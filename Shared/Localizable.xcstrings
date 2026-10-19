@@ -34,22 +34,6 @@
         }
       }
     },
-    "%.1f км": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%.1f км"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%.1f km"
-          }
-        }
-      }
-    },
     "%1$@ и %2$@ разделяет стоянка %3$@": {
       "localizations": {
         "ru": {
@@ -756,6 +740,22 @@
         }
       }
     },
+    "+%lld км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+%lld км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+%lld km/soat"
+          }
+        }
+      }
+    },
     "+10 км/ч": {
       "localizations": {
         "ru": {
@@ -1044,6 +1044,22 @@
         }
       }
     },
+    "240 м": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "240 м"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "240 m"
+          }
+        }
+      }
+    },
     "3 400+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном.": {
       "localizations": {
         "ru": {
@@ -1184,22 +1200,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "RadarMap"
-          }
-        }
-      }
-    },
-    "RadarMap следит за %lld камерами вокруг": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "RadarMap следит за %lld камерами вокруг"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "RadarMap atrofdagi %lld ta kamerani kuzatmoqda"
           }
         }
       }
@@ -2512,6 +2512,22 @@
         }
       }
     },
+    "Встроенная база камер не читается — переустановите приложение.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Встроенная база камер не читается — переустановите приложение."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ichki kameralar bazasi o‘qilmayapti — ilovani qayta o‘rnating."
+          }
+        }
+      }
+    },
     "Всё время": {
       "localizations": {
         "ru": {
@@ -3175,22 +3191,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Keyingi"
-          }
-        }
-      }
-    },
-    "Данные о местоположении остаются на устройстве.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Данные о местоположении остаются на устройстве."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Joylashuv ma'lumotlari qurilmada qoladi."
           }
         }
       }
@@ -4501,6 +4501,22 @@
         }
       }
     },
+    "История поездок, дом и работа хранятся только на этом iPhone. На сервер уходят запрос маршрута, ваши отметки и обезличенные отрезки для пробок — их можно выключить в Настройках.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "История поездок, дом и работа хранятся только на этом iPhone. На сервер уходят запрос маршрута, ваши отметки и обезличенные отрезки для пробок — их можно выключить в Настройках."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarlar tarixi, uy va ish joyi faqat shu iPhone'da saqlanadi. Serverga faqat marshrut so‘rovi, sizning belgilaringiz va tirbandlik uchun shaxssiz yo‘l bo‘laklari yuboriladi — ularni Sozlamalarda o‘chirish mumkin."
+          }
+        }
+      }
+    },
     "Источники данных": {
       "localizations": {
         "ru": {
@@ -4892,6 +4908,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kamera №%@"
+          }
+        }
+      }
+    },
+    "Камера, 300 метров": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камера, 300 метров"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera, 300 metr"
           }
         }
       }
@@ -5598,22 +5630,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Marshrutlar vaqtincha ishlamayapti — tuzatyapmiz"
-          }
-        }
-      }
-    },
-    "Маршруты и местоположение обрабатываются только на этом iPhone — на сервер не уходят.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Маршруты и местоположение обрабатываются только на этом iPhone — на сервер не уходят."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Marshrutlar va joylashuv faqat shu iPhone'da qayta ishlanadi — serverga yuborilmaydi."
           }
         }
       }
@@ -8678,18 +8694,18 @@
         }
       }
     },
-    "Похоже, вы едете — включите оповещения": {
+    "Похоже, вы едете": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Похоже, вы едете — включите оповещения"
+            "value": "Похоже, вы едете"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Harakatlanayotganga o'xshaysiz — ogohlantirishlarni yoqing"
+            "value": "Siz yo‘lda ketayotganga o‘xshaysiz"
           }
         }
       }
@@ -8996,6 +9012,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aloqani tekshiring va qaytadan urinib ko‘ring."
+          }
+        }
+      }
+    },
+    "Продолжить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Продолжить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Davom etish"
           }
         }
       }
@@ -9429,6 +9461,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Radar belgilandi. Ogohlantirganingiz uchun rahmat!"
+          }
+        }
+      }
+    },
+    "Радар!": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Радар!"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radar!"
           }
         }
       }

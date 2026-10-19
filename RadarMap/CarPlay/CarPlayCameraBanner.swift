@@ -48,6 +48,16 @@ nonisolated enum CarPlayCameraBannerText {
                              interval: TimeInterval = AppConfig.carPlayCameraBannerUpdateSeconds) -> Bool {
         shown != new && sinceLast >= interval
     }
+
+    /// Держать ли баннер, когда тревога на миг пропала. `isApproachingCamera`
+    /// мигает на шуме курса и точности: до 19.10 каждое мигание снимало
+    /// баннер и показывало его снова — анимация и два сообщения в машину ради
+    /// той же камеры. Та же камера и пропажа короче паузы — держим; другая
+    /// камера или дольше паузы — снимаем.
+    static func keepsThroughDropout(sameCamera: Bool, lostFor: TimeInterval,
+                                    grace: TimeInterval = AppConfig.carPlayCameraBannerGraceSeconds) -> Bool {
+        sameCamera && lostFor < grace
+    }
 }
 
 /// Баннер камеры одного подключения. Зовётся на каждом пересчёте ведения.
@@ -66,6 +76,12 @@ final class CarPlayCameraBanner {
     /// Ограничение у камеры — одно на подъезд: поиск по индексу дорог на
     /// каждом тике ради сравнения строк не нужен.
     private var limit: (cameraID: Int, value: Int?)?
+    /// Когда тревога пропала при показанном баннере (пауза до снятия).
+    private var lostSince: Date?
+    /// Снятие по истечении паузы. Само `update` по времени не перезапустится:
+    /// его зовёт наблюдение, а без маршрута и без новых фиксов наблюдать
+    /// нечего — баннер (`duration: 0`) висел бы до смены ближайшей камеры.
+    private var graceTask: Task<Void, Never>?
 
     private var env: AppEnvironment { .shared }
 
@@ -74,11 +90,34 @@ final class CarPlayCameraBanner {
         guard location.isApproachingCamera, let camera = location.nearestCamera,
               let distance = location.distanceToNearest else {
             // Проехали или тревога снята: баннер уходит, следующий подъезд —
-            // заново, в том числе к той же камере.
+            // заново, в том числе к той же камере. Короткое мигание тревоги
+            // у той же камеры баннер не трогает.
+            if let alert {
+                let now = Date()
+                let since = lostSince ?? now
+                lostSince = since
+                if CarPlayCameraBannerText.keepsThroughDropout(
+                    sameCamera: location.nearestCamera?.id == cameraID,
+                    lostFor: now.timeIntervalSince(since)) {
+                    if graceTask == nil {
+                        graceTask = Task { @MainActor [weak self, weak banners] in
+                            await Task.pause(seconds: AppConfig.carPlayCameraBannerGraceSeconds)
+                            guard !Task.isCancelled, let self, self.alert === alert,
+                                  self.lostSince != nil else { return }
+                            banners?.dismiss(alert)
+                            self.clear()
+                        }
+                    }
+                    return
+                }
+            }
             if let alert { banners.dismiss(alert) }
             clear()
             return
         }
+        lostSince = nil
+        graceTask?.cancel()
+        graceTask = nil
 
         if let alert, cameraID == camera.id {
             let showing = banners.isShowing(alert)
@@ -142,5 +181,8 @@ final class CarPlayCameraBanner {
         shownText = nil
         updatedAt = .distantPast
         limit = nil
+        lostSince = nil
+        graceTask?.cancel()
+        graceTask = nil
     }
 }

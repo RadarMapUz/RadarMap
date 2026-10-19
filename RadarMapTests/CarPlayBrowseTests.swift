@@ -93,4 +93,13 @@ final class CarPlayBrowseTests: XCTestCase {
         XCTAssertEqual(B.reduce(&state, .recenter, previewing: false), [.recenter, .cancelIdle])
         XCTAssertTrue(state.following)
     }
+
+    /// Удержанная стрелка не панорамирует вечно: «отпустили» теряется при
+    /// автозакрытии осмотра и отключении машины (аудит 19.10).
+    func testPanHoldStopsAtTheCap() {
+        XCTAssertTrue(B.panHoldContinues(steps: 0, interval: 0.15, maxSeconds: 15))
+        XCTAssertTrue(B.panHoldContinues(steps: 99, interval: 0.15, maxSeconds: 15))
+        XCTAssertFalse(B.panHoldContinues(steps: 100, interval: 0.15, maxSeconds: 15))
+        XCTAssertFalse(B.panHoldContinues(steps: 10_000))
+    }
 }

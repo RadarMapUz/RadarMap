@@ -21,6 +21,16 @@ import Foundation
 
 nonisolated enum CarPlayBrowse {
 
+    /// Удержанная стрелка повторяет шаг, пока шагов меньше потолка
+    /// (`carPlayPanHoldMaxSeconds`). Отпускание приходит событием, но теряется
+    /// при автозакрытии осмотра и отключении — потолок не даёт карте уехать
+    /// навсегда.
+    static func panHoldContinues(steps: Int,
+                                 interval: TimeInterval = AppConfig.carPlayPanHoldInterval,
+                                 maxSeconds: TimeInterval = AppConfig.carPlayPanHoldMaxSeconds) -> Bool {
+        Double(steps) * interval < maxSeconds
+    }
+
     struct State: Equatable, Sendable {
         /// Карта едет за машиной.
         var following = true

@@ -55,4 +55,15 @@ final class CarPlayBannerPolicyTests: XCTestCase {
         XCTAssertEqual(P.decide(showing: .info, incoming: .question), .replace)
         XCTAssertEqual(P.decide(showing: .suggestion, incoming: .detour), .replace)
     }
+
+    /// «Завершить поездку?» — ответ на касание водителя: вопрос и объезд его
+    /// не перебивают, камера — да; поверх камеры он не встаёт (тогда окно).
+    func testDriverRequestOutranksQuestionsAndDetours() {
+        XCTAssertEqual(P.decide(showing: .question, incoming: .request), .replace)
+        XCTAssertEqual(P.decide(showing: .detour, incoming: .request), .replace)
+        XCTAssertEqual(P.decide(showing: .request, incoming: .question), .wait)
+        XCTAssertEqual(P.decide(showing: .request, incoming: .detour), .wait)
+        XCTAssertEqual(P.decide(showing: .request, incoming: .camera), .replace)
+        XCTAssertEqual(P.decide(showing: .camera, incoming: .request), .drop)
+    }
 }

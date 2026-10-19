@@ -125,16 +125,23 @@ nonisolated enum BottomHint: Equatable {
     }
 }
 
+/// Догадка «едем» вместе с самим действием. До 19.10 это была подпись
+/// «включите оповещения» без кнопки — и она ВЫТЕСНЯЛА «Начать поездку»
+/// (нижняя ветка одна: `.driving` вместо `.destinations`): приложение звало
+/// включить оповещения ровно тогда, когда нажать было нечего.
 struct DrivingHintChip: View {
     @Environment(AppEnvironment.self) private var env
+    let onStart: () -> Void
 
     var body: some View {
         if env.location.isProbablyDriving {
-            Text("Похоже, вы едете — включите оповещения")
-                .font(.rounded(12, .medium))
-                .foregroundStyle(Theme.success)
-                .padding(.horizontal, 12).padding(.vertical, 6)
-                .background(.ultraThinMaterial, in: Capsule())
+            VStack(spacing: 8) {
+                Text("Похоже, вы едете")
+                    .font(.rounded(13, .medium))
+                    .foregroundStyle(Theme.textSecondary)
+                PrimaryButton(title: "Начать поездку", systemImage: "play.fill", action: onStart)
+                    .liftAccent()
+            }
         }
     }
 }

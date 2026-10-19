@@ -98,7 +98,7 @@ final class NotificationService: NSObject {
     /// Поездка закончилась сама (вышел из машины, телефон в кармане) — короткие
     /// итоги на локскрин: приложение открывать не обязательно, цифры уже тут.
     /// Тап ведёт в деталку (deep link разбирает RootView).
-    func notifyTripSummary(distance: Double, rating: Int?, fineRisk: Double) {
+    func notifyTripSummary(tripID: Double, distance: Double, rating: Int?, fineRisk: Double) {
         let content = UNMutableNotificationContent()
         content.title = String(format: String(localized: "Поездка: %@"),
                                Formatting.distance(distance))
@@ -111,7 +111,8 @@ final class NotificationService: NSObject {
             : String(localized: "без риска штрафов"))
         content.body = parts.joined(separator: " · ")
         content.sound = nil   // человек только что вышел из машины — не трезвоним
-        content.userInfo = ["deeplink": "radarmap://trip/last"]
+        // id, а не «последняя»: к тапу последней может стать другая поездка.
+        content.userInfo = ["deeplink": DeepLink.trip(tripID).absoluteString]
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: Self.tripSummaryID, content: content, trigger: nil))
     }

@@ -181,7 +181,7 @@ final class CameraStore: CameraRepository {
               let data = try? Data(contentsOf: url),
               let decoded = try? JSONDecoder().decode([Camera].self, from: data) else {
             Log.cameras.fault("встроенная cameras.json не читается — приложение без базы")
-            return ([], "Не удалось загрузить cameras.json из бандла.", false)
+            return ([], String(localized: "Встроенная база камер не читается — переустановите приложение."), false)
         }
         return (decoded, nil, false)
     }

@@ -207,6 +207,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         freezeWatch = nil
         panningFallback?.cancel()
         panningFallback = nil
+        stopPanHold()
+        isPanning = false
         guidance.detach()
         session += 1   // гасим подписки syncTemplate этой сессии
         banners?.reset()
@@ -478,17 +480,29 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     /// Стрелку держат: панорамируем, пока не отпустят. Один шаг на удержание
     /// заставлял щёлкать до соседнего квартала полминуты.
+    ///
+    /// Цикл обязан кончиться и без «отпустили»: событие конца теряется, если
+    /// осмотр закрылся сам (автовозврат, камера впереди) или машину отключили —
+    /// до 19.10 карта тогда ехала вечно, а `self?` без выхода держал шаблон
+    /// (аудит CarPlay 19.10). Отсюда отмена в leavePanning/dismiss/disconnect
+    /// и потолок шагов `CarPlayBrowse.panHoldContinues`.
     func mapTemplate(_ mapTemplate: CPMapTemplate, panBeganWith direction: CPMapTemplate.PanDirection) {
-        panHoldTask?.cancel()
+        stopPanHold()
         panHoldTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                self?.mapTemplate(mapTemplate, panWith: direction)
+            var steps = 0
+            while !Task.isCancelled, CarPlayBrowse.panHoldContinues(steps: steps), let self {
+                self.mapTemplate(mapTemplate, panWith: direction)
+                steps += 1
                 await Task.pause(seconds: AppConfig.carPlayPanHoldInterval)
             }
         }
     }
 
     func mapTemplate(_ mapTemplate: CPMapTemplate, panEndedWith direction: CPMapTemplate.PanDirection) {
+        stopPanHold()
+    }
+
+    private func stopPanHold() {
         panHoldTask?.cancel()
         panHoldTask = nil
     }
@@ -545,6 +559,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// нашему ключу они «не менялись»: что показывает головное устройство
     /// после осмотра, решаем не мы, и кэш sentBar ему не указ.
     func mapTemplateDidDismissPanningInterface(_ mapTemplate: CPMapTemplate) {
+        stopPanHold()
         isPanning = false
         panningFallback?.cancel()
         panningFallback = nil
@@ -558,6 +573,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// шаблона), — поэтому после паузы бар возвращаем сами: застрявшая
     /// «Готово» — ровно та пропажа кнопок, которую здесь чиним.
     private func leavePanning(reason: String) {
+        stopPanHold()
         guard isPanning, let mapTemplate else { return }
         Log.carplay.notice("осмотр закрываю: \(reason, privacy: .public)")
         mapTemplate.dismissPanningInterface(animated: true)
@@ -661,8 +677,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         let route = env.route
         let phase = NavigationFlow.phase(hasRoute: route.isActive, isTripActive: env.location.isTripActive)
         let building = route.isBuilding
+        let moving = !CarPlayTripPreview.shouldPreview(speedKmh: env.location.speedKmh)
         let decision = NavigationFlow.carChoice(from: flowPhase, to: phase,
-                                                showing: model.isPreviewing, building: building)
+                                                showing: model.isPreviewing, building: building,
+                                                moving: moving)
         // Пока строится, фаза промежуточная — прошлой её не считаем: иначе
         // маршрут, достроенный на телефоне, не открыл бы выбор здесь.
         if !building { flowPhase = phase }
@@ -1158,10 +1176,30 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     /// «Завершить поездку?» на ходу. Тот же паттерн, что у Apple Maps: конец
     /// маршрута не висит одним тапом на баре.
+    ///
+    /// С 19.10 — баннер навигатора, а не окно на весь экран: карта и манёвр
+    /// под ним остаются (аудит CarPlay 18.10, P0-3; модальное окно на ходу
+    /// Руководство оставляет только ошибкам). Окно — запасной путь, если
+    /// баннер сейчас не встанет: на экране баннер камеры, он важнее.
     private func confirmEndTrip() {
+        let title = env.route.isActive ? String(localized: "Завершить маршрут?")
+                                       : String(localized: "Завершить поездку?")
+        if let banners {
+            let banner = CPNavigationAlert(
+                titleVariants: [title],
+                subtitleVariants: [],
+                image: nil,
+                primaryAction: CPAlertAction(title: String(localized: "Завершить"),
+                                             style: .destructive) { [weak self] _ in
+                    self?.endTripAndRoute(toast: false)
+                },
+                secondaryAction: CPAlertAction(title: String(localized: "Продолжить"),
+                                               style: .cancel) { _ in },
+                duration: AppConfig.carPlayEndConfirmSeconds)
+            if banners.show(banner, kind: .request) { return }
+        }
         let alert = CPAlertTemplate(
-            titleVariants: [env.route.isActive ? String(localized: "Завершить маршрут?")
-                                               : String(localized: "Завершить поездку?")],
+            titleVariants: [title],
             actions: [
                 CPAlertAction(title: String(localized: "Завершить"),
                               style: .destructive) { [weak self] _ in
@@ -1490,9 +1528,20 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     /// Ближайшие заведения вида списком: тап — маршрут.
+    /// Действия водителя, которые ждут сеть или поиск. ПОВТОР того же
+    /// касания в эти секунды — «не сработало?», а не новое намерение: без
+    /// этого он открывал второй список или строил маршрут дважды (аудит
+    /// CarPlay 19.10). Другое касание (передумал: «АЗС» → «Дом») проходит.
+    private var actionsInFlight: Set<String> = []
+
     private func presentNearest(_ kind: Venue.Kind) {
+        let key = "nearest:\(kind.rawValue)"
+        guard actionsInFlight.insert(key).inserted else {
+            return Log.carplay.notice("повторное касание — список уже ищется")
+        }
         Task { @MainActor [weak self] in
             guard let self else { return }
+            defer { self.actionsInFlight.remove(key) }
             let found = await search.nearest(kind)
             guard !found.isEmpty else {
                 return showAlert(title: String(format: String(localized: "%@ рядом не нашлось"), kind.title),
@@ -1603,8 +1652,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     /// Строим маршрут и сразу едем: за рулём выбирать из альтернатив некогда.
     private func route(to place: SavedPlace, allowPreview: Bool = true) {
+        let key = "route:\(place.lat),\(place.lon)"
+        guard actionsInFlight.insert(key).inserted else {
+            return Log.carplay.notice("повторное касание — маршрут уже строится")
+        }
         Task { @MainActor [weak self] in
             guard let self else { return }
+            defer { self.actionsInFlight.remove(key) }
             // Грубая точка фонового режима сюда не годится: маршрут от неё
             // начинается за километры (plan_drive_complaints.md, Ж5).
             guard let from = await env.location.awaitPreciseCoordinate() else {

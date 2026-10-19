@@ -549,7 +549,7 @@ final class LocationService: NSObject {
             // (склейка) id остаётся старым.
             if auto, !isPhoneForeground, let record = trip.history.first,
                Date().timeIntervalSince(record.endedAt) < 30 {
-                notifier.notifyTripSummary(distance: record.distanceMeters,
+                notifier.notifyTripSummary(tripID: record.id, distance: record.distanceMeters,
                                            rating: record.score.map { Int($0) },
                                            fineRisk: TripHistory.fineRisk(of: record.passed))
             }
@@ -1266,8 +1266,7 @@ final class LocationService: NSObject {
         CameraActivityAttributes.ContentState(
             nearestTitle: nearestCamera?.displayTitle,
             nearestSymbol: nearestCamera?.kind.symbolName ?? "checkmark.shield.fill",
-            distanceMeters: distanceToNearest,
-            camerasNearby: nearbyCameras.count
+            distanceMeters: distanceToNearest
         )
     }
 

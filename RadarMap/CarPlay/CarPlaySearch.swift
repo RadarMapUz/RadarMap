@@ -172,11 +172,23 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
         }
         guard book == nil || venues == nil else { return }
         if loadTask == nil {
+            // Пишем, только если клетка та же: пока грузилась старая, машина
+            // могла уехать в новую — и в Самарканде отвечали ташкентские
+            // адреса, а проверка выше считала новую клетку загруженной
+            // (аудит CarPlay 19.10).
             loadTask = Task { [weak self] in
                 guard let self else { return }
-                if self.book == nil { self.book = await self.env.roads.addressBook(for: center) }
-                if self.venues == nil { self.venues = await self.env.roads.venueBook(for: center) }
-                if self.loadedCell == cell { self.loadTask = nil }
+                if self.book == nil {
+                    let book = await self.env.roads.addressBook(for: center)
+                    guard self.loadedCell == cell else { return }
+                    self.book = book
+                }
+                if self.venues == nil {
+                    let venues = await self.env.roads.venueBook(for: center)
+                    guard self.loadedCell == cell else { return }
+                    self.venues = venues
+                }
+                self.loadTask = nil
             }
         }
         await loadTask?.value

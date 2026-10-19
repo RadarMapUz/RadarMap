@@ -70,7 +70,28 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
         // стартует «спящим» (см. CarPlaySceneDelegate.didConnect).
         if shown && UIApplication.shared.applicationState != .background { installHost() }
         env.startDrivingServices()
+        shortcutsGeneration += 1
+        observeShortcuts()
+    }
+
+    /// Ярлыки следуют за местами: Дом, заданный поиском в машине или на
+    /// телефоне, до 19.10 оставался на плитке «не задан» до переподключения —
+    /// синхронизация шла только при подключении и выходе на экран.
+    private var shortcutsGeneration = 0
+
+    private func observeShortcuts() {
+        let generation = shortcutsGeneration
         syncShortcuts()
+        withObservationTracking {
+            for slot in PlaceSlot.allCases { _ = env.settings.place(for: slot) }
+            _ = env.learnedPlaces
+            _ = env.commute
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, self.controller != nil, self.shortcutsGeneration == generation else { return }
+                self.observeShortcuts()
+            }
+        }
     }
 
     private func installHost() {

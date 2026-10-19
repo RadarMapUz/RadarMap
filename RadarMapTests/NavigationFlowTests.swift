@@ -49,6 +49,22 @@ final class NavigationFlowTests: XCTestCase {
         XCTAssertEqual(Flow.carChoice(from: .guiding, to: .free, showing: true, building: false), .close)
     }
 
+    /// Маршрут с телефона на ходу: в машине ни списка вариантов, ни старта
+    /// без «Поехали» — решает телефон (аудит CarPlay 19.10; «я пассажир» на
+    /// ходу оставляет маршрут, и автостарт сделал бы пассажира водителем).
+    func testPhoneRouteOnTheMoveIsNotPreviewedNorStarted() {
+        XCTAssertEqual(Flow.carChoice(from: .free, to: .choosing, showing: false,
+                                      building: false, moving: true), .none)
+        XCTAssertEqual(Flow.carChoice(from: .guiding, to: .choosing, showing: false,
+                                      building: false, moving: true), .none, "«я пассажир» на ходу")
+        // Свою постройку машина не перебивает и на ходу.
+        XCTAssertEqual(Flow.carChoice(from: .free, to: .choosing, showing: false,
+                                      building: true, moving: true), .none)
+        // Выбор уже на экране — его судьбу решает MovingWatch, не переход.
+        XCTAssertEqual(Flow.carChoice(from: .choosing, to: .choosing, showing: true,
+                                      building: false, moving: true), .none)
+    }
+
     func testCarOwnChoiceOverARunningTripStays() {
         // Стоя на светофоре, водитель выбирает в машине новый путь: поездка
         // идёт, фаза — ведение, но выбор закрывать не за что.

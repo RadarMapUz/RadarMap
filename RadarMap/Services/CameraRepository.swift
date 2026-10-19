@@ -223,6 +223,12 @@ final class CameraStore: CameraRepository {
     /// хуже, чем оба конца.
     @discardableResult
     func applyOverrides(_ fresh: CameraOverrides) -> Bool {
+        // Подписанные, но старше применённых — откат (сервер отдаёт прошлую
+        // выкладку, где скрыта уже возвращённая камера): не применяем (S18).
+        guard CameraOverrideEngine.isNotOlder(fresh, than: overrides) else {
+            Log.cameras.fault("правки v\(fresh.version, privacy: .public) старше применённых v\(self.overrides.version, privacy: .public) — откат отвергнут")
+            return true
+        }
         guard CameraOverrideEngine.isSane(fresh, baseCount: bundled.count) else {
             Log.cameras.fault("правки отвергнуты: скрывают слишком много камер (\(fresh.items.count, privacy: .public) записей на \(self.bundled.count, privacy: .public) камер)")
             return false

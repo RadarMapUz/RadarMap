@@ -870,6 +870,16 @@ nonisolated enum AppConfig {
     /// (bash server/publish_limits.sh) и /status покажет «подпись: подписаны».
     nonisolated static let speedLimitsAcceptUnsigned = true
 
+    /// Версия базы камер в version.json до 20.10 не подписана (подписаны только
+    /// байты базы): сервер мог отдать старую подписанную базу с версией 999999,
+    /// и настоящие обновления больше не приходили бы никогда (S18). Пока
+    /// владелец не выложил манифест с подписанной версией («release»), версию
+    /// без подписи берём, но не дальше этого скачка от своей.
+    /// ВЫКЛЮЧИТЬ приём без подписи (dbAcceptUnsignedVersion = false), когда
+    /// sign_db.sh выложит release на прод.
+    nonisolated static let dbVersionMaxUnsignedJump = 20
+    nonisolated static let dbAcceptUnsignedVersion = true
+
     /// Потолок размера файла лимитов по подписанному индексу. Боевой файл —
     /// 3,4 МБ (формат 2 чуть больше); индекс, обещающий больше чем вдесятеро,
     /// — ошибка публикации, и качать такое в память телефона по мобильной

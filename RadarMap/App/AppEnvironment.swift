@@ -480,6 +480,10 @@ final class AppEnvironment {
         }
         // Объезд пробки: сказать — голосом, решить — касанием (телефон или
         // машина). Маршрут сам не меняется.
+        route.detourScreenAvailable = { [weak self] in
+            guard let self else { return false }
+            return self.isPhoneSceneActive || self.isCarPlayConnected
+        }
         route.onDetourOffer = { [weak alerts] offer in
             guard settings.voiceEnabled else { return }
             alerts?.speak(offer.spoken)

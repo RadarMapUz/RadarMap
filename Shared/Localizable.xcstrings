@@ -238,6 +238,22 @@
         }
       }
     },
+    "%@ к прошлой неделе": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ к прошлой неделе"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "o‘tgan haftaga %@"
+          }
+        }
+      }
+    },
     "%@ км": {
       "localizations": {
         "ru": {
@@ -7196,6 +7212,22 @@
         }
       }
     },
+    "Норма и динамика": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Норма и динамика"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Me’yor va dinamika"
+          }
+        }
+      }
+    },
     "О приложении": {
       "extractionState": "manual",
       "localizations": {
@@ -8227,6 +8259,22 @@
         }
       }
     },
+    "По дням": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По дням"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kunlar bo‘yicha"
+          }
+        }
+      }
+    },
     "По маршруту %@ через %lld метров": {
       "localizations": {
         "ru": {
@@ -8255,6 +8303,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Marshrutda radar 800 metrdan so‘ng"
+          }
+        }
+      }
+    },
+    "По неделям": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По неделям"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haftalar bo‘yicha"
           }
         }
       }

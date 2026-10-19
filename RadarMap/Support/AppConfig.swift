@@ -682,6 +682,21 @@ nonisolated enum AppConfig {
     /// Сколько ждать, пока будет из чего решать (позиция, профиль с диска,
     /// дом и работа), если поездка началась раньше — запуск Siri, фон.
     nonisolated static let commuteGhostStartWaitSeconds: TimeInterval = 180
+
+    // MARK: Срок прибытия («быть к 9:00», план 19.10, 8.6)
+
+    /// Срок действует для поездки, начатой не раньше чем за столько часов.
+    nonisolated static let arrivalTargetLeadHours: Double = 3
+    /// Срок по умолчанию, когда распорядок ещё не виден: 9:00.
+    nonisolated static let arrivalTargetDefaultMinute = 9 * 60
+    /// Вопрос о сроке — не раньше стольких будних дней с прибытием за 30.
+    nonisolated static let arrivalTargetMinDays = 8
+    /// p90 прибытия не дальше этого от ближайшего :00/:30 сверху.
+    nonisolated static let arrivalTargetMaxGapMinutes: Double = 15
+    /// Разброс p25…p90 прибытий: шире — свободный график, не спрашиваем.
+    nonisolated static let arrivalTargetMaxSpreadMinutes: Double = 40
+    /// Опоздание повторяется голосом, только если стало хуже ещё на столько.
+    nonisolated static let arrivalTargetLateRepeatMinutes = 5
     /// Поездка — «дорога на работу», если началась не дальше 1 км от дома
     /// (и наоборот): автостарт CoreMotion срабатывает уже на ходу.
     nonisolated static let commuteGhostStartRadiusMeters: Double = 1000

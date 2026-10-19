@@ -103,8 +103,7 @@ struct TripLiveBar: View {
                     .contentTransition(.numericText())
                 Text(verbatim: Self.ghostCaption(ghost))
                     .font(.rounded(12, .medium).monospacedDigit())
-                    .foregroundStyle(ghost.deltaMinutes >= AppConfig.commuteGhostLateMinutes
-                                     ? Theme.warning : Theme.textSecondary)
+                    .foregroundStyle(Self.ghostTint(ghost))
             } else {
                 // Свободная поездка без маршрута: таймер + путь + камеры.
                 if let started = env.trip.startedAt {
@@ -174,11 +173,35 @@ struct TripLiveBar: View {
 
     /// «Работа · как обычно» / «Работа · +4 мин к обычному». Быстрее обычного
     /// не говорим никогда — это не гонка: опережение видно по времени.
+    /// «Работа · +4 мин к обычному»; со сроком — запас: «Работа · с запасом
+    /// 9 мин», «впритык», «на 12 мин позже 9:00».
     static func ghostCaption(_ ghost: CommuteLiveService.Display) -> String {
         let place = ghost.direction == .toWork ? String(localized: "Работа") : String(localized: "Дом")
-        let delta = ghost.deltaMinutes >= 1
-            ? String(localized: "+\(ghost.deltaMinutes) мин к обычному")
-            : String(localized: "как обычно")
-        return "\(place) · \(delta)"
+        let tail: String
+        if let slack = ghost.slack {
+            switch slack.shown {
+            case .comfortable where slack.minutes >= 60: tail = String(localized: "с запасом больше часа")
+            case .comfortable: tail = String(localized: "с запасом \(slack.minutes) мин")
+            case .tight: tail = String(localized: "впритык")
+            case .late:
+                tail = String(localized: "на \(slack.lateMinutes) мин позже \(CommuteGhost.clock(slack.deadline))")
+            }
+        } else {
+            tail = ghost.deltaMinutes >= 1
+                ? String(localized: "+\(ghost.deltaMinutes) мин к обычному")
+                : String(localized: "как обычно")
+        }
+        return "\(place) · \(tail)"
+    }
+
+    /// Цвет — второй признак, смысл в словах: со сроком — по запасу, без него —
+    /// жёлтый только на заметной задержке.
+    static func ghostTint(_ ghost: CommuteLiveService.Display) -> Color {
+        switch ghost.slack?.shown {
+        case .late: return Theme.danger
+        case .tight: return Theme.warning
+        case .comfortable: return Theme.textSecondary
+        case nil: return ghost.deltaMinutes >= AppConfig.commuteGhostLateMinutes ? Theme.warning : Theme.textSecondary
+        }
     }
 }

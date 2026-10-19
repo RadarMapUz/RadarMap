@@ -137,12 +137,20 @@ struct MapScreen: View {
             }
             #if DEBUG
             openScreenFromLaunchArguments()
-            // Скриншот-хук: `-demoGhost` — строка «Работа · 9:12 · +4 мин».
-            if ProcessInfo.processInfo.arguments.contains("-demoGhost") {
+            // Скриншот-хук: `-demoGhost [late|tight|ok]` — строка «Работа · 9:12 ·
+            // +4 мин»; со словом — с запасом до срока «быть к».
+            let arguments = ProcessInfo.processInfo.arguments
+            if let at = arguments.firstIndex(of: "-demoGhost") {
+                let mode = arguments.indices.contains(at + 1) ? arguments[at + 1] : ""
                 Task {
                     await Task.pause(seconds: 4)
-                    env.commuteLive.showDemo(direction: .toWork,
-                                             arrival: Date().addingTimeInterval(22 * 60), deltaMinutes: 4)
+                    let arrival = Date().addingTimeInterval(22 * 60)
+                    let minutes = ["late": -7, "tight": 3, "ok": 9][mode]
+                    let slack = minutes.map {
+                        CommuteGhost.TargetSlack(state: .raw(minutes: Double($0)), minutes: $0,
+                                                 deadline: arrival.addingTimeInterval(Double($0) * 60))
+                    }
+                    env.commuteLive.showDemo(direction: .toWork, arrival: arrival, deltaMinutes: 4, slack: slack)
                 }
             }
             // Скриншот-хук: `-whatsNew` — показать «Что нового» снова.

@@ -61,7 +61,8 @@ final class WatchBridgeService: NSObject {
         // (docs/perf_audit_2026-10-07.md). В тревоге — как раньше.
         let calm = alertLevel == 0
         let speedStep = calm ? AppConfig.watchSpeedStepCalm : AppConfig.watchSpeedStepAlert
-        let distStep = (distanceMeters ?? .infinity) > AppConfig.liveActivityNearMeters ? 100.0 : 25.0
+        let distStep = (distanceMeters ?? .infinity) > AppConfig.liveActivityNearMeters
+            ? AppConfig.watchDistanceStepFar : AppConfig.watchDistanceStepNear
         let quantized: [String: Int] = [
             "active": isTripActive ? 1 : 0,
             "speed": Int((speedKmh / speedStep).rounded() * speedStep),
@@ -73,7 +74,7 @@ final class WatchBridgeService: NSObject {
         ]
         guard quantized != lastSent else { return }
         // Рост/сброс уровня и смена камеры — сразу; бегущие цифры — не чаще
-        // раза в minInterval (в тревоге) или watchCalmInterval (без неё).
+        // раза в watchAlertInterval (в тревоге) или watchCalmInterval (без неё).
         if quantized["level"] == lastSent["level"], quantized["title"] == lastSent["title"],
            Date().timeIntervalSince(lastSentAt) < (calm ? AppConfig.watchCalmInterval : AppConfig.watchAlertInterval) {
             return

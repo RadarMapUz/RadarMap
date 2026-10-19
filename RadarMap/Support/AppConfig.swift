@@ -72,6 +72,11 @@ nonisolated enum AppConfig {
     /// «Стою» — скорость ниже этого (км/ч). Ползание в пробке (1–2 км/ч) —
     /// тоже стоянка: фиксы всё равно приходят по 30-метровому фильтру.
     nonisolated static let gpsStandstillSpeedKmh = 3.0
+    /// С этой скорости фикс считается движением для «когда двигались в
+    /// последний раз» (сторож, стоянка). Отдельно от порога лестницы GPS:
+    /// поднять тот ради экономии в пробке не должно делать ползущую машину
+    /// «стоящей».
+    nonisolated static let movementSeenSpeedKmh = 3.0
     /// Ближе этого к камере/манёвру стоянка НЕ расслабляет GPS: зона замера
     /// проезда 80 м плюс запас — очередь ползком у самой камеры пишет проезд
     /// с полной точностью, как и раньше.
@@ -460,6 +465,10 @@ nonisolated enum AppConfig {
     nonisolated static let cameraOverspeedWarnMarginKmh: Double = 2
 
     // MARK: - Склейка поездок (заезд по пути ≠ новая поездка)
+    /// «Я пассажир» — кусок короче этого не пишется вовсе.
+    static let passengerTripMinMeters: Double = 500
+    /// Шаг между фиксами длиннее этого — перелёт, в дистанцию поездки не идёт.
+    nonisolated static let tripMaxStepMeters: Double = 500
     // nonisolated: читаются из чистого TripMerge (и его тестов) без прыжка на main.
 
     /// Новый старт дальше этого от финиша прошлой — точно другая поездка
@@ -733,6 +742,10 @@ nonisolated enum AppConfig {
 
     /// Как часто опрашивать сервер о передвижных радарах (сек), пока приложение открыто.
     static let mobilePollInterval: TimeInterval = 180
+
+    /// Вспышка ответа на «Радар!» и вопрос «Радар ещё стоял?» на телефоне.
+    static let reportFlashSeconds: TimeInterval = 2
+    static let mobileQuestionSeconds: TimeInterval = 20
 
     // MARK: - Расписание опроса в поездке
     //
@@ -1471,13 +1484,9 @@ nonisolated enum AppConfig {
     static let trafficBatchPieces = 12
     /// Аудиосессия отпускается через столько после фразы — музыка возвращается.
     static let audioReleaseDelaySeconds: TimeInterval = 0.4
-    /// «Я пассажир» — кусок короче этого не пишется вовсе.
-    static let passengerTripMinMeters: Double = 500
-    /// Шаг между фиксами длиннее этого — перелёт, в дистанцию поездки не идёт.
-    nonisolated static let tripMaxStepMeters: Double = 500
-    /// Вспышка ответа на «Радар!» и вопрос «Радар ещё стоял?» на телефоне.
-    static let reportFlashSeconds: TimeInterval = 2
-    static let mobileQuestionSeconds: TimeInterval = 20
+    /// Шаг дистанции на часах вдали от камеры и вблизи (зона — как у Live Activity).
+    static let watchDistanceStepFar = 100.0
+    static let watchDistanceStepNear = 25.0
 
     // MARK: - Офлайн-карты (docs/plan_map_offline.md §2.7)
 

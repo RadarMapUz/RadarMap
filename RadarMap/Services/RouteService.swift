@@ -1145,14 +1145,14 @@ final class RouteService {
             let candidates = built.map { variant in
                 (points: variant.points.map(\.coordinate), travelTime: variant.travelTime, steps: variant.steps)
             }
-            let offer = await offMain { () -> DetourAdvisor.Offer? in
+            let offer = await Task.detached(priority: .utility) { () -> DetourAdvisor.Offer? in
                 let scored = candidates.map { candidate in
                     DetourAdvisor.Candidate(points: candidate.points,
                                             expectedTime: candidate.travelTime + snapshot.delay(along: candidate.points),
                                             steps: candidate.steps)
                 }
                 return DetourAdvisor.decide(currentRemaining: currentRemaining, current: current, candidates: scored)
-            }
+            }.value
             guard gen == generation, detourOffer == nil else { return }
             guard let offer, built.indices.contains(offer.index) else {
                 Log.route.notice("объезд: выгодного нет")

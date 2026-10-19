@@ -174,9 +174,9 @@ final class SpeedLimitService {
     private func loadLocal() async {
         let dataURL = fileURL, manifestURL = self.manifestURL
         let ratchet = Storage.bool(.speedLimitsSignedSeen)
-        let cached = await offMain {
+        let cached = await Task.detached(priority: .utility) {
             SpeedLimitCache.load(dataURL: dataURL, manifestURL: manifestURL, ratchetSet: ratchet)
-        }
+        }.value
         if cached.sawSignedIndex { markSignedSeen() }
         if let built = cached.index {
             index = built
@@ -237,10 +237,10 @@ final class SpeedLimitService {
             return
         }
         let dataURL = fileURL, manifestURL = self.manifestURL
-        let outcome = await offMain {
+        let outcome = await Task.detached(priority: .utility) {
             SpeedLimitCache.acceptSigned(data, file: file, envelope: envelope,
                                          dataURL: dataURL, manifestURL: manifestURL)
-        }
+        }.value
         switch outcome {
         case .success(let built):
             index = built
@@ -262,9 +262,9 @@ final class SpeedLimitService {
         guard let data = payload else { return }
 
         let url = fileURL
-        let built = await offMain {
+        let built = await Task.detached(priority: .utility) {
             SpeedLimitCache.acceptLegacy(data, dataURL: url)
-        }
+        }.value
         // Пока качали, храповик мог встать (другой вызов увидел подпись):
         // тогда этот результат уже не вправе стать действующим.
         guard let built, LimitsTrust.allowsLegacy(ratchetSet: Storage.bool(.speedLimitsSignedSeen))

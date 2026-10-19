@@ -44,14 +44,14 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
         Log.carplay.notice("CarPlay: приборная панель подключена")
         controller = dashboardController
         model.carIsDark = window.traitCollection.userInterfaceStyle == .dark
-        model.refreshDaylight(appearance: env.settings.mapAppearance, sunDay: env.interfaceIsDaylight)
+        model.refreshDaylight(appearance: env.settings.mapAppearance, sunDay: env.sunIsUp)
         // Тема машины меняется на ходу (фары, тоннель). У панели нет
         // contentStyleDidChange, как у основной сцены, — слушаем трейт окна:
         // иначе в «Авто» панель, подключённая днём, оставалась белой всю ночь.
         window.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak self] (window: UIWindow, _: UITraitCollection) in
             guard let self else { return }
             self.model.carIsDark = window.traitCollection.userInterfaceStyle == .dark
-            self.model.refreshDaylight(appearance: self.env.settings.mapAppearance, sunDay: self.env.interfaceIsDaylight)
+            self.model.refreshDaylight(appearance: self.env.settings.mapAppearance, sunDay: self.env.sunIsUp)
         }
         // Панель подключается и в ФОНЕ (журнал 11.10: BG-Active сразу при
         // открытии приложения), а модель раньше считала себя на экране по
@@ -220,8 +220,12 @@ struct CarPlayDashboardView: View {
                 .safeAreaPadding()
         }
         .environment(\.colorScheme, model.isDaylight ? .light : .dark)
-        .onChange(of: env.interfaceIsDaylight, initial: true) { _, day in
+        .onChange(of: env.sunIsUp, initial: true) { _, day in
             model.refreshDaylight(appearance: env.settings.mapAppearance, sunDay: day)
+        }
+        // Настройку сменили на телефоне — плитка не ждёт солнца.
+        .onChange(of: env.settings.mapAppearance) { _, appearance in
+            model.refreshDaylight(appearance: appearance, sunDay: env.sunIsUp)
         }
     }
 }

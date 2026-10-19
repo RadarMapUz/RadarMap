@@ -34,9 +34,8 @@ final class LiveActivityService {
     nonisolated deinit {}
     private var activity: Activity<CameraActivityAttributes>?
     private var lastSentState: CameraActivityAttributes.ContentState?
-    /// Когда обновляли: квант 25 м в движении — это раз в 1–2 секунды, ≈2500
-    /// пробуждений расширения виджета за час. Локскрин не нуждается в
-    /// секундной точности дистанции — раз в 3 с достаточно.
+    /// Когда обновляли (ритм — quantize/interval: 50 м / 5 с вблизи камеры,
+    /// 200 м / 30 с вдали, полосу между обновлениями ведёт система).
     private var lastSentAt = Date.distantPast
 
     var isActive: Bool { activity != nil }

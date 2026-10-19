@@ -221,8 +221,8 @@ final class CarPlayMapModel {
     func returnOnAlert() { send(.cameraAhead) }
 
     /// Пересчитать день/ночь. Ручной выбор старше всего; в «Авто» — машина,
-    /// а без её ответа — солнце (`sunDay` = AppEnvironment.interfaceIsDaylight:
-    /// один расчёт на телефон и машину, а не свой цикл в каждой сцене).
+    /// а без её ответа — солнце (`sunDay` = AppEnvironment.sunIsUp: один
+    /// расчёт на телефон и машину, а не свой цикл в каждой сцене).
     func refreshDaylight(appearance: MapAppearance, sunDay: Bool) {
         let day: Bool
         switch appearance {
@@ -283,16 +283,16 @@ struct CarPlayMapScreen: View {
         // запуск из машины: первый фикс раньше базы, машина стоит — раньше
         // здесь была своя подписка, третья на одно изменение).
         // День/ночь: тема машины приходит сразу (contentStyleDidChange в
-        // делегате), солнце — из AppEnvironment.interfaceIsDaylight.
+        // делегате), солнце — из AppEnvironment.sunIsUp.
         // Солнце пересчитывает AppEnvironment (раз в 5 мин, пока на экран
         // смотрят) — здесь только следуем за ним, без своего цикла.
-        .onChange(of: env.interfaceIsDaylight, initial: true) { _, day in
+        .onChange(of: env.sunIsUp, initial: true) { _, day in
             model.refreshDaylight(appearance: env.settings.mapAppearance, sunDay: day)
         }
         // Настройку водитель мог сменить на телефоне посреди поездки — минуты
         // не ждём.
         .onChange(of: env.settings.mapAppearance) { _, appearance in
-            model.refreshDaylight(appearance: appearance, sunDay: env.interfaceIsDaylight)
+            model.refreshDaylight(appearance: appearance, sunDay: env.sunIsUp)
         }
     }
 

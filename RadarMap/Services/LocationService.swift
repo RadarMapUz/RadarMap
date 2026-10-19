@@ -1130,7 +1130,7 @@ final class LocationService: NSObject {
             speedKmh = speedSmoother.update(rawKmh: speed * 3.6, at: Date())
             refreshDrivingFlag()
         }
-        if speedKmh >= AppConfig.gpsStandstillSpeedKmh { lastMovementAt = Date() }
+        if speedKmh >= AppConfig.movementSeenSpeedKmh { lastMovementAt = Date() }
         if currentCourse != course { currentCourse = course }
         locationTick &+= 1
         onAcceptedFix?(coordinate)

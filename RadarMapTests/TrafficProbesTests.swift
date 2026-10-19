@@ -164,15 +164,39 @@ final class TrafficProbesTests: XCTestCase {
 
     /// Плотная пробка: кусок кончился 12 мин назад, отпущен минуту назад —
     /// уходит (счёт от конца выбрасывал бы ровно тяжёлые пробки). Пролежал в
-    /// очереди 11 мин или кончился полчаса назад — нет.
+    /// очереди 11 мин или кончился полчаса назад — нет. Обычный кусок,
+    /// отпущенный после 25 минут у магазина, — старая езда, не «сейчас».
     func testJamPieceIsFreshFromItsRelease() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
-        XCTAssertTrue(TrafficService.isFresh(releasedAt: now.addingTimeInterval(-60),
-                                             endedAt: now.addingTimeInterval(-12 * 60), now: now))
-        XCTAssertFalse(TrafficService.isFresh(releasedAt: now.addingTimeInterval(-11 * 60),
-                                              endedAt: now.addingTimeInterval(-12 * 60), now: now),
-                       "офлайн-очередь")
-        XCTAssertFalse(TrafficService.isFresh(releasedAt: now.addingTimeInterval(-60),
-                                              endedAt: now.addingTimeInterval(-31 * 60), now: now))
+        func fresh(released: Double, ended: Double, slow: Bool) -> Bool {
+            TrafficService.isFresh(releasedAt: now.addingTimeInterval(-released * 60),
+                                   endedAt: now.addingTimeInterval(-ended * 60), slow: slow, now: now)
+        }
+        XCTAssertTrue(fresh(released: 1, ended: 12, slow: true))
+        XCTAssertFalse(fresh(released: 11, ended: 12, slow: true), "офлайн-очередь")
+        XCTAssertFalse(fresh(released: 1, ended: 31, slow: true))
+        XCTAssertFalse(fresh(released: 1, ended: 26, slow: false), "стоянка у магазина без автостопа")
+        XCTAssertTrue(fresh(released: 1, ended: 9, slow: false))
+    }
+
+    /// Кусок пробки узнаётся по средней по пути, не по доплеру.
+    func testSlowPieceIsMarkedAsJam() {
+        var probes = TrafficProbes(random: { 0.5 })
+        probes.begin(zones: [])
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        // ~0,84 м/с (3 км/ч), скорость в фиксе — нет.
+        for i in 0..<2400 {
+            probes.add(lat: 41.30, lon: 69.20 + Double(i) * 0.00001, kmh: -1,
+                       at: start.addingTimeInterval(Double(i)))
+        }
+        let slow = probes.takeReadyStamped()
+        XCTAssertFalse(slow.isEmpty)
+        XCTAssertTrue(slow.allSatisfy(\.slow))
+        var fast = TrafficProbes(random: { 0.5 })
+        fast.begin(zones: [])
+        for i in 0..<400 {
+            fast.add(lat: 41.30, lon: 69.20 + Double(i) * 0.0001, kmh: 30, at: start.addingTimeInterval(Double(i)))
+        }
+        XCTAssertFalse(fast.takeReadyStamped().contains(where: \.slow))
     }
 }

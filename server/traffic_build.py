@@ -45,6 +45,7 @@ OSRM = "http://127.0.0.1:8092"
 OUT_PATH = "/opt/radarmap/www/traffic/now.json"
 
 PIECE_TTL = 20 * 60          # кусок, который не удалось сопоставить, не живёт дольше
+SEEN_TTL = 30 * 60           # отпечатки повторов: как TRAFFIC_SEEN_TTL в api.py
 SAMPLE_WINDOW = 15 * 60      # «текущая» скорость — за последние 15 минут
 SAMPLE_KEEP = 60 * 60        # сырые скорости рёбер хранятся час
 MIN_PIECES = 2               # независимых кусков на ребро, чтобы показать его
@@ -199,6 +200,12 @@ def process(conn, now, matcher=osrm_match):
 
 def prune(conn, now):
     conn.execute("DELETE FROM traffic_pieces WHERE received < ?", (now - PIECE_TTL,))
+    # Отпечатки повторов (api.py) живут полчаса и без новых POST: ночью
+    # запросов нет, а cron идёт. Таблицы может ещё не быть (старый api.py).
+    try:
+        conn.execute("DELETE FROM traffic_seen WHERE received < ?", (now - SEEN_TTL,))
+    except sqlite3.OperationalError:
+        pass
     conn.execute("DELETE FROM traffic_samples WHERE ts < ?", (now - SAMPLE_KEEP,))
     conn.commit()
 

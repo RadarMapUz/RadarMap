@@ -7,6 +7,7 @@
 //  атомарно подменяем базу. Без сети приложение работает на локальной копии.
 //
 
+import CryptoKit
 import Foundation
 import Observation
 import os
@@ -120,6 +121,9 @@ final class RemoteSyncService {
         let count: Int
         /// Ed25519-подпись cameras.json (base64). Нет подписи — базу не применяем.
         let sig: String?
+        /// sha256 опубликованного файла (sign_db.sh): по нему видно, что
+        /// скачали не тот файл (кэш, недовыкладка, прокси), а не плохую базу.
+        let sha256: String?
     }
 
     /// `force` — кнопка «Проверить» в настройках: отказ, запомненный раньше,
@@ -151,6 +155,16 @@ final class RemoteSyncService {
 
             state = .downloading
             let payload = try await api.getData("cameras.json")
+            // Байты не те, что опубликованы (устаревший кэш, файл ещё
+            // выкладывается, прокси) — это сбой доставки, а не плохая база:
+            // отказ не запоминаем, попробуем в следующий срок (ревью S23).
+            if let expected = manifest.sha256?.lowercased(), await Self.sha256(payload) != expected {
+                Log.network.error("синк базы: sha256 скачанного не совпал с манифестом — не та выкладка")
+                Storage.set(Date(), for: .lastSyncCheck)
+                failure = .server
+                state = .failed
+                return
+            }
             // Подпись обязательна: неподписанная/подменённая база не применяется
             // (защита от MITM на HTTP и от компрометации сервера).
             guard OTASignature.isValid(data: payload, signatureB64: manifest.sig) else {
@@ -195,6 +209,11 @@ final class RemoteSyncService {
         Storage.set(Date(), for: .lastSyncCheck)
     }
 
+    @concurrent
+    private static func sha256(_ data: Data) async -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
     nonisolated static func rejectionKey(version: Int, sig: String?, build: String) -> String {
         "\(build)|\(version)|\(sig ?? "-")"
     }
@@ -207,7 +226,10 @@ final class RemoteSyncService {
         }
     }
 
+    /// Версия и сборка: номер сборки в App Store Connect может повториться
+    /// при новой версии.
     private static var build: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
+        let info = Bundle.main.infoDictionary
+        return "\(info?["CFBundleShortVersionString"] as? String ?? "0")(\(info?["CFBundleVersion"] as? String ?? "0"))"
     }
 }

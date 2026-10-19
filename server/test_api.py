@@ -1043,6 +1043,19 @@ class TrafficTest(ServerTestBase):
         self.assertEqual(body.get("accepted"), 1)
         self.assertEqual(len(self.stored()), 3)
 
+    def test_repeat_does_not_spend_the_address_quota(self):
+        old = api.TRAFFIC_PIECES_PER_IP_DAY
+        api.TRAFFIC_PIECES_PER_IP_DAY = 2
+        try:
+            first = {"v": 1, "pieces": [self.piece(lat=41.36)]}
+            _call(self.port, "POST", "/api/traffic", first, ip="10.0.0.21")
+            _call(self.port, "POST", "/api/traffic", first, ip="10.0.0.21")
+            status, body = _call(self.port, "POST", "/api/traffic",
+                                 {"v": 1, "pieces": [self.piece(lat=41.37)]}, ip="10.0.0.21")
+            self.assertEqual(body.get("accepted"), 1, "повтор не съел квоту адреса")
+        finally:
+            api.TRAFFIC_PIECES_PER_IP_DAY = old
+
     def test_seen_marks_expire(self):
         old = api.TRAFFIC_SEEN_TTL
         api.TRAFFIC_SEEN_TTL = -1

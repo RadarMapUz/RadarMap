@@ -54,7 +54,7 @@ nonisolated struct TrafficProbes: Sendable {
     /// Когда каждый готовый кусок отпущен и когда кончился — только на
     /// телефоне, на сервер не уходит: по ним старые куски не отправляются
     /// (S21, 20.10).
-    private var readyStamps: [(released: Date, ended: Date)] = []
+    private var readyStamps: [(released: Date, ended: Date, slow: Bool)] = []
     /// Длина текущего куска до закрытия (плавает вокруг pieceMeters).
     private var targetLength: Double = AppConfig.trafficPieceMeters
     private var random: @Sendable () -> Double
@@ -134,10 +134,13 @@ nonisolated struct TrafficProbes: Sendable {
         takeReadyStamped().map(\.piece)
     }
 
-    /// Готовые куски с локальным временем отпуска и конца.
-    mutating func takeReadyStamped() -> [(piece: Piece, releasedAt: Date, endedAt: Date)] {
+    /// Готовые куски с локальным временем отпуска и конца; `slow` — кусок
+    /// пробки (средняя по нему ниже `trafficJamPieceKmh`).
+    mutating func takeReadyStamped() -> [(piece: Piece, releasedAt: Date, endedAt: Date, slow: Bool)] {
         defer { ready = []; readyStamps = [] }
-        return zip(ready, readyStamps).map { (piece: $0.0, releasedAt: $0.1.released, endedAt: $0.1.ended) }
+        return zip(ready, readyStamps).map {
+            (piece: $0.0, releasedAt: $0.1.released, endedAt: $0.1.ended, slow: $0.1.slow)
+        }
     }
 
     // MARK: - Внутреннее
@@ -158,8 +161,16 @@ nonisolated struct TrafficProbes: Sendable {
               traveled - end.along >= AppConfig.trafficTrimMeters {
             held.removeFirst()
             ready.append(Self.encode(piece))
-            readyStamps.append((released: time, ended: end.time))
+            readyStamps.append((released: time, ended: end.time, slow: Self.isJam(piece)))
         }
+    }
+
+    /// Средняя скорость по пути куска (не по доплеру — его в пробке и нет).
+    private static func isJam(_ fixes: [Fix]) -> Bool {
+        guard let first = fixes.first, let last = fixes.last else { return false }
+        let seconds = last.time.timeIntervalSince(first.time)
+        guard seconds > 0 else { return false }
+        return (last.along - first.along) / seconds * 3.6 < AppConfig.trafficJamPieceKmh
     }
 
     private mutating func nextTarget() {

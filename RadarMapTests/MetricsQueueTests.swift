@@ -40,18 +40,20 @@ final class MetricsQueueTests: XCTestCase {
         XCTAssertNil(MetricsQueue.stamped(Data("не json".utf8), device: "NEW"))
     }
 
-    /// Что сервер не примет никогда, не откладывается; 4xx не держит очередь,
-    /// сеть и 5xx — повтор.
+    /// Что сервер не примет никогда, не откладывается; отвергнутое ТЕЛО (400,
+    /// 413…) очередь не держит; «не тот адрес» (404, 405, 403 — откат строки
+    /// nginx), сеть и 5xx — повтор, очередь цела.
     func testOutcomesAndCaps() {
         XCTAssertEqual(APIClient.outcome(status: 200), .accepted)
         XCTAssertEqual(APIClient.outcome(status: 400), .rejected(400))
         XCTAssertEqual(APIClient.outcome(status: 413), .rejected(413))
-        XCTAssertEqual(APIClient.outcome(status: 429), .retry)
-        XCTAssertEqual(APIClient.outcome(status: 408), .retry)
-        XCTAssertEqual(APIClient.outcome(status: 503), .retry)
+        XCTAssertEqual(APIClient.outcome(status: 422), .rejected(422))
+        for status in [404, 405, 403, 421, 429, 408, 500, 503] {
+            XCTAssertEqual(APIClient.outcome(status: status), .retry, "\(status)")
+        }
         XCTAssertTrue(MetricsQueue.fits(Data(count: 1_500_000), kind: "diagnostic"))
-        XCTAssertFalse(MetricsQueue.fits(Data(count: 2_100_000), kind: "diagnostic"))
-        XCTAssertFalse(MetricsQueue.fits(Data(count: 300_000), kind: "metric"))
+        XCTAssertFalse(MetricsQueue.fits(Data(count: 1_900_000), kind: "diagnostic"), "запас к потолку сервера")
+        XCTAssertFalse(MetricsQueue.fits(Data(count: 190_000), kind: "metric"))
     }
 
     func testQueueIsCapped() {

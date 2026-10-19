@@ -43,7 +43,7 @@ final class TrafficService {
     /// только чтобы не отправить старое). Офлайн-поездка оставляла до 30
     /// кусков, и они уходили часы спустя как «сейчас» — ложные пробки в
     /// now.json и в чужих ETA (S21, 20.10).
-    @ObservationIgnored private var queue: [(piece: TrafficProbes.Piece, releasedAt: Date, endedAt: Date)] = []
+    @ObservationIgnored private var queue: [(piece: TrafficProbes.Piece, releasedAt: Date, endedAt: Date, slow: Bool)] = []
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     /// Последний такт сети (отправка + приём).
     @ObservationIgnored private var lastTickAt = Date.distantPast
@@ -118,7 +118,7 @@ final class TrafficService {
     private func uploadNow() async {
         let now = Date()
         queue += probes.takeReadyStamped()
-        queue.removeAll { !Self.isFresh(releasedAt: $0.releasedAt, endedAt: $0.endedAt, now: now) }
+        queue.removeAll { !Self.isFresh(releasedAt: $0.releasedAt, endedAt: $0.endedAt, slow: $0.slow, now: now) }
         if queue.count > AppConfig.trafficQueueCap { queue.removeFirst(queue.count - AppConfig.trafficQueueCap) }
         guard contributes, isOnline(), !queue.isEmpty else { return }
         let batch = Array(queue.prefix(AppConfig.trafficBatchPieces))
@@ -135,13 +135,15 @@ final class TrafficService {
         }
     }
 
-    /// Кусок ещё можно отправить. Возраст считается от ОТПУСКА: в плотной
-    /// пробке машина отъезжает 400 м от конца куска минут десять, и счёт от
-    /// конца выбрасывал бы ровно самые тяжёлые пробки (ревью S21). Офлайн-
-    /// очередь — это время после отпуска; конец держит свой, широкий предел.
-    nonisolated static func isFresh(releasedAt: Date, endedAt: Date, now: Date) -> Bool {
-        now.timeIntervalSince(releasedAt) <= AppConfig.trafficPieceMaxAgeSeconds
-            && now.timeIntervalSince(endedAt) <= AppConfig.trafficPieceMaxEndAgeSeconds
+    /// Кусок ещё можно отправить. Офлайн-очередь — время после ОТПУСКА; от
+    /// конца — 10 мин, а куску пробки 30: в плотной пробке машина отъезжает
+    /// 400 м от конца куска минут десять, и счёт от конца выбрасывал бы ровно
+    /// самые тяжёлые пробки (ревью S21). Обычный кусок, отпущенный после
+    /// долгой стоянки (магазин без автостопа), — старая езда, не «сейчас».
+    nonisolated static func isFresh(releasedAt: Date, endedAt: Date, slow: Bool, now: Date) -> Bool {
+        let endLimit = slow ? AppConfig.trafficPieceMaxEndAgeSeconds : AppConfig.trafficPieceMaxAgeSeconds
+        return now.timeIntervalSince(releasedAt) <= AppConfig.trafficPieceMaxAgeSeconds
+            && now.timeIntervalSince(endedAt) <= endLimit
     }
 
     private struct Envelope: Encodable {

@@ -126,15 +126,16 @@ nonisolated struct APIClient {
     }
 
     /// Исход отправки, когда тело можно отложить и повторить: принято;
-    /// повторить (сеть, 5xx, 408, 429); не примут никогда (прочие 4xx —
-    /// повтор того же тела только забил бы очередь).
+    /// не примут никогда — только статусы про САМО тело (400, 413, 415, 422:
+    /// повтор того же тела только забил бы очередь); всё прочее — повторить:
+    /// 404/405/403 значат «не тот адрес», а не «не то тело» — откат строки
+    /// nginx стёр бы всю очередь крэшей за одну досылку (ревью S26).
     enum PostOutcome: Equatable { case accepted, retry, rejected(Int) }
 
     nonisolated static func outcome(status: Int) -> PostOutcome {
         switch status {
         case 200..<300: .accepted
-        case 408, 429: .retry
-        case 400..<500: .rejected(status)
+        case 400, 413, 415, 422: .rejected(status)
         default: .retry
         }
     }

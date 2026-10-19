@@ -244,7 +244,9 @@ final class CameraStore: CameraRepository {
                 try JSONDecoder().decode([Camera].self, from: data)
             }
         } catch {
-            throw .undecodable(error.localizedDescription)
+            // Путь ключа (codingPath) — ровно то, что нужно, когда сборка не
+            // разбирает подписанную базу.
+            throw .undecodable(String(describing: error))
         }
         guard decoded.count >= 100 else { throw .incomplete(count: decoded.count) }
         // Запись ~1 МБ атомарно (temp + rename) — вне main, как декод выше:

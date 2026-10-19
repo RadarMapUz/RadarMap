@@ -165,9 +165,17 @@ nonisolated enum MetricsQueue {
 
     /// Тело для сервера: отложенный отчёт + id устройства на момент отправки.
     static func stamped(_ report: Data, device: String) -> Data? {
-        guard var body = (try? JSONSerialization.jsonObject(with: report)) as? [String: Any] else { return nil }
-        body["device"] = device
-        return try? JSONSerialization.data(withJSONObject: body)
+        do {
+            guard var body = try JSONSerialization.jsonObject(with: report) as? [String: Any] else {
+                Log.network.error("отложенный отчёт — не объект JSON")
+                return nil
+            }
+            body["device"] = device
+            return try JSONSerialization.data(withJSONObject: body)
+        } catch {
+            Log.network.error("отложенный отчёт не собран: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 
     static var directory: URL {

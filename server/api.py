@@ -861,10 +861,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             conn.execute("DELETE FROM traffic_seen WHERE received < ?", (now - TRAFFIC_SEEN_TTL,))
             for piece in pieces:
-                if ip_quota_exceeded("traffic", ip, TRAFFIC_PIECES_PER_IP_DAY):
-                    break
                 text = json.dumps(piece, separators=(",", ":"))
                 digest = hashlib.sha256(text.encode()).hexdigest()
+                # Повтор квоту адреса не тратит.
+                if conn.execute("SELECT 1 FROM traffic_seen WHERE hash = ?", (digest,)).fetchone():
+                    continue
+                if ip_quota_exceeded("traffic", ip, TRAFFIC_PIECES_PER_IP_DAY):
+                    break
                 # INSERT OR IGNORE — и проверка, и отметка разом: два запроса
                 # с одной пачкой не проскочат оба.
                 if conn.execute("INSERT OR IGNORE INTO traffic_seen(hash, received) VALUES(?, ?)",

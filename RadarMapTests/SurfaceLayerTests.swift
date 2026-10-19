@@ -53,35 +53,13 @@ struct SurfaceLayerTests {
         #expect(areas[0].roadClass == 0)
     }
 
-    @Test("Класс полотна доезжает до сцены, а не теряется по дороге")
-    func roadClassReachesTheScene() {
-        // Класс лежит в записи тайла, а красит по нему ВЬЮ. Между ними —
-        // сцена, и поля для класса в ней не было вовсе: вью спрашивало
-        // `area.roadClass` у типа, где его нет, и модуль не собирался.
-        // Проспект и двор обязаны отличаться заливкой, иначе город станет
-        // одного тона.
-        let area = RoadSketch.Area(points: [.zero, CGPoint(x: 1, y: 1)],
-                                   kind: .road, isClosed: true,
-                                   levels: 0, roadClass: 3)
-        #expect(area.roadClass == 3)
-    }
-
     @Test("Поверхность — ближний охват и только он")
     func surfaceIsCloseRangeOnly() {
         // На охвате района полотно вырождается в линию, и штрих там честнее и
         // дешевле: видно костяк района, а не отдельные проезжие части.
         #expect(SketchArea.Kind.road.maxSpanMeters == 250)
         #expect(SketchArea.Kind.junction.maxSpanMeters == 250)
-        #expect(SketchArea.Kind.road.maxSpanMeters < RoadSketch.farNetworkSpan)
-    }
-
-    @Test("Поверхность ложится над местностью и под сетью")
-    func drawOrderHolds() {
-        let order = RoadSketch.drawOrder
-        #expect(order(.road) > order(.sidewalk), "полотно ушло под тротуар")
-        #expect(order(.junction) > order(.road),
-                "перекрёсток под полотном не закроет стыки")
-        #expect(order(.house) < order(.road))
+        #expect(SketchArea.Kind.road.maxSpanMeters < MapViewport.farNetworkSpan)
     }
 
     @Test("Набор d — площадной")

@@ -81,15 +81,6 @@ final class RoadNetworkService {
     /// points — другая геометрия, как и сама дальняя сеть.
     private(set) var farPoints: [SketchPoint] = []
 
-    /// Какие наборы тайлов сейчас нужны. Ставит схема: она одна знает охват и
-    /// то, едем ли мы по двору. Слой, невидимый на текущем охвате, не
-    /// качается и не разбирается вовсе — дворовые проезды это половина всех
-    /// дорог, и в общем файле они ехали бы на телефон всю поездку впустую.
-    func setWantedSets(_ wanted: Swift.Set<RoadTiles.Set>) {
-        guard wanted != wantedSets else { return }
-        wantedSets = wanted
-        lastEnsureAt = nil   // состав окрестности изменился — проверить сразу
-    }
     /// Только улицы: костяк района и местность рисовала схема приборки
     /// (удалена 11.10), а посадке отметки и схеме развязки нужны оси улиц.
     @ObservationIgnored private var wantedSets: Swift.Set<RoadTiles.Set> = [.streets]

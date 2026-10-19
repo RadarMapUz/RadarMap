@@ -51,7 +51,7 @@ nonisolated struct SketchPoint: Sendable {
         /// по ней читается, где город, а где проезд насквозь.
         var maxSpanMeters: Double {
             switch self {
-            case .trafficLight: return RoadSketch.maxSpanMeters
+            case .trafficLight: return MapViewport.maxSpanMeters
             // Краска мельче значка на порядок: дальше сотни метров зебра —
             // это пиксель, а стоп-линия и вовсе волос. Решение по ним
             // принимают на подъезде, и раньше они не нужны.
@@ -60,7 +60,7 @@ nonisolated struct SketchPoint: Sendable {
             // Решение о полосе принимают здесь и сейчас: дальше ста метров
             // стрелка — пиксель, а перестроиться всё равно уже поздно.
             case .laneArrows: return 120
-            default: return RoadSketch.farNetworkSpan
+            default: return MapViewport.farNetworkSpan
             }
         }
 

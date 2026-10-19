@@ -38,9 +38,9 @@ nonisolated struct SketchPlace: Sendable, Equatable {
         /// Каждому рангу свой диапазон, и диапазоны почти не пересекаются.
         var fromSpanMeters: Double {
             switch self {
-            case .city, .town:              return RoadSketch.farNetworkSpan
-            case .village, .hamlet:         return RoadSketch.farNetworkSpan
-            case .suburb, .neighbourhood:   return RoadSketch.farNetworkSpan
+            case .city, .town:              return MapViewport.farNetworkSpan
+            case .village, .hamlet:         return MapViewport.farNetworkSpan
+            case .suburb, .neighbourhood:   return MapViewport.farNetworkSpan
             }
         }
 

@@ -55,30 +55,6 @@ final class SketchAreaTests: XCTestCase {
         XCTAssertNil(RoadTiles.Set.surface.areaKind)
     }
 
-    // MARK: - Правила слоёв
-
-    func testBlocksLiveAtEveryScaleNow() {
-        // Вода и зелень — крупные ориентиры, они читаются на любом охвате.
-        // Кварталы — почти на любом: они гасли после 340 метров, ровно там,
-        // где город должен превращаться в массу застройки, а вместо неё
-        // оставалось пустое поле. Кварталов в кадре на полкилометра всего
-        // восемьдесят восемь — это дёшево.
-        //
-        // Но не БЕСКОНЕЧНО: с осмотром до двадцати километров бесконечность
-        // означала бы восемьдесят один тайл кварталов ради фигур мельче
-        // пикселя. Потолок обязан быть выше района и много ниже осмотра.
-        XCTAssertEqual(SketchArea.Kind.water.maxSpanMeters, .greatestFiniteMagnitude)
-        XCTAssertGreaterThan(SketchArea.Kind.block.maxSpanMeters,
-                             RoadSketch.maxSpanMeters)
-        XCTAssertLessThan(SketchArea.Kind.block.maxSpanMeters,
-                          RoadSketch.inspectMaxSpanMeters)
-        // А дом и тротуар остаются вблизи: их по числу больше всего
-        // остального вместе, и на дальнем плане они шум, а не ориентир.
-        XCTAssertLessThan(SketchArea.Kind.house.maxSpanMeters, RoadSketch.farNetworkSpan)
-        XCTAssertLessThan(SketchArea.Kind.sidewalk.maxSpanMeters,
-                          SketchArea.Kind.house.maxSpanMeters)
-    }
-
     // MARK: - Очередь бюджета
 
     func testPavementOutranksEverything() {
@@ -92,75 +68,6 @@ final class SketchAreaTests: XCTestCase {
         XCTAssertEqual(Array(ranks.suffix(2)), [.house, .sidewalk])
     }
 
-    func testRoadAndJunctionsLiveOrDieTogether() {
-        // Дорога без площади перекрёстка — это ленты, которые не сходятся, а
-        // дорога, у которой выброшен каждый пятый кусок, — рваная. Замерено в
-        // перегреве на боевых тайлах: при бюджете 120 терялись ВСЕ 41 площадь
-        // перекрёстка и 20 из 82 кусков полотна. Ровно это и было на снимке
-        // с баннером «Телефон перегрелся».
-        let pavement = (0..<6).map { index in
-            SketchArea(points: ring(at: 41.3 + Double(index) * 0.0001, 69.25),
-                       kind: index < 4 ? .road : .junction, isClosed: true)
-        }
-        let tight = RoadSketch.scene(alertCamera: nil, alertInRange: false,
-                                     areas: pavement, areaBudget: 5,
-                                     anchor: .init(latitude: 41.3, longitude: 69.25),
-                                     spanMeters: 200)
-        XCTAssertFalse(tight.areas.contains { $0.kind.isPavement },
-                       "полотно нарисовано наполовину — это и есть рваные дороги")
-        XCTAssertFalse(tight.hasPavement,
-                       "вью обязана узнать, что полотна нет, и чертить сеть штрихом")
-
-        let enough = RoadSketch.scene(alertCamera: nil, alertInRange: false,
-                                      areas: pavement, areaBudget: 6,
-                                      anchor: .init(latitude: 41.3, longitude: 69.25),
-                                      spanMeters: 200)
-        XCTAssertEqual(enough.areas.filter { $0.kind.isPavement }.count, 6)
-        XCTAssertTrue(enough.hasPavement)
-    }
-
-    func testTerrainIsCutBeforeTheRoad() {
-        // Когда мест меньше, чем фигур, уходит местность, а не асфальт.
-        var mixed: [SketchArea] = (0..<3).map {
-            SketchArea(points: ring(at: 41.3 + Double($0) * 0.0001, 69.25),
-                       kind: .road, isClosed: true)
-        }
-        mixed += (0..<20).map {
-            SketchArea(points: ring(at: 41.3 + Double($0) * 0.0001, 69.2505),
-                       kind: .green, isClosed: true)
-        }
-        let scene = RoadSketch.scene(alertCamera: nil, alertInRange: false,
-                                     areas: mixed, areaBudget: 6,
-                                     anchor: .init(latitude: 41.3, longitude: 69.25),
-                                     spanMeters: 200)
-        XCTAssertEqual(scene.areas.filter { $0.kind == .road }.count, 3)
-        XCTAssertEqual(scene.areas.count, 6)
-    }
-
-    func testTerrainIsDrawnUnderRoads() {
-        // Порядок задаётся сценой один раз, а не рендерером на каждой
-        // пересборке. Кварталы под всем, вода поверх зелени.
-        let order = [SketchArea.Kind.block, .green, .water, .rail].map(RoadSketch.drawOrder)
-        XCTAssertEqual(order, order.sorted(), "слои обязаны идти снизу вверх")
-    }
-
-    func testSceneKeepsOnlyLayersVisibleAtThisSpan() {
-        let block = SketchArea(points: ring(at: 41.3, 69.25), kind: .block, isClosed: true)
-        let water = SketchArea(points: ring(at: 41.3, 69.25), kind: .water, isClosed: true)
-        let near = RoadSketch.scene(alertCamera: nil, alertInRange: false,
-                                    areas: [block, water],
-                                    anchor: .init(latitude: 41.3, longitude: 69.25),
-                                    spanMeters: 200)
-        XCTAssertEqual(Set(near.areas.map(\.kind)), [.block, .water])
-
-        let far = RoadSketch.scene(alertCamera: nil, alertInRange: false,
-                                   areas: [block, water],
-                                   anchor: .init(latitude: 41.3, longitude: 69.25),
-                                   spanMeters: 600)
-        XCTAssertEqual(Set(far.areas.map(\.kind)), [.block, .water],
-                       "на дальнем плане город держится кварталами — без них пустое поле")
-    }
-
     func testThermalBudgetSilencesTerrainFirst() {
         // Местность — ориентиры, а не предупреждения. Она гаснет раньше всего,
         // что несёт смысл: дороги, маршрут и камеры не режутся ни на одной
@@ -170,42 +77,6 @@ final class SketchAreaTests: XCTestCase {
         XCTAssertEqual(PerformanceMode.minimal.sketchAreaBudget, 0)
         XCTAssertGreaterThan(PerformanceMode.minimal.carPlayAnnotationBudget, 0,
                              "камеры не гаснут никогда")
-    }
-
-    func testAreaBudgetKeepsLandmarksBeforeHouses() {
-        // Бюджет местности режет по СЛОЯМ, а не по порядку массива. Массив
-        // приезжает flatMap-ом по множеству тайлов, то есть его порядок —
-        // порядок хеша: «первые N» означало бы «кто выжил, решил хеш». Река
-        // исчезала бы через раз, вытесненная пачкой домов из тайла, который
-        // просто оказался раньше в обходе.
-        //
-        // Заполняться бюджет начнёт ровно тогда, когда поедут дома: их 54 094
-        // в одном кадре центра против четырёхсот мест в бюджете.
-        var mixed: [SketchArea] = (0..<30).map {
-            SketchArea(points: ring(at: 41.3 + Double($0) * 0.0001, 69.25),
-                       kind: .house, isClosed: true)
-        }
-        mixed.append(SketchArea(points: ring(at: 41.3005, 69.2505),
-                                kind: .water, isClosed: true))
-        let scene = RoadSketch.scene(alertCamera: nil, alertInRange: false,
-                                     areas: mixed, areaBudget: 5,
-                                     anchor: .init(latitude: 41.3, longitude: 69.25),
-                                     spanMeters: 150)
-        XCTAssertEqual(scene.areas.count, 5)
-        XCTAssertTrue(scene.areas.contains { $0.kind == .water },
-                      "вода — ориентир, она обязана пережить дома")
-    }
-
-    func testAreaBudgetIsRespected() {
-        let many = (0..<50).map {
-            SketchArea(points: ring(at: 41.3 + Double($0) * 0.0001, 69.25),
-                       kind: .green, isClosed: true)
-        }
-        let scene = RoadSketch.scene(alertCamera: nil, alertInRange: false,
-                                     areas: many, areaBudget: 10,
-                                     anchor: .init(latitude: 41.3, longitude: 69.25),
-                                     spanMeters: 200)
-        XCTAssertEqual(scene.areas.count, 10)
     }
 
     private func ring(at latitude: Double, _ longitude: Double) -> [CLLocationCoordinate2D] {
@@ -232,35 +103,6 @@ final class SketchAreaTests: XCTestCase {
         let line = RoadTiles.decodeTile(Data(tile.utf8))?.first
         XCTAssertEqual(line?.isRing, true)
         XCTAssertEqual(line?.isOneWay, false)
-    }
-
-    func testCurrentStreetTakesTheNearestNamedRoad() {
-        let me = CLLocationCoordinate2D(latitude: 41.3, longitude: 69.25)
-        let near = RoadLine(points: line(from: 41.3, lon: 69.2501),
-                            kind: .primary, isDetailed: true, name: "Амира Темура")
-        let far = RoadLine(points: line(from: 41.3, lon: 69.2530),
-                           kind: .primary, isDetailed: true, name: "Далёкая")
-        let network = StubNetwork(lines: [far, near])
-        XCTAssertEqual(RoadSketch.currentStreet(network: network, at: me),
-                       "Амира Темура")
-    }
-
-    func testUnnamedRoadGivesNoLabel() {
-        // Пустая подпись под курсором хуже её отсутствия: она выглядит
-        // сломанной, а не честной.
-        let me = CLLocationCoordinate2D(latitude: 41.3, longitude: 69.25)
-        let network = StubNetwork(lines: [RoadLine(points: line(from: 41.3, lon: 69.2501),
-                                                   kind: .primary, isDetailed: true)])
-        XCTAssertNil(RoadSketch.currentStreet(network: network, at: me))
-    }
-
-    func testDistantStreetIsNotOurs() {
-        let me = CLLocationCoordinate2D(latitude: 41.3, longitude: 69.25)
-        let network = StubNetwork(lines: [RoadLine(points: line(from: 41.3, lon: 69.2540),
-                                                   kind: .primary, isDetailed: true,
-                                                   name: "Соседняя")])
-        XCTAssertNil(RoadSketch.currentStreet(network: network, at: me),
-                     "улица в трёхстах метрах — не та, по которой мы едем")
     }
 
     private func line(from latitude: Double, lon: Double) -> [CLLocationCoordinate2D] {
@@ -306,10 +148,10 @@ final class SketchAreaTests: XCTestCase {
         // имеют, и на костяке им нечего показывать — они обрываются на
         // границе детальной сети.
         XCTAssertEqual(SketchPoint.Kind.trafficLight.maxSpanMeters,
-                       RoadSketch.maxSpanMeters)
+                       MapViewport.maxSpanMeters)
         for kind in SketchPoint.Kind.allCases
         where kind != .trafficLight && !kind.isPaint {
-            XCTAssertEqual(kind.maxSpanMeters, RoadSketch.farNetworkSpan,
+            XCTAssertEqual(kind.maxSpanMeters, MapViewport.farNetworkSpan,
                            "\(kind) живёт ровно до костяка района")
         }
     }
@@ -321,28 +163,9 @@ final class SketchAreaTests: XCTestCase {
         // серое пятно. Решение по ним принимают на подъезде, и держать их
         // дольше значит платить растром за то, чего не видно.
         for kind in SketchPoint.Kind.allCases where kind.isPaint {
-            XCTAssertLessThan(kind.maxSpanMeters, RoadSketch.farNetworkSpan,
+            XCTAssertLessThan(kind.maxSpanMeters, MapViewport.farNetworkSpan,
                               "\(kind) — краска, она обязана гаснуть раньше сети")
         }
-    }
-
-    func testSceneKeepsOnlyMarksVisibleAtThisSpan() {
-        let light = SketchPoint(coordinate: .init(latitude: 41.3005, longitude: 69.25),
-                                kind: .trafficLight)
-        let bump = SketchPoint(coordinate: .init(latitude: 41.3005, longitude: 69.25),
-                               kind: .speedBump)
-        let near = RoadSketch.scene(alertCamera: nil, alertInRange: false,
-                                    points: [light, bump],
-                                    anchor: .init(latitude: 41.3, longitude: 69.25),
-                                    spanMeters: 200)
-        XCTAssertEqual(Set(near.marks.map(\.kind)), [.trafficLight, .speedBump])
-
-        let far = RoadSketch.scene(alertCamera: nil, alertInRange: false,
-                                   points: [light, bump],
-                                   anchor: .init(latitude: 41.3, longitude: 69.25),
-                                   spanMeters: RoadSketch.farNetworkSpan + 1)
-        XCTAssertEqual(Set(far.marks.map(\.kind)), [.trafficLight],
-                       "на костяке района остаётся только светофор")
     }
 
     func testTheFarPointSetIsPointsToo() {
@@ -353,22 +176,6 @@ final class SketchAreaTests: XCTestCase {
         XCTAssertNotEqual(RoadTiles.Set.pointsFar, RoadTiles.Set.points)
     }
 
-    func testMarkBudgetCapsWhatEverArrivesInATile() {
-        // Тайл приходит извне, а слой марок перерисовывается на тик: потолок
-        // здесь предохранитель, а не оптимизация.
-        let anchor = CLLocationCoordinate2D(latitude: 41.3, longitude: 69.25)
-        let crowd = (0..<(RoadSketch.markBudget * 2)).map { i in
-            SketchPoint(coordinate: .init(latitude: 41.3 + Double(i) * 1e-5,
-                                          longitude: 69.25),
-                        kind: .trafficLight)
-        }
-        let scene = RoadSketch.scene(alertCamera: nil, alertInRange: false,
-                                     points: crowd, anchor: anchor, spanMeters: 200)
-        XCTAssertGreaterThan(scene.marks.count, RoadSketch.markBudget,
-                             "сцена не режет — режет слой отрисовки")
-        XCTAssertEqual(scene.marks.prefix(RoadSketch.markBudget).count,
-                       RoadSketch.markBudget)
-    }
 }
 
 /// Источник, отдающий заранее известные линии: имя улицы — чистая функция, и

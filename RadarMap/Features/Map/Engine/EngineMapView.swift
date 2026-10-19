@@ -46,7 +46,7 @@ struct EngineMapView: UIViewRepresentable {
     var courseDegrees: Double
     /// Охват по высоте вида, метры.
     var spanMeters: Double
-    var anchorY: Double = RoadSketch.meY
+    var anchorY: Double = MapViewport.meY
     /// Наклон, градусы.
     var pitchDegrees: Double
     var daylight: Bool

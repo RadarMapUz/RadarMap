@@ -123,6 +123,6 @@ final class PerfAuditTests: XCTestCase {
         var stopped = next
         stopped.arrivesAt = nil
         XCTAssertNil(LiveActivityService.approachStart(new: stopped, sent: sent, now: t0.addingTimeInterval(5)))
-        XCTAssertLessThan(AppConfig.liveActivityKeepAliveSeconds, 300, "освежать раньше staleDate")
+        XCTAssertLessThan(AppConfig.liveActivityKeepAliveSeconds, AppConfig.liveActivityStaleSeconds, "освежать раньше staleDate")
     }
 }

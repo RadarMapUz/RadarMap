@@ -75,12 +75,7 @@ nonisolated struct AlertEngine {
             announcedLevel[cameraID] = 0
             return nil
         }
-        // Пороги по убыванию, без массива: решение принимается по каждой
-        // камере в радиусе на каждом тике GPS.
-        var level = 0
-        if distance <= radius { level += 1 }
-        if distance <= radius * 0.6 { level += 1 }
-        if distance <= radius * 0.3 { level += 1 }
+        let level = Self.level(distance: distance, radius: radius)
         let previous = announcedLevel[cameraID] ?? 0
         guard level > previous else { return nil }
         announcedLevel[cameraID] = level
@@ -89,5 +84,15 @@ nonisolated struct AlertEngine {
 
     mutating func reset() {
         announcedLevel.removeAll()
+    }
+
+    /// Ступень тревоги по дистанции: 1 — в радиусе, 2 — ближе
+    /// `alertLevel2Share` радиуса, 3 — ближе `alertLevel3Share`. Одна лестница
+    /// на движок, экран и часы — до 19.10 у LocationService была своя копия
+    /// тех же 0,6/0,3 (аудит архитектуры).
+    static func level(distance: CLLocationDistance, radius: CLLocationDistance) -> Int {
+        if distance <= radius * AppConfig.alertLevel3Share { return 3 }
+        if distance <= radius * AppConfig.alertLevel2Share { return 2 }
+        return distance <= radius ? 1 : 0
     }
 }

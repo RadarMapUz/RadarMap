@@ -327,29 +327,31 @@ final class LocationService: NSObject {
     /// если он не пришёл: не построить лучше, чем построить от вчерашнего
     /// места (plan_drive_complaints.md, Ж5).
     func awaitPreciseCoordinate(timeout: TimeInterval = 6) async -> CLLocationCoordinate2D? {
-        if !isPositionCoarse, let currentCoordinate { return currentCoordinate }
-        guard isAuthorized else { return nil }
-        manager.requestLocation()
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if !isPositionCoarse, let currentCoordinate { return currentCoordinate }
-            await Task.pause(seconds: 0.2)
-        }
-        return nil
+        await awaitPosition(timeout: timeout, precise: true)
     }
 
     /// Координата для интентов (холодный старт из Siri: bootstrap не выполнялся,
     /// currentCoordinate пуст) — просим одноразовый фикс и ждём его до `timeout`.
     func awaitCoordinate(timeout: TimeInterval = 5) async -> CLLocationCoordinate2D? {
-        if let currentCoordinate { return currentCoordinate }
+        await awaitPosition(timeout: timeout, precise: false)
+    }
+
+    /// Одноразовый фикс и ожидание его до `timeout` — общий цикл обеих
+    /// просьб выше. `precise` — грубая точка (фоновый режим) не годится:
+    /// маршрут от неё начинается за километры.
+    private func awaitPosition(timeout: TimeInterval, precise: Bool) async -> CLLocationCoordinate2D? {
+        func ready() -> CLLocationCoordinate2D? {
+            precise && isPositionCoarse ? nil : currentCoordinate
+        }
+        if let point = ready() { return point }
         guard isAuthorized else { return nil }
         manager.requestLocation()
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            if let currentCoordinate { return currentCoordinate }
-            await Task.pause(seconds: 0.2)
+            if let point = ready() { return point }
+            await Task.pause(seconds: AppConfig.positionWaitStepSeconds)
         }
-        return currentCoordinate
+        return ready()
     }
 
     /// Телефонная сцена открыта/свёрнута. Точный GPS для HUD держим, только пока открыто и НЕ в поездке.
@@ -536,7 +538,7 @@ final class LocationService: NSObject {
         let batteryPercent = BatteryProbe.percent()
         if asPassenger {
             _ = passTracking.flush()   // пассажирские «проезды» не считаем
-            if trip.distanceMeters < 500 { trip.cancel() } else {
+            if trip.distanceMeters < AppConfig.passengerTripMinMeters { trip.cancel() } else {
                 trip.finish(batteryPercent: batteryPercent)
             }
         } else {
@@ -619,17 +621,13 @@ final class LocationService: NSObject {
         // замирал на нуле, потому что телефон лежит в держателе неподвижно
         // относительно себя, а система считает это «пользователь остановился».
         manager.pausesLocationUpdatesAutomatically = !(isTripActive || isCarPlayConnected)
-        if isTripActive {
-            // Поездка: высокая точность, разрешаем работу в фоне (нужен доступ «Всегда»).
-            manager.desiredAccuracy = isLowPowerMode ? kCLLocationAccuracyNearestTenMeters : kCLLocationAccuracyBest
-            manager.distanceFilter = isLowPowerMode ? 20 : 5
-            manager.allowsBackgroundLocationUpdates = (manager.authorizationStatus == .authorizedAlways)
-            manager.showsBackgroundLocationIndicator = true
-        } else if isCarPlayConnected {
-            // Экран машины без начатой поездки — это тоже вождение: цифры на
-            // нём обязаны быть живыми. Точность как в поездке; фон разрешаем,
-            // потому что телефон при этом обычно заблокирован в держателе, и
-            // без флага система вправе перестать слать фиксы.
+        if isTripActive || isCarPlayConnected {
+            // Поездка: высокая точность, разрешаем работу в фоне (нужен доступ
+            // «Всегда»). Экран машины без начатой поездки — это тоже вождение:
+            // цифры на нём обязаны быть живыми, а телефон при этом обычно
+            // заблокирован в держателе, и без флага фона система вправе
+            // перестать слать фиксы. Дальше точность ведёт лестница
+            // (tuneAdaptiveAccuracy).
             manager.desiredAccuracy = isLowPowerMode ? kCLLocationAccuracyNearestTenMeters : kCLLocationAccuracyBest
             manager.distanceFilter = isLowPowerMode ? 20 : 5
             manager.allowsBackgroundLocationUpdates = (manager.authorizationStatus == .authorizedAlways)
@@ -1132,7 +1130,7 @@ final class LocationService: NSObject {
             speedKmh = speedSmoother.update(rawKmh: speed * 3.6, at: Date())
             refreshDrivingFlag()
         }
-        if speedKmh >= 3 { lastMovementAt = Date() }
+        if speedKmh >= AppConfig.movementSeenSpeedKmh { lastMovementAt = Date() }
         if currentCourse != course { currentCourse = course }
         locationTick &+= 1
         onAcceptedFix?(coordinate)
@@ -1318,10 +1316,7 @@ final class LocationService: NSObject {
     nonisolated static func alertLevel(distance: CLLocationDistance?, radius: CLLocationDistance,
                                        tripActive: Bool) -> Int {
         guard tripActive, let d = distance else { return 0 }
-        if d <= radius * 0.3 { return 3 }
-        if d <= radius * 0.6 { return 2 }
-        if d <= radius { return 1 }
-        return 0
+        return AlertEngine.level(distance: d, radius: radius)
     }
 
     /// Текущее состояние для Live Activity.

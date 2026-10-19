@@ -41,7 +41,6 @@ final class WatchBridgeService: NSObject {
     /// Часы спарены и приложение на них стоит — по событиям сессии, а не
     /// опросом WCSession на каждом GPS-тике (аудит энергии 19.10).
     private var watchReady = false
-    private static let minInterval: TimeInterval = 3
 
     override init() {
         super.init()
@@ -61,8 +60,9 @@ final class WatchBridgeService: NSObject {
         // каждый тик, и часы получали сообщение раз в 3 с всю поездку
         // (docs/perf_audit_2026-10-07.md). В тревоге — как раньше.
         let calm = alertLevel == 0
-        let speedStep = calm ? 5.0 : 2.0
-        let distStep = (distanceMeters ?? .infinity) > AppConfig.liveActivityNearMeters ? 100.0 : 25.0
+        let speedStep = calm ? AppConfig.watchSpeedStepCalm : AppConfig.watchSpeedStepAlert
+        let distStep = (distanceMeters ?? .infinity) > AppConfig.liveActivityNearMeters
+            ? AppConfig.watchDistanceStepFar : AppConfig.watchDistanceStepNear
         let quantized: [String: Int] = [
             "active": isTripActive ? 1 : 0,
             "speed": Int((speedKmh / speedStep).rounded() * speedStep),
@@ -74,9 +74,9 @@ final class WatchBridgeService: NSObject {
         ]
         guard quantized != lastSent else { return }
         // Рост/сброс уровня и смена камеры — сразу; бегущие цифры — не чаще
-        // раза в minInterval (в тревоге) или watchCalmInterval (без неё).
+        // раза в watchAlertInterval (в тревоге) или watchCalmInterval (без неё).
         if quantized["level"] == lastSent["level"], quantized["title"] == lastSent["title"],
-           Date().timeIntervalSince(lastSentAt) < (calm ? AppConfig.watchCalmInterval : Self.minInterval) {
+           Date().timeIntervalSince(lastSentAt) < (calm ? AppConfig.watchCalmInterval : AppConfig.watchAlertInterval) {
             return
         }
         lastSent = quantized

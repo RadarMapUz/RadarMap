@@ -185,4 +185,16 @@ final class LocationGatesTests: XCTestCase {
         XCTAssertTrue(LocationGates.isOnOurRoad(sudden, in: situation(),
                                                 isOnRoute: false))
     }
+
+    /// Направление фильтрует только в движении и с достоверным курсом: стоящая
+    /// машина не «едет мимо», а случайный курс не вправе заглушить камеру
+    /// (аудит 19.10: прямого теста не было).
+    func testDirectionFilterNeedsSpeedAndATrustedCourse() {
+        XCTAssertTrue(LocationGates.isFilteringActive(situation(course: 90, speed: 60)))
+        XCTAssertFalse(LocationGates.isFilteringActive(situation(course: -1, speed: 60)), "курса нет")
+        XCTAssertFalse(LocationGates.isFilteringActive(
+            situation(course: 90, speed: AppConfig.directionalMinSpeedKmh - 0.1)), "почти стоим")
+        XCTAssertTrue(LocationGates.isFilteringActive(
+            situation(course: 0, speed: AppConfig.directionalMinSpeedKmh)), "порог включительно, север — тоже курс")
+    }
 }

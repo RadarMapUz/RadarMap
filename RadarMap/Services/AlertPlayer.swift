@@ -294,7 +294,7 @@ final class AlertPlayer: NSObject {
 
     private func deactivateSoon() {
         // Отпускаем сессию, если ничего больше не играет (возвращаем громкость музыке).
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + AppConfig.audioReleaseDelaySeconds) { [weak self] in
             guard let self else { return }
             let stillPlaying = (self.player?.isPlaying ?? false) || self.synthesizer.isSpeaking
             if !stillPlaying {

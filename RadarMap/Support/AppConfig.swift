@@ -64,12 +64,19 @@ nonisolated enum AppConfig {
     /// расслабляемся вовсе, а вдали выход мгновенный — первый же фикс с
     /// движением возвращает точный тир.
     nonisolated static let gpsIdleAfterSeconds: TimeInterval = 20
+    /// Шаг ожидания одноразового фикса (интенты, маршрут из машины).
+    nonisolated static let positionWaitStepSeconds: TimeInterval = 0.2
     /// Открытый экран «лежал» — сдвиг на столько от места лёжки возвращает
     /// максимальную точность, даже если скорость первого фикса ещё ноль.
     nonisolated static let gpsIdleLeaveMeters: Double = 20
     /// «Стою» — скорость ниже этого (км/ч). Ползание в пробке (1–2 км/ч) —
     /// тоже стоянка: фиксы всё равно приходят по 30-метровому фильтру.
     nonisolated static let gpsStandstillSpeedKmh = 3.0
+    /// С этой скорости фикс считается движением для «когда двигались в
+    /// последний раз» (сторож, стоянка). Отдельно от порога лестницы GPS:
+    /// поднять тот ради экономии в пробке не должно делать ползущую машину
+    /// «стоящей».
+    nonisolated static let movementSeenSpeedKmh = 3.0
     /// Ближе этого к камере/манёвру стоянка НЕ расслабляет GPS: зона замера
     /// проезда 80 м плюс запас — очередь ползком у самой камеры пишет проезд
     /// с полной точностью, как и раньше.
@@ -373,6 +380,10 @@ nonisolated enum AppConfig {
     /// Гистерезис выхода из зоны оповещения: серия порогов сбрасывается только
     /// когда камера ушла заметно дальше радиуса — анти-дребезг на границе.
     static let alertExitHysteresisMeters: CLLocationDistance = 80
+    /// Ступени тревоги — доли радиуса (AlertEngine.level): ближе 0,6 —
+    /// вторая, ближе 0,3 — третья.
+    nonisolated static let alertLevel2Share = 0.6
+    nonisolated static let alertLevel3Share = 0.3
 
     /// Проезд считается завершённым, когда камера ушла дальше радиуса на этот запас
     /// (гарантирует, что траверз точно пройден, а не GPS-скачок).
@@ -454,6 +465,10 @@ nonisolated enum AppConfig {
     nonisolated static let cameraOverspeedWarnMarginKmh: Double = 2
 
     // MARK: - Склейка поездок (заезд по пути ≠ новая поездка)
+    /// «Я пассажир» — кусок короче этого не пишется вовсе.
+    static let passengerTripMinMeters: Double = 500
+    /// Шаг между фиксами длиннее этого — перелёт, в дистанцию поездки не идёт.
+    nonisolated static let tripMaxStepMeters: Double = 500
     // nonisolated: читаются из чистого TripMerge (и его тестов) без прыжка на main.
 
     /// Новый старт дальше этого от финиша прошлой — точно другая поездка
@@ -727,6 +742,10 @@ nonisolated enum AppConfig {
 
     /// Как часто опрашивать сервер о передвижных радарах (сек), пока приложение открыто.
     static let mobilePollInterval: TimeInterval = 180
+
+    /// Вспышка ответа на «Радар!» и вопрос «Радар ещё стоял?» на телефоне.
+    static let reportFlashSeconds: TimeInterval = 2
+    static let mobileQuestionSeconds: TimeInterval = 20
 
     // MARK: - Расписание опроса в поездке
     //
@@ -1239,9 +1258,9 @@ nonisolated enum AppConfig {
     static let carPlayAppleStartSpanMeters: CLLocationDistance = 2600
     static let carPlayAppleMinDelta = 0.002
     static let carPlayAppleMaxDelta = 4.0
-    /// День/ночь в машине пересчитывается с этим шагом (тема машины
-    /// приходит сразу, это только солнце).
-    static let carPlayDaylightRefresh: TimeInterval = 60
+    /// Тема по солнцу пересчитывается с этим шагом, пока на экран смотрят
+    /// (телефон или машина) — AppEnvironment, один расчёт на все сцены.
+    static let interfaceThemeRefreshSeconds: TimeInterval = 300
     /// Где стоит «я» по высоте вида: ниже середины, впереди видно больше.
     static let mapMeY: Double = 0.78
     /// Долгий тап по карте — точка с баром действий.
@@ -1454,6 +1473,20 @@ nonisolated enum AppConfig {
     static let liveActivityKeepAliveSeconds: TimeInterval = 240
     /// Часы без тревоги: не чаще раза в столько секунд.
     static let watchCalmInterval: TimeInterval = 10
+    /// Часы в тревоге: не чаще раза в столько секунд; шаг скорости на часах
+    /// без тревоги и в тревоге.
+    static let watchAlertInterval: TimeInterval = 3
+    static let watchSpeedStepCalm = 5.0
+    static let watchSpeedStepAlert = 2.0
+    /// Плашка Live Activity «устаревает» (нет обновлений) — «Нет сигнала GPS».
+    static let liveActivityStaleSeconds: TimeInterval = 300
+    /// Пачка кусков пробок за одну отправку.
+    static let trafficBatchPieces = 12
+    /// Аудиосессия отпускается через столько после фразы — музыка возвращается.
+    static let audioReleaseDelaySeconds: TimeInterval = 0.4
+    /// Шаг дистанции на часах вдали от камеры и вблизи (зона — как у Live Activity).
+    static let watchDistanceStepFar = 100.0
+    static let watchDistanceStepNear = 25.0
 
     // MARK: - Офлайн-карты (docs/plan_map_offline.md §2.7)
 

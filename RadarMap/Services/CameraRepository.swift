@@ -229,9 +229,9 @@ final class CameraStore: CameraRepository {
 
     /// Применить скачанное обновление базы: валидация → атомарная запись → подмена в памяти.
     func applyRemote(data: Data, version: Int) async throws -> Int {
-        let decoded = try await Task.detached(priority: .userInitiated) {
+        let decoded = try await offMain {
             try JSONDecoder().decode([Camera].self, from: data)
-        }.value
+        }
         guard decoded.count >= 100 else {
             throw NSError(domain: "RadarMap.Sync", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "Файл базы неполный (\(decoded.count) камер)."])
@@ -239,9 +239,9 @@ final class CameraStore: CameraRepository {
         // Запись ~1 МБ атомарно (temp + rename) — вне main, как декод выше:
         // на применении OTA она подвешивала кадр.
         let url = Self.remoteFileURL
-        try await Task.detached(priority: .userInitiated) {
+        try await offMain {
             try data.write(to: url, options: .atomic)
-        }.value
+        }
         bundled = decoded
         dbVersion = version
         Storage.set(version, for: .cameraDBVersion)

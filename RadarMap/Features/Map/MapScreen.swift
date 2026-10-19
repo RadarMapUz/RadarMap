@@ -344,12 +344,9 @@ struct MapScreen: View {
         case .dark:  return .dark
         case .light: return .light
         case .auto:
-            // Точка для солнца — троттленный focus (шаг mapFocusStepMeters),
-            // не живая координата: та пишется каждым фиксом, и тема «Авто»
-            // делала body карты заложником тика + NOAA-расчёт каждую секунду.
-            return Sun.isDaytime(at: map.focus ?? env.location.currentCoordinate,
-                                 now: Date())
-                ? .light : .dark
+            // Тот же день/ночь, что у интерфейса и CarPlay (AppEnvironment,
+            // раз в 5 мин): не NOAA-расчёт в body и не своя точка.
+            return env.interfaceIsDaylight ? .light : .dark
         }
     }
 

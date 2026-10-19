@@ -100,6 +100,7 @@ final class AppEnvironment {
         isCarPlayConnected = connected
         location.setCarPlayConnected(connected)
         refreshTrafficWanted()
+        updateThemeClock()
         if connected {
             mobile.startPolling()
         } else if !isPhoneSceneActive, !mobile.isTripActive {
@@ -112,12 +113,62 @@ final class AppEnvironment {
     /// пользователя). Пишется только на смене: её читает корень приложения, и
     /// запись на каждом пересчёте пересобирала бы всё дерево.
     private(set) var interfaceIsDaylight = false
+    /// Солнце над точкой пользователя — без оглядки на настройку. CarPlay
+    /// берёт его, а не interfaceIsDaylight: в «Авто» у машины своя тема
+    /// (фары), и смешивать её с результатом под прежнюю настройку нельзя.
+    private(set) var sunIsUp = false
 
     /// Пересчёт темы: на старте, при открытии, при смене настройки и раз в
-    /// пять минут (RootView) — закат не ждёт перезапуска.
+    /// пять минут, пока на экран смотрят (themeClock) — закат не ждёт
+    /// перезапуска. Один источник дня/ночи для интерфейса, карты телефона,
+    /// HUD, CarPlay и плитки: до 19.10 их было пять, со своими точками и
+    /// циклами (аудит архитектуры).
     func refreshInterfaceAppearance() {
-        let day = settings.mapAppearance.isDaylight(at: location.currentCoordinate, now: Date())
+        let sun = Sun.isDaytime(at: location.currentCoordinate, now: Date())
+        if sun != sunIsUp { sunIsUp = sun }
+        let day: Bool
+        switch settings.mapAppearance {
+        case .dark:  day = false
+        case .light: day = true
+        case .auto:  day = sun
+        }
         if day != interfaceIsDaylight { interfaceIsDaylight = day }
+    }
+
+    /// Настройка темы сменилась — пересчитать сразу, а не ждать часов темы:
+    /// без телефонной сцены (только машина) RootView этого не сделает.
+    private func observeAppearanceSetting() {
+        withObservationTracking {
+            _ = settings.mapAppearance
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.refreshInterfaceAppearance()
+                self?.observeAppearanceSetting()
+            }
+        }
+    }
+    /// Первая точка пришла — тема по солнцу ЗДЕСЬ, а не по запасному правилу
+    /// 6–19 ч до следующего тика часов (холодный старт в 19:20 в июне).
+    @ObservationIgnored private var themeHadPosition = false
+
+    /// Часы темы: идут, пока на экран смотрят — телефон или машина (CarPlay
+    /// может подключиться без телефонной сцены вовсе, и тогда раньше закат
+    /// не замечал никто).
+    @ObservationIgnored private var themeClock: Task<Void, Never>?
+
+    private func updateThemeClock() {
+        if isPhoneSceneActive || isCarPlayConnected {
+            guard themeClock == nil else { return }
+            themeClock = Task { [weak self] in
+                while !Task.isCancelled {
+                    self?.refreshInterfaceAppearance()
+                    await Task.pause(seconds: AppConfig.interfaceThemeRefreshSeconds)
+                }
+            }
+        } else {
+            themeClock?.cancel()
+            themeClock = nil
+        }
     }
 
     /// Пробки нужны, пока на них кто-то смотрит: экран телефона, машина или
@@ -141,6 +192,7 @@ final class AppEnvironment {
     func setPhoneSceneActive(_ active: Bool) {
         isPhoneSceneActive = active
         refreshTrafficWanted()
+        updateThemeClock()
         if active {
             mobile.startPolling()
         } else if !isCarPlayConnected, !mobile.isTripActive {
@@ -258,6 +310,10 @@ final class AppEnvironment {
             // числе в фоне, ради смены вопроса раз в поездку. Появление
             // вопроса анимирует сам гейт (MobileConfirmGate).
             mobile?.trackPasses(from: coordinate)
+            if let self, !self.themeHadPosition {
+                self.themeHadPosition = true
+                self.refreshInterfaceAppearance()
+            }
             // Улицы вокруг машины — для посадки «Радар!» на дорогу и схемы
             // развязки в CarPlay. После удаления схемы приборки (11.10)
             // ensureCoverage не звал никто, сеть была пустой, и отметки уходили
@@ -442,6 +498,7 @@ final class AppEnvironment {
         // мигнуть тёмным при запуске.
         refreshInterfaceAppearance()
         observeCameraRevision()
+        observeAppearanceSetting()
         wireNetworkRhythm()
     }
 

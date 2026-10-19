@@ -171,6 +171,16 @@ final class RoadTilesTests: XCTestCase {
                        "разные дороги с общими концами схлопывать нельзя")
     }
 
+    /// Код класса для ключей постоянен и у всех классов разный — до 19.10
+    /// ключ брал hashValue (новый на каждый запуск), и тест выше падал раз в
+    /// пару сотен прогонов.
+    func testRoadClassCodesAreStableAndDistinct() {
+        let all: [RoadClass] = [.motorway, .trunk, .primary, .secondary, .tertiary,
+                                .residential, .service, .pedestrian, .unknown]
+        XCTAssertEqual(Set(all.map(\.stableCode)).count, all.count)
+        XCTAssertEqual(RoadClass.motorway.stableCode, 1)
+    }
+
     func testSameEndsDifferentPointCountAreBothKept() {
         // Второй различающий признак ключа: число точек. Развязка и прямой
         // съезд между теми же узлами — разная геометрия при одинаковых концах.

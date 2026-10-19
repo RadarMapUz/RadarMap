@@ -23,6 +23,24 @@ nonisolated enum RoadClass: Equatable {
     case pedestrian
     case unknown
 
+    /// Постоянный код класса — для ключей. `hashValue` для этого не годится:
+    /// он меняется от запуска к запуску, и обрезанный до байта совпадал у
+    /// разных классов (1 из 256) — склейка дублей молча стирала мост над
+    /// одноимённой улицей (флейки-тест 19.10).
+    var stableCode: UInt8 {
+        switch self {
+        case .motorway: return 1
+        case .trunk: return 2
+        case .primary: return 3
+        case .secondary: return 4
+        case .tertiary: return 5
+        case .residential: return 6
+        case .service: return 7
+        case .pedestrian: return 8
+        case .unknown: return 0
+        }
+    }
+
     init(raw: String?) {
         switch raw {
         case "motorway", "motorway_link": self = .motorway

@@ -62,6 +62,19 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
 
     init(onPick: @escaping (SavedPlace) -> Void) {
         self.onPick = onPick
+        super.init()
+        // Адресная книга и заведения клетки — мегабайты, а нужны только пока
+        // открыт поиск: на предупреждении о памяти отдаём их (план 2.20) —
+        // следующий запрос прочтёт заново с диска.
+        MemoryPressure.onWarning(self) { $0.releaseBooks() }
+    }
+
+    private func releaseBooks() {
+        loadTask?.cancel()
+        loadTask = nil
+        book = nil
+        venues = nil
+        loadedCell = nil
     }
 
     /// Ближайшие заведения вида — для плитки «АЗС» в «Куда». Свой индекс, а

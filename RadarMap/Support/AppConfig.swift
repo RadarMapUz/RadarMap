@@ -507,6 +507,13 @@ nonisolated enum AppConfig {
     /// Новый старт дальше этого от финиша прошлой — точно другая поездка
     /// (телефон приехал сюда не за рулём).
     nonisolated static let tripMergeMaxMeters: CLLocationDistance = 400
+    /// Поздний автостарт (S19): к пределу — путь с начала езды по CoreMotion
+    /// со средней городской скоростью, но не больше потолка.
+    nonisolated static let tripMergeLateStartSpeedMps: Double = 15
+    nonisolated static let tripMergeLateStartMaxMeters: CLLocationDistance = 1500
+    /// Ручное объединение двух записей: старт второй — до 2 км от финиша
+    /// первой (поздний автостарт); дальше — точно разные поездки.
+    nonisolated static let tripManualMergeMaxMeters: CLLocationDistance = 2000
     /// Пауза короче — склеиваем без вопросов: магазин, заправка, забрал человека.
     nonisolated static let tripMergeShortStopSeconds: TimeInterval = 15 * 60
     /// Пауза дольше — новая поездка при любых обстоятельствах.

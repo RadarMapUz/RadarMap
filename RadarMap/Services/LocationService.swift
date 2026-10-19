@@ -459,8 +459,12 @@ final class LocationService: NSObject {
         // автостарт срабатывает раньше первого фикса, и иначе склейка не
         // случилась бы никогда именно в самом частом сценарии.
         let here = currentCoordinate ?? previousEnd
+        // Езда началась раньше старта (поздний автостарт): стоянка кончилась
+        // тогда, а не сейчас, и уехать машина успела дальше (S19).
+        let paused = max(0, now.timeIntervalSince(previous.endedAt))
+        let lateStart = min(paused, motion?.drivingSince.map { max(0, now.timeIntervalSince($0)) } ?? 0)
         let context = TripMerge.Context(
-            stopDuration: now.timeIntervalSince(previous.endedAt),
+            stopDuration: paused - lateStart,
             metersFromPreviousEnd: GeoMath.fastDistance(here.latitude, here.longitude,
                                                         previousEnd.latitude,
                                                         previousEnd.longitude),
@@ -468,7 +472,8 @@ final class LocationService: NSObject {
             stopNearSavedPlace: TripMerge.isNearSavedPlace(previousEnd, places: savedPlaces),
             crossesDay: !Calendar.current.isDate(previous.endedAt, inSameDayAs: now),
             existingStops: previous.stops?.count ?? 0,
-            previousDuration: previous.duration)
+            previousDuration: previous.duration,
+            lateStartSeconds: lateStart)
         guard TripMerge.shouldMerge(context) else { return false }
         trip.resume(previous, stoppedUntil: now, batteryPercent: batteryPercent)
         return true

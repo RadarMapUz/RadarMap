@@ -38,6 +38,11 @@ final class MotionService {
     /// стоим — значит фиксов нет из-за distanceFilter, а не из-за спутников.
     /// Без слежения за движением (ручной старт) — всегда false: «не знаю».
     @ObservationIgnored private(set) var isStationary = false
+    /// С какого момента CoreMotion видит езду (startDate первого сэмпла
+    /// «в машине» этого старта): автостарт бывает поздним — машина уже
+    /// проехала сотни метров, — и склейке после магазина это надо знать (S19).
+    @ObservationIgnored private(set) var drivingSince: Date?
+    @ObservationIgnored private var pendingSince: Date?
 
     /// Колбэки — вешает AppEnvironment/RootView (старт/стоп поездки).
     @ObservationIgnored var onDrivingStart: (() -> Void)? {
@@ -83,6 +88,8 @@ final class MotionService {
     private func beginDriving() {
         guard !isDriving else { return }
         isDriving = true
+        drivingSince = pendingSince ?? Date()
+        pendingSince = nil
         onDrivingStart?()
     }
 
@@ -93,6 +100,7 @@ final class MotionService {
         if drivingNow {
             stopTask?.cancel(); stopTask = nil
             guard !isDriving else { return }
+            if pendingSince == nil { pendingSince = min(activity.startDate, Date()) }
             // Против ложных стартов (тряска пешком, автобус на секунду): high — сразу,
             // medium — только если «за рулём» держится подтверждающую паузу подряд.
             // Любой не-automotive сэмпл в ожидании отменяет старт.
@@ -110,6 +118,7 @@ final class MotionService {
         } else if !isDriving, !activity.automotive {
             // Вышли из машины/идём — ожидающий старт больше не актуален.
             startTask?.cancel(); startTask = nil
+            pendingSince = nil
         } else if isDriving, activity.stationary || activity.walking || activity.running || activity.cycling {
             // Не гасим сразу — вдруг светофор/пробка. Ждём устойчивую остановку.
             guard stopTask == nil else { return }
@@ -117,6 +126,7 @@ final class MotionService {
                 await Task.pause(seconds: AppConfig.autoStopAfterSeconds)
                 guard let self, !Task.isCancelled else { return }
                 self.isDriving = false
+                self.drivingSince = nil
                 self.stopTask = nil
                 self.onDrivingStop?()
             }

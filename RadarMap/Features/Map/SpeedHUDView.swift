@@ -31,24 +31,35 @@ struct SpeedHUDView: View {
         return night ? base * 0.72 : base
     }
 
+    /// Скорость и знак лимита — только когда едем (поездка или «похоже,
+    /// едем»). Стоя «0 км/ч» — не факт, а пустое место в самом заметном углу
+    /// экрана (5.7); остаётся ближайшая камера.
+    nonisolated static func showsSpeed(isTripActive: Bool, isProbablyDriving: Bool) -> Bool {
+        isTripActive || isProbablyDriving
+    }
+
     var body: some View {
         let location = env.location
+        let showsSpeed = Self.showsSpeed(isTripActive: location.isTripActive,
+                                         isProbablyDriving: location.isProbablyDriving)
         // Сплошная, не стекло: под панелью едет карта (см. SolidPanel).
         SolidPanel(cornerRadius: Theme.cornerPanel) {
             HStack(spacing: 0) {
-                speedBlock(location.speedKmh)
+                if showsSpeed {
+                    speedBlock(location.speedKmh)
 
-                // Знак лимита дороги, по которой едем (данные OSM с нашего сервера).
-                if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
-                    limitSign(limit)
-                        .padding(.trailing, 6)
-                        .transition(.scale.combined(with: .opacity))
+                    // Знак лимита дороги, по которой едем (данные OSM с нашего сервера).
+                    if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
+                        limitSign(limit)
+                            .padding(.trailing, 6)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+
+                    Rectangle()
+                        .fill(Theme.stroke)
+                        .frame(width: 1, height: secondary ? 30 : 44)
+                        .padding(.horizontal, 4)
                 }
-
-                Rectangle()
-                    .fill(Theme.stroke)
-                    .frame(width: 1, height: secondary ? 30 : 44)
-                    .padding(.horizontal, 4)
 
                 nearestBlock(camera: location.nearestCamera,
                              distance: location.distanceToNearest)
@@ -71,17 +82,26 @@ struct SpeedHUDView: View {
         // никто не прочёл (docs/plan_drive_ux_2026-10-07.md, п. 5). Режим
         // по-прежнему виден и меняется в быстрых тумблерах (долгий тап по HUD).
         .motionAnimation(Motion.standard, value: env.speedLimits.currentLimit)
+        .motionAnimation(Motion.standard, value: showsSpeedNow)
         // VoiceOver: весь HUD — одна связная фраза, а не россыпь цифр.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilitySummary)
     }
 
+    private var showsSpeedNow: Bool {
+        Self.showsSpeed(isTripActive: env.location.isTripActive,
+                        isProbablyDriving: env.location.isProbablyDriving)
+    }
+
     /// «Скорость 47 км/ч. Лимит 60. Радар через 360 метров» — для VoiceOver.
     private var accessibilitySummary: String {
-        var parts = [String(format: String(localized: "Скорость %lld км/ч"),
-                            Int(env.location.speedKmh.rounded()))]
-        if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
-            parts.append(String(format: String(localized: "Лимит %lld"), limit))
+        var parts: [String] = []
+        if showsSpeedNow {
+            parts.append(String(format: String(localized: "Скорость %lld км/ч"),
+                                Int(env.location.speedKmh.rounded())))
+            if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
+                parts.append(String(format: String(localized: "Лимит %lld"), limit))
+            }
         }
         if env.location.isSignalStale {
             parts.append(String(localized: "Нет сигнала GPS"))

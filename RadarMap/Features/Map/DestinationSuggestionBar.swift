@@ -90,9 +90,17 @@ struct DestinationSuggestionBar: View {
     }
 
     private var suggestion: Target? {
-        guard env.settings.destinationSuggestions,
-              !env.location.isTripActive, !env.route.isActive,
-              let guess = env.destinationGuess(now: Date()) else { return nil }
+        guard let guess = Self.guess(env) else { return nil }
         return Target(kind: guess.kind, coordinate: guess.coordinate, subtitle: guess.subtitle)
+    }
+
+    /// Будет ли строка на экране — её же спрашивает предложение офлайн-карты,
+    /// чтобы не встать третьей карточкой (5.9).
+    static func isShown(_ env: AppEnvironment) -> Bool { guess(env) != nil }
+
+    private static func guess(_ env: AppEnvironment) -> DestinationGuess? {
+        guard env.settings.destinationSuggestions,
+              !env.location.isTripActive, !env.route.isActive else { return nil }
+        return env.destinationGuess(now: Date())
     }
 }

@@ -205,6 +205,36 @@ nonisolated enum TripScreenLayout {
         return distance <= AppConfig.tripCameraChipMeters
     }
 
+    /// Долгий тап по карте (точка «поеду сюда / радар здесь») — только стоя
+    /// или медленно (5.4). На ходу это прицел пальцем в движущуюся карту и
+    /// второй путь к отметке радара рядом с веером «Радар!», который для того
+    /// и сделан, чтобы попадать вслепую.
+    static func allowsMapLongPress(isTripActive: Bool, speedKmh: Double,
+                                   isProbablyDriving: Bool) -> Bool {
+        if isProbablyDriving { return false }
+        return !(isTripActive && speedKmh >= AppConfig.speakSpeedThresholdKmh)
+    }
+
+    /// Меню «…» в поездке: «Итоги», «Настройки» и «Добавить камеру» — только
+    /// стоя (5.3). Нижнего бара в поездке нет совсем, и без них единственным
+    /// путём в настройки на заправке был «Стоп», то есть разрезанная поездка
+    /// (ревью 19.10).
+    static func tripMenuShowsParkedItems(speedKmh: Double) -> Bool {
+        speedKmh < AppConfig.speakSpeedThresholdKmh
+    }
+
+    /// Капсула следующей камеры маршрута в нижней панели. Пока чип сверху
+    /// показывает ТУ ЖЕ камеру, капсула молчит: два «240 м» об одной камере
+    /// на одном экране (5.1). Чип — на подходе и наверху, рядом с манёвром,
+    /// поэтому уступает капсула; дальше подхода камера снова живёт внизу.
+    /// Без сигнала GPS капсулы нет: её расстояние замерло, а чип честно
+    /// говорит «нет сигнала» — застывшая цифра внизу спорила бы с ним.
+    static func showsCameraCapsule(capsuleCameraID: Int, chipCameraID: Int?,
+                                   chipShown: Bool, isSignalStale: Bool) -> Bool {
+        if isSignalStale { return false }
+        return !(chipShown && chipCameraID == capsuleCameraID)
+    }
+
     /// Свежа ли сохранённая поездка для карточки «Поездка сохранена».
     /// Отсчёт — от момента сохранения, а не от последнего фикса записи.
     static func isTripEndFresh(savedAt: Date?, now: Date) -> Bool {

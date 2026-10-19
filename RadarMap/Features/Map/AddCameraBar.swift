@@ -2,15 +2,19 @@
 //  AddCameraBar.swift
 //  RadarMap
 //
-//  Нижняя панель режима добавления: тип (камера/радар/передвижной), имя, «Добавить здесь».
-//  Передвижной радар уходит на сервер (виден всем водителям ~3 часа),
-//  камера/радар сохраняются локально на устройстве.
+//  Нижняя панель режима добавления: своя стационарная камера или радар,
+//  имя, «Добавить здесь» — сохраняется на устройстве.
+//
+//  «Передвижной» отсюда ушёл (5.11): к отметке радара для всех было три
+//  дороги — «Радар!», «Радар здесь» у точки на карте и этот прицел, — и
+//  третья ничем не отличалась от второй. Теперь «Радар!» — где я сейчас,
+//  «Радар здесь» — где показал на карте, а прицел — только своя камера.
 //
 
 import SwiftUI
 
 enum AddKind: Hashable {
-    case camera, radar, mobile
+    case camera, radar
 }
 
 struct AddCameraBar: View {
@@ -34,31 +38,23 @@ struct AddCameraBar: View {
                 Picker("Тип", selection: $kind) {
                     Text("Камера").tag(AddKind.camera)
                     Text("Радар").tag(AddKind.radar)
-                    Text("Передвижной").tag(AddKind.mobile)
                 }
                 .pickerStyle(.segmented)
 
-                if kind == .mobile {
-                    Label("Отметка видна всем водителям ~3 часа", systemImage: "person.3.fill")
-                        .font(.rounded(12))
-                        .foregroundStyle(Theme.Types.mobile)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    TextField("Название (необязательно)", text: $name)
-                        .textFieldStyle(.plain)
-                        .padding(12)
-                        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
-                        .foregroundStyle(Theme.textPrimary)
-                }
+                TextField("Название (необязательно)", text: $name)
+                    .textFieldStyle(.plain)
+                    .padding(12)
+                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
+                    .foregroundStyle(Theme.textPrimary)
 
                 HStack(spacing: 12) {
                     // Общая вторая кнопка: самодельная была ниже соседней
                     // PrimaryButton, другого кегля и серым текстом — пара
                     // не читалась парой.
                     SecondaryButton(title: "Отмена", action: onCancel)
-                    PrimaryButton(title: kind == .mobile ? "Радар здесь!" : "Добавить здесь",
+                    PrimaryButton(title: "Добавить здесь",
                                   systemImage: "plus",
-                                  tint: kind == .mobile ? Theme.Types.mobile : Theme.accentFill) {
+                                  tint: Theme.accentFill) {
                         onAdd(kind, name)
                     }
                 }

@@ -90,15 +90,19 @@ struct OfflineOfferCard: View {
             current: env.location.currentCoordinate)
         let region = service.region(containing: anchor)
         let available = region.map { service.state(for: $0) == .notDownloaded } ?? false
-        let offer = OfflineOffer.shouldOffer(.init(
+        var situation = OfflineOffer.Situation(
             onboarded: Storage.bool(.hasCompletedOnboarding),
             answered: answered,
             ownMap: ownMap,
             driving: env.location.isTripActive || env.location.isProbablyDriving,
             online: env.network.isOnline,
             expensiveNetwork: env.network.isExpensive,
-            regionAvailable: available))
-        return offer ? region : nil
+            regionAvailable: available)
+        guard OfflineOffer.shouldOffer(situation) else { return nil }
+        // Догадка «Домой» считается, только если иначе предложили бы: вопрос
+        // почти всегда уже отвечен, а тело перерисовывается на фиксах.
+        situation.suggestionShown = DestinationSuggestionBar.isShown(env)
+        return OfflineOffer.shouldOffer(situation) ? region : nil
     }
 
     private func answer() {

@@ -119,4 +119,13 @@ struct ProbablyDrivingTests {
     func tripSilencesIt() {
         #expect(!LocationService.probablyDriving(was: true, speedKmh: 90, tripActive: true))
     }
+
+    /// Стоя без поездки «0 км/ч» не показывается — только ближайшая камера (5.7).
+    @Test("Стоя без поездки скорости в HUD нет")
+    func idleHudHasNoSpeed() {
+        #expect(!SpeedHUDView.showsSpeed(isTripActive: false, isProbablyDriving: false))
+        // В поездке скорость всегда, и в пробке на месте.
+        #expect(SpeedHUDView.showsSpeed(isTripActive: true, isProbablyDriving: false))
+        #expect(SpeedHUDView.showsSpeed(isTripActive: false, isProbablyDriving: true))
+    }
 }

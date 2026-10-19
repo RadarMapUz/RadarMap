@@ -60,12 +60,24 @@ struct MapStatusBanner: View {
         if arguments.contains("-forceOffline") { return .offline(offlineNotice(online: false) ?? .general) }
         if arguments.contains("-forceNoLimits") { return .noSpeedLimits }
         #endif
-        if let message = env.config.banner { return .server(message) }
-        if let notice = offlineNotice(online: env.network.isOnline) { return .offline(notice) }
-        if env.thermal.mode.explains { return .overheated }
-        if !env.speedLimits.isReady { return .noSpeedLimits }
-        return nil
+        // Решает чистая политика (MapStatusPick): в поездке — только сеть.
+        let offline = offlineNotice(online: env.network.isOnline)
+        switch MapStatusPick.pick(hasServerMessage: env.config.banner != nil,
+                                  isOffline: offline != nil,
+                                  isOverheated: env.thermal.mode.explains,
+                                  limitsReady: env.speedLimits.isReady,
+                                  inTrip: inTrip) {
+        case .server?:        return env.config.banner.map { .server($0) }
+        case .offline?:       return offline.map { .offline($0) }
+        case .overheated?:    return .overheated
+        case .noSpeedLimits?: return .noSpeedLimits
+        case nil:             return nil
+        }
     }
+
+    private var inTrip: Bool { env.location.isTripActive }
+    /// В поездке — одна строка: пояснение и кнопки ждут остановки.
+    private var compact: Bool { MapStatusPick.isCompact(inTrip: inTrip) }
 
     /// Какую плашку «нет связи» показать. Координата читается только без
     /// связи: со связью плашка не должна перерисовываться на каждом GPS-тике.
@@ -108,8 +120,11 @@ struct MapStatusBanner: View {
             // спидометр рисовался без сети целиком, — но он убран, а другого
             // экрана, который честно заменил бы серую карту, у этой подложки
             // нет. Главное плашка и так говорит: камеры предупреждают.
+            // В поездке пояснение убирается — заголовок сам говорит главное
+            // (ревью 19.10).
             shell(symbol: "wifi.slash", tint: Theme.textSecondary,
-                  title: String(localized: "Карта не загружается — нет сети"),
+                  title: compact ? String(localized: "Нет сети — камеры предупреждают")
+                                 : String(localized: "Карта не загружается — нет сети"),
                   body: String(localized: "Камеры предупреждают как обычно: база хранится на телефоне"),
                   id: status.id)
         case .offline(.downloadedRegion):
@@ -144,56 +159,19 @@ struct MapStatusBanner: View {
         }
     }
 
-    private func shell(symbol: String, tint: Color, title: String, body: String?,
-                       id: String, action: (String, () -> Void)? = nil) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: symbol)
-                .foregroundStyle(tint)
-                .font(.rounded(19, .semibold))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.rounded(15, .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                if let body, !body.isEmpty {
-                    Text(body)
-                        .font(.rounded(12))
-                        .foregroundStyle(Theme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if let (label, perform) = action {
-                    // Кнопка, а не подпись: была `.caption` без рамки, ~16 pt
-                    // в высоту — промах за рулём значит второй взгляд.
-                    Button(action: perform) {
-                        Text(isRetrying ? String(localized: "Загружаю…") : label)
-                            .font(.rounded(15, .semibold))
-                            .foregroundStyle(Theme.accent)
-                            .padding(.horizontal, 14)
-                            .frame(minHeight: Theme.controlSize)
-                            .background(Theme.accent.opacity(0.12), in: Capsule())
-                            .contentShape(Capsule())
-                    }
-                    .buttonStyle(PressableStyle())
-                    .disabled(isRetrying)
-                    .padding(.top, 4)
-                }
-            }
-            Spacer(minLength: 0)
-            Button {
-                withMotion(Motion.quick) { _ = dismissed.insert(id) }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.rounded(12, .bold))
-                    .foregroundStyle(Theme.textTertiary)
-                    .tapTarget()         // палец за рулём крупнее крестика
-            }
-            .accessibilityLabel(Text("Закрыть объявление"))
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
-                .stroke(tint.opacity(0.35), lineWidth: 1)
-        )
+    private func shell(symbol: String, tint: Color, title: String, body rawBody: String?,
+                       id: String, action rawAction: (String, () -> Void)? = nil) -> some View {
+        let body = compact ? nil : rawBody
+        let action = compact ? nil : rawAction
+        return shellContent(symbol: symbol, tint: tint, title: title, body: body,
+                            id: id, action: action)
+    }
+
+    private func shellContent(symbol: String, tint: Color, title: String, body: String?,
+                              id: String, action: (String, () -> Void)?) -> some View {
+        StatusBanner(symbol: symbol, tint: tint, title: title, detail: body,
+                     action: action.map { StatusBanner.Action(title: $0.0, isBusy: isRetrying,
+                                                              perform: $0.1) },
+                     onDismiss: { withMotion(Motion.quick) { _ = dismissed.insert(id) } })
     }
 }

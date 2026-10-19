@@ -1252,6 +1252,22 @@
         }
       }
     },
+    "«Радар!» — отметка для других. Удержите — тренога или ДТП": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Радар!» — отметка для других. Удержите — тренога или ДТП"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Radar!» — boshqalar uchun belgi. Bosib turing — uch oyoq yoki YTH"
+          }
+        }
+      }
+    },
     "«Умный» — поездка включается сама только в вашей машине (CarPlay или знакомая магнитола), в чужой сначала спросит «вы за рулём?». «Авто» — всегда сама. «Ручной» — только кнопкой, слежение за движением выключено совсем. Заезд по пути (магазин, заправка) в новую поездку не превращается — остаётся остановкой внутри той же. Экран в поездке не засыпает, как у навигаторов.": {
       "localizations": {
         "ru": {
@@ -3865,22 +3881,6 @@
         }
       }
     },
-    "Жёлтая кнопка — отметить радар для других": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Жёлтая кнопка — отметить радар для других"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sariq tugma — boshqalar uchun radarni belgilash"
-          }
-        }
-      }
-    },
     "За всё время": {
       "localizations": {
         "ru": {
@@ -5393,6 +5393,22 @@
         }
       }
     },
+    "Кнопки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Кнопки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tugmalar"
+          }
+        }
+      }
+    },
     "Когда поездка начинается сама.": {
       "localizations": {
         "ru": {
@@ -5758,6 +5774,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Marshrutlar, limitlar va safar Yakunlari — ham shu yerda"
+          }
+        }
+      }
+    },
+    "Масштаб": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Масштаб"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masshtab"
           }
         }
       }
@@ -6351,6 +6383,22 @@
         }
       }
     },
+    "Не видим вашего положения — заезд остался": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не видим вашего положения — заезд остался"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joylashuvingiz ko‘rinmayapti — bekat qoldi"
+          }
+        }
+      }
+    },
     "Не вижу геопозицию — попробуйте ещё раз.": {
       "localizations": {
         "ru": {
@@ -6540,6 +6588,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Manzilni ochib bo‘lmadi"
+          }
+        }
+      }
+    },
+    "Не удалось убрать заезд — маршрут прежний": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось убрать заезд — маршрут прежний"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bekatni olib tashlab bo‘lmadi — yo‘nalish o‘zgarmadi"
           }
         }
       }
@@ -6750,6 +6814,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aloqa yo‘q, keyinroq yuboraman"
+          }
+        }
+      }
+    },
+    "Нет сети — камеры предупреждают": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет сети — камеры предупреждают"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarmoq yo‘q — kameralar ogohlantiradi"
           }
         }
       }
@@ -7489,22 +7569,6 @@
         }
       }
     },
-    "Отметка видна всем водителям ~3 часа": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Отметка видна всем водителям ~3 часа"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Belgi barcha haydovchilarga ~3 soat ko'rinadi"
-          }
-        }
-      }
-    },
     "Отметка водителей: %@": {
       "localizations": {
         "ru": {
@@ -7840,22 +7904,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Limitdan ortiq birinchi ~%lld km/soat uchun odatda jarima yozilmaydi. Summalar — birinchi qayd; takroriy buzishlar ancha qimmat."
-          }
-        }
-      }
-    },
-    "Передвижной": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Передвижной"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ko'chma"
           }
         }
       }
@@ -9545,22 +9593,6 @@
         }
       }
     },
-    "Радар здесь!": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Радар здесь!"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Radar shu yerda!"
-          }
-        }
-      }
-    },
     "Радар на месте": {
       "localizations": {
         "ru": {
@@ -10432,6 +10464,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tizim tili"
+          }
+        }
+      }
+    },
+    "Скопировать координаты": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скопировать координаты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Koordinatalarni nusxalash"
           }
         }
       }
@@ -11399,6 +11447,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "O'tilgan kameralarda yo'l limiti noma'lum — ular bo'yicha oshirishlar hisoblanmadi"
+          }
+        }
+      }
+    },
+    "Убрать заезд": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Убрать заезд"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bekatni olib tashlash"
           }
         }
       }

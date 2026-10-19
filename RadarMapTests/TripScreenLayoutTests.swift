@@ -145,6 +145,40 @@ final class TripScreenLayoutTests: XCTestCase {
                                                        isSignalStale: true))
     }
 
+    /// Одно расстояние до одной камеры: на подходе говорит чип сверху,
+    /// капсула той же камеры внизу молчит; другая камера — капсула остаётся.
+    func testCapsuleYieldsToTheChipForTheSameCamera() {
+        func shows(_ chipID: Int?, chip: Bool, stale: Bool = false) -> Bool {
+            TripScreenLayout.showsCameraCapsule(capsuleCameraID: 7, chipCameraID: chipID,
+                                                chipShown: chip, isSignalStale: stale)
+        }
+        XCTAssertFalse(shows(7, chip: true))
+        XCTAssertTrue(shows(7, chip: false), "далеко — чипа нет, камера живёт капсулой")
+        XCTAssertTrue(shows(9, chip: true), "ближайшая по прямой — не та, что на маршруте")
+        // Без сигнала ближайшая камера не стирается до следующего тика —
+        // но капсула молчит по другой причине: её расстояние замерло.
+        XCTAssertFalse(shows(7, chip: true, stale: true))
+        XCTAssertFalse(shows(9, chip: true, stale: true))
+    }
+
+    /// Долгий тап на ходу выключен: в поездке на скорости и при «похоже,
+    /// едем» без поездки; стоя и медленно — работает.
+    func testMapLongPressOnlyStandingOrSlow() {
+        let fast = AppConfig.speakSpeedThresholdKmh + 10
+        XCTAssertTrue(TripScreenLayout.allowsMapLongPress(isTripActive: false, speedKmh: 0, isProbablyDriving: false))
+        XCTAssertTrue(TripScreenLayout.allowsMapLongPress(isTripActive: true, speedKmh: 2, isProbablyDriving: false),
+                      "в пробке на месте точку поставить можно")
+        XCTAssertFalse(TripScreenLayout.allowsMapLongPress(isTripActive: true, speedKmh: fast, isProbablyDriving: false))
+        XCTAssertFalse(TripScreenLayout.allowsMapLongPress(isTripActive: false, speedKmh: fast, isProbablyDriving: true))
+    }
+
+    /// Настройки и «Итоги» в поездке — стоя: на заправке до них не только
+    /// через «Стоп».
+    func testParkedItemsInTheTripMenuOnlyStanding() {
+        XCTAssertTrue(TripScreenLayout.tripMenuShowsParkedItems(speedKmh: 0))
+        XCTAssertFalse(TripScreenLayout.tripMenuShowsParkedItems(speedKmh: AppConfig.speakSpeedThresholdKmh + 5))
+    }
+
     // MARK: - «Поездка сохранена»
 
     /// Характеризация бага: «после „Завершить“ поездка куда-то делась».

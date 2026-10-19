@@ -318,7 +318,7 @@ final class MobileCameraService {
     /// его чуть мимо.
     private func placed(_ coordinate: CLLocationCoordinate2D,
                         course: Double) -> (CLLocationCoordinate2D, String) {
-        guard let network = roads?.network else { return (coordinate, "") }
+        guard let network = roads?.reportNetwork else { return (coordinate, "") }
         let nearby = network.roads(near: coordinate,
                                    radius: AppConfig.reportSnapMaxMeters)
         guard let placement = ReportPlacement.snapped(coordinate, course: course,

@@ -3307,6 +3307,22 @@
         }
       }
     },
+    "До следующей камеры": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "До следующей камеры"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keyingi kameragacha"
+          }
+        }
+      }
+    },
     "До уровня «%1$@» — %2$lld балла": {
       "localizations": {
         "ru": {
@@ -6000,22 +6016,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Xaritada «Safarni boshlash» tugmasini bosing — trek, har bir kameradagi tezlik va statistikani yig‘amiz."
-          }
-        }
-      }
-    },
-    "Нажмите, чтобы скрыть": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Нажмите, чтобы скрыть"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yashirish uchun bosing"
           }
         }
       }

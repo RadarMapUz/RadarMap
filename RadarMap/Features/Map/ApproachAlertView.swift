@@ -18,19 +18,39 @@
 //  знаком лимита → кнопки. Никаких материалов и теней на составных вью:
 //  карта под экраном продолжает ехать (аудит 11.10).
 //
-//  Внизу — две кнопки: «без звука» и «Радар!». Тап мимо них скрывает экран
-//  до следующей камеры.
+//  Внизу — две кнопки: «без звука» и «Радар!», под ними «Скрыть» (до
+//  следующей камеры). До 19.10 экран скрывало ЛЮБОЕ касание мимо кнопок —
+//  телефон в держателе задевают, поправляя его, и предупреждение пропадало
+//  ровно у камеры (аудит 10.10, «осталось»).
+//
+//  В навигации экран — нижняя карточка, а не весь экран (`Layout`): на
+//  перекрёстке с камерой полноэкранное окно закрывало манёвр, то есть
+//  ровно тот момент, когда водителю нужнее всего, куда поворачивать.
 //
 
 import SwiftUI
 
 struct ApproachAlertView: View {
+    /// Как показать предупреждение. Чистое решение — ApproachAlertLayoutTests.
+    enum Layout: Equatable {
+        /// Без маршрута: весь экран, читается боковым зрением.
+        case fullScreen
+        /// В навигации: карточка снизу, баннер манёвра сверху остаётся виден.
+        case bottomCard
+
+        static func choose(navigating: Bool) -> Layout { navigating ? .bottomCard : .fullScreen }
+    }
+
     @Environment(AppEnvironment.self) private var env
     let camera: Camera
     let distance: Double
     let speedKmh: Double
     let relativeBearing: Double?
     let alertRadius: Double
+    var layout: Layout = .fullScreen
+    /// Верхняя кромка нижней карточки в пунктах окна (nil — карточки нет):
+    /// карта поднимает «я» и камеру над ней (MapFrameState).
+    var onCardEdge: (CGFloat?) -> Void = { _ in }
     let onDismiss: () -> Void
 
     @State private var pulse = false
@@ -43,6 +63,13 @@ struct ApproachAlertView: View {
     private var isOverspeeding: Bool { env.speedLimits.isOverspeeding }
 
     var body: some View {
+        switch layout {
+        case .fullScreen: fullScreen
+        case .bottomCard: bottomCard
+        }
+    }
+
+    private var fullScreen: some View {
         ZStack {
             Color(uiColor: Theme.rgb(0x14181D)).ignoresSafeArea()
             // Полоса цвета типа сверху — тип виден боковым зрением.
@@ -62,17 +89,15 @@ struct ApproachAlertView: View {
                 detailsRow
                     .padding(.top, 36)
                 Spacer(minLength: 12)
-                // Место под кнопки внизу (они лежат отдельным слоем).
-                Color.clear.frame(height: 110)
+                // Место под кнопки внизу (они лежат отдельным слоем):
+                // 56 кнопки + 10 + 44 «Скрыть» + 4 — с запасом.
+                Color.clear.frame(height: 122)
             }
             .padding(.horizontal, 24)
-            // VoiceOver: сведения — одна фраза + действие «скрыть»; кнопки ниже
-            // остаются отдельными элементами.
+            // VoiceOver: сведения — одна фраза; скрыть — только кнопкой
+            // «Скрыть», как и касанием (случайная активация не убирает окно).
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilitySummary)
-            .accessibilityAddTraits(.isButton)
-            .accessibilityHint(Text("Нажмите, чтобы скрыть"))
-            .accessibilityAction { onDismiss() }
 
             VStack(spacing: 10) {
                 Spacer()
@@ -81,18 +106,109 @@ struct ApproachAlertView: View {
                     ReportRadarButton()
                 }
                 .padding(.horizontal, 24)
-                Text("Нажмите, чтобы скрыть")
-                    .font(.rounded(12))
-                    .foregroundStyle(Theme.textTertiary)
-                    .padding(.bottom, 16)
-                    .accessibilityHidden(true)
+                hideButton
+                    .padding(.bottom, 4)
             }
         }
         .environment(\.colorScheme, .dark)
+        // Касание мимо кнопок не уходит в карту под экраном и ничего не
+        // скрывает: скрыть — только кнопкой (см. шапку файла).
         .contentShape(Rectangle())
-        .onTapGesture { onDismiss() }
+        .onTapGesture {}
         .onAppear { pulse = true }
         .transition(.opacity.combined(with: .scale(scale: 1.03)))
+    }
+
+    /// Нижняя карточка навигации: тип и адрес строкой, расстояние справа,
+    /// полоса приближения, направление и скорость, кнопки. Сверху карта и
+    /// баннер манёвра остаются видны.
+    private var bottomCard: some View {
+        VStack {
+            Spacer()
+            VStack(spacing: 14) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle().fill(tint).frame(width: 46, height: 46)
+                        Image(systemName: camera.kind.symbolName)
+                            .font(.rounded(20, .bold))
+                            .foregroundStyle(camera.kind.glyphTint)
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(camera.kind.displayName)
+                            .font(.rounded(17, .bold))
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                        if !camera.location.isEmpty {
+                            Text(camera.location)
+                                .font(.rounded(13))
+                                .foregroundStyle(Theme.textSecondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: 8)
+                    HStack(alignment: .lastTextBaseline, spacing: 4) {
+                        Text("\(Int(distance.rounded()))")
+                            .font(.system(size: 44, weight: .heavy, design: .rounded))
+                            .foregroundStyle(Theme.textPrimary)
+                            .liveNumber()
+                        Text("м").font(.rounded(20, .bold)).foregroundStyle(Theme.textSecondary)
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(accessibilitySummary)
+                proximityBar
+                detailsRow
+                HStack(spacing: 12) {
+                    muteButton
+                    ReportRadarButton()
+                }
+                hideButton
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .background {
+                // Полоса цвета типа сверху — тот же сигнал, что у полного экрана.
+                ZStack(alignment: .top) {
+                    Color(uiColor: Theme.rgb(0x14181D))
+                    tint.frame(height: 5)
+                }
+                .clipShape(UnevenRoundedRectangle(topLeadingRadius: Theme.cornerLarge,
+                                                  topTrailingRadius: Theme.cornerLarge, style: .continuous))
+                .ignoresSafeArea(edges: .bottom)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {}
+            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { onCardEdge($0) }
+            .onDisappear { onCardEdge(nil) }
+        }
+        .environment(\.colorScheme, .dark)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private var proximityBar: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.white.opacity(0.12))
+                Capsule().fill(tint)
+                    .frame(width: max(8, geo.size.width * proximity))
+                    .motionAnimation(.linear(duration: 0.9), value: proximity)
+            }
+        }
+        .frame(height: 8)
+    }
+
+    /// Скрыть до следующей камеры — отдельной кнопкой, не касанием куда угодно.
+    private var hideButton: some View {
+        Button(action: onDismiss) {
+            Text("Скрыть")
+                .font(.rounded(15, .semibold))
+                .foregroundStyle(Theme.textSecondary)
+                .frame(maxWidth: .infinity, minHeight: Theme.controlSize)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableStyle())
+        .accessibilityHint(Text("До следующей камеры"))
     }
 
     // MARK: - Блоки
@@ -136,16 +252,8 @@ struct ApproachAlertView: View {
                     .liveNumber()
                 Text("м").font(.rounded(34, .bold)).foregroundStyle(Theme.textSecondary)
             }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.12))
-                    Capsule().fill(tint)
-                        .frame(width: max(8, geo.size.width * proximity))
-                        .motionAnimation(.linear(duration: 0.9), value: proximity)
-                }
-            }
-            .frame(height: 8)
-            .padding(.horizontal, 12)
+            proximityBar
+                .padding(.horizontal, 12)
         }
     }
 

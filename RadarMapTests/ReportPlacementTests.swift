@@ -34,6 +34,37 @@ final class ReportPlacementTests: XCTestCase {
         XCTAssertEqual(placed!.roadClass, .primary)
     }
 
+    /// Пока тайлов улиц нет, сеть — индекс лимитов: класса он не знает, но
+    /// отметка обязана сесть и на его ось (vehicleNetwork, аудит 19.10).
+    func testFallbackNetworkWithoutClassStillPlacesTheReport() {
+        let limitLine = RoadLine(points: [CLLocationCoordinate2D(latitude: 41.30, longitude: 69.25),
+                                          CLLocationCoordinate2D(latitude: 41.32, longitude: 69.25)])
+        struct Lines: RoadNetworkSource {
+            let lines: [RoadLine]
+            func roads(near coordinate: CLLocationCoordinate2D, radius: CLLocationDistance) -> [RoadLine] { lines }
+        }
+        let network = FallbackRoadNetwork(primary: EmptyRoadNetwork(), fallback: Lines(lines: [limitLine]))
+        let raw = CLLocationCoordinate2D(latitude: 41.310, longitude: 69.2504)
+        let placed = ReportPlacement.snapped(raw, course: 0,
+                                             roads: network.roads(near: raw, radius: 60), maxMeters: 60)
+        XCTAssertEqual(placed?.coordinate.longitude ?? 0, 69.250, accuracy: 1e-6)
+
+        // Тайлы есть, но двора водителя в них нет (дворы не качаем): объединение
+        // с индексом лимитов сажает на свою улицу, а не на соседний проспект.
+        let avenue = RoadLine(points: [CLLocationCoordinate2D(latitude: 41.30, longitude: 69.2509),
+                                       CLLocationCoordinate2D(latitude: 41.32, longitude: 69.2509)],
+                              kind: .primary)
+        // «Первичный, иначе запасной» видел бы только проспект и сажал туда.
+        let primaryOnly = FallbackRoadNetwork(primary: Lines(lines: [avenue]), fallback: Lines(lines: [limitLine]))
+        let wrong = ReportPlacement.snapped(raw, course: 0,
+                                            roads: primaryOnly.roads(near: raw, radius: 60), maxMeters: 60)
+        XCTAssertEqual(wrong?.coordinate.longitude ?? 0, 69.2509, accuracy: 1e-6)
+        let union = UnionRoadNetwork(sources: [Lines(lines: [avenue]), Lines(lines: [limitLine])])
+        let own = ReportPlacement.snapped(raw, course: 0,
+                                          roads: union.roads(near: raw, radius: 60), maxMeters: 60)
+        XCTAssertEqual(own?.coordinate.longitude ?? 0, 69.250, accuracy: 1e-6)
+    }
+
     func testRoadAlongCourseBeatsACloserCrossStreet() {
         // Развязка: поперечная улица ближе, но мы едем не по ней. Снап на неё
         // увёл бы отметку на дорогу, по которой никто из предупреждаемых не

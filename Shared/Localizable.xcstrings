@@ -4880,6 +4880,22 @@
         }
       }
     },
+    "Камер по пути не было": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камер по пути не было"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo‘lda kameralar bo‘lmadi"
+          }
+        }
+      }
+    },
     "Камер рядом нет": {
       "localizations": {
         "ru": {

@@ -943,9 +943,17 @@ struct TripStatsSheet: View {
             HStack(spacing: 14) {
                 // На карте — точки, то есть УНИКАЛЬНЫЕ камеры; повторные
                 // проезды одной камеры складываются в один маркер.
-                legendItem(Theme.success,
-                           String(format: String(localized: "Камер в лимите: %lld"),
-                                  mapData.markers.filter { !$0.hasViolation }.count))
+                // «Камер в лимите: 0» с зелёной точкой — не факт, а его
+                // отсутствие: за период камер по пути просто не было.
+                let clean = mapData.markers.filter { !$0.hasViolation }.count
+                if mapData.markers.isEmpty {
+                    Text("Камер по пути не было")
+                        .font(.rounded(11))
+                        .foregroundStyle(Theme.textTertiary)
+                } else if clean > 0 {
+                    legendItem(Theme.success,
+                               String(format: String(localized: "Камер в лимите: %lld"), clean))
+                }
                 if mapData.markers.contains(where: \.hasViolation) {
                     legendItem(Theme.danger,
                                String(format: String(localized: "Камер с превышением: %lld"),

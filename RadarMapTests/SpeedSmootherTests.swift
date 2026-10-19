@@ -102,4 +102,22 @@ final class SpeedSmootherTests: XCTestCase {
         XCTAssertEqual(SpeedBound.capped(5, distanceFilter: 30, secondsSinceFix: 2), 5)
         XCTAssertEqual(SpeedBound.capped(0, distanceFilter: 6, secondsSinceFix: 20), 0)
     }
+
+    /// Экран открыт или CarPlay — фильтра нет, фиксы раз в секунду и стоя.
+    /// Подземный паркинг на 15 км/ч: через 5 с молчания цифра уже не 15, через
+    /// 20 с — ноль (сценарий S8, 20.10; раньше она застывала навсегда).
+    func testNoFilterSilenceStillBoundsTheSpeed() {
+        XCTAssertEqual(SpeedBound.capped(15, distanceFilter: -1, secondsSinceFix: 1), 15, "обычный интервал")
+        XCTAssertEqual(SpeedBound.capped(15, distanceFilter: -1, secondsSinceFix: 5), 7.2, accuracy: 0.01)
+        XCTAssertEqual(SpeedBound.capped(15, distanceFilter: -1, secondsSinceFix: 20), 0)
+    }
+
+    /// Сторож «нет сигнала»: на ходу — всегда; стоя — только когда фиксы
+    /// обязаны идти и стоя (фильтра нет).
+    func testStaleWatchdogArmsAtAnySpeedWithoutAFilter() {
+        XCTAssertTrue(LocationService.watchdogArms(speedKmh: 50, distanceFilter: 25))
+        XCTAssertFalse(LocationService.watchdogArms(speedKmh: 15, distanceFilter: 25), "в кармане стоя фиксов нет из-за фильтра")
+        XCTAssertTrue(LocationService.watchdogArms(speedKmh: 15, distanceFilter: -1))
+        XCTAssertTrue(LocationService.watchdogArms(speedKmh: 0, distanceFilter: -1))
+    }
 }

@@ -87,10 +87,18 @@ nonisolated enum SpeedBound {
     /// Ниже — показываем 0: «ползу 2 км/ч» на стоянке читается как сбой.
     static let floorKmh: Double = 3
 
+    /// Без фильтра расстояния (экран открыт, CarPlay) фиксы идут раз в
+    /// секунду при любом движении — молчание GPS значит «сигнала нет», и
+    /// граница считается по этому шагу. До 20.10 без фильтра граница не
+    /// применялась вовсе: под землёй на 15 км/ч цифра застывала, а с ней и
+    /// полноэкранное оповещение (сценарий S8).
+    static let noFilterStepMeters: Double = 10
+
     static func capped(_ kmh: Double, distanceFilter: Double,
                        secondsSinceFix: TimeInterval) -> Double {
-        guard kmh > 0, secondsSinceFix > graceSeconds, distanceFilter > 0 else { return kmh }
-        let bound = distanceFilter / secondsSinceFix * 3.6
+        guard kmh > 0, secondsSinceFix > graceSeconds else { return kmh }
+        let step = distanceFilter > 0 ? distanceFilter : noFilterStepMeters
+        let bound = step / secondsSinceFix * 3.6
         let value = min(kmh, bound)
         return value < floorKmh ? 0 : value
     }

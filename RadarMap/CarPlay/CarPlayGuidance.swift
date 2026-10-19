@@ -624,7 +624,7 @@ final class CarPlayGuidance {
         guard step.kind?.isDrawable == true, let route = env.route.selected else { return nil }
         let coordinates = route.points.map(\.coordinate)
         guard let center = JunctionSketch.point(on: coordinates, at: step.distanceAlong) else { return nil }
-        let roads = env.roads.network
+        let roads = env.roads.vehicleNetwork
             .roads(near: center, radius: AppConfig.junctionRadiusMeters * 1.2)
             .map(\.points)
         guard let plan = JunctionSketch.plan(route: coordinates, maneuverAlong: step.distanceAlong, roads: roads),

@@ -34,6 +34,22 @@ final class ReportPlacementTests: XCTestCase {
         XCTAssertEqual(placed!.roadClass, .primary)
     }
 
+    /// Пока тайлов улиц нет, сеть — индекс лимитов: класса он не знает, но
+    /// отметка обязана сесть и на его ось (vehicleNetwork, аудит 19.10).
+    func testFallbackNetworkWithoutClassStillPlacesTheReport() {
+        let limitLine = RoadLine(points: [CLLocationCoordinate2D(latitude: 41.30, longitude: 69.25),
+                                          CLLocationCoordinate2D(latitude: 41.32, longitude: 69.25)])
+        struct Lines: RoadNetworkSource {
+            let lines: [RoadLine]
+            func roads(near coordinate: CLLocationCoordinate2D, radius: CLLocationDistance) -> [RoadLine] { lines }
+        }
+        let network = FallbackRoadNetwork(primary: EmptyRoadNetwork(), fallback: Lines(lines: [limitLine]))
+        let raw = CLLocationCoordinate2D(latitude: 41.310, longitude: 69.2504)
+        let placed = ReportPlacement.snapped(raw, course: 0,
+                                             roads: network.roads(near: raw, radius: 60), maxMeters: 60)
+        XCTAssertEqual(placed?.coordinate.longitude ?? 0, 69.250, accuracy: 1e-6)
+    }
+
     func testRoadAlongCourseBeatsACloserCrossStreet() {
         // Развязка: поперечная улица ближе, но мы едем не по ней. Снап на неё
         // увёл бы отметку на дорогу, по которой никто из предупреждаемых не

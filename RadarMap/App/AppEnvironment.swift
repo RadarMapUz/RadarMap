@@ -63,9 +63,10 @@ final class AppEnvironment {
     let network = NetworkMonitor()
     /// Офлайн-карты: скачанные области для карты без связи.
     let offlineMaps = OfflineMapService()
-    /// Дорожные тайлы для схемы приборки: подписанный индекс, ленивые тайлы,
-    /// классы дорог и мосты. Пустой источник, пока не приехали, — схема тогда
-    /// берёт сеть из индекса лимитов (FallbackRoadNetwork).
+    /// Дорожные тайлы: подписанный индекс, ленивые тайлы улиц вокруг машины
+    /// (посадка отметки «Радар!» на дорогу, схема развязки в CarPlay) и файлы
+    /// адресов и заведений для поиска. Пока тайлы не приехали — индекс
+    /// лимитов (`roads.vehicleNetwork`).
     let roads = RoadNetworkService()
     /// «Поделиться прибытием» — ссылка с временем прибытия для знакомого.
     let etaShare = EtaShareService()
@@ -239,8 +240,16 @@ final class AppEnvironment {
         location.onCameraSpoken = { [weak usage] grade in usage?.noteCameraSpoken(grade) }
         // «Радар ещё стоял?» — наблюдение за проездом мимо передвижных точек
         // на каждом фиксе, и с погашенным экраном тоже (MobileCameraService).
-        location.onAcceptedFix = { [weak mobile, weak traffic, weak location, weak route, weak alerts] coordinate in
+        location.onAcceptedFix = { [weak self, weak mobile, weak traffic, weak location, weak route, weak alerts] coordinate in
             withMotion { mobile?.trackPasses(from: coordinate) }
+            // Улицы вокруг машины — для посадки «Радар!» на дорогу и схемы
+            // развязки в CarPlay. После удаления схемы приборки (11.10)
+            // ensureCoverage не звал никто, сеть была пустой, и отметки уходили
+            // сырой координатой водителя (аудит 19.10). Только в поездке или с
+            // машиной; гейт внутри — дёшево, пока окрестность та же.
+            if let self, location?.isTripActive == true || self.isCarPlayConnected {
+                self.roads.ensureCoverage(around: coordinate)
+            }
             traffic?.note(coordinate, speedKmh: location?.speedKmh ?? -1)
             if let traffic, let route, route.isActive { route.refreshTrafficDelay(revision: traffic.revision) }
             // «Впереди пробка» — только без маршрута: с маршрутом пробки уже в
@@ -282,6 +291,10 @@ final class AppEnvironment {
         // молчит.
         mobile.roads = roads
         mobile.network = network
+        // Где тайлов улиц ещё нет — линии из индекса лимитов: он уже лежит на
+        // телефоне и знает настоящие оси дорог (класса не знает — посадке
+        // отметки класс не нужен).
+        roads.fallbackSource = { [weak speedLimits] in speedLimits?.limitIndex }
         // Тайлы дорог — туда же: без покрытия сеть не будится, диск читается
         // как читался (см. RoadNetworkService.load).
         roads.connectivity = network

@@ -8,13 +8,13 @@
 //  индекс — SignedPayload, проверяется ДО разбора и на каждой загрузке с
 //  диска (файл на диске — такие же чужие байты, как файл из сети); каждый
 //  тайл сверяется с sha256 из индекса и при несходстве отбрасывается,
-//  а не «спасается». Любая неисправность даёт пустой источник — схема
-//  тогда рисует сеть из индекса лимитов (FallbackRoadNetwork), то есть
-//  ровно то, что рисовала до появления тайлов.
+//  а не «спасается». Любая неисправность даёт пустой источник — тогда
+//  `vehicleNetwork` отдаёт линии индекса лимитов (FallbackRoadNetwork).
 //
-//  Ленивость: телефон возит окрестность 3×3 тайла (~165 км), а не страну.
-//  ensureCoverage дёргается тиком приборки — скачивание идёт только когда
-//  схема на экране и только недостающих тайлов.
+//  Ленивость: телефон возит окрестность 3×3 тайла улиц, а не страну.
+//  ensureCoverage зовётся на фиксах поездки и с подключённой машиной
+//  (AppEnvironment.onAcceptedFix) — скачивание только недостающих тайлов,
+//  медианный тайл улиц ~2 КБ.
 //
 
 import CoreLocation
@@ -51,6 +51,14 @@ final class RoadNetworkService {
     /// Снимок загруженных тайлов под кэшем окрестности. Пустой, пока тайлы
     /// не приехали, — вызывающий обязан держать фолбэк, а не пустоту.
     private(set) var network: any RoadNetworkSource = EmptyRoadNetwork()
+    /// Запасной источник, пока тайлов улиц нет (первый запуск, нет сети,
+    /// новая окрестность): индекс лимитов. Ставит AppEnvironment.
+    @ObservationIgnored var fallbackSource: (() -> (any RoadNetworkSource)?)?
+    /// Проезжие оси вокруг точки: тайлы, где они есть, иначе индекс лимитов.
+    /// Для посадки отметки «Радар!» и схемы развязки в машине.
+    var vehicleNetwork: any RoadNetworkSource {
+        FallbackRoadNetwork(primary: network, fallback: fallbackSource?() ?? EmptyRoadNetwork())
+    }
     /// Костяк района: раздельные проезжие сведены в одну ось, мелочи нет.
     /// Пустой на старом формате — вызывающий тогда берёт обычную сеть.
     private(set) var farNetwork: any RoadNetworkSource = EmptyRoadNetwork()
@@ -77,7 +85,9 @@ final class RoadNetworkService {
         wantedSets = wanted
         lastEnsureAt = nil   // состав окрестности изменился — проверить сразу
     }
-    @ObservationIgnored private var wantedSets: Swift.Set<RoadTiles.Set> = [.far, .streets]
+    /// Только улицы: костяк района и местность рисовала схема приборки
+    /// (удалена 11.10), а посадке отметки и схеме развязки нужны оси улиц.
+    @ObservationIgnored private var wantedSets: Swift.Set<RoadTiles.Set> = [.streets]
     /// Распакованная местность по ключам наборов.
     @ObservationIgnored private var loadedAreas: [String: [SketchArea]] = [:]
     @ObservationIgnored private var loadedPoints: [String: [SketchPoint]] = [:]

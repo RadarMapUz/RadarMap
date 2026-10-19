@@ -41,7 +41,12 @@ final class ScenarioDriveTests: XCTestCase {
                 let along = cumulative + t * len
                 cumulative += len
                 if let near, along < near - 50 || along > near + 500 { continue }
-                if offset < best.offset - 0.01 { best = (along, offset) }
+                // При равенстве — дальше по маршруту (как штраф «против хода» у
+                // сервиса): обратная нога не проецируется на прямую.
+                if offset < best.offset - 0.01
+                    || (abs(offset - best.offset) <= 0.01 && near != nil && along > best.along) {
+                    best = (along, offset)
+                }
             }
             return best
         }
@@ -57,6 +62,8 @@ final class ScenarioDriveTests: XCTestCase {
         var route: RouteModel?
         /// Камера → сколько раз о ней предупредили с начала (новый подъезд).
         private(set) var firstAlerts: [Int: Int] = [:]
+        /// Где прозвучало каждое «первое» (x, y в метрах).
+        private(set) var firstAlertPoints: [Int: [(x: Double, y: Double)]] = [:]
         private(set) var rejected = 0
         private var progress: Double?
 
@@ -83,12 +90,14 @@ final class ScenarioDriveTests: XCTestCase {
                     let straight = GeoMath.fastDistance(here.latitude, here.longitude, camera.lat, camera.lon)
                     if engine.isAnnounced(camera.id) {
                         engine.noteGeometry(camera.id,
-                                            atTraverse: straight <= PassGeometry.traverseLimit(for: camera),
+                                            atTraverse: straight <= max(PassGeometry.traverseLimit(for: camera),
+                                                                        AppConfig.alertTraverseMeters),
                                             behind: LocationGates.isClearlyBehind(camera, in: situation),
-                                            ahead: LocationGates.isClearlyAhead(camera, in: situation))
+                                            ahead: LocationGates.isReapproach(camera, in: situation))
                     }
                     let remaining = progress.flatMap { p in cameraAlong[camera.id].map { $0 - p } }
                     guard let candidate = LocationGates.candidateDistance(straight: straight, routeRemaining: remaining,
+                                                                          announced: engine.isAnnounced(camera.id),
                                                                           in: situation) else { continue }
                     candidates.append((camera, candidate.distance, candidate.onRoute))
                 }
@@ -104,9 +113,11 @@ final class ScenarioDriveTests: XCTestCase {
                 }) else { continue }
                 let radius = AlertEngine.effectiveRadius(speedKmh: speedKmh, baseRadius: AppConfig.alertRadius)
                 if let decision = engine.evaluate(cameraID: nearest.camera.id, distance: nearest.distance,
-                                                  radius: radius),
+                                                  radius: radius,
+                                                  moving: LocationGates.isFilteringActive(situation)),
                    decision.isFirst {
                     firstAlerts[nearest.camera.id, default: 0] += 1
+                    firstAlertPoints[nearest.camera.id, default: []].append(xy(good.lat, good.lon))
                 }
             }
         }
@@ -245,9 +256,11 @@ final class ScenarioDriveTests: XCTestCase {
         engine.noteGeometry(7, atTraverse: false, behind: true, ahead: false)
         engine.noteGeometry(7, atTraverse: false, behind: false, ahead: true)
         XCTAssertNil(engine.evaluate(cameraID: 7, distance: 150, radius: 400))
-        // Впереди два подряд — новый подъезд, серия с начала.
+        // Впереди два подряд — новый подъезд, серия с начала; но первое
+        // оповещение перевзведённой — только на ходу (стоя гейтов нет).
         engine.noteGeometry(7, atTraverse: false, behind: false, ahead: true)
-        XCTAssertEqual(engine.evaluate(cameraID: 7, distance: 140, radius: 400)?.isFirst, true)
+        XCTAssertNil(engine.evaluate(cameraID: 7, distance: 140, radius: 400, moving: false))
+        XCTAssertEqual(engine.evaluate(cameraID: 7, distance: 140, radius: 400, moving: true)?.isFirst, true)
         // Геометрия: без курса «позади»/«впереди» не решается; шум траверза — не «позади».
         let east = { (x: Double) in LocationGates.Situation(
             coordinate: CLLocationCoordinate2D(latitude: self.point(x, 0).lat, longitude: self.point(x, 0).lon),
@@ -255,7 +268,7 @@ final class ScenarioDriveTests: XCTestCase {
         XCTAssertTrue(LocationGates.isClearlyBehind(cam, in: east(200)))
         XCTAssertFalse(LocationGates.isClearlyBehind(cam, in: east(30)))
         XCTAssertTrue(LocationGates.isClearlyAhead(cam, in: east(-200)))
-        XCTAssertFalse(LocationGates.isClearlyAhead(cam, in: east(-40)))
+        XCTAssertFalse(LocationGates.isClearlyAhead(cam, in: east(-30)))
         let standing = LocationGates.Situation(coordinate: east(200).coordinate, course: -1, speedKmh: 0,
                                                horizontalAccuracy: 6, context: .city)
         XCTAssertFalse(LocationGates.isClearlyBehind(cam, in: standing))
@@ -301,6 +314,35 @@ final class ScenarioDriveTests: XCTestCase {
         var drive = Drive()
         drive.run(route, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
         XCTAssertEqual(drive.firstAlerts[1], 1)
+    }
+
+    // MARK: - S4: ревью 20.10, третий круг
+
+    /// Круг по кварталу со светофором на обратной улице: камера, проеханная
+    /// по y=0, с параллельной улицы y=250 «впереди по курсу», но на чужой
+    /// дороге — не перевзводится; стоя у светофора — не звучит. Второе
+    /// «первое» — на настоящем подъезде по y=0.
+    func testLoopWithALightOnTheParallelStreet() {
+        let route = fixes(from: (0, 0), legs: [Leg(x: 1250, y: 0, speed: 12),
+                                               Leg(x: 1250, y: 250, speed: 10),
+                                               Leg(x: 1100, y: 250, speed: 10, stopSeconds: 40),
+                                               Leg(x: 600, y: 250, speed: 12),
+                                               Leg(x: 600, y: 0, speed: 10),
+                                               Leg(x: 1300, y: 0, speed: 12)])
+        var drive = Drive()
+        drive.run(route, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
+        XCTAssertEqual(drive.firstAlerts[1], 2)
+        let second = drive.firstAlertPoints[1]?.last
+        XCTAssertEqual(second?.y ?? 999, 0, accuracy: 1, "второе «первое» — на подъезде по y=0, а не у светофора")
+    }
+
+    /// Разворот всего в 60 м за камерой: «впереди» после него — дважды, и
+    /// подъезд новый (порог «впереди» мягче порога «позади»).
+    func testUTurnSoonAfterTheCameraWarnsAgain() {
+        let route = fixes(from: (0, 0), legs: [Leg(x: 1065, y: 0, speed: 12), Leg(x: 0, y: 0, speed: 12)])
+        var drive = Drive()
+        drive.run(route, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
+        XCTAssertEqual(drive.firstAlerts[1], 2)
     }
 
     // MARK: - A3: тоннель

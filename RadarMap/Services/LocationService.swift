@@ -1139,7 +1139,7 @@ final class LocationService: NSObject {
         locationTick &+= 1
         onAcceptedFix?(coordinate)
         retileIfNeeded(around: coordinate)
-        recomputeNearest(from: coordinate)
+        recomputeNearest(from: coordinate, fromFix: true)
         recomputeDirection()
 
         // Активные оповещения (звук/голос/экран) — в поездке ИЛИ пока приложение открыто.
@@ -1378,7 +1378,7 @@ final class LocationService: NSObject {
             bearingSmoother.reset()
             return
         }
-        if isCameraOnRoute(camera) {
+        if nearestViaRoute {
             if relativeBearingToNearest != 0 { relativeBearingToNearest = 0 }   // на маршруте — прямо по ходу
             bearingSmoother.reset()
             return
@@ -1426,12 +1426,21 @@ final class LocationService: NSObject {
     private func clearNearest() {
         if nearestCamera != nil { nearestCamera = nil }
         if distanceToNearest != nil { distanceToNearest = nil }
+        nearestViaRoute = false
         if !clusteredCameras.isEmpty { clusteredCameras = [] }
     }
 
     @ObservationIgnored private var nearestBuffer: [(camera: Camera, distance: CLLocationDistance, onRoute: Bool)] = []
+    /// Ближайшая выбрана по остатку маршрута (а не по прямой): фраза «по
+    /// маршруту» и «прямо по ходу» — только тогда. Проеханная камера маршрута,
+    /// снова впереди по прямой после разворота, — уже не «по маршруту».
+    @ObservationIgnored private var nearestViaRoute = false
 
-    private func recomputeNearest(from coordinate: CLLocationCoordinate2D) {
+    /// `fromFix` — вызов с настоящего фикса GPS (handleLocation). Учёт
+    /// «проехали / снова подъезд» — только по ним: пересборка окна (база,
+    /// чужие отметки, возврат на экран) повторяет последний фикс, и один кривой
+    /// курс засчитывался бы дважды (ревью 20.10).
+    private func recomputeNearest(from coordinate: CLLocationCoordinate2D, fromFix: Bool = false) {
         guard !trackedCameras.isEmpty else { clearNearest(); return }
         // Сначала дешёвая дистанция по всему окну, и только потом дорогая проверка
         // «наша ли это дорога» — по возрастанию, до первой подходящей. Результат
@@ -1461,23 +1470,26 @@ final class LocationService: NSObject {
         for camera in trackedCameras {
             let straight = GeoMath.fastDistance(coordinate.latitude, coordinate.longitude,
                                                 camera.lat, camera.lon)
-            let atTraverse = straight <= PassGeometry.traverseLimit(for: camera)
-            if countsPasses, atTraverse {
+            if countsPasses, straight <= PassGeometry.traverseLimit(for: camera) {
                 alertRecall.notePassed(cameraID: camera.id)
             }
+            let announced = alertEngine.isAnnounced(camera.id)
             // Проеханные (сценарий S4): о ком сказали, у кого были и кто теперь
             // явно позади — следующий подъезд к ним (разворот, круг) будет
             // новым. Только по годному фиксу — грубая точка из seedContext
             // «проезжать» камеры не вправе. Сказано о единицах камер.
-            if alertEngine.isAnnounced(camera.id), !isPositionCoarse {
-                alertEngine.noteGeometry(camera.id, atTraverse: atTraverse,
+            if announced, fromFix, !isPositionCoarse {
+                alertEngine.noteGeometry(camera.id,
+                                         atTraverse: straight <= max(PassGeometry.traverseLimit(for: camera),
+                                                                     AppConfig.alertTraverseMeters),
                                          behind: LocationGates.isClearlyBehind(camera, in: situation),
-                                         ahead: LocationGates.isClearlyAhead(camera, in: situation))
+                                         ahead: LocationGates.isReapproach(camera, in: situation))
             }
             // Камера уехала назад по маршруту — стоя не пугаем ею, в движении
             // она снова камера «как все» (маршрут с разворотом).
             guard let candidate = LocationGates.candidateDistance(straight: straight,
                                                                   routeRemaining: routeRemaining(to: camera),
+                                                                  announced: alertEngine.isAnnounced(camera.id),
                                                                   in: situation) else { continue }
             candidates.append((camera, candidate.distance, candidate.onRoute))
         }
@@ -1488,6 +1500,7 @@ final class LocationService: NSObject {
             LocationGates.isOnOurRoad($0.camera, in: situation, isOnRoute: $0.onRoute)
         }) else { clearNearest(); return }
         let found = candidates[index]
+        nearestViaRoute = found.onRoute
         // Камера чаще всего ТА ЖЕ, что тик назад: перезапись тем же значением
         // всё равно будит всех наблюдателей @Observable, и до этой проверки
         // карта с двумя сотнями маркеров перерисовывалась каждую секунду.
@@ -1597,7 +1610,8 @@ final class LocationService: NSObject {
     private func runAlertEngine() {
         guard let camera = nearestCamera, let distance = distanceToNearest else { return }
         guard let decision = alertEngine.evaluate(cameraID: camera.id, distance: distance,
-                                                  radius: effectiveAlertRadius) else { return }
+                                                  radius: effectiveAlertRadius,
+                                                  moving: isDirectionalFilteringActive) else { return }
 
         let policy = voicePlan(for: camera, crawling: isCrawling)
 
@@ -1718,7 +1732,7 @@ final class LocationService: NSObject {
         } else if brief {
             phrase = String(format: String(localized: "%@, %lld метров"),
                             camera.kind.shortName, rounded)
-        } else if isCameraOnRoute(camera) {
+        } else if camera == nearestCamera ? nearestViaRoute : isCameraOnRoute(camera) {
             phrase = String(format: String(localized: "По маршруту %@ через %lld метров"),
                             camera.kind.displayName.lowercased(), rounded)
         } else {

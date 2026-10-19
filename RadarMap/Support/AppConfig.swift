@@ -384,10 +384,17 @@ nonisolated enum AppConfig {
     /// дальше этого (при достоверном курсе): следующий подъезд к ней — после
     /// разворота или круга по кварталу — предупреждается заново. С запасом над
     /// шумом траверза (`corridorBehindToleranceMeters`).
-    nonisolated static let alertPassedBehindMeters: CLLocationDistance = 60
+    nonisolated static let alertPassedBehindMeters: CLLocationDistance = 40
     /// Сколько фиксов подряд нужно, чтобы считать камеру проеханной и чтобы
     /// считать подъезд к ней новым: один фикс с кривым курсом — не решение.
     nonisolated static let alertPassedConfirmFixes = 2
+    /// «Явно впереди» для нового подъезда (ревью 20.10): разворот уже в 60 м
+    /// за камерой даёт два фикса «впереди». Дубль «0 метров» у камеры маршрута
+    /// этим порогом не держится — его закрывает isReapproach (гейт дороги).
+    nonisolated static let alertPassedAheadMeters: CLLocationDistance = 40
+    /// «Были у камеры» для нового подъезда — шире записи проезда (40 м):
+    /// проезд по дальней проезжей части широкого проспекта тоже «был».
+    nonisolated static let alertTraverseMeters: CLLocationDistance = 90
     /// Ступени тревоги — доли радиуса (AlertEngine.level): ближе 0,6 —
     /// вторая, ближе 0,3 — третья.
     nonisolated static let alertLevel2Share = 0.6

@@ -38,6 +38,10 @@ nonisolated struct AlertEngine {
     /// иначе давал второе «первое» оповещение о той же камере (ревью 20.10).
     private var traversed: Set<Int> = []
     private var passed: Set<Int> = []
+    /// Серия забыта по «проехали → снова подъезд»: первое оповещение такой
+    /// камеры — только на ходу. Стоя гейты не работают вовсе, и перевзведённая
+    /// с соседней улицы камера на светофоре давала бы новое «первое» (ревью 20.10).
+    private var rearmed: Set<Int> = []
     private var behindStreak: [Int: Int] = [:]
     private var aheadStreak: [Int: Int] = [:]
 
@@ -85,11 +89,18 @@ nonisolated struct AlertEngine {
 
     /// Оценить приближение: вернёт решение, если уровень вырос; nil — молчим.
     /// Выход за радиус с гистерезисом сбрасывает серию — при возврате сигналим заново.
+    /// `moving` — едем с достоверным курсом (гейты работают). Важно только
+    /// для камер, перевзведённых после проезда: им первое оповещение — на ходу.
     mutating func evaluate(cameraID: Int, distance: CLLocationDistance,
-                           radius: CLLocationDistance) -> Decision? {
+                           radius: CLLocationDistance, moving: Bool = true) -> Decision? {
         if distance > radius + AppConfig.alertExitHysteresisMeters {
             forget(cameraID)
+            rearmed.remove(cameraID)
             return nil
+        }
+        if rearmed.contains(cameraID) {
+            guard moving else { return nil }
+            rearmed.remove(cameraID)
         }
         let level = Self.level(distance: distance, radius: radius)
         let previous = announcedLevel[cameraID] ?? 0
@@ -102,6 +113,7 @@ nonisolated struct AlertEngine {
         announcedLevel.removeAll()
         traversed.removeAll()
         passed.removeAll()
+        rearmed.removeAll()
         behindStreak.removeAll()
         aheadStreak.removeAll()
     }
@@ -134,7 +146,10 @@ nonisolated struct AlertEngine {
         if passed.contains(cameraID) {
             let streak = ahead ? (aheadStreak[cameraID] ?? 0) + 1 : 0
             aheadStreak[cameraID] = streak
-            if streak >= confirm { forget(cameraID) }
+            if streak >= confirm {
+                forget(cameraID)
+                rearmed.insert(cameraID)
+            }
         } else if traversed.contains(cameraID) {
             let streak = behind ? (behindStreak[cameraID] ?? 0) + 1 : 0
             behindStreak[cameraID] = streak

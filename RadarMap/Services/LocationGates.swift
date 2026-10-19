@@ -167,7 +167,19 @@ nonisolated enum LocationGates {
     static func isClearlyAhead(_ camera: Camera, in situation: Situation) -> Bool {
         guard isFilteringActive(situation) else { return false }
         return RoadCorridor.fix(from: situation.coordinate, course: situation.course,
-                                to: camera.coordinate).along > AppConfig.alertPassedBehindMeters
+                                to: camera.coordinate).along > AppConfig.alertPassedAheadMeters
+    }
+
+    /// Новый подъезд к проеханной камере: она явно впереди, И проходит гейт
+    /// «наша дорога», И едем не ползком, И мы не доказанно вне её проезжей
+    /// части. Одного «впереди по курсу» мало — на параллельной улице в 250 м,
+    /// на развязке-клевере и на парковке у дороги курс тоже смотрит на камеру
+    /// (ревью 20.10).
+    static func isReapproach(_ camera: Camera, in situation: Situation) -> Bool {
+        situation.speedKmh >= AppConfig.voiceMinSpeedKmh
+            && isClearlyAhead(camera, in: situation)
+            && isOnOurRoad(camera, in: situation, isOnRoute: false)
+            && !PassGeometry.isProvenOffRoad(camera: camera, at: situation.coordinate)
     }
 
     /// Кандидат в ближайшие: по маршруту — остаток вдоль него и признак «на
@@ -175,10 +187,15 @@ nonisolated enum LocationGates {
     /// — уже не маршрутная: в движении она снова «как все» (по прямой и через
     /// гейты — маршрут с разворотом проходит её второй раз), стоя — не
     /// кандидат вовсе, как и раньше. nil — не кандидат.
+    /// `announced` — о камере уже сказали: такая, уехавшая назад по
+    /// маршруту, кандидатом не становится, пока движок не забудет серию
+    /// (проехали → новый подъезд): иначе проеханная камера после разворота
+    /// у самой камеры заслоняла бы следующую камеру маршрута (ревью 20.10).
     static func candidateDistance(straight: CLLocationDistance, routeRemaining: CLLocationDistance?,
+                                  announced: Bool = false,
                                   in situation: Situation) -> (distance: CLLocationDistance, onRoute: Bool)? {
         guard let routeRemaining else { return (straight, false) }
         if routeRemaining > -AppConfig.routePassedToleranceMeters { return (max(0, routeRemaining), true) }
-        return isFilteringActive(situation) ? (straight, false) : nil
+        return isFilteringActive(situation) && !announced ? (straight, false) : nil
     }
 }

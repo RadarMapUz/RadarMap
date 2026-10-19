@@ -1557,8 +1557,14 @@ final class LocationService: NSObject {
     /// Остаток до камеры ПО МАРШРУТУ; nil — камера не на активном маршруте.
     /// По прямой петля развязки или объезд дают 300 м там, где по дороге 2 км, —
     /// и приложение предупреждало о камере, до которой ещё ехать и ехать.
+    /// Остаток по маршруту до его камеры — только пока мы на маршруте.
+    /// Съехали (а без сети перестроиться нельзя) — прогресс застыл на
+    /// проекции, и камеры старой линии «по маршруту» были нашими без
+    /// условий: заслоняли настоящую камеру впереди на новой дороге и
+    /// звучали сами (сценарий S7, 20.10). Тогда они — как все: по прямой и
+    /// через гейты.
     private func routeRemaining(to camera: Camera) -> CLLocationDistance? {
-        guard let route, route.isActive,
+        guard let route, route.isActive, !route.isOffRoute,
               let onRoute = route.routeCamera(id: camera.id)
         else { return nil }
         return onRoute.distanceAlong - route.progressAlong

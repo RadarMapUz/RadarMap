@@ -66,6 +66,8 @@ final class ScenarioDriveTests: XCTestCase {
         private(set) var firstAlertPoints: [Int: [(x: Double, y: Double)]] = [:]
         private(set) var rejected = 0
         private var progress: Double?
+        /// Съехали с линии дальше rerouteDeviationMeters (как RouteService.isOffRoute).
+        private var offRoute = false
 
         mutating func run(_ fixes: [LocationFilter.Fix], cameras: [Camera],
                           xy: (Double, Double) -> (x: Double, y: Double)) {
@@ -100,7 +102,7 @@ final class ScenarioDriveTests: XCTestCase {
                                                 && LocationGates.isReapproach(camera, in: situation,
                                                                               passLine: engine.passLine(camera.id)))
                     }
-                    let remaining = progress.flatMap { p in cameraAlong[camera.id].map { $0 - p } }
+                    let remaining = offRoute ? nil : progress.flatMap { p in cameraAlong[camera.id].map { $0 - p } }
                     guard let candidate = LocationGates.candidateDistance(straight: straight, routeRemaining: remaining,
                                                                           announced: engine.isAnnounced(camera.id),
                                                                           in: situation) else { continue }
@@ -109,7 +111,9 @@ final class ScenarioDriveTests: XCTestCase {
                 // Прогресс по маршруту — после выбора, как в сервисе (отставание на фикс).
                 defer {
                     if let route {
-                        progress = route.project(xy(good.lat, good.lon), near: progress).along
+                        let hit = route.project(xy(good.lat, good.lon), near: progress)
+                        progress = hit.along
+                        offRoute = hit.offset > AppConfig.rerouteDeviationMeters
                     }
                 }
                 candidates.sort { $0.distance < $1.distance }
@@ -465,6 +469,24 @@ final class ScenarioDriveTests: XCTestCase {
         var drive = Drive()
         drive.run(route, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
         XCTAssertEqual(drive.firstAlerts[1], 1, "\(drive.firstAlertPoints[1] ?? [])")
+    }
+
+    // MARK: - S7: съехали с маршрута без сети
+
+    /// Маршрут на восток с камерой R в 300 м за поворотом; водитель свернул
+    /// на север (сети нет — перестроения нет), на новой дороге камера C.
+    /// Застывший прогресс держал R «по маршруту» в 300 м и нашей без
+    /// условий: C молчала, пока не стала ближе R, а R звучала с чужой дороги.
+    func testOffRouteCamerasDoNotMaskTheRealOne() {
+        let route = fixes(from: (0, 0), legs: [Leg(x: 600, y: 0, speed: 13.9),
+                                               Leg(x: 600, y: 1400, speed: 13.9)])
+        var drive = Drive()
+        drive.route = RouteModel(points: [(0, 0), (2000, 0)])
+        drive.run(route, cameras: [camera(1, x: 900, y: 0), camera(2, x: 600, y: 800)], xy: xy)
+        let first = drive.firstAlertPoints[2]?.first
+        XCTAssertNotNil(first, "настоящая камера на новой дороге звучит")
+        XCTAssertLessThan(first?.y ?? 999, 450,
+                          "звучит за полный радиус, а не когда стала ближе застывшей R: \(drive.firstAlertPoints)")
     }
 
     // MARK: - A3: тоннель

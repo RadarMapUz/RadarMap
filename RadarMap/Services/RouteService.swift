@@ -191,6 +191,10 @@ final class RouteService {
     }
 
     @ObservationIgnored private var offRouteTicks = 0
+    /// Последний фикс — дальше `rerouteDeviationMeters` от линии: мы не на
+    /// маршруте (съехали, перестроиться нельзя — нет сети). Остаток «по
+    /// маршруту» до его камер тогда ничего не значит (сценарий S7).
+    @ObservationIgnored private(set) var isOffRoute = false
     @ObservationIgnored private var lastRebuildAt: Date = .distantPast
     @ObservationIgnored private var isRebuilding = false
     /// Идёт перестроение после съезда — наблюдаемо: машина на это время
@@ -536,6 +540,7 @@ final class RouteService {
         laneNotice = nil
         laneNoticeDistance = 0
         offRouteTicks = 0
+        isOffRoute = false
         announcedStage = [:]
         segmentHint = 0
         // Задержка пробками — с варианта (посчитана при построении); дальше
@@ -601,7 +606,8 @@ final class RouteService {
         updateManeuvers(variant: variant, along: along, announce: announce)
 
         // Отклонение → перестроение (с защитой от шума GPS и кулдауном).
-        guard deviation > AppConfig.rerouteDeviationMeters else {
+        isOffRoute = deviation > AppConfig.rerouteDeviationMeters
+        guard isOffRoute else {
             offRouteTicks = 0
             return
         }

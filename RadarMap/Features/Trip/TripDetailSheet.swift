@@ -617,7 +617,7 @@ struct TripDetailContent: View {
                   icon: "clock"),
             .init(value: Formatting.distance(record.distanceMeters), label: String(localized: "пройдено пути"),
                   icon: "point.topleft.down.to.point.bottomright.curvepath"),
-            .init(value: "\(record.camerasPassed)", label: String(localized: "пройдено камер"),
+            .init(value: "\(record.camerasPassed)", label: String(localized: "проездов камер"),
                   icon: Icon.cameras),
             .init(value: "\(Int(record.maxSpeedKmh))", label: String(localized: "максимум, км/ч"),
                   icon: "gauge.with.dots.needle.100percent"),
@@ -764,9 +764,12 @@ struct TripShareCard: View {
     }
 
     /// «Все камеры в лимите» или «Риск ≈ … · место» — главный вывод поездки.
+    /// Решает `TripRecord.verdict`: карточку отправляют наружу, и «в лимите»
+    /// после превышения с предположенным лимитом или после «штраф пришёл»
+    /// было бы враньём в пользу водителя. Лимиты неизвестны — без плашки.
     @ViewBuilder private var verdictChip: some View {
-        let risk = TripHistory.fineRisk(of: record.passed)
-        if risk > 0 {
+        switch record.verdict {
+        case .risk(let risk):
             let worst = TripHistorySection.worstPenalty(record)
             chip(icon: "exclamationmark.triangle.fill",
                  text: worst.map {
@@ -774,10 +777,16 @@ struct TripShareCard: View {
                             Formatting.money(risk), $0.place)
                  } ?? String(format: String(localized: "Риск ≈ %@"), Formatting.money(risk)),
                  tint: Theme.danger)
-        } else if record.camerasPassed > 0 {
+        case .overspeed(let count):
+            chip(icon: "exclamationmark.triangle.fill",
+                 text: String(format: String(localized: "Превышений: %lld"), count),
+                 tint: Theme.danger)
+        case .clean:
             chip(icon: "checkmark.seal.fill",
                  text: String(localized: "Все камеры в лимите"),
                  tint: Theme.success)
+        case .unknownLimits, .noCameras:
+            EmptyView()
         }
     }
 

@@ -187,7 +187,7 @@ struct RatingDetailSheet: View {
                    let previous = filled.dropLast().last?.rating,
                    last != previous {
                     Text(String(format: String(localized: "%@ к прошлой неделе"),
-                                last > previous ? "+\(last - previous)" : "\(last - previous)"))
+                                Formatting.signed(last - previous)))
                         .font(.rounded(13, .bold).monospacedDigit())
                         .foregroundStyle(last > previous ? Theme.success : Theme.danger)
                 }
@@ -269,13 +269,13 @@ struct RatingDetailSheet: View {
         }
     }
 
+    /// Та же метка, что в герое «Итогов» (6.3): «−8 к прошлой», без стрелки
+    /// рядом со знаком — один экран не должен называть одно число по-разному.
     private func deltaBadge(_ delta: Int) -> some View {
         let up = delta > 0
         let flat = delta == 0
         let tint: Color = flat ? Theme.textSecondary : (up ? Theme.success : Theme.danger)
-        return Label(flat ? String(localized: "как в прошлый период")
-                          : (up ? "+\(delta)" : "\(delta)"),
-                     systemImage: flat ? "equal" : (up ? "arrow.up" : "arrow.down"))
+        return Text(flat ? String(localized: "как в прошлый период") : period.ratingDeltaText(delta))
             .font(.rounded(11, .bold).monospacedDigit())
             .foregroundStyle(tint)
             .padding(.horizontal, 8).padding(.vertical, 3)
@@ -594,6 +594,7 @@ struct RatingDetailSheet: View {
                 SectionHeader(String(localized: "Из чего сложился ваш рейтинг"))
                 let shown = Array(items.prefix(AppConfig.breakdownVisibleRows))
                     .filter { $0.points >= AppConfig.breakdownMinPoints }
+                if let first = shown.first { ContributionFormula(item: first) }
                 ForEach(shown) { item in
                     ContributionRow(item: item, highlighted: highlighted == item.id) {
                         open(item)
@@ -799,6 +800,24 @@ private struct ContributionBar: View {
 
 /// Строка обязана объяснять сама себя: слева — что за поездка, справа — вклад
 /// и та самая арифметика «недобор × доля», из которой он получился.
+/// Легенда к правой колонке строк (6.3): «18 × 23 %» без неё — шифр. Пример
+/// берётся из первой строки, чтобы формула читалась на своих числах; «≈» —
+/// потому что доля в строке округлена до процента.
+private struct ContributionFormula: View {
+    let item: RatingContribution
+
+    var body: some View {
+        // Арифметика — одним неразрывным куском: «≈» в конце строки и «−27,2»
+        // на следующей читались как два разных выражения.
+        let math = Formatting.unbreakable(
+            "\(item.deficit) × \(Int((item.weightShare * 100).rounded())) % ≈ \(Formatting.points(item.points))")
+        Text(String(format: String(localized: "Вклад = недобор балла до 100 × доля пути: %@"), math))
+            .font(.rounded(11))
+            .foregroundStyle(Theme.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
 private struct ContributionRow: View {
     let item: RatingContribution
     var highlighted = false
@@ -812,8 +831,9 @@ private struct ContributionRow: View {
                     .fill(item.points >= 1 ? Theme.danger : Theme.textTertiary)
                     .frame(width: 3, height: 34)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(item.date.formatted(date: .abbreviated,
-                                             time: item.isTrip ? .shortened : .omitted))
+                    // Даты — как в списке поездок: «Вчера, 19:00», «12 октября»;
+                    // было «19 окт. 2026 г., 19:00» — другой экран, другой язык.
+                    Text(item.isTrip ? Formatting.tripTitle(item.date) : Formatting.dayTitle(item.date))
                         .font(.rounded(15, .semibold))
                         .foregroundStyle(Theme.textPrimary)
                     Text("\(Formatting.distance(item.distanceMeters)) · "
@@ -888,6 +908,10 @@ private struct AllContributionsView: View {
         return ScrollView {
             LazyVStack(spacing: 10) {
                 controls
+                if let first = shown.first {
+                    ContributionFormula(item: first)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
                 if shown.isEmpty {
                     Text("В этом периоде нет поездок с превышениями — это хорошая новость.")
                         .font(.rounded(15))

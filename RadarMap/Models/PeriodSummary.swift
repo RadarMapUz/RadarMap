@@ -93,6 +93,27 @@ nonisolated enum StatsPeriod: String, CaseIterable, Identifiable {
         }
     }
 
+    /// «к прошлой» — короткая форма для тесной строки: период уже назван
+    /// подписью «за неделю» над числом, а голая метка «↘ 73 %» не говорила,
+    /// с чем сравнили (узбекский на узком экране, ревью 20.10).
+    var versusPreviousShort: String {
+        switch self {
+        case .week:        return String(localized: "к прошлой")
+        case .day, .month: return String(localized: "к прошлому")
+        }
+    }
+
+    /// «−8 к прошлой» — метка движения рейтинга у его уровня (6.3). Короткая:
+    /// полное «к прошлой неделе» стоит у километров строкой выше. Число —
+    /// внутри фразы каталога, чтобы порядок слов в узбекском был свой.
+    func ratingDeltaText(_ delta: Int) -> String {
+        let signed = Formatting.signed(delta)
+        switch self {
+        case .week:        return String(localized: "\(signed) к прошлой")
+        case .day, .month: return String(localized: "\(signed) к прошлому")
+        }
+    }
+
     /// Подпись «вашей нормы»: по скольким прошлым окнам она посчитана.
     /// Меньше трёх окон норму не показываем (см. ratingBaselineMinPeriods),
     /// но 21 и 31 окно — «по 21 прошлой неделе»: форму числа даёт каталог.
@@ -665,6 +686,9 @@ nonisolated struct PassMarker: Identifiable, Equatable {
 
     var id: Int { cameraID }
     var hasViolation: Bool { overTimes > 0 }
+    /// Лимит не известен ни на одном проезде: «в лимите» сказать нельзя —
+    /// точка рисуется нейтральной, а не зелёной.
+    var limitUnknown: Bool { limitKmh == nil }
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: lat, longitude: lon)
     }

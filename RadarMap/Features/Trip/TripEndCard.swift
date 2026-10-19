@@ -161,21 +161,32 @@ struct TripEndCard: View {
         }
     }
 
-    /// Одна честная строка про деньги: риск, если он есть, иначе «всё в лимите».
+    /// Одна честная строка про деньги и поведение (`TripRecord.verdict`):
+    /// риск, если он есть; превышения без суммы (лимит предположен) — тоже
+    /// превышения; «превышений нет» — только когда хоть один лимит известен.
     private var moneyLine: String {
-        let risk = TripHistory.fineRisk(of: record.passed)
-        if risk > 0 {
+        switch record.verdict {
+        case .risk(let risk):
             return String(format: String(localized: "риск ≈ %@"), Formatting.money(risk))
-        }
-        if record.camerasPassed > 0 {
-            return String(format: String(localized: "Камер: %lld — все в лимите"),
+        case .overspeed(let count):
+            return String(format: String(localized: "Превышений: %lld"), count)
+        case .clean:
+            return String(format: String(localized: "Проездов камер: %lld — превышений нет"),
                           record.camerasPassed)
+        case .unknownLimits:
+            return String(format: String(localized: "Проездов камер: %lld · лимит неизвестен"),
+                          record.camerasPassed)
+        case .noCameras:
+            return String(localized: "Без камер и превышений")
         }
-        return String(localized: "Без камер и превышений")
     }
 
     private var moneyTint: Color {
-        TripHistory.fineRisk(of: record.passed) > 0 ? Theme.danger : Theme.success
+        switch record.verdict {
+        case .risk, .overspeed: return Theme.danger
+        case .clean, .noCameras: return Theme.success
+        case .unknownLimits: return Theme.textSecondary
+        }
     }
 
     // MARK: - Склейка «это продолжение прошлой»

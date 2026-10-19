@@ -93,12 +93,14 @@ nonisolated enum PeriodInsights {
     }
 
     /// Период без единого штрафуемого проезда — это главная новость, если она есть.
+    /// Без числа (6.2): «Камер в лимите: 31» здесь считало проезды с известным
+    /// лимитом, легенда карты — разные камеры, «Детали» — все проезды; три
+    /// числа под похожими словами. Число проездов — в карточке денег рядом.
     private static func cleanInsight(_ summary: PeriodSummary) -> Insight? {
         guard summary.overPasses == 0, summary.cleanPasses > 0 else { return nil }
         return Insight(
             id: "clean", kind: .good, icon: "checkmark.shield.fill",
-            text: String(format: String(localized: "Ни одного штрафуемого превышения. Камер в лимите: %lld"),
-                         summary.cleanPasses))
+            text: String(localized: "Ни одного штрафуемого превышения"))
     }
 
     /// Место, где превышают систематически: одна случайность советом не является.

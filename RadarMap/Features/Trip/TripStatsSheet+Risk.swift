@@ -20,8 +20,9 @@ extension TripStatsSheet {
     /// основной тап остался за картой.
     @ViewBuilder
     func riskCard(summary: PeriodSummary) -> some View {
-        let total = summary.cleanPasses + summary.overPasses
-        if total > 0 {
+        // Карточка — только когда есть о чём судить: хоть один проезд с
+        // известным лимитом. Все без лимита — об этом скажет вывод героя.
+        if summary.cleanPasses + summary.overPasses > 0 {
             let ok = summary.overPasses == 0
             ZStack(alignment: .topTrailing) {
                 Button {
@@ -58,7 +59,7 @@ extension TripStatsSheet {
                                 .contentTransition(.numericText())
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.55)
-                            Text(passesLine(summary, total: total, ok: ok))
+                            Text(passesLine(summary, ok: ok))
                                 .font(.rounded(13))
                                 .foregroundStyle(Theme.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -144,13 +145,17 @@ extension TripStatsSheet {
         }
     }
 
-    /// «Превышений: 2 · проездов камер: 6» — форма после двоеточия не зависит от
-    /// числа, поэтому не нужны падежные варианты на каждое число.
-    func passesLine(_ summary: PeriodSummary, total: Int, ok: Bool) -> String {
+    /// «Проездов камер: 6 · с превышением: 2» — два счётчика с подписью (6.2).
+    /// Проезды — ВСЕ, то же число, что в «Деталях»: раньше здесь считались
+    /// только проезды с известным лимитом, и под одним словом на экране стояли
+    /// два разных числа. «Превышений нет», а не «все в лимите»: у части камер
+    /// лимит может быть неизвестен. Форма после двоеточия от числа не зависит.
+    func passesLine(_ summary: PeriodSummary, ok: Bool) -> String {
         if ok {
-            return String(format: String(localized: "Проездов камер: %lld — все в лимите"), total)
+            return String(format: String(localized: "Проездов камер: %lld — превышений нет"),
+                          summary.cameras)
         }
-        return String(format: String(localized: "Превышений: %1$lld · проездов камер: %2$lld"),
-                      summary.overPasses, total)
+        return String(format: String(localized: "Проездов камер: %1$lld · с превышением: %2$lld"),
+                      summary.cameras, summary.overPasses)
     }
 }

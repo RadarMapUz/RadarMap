@@ -141,38 +141,47 @@ extension TripStatsSheet {
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
                     .lineLimit(1)
-                // Третий вариант — без слов: на SE при крупном кегле и в
-                // узбекском «↗ 100 % к прошлому месяцу» не помещается и под
-                // числом; голос всё равно говорит целиком (ревью 19.10).
+                // Третий вариант — короткие слова: на SE при крупном кегле и
+                // в узбекском «↗ 100 % к прошлому месяцу» не помещается и под
+                // числом. Голым «↘ 73 %» он был до 20.10 — и тогда «−8» у
+                // рейтинга тоже оставалось без «к чему»; голос — целиком.
                 ViewThatFits(in: .horizontal) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         distance
-                        if let delta = summary.distanceDeltaPercent { deltaBadge(delta, words: true) }
+                        if let delta = summary.distanceDeltaPercent { deltaBadge(delta) }
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         distance
-                        if let delta = summary.distanceDeltaPercent { deltaBadge(delta, words: true) }
+                        if let delta = summary.distanceDeltaPercent { deltaBadge(delta) }
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         distance.minimumScaleFactor(0.6)
-                        if let delta = summary.distanceDeltaPercent { deltaBadge(delta, words: false) }
+                        if let delta = summary.distanceDeltaPercent { deltaBadge(delta, short: true) }
                     }
                 }
                 if let rating = summary.rating {
                     // Уровень и движение рейтинга — в одной строке. Раньше
                     // бейдж «−16» висел под кольцом и прижимался к его обводке:
                     // круг держал сразу три вещи — число, подпись и дельту.
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        // Переносится: «Уверенный, но с риском» рядом с
-                        // бейджем дельты обрезалось до «Уверенный, но с…».
-                        Text(DrivingScore.level(for: rating))
-                            .font(.rounded(14, .bold))
-                            .foregroundStyle(Theme.textPrimary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        if let delta = summary.ratingDelta,
-                           abs(delta) >= AppConfig.insightRatingStep {
-                            ratingDeltaBadge(delta)
+                    // Не влезает рядом («Уверенный, но с риском» + «−8 к
+                    // прошлой» на SE) — метка встаёт под уровнем.
+                    let level = Text(DrivingScore.level(for: rating))
+                        .font(.rounded(14, .bold))
+                        .foregroundStyle(Theme.textPrimary)
+                    if let delta = summary.ratingDelta,
+                       abs(delta) >= AppConfig.insightRatingStep {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                level.fixedSize()
+                                ratingDeltaBadge(delta)
+                            }
+                            VStack(alignment: .leading, spacing: 4) {
+                                level.fixedSize(horizontal: false, vertical: true)
+                                ratingDeltaBadge(delta)
+                            }
                         }
+                    } else {
+                        level.fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 // Переносится, а не обрезается: при крупном шрифте «за рулём»
@@ -207,21 +216,23 @@ extension TripStatsSheet {
         String(localized: "Поездок: \(summary.trips) · \(Formatting.duration(summary.movingDuration)) за рулём")
     }
 
-    /// «+6» под кольцом: рост рейтинга — зелёный, просадка — красная.
+    /// «+6 к прошлой» у уровня рейтинга: рост — зелёный, просадка — красная.
+    /// Голое «↓ -8» не говорило ни что это баллы рейтинга, ни с чем сравнили
+    /// (6.3); знак — типографский минус, без стрелки (стрелка и минус
+    /// говорили одно и то же дважды). Голос — целиком, с числом.
     func ratingDeltaBadge(_ delta: Int) -> some View {
         let up = delta > 0
         let tint = up ? Theme.success : Theme.danger
-        // Число без подписи: рядом с ним уже стоит уровень рейтинга, а «к
-        // прошлой неделе» сказано меткой километров выше. Голос — целиком.
-        return Label(up ? "+\(delta)" : "\(delta)",
-                     systemImage: up ? "arrow.up" : "arrow.down")
+        let versus = period.versusPrevious
+        return Text(period.ratingDeltaText(delta))
             .font(.rounded(11, .bold).monospacedDigit())
             .foregroundStyle(tint)
+            .lineLimit(1)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(tint.opacity(0.14), in: Capsule())
-            .accessibilityLabel(Text((up ? String(localized: "Рейтинг вырос")
-                                         : String(localized: "Рейтинг снизился"))
-                                     + " " + period.versusPrevious))
+            .fixedSize()
+            .accessibilityLabel(Text(up ? String(localized: "Рейтинг вырос на \(delta) \(versus)")
+                                        : String(localized: "Рейтинг снизился на \(abs(delta)) \(versus)")))
     }
 
     // MARK: - Строка вывода (живёт в герой-карточке)
@@ -248,9 +259,10 @@ extension TripStatsSheet {
         }
     }
 
-    func deltaBadge(_ delta: Int, words: Bool) -> some View {
+    func deltaBadge(_ delta: Int, short: Bool = false) -> some View {
         let up = delta >= 0
-        let text: LocalizedStringKey = words ? "\(abs(delta))% \(period.versusPrevious)" : "\(abs(delta))%"
+        let versus = short ? period.versusPreviousShort : period.versusPrevious
+        let text: LocalizedStringKey = "\(abs(delta))% \(versus)"
         return Label(text, systemImage: up ? "arrow.up.right" : "arrow.down.right")
             .font(.rounded(11, .bold))
             .foregroundStyle(up ? Theme.accent : Theme.textSecondary)

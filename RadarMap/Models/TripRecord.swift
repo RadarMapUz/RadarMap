@@ -179,6 +179,37 @@ nonisolated struct TripRecord: Codable, Identifiable {
             return FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) == 0
         }
     }
+    /// Вердикт поездки одной строкой — карточка «Поездка сохранена» и
+    /// карточка «поделиться». Деньги — только ждущие ответа по достоверному
+    /// лимиту (`fineRisk`), но «все в лимите» — только если превышений не было
+    /// вовсе и хоть один лимит известен. Предположенный лимит, «штраф пришёл» и
+    /// «не пришёл» снимают сумму риска, но не поведение (как FineDismissTests):
+    /// раньше риск 0 читался как «Все камеры в лимите», и такую карточку можно
+    /// было отправить друзьям после превышения. Камеры без лимита — нехватка
+    /// данных, а не заслуга водителя.
+    enum Verdict: Equatable {
+        case risk(Double)
+        case overspeed(Int)
+        case clean
+        case unknownLimits
+        case noCameras
+    }
+
+    var verdict: Verdict {
+        let risk = TripHistory.fineRisk(of: passed)
+        if risk > 0 { return .risk(risk) }
+        var limited = 0
+        var over = 0
+        for pass in passed {
+            guard let limit = pass.limitKmh else { continue }
+            limited += 1
+            if FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) > 0 { over += 1 }
+        }
+        if over > 0 { return .overspeed(over) }
+        if limited > 0 { return .clean }
+        return passed.isEmpty ? .noCameras : .unknownLimits
+    }
+
     /// Средняя — по времени В ДВИЖЕНИИ: стоянка в поездке не «средняя скорость 12».
     var averageSpeedKmh: Double {
         movingDuration > 0 ? distanceMeters / movingDuration * 3.6 : 0

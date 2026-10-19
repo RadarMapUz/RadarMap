@@ -95,7 +95,7 @@ extension TripStatsSheet {
                 showAllTrips = true
             } label: {
                 HStack(spacing: 6) {
-                    Text("Все поездки")
+                    Text("Архив поездок")
                         .font(.rounded(15, .semibold))
                     Image(systemName: "chevron.right")
                         .font(.rounded(10, .bold))

@@ -87,7 +87,10 @@ struct AllTripsSheet: View {
             .backport.scrollEdgeEffectStyle(.hard, for: .top)
             .background(Theme.screenBackground)
             .onAppear { env.usage.noteScreen("allTrips") }
-            .navigationTitle("Все поездки")
+            // «Архив поездок», а не «Все поездки» (6.2): «Показать все
+            // поездки (N)» в Итогах раскрывает поездки ПЕРИОДА, а здесь —
+            // всё, что хранится; одно слово для двух списков путало.
+            .navigationTitle("Архив поездок")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {

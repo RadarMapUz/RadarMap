@@ -1398,18 +1398,6 @@ final class LocationService: NSObject {
         relativeBearingToNearest.map { CameraDirection.classify(relativeBearing: $0) }
     }
 
-    /// Тот же гейт «камера на нашей дороге», которым отбирается ближайшая для
-    /// HUD и голоса, — наружу для экранов, перечисляющих камеры впереди.
-    ///
-    /// Открыт ровно ради того, чтобы такие экраны НЕ заводили свой коридор.
-    /// Лента машины сначала фильтровала сама и на первом же перекрёстке
-    /// показала камеру в тридцати метрах, пока док писал «741 м»: обе цифры
-    /// правдивы по-своему, а вместе они означают приложение, спорящее само с
-    /// собой. Правило прежнее — порядок и состав гейтов живут в одном месте.
-    func isRelevantAhead(_ camera: Camera, from coordinate: CLLocationCoordinate2D) -> Bool {
-        isOnOurRoad(camera, from: coordinate)
-    }
-
     /// «впереди» / «впереди справа» / «впереди слева» — для голосового предупреждения.
     private var directionPhrase: String {
         switch nearestDirection {
@@ -1435,6 +1423,8 @@ final class LocationService: NSObject {
     /// маршруту» и «прямо по ходу» — только тогда. Проеханная камера маршрута,
     /// снова впереди по прямой после разворота, — уже не «по маршруту».
     @ObservationIgnored private var nearestViaRoute = false
+    /// Время фикса, по которому последний раз считалась серия «проехали».
+    @ObservationIgnored private var geometryFixTime: Date?
 
     /// `fromFix` — вызов с настоящего фикса GPS (handleLocation). Учёт
     /// «проехали / снова подъезд» — только по ним: пересборка окна (база,
@@ -1442,6 +1432,11 @@ final class LocationService: NSObject {
     /// курс засчитывался бы дважды (ревью 20.10).
     private func recomputeNearest(from coordinate: CLLocationCoordinate2D, fromFix: Bool = false) {
         guard !trackedCameras.isEmpty else { clearNearest(); return }
+        // Тот же фикс второй раз (iOS повторяет кэшированный после каждого
+        // startUpdatingLocation — экран, машина, питание) — не новый шаг серии
+        // «проехали / снова впереди» (ревью S4, третий круг).
+        let newFix = fromFix && (geometryFixTime.map { lastFixTime > $0 } ?? true)
+        if newFix { geometryFixTime = lastFixTime }
         // Сначала дешёвая дистанция по всему окну, и только потом дорогая проверка
         // «наша ли это дорога» — по возрастанию, до первой подходящей. Результат
         // тот же, что у минимума по отфильтрованному списку, но геометрию камеры
@@ -1478,12 +1473,13 @@ final class LocationService: NSObject {
             // явно позади — следующий подъезд к ним (разворот, круг) будет
             // новым. Только по годному фиксу — грубая точка из seedContext
             // «проезжать» камеры не вправе. Сказано о единицах камер.
-            if announced, fromFix, !isPositionCoarse {
+            if announced, newFix, !isPositionCoarse {
                 alertEngine.noteGeometry(camera.id,
                                          atTraverse: straight <= max(PassGeometry.traverseLimit(for: camera),
                                                                      AppConfig.alertTraverseMeters),
                                          behind: LocationGates.isClearlyBehind(camera, in: situation),
-                                         ahead: LocationGates.isReapproach(camera, in: situation))
+                                         ahead: alertEngine.isPassed(camera.id)
+                                            && LocationGates.isReapproach(camera, in: situation))
             }
             // Камера уехала назад по маршруту — стоя не пугаем ею, в движении
             // она снова камера «как все» (маршрут с разворотом).

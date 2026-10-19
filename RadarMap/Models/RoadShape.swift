@@ -349,9 +349,31 @@ nonisolated enum PassGeometry {
         guard camera.hasTrustedRoadProfile,
               let shape = RoadShape(camera: camera),
               let lateral = shape.lateralOffset(from: coordinate) else { return false }
+        return lateral > offRoadLimit(for: camera)
+    }
+
+    /// Дальше этого сбоку от дороги камеры — уже не её дорога.
+    static func offRoadLimit(for camera: Camera) -> Double {
         let width = RoadGeometry.halfWidth(lanes: camera.lanes, roadClass: camera.roadClass)
-        let limit = max(AppConfig.passOffRoadMeters, width * AppConfig.passOffRoadFactor)
-        return lateral > limit
+        return max(AppConfig.passOffRoadMeters, width * AppConfig.passOffRoadFactor)
+    }
+
+    /// Боковое смещение от СВОЕЙ дороги камеры: на её куске — до ломаной, за
+    /// краем куска — до прямой через камеру по её оси. Коридор мерит сбоку от
+    /// НАШЕГО курса, а на петле развязки курс на одну-три точки смотрит прямо
+    /// на камеру — так проеханная камера «подъезжалась» заново с петли
+    /// (ревью S4, третий круг). nil — нет ни доверенного куска, ни оси.
+    static func ownRoadOffset(camera: Camera, at coordinate: CLLocationCoordinate2D) -> Double? {
+        guard camera.hasTrustedRoadProfile else { return nil }
+        let shape = RoadShape(camera: camera)
+        if let lateral = shape?.lateralOffset(from: coordinate) { return lateral }
+        guard let axis = camera.axis.map(Double.init) ?? shape?.axis(near: camera.coordinate) else { return nil }
+        let metersPerLon = 111_320.0 * cos(camera.lat * .pi / 180)
+        let x = (coordinate.longitude - camera.lon) * metersPerLon
+        let y = (coordinate.latitude - camera.lat) * 111_320.0
+        let angle = axis * .pi / 180
+        // |P × d|, d = (sin, cos) — единичный вектор оси (0° — север).
+        return abs(x * cos(angle) - y * sin(angle))
     }
 }
 

@@ -91,20 +91,22 @@ nonisolated struct AlertEngine {
     /// Выход за радиус с гистерезисом сбрасывает серию — при возврате сигналим заново.
     /// `moving` — едем с достоверным курсом (гейты работают). Важно только
     /// для камер, перевзведённых после проезда: им первое оповещение — на ходу.
+    /// Перевзведённая камера остаётся такой до первого РЕШЕНИЯ: проверка в
+    /// полосе гистерезиса (за радиусом, решения нет) флаг не снимает — иначе
+    /// дальше, у светофора без гейтов, она звучала «первой» с соседней улицы
+    /// (ревью S4, третий круг).
     mutating func evaluate(cameraID: Int, distance: CLLocationDistance,
-                           radius: CLLocationDistance, moving: Bool = true) -> Decision? {
+                           radius: CLLocationDistance, moving: Bool) -> Decision? {
         if distance > radius + AppConfig.alertExitHysteresisMeters {
             forget(cameraID)
             rearmed.remove(cameraID)
             return nil
         }
-        if rearmed.contains(cameraID) {
-            guard moving else { return nil }
-            rearmed.remove(cameraID)
-        }
+        if rearmed.contains(cameraID), !moving { return nil }
         let level = Self.level(distance: distance, radius: radius)
         let previous = announcedLevel[cameraID] ?? 0
         guard level > previous else { return nil }
+        rearmed.remove(cameraID)
         announcedLevel[cameraID] = level
         return Decision(level: level, isFirst: previous == 0)
     }
@@ -129,6 +131,10 @@ nonisolated struct AlertEngine {
 
     /// О камере уже сказали (уровень > 0).
     func isAnnounced(_ cameraID: Int) -> Bool { (announcedLevel[cameraID] ?? 0) > 0 }
+
+    /// Камеру проехали — ждём только нового подъезда (тогда и нужен дорогой
+    /// LocationGates.isReapproach, а не на каждой камере каждый фикс).
+    func isPassed(_ cameraID: Int) -> Bool { passed.contains(cameraID) }
 
     /// Геометрия камеры, о которой сказали, на годном фиксе — звать на КАЖДОМ
     /// (сказано о единицах камер):

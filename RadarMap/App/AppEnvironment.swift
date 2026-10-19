@@ -68,6 +68,8 @@ final class AppEnvironment {
     /// адресов и заведений для поиска. Пока тайлы не приехали — индекс
     /// лимитов (`roads.vehicleNetwork`).
     let roads = RoadNetworkService()
+    /// Профиль дороги дом↔работа по участкам и журнал поездок для «дороги».
+    let commuteProfiles = CommuteProfileStore()
     /// «Поделиться прибытием» — ссылка с временем прибытия для знакомого.
     let etaShare = EtaShareService()
     /// Горячие точки треног: подписанный список мест, где водители отмечали
@@ -287,6 +289,21 @@ final class AppEnvironment {
         }
         route.onManeuverSpoken = { [weak usage] kind in usage?.noteManeuver(kind) }
         trip.onTripDropped = { [weak usage] reason in usage?.noteTripDropped(reason) }
+        // Поездка дом↔работа — строкой в профиль участков (будущий «призрак»).
+        // Направление — тем же правилом, что «Дорога на работу» в Итогах.
+        trip.onTrackFinished = { [weak self] record, track, times in
+            guard let self, self.settings.commuteLearning, let ends = self.commuteEnds,
+                  let direction = Commute.trips(history: [record], home: ends.home,
+                                                work: ends.work).first?.direction else { return }
+            self.commuteProfiles.ingest(record: record, track: track, times: times,
+                                        direction: direction, limits: self.speedLimits.limitIndex)
+        }
+        // Стёртые человеком поездки забываются и в журнале, и в профиле.
+        trip.onRecordsErased = { [weak self] ids in
+            self?.commuteProfiles.forget(ids)
+            self?.refreshCommute()
+        }
+        commuteProfiles.onLoaded = { [weak self] in self?.refreshCommute() }
         trip.recordsTimedTrack = settings.recordTimedTrack
         // Снап отметки на ось дороги и очередь без сети — обе зависимости
         // слабые: отметка обязана уходить и когда тайлов нет, и когда сеть
@@ -547,11 +564,16 @@ final class AppEnvironment {
     }
 
     func refreshCommute() {
+        // Журнал копит концы поездок 45 дней — история держит только 50
+        // записей, и «медиана за 30 дней» на ней была медианой за 12–17.
         guard let ends = commuteEnds else {
             commute = []
             return
         }
-        let trips = Commute.trips(history: trip.history, home: ends.home, work: ends.work)
+        let trips = settings.commuteLearning
+            ? Commute.trips(history: commuteProfiles.updateLedger(with: trip.history),
+                            home: ends.home, work: ends.work)
+            : Commute.trips(history: trip.history, home: ends.home, work: ends.work)
         commute = Commute.summaries(trips: trips, now: Date())
     }
 

@@ -864,6 +864,9 @@ final class LocationService: NSObject {
 
     /// Единственная точка входа фиксов: сначала гейт качества, потом обработка.
     /// Отброшенный фикс не двигает ни трек, ни алерты, ни спидометр.
+    /// Время последнего принятого фикса (для трека поездки).
+    @ObservationIgnored private var lastFixTime = Date()
+
     private func handleFix(_ fix: LocationFilter.Fix) {
         switch locationFilter.accept(fix) {
         case .rejected(let reason):
@@ -916,6 +919,9 @@ final class LocationService: NSObject {
             if isSignalStale { isSignalStale = false }
             if isPositionCoarse { isPositionCoarse = false }
             lastAcceptedAt = Date()
+            // Время точки трека — время ФИКСА: после фоновой паузы iOS отдаёт
+            // фиксы пачкой, и часы обработки дали бы им одно время.
+            lastFixTime = min(fix.timestamp, Date())
             horizontalAccuracy = good.accuracy
             handleLocation(coordinate: CLLocationCoordinate2D(latitude: good.lat,
                                                               longitude: good.lon),
@@ -1087,7 +1093,7 @@ final class LocationService: NSObject {
 
         // Активные оповещения (звук/голос/экран) — в поездке ИЛИ пока приложение открыто.
         if isTripActive || isForeground {
-            trip.update(coordinate: coordinate, speedKmh: speedKmh)
+            trip.update(coordinate: coordinate, speedKmh: speedKmh, at: lastFixTime)
             // Геометрия проверяется в точке сближения, а не при захвате:
             // коридор оповещений на подходе широк намеренно (о камере за
             // поворотом молчать нельзя), и камера соседней улицы, попав под

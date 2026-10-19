@@ -71,6 +71,21 @@ final class TripStats {
     @ObservationIgnored private var lastCoordinate: CLLocationCoordinate2D?
     /// Сырой трек текущей поездки: точка каждые ≥30 м, упрощается при финише.
     @ObservationIgnored private var trackBuffer: [TrackPoint] = []
+    /// Время каждой точки `trackBuffer` (секунды Unix; NaN — неизвестно).
+    /// Параллельным массивом, а не полем TrackPoint: в запись истории время
+    /// не едет (трек там упрощён и живёт неделю), оно нужно только свёртке
+    /// поездки в профиль дороги дом↔работа при финише (CommuteProfile).
+    @ObservationIgnored private var trackTimes: [Double] = []
+    /// Сырой трек последней сохранённой поездки — для склейки: продолженная
+    /// поездка поднимает его вместо упрощённого, и время первой ноги не
+    /// теряется (пока процесс жив).
+    @ObservationIgnored private var lastFinishedRaw: (id: Double, track: [TrackPoint], times: [Double])?
+    /// Поездка сохранена: запись и сырой трек со временем. Ставит
+    /// AppEnvironment (профиль дороги на работу).
+    @ObservationIgnored var onTrackFinished: ((TripRecord, [TrackPoint], [Double]) -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onTrackFinished,
+                                               "TripStats.onTrackFinished") }
+    }
     /// Подробный трек со временем (TimedTrack) — только когда включено в
     /// настройках; ставит AppEnvironment. Пишется лишь в поездке.
     @ObservationIgnored var recordsTimedTrack = false
@@ -136,7 +151,9 @@ final class TripStats {
         passed = []
         stops = []
         trackBuffer = []
+        trackTimes = []
         timedBuffer = []
+        lastFinishedRaw = nil   // новая поездка, не склейка — прошлый трек не нужен
         finishedDuration = 0
         startBatteryPercent = batteryPercent
         startedAt = Date()
@@ -168,7 +185,14 @@ final class TripStats {
         distanceMeters = record.distanceMeters
         maxSpeedKmh = record.maxSpeedKmh
         passed = record.passed
-        trackBuffer = record.trackPoints
+        if let raw = lastFinishedRaw, raw.id == record.id {
+            trackBuffer = raw.track
+            trackTimes = raw.times
+        } else {
+            trackBuffer = record.trackPoints
+            trackTimes = Array(repeating: .nan, count: trackBuffer.count)
+        }
+        lastFinishedRaw = nil
         // Склейка: подробный трек первой ноги продолжается той же записью.
         timedBuffer = TimedTrackStore.load(tripID: record.id) ?? []
         lastCoordinate = record.endCoordinate
@@ -184,7 +208,7 @@ final class TripStats {
         Log.trips.info("поездка продолжена: остановка \(stopSeconds, privacy: .public) с")
     }
 
-    func update(coordinate: CLLocationCoordinate2D, speedKmh: Double) {
+    func update(coordinate: CLLocationCoordinate2D, speedKmh: Double, at time: Date = Date()) {
         if let last = lastCoordinate {
             // Тем же способом, что и весь пайплайн: HUD, гейты и запись проезда
             // обязаны сходиться в цифрах, а на масштабе одного тика (десятки
@@ -202,15 +226,14 @@ final class TripStats {
         }
 
         // Трек: точка каждые ≥30 м (память копеечная, финальное сжатие при финише).
-        if let last = trackBuffer.last {
-            if GeoMath.fastDistance(last.lat, last.lon,
-                                    coordinate.latitude, coordinate.longitude) >= Self.trackStepMeters {
-                trackBuffer.append(TrackPoint(lat: coordinate.latitude,
-                                              lon: coordinate.longitude, speedKmh: speedKmh))
-            }
-        } else {
+        let due = trackBuffer.last.map {
+            GeoMath.fastDistance($0.lat, $0.lon, coordinate.latitude, coordinate.longitude)
+                >= Self.trackStepMeters
+        } ?? true
+        if due {
             trackBuffer.append(TrackPoint(lat: coordinate.latitude,
                                           lon: coordinate.longitude, speedKmh: speedKmh))
+            trackTimes.append(time.timeIntervalSince1970)
         }
         // Вне поездки буфер нужен только схеме приборки (хвост «откуда
         // приехал», recentTrack ≤ 60 точек) — а рос он неограниченно: долгая
@@ -218,6 +241,9 @@ final class TripStats {
         // никто не читал дальше хвоста.
         if startedAt == nil, trackBuffer.count > 120 {
             trackBuffer.removeFirst(trackBuffer.count - 120)
+        }
+        if trackTimes.count > trackBuffer.count {
+            trackTimes.removeFirst(trackTimes.count - trackBuffer.count)
         }
 
         checkpointIfDue()
@@ -250,6 +276,7 @@ final class TripStats {
         passed = []
         stops = []
         trackBuffer = []
+        trackTimes = []
         startBatteryPercent = nil
         removeCheckpoint()
     }
@@ -313,6 +340,15 @@ final class TripStats {
         history.insert(record, at: 0)
         history = TripHistory.pruned(history)
         lastSavedAt = Date()
+        if trackTimes.count == trackBuffer.count {
+            // Массивы уходят как есть (копия при записи — даром): склейку в
+            // точки со временем делает получатель вне main и только для
+            // поездки дом↔работа.
+            lastFinishedRaw = (record.id, trackBuffer, trackTimes)
+            onTrackFinished?(record, trackBuffer, trackTimes)
+        } else {
+            Log.trips.fault("время трека разошлось с треком: \(self.trackTimes.count, privacy: .public) против \(self.trackBuffer.count, privacy: .public)")
+        }
         if !timedBuffer.isEmpty {
             let points = timedBuffer, id = record.id
             timedBuffer = []
@@ -448,7 +484,16 @@ final class TripStats {
             persistDays()
         }
         history.removeAll { $0.id == id }
+        if lastFinishedRaw?.id == id { lastFinishedRaw = nil }
         persist()
+        onRecordsErased?([id])
+    }
+
+    /// Записи стёрты человеком (nil — вся история): производные данные —
+    /// журнал и профиль дороги — обязаны забыть их тоже.
+    @ObservationIgnored var onRecordsErased: ((Set<Double>?) -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onRecordsErased,
+                                               "TripStats.onRecordsErased") }
     }
 
     /// «Очистить историю» стирает и дневные агрегаты: пользователь просит
@@ -456,8 +501,10 @@ final class TripStats {
     func clearHistory() {
         history = []
         days = []
+        lastFinishedRaw = nil
         persist()
         persistDays()
+        onRecordsErased?(nil)
     }
 
     // MARK: - Сводки

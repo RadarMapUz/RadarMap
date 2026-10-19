@@ -227,12 +227,12 @@ struct MapScreen: View {
         // Окно камеры читает дистанцию каждый тик — в фоне его не держим
         // (то же правило, что у слоёв выше).
         .overlay { if scenePhase != .background { approachOverlay } }
-        // Пуш «Итоги поездки» и другие диплинки на статистику ведут сюда:
-        // radarmap://trip — пуш и виджет недели на локскрине,
+        // Диплинки на статистику (DeepLink.parse):
+        // radarmap://trip/last — пуш «Итоги поездки», открывает ЭТУ поездку;
+        // radarmap://trip — виджет недели на локскрине,
         // radarmap://stats — домашний виджет километров.
         .onOpenURL { url in
-            guard url.scheme == "radarmap",
-                  url.host() == "trip" || url.host() == "stats" else { return }
+            guard let link = DeepLink.parse(url) else { return }
             // Поверх может быть другой шит — вторая презентация молча не
             // проходит, а «истинный» showStats делал кнопку Итогов мёртвой.
             // Закрываем всё своё и открываем Итоги после паузы на анимацию.
@@ -242,8 +242,17 @@ struct MapScreen: View {
             map.showSettings = false
             showRouteCameras = false
             showMyPlaces = false
+            tripEndDetail = nil
+            // Деталка — отдельный шит карты: поверх открытых Итогов не встанет.
+            if link == .lastTrip { map.showStats = false }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                map.showStats = true
+                switch link {
+                case .stats:
+                    map.showStats = true
+                case .lastTrip:
+                    // Записи нет (история стёрта) — обзор лучше пустого экрана.
+                    if let last = env.trip.history.first { tripEndDetail = last } else { map.showStats = true }
+                }
             }
         }
         .onChange(of: env.location.nearestCamera?.id) { _, _ in
@@ -922,7 +931,7 @@ struct MapScreen: View {
                         .padding(.horizontal, 12).padding(.vertical, 6)
                         .background(.ultraThinMaterial, in: Capsule())
                     case .driving:
-                        DrivingHintChip()
+                        DrivingHintChip { toggleTrip() }
                     case .destinations:
                         // Куда поедем — одной строкой и только когда есть
                         // уверенная догадка. Два круга Дом/Работа стояли здесь

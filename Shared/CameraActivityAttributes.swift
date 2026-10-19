@@ -9,8 +9,11 @@ import Foundation
 #if canImport(ActivityKit)
 import ActivityKit
 
-struct CameraActivityAttributes: ActivityAttributes {
-    struct ContentState: Codable, Hashable {
+// nonisolated: приложение собрано с MainActor по умолчанию, а ActivityKit
+// кодирует состояние вне главного потока (`@concurrent` в LiveActivityService) —
+// изолированное соответствие в Swift 6 стало бы ошибкой.
+nonisolated struct CameraActivityAttributes: ActivityAttributes {
+    nonisolated struct ContentState: Codable, Hashable {
         /// Адрес/название ближайшей камеры (nil — рядом камер нет).
         var nearestTitle: String?
         /// SF Symbol типа камеры ("camera.fill" / "speedometer").

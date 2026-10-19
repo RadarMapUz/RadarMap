@@ -8694,18 +8694,18 @@
         }
       }
     },
-    "Похоже, вы едете — включите оповещения": {
+    "Похоже, вы едете": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Похоже, вы едете — включите оповещения"
+            "value": "Похоже, вы едете"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Harakatlanayotganga o'xshaysiz — ogohlantirishlarni yoqing"
+            "value": "Siz yo‘lda ketayotganga o‘xshaysiz"
           }
         }
       }

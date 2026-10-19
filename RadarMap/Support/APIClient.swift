@@ -125,7 +125,41 @@ nonisolated struct APIClient {
         }
     }
 
-    /// POST сырого тела (готовый JSON Data) без разбора ответа — для MetricKit.
+    /// Исход отправки, когда тело можно отложить и повторить: принято;
+    /// повторить (сеть, 5xx, 408, 429); не примут никогда (прочие 4xx —
+    /// повтор того же тела только забил бы очередь).
+    enum PostOutcome: Equatable { case accepted, retry, rejected(Int) }
+
+    nonisolated static func outcome(status: Int) -> PostOutcome {
+        switch status {
+        case 200..<300: .accepted
+        case 408, 429: .retry
+        case 400..<500: .rejected(status)
+        default: .retry
+        }
+    }
+
+    /// POST сырого тела с исходом из трёх (см. `PostOutcome`).
+    func post(_ path: String, body: Data) async -> PostOutcome {
+        var req = request(path)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = body
+        do {
+            let (_, response) = try await transport(req)
+            guard let http = response as? HTTPURLResponse else { return .accepted }
+            let outcome = Self.outcome(status: http.statusCode)
+            if outcome != .accepted {
+                Log.network.error("POST \(path, privacy: .public): HTTP \(http.statusCode, privacy: .public)")
+            }
+            return outcome
+        } catch {
+            Log.network.error("POST \(path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return .retry
+        }
+    }
+
+    /// POST сырого тела (готовый JSON Data) без разбора ответа.
     func postAccepted(_ path: String, body: Data) async -> Bool {
         var req = request(path)
         req.httpMethod = "POST"

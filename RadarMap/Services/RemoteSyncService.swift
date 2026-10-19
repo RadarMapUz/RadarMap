@@ -37,8 +37,33 @@ final class RemoteSyncService {
         case failed
     }
 
+    /// Почему не обновилось — для строки в настройках: «нет сети» и «подпись
+    /// не сошлась» требуют от человека разного.
+    nonisolated enum Failure: Equatable {
+        case network, server, signature, rejected, storage
+
+        var message: String {
+            switch self {
+            case .network: String(localized: "Ошибка сети")
+            case .server: String(localized: "Сервер базы не ответил")
+            case .signature: String(localized: "Подпись базы не прошла проверку")
+            case .rejected: String(localized: "Обновление базы отклонено проверкой")
+            case .storage: String(localized: "Базу не удалось сохранить на телефоне")
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .network: "wifi.slash"
+            case .server: "server.rack"
+            case .signature, .rejected: "exclamationmark.shield"
+            case .storage: "externaldrive.badge.exclamationmark"
+            }
+        }
+    }
+
     private(set) var state: SyncState = .idle
-    private(set) var lastError: String?
+    private(set) var failure: Failure?
 
     @ObservationIgnored private let store: CameraStore
     @ObservationIgnored private let api = APIClient(timeout: 15, resourceTimeout: 60)
@@ -97,10 +122,12 @@ final class RemoteSyncService {
         let sig: String?
     }
 
-    func check() async {
+    /// `force` — кнопка «Проверить» в настройках: отказ, запомненный раньше,
+    /// её не останавливает.
+    func check(force: Bool = false) async {
         guard state != .checking && state != .downloading else { return }
         state = .checking
-        lastError = nil
+        failure = nil
         do {
             let manifest = try await api.get("version.json", as: Manifest.self)
 
@@ -109,12 +136,15 @@ final class RemoteSyncService {
                 state = .upToDate
                 return
             }
-            // Эту версию уже скачивали и отвергли (подпись, разбор): мегабайт
-            // заново на каждой активации ничего не изменит (S23, 20.10).
-            // Новая версия — новая попытка.
-            if Storage.intIfPresent(.rejectedDBVersion) == manifest.version {
+            // Этот самый файл уже скачивали и отвергли (подпись, разбор):
+            // мегабайт заново на каждой активации ничего не изменит (S23).
+            // Ключ — сборка, версия И подпись: перевыпуск под тем же номером,
+            // новая сборка или настоящая N+1 после чужого манифеста с N+1 —
+            // новая попытка (ревью S23).
+            let key = Self.rejectionKey(version: manifest.version, sig: manifest.sig, build: Self.build)
+            if !force, Storage.string(.rejectedDB) == key {
                 Storage.set(Date(), for: .lastSyncCheck)
-                lastError = String(localized: "Обновление базы отклонено проверкой")
+                failure = .rejected
                 state = .failed
                 return
             }
@@ -125,32 +155,59 @@ final class RemoteSyncService {
             // (защита от MITM на HTTP и от компрометации сервера).
             guard OTASignature.isValid(data: payload, signatureB64: manifest.sig) else {
                 Log.network.error("синк базы: подпись не сошлась — обновление отклонено")
-                reject(manifest.version)
-                lastError = String(localized: "Подпись базы не прошла проверку")
+                reject(key)
+                failure = .signature
                 state = .failed
                 return
             }
             let count: Int
-            do {
+            do throws(RemoteDBError) {
                 count = try await store.applyRemote(data: payload, version: manifest.version)
             } catch {
-                // Подписанная, но не годная этой сборке (разбор, мало камер) —
-                // тоже не качать заново до новой версии.
-                reject(manifest.version)
-                throw error
+                Log.network.error("синк базы: не применена — \(String(describing: error), privacy: .public)")
+                if error.isPayloadDefect {
+                    // Подписанная, но негодная (разбор, мало камер) — этот файл
+                    // не качать заново.
+                    reject(key)
+                    failure = .rejected
+                } else {
+                    // Не записалась (место) — база ни при чём: попробуем в
+                    // следующий срок, а кнопка — хоть сейчас.
+                    Storage.set(Date(), for: .lastSyncCheck)
+                    failure = .storage
+                }
+                state = .failed
+                return
             }
 
+            Storage.remove(.rejectedDB)
             Storage.set(Date(), for: .lastSyncCheck)
             state = .updated(count: count)
         } catch {
             Log.network.error("синк базы: \(error.localizedDescription, privacy: .public)")
-            lastError = error.localizedDescription
+            failure = Self.failure(for: error)
             state = .failed
         }
     }
 
-    private func reject(_ version: Int) {
-        Storage.set(version, for: .rejectedDBVersion)
+    private func reject(_ key: String) {
+        Storage.set(key, for: .rejectedDB)
         Storage.set(Date(), for: .lastSyncCheck)
+    }
+
+    nonisolated static func rejectionKey(version: Int, sig: String?, build: String) -> String {
+        "\(build)|\(version)|\(sig ?? "-")"
+    }
+
+    /// Сбой до скачивания базы: сеть или сервер (статус, кривой version.json).
+    nonisolated static func failure(for error: Error) -> Failure {
+        switch error {
+        case APIClient.Failure.badStatus, is DecodingError: .server
+        default: .network
+        }
+    }
+
+    private static var build: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
     }
 }

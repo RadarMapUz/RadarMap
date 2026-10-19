@@ -43,7 +43,7 @@ final class TrafficService {
     /// только чтобы не отправить старое). Офлайн-поездка оставляла до 30
     /// кусков, и они уходили часы спустя как «сейчас» — ложные пробки в
     /// now.json и в чужих ETA (S21, 20.10).
-    @ObservationIgnored private var queue: [(piece: TrafficProbes.Piece, at: Date)] = []
+    @ObservationIgnored private var queue: [(piece: TrafficProbes.Piece, releasedAt: Date, endedAt: Date)] = []
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     /// Последний такт сети (отправка + приём).
     @ObservationIgnored private var lastTickAt = Date.distantPast
@@ -117,8 +117,8 @@ final class TrafficService {
 
     private func uploadNow() async {
         let now = Date()
-        queue += probes.takeReadyStamped().map { (piece: $0.piece, at: $0.endedAt) }
-        queue.removeAll { now.timeIntervalSince($0.at) > AppConfig.trafficPieceMaxAgeSeconds }
+        queue += probes.takeReadyStamped()
+        queue.removeAll { !Self.isFresh(releasedAt: $0.releasedAt, endedAt: $0.endedAt, now: now) }
         if queue.count > AppConfig.trafficQueueCap { queue.removeFirst(queue.count - AppConfig.trafficQueueCap) }
         guard contributes, isOnline(), !queue.isEmpty else { return }
         let batch = Array(queue.prefix(AppConfig.trafficBatchPieces))
@@ -133,6 +133,15 @@ final class TrafficService {
             queue.removeFirst(min(batch.count, queue.count))
             Log.network.info("пробки: отправлено кусков \(batch.count, privacy: .public)")
         }
+    }
+
+    /// Кусок ещё можно отправить. Возраст считается от ОТПУСКА: в плотной
+    /// пробке машина отъезжает 400 м от конца куска минут десять, и счёт от
+    /// конца выбрасывал бы ровно самые тяжёлые пробки (ревью S21). Офлайн-
+    /// очередь — это время после отпуска; конец держит свой, широкий предел.
+    nonisolated static func isFresh(releasedAt: Date, endedAt: Date, now: Date) -> Bool {
+        now.timeIntervalSince(releasedAt) <= AppConfig.trafficPieceMaxAgeSeconds
+            && now.timeIntervalSince(endedAt) <= AppConfig.trafficPieceMaxEndAgeSeconds
     }
 
     private struct Envelope: Encodable {

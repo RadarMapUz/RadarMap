@@ -63,41 +63,75 @@ final class MetricsService: NSObject, MXMetricManagerSubscriber {
         Task {
             guard await self.isUploadAllowed else { return }
             let api = APIClient(timeout: 20)
+            var delivered = false
             for data in payloads {
                 guard let parsed = try? JSONSerialization.jsonObject(with: data) else {
                     Log.network.error("MetricKit-пакет \(kind, privacy: .public) не распарсился")
                     continue
                 }
-                let body: [String: Any] = [
-                    "device": await Self.deviceID,
-                    "kind": kind,
-                    "payload": parsed,
-                ]
+                // Устройство — не в отчёт, а при отправке: отложенный под
+                // прошлым (30-дневным) id и досланный рядом с новым связал бы
+                // их на сервере (ревью S26).
+                let report: [String: Any] = ["kind": kind, "payload": parsed]
                 // Словарь из уже валидного JSON — сериализация не падает.
-                guard let encoded = try? JSONSerialization.data(withJSONObject: body) else { continue }
-                // Не ушёл (трасса без сети, сервер лёг) — на диск: диагностика
-                // (крэш, зависание) приходит от системы ОДИН раз, и крэши на
-                // трассе без покрытия терялись первыми (S26, 20.10).
-                if await !api.postAccepted("api/metrics", body: encoded) {
+                guard let encoded = try? JSONSerialization.data(withJSONObject: report) else { continue }
+                guard MetricsQueue.fits(encoded, kind: kind) else {
+                    Log.network.error("MetricKit-пакет \(kind, privacy: .public): \(encoded.count, privacy: .public) байт — сервер не примет, не шлём")
+                    continue
+                }
+                switch await Self.send(encoded, api: api) {
+                case .accepted:
+                    delivered = true
+                case .retry:
+                    // Не ушёл (трасса без сети, сервер лёг) — на диск:
+                    // диагностика (крэш, зависание) приходит от системы ОДИН
+                    // раз, и крэши на трассе без покрытия терялись первыми (S26).
                     MetricsQueue.save(encoded)
+                case .rejected(let status):
+                    Log.network.error("MetricKit-пакет \(kind, privacy: .public) отвергнут (HTTP \(status, privacy: .public)) — не откладываем")
                 }
             }
+            // Сеть есть — дослать и отложенное: процесс, живущий днями фоновыми
+            // поездками, иначе ждал бы холодного старта (ревью S26).
+            if delivered { Self.flushPending(allowed: true) }
         }
     }
 
-    /// Дослать отложенные отчёты: по одному, до первой неудачи.
+    /// Отправить отчёт, добавив ТЕКУЩИЙ анонимный id.
+    nonisolated private static func send(_ report: Data, api: APIClient) async -> APIClient.PostOutcome {
+        guard let body = MetricsQueue.stamped(report, device: await deviceID) else {
+            Log.network.error("отчёт MetricKit не собран для отправки")
+            return .rejected(0)
+        }
+        return await api.post("api/metrics", body: body)
+    }
+
+    /// Дослать отложенные отчёты: по одному, до первой неудачи; отвергнутый
+    /// навсегда (4xx) выбрасывается и очередь не держит. Одна досылка за раз.
     nonisolated static func flushPending(allowed: Bool) {
         Task.detached(priority: .utility) {
             MetricsQueue.prune(now: Date())
-            guard allowed else { return }
+            guard allowed, MetricsQueue.beginFlush() else { return }
+            defer { MetricsQueue.endFlush() }
             let api = APIClient(timeout: 20)
             for url in MetricsQueue.pending() {
-                guard let data = try? Data(contentsOf: url) else {
+                let data: Data
+                do {
+                    data = try Data(contentsOf: url)
+                } catch {
+                    Log.network.error("отложенный отчёт не читается — удаляю: \(error.localizedDescription, privacy: .public)")
                     MetricsQueue.remove(url)
                     continue
                 }
-                guard await api.postAccepted("api/metrics", body: data) else { return }
-                MetricsQueue.remove(url)
+                switch await send(data, api: api) {
+                case .accepted:
+                    MetricsQueue.remove(url)
+                case .retry:
+                    return
+                case .rejected(let status):
+                    Log.network.error("отложенный отчёт отвергнут (HTTP \(status, privacy: .public)) — удаляю")
+                    MetricsQueue.remove(url)
+                }
             }
         }
     }
@@ -107,8 +141,34 @@ final class MetricsService: NSObject, MXMetricManagerSubscriber {
 /// старше недели — очередь не растёт без конца на телефоне, который месяцами
 /// не видит сервер.
 nonisolated enum MetricsQueue {
-    static let maxFiles = 20
-    static let maxAgeDays = 7.0
+    static let maxFiles = AppConfig.metricsQueueMaxFiles
+    static let maxAgeDays = AppConfig.metricsQueueMaxAgeDays
+    private static let flushing = OSAllocatedUnfairLock(initialState: false)
+
+    static func beginFlush() -> Bool {
+        flushing.withLock { busy in
+            guard !busy else { return false }
+            busy = true
+            return true
+        }
+    }
+
+    static func endFlush() {
+        flushing.withLock { $0 = false }
+    }
+
+    /// Не больше, чем сервер примет вообще (запас на обёртку — внутри его
+    /// предела на тело).
+    static func fits(_ report: Data, kind: String) -> Bool {
+        report.count <= (kind == "diagnostic" ? AppConfig.diagnosticMaxBytes : AppConfig.metricsMaxBytes)
+    }
+
+    /// Тело для сервера: отложенный отчёт + id устройства на момент отправки.
+    static func stamped(_ report: Data, device: String) -> Data? {
+        guard var body = (try? JSONSerialization.jsonObject(with: report)) as? [String: Any] else { return nil }
+        body["device"] = device
+        return try? JSONSerialization.data(withJSONObject: body)
+    }
 
     static var directory: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -129,7 +189,15 @@ nonisolated enum MetricsQueue {
 
     /// Отложенные, от старых к новым (имя начинается со времени).
     static func pending() -> [URL] {
-        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return [] }
+        let names: [String]
+        do {
+            names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        } catch CocoaError.fileReadNoSuchFile {
+            return []   // ничего не откладывали — папки нет
+        } catch {
+            Log.network.error("очередь отчётов не читается: \(error.localizedDescription, privacy: .public)")
+            return []
+        }
         return names.filter { $0.hasSuffix(".json") }.sorted().map { directory.appendingPathComponent($0) }
     }
 

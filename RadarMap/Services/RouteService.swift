@@ -1175,8 +1175,6 @@ final class RouteService {
     /// На каждом фиксе поездки — и стоя: в пробке машина не сдвигается, и
     /// updateProgress (он ждёт смещения) молчит ровно тогда, когда объезд нужен.
     func considerDetour(coordinate: CLLocationCoordinate2D, speedKmh: Double, now: Date = Date()) {
-        // Пульт выключил маршруты (OSRM лёг) — поиск объезда не ходит (S24).
-        guard isRoutingEnabled else { return }
         // Истекло — показанное или так и не показанное — это «остаёмся»: то же
         // молчание 10 минут и тот же счёт в лимит. Иначе невиданное
         // предложение, снятое без отказа, звучало голосом снова через 3 мин
@@ -1185,6 +1183,10 @@ final class RouteService {
             declineDetour(now: now, reason: offer.shownAt == nil ? "так и не показано" : "нет ответа")
         }
         let crawl = detourCrawl.update(speedKmh: speedKmh, at: now)
+        // Пульт выключил маршруты (OSRM лёг) — поиск объезда не ходит (S24).
+        // Ниже истечения и счёта «ползём»: открытое предложение должно истечь,
+        // а не висеть до конца маршрута (ревью S24).
+        guard isRoutingEnabled else { return }
         guard let variant = selected, let destination = destinationCoordinate,
               !isBuilding, !isRebuilding, detourOffer == nil, !detourSearching,
               let snapshot = trafficSnapshot?(), snapshot.isFresh(now: now),

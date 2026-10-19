@@ -697,7 +697,7 @@ struct DatabaseSettingsPage: View {
                     }
                 }
                 Button {
-                    Task { await env.sync.check() }
+                    Task { await env.sync.check(force: true) }
                 } label: {
                     HStack {
                         Text("Проверить обновления")
@@ -726,8 +726,9 @@ struct DatabaseSettingsPage: View {
             Label("Обновлено", systemImage: "arrow.down.circle.fill")
                 .font(.rounded(13)).foregroundStyle(Theme.accent).labelStyle(.titleAndIcon)
         case .failed:
-            // Подпись или разбор — не «сеть»: причина из lastError (S23).
-            Label(env.sync.lastError.map { LocalizedStringKey($0) } ?? "Ошибка сети", systemImage: "wifi.slash")
+            // Подпись, разбор, место — не «сеть»: своя причина и значок (S23).
+            let failure = env.sync.failure ?? .network
+            Label { Text(verbatim: failure.message) } icon: { Image(systemName: failure.symbol) }
                 .font(.rounded(13)).foregroundStyle(Theme.danger).labelStyle(.titleAndIcon)
         case .idle:
             EmptyView()

@@ -70,6 +70,7 @@ class ServerTestBase(unittest.TestCase):
         conn.close()
         conn = sqlite3.connect(api.TRAFFIC_DB_PATH)
         conn.execute("DELETE FROM traffic_pieces")
+        conn.execute("DELETE FROM traffic_seen")
         conn.commit()
         conn.close()
         with api._ip_lock:
@@ -1017,13 +1018,45 @@ class TrafficTest(ServerTestBase):
         api.TRAFFIC_PIECES_PER_IP_DAY = 2
         try:
             status, body = _call(self.port, "POST", "/api/traffic",
-                                 {"v": 1, "pieces": [self.piece()] * 3}, ip="10.0.0.9")
+                                 {"v": 1, "pieces": [self.piece(lat=41.31 + i * 0.01) for i in range(3)]},
+                                 ip="10.0.0.9")
             self.assertEqual(body.get("accepted"), 2)
             status, body = _call(self.port, "POST", "/api/traffic",
-                                 {"v": 1, "pieces": [self.piece()]}, ip="10.0.0.10")
+                                 {"v": 1, "pieces": [self.piece(lat=41.35)]}, ip="10.0.0.10")
             self.assertEqual(body.get("accepted"), 1, "лимит — на адрес, а не на всех")
         finally:
             api.TRAFFIC_PIECES_PER_IP_DAY = old
+
+    def test_repeat_of_a_lost_answer_is_stored_once(self):
+        """Ответ потерялся — телефон шлёт ту же пачку снова: одна машина не
+        набирает «два независимых куска» сама с собой."""
+        batch = {"v": 1, "pieces": [self.piece(), self.piece(lat=41.32)]}
+        status, body = _call(self.port, "POST", "/api/traffic", batch)
+        self.assertEqual((status, body.get("accepted")), (200, 2))
+        status, body = _call(self.port, "POST", "/api/traffic", batch)
+        self.assertEqual(status, 200, "повтор — не ошибка: телефон должен снять его с очереди")
+        self.assertEqual(body.get("accepted"), 0)
+        self.assertEqual(len(self.stored()), 2)
+        # Внутри одной пачки — тоже.
+        status, body = _call(self.port, "POST", "/api/traffic",
+                             {"v": 1, "pieces": [self.piece(lat=41.33)] * 2})
+        self.assertEqual(body.get("accepted"), 1)
+        self.assertEqual(len(self.stored()), 3)
+
+    def test_seen_marks_expire(self):
+        old = api.TRAFFIC_SEEN_TTL
+        api.TRAFFIC_SEEN_TTL = -1
+        try:
+            batch = {"v": 1, "pieces": [self.piece()]}
+            _call(self.port, "POST", "/api/traffic", batch)
+            status, body = _call(self.port, "POST", "/api/traffic", batch)
+            self.assertEqual(body.get("accepted"), 1, "отпечаток истёк — кусок снова новый")
+        finally:
+            api.TRAFFIC_SEEN_TTL = old
+        conn = sqlite3.connect(api.TRAFFIC_DB_PATH)
+        rows = conn.execute("SELECT * FROM traffic_seen").fetchall()
+        conn.close()
+        self.assertTrue(all(len(row) == 2 for row in rows), "в отпечатке — только хэш и время приёма")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

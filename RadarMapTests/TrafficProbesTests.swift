@@ -142,9 +142,9 @@ final class TrafficProbesTests: XCTestCase {
         XCTAssertTrue(probes.takeReady().isEmpty)
     }
 
-    /// Куски знают, когда кончились (только локально): офлайн-поездка не
-    /// уходит часы спустя как «сейчас» (S21, 20.10).
-    func testPiecesKeepTheirLocalEndTime() {
+    /// Куски знают, когда кончились и когда отпущены (только локально):
+    /// офлайн-поездка не уходит часы спустя как «сейчас» (S21, 20.10).
+    func testPiecesKeepTheirLocalEndAndReleaseTime() {
         var probes = TrafficProbes(random: { 0.5 })
         probes.begin(zones: [])
         let start = Date(timeIntervalSince1970: 1_800_000_000)
@@ -157,6 +157,22 @@ final class TrafficProbesTests: XCTestCase {
         for item in stamped {
             XCTAssertGreaterThan(item.endedAt, start)
             XCTAssertLessThan(item.endedAt, start.addingTimeInterval(400))
+            // ~8,4 м на шаг: отпуск — через 400 м, то есть ~48 с после конца.
+            XCTAssertGreaterThanOrEqual(item.releasedAt.timeIntervalSince(item.endedAt), 40)
         }
+    }
+
+    /// Плотная пробка: кусок кончился 12 мин назад, отпущен минуту назад —
+    /// уходит (счёт от конца выбрасывал бы ровно тяжёлые пробки). Пролежал в
+    /// очереди 11 мин или кончился полчаса назад — нет.
+    func testJamPieceIsFreshFromItsRelease() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertTrue(TrafficService.isFresh(releasedAt: now.addingTimeInterval(-60),
+                                             endedAt: now.addingTimeInterval(-12 * 60), now: now))
+        XCTAssertFalse(TrafficService.isFresh(releasedAt: now.addingTimeInterval(-11 * 60),
+                                              endedAt: now.addingTimeInterval(-12 * 60), now: now),
+                       "офлайн-очередь")
+        XCTAssertFalse(TrafficService.isFresh(releasedAt: now.addingTimeInterval(-60),
+                                              endedAt: now.addingTimeInterval(-31 * 60), now: now))
     }
 }

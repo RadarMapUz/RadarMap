@@ -357,6 +357,12 @@ TRAFFIC_MAX_POINTS = 120         # в куске
 TRAFFIC_MAX_SPAN = 900           # секунд в куске (стоим в пробке — кусок длинный)
 TRAFFIC_MAX_STEP_MPS = 70.0      # между соседними точками (~250 км/ч)
 TRAFFIC_PIECES_PER_IP_DAY = 5000 # CGNAT: за адресом оператора — десятки машин
+# Дубли: ответ на POST потерялся (таймаут, смена соты) — телефон шлёт ту же
+# пачку снова, и одна машина набирала бы MIN_PIECES=2 сама с собой (ревью S21,
+# 20.10). Отпечаток куска живёт полчаса: сырые куски удаляются через пару минут
+# после сопоставления, и по ним повтор уже не поймать. Отпечаток — sha256
+# тех же чисел, что и так лежат в traffic_pieces; ни устройства, ни адреса.
+TRAFFIC_SEEN_TTL = 30 * 60
 # Узбекистан с запасом: точка за границей — не наша дорога или подделка.
 UZ_LAT = (37.0, 45.8)
 UZ_LON = (55.8, 73.3)
@@ -377,6 +383,10 @@ def init_traffic_db():
         received REAL NOT NULL,
         points TEXT NOT NULL)""")
     conn.execute("CREATE INDEX IF NOT EXISTS traffic_pieces_received ON traffic_pieces(received)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS traffic_seen(
+        hash TEXT PRIMARY KEY,
+        received REAL NOT NULL)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS traffic_seen_received ON traffic_seen(received)")
     conn.commit()
     conn.close()
 
@@ -849,11 +859,18 @@ class Handler(BaseHTTPRequestHandler):
         now = time.time()
         conn = traffic_db()
         try:
+            conn.execute("DELETE FROM traffic_seen WHERE received < ?", (now - TRAFFIC_SEEN_TTL,))
             for piece in pieces:
                 if ip_quota_exceeded("traffic", ip, TRAFFIC_PIECES_PER_IP_DAY):
                     break
-                conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)",
-                             (now, json.dumps(piece, separators=(",", ":"))))
+                text = json.dumps(piece, separators=(",", ":"))
+                digest = hashlib.sha256(text.encode()).hexdigest()
+                # INSERT OR IGNORE — и проверка, и отметка разом: два запроса
+                # с одной пачкой не проскочат оба.
+                if conn.execute("INSERT OR IGNORE INTO traffic_seen(hash, received) VALUES(?, ?)",
+                                (digest, now)).rowcount == 0:
+                    continue
+                conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)", (now, text))
                 accepted += 1
             conn.commit()
         finally:

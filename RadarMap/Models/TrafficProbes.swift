@@ -51,9 +51,10 @@ nonisolated struct TrafficProbes: Sendable {
     private var current: [Fix] = []
     private var held: [[Fix]] = []
     private var ready: [Piece] = []
-    /// Когда кончился каждый готовый кусок — только на телефоне, на сервер
-    /// не уходит: по нему старые куски не отправляются (S21, 20.10).
-    private var readyEnds: [Date] = []
+    /// Когда каждый готовый кусок отпущен и когда кончился — только на
+    /// телефоне, на сервер не уходит: по ним старые куски не отправляются
+    /// (S21, 20.10).
+    private var readyStamps: [(released: Date, ended: Date)] = []
     /// Длина текущего куска до закрытия (плавает вокруг pieceMeters).
     private var targetLength: Double = AppConfig.trafficPieceMeters
     private var random: @Sendable () -> Double
@@ -102,7 +103,7 @@ nonisolated struct TrafficProbes: Sendable {
         }
         let fix = Fix(lat: lat, lon: lon, kmh: kmh, time: time, along: traveled)
         last = fix
-        releaseHeld()
+        releaseHeld(at: time)
 
         // Начало поездки не уходит.
         guard traveled >= AppConfig.trafficTrimMeters else { return }
@@ -133,10 +134,10 @@ nonisolated struct TrafficProbes: Sendable {
         takeReadyStamped().map(\.piece)
     }
 
-    /// Готовые куски с временем конца (локальным).
-    mutating func takeReadyStamped() -> [(piece: Piece, endedAt: Date)] {
-        defer { ready = []; readyEnds = [] }
-        return Array(zip(ready, readyEnds)).map { (piece: $0.0, endedAt: $0.1) }
+    /// Готовые куски с локальным временем отпуска и конца.
+    mutating func takeReadyStamped() -> [(piece: Piece, releasedAt: Date, endedAt: Date)] {
+        defer { ready = []; readyStamps = [] }
+        return zip(ready, readyStamps).map { (piece: $0.0, releasedAt: $0.1.released, endedAt: $0.1.ended) }
     }
 
     // MARK: - Внутреннее
@@ -152,12 +153,12 @@ nonisolated struct TrafficProbes: Sendable {
 
     /// Кусок отпускается, когда машина отъехала от его конца на 400 м: если
     /// поездка кончится раньше, его конец мог оказаться финишем.
-    private mutating func releaseHeld() {
+    private mutating func releaseHeld(at time: Date) {
         while let piece = held.first, let end = piece.last,
               traveled - end.along >= AppConfig.trafficTrimMeters {
             held.removeFirst()
             ready.append(Self.encode(piece))
-            readyEnds.append(end.time)
+            readyStamps.append((released: time, ended: end.time))
         }
     }
 

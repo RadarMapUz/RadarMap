@@ -167,10 +167,11 @@ struct SpeedHUDView: View {
                     .foregroundStyle(Theme.warning)
                     .symbolEffect(.pulse, options: .repeating, isActive: true)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Нет сигнала GPS")
+                    // Без доступа к геопозиции — не «спутники»: причина другая.
+                    Text(env.location.isAuthorized ? "Нет сигнала GPS" : "Нет доступа к геопозиции")
                         .font(.rounded(14, .semibold))
                         .foregroundStyle(Theme.textPrimary)
-                    Text("Оповещения ждут спутники")
+                    Text(env.location.isAuthorized ? "Оповещения ждут спутники" : "Разрешите в Настройках iOS")
                         .font(.rounded(11))
                         .foregroundStyle(Theme.textSecondary)
                 }

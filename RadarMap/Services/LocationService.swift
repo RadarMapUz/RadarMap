@@ -774,7 +774,9 @@ final class LocationService: NSObject {
     /// добавляет ни фразы, ни писка.
     func refreshMonitoring(evaluateNow: Bool = false) {
         anchor = nil
-        guard let coordinate = currentCoordinate else { return }
+        // Без доступа — замороженная позиция: окно камер и оповещения по ней
+        // не пересчитываем (ближайшая снята, и снята насовсем).
+        guard let coordinate = currentCoordinate, isAuthorized else { return }
         retile(around: coordinate)
         // Пересчёт ближайшей обязателен, а не «до следующего фикса»: база
         // догружается асинхронно и часто уже ПОСЛЕ первого фикса, а на стоящем
@@ -1033,9 +1035,14 @@ final class LocationService: NSObject {
     private func armStaleWatchdog() {
         fixSequence &+= 1   // прошлый сторож обесценен даже если новый не ставим
         staleWatchdogTask?.cancel()
-        guard speedKmh >= AppConfig.staleWatchdogMinSpeedKmh else { return }
+        guard Self.watchdogArms(speedKmh: speedKmh, distanceFilter: manager.distanceFilter) else { return }
+        // Заряжен только из-за «фильтра нет» (иначе на этой скорости он бы
+        // не встал): если к сроку фильтр появился (ушли с экрана, машина
+        // отключилась) — стоим и молчим из-за фильтра, «нет сигнала» — ложь.
+        let armedWithoutFilter = speedKmh < AppConfig.staleWatchdogMinSpeedKmh
         let speedMps = speedKmh / 3.6
-        let expected = speedMps > 0 ? manager.distanceFilter / speedMps : .infinity
+        let expected = manager.distanceFilter <= 0 ? 1
+            : (speedMps > 0 ? manager.distanceFilter / speedMps : .infinity)
         let window = max(AppConfig.gpsStaleSeconds,
                          min(AppConfig.staleWatchdogMaxSeconds,
                              expected * AppConfig.staleWatchdogSlack))
@@ -1044,6 +1051,7 @@ final class LocationService: NSObject {
             try? await Task.sleep(for: .seconds(window))
             guard !Task.isCancelled, let self, self.fixSequence == sequence,
                   self.isTripActive || self.isForeground else { return }
+            if armedWithoutFilter, self.manager.distanceFilter > 0 { return }
             // Стоим (CoreMotion уверен) — фиксов нет из-за distanceFilter,
             // а не из-за спутников: «нет сигнала» у светофора — ложь.
             if self.motion?.isStationary == true {
@@ -1056,6 +1064,15 @@ final class LocationService: NSObject {
     }
 
     @ObservationIgnored private var staleWatchdogTask: Task<Void, Never>?
+
+    /// Сторож «нет сигнала» заряжается в движении — или при любой скорости,
+    /// когда фильтра расстояния нет (экран открыт, CarPlay): тогда фиксы идут
+    /// раз в секунду и стоя, и их молчание — потеря сигнала, а не стоянка.
+    /// До 20.10 ниже 20 км/ч он не заряжался вовсе: подземный паркинг на
+    /// 15 км/ч застывал со старой скоростью и висящим оповещением (S8).
+    nonisolated static func watchdogArms(speedKmh: Double, distanceFilter: CLLocationDistance) -> Bool {
+        speedKmh >= AppConfig.staleWatchdogMinSpeedKmh || distanceFilter <= 0
+    }
 
     /// Спидометр без фиксов: раз в секунду скорость ограничивается сверху
     /// тем, что опровергает молчание GPS (SpeedBound), пока не станет нулём.
@@ -1825,6 +1842,19 @@ final class LocationService: NSObject {
         case .authorizedAlways:
             startBackgroundMonitoring()
             applyLocationMode()
+        case .denied, .restricted:
+            // Доступа нет (отозвали на ходу или не давали) — фиксов не будет.
+            // Ни застывшей скорости, ни висящего оповещения (сценарий S8,
+            // 20.10). Поездку не закрываем: вернут доступ — applyLocationMode
+            // продолжит её, а автостарт и геозоны останутся в порядке.
+            manager.stopUpdatingLocation()
+            staleWatchdogTask?.cancel()
+            speedDecayTask?.cancel()
+            isSignalStale = true
+            if speedKmh != 0 { speedKmh = 0 }
+            refreshDrivingFlag()
+            clearNearest()
+            if isTripActive { Log.location.notice("доступ к геопозиции отозван посреди поездки") }
         default:
             break
         }

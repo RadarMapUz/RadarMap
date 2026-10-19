@@ -87,9 +87,19 @@ nonisolated enum SpeedBound {
     /// Ниже — показываем 0: «ползу 2 км/ч» на стоянке читается как сбой.
     static let floorKmh: Double = 3
 
+    /// Без фильтра расстояния (экран открыт, CarPlay) молчание GPS ничего
+    /// не говорит о пройденном — это потеря сигнала, а не «проехали меньше
+    /// фильтра». Цифру держим до окна «нет сигнала», потом ноль. До 20.10 без
+    /// фильтра граница не применялась вовсе (под землёй на 15 км/ч цифра
+    /// застывала навсегда); шаг «10 м за секунду молчания» оказался хуже —
+    /// один пропущенный фикс на 90 км/ч ронял её до 18, сжимал радиус
+    /// оповещения, и камера звучала дважды (ревью S8).
+    static let noFilterHoldSeconds: TimeInterval = 8
+
     static func capped(_ kmh: Double, distanceFilter: Double,
                        secondsSinceFix: TimeInterval) -> Double {
-        guard kmh > 0, secondsSinceFix > graceSeconds, distanceFilter > 0 else { return kmh }
+        guard kmh > 0, secondsSinceFix > graceSeconds else { return kmh }
+        guard distanceFilter > 0 else { return secondsSinceFix >= noFilterHoldSeconds ? 0 : kmh }
         let bound = distanceFilter / secondsSinceFix * 3.6
         let value = min(kmh, bound)
         return value < floorKmh ? 0 : value

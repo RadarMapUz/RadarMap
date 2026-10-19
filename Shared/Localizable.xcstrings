@@ -10672,6 +10672,22 @@
         }
       }
     },
+    "Разрешите в Настройках iOS": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Разрешите в Настройках iOS"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS sozlamalarida ruxsat bering"
+          }
+        }
+      }
+    },
     "Разрешите геопозицию на телефоне": {
       "localizations": {
         "uz": {

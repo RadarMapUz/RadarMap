@@ -102,4 +102,24 @@ final class SpeedSmootherTests: XCTestCase {
         XCTAssertEqual(SpeedBound.capped(5, distanceFilter: 30, secondsSinceFix: 2), 5)
         XCTAssertEqual(SpeedBound.capped(0, distanceFilter: 6, secondsSinceFix: 20), 0)
     }
+
+    /// Экран открыт или CarPlay — фильтра нет: молчание GPS — потеря
+    /// сигнала, а не «проехали меньше фильтра». На 90 км/ч пропущенный фикс
+    /// (2 с) и даже 7 с под эстакадой — цифра та же; дольше окна «нет
+    /// сигнала» — ноль, а не вечные 15 под землёй (сценарий S8, ревью 20.10).
+    func testNoFilterSilenceHoldsThenZero() {
+        XCTAssertEqual(SpeedBound.capped(90, distanceFilter: -1, secondsSinceFix: 2), 90)
+        XCTAssertEqual(SpeedBound.capped(90, distanceFilter: -1, secondsSinceFix: 7), 90)
+        XCTAssertEqual(SpeedBound.capped(90, distanceFilter: -1, secondsSinceFix: 9), 0)
+        XCTAssertEqual(SpeedBound.capped(15, distanceFilter: -1, secondsSinceFix: 20), 0)
+    }
+
+    /// Сторож «нет сигнала»: на ходу — всегда; стоя — только когда фиксы
+    /// обязаны идти и стоя (фильтра нет).
+    func testStaleWatchdogArmsAtAnySpeedWithoutAFilter() {
+        XCTAssertTrue(LocationService.watchdogArms(speedKmh: 50, distanceFilter: 25))
+        XCTAssertFalse(LocationService.watchdogArms(speedKmh: 15, distanceFilter: 25), "в кармане стоя фиксов нет из-за фильтра")
+        XCTAssertTrue(LocationService.watchdogArms(speedKmh: 15, distanceFilter: -1))
+        XCTAssertTrue(LocationService.watchdogArms(speedKmh: 0, distanceFilter: -1))
+    }
 }

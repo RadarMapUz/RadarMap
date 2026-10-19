@@ -83,14 +83,25 @@ nonisolated enum StatsPeriod: String, CaseIterable, Identifiable {
         }
     }
 
+    /// «к прошлой неделе» — к чему метки дельты в герое «Итогов» (6.3): голое
+    /// «↘ 89 %» и «−19» не говорили, с чем сравнили.
+    var versusPrevious: String {
+        switch self {
+        case .day:   return String(localized: "к прошлому дню")
+        case .week:  return String(localized: "к прошлой неделе")
+        case .month: return String(localized: "к прошлому месяцу")
+        }
+    }
+
     /// Подпись «вашей нормы»: по скольким прошлым окнам она посчитана.
     /// Меньше трёх окон норму не показываем (см. ratingBaselineMinPeriods),
-    /// поэтому падежных вариантов на единицу здесь не нужно.
+    /// но 21 и 31 окно — «по 21 прошлой неделе»: форму числа даёт каталог.
     func baselineTitle(periods: Int) -> String {
         switch self {
-        case .day:   return String(format: String(localized: "по %lld прошлым дням"), periods)
-        case .week:  return String(format: String(localized: "по %lld прошлым неделям"), periods)
-        case .month: return String(format: String(localized: "по %lld прошлым месяцам"), periods)
+        // Интерполяция — чтобы каталог выбрал форму числа («по 1 прошлой неделе»).
+        case .day:   return String(localized: "по \(periods) прошлым дням")
+        case .week:  return String(localized: "по \(periods) прошлым неделям")
+        case .month: return String(localized: "по \(periods) прошлым месяцам")
         }
     }
 

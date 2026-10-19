@@ -67,8 +67,9 @@ nonisolated struct TripBackup: Codable {
     /// Короткая сводка для экрана подтверждения: человек должен видеть, что
     /// именно он собирается влить.
     var summary: String {
-        String(format: String(localized: "%1$lld поездок · %2$lld дней"),
-               history.count, days.count)
+        // Две строки каталога, а не одна с двумя числами: у каждого числа
+        // своя форма («1 поездка · 3 дня», 6.11).
+        String(localized: "\(history.count) поездок") + " · " + String(localized: "\(days.count) дней")
     }
 }
 

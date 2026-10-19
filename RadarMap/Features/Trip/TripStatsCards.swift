@@ -233,9 +233,11 @@ struct AlertRecallCard: View {
                              tint: Theme.danger)
                 }
                 if tally.unused > 0 {
-                    footnote(String(format: String(localized:
-                        "%lld предупреждений — о камерах, мимо которых вы не проехали"),
-                        tally.unused), tint: Theme.textTertiary)
+                    // Интерполяция, не String(format:): только так каталог
+                    // выбирает форму числа («1 предупреждение», 6.11).
+                    footnote(String(localized:
+                        "\(tally.unused) предупреждений — о камерах, мимо которых вы не проехали"),
+                             tint: Theme.textTertiary)
                 }
             }
             .statCard()

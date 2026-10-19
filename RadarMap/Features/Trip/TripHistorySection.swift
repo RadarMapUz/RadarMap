@@ -44,9 +44,20 @@ struct TripHistorySection: View {
                     .textCase(.uppercase)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 6)
-                ForEach(group.records) { record in
-                    row(record)
+                // Поездки дня — одной карточкой со строками (6.1): пять
+                // отдельных карточек с тенью читались стопкой, а не списком,
+                // и каждая тень пересчитывалась при прокрутке.
+                VStack(spacing: 0) {
+                    ForEach(Array(group.records.enumerated()), id: \.element.id) { index, record in
+                        if index > 0 {
+                            Divider().overlay(Theme.stroke).padding(.leading, 70)
+                        }
+                        row(record)
+                    }
                 }
+                // Подсветка выбранной строки не выходит за скругление карточки.
+                .clipShape(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+                .statCard(padding: 0, radius: Theme.cornerMedium)
             }
         }
     }
@@ -110,10 +121,10 @@ struct TripHistorySection: View {
                 }
                 trailingIcon(record, selected: selected)
             }
-            .statCard(padding: 14, radius: Theme.cornerMedium)
-            // Выбранная поездка обведена акцентом — видно, что показано на карте.
-            .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
-                .stroke(selected ? Theme.accent : .clear, lineWidth: 1.5))
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            // Выбранная поездка подсвечена акцентом — видно, что показано на карте.
+            .background(selected ? Theme.accent.opacity(0.08) : .clear)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         // «Проявления» строк при прокрутке (scrollTransition) больше нет: оно

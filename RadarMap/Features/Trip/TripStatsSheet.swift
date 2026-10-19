@@ -138,17 +138,6 @@ struct TripStatsSheet: View {
                             .entrance(0, appeared)
                     }
 
-                    // Дорога на работу и домой — над периодом: у неё своё окно
-                    // (30 дней), и это первое, что человек хочет знать о
-                    // будничной езде. Нет поездок дом↔работа — блока нет.
-                    ForEach(env.commute) { commute in
-                        Button { commuteDetail = commute } label: {
-                            CommuteCard(summary: commute)
-                        }
-                        .buttonStyle(PressableStyle())
-                        .entrance(0, appeared)
-                    }
-
                     // Пикер и стрелки — одна визуальная группа и ЛИПКАЯ:
                     // прокрутив до списка поездок, человек переставал видеть,
                     // за какое окно эти цифры, и «3–9 августа» приходилось
@@ -166,45 +155,24 @@ struct TripStatsSheet: View {
                     } else {
                         heroCard(trip: trip, summary: summary, insights: itogi.insights)
                             .entrance(1, appeared)
-                        riskCard(summary: summary)
-                            .entrance(2, appeared)
-                            .id("risk")
-                        pendingNudgeRow(itogi)
-                            .entrance(2, appeared)
+                        // Порядок (6.1): герой → деньги (с «Ждут ответа» сразу
+                        // под ними) → карта → поездки → детали. Поездки выше
+                        // деталей: их открывают чаще, чем графики.
+                        VStack(spacing: 8) {
+                            riskCard(summary: summary)
+                            pendingNudgeRow(itogi)
+                        }
+                        .entrance(2, appeared)
+                        .id("risk")
                         mapCard
                             .entrance(3, appeared)
                             .id("map")
-                        // Календарь — только в «Месяце»: неделя видна и в
-                        // столбиках, а месяц по клеткам читается одним взглядом.
-                        if period == .month {
-                            MonthCalendarCard(days: trip.days, anchor: anchor) { day in
-                                withMotion(Motion.standard) {
-                                    period = .day
-                                    anchor = day
-                                }
-                            }
-                            .entrance(3, appeared)
-                            .id("calendar")
-                        }
-                        periodDetails(summary: summary)
-                            .entrance(3, appeared)
-                            .id("details")
                         tripsSection(trip: trip, proxy: proxy)
-                            .entrance(4, appeared)
+                            .entrance(3, appeared)
                             .id("history")
-                    }
-
-                    contributionRow
-                        .entrance(5, appeared)
-
-                    // «За всё время» — три блока в одном сворачивающемся, тем
-                    // же приёмом, что «Детали периода». Экран Итогов открывают
-                    // ради ТЕКУЩЕГО периода; пожизненные цифры, охват и
-                    // достижения читают раз в месяц, а место занимали всегда.
-                    if !trip.lifetime.isEmpty {
-                        lifetimeSection(trip: trip)
-                            .entrance(5, appeared)
-                            .id("lifetime")
+                        periodDetails(summary: summary, trip: trip)
+                            .entrance(4, appeared)
+                            .id("details")
                     }
                     } header: {
                         VStack(spacing: 6) {
@@ -228,6 +196,27 @@ struct TripStatsSheet: View {
                                 }
                         }
                         .entrance(0, appeared)
+                    }
+
+                    // Вне секции периода — своё окно у каждого (6.1): дорога на
+                    // работу (30 дней), свои отметки, всё время. Шапка периода
+                    // над ними не висит — это уже не про выбранную неделю.
+                    if !env.commute.isEmpty {
+                        commuteCards
+                            .entrance(5, appeared)
+                    }
+
+                    contributionRow
+                        .entrance(5, appeared)
+
+                    // «За всё время» — три блока в одном сворачивающемся, тем
+                    // же приёмом, что «Детали периода». Экран Итогов открывают
+                    // ради ТЕКУЩЕГО периода; пожизненные цифры, охват и
+                    // достижения читают раз в месяц, а место занимали всегда.
+                    if !trip.lifetime.isEmpty {
+                        lifetimeSection(trip: trip)
+                            .entrance(5, appeared)
+                            .id("lifetime")
                     }
                 }
                 .padding(20)
@@ -1172,7 +1161,20 @@ struct TripStatsSheet: View {
         }
     }
 
-    private func periodDetails(summary: PeriodSummary) -> some View {
+    /// «Дорога на работу» и «Дорога домой». Двумя карточками в столбик они
+    /// занимали полэкрана над периодом; теперь — внизу, по одной в ряд.
+    private var commuteCards: some View {
+        VStack(spacing: 10) {
+            ForEach(env.commute) { commute in
+                Button { commuteDetail = commute } label: {
+                    CommuteCard(summary: commute)
+                }
+                .buttonStyle(PressableStyle())
+            }
+        }
+    }
+
+    private func periodDetails(summary: PeriodSummary, trip: TripStats) -> some View {
         VStack(spacing: 16) {
             Button {
                 withMotion(Motion.standard) { detailsExpanded.toggle() }
@@ -1201,6 +1203,17 @@ struct TripStatsSheet: View {
                                      ? String(localized: "Скрыть детали периода")
                                      : String(localized: "Показать детали периода")))
             if detailsExpanded {
+                // Календарь месяца — внутри деталей (6.1): клетки читаются
+                // одним взглядом, но нужны реже, чем деньги и поездки.
+                if period == .month {
+                    MonthCalendarCard(days: trip.days, anchor: anchor) { day in
+                        withMotion(Motion.standard) {
+                            period = .day
+                            anchor = day
+                        }
+                    }
+                    .id("calendar")
+                }
                 KPIStrip(summary: summary,
                          activeDaysText: activeDaysText(summary))
                 if let days = period.chartDays(containing: anchor) {

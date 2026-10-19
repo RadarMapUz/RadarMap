@@ -11323,6 +11323,38 @@
         }
       }
     },
+    "Сервер не отвечает — отправлю, как только ответит.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер не отвечает — отправлю, как только ответит."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server javob bermayapti — javob berishi bilan yuboraman."
+          }
+        }
+      }
+    },
+    "Сервер не отвечает, отправлю позже": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер не отвечает, отправлю позже"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server javob bermayapti, keyinroq yuboraman"
+          }
+        }
+      }
+    },
     "Серия поездок подряд, где ни одна камера не поймала бы на штраф.": {
       "localizations": {
         "ru": {

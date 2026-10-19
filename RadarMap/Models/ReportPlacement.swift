@@ -160,8 +160,13 @@ nonisolated enum ReportQueue {
     static let limit = 3
 
     /// Отметка старше этого не отправляется никогда: радар уехал, а мы бы
-    /// предупредили. Молчание тут честнее доставки.
-    static let maxAge: TimeInterval = 15 * 60
+    /// предупредили. Молчание тут честнее доставки. Тренога и пост стоят
+    /// часами (15 минут выбрасывали отметку с трассы без покрытия, которая
+    /// ещё стоит, — S25), ДТП рассасывается быстрее. Сервер ведёт срок от
+    /// момента отметки (поле age), а не от приёма.
+    static func maxAge(kind: String) -> TimeInterval {
+        kind == ReportKind.accident.rawValue ? 20 * 60 : 45 * 60
+    }
 
     /// Поставить в очередь. Повтор того же типа рядом и недавно не копится:
     /// без сети человек жмёт ещё раз именно потому, что не понял, ушло ли.
@@ -183,7 +188,7 @@ nonisolated enum ReportQueue {
         var send: [PendingReport] = []
         var expired: [PendingReport] = []
         for item in queue {
-            if now.timeIntervalSince(item.at) > maxAge {
+            if now.timeIntervalSince(item.at) > maxAge(kind: item.kind) {
                 expired.append(item)
             } else {
                 send.append(item)

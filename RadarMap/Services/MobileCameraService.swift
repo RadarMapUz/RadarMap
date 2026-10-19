@@ -403,6 +403,10 @@ final class MobileCameraService {
         do {
             var payload = ["lat": item.lat, "lon": item.lon,
                            "device": deviceID, "type": item.kind] as [String: Any]
+            // Из очереди — сколько секунд назад отметили: срок жизни точки
+            // сервер считает от этого момента (S25). Старый сервер поле не читает.
+            let age = Date().timeIntervalSince(item.at)
+            if age >= 30 { payload["age"] = Int(age) }
             if !item.cls.isEmpty { payload["cls"] = item.cls }
             let response = try await api.post("api/report", json: payload, as: Response.self)
             lastSent = ReportGuard.Sent(kind: kind, latitude: item.lat,
@@ -457,18 +461,30 @@ final class MobileCameraService {
 
     /// Отправить накопленное. Дёргается на каждом опросе: отдельного таймера
     /// очередь не заслуживает — она пуста в подавляющем большинстве запусков.
+    /// Отметка уходит из очереди только ПОСЛЕ ответа: раньше очередь
+    /// очищалась до отправки, и убитый посреди неё процесс терял все (S25).
     func flushPending() async {
-        guard isEnabled, !pending.isEmpty, network?.isOnline ?? true else { return }
-        let (send, expired) = ReportQueue.split(pending, now: Date())
+        guard isEnabled, !pending.isEmpty, network?.isOnline ?? true, !isFlushing else { return }
+        isFlushing = true
+        defer { isFlushing = false }
+        let (_, expired) = ReportQueue.split(pending, now: Date())
         if !expired.isEmpty {
             Log.network.notice("отметок протухло в очереди: \(expired.count, privacy: .public)")
+            pending.removeAll { expired.contains($0) }
+            savePending()
         }
-        pending = []
-        savePending()
-        for item in send {
-            await self.send(item, queueOnFailure: true)
+        while let item = pending.first {
+            let result = await send(item, queueOnFailure: false)
+            // Сеть или сервер снова подвели — отметка остаётся, попробуем позже.
+            if case .failed(let why) = result, why.isWorthRetrying { return }
+            // Ушла или отвергнута навсегда — из очереди (по ней самой: пока
+            // ждали ответа, очередь могла сдвинуться).
+            if let index = pending.firstIndex(of: item) { pending.remove(at: index) }
+            savePending()
         }
     }
+
+    @ObservationIgnored private var isFlushing = false
 
     /// Сколько отметок ждёт связи — для честной подписи в интерфейсе.
     var pendingCount: Int { pending.count }
@@ -575,8 +591,9 @@ final class MobileCameraService {
     enum QuickOutcome {
         case sent(ReportResult)
         case refused(ReportGuard.Refusal)
-        /// Нет связи — отметка ждёт её в очереди, а не потеряна.
-        case queued
+        /// Не ушла — ждёт в очереди, а не потеряна; причина — для фразы: при
+        /// 5xx связь есть, «нет связи» было бы неправдой (S25).
+        case queued(ReportResult.Failure)
 
         /// Фраза голосом. За рулём на экран не смотрят — ответ обязан звучать,
         /// иначе непонятно, ушло или нет, и человек жмёт ещё раз.
@@ -589,6 +606,7 @@ final class MobileCameraService {
             case .refused(.duplicate):  return String(localized: "Уже отметили здесь")
             case .refused(.noPosition): return String(localized: "Ждём спутники")
             case .refused(.notDriving): return String(localized: "Отметка ставится в движении")
+            case .queued(.serverBroken): return String(localized: "Сервер не отвечает, отправлю позже")
             case .queued: return String(localized: "Нет связи, отправлю позже")
             }
         }
@@ -631,7 +649,7 @@ final class MobileCameraService {
         // «Отправлю позже» говорим, только если отметка ДЕЙСТВИТЕЛЬНО легла в
         // очередь. Отказ сервера туда не кладётся — обещать доставку было бы
         // враньём, а водитель на него рассчитывает и второй раз не отметит.
-        if case .failed(let why) = result, why.isWorthRetrying, pendingCount > 0 { return .queued }
+        if case .failed(let why) = result, why.isWorthRetrying, pendingCount > 0 { return .queued(why) }
         // Считаем только созданную отметку, и только здесь: уточнение типа
         // (refine) переписывает ту же точку и второй отметкой не является.
         onReportSent?()

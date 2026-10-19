@@ -391,6 +391,21 @@ def init_traffic_db():
     conn.close()
 
 
+# Сколько секунд назад телефон поставил отметку из очереди — не больше часа:
+# дольше очередь телефона отметки не держит.
+REPORT_MAX_AGE = 3600
+
+
+def report_age(data):
+    try:
+        age = float(data.get("age", 0))
+    except (TypeError, ValueError):
+        return 0
+    if not math.isfinite(age):
+        return 0
+    return min(max(age, 0), REPORT_MAX_AGE)
+
+
 def clean_traffic_piece(raw):
     """Кусок в каноническом виде или None. Берутся только четыре числа точки;
     всё, что прислали сверх, отбрасывается — сохранить «случайно» нечего."""
@@ -1227,10 +1242,14 @@ class Handler(BaseHTTPRequestHandler):
             # есть кому подтверждать (см. probation_active).
             ttl = PROBATION_TTLS[rtype] if probation_active(conn, now) \
                 else REPORT_TTLS[rtype]
+            # Отметка из очереди телефона (не было связи): срок — от момента,
+            # когда её поставили, а не от приёма — иначе тренога, отмеченная
+            # сорок минут назад, жила бы полный срок с этой минуты (S25).
+            observed = now - report_age(data)
             cur = conn.execute(
                 "INSERT INTO reports(lat, lon, created, expires, device, type, ip, cls, "
                 "active, closed) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                (lat, lon, now, now + ttl, device, rtype, ip, cls,
+                (lat, lon, now, max(now + 60, observed + ttl), device, rtype, ip, cls,
                  0 if blocked else 1, "blocked" if blocked else ""))
             conn.commit()
             bump_mobile_version()

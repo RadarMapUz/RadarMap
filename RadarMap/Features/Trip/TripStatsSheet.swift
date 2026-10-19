@@ -380,10 +380,11 @@ struct TripStatsSheet: View {
         }
         .sheet(isPresented: $showFinesInfo) {
             // Один экран штрафов (6.9): вход через (i) раскрывает «Откуда сумма».
-            FinesSheet(period: period, anchor: anchor, explainsFirst: true)
+            FinesSheet(period: period, anchor: anchor, explainsFirst: true,
+                       periodRisk: current.summary.fineRisk)
         }
         .sheet(isPresented: $showFines) {
-            FinesSheet(period: period, anchor: anchor)
+            FinesSheet(period: period, anchor: anchor, periodRisk: current.summary.fineRisk)
         }
         .sheet(item: $selectedBadge) { badge in AchievementInfoSheet(badge: badge) }
         .sheet(item: $commuteDetail) { commute in

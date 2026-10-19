@@ -38,7 +38,7 @@ nonisolated enum TripArchive {
     /// Хоть один проезд со ступенью штрафа — та же граница, что у денег.
     static func hasFinedPass(_ record: TripRecord) -> Bool {
         record.passed.contains { pass in
-            guard let limit = pass.limitKmh else { return false }
+            guard pass.limitIsCertain, let limit = pass.limitKmh else { return false }
             return FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) > 0
         }
     }

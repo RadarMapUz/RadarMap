@@ -29,6 +29,10 @@ struct FinesSheet: View {
     let anchor: Date
     /// «Откуда сумма» раскрыта сразу — вход через (i) у карточки денег.
     var explainsFirst = false
+    /// Риск периода с карточки «Итогов» — по дневным сводкам, которые живут
+    /// дольше записей (хранятся последние 50). Если строк меньше, чем денег на
+    /// карточке, шапка говорит об этом, а не показывает другое число молча.
+    var periodRisk: Double? = nil
 
     /// Проезд, открытый на карте.
     @State private var selectedItem: PassMapPayload?
@@ -60,12 +64,20 @@ struct FinesSheet: View {
                     } else {
                         header(sum: pendingSum, paid: paidSum, total: items.count,
                                dismissed: dismissedCount)
+                        if let periodRisk, periodRisk > pendingSum + 1000 {
+                            Label(String(format: String(localized: "В «Итогах» за период — %@: часть поездок старше сохранённых, их строк здесь нет"),
+                                         Formatting.money(periodRisk)),
+                                  systemImage: "internaldrive")
+                                .font(.rounded(11))
+                                .foregroundStyle(Theme.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         ForEach(items) { item in
                             row(item)
                         }
                         footnote
                     }
-                    explainer(open: items.isEmpty || explainerOpen)
+                    explainer(open: items.isEmpty || explainerOpen, togglable: !items.isEmpty)
                         .id("explainer")
                 }
                 .padding(20)
@@ -96,9 +108,8 @@ struct FinesSheet: View {
         }
     }
 
-    /// Проезды периода со штрафной ступенью и достоверным лимитом, новые сверху.
-    /// Отменённые остаются в списке (зачёркнутыми) — иначе «Вернуть» негде.
-    @ViewBuilder private func explainer(open: Bool) -> some View {
+    /// «Откуда сумма и как считаем» — заголовок-раскрывашка и FinesExplainer.
+    @ViewBuilder private func explainer(open: Bool, togglable: Bool = true) -> some View {
         Button {
             withMotion(Motion.standard) { explainerOpen.toggle() }
         } label: {
@@ -108,21 +119,27 @@ struct FinesSheet: View {
                     .font(.rounded(14, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.down")
-                    .font(.rounded(13, .bold))
-                    .foregroundStyle(Theme.textTertiary)
-                    .rotationEffect(.degrees(open ? 180 : 0))
+                if togglable {
+                    Image(systemName: "chevron.down")
+                        .font(.rounded(13, .bold))
+                        .foregroundStyle(Theme.textTertiary)
+                        .rotationEffect(.degrees(open ? 180 : 0))
+                }
             }
             .statCard(padding: 14, radius: Theme.cornerMedium)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // Без строк объяснение раскрыто всегда — сворачивать его нечем.
+        .disabled(!togglable)
         .padding(.top, 4)
         if open {
             FinesExplainer(interval: period.interval(containing: anchor))
         }
     }
 
+    /// Проезды периода со штрафной ступенью и достоверным лимитом, новые сверху.
+    /// Отменённые остаются в списке (зачёркнутыми) — иначе «Вернуть» негде.
     private static func items(_ history: [TripRecord], period: StatsPeriod,
                               anchor: Date) -> [FineItem] {
         TripHistory.records(history, period: period, anchor: anchor)

@@ -531,19 +531,22 @@ final class LocationService: NSObject {
         // и промах конвейера от того, кто за рулём, не зависит.
         let recall = alertRecall.tally()
         if !recall.isEmpty { onAlertRecall?(recall) }
+        // Камеры, мимо которых ещё «проезжали» в момент остановки, — ДО сброса
+        // счётчика: записи проезда нужно знать, предупреждали ли о камере.
+        // После сброса каждый такой проезд выходил «промолчала» — и камера,
+        // о которой сказали за 300 м до парковки, звала жаловаться (ревью 19.10).
+        let tailPasses = passTracking.flush()
+        if !asPassenger { register(passes: tailPasses) }   // пассажирские не считаем
         alertRecall.reset()
         voicedInGroup.removeAll()
         postponedVoice = nil
         notifier.clearDriverCheck()   // вопрос «вы за рулём?» больше не актуален
         let batteryPercent = BatteryProbe.percent()
         if asPassenger {
-            _ = passTracking.flush()   // пассажирские «проезды» не считаем
             if trip.distanceMeters < AppConfig.passengerTripMinMeters { trip.cancel() } else {
                 trip.finish(batteryPercent: batteryPercent)
             }
         } else {
-            // Камеры, мимо которых ещё «проезжали» в момент остановки.
-            register(passes: passTracking.flush())
             trip.finish(endedManually: !auto, batteryPercent: batteryPercent)
             // Автостоп с телефоном в кармане: короткие итоги на локскрин —
             // цифры дошли до человека, даже если он не откроет приложение.

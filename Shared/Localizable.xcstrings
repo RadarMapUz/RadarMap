@@ -1955,6 +1955,22 @@
         }
       }
     },
+    "В «Итогах» за период — %@: часть поездок старше сохранённых, их строк здесь нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В «Итогах» за период — %@: часть поездок старше сохранённых, их строк здесь нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Natijalar»da davr uchun — %@: ba’zi safarlar saqlanganlardan eski, ularning qatorlari bu yerda yo‘q"
+          }
+        }
+      }
+    },
     "В городе — коротко, на трассе — полностью. О камерах, которые вы проезжаете спокойно каждый день, молчит.": {
       "localizations": {
         "ru": {

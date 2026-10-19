@@ -684,7 +684,7 @@ struct TripDetailContent: View {
 
     /// Штрафуемый проезд: лимит известен и превышение дошло до ступени штрафа.
     nonisolated static func isFined(_ pass: PassedCamera) -> Bool {
-        guard let limit = pass.limitKmh else { return false }
+        guard pass.limitIsCertain, let limit = pass.limitKmh else { return false }
         return FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) > 0
     }
 

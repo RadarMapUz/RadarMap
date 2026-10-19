@@ -271,4 +271,21 @@ final class RatingBreakdownTests: XCTestCase {
         // Проезд в допуске строки не создаёт.
         XCTAssertNil(sources.first { $0.location == "Чиланзар" })
     }
+
+    /// «Откуда сумма» по тем же правилам, что дневные сводки: «не пришёл» и
+    /// предположенный лимит денег не дают (ревью 19.10 — шапка показывала
+    /// «0 штрафов», а строки ниже — суммы).
+    func testFineSourcesSkipDismissedAndAssumedLimits() {
+        var dismissed = pass(1, speed: 92, limit: 60, location: "Юнусабад")
+        dismissed.fineDismissed = true
+        var assumed = pass(2, speed: 92, limit: 60, location: "Чиланзар")
+        assumed.limitAssumed = true
+        let history = [record(daysAgo: 1, km: 10, score: 60, passes: [dismissed, assumed])]
+        let days = TripDayBook.rebuilt(from: history, calendar: utc)
+        let summary = TripHistory.summary(days: days, history: history, period: .month,
+                                          anchor: now, calendar: utc)
+        let sources = RatingBreakdown.fineSources(records: history, in: month)
+        XCTAssertTrue(sources.isEmpty)
+        XCTAssertEqual(summary.fineRisk, 0)
+    }
 }

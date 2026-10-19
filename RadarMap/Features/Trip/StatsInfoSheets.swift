@@ -34,7 +34,9 @@ struct FinesExplainer: View {
             fineTable
             method
         }
-        .task(id: interval) {
+        // И на смену данных: отметка «не пришёл» на этом же экране должна
+        // сразу убрать камеру из «Откуда сумма».
+        .task(id: "\(interval.start.timeIntervalSince1970)|\(env.trip.dataRevision)") {
             sources = RatingBreakdown.fineSources(records: env.trip.history, in: interval)
         }
     }

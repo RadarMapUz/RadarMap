@@ -396,7 +396,11 @@ nonisolated enum RatingBreakdown {
         var byCamera: [Int: FineSource] = [:]
         for record in records where interval.contains(record.startedAt) {
             for pass in record.passed {
-                guard let limit = pass.limitKmh else { continue }
+                // Те же правила, что у дневных сводок (TripDay): лимит
+                // достоверный, штраф не отмечен «пришёл / не пришёл». Без них
+                // «Откуда сумма» показывала деньги, которых в шапке уже нет.
+                guard pass.limitIsCertain, pass.countsTowardFines,
+                      let limit = pass.limitKmh else { continue }
                 let fine = FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
                 guard fine > 0 else { continue }
                 if let existing = byCamera[pass.cameraID] {

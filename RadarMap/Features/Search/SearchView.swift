@@ -230,6 +230,10 @@ struct SearchView: View {
     var onAddStop: ((CLLocationCoordinate2D, String) -> Void)? = nil
     /// Открытие сразу в режиме «выбрать адрес для Дом/Работа» (из Настроек).
     var initialAssign: PlaceSlot? = nil
+    /// Секция «Мои места». Нет — когда поиск выбирает точку для «Избранного»:
+    /// тап по «Дому» предложил бы избранное «Дом», а пустой слот назначил бы
+    /// Дом вместо выбора (ревью 19.10).
+    var showsPlaces = true
 
     @State private var assigning: PlaceSlot? = nil
     /// «Выбрать на карте» для назначаемого места — когда адрес словами не
@@ -247,7 +251,7 @@ struct SearchView: View {
                 if let slot = assigning {
                     assignBanner(slot)
                 } else {
-                    placesSection
+                    if showsPlaces { placesSection }
                     if model.query.isEmpty {
                         categoriesSection
                         recentsSection
@@ -268,7 +272,9 @@ struct SearchView: View {
                 // «Готово», как на всех листах приложения (7.1): «Отмена»
                 // здесь ничего не отменяла — лист просто закрывался.
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Готово") { dismiss() }
+                    // В режиме назначения это выход без сохранения — так и
+                    // называется.
+                    Button(initialAssign != nil ? "Отмена" : "Готово") { dismiss() }
                 }
             }
         }

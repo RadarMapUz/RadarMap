@@ -15,6 +15,9 @@ final class WhatsNewTests: XCTestCase {
         XCTAssertFalse(WhatsNew.shouldShow(seenEdition: WhatsNew.edition, onboarded: true), "уже видел")
         XCTAssertFalse(WhatsNew.shouldShow(seenEdition: 0, onboarded: false), "новому пользователю — онбординг")
         XCTAssertFalse(WhatsNew.shouldShow(seenEdition: 0, onboarded: true, items: []), "нечего сказать — экрана нет")
+        XCTAssertFalse(WhatsNew.shouldShow(seenEdition: 0, onboarded: true, isDriving: true),
+                       "за рулём лист закрыл бы предупреждение о камере")
+        XCTAssertFalse(WhatsNew.shouldShow(seenEdition: 0, onboarded: true, carPlay: true))
     }
 
     func testAtMostThreeItems() {

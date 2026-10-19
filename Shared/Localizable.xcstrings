@@ -6670,6 +6670,22 @@
         }
       }
     },
+    "Настройки → О приложении → Мои данные → «Сохранить копию», затем на новом телефоне — «Восстановить из файла». История хранится только на телефоне, на сервер мы её не отправляем.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Настройки → О приложении → Мои данные → «Сохранить копию», затем на новом телефоне — «Восстановить из файла». История хранится только на телефоне, на сервер мы её не отправляем."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sozlamalar → Ilova haqida → Mening ma’lumotlarim → «Nusxani saqlash», so‘ng yangi telefonda — «Fayldan tiklash». Tarix faqat telefonda saqlanadi, biz uni serverga yubormaymiz."
+          }
+        }
+      }
+    },
     "Начать": {
       "localizations": {
         "ru": {
@@ -9670,6 +9686,22 @@
         }
       }
     },
+    "Проверьте звук — кнопка с динамиком на карте. О камерах, которые вы часто проезжаете без превышения, приложение молчит намеренно: на карте у них зелёная галочка (Настройки → Приложение учится). Скрытую камеру можно вернуть в Настройках → О приложении → База камер → Скрытые камеры. Если ничего не подошло — нажмите «Не предупредила о камере» у этого проезда в Итогах, мы разберём случай.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверьте звук — кнопка с динамиком на карте. О камерах, которые вы часто проезжаете без превышения, приложение молчит намеренно: на карте у них зелёная галочка (Настройки → Приложение учится). Скрытую камеру можно вернуть в Настройках → О приложении → База камер → Скрытые камеры. Если ничего не подошло — нажмите «Не предупредила о камере» у этого проезда в Итогах, мы разберём случай."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovozni tekshiring — xaritadagi karnay tugmasi. Tez-tez tezlikni oshirmay o‘tadigan kameralaringiz haqida ilova ataylab jim turadi: xaritada ularda yashil belgi bor (Sozlamalar → Ilova o‘rganadi). Yashirilgan kamerani Sozlamalar → Ilova haqida → Kameralar bazasi → Yashirilgan kameralar bo‘limida qaytarish mumkin. Hech biri to‘g‘ri kelmasa — Natijalardagi shu o‘tish yonidagi «Kamera haqida ogohlantirmadi» tugmasini bosing, holatni ko‘rib chiqamiz."
+          }
+        }
+      }
+    },
     "Проверьте связь и попробуйте ещё раз.": {
       "extractionState": "manual",
       "localizations": {
@@ -11055,6 +11087,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kameralar oldidagi tezlik"
+          }
+        }
+      }
+    },
+    "Скрытая камера не показывается и не предупреждает. Вернуть её можно в Настройках → О приложении → База камер → Скрытые камеры.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скрытая камера не показывается и не предупреждает. Вернуть её можно в Настройках → О приложении → База камер → Скрытые камеры."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yashirilgan kamera ko‘rinmaydi va ogohlantirmaydi. Uni Sozlamalar → Ilova haqida → Kameralar bazasi → Yashirilgan kameralar bo‘limida qaytarish mumkin."
           }
         }
       }
@@ -17328,22 +17376,6 @@
         }
       }
     },
-    "Скрытая камера не показывается и не предупреждает. Вернуть её можно в Настройках → База камер → Скрытые камеры.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Скрытая камера не показывается и не предупреждает. Вернуть её можно в Настройках → База камер → Скрытые камеры."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yashirilgan kamera ko‘rinmaydi va ogohlantirmaydi. Uni Sozlamalar → Kameralar bazasi → Yashirilgan kameralar bo‘limida qaytarish mumkin."
-          }
-        }
-      }
-    },
     "Своя камера исчезнет с карты и перестанет предупреждать.": {
       "localizations": {
         "ru": {
@@ -18528,22 +18560,6 @@
         }
       }
     },
-    "Проверьте звук — кнопка с динамиком на карте. О камерах, которые вы часто проезжаете без превышения, приложение молчит намеренно: на карте у них зелёная галочка (Настройки → Приложение учится). Скрытую камеру можно вернуть в Настройках → База камер → Скрытые камеры. Если ничего не подошло — нажмите «Не предупредила о камере» у этого проезда в Итогах, мы разберём случай.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Проверьте звук — кнопка с динамиком на карте. О камерах, которые вы часто проезжаете без превышения, приложение молчит намеренно: на карте у них зелёная галочка (Настройки → Приложение учится). Скрытую камеру можно вернуть в Настройках → База камер → Скрытые камеры. Если ничего не подошло — нажмите «Не предупредила о камере» у этого проезда в Итогах, мы разберём случай."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ovozni tekshiring — xaritadagi karnay tugmasi. Tez-tez tezlikni oshirmay o‘tadigan kameralaringiz haqida ilova ataylab jim turadi: xaritada ularda yashil belgi bor (Sozlamalar → Ilova o‘rganadi). Yashirilgan kamerani Sozlamalar → Kameralar bazasi → Yashirilgan kameralar bo‘limida qaytarish mumkin. Hech biri to‘g‘ri kelmasa — Natijalardagi shu o‘tish yonidagi «Kamera haqida ogohlantirmadi» tugmasini bosing, holatni ko‘rib chiqamiz."
-          }
-        }
-      }
-    },
     "Зачем доступ к геопозиции «Всегда»?": {
       "localizations": {
         "ru": {
@@ -18652,22 +18668,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Safarlarni yangi telefonga qanday ko‘chirish mumkin?"
-          }
-        }
-      }
-    },
-    "Настройки → Мои данные → «Сохранить копию», затем на новом телефоне — «Восстановить из файла». История хранится только на телефоне, на сервер мы её не отправляем.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Настройки → Мои данные → «Сохранить копию», затем на новом телефоне — «Восстановить из файла». История хранится только на телефоне, на сервер мы её не отправляем."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sozlamalar → Mening ma’lumotlarim → «Nusxani saqlash», so‘ng yangi telefonda — «Fayldan tiklash». Tarix faqat telefonda saqlanadi, biz uni serverga yubormaymiz."
           }
         }
       }

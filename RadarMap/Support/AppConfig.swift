@@ -443,7 +443,8 @@ nonisolated enum AppConfig {
     nonisolated static let radarCaptionTrips = 5
     /// «Избранное» (7.2): сколько мест держим и что считать тем же местом.
     nonisolated static let favoritePlacesMax = 12
-    nonisolated static let favoriteSameMeters: Double = 150
+    /// 40 м — та же точка; садик в 120 м от школы — уже другое место.
+    nonisolated static let favoriteSameMeters: Double = 40
     /// Снимок проезда камеры: участок трека в этом радиусе от неё (6.7).
     nonisolated static let passPictureTrackMeters: Double = 900
 

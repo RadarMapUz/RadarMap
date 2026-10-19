@@ -19,4 +19,20 @@ enum PlaceTitle {
         }
         return String(localized: "Текущее место")
     }
+
+    /// «Текущее место» для Дом/Работа — одно на «Мои места» и Настройки.
+    /// Положение читается в момент нажатия, а не при сборке меню: чтение
+    /// `currentCoordinate` в body пересобирало лист на каждом фиксе.
+    @MainActor
+    static func currentAssigner(_ slot: PlaceSlot, env: AppEnvironment) -> (() -> Void)? {
+        guard env.location.hasLocation else { return nil }
+        return {
+            guard let point = env.location.currentCoordinate else { return }
+            Task {
+                let title = await resolve(point, env: env)
+                env.settings.setPlace(SavedPlace(title: title, lat: point.latitude, lon: point.longitude),
+                                      for: slot)
+            }
+        }
+    }
 }

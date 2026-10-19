@@ -39,8 +39,12 @@ nonisolated enum WhatsNew {
     }
 
     /// Показать ли экран: человек уже пользовался приложением (онбординг
-    /// пройден раньше) и этот выпуск ещё не видел.
-    static func shouldShow(seenEdition: Int, onboarded: Bool, items: [Item] = items) -> Bool {
-        onboarded && seenEdition < edition && !items.isEmpty
+    /// пройден раньше), этот выпуск ещё не видел — и сейчас НЕ за рулём.
+    /// Первое открытие после обновления чаще всего в машине с автостартом,
+    /// и лист на весь экран закрыл бы предупреждение о камере (ревью 19.10);
+    /// тогда — в следующий раз, стоя.
+    static func shouldShow(seenEdition: Int, onboarded: Bool, isDriving: Bool = false,
+                           carPlay: Bool = false, items: [Item] = items) -> Bool {
+        onboarded && !isDriving && !carPlay && seenEdition < edition && !items.isEmpty
     }
 }

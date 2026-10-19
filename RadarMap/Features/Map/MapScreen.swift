@@ -36,6 +36,9 @@ struct MapScreen: View {
     @State private var columnSlots: Int?
     /// Разовая подсказка о жесте (см. OneTimeHints): максимум одна за запуск.
     @State private var activeHint: OneTimeHints.Hint?
+    /// «Что нового» после обновления (WhatsNew) — среди листов карты, чтобы
+    /// диплинк виджета закрывал его вместе с остальными.
+    @State private var showsWhatsNew = false
     @State private var hintConsumedThisLaunch = false
     /// «Батарея садится — погасите экран»: поездка началась, заряд тает, а
     /// зарядки нет.
@@ -134,12 +137,19 @@ struct MapScreen: View {
             }
             #if DEBUG
             openScreenFromLaunchArguments()
+            // Скриншот-хук: `-whatsNew` — показать «Что нового» снова.
+            if ProcessInfo.processInfo.arguments.contains("-whatsNew") {
+                Storage.set(0, for: .whatsNewEdition)
+            }
             #endif
             // Подсказка о жесте — после того как карта обжилась: чип поверх
             // стартовой анимации читается как сбой, а не как помощь.
             Task {
                 await Task.pause(seconds: 3)
-                maybeShowHint()
+                // «Что нового» — вместо разовой подсказки, а не поверх неё:
+                // подсказка под листом сгорела бы, а у обновившихся она одна
+                // на всю жизнь (ревью 19.10).
+                if !maybeShowWhatsNew() { maybeShowHint() }
                 // Каталог областей — маленький подписанный файл; нужен, только
                 // пока на предложение скачать карту не ответили.
                 if !Storage.bool(.offlineOfferAnswered), env.offlineMaps.catalog == nil,
@@ -188,6 +198,7 @@ struct MapScreen: View {
                        onAddStop: !env.location.hasLocation || !env.route.isActive ? nil
                            : { coord, name in addStop(coord, name: name) })
         }
+        .sheet(isPresented: $showsWhatsNew) { WhatsNewSheet() }
         .sheet(isPresented: $showRouteCameras) {
             RouteCamerasSheet(onSelect: { map.focus(on: $0) })
         }
@@ -243,6 +254,7 @@ struct MapScreen: View {
             map.showSettings = false
             showRouteCameras = false
             showMyPlaces = false
+            showsWhatsNew = false
             tripEndDetail = nil
             // Деталка — отдельный шит карты: поверх открытых Итогов не встанет.
             if link != .stats { map.showStats = false }
@@ -410,6 +422,24 @@ struct MapScreen: View {
                 .foregroundStyle(Theme.textSecondary)
         }
         #endif
+    }
+
+    // MARK: - «Что нового»
+
+    /// Один раз на выпуск текста, только стоя и без машины (WhatsNew). Выпуск
+    /// помечается увиденным при показе: убитое на открытом листе приложение
+    /// не покажет его второй раз.
+    private func maybeShowWhatsNew() -> Bool {
+        guard WhatsNew.shouldShow(seenEdition: Storage.int(.whatsNewEdition),
+                                  onboarded: Storage.bool(.hasCompletedOnboarding),
+                                  isDriving: env.location.isTripActive || env.location.isProbablyDriving,
+                                  carPlay: env.isCarPlayConnected),
+              !map.showStats, !map.showSettings, !map.showSearch, !showMyPlaces
+        else { return false }
+        Storage.set(WhatsNew.edition, for: .whatsNewEdition)
+        hintConsumedThisLaunch = true
+        showsWhatsNew = true
+        return true
     }
 
     // MARK: - Разовые подсказки

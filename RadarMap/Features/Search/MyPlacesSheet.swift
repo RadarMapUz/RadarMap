@@ -33,6 +33,8 @@ struct MyPlacesSheet: View {
     @State private var searchingFavorite = false
     @State private var pendingFavorite: SavedPlace?
     @State private var favoriteName = ""
+    /// Выбранное в поиске — имя спросим, когда лист поиска закроется.
+    @State private var pickedFavorite: SavedPlace?
 
     var body: some View {
         NavigationStack {
@@ -63,11 +65,19 @@ struct MyPlacesSheet: View {
         .sheet(item: $searchSlot) { slot in
             SearchView(initialAssign: slot)
         }
-        .sheet(isPresented: $searchingFavorite) {
+        .sheet(isPresented: $searchingFavorite, onDismiss: {
+            // После закрытия, а не по таймеру: алерт поверх уходящего листа
+            // не показывается, и выбор пропадал на медленной анимации.
+            if let picked = pickedFavorite {
+                pickedFavorite = nil
+                favoriteName = picked.title
+                pendingFavorite = picked
+            }
+        }) {
             SearchView(onSelect: { coordinate, title in
-                proposeFavorite(SavedPlace(title: title, lat: coordinate.latitude,
-                                           lon: coordinate.longitude))
-            })
+                pickedFavorite = SavedPlace(title: title, lat: coordinate.latitude,
+                                            lon: coordinate.longitude)
+            }, showsPlaces: false)
         }
         .alert("Название места", isPresented: Binding(get: { pendingFavorite != nil },
                                                       set: { if !$0 { pendingFavorite = nil } })) {
@@ -233,7 +243,9 @@ struct MyPlacesSheet: View {
     /// поиска; имя спрашиваем сразу, адрес остаётся подсказкой в поле.
     @ViewBuilder private var favoritesSection: some View {
         Section {
-            ForEach(env.settings.favoritePlaces, id: \.title) { place in
+            // По позиции, не по имени: два «Текущих места» в разных
+            // концах страны давали одинаковый id (ревью 19.10).
+            ForEach(Array(env.settings.favoritePlaces.enumerated()), id: \.offset) { _, place in
                 Button {
                     go(to: place.coordinate, name: place.title)
                 } label: {
@@ -285,20 +297,7 @@ struct MyPlacesSheet: View {
 
     /// Задать Дом/Работу текущим местом; без положения пункта нет.
     private func currentAssigner(_ slot: PlaceSlot) -> (() -> Void)? {
-        guard env.location.hasLocation, let point = env.location.currentCoordinate else { return nil }
-        return {
-            Task {
-                let title = await PlaceTitle.resolve(point, env: env)
-                env.settings.setPlace(SavedPlace(title: title, lat: point.latitude, lon: point.longitude),
-                                      for: slot)
-            }
-        }
-    }
-
-    private func proposeFavorite(_ place: SavedPlace) {
-        favoriteName = place.title
-        // После закрытия листа поиска: алерт поверх уходящего листа не показывается.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { pendingFavorite = place }
+        PlaceTitle.currentAssigner(slot, env: env)
     }
 
     /// «Текущее место» — с адресом из своего адресника, если он рядом.

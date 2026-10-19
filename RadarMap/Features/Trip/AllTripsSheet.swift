@@ -17,16 +17,30 @@ import CoreLocation
 struct AllTripsSheet: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
-    var onOpenDetail: (TripRecord) -> Void
     var onRepeat: ((CLLocationCoordinate2D, String) -> Void)?
 
+    /// Свой стек (6.10): поездка и проезд открываются внутри, «Назад»
+    /// возвращает в список. Раньше тап закрывал список и открывал деталку
+    /// поверх «Итогов» — назад к списку пути не было.
+    @State private var path: [Route] = []
+    @State private var onlyFined = false
+    @State private var months: [TripArchive.Month] = []
+
+    enum Route: Hashable {
+        case trip(Double)
+        case pass(trip: Double, pass: UUID)
+    }
+
+    private struct Key: Equatable {
+        let revision: Int
+        let onlyFined: Bool
+    }
+
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
-                    if months.isEmpty {
-                        // История очищена или её ещё нет: экран, открывшийся
-                        // пустым, читается как сбой, а не как «поездок нет».
+                    if env.trip.history.isEmpty {
                         VStack(spacing: 8) {
                             Image(systemName: "car.side")
                                 .font(.rounded(34))
@@ -43,16 +57,29 @@ struct AllTripsSheet: View {
                         .padding(.top, 60)
                     } else {
                         retentionNote
+                        if months.isEmpty, onlyFined {
+                            Text("Поездок с превышениями среди сохранённых нет")
+                                .font(.rounded(15))
+                                .foregroundStyle(Theme.textSecondary)
+                                .padding(.top, 12)
+                        }
                     }
-                    ForEach(months, id: \.title) { month in
-                        Text(month.title)
+                    ForEach(months, id: \.start) { month in
+                        Text(month.start.formatted(.dateTime.month(.wide).year()
+                                                    .locale(NumberFormat.locale)))
                             .font(.rounded(15, .semibold))
                             .foregroundStyle(Theme.textTertiary)
                             .textCase(.uppercase)
                             .padding(.top, 8)
-                        ForEach(month.records) { record in
-                            row(record)
+                        // Месяц — одной карточкой со строками, как поездки дня в
+                        // «Итогах»: без тени у каждой строки.
+                        VStack(spacing: 0) {
+                            ForEach(Array(month.records.enumerated()), id: \.element.id) { index, record in
+                                if index > 0 { Divider().overlay(Theme.stroke).padding(.leading, 14) }
+                                row(record)
+                            }
                         }
+                        .statCard(padding: 0, radius: Theme.cornerMedium)
                     }
                 }
                 .padding(20)
@@ -63,14 +90,48 @@ struct AllTripsSheet: View {
             .navigationTitle("Все поездки")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        withMotion(Motion.standard) { onlyFined.toggle() }
+                    } label: {
+                        Image(systemName: onlyFined ? "exclamationmark.triangle.fill"
+                                                    : "exclamationmark.triangle")
+                    }
+                    .accessibilityLabel(Text("Только с превышениями"))
+                    .accessibilityAddTraits(onlyFined ? .isSelected : [])
+                }
                 ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }
             }
+            .navigationDestination(for: Route.self) { destination($0) }
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        // Группировка — на смену истории или фильтра, не в body.
+        .task(id: Key(revision: env.trip.dataRevision, onlyFined: onlyFined)) {
+            months = TripArchive.months(env.trip.history, onlyFined: onlyFined)
+        }
     }
 
-    /// Честно говорим, почему список не бесконечный, — иначе это выглядит багом.
+    @ViewBuilder private func destination(_ route: Route) -> some View {
+        switch route {
+        case .trip(let id):
+            if let record = env.trip.history.first(where: { $0.id == id }) {
+                TripDetailContent(record: record,
+                                  onRoute: onRepeat.map { repeatRoute in
+                                      { coord, name in dismiss(); repeatRoute(coord, name) }
+                                  },
+                                  onOpenPass: { path.append(.pass(trip: id, pass: $0.id)) })
+                    .navigationTitle(Formatting.tripTitle(record.startedAt))
+                    .navigationBarTitleDisplayMode(.inline)
+            }
+        case .pass(let tripID, let passID):
+            if let record = env.trip.history.first(where: { $0.id == tripID }),
+               let pass = record.passed.first(where: { $0.id == passID }) {
+                PassDetailView(pass: pass, track: record.trackPoints, record: record)
+            }
+        }
+    }
+
     private var retentionNote: some View {
         Label(String(format: String(localized: "Хранятся последние %lld поездок. Итоги за месяцы считаются по дневным сводкам — они не удаляются."),
                      TripHistory.maxHistory),
@@ -80,39 +141,39 @@ struct AllTripsSheet: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
-    private struct Month {
-        let title: String
-        let records: [TripRecord]
+    private var homeCoordinate: CLLocationCoordinate2D? {
+        env.settings.homePlace?.coordinate
+            ?? env.learnedPlaces.first { $0.kind == .home }?.coordinate
     }
 
-    /// Группировка по календарным месяцам, порядок истории (новые сверху).
-    private var months: [Month] {
-        let calendar = Calendar.current
-        var order: [Date] = []
-        var byMonth: [Date: [TripRecord]] = [:]
-        for record in env.trip.history {
-            let key = calendar.dateInterval(of: .month, for: record.startedAt)?.start
-                ?? calendar.startOfDay(for: record.startedAt)
-            if byMonth[key] == nil { order.append(key) }
-            byMonth[key, default: []].append(record)
-        }
-        return order.map { key in
-            Month(title: key.formatted(.dateTime.month(.wide).year()),
-                  records: byMonth[key] ?? [])
-        }
+    private var workCoordinate: CLLocationCoordinate2D? {
+        env.settings.workPlace?.coordinate
+            ?? env.learnedPlaces.first { $0.kind == .work }?.coordinate
     }
 
     private func row(_ record: TripRecord) -> some View {
-        Button {
-            onOpenDetail(record)
+        let finish = TripArchive.finish(record.endCoordinate, home: homeCoordinate, work: workCoordinate)
+        return Button {
+            path.append(.trip(record.id))
         } label: {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(record.startedAt.formatted(date: .abbreviated, time: .shortened))
-                        .font(.rounded(14, .semibold))
-                        .foregroundStyle(Theme.textPrimary)
+                    HStack(spacing: 6) {
+                        Text(record.startedAt.formatted(.dateTime.day().month(.abbreviated)
+                                                          .hour().minute()
+                                                          .locale(NumberFormat.locale)))
+                            .font(.rounded(14, .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                        // Куда приехали — «→ Работа»: строку узнают по цели,
+                        // а не по времени старта.
+                        if let finish {
+                            Text(finish == .home ? "→ Дом" : "→ Работа")
+                                .font(.rounded(12, .semibold))
+                                .foregroundStyle(Theme.accent)
+                        }
+                    }
                     Text("\(Formatting.distance(record.distanceMeters)) · \(Formatting.duration(record.duration))")
-                        .font(.rounded(15))
+                        .font(.rounded(13))
                         .foregroundStyle(Theme.textSecondary)
                 }
                 Spacer(minLength: 8)
@@ -125,16 +186,17 @@ struct AllTripsSheet: View {
                                     in: Capsule())
                 }
                 Image(systemName: "chevron.right")
-                    .font(.rounded(15, .semibold))
+                    .font(.rounded(13, .semibold))
                     .foregroundStyle(Theme.textTertiary)
             }
-            .statCard(padding: 14, radius: Theme.cornerMedium)
+            .padding(.horizontal, 14).padding(.vertical, 12)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .contextMenu {
             if let onRepeat, let end = record.endCoordinate {
                 Button {
+                    dismiss()
                     onRepeat(end, String(localized: "Как в прошлый раз"))
                 } label: {
                     Label("Повторить маршрут", systemImage: "arrow.triangle.turn.up.right.circle")

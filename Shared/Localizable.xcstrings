@@ -398,6 +398,22 @@
         }
       }
     },
+    "%@ ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ soat"
+          }
+        }
+      }
+    },
     "%@%lld%% к прошлой неделе": {
       "localizations": {
         "ru": {
@@ -2116,22 +2132,6 @@
         }
       }
     },
-    "Ваша норма": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ваша норма"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sizning odatiy darajangiz"
-          }
-        }
-      }
-    },
     "Ваши отметки за 30 дней": {
       "extractionState": "manual",
       "localizations": {
@@ -3534,22 +3534,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Davr tafsilotlari"
-          }
-        }
-      }
-    },
-    "Динамика по неделям": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Динамика по неделям"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Haftalar dinamikasi"
           }
         }
       }
@@ -8756,6 +8740,22 @@
         }
       }
     },
+    "Поездок с превышениями среди сохранённых нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездок с превышениями среди сохранённых нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saqlanganlar orasida oshirishli safarlar yo‘q"
+          }
+        }
+      }
+    },
     "Поездок: %1$lld · %2$@": {
       "localizations": {
         "ru": {
@@ -11576,6 +11576,22 @@
         }
       }
     },
+    "Только превышения": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только превышения"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faqat oshirishlar"
+          }
+        }
+      }
+    },
     "Только радары": {
       "localizations": {
         "ru": {
@@ -11603,7 +11619,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Faqat tezlik oshirilganlari"
+            "value": "Faqat oshirishlar bilan"
           }
         }
       }
@@ -14806,6 +14822,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "jarimali o'tishlar: %lld"
+          }
+        }
+      }
+    },
+    "→ Дом": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "→ Дом"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "→ Uy"
+          }
+        }
+      }
+    },
+    "→ Работа": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "→ Работа"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "→ Ish"
           }
         }
       }

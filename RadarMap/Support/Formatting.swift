@@ -113,6 +113,8 @@ enum Formatting {
         let total = Int(seconds.rounded())
         let h = total / 3600
         let m = (total % 3600) / 60
+        // «1 ч», а не «1 ч 0 мин»: ноль минут — не факт, а лишнее слово.
+        if h > 0, m == 0 { return String(format: String(localized: "%@ ч"), String(h)) }
         if h > 0 { return String(format: String(localized: "%1$@ ч %2$@ мин"), String(h), String(m)) }
         if m > 0 { return String(format: String(localized: "%@ мин"), String(m)) }
         return String(format: String(localized: "%@ сек"), String(total))

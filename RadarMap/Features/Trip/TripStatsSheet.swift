@@ -278,8 +278,9 @@ struct TripStatsSheet: View {
                             Button("Очистить историю", systemImage: "trash", role: .destructive) {
                                 confirmsClear = true
                             }
-                            // До чтения истории очистка отклоняется (S9).
-                            .disabled(!trip.isLoaded)
+                            // До чтения истории и переноса старых счётчиков
+                            // очистка отклоняется (S9).
+                            .disabled(!trip.isLoaded || !trip.isLifetimeTrusted)
                         } label: { Image(systemName: "ellipsis.circle") }
                             .accessibilityLabel(Text("Ещё"))
                         // Похвастаться периодом: карта + рейтинг + зона риска одной картинкой.

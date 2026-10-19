@@ -1054,9 +1054,6 @@ final class AppEnvironment {
     /// свежей. Считаем ЗДЕСЬ: виджет не имеет права вычислять — у него нет ни
     /// истории, ни права тратить батарею.
     func refreshWidgetSnapshot() {
-        // «За всё время» ещё не перенесено (старт до разблокировки) — виджет
-        // держит прошлый снимок, а не вклад одного процесса (ревью S9).
-        guard trip.isLifetimeTrusted else { return }
         #if DEBUG
         // Скриншот-хук `-widgetState empty|few|full`: виджет живёт в основном
         // не на полной неделе, а посмотреть скудные состояния иначе нечем —
@@ -1116,7 +1113,10 @@ final class AppEnvironment {
             topRiskPasses: week.topOverCount,
             usualWeekDistance: WidgetWeek.median(previousWeeks),
             monthDistance: month.distance,
-            lifetimeDistance: trip.lifetime.distanceMeters,
+            // «За всё время» ещё не перенесено (старт до разблокировки) —
+            // прошлое значение, а не журнал одного процесса (ревью S9).
+            lifetimeDistance: trip.isLifetimeTrusted ? trip.lifetime.distanceMeters
+                                                     : SharedDefaults.read().lifetimeDistance,
             weekMovingDuration: week.movingDuration,
             lastTripDistance: trip.history.first?.distanceMeters ?? 0,
             lastTripAt: trip.history.first?.startedAt

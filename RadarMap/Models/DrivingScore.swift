@@ -36,7 +36,7 @@ nonisolated enum FineSchedule {
 
 enum DrivingScore {
     /// Проезд камеры для расчёта: скорость и лимит дороги (если известен).
-    struct Pass {
+    nonisolated struct Pass: Codable, Sendable {
         let speedKmh: Double
         let limitKmh: Int?
     }
@@ -281,24 +281,6 @@ nonisolated struct LifetimeStats: Codable, Equatable {
     /// растёт; серия: новый штраф её обрывает, а чистые лимитные проезды
     /// продлевают, только если у первой ноги лимитных не было (иначе шаг
     /// серии уже сделан).
-    /// Этот итог, а после него — более поздний период `later`, посчитанный с
-    /// нуля (вклад процесса, которому нельзя было верить UserDefaults,
-    /// ревью S9). Счётчики складываются; серия `later` продолжает эту, если
-    /// в `later` не было штрафа, иначе она — своя; рекорд — наибольший.
-    func followed(by later: LifetimeStats) -> LifetimeStats {
-        var s = self
-        s.trips += later.trips
-        s.distanceMeters += later.distanceMeters
-        s.camerasPassed += later.camerasPassed
-        s.camerasInLimit += later.camerasInLimit
-        s.savedFinesSum += later.savedFinesSum
-        s.riskFinesSum += later.riskFinesSum
-        s.cleanStreak = later.riskFinesSum > 0 ? later.cleanStreak : cleanStreak + later.cleanStreak
-        s.bestStreak = max(bestStreak, later.bestStreak, s.cleanStreak)
-        s.lastTripRaisedBest = later.trips > 0 ? later.lastTripRaisedBest : lastTripRaisedBest
-        return s
-    }
-
     nonisolated static func updatedResumed(_ stats: LifetimeStats,
                                            basePasses: [DrivingScore.Pass],
                                            allPasses: [DrivingScore.Pass],

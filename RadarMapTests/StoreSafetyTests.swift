@@ -136,40 +136,51 @@ final class TimedTrackPrivacyTests: XCTestCase {
         var saved = LifetimeStats()
         saved.trips = 120
         saved.distanceMeters = 3_000_000
+        let unknown = TripStats.Legacy(lifetime: nil, recall: nil, known: false)
+        let absent = TripStats.Legacy(lifetime: nil, recall: nil, known: true)
+        let present = TripStats.Legacy(lifetime: saved, recall: nil, known: true)
         let file = TripStats.LifetimeFile(lifetime: saved, alertRecall: AlertRecall.Tally())
-        let loaded = TripStats.lifetimeSource(.loaded(file), session: nil, legacy: nil, legacyRecall: nil,
-                                              startedBlocked: true, decodedTrips: trips)
+        let loaded = TripStats.lifetimeSource(.loaded(file), session: nil, legacy: unknown, decodedTrips: trips)
         XCTAssertEqual(loaded.file.lifetime.trips, 120)
         XCTAssertFalse(loaded.needsWrite)
         XCTAssertTrue(loaded.trusted)
 
-        let migrated = TripStats.lifetimeSource(.missing, session: nil, legacy: saved, legacyRecall: nil,
-                                                startedBlocked: true, decodedTrips: trips)
-        XCTAssertEqual(migrated.file.lifetime.trips, 120, "запись UserDefaults настоящая — переносим")
+        let migrated = TripStats.lifetimeSource(.missing, session: nil, legacy: present, decodedTrips: trips)
+        XCTAssertEqual(migrated.file.lifetime.trips, 120, "старая запись настоящая — переносим")
         XCTAssertTrue(migrated.needsWrite)
 
-        let blind = TripStats.lifetimeSource(.missing, session: nil, legacy: nil, legacyRecall: nil,
-                                             startedBlocked: true, decodedTrips: trips)
-        XCTAssertFalse(blind.trusted, "до разблокировки пустые UserDefaults — не правда")
+        let blind = TripStats.lifetimeSource(.missing, session: nil, legacy: unknown, decodedTrips: trips)
+        XCTAssertFalse(blind.trusted, "файл настроек не прочтён — нулям не верим")
         XCTAssertFalse(blind.needsWrite)
+        XCTAssertFalse(TripStats.lifetimeSource(.missing, session: nil, legacy: unknown, decodedTrips: []).trusted,
+                       "и с пустой историей: у человека, стёршего поездки, нули стёрли бы годы")
 
-        let fresh = TripStats.lifetimeSource(.missing, session: nil, legacy: nil, legacyRecall: nil,
-                                             startedBlocked: false, decodedTrips: trips)
-        XCTAssertEqual(fresh.file.lifetime.trips, 2, "версия без счётчиков — из истории")
+        let fresh = TripStats.lifetimeSource(.missing, session: nil, legacy: absent, decodedTrips: trips)
+        XCTAssertEqual(fresh.file.lifetime.trips, 2, "записи точно нет (версия без счётчиков) — из истории")
         XCTAssertTrue(fresh.trusted)
 
-        let empty = TripStats.lifetimeSource(.missing, session: nil, legacy: nil, legacyRecall: nil,
-                                             startedBlocked: true, decodedTrips: [])
-        XCTAssertFalse(empty.trusted,
-                       "и с пустой историей: до разблокировки нулям не верим — у человека, стёршего поездки, они стёрли бы годы")
-        let freshStart = TripStats.lifetimeSource(.missing, session: nil, legacy: nil, legacyRecall: nil,
-                                                  startedBlocked: false, decodedTrips: [])
-        XCTAssertTrue(freshStart.trusted, "обычный запуск, ничего нет — новый человек")
-
-        let corrupt = TripStats.lifetimeSource(.corrupt(CocoaError(.fileReadCorruptFile)), session: nil, legacy: saved, legacyRecall: nil,
-                                               startedBlocked: false, decodedTrips: trips)
+        let corrupt = TripStats.lifetimeSource(.corrupt(CocoaError(.fileReadCorruptFile)), session: nil,
+                                               legacy: present, decodedTrips: trips)
         XCTAssertEqual(corrupt.file.lifetime.trips, 120, "битый файл: лучшее из оставшегося")
         XCTAssertTrue(corrupt.needsWrite)
+    }
+
+    /// Старые счётчики — из самого файла настоящих: кэш настроек процесса,
+    /// поднятого до разблокировки, может врать пустотой.
+    func testLegacyFromThePreferencesFile() throws {
+        var saved = LifetimeStats()
+        saved.trips = 42
+        let dict: [String: Any] = [Storage.Key.lifetimeStats.rawValue: try JSONEncoder().encode(saved),
+                                   "другое": 1]
+        let data = try PropertyListSerialization.data(fromPropertyList: dict, format: .binary, options: 0)
+        let legacy = TripStats.legacyFromPlist(data)
+        XCTAssertTrue(legacy.known)
+        XCTAssertEqual(legacy.lifetime?.trips, 42)
+        let none = TripStats.legacyFromPlist(try PropertyListSerialization.data(fromPropertyList: ["x": 1],
+                                                                                format: .binary, options: 0))
+        XCTAssertTrue(none.known, "файл прочтён, ключа нет — точно нет")
+        XCTAssertNil(none.lifetime)
+        XCTAssertFalse(TripStats.legacyFromPlist(Data("мусор".utf8)).known)
     }
 
     /// Поездка A кончилась до разблокировки, потом продолжена склейкой и ещё
@@ -202,32 +213,38 @@ final class TimedTrackPrivacyTests: XCTestCase {
     /// Вклад процесса, которому нельзя было верить UserDefaults, ложится
     /// после перенесённого: счётчики складываются, серия продолжается, если
     /// во вкладе не было штрафа; один и тот же вклад — один раз.
-    func testSessionFollowsTheMigratedTotals() {
+    func testSessionJournalReplaysOntoTheMigratedTotals() {
         var saved = LifetimeStats()
         saved.trips = 100
         saved.distanceMeters = 2_000_000
         saved.cleanStreak = 5
-        saved.bestStreak = 7
+        saved.bestStreak = 6
         let clean = DrivingScore.Pass(speedKmh: 55, limitKmh: 60)
         let fined = DrivingScore.Pass(speedKmh: 95, limitKmh: 60)
-        let session = LifetimeStats.updated(LifetimeStats(), passes: [clean], distanceMeters: 10_000)
-        let joined = saved.followed(by: session)
-        XCTAssertEqual(joined.trips, 101)
-        XCTAssertEqual(joined.distanceMeters, 2_010_000)
-        XCTAssertEqual(joined.cleanStreak, 6, "чистая поездка продолжает серию")
-        XCTAssertEqual(joined.bestStreak, 7)
-        let broken = saved.followed(by: LifetimeStats.updated(session, passes: [fined], distanceMeters: 1000))
-        XCTAssertEqual(broken.cleanStreak, 0, "штраф во вкладе обрывает серию")
-
+        func trip(_ pass: DrivingScore.Pass) -> TripStats.LifetimeOp { .trip(passes: [pass], distance: 10_000) }
+        // Три чистые через границу (серия 8 — новый рекорд), штраф, ещё одна.
+        let session = TripStats.LifetimeSession(id: "S1", ops: [trip(clean), trip(clean), trip(clean),
+                                                                 trip(fined), trip(clean), .trips(-1)])
         let file = TripStats.LifetimeFile(lifetime: saved, alertRecall: AlertRecall.Tally())
-        let sessionFile = TripStats.LifetimeFile(lifetime: session, alertRecall: AlertRecall.Tally(), sessionID: "S1")
-        let merged = TripStats.lifetimeSource(.loaded(file), session: sessionFile, legacy: nil, legacyRecall: nil,
-                                              startedBlocked: false, decodedTrips: [])
-        XCTAssertEqual(merged.file.lifetime.trips, 101)
+        let merged = TripStats.lifetimeSource(.loaded(file), session: session,
+                                              legacy: TripStats.Legacy(lifetime: nil, recall: nil, known: true),
+                                              decodedTrips: [])
+        XCTAssertEqual(merged.file.lifetime.trips, 104, "пять поездок, одна склеена вручную")
+        XCTAssertEqual(merged.file.lifetime.distanceMeters, 2_050_000)
+        XCTAssertEqual(merged.file.lifetime.bestStreak, 8, "рекорд через границу не теряется")
+        XCTAssertEqual(merged.file.lifetime.cleanStreak, 1)
         XCTAssertEqual(merged.file.mergedSession, "S1")
-        let again = TripStats.lifetimeSource(.loaded(merged.file), session: sessionFile, legacy: nil,
-                                             legacyRecall: nil, startedBlocked: false, decodedTrips: [])
-        XCTAssertEqual(again.file.lifetime.trips, 101, "упали между записью и удалением вклада — не второй раз")
+        let again = TripStats.lifetimeSource(.loaded(merged.file), session: session,
+                                             legacy: TripStats.Legacy(lifetime: nil, recall: nil, known: true),
+                                             decodedTrips: [])
+        XCTAssertEqual(again.file.lifetime.trips, 104, "упали между записью и удалением журнала — не второй раз")
+        // Флаг «поднял рекорд» мерится против настоящего рекорда, а не нуля.
+        var high = LifetimeStats()
+        high.cleanStreak = 2
+        high.bestStreak = 10
+        let one = TripStats.LifetimeSession(id: "S2", ops: [trip(clean)])
+            .replayed(onto: TripStats.LifetimeFile(lifetime: high, alertRecall: AlertRecall.Tally()))
+        XCTAssertEqual(one.lifetime.lastTripRaisedBest, false)
     }
 
     /// Поле, добавленное позже, не делает старый файл «битым».

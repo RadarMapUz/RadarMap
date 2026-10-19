@@ -489,12 +489,12 @@ struct MapScreen: View {
     /// «Батарея садится — погасите экран»: поездка началась, зарядки нет,
     /// батарея ниже трети. Раньше здесь звали в спидометр; его нет, а честный
     /// совет один — экран и есть главный потребитель, и гасить его можно:
-    /// при доступе «Всегда» предупреждения звучат и с погашенным экраном. Без
-    /// «Всегда» это было бы неправдой, поэтому совет только с ним.
+    /// поездка, начатая на экране, звучит и с погашенным — и при «Всегда», и
+    /// при «При использовании» (S2, 20.10). Без доступа вовсе совета нет.
     /// Мониторинг батареи включается на один замер и тут же гасится — держать
     /// его постоянно ради подсказки было бы иронией на тему экономии.
     private func maybeSuggestScreenOffForBattery() {
-        guard env.location.authorizationStatus == .authorizedAlways else { return }
+        guard [.authorizedAlways, .authorizedWhenInUse].contains(env.location.authorizationStatus) else { return }
         let battery = BatteryProbe.snapshot()
         guard let percent = battery.percent, percent < 30, !battery.isCharging else { return }
         withMotion(Motion.standard) { showBatterySaverHint = true }

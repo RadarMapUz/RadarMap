@@ -131,13 +131,13 @@ final class CameraStore: CameraRepository {
     private(set) var dbVersion: Int =
         Storage.intIfPresent(.cameraDBVersion) ?? AppConfig.bundledDBVersion
 
-    /// Первая загрузка базы завершена (декод асинхронный). Для одноразовых
-    /// миграций, которым нужны данные камер: вызов в момент сборки сервисов
-    /// пришёлся бы на пустой список.
     /// База прочитана (декод асинхронный): до этого `cameras` пуст не потому,
     /// что камер нет.
     @ObservationIgnored private(set) var isDatabaseLoaded = false
 
+    /// Первая загрузка базы завершена (декод асинхронный). Для одноразовых
+    /// миграций, которым нужны данные камер: вызов в момент сборки сервисов
+    /// пришёлся бы на пустой список.
     @ObservationIgnored var onDatabaseLoaded: (() -> Void)? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onDatabaseLoaded,
                                                "CameraRepository.onDatabaseLoaded") }

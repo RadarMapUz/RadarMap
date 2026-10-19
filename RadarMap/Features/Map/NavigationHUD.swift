@@ -37,7 +37,7 @@ struct TripSpeedCluster: View {
                     Text("км/ч")
                         .lineLimit(1)
                     if env.location.isLowPowerMode {
-                        // Энергосбережение iOS: точность GPS снижена, голос отключён.
+                        // Энергосбережение iOS: точность GPS снижена (голос о камерах — как всегда).
                         Image(systemName: "bolt.fill")
                             .foregroundStyle(Theme.warning)
                     }

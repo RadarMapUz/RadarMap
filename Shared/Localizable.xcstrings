@@ -9016,6 +9016,22 @@
         }
       }
     },
+    "Продолжить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Продолжить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Davom etish"
+          }
+        }
+      }
+    },
     "Проезд камеры": {
       "localizations": {
         "ru": {

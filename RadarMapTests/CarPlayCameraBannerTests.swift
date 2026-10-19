@@ -43,4 +43,14 @@ final class CarPlayCameraBannerTests: XCTestCase {
         XCTAssertTrue(T.shouldUpdate(shown: a, new: b, sinceLast: 1.2, interval: 1))
         XCTAssertTrue(T.shouldUpdate(shown: nil, new: a, sinceLast: 5, interval: 1))
     }
+
+    /// Мигание тревоги у той же камеры не снимает баннер; другая камера или
+    /// долгая пропажа — снимают (аудит CarPlay 19.10).
+    func testBannerSurvivesABriefDropoutOfTheSameCamera() {
+        typealias T = CarPlayCameraBannerText
+        XCTAssertTrue(T.keepsThroughDropout(sameCamera: true, lostFor: 0, grace: 2))
+        XCTAssertTrue(T.keepsThroughDropout(sameCamera: true, lostFor: 1.9, grace: 2))
+        XCTAssertFalse(T.keepsThroughDropout(sameCamera: true, lostFor: 2, grace: 2))
+        XCTAssertFalse(T.keepsThroughDropout(sameCamera: false, lostFor: 0, grace: 2))
+    }
 }

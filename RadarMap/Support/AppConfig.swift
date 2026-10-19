@@ -1150,6 +1150,12 @@ nonisolated enum AppConfig {
     static let carPlayPanStep: CGFloat = 120
     /// Удержанная стрелка панорамы повторяет шаг с этим интервалом.
     static let carPlayPanHoldInterval: TimeInterval = 0.15
+    /// Дольше удержание не панорамирует (~100 шагов × 120 pt — несколько
+    /// кварталов): событие «отпустили» может не прийти.
+    static let carPlayPanHoldMaxSeconds: TimeInterval = 15
+    /// Сколько висит «Завершить поездку?» баннером на ходу; не ответили —
+    /// едем дальше (не меньше CPNavigationAlertMinimumDuration, 5 с).
+    static let carPlayEndConfirmSeconds: TimeInterval = 8
     /// Сколько висит подтверждение в машине («Поездка началась») — баннером
     /// навигатора с 18.10. Не меньше CPNavigationAlertMinimumDuration (5 с):
     /// короче система всё равно не покажет.
@@ -1243,6 +1249,9 @@ nonisolated enum AppConfig {
     /// Расстояние в баннере камеры переписывается не чаще этого: каждое
     /// обновление — сообщение в машину, а цифра меняется на каждом фиксе.
     static let carPlayCameraBannerUpdateSeconds: TimeInterval = 1
+    /// Сколько баннер камеры переживает мигание тревоги у той же камеры
+    /// (шум курса/точности), прежде чем сняться.
+    static let carPlayCameraBannerGraceSeconds: TimeInterval = 2
 
     // MARK: - Дороги и карта на движке
 

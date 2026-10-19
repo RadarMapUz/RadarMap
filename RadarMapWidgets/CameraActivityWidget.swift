@@ -17,10 +17,6 @@ private enum WTheme {
     static let secondary = Color.white.opacity(0.62)
 }
 
-/// Числа — по языку плашки, как `Formatting.numberLocale` в приложении:
-/// `String(format:)` без локали давал «1.4 км» с точкой и в русском.
-private let numberLocale = Locale(identifier: Bundle.main.preferredLocalizations.first ?? "ru")
-
 /// Единицы — через каталог: плашка живёт на экране блокировки в том же
 /// языке, что и приложение, и «м»/«км» строкой в коде на узбекском остались
 /// бы русскими.
@@ -28,8 +24,9 @@ private func format(_ meters: Double) -> String {
     guard meters >= 1000 else {
         return String(format: String(localized: "%lld м"), Int(meters.rounded()))
     }
-    let km = (meters / 1000).formatted(.number.precision(.fractionLength(1)).grouping(.never).locale(numberLocale))
-    return String(format: String(localized: "%@ км"), km)
+    // Число — общим правилом (Shared/NumberFormat): `String(format:)` без
+    // локали давал «1.4 км» с точкой и в русском.
+    return String(format: String(localized: "%@ км"), NumberFormat.decimal(meters / 1000))
 }
 
 struct CameraActivityWidget: Widget {

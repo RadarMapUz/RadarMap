@@ -7,20 +7,14 @@ import Foundation
 import CoreLocation
 
 enum Formatting {
-    /// Локаль чисел — по ЯЗЫКУ приложения, а не по региону телефона. При
-    /// русском интерфейсе и регионе «США» дробные шли с точкой: «64.3 км»,
-    /// «1.3 млн сум» посреди русского текста. И русский, и узбекский пишут
-    /// дробь через запятую.
-    nonisolated static let numberLocale = Locale(
-        identifier: Bundle.main.preferredLocalizations.first ?? "ru")
+    /// Локаль чисел — по ЯЗЫКУ приложения, а не по региону телефона: одно
+    /// правило с виджетами и часами (`Shared/NumberFormat`).
+    nonisolated static var numberLocale: Locale { NumberFormat.locale }
 
     /// «1,3» — дробное с одним знаком (или `digits`) в локали приложения.
     nonisolated static func decimal(_ value: Double, digits: Int = 1,
-                                    locale: Locale = numberLocale) -> String {
-        value.formatted(.number.precision(.fractionLength(digits))
-            .rounded(rule: .toNearestOrAwayFromZero)
-            .grouping(.never)
-            .locale(locale))
+                                    locale: Locale = NumberFormat.locale) -> String {
+        NumberFormat.decimal(value, digits: digits, locale: locale)
     }
 
     /// Заголовок дня в истории: «Сегодня» / «Вчера» / дата.

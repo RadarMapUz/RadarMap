@@ -69,11 +69,6 @@ nonisolated enum NavigationFlow {
         case show
         /// Закрыть: поехали (с телефона, автостартом) или маршрут сняли.
         case close
-        /// Машина уже едет: выбора нет — вести рекомендованным сразу, как
-        /// «Куда» на ходу (CarPlayTripPreview.shouldPreview). До 19.10 выбор
-        /// с телефона открывался и на скорости, а через 4 с принимался сам —
-        /// список вариантов мелькал перед водителем ни для чего.
-        case drive
     }
 
     /// Решение — по ПЕРЕХОДУ фазы, а не по фазе: машина может сама держать
@@ -87,6 +82,11 @@ nonisolated enum NavigationFlow {
     ///     промежуточная (маршрут уже есть, поездки ещё нет), и показывать по
     ///     ней выбор значило бы перебить решение «едем сразу» на ходу.
     ///   - moving: машина едет быстрее порога выбора (`carPlayPreviewMaxKmh`).
+    ///     Тогда маршрут с телефона в машине НЕ показывается выбором: до 19.10
+    ///     список вариантов открывался на скорости и через 4 с принимался сам
+    ///     (MovingWatch) — поездка стартовала без «Поехали» на телефоне, в том
+    ///     числе сразу после «я пассажир». Решает телефон: «Поехали» там —
+    ///     ведение в машине; машина водителю на ходу ничего не подсовывает.
     static func carChoice(from previous: Phase?, to phase: Phase,
                           showing: Bool, building: Bool, moving: Bool = false) -> CarChoice {
         guard !building else { return .none }
@@ -99,7 +99,7 @@ nonisolated enum NavigationFlow {
         }
         // Маршрут построен на телефоне, остался после автостопа или ждал,
         // пока машина подключится, — тот же выбор и в машине.
-        if phase == .choosing, previous != .choosing { return moving ? .drive : .show }
+        if phase == .choosing, previous != .choosing { return moving ? .none : .show }
         return .none
     }
 

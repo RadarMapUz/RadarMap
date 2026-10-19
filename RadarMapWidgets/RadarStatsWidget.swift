@@ -550,9 +550,6 @@ private struct RadarStatsView: View {
 
     // MARK: - Форматирование
 
-    /// Язык виджета — как `Formatting.numberLocale` в приложении.
-    private static let numberLocale = Locale(identifier: Bundle.main.preferredLocalizations.first ?? "ru")
-
     /// Километры. До сотни — с десятой (12,4 км читается точнее, чем 12),
     /// дальше без неё и с разделителем разрядов: «12400.0 km» в плитке
     /// «всего» выглядело сырым числом из отладки, а не пробегом.
@@ -561,11 +558,10 @@ private struct RadarStatsView: View {
         let value = meters / 1000
         guard value < 100 else {
             return String(format: String(localized: "%@ км"),
-                          value.formatted(.number.precision(.fractionLength(0)).locale(Self.numberLocale)))
+                          value.formatted(.number.precision(.fractionLength(0)).locale(NumberFormat.locale)))
         }
-        // По языку виджета: `String(format:)` без локали ставил точку — «12.4 км».
-        return String(format: String(localized: "%@ км"),
-                      value.formatted(.number.precision(.fractionLength(1)).grouping(.never).locale(Self.numberLocale)))
+        // Общим правилом: `String(format:)` без локали ставил точку — «12.4 км».
+        return String(format: String(localized: "%@ км"), NumberFormat.decimal(value))
     }
 
     private func duration(_ seconds: TimeInterval) -> String {

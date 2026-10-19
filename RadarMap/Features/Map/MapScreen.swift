@@ -228,7 +228,7 @@ struct MapScreen: View {
         // (то же правило, что у слоёв выше).
         .overlay { if scenePhase != .background { approachOverlay } }
         // Диплинки на статистику (DeepLink.parse):
-        // radarmap://trip/last — пуш «Итоги поездки», открывает ЭТУ поездку;
+        // radarmap://trip/<id> — пуш «Итоги поездки», открывает ЭТУ поездку;
         // radarmap://trip — виджет недели на локскрине,
         // radarmap://stats — домашний виджет километров.
         .onOpenURL { url in
@@ -244,13 +244,19 @@ struct MapScreen: View {
             showMyPlaces = false
             tripEndDetail = nil
             // Деталка — отдельный шит карты: поверх открытых Итогов не встанет.
-            if link == .lastTrip { map.showStats = false }
+            if link != .stats { map.showStats = false }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 switch link {
                 case .stats:
                     map.showStats = true
+                case .trip(let id):
+                    // Записи нет (склеена, стёрта) — обзор лучше пустого экрана.
+                    if let record = env.trip.history.first(where: { $0.id == id }) {
+                        tripEndDetail = record
+                    } else {
+                        map.showStats = true
+                    }
                 case .lastTrip:
-                    // Записи нет (история стёрта) — обзор лучше пустого экрана.
                     if let last = env.trip.history.first { tripEndDetail = last } else { map.showStats = true }
                 }
             }
@@ -931,7 +937,11 @@ struct MapScreen: View {
                         .padding(.horizontal, 12).padding(.vertical, 6)
                         .background(.ultraThinMaterial, in: Capsule())
                     case .driving:
-                        DrivingHintChip { toggleTrip() }
+                        // Только старт: подсказка живёт до следующего фикса,
+                        // и второе касание через toggle завершало бы поездку.
+                        DrivingHintChip {
+                            if !env.location.isTripActive { toggleTrip() }
+                        }
                     case .destinations:
                         // Куда поедем — одной строкой и только когда есть
                         // уверенная догадка. Два круга Дом/Работа стояли здесь

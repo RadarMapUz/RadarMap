@@ -30,8 +30,12 @@ nonisolated enum CarPlayBannerPolicy {
         case suggestion
         /// «Радар ещё на месте?» — подождёт и вернётся.
         case question
-        /// Объезд пробки — уступает только камере.
+        /// Объезд пробки — уступает только камере и запросу водителя.
         case detour
+        /// Ответ на касание самого водителя («Завершить поездку?»): его не
+        /// перебивают ни вопрос, ни объезд — пропавший вопрос читался бы как
+        /// «нажатие не сработало». Не возвращается: устаревший не нужен.
+        case request
         /// Камера впереди — всегда сверху.
         case camera
 
@@ -47,6 +51,7 @@ nonisolated enum CarPlayBannerPolicy {
             case .suggestion: return "предложение"
             case .question:   return "вопрос"
             case .detour:     return "объезд"
+            case .request:    return "запрос водителя"
             case .camera:     return "камера"
             }
         }

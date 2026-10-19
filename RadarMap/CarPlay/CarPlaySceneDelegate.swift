@@ -700,9 +700,6 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         case .close:
             endPreview(start: false, keepRoute: true,
                        reason: phase == .free ? "маршрут снят не в машине" : "поехали не из машины")
-        case .drive:
-            Log.carplay.notice("маршрут с телефона на ходу — ведём без выбора")
-            if !env.location.isTripActive { env.location.startTrip() }
         }
     }
 
@@ -1199,7 +1196,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 secondaryAction: CPAlertAction(title: String(localized: "Продолжить"),
                                                style: .cancel) { _ in },
                 duration: AppConfig.carPlayEndConfirmSeconds)
-            if banners.show(banner, kind: .question) { return }
+            if banners.show(banner, kind: .request) { return }
         }
         let alert = CPAlertTemplate(
             titleVariants: [title],
@@ -1531,18 +1528,20 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     /// Ближайшие заведения вида списком: тап — маршрут.
-    /// Идёт действие водителя, которое ждёт сеть или поиск (список рядом,
-    /// постройка маршрута). Второе касание в эти секунды — не новое
-    /// намерение, а «не сработало?»: без флага оно открывало второй список
-    /// или строило маршрут дважды и гоняло флаг выбора (аудит CarPlay 19.10).
-    private var actionInFlight = false
+    /// Действия водителя, которые ждут сеть или поиск. ПОВТОР того же
+    /// касания в эти секунды — «не сработало?», а не новое намерение: без
+    /// этого он открывал второй список или строил маршрут дважды (аудит
+    /// CarPlay 19.10). Другое касание (передумал: «АЗС» → «Дом») проходит.
+    private var actionsInFlight: Set<String> = []
 
     private func presentNearest(_ kind: Venue.Kind) {
-        guard !actionInFlight else { return Log.carplay.notice("повторное касание — список уже ищется") }
-        actionInFlight = true
+        let key = "nearest:\(kind.rawValue)"
+        guard actionsInFlight.insert(key).inserted else {
+            return Log.carplay.notice("повторное касание — список уже ищется")
+        }
         Task { @MainActor [weak self] in
             guard let self else { return }
-            defer { self.actionInFlight = false }
+            defer { self.actionsInFlight.remove(key) }
             let found = await search.nearest(kind)
             guard !found.isEmpty else {
                 return showAlert(title: String(format: String(localized: "%@ рядом не нашлось"), kind.title),
@@ -1653,11 +1652,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     /// Строим маршрут и сразу едем: за рулём выбирать из альтернатив некогда.
     private func route(to place: SavedPlace, allowPreview: Bool = true) {
-        guard !actionInFlight else { return Log.carplay.notice("повторное касание — маршрут уже строится") }
-        actionInFlight = true
+        let key = "route:\(place.lat),\(place.lon)"
+        guard actionsInFlight.insert(key).inserted else {
+            return Log.carplay.notice("повторное касание — маршрут уже строится")
+        }
         Task { @MainActor [weak self] in
             guard let self else { return }
-            defer { self.actionInFlight = false }
+            defer { self.actionsInFlight.remove(key) }
             // Грубая точка фонового режима сюда не годится: маршрут от неё
             // начинается за километры (plan_drive_complaints.md, Ж5).
             guard let from = await env.location.awaitPreciseCoordinate() else {

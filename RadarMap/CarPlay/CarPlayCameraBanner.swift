@@ -78,6 +78,10 @@ final class CarPlayCameraBanner {
     private var limit: (cameraID: Int, value: Int?)?
     /// Когда тревога пропала при показанном баннере (пауза до снятия).
     private var lostSince: Date?
+    /// Снятие по истечении паузы. Само `update` по времени не перезапустится:
+    /// его зовёт наблюдение, а без маршрута и без новых фиксов наблюдать
+    /// нечего — баннер (`duration: 0`) висел бы до смены ближайшей камеры.
+    private var graceTask: Task<Void, Never>?
 
     private var env: AppEnvironment { .shared }
 
@@ -88,19 +92,32 @@ final class CarPlayCameraBanner {
             // Проехали или тревога снята: баннер уходит, следующий подъезд —
             // заново, в том числе к той же камере. Короткое мигание тревоги
             // у той же камеры баннер не трогает.
-            if alert != nil {
+            if let alert {
                 let now = Date()
                 let since = lostSince ?? now
                 lostSince = since
                 if CarPlayCameraBannerText.keepsThroughDropout(
                     sameCamera: location.nearestCamera?.id == cameraID,
-                    lostFor: now.timeIntervalSince(since)) { return }
+                    lostFor: now.timeIntervalSince(since)) {
+                    if graceTask == nil {
+                        graceTask = Task { @MainActor [weak self, weak banners] in
+                            await Task.pause(seconds: AppConfig.carPlayCameraBannerGraceSeconds)
+                            guard !Task.isCancelled, let self, self.alert === alert,
+                                  self.lostSince != nil else { return }
+                            banners?.dismiss(alert)
+                            self.clear()
+                        }
+                    }
+                    return
+                }
             }
             if let alert { banners.dismiss(alert) }
             clear()
             return
         }
         lostSince = nil
+        graceTask?.cancel()
+        graceTask = nil
 
         if let alert, cameraID == camera.id {
             let showing = banners.isShowing(alert)
@@ -165,5 +182,7 @@ final class CarPlayCameraBanner {
         updatedAt = .distantPast
         limit = nil
         lostSince = nil
+        graceTask?.cancel()
+        graceTask = nil
     }
 }

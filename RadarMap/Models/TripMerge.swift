@@ -38,6 +38,10 @@ nonisolated enum TripMerge {
         let existingStops: Int
         /// Длительность прошлой поездки (со всеми её стоянками).
         let previousDuration: TimeInterval
+        /// Сколько уже ехали до старта поездки (автостарт поймал езду поздно,
+        /// CoreMotion знает её начало): за это время машина честно уехала от
+        /// точки финиша дальше 400 м (S19, 20.10). 0 — не знаем.
+        var lateStartSeconds: TimeInterval = 0
     }
 
     /// Продолжать прошлую поездку вместо новой записи?
@@ -46,7 +50,12 @@ nonisolated enum TripMerge {
         if context.endedManually { return false }
         // Стартовали в другом месте: телефон приехал сюда не за рулём этой машины
         // (пассажиром, пешком, на такси) — склеивать нечего.
-        if context.metersFromPreviousEnd > AppConfig.tripMergeMaxMeters { return false }
+        // Поздний автостарт: дальше — ровно настолько, насколько машина
+        // успела уехать с начала езды (с потолком).
+        let reach = AppConfig.tripMergeMaxMeters
+            + min(max(0, context.lateStartSeconds) * AppConfig.tripMergeLateStartSpeedMps,
+                  AppConfig.tripMergeLateStartMaxMeters)
+        if context.metersFromPreviousEnd > reach { return false }
         if context.crossesDay { return false }
         // Страховка от «одна поездка на весь день»: и по числу заездов, и по времени.
         if context.existingStops >= AppConfig.tripMergeMaxStops { return false }
@@ -81,8 +90,12 @@ nonisolated enum TripMerge {
     /// Можно ли объединить `next` с предыдущей по времени `previous`.
     /// Ворота те же, что у автосклейки, кроме намерения: само объединение —
     /// уже намерение, и «Завершить» его не блокирует.
+    /// `maxMeters` — от финиша до старта: ручное объединение — уже намерение,
+    /// и поздний автостарт (старт в 800 м от магазина) его не блокирует (S19);
+    /// предложение в Итогах держит строгий предел автосклейки.
     static func manualMergeAllowed(previous: TripRecord, next: TripRecord,
-                                   calendar: Calendar = .current) -> Bool {
+                                   calendar: Calendar = .current,
+                                   maxMeters: CLLocationDistance = AppConfig.tripMergeMaxMeters) -> Bool {
         guard next.startedAt >= previous.endedAt else { return false }
         guard calendar.isDate(previous.endedAt, inSameDayAs: next.startedAt) else { return false }
         guard next.startedAt.timeIntervalSince(previous.endedAt)
@@ -92,7 +105,7 @@ nonisolated enum TripMerge {
         // решают только день и пауза.
         if let end = previous.endCoordinate, let start = next.trackPoints.first {
             guard GeoMath.fastDistance(end.latitude, end.longitude, start.lat, start.lon)
-                <= AppConfig.tripMergeMaxMeters else { return false }
+                <= maxMeters else { return false }
         }
         // Те же страховки «одна поездка на весь день», что у автосклейки.
         guard (previous.stops?.count ?? 0) + (next.stops?.count ?? 0)

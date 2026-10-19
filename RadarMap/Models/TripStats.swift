@@ -388,8 +388,8 @@ final class TripStats {
     func canMergeWithPrevious(id: Double) -> Bool {
         guard let index = history.firstIndex(where: { $0.id == id }),
               index + 1 < history.count else { return false }
-        return TripMerge.manualMergeAllowed(previous: history[index + 1],
-                                            next: history[index])
+        return TripMerge.manualMergeAllowed(previous: history[index + 1], next: history[index],
+                                            maxMeters: AppConfig.tripManualMergeMaxMeters)
     }
 
     /// Объединить запись с предыдущей — ручная склейка там, где автоматика не
@@ -399,7 +399,8 @@ final class TripStats {
         guard let index = history.firstIndex(where: { $0.id == id }),
               index + 1 < history.count else { return }
         let next = history[index], previous = history[index + 1]
-        guard TripMerge.manualMergeAllowed(previous: previous, next: next) else { return }
+        guard TripMerge.manualMergeAllowed(previous: previous, next: next,
+                                           maxMeters: AppConfig.tripManualMergeMaxMeters) else { return }
         let merged = TripMerge.merged(previous: previous, next: next)
         // Дни: снять обе ноги, положить склейку — но только если строки обеих
         // на месте (смена пояса могла увести ключ; unfolded тогда промахнётся,

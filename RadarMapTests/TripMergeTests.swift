@@ -18,11 +18,12 @@ final class TripMergeTests: XCTestCase {
                          nearSaved: Bool = false,
                          crossesDay: Bool = false,
                          stops: Int = 0,
-                         previous: TimeInterval = 30 * 60) -> TripMerge.Context {
+                         previous: TimeInterval = 30 * 60,
+                         lateStart: TimeInterval = 0) -> TripMerge.Context {
         TripMerge.Context(stopDuration: stop, metersFromPreviousEnd: meters,
                           endedManually: manual, stopNearSavedPlace: nearSaved,
                           crossesDay: crossesDay, existingStops: stops,
-                          previousDuration: previous)
+                          previousDuration: previous, lateStartSeconds: lateStart)
     }
 
     // MARK: - Склеиваем
@@ -53,6 +54,20 @@ final class TripMergeTests: XCTestCase {
     func testStartFarFromPreviousEndIsNewTrip() {
         XCTAssertFalse(TripMerge.shouldMerge(context(stop: 60, meters: 900)),
                        "телефон приехал сюда не за рулём этой машины")
+    }
+
+    /// Поздний автостарт (S19): CoreMotion видит езду уже минуту, машина за
+    /// это время уехала от магазина на 800 м — та же поездка. Без минуты
+    /// езды те же 800 м — другая; 2,5 км — дальше потолка в любом случае.
+    func testLateAutostartAfterAShopStillMerges() {
+        XCTAssertTrue(TripMerge.shouldMerge(context(stop: 10 * 60, meters: 800, lateStart: 60)))
+        XCTAssertFalse(TripMerge.shouldMerge(context(stop: 10 * 60, meters: 800, lateStart: 0)))
+        XCTAssertFalse(TripMerge.shouldMerge(context(stop: 10 * 60, meters: 800, lateStart: 20)),
+                       "за 20 с езды на 800 м не уехать")
+        XCTAssertFalse(TripMerge.shouldMerge(context(stop: 10 * 60, meters: 2500, lateStart: 600)),
+                       "потолок: за десять минут «езды» склейку не вытянуть")
+        XCTAssertFalse(TripMerge.shouldMerge(context(stop: 10 * 60, meters: 800, manual: true, lateStart: 60)),
+                       "ручное «Завершить» по-прежнему сильнее")
     }
 
     func testHalfHourAtHomeIsNewTrip() {
@@ -326,7 +341,16 @@ final class TripMergeTests: XCTestCase {
                          from: farPoint)
         XCTAssertFalse(TripMerge.manualMergeAllowed(previous: previous, next: far,
                                                     calendar: utc),
-                       "старт в 900 м от финиша — телефон приехал туда не этой машиной")
+                       "предложение в Итогах: старт в 900 м — строгий предел автосклейки")
+        // Ручное объединение — намерение: поздний автостарт в 900 м его не
+        // блокирует (S19); 2,5 км — уже точно разные поездки.
+        XCTAssertTrue(TripMerge.manualMergeAllowed(previous: previous, next: far, calendar: utc,
+                                                   maxMeters: AppConfig.tripManualMergeMaxMeters))
+        let farther = record(start: base.addingTimeInterval(45 * 60), minutes: 15, km: 4,
+                             from: GeoMath.destination(from: previous.endCoordinate!, bearing: 90,
+                                                       distanceMeters: 2500))
+        XCTAssertFalse(TripMerge.manualMergeAllowed(previous: previous, next: farther, calendar: utc,
+                                                    maxMeters: AppConfig.tripManualMergeMaxMeters))
     }
 
     func testMergedKeepsTotalsAndGapBecomesStop() {

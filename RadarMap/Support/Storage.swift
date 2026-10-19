@@ -40,6 +40,7 @@ enum Storage {
         case roadsIndexLastCheck    // дата последней проверки индекса дорожных тайлов
         case hotspotsLastCheck      // дата последней проверки горячих точек треног
         case hasCompletedOnboarding // онбординг пройден (@AppStorage)
+        case whatsNewEdition        // какой выпуск «Что нового» уже показан (WhatsNew.edition)
         case reviewAskedVersion     // версия, в которой уже просили оценку App Store
         case hintTogglesShown       // разовая подсказка «долгий тап — переключатели» показана
         case hintRadarShown         // разовая подсказка «жёлтая кнопка — радар» показана

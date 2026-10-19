@@ -23,6 +23,8 @@ struct RootView: View {
     /// «Открыть карту на телефоне» при подключённом CarPlay (пассажиру нужны
     /// настройки и Итоги). Память сцены, не настройка: живёт до конца сессии.
     @State private var phoneMapOverride = false
+    /// «Что нового» после обновления — один раз на выпуск (WhatsNew).
+    @State private var showsWhatsNew = false
     #if DEBUG
     /// Скриншот-автоматизация: CarPlay-экран на телефоне (симулятор не даёт
     /// открыть CarPlay-дисплей без ручного клика по меню).
@@ -64,6 +66,8 @@ struct RootView: View {
                     // смене флага не меняется. Без этого ПЕРВАЯ сессия жила в
                     // тихом фоне: без опроса отметок, без CoreMotion и без
                     // отметки «экран на виду».
+                    // Прошедший онбординг «нового» не видит: ему всё рассказали.
+                    Storage.set(WhatsNew.edition, for: .whatsNewEdition)
                     env.startDrivingServices()
                     env.location.setForeground(true)
                     env.setPhoneSceneActive(true)
@@ -77,6 +81,18 @@ struct RootView: View {
         // и конец поездки (единственный триггер) никто не видел — просьба об
         // оценке была недостижима ровно для самого лояльного сегмента.
         .modifier(ReviewPromptModifier())
+        .sheet(isPresented: $showsWhatsNew, onDismiss: {
+            Storage.set(WhatsNew.edition, for: .whatsNewEdition)
+        }) { WhatsNewSheet() }
+        .task {
+            // Пауза — чтобы лист не наложился на появление карты и запросы
+            // разрешений первого кадра.
+            await Task.pause(seconds: 1.5)
+            if WhatsNew.shouldShow(seenEdition: Storage.int(.whatsNewEdition),
+                                   onboarded: hasCompletedOnboarding && !Self.forceOnboarding) {
+                showsWhatsNew = true
+            }
+        }
         .motionAnimation(Motion.standard, value: env.isCarPlayConnected)
         // Вышли из машины — следующее подключение снова начнёт с экрана передачи.
         .onChange(of: env.isCarPlayConnected) { _, connected in

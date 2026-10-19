@@ -68,6 +68,24 @@ struct OnboardingView: View {
                 Color.clear.frame(height: 12)
             }
         }
+        // «Пропустить» — к разрешениям, а не мимо них (7.5): три страницы
+        // рассказа можно пролистать, а без доступа к геопозиции приложение
+        // не предупредит ни о чём.
+        .overlay(alignment: .topTrailing) {
+            if page < lastPage {
+                Button {
+                    withMotion { page = lastPage }
+                } label: {
+                    Text("Пропустить")
+                        .font(.rounded(15, .semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                        .padding(.horizontal, 16)
+                        .tapTarget()
+                }
+                .padding(.top, 4)
+                .transition(.opacity)
+            }
+        }
     }
 
     // MARK: - Страницы

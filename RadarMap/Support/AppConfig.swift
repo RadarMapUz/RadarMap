@@ -727,6 +727,9 @@ nonisolated enum AppConfig {
     /// продержаться (второй пересчёт не раньше чем через минуту).
     nonisolated static let commuteGhostSlackHysteresisMinutes = 1.5
     nonisolated static let commuteGhostSlackHoldSeconds: TimeInterval = 60
+    /// Маршрут считается своей дорогой на работу (8.8.11), если столько его
+    /// длины лежит у линии варианта (и финиш — у её конца).
+    nonisolated static let commuteRouteOverlap = 0.8
     /// Пробки из `now.json` — только дальше этого впереди по линии (8.8.10):
     /// ближе пробку уже несёт сегодняшний темп.
     nonisolated static let commuteGhostJamAheadMeters: Double = 2000

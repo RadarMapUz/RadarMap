@@ -301,7 +301,18 @@ final class RouteService {
     }
     var remainingTime: TimeInterval {
         guard let selected, selected.distance > 0 else { return 0 }
+        // Маршрут по своей дороге на работу (8.8.11) — остаток по своим
+        // прошлым поездкам (призрак): сами улучшаются прибытие в панели,
+        // CarPlay и «Поделиться прибытием».
+        if let personal = personalRemaining?() { return personal }
         return selected.travelTime * remainingDistance / selected.distance + remainingTrafficDelay
+    }
+
+    /// Личный остаток пути (8.8.11), подаёт AppEnvironment из призрака дороги
+    /// на работу; nil — маршрут считает сам (линейная доля + пробки).
+    @ObservationIgnored var personalRemaining: (() -> TimeInterval?)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: personalRemaining,
+                                               "RouteService.personalRemaining") }
     }
 
     /// Пересчитать задержку пробками на остатке пути: на новом наборе пробок

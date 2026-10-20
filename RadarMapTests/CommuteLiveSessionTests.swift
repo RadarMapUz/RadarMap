@@ -105,6 +105,46 @@ final class CommuteLiveSessionTests: XCTestCase {
         XCTAssertEqual(old.remaining, usual.remaining, accuracy: 1, "файл старше 10 мин — данных нет")
     }
 
+    private func line(_ meters: [Double], north: Double = 0) -> [CLLocationCoordinate2D] {
+        meters.map { x in
+            let (la, lo) = coordinate(x, north: north)
+            return CLLocationCoordinate2D(latitude: la, longitude: lo)
+        }
+    }
+
+    /// Маршрут по своей дороге на работу (8.8.11): у линии варианта и финиш у
+    /// её конца — совпадает; дальше работы или параллельной улицей — нет.
+    func testRouteMatchesOnlyAlongTheVariantToItsEnd() throws {
+        let session = try XCTUnwrap(CommuteLiveSession(variants: [variant()], weekend: false,
+                                                        departure: start, calendar: utc))
+        XCTAssertEqual(session.matchingCandidates(route: line(Array(stride(from: 0.0, through: 4000, by: 100)))), [0])
+        XCTAssertTrue(session.matchingCandidates(route: line(Array(stride(from: 0.0, through: 6000, by: 100)))).isEmpty,
+                      "финиш в 2 км за работой — уже не дорога на работу")
+        XCTAssertTrue(session.matchingCandidates(route: line(Array(stride(from: 0.0, through: 4000, by: 100)),
+                                                             north: 300)).isEmpty, "параллельная улица")
+    }
+
+    /// Остаток маршрута по призраку (8.8.11): маршрут совпал — прогноз ведущего
+    /// варианта; маршрут сняли — снова nil, и маршрут считает сам.
+    @MainActor
+    func testRouteRemainingComesFromTheGhost() throws {
+        let service = CommuteLiveService()
+        service.start(direction: .toWork, variants: [variant()], departure: start, calendar: utc)
+        var t = start
+        for s in stride(from: 0.0, through: 2000, by: 50) {
+            let (la, lo) = coordinate(s)
+            service.note(CLLocationCoordinate2D(latitude: la, longitude: lo), accuracy: 10, at: t)
+            t = t.addingTimeInterval(5)
+        }
+        XCTAssertNil(service.routeRemaining(now: t), "маршрута нет")
+        let key = NSObject()
+        service.noteRoute(key: ObjectIdentifier(key), coordinates: line(Array(stride(from: 0.0, through: 4000, by: 100))))
+        let remaining = try XCTUnwrap(service.routeRemaining(now: t))
+        XCTAssertEqual(remaining, 200, accuracy: 30, "оставшиеся 2 км по 20 с на 200 м")
+        service.noteRoute(key: nil, coordinates: nil)
+        XCTAssertNil(service.routeRemaining(now: t))
+    }
+
     func testOnScheduleIsUsual() throws {
         var session = try XCTUnwrap(CommuteLiveSession(variants: [variant()], weekend: false,
                                                         departure: start, calendar: utc))

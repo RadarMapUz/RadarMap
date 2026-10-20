@@ -164,6 +164,25 @@ nonisolated struct CommuteLiveSession: Sendable {
         return Output(forecast: forecast, isOff: false, remainingMeters: remainingMeters, hasLead: true)
     }
 
+    /// Варианты, по которым идёт построенный маршрут (8.8.11): не меньше
+    /// `commuteRouteOverlap` маршрута у линии варианта и финиш маршрута у
+    /// конца линии. Тогда остаток призрака — по своим прошлым поездкам —
+    /// честнее линейной доли маршрута; маршрут дальше работы (заехать после
+    /// неё) — уже не дорога на работу, и остаток призрака его не покрыл бы.
+    func matchingCandidates(route: [CLLocationCoordinate2D]) -> Set<Int> {
+        guard let finish = route.last else { return [] }
+        var result = Set<Int>()
+        for (i, c) in candidates.enumerated() {
+            guard let end = c.coordinates.last,
+                  GeoMath.fastDistance(finish.latitude, finish.longitude, end.latitude, end.longitude)
+                      <= AppConfig.commuteGhostStartRadiusMeters,
+                  DetourAdvisor.overlap(route, with: c.coordinates) >= AppConfig.commuteRouteOverlap
+            else { continue }
+            result.insert(i)
+        }
+        return result
+    }
+
     /// Пробки сверх обычного на участках дальше `commuteGhostJamAheadMeters`
     /// впереди (8.8.10): ближе их уже несёт сегодняшний темп ρ — сложить оба
     /// значило бы посчитать одну пробку дважды. Файл старше 10 мин — ноль.

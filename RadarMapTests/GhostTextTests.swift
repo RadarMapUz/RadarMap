@@ -75,3 +75,27 @@ final class GhostLatePlaqueTests: XCTestCase {
                        "под оповещением о камере ждёт")
     }
 }
+
+/// «Почему дольше» одним словом (8.8.12): пробка или стояли — только когда
+/// причина видна; без неё — без слова.
+final class GhostReasonTests: XCTestCase {
+    func testReasonOnlyWhenVisible() {
+        XCTAssertNil(CommuteGhost.reason(delta: 30, sawJam: true, longestStand: 600), "меньше минуты — не «дольше»")
+        XCTAssertEqual(CommuteGhost.reason(delta: 360, sawJam: true, longestStand: 0), .jam)
+        XCTAssertEqual(CommuteGhost.reason(delta: 360, sawJam: false, longestStand: AppConfig.commuteLongStandSeconds), .stood)
+        XCTAssertNil(CommuteGhost.reason(delta: 360, sawJam: false, longestStand: 90), "светофор — не «стояли»")
+    }
+
+    func testWordJoinsTheTail() throws {
+        try XCTSkipUnless(Bundle.main.preferredLocalizations.first == "ru", "слова — по русскому каталогу")
+        let ghost = CommuteLiveService.Display(direction: .toWork, arrival: Date(timeIntervalSince1970: 1_800_000_000),
+                                               deltaMinutes: 6, slack: nil, reason: .jam)
+        XCTAssertEqual(GhostText.tail(ghost), "+6 мин к обычному · пробка")
+        var usual = ghost
+        usual.reason = .stood
+        XCTAssertEqual(GhostText.tail(usual), "+6 мин к обычному · стояли")
+        let calm = CommuteLiveService.Display(direction: .toWork, arrival: ghost.arrival, deltaMinutes: 0,
+                                              slack: nil, reason: .jam)
+        XCTAssertEqual(GhostText.tail(calm), "как обычно", "как обычно — без причины")
+    }
+}

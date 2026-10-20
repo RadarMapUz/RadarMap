@@ -17,8 +17,18 @@ enum GhostText {
         return "\(place) · \(tail(ghost))"
     }
 
-    /// Хвост без места — для тесных мест (плитка CarPlay).
+    /// Хвост без места — для тесных мест (плитка CarPlay). Почему дольше —
+    /// одним словом через точку (8.8.12): «+6 мин к обычному · пробка».
     static func tail(_ ghost: CommuteLiveService.Display) -> String {
+        let base = core(ghost)
+        guard let reason = ghost.reason, ghost.deltaMinutes >= 1 || ghost.slack?.shown == .late else { return base }
+        switch reason {
+        case .jam:   return "\(base) · " + String(localized: "пробка")
+        case .stood: return "\(base) · " + String(localized: "стояли")
+        }
+    }
+
+    private static func core(_ ghost: CommuteLiveService.Display) -> String {
         if let slack = ghost.slack {
             switch slack.shown {
             case .comfortable where slack.minutes >= 60: return String(localized: "с запасом больше часа")

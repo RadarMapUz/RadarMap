@@ -198,6 +198,21 @@ nonisolated enum CommuteGhost {
         return previous + (raw - previous) * AppConfig.commuteGhostPaceSmoothing
     }
 
+    // MARK: - Почему дольше (8.8.12)
+
+    /// Одно слово к «+6 мин»: пробка (на пройденном участке рёбра `now.json`
+    /// были хуже обычного разброса) или стояли (одна стоянка от 3 мин).
+    /// Причины не видно — слова нет: догадка, проданная как факт, хуже
+    /// молчания (то же правило, что у подсказок о треногах).
+    enum Reason: String, Equatable, Sendable { case jam, stood }
+
+    static func reason(delta: TimeInterval, sawJam: Bool, longestStand: TimeInterval) -> Reason? {
+        guard delta >= 60 else { return nil }
+        if sawJam { return .jam }
+        if longestStand >= AppConfig.commuteLongStandSeconds { return .stood }
+        return nil
+    }
+
     // MARK: - Прогноз
 
     struct Forecast: Equatable, Sendable {

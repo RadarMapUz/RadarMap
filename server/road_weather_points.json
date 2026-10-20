@@ -1,0 +1,162 @@
+{
+  "v": 1,
+  "about": "Точки погоды на трассах (этап 19.1): перевалы и равнинные участки, где зимой бывают снег, гололёд, туман и ветер. Координата — на оси дороги: взята у снапнутой камеры базы (номер в check), высота — по рельефу open-meteo. r — полудлина участка, который точка представляет, м. group — один перевал из нескольких точек: телефон говорит о нём один раз. where — место в предложном падеже для фразы «<where> туман». Каждая точка ждёт проверки владельцем: открыть на карте, убедиться, что точка на трассе и участок верный, и только тогда убрать check.",
+  "points": [
+    {
+      "id": "kamchik-approach",
+      "group": "kamchik",
+      "kind": "pass",
+      "road": "A373",
+      "lat": 41.143684,
+      "lon": 70.404871,
+      "r": 6000,
+      "name": {"ru": "Перевал Камчик", "uz": "Qamchiq dovoni"},
+      "where": {"ru": "На перевале Камчик", "uz": "Qamchiq dovonida"},
+      "check": "проверить: нижний подъём с ташкентской стороны, км 127,5 (Бешкуль, камера 3017), ~1240 м"
+    },
+    {
+      "id": "kamchik-north",
+      "group": "kamchik",
+      "kind": "pass",
+      "road": "A373",
+      "lat": 41.11173,
+      "lon": 70.49804,
+      "r": 5000,
+      "name": {"ru": "Перевал Камчик", "uz": "Qamchiq dovoni"},
+      "where": {"ru": "На перевале Камчик", "uz": "Qamchiq dovonida"},
+      "check": "проверить: северный склон, серпантин под тоннелями, км 138–139 (камера 952), ~1800 м"
+    },
+    {
+      "id": "kamchik-tunnel",
+      "group": "kamchik",
+      "kind": "pass",
+      "road": "A373",
+      "lat": 41.08438,
+      "lon": 70.54011,
+      "r": 3000,
+      "name": {"ru": "Перевал Камчик", "uz": "Qamchiq dovoni"},
+      "where": {"ru": "На перевале Камчик", "uz": "Qamchiq dovonida"},
+      "check": "проверить: вершина и тоннели (Резак, 2-й тоннель), км 149,8 (камера 956), ~2180 м — самая высокая из точек"
+    },
+    {
+      "id": "kamchik-south",
+      "group": "kamchik",
+      "kind": "pass",
+      "road": "A373",
+      "lat": 41.03802,
+      "lon": 70.5801,
+      "r": 6000,
+      "name": {"ru": "Перевал Камчик", "uz": "Qamchiq dovoni"},
+      "where": {"ru": "На перевале Камчик", "uz": "Qamchiq dovonida"},
+      "check": "проверить: южный склон к Резаксаю, км 157 (камера 945), ~1860 м"
+    },
+    {
+      "id": "takhtakaracha-north",
+      "group": "takhtakaracha",
+      "kind": "pass",
+      "road": "M39",
+      "lat": 39.31077,
+      "lon": 66.94308,
+      "r": 5000,
+      "name": {"ru": "Перевал Тахтакарача", "uz": "Taxtaqoracha dovoni"},
+      "where": {"ru": "На перевале Тахтакарача", "uz": "Taxtaqoracha dovonida"},
+      "check": "проверить: северный склон, Омонкутан (камера 1789), ~1370 м"
+    },
+    {
+      "id": "takhtakaracha-pass",
+      "group": "takhtakaracha",
+      "kind": "pass",
+      "road": "M39",
+      "lat": 39.29,
+      "lon": 66.932,
+      "r": 3000,
+      "name": {"ru": "Перевал Тахтакарача", "uz": "Taxtaqoracha dovoni"},
+      "where": {"ru": "На перевале Тахтакарача", "uz": "Taxtaqoracha dovonida"},
+      "check": "проверить: вершина — НЕ с камеры: самая высокая точка рельефа (~1670 м) на прямой Омонкутан — Кайнар; поставить на ось M39 у вершины"
+    },
+    {
+      "id": "takhtakaracha-south",
+      "group": "takhtakaracha",
+      "kind": "pass",
+      "road": "M39",
+      "lat": 39.23351,
+      "lon": 66.90503,
+      "r": 5000,
+      "name": {"ru": "Перевал Тахтакарача", "uz": "Taxtaqoracha dovoni"},
+      "where": {"ru": "На перевале Тахтакарача", "uz": "Taxtaqoracha dovonida"},
+      "check": "проверить: южный склон, Кайнар, км 1147 (камера 1152), ~890 м"
+    },
+    {
+      "id": "m39-chinaz",
+      "group": "m39-chinaz",
+      "kind": "plain",
+      "road": "M39",
+      "lat": 40.949,
+      "lon": 68.74544,
+      "r": 10000,
+      "name": {"ru": "Трасса M39 у Чиназа", "uz": "M39 trassasi, Chinoz"},
+      "where": {"ru": "На трассе у Чиназа", "uz": "Chinoz yaqinidagi trassada"},
+      "check": "проверить: пойма Сырдарьи у моста, Яллама (камера 2950); туманы осенью и зимой"
+    },
+    {
+      "id": "m39-mirzachul",
+      "group": "m39-mirzachul",
+      "kind": "plain",
+      "road": "M39",
+      "lat": 40.47173,
+      "lon": 68.27442,
+      "r": 15000,
+      "name": {"ru": "Трасса M39, Мирзачуль", "uz": "M39 trassasi, Mirzachoʻl"},
+      "where": {"ru": "На трассе в Мирзачуле", "uz": "Mirzachoʻl trassasida"},
+      "check": "проверить: Голодная степь, Акалтын, км 931 (камера 1875)"
+    },
+    {
+      "id": "m39-bulungur",
+      "group": "m39-bulungur",
+      "kind": "plain",
+      "road": "M39",
+      "lat": 39.78648,
+      "lon": 67.3103,
+      "r": 12000,
+      "name": {"ru": "Трасса M39 у Булунгура", "uz": "M39 trassasi, Bulungʻur"},
+      "where": {"ru": "На трассе у Булунгура", "uz": "Bulungʻur yaqinidagi trassada"},
+      "check": "проверить: долина Зарафшана перед Самаркандом, км 1056 (камера 1521)"
+    },
+    {
+      "id": "a373-ahangaran",
+      "group": "a373-ahangaran",
+      "kind": "plain",
+      "road": "A373",
+      "lat": 40.90897,
+      "lon": 69.6246,
+      "r": 12000,
+      "name": {"ru": "Трасса A373 у Ахангарана", "uz": "A373 trassasi, Ohangaron"},
+      "where": {"ru": "На трассе у Ахангарана", "uz": "Ohangaron yaqinidagi trassada"},
+      "check": "проверить: равнина Ташкент — Ангрен, км 48 (камера 3029)"
+    },
+    {
+      "id": "a373-buvayda",
+      "group": "a373-buvayda",
+      "kind": "plain",
+      "road": "A373",
+      "lat": 40.70109,
+      "lon": 71.03131,
+      "r": 15000,
+      "name": {"ru": "Трасса A373 у Бувайды", "uz": "A373 trassasi, Buvayda"},
+      "where": {"ru": "На трассе у Бувайды", "uz": "Buvayda yaqinidagi trassada"},
+      "check": "проверить: дно Ферганской долины между Папом и Учкуприком, км 214–215 (камера 416)"
+    },
+    {
+      "id": "a373-shahrixon",
+      "group": "a373-shahrixon",
+      "kind": "plain",
+      "road": "A373",
+      "lat": 40.72598,
+      "lon": 72.04092,
+      "r": 15000,
+      "name": {"ru": "Трасса A373 у Шахрихана", "uz": "A373 trassasi, Shahrixon"},
+      "where": {"ru": "На трассе у Шахрихана", "uz": "Shahrixon yaqinidagi trassada"},
+      "check": "проверить: Ферганская долина перед Андижаном, км 308,5 (камера 186)"
+    }
+  ]
+}

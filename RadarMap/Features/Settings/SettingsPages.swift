@@ -113,6 +113,22 @@ struct AlertSettingsPage: View {
             }
 
             Section {
+                Toggle("Погода на перевалах", isOn: $settings.roadWeatherAlerts)
+                    .onChange(of: settings.roadWeatherAlerts) { _, _ in
+                        Task { await env.roadWeather.refresh() }
+                    }
+                SettingsExplainer([
+                    "Перед перевалами Камчик и Тахтакарача и на равнинных участках трасс M39 и A373 приложение один раз скажет, если там снег, гололёд, туман или сильный ветер: «На перевале Камчик туман».",
+                    "Фраза звучит за 20–40 км, по маршруту или по ходу движения на трассе, и никогда не перебивает предупреждение о камере.",
+                    "Прогноз — Open-Meteo, обновляется раз в полчаса. Где вы находитесь, сервер не узнаёт: телефон скачивает погоду по всем точкам и решает сам.",
+                ])
+            } header: {
+                Text("Дальняя дорога")
+            } footer: {
+                Text("Одна спокойная фраза и баннер о погоде на перевале впереди.")
+            }
+
+            Section {
                 Picker("Баннеры в фоне", selection: $settings.backgroundAlerts) {
                     ForEach(BackgroundAlertMode.allCases) { Text($0.title).tag($0) }
                 }

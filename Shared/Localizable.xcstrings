@@ -50,6 +50,38 @@
         }
       }
     },
+    "%1$@ · через %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · через %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$@ dan keyin"
+          }
+        }
+      }
+    },
+    "%1$@ и %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ и %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ va %2$@"
+          }
+        }
+      }
+    },
     "%1$@ и %2$@ разделяет стоянка %3$@": {
       "localizations": {
         "ru": {
@@ -4063,6 +4095,22 @@
         }
       }
     },
+    "Дальняя дорога": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дальняя дорога"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uzoq yoʻl"
+          }
+        }
+      }
+    },
     "Два разрешения — и в путь": {
       "localizations": {
         "ru": {
@@ -6245,18 +6293,18 @@
         }
       }
     },
-    "Карты и ограничения скорости — © участники OpenStreetMap. Камеры, банкоматы и гостиницы — Портал открытых данных Республики Узбекистан (CC BY-SA 4.0). Приложение бесплатное, без рекламы и без слежки.": {
+    "Карты и ограничения скорости — © участники OpenStreetMap. Камеры, банкоматы и гостиницы — Портал открытых данных Республики Узбекистан (CC BY-SA 4.0). Погода на перевалах — Weather data by Open-Meteo.com (CC BY 4.0). Приложение бесплатное, без рекламы и без слежки.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Карты и ограничения скорости — © участники OpenStreetMap. Камеры, банкоматы и гостиницы — Портал открытых данных Республики Узбекистан (CC BY-SA 4.0). Приложение бесплатное, без рекламы и без слежки."
+            "value": "Карты и ограничения скорости — © участники OpenStreetMap. Камеры, банкоматы и гостиницы — Портал открытых данных Республики Узбекистан (CC BY-SA 4.0). Погода на перевалах — Weather data by Open-Meteo.com (CC BY 4.0). Приложение бесплатное, без рекламы и без слежки."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Xaritalar va tezlik cheklovlari — © OpenStreetMap ishtirokchilari. Kameralar, bankomatlar va mehmonxonalar — Oʻzbekiston Respublikasi Ochiq maʼlumotlar portali (CC BY-SA 4.0). Ilova bepul, reklamasiz va kuzatuvsiz."
+            "value": "Xaritalar va tezlik cheklovlari — © OpenStreetMap ishtirokchilari. Kameralar, bankomatlar va mehmonxonalar — Oʻzbekiston Respublikasi Ochiq maʼlumotlar portali (CC BY-SA 4.0). Dovonlardagi ob-havo — Weather data by Open-Meteo.com (CC BY 4.0). Ilova bepul, reklamasiz va kuzatuvsiz."
           }
         }
       }
@@ -8310,6 +8358,22 @@
         }
       }
     },
+    "Одна спокойная фраза и баннер о погоде на перевале впереди.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Одна спокойная фраза и баннер о погоде на перевале впереди."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldindagi dovondagi ob-havo haqida bitta xotirjam ibora va banner."
+          }
+        }
+      }
+    },
     "Опишите проблему или идею…": {
       "localizations": {
         "ru": {
@@ -9227,6 +9291,22 @@
         }
       }
     },
+    "Перед перевалами Камчик и Тахтакарача и на равнинных участках трасс M39 и A373 приложение один раз скажет, если там снег, гололёд, туман или сильный ветер: «На перевале Камчик туман».": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перед перевалами Камчик и Тахтакарача и на равнинных участках трасс M39 и A373 приложение один раз скажет, если там снег, гололёд, туман или сильный ветер: «На перевале Камчик туман»."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qamchiq va Taxtaqoracha dovonlari oldidan hamda M39 va A373 trassalarining tekis qismlarida u yerda qor, yaxmalak, tuman yoki kuchli shamol boʻlsa, ilova bir marta aytadi: «Qamchiq dovonida tuman»."
+          }
+        }
+      }
+    },
     "Передвижной радар": {
       "localizations": {
         "ru": {
@@ -9463,6 +9543,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Marshrutni takrorlash"
+          }
+        }
+      }
+    },
+    "Погода на перевалах": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Погода на перевалах"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dovonlardagi ob-havo"
           }
         }
       }
@@ -10618,6 +10714,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aloqani tekshiring va qaytadan urinib koʻring."
+          }
+        }
+      }
+    },
+    "Прогноз — Open-Meteo, обновляется раз в полчаса. Где вы находитесь, сервер не узнаёт: телефон скачивает погоду по всем точкам и решает сам.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Прогноз — Open-Meteo, обновляется раз в полчаса. Где вы находитесь, сервер не узнаёт: телефон скачивает погоду по всем точкам и решает сам."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prognoz — Open-Meteo, har yarim soatda yangilanadi. Server qayerdaligingizni bilmaydi: telefon barcha nuqtalar boʻyicha ob-havoni yuklab oladi va oʻzi hal qiladi."
           }
         }
       }
@@ -13738,6 +13850,22 @@
         }
       }
     },
+    "Фраза звучит за 20–40 км, по маршруту или по ходу движения на трассе, и никогда не перебивает предупреждение о камере.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Фраза звучит за 20–40 км, по маршруту или по ходу движения на трассе, и никогда не перебивает предупреждение о камере."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ibora 20–40 km oldin — marshrut boʻyicha yoki trassada harakat yoʻnalishida — eshitiladi va hech qachon kamera haqidagi ogohlantirishni boʻlmaydi."
+          }
+        }
+      }
+    },
     "Хранятся последние %lld поездок. Итоги за месяцы считаются по дневным сводкам — они не удаляются.": {
       "localizations": {
         "ru": {
@@ -14828,6 +14956,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "oʻchirilgan"
+          }
+        }
+      }
+    },
+    "гололёд": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "гололёд"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yaxmalak"
           }
         }
       }
@@ -16915,6 +17059,22 @@
         }
       }
     },
+    "сильный ветер": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "сильный ветер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kuchli shamol"
+          }
+        }
+      }
+    },
     "скорость менялась в среднем больше чем на %1$lld км/ч между точками трека, спокойная езда — до %2$lld": {
       "extractionState": "manual",
       "localizations": {
@@ -16977,6 +17137,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "biroz yuqori"
+          }
+        }
+      }
+    },
+    "снег": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "снег"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "qor"
           }
         }
       }
@@ -17137,6 +17313,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "yoqilgʻi, hozirgi narxda"
+          }
+        }
+      }
+    },
+    "туман": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "туман"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tuman"
           }
         }
       }

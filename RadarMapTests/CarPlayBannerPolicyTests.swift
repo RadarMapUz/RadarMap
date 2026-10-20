@@ -15,13 +15,13 @@ final class CarPlayBannerPolicyTests: XCTestCase {
     private typealias P = CarPlayBannerPolicy
 
     func testEmptyScreenShowsAnything() {
-        for kind in [P.Kind.info, .suggestion, .question, .detour, .camera] {
+        for kind in [P.Kind.info, .suggestion, .question, .roadWeather, .detour, .camera] {
             XCTAssertEqual(P.decide(showing: nil, incoming: kind), .present)
         }
     }
 
     func testCameraAlwaysWins() {
-        for showing in [P.Kind.info, .suggestion, .question, .detour, .camera] {
+        for showing in [P.Kind.info, .suggestion, .question, .roadWeather, .detour, .camera] {
             XCTAssertEqual(P.decide(showing: showing, incoming: .camera), .replace, "поверх «\(showing)»")
         }
     }
@@ -65,5 +65,18 @@ final class CarPlayBannerPolicyTests: XCTestCase {
         XCTAssertEqual(P.decide(showing: .request, incoming: .detour), .wait)
         XCTAssertEqual(P.decide(showing: .request, incoming: .camera), .replace)
         XCTAssertEqual(P.decide(showing: .camera, incoming: .request), .drop)
+    }
+
+    /// Погода на перевале (19.2) — ниже камеры, объезда и запроса водителя;
+    /// вытесненная — вернётся, пока не истекла.
+    func testRoadWeatherYieldsToCameraDetourAndRequest() {
+        XCTAssertEqual(P.decide(showing: .camera, incoming: .roadWeather), .wait)
+        XCTAssertEqual(P.decide(showing: .detour, incoming: .roadWeather), .wait)
+        XCTAssertEqual(P.decide(showing: .request, incoming: .roadWeather), .wait)
+        XCTAssertEqual(P.decide(showing: .roadWeather, incoming: .camera), .replace)
+        XCTAssertEqual(P.decide(showing: .roadWeather, incoming: .detour), .replace)
+        XCTAssertEqual(P.decide(showing: .info, incoming: .roadWeather), .replace)
+        XCTAssertEqual(P.decide(showing: .roadWeather, incoming: .question), .wait)
+        XCTAssertTrue(P.Kind.roadWeather.comesBack)
     }
 }

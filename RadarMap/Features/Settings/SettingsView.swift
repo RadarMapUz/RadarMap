@@ -126,7 +126,7 @@ struct SettingsView: View {
                 .tint(Theme.textPrimary)
                 SettingsRow(.version, value: Self.appVersion)
             } footer: {
-                Text("Карты и ограничения скорости — © участники OpenStreetMap. Камеры, банкоматы и гостиницы — Портал открытых данных Республики Узбекистан (CC BY-SA 4.0). Приложение бесплатное, без рекламы и без слежки.")
+                Text("Карты и ограничения скорости — © участники OpenStreetMap. Камеры, банкоматы и гостиницы — Портал открытых данных Республики Узбекистан (CC BY-SA 4.0). Погода на перевалах — Weather data by Open-Meteo.com (CC BY 4.0). Приложение бесплатное, без рекламы и без слежки.")
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

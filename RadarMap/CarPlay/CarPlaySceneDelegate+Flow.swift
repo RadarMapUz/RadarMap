@@ -141,11 +141,32 @@ extension CarPlaySceneDelegate {
         Log.carplay.notice("объезд: баннер в машине")
     }
 
+    /// Погода на перевале (19.2): тот же баннер, что карточка на телефоне.
+    func observeRoadWeather() {
+        let session = session
+        withObservationTracking {
+            _ = env.roadWeather.banner
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, self.session == session else { return }
+                self.syncRoadWeatherBanner()
+                self.observeRoadWeather()
+            }
+        }
+    }
+
+    func syncRoadWeatherBanner() {
+        guard let banners else { return }
+        roadWeatherBanner.sync(env.roadWeather.banner, banners: banners,
+                               onDark: model.carIsDark ?? !model.isDaylight)
+    }
+
     // MARK: - Баннеры: что снято и что вернуть
 
-    /// Экран баннеров освободился — показать ждущих: объезд и вопрос.
+    /// Экран баннеров освободился — показать ждущих: объезд, погоду и вопрос.
     func bannersFreed() {
         syncDetourAlert()
+        syncRoadWeatherBanner()
         presentPendingConfirmIfNeeded()
     }
 
@@ -163,6 +184,7 @@ extension CarPlaySceneDelegate {
             confirmBanner = nil
             confirmBannerID = nil
         }
+        roadWeatherBanner.forget(alert)
     }
 
     /// Поездка сохранилась — итог одной строкой, пока машина стоит и экран

@@ -470,6 +470,73 @@ struct MobileConfirmBar: View {
     }
 }
 
+/// «Ещё перекрыто?» / «Ремонт ещё идёт?» — вопрос после проезда события
+/// дороги (RoadEventPassWatch). Та же дисциплина, что у MobileConfirmBar:
+/// двадцать секунд и молча уйти, молчание ничего не шлёт, под предупреждением
+/// о камере ждёт. Показывается, только когда нет вопроса о радаре
+/// (MobileConfirmGate).
+struct RoadEventConfirmBar: View {
+    @Environment(AppEnvironment.self) private var env
+    var isCovered = false
+
+    @State private var task: Task<Void, Never>?
+
+    var body: some View {
+        if let event = env.mobile.pendingRoadConfirm, !isCovered {
+            let kind = ReportKind(rawValue: event.kind.rawValue) ?? .closure
+            HStack(spacing: 10) {
+                Image(systemName: kind.symbol)
+                    .font(.rounded(15, .bold))
+                    .foregroundStyle(kind.glyphTint)
+                    .frame(width: 34, height: 34)
+                    .background(kind.tint.gradient, in: Circle())
+                Text(RoadEventPassWatch.question(for: event.kind))
+                    .font(.rounded(15, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                Spacer(minLength: 4)
+                answer(title: String(localized: "Да"), tint: Theme.successFill, value: true, id: event.id)
+                answer(title: String(localized: "Нет"), tint: Theme.dangerFill, value: false, id: event.id)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .liftedBackground(Theme.surface,
+                              in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
+                .stroke(Theme.stroke, lineWidth: 1))
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .onAppear {
+                task?.cancel()
+                let id = event.id
+                task = Task {
+                    try? await Task.sleep(for: .seconds(AppConfig.mobileQuestionSeconds))
+                    guard !Task.isCancelled else { return }
+                    // Время вышло — снимаем вопрос, ничего не отправляя.
+                    withMotion { env.mobile.answerRoadConfirm(stillThere: nil, for: id) }
+                }
+            }
+            .onDisappear { task?.cancel() }
+        }
+    }
+
+    private func answer(title: String, tint: Color, value: Bool, id: Int) -> some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            withMotion { env.mobile.answerRoadConfirm(stillThere: value, for: id) }
+            env.alerts.speak(String(localized: "Спасибо!"))
+        } label: {
+            Text(title)
+                .font(.rounded(15, .bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .frame(minWidth: 62, minHeight: 44)
+                .background(tint,
+                            in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 extension ReportKind {
     /// Заливка и знак: у дороги — свои, не красные (красный на этой карте —
     /// камера) и не цвет интерфейса.

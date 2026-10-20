@@ -1203,6 +1203,111 @@ class RoadEventsTest(ServerTestBase):
         status, _ = self.report("roadwork", device="fresh2", lat=41.46)
         self.assertEqual(status, 429, "свой кап дороги — исчерпан")
 
+    # --- «Ещё перекрыто?» после проезда: голос водителя по событию дороги ---
+
+    def vote(self, rid, device, value, ip, kind="pass"):
+        return _call(self.port, "POST", "/api/vote",
+                     {"id": rid, "device": device, "value": value, "kind": kind}, ip=ip)
+
+    def road_item(self, rid):
+        _, road = _call(self.port, "GET", "/api/road")
+        return next((r for r in road["reports"] if r["id"] == rid), None)
+
+    def stored(self, rid):
+        conn = sqlite3.connect(api.DB_PATH)
+        row = conn.execute("SELECT created, expires, active FROM reports WHERE id = ?",
+                           (rid,)).fetchone()
+        conn.close()
+        return row
+
+    def test_pass_yes_confirms_road_event_by_independent_driver_only(self):
+        """«Да» после проезда — тот же лайк, что у радара: свой адрес не
+        подтверждает, чужое устройство И адрес — полный срок и confirmed."""
+        api._probation_cache = (time.time(), True)
+        try:
+            _, made = _call(self.port, "POST", "/api/report",
+                            {"lat": 41.31, "lon": 69.25, "device": "owner", "type": "roadwork"},
+                            ip="10.5.1.1")
+            rid = made["id"]
+            status, _ = self.vote(rid, "same-wifi", 1, ip="10.5.1.1")
+            self.assertEqual(status, 200)
+            self.assertFalse(self.road_item(rid)["confirmed"], "свой адрес подтвердил свой ремонт")
+            status, _ = self.vote(rid, "stranger", 1, ip="10.5.1.2")
+            self.assertEqual(status, 200)
+            self.assertTrue(self.road_item(rid)["confirmed"])
+            created, expires, _ = self.stored(rid)
+            self.assertAlmostEqual(expires - created, api.REPORT_TTLS["roadwork"], delta=60,
+                                   msg="подтверждённый ремонт — полный срок")
+            conn = sqlite3.connect(api.DB_PATH)
+            kind = conn.execute("SELECT kind FROM votes WHERE report_id = ? AND device = 'stranger'",
+                                (rid,)).fetchone()[0]
+            conn.close()
+            self.assertEqual(kind, "pass", "модератор видит голос после проезда")
+        finally:
+            api._probation_cache = (0.0, None)
+
+    def test_pass_noes_cut_life_and_hide_road_event(self):
+        """«Нет» с нового адреса срезает срок, три разных адреса снимают
+        событие из /api/road — как у радара."""
+        _, made = self.report("closure", device="owner")
+        rid = made["id"]
+        _, start, _ = self.stored(rid)
+        self.vote(rid, "n1", -1, ip="10.5.2.1")
+        self.assertAlmostEqual(self.stored(rid)[1], start - api.DOWN_PENALTY, delta=5)
+        self.vote(rid, "n2", -1, ip="10.5.2.2")
+        self.assertIsNotNone(self.road_item(rid), "два адреса — ещё не кворум")
+        status, body = self.vote(rid, "n3", -1, ip="10.5.2.3")
+        self.assertEqual(status, 200)
+        self.assertFalse(body["active"])
+        self.assertIsNone(self.road_item(rid), "открытая дорога ушла из списка")
+        status, _ = self.vote(rid, "late", 1, ip="10.5.2.4")
+        self.assertEqual(status, 404, "голос за снятое событие не воскрешает его")
+
+    def test_noes_from_one_address_do_not_hide_road_event(self):
+        _, made = self.report("roadwork", device="owner")
+        rid = made["id"]
+        for device in ("r1", "r2", "r3"):
+            _, body = self.vote(rid, device, -1, ip="10.5.3.3")
+        self.assertTrue(body["active"], "ротация UUID с одного адреса — не кворум")
+
+    def _seed_old_yes(self, rid, count, age):
+        conn = sqlite3.connect(api.DB_PATH)
+        for index in range(count):
+            conn.execute("INSERT INTO votes(report_id, device, value, ts, ip, kind) "
+                         "VALUES(?,?,1,?,?,'pass')",
+                         (rid, f"old{index}", time.time() - age, f"10.6.0.{index + 1}"))
+        conn.execute("UPDATE reports SET up = ? WHERE id = ?", (count, rid))
+        conn.commit()
+        conn.close()
+
+    def test_old_confirmations_do_not_shield_finished_roadwork(self):
+        """Пять «да» понедельника не держат закончившийся в пятницу ремонт:
+        кворум дороги меряется по свежему окну."""
+        _, made = self.report("roadwork", device="owner")
+        rid = made["id"]
+        self._seed_old_yes(rid, 5, age=api.ROAD_VOTE_FRESH + 3600)
+        for index in range(3):
+            _, body = self.vote(rid, f"fri{index}", -1, ip=f"10.6.1.{index + 1}")
+        self.assertFalse(body["active"], "старые подтверждения заслонили открытую дорогу")
+        self.assertEqual(body["up"], 5, "счётчик голосов — по-прежнему за всё время")
+
+    def test_fresh_confirmations_still_outweigh_noes(self):
+        _, made = self.report("roadwork", device="owner")
+        rid = made["id"]
+        self._seed_old_yes(rid, 4, age=600)
+        for index in range(3):
+            _, body = self.vote(rid, f"n{index}", -1, ip=f"10.6.2.{index + 1}")
+        self.assertTrue(body["active"], "четыре свежих «да» против трёх «нет» — ремонт идёт")
+
+    def test_radar_quorum_still_counts_every_vote(self):
+        """Окно — только у дороги: у радара все голоса в счёте, как было."""
+        _, made = self.report("radar", device="owner")
+        rid = made["id"]
+        self._seed_old_yes(rid, 4, age=api.ROAD_VOTE_FRESH + 3600)
+        for index in range(3):
+            _, body = self.vote(rid, f"n{index}", -1, ip=f"10.6.3.{index + 1}")
+        self.assertTrue(body["active"], "кворум радара изменился")
+
 class CngTest(ServerTestBase):
     """Метан на АГНКС (12б.4): тот же цикл доверия, что у радаров, и ответ
     без устройства, адреса и времени отметки."""

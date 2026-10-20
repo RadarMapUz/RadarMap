@@ -4586,6 +4586,22 @@
         }
       }
     },
+    "Ещё перекрыто?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ещё перекрыто?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hali ham yopiqmi?"
+          }
+        }
+      }
+    },
     "Жарко — экономлю экран": {
       "localizations": {
         "ru": {
@@ -11285,6 +11301,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Taʼmir"
+          }
+        }
+      }
+    },
+    "Ремонт ещё идёт?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ремонт ещё идёт?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taʼmir hali davom etyaptimi?"
           }
         }
       }

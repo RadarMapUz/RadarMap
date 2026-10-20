@@ -82,6 +82,8 @@ final class AppEnvironment {
     let etaShare = EtaShareService()
     /// Семейная ссылка прибытия домой (12б.6).
     let family = FamilyShareService()
+    /// Граф трасс для маршрута без сети (12б.10).
+    let offlineRoutes = OfflineRouteService()
     /// Горячие точки треног: подписанный список мест, где водители отмечали
     /// радар снова и снова. Не камеры и не отметки — память, поэтому и живут
     /// отдельным сервисом с недельным обновлением и своим тихим тоном.
@@ -209,6 +211,7 @@ final class AppEnvironment {
         updateThemeClock()
         if active {
             mobile.startPolling()
+            Task { await offlineRoutes.refreshIfDue() }
         } else if !isCarPlayConnected, !mobile.isTripActive {
             // Экран погас, но человек едет — опрос продолжается: это и есть
             // единственный момент, когда чужая отметка чего-то стоит.
@@ -441,6 +444,15 @@ final class AppEnvironment {
         etaShare.route = route
         etaShare.allowedByConfig = { [weak config] in config?.current.isEtaShareEnabled ?? true }
         family.allowedByConfig = { [weak config] in config?.current.isEtaShareEnabled ?? true }
+        // Маршрут без сети (12б.10): свой граф трасс, а связь вернулась —
+        // приблизительный маршрут молча заменяется серверным.
+        offlineRoutes.network = network
+        route.offlinePath = { [weak offlineRoutes] from, to in await offlineRoutes?.path(from: from, to: to) }
+        network.onOnline = { [weak self] in
+            guard let self else { return }
+            self.route.replaceOfflineRoute(from: self.location.currentCoordinate, cameras: self.cameras.cameras)
+            Task { await self.offlineRoutes.refreshIfDue() }
+        }
         traffic.isOnline = { [weak network] in network?.isOnline ?? false }
         #if canImport(MapLibre)
         // Сервер карты лёг при живой связи (S22): сторож тайлов сообщает, карта

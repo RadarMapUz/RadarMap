@@ -6358,6 +6358,22 @@
         }
       }
     },
+    "Маршрут без сети, приблизительно": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрут без сети, приблизительно"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarmoqsiz marshrut, taxminiy"
+          }
+        }
+      }
+    },
     "Маршрут в один тап — кнопкой «Мои места» на карте или из «Поиска». Адрес можно найти словами или показать на карте.": {
       "localizations": {
         "ru": {

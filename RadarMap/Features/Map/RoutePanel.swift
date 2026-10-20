@@ -37,6 +37,17 @@ struct RoutePanel: View {
                 }
             }
 
+            // Маршрут по своему графу трасс (12б.10): без запретов поворотов и
+            // без подсказок манёвров — так и сказать. Связь вернётся — его
+            // молча заменит серверный.
+            if route.selected?.isOffline == true {
+                Label("Маршрут без сети, приблизительно", systemImage: "wifi.slash")
+                    .font(.rounded(12, .semibold))
+                    .foregroundStyle(Theme.warning)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .liftedBackground(Theme.surface, in: Capsule())
+            }
+
             GlassCard(cornerRadius: Theme.cornerLarge) {
                 VStack(spacing: 12) {
                     // Куда едем + время/путь + закрыть

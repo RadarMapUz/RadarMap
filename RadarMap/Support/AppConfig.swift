@@ -1464,6 +1464,10 @@ nonisolated enum AppConfig {
     static let etaShareRemainingStepMeters: Double = 500
     static let etaShareKeepAliveSeconds: TimeInterval = 10 * 60
     static let etaShareArrivalFreshSeconds: TimeInterval = 120
+    /// Проверка, что сервер показывает ссылки прибытия: «умеет» — раз в
+    /// сутки, «не умеет» — снова через 10 мин (владелец мог выложить сервер).
+    static let etaShareProbeOKSeconds: TimeInterval = 24 * 3600
+    static let etaShareProbeRetrySeconds: TimeInterval = 10 * 60
 
     // MARK: - CarPlay: карта на движке
 

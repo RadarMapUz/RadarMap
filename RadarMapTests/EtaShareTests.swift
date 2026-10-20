@@ -56,4 +56,43 @@ final class EtaShareTests: XCTestCase {
                                           now: t0.addingTimeInterval(AppConfig.etaShareKeepAliveSeconds)),
                       "ссылка не должна погаснуть")
     }
+
+    // MARK: - Сервер показывает ссылки?
+
+    /// 20.10: на сервере был старый api.py — ссылка ушла знакомому и
+    /// открылась `{"error": "not found"}`. Такой ответ — «не умеет».
+    func testOldServerWithoutRouteIsUnsupported() {
+        XCTAssertEqual(EtaShare.linkSupport(status: 404, contentType: "application/json"), false)
+    }
+
+    /// Новый сервер на чужой токен отвечает страницей «ссылка устарела» —
+    /// тоже 404, но HTML: адрес есть.
+    func testExpiredPageOnNewServerIsSupported() {
+        XCTAssertEqual(EtaShare.linkSupport(status: 404, contentType: "text/html; charset=utf-8"), true)
+        XCTAssertEqual(EtaShare.linkSupport(status: 200, contentType: "text/html; charset=utf-8"), true)
+    }
+
+    /// Сбой сервера — не повод ни отдать мёртвую ссылку, ни запомнить «не умеет».
+    func testServerErrorIsUnknown() {
+        XCTAssertNil(EtaShare.linkSupport(status: 502, contentType: "text/plain"))
+    }
+
+    func testProbeTokenHasValidShape() {
+        XCTAssertEqual(EtaShare.probeToken.count, 22)
+        XCTAssertTrue(EtaShare.probeToken.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" })
+    }
+
+    /// «Умеет» спрашиваем раз в сутки, «не умеет» — снова через 10 мин:
+    /// владелец мог выложить сервер, и ссылка должна вернуться без перезапуска.
+    func testProbeCadence() {
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertTrue(EtaShare.probeDue(support: nil, lastProbe: nil, now: t0))
+        XCTAssertFalse(EtaShare.probeDue(support: false, lastProbe: t0, now: t0.addingTimeInterval(60)))
+        XCTAssertTrue(EtaShare.probeDue(support: false, lastProbe: t0,
+                                        now: t0.addingTimeInterval(AppConfig.etaShareProbeRetrySeconds)))
+        XCTAssertFalse(EtaShare.probeDue(support: true, lastProbe: t0,
+                                         now: t0.addingTimeInterval(AppConfig.etaShareProbeRetrySeconds)))
+        XCTAssertTrue(EtaShare.probeDue(support: true, lastProbe: t0,
+                                        now: t0.addingTimeInterval(AppConfig.etaShareProbeOKSeconds)))
+    }
 }

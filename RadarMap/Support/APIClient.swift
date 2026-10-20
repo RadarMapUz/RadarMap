@@ -85,6 +85,17 @@ nonisolated struct APIClient {
         return (data, (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "ETag"))
     }
 
+    /// Только код ответа и тип содержимого — есть ли адрес на сервере вообще
+    /// (новая функция при старом сервере). nil — сети нет.
+    func probe(_ path: String) async -> (status: Int, contentType: String?)? {
+        var req = request(path)
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        // Сбой сети уже записан в журнал в transport; здесь он значит «не знаем».
+        guard let (_, response) = try? await transport(req),
+              let http = response as? HTTPURLResponse else { return nil }
+        return (http.statusCode, http.value(forHTTPHeaderField: "Content-Type"))
+    }
+
     /// GET сырых данных (файлы базы) с проверкой статуса.
     func getData(_ path: String, cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy) async throws -> Data {
         var req = request(path)

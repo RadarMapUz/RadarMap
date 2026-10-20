@@ -36,6 +36,28 @@ nonisolated enum EtaShare {
             .replacingOccurrences(of: "=", with: "")
     }
 
+    /// Токен для проверки сервера: правильной формы, но ничей — страница
+    /// ответит «ссылка устарела», ничего не создав.
+    static let probeToken = String(repeating: "A", count: 22)
+
+    /// Показывает ли сервер страницы ссылок. Страница прибытия — всегда HTML,
+    /// и на устаревший токен тоже; 404 не-HTML — адреса нет: сервер старше
+    /// функции. Так было 20.10: ссылка ушла знакомому и открылась
+    /// `{"error": "not found"}`. Остальное (5xx, сбой) — не знаем.
+    static func linkSupport(status: Int, contentType: String?) -> Bool? {
+        if contentType?.lowercased().hasPrefix("text/html") == true { return true }
+        if status == 404 { return false }
+        return nil
+    }
+
+    /// Пора ли спросить сервер снова: «умеет» — раз в сутки, «не умеет» или
+    /// не знаем — через 10 мин.
+    static func probeDue(support: Bool?, lastProbe: Date?, now: Date) -> Bool {
+        guard let lastProbe else { return true }
+        let age = now.timeIntervalSince(lastProbe)
+        return age >= (support == true ? AppConfig.etaShareProbeOKSeconds : AppConfig.etaShareProbeRetrySeconds)
+    }
+
     /// Страница для знакомого.
     static func link(base: URL, token: String) -> URL {
         base.appendingPathComponent("api").appendingPathComponent("eta").appendingPathComponent(token)

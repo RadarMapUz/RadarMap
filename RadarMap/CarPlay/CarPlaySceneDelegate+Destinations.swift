@@ -139,7 +139,8 @@ extension CarPlaySceneDelegate {
         let ahead = RouteCamerasAhead.list(env.route.camerasOnRoute, progress: env.route.progressAlong,
                                            limit: Int(CPListTemplate.maximumItemCount))
         guard !ahead.isEmpty else {
-            return showToast(String(localized: "Камер впереди по маршруту нет"))
+            showToast(String(localized: "Камер впереди по маршруту нет"))
+            return
         }
         let items = ahead.map { item in
             CPListItem(text: "\(Formatting.distance(item.meters)) · \(item.camera.kind.displayName)",
@@ -392,7 +393,7 @@ extension CarPlaySceneDelegate {
         let origin = MKMapItem(placemark: MKPlacemark(coordinate: env.location.currentCoordinate ?? destination))
         let target = MKMapItem(placemark: MKPlacemark(coordinate: destination))
         target.name = name
-        let trip = CPTrip(origin: origin, destination: target, routeChoices: choices)
+        let trip = CarPlayGuidance.makeTrip(origin: origin, destination: target, choices: choices)
         if previewTrip != nil { mapTemplate.hideTripPreviews() }
         previewTrip = trip
         previewDestination = destination
@@ -445,6 +446,33 @@ extension CarPlaySceneDelegate {
                     return
                 }
                 await Task.pause(seconds: 1)
+            }
+        }
+    }
+
+    /// Место из поиска (10.5). Без маршрута — цель. С маршрутом — спросить:
+    /// «Заехать по пути» или «Новая цель». До 20.10 заезд был только у плитки
+    /// «АЗС», а найденная поиском аптека молча заменяла цель — и маршрут
+    /// домой пропадал, хотя хотели заскочить по дороге.
+    func pickFromSearch(_ place: SavedPlace) {
+        guard env.route.isActive, !model.isPreviewing else { return route(to: place) }
+        let sheet = CPActionSheetTemplate(
+            title: Self.shortTitle(place.title),
+            message: nil,
+            actions: [
+                CPAlertAction(title: String(localized: "Заехать по пути"), style: .default) { [weak self] _ in
+                    self?.dismissTopTemplate { [weak self] in self?.addStop(place) }
+                },
+                CPAlertAction(title: String(localized: "Новая цель"), style: .default) { [weak self] _ in
+                    self?.dismissTopTemplate { [weak self] in self?.route(to: place) }
+                },
+                CPAlertAction(title: String(localized: "Отмена"), style: .cancel) { [weak self] _ in
+                    self?.dismissTopTemplate()
+                },
+            ])
+        interfaceController?.presentTemplate(sheet, animated: true) { _, error in
+            if let error {
+                Log.carplay.error("presentTemplate(заезд или цель): \(error.localizedDescription, privacy: .public)")
             }
         }
     }

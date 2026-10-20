@@ -180,15 +180,40 @@ extension CarPlaySceneDelegate {
         }
     }
 
-    func showTripSummaryIfFresh() {
+    /// true — итог показан сейчас.
+    @discardableResult
+    func showTripSummaryIfFresh() -> Bool {
         guard let saved = env.trip.lastSavedAt, saved != summarizedSave,
               Date().timeIntervalSince(saved) < AppConfig.tripEndCardFreshSeconds,
               Self.activeDelegate === self, model.isOnScreen, shownTemplate == nil,
               env.location.speedKmh < AppConfig.carPlayPreviewMaxKmh,
-              let record = env.trip.history.first else { return }
+              let record = env.trip.history.first else { return false }
+        // Показан — только если очередь баннеров его приняла: занятый камерой
+        // или вопросом экран не должен тратить единственный показ (ревью 10.9).
+        let lines = CarPlayTripSummary.lines(for: record)
+        guard showToast(lines[0], variants: lines) else { return false }
         summarizedSave = saved
         Log.carplay.notice("итог поездки в машине")
-        showToast(CarPlayTripSummary.lines(for: record)[0], variants: CarPlayTripSummary.lines(for: record))
+        return true
+    }
+
+    /// Одноразовые показы ждут экрана (10.9): итог поездки и «Куда едем?»
+    /// проверяли «экран наш и шаблон свободен» один раз и, не застав этого
+    /// (на экране машины другое приложение, сверху «Куда»), пропадали до
+    /// следующего раза. Теперь их пробуют снова, когда карта снова на экране
+    /// — у каждого свои условия свежести.
+    func retryOneTimeShows() {
+        guard Self.activeDelegate === self, model.isOnScreen, shownTemplate == nil else { return }
+        // Итог только что встал — предложение подождёт следующего раза, а не
+        // вытеснит его тем же вызовом.
+        if showTripSummaryIfFresh() { return }
+        // «Сели и поехали» — первые минуты подключения (`connectedAt`). Через
+        // ту же паузу на точный фикс, что и при подключении: догадка смотрит,
+        // где мы стоим, и у дома не предложит «Домой» (ревью 10.9).
+        if rootShown, !offeredDestination, let connectedAt,
+           Date().timeIntervalSince(connectedAt) < AppConfig.carPlayDestinationOfferWindow {
+            offerDestinationSoon()
+        }
     }
 
     /// Сев в машину, водитель чаще всего едет туда же, куда всегда: утром из
@@ -213,7 +238,6 @@ extension CarPlaySceneDelegate {
               shownTemplate == nil, !model.isPreviewing, !env.route.isActive,
               env.location.speedKmh < AppConfig.carPlayPreviewMaxKmh,
               let guess = env.destinationGuess(now: Date()) else { return }
-        offeredDestination = true
         let title = guess.kind.suggestionTitle
         let place = SavedPlace(title: guess.placeTitle ?? guess.kind.title,
                                lat: guess.coordinate.latitude, lon: guess.coordinate.longitude)
@@ -234,7 +258,10 @@ extension CarPlaySceneDelegate {
                 Log.carplay.notice("«куда едем?»: отказ")
             },
             duration: AppConfig.carPlayDestinationOfferSeconds)
+        // Единственный показ тратится, только когда баннер принят: занятый
+        // экран (камера, вопрос) оставляет попытку на возврат к карте.
         guard banners?.show(alert, kind: .suggestion) == true else { return }
+        offeredDestination = true
         Log.carplay.notice("«куда едем?»: предлагаю \(guess.kind.rawValue, privacy: .public)")
     }
 

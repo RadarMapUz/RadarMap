@@ -4,12 +4,9 @@
 //
 //  Раскладка экрана машины по вертикали и горизонтали — числами, а не глазами.
 //
-//  Поломка, ради которой тесты написаны, глазами и ловилась: приборная панель
-//  занимала 88 точек, а схема резервировала под неё 140 — резерв считался по
-//  carPlayDockBottomInset, взятому с запасом ради служебных подписей MKMapView,
-//  и сверху к нему добавлялся ещё и зазор. Сорок точек высоты уходили в чёрное
-//  поле, а на экране машины высота — самый дорогой ресурс: схема считает
-//  масштаб именно от неё.
+//  Резерв под док для схемы (carPlayDockReserve против carPlayDockBottomInset)
+//  ушёл вместе со схемой (11.10) и картой Apple; остались высота и ширина
+//  самого дока — экран машины меряется ими.
 //
 //  Второе число — потолок ширины дока. Он обязан оставаться широким настолько,
 //  чтобы ViewThatFits выбирал раскладку С ПРИБЫТИЕМ: слишком узкий потолок не
@@ -29,22 +26,12 @@ final class CarPlayDockLayoutTests: XCTestCase {
     /// в ширину, и съесть карту она может именно здесь.
     private let narrowHeadUnit = CGSize(width: 800, height: 480)
 
-    /// Резерв под панель обязан её вмещать — иначе схема заедет под цифры.
-    func testReserveCoversTheDock() {
-        XCTAssertGreaterThanOrEqual(AppConfig.carPlayDockReserve, AppConfig.carPlayDockHeight)
-    }
-
-    /// …и не превышать инсет карты: тот взят с запасом под служебные подписи,
-    /// и считать по нему высоту схемы — это и есть та самая потеря сорока точек.
-    func testReserveIsNotThePaddedMapInset() {
-        XCTAssertLessThan(AppConfig.carPlayDockReserve, AppConfig.carPlayDockBottomInset)
-    }
-
     /// Панель не имеет права съесть карту. Высота на экране машины — самый
     /// дорогой ресурс, и на самой тесной голове карте обязаны остаться две
     /// трети: ниже этого карта перестаёт показывать дорогу впереди.
     func testDockLeavesTheMapMostOfTheHeight() {
-        let share = (narrowHeadUnit.height - AppConfig.carPlayDockReserve) / narrowHeadUnit.height
+        // Док и его нижний отступ.
+        let share = (narrowHeadUnit.height - AppConfig.carPlayDockHeight - 12) / narrowHeadUnit.height
         XCTAssertGreaterThanOrEqual(share, 0.66,
                                     "карте осталось \(Int(share * 100)) % высоты")
     }

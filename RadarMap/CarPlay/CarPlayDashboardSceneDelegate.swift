@@ -204,6 +204,9 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
 struct CarPlayDashboardView: View {
     @Environment(AppEnvironment.self) private var env
     let model: CarPlayMapModel
+    /// Ширина плитки — меняется со сменой экрана, не тиком: по ней прибор
+    /// решает, влезает ли прибытие (10.7).
+    @State private var width: CGFloat = 0
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -216,10 +219,15 @@ struct CarPlayDashboardView: View {
             } else {
                 Theme.background.ignoresSafeArea()
             }
-            CarPlayDashboardGauge()
-                .padding(10)
-                .safeAreaPadding()
+            // Прибор — тоже только на экране (10.10): он читает скорость и
+            // дистанцию каждого фикса, и плитка, которую никто не видит,
+            // пересобиралась бы всю поездку.
+            if model.isOnScreen {
+                CarPlayDashboardGauge(width: width - 20)
+                    .padding(10)
+            }
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .environment(\.colorScheme, model.isDaylight ? .light : .dark)
         .onChange(of: env.sunIsUp, initial: true) { _, day in
             model.refreshDaylight(appearance: env.settings.mapAppearance, sunDay: day)
@@ -241,6 +249,13 @@ struct CarPlayDashboardView: View {
 /// инструкций рядом показывает его не всегда.
 private struct CarPlayDashboardGauge: View {
     @Environment(AppEnvironment.self) private var env
+    /// Сколько места у прибора. Плитка на узком экране машины — меньше
+    /// 300 pt, и капсула со скоростью, знаком, камерой и прибытием вылезала
+    /// за неё (10.7): прибытие там и так есть в соседней плитке инструкций,
+    /// оно уходит первым.
+    let width: CGFloat
+
+    private var showsArrival: Bool { width <= 0 || width >= AppConfig.carPlayGaugeArrivalWidth }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -266,7 +281,9 @@ private struct CarPlayDashboardGauge: View {
                         .liveNumber()
                 }
             }
-            if env.route.isActive {
+            if !showsArrival {
+                EmptyView()
+            } else if env.route.isActive {
                 Rectangle().fill(Theme.stroke).frame(width: 1, height: 24)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(Formatting.duration(env.route.remainingTime))

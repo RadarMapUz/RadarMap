@@ -162,7 +162,9 @@ extension CarPlaySceneDelegate {
     /// Уступает всему важнее: опоздавшее подтверждение не показывается.
     /// `speakIfHidden` — ответ на тап водителя: если баннер не встал (впереди
     /// камера), он звучит голосом — иначе тап остался бы без ответа.
-    func showToast(_ text: String, variants: [String]? = nil, speakIfHidden: Bool = false) {
+    /// true — баннер на экране (очередь его приняла).
+    @discardableResult
+    func showToast(_ text: String, variants: [String]? = nil, speakIfHidden: Bool = false) -> Bool {
         let alert = CPNavigationAlert(
             titleVariants: variants ?? [text],
             subtitleVariants: nil,
@@ -172,5 +174,6 @@ extension CarPlaySceneDelegate {
             duration: AppConfig.carPlayToastSeconds)
         let shown = banners?.show(alert, kind: .info) ?? false
         if !shown, speakIfHidden { env.alerts.speak(text) }
+        return shown
     }
 }

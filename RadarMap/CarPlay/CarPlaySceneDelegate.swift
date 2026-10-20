@@ -71,7 +71,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     lazy var guidance = CarPlayGuidance(model: model)
     /// Поиск адреса в машине: тот же порядок источников, что на телефоне.
     lazy var search: CarPlaySearch = {
-        let search = CarPlaySearch { [weak self] place in self?.route(to: place) }
+        let search = CarPlaySearch { [weak self] place in self?.pickFromSearch(place) }
         search.present = { [weak self] template in self?.pushSearchResults(template) }
         return search
     }()
@@ -286,8 +286,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     /// Поколение подписки syncTemplate: живой остаётся только ПОСЛЕДНЯЯ.
     /// Каждый вызов регистрирует новую одноразовую подписку, и без поколения
-    /// каждый тап «Схема/Карта» добавлял по две вечно перевзводящиеся: после
-    /// N тапов любое изменение состояния пересобирало шаблон N раз подряд.
+    /// каждая внеочередная пересборка (когда-то — тап «Схема/Карта», теперь —
+    /// возврат на экран, конец осмотра) добавляла по вечно перевзводящейся:
+    /// после N таких любое изменение состояния пересобирало шаблон N раз подряд.
     var syncGeneration = 0
 
     /// Что сейчас отправлено в магнитолу. Кнопки — не память, а сообщения на
@@ -461,6 +462,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         }
         watchRootTemplate()
         presentPendingConfirmIfNeeded()
+        retryOneTimeShows()
     }
 
     /// Проверка «корень действительно на экране машины», когда сцена стала

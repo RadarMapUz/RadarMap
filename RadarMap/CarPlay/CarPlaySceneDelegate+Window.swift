@@ -99,6 +99,7 @@ extension CarPlaySceneDelegate {
         rootDidShow(via: "templateDidAppear")
         // Вернулись к карте из «Куда» или поиска — ждавший вопрос теперь видно.
         presentPendingConfirmIfNeeded()
+        retryOneTimeShows()
     }
 
     /// Корень на экране машины — один раз за подключение. Признак — либо

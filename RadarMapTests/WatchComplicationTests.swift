@@ -6,7 +6,9 @@
 //  НЕ должно: перезагрузки WidgetKit на каждом контексте (бюджет кончился бы
 //  к концу поездки), точной дистанции, которая через две минуты врёт, и
 //  старого снимка поездки, выданного за свежий. Плюс цвета: диск камеры —
-//  цвет её типа на карте, красный — только у камеры.
+//  цвет её типа на карте, красный — только у камеры. С 14.5 — id камеры
+//  (и откат на адрес+значок без него) и толчок с телефона: старый толчок не
+//  берётся, а контекст и толчок одного снимка — одна перезагрузка.
 //
 
 import SwiftUI
@@ -24,8 +26,9 @@ final class WatchComplicationTests: XCTestCase {
     private let noon = Date(timeIntervalSince1970: 1_799_971_200 + 43_200)   // 2027-01-15 12:00 UTC
 
     private func trip(_ distance: Int?, title: String? = "Юнусабад",
-                      symbol: String = "camera.fill") -> WatchComplicationState {
-        WatchComplication.state(isTripActive: true, symbol: symbol, title: title, distanceMeters: distance)
+                      symbol: String = "camera.fill", id: Int? = nil) -> WatchComplicationState {
+        WatchComplication.state(isTripActive: true, symbol: symbol, title: title, distanceMeters: distance,
+                                cameraID: id)
     }
 
     // MARK: - Состояние
@@ -158,6 +161,121 @@ final class WatchComplicationTests: XCTestCase {
                                                now: noon, calendar: calendar)
         XCTAssertNil(WatchComplication.reloadReason(for: .noTrip, ledger: idle,
                                                     now: noon.addingTimeInterval(86_000), calendar: calendar))
+    }
+
+    // MARK: - id камеры (14.5)
+
+    func testAnotherCameraAtTheSameAddressIsToldByID() {
+        let ledger = WatchComplication.recording(.tripChanged, state: trip(800, id: 3496), ledger: .init(),
+                                                 now: noon, calendar: calendar)
+        let later = noon.addingTimeInterval(WatchComplication.minReloadInterval)
+        // Адрес, значок и ступень те же — без id это была бы «та же камера».
+        XCTAssertEqual(WatchComplication.reloadReason(for: trip(800, id: 3497), ledger: ledger, now: later,
+                                                      calendar: calendar), .contentChanged)
+        // Та же камера ближе внутри ступени — по-прежнему не повод.
+        XCTAssertNil(WatchComplication.reloadReason(for: trip(650, id: 3496), ledger: ledger, now: later,
+                                                    calendar: calendar))
+        // Интервал держит и смену по id.
+        XCTAssertNil(WatchComplication.reloadReason(for: trip(800, id: 3497), ledger: ledger,
+                                                    now: noon.addingTimeInterval(60), calendar: calendar))
+    }
+
+    func testWithoutIDTheCameraIsToldByAddressAndIcon() {
+        // Телефон старой сборки id не шлёт — поведение до 14.5.
+        let ledger = WatchComplication.recording(.tripChanged, state: trip(800), ledger: .init(),
+                                                 now: noon, calendar: calendar)
+        let later = noon.addingTimeInterval(WatchComplication.minReloadInterval)
+        XCTAssertNil(WatchComplication.reloadReason(for: trip(800), ledger: ledger, now: later,
+                                                    calendar: calendar))
+        XCTAssertEqual(WatchComplication.reloadReason(for: trip(800, title: "Чиланзар"), ledger: ledger,
+                                                      now: later, calendar: calendar), .contentChanged)
+        XCTAssertEqual(WatchComplication.reloadReason(for: trip(800, symbol: "speedometer"), ledger: ledger,
+                                                      now: later, calendar: calendar), .contentChanged)
+        let old = WatchComplicationState.Camera(symbol: "camera.fill", title: "Юнусабад", within: 1000)
+        var twin = old
+        twin.id = 3497
+        XCTAssertFalse(WatchComplication.isAnotherCamera(old, twin), "id только у одной — откат на адрес")
+    }
+
+    func testIDAppearingMidTripIsNotAReload() {
+        // Телефон обновился посреди поездки: та же камера, теперь с id.
+        let ledger = WatchComplication.recording(.tripChanged, state: trip(800), ledger: .init(),
+                                                 now: noon, calendar: calendar)
+        XCTAssertNil(WatchComplication.reloadReason(for: trip(800, id: 3496), ledger: ledger,
+                                                    now: noon.addingTimeInterval(300), calendar: calendar))
+        // А нарисованное у той же камеры поменялось (язык, тип отметки) — повод.
+        let same = WatchComplication.recording(.tripChanged, state: trip(800, id: 7), ledger: .init(),
+                                               now: noon, calendar: calendar)
+        XCTAssertEqual(WatchComplication.reloadReason(for: trip(800, title: "Yunusobod", id: 7), ledger: same,
+                                                      now: noon.addingTimeInterval(300), calendar: calendar),
+                       .contentChanged)
+    }
+
+    /// Снимок и учёт, записанные сборкой до 14.5, читаются: поля id в них нет.
+    func testSnapshotWithoutIDDecodes() throws {
+        let json = #"{"state":{"isTripActive":true,"camera":{"symbol":"camera.fill","title":"Юнусабад","within":500}},"updatedAt":0}"#
+        let snapshot = try JSONDecoder().decode(WatchComplicationSnapshot.self, from: Data(json.utf8))
+        XCTAssertEqual(snapshot.state.camera?.within, 500)
+        XCTAssertNil(snapshot.state.camera?.id)
+        let ledgerJSON = #"{"lastState":{"isTripActive":true,"camera":{"symbol":"camera.fill","within":300}},"routineReloads":3}"#
+        let ledger = try JSONDecoder().decode(WatchComplicationLedger.self, from: Data(ledgerJSON.utf8))
+        XCTAssertEqual(ledger.routineReloads, 3)
+        XCTAssertNil(ledger.lastState?.camera?.id)
+    }
+
+    // MARK: - Толчок с телефона (14.5)
+
+    func testPushIsTakenOnlyWhenNewerAndFresh() {
+        let applied = noon.addingTimeInterval(-30)
+        XCTAssertTrue(WatchComplication.acceptsPush(sentAt: noon.addingTimeInterval(-5), lastAppliedAt: applied,
+                                                    now: noon))
+        XCTAssertFalse(WatchComplication.acceptsPush(sentAt: applied, lastAppliedAt: applied, now: noon),
+                       "тот же снимок, что уже пришёл контекстом")
+        XCTAssertFalse(WatchComplication.acceptsPush(sentAt: noon.addingTimeInterval(-60), lastAppliedAt: applied,
+                                                     now: noon), "старее применённого — очередь, не откат")
+        XCTAssertTrue(WatchComplication.acceptsPush(sentAt: noon.addingTimeInterval(-60), lastAppliedAt: nil,
+                                                    now: noon), "часы только проснулись")
+        XCTAssertFalse(WatchComplication.acceptsPush(sentAt: noon.addingTimeInterval(-WatchComplication.pushMaxAge - 1),
+                                                     lastAppliedAt: nil, now: noon), "опоздавший — не берём")
+        XCTAssertFalse(WatchComplication.acceptsPush(sentAt: nil, lastAppliedAt: nil, now: noon),
+                       "без времени отправки — не наш")
+        XCTAssertTrue(WatchComplication.acceptsPush(sentAt: noon.addingTimeInterval(20), lastAppliedAt: nil,
+                                                    now: noon), "часы телефона чуть впереди")
+        XCTAssertFalse(WatchComplication.acceptsPush(sentAt: noon.addingTimeInterval(WatchComplication.pushClockSkew + 1),
+                                                     lastAppliedAt: nil, now: noon))
+    }
+
+    /// Контекст и толчок несут один снимок — в каком бы порядке они ни
+    /// пришли, перезагрузка одна (тот же путь ComplicationFeed).
+    func testContextAndPushOfOneStateReloadOnce() {
+        var ledger = WatchComplication.recording(.tripChanged, state: trip(800, id: 1), ledger: .init(),
+                                                 now: noon, calendar: calendar)
+        var reloads = 0
+        let next = trip(800, id: 2)
+        for second in [150.0, 151.0, 170.0] {   // контекст, толчок, повтор контекста
+            let now = noon.addingTimeInterval(second)
+            if let reason = WatchComplication.reloadReason(for: next, ledger: ledger, now: now,
+                                                           calendar: calendar) {
+                ledger = WatchComplication.recording(reason, state: next, ledger: ledger, now: now,
+                                                     calendar: calendar)
+                reloads += 1
+            }
+        }
+        XCTAssertEqual(reloads, 1)
+    }
+
+    func testSnapshotIsDatedBySendTime() {
+        let hourAgo = noon.addingTimeInterval(-3600)
+        // Контекст, пролежавший час, — «данные на» час назад, а не «сейчас».
+        let snapshot = WatchComplicationSnapshot(state: trip(800),
+                                                 updatedAt: WatchComplication.snapshotDate(sentAt: hourAgo,
+                                                                                           receivedAt: noon))
+        XCTAssertEqual(snapshot.updatedAt, hourAgo)
+        XCTAssertTrue(WatchComplication.isStale(snapshot, now: noon))
+        XCTAssertEqual(WatchComplication.snapshotDate(sentAt: nil, receivedAt: noon), noon,
+                       "старый телефон без времени — время приёма")
+        XCTAssertEqual(WatchComplication.snapshotDate(sentAt: noon.addingTimeInterval(30), receivedAt: noon), noon,
+                       "из будущего — не свежее, чем сейчас")
     }
 
     // MARK: - Устаревание

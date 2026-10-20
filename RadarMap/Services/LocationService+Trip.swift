@@ -211,7 +211,8 @@ extension LocationService {
         notifier.clearApproaching()   // конец поездки — убрать висящий баннер камеры
         // Часы сразу в «ожидание», не дожидаясь следующего GPS-тика.
         watchBridge?.update(isTripActive: false, speedKmh: 0, cameraTitle: nil, cameraSymbol: nil,
-                            distanceMeters: nil, alertLevel: 0, limitKmh: nil, isOverspeeding: false)
+                            cameraID: nil, distanceMeters: nil, alertLevel: 0, limitKmh: nil,
+                            isOverspeeding: false)
     }
 
     func register(passes: [PassTracking.Pass]) {

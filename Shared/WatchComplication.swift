@@ -7,6 +7,8 @@
 //
 //  Данные — из того же applicationContext, что и HUD часов: приложение часов
 //  кладёт снимок в App Group, расширение компликации его только рисует.
+//  Спящие часы телефон будит толчком (14.5, WatchComplicationPush) — тот же
+//  снимок, применяется по тем же правилам, перезагрузок не добавляет.
 //  Решения — что показать, когда снимок устарел и когда тратить перезагрузку
 //  WidgetKit — здесь, чистые и без часов/диска: файл компилируется и в
 //  приложение телефона, и его проверяет WatchComplicationTests.
@@ -37,6 +39,11 @@ nonisolated struct WatchComplicationState: Codable, Equatable, Sendable {
         /// Верхняя граница дистанции, м (ступень `WatchComplication.bounds`);
         /// nil — дальше самой крупной ступени.
         var within: Int?
+        /// id камеры в базе телефона (14.5): две камеры с одним адресом и
+        /// значком — разные камеры. nil — телефон старой сборки его не шлёт,
+        /// тогда узнаём камеру по адресу и значку. В снимке до 14.5 поля нет —
+        /// декодируется в nil.
+        var id: Int?
     }
 
     var isTripActive: Bool
@@ -94,15 +101,42 @@ nonisolated enum WatchComplication {
 
     /// Состояние из того, что прислал телефон (ключи applicationContext).
     static func state(isTripActive: Bool, symbol: String?, title: String?,
-                      distanceMeters: Int?) -> WatchComplicationState {
+                      distanceMeters: Int?, cameraID: Int? = nil) -> WatchComplicationState {
         guard isTripActive else { return .noTrip }
         guard let distanceMeters, distanceMeters >= 0 else {
             return WatchComplicationState(isTripActive: true, camera: nil)
         }
         let camera = WatchComplicationState.Camera(symbol: symbol ?? "camera.fill",
                                                    title: title,
-                                                   within: bound(forMeters: distanceMeters))
+                                                   within: bound(forMeters: distanceMeters),
+                                                   id: cameraID)
         return WatchComplicationState(isTripActive: true, camera: camera)
+    }
+
+    /// Другая камера: по id, если он есть у обеих; без него (телефон старой
+    /// сборки, учёт до обновления) — по адресу и значку, как до 14.5. Только
+    /// id у одной из двух — не повод: так выглядит обновление телефона
+    /// посреди поездки, а не новая камера.
+    static func isAnotherCamera(_ old: WatchComplicationState.Camera,
+                                _ new: WatchComplicationState.Camera) -> Bool {
+        if let oldID = old.id, let newID = new.id { return oldID != newID }
+        return old.title != new.title || old.symbol != new.symbol
+    }
+
+    /// Циферблат стал другим: поездка, другая камера, ступень или то, что
+    /// нарисовано (адрес и значок той же камеры — смена языка, тип отметки).
+    static func needsRedraw(from last: WatchComplicationState,
+                            to state: WatchComplicationState) -> Bool {
+        guard last.isTripActive == state.isTripActive else { return true }
+        switch (last.camera, state.camera) {
+        case (nil, nil):
+            return false
+        case let (old?, new?):
+            return isAnotherCamera(old, new) || old.within != new.within
+                || old.title != new.title || old.symbol != new.symbol
+        default:
+            return true
+        }
     }
 
     // MARK: - Перезагрузка
@@ -127,7 +161,7 @@ nonisolated enum WatchComplication {
         let elapsed = now.timeIntervalSince(lastAt)
         // Часы назад (смена пояса, ручная установка) — не повод молчать сутки.
         let reason: Reason
-        if state != last {
+        if needsRedraw(from: last, to: state) {
             reason = .contentChanged
         } else if state.isTripActive, elapsed >= refreshAfter || elapsed < 0 {
             reason = .refresh
@@ -160,6 +194,40 @@ nonisolated enum WatchComplication {
     private static func routineReloads(_ ledger: WatchComplicationLedger, now: Date,
                                        calendar: Calendar) -> Int {
         ledger.day == calendar.startOfDay(for: now) ? ledger.routineReloads : 0
+    }
+
+    // MARK: - Толчок с телефона (14.5)
+
+    /// Толчок старше — не берём. С компликациями WidgetKit
+    /// `transferCurrentComplicationUserInfo` порой доходит, только когда
+    /// приложение часов проснулось само, — тогда с ним приходит и контекст,
+    /// он не старее. А снимок такого возраста циферблат всё равно рисует
+    /// приглушённым: применённый, он лишь перевернул бы циферблат в прошлую
+    /// поездку и обратно, потратив две перезагрузки.
+    static let pushMaxAge: TimeInterval = staleAfter
+    /// Часы телефона впереди часов запястья не больше чем на столько.
+    static let pushClockSkew: TimeInterval = 60
+
+    /// Брать ли толчок. Толчок — очередь, а не «последнее состояние», как
+    /// контекст: старый может прийти после нового. Берём только новее
+    /// применённого (по времени отправки телефона) и свежий. Без времени —
+    /// не берём: такой толчок пришёл бы от чужой сборки. Контекст этим не
+    /// проверяется — он всегда последний, и HUD никогда не молчит из-за
+    /// сбитых часов телефона.
+    static func acceptsPush(sentAt: Date?, lastAppliedAt: Date?, now: Date) -> Bool {
+        guard let sentAt else { return false }
+        if let lastAppliedAt, sentAt <= lastAppliedAt { return false }
+        let age = now.timeIntervalSince(sentAt)
+        return age <= pushMaxAge && age >= -pushClockSkew
+    }
+
+    /// Время снимка — когда состояние отправил телефон, а не когда оно дошло:
+    /// контекст, полежавший час в ожидании, — данные часовой давности, и
+    /// «данные на 12:04» должно назвать их время. Телефон без времени (старая
+    /// сборка) — время приёма, как до 14.5; из будущего — тоже.
+    static func snapshotDate(sentAt: Date?, receivedAt now: Date) -> Date {
+        guard let sentAt else { return now }
+        return min(sentAt, now)
     }
 
     // MARK: - Показ

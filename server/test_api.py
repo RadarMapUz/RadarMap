@@ -1432,9 +1432,6 @@ class CngTest(ServerTestBase):
         self.assertEqual(self.post("nogas", lat=41.40)[0], 429)
         self.assertEqual(self.post("gas", lat=41.20)[0], 200, "своя станция — ответ можно поменять")
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
 
 class EtaShareTest(ServerTestBase):
     """«Поделиться прибытием». Важнее формы — что сервер НЕ хранит: ни точки,
@@ -1539,3 +1536,220 @@ class EtaShareTest(ServerTestBase):
         status, _, _ = _get_raw(self.port, "/api/eta/f/short")
         self.assertEqual(status, 404)
 
+
+
+def _post_raw(port, path, body):
+    """POST готовыми байтами: json.dumps не построит тело, которое ломает
+    разбор на сервере (вложенность в тысячи скобок)."""
+    req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data=body, method="POST",
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+
+class ServerAuditTest(ServerTestBase):
+    """Аудит сервера 14.3 (20.10): каждая проверка — дыра, найденная ревью, и
+    до правки падала. Важнее формы — чего сервер НЕ должен позволить."""
+
+    def setUp(self):
+        super().setUp()
+        with api._eta_lock:
+            api._eta_links.clear()
+
+    def report(self, rtype, device, ip, lat=41.31, lon=69.25, **extra):
+        body = {"lat": lat, "lon": lon, "device": device, "type": rtype}
+        body.update(extra)
+        return _call(self.port, "POST", "/api/report", body, ip=ip)
+
+    def lists(self):
+        _, mobile = _call(self.port, "GET", "/api/mobile")
+        _, road = _call(self.port, "GET", "/api/road")
+        return [r["id"] for r in mobile["reports"]], [r["id"] for r in road["reports"]]
+
+    def seed(self, rtype, count, ip):
+        conn = sqlite3.connect(api.DB_PATH)
+        now = time.time()
+        for index in range(count):
+            conn.execute("INSERT INTO reports(lat, lon, created, expires, device, type, ip, active) "
+                         "VALUES(?,?,?,?,?,?,?,1)",
+                         (40.0 + index * 0.01, 71.5, now - 600, now + 86400, f"seed-{ip}-{index}",
+                          rtype, ip))
+        conn.commit()
+        conn.close()
+
+    def lifetime(self, rid):
+        conn = sqlite3.connect(api.DB_PATH)
+        created, expires = conn.execute("SELECT created, expires FROM reports WHERE id = ?",
+                                        (rid,)).fetchone()
+        conn.close()
+        return expires - created
+
+    # --- уточнение типа через границу камера/дорога ---
+
+    def test_crossing_amend_respects_the_road_cap_of_the_address(self):
+        """«Радар» → amend «перекрыто» не обходит кап дороги на адрес: иначе
+        один адрес держал бы сколько угодно перекрытий вместо шести."""
+        self.seed("roadwork", api.MAX_ACTIVE_ROAD_PER_IP, ip="10.14.1.1")
+        status, radar = self.report("radar", "fresh", ip="10.14.1.1")
+        self.assertEqual(status, 200)
+        status, _ = self.report("closure", "fresh", ip="10.14.1.1", amend_id=radar["id"])
+        self.assertEqual(status, 429, "amend через границу обошёл кап дороги на адрес")
+        mobile, road = self.lists()
+        self.assertIn(radar["id"], mobile, "отказ не трогает сам радар")
+        self.assertNotIn(radar["id"], road)
+
+    def test_crossing_amend_respects_the_global_road_cap(self):
+        old = api.MAX_ACTIVE_ROAD
+        api.MAX_ACTIVE_ROAD = 2
+        try:
+            self.seed("roadwork", 1, ip="10.14.2.1")
+            self.seed("closure", 1, ip="10.14.2.2")
+            status, radar = self.report("radar", "fresh", ip="10.14.2.9")
+            self.assertEqual(status, 200)
+            status, _ = self.report("closure", "fresh", ip="10.14.2.9", amend_id=radar["id"])
+            self.assertEqual(status, 429, "amend через границу обошёл общий кап дороги")
+            self.assertIn(radar["id"], self.lists()[0])
+        finally:
+            api.MAX_ACTIVE_ROAD = old
+
+    def test_crossing_amend_respects_the_camera_cap_of_the_address(self):
+        """Обратная сторона: «перекрыто» → «радар» не обходит кап камер на адрес."""
+        self.seed("radar", api.MAX_ACTIVE_PER_IP, ip="10.14.3.1")
+        status, closure = self.report("closure", "fresh", ip="10.14.3.1")
+        self.assertEqual(status, 200)
+        status, _ = self.report("radar", "fresh", ip="10.14.3.1", amend_id=closure["id"])
+        self.assertEqual(status, 429)
+        self.assertIn(closure["id"], self.lists()[1])
+
+    def test_author_cannot_move_a_confirmed_radar_off_the_camera_list(self):
+        """Отзыв подтверждённой другими отметки запрещён — и amend в «перекрыто»
+        (то же исчезновение радара из /api/mobile) запрещён так же."""
+        _, radar = self.report("radar", "author", ip="10.14.4.1")
+        status, _ = _call(self.port, "POST", "/api/vote",
+                          {"id": radar["id"], "device": "witness", "value": 1}, ip="10.14.4.2")
+        self.assertEqual(status, 200)
+        status, _ = self.report("closure", "author", ip="10.14.4.1", amend_id=radar["id"])
+        self.assertEqual(status, 409)
+        mobile, road = self.lists()
+        self.assertIn(radar["id"], mobile, "подтверждённый другими радар пропал у всех")
+        self.assertEqual(road, [])
+
+    def test_same_category_amend_never_keeps_a_longer_lifetime(self):
+        """Ремонт (сутки на испытании) → «перекрыто» своей же точкой: срок —
+        перекрытия (3 ч), а не ремонта; обратно — не продлевает."""
+        api._probation_cache = (time.time(), True)
+        try:
+            _, made = self.report("roadwork", "me", ip="10.14.5.1")
+            status, body = self.report("closure", "me", ip="10.14.5.1")
+            self.assertTrue(body.get("amended"))
+            self.assertAlmostEqual(self.lifetime(made["id"]), api.PROBATION_TTLS["closure"], delta=5,
+                                   msg="неподтверждённое перекрытие живёт сроком ремонта")
+            self.report("roadwork", "me", ip="10.14.5.1")
+            self.assertAlmostEqual(self.lifetime(made["id"]), api.PROBATION_TTLS["closure"], delta=5,
+                                   msg="уточнение типа продлило свою точку")
+        finally:
+            api._probation_cache = (0.0, None)
+
+    # --- IPv6: адрес — это сеть /64, а не 2^64 адресов ---
+
+    def test_one_ipv6_subnet_cannot_hide_a_report(self):
+        """Кворум скрытия — три РАЗНЫХ адреса. Три адреса одной /64 — один
+        абонент: иначе один телефон снимал бы с карты любой радар."""
+        _, radar = self.report("radar", "owner", ip="10.14.6.1")
+        for index, host in enumerate(("a", "b", "c")):
+            _, body = _call(self.port, "POST", "/api/vote",
+                            {"id": radar["id"], "device": f"v{index}", "value": -1},
+                            ip=f"2001:db8:14:6::{host}")
+        self.assertTrue(body["active"], "три адреса одной /64 сняли радар")
+
+    def test_one_ipv6_subnet_cannot_confirm_its_own_report(self):
+        api._probation_cache = (time.time(), True)
+        try:
+            _, radar = self.report("radar", "owner", ip="2001:db8:14:7::1")
+            _call(self.port, "POST", "/api/vote", {"id": radar["id"], "device": "other", "value": 1},
+                  ip="2001:db8:14:7::2")
+            _, mobile = _call(self.port, "GET", "/api/mobile")
+            self.assertFalse(mobile["reports"][0]["confirmed"], "своя /64 подтвердила свою отметку")
+            _call(self.port, "POST", "/api/vote", {"id": radar["id"], "device": "stranger", "value": 1},
+                  ip="2001:db8:99:1::1")
+            _, mobile = _call(self.port, "GET", "/api/mobile")
+            self.assertTrue(mobile["reports"][0]["confirmed"], "чужая сеть — независимое подтверждение")
+        finally:
+            api._probation_cache = (0.0, None)
+
+    def test_client_key_keeps_ipv4_and_bot_pseudo_addresses(self):
+        self.assertEqual(api.client_key("10.0.0.1"), "10.0.0.1")
+        self.assertEqual(api.client_key("::ffff:10.0.0.1"), "10.0.0.1")
+        self.assertEqual(api.client_key("2001:db8:1:2:3:4:5:6"), "2001:db8:1:2::/64")
+        self.assertEqual(api.client_key("tg-0123456789abcdef"), "tg-0123456789abcdef")
+
+    # --- «Поделиться прибытием»: полная таблица не запирает новых ---
+
+    def test_full_link_table_still_takes_a_new_driver(self):
+        """Пять тысяч ссылок с трёх адресов запирали «Поделиться прибытием»
+        всей стране на два часа (503). Теперь уходит самая давно не
+        обновлявшаяся ссылка: живые обновляются раз в минуту и возвращаются."""
+        old = api.ETA_MAX_LINKS
+        api.ETA_MAX_LINKS = 3
+        try:
+            now = time.time()
+            for index in range(3):
+                api.eta_put(f"flood{index}" + "x" * 20,
+                            {"eta": now + 600, "left_m": 1, "status": "driving",
+                             "updated": now - 60 * (index + 1)}, now)
+            token = "R" * 22
+            status, _ = _call(self.port, "POST", "/api/eta",
+                              {"token": token, "eta": now + 1500, "left_m": 5000, "status": "driving"})
+            self.assertEqual(status, 200, "полная таблица отказала новому водителю")
+            self.assertEqual(_get_raw(self.port, "/api/eta/" + token)[0], 200)
+            with api._eta_lock:
+                self.assertLessEqual(len(api._eta_links), 3)
+                self.assertNotIn("flood2" + "x" * 20, api._eta_links, "ушла не самая старая")
+                self.assertIn("flood0" + "x" * 20, api._eta_links)
+        finally:
+            api.ETA_MAX_LINKS = old
+
+    # --- числа и вложенность, на которых падал разбор ---
+
+    def test_huge_numbers_answer_400_not_a_dropped_connection(self):
+        """Infinity и целое в 400 знаков проходят json.loads, но int()/float()
+        бросают OverflowError — обработчик падал без ответа, трейс в журнал."""
+        for path, payload in (
+                ("/api/vote", {"id": float("inf"), "device": "d", "value": 1}),
+                ("/api/report/cancel", {"id": float("inf"), "device": "d"}),
+                ("/api/camera_report", {"camera_id": float("inf"), "reason": "gone", "device": "d"}),
+                ("/api/report", {"lat": 10 ** 400, "lon": 69.25, "device": "d"}),
+                ("/api/cng", {"lat": 10 ** 400, "lon": 69.25, "device": "d", "kind": "gas"}),
+                ("/api/eta", {"token": "Z" * 22, "eta": 10 ** 400, "left_m": 0, "status": "driving"})):
+            status, _ = _call(self.port, "POST", path, payload)
+            self.assertEqual(status, 400, path)
+
+    def test_garbage_numbers_keep_their_documented_defaults(self):
+        """Где мусор в поле по контракту — «по умолчанию», он им и остаётся."""
+        status, body = self.report("radar", "d1", ip="10.14.8.1", amend_id=float("inf"),
+                                   age=10 ** 400)
+        self.assertEqual(status, 200, "кривой amend_id или age не роняет отметку")
+        self.assertFalse(body["merged"])
+        status, _ = _call(self.port, "POST", "/api/stat",
+                          {"device": "d", "day": "2026-10-20", "trips": float("inf")})
+        self.assertEqual(status, 200, "испорченный счётчик — ноль, а не обрыв")
+        good = TrafficTest.piece()
+        bad = {"p": [[10 ** 400, 69.27, 0, 40], [41.311, 69.27, 8, 40], [41.312, 69.27, 16, 40]]}
+        status, body = _call(self.port, "POST", "/api/traffic", {"v": 1, "pieces": [bad, good]})
+        self.assertEqual((status, body.get("accepted")), (200, 1), "плохой кусок роняет пачку")
+
+    def test_deeply_nested_body_is_400(self):
+        """На сервере Python 3.10: вложенность в 2000 скобок — RecursionError
+        в json.loads, мимо except ValueError (на 3.14 разбор не падает)."""
+        depth = 2000
+        status = _post_raw(self.port, "/api/report", b"[" * depth + b"]" * depth)
+        self.assertEqual(status, 400)
+        status = _post_raw(self.port, "/api/metrics", b"[" * depth + b"]" * depth)
+        self.assertEqual(status, 400)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

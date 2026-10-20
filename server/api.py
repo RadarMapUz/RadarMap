@@ -48,6 +48,7 @@ Endpoints:
 server/publish_overrides.sh — ключ подписи на VPS не хранится.
 """
 import hashlib
+import ipaddress
 import json
 import math
 import os
@@ -510,7 +511,7 @@ REPORT_MAX_AGE = 3600
 def report_age(data):
     try:
         age = float(data.get("age", 0))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):   # целое в сотни знаков
         return 0
     if not math.isfinite(age):
         return 0
@@ -531,7 +532,7 @@ def clean_traffic_piece(raw):
             return None
         try:
             lat, lon, t, kmh = (float(v) for v in point)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):   # OverflowError — целое в сотни знаков
             return None
         if not all(math.isfinite(v) for v in (lat, lon, t, kmh)):
             return None
@@ -578,7 +579,7 @@ def clamp_int(value, limit=100000):
     ноль: испорченное поле не должно ни падать, ни искажать сводку."""
     try:
         number = int(value or 0)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):   # OverflowError — Infinity
         return 0
     return number if 0 <= number <= limit else 0
 
@@ -626,6 +627,28 @@ def bump_mobile_version():
     global _mobile_version
     with _mobile_lock:
         _mobile_version += 1
+
+def client_key(value):
+    """«Адрес» для капов, кворумов и теневого бана.
+
+    IPv6 — по сети /64, а не по адресу: оператор выдаёт абоненту целую /64
+    (на мобильной сети — на каждое подключение), и все 2^64 адресов в ней —
+    один телефон или один дом. По полному адресу один абонент был бы любым
+    числом «разных адресов»: снимал бы чужой радар кворумом трёх, сам
+    подтверждал свои фейки, обходил все капы по адресу и раздувал счётчики
+    в памяти. IPv4 (и IPv4 внутри IPv6) — как есть; не адрес вовсе
+    (псевдоадрес бота «tg-…») — тоже как есть.
+    """
+    try:
+        addr = ipaddress.ip_address(value)
+        if addr.version == 6:
+            if addr.ipv4_mapped:
+                return str(addr.ipv4_mapped)
+            return str(ipaddress.ip_network(f"{addr}/64", strict=False))
+        return str(addr)
+    except ValueError:
+        return value
+
 
 def ip_quota_exceeded(bucket, ip, cap):
     """True — суточный кап этого IP по данному бакету исчерпан (и счёт +1)."""
@@ -702,6 +725,23 @@ def lifecycle_expires(created, expires, rtype, confirmed, now):
     # часов MAX_LIFE обрезали бы его до испытательного дня.
     return min(created + max(MAX_LIFE, full), new_exp)
 
+
+def amended_expires(conn, rid, created, expires, owner_device, owner_ip, rtype, now):
+    """Срок своей точки после уточнения типа внутри категории.
+
+    Уточнение не продлевает (иначе amend был бы бесплатным продлением своей
+    отметки), но и не оставляет точке срок старого типа, если он длиннее:
+    «ремонт» живёт на испытании сутки, «перекрытие» — три часа, и ремонт,
+    переписанный в перекрытие, жил бы неподтверждённым перекрытием сутки.
+    Потолок — срок, который получила бы точка нового типа: испытательный без
+    независимого подтверждения, полный — с ним.
+    """
+    if confirmed_independently(conn, rid, owner_device, owner_ip):
+        cap = created + max(MAX_LIFE, REPORT_TTLS[rtype])
+    else:
+        cap = created + road_new_ttl(conn, rtype, now)
+    return min(expires, max(now + 60, cap))
+
 # --- Поделиться прибытием -------------------------------------------------
 #
 # Водитель отправляет знакомому ссылку «буду примерно в 18:40». Приватно по
@@ -744,13 +784,20 @@ def clean_eta(data, now):
 
 
 def eta_put(token, item, now):
+    """Полная таблица уступает место новой ссылке за счёт самой давно не
+    обновлявшейся. Раньше она отвечала 503: пять тысяч случайных ссылок с
+    трёх адресов запирали «Поделиться прибытием» всей стране на два часа, а
+    держать её запертой стоило бы пару десятков адресов в сутки. Живая ссылка
+    обновляется не реже раза в 10 минут и, вытесненная потопом, возвращается
+    сама со следующим обновлением; вытеснить её навсегда — значит писать
+    больше ETA_MAX_LINKS новых ссылок за каждый её интервал."""
     with _eta_lock:
         for key in [k for k, v in _eta_links.items() if _eta_expired(v, now)]:
             del _eta_links[key]
         if token not in _eta_links and len(_eta_links) >= ETA_MAX_LINKS:
-            return False
+            oldest = min(_eta_links, key=lambda k: _eta_links[k]["updated"])
+            del _eta_links[oldest]
         _eta_links[token] = item
-        return True
 
 
 def eta_get(token, now):
@@ -884,12 +931,15 @@ class Handler(BaseHTTPRequestHandler):
         на проде: запрос с «X-Forwarded-For: 8.8.8.8» проходил и списывался с
         чужого лимита. Так обходились все суточные капы и подделывался кворум
         «разных адресов», по которому скрывается отметка.
+
+        IPv6 сводится к сети /64 (client_key): адрес внутри неё абонент
+        меняет бесплатно, как UUID.
         """
         for header in ("X-Real-IP", "X-Forwarded-For"):
             value = self.headers.get(header, "").split(",")[0].strip()
             if value:
-                return value
-        return self.client_address[0]
+                return client_key(value)
+        return client_key(self.client_address[0])
 
     def _body(self, limit=4096):
         try:
@@ -987,6 +1037,23 @@ class Handler(BaseHTTPRequestHandler):
         return self._json_cached(body, etag)
 
     def do_POST(self):
+        """Разбор чисел и вложенности — один отказ на всех: Infinity и целое в
+        сотни знаков проходят json.loads, но int()/float() бросают
+        OverflowError, а тело из двух тысяч скобок на Python 3.10 сервера —
+        RecursionError прямо в json.loads, мимо except ValueError. Обработчик
+        падал без ответа, а в журнал уходил трейс на каждый такой запрос.
+        Все записи в базу идут после разбора полей, так что отказ здесь ничего
+        не оставляет недописанным (соединение закрывается без commit)."""
+        try:
+            return self._post()
+        except (OverflowError, RecursionError) as error:
+            # Путь — без запроса и в repr: строка уходит в журнал, а путь
+            # присылает клиент.
+            route = self.path.split("?", 1)[0][:64]
+            sys.stderr.write(f"POST {route!r}: {type(error).__name__} — 400\n")
+            return self._json(400, {"error": "bad fields"})
+
+    def _post(self):
         path = self.path.split("?", 1)[0].rstrip("/")
         if path == "/api/report":
             return self._report()
@@ -1018,8 +1085,7 @@ class Handler(BaseHTTPRequestHandler):
         if ip_quota_exceeded("eta", self._ip(), ETA_UPDATES_PER_IP_DAY):
             return self._json(429, {"error": "too many"})
         token, item = cleaned
-        if not eta_put(token, item, now):
-            return self._json(503, {"error": "busy"})
+        eta_put(token, item, now)
         self._json(200, {"ok": True})
 
     def _eta_page(self, token, family=False):
@@ -1334,7 +1400,7 @@ class Handler(BaseHTTPRequestHandler):
             course = -1.0
         try:
             amend_id = int(data.get("amend_id") or 0)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):   # OverflowError — Infinity
             amend_id = 0
         ip = self._ip()
         if ip_quota_exceeded("report", ip, IP_DAILY_CAPS["report"]):
@@ -1355,7 +1421,7 @@ class Handler(BaseHTTPRequestHandler):
             # радар пропадал у всех, старых сборок тоже. Через границу — только
             # явно: «Что это было? → Перекрыто» присылает amend_id той точки.
             own = conn.execute(
-                "SELECT id, lat, lon, type, created FROM reports "
+                "SELECT id, lat, lon, type, created, expires, ip FROM reports "
                 "WHERE device = ? AND active = 1 AND expires > ? AND created > ?",
                 (device, now, now - AMEND_WINDOW)).fetchall()
             for r in own:
@@ -1365,15 +1431,43 @@ class Handler(BaseHTTPRequestHandler):
                 if crossing and r[0] != amend_id:
                     continue
                 if crossing:
-                    # Кап своих активных точек — категории, куда переводим:
-                    # иначе «три радара → в ремонт → ещё три радара» обходил его.
+                    # Перевод через границу уводит точку из её списка у всех —
+                    # для /api/mobile это то же, что отзыв. Отзыв подтверждённой
+                    # другими отметки запрещён (_report_cancel), значит и это:
+                    # иначе автор первой отметки настоящей треноги снимал бы её
+                    # у всех, уже подтверждённую, одним «Перекрыто».
+                    others = conn.execute(
+                        "SELECT COUNT(*) FROM votes WHERE report_id = ? AND value = 1 "
+                        "AND device != ?", (r[0], device)).fetchone()[0]
+                    if others:
+                        return self._json(409, {"error": "confirmed by others"})
+                    # Капы категории, куда переводим, — все те же, что у новой
+                    # точки: свой (иначе «три радара → в ремонт → ещё три
+                    # радара»), адреса и общий (иначе радар, переписанный в
+                    # перекрытие, обходил шесть перекрытий на адрес и потолок
+                    # страны — каждый адрес держал бы сколько угодно). Адрес —
+                    # той строки, что переводим: он с ней и остаётся.
+                    target_road = is_road(rtype)
+                    flag = 1 if target_road else 0
                     target = conn.execute(
                         "SELECT COUNT(*) FROM reports WHERE device = ? AND active = 1 "
                         "AND expires > ? AND (type IN (?, ?)) = ?",
-                        (device, now, ROAD_TYPES[0], ROAD_TYPES[1],
-                         1 if is_road(rtype) else 0)).fetchone()[0]
+                        (device, now, ROAD_TYPES[0], ROAD_TYPES[1], flag)).fetchone()[0]
                     if target >= 3:
                         return self._json(429, {"error": "too many active reports"})
+                    total = conn.execute(
+                        "SELECT COUNT(*) FROM reports WHERE active = 1 AND expires > ? "
+                        "AND (type IN (?, ?)) = ?",
+                        (now, ROAD_TYPES[0], ROAD_TYPES[1], flag)).fetchone()[0]
+                    if total >= (MAX_ACTIVE_ROAD if target_road else MAX_ACTIVE_REPORTS):
+                        return self._json(429, {"error": "too many active"})
+                    if r[6]:
+                        mine = conn.execute(
+                            "SELECT COUNT(*) FROM reports WHERE ip = ? AND active = 1 "
+                            "AND expires > ? AND (type IN (?, ?)) = ?",
+                            (r[6], now, ROAD_TYPES[0], ROAD_TYPES[1], flag)).fetchone()[0]
+                        if mine >= (MAX_ACTIVE_ROAD_PER_IP if target_road else MAX_ACTIVE_PER_IP):
+                            return self._json(429, {"error": "too many active"})
                     # Через границу срок — по НОВОМУ типу, от создания: иначе
                     # перекрытие жило бы сроком радара (75 мин вместо 3 ч), а
                     # радар из перекрытия — сроком перекрытия. Как у новой
@@ -1382,10 +1476,13 @@ class Handler(BaseHTTPRequestHandler):
                     conn.execute("UPDATE reports SET type = ?, expires = ? WHERE id = ?",
                                  (rtype, max(now + 60, r[4] + ttl), r[0]))
                 else:
-                    # Срок не трогаем: уточнение типа — не подтверждение, иначе
-                    # amend был бы бесплатным продлением собственной отметки.
-                    conn.execute("UPDATE reports SET type = ? WHERE id = ?",
-                                 (rtype, r[0]))
+                    # Срок не продлеваем: уточнение типа — не подтверждение,
+                    # иначе amend был бы бесплатным продлением своей отметки.
+                    # Но и срок старого типа, если он длиннее, не оставляем
+                    # (см. amended_expires: ремонт → перекрытие).
+                    conn.execute("UPDATE reports SET type = ?, expires = ? WHERE id = ?",
+                                 (rtype, amended_expires(conn, r[0], r[4], r[5], device, r[6],
+                                                         rtype, now), r[0]))
                 conn.commit()
                 bump_mobile_version()
                 # merged=True — для старых клиентов, знающих только это поле.

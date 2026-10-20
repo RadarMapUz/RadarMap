@@ -60,6 +60,8 @@ final class ScenarioDriveTests: XCTestCase {
         var filter = LocationFilter()
         var engine = AlertEngine()
         var route: RouteModel?
+        /// Город или трасса — как alertContext сервиса (ширина коридора, радиус).
+        var context: AlertPolicy.Context = .city
         /// Камера → сколько раз о ней предупредили с начала (новый подъезд).
         private(set) var firstAlerts: [Int: Int] = [:]
         /// Где прозвучало каждое «первое» (x, y в метрах).
@@ -86,7 +88,7 @@ final class ScenarioDriveTests: XCTestCase {
                 let speedKmh = max(0, good.speed ?? 0) * 3.6
                 let situation = LocationGates.Situation(coordinate: here, course: good.course,
                                                         speedKmh: speedKmh,
-                                                        horizontalAccuracy: good.accuracy, context: .city)
+                                                        horizontalAccuracy: good.accuracy, context: context)
                 var candidates: [(camera: Camera, distance: Double, onRoute: Bool)] = []
                 for camera in cameras {
                     let straight = GeoMath.fastDistance(here.latitude, here.longitude, camera.lat, camera.lon)
@@ -120,7 +122,8 @@ final class ScenarioDriveTests: XCTestCase {
                 guard let nearest = candidates.first(where: {
                     LocationGates.isOnOurRoad($0.camera, in: situation, isOnRoute: $0.onRoute)
                 }) else { continue }
-                let radius = AlertEngine.effectiveRadius(speedKmh: speedKmh, baseRadius: AppConfig.alertRadius)
+                let radius = AlertEngine.effectiveRadius(speedKmh: speedKmh, baseRadius: AppConfig.alertRadius,
+                                                         context: context)
                 if let decision = engine.evaluate(cameraID: nearest.camera.id, distance: nearest.distance,
                                                   radius: radius,
                                                   moving: LocationGates.isFilteringActive(situation)),
@@ -534,7 +537,7 @@ final class ScenarioDriveTests: XCTestCase {
 extension ScenarioDriveTests {
     /// Проезд по собственной проезжей части камеры (`road` из базы) с
     /// разгоном 500 м и выездом 200 м, в её направлении, где оно известно.
-    private func ownRoadDrive(for target: Camera) -> [(x: Double, y: Double)]? {
+    private func ownRoadDrive(for target: Camera, approach: Double = 500) -> [(x: Double, y: Double)]? {
         guard let road = target.road, road.count >= 4 else { return nil }
         var path: [(x: Double, y: Double)] = stride(from: 0, to: road.count - 1, by: 2).map { i in
             xy(target.lat + Double(road[i]) / 1e6, target.lon + Double(road[i + 1]) / 1e6)
@@ -549,7 +552,7 @@ extension ScenarioDriveTests {
             let length = max(0.1, (dx * dx + dy * dy).squareRoot())
             return (a.x + dx / length * meters, a.y + dy / length * meters)
         }
-        let head = extended(path[0], from: path[1], by: 500)
+        let head = extended(path[0], from: path[1], by: approach)
         let tail = extended(path[path.count - 1], from: path[path.count - 2], by: 200)
         return [head] + path + [tail]
     }
@@ -573,56 +576,96 @@ extension ScenarioDriveTests {
     /// (параллельная улица, эстакада — коридор города не шире 90 м,
     /// щедрый — 140) не прозвучала. Камеры за концом пути не судим: их
     /// расстояние продольное (следующая на той же дороге).
-    func testCityCamerasOnTheirOwnRoad() throws {
-        let url = try XCTUnwrap(Bundle.main.url(forResource: "cameras", withExtension: "json"))
-        let all = TwinCheck.verified(try JSONDecoder().decode([Camera].self, from: Data(contentsOf: url))).cameras
-        let city = all.filter { $0.region.hasPrefix("Toshkent shahar") && $0.road != nil
-            && $0.hasTrustedRoadProfile && $0.needsReview != true }
-        let sample = stride(from: 0, to: city.count, by: 4).map { city[$0] }
+    private struct OwnRoadResult {
+        var drives = 0
         var silent: [Int] = []
         var late: [Int] = []
         var offPath: [(target: Int, other: Int, lateral: Int)] = []
+    }
+
+    private func bundledCameras() throws -> [Camera] {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "cameras", withExtension: "json"))
+        return TwinCheck.verified(try JSONDecoder().decode([Camera].self, from: Data(contentsOf: url))).cameras
+    }
+
+    /// Проезды по собственной дороге каждой камеры выборки: кто промолчал,
+    /// кто прозвучал позже `minAhead` м (не в группе), кто чужой сбоку.
+    private func ownRoadDrives(_ sample: [Camera], all: [Camera], speed: Double,
+                               context: AlertPolicy.Context, minAhead: Double,
+                               approach: Double = 500,
+                               groupMeters: Double = AppConfig.voiceGroupMeters) -> OwnRoadResult {
+        var result = OwnRoadResult()
         for target in sample {
-            guard let path = ownRoadDrive(for: target) else { continue }
-            var legs: [Leg] = []
-            for p in path.dropFirst() { legs.append(Leg(x: p.x, y: p.y, speed: 14)) }
-            let fixes = self.fixes(from: (path[0].x, path[0].y), legs: legs)
+            guard let path = ownRoadDrive(for: target, approach: approach) else { continue }
+            result.drives += 1
+            let legs = path.dropFirst().map { Leg(x: $0.x, y: $0.y, speed: speed) }
+            let fixes = self.fixes(from: (path[0].x, path[0].y), legs: Array(legs))
             let nearby = all.filter {
                 GeoMath.fastDistance($0.lat, $0.lon, target.lat, target.lon) <= 3_000
             }
             var drive = Drive()
+            drive.context = context
             drive.run(fixes, cameras: nearby, xy: xy)
             let targetXY = xy(target.lat, target.lon)
+            // Группа: о камере в voiceGroupMeters от цели сказали — голос
+            // объявил и цель («Камеры впереди…»).
+            let grouped = drive.firstAlertPoints.keys.contains { other in
+                guard other != target.id, let camera = nearby.first(where: { $0.id == other }) else { return false }
+                return GeoMath.fastDistance(camera.lat, camera.lon, target.lat, target.lon)
+                    <= groupMeters
+            }
             if let first = drive.firstAlertPoints[target.id]?.first {
                 let ahead = ((first.x - targetXY.x) * (first.x - targetXY.x)
                              + (first.y - targetXY.y) * (first.y - targetXY.y)).squareRoot()
-                // Поздно — только если голос не объявил её группой с камерой
-                // перед ней («Камеры впереди…», voiceGroupMeters): тогда своё
-                // первое у неё и должно наступить после проезда соседки.
-                let grouped = drive.firstAlertPoints.keys.contains { other in
-                    guard other != target.id, let camera = nearby.first(where: { $0.id == other }) else { return false }
-                    return GeoMath.fastDistance(camera.lat, camera.lon, target.lat, target.lon)
-                        <= AppConfig.voiceGroupMeters
-                }
-                if ahead < 60, !grouped { late.append(target.id) }
-            } else if !drive.firstAlertPoints.keys.contains(where: { other in
-                // Группа камер вплотную: о соседней в 30 м сказали — сказали и об этой.
-                guard let camera = nearby.first(where: { $0.id == other }) else { return false }
-                return GeoMath.fastDistance(camera.lat, camera.lon, target.lat, target.lon) <= 30
-            }) {
-                silent.append(target.id)
+                if ahead < minAhead, !grouped { result.late.append(target.id) }
+            } else if !grouped {
+                result.silent.append(target.id)
             }
             for (other, points) in drive.firstAlertPoints where other != target.id {
                 guard let camera = nearby.first(where: { $0.id == other }), !points.isEmpty else { continue }
                 if let side = lateral(xy(camera.lat, camera.lon), to: path), side > 160 {
-                    offPath.append((target.id, other, Int(side)))
+                    result.offPath.append((target.id, other, Int(side)))
                 }
             }
         }
-        print("A1: камер \(sample.count), молчали \(silent), поздно \(late), чужие \(offPath.prefix(20))")
-        XCTAssertGreaterThan(sample.count, 50)
-        XCTAssertEqual(silent, [], "о камере на своей дороге молчать нельзя")
-        XCTAssertEqual(late, [], "первое — заранее, если камера не в группе с соседкой")
-        XCTAssertEqual(offPath.map(\.other), [], "камера дальше 160 м от пути — не наша")
+        return result
+    }
+
+    func testCityCamerasOnTheirOwnRoad() throws {
+        let all = try bundledCameras()
+        let city = all.filter { $0.region.hasPrefix("Toshkent shahar") && $0.road != nil
+            && $0.hasTrustedRoadProfile && $0.needsReview != true }
+        let sample = stride(from: 0, to: city.count, by: 4).map { city[$0] }
+        let result = ownRoadDrives(sample, all: all, speed: 14, context: .city, minAhead: 60)
+        print("A1: камер \(result.drives), молчали \(result.silent), поздно \(result.late), чужие \(result.offPath.prefix(20))")
+        XCTAssertGreaterThan(result.drives, 150)
+        XCTAssertEqual(result.silent, [], "о камере на своей дороге молчать нельзя")
+        XCTAssertEqual(result.late, [], "первое — заранее, если камера не в группе с соседкой")
+        XCTAssertEqual(result.offPath.map(\.other), [], "камера дальше 160 м от пути — не наша")
+    }
+
+    /// A2 (план 12в): трасса 94 км/ч — камеры на trunk/motorway вне Ташкента.
+    /// Умный радиус даёт водителю секунды, а не метры: первое оповещение —
+    /// не ближе 0,8 радиуса на этой скорости, кроме камеры, перед которой в
+    /// пределах радиуса прозвучала другая (пока не проехали её, ближайшая —
+    /// она: 10 из 182 стоят в 90–650 м за соседкой); молчащих и
+    /// чужих сбоку нет и на трассовом, более широком коридоре.
+    func testHighwayCamerasWarnEarlyEnough() throws {
+        let all = try bundledCameras()
+        let highway = all.filter { !$0.region.hasPrefix("Toshkent shahar") && $0.road != nil
+            && ["trunk", "motorway"].contains($0.cls ?? "") && $0.needsReview != true }
+        let sample = stride(from: 0, to: highway.count, by: max(1, highway.count / 150)).map { highway[$0] }
+        let speed = 26.0
+        let radius = AlertEngine.effectiveRadius(speedKmh: speed * 3.6, baseRadius: AppConfig.alertRadius,
+                                                 context: .highway)
+        // Разгон длиннее радиуса: на трассе он 754 м, и с городскими 500 м
+        // оповещению физически негде было прозвучать раньше.
+        let result = ownRoadDrives(sample, all: all, speed: speed, context: .highway, minAhead: radius * 0.8,
+                                   approach: radius + 400, groupMeters: radius)
+        print("A2: камер \(result.drives), радиус \(Int(radius)), молчали \(result.silent), поздно \(result.late), чужие \(result.offPath.prefix(20))")
+        XCTAssertGreaterThan(result.drives, 100)
+        XCTAssertEqual(result.silent, [])
+        XCTAssertEqual(result.late, [], "на трассе — заранее, по секундам, а не по метрам")
+        XCTAssertEqual(result.offPath.map(\.other), [])
     }
 }

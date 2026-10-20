@@ -2,14 +2,17 @@
 //  WatchBridgeService.swift
 //  RadarMap
 //
-//  Мост на Apple Watch: шлём состояние поездки (скорость, ближайшая камера,
-//  уровень тревоги) через applicationContext — «последнее состояние», не очередь.
+//  Мост на Apple Watch: шлём состояние поездки (ближайшая камера, уровень
+//  тревоги, знак ограничения, скорость — в тревоге или при превышении) через
+//  applicationContext — «последнее состояние», не очередь. Обратно — «Радар!»
+//  сообщением с ответом (9.3).
 //  Квантуем и дедупим, как в Live Activity: радио будим только когда цифры
 //  реально изменились — батарея обоих устройств целее.
 //
 
 import Foundation
 import WatchConnectivity
+import os
 
 @MainActor
 final class WatchBridgeService: NSObject {
@@ -31,16 +34,23 @@ final class WatchBridgeService: NSObject {
     /// не синтезировать isolated deinit вовсе.
     nonisolated deinit {}
     /// Последнее отправленное состояние (для дедупа).
-    private var lastSent: [String: Int] = [:]
-    /// Когда отправляли: в движении кванты (2 км/ч, 25 м) перешагиваются почти
-    /// каждым тиком, и дедуп по значению превращался в честный 1 Гц — ≈3600
-    /// пробуждений BT-радио обоих устройств за час. Скорость и дистанция на
-    /// запястье не нуждаются в секундной точности — а смена уровня тревоги
+    private var lastSent: Payload?
+    /// Когда отправляли: в движении кванты перешагиваются почти каждым тиком,
+    /// и дедуп по значению превращался в честный 1 Гц — ≈3600 пробуждений
+    /// BT-радио обоих устройств за час. Дистанция на запястье не нуждается в
+    /// секундной точности — а смена уровня, камеры, знака и превышения
     /// проходит без очереди.
     private var lastSentAt = Date.distantPast
     /// Часы спарены и приложение на них стоит — по событиям сессии, а не
     /// опросом WCSession на каждом GPS-тике (аудит энергии 19.10).
     private var watchReady = false
+
+    /// «Радар!» с часов (9.3): ответ — точка есть (ушла, в очереди или уже
+    /// стояла), нет — или nil: прошлая отметка ещё в пути.
+    var onReport: (() async -> Bool?)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onReport,
+                                               "WatchBridgeService.onReport") }
+    }
 
     override init() {
         super.init()
@@ -49,48 +59,99 @@ final class WatchBridgeService: NSObject {
         WCSession.default.activate()
     }
 
-    /// Обновить часы. Дёшево вызывать на каждом GPS-тике: без изменений — no-op.
-    func update(isTripActive: Bool, speedKmh: Double, cameraTitle: String?,
-                distanceMeters: Double?, alertLevel: Int) {
-        guard watchReady else { return }
-        let session = WCSession.default
+    /// Что уходит на часы — квантованное, для дедупа (чистое, WatchBridgeTests).
+    nonisolated struct Payload: Equatable {
+        var active: Bool
+        /// Скорость — только в тревоге или при превышении (9.3): в спокойном
+        /// режиме часы её не показывают — ступень 5 км/ч раз в 10 с была
+        /// старой цифрой на запястье. nil — не показывать.
+        var speed: Int?
+        var distance: Int?
+        var level: Int
+        var title: String?
+        var symbol: String?
+        var limit: Int?
+        var over: Bool
 
-        // Квантуем — меньше пробуждений радио. Без тревоги грубее: скорость до
-        // 5 км/ч, дальняя дистанция до 100 м, — ступень в 2 км/ч менялась почти
-        // каждый тик, и часы получали сообщение раз в 3 с всю поездку
-        // (docs/perf_audit_2026-10-07.md). В тревоге — как раньше.
-        let calm = alertLevel == 0
-        let speedStep = calm ? AppConfig.watchSpeedStepCalm : AppConfig.watchSpeedStepAlert
+        /// Повод отправить сразу, мимо интервала: то, что меняет смысл
+        /// экрана, а не бегущую цифру. Превышение и появление скорости — по
+        /// фронту вверх: «начали превышать» нужно сразу, а «перестали» ждёт
+        /// интервала — иначе дребезг у самого лимита будил бы радио каждую
+        /// секунду (ревью 9.3).
+        func isUrgent(comparedTo old: Payload?) -> Bool {
+            guard let old else { return true }
+            return level != old.level || title != old.title || symbol != old.symbol
+                || limit != old.limit || active != old.active
+                || (over && !old.over) || (speed != nil && old.speed == nil)
+        }
+
+        var context: [String: Any] {
+            var context: [String: Any] = ["active": active, "level": level, "over": over]
+            if let speed { context["speed"] = speed }
+            if let distance { context["dist"] = distance }
+            if let title { context["title"] = title }
+            if let symbol { context["sym"] = symbol }
+            if let limit { context["limit"] = limit }
+            return context
+        }
+    }
+
+    nonisolated static func payload(isTripActive: Bool, speedKmh: Double, cameraTitle: String?,
+                                    cameraSymbol: String?, distanceMeters: Double?, alertLevel: Int,
+                                    limitKmh: Int?, isOverspeeding: Bool) -> Payload {
+        let showsSpeed = isTripActive && (alertLevel > 0 || isOverspeeding)
+        let speedStep = AppConfig.watchSpeedStepAlert
         let distStep = (distanceMeters ?? .infinity) > AppConfig.liveActivityNearMeters
             ? AppConfig.watchDistanceStepFar : AppConfig.watchDistanceStepNear
-        let quantized: [String: Int] = [
-            "active": isTripActive ? 1 : 0,
-            "speed": Int((speedKmh / speedStep).rounded() * speedStep),
-            "dist": distanceMeters.map { Int(($0 / distStep).rounded() * distStep) } ?? -1,
-            "level": alertLevel,
-            // Смена ближайшей камеры при совпавших квантах — тоже повод отправить:
-            // иначе на часах висело бы название прошлой камеры со свежей дистанцией.
-            "title": cameraTitle?.hashValue ?? 0,
-        ]
-        guard quantized != lastSent else { return }
-        // Рост/сброс уровня и смена камеры — сразу; бегущие цифры — не чаще
-        // раза в watchAlertInterval (в тревоге) или watchCalmInterval (без неё).
-        if quantized["level"] == lastSent["level"], quantized["title"] == lastSent["title"],
-           Date().timeIntervalSince(lastSentAt) < (calm ? AppConfig.watchCalmInterval : AppConfig.watchAlertInterval) {
+        return Payload(active: isTripActive,
+                       speed: showsSpeed ? Int((speedKmh / speedStep).rounded() * speedStep) : nil,
+                       distance: distanceMeters.map { Int(($0 / distStep).rounded() * distStep) },
+                       level: alertLevel,
+                       title: cameraTitle,
+                       symbol: cameraTitle == nil ? nil : cameraSymbol,
+                       limit: limitKmh,
+                       over: isOverspeeding)
+    }
+
+    /// Обновить часы. Дёшево вызывать на каждом GPS-тике: без изменений — no-op.
+    func update(isTripActive: Bool, speedKmh: Double, cameraTitle: String?, cameraSymbol: String?,
+                distanceMeters: Double?, alertLevel: Int, limitKmh: Int?, isOverspeeding: Bool) {
+        guard watchReady else { return }
+        let payload = Self.payload(isTripActive: isTripActive, speedKmh: speedKmh,
+                                   cameraTitle: cameraTitle, cameraSymbol: cameraSymbol,
+                                   distanceMeters: distanceMeters, alertLevel: alertLevel,
+                                   limitKmh: limitKmh, isOverspeeding: isOverspeeding)
+        guard payload != lastSent else { return }
+        // Смысл экрана поменялся — сразу; бегущие цифры — не чаще раза в
+        // watchAlertInterval (скорость на часах) или watchCalmInterval.
+        if !payload.isUrgent(comparedTo: lastSent),
+           Date().timeIntervalSince(lastSentAt)
+            < (payload.speed != nil ? AppConfig.watchAlertInterval : AppConfig.watchCalmInterval) {
             return
         }
-        lastSent = quantized
+        lastSent = payload
         lastSentAt = Date()
-
-        var context: [String: Any] = [
-            "active": isTripActive,
-            "speed": quantized["speed"] ?? 0,
-            "level": alertLevel,
-        ]
-        if let dist = quantized["dist"], dist >= 0 { context["dist"] = dist }
-        if let cameraTitle { context["title"] = cameraTitle }
         // Ошибка отправки не критична: следующий тик пришлёт свежее состояние.
-        try? session.updateApplicationContext(context)
+        try? WCSession.default.updateApplicationContext(payload.context)
+    }
+}
+
+/// Ответ часам из главного актора: обработчик WatchConnectivity не Sendable,
+/// но вызвать его можно из любого потока — ровно один раз.
+private struct WatchReply: @unchecked Sendable {
+    let send: ([String: Any]) -> Void
+}
+
+/// Первый из ответов (итог или «в пути» по тайм-ауту) — единственный.
+@MainActor
+private final class WatchReplyOnce {
+    private var reply: WatchReply?
+
+    init(_ reply: WatchReply) { self.reply = reply }
+
+    func send(_ message: [String: Any]) {
+        reply?.send(message)
+        reply = nil
     }
 }
 
@@ -108,7 +169,7 @@ extension WatchBridgeService: WCSessionDelegate {
         let ready = session.activationState == .activated && session.isPaired && session.isWatchAppInstalled
         Task { @MainActor in
             self.watchReady = ready
-            if !ready { self.lastSent = [:] }
+            if !ready { self.lastSent = nil }
         }
     }
     nonisolated func sessionDidBecomeInactive(_ session: WCSession) {
@@ -117,5 +178,31 @@ extension WatchBridgeService: WCSessionDelegate {
     nonisolated func sessionDidDeactivate(_ session: WCSession) {
         noteWatchState(session)
         session.activate()   // смена часов — переактивируемся
+    }
+
+    /// «Радар!» с часов. Часы будят приложение в фоне и ждут ответа — без
+    /// него на запястье не узнать, ушла ли отметка.
+    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any],
+                             replyHandler: @escaping ([String: Any]) -> Void) {
+        let reply = WatchReply(send: replyHandler)
+        guard message["action"] as? String == "report" else {
+            reply.send([:])
+            return
+        }
+        Task { @MainActor in
+            let once = WatchReplyOnce(reply)
+            // Часы ждут ответа недолго (тайм-аут WatchConnectivity не описан);
+            // отметка на слабой связи может идти дольше — тогда честное «в
+            // пути», а итог скажет голос телефона.
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(AppConfig.watchReplyMaxSeconds))
+                once.send(["pending": true])
+            }
+            guard let onReport = self.onReport else { return once.send(["ok": false]) }
+            let answer = await onReport()
+            Log.network.info("часы: «Радар!» — \(answer.map { $0 ? "принято" : "отказ" } ?? "уже в пути", privacy: .public)")
+            // nil — отметка с прошлого нажатия ещё в пути: не «✕», а «в пути».
+            once.send(answer.map { ["ok": $0] } ?? ["pending": true])
+        }
     }
 }

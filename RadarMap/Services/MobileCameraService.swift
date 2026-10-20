@@ -413,7 +413,11 @@ final class MobileCameraService {
                                         longitude: item.lon, at: item.at)
             lastSentID = response.id
             if response.merged != true { noteMine(id: response.id, item: item) }
-            await refresh()
+            // Маркеры — отдельно, не задерживая ответ: водитель ждёт «принято»
+            // (голос, плашка, часы), а не второго запроса за картой — на
+            // слабой связи он добавлял до 10 с, и часы успевали сказать «✕»
+            // о доставленной отметке (ревью 9.3).
+            Task { await self.refresh() }
             // amended: сервер счёл это уточнением типа СВОЕЙ свежей отметки
             // (другой тип в 400 м / 10 мин) и переписал её, а не создал вторую.
             if response.amended == true { return .amended }

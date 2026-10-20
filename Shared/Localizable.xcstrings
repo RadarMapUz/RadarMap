@@ -8810,6 +8810,22 @@
         }
       }
     },
+    "Отправляется": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправляется"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yuborilmoqda"
+          }
+        }
+      }
+    },
     "Отрезки пути без устройства и времени — из них считаются пробки.": {
       "localizations": {
         "ru": {

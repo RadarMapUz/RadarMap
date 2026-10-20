@@ -75,7 +75,7 @@ private func format(_ meters: Double) -> String {
 struct CameraActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: CameraActivityAttributes.self) { context in
-            LockScreenView(state: context.state, isStale: context.isStale)
+            ActivityContent(state: context.state, isStale: context.isStale)
                 // Высота плашки — не больше 160 pt: на самом крупном шрифте
                 // строка с дистанцией, прибытием и полосой выталкивала кнопки
                 // за край (ревью 20.10).
@@ -136,6 +136,10 @@ struct CameraActivityWidget: Widget {
             }
             .keylineTint(WTheme.accent)
         }
+        // Smart Stack часов (9.2) и машины на iOS 26 берут малое лицо: без
+        // него система собирала бы его из краёв острова (compact leading +
+        // trailing) — значок и цифра без знака и адреса.
+        .supplementalActivityFamilies([.small])
     }
 
     @ViewBuilder
@@ -145,6 +149,68 @@ struct CameraActivityWidget: Widget {
             .font(.system(size: 14, weight: .bold))
             .foregroundStyle(isStale ? WTheme.secondary
                              : state.nearestTitle == nil ? WTheme.clear : WTheme.camera)
+    }
+}
+
+/// Лицо по месту показа: малое (Smart Stack часов, машина) или экран
+/// блокировки.
+private struct ActivityContent: View {
+    @Environment(\.activityFamily) private var family
+    let state: CameraActivityAttributes.ContentState
+    let isStale: Bool
+
+    var body: some View {
+        switch family {
+        case .small: SmallActivityView(state: state, isStale: isStale)
+        default: LockScreenView(state: state, isStale: isStale)
+        }
+    }
+}
+
+/// Малое лицо (9.2): на запястье важны дистанция и знак — взгляд на часы
+/// длится секунду. Без кнопок (отметку ставят с телефона или голосом),
+/// без адреса длиннее строки и без прибытия.
+private struct SmallActivityView: View {
+    let state: CameraActivityAttributes.ContentState
+    let isStale: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: isStale ? "location.slash.fill"
+                  : state.nearestTitle == nil ? "checkmark.shield.fill" : state.nearestSymbol)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 28, height: 28)
+                .background(isStale ? WTheme.primary.opacity(0.16)
+                            : state.nearestTitle == nil ? WTheme.clearFill : WTheme.cameraFill,
+                            in: Circle())
+            VStack(alignment: .leading, spacing: 1) {
+                if isStale {
+                    Text("Нет сигнала GPS")
+                        .font(.system(.footnote, design: .rounded).weight(.semibold))
+                        .foregroundStyle(WTheme.primary)
+                } else if let title = state.nearestTitle, let distance = state.distanceMeters {
+                    Text(format(distance))
+                        .font(.system(.title3, design: .rounded).weight(.bold))
+                        .foregroundStyle(WTheme.level(state.alertLevel))
+                        .minimumScaleFactor(0.7)
+                    Text(title)
+                        .font(.system(.caption2, design: .rounded))
+                        .foregroundStyle(WTheme.secondary)
+                        .lineLimit(1)
+                } else {
+                    Text("Камер рядом нет")
+                        .font(.system(.footnote, design: .rounded).weight(.semibold))
+                        .foregroundStyle(WTheme.primary)
+                        .lineLimit(2)
+                }
+            }
+            Spacer(minLength: 0)
+            if !isStale, let limit = state.limitKmh {
+                LimitSign(limit: limit, size: 28)
+            }
+        }
+        .padding(10)
     }
 }
 

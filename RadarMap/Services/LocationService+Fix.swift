@@ -384,8 +384,14 @@ extension LocationService {
         if isTripActive {
             watchBridge?.update(isTripActive: true, speedKmh: speedKmh,
                                 cameraTitle: nearestCamera?.displayTitle,
+                                cameraSymbol: nearestCamera?.kind.symbolName,
                                 distanceMeters: distanceToNearest,
-                                alertLevel: alertLevel)
+                                alertLevel: alertLevel,
+                                limitKmh: speedLimits?.currentLimit,
+                                // Устойчивое: мгновенный флаг щёлкает от шума
+                                // GPS у самого лимита и будил бы радио часов
+                                // раз в секунду (ревью 9.3).
+                                isOverspeeding: speedLimits?.isOverspeedingSustained ?? false)
         }
     }
 

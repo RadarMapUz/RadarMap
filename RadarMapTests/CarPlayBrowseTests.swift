@@ -88,6 +88,16 @@ final class CarPlayBrowseTests: XCTestCase {
         XCTAssertEqual(run([.zoomed], from: state, previewing: true).1, [])
     }
 
+    /// «Весь маршрут» во время ведения (10.4) — обзор вернётся к машине сам,
+    /// камера впереди возвращает сразу.
+    func testOverviewWhileGuidingReturnsByItself() {
+        let (state, effects) = run([.overview], previewing: false)
+        XCTAssertFalse(state.following)
+        XCTAssertEqual(effects, [.armIdle])
+        XCTAssertEqual(run([.idleTimeout], from: state, previewing: false).1, [.recenter, .cancelIdle])
+        XCTAssertEqual(run([.cameraAhead], from: state, previewing: false).1, [.recenter, .cancelIdle])
+    }
+
     func testRecenterAfterPreviewFollowsAgain() {
         var state = B.State(following: false, panning: false)
         XCTAssertEqual(B.reduce(&state, .recenter, previewing: false), [.recenter, .cancelIdle])

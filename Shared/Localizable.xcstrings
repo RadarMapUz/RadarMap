@@ -4299,6 +4299,22 @@
         }
       }
     },
+    "Другое": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Другое"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boshqa"
+          }
+        }
+      }
+    },
     "Другой водитель проехал и подтвердил: %@": {
       "extractionState": "manual",
       "localizations": {
@@ -4935,6 +4951,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ovoz"
+          }
+        }
+      }
+    },
+    "Звук в машине": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Звук в машине"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashinada ovoz"
           }
         }
       }
@@ -5655,6 +5687,54 @@
         }
       }
     },
+    "Камер впереди нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камер впереди нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldinda kamera yo‘q"
+          }
+        }
+      }
+    },
+    "Камер впереди по маршруту нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камер впереди по маршруту нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo‘nalishda oldinda kamera yo‘q"
+          }
+        }
+      }
+    },
+    "Камер впереди: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камер впереди: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldinda kameralar: %lld"
+          }
+        }
+      }
+    },
     "Камер по пути не было": {
       "localizations": {
         "ru": {
@@ -5907,6 +5987,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kameralar odatdagidek ogohlantiradi: baza telefonda saqlanadi"
+          }
+        }
+      }
+    },
+    "Камеры: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камеры: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralar: %lld"
           }
         }
       }
@@ -7969,6 +8065,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Barchasi haqida"
+          }
+        }
+      }
+    },
+    "Обо всех камерах": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обо всех камерах"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Barcha kameralar haqida"
           }
         }
       }
@@ -10816,6 +10928,38 @@
         }
       }
     },
+    "Радар отмечен": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Радар отмечен"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radar belgilandi"
+          }
+        }
+      }
+    },
+    "Радар отмечен — что это было?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Радар отмечен — что это было?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radar belgilandi — bu nima edi?"
+          }
+        }
+      }
+    },
     "Радар отмечен. Спасибо, что предупредили!": {
       "localizations": {
         "ru": {
@@ -11643,6 +11787,22 @@
         }
       }
     },
+    "Сейчас: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сейчас: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hozir: %@"
+          }
+        }
+      }
+    },
     "Сели за руль — поездка началась сама": {
       "localizations": {
         "ru": {
@@ -11751,6 +11911,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Birorta kamera jarimaga tutmaydigan ketma-ket safarlar seriyasi."
+          }
+        }
+      }
+    },
+    "Сигнал": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сигнал"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signal"
           }
         }
       }
@@ -12624,6 +12800,22 @@
         }
       }
     },
+    "Тишина до конца поездки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тишина до конца поездки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar oxirigacha jimlik"
+          }
+        }
+      }
+    },
     "Тогда в дороге будет видно, успеваете ли: «с запасом» или «впритык». Срок останется на телефоне.": {
       "localizations": {
         "ru": {
@@ -12700,6 +12892,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Faqat oshirishlar bilan"
+          }
+        }
+      }
+    },
+    "Только сигнал": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только сигнал"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faqat signal"
           }
         }
       }
@@ -13144,6 +13352,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aqlli"
+          }
+        }
+      }
+    },
+    "Умно — при превышении": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Умно — при превышении"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aqlli — tezlik oshganda"
           }
         }
       }

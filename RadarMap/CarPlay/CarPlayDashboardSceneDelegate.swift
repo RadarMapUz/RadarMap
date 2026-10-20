@@ -166,7 +166,8 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
                                          subtitleVariants: [usual, String(localized: "по вашим поездкам")]
                                             .compactMap { $0 },
                                          image: image) { [weak self] _ in
-                    self?.route(to: place)
+                    // Выученное в «недавние» не пишем (см. «Куда»).
+                    self?.route(to: place, remember: false)
                 }
             }
             return CPDashboardButton(titleVariants: [slot.name], subtitleVariants: [slot.notSetTitle],
@@ -176,7 +177,7 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
         }
     }
 
-    private func route(to place: SavedPlace) {
+    private func route(to place: SavedPlace, remember: Bool = true) {
         Task { @MainActor [weak self] in
             guard let self else { return }
             guard let from = await env.location.awaitPreciseCoordinate() else {
@@ -189,7 +190,7 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
             }
             await env.route.build(from: from, to: place.coordinate, name: place.title,
                                   cameras: env.cameras.cameras, alternatives: false)
-            env.settings.addRecent(title: place.title, lat: place.lat, lon: place.lon)
+            if remember { env.settings.addRecent(title: place.title, lat: place.lat, lon: place.lon) }
             if !env.location.isTripActive { env.location.startTrip() }
             if let error = env.route.errorMessage {
                 Log.carplay.error("маршрут с приборной панели: \(error, privacy: .public)")

@@ -253,12 +253,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // Вышли из машины: телефон мог всё это время быть в фоне, события
         // scenePhase не будет — снимаем «передний план» сами.
         AppEnvironment.shared.setCarPlayConnected(false)
-        // Тишина — атрибут ПОЕЗДКИ, а не настройка: кнопку жали в машине
-        // (спит пассажир, идёт разговор), и без отката телефон навсегда
-        // оставался в «Молча», а человек не связал бы это с кнопкой в машине.
-        // Откатываем только тишину, включённую КНОПКОЙ машины (маркер в
-        // Storage): выключенное руками в настройках не трогаем.
-        if Storage.bool(.carPlayMuted) { unmute() }
+        // Звук, выбранный в машине, — атрибут ПОЕЗДКИ (restoreCarSound).
+        restoreCarSound()
     }
 
     /// Машина сменила тему (включились фары, въехали в тоннель).
@@ -300,6 +296,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// любое касание отслеживаемого (а MapKit дёргал слежение на каждом «+»),
     /// поэтому отправляем только реально изменившееся.
     var sentBar: [Bool]?
+    /// Звук, с которым собран бар (10.1): значок кнопки — нынешний выбор.
+    var sentSound: CarPlaySoundChoice?
     var sentMapButtons: [Bool]?
 
     /// Открыт ли сейчас осмотр карты: бар на это время — одна кнопка «Готово».

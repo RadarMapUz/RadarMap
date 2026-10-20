@@ -80,6 +80,9 @@ nonisolated enum Commute {
         let best: BestWindow?
         /// Поездки окна, новые первыми.
         let trips: [Trip]
+        /// Неделя дороги (8.8.15): средняя за 7 дней против «обычно»; nil —
+        /// за неделю меньше двух поездок или «обычно» ещё нет.
+        var week: Week? = nil
 
         /// Последняя поездка заметно дольше/короче обычного.
         var lastIsSlower: Bool { (lastDelay ?? 0) >= AppConfig.commuteNoticeableDelaySeconds }
@@ -140,6 +143,30 @@ nonisolated enum Commute {
 
     // MARK: - Сводка
 
+    /// Неделя дороги: «за неделю в среднем 41 мин — на 3 мин дольше обычного».
+    struct Week: Equatable, Sendable {
+        /// Средняя за 7 дней, с.
+        let average: TimeInterval
+        let trips: Int
+        /// Средняя минус «обычно» (медиана 30 дней), с.
+        let delta: TimeInterval
+
+        /// Отклонение заметно — иначе строка «как обычно» ничего не добавляет.
+        var isNoticeable: Bool { abs(delta) >= AppConfig.commuteWeekNoticeableSeconds }
+    }
+
+    /// Неделя по поездкам окна: последние 7 суток до `now`, не меньше двух
+    /// поездок, и «обычно» уже есть. Средняя, а не медиана: неделю делает
+    /// каждый день, и один тяжёлый вторник — часть её правды.
+    static func week(_ window: [Trip], usual: TimeInterval?, now: Date) -> Week? {
+        guard let usual else { return nil }
+        let since = now.addingTimeInterval(-7 * 86_400)
+        let recent = window.filter { $0.departure >= since && $0.departure <= now }
+        guard recent.count >= AppConfig.commuteWeekMinTrips else { return nil }
+        let average = recent.reduce(0) { $0 + $1.duration } / Double(recent.count)
+        return Week(average: average, trips: recent.count, delta: average - usual)
+    }
+
     /// Сводка по направлению за окно. nil — поездок этого направления нет.
     static func summary(_ direction: Direction, trips: [Trip], now: Date,
                         calendar: Calendar = .current,
@@ -161,7 +188,8 @@ nonisolated enum Commute {
         return Summary(direction: direction, last: last, usual: usual,
                        usualDepartureMinute: usualDeparture,
                        lastDelay: usual.map { last.duration - $0 },
-                       best: best, trips: window)
+                       best: best, trips: window,
+                       week: week(window, usual: usual, now: now))
     }
 
     /// Обе сводки, по которым есть поездки. Порядок — по времени суток:

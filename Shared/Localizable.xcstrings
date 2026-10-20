@@ -4496,6 +4496,38 @@
         }
       }
     },
+    "За неделю в среднем %1$@ — на %2$@ дольше обычного": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "За неделю в среднем %1$@ — на %2$@ дольше обычного"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bir haftada o‘rtacha %1$@ — odatdagidan %2$@ uzoqroq"
+          }
+        }
+      }
+    },
+    "За неделю в среднем %1$@ — на %2$@ меньше обычного": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "За неделю в среднем %1$@ — на %2$@ меньше обычного"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bir haftada o‘rtacha %1$@ — odatdagidan %2$@ kamroq"
+          }
+        }
+      }
+    },
     "За рулём": {
       "localizations": {
         "ru": {

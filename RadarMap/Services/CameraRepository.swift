@@ -68,7 +68,14 @@ final class CameraStore: CameraRepository {
     var cameras: [Camera] {
         if let mergedCache { return mergedCache }
         let base = CameraOverrideEngine.apply(overrides, to: bundled).cameras
-        let merged = (base + custom + mobile).filter { !hiddenIDs.contains($0.id) }
+        // Пара — доказательство для гейта направления, только если она есть
+        // в ЭТОМ наборе: признак снапа без камеры рядом или пара, скрытая
+        // модератором, глушили бы камеру без доказательства (TwinCheck, 11.2).
+        let checked = TwinCheck.verified((base + custom + mobile).filter { !hiddenIDs.contains($0.id) })
+        if checked.dropped > 0 {
+            Log.cameras.info("парные камеры без пары: признак снят у \(checked.dropped, privacy: .public)")
+        }
+        let merged = checked.cameras
         mergedCache = merged
         return merged
     }

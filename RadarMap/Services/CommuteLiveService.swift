@@ -37,16 +37,22 @@ final class CommuteLiveService {
     /// Плашку «опаздываю — предупредить?» (8.8.14) в этой поездке уже закрыли
     /// или использовали: она одна на поездку.
     private(set) var latePlaqueDone = false
+    /// Плашку уже показали — дальше она держится, пока не закроют, не
+    /// отправят или не истечёт её время, а не мигает на каждом «стоим/едем».
+    private(set) var latePlaqueShown = false
 
     func dismissLatePlaque() { latePlaqueDone = true }
+    func markLatePlaqueShown() { if !latePlaqueShown { latePlaqueShown = true } }
 
     /// Показывать ли плашку «опаздываю» (8.8.14): только со сроком и когда
     /// показано «позже срока», стоя (лист «Поделиться» на ходу — помеха за
     /// рулём), не под оповещением о камере и один раз за поездку. Сама
     /// никогда ничего не отправляет и «поторопитесь» не говорит.
-    nonisolated static func showsLatePlaque(slack: CommuteGhost.Slack?, done: Bool, speedKmh: Double,
-                                            coveredByCamera: Bool) -> Bool {
-        slack == .late && !done && !coveredByCamera && speedKmh < AppConfig.commuteLatePromptMaxKmh
+    nonisolated static func showsLatePlaque(slack: CommuteGhost.Slack?, done: Bool, shown: Bool = false,
+                                            speedKmh: Double, coveredByCamera: Bool) -> Bool {
+        guard slack == .late, !done, !coveredByCamera else { return false }
+        // Появляется стоя; показанная — держится (не мигает в «едем-стоим»).
+        return shown || speedKmh < AppConfig.commuteLatePromptMaxKmh
     }
 
     @ObservationIgnored private var session: CommuteLiveSession?
@@ -105,6 +111,7 @@ final class CommuteLiveService {
             announcer = CommuteGhost.Announcer()
             lateNotice = CommuteGhost.LateNotice()
             latePlaqueDone = false
+            latePlaqueShown = false
         }
         Log.trips.info("призрак: \(direction.rawValue, privacy: .public), вариантов \(variants.count, privacy: .public)")
     }
@@ -123,7 +130,12 @@ final class CommuteLiveService {
     /// дороге, прогноза нет или сошли: тогда маршрут считает сам.
     func routeRemaining(now: Date) -> TimeInterval? {
         guard display != nil, let forecast = lastForecast, routeMatches.contains(forecast.lead) else { return nil }
-        return max(0, forecast.remaining - now.timeIntervalSince(forecast.at))
+        // Без свежих фиксов (стоим с погашенным экраном — фильтр по расстоянию
+        // не даёт их) прогноз не тает до нуля: маршрут считает сам и честно
+        // сдвигает прибытие.
+        let age = now.timeIntervalSince(forecast.at)
+        guard age <= AppConfig.commuteRouteForecastMaxAge else { return nil }
+        return max(0, forecast.remaining - age)
     }
 
     /// Пробки для прогноза (8.8.10): новый файл `now.json` — в сессию; тот же

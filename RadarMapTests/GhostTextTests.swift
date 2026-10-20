@@ -39,22 +39,27 @@ final class GhostTextTests: XCTestCase {
                        "со сроком решает запас, а не отклонение")
     }
 
-    /// Плашка: смена минуты прибытия или подписи — повод обновить, та же
-    /// строка на следующем фиксе — нет.
-    func testLiveActivityUpdatesOnGhostMinuteOnly() {
+    /// Плашка: прибытие сдвинулось на 2+ мин или сменилась тревожность —
+    /// повод обновить; минута в пробке и та же строка — нет (бюджет плашки).
+    func testLiveActivityUpdatesOnlyOnRealGhostChanges() {
         var old = CameraActivityAttributes.ContentState(nearestTitle: nil, nearestSymbol: "checkmark.shield.fill",
                                                         distanceMeters: nil, arrivesAt: nil, since: nil)
         old.etaClock = arrival
         old.etaCaption = "Работа · как обычно"
-        var same = old
-        same.since = arrival.addingTimeInterval(5)
-        XCTAssertFalse(LiveActivityService.differs(same, from: old, now: arrival))
-        var later = old
-        later.etaClock = arrival.addingTimeInterval(60)
-        XCTAssertTrue(LiveActivityService.differs(later, from: old, now: arrival))
-        var worse = old
-        worse.etaCaption = "Работа · +4 мин к обычному"
-        XCTAssertTrue(LiveActivityService.differs(worse, from: old, now: arrival))
+        old.etaAlert = false
+        var minute = old
+        minute.etaClock = arrival.addingTimeInterval(60)
+        minute.etaCaption = "Работа · +1 мин к обычному"
+        XCTAssertFalse(LiveActivityService.differs(minute, from: old, now: arrival), "минута в пробке — не повод")
+        var shifted = old
+        shifted.etaClock = arrival.addingTimeInterval(120)
+        XCTAssertTrue(LiveActivityService.differs(shifted, from: old, now: arrival))
+        var alarm = old
+        alarm.etaAlert = true
+        XCTAssertTrue(LiveActivityService.differs(alarm, from: old, now: arrival))
+        var gone = old
+        gone.etaClock = nil
+        XCTAssertTrue(LiveActivityService.differs(gone, from: old, now: arrival))
     }
 }
 
@@ -73,6 +78,9 @@ final class GhostLatePlaqueTests: XCTestCase {
                        "одна на поездку")
         XCTAssertFalse(CommuteLiveService.showsLatePlaque(slack: .late, done: false, speedKmh: 0, coveredByCamera: true),
                        "под оповещением о камере ждёт")
+        XCTAssertTrue(CommuteLiveService.showsLatePlaque(slack: .late, done: false, shown: true, speedKmh: 30,
+                                                         coveredByCamera: false),
+                      "показанная держится и тронувшись — не мигает в «едем-стоим»")
     }
 }
 
@@ -80,10 +88,13 @@ final class GhostLatePlaqueTests: XCTestCase {
 /// причина видна; без неё — без слова.
 final class GhostReasonTests: XCTestCase {
     func testReasonOnlyWhenVisible() {
-        XCTAssertNil(CommuteGhost.reason(delta: 30, sawJam: true, longestStand: 600), "меньше минуты — не «дольше»")
-        XCTAssertEqual(CommuteGhost.reason(delta: 360, sawJam: true, longestStand: 0), .jam)
-        XCTAssertEqual(CommuteGhost.reason(delta: 360, sawJam: false, longestStand: AppConfig.commuteLongStandSeconds), .stood)
-        XCTAssertNil(CommuteGhost.reason(delta: 360, sawJam: false, longestStand: 90), "светофор — не «стояли»")
+        XCTAssertNil(CommuteGhost.reason(delta: 30, jamSeconds: 300, longestStand: 600), "меньше минуты — не «дольше»")
+        XCTAssertEqual(CommuteGhost.reason(delta: 360, jamSeconds: 300, longestStand: 0), .jam)
+        XCTAssertEqual(CommuteGhost.reason(delta: 360, jamSeconds: 0, longestStand: AppConfig.commuteLongStandSeconds), .stood)
+        XCTAssertNil(CommuteGhost.reason(delta: 360, jamSeconds: 20, longestStand: 90), "светофор и полминуты — не причина")
+        // Короткая ранняя пробка и долгая стоянка у аптеки — «стояли»: что
+        // стоило больше секунд, то и названо.
+        XCTAssertEqual(CommuteGhost.reason(delta: 400, jamSeconds: 90, longestStand: 240), .stood)
     }
 
     func testWordJoinsTheTail() throws {

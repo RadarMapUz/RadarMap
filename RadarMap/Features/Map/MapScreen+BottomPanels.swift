@@ -89,7 +89,7 @@ extension MapScreen {
                 // тот же гейт-паттерн и то же место над панелью поездки.
                 ReportRefineGate()
                 // «Опаздываю — предупредить?» — со сроком, стоя, раз за поездку.
-                GhostLateGate()
+                GhostLateGate { text in lateSharePayload = ActivityTextPayload(text: text) }
                 // Итог поездки — сразу после стопа, в момент, когда цифры
                 // интереснее всего (см. maybeShowTripEnd про условия показа).
                 if let record = tripEndRecord {

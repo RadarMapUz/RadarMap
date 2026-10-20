@@ -183,13 +183,30 @@ struct ReportRefineGate: View {
 /// камерой» читает гейт, а не body MapScreen (та же дисциплина, что выше).
 struct GhostLateGate: View {
     @Environment(AppEnvironment.self) private var env
+    /// Лист «Поделиться» показывает экран карты, а не плашка: плашка уходит
+    /// сразу после тапа, и лист, привязанный к ней, ушёл бы вместе с ней.
+    let onShare: (String) -> Void
 
     var body: some View {
-        if let ghost = env.commuteLive.display, let slack = ghost.slack,
-           CommuteLiveService.showsLatePlaque(slack: slack.shown, done: env.commuteLive.latePlaqueDone,
+        let live = env.commuteLive
+        if let ghost = live.display, let slack = ghost.slack,
+           CommuteLiveService.showsLatePlaque(slack: slack.shown, done: live.latePlaqueDone,
+                                              shown: live.latePlaqueShown,
                                               speedKmh: env.location.speedKmh,
                                               coveredByCamera: env.location.isApproachingCamera) {
-            GhostLatePlaque(ghost: ghost) { env.commuteLive.dismissLatePlaque() }
+            GhostLatePlaque(ghost: ghost,
+                            onShare: { text in
+                                live.dismissLatePlaque()
+                                onShare(text)
+                            },
+                            onDone: { live.dismissLatePlaque() })
+                .onAppear { live.markLatePlaqueShown() }
+                .task {
+                    // Не ответили — уходит сама: напоминать весь остаток пути незачем.
+                    try? await Task.sleep(for: .seconds(AppConfig.commuteLatePromptSeconds))
+                    guard !Task.isCancelled else { return }
+                    live.dismissLatePlaque()
+                }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
@@ -199,10 +216,12 @@ struct GhostLateGate: View {
 /// текстом прибытия. Ничего на сервер: это обычное сообщение от водителя.
 struct GhostLatePlaque: View {
     let ghost: CommuteLiveService.Display
+    let onShare: (String) -> Void
     let onDone: () -> Void
 
+    /// Часы — по языку приложения, как в заголовке плашки (CommuteGhost.clock).
     private var message: String {
-        let clock = ghost.arrival.formatted(date: .omitted, time: .shortened)
+        let clock = CommuteGhost.clock(ghost.arrival)
         return String(localized: "Задерживаюсь: буду примерно в \(clock).")
     }
 
@@ -226,15 +245,15 @@ struct GhostLatePlaque: View {
             Spacer(minLength: 4)
             // Значок «поделиться», а не слово: «Предупредить» в узкой кнопке
             // переносилось по слогам (снимок 20.10); смысл несёт строка слева.
-            ShareLink(item: message) {
+            Button { onShare(message) } label: {
                 Image(systemName: "square.and.arrow.up")
                     .font(.rounded(17, .bold))
                     .foregroundStyle(Theme.onAccentFill)
                     .frame(width: 44, height: 44)
                     .background(Theme.accentFill, in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
             }
+            .buttonStyle(.plain)
             .accessibilityLabel(Text("Предупредить"))
-            .simultaneousGesture(TapGesture().onEnded { onDone() })
             Button(action: onDone) {
                 Image(systemName: "xmark")
                     .font(.rounded(13, .bold))

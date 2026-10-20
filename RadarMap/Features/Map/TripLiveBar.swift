@@ -104,6 +104,8 @@ struct TripLiveBar: View {
                 Text(verbatim: GhostText.caption(ghost))
                     .font(.rounded(12, .medium).monospacedDigit())
                     .foregroundStyle(GhostText.tint(ghost))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             } else {
                 // Свободная поездка без маршрута: таймер + путь + камеры.
                 if let started = env.trip.startedAt {

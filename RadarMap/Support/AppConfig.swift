@@ -734,15 +734,27 @@ nonisolated enum AppConfig {
     /// Маршрут считается своей дорогой на работу (8.8.11), если столько его
     /// длины лежит у линии варианта (и финиш — у её конца).
     nonisolated static let commuteRouteOverlap = 0.8
-    /// Пробки из `now.json` — только дальше этого впереди по линии (8.8.10):
-    /// ближе пробку уже несёт сегодняшний темп.
-    nonisolated static let commuteGhostJamAheadMeters: Double = 2000
+    /// Маршрут кончается у конца линии варианта (8.8.11) — не дальше этого:
+    /// маршрут за работу — уже не дорога на работу.
+    nonisolated static let commuteRouteFinishMeters: Double = 300
+    /// Подпись призрака в доке CarPlay — не шире, чтобы капсулы не уехали под
+    /// кнопки карты на 800×480.
+    nonisolated static let carPlayGhostCaptionMaxWidth: CGFloat = 230
+    /// Остаток призрака для маршрута — пока прогноз свежий: без фиксов (экран
+    /// погашен, стоим) он не должен таять до нуля.
+    nonisolated static let commuteRouteForecastMaxAge: TimeInterval = 90
     /// Плашка «опаздываю — предупредить?» (8.8.14) — только медленнее этого:
     /// лист «Поделиться» на ходу — помеха за рулём.
     nonisolated static let commuteLatePromptMaxKmh = 10.0
-    /// «Стояли» (8.8.12): одна стоянка от 3 мин — фиксы ближе 5 м подряд.
+    /// «Стояли» (8.8.12): одна стоянка от 3 мин — фиксы в пределах 20 м от
+    /// места, где встали; пропуск фиксов — за вычетом проезда на 2 м/с.
     nonisolated static let commuteLongStandSeconds: TimeInterval = 180
-    nonisolated static let commuteStandStillMeters: Double = 5
+    nonisolated static let commuteStandRadiusMeters: Double = 20
+    nonisolated static let commuteCrawlSpeedMps: Double = 2
+    /// «Пробка» (8.8.12) — от минуты, потерянной в ней сверх медианы.
+    nonisolated static let commuteJamReasonSeconds: TimeInterval = 60
+    /// Плашка «опаздываю» уходит сама через столько секунд после показа.
+    nonisolated static let commuteLatePromptSeconds: TimeInterval = 30
     /// Пересчёт призрака стоя или посреди длинного участка — раз в 30 с.
     nonisolated static let commuteGhostRecomputeSeconds: TimeInterval = 30
     /// С какого отклонения строка призрака становится янтарной (мин).

@@ -82,6 +82,19 @@ final class UzHolidaysTests: XCTestCase {
         XCTAssertTrue(target.applies(on: day(2026, 3, 24), calendar: utc))
     }
 
+    /// Строка, свёрнутая до списка праздников (флаг «будни» в ней), при выборке
+    /// всё равно уходит из будничного класса — по своей дате.
+    func testHolidayRowsLeaveTheWeekdayClassAtSelection() throws {
+        func row(_ d: Int, month: Int = 10) -> CommuteProfile.Row {
+            CommuteProfile.Row(tripID: Double(month * 100 + d),
+                               departure: utc.date(from: DateComponents(year: 2026, month: month, day: d, hour: 8))!,
+                               weekend: false, arrivalMinute: 0, seconds: [20, 20])
+        }
+        let rows = [row(13), row(14), row(15), row(1)]   // 1 октября — День учителя
+        let weekday = try XCTUnwrap(CommuteGhost.selectRows(rows, weekend: false, departureMinute: 480, calendar: utc))
+        XCTAssertEqual(Set(weekday.map(\.tripID)), [1013, 1014, 1015])
+    }
+
     /// Поездка в праздник ложится в выходной класс профиля, а не в будни.
     func testHolidayTripFoldsAsWeekend() {
         XCTAssertTrue(UzHolidays.isDayOff(day(2026, 5, 28), calendar: utc))

@@ -72,8 +72,10 @@ nonisolated struct CommuteLiveSession: Sendable {
         var crossTimes: [Int: Date] = [:]
         var live: [(seconds: Double, median: Double, length: Double)] = []
         var rho = 1.0
-        /// На пройденном участке пробки по `now.json` были хуже q75 (8.8.12).
-        var sawJam = false
+        /// Секунды сверх медианы на пройденных участках, где и пробки по
+        /// `now.json`, и сам проезд были хуже q75 (8.8.12): «пробка» — только
+        /// если в ней и правда тащились, а не по старому файлу.
+        var jamSeconds = 0.0
     }
 
     private let frame: CommuteProfile.Frame
@@ -82,9 +84,11 @@ nonisolated struct CommuteLiveSession: Sendable {
     private(set) var active: Int?
     private var lastPoint: SIMD2<Double>?
     private var lastForecastAt: Date?
-    private var lastFixAt: Date?
-    /// Текущая и самая долгая стоянка поездки без движения, с (8.8.12).
-    private var standing: TimeInterval = 0
+    /// Где и когда машина встала (8.8.12): стоянка — время, пока фиксы не
+    /// уходят от якоря дальше `commuteStandRadiusMeters`; пропуск фиксов
+    /// (экран погашен, фильтр по расстоянию) засчитывается за вычетом времени
+    /// на проезд расстояния медленным ходом — шаг между фиксами тут не годится.
+    private var standAnchor: (p: SIMD2<Double>, t: Date)?
     private var longestStand: TimeInterval = 0
     /// Когда сделан файл пробок, легший в `crowd`: старше 10 мин — данных нет,
     /// даже если новый файл не пришёл (поездка ушла из сети).
@@ -143,13 +147,18 @@ nonisolated struct CommuteLiveSession: Sendable {
         lastPoint = p
         // Стоянка — фиксы почти на месте подряд; одна долгая (заехал,
         // ждал у ворот) объясняет задержку словом «стояли» (8.8.12).
-        if let previous = lastFixAt, step < AppConfig.commuteStandStillMeters {
-            standing += now.timeIntervalSince(previous)
-            longestStand = max(longestStand, standing)
+        if let anchor = standAnchor {
+            let away = simd_distance(anchor.p, p)
+            let since = now.timeIntervalSince(anchor.t)
+            if away < AppConfig.commuteStandRadiusMeters {
+                longestStand = max(longestStand, since)
+            } else {
+                longestStand = max(longestStand, since - away / AppConfig.commuteCrawlSpeedMps)
+                standAnchor = (p, now)
+            }
         } else {
-            standing = 0
+            standAnchor = (p, now)
         }
-        lastFixAt = now
         let accuracy = max(accuracy, 0)
 
         var crossed = Set<Int>()
@@ -179,7 +188,7 @@ nonisolated struct CommuteLiveSession: Sendable {
         let forecast = CommuteGhost.forecast(c.base, along: c.floor, elapsed: elapsed, rho: c.rho, now: now,
                                              jamAhead: jamAhead(c, now: now))
         return Output(forecast: forecast, isOff: false, remainingMeters: remainingMeters, hasLead: true,
-                      reason: CommuteGhost.reason(delta: forecast.delta, sawJam: c.sawJam,
+                      reason: CommuteGhost.reason(delta: forecast.delta, jamSeconds: c.jamSeconds,
                                                   longestStand: longestStand))
     }
 
@@ -194,7 +203,7 @@ nonisolated struct CommuteLiveSession: Sendable {
         for (i, c) in candidates.enumerated() {
             guard let end = c.coordinates.last,
                   GeoMath.fastDistance(finish.latitude, finish.longitude, end.latitude, end.longitude)
-                      <= AppConfig.commuteGhostStartRadiusMeters,
+                      <= AppConfig.commuteRouteFinishMeters,
                   DetourAdvisor.overlap(route, with: c.coordinates) >= AppConfig.commuteRouteOverlap
             else { continue }
             result.insert(i)
@@ -202,14 +211,26 @@ nonisolated struct CommuteLiveSession: Sendable {
         return result
     }
 
-    /// Пробки сверх обычного на участках дальше `commuteGhostJamAheadMeters`
-    /// впереди (8.8.10): ближе их уже несёт сегодняшний темп ρ — сложить оба
-    /// значило бы посчитать одну пробку дважды. Файл старше 10 мин — ноль.
+    /// Пробки сверх обычного на участках впереди (8.8.10): по каждому участку
+    /// — то, на что пробка по `now.json` хуже того, что уже несёт сегодняшний
+    /// темп ρ (он затухает с расстоянием). Так пробка в 300 м впереди
+    /// учитывается сразу, а одна и та же пробка не считается дважды. Участок
+    /// не хуже q75 водителя — обычная пробка этого часа, она в медиане. Файл
+    /// старше 10 мин — ноль.
     private func jamAhead(_ c: Candidate, now: Date) -> Double {
         guard let crowd = c.crowd, let generated = crowdGenerated,
               now.timeIntervalSince(generated) <= AppConfig.trafficStaleSeconds else { return 0 }
-        let from = c.base.locate(c.floor + AppConfig.commuteGhostJamAheadMeters).segment + 1
-        return CommuteEstimate.jamExtra(c.base, crowd: crowd, from: from)
+        let base = c.base
+        let k = base.locate(c.floor).segment
+        let a = min(max(0, c.floor), base.length)
+        var extra = 0.0
+        for j in (k + 1)..<min(crowd.count, base.median.count) where j > k {
+            guard let time = crowd[j], time > base.q75[j] else { continue }
+            let rhoExcess = max(0, (c.rho - 1) * base.median[j]
+                                * exp(-(base.start(of: j) - a) / AppConfig.commuteGhostDecayMeters))
+            extra += max(0, time - base.median[j] - rhoExcess)
+        }
+        return extra
     }
 
     /// Фикс по одной линии: проекция, сход/возврат, пересечения границ и
@@ -243,12 +264,15 @@ nonisolated struct CommuteLiveSession: Sendable {
                 let share = (base.ends[j] - lastAlong) / (along - lastAlong)
                 let t = lastTime.addingTimeInterval(share * now.timeIntervalSince(lastTime))
                 c.crossTimes[j] = t
-                // Пройденный участок j — по пробкам хуже обычного разброса.
-                if let crowd = c.crowd, j < crowd.count, let jam = crowd[j], jam > base.q75[j] {
-                    c.sawJam = true
-                }
                 if j > 0, let previous = c.crossTimes[j - 1] {
-                    c.live.append((t.timeIntervalSince(previous), base.median[j], base.length(of: j)))
+                    let live = t.timeIntervalSince(previous)
+                    // Пробка на пройденном участке — и по файлу, и по своему
+                    // проезду хуже обычного разброса (8.8.12).
+                    if let crowd = c.crowd, j < crowd.count, let jam = crowd[j], jam > base.q75[j],
+                       live > base.q75[j] {
+                        c.jamSeconds += live - base.median[j]
+                    }
+                    c.live.append((live, base.median[j], base.length(of: j)))
                     // Темпу нужны последние ~2 км — хвост дальше не храним.
                     if c.live.count > 64 { c.live.removeFirst(c.live.count - 64) }
                 }

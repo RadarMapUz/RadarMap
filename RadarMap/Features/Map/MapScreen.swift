@@ -50,6 +50,8 @@ struct MapScreen: View {
     @State var tripEndDetail: TripRecord?
     /// Текст ссылки «Поделиться прибытием» для системного листа.
     @State var etaSharePayload: ActivityTextPayload?
+    /// «Задерживаюсь: буду в 9:07» — лист от экрана, а не от плашки (8.8.14).
+    @State var lateSharePayload: ActivityTextPayload?
     @Environment(\.scenePhase) var scenePhase
     /// Пикер типа отметки (радар/тренога/пост/ДТП) для выбранной точки.
     @State var reportPoint: MapPoint?
@@ -244,6 +246,10 @@ struct MapScreen: View {
                 sent ? env.etaShare.confirmShared() : env.etaShare.cancelPrepared()
             }
             .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $lateSharePayload) { payload in
+            ActivityTextSheet(text: payload.text) { _ in }
+                .presentationDetents([.medium, .large])
         }
         .sheet(item: $tripEndDetail) { record in
             TripDetailSheet(record: record,

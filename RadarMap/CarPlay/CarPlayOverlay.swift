@@ -349,9 +349,14 @@ struct CarPlayOverlay: View {
                     .font(.rounded(24, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
+                // Длинная подпись («Работа · на 12 мин позже 9:00 · пробка») не
+                // раздвигает док под кнопки карты: потолок ширины капсулы.
                 Text(verbatim: GhostText.caption(ghost))
                     .font(.rounded(13, .semibold))
                     .foregroundStyle(GhostText.tint(ghost))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: AppConfig.carPlayGhostCaptionMaxWidth, alignment: .leading)
             }
         }
     }

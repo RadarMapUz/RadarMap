@@ -269,7 +269,7 @@ final class CommuteProfileStore {
         let rows = [1.0, 0.92, 1.06, 0.97, 1.1, 0.95].enumerated().map { i, scale in
             let departure = Calendar.current.date(byAdding: .day, value: -(i + 1), to: now) ?? now
             return CommuteProfile.Row(tripID: departure.timeIntervalSince1970, departure: departure,
-                                      weekend: Calendar.current.isDateInWeekend(now), arrivalMinute: 0,
+                                      weekend: UzHolidays.isDayOff(now), arrivalMinute: 0,
                                       seconds: [UInt16](repeating: UInt16((segment * scale).rounded()),
                                                         count: count))
         }

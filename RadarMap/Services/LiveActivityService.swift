@@ -168,9 +168,16 @@ final class LiveActivityService {
         guard let old else { return true }
         if new.nearestTitle != old.nearestTitle || new.nearestSymbol != old.nearestSymbol
             || new.distanceMeters != old.distanceMeters { return true }
-        // Призрак (8.8.3б) — со сменой минуты прибытия или подписи, не чаще:
-        // прибытие уже округлено до минуты, подпись меняется с отклонением.
-        if new.etaClock != old.etaClock || new.etaCaption != old.etaCaption { return true }
+        // Призрак (8.8.3б): прибытие сдвинулось на 2+ мин, появилось или ушло,
+        // или сменилась тревожность. Стоя в пробке прибытие и «+N мин» растут
+        // каждую минуту — слать это раз в минуту значило бы тратить бюджет
+        // плашки на то же «стоим»; подпись обновится вместе с ближайшей отправкой.
+        switch (old.etaClock, new.etaClock) {
+        case let (was?, now?) where abs(now.timeIntervalSince(was)) >= 120: return true
+        case (nil, .some), (.some, nil): return true
+        default: break
+        }
+        if new.etaAlert != old.etaAlert { return true }
         switch (old.arrivesAt, new.arrivesAt) {
         case (nil, nil): return false
         case let (sent?, fresh?):

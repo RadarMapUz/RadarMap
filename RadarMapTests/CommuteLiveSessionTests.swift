@@ -76,11 +76,11 @@ final class CommuteLiveSessionTests: XCTestCase {
         return TrafficSnapshot(generated: generated, edges: edges)
     }
 
-    /// Пробка дальше 2 км впереди по своему пути (8.8.10): участок берёт время
-    /// пробки сверх обычного — 72 с вместо 20 на двух последних участках.
-    /// Ближе 2 км её уже несёт темп ρ — не прибавляем; файл старше 10 мин —
+    /// Пробка впереди по своему пути (8.8.10): участок берёт время пробки
+    /// сверх того, что уже несёт сегодняшний темп ρ. Едем как обычно (ρ = 1) —
+    /// и дальняя, и ближняя пробка добавляются целиком; файл старше 10 мин —
     /// данных нет.
-    func testJamFarAheadAddsOnlyBeyondTwoKilometers() throws {
+    func testJamAheadAddsBeyondTodaysPace() throws {
         func session() throws -> CommuteLiveSession {
             try XCTUnwrap(CommuteLiveSession(variants: [variant()], weekend: false, departure: start, calendar: utc))
         }
@@ -97,12 +97,55 @@ final class CommuteLiveSessionTests: XCTestCase {
         var near = try session()
         near.setTraffic(jam(from: 2000, to: 3000, generated: start), now: start)
         let close = try XCTUnwrap(drive(&near, speed: 10, until: 1600)?.forecast)
-        XCTAssertEqual(close.remaining, usual.remaining, accuracy: 1, "ближе 2 км — уже темп, не файл")
+        XCTAssertEqual(close.remaining - usual.remaining, 5 * (200 / (10 / 3.6) - 20), accuracy: 12,
+                       "пробка в 400 м впереди — сразу, темп её ещё не знает")
 
         var stale = try session()
         stale.setTraffic(jam(from: 3600, to: 4000, generated: start.addingTimeInterval(-11 * 60)), now: start)
         let old = try XCTUnwrap(drive(&stale, speed: 10, until: 1600)?.forecast)
         XCTAssertEqual(old.remaining, usual.remaining, accuracy: 1, "файл старше 10 мин — данных нет")
+    }
+
+    /// Стоянка 4 мин на месте (фиксы раз в секунду в пределах 20 м) — «стояли»;
+    /// такая же стоянка без фиксов (экран погашен) — тоже, по пропуску.
+    func testLongStandNamesTheReason() throws {
+        for withFixes in [true, false] {
+            var session = try XCTUnwrap(CommuteLiveSession(variants: [variant()], weekend: false,
+                                                            departure: start, calendar: utc))
+            var t = start
+            var out: CommuteLiveSession.Output?
+            func fix(_ s: Double) {
+                let (la, lo) = coordinate(s)
+                let o = session.note(lat: la, lon: lo, accuracy: 10, at: t)
+                if o.forecast != nil { out = o }
+            }
+            for s in stride(from: 0.0, through: 1800, by: 50) { fix(s); t = t.addingTimeInterval(5) }
+            if withFixes {
+                for _ in 0..<240 { fix(1800); t = t.addingTimeInterval(1) }
+            } else {
+                t = t.addingTimeInterval(240)
+            }
+            for s in stride(from: 1850.0, through: 2600, by: 50) { fix(s); t = t.addingTimeInterval(5) }
+            XCTAssertEqual(out?.reason, .stood, withFixes ? "с фиксами" : "без фиксов")
+        }
+    }
+
+    /// Остаток для маршрута без свежих фиксов не тает до нуля — после 90 с
+    /// маршрут снова считает сам.
+    @MainActor
+    func testRouteRemainingExpiresWithoutFixes() throws {
+        let service = CommuteLiveService()
+        service.start(direction: .toWork, variants: [variant()], departure: start, calendar: utc)
+        var t = start
+        for s in stride(from: 0.0, through: 2000, by: 50) {
+            let (la, lo) = coordinate(s)
+            service.note(CLLocationCoordinate2D(latitude: la, longitude: lo), accuracy: 10, at: t)
+            t = t.addingTimeInterval(5)
+        }
+        let key = NSObject()
+        service.noteRoute(key: ObjectIdentifier(key), coordinates: line(Array(stride(from: 0.0, through: 4000, by: 100))))
+        XCTAssertNotNil(service.routeRemaining(now: t))
+        XCTAssertNil(service.routeRemaining(now: t.addingTimeInterval(120)))
     }
 
     private func line(_ meters: [Double], north: Double = 0) -> [CLLocationCoordinate2D] {

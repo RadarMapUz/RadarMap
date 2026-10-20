@@ -96,7 +96,10 @@ nonisolated enum CommuteGhost {
                                  calendar: Calendar = .current,
                                  minRows: Int = AppConfig.commuteGhostMinRows)
         -> (rows: [CommuteProfile.Row], tier: RowTier)? {
-        let sameClass = rows.filter { $0.weekend == weekend }
+        // Праздник — по дате строки, а не только по флагу свёртки: строки,
+        // свёрнутые до списка праздников (или до правки оценки хайитов),
+        // иначе ещё 45 дней портили бы будничную медиану.
+        let sameClass = rows.filter { ($0.weekend || UzHolidays.isHoliday($0.departure, calendar: calendar)) == weekend }
         func near(_ window: Int) -> [CommuteProfile.Row] {
             sameClass.filter {
                 let m = CommuteProfile.minuteOfDay($0.departure, calendar: calendar)
@@ -200,17 +203,19 @@ nonisolated enum CommuteGhost {
 
     // MARK: - Почему дольше (8.8.12)
 
-    /// Одно слово к «+6 мин»: пробка (на пройденном участке рёбра `now.json`
-    /// были хуже обычного разброса) или стояли (одна стоянка от 3 мин).
-    /// Причины не видно — слова нет: догадка, проданная как факт, хуже
-    /// молчания (то же правило, что у подсказок о треногах).
+    /// Одно слово к «+6 мин»: пробка (на пройденных участках и рёбра
+    /// `now.json`, и сам проезд были хуже обычного разброса — `jamSeconds`
+    /// сверх медианы) или стояли (одна стоянка от 3 мин). Обе видны —
+    /// побеждает та, что стоила больше секунд. Причины не видно — слова нет:
+    /// догадка, проданная как факт, хуже молчания.
     enum Reason: String, Equatable, Sendable { case jam, stood }
 
-    static func reason(delta: TimeInterval, sawJam: Bool, longestStand: TimeInterval) -> Reason? {
+    static func reason(delta: TimeInterval, jamSeconds: TimeInterval, longestStand: TimeInterval) -> Reason? {
         guard delta >= 60 else { return nil }
-        if sawJam { return .jam }
-        if longestStand >= AppConfig.commuteLongStandSeconds { return .stood }
-        return nil
+        let jam = jamSeconds >= AppConfig.commuteJamReasonSeconds ? jamSeconds : 0
+        let stood = longestStand >= AppConfig.commuteLongStandSeconds ? longestStand : 0
+        guard jam > 0 || stood > 0 else { return nil }
+        return jam >= stood ? .jam : .stood
     }
 
     // MARK: - Прогноз

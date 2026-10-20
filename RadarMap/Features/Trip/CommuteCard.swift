@@ -91,13 +91,14 @@ struct CommuteCard: View {
                       time, Formatting.clock(minuteOfDay: departure))
     }
 
-    /// «За неделю в среднем 41 мин — на 3 мин дольше обычного».
+    /// «За 7 дней в среднем 41 мин — на 3 мин дольше обычного». «За 7 дней»,
+    /// а не «за неделю»: окно скользящее, а «Неделя» в «Итогах» — календарная.
     static func weekLine(_ week: Commute.Week) -> String {
         let average = Formatting.unbreakable(Formatting.duration(week.average))
         let minutes = Formatting.unbreakable(Formatting.duration(abs(week.delta)))
         return week.delta > 0
-            ? String(format: String(localized: "За неделю в среднем %1$@ — на %2$@ дольше обычного"), average, minutes)
-            : String(format: String(localized: "За неделю в среднем %1$@ — на %2$@ меньше обычного"), average, minutes)
+            ? String(format: String(localized: "За 7 дней в среднем %1$@ — на %2$@ дольше обычного"), average, minutes)
+            : String(format: String(localized: "За 7 дней в среднем %1$@ — на %2$@ меньше обычного"), average, minutes)
     }
 
     /// «Вчера · 8:22 → 9:17», «пт, 9 октября · 18:34 → 19:15».

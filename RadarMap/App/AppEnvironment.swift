@@ -506,6 +506,9 @@ final class AppEnvironment {
         }
         commuteProfiles.onLoaded = { [weak self] in self?.refreshCommute() }
         trip.recordsTimedTrack = settings.recordTimedTrack
+        // Слепок живой поездки помнит режим «Работаю водителем»: рейс, который
+        // оборвала смерть процесса, восстанавливается рейсом (ревью 14.1).
+        trip.workMode = { [weak settings] in settings?.workDriverMode == true }
         // Снап отметки на ось дороги и очередь без сети — обе зависимости
         // слабые: отметка обязана уходить и когда тайлов нет, и когда сеть
         // молчит.

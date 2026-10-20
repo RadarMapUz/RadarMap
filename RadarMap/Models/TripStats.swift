@@ -88,6 +88,19 @@ final class TripStats {
     /// не едет (трек там упрощён и живёт неделю), оно нужно только свёртке
     /// поездки в профиль дороги дом↔работа при финише (CommuteProfile).
     @ObservationIgnored private var trackTimes: [Double] = []
+    /// Откуда выехали — для записи и слепка одним правилом. Сырой буфер
+    /// начинается со старта (после склейки — со старта первой ноги); прежняя
+    /// запись склейки знает свой старт и без трека.
+    private var startPoint: (lat: Double, lon: Double)? {
+        if let start = resumedFrom?.startCoordinate { return (start.latitude, start.longitude) }
+        return trackBuffer.first.map { ($0.lat, $0.lon) }
+    }
+    /// Режим «Работаю водителем» сейчас — для слепка живой поездки (12б.9):
+    /// финиш получает режим аргументом, а поездка, оборванная смертью
+    /// процесса, финиша не дождётся. Ставит AppEnvironment.
+    @ObservationIgnored var workMode: (() -> Bool)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: workMode, "TripStats.workMode") }
+    }
     /// Сырой трек последней сохранённой поездки — для склейки: продолженная
     /// поездка поднимает его вместо упрощённого, и время первой ноги не
     /// теряется (пока процесс жив).
@@ -368,10 +381,10 @@ final class TripStats {
             endedManually: endedManually,
             batteryDropPercent: Self.batteryDrop(startPercent: startBatteryPercent,
                                                  endPercent: batteryPercent),
-            // Сырой буфер начинается со старта (после склейки — со старта
-            // первой ноги): упрощённый трек вырежут через неделю, старт нет.
-            startLat: trackBuffer.first?.lat,
-            startLon: trackBuffer.first?.lon,
+            // Упрощённый трек вырежут через неделю, старт нет (startPoint —
+            // то же правило, что у слепка живой поездки).
+            startLat: startPoint?.lat,
+            startLon: startPoint?.lon,
             work: work ? true : nil
         )
         history.insert(record, at: 0)
@@ -1572,6 +1585,15 @@ final class TripStats {
         /// внёс её в «за всё время»). Нет полей — старый слепок, не склейка.
         var baseDistance: Double? = nil
         var basePassCount: Int? = nil
+        /// Точка старта — как у finish(): трек записи вырежут через неделю, а
+        /// дорога на работу нужна и через месяц (Commute). Нет поля — старый
+        /// слепок: старт берётся из первой точки его трека.
+        var startLat: Double? = nil
+        var startLon: Double? = nil
+        /// Режим «Работаю водителем» на момент слепка (12б.9): рейс, оборванный
+        /// смертью процесса, восстанавливается рейсом, а не личной поездкой с
+        /// адресом пассажира на конце. Нет поля — старый слепок, личная.
+        var work: Bool? = nil
     }
 
     /// Не чаще раза в checkpointInterval: слепок пишется на каждый интервал
@@ -1611,12 +1633,15 @@ final class TripStats {
         // следующая. Дуглас—Пекер по всему сырому треку стоил на длинной
         // поездке 1–3 мс главного потока раз в 20 с (аудит 11.10).
         let raw = trackBuffer
+        let start = startPoint
         let head = InflightTrip(
             startedAt: startedAt, lastPointAt: lastPointAt ?? Date(),
             distanceMeters: distanceMeters, maxSpeedKmh: maxSpeedKmh,
             passed: passed, stops: stops, track: [],
             endLat: lastCoordinate?.latitude, endLon: lastCoordinate?.longitude,
-            baseDistance: resumedFrom?.distanceMeters, basePassCount: resumedFrom?.passed.count)
+            baseDistance: resumedFrom?.distanceMeters, basePassCount: resumedFrom?.passed.count,
+            startLat: start?.lat, startLon: start?.lon,
+            work: workMode?() == true ? true : nil)
         guard let url = checkpointURL else { return }
         Task.detached(priority: .utility) {
             var snapshot = head
@@ -1770,6 +1795,9 @@ final class TripStats {
         let score = DrivingScore.tripScore(
             passes: snapshot.passed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
             trackSpeeds: raw.map(\.speedKmh))
+        let start: (lat: Double, lon: Double)? = snapshot.startLat.flatMap { lat in
+            snapshot.startLon.map { (lat, $0) }
+        } ?? raw.first.map { ($0.lat, $0.lon) }
         return TripRecord(
             id: snapshot.startedAt.timeIntervalSince1970,
             startedAt: snapshot.startedAt,
@@ -1782,7 +1810,13 @@ final class TripStats {
             score: score,
             stops: snapshot.stops.isEmpty ? nil : snapshot.stops,
             // Пользователь «Завершить» не нажимал — склейку не запрещаем.
-            endedManually: false
+            endedManually: false,
+            // Старт и пометка рейса — как у finish() (ревью 14.1, хвост 14.8):
+            // без них восстановленный рейс шёл в выученные Дом/Работу, а
+            // поездка на работу через неделю, когда трек вырезан, теряла
+            // старт. Старый слепок без поля — старт из первой точки трека.
+            startLat: start?.lat, startLon: start?.lon,
+            work: snapshot.work == true ? true : nil
         )
     }
 

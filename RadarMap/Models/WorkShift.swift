@@ -18,7 +18,7 @@
 
 import Foundation
 
-nonisolated struct WorkShift: Identifiable, Equatable, Sendable {
+nonisolated struct WorkShift: Identifiable, Equatable, Sendable, Codable {
     /// Первый рейс смены.
     let id: Double
     let start: Date
@@ -48,6 +48,35 @@ nonisolated struct WorkShift: Identifiable, Equatable, Sendable {
             }
         }
         return groups.map(make).reversed()
+    }
+
+    // MARK: - Журнал закрытых смен
+
+    /// Полные записи живут 30 дней и не больше 50 штук — у таксиста это 2–3
+    /// дня рейсов. Поэтому закрытая смена (простой после неё дольше часа)
+    /// записывается в журнал один раз и дальше от истории не зависит;
+    /// журнал хранит 90 дней. Идущая смена считается из истории вживую.
+    static func logged(_ log: [WorkShift], history: [TripRecord], now: Date,
+                       gap: TimeInterval = AppConfig.workShiftGapSeconds) -> [WorkShift] {
+        let closed = shifts(from: history, gap: gap).filter {
+            now.timeIntervalSince($0.end) > gap && !overlaps($0, log)
+        }
+        let horizon = now.addingTimeInterval(-AppConfig.workShiftLogDays * 86_400)
+        return (log + closed).filter { $0.end >= horizon }.sorted { $0.start > $1.start }
+    }
+
+    /// Что показать: журнал и идущие смены из истории, без повторов, новые первыми.
+    static func display(log: [WorkShift], history: [TripRecord],
+                        gap: TimeInterval = AppConfig.workShiftGapSeconds) -> [WorkShift] {
+        let live = shifts(from: history, gap: gap).filter { !overlaps($0, log) }
+        return (log + live).sorted { $0.start > $1.start }
+    }
+
+    /// Смена уже в журнале — по времени, а не по id: когда первые рейсы
+    /// записанной смены вырежет чистка истории, остаток соберётся заново с
+    /// другим id, и по id он стал бы второй, урезанной копией.
+    private static func overlaps(_ shift: WorkShift, _ log: [WorkShift]) -> Bool {
+        log.contains { $0.start <= shift.end && shift.start <= $0.end }
     }
 
     private static func make(_ trips: [TripRecord]) -> WorkShift {

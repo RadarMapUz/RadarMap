@@ -1874,4 +1874,6 @@ nonisolated enum AppConfig {
     static let workShiftGapSeconds: TimeInterval = 3600
     /// Сколько смен показывать в «Итогах».
     static let workShiftsShown = 7
+    /// Журнал закрытых смен — столько дней.
+    static let workShiftLogDays: Double = 90
 }

@@ -68,6 +68,7 @@ enum Storage {
         case carPlaySoundSet        // soundEnabled, поставленный машиной
         case parkedCar              // «Где машина»: точка конца поездки (ParkedCar, JSON)
         case cngAskedAt             // метан: о какой станции и когда спрашивали (JSON, 3 ч)
+        case workShiftLog           // журнал закрытых смен таксиста (WorkShift, JSON, 90 дней)
     }
 
     private static var defaults: UserDefaults { .standard }

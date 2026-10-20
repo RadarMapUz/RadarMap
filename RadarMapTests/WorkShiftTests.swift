@@ -62,4 +62,31 @@ final class WorkShiftTests: XCTestCase {
         XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("\"work\""), "личная запись — без поля")
         XCTAssertNil(try JSONDecoder().decode(TripRecord.self, from: data).work)
     }
+
+    /// Закрытая смена переживает чистку истории (50 записей / 30 дней) и не
+    /// двоится, когда её первые рейсы уже вырезаны.
+    func testClosedShiftOutlivesHistoryPruning() {
+        let morning = [trip(0, 20), trip(30, 20), trip(60, 20)]
+        let afterShift = day.addingTimeInterval(5 * 3600)
+        let log = WorkShift.logged([], history: morning, now: afterShift)
+        XCTAssertEqual(log.count, 1)
+        XCTAssertEqual(log.first?.trips, 3)
+        // Чистка вырезала первый рейс: остаток — не новая смена.
+        let pruned = Array(morning.dropFirst())
+        XCTAssertEqual(WorkShift.logged(log, history: pruned, now: afterShift), log)
+        XCTAssertEqual(WorkShift.display(log: log, history: pruned).count, 1, "без урезанной копии")
+        XCTAssertEqual(WorkShift.display(log: log, history: []).first?.trips, 3, "история пуста — журнал помнит")
+    }
+
+    func testOngoingShiftIsShownButNotLogged() {
+        let now = day.addingTimeInterval(50 * 60)   // последний рейс кончился 10 мин назад
+        let history = [trip(0, 20), trip(30, 10)]
+        XCTAssertTrue(WorkShift.logged([], history: history, now: now).isEmpty, "смена ещё идёт")
+        XCTAssertEqual(WorkShift.display(log: [], history: history).first?.trips, 2)
+    }
+
+    func testLogForgetsAfterNinetyDays() {
+        let log = WorkShift.logged([], history: [trip(0, 20)], now: day.addingTimeInterval(7200))
+        XCTAssertTrue(WorkShift.logged(log, history: [], now: day.addingTimeInterval(91 * 86_400)).isEmpty)
+    }
 }

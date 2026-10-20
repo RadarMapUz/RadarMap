@@ -842,7 +842,39 @@ final class AppEnvironment {
         return (merged.addedTrips, merged.addedDays)
     }
 
+    /// Смены таксиста для «Итогов» (12б.9): журнал закрытых плюс идущая из
+    /// истории. Пересчёт — на старте сцены и в конце поездки, не в body.
+    private(set) var workShifts: [WorkShift] = []
+    @ObservationIgnored private var workShiftLog: [WorkShift] = AppEnvironment.loadShiftLog()
+
+    func refreshWorkShifts(now: Date = Date()) {
+        let history = trip.history
+        let next = WorkShift.logged(workShiftLog, history: history, now: now)
+        if next != workShiftLog {
+            workShiftLog = next
+            do {
+                Storage.set(try JSONEncoder().encode(next), for: .workShiftLog)
+            } catch {
+                Log.trips.error("журнал смен не записался: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        let display = WorkShift.display(log: workShiftLog, history: history)
+        if display != workShifts { workShifts = display }
+    }
+
+    private static func loadShiftLog() -> [WorkShift] {
+        guard let data = Storage.data(.workShiftLog) else { return [] }
+        do {
+            return try JSONDecoder().decode([WorkShift].self, from: data)
+        } catch {
+            Log.trips.error("журнал смен не прочитался: \(error.localizedDescription, privacy: .public)")
+            return []
+        }
+    }
+
     func refreshLearnedPlaces() {
+        // Тем же тактом (старт сцены, конец поездки) — журнал смен (12б.9).
+        defer { refreshWorkShifts() }
         guard settings.destinationSuggestions else {
             // Выключили подсказки — забываем и выученное: держать в памяти
             // домашний адрес, которым не пользуемся, незачем. Дорога на работу

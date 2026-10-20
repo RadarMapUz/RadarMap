@@ -85,6 +85,32 @@ final class LocationGatesTests: XCTestCase {
                                                 isOnRoute: true))
     }
 
+    /// Остаток «по маршруту» — только по живому прогрессу. Пока маршрут
+    /// строится (замена маршрута без сети серверным, новая цель, заезд),
+    /// прогресс стоит, а машина едет: камера маршрута «через 800 м»
+    /// оставалась такой полкилометра, и проеханная за это время молчала
+    /// (ревью 14.2). Тогда она — как все: по прямой и через гейты.
+    func testFrozenRouteProgressIsNotTrusted() {
+        XCTAssertEqual(LocationGates.routeRemaining(cameraAlong: 5_000, progressAlong: 4_200,
+                                                    isOffRoute: false, isProgressFrozen: false), 800)
+        XCTAssertNil(LocationGates.routeRemaining(cameraAlong: 5_000, progressAlong: 4_200,
+                                                  isOffRoute: false, isProgressFrozen: true),
+                     "маршрут строится — прогресс застыл")
+        XCTAssertNil(LocationGates.routeRemaining(cameraAlong: 5_000, progressAlong: 4_200,
+                                                  isOffRoute: true, isProgressFrozen: false),
+                     "съехали — проекция застыла на старой линии (S7)")
+        XCTAssertNil(LocationGates.routeRemaining(cameraAlong: nil, progressAlong: 4_200,
+                                                  isOffRoute: false, isProgressFrozen: false),
+                     "камера не на маршруте")
+        // Без остатка по маршруту кандидат — по прямой и не «маршрутный»:
+        // гейты решают сами, и «маршрут сильнее геометрии» застывшей линии
+        // не достаётся.
+        let candidate = LocationGates.candidateDistance(straight: 300, routeRemaining: nil,
+                                                        announced: false, in: situation())
+        XCTAssertEqual(candidate?.distance, 300)
+        XCTAssertEqual(candidate?.onRoute, false)
+    }
+
     // MARK: - Гейт направления: только с доказанными сторонами
 
     /// Встречная камера с ДОКАЗАННЫМИ сторонами (парная напротив) — молчим.

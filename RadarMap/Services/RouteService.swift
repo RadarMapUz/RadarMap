@@ -206,6 +206,11 @@ final class RouteService {
     /// маршруту» до его камер тогда ничего не значит (сценарий S7).
     @ObservationIgnored private(set) var isOffRoute = false
     @ObservationIgnored private var isRebuilding = false
+    /// Прогресс по маршруту сейчас не обновляется: идёт построение или
+    /// перестроение, `updateProgress` ждёт его конца, и `progressAlong`
+    /// застыл там, где машина была до него. Остатку «по маршруту» до камер
+    /// тогда верить нельзя (LocationGates.routeRemaining).
+    var isProgressFrozen: Bool { isBuilding || isRebuilding }
     /// Идёт перестроение после съезда — наблюдаемо: машина на это время
     /// показывает «Перестраиваю маршрут» вместо уже неверного поворота.
     private(set) var isRerouting = false

@@ -242,12 +242,14 @@ extension LocationService {
     /// проекции, и камеры старой линии «по маршруту» были нашими без
     /// условий: заслоняли настоящую камеру впереди на новой дороге и
     /// звучали сами (сценарий S7, 20.10). Тогда они — как все: по прямой и
-    /// через гейты.
+    /// через гейты. То же — пока маршрут строится: прогресс стоит
+    /// (LocationGates.routeRemaining).
     func routeRemaining(to camera: Camera) -> CLLocationDistance? {
-        guard let route, route.isActive, !route.isOffRoute,
-              let onRoute = route.routeCamera(id: camera.id)
-        else { return nil }
-        return onRoute.distanceAlong - route.progressAlong
+        guard let route, route.isActive else { return nil }
+        return LocationGates.routeRemaining(cameraAlong: route.routeCamera(id: camera.id)?.distanceAlong,
+                                            progressAlong: route.progressAlong,
+                                            isOffRoute: route.isOffRoute,
+                                            isProgressFrozen: route.isProgressFrozen)
     }
 
     /// Умный радиус оповещения — растёт со скоростью (см. AlertEngine).

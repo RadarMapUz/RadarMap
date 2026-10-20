@@ -6,15 +6,20 @@
 //  примерно в 18:40».
 //
 //  Приватно по построению, и это проверяется тестом: телефон отправляет
-//  четыре поля — случайную ссылку, время прибытия, остаток пути и статус. Ни
-//  точки, ни цели, ни устройства. Сервер держит это в памяти и гасит ссылку
-//  сам (server/api.py, «Поделиться прибытием»). Отправка начинается, только
-//  когда водитель действительно поделился, и заканчивается с маршрутом:
-//  «на месте» или «больше не отслеживается».
+//  случайный ключ записи, адрес страницы, время прибытия, остаток пути и
+//  статус. Ни точки, ни цели, ни устройства. Сервер держит это в памяти и
+//  гасит ссылку сам (server/api.py, «Поделиться прибытием»). Отправка
+//  начинается, только когда водитель действительно поделился, и
+//  заканчивается с маршрутом: «на месте» или «больше не отслеживается».
+//
+//  Читать и писать — разные ключи (14.12): в ссылке только адрес — хэш
+//  ключа записи, сам ключ не покидает телефон иначе как в теле POST. У кого
+//  ссылка, тот видит, но не пишет: ни ложного «дома», ни чужого времени.
 //
 //  Чистая логика; покрыто EtaShareTests.
 //
 
+import CryptoKit
 import Foundation
 import Security
 
@@ -24,16 +29,48 @@ nonisolated enum EtaShare {
         case driving, arrived, ended
     }
 
-    /// Случайная ссылка: 128 бит, base64url без заполнения (22 знака).
+    /// Случайный ключ: 128 бит, base64url без заполнения (22 знака). Из него
+    /// делается ключ записи; до 14.12 он же был ссылкой.
     static func makeToken() -> String {
         var bytes = [UInt8](repeating: 0, count: 16)
         if SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) != errSecSuccess {
             bytes = (0..<16).map { _ in UInt8.random(in: 0...255) }
         }
-        return Data(bytes).base64EncodedString()
+        return base64url(Data(bytes))
+    }
+
+    /// Адрес страницы для ключа записи: base64url(SHA-256(ключ)) без «=», 43
+    /// знака — тот же расчёт, что `eta_address` на сервере (общий вектор в
+    /// тестах обеих сторон). Полный хэш, без обрезки: длина и есть метка
+    /// «ссылка с ключом» — сервер не принимает голый token такой длины даже
+    /// тогда, когда записи по адресу нет (семейная ссылка между поездками
+    /// домой, рестарт сервиса), а старые сборки делали ссылки из 22 знаков.
+    static func address(forKey key: String) -> String {
+        base64url(Data(SHA256.hash(data: Data(key.utf8))))
+    }
+
+    private static func base64url(_ data: Data) -> String {
+        data.base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
+    }
+
+    /// Чем телефон пишет в ссылку.
+    enum WriteKey: Equatable, Sendable {
+        /// Ключ записи (14.12) — только на телефоне; в ссылке — его хэш.
+        case secret(String)
+        /// Ссылка до 14.12: адрес и есть ключ. Так пишет только семейная
+        /// ссылка, созданная раньше, — до своей смены (30 дней).
+        case legacy(String)
+
+        /// Адрес страницы — то, что видит близкий в ссылке.
+        var address: String {
+            switch self {
+            case .secret(let key): EtaShare.address(forKey: key)
+            case .legacy(let token): token
+            }
+        }
     }
 
     /// Токен для проверки сервера: правильной формы, но ничей — страница
@@ -63,13 +100,21 @@ nonisolated enum EtaShare {
         base.appendingPathComponent("api").appendingPathComponent("eta").appendingPathComponent(token)
     }
 
-    /// Тело обновления — только эти четыре поля.
-    static func payload(token: String, arrival: Date, remainingMeters: Double,
+    /// Тело обновления — только эти поля. С ключом записи рядом идёт и сам
+    /// адрес (`token`): сервер до 14.12 ключа не знает и пишет по token —
+    /// ссылка работает и там (без защиты, как раньше); новый сервер пишет
+    /// только по ключу и проверяет, что token — его адрес. Так телефону не
+    /// нужно знать версию сервера, и выкладка посреди поездки ничего не ломает.
+    static func payload(write: WriteKey, arrival: Date, remainingMeters: Double,
                         status: Status) -> [String: Any] {
-        ["token": token,
-         "eta": arrival.timeIntervalSince1970.rounded(),
-         "left_m": Int(max(0, remainingMeters).rounded()),
-         "status": status.rawValue]
+        var body: [String: Any] = [
+            "token": write.address,
+            "eta": arrival.timeIntervalSince1970.rounded(),
+            "left_m": Int(max(0, remainingMeters).rounded()),
+            "status": status.rawValue,
+        ]
+        if case .secret(let key) = write { body["key"] = key }
+        return body
     }
 
     /// Слать ли обновление в пути. До 19.10 — каждую минуту, даже стоя в

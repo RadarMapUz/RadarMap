@@ -27,7 +27,8 @@ final class EtaShareService {
     @ObservationIgnored weak var route: RouteService?
     /// Пульт: рубильник на случай поломки страницы.
     @ObservationIgnored var allowedByConfig: () -> Bool = { true }
-    @ObservationIgnored private var token: String?
+    /// Ключ записи этой ссылки: живёт только в памяти, в ссылке — его хэш.
+    @ObservationIgnored private var write: EtaShare.WriteKey?
     @ObservationIgnored private var loop: Task<Void, Never>?
     private let api = APIClient()
 
@@ -69,9 +70,9 @@ final class EtaShareService {
     /// Ссылка и текст для листа «Поделиться». Отправки ещё нет.
     func prepare() -> (url: URL, message: String)? {
         guard isAvailable, let route else { return nil }
-        let token = self.token ?? EtaShare.makeToken()
-        self.token = token
-        let url = EtaShare.link(base: AppConfig.syncBaseURL, token: token)
+        let write = self.write ?? .secret(EtaShare.makeToken())
+        self.write = write
+        let url = EtaShare.link(base: AppConfig.syncBaseURL, token: write.address)
         let clock = route.arrivalDate.formatted(date: .omitted, time: .shortened)
         let message = String(format: String(localized: "Буду примерно в %1$@ (через %2$@). Следить: %3$@"),
                              clock, Formatting.duration(route.remainingTime), url.absoluteString)
@@ -80,7 +81,7 @@ final class EtaShareService {
 
     /// Водитель отправил ссылку — начинаем обновлять.
     func confirmShared() {
-        guard token != nil, !isSharing else { return }
+        guard write != nil, !isSharing else { return }
         isSharing = true
         sentArrival = nil
         sentRemaining = nil
@@ -120,7 +121,7 @@ final class EtaShareService {
     /// Передумал в листе «Поделиться» — ссылки не было.
     func cancelPrepared() {
         guard !isSharing else { return }
-        token = nil
+        write = nil
     }
 
     /// «Перестать делиться» — знакомый увидит «больше не отслеживается».
@@ -142,14 +143,14 @@ final class EtaShareService {
         sentAt = nil
         await send(status, arrival: Date(), remaining: 0)
         isSharing = false
-        token = nil
+        write = nil
         Log.network.notice("прибытие: ссылка закрыта (\(status.rawValue, privacy: .public))")
     }
 
     @discardableResult
     private func send(_ status: EtaShare.Status, arrival: Date, remaining: CLLocationDistance) async -> Bool {
-        guard let token, allowedByConfig() else { return false }
-        return await api.postAccepted("api/eta", json: EtaShare.payload(token: token, arrival: arrival,
+        guard let write, allowedByConfig() else { return false }
+        return await api.postAccepted("api/eta", json: EtaShare.payload(write: write, arrival: arrival,
                                                                        remainingMeters: remaining, status: status))
     }
 }

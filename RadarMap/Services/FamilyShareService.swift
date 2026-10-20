@@ -4,8 +4,8 @@
 //
 //  «Близкие видят прибытие» (12б.6): постоянная семейная ссылка. Правила — в
 //  FamilyShare; здесь хранение ссылки, отправка и пауза на поездку. Шлёт тем
-//  же путём и теми же четырьмя полями, что «Поделиться прибытием»
-//  (EtaShare): ни точки, ни цели, ни устройства.
+//  же путём и теми же полями, что «Поделиться прибытием» (EtaShare): ключ
+//  записи, адрес и четыре поля — ни точки, ни цели, ни устройства.
 //
 
 import Foundation
@@ -52,7 +52,7 @@ final class FamilyShareService {
         if !enabled { closeSoon(nearHome: false) }
     }
 
-    /// Ссылку удалили: у близкого — «сейчас не в пути» навсегда. Токен для
+    /// Ссылку удалили: у близкого — «сейчас не в пути» навсегда. Ключ для
     /// закрытия снят до удаления (closeSoon): задача закрытия стартует позже,
     /// и раньше находила ссылку уже пустой — «не в пути» не уходило, и у
     /// близкого до двух часов висело «будет дома в 18:40» (ревью 14.1).
@@ -64,11 +64,12 @@ final class FamilyShareService {
     /// Отправили (лист «Поделиться» сообщил, что ушло).
     func markSent() { link?.needsResend = false }
 
-    /// Раз в 30 дней — новый токен (старую ссылку близкий больше не видит).
+    /// Раз в 30 дней — новый ключ и адрес (старую ссылку близкий больше не
+    /// видит); ссылка до 14.12 здесь же получает ключ записи.
     func rotateIfNeeded(now: Date = Date()) {
         guard let link, link.needsRotation(now: now), !isLive else { return }
         self.link = link.rotated(now: now)
-        Log.network.notice("семейная ссылка: токен сменён (30 дней)")
+        Log.network.notice("семейная ссылка: сменена (30 дней), пишется ключом")
     }
 
     // MARK: - Поездка
@@ -92,12 +93,12 @@ final class FamilyShareService {
         case .idle:
             if isLive || inFlight != nil { closeSoon(nearHome: false) }
         case .driving(let arrival):
-            guard inFlight == nil, let token = link?.token,
+            guard inFlight == nil, let write = link?.write,
                   EtaShare.shouldSend(lastArrival: sentArrival, lastRemaining: sentArrival == nil ? nil : 0,
                                       lastSentAt: sentAt, arrival: arrival, remaining: 0, now: now)
             else { return }
             let started = generation
-            let request = enqueue(.driving, arrival: arrival, token: token)
+            let request = enqueue(.driving, arrival: arrival, write: write)
             inFlight = request
             Task {
                 let delivered = await request.value
@@ -119,34 +120,34 @@ final class FamilyShareService {
         closeSoon(nearHome: nearHome)
     }
 
-    /// Закрыть живую ссылку — и ту, чья первая отправка ещё в пути. Токен
+    /// Закрыть живую ссылку — и ту, чья первая отправка ещё в пути. Ключ
     /// снимается сейчас, синхронно: к старту задачи ссылку могли удалить.
     /// Закрывает один раз: отправка, оставшаяся в пути, ссылку уже не держит.
     private func closeSoon(nearHome: Bool) {
-        guard isLive || inFlight != nil, let token = link?.token else { return }
+        guard isLive || inFlight != nil, let write = link?.write else { return }
         generation &+= 1
         isLive = false
         inFlight = nil
         sentArrival = nil
         sentAt = nil
-        enqueue(FamilyShare.endStatus(nearHome: nearHome), arrival: Date(), token: token)
+        enqueue(FamilyShare.endStatus(nearHome: nearHome), arrival: Date(), write: write)
     }
 
     /// В очередь: после всего, что ушло раньше.
     @discardableResult
-    private func enqueue(_ status: EtaShare.Status, arrival: Date, token: String) -> Task<Bool, Never> {
+    private func enqueue(_ status: EtaShare.Status, arrival: Date, write: EtaShare.WriteKey) -> Task<Bool, Never> {
         let previous = chain
         let task = Task {
             _ = await previous?.value
-            return await send(status, arrival: arrival, token: token)
+            return await send(status, arrival: arrival, write: write)
         }
         chain = task
         return task
     }
 
-    private func send(_ status: EtaShare.Status, arrival: Date, token: String) async -> Bool {
+    private func send(_ status: EtaShare.Status, arrival: Date, write: EtaShare.WriteKey) async -> Bool {
         guard allowedByConfig() else { return false }
-        return await api.postAccepted("api/eta", json: EtaShare.payload(token: token, arrival: arrival,
+        return await api.postAccepted("api/eta", json: EtaShare.payload(write: write, arrival: arrival,
                                                                        remainingMeters: 0, status: status))
     }
 

@@ -13,6 +13,7 @@ struct FamilyShareSettingsPage: View {
     @Environment(AppEnvironment.self) private var env
     @State private var name = ""
     @State private var sharePayload: ActivityTextPayload?
+    @State private var serverUnavailable = false
 
     var body: some View {
         let family = env.family
@@ -26,10 +27,18 @@ struct FamilyShareSettingsPage: View {
                     // жест — ссылка у незрячего водителя навсегда оставалась
                     // «не отправленной». Заодно «отправлено» — только когда
                     // её правда отправили, а не открыли лист и закрыли.
+                    // Сервер без страницы (не выложен) — ссылку не отдаём:
+                    // близкий открыл бы ошибку.
                     Button {
-                        let message = String(localized: "Здесь видно, когда я буду дома")
-                        sharePayload = ActivityTextPayload(
-                            text: message + " " + link.url(base: AppConfig.syncBaseURL).absoluteString)
+                        Task {
+                            guard await env.etaShare.ensureServerSupport() else {
+                                serverUnavailable = true
+                                return
+                            }
+                            sharePayload = ActivityTextPayload(text: String(
+                                format: String(localized: "Здесь видно, когда я буду дома: %@"),
+                                link.url(base: AppConfig.syncBaseURL).absoluteString))
+                        }
                     } label: {
                         Label(link.needsResend ? "Отправить новую ссылку" : "Отправить ссылку",
                               systemImage: "square.and.arrow.up")
@@ -65,11 +74,19 @@ struct FamilyShareSettingsPage: View {
             }
         }
         .settingsPage("Близкие видят прибытие")
+        // «Отправлено» — только по ответу листа: тап по ShareLink снимал
+        // «отправьте новую» и тогда, когда лист закрыли, ничего не отправив, —
+        // а старая ссылка после смены токена уже не показывает поездки (ревью 14.1).
         .sheet(item: $sharePayload) { payload in
             ActivityTextSheet(text: payload.text) { sent in
                 if sent { family.markSent() }
             }
             .presentationDetents([.medium, .large])
+        }
+        .alert("Ссылка пока не работает", isPresented: $serverUnavailable) {
+            Button("Понятно", role: .cancel) {}
+        } message: {
+            Text("Сервер ещё не обновлён — близкий открыл бы ошибку. Попробуйте позже.")
         }
     }
 }

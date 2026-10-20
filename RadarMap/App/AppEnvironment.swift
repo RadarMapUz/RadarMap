@@ -892,7 +892,11 @@ final class AppEnvironment {
 
     func refreshWorkShifts(now: Date = Date()) {
         let history = trip.history
-        let next = WorkShift.logged(workShiftLog, history: history, now: now)
+        // Идущий рейс — ещё не в истории, но смену продолжает: без него она
+        // закрылась бы посреди рейса (WorkShift.isClosed). Рейс ли это,
+        // решает режим на финише (trip.finish(work:)) — им и судим.
+        let ongoing = location.isTripActive && settings.workDriverMode ? trip.startedAt : nil
+        let next = WorkShift.logged(workShiftLog, history: history, now: now, ongoingSince: ongoing)
         if next != workShiftLog {
             workShiftLog = next
             do {
@@ -1210,6 +1214,12 @@ final class AppEnvironment {
     /// Виджет «Дорога на работу» (9.4): готовые минуты в App Group; пишется и
     /// перезагружается, только когда числа сменились (бюджет WidgetKit).
     private func refreshCommuteWidget(now: Date = Date()) {
+        // Пока история или профиль дороги не прочитаны, «дороги нет» значит
+        // «ещё не знаем»: профиль читается раньше истории, выученных мест
+        // ещё нет — и запись стирала виджет и снимала фоновую заявку на каждом
+        // холодном старте, а в фоновом подъёме — ровно утром (ревью 14.1).
+        // Прочитается второе из двух — его колбэк и перепишет.
+        guard trip.isLoaded, commuteProfiles.isLoaded else { return }
         let target = settings.commuteLearning ? settings.workArrivalTarget : nil
         func direction(_ kind: Commute.Direction) -> CommuteWidgetData.Direction? {
             guard let summary = commute.first(where: { $0.direction == kind }), let usual = summary.usual else {
@@ -1255,13 +1265,17 @@ final class AppEnvironment {
         let toWork = direction(.toWork), toHome = direction(.toHome)
         var data = toWork == nil && toHome == nil
             ? nil : CommuteWidgetData(toWork: toWork, toHome: toHome, updatedAt: now)
-        // Где телефон — только «дом»/«работа», без координат.
-        if let place = commuteWidgetPlace() {
-            data?.lastPlace = place
-            data?.lastPlaceAt = now
+        // Где телефон — только «дом»/«работа», без координат; позиции нет
+        // (фоновый подъём) — прежняя отметка (WidgetCommute.placeMark).
+        let stored = WidgetCommute.read()
+        if let mark = WidgetCommute.placeMark(current: commuteWidgetPlace(),
+                                              positionKnown: location.currentCoordinate != nil,
+                                              previous: stored, now: now) {
+            data?.lastPlace = mark.place
+            data?.lastPlaceAt = mark.at
         }
         scheduleCommuteBackgroundRefresh(data, now: now)
-        guard !WidgetCommute.sameNumbers(WidgetCommute.read(), data) else { return }
+        guard !WidgetCommute.sameNumbers(stored, data) else { return }
         WidgetCommute.write(data)
         WidgetCenter.shared.reloadTimelines(ofKind: "RadarCommuteWidget")
     }
@@ -1299,12 +1313,14 @@ final class AppEnvironment {
     func commuteBackgroundRefresh() async {
         Log.app.notice("фоновое обновление дороги на работу")
         commuteRefreshScheduledFor = nil   // заявка израсходована
+        // Процесс поднят ради этого подъёма: и профиль, и история ещё читаются
+        // с диска — без истории нет выученных мест, а значит и дороги.
         var steps = 0
-        while !commuteProfiles.isLoaded, steps < AppConfig.commuteRefreshProfileWaitSteps {
+        while !(commuteProfiles.isLoaded && trip.isLoaded), steps < AppConfig.commuteRefreshProfileWaitSteps {
             await Task.pause(seconds: 0.1)
             steps += 1
         }
-        guard settings.commuteLearning, commuteProfiles.isLoaded else { return }
+        guard settings.commuteLearning, commuteProfiles.isLoaded, trip.isLoaded else { return }
         if commute.isEmpty { refreshCommute() }
         await traffic.refresh()
         let now = Date()

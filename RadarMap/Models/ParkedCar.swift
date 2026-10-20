@@ -14,6 +14,8 @@
 //      «машину» в соседнем квартале — хуже, чем ничего. Точка — последняя,
 //      где ещё ЕХАЛИ (≥ 12 км/ч), а не позиция в момент автостопа: он
 //      приходит через три минуты стоянки, когда человек уже ушёл;
+//    * конец поездки на ходу («Стоп» рукой, Siri) не паркует: машина едет
+//      дальше вместе с человеком;
 //    * остановка ВНУТРИ поездки (склейка TripMerge) не паркует — поездка
 //      продолжается, и новая поездка, склеенная или нет, сбрасывает точку:
 //      человек уже в машине;
@@ -55,8 +57,12 @@ nonisolated struct ParkedCar: Codable, Equatable, Sendable {
     }
 
     /// Машина встала: конец поездки за рулём при точной последней точке езды.
-    static func park(lastDriven: Fix?, asPassenger: Bool, now: Date) -> ParkedCar? {
-        guard !asPassenger, let fix = lastDriven,
+    /// `speedKmh` — спидометр в момент конца: «Стоп» рукой (или Siri) на ходу —
+    /// не парковка, машина едет дальше вместе с человеком, и точка «последней
+    /// езды» — место нажатия. Через две минуты капсула звала бы назад к нему,
+    /// а после настоящей парковки без поездки — в чужой квартал (ревью 14.1).
+    static func park(lastDriven: Fix?, asPassenger: Bool, speedKmh: Double = 0, now: Date) -> ParkedCar? {
+        guard !asPassenger, !isDriving(speedKmh: speedKmh), let fix = lastDriven,
               fix.accuracy > 0, fix.accuracy <= AppConfig.parkedCarMaxAccuracyMeters else { return nil }
         return ParkedCar(lat: fix.lat, lon: fix.lon, parkedAt: now)
     }

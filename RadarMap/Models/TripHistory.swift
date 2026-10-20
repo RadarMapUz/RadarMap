@@ -270,8 +270,10 @@ nonisolated enum TripHistory {
                              // пересчитывает балл — к расходу заряда это
                              // отношения не имеет. Поле с дефолтом nil, и без
                              // явной передачи честно измеренная цифра молча
-                             // исчезала при обновлении приложения.
-                             batteryDropPercent: record.batteryDropPercent)
+                             // исчезала при обновлении приложения. Пометка
+                             // рейса (12б.9) — по той же причине.
+                             batteryDropPercent: record.batteryDropPercent,
+                             work: record.work)
             return out
         }
         return (cleaned, changed)
@@ -318,7 +320,8 @@ nonisolated enum TripHistory {
                                   trackSpeeds: record.trackPoints.map(\.speedKmh)),
                               stops: record.stops,
                               endedManually: record.endedManually,
-                              batteryDropPercent: record.batteryDropPercent)
+                              batteryDropPercent: record.batteryDropPercent,
+                              work: record.work)
         }
         return (cleaned, changed)
     }
@@ -353,7 +356,8 @@ nonisolated enum TripHistory {
                                   trackSpeeds: track.map(\.speedKmh)),
                               stops: record.stops,
                               endedManually: record.endedManually,
-                              batteryDropPercent: record.batteryDropPercent)
+                              batteryDropPercent: record.batteryDropPercent,
+                              work: record.work)
         }
         return (cleaned, changed)
     }
@@ -546,7 +550,10 @@ nonisolated enum TripHistory {
                 trackSpeeds: speeds),
             stops: stops.isEmpty ? nil : stops,
             endedManually: record.endedManually,
-            batteryDropPercent: batteryDrop)
+            batteryDropPercent: batteryDrop,
+            // Половины рейса — рейсы (12б.9): без пометки разделённый рейс
+            // выпадал из «Смен» и учился как своя поездка (ревью 14.1).
+            work: record.work)
     }
 
     private static func polylineLength(_ points: [TrackPoint]) -> Double {

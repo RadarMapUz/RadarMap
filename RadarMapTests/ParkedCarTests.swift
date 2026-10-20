@@ -39,6 +39,17 @@ final class ParkedCarTests: XCTestCase {
                      "неизвестная точность — не точная")
     }
 
+    /// «Стоп» на ходу — не парковка: машина едет дальше с человеком внутри,
+    /// и точка нажатия через две минуты стала бы «Машина · 1,5 км» за спиной
+    /// (ревью 14.1). Автостоп приходит на стоянке — спидометр там ноль.
+    func testStopWhileDrivingDoesNotPark() {
+        XCTAssertNil(ParkedCar.park(lastDriven: fix(accuracy: 8), asPassenger: false, speedKmh: 45, now: t0))
+        XCTAssertNotNil(ParkedCar.park(lastDriven: fix(accuracy: 8), asPassenger: false, speedKmh: 0, now: t0),
+                        "автостоп через три минуты стоянки")
+        XCTAssertNotNil(ParkedCar.park(lastDriven: fix(accuracy: 8), asPassenger: false, speedKmh: 5, now: t0),
+                        "«Стоп» рукой, уже отходя от машины")
+    }
+
     func testWalkingIsNotDriving() {
         XCTAssertFalse(ParkedCar.isDriving(speedKmh: 6), "пешком от машины — не точка машины")
         XCTAssertFalse(ParkedCar.isDriving(speedKmh: 11), "бег — тоже")

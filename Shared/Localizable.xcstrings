@@ -5172,18 +5172,18 @@
         }
       }
     },
-    "Здесь видно, когда я буду дома": {
+    "Здесь видно, когда я буду дома: %@": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Здесь видно, когда я буду дома"
+            "value": "Здесь видно, когда я буду дома: %@"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu yerda uyga qachon kelishim koʻrinadi"
+            "value": "Bu yerda uyga qachon kelishim koʻrinadi: %@"
           }
         }
       }
@@ -11929,6 +11929,22 @@
         }
       }
     },
+    "Сервер ещё не обновлён — близкий открыл бы ошибку. Попробуйте позже.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сервер ещё не обновлён — близкий открыл бы ошибку. Попробуйте позже."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server hali yangilanmagan — yaqiningiz xatolikni koʻrardi. Keyinroq urinib koʻring."
+          }
+        }
+      }
+    },
     "Сервер карты не отвечает — камеры предупреждают": {
       "localizations": {
         "ru": {
@@ -12519,6 +12535,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Havola yangilandi — eskisi endi safarlarni koʻrsatmaydi. Yangisini yuboring."
+          }
+        }
+      }
+    },
+    "Ссылка пока не работает": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ссылка пока не работает"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Havola hozircha ishlamaydi"
           }
         }
       }

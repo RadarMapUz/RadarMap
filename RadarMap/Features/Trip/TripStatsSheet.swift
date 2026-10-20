@@ -202,12 +202,15 @@ struct TripStatsSheet: View {
                     if !env.commute.isEmpty {
                         commuteCards
                             .entrance(5, appeared)
+                            .id("commute")
                     }
 
                     // Смены таксиста (12б.9) — из рабочих рейсов; нет их — нет блока.
-                    if !env.workShifts.isEmpty {
-                        WorkShiftsCard(shifts: env.workShifts)
+                    let shifts = WorkShiftsCard.shown(env.workShifts)
+                    if !shifts.isEmpty {
+                        WorkShiftsCard(shifts: shifts)
                             .entrance(5, appeared)
+                            .id("shifts")
                     }
 
                     contributionRow

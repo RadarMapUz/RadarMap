@@ -152,6 +152,9 @@ struct SettingsView: View {
         case "database": DatabaseSettingsPage()
         case "backup": BackupSettingsPage()
         case "language": LanguageSettingsPage()
+        case "fuel": FuelSettingsPage()
+        case "family": FamilyShareSettingsPage()
+        case "fines": Form { FineCheckSection() }.settingsPage("Штрафы")
         default: HelpSettingsPage()
         }
     }

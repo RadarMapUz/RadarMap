@@ -485,7 +485,7 @@ struct RoadEventConfirmBar: View {
     @State private var task: Task<Void, Never>?
 
     var body: some View {
-        if let event = env.mobile.pendingRoadConfirm, !isCovered {
+        if let event = shownEvent, !isCovered {
             let kind = ReportKind(rawValue: event.kind.rawValue) ?? .closure
             HStack(spacing: 10) {
                 Image(systemName: kind.symbol)
@@ -520,6 +520,21 @@ struct RoadEventConfirmBar: View {
             }
             .onDisappear { task?.cancel() }
         }
+    }
+
+    /// Событие, о котором спрашиваем.
+    private var shownEvent: (id: Int, kind: RoadEvent.Kind)? {
+        if let event = env.mobile.pendingRoadConfirm { return (event.id, event.kind) }
+        #if DEBUG
+        // Скриншот-хук: `-demoRoadConfirm closure|roadwork` — вопрос без
+        // настоящего проезда (ответ уходит в пустоту: ждущего события нет).
+        let args = ProcessInfo.processInfo.arguments
+        if let at = args.firstIndex(of: "-demoRoadConfirm") {
+            let kind = args.indices.contains(at + 1) ? RoadEvent.Kind(rawValue: args[at + 1]) : nil
+            return (-1, kind ?? .closure)
+        }
+        #endif
+        return nil
     }
 
     private func answer(title: String, tint: Color, value: Bool, id: Int) -> some View {

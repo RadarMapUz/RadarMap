@@ -197,7 +197,7 @@ extension MapScreen {
             // 0,3 с анимации на экране было две панели и сбрасывался
             // взведённый «Стоп».
             // «Сейчас видят: Мама» — над строкой поездки, пока ссылка живая (12б.6).
-            if env.location.isTripActive { FamilyLiveChip() }
+            if env.location.isTripActive || FamilyLiveChip.showsDemo { FamilyLiveChip() }
             if !map.isAddingCamera,
                TripScreenLayout.showsTripBar(mode: mode, arrivalShown: arrivalShown) {
                 TripLiveBar(

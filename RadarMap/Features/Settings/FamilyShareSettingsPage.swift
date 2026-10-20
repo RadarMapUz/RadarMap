@@ -65,13 +65,13 @@ struct FamilyLiveChip: View {
     @Environment(AppEnvironment.self) private var env
 
     var body: some View {
-        if env.family.isLive, let link = env.family.link {
+        if let name = liveName {
             HStack(spacing: 8) {
                 Image(systemName: "eye.fill")
                     .font(.rounded(12, .bold))
                     .foregroundStyle(Theme.accent)
                     .accessibilityHidden(true)
-                Text(String(format: String(localized: "Сейчас видят: %@"), link.name))
+                Text(String(format: String(localized: "Сейчас видят: %@"), name))
                     .font(.rounded(13, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
@@ -95,5 +95,20 @@ struct FamilyLiveChip: View {
             .overlay(Capsule().strokeBorder(Theme.edgePanel, lineWidth: 1))
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
+    }
+
+    /// Кому видна поездка; nil — чипа нет.
+    private var liveName: String? {
+        if env.family.isLive, let link = env.family.link { return link.name }
+        return Self.showsDemo ? "Dilnoza opa" : nil
+    }
+
+    /// Скриншот-хук `-demoFamilyLive` (DEBUG): чип без поездки и живой ссылки.
+    static var showsDemo: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-demoFamilyLive")
+        #else
+        false
+        #endif
     }
 }

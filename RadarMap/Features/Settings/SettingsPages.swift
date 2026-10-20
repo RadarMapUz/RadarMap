@@ -827,7 +827,7 @@ struct LanguageSettingsPage: View {
 
 /// Госномер и кнопка на официальный портал (FineCheck, 12б.8). Номер — только
 /// в буфер, не в адрес ссылки; рядом своя оценка с честной пометкой.
-private struct FineCheckSection: View {
+struct FineCheckSection: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.openURL) private var openURL
     @State private var copied = false

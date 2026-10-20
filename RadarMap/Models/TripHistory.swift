@@ -444,6 +444,29 @@ nonisolated enum TripHistory {
         return (cleaned, removed, changed)
     }
 
+    /// Подписи проездов камер базы — одним алфавитом, как база после 11.6
+    /// (AddressText): «Итоги» складывают превышения по тексту места, и одно
+    /// место раскололось бы на «старое» и «новое». Свои камеры и отметки
+    /// водителей не трогаем — их подписи на языке интерфейса. Счёт не
+    /// меняется, поэтому дни и «за всё время» не трогаются.
+    static func labelsNormalized(_ history: [TripRecord]) -> ([TripRecord], Bool) {
+        var changed = false
+        let normalized = history.map { record -> TripRecord in
+            guard record.passed.contains(where: { $0.cameraID < firstHandPlacedCameraID
+                && AddressText.normalized($0.location) != $0.location }) else { return record }
+            changed = true
+            var copy = record
+            copy.passed = record.passed.map { pass in
+                guard pass.cameraID < firstHandPlacedCameraID else { return pass }
+                var out = pass
+                out.location = AddressText.normalized(pass.location)
+                return out
+            }
+            return copy
+        }
+        return (normalized, changed)
+    }
+
     private static func isCrowdCaption(_ pass: PassedCamera) -> Bool {
         pass.cameraID >= firstCrowdCameraID && !pass.location.isEmpty
     }

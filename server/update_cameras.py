@@ -47,8 +47,57 @@ def cap(w):
     for i,ch in enumerate(lw):
         if ch.isalpha(): return lw[:i]+ch.upper()+lw[i+1:]
     return lw
+# Кириллица внутри латинских слов («Dаhаsi», «Kеsishgan» — 665 адресов в
+# v12): реестр набирают с переключённой раскладкой, и буквы-двойники
+# выглядят так же, а ищутся и читаются синтезом иначе (план 11.6).
+HOMOGLYPHS = str.maketrans("АВЕКМНОРСТХаеорсухк", "ABEKMHOPCTXaeopcyxk")
+CYR = re.compile("[А-Яа-яЁёЎўҚқҒғҲҳЪъЬьЫы]")
+LAT = re.compile("[A-Za-z]")
+# Узбекская кириллица → латиница (алфавит 1995 года) — для адресов, целиком
+# набранных кириллицей (2498–2502, 2849): остальная база латинская.
+UZ_LATIN = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "yo", "ж": "j", "з": "z",
+    "и": "i", "й": "y", "к": "k", "л": "l", "м": "m", "н": "n", "о": "o", "п": "p", "р": "r",
+    "с": "s", "т": "t", "у": "u", "ф": "f", "х": "x", "ц": "s", "ч": "ch", "ш": "sh", "ъ": "ʼ",
+    "ь": "", "э": "e", "ю": "yu", "я": "ya", "ў": "o‘", "қ": "q", "ғ": "g‘", "ҳ": "h",
+}
+VOWELS = set("aeiouаеёиоуэюяў")
+
+def fold_word(w):
+    """Слово с латиницей и кириллицей — двойники в латиницу, прочие буквы
+    (опечатки реестра: «Kфo‘chasi», «Sаnъаt», «aulы») — по алфавиту."""
+    if not (CYR.search(w) and LAT.search(w)):
+        return w
+    out = []
+    for ch in w.translate(HOMOGLYPHS):
+        if not CYR.match(ch) and ch not in "ыЫ":
+            out.append(ch)
+            continue
+        low = ch.lower()
+        lat = "i" if low == "ы" else UZ_LATIN.get(low, "")
+        out.append(lat.capitalize() if ch != low and lat else lat)
+    return "".join(out)
+
+def to_latin(s):
+    """Строка целиком кириллицей — в узбекскую латиницу; иначе как есть.
+    «Е» в начале слова и после гласной — «ye», как в алфавите."""
+    if not CYR.search(s) or LAT.search(s):
+        return s
+    out = []
+    prev = ""
+    for ch in s:
+        low = ch.lower()
+        if low == "е" and (not prev.isalpha() or prev.lower() in VOWELS):
+            lat = "ye"
+        else:
+            lat = UZ_LATIN.get(low, ch)
+        out.append(lat.capitalize() if ch != low and lat else lat)
+        prev = ch
+    return "".join(out)
+
 def smart(s):
     s=re.sub(r"\s+"," ",s).strip()
+    s=to_latin(" ".join(fold_word(w) for w in s.split(" ")))
     return " ".join(cap(w) for w in s.split(" ") if w)
 def coord(s):
     s=s.replace(",",".").strip()

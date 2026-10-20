@@ -1464,6 +1464,16 @@ final class TripStats {
             }
             Storage.set(true, for: .passCrowdCleanup1)
         }
+        // Подписи проездов камер базы — одним алфавитом (11.6).
+        if !Storage.bool(.passLabelsNormalized1) {
+            let (normalized, changed) = TripHistory.labelsNormalized(history)
+            if changed {
+                history = normalized
+                persist()
+                Log.trips.info("подписи проездов приведены к одному алфавиту")
+            }
+            Storage.set(true, for: .passLabelsNormalized1)
+        }
         // Разовая чистка повторов (11.1): проезд пары камер-дублей писался
         // дважды. Хирургически, как чистка S30.
         if isLifetimeTrusted, !Storage.bool(.passDuplicateCleanup1) {

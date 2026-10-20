@@ -5349,6 +5349,22 @@
         }
       }
     },
+    "Камеры на карте видны и без позиции": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камеры на карте видны и без позиции"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralar xaritada joylashuvsiz ham koʻrinadi"
+          }
+        }
+      }
+    },
     "Камеры на маршруте": {
       "localizations": {
         "ru": {
@@ -7442,6 +7458,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Muammo yoki gʻoyani yozing…"
+          }
+        }
+      }
+    },
+    "Оповещений нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оповещений нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogohlantirishlar yoʻq"
           }
         }
       }

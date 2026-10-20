@@ -37,8 +37,12 @@ struct EngineBaseLayer: View {
     private var browsing: Bool { map.orientation == .free }
 
     var body: some View {
-        let me = env.location.displayCoordinate ?? env.location.currentCoordinate
-        if let me {
+        // Без геопозиции («Никогда», ещё нет фикса) карта — не пустая подложка,
+        // а город: камеры, поиск и «Итоги» работают и так (12в A10: до 20.10
+        // экран был чёрным под двумя баннерами). Значка «я» тогда нет.
+        let known = env.location.displayCoordinate ?? env.location.currentCoordinate
+        let me = known ?? AppConfig.mapFallbackCenter
+        do {
             let insets = state.insets
             let distance = env.location.nearestCamera != nil
                 ? env.location.distanceToNearest : nil
@@ -127,7 +131,8 @@ struct EngineBaseLayer: View {
                         onBrowse: { map.releaseToFree() },
                         onSelectCamera: onSelectCamera,
                         onLongPress: onLongPress,
-                        onRegion: { map.updateVisible(for: $0) })
+                        onRegion: { map.updateVisible(for: $0) },
+                        showsPosition: known != nil)
                     if browsing {
                         VStack {
                             Spacer()
@@ -163,8 +168,6 @@ struct EngineBaseLayer: View {
                     if old == .free, new != .free { recenterToken += 1 }
                 }
             }
-        } else {
-            MapPalette.ground
         }
     }
 

@@ -172,10 +172,13 @@ struct SpeedHUDView: View {
                     .symbolEffect(.pulse, options: .repeating, isActive: true)
                 VStack(alignment: .leading, spacing: 1) {
                     // Без доступа к геопозиции — не «спутники»: причина другая.
-                    Text(env.location.isAuthorized ? "Нет сигнала GPS" : "Нет доступа к геопозиции")
+                    // Причину и кнопку уже показывает баннер над картой — здесь
+                    // то, что работает и без позиции (12в A10: до 20.10 карточка
+                    // слово в слово повторяла баннер).
+                    Text(env.location.isAuthorized ? "Нет сигнала GPS" : "Оповещений нет")
                         .font(.rounded(14, .semibold))
                         .foregroundStyle(Theme.textPrimary)
-                    Text(env.location.isAuthorized ? "Оповещения ждут спутники" : "Разрешите в Настройках iOS")
+                    Text(env.location.isAuthorized ? "Оповещения ждут спутники" : "Камеры на карте видны и без позиции")
                         .font(.rounded(11))
                         .foregroundStyle(Theme.textSecondary)
                 }

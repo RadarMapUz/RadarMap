@@ -211,6 +211,10 @@ nonisolated enum AppConfig {
         span: MKCoordinateSpan(latitudeDelta: 8.0, longitudeDelta: 12.0)
     )
 
+    /// Центр карты, пока своей позиции нет (доступ «Никогда», первый фикс
+    /// ещё не пришёл): Ташкент — там большинство камер и водителей.
+    static let mapFallbackCenter = CLLocationCoordinate2D(latitude: 41.3111, longitude: 69.2797)
+
     /// Бюджет аннотаций на экране. Камер в области больше — область
     /// кластеризуется целиком (CameraMapContent), и ни одна камера не пропадает:
     /// раньше лишние молча отбрасывались и карта выглядела «недогруженной».

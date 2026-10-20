@@ -144,7 +144,9 @@ struct EngineBaseLayer: View {
                                                      course: env.location.currentCourse,
                                                      inTrip: env.location.isTripActive)
                             } label: {
-                                Label("К машине", systemImage: "location.fill")
+                                // «Ко мне», а не «К машине»: с 12б.1 «Машина · 330 м» — это место
+                                // парковки, и две «машины» на экране путались (матрица 13.2).
+                                Label("Ко мне", systemImage: "location.fill")
                                     .font(.rounded(14, .semibold))
                                     .padding(.horizontal, 14).padding(.vertical, 10)
                                     .liftedBackground(Theme.surface, in: Capsule())

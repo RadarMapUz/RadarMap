@@ -22,19 +22,21 @@ nonisolated enum WhatsNew {
     }
 
     /// Номер текущего выпуска текста. Поднимать вместе с `items`.
-    static let edition = 1
+    static let edition = 2
 
     static var items: [Item] {
         [
-            Item(symbol: "rectangle.3.group.fill",
-                 title: String(localized: "Итоги недели на домашнем экране"),
-                 text: String(localized: "Виджет в цветах приложения: километры, балл, дни и где теряете баллы.")),
+            // Выпуск 2 (2.2.23): только то, что работает без выкладки сервера —
+            // перекрытия, метан и семейная ссылка появятся после неё.
             Item(symbol: "car.fill",
-                 title: String(localized: "«Начать поездку» одним нажатием"),
-                 text: String(localized: "В Пункте управления и на кнопке действия — не открывая приложение.")),
-            Item(symbol: "speedometer",
-                 title: String(localized: "Спокойнее за рулём"),
-                 text: String(localized: "Одно расстояние до камеры, объявления ждут остановки, «Радар!» подписан в первых поездках.")),
+                 title: String(localized: "Где оставили машину"),
+                 text: String(localized: "После поездки на карте — значок машины и «Машина · 330 м» со стрелкой.")),
+            Item(symbol: "fuelpump.fill",
+                 title: String(localized: "Сколько стоит дорога"),
+                 text: String(localized: "Укажите расход и цену — стоимость появится в поездках и «Итогах». Там же — проверка штрафов по госномеру.")),
+            Item(symbol: "lock.rectangle.on.rectangle",
+                 title: String(localized: "«На работу» на экране блокировки"),
+                 text: String(localized: "Виджет: сколько ехать сейчас и не мешают ли пробки — ещё до выезда.")),
         ]
     }
 

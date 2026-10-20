@@ -1707,18 +1707,18 @@
         }
       }
     },
-    "«Начать поездку» одним нажатием": {
+    "«На работу» на экране блокировки": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "«Начать поездку» одним нажатием"
+            "value": "«На работу» на экране блокировки"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "«Safarni boshlash» bir bosishda"
+            "value": "Bloklash ekranida «Ishga»"
           }
         }
       }
@@ -2299,22 +2299,6 @@
         }
       }
     },
-    "В Пункте управления и на кнопке действия — не открывая приложение.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "В Пункте управления и на кнопке действия — не открывая приложение."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Boshqaruv markazida va harakat tugmasida — ilovani ochmasdan."
-          }
-        }
-      }
-    },
     "В городе — коротко, на трассе — полностью. О камерах, которые вы проезжаете спокойно каждый день, молчит.": {
       "localizations": {
         "ru": {
@@ -2687,18 +2671,18 @@
         }
       }
     },
-    "Виджет в цветах приложения: километры, балл, дни и где теряете баллы.": {
+    "Виджет: сколько ехать сейчас и не мешают ли пробки — ещё до выезда.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Виджет в цветах приложения: километры, балл, дни и где теряете баллы."
+            "value": "Виджет: сколько ехать сейчас и не мешают ли пробки — ещё до выезда."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ilova ranglaridagi vidjet: kilometrlar, ball, kunlar va ball qayerda yoʻqotiladi."
+            "value": "Vidjet: hozir qancha yurish kerak va tirbandlik xalaqit bermaydimi — yoʻlga chiqishdan oldin."
           }
         }
       }
@@ -5381,22 +5365,6 @@
         }
       }
     },
-    "Итоги недели на домашнем экране": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Итоги недели на домашнем экране"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bosh ekranda hafta natijalari"
-          }
-        }
-      }
-    },
     "Итоги недели по воскресеньям": {
       "localizations": {
         "ru": {
@@ -6145,6 +6113,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tugmalar"
+          }
+        }
+      }
+    },
+    "Ко мне": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ко мне"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mening joyimga"
           }
         }
       }
@@ -8054,22 +8038,6 @@
         }
       }
     },
-    "Одно расстояние до камеры, объявления ждут остановки, «Радар!» подписан в первых поездках.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Одно расстояние до камеры, объявления ждут остановки, «Радар!» подписан в первых поездках."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kameragacha bitta masofa, eʼlonlar toʻxtashni kutadi, «Radar!» birinchi safarlarda yozilgan."
-          }
-        }
-      }
-    },
     "Опишите проблему или идею…": {
       "localizations": {
         "ru": {
@@ -9912,6 +9880,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ishga chiqish vaqti"
+          }
+        }
+      }
+    },
+    "После поездки на карте — значок машины и «Машина · 330 м» со стрелкой.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "После поездки на карте — значок машины и «Машина · 330 м» со стрелкой."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safardan keyin xaritada — mashina belgisi va koʻrsatkichli «Mashina · 330 m»."
           }
         }
       }
@@ -11769,6 +11753,22 @@
         }
       }
     },
+    "Сколько стоит дорога": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сколько стоит дорога"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl qanchaga tushadi"
+          }
+        }
+      }
+    },
     "Скопировать координаты": {
       "localizations": {
         "ru": {
@@ -12119,22 +12119,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "IIV har bir kamera uchun roʻyxat eʼlon qilmaydi — turi imkoniyatlarini koʻrsatamiz"
-          }
-        }
-      }
-    },
-    "Спокойнее за рулём": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Спокойнее за рулём"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rulda xotirjamroq"
           }
         }
       }
@@ -13155,6 +13139,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sarf va narxni kiriting — safarlarda, «Natijalar»da va «Ishga yoʻl»da narx paydo boʻladi."
+          }
+        }
+      }
+    },
+    "Укажите расход и цену — стоимость появится в поездках и «Итогах». Там же — проверка штрафов по госномеру.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Укажите расход и цену — стоимость появится в поездках и «Итогах». Там же — проверка штрафов по госномеру."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sarf va narxni kiriting — narx safarlarda va «Natijalar»da paydo boʻladi. Oʻsha yerda — davlat raqami boʻyicha jarimalarni tekshirish."
           }
         }
       }
@@ -16837,22 +16837,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Joylashuvingizni koʻrmayapmiz — marshrut tuzilmadi"
-          }
-        }
-      }
-    },
-    "К машине": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "К машине"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Avtomobilga"
           }
         }
       }

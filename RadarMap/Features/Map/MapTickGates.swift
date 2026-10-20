@@ -165,7 +165,7 @@ struct MobileConfirmGate: View {
         // Один вопрос за раз: радар первым, «ещё перекрыто?» — когда о радаре
         // спрашивать нечего (MobileCameraService.passQuestion).
         Group {
-            if env.mobile.pendingConfirm != nil {
+            if env.mobile.pendingConfirm != nil || MobileConfirmBar.showsDemo {
                 MobileConfirmBar(isCovered: covered)
             } else {
                 RoadEventConfirmBar(isCovered: covered)

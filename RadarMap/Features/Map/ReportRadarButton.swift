@@ -418,13 +418,13 @@ struct MobileConfirmBar: View {
     @State private var task: Task<Void, Never>?
 
     var body: some View {
-        if let camera = env.mobile.pendingConfirm, !isCovered {
+        if let kind = shownKind, !isCovered {
             HStack(spacing: 10) {
-                Image(systemName: camera.kind.symbolName)
+                Image(systemName: kind.symbolName)
                     .font(.rounded(15, .bold))
-                    .foregroundStyle(camera.kind.glyphTint)
+                    .foregroundStyle(kind.glyphTint)
                     .frame(width: 34, height: 34)
-                    .background(camera.kind.tint.gradient, in: Circle())
+                    .background(kind.tint.gradient, in: Circle())
                 Text("Радар ещё стоял?")
                     .font(.rounded(15, .semibold))
                     .foregroundStyle(Theme.textPrimary)
@@ -450,6 +450,23 @@ struct MobileConfirmBar: View {
             }
             .onDisappear { task?.cancel() }
         }
+    }
+
+    /// Тип отметки, о которой спрашиваем; nil — плашки нет.
+    private var shownKind: CameraType? {
+        if let camera = env.mobile.pendingConfirm { return camera.kind }
+        return Self.showsDemo ? .tripod : nil
+    }
+
+    /// Скриншот-хук `-demoRadarConfirm` (DEBUG): вопрос без настоящего
+    /// проезда. Ответ уходит в пустоту — ждущей отметки нет, answerConfirm
+    /// ничего не отправит.
+    static var showsDemo: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-demoRadarConfirm")
+        #else
+        false
+        #endif
     }
 
     private func answer(title: String, tint: Color, value: Bool) -> some View {

@@ -16,6 +16,10 @@ struct OfflineOfferCard: View {
     let ownMap: Bool
     /// Ответ — локально, чтобы карточка ушла сразу: Storage не наблюдаемый.
     @State private var answered = Storage.bool(.offlineOfferAnswered)
+    #if DEBUG
+    /// Ответ на демо-карточку: только на этот запуск, в Storage не пишется.
+    @State private var demoAnswered = false
+    #endif
 
     var body: some View {
         if let region = offeredRegion {
@@ -55,7 +59,8 @@ struct OfflineOfferCard: View {
                 .tapTarget()
                 .accessibilityLabel(Text("Не сейчас"))
                 Button {
-                    env.offlineMaps.download(region)
+                    // Демо-карточка ничего не качает: снимок, а не загрузка.
+                    if !Self.showsDemo { env.offlineMaps.download(region) }
                     answer()
                 } label: {
                     // Синяя, не жёлтая: жёлтая на экране одна — главное действие
@@ -89,6 +94,13 @@ struct OfflineOfferCard: View {
             learnedHome: env.learnedPlaces.first { $0.kind == .home }?.coordinate,
             current: env.location.currentCoordinate)
         let region = service.region(containing: anchor)
+        #if DEBUG
+        // Скриншот-хук `-demoOfflineOffer`: карточка мимо «уже ответили» и
+        // «спокойного момента» — область из настоящего каталога.
+        if Self.showsDemo {
+            return demoAnswered ? nil : region ?? service.catalog?.regions.first
+        }
+        #endif
         let available = region.map { service.state(for: $0) == .notDownloaded } ?? false
         var situation = OfflineOffer.Situation(
             onboarded: Storage.bool(.hasCompletedOnboarding),
@@ -106,7 +118,22 @@ struct OfflineOfferCard: View {
     }
 
     private func answer() {
+        #if DEBUG
+        if Self.showsDemo {
+            withMotion(Motion.standard) { demoAnswered = true }
+            return
+        }
+        #endif
         Storage.set(true, for: .offlineOfferAnswered)
         withMotion(Motion.standard) { answered = true }
+    }
+
+    /// Скриншот-хук `-demoOfflineOffer` (DEBUG).
+    static var showsDemo: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-demoOfflineOffer")
+        #else
+        false
+        #endif
     }
 }

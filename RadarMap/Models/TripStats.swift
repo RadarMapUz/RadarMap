@@ -325,7 +325,7 @@ final class TripStats {
 
     func noteDropped(_ reason: String) { onTripDropped?(reason) }
 
-    func finish(endedManually: Bool = true, batteryPercent: Int? = nil) {
+    func finish(endedManually: Bool = true, batteryPercent: Int? = nil, work: Bool = false) {
         finishedDuration = durationSeconds
         // Поездка завершена штатно — страховочный слепок больше не нужен.
         defer { startedAt = nil; startBatteryPercent = nil; resumedFrom = nil; removeCheckpoint() }
@@ -371,7 +371,8 @@ final class TripStats {
             // Сырой буфер начинается со старта (после склейки — со старта
             // первой ноги): упрощённый трек вырежут через неделю, старт нет.
             startLat: trackBuffer.first?.lat,
-            startLon: trackBuffer.first?.lon
+            startLon: trackBuffer.first?.lon,
+            work: work ? true : nil
         )
         history.insert(record, at: 0)
         history = TripHistory.pruned(history)

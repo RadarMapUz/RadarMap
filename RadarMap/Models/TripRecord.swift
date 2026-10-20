@@ -161,6 +161,10 @@ nonisolated struct TripRecord: Codable, Identifiable {
     /// через месяц (Commute). У старых записей отсутствует.
     var startLat: Double? = nil
     var startLon: Double? = nil
+    /// Записана в режиме «Работаю водителем» (12б.9): входит в смены, не
+    /// входит в дорогу на работу и в выученные Дом/Работу. nil — личная;
+    /// у старых записей отсутствует, и выключение режима их не трогает.
+    var work: Bool? = nil
 
     var camerasPassed: Int { passed.count }
     /// Общее время от старта до финиша — включая стоянки: столько поездка заняла.

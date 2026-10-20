@@ -548,6 +548,9 @@ final class AppSettings {
     /// это разные вещи по природе: там факт от живого человека, здесь догадка
     /// о прошлом, и выключать их хочется по отдельности.
     var tripodHints: Bool { didSet { store.set(tripodHints, forKey: Keys.tripodHints) } }
+    /// «Работаю водителем» (такси, курьер — 12б.9): поездки собираются в
+    /// смены, без дороги на работу и подсказок «Домой», голос короткий.
+    var workDriverMode: Bool { didSet { store.set(workDriverMode, forKey: Keys.workDriverMode) } }
     /// Госномер для «Проверить штрафы» (FineCheck): только на телефоне,
     /// пустая строка — не задан. На сервер не уходит никогда.
     var licensePlate: String { didSet { store.set(licensePlate, forKey: Keys.licensePlate) } }
@@ -713,6 +716,7 @@ final class AppSettings {
         static let commuteLearningOff = "commuteLearningOff"
         static let smartSilence = "smartSilence"
         static let tripodHints = "tripodHints"
+        static let workDriverMode = "workDriverMode"
         static let licensePlate = "licensePlate"
         static let parkedCarHint = "parkedCarHint"
         static let mapPlaces = "mapPlaces"
@@ -816,6 +820,7 @@ final class AppSettings {
         commuteLearning = !store.bool(forKey: Keys.commuteLearningOff)
         smartSilence = store.bool(forKey: Keys.smartSilence)
         tripodHints = store.bool(forKey: Keys.tripodHints)
+        workDriverMode = store.bool(forKey: Keys.workDriverMode)
         licensePlate = store.string(forKey: Keys.licensePlate) ?? ""
         parkedCarHint = store.bool(forKey: Keys.parkedCarHint)
         mapPlaces = store.bool(forKey: Keys.mapPlaces)

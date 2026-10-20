@@ -234,16 +234,10 @@ extension AppEnvironment {
             Log.alerts.info("Плашка: звук \(self.settings.isMuted ? "выключен" : "включён", privacy: .public)")
             location.refreshLiveActivity()
         case .report:
-            // Та же дверь, что у кнопки на карте: защита от дублей, «с дивана»
-            // и курс для снапа — в quickReport, не здесь.
-            let outcome = await mobile.quickReport(
-                kind: .radar,
-                coordinate: location.currentCoordinate,
-                speedKmh: location.speedKmh,
-                isTripActive: location.isTripActive,
-                course: location.currentCourse)
-            alerts.speak(outcome.spoken)
-            let flash = liveActivity.flashReport(outcome.isSuccess)
+            guard let outcome = await remoteRadarReport() else { return }
+            // Повтор на том же месте — точка уже стоит: ✓, а не «✕ Не
+            // отправлено» поверх голоса «Уже отметили здесь» (ревью 20.10).
+            let flash = liveActivity.flashReport(outcome.pointExists)
             location.refreshLiveActivity()
             // Снять отметку — отдельной задачей: намерению плашки система даёт
             // секунды, и ждать внутри него незачем.
@@ -253,6 +247,35 @@ extension AppEnvironment {
                 self?.location.refreshLiveActivity()
             }
         }
+    }
+}
+
+extension AppEnvironment {
+    /// «Радар!» без взгляда на телефон — с плашки (и с часов, 9.3). Та же
+    /// дверь, что у кнопки на карте: защита от дублей, «с дивана» и курс для
+    /// снапа — в quickReport, не здесь. Итог произносится: на экран за рулём
+    /// не смотрят.
+    ///
+    /// nil — отметка с прошлого нажатия ещё в пути: на слабой связи ответ
+    /// идёт секунды, водитель жмёт ещё раз, и второе нажатие проходило мимо
+    /// защиты от дублей (она узнаёт об отметке только после ответа сервера) —
+    /// кнопка на карте держит для этого `isSending` (ревью 20.10).
+    func remoteRadarReport() async -> MobileCameraService.QuickOutcome? {
+        guard !remoteReportInFlight else { return nil }
+        remoteReportInFlight = true
+        defer { remoteReportInFlight = false }
+        // Плашка и часы поднимают приложение и из выгруженного состояния —
+        // точки тогда ещё нет; одноразовый фикс, как у Siri.
+        var coordinate = location.currentCoordinate
+        if coordinate == nil { coordinate = await location.awaitCoordinate() }
+        let outcome = await mobile.quickReport(
+            kind: .radar,
+            coordinate: coordinate,
+            speedKmh: location.speedKmh,
+            isTripActive: location.isTripActive,
+            course: location.currentCourse)
+        alerts.speak(outcome.spoken)
+        return outcome
     }
 }
 

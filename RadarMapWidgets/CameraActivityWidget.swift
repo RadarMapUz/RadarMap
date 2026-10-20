@@ -76,6 +76,10 @@ struct CameraActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: CameraActivityAttributes.self) { context in
             LockScreenView(state: context.state, isStale: context.isStale)
+                // Высота плашки — не больше 160 pt: на самом крупном шрифте
+                // строка с дистанцией, прибытием и полосой выталкивала кнопки
+                // за край (ревью 20.10).
+                .dynamicTypeSize(...DynamicTypeSize.xLarge)
                 .activityBackgroundTint(WTheme.background.opacity(0.92))
                 .activitySystemActionForegroundColor(WTheme.accent)
         } dynamicIsland: { context in
@@ -94,26 +98,30 @@ struct CameraActivityWidget: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    if !context.isStale { ApproachBar(state: context.state) }
-                    // `?? "…"` дал бы String — мимо каталога, на узбекском
-                    // осталось бы по-русски.
-                    Group {
-                        if context.isStale {
-                            Text("Нет сигнала GPS")
-                        } else if let title = context.state.nearestTitle {
-                            Text(title)
-                        } else {
-                            Text("Камер рядом нет")
+                    VStack(alignment: .leading, spacing: 4) {
+                        if !context.isStale { ApproachBar(state: context.state) }
+                        // `?? "…"` дал бы String — мимо каталога, на узбекском
+                        // осталось бы по-русски.
+                        Group {
+                            if context.isStale {
+                                Text("Нет сигнала GPS")
+                            } else if let title = context.state.nearestTitle {
+                                Text(title)
+                            } else {
+                                Text("Камер рядом нет")
+                            }
+                        }
+                            .font(.system(.footnote, design: .rounded))
+                            .foregroundStyle(WTheme.secondary)
+                            .lineLimit(context.isStale ? 2 : 1)
+                        if !context.isStale {
+                            GhostLine(state: context.state)
+                            ActivityButtons(state: context.state, height: 34)
+                                .padding(.top, 2)
                         }
                     }
-                        .font(.system(.footnote, design: .rounded))
-                        .foregroundStyle(WTheme.secondary)
-                        .lineLimit(context.isStale ? 2 : 1)
-                    if !context.isStale {
-                        GhostLine(state: context.state)
-                        ActivityButtons(state: context.state, height: 34)
-                            .padding(.top, 2)
-                    }
+                    // Развёрнутый остров тоже не выше 160 pt (ревью 20.10).
+                    .dynamicTypeSize(...DynamicTypeSize.xLarge)
                 }
             } compactLeading: {
                 typeIcon(context.state, isStale: context.isStale)
@@ -233,6 +241,7 @@ private struct ActivityButtons: View {
                 HStack(spacing: 6) {
                     Image(systemName: reportSymbol)
                         .font(.system(size: 15, weight: .bold))
+                        .accessibilityHidden(true)
                     reportTitle
                         .font(.system(size: 15, weight: .heavy, design: .rounded))
                         .lineLimit(1)

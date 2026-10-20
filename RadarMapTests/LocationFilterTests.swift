@@ -178,6 +178,21 @@ final class LocationFilterTests: XCTestCase {
         XCTAssertEqual(turning?.course, -1)
     }
 
+    /// Сырой курс повтора, пусть недоверенный, смотрит в другую сторону —
+    /// это поворот (городской каньон отстаёт позицией), курс не держим.
+    func testRawCourseFarFromHeldIsATurnNotARepeat() {
+        var filter = LocationFilter()
+        _ = filter.accept(fix(base, speed: 8, course: 90, courseAccuracy: 4), now: now)
+        let turned = accepted(filter.accept(fix(moved(2, bearing: 170), speed: 8, course: 175,
+                                                courseAccuracy: 40, at: 1),
+                                            now: now.addingTimeInterval(1)))
+        XCTAssertEqual(turned?.course, -1)
+        let close = accepted(filter.accept(fix(moved(3, bearing: 95), speed: 8, course: 100,
+                                               courseAccuracy: 40, at: 1.2),
+                                           now: now.addingTimeInterval(1.2)))
+        XCTAssertEqual(close?.course, 90, "рядом с удержанным — повтор, держим")
+    }
+
     /// Стоя курс не держим, удержанный опору не продлевает, а дольше
     /// `courseHoldSeconds` курса нет.
     func testHoldIsShortAndOnlyOnTheMove() {

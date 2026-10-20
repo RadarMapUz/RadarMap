@@ -48,6 +48,8 @@ final class AppEnvironment {
     let route = RouteService()
     let speedLimits: SpeedLimitService
     let liveActivity = LiveActivityService()
+    /// «Радар!» с плашки или часов в пути (`remoteRadarReport`).
+    @ObservationIgnored var remoteReportInFlight = false
     /// Мост на Apple Watch: HUD поездки + тук на запястье.
     let watchBridge = WatchBridgeService()
     let metrics = MetricsService()

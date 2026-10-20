@@ -172,4 +172,16 @@ final class LiveActivityButtonsTests: XCTestCase {
         XCTAssertFalse(LiveActivityService.differs(legacy, from: old, now: now))
         XCTAssertFalse(LiveActivityService.answersTap(base, from: nil), "первое состояние — не ответ")
     }
+
+    /// ✓ на плашке — «точка на карте есть»: повтор на том же месте её уже
+    /// имеет, а «✕ Не отправлено» спорило бы с голосом «Уже отметили здесь».
+    func testRepeatOnTheSameSpotShowsTick() {
+        typealias Outcome = MobileCameraService.QuickOutcome
+        XCTAssertTrue(Outcome.refused(.duplicate).pointExists)
+        XCTAssertTrue(Outcome.sent(.created).pointExists)
+        XCTAssertTrue(Outcome.queued(.offline).pointExists, "ждёт сети — тап принят")
+        XCTAssertFalse(Outcome.refused(.noPosition).pointExists)
+        XCTAssertFalse(Outcome.refused(.notDriving).pointExists)
+        XCTAssertFalse(Outcome.sent(.failed(.tooOften)).pointExists)
+    }
 }

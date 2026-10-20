@@ -192,8 +192,14 @@ extension LocationService {
                     alertEngine.noteApproach(camera.id, distance: straight, at: coordinate,
                                              course: situation.course)
                 }
+                let behind = LocationGates.isClearlyBehind(camera, in: situation)
+                // Камера явно позади — её баннер «Камера через …» уже неправда.
+                // Здесь, а не по записи проезда: проезд закрывается за сотни
+                // метров и не пишется вовсе для камеры соседней улицы — а
+                // ложный баннер именно о ней (прогон и ревью 20.10).
+                if behind { notifier.clearApproaching(passed: camera.id) }
                 alertEngine.noteGeometry(camera.id, atTraverse: atTraverse,
-                                         behind: LocationGates.isClearlyBehind(camera, in: situation),
+                                         behind: behind,
                                          ahead: alertEngine.isPassed(camera.id)
                                             && LocationGates.isReapproach(camera, in: situation,
                                                                           passLine: alertEngine.passLine(camera.id)))

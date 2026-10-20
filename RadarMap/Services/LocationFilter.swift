@@ -142,9 +142,13 @@ nonisolated struct LocationFilter {
         }
         // Повторный фикс на ходу (см. шапку): курс недавний, едем — держим.
         // Стоя не держим: стоящая машина не едет мимо камеры, а её курс — шум.
+        // Свой сырой курс у фикса есть, пусть и недоверенный, и он смотрит
+        // совсем в другую сторону — это поворот, а не повтор: не держим.
         if let held = lastCourse, let speed, isRepeat(fix, speed: speed),
            speed * 3.6 >= AppConfig.directionalMinSpeedKmh,
-           fix.timestamp.timeIntervalSince(held.at) <= AppConfig.courseHoldSeconds {
+           fix.timestamp.timeIntervalSince(held.at) <= AppConfig.courseHoldSeconds,
+           fix.course < 0 || GeoMath.angleDifference(fix.course, held.course)
+                <= AppConfig.courseHoldMaxTurnDegrees {
             return (held.course, false)
         }
         return (-1, false)   // курса нет — ось и коридор обязаны молчать

@@ -18,6 +18,7 @@
 
 #if os(iOS)
 import AppIntents
+import os
 
 /// Что попросили с плашки.
 nonisolated enum ActivityAction: Sendable {
@@ -30,6 +31,17 @@ nonisolated enum ActivityAction: Sendable {
 @MainActor
 enum ActivityActions {
     static var perform: ((ActivityAction) async -> Void)?
+
+    /// Исполнителя нет — нажатие пропало бы молча; сказать об этом в журнал
+    /// (Log приложения сюда не доходит: файл общий с расширением).
+    static func run(_ action: ActivityAction) async {
+        guard let perform else {
+            Logger(subsystem: "uz.radarmap.ios", category: "alerts")
+                .error("Кнопка плашки без исполнителя: \(String(describing: action), privacy: .public)")
+            return
+        }
+        await perform(action)
+    }
 }
 
 /// «Радар!» с плашки — та же дверь, что у кнопки на карте и в CarPlay.
@@ -44,7 +56,7 @@ struct ActivityReportIntent: LiveActivityIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        await ActivityActions.perform?(.report)
+        await ActivityActions.run(.report)
         return .result()
     }
 }
@@ -60,7 +72,7 @@ struct ActivitySoundIntent: LiveActivityIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        await ActivityActions.perform?(.toggleSound)
+        await ActivityActions.run(.toggleSound)
         return .result()
     }
 }

@@ -125,6 +125,9 @@ nonisolated enum AppConfig {
     /// фикс через 2 мс) или сдвинулся меньше этой доли пути по своей скорости.
     static let courseRepeatMaxSeconds = 0.5
     static let courseRepeatMoveShare = 0.5
+    /// Сырой (даже недоверенный) курс повтора разошёлся с удержанным больше
+    /// этого — поворот, курс не держим.
+    static let courseHoldMaxTurnDegrees = 45.0
 
     /// Точность скорости, выше которой значение не берём (держим прошлое).
     static let maxSpeedAccuracyMps = 5.0

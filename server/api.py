@@ -24,8 +24,11 @@ Endpoints:
   POST /api/traffic        {v: 1, pieces: [{p: [[lat, lon, t, kmh], ...]}]} -> {"ok": true, "accepted": N}
                            (куски следа для пробок: без устройства, без поездки, время —
                             только относительное внутри куска; см. «Пробки» ниже)
-  POST /api/eta            {token, eta, left_m, status: "driving"|"arrived"|"ended"} -> {"ok": true}
-  GET  /api/eta/<token>    -> HTML «будет примерно в 18:40» (см. «Поделиться прибытием» ниже)
+  POST /api/eta            {key [, token], eta, left_m, status: "driving"|"arrived"|"ended"}
+                           -> {"ok": true}; key — ключ записи, адрес страницы — его хэш
+                           (старые сборки шлют один token — он же адрес; см. «Поделиться
+                           прибытием» ниже)
+  GET  /api/eta/<token>    -> HTML «будет примерно в 18:40»; заголовок X-Eta-Version: 2
   GET  /api/eta/f/<token>  -> то же для постоянной семейной ссылки: вне поездки «сейчас не в пути»
 
 Правила передвижных радаров (жизненный цикл доверия):
@@ -47,7 +50,9 @@ Endpoints:
 и копит решения в таблице overrides; публикует их владелец локальной командой
 server/publish_overrides.sh — ключ подписи на VPS не хранится.
 """
+import base64
 import hashlib
+import hmac
 import ipaddress
 import json
 import math
@@ -750,26 +755,72 @@ def amended_expires(conn, rid, created, expires, owner_device, owner_ip, rtype, 
 # ссылке (128 бит) и гаснет само: без обновлений — через ETA_TTL, после «на
 # месте» — через ETA_ARRIVED_TTL. Рестарт сервиса стирает все ссылки — это
 # цена того, что на диске нет ничего.
+#
+# Читать и писать — разные ключи (14.12). До них ссылка была и адресом
+# страницы, и правом записи: у кого ссылка (мама, и кому она её переслала),
+# тот мог прислать ложное «дома» или чужое время. Теперь телефон держит
+# случайный ключ записи W (128 бит) и шлёт {key: W}; адрес страницы —
+# base64url(sha256(W)) без «=», ровно 43 знака. Сервер секрета не хранит
+# вовсе: право записи — это знание прообраза адреса, сравнивать не с чем.
+#
+# Длина адреса и есть метка «ссылка с ключом», и она важнее метки на записи:
+# голый token длиной 43 не принимается никогда, даже когда записи по адресу
+# нет — семейная ссылка между поездками домой пуста, рестарт стирает всё,
+# потоп вытесняет запись вместе с её меткой, и читатель создал бы запись
+# заново. Старые сборки шлют token из 22 знаков — он по-прежнему и адрес, и
+# ключ: разовая ссылка живёт поездку, семейная — пока сборку не обновят, а
+# после обновления — до своей смены через 30 дней (телефон не гасит ссылку,
+# которая уже у близкого).
+#
+# Новый телефон шлёт вместе с ключом и сам адрес в token: сервер до 14.12
+# ключа не знает и берёт token — ссылка работает (без защиты, как и раньше),
+# а этот сервер проверяет, что token — адрес именно этого ключа. Так телефону
+# не нужно знать версию сервера, и обновление сервера посреди жизни ссылки
+# ничего не ломает. Версию видно снаружи: X-Eta-Version на страницах.
 
 ETA_TTL = 2 * 3600
 ETA_ARRIVED_TTL = 30 * 60
 ETA_MAX_LINKS = 5000
 ETA_UPDATES_PER_IP_DAY = 2000
 ETA_HORIZON = 48 * 3600
-_ETA_TOKEN = re.compile(r"^[A-Za-z0-9_-]{22,64}$")
+ETA_PROTOCOL = 2
+_ETA_TOKEN = re.compile(r"^[A-Za-z0-9_-]{22,64}$")         # адрес страницы (GET)
+_ETA_LEGACY_TOKEN = re.compile(r"^[A-Za-z0-9_-]{22,42}$")  # голый token старых сборок
+_ETA_KEY = re.compile(r"^[A-Za-z0-9_-]{22,64}$")           # ключ записи
 _eta_links = {}
 _eta_lock = threading.Lock()
 
 
+def eta_address(key):
+    """Адрес страницы для ключа записи: base64url(sha256(ключ)) без «=» — 43
+    знака, длиннее любого token старых сборок (22)."""
+    digest = hashlib.sha256(key.encode("ascii")).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+
 def clean_eta(data, now):
-    """Чистое обновление или None. Берутся только четыре поля — всё остальное,
-    что пришло (координаты, имя, устройство), не сохраняется вовсе."""
+    """(адрес, запись) или None. Берутся только ключ и четыре поля — всё
+    остальное, что пришло (координаты, имя, устройство), не сохраняется вовсе.
+    Сам ключ не сохраняется тоже: запись лежит по его хэшу, с меткой keyed."""
     if not isinstance(data, dict):
         return None
+    key = data.get("key")
     token = data.get("token")
-    status = data.get("status")
-    if not isinstance(token, str) or not _ETA_TOKEN.match(token):
+    if key is not None:
+        if not isinstance(key, str) or not _ETA_KEY.fullmatch(key):
+            return None
+        address = eta_address(key)
+        # token рядом с ключом — для сервера до 14.12; здесь он обязан быть
+        # адресом этого ключа: иначе ссылка у близкого и запись разошлись бы.
+        if token is not None and not (isinstance(token, str) and _ETA_TOKEN.fullmatch(token)
+                                      and hmac.compare_digest(token, address)):
+            return None
+        keyed = True
+    elif isinstance(token, str) and _ETA_LEGACY_TOKEN.fullmatch(token):
+        address, keyed = token, False
+    else:
         return None
+    status = data.get("status")
     if status not in ("driving", "arrived", "ended"):
         return None
     eta = data.get("eta")
@@ -780,11 +831,16 @@ def clean_eta(data, now):
         return None
     if not (now - 3600 <= eta <= now + ETA_HORIZON) or not (0 <= left <= 2_000_000):
         return None
-    return token, {"eta": float(eta), "left_m": int(left), "status": status, "updated": now}
+    return address, {"eta": float(eta), "left_m": int(left), "status": status,
+                     "updated": now, "keyed": keyed}
 
 
 def eta_put(token, item, now):
-    """Полная таблица уступает место новой ссылке за счёт самой давно не
+    """False — запись без ключа поверх записи, созданной ключом: так писал бы
+    читатель ссылки. По длине адреса (см. выше) такой запрос сюда не доходит;
+    метка — вторая стена на случай, если формат адреса когда-нибудь сменят.
+
+    Полная таблица уступает место новой ссылке за счёт самой давно не
     обновлявшейся. Раньше она отвечала 503: пять тысяч случайных ссылок с
     трёх адресов запирали «Поделиться прибытием» всей стране на два часа, а
     держать её запертой стоило бы пару десятков адресов в сутки. Живая ссылка
@@ -794,10 +850,14 @@ def eta_put(token, item, now):
     with _eta_lock:
         for key in [k for k, v in _eta_links.items() if _eta_expired(v, now)]:
             del _eta_links[key]
-        if token not in _eta_links and len(_eta_links) >= ETA_MAX_LINKS:
+        current = _eta_links.get(token)
+        if current is not None and current.get("keyed") and not item.get("keyed"):
+            return False
+        if current is None and len(_eta_links) >= ETA_MAX_LINKS:
             oldest = min(_eta_links, key=lambda k: _eta_links[k]["updated"])
             del _eta_links[oldest]
         _eta_links[token] = item
+        return True
 
 
 def eta_get(token, now):
@@ -1084,8 +1144,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": "bad json"})
         if ip_quota_exceeded("eta", self._ip(), ETA_UPDATES_PER_IP_DAY):
             return self._json(429, {"error": "too many"})
-        token, item = cleaned
-        eta_put(token, item, now)
+        address, item = cleaned
+        if not eta_put(address, item, now):
+            return self._json(403, {"error": "forbidden"})
         self._json(200, {"ok": True})
 
     def _eta_page(self, token, family=False):
@@ -1102,6 +1163,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Robots-Tag", "noindex")
+        # Снаружи видно, понимает ли сервер ключ записи (проверка выкладки).
+        self.send_header("X-Eta-Version", str(ETA_PROTOCOL))
         self.end_headers()
         self.wfile.write(body)
 

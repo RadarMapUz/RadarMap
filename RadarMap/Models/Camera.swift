@@ -198,7 +198,7 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
     /// предупреждения. Таких камер половина базы, поэтому это главный
     /// предохранитель против пропусков.
     var sidesAreProven: Bool {
-        guard hasTrustedRoadProfile else { return false }
+        guard profileMayMute else { return false }
         if twin == true { return true }
         return split == false
     }
@@ -210,6 +210,18 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
     /// пешеходный переход идёт ПОПЕРЁК проезжей части, и камера над дорогой
     /// выглядела бы для гейта оси как камера на перпендикулярной улице.
     var hasTrustedRoadProfile: Bool { roadClass.isVehicleRoad }
+
+    /// Профилю можно доверить ТИШИНУ: глушить камеру по оси её дороги и по
+    /// разделённым сторонам. Снап на второстепенную дорогу (проезд, жилая
+    /// зона — `AppConfig.minorSnapRoadClasses`) — чаще всего промах
+    /// сопоставления: в базе таких 126, и у 61 в адресе стоит трасса или
+    /// проспект. Ось такого проезда к трассе отношения не имеет, а радар на
+    /// трассе по ней молчал (прогон 13.3, камеры 3135 и 3136 на D006).
+    /// Подтвердить «камера наша» такой профиль по-прежнему может, а проезды
+    /// судятся как раньше (PassGeometry смотрит на hasTrustedRoadProfile).
+    var profileMayMute: Bool {
+        hasTrustedRoadProfile && !AppConfig.minorSnapRoadClasses.contains(cls ?? "")
+    }
 
     /// Можно ли отбрасывать камеру по НАПРАВЛЕНИЮ движения: нужно и само
     /// направление проезжей части, и доказательство, что стороны поделены.

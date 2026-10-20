@@ -123,6 +123,31 @@ final class LocationGatesTests: XCTestCase {
                                                 isOnRoute: false))
     }
 
+    /// Снап на проезд или жилую зону — промах сопоставления: радары 3135 и
+    /// 3136 стоят на трассе D006, а снап посадил их на поперечный проезд и
+    /// жилую улицу, и гейт оси глушил их на 100 км/ч (прогон 13.3). Такой
+    /// оси не верим; на настоящей проезжей части гейт оси работает как раньше.
+    func testCrossAxisFromMinorRoadSnapDoesNotMute() {
+        for cls in ["service", "living_street", "track"] {
+            let radar = camera(ahead: 300, east: 15, roadBearing: 90, cls: cls, axis: 90)
+            XCTAssertTrue(LocationGates.isOnOurRoad(radar, in: situation(), isOnRoute: false), cls)
+        }
+        let onCarriageway = camera(ahead: 300, east: 15, roadBearing: 90, cls: "primary", axis: 90)
+        XCTAssertFalse(LocationGates.isOnOurRoad(onCarriageway, in: situation(), isOnRoute: false),
+                       "поперёк по оси настоящей проезжей части — по-прежнему не наша")
+    }
+
+    /// «Стороны поделены» на второстепенном снапе тоже не доказаны: twin и
+    /// split посчитаны для чужого проезда.
+    func testMinorRoadSnapNeverProvesSides() {
+        let twin = camera(ahead: 300, roadBearing: 0, cls: "service", dir: 180, twin: true)
+        XCTAssertFalse(twin.sidesAreProven)
+        XCTAssertTrue(LocationGates.isOnOurRoad(twin, in: situation(), isOnRoute: false),
+                      "встречная по направлению, но доказательства нет — предупреждаем")
+        let proven = camera(ahead: 300, roadBearing: 0, cls: "primary", dir: 180, twin: true)
+        XCTAssertFalse(LocationGates.isOnOurRoad(proven, in: situation(), isOnRoute: false))
+    }
+
     // MARK: - Кусок дороги решает в обе стороны
 
     /// Мы на проезжей части камеры, камера впереди — наша.

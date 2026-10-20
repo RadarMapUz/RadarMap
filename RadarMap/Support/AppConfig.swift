@@ -383,6 +383,10 @@ nonisolated enum AppConfig {
     /// историю. Камера снимает проезжую часть, над которой стоит: половина
     /// ширины проспекта (13–20 м) плюс шум GPS — это сорок метров с запасом.
     static let passTraverseMaxMeters: CLLocationDistance = 40
+    /// Один проезд на точку (11.1): тот же тип камеры ближе этого и в
+    /// пределах этого времени — повтор (дубли базы стоят в 1–11 м).
+    static let passDuplicateMeters: CLLocationDistance = 15
+    static let passDuplicateSeconds: TimeInterval = 60
 
     /// Тот же траверз для камер БЕЗ дорожного профиля — свои точки и
     /// краудсорсные отметки. Их координату ставил человек, а не снап по оси

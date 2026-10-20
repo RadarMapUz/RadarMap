@@ -391,6 +391,59 @@ nonisolated enum TripHistory {
         return (cleaned, removed, changed)
     }
 
+    // MARK: - Одна точка — один проезд (11.1)
+
+    /// Тот же проезд, записанный второй раз: в базе есть настоящие дубли —
+    /// две камеры одного типа в 1–11 м друг от друга с одним направлением
+    /// (13 пар в v11, план 11.1). PassTracking следит за каждой, что стала
+    /// ближайшей, и проезд такой пары писался дважды: двойной «штраф» и
+    /// двойной минус в рейтинге за одну точку. Повтор — тот же тип в
+    /// `passDuplicateMeters` за `passDuplicateSeconds`; у старых записей без
+    /// координат судить не по чему — не повтор.
+    static func isDuplicate(cameraID: Int, typeRaw: String, lat: Double?, lon: Double?, date: Date,
+                            of previous: [PassedCamera]) -> Bool {
+        guard let lat, let lon else { return false }
+        return previous.contains { other in
+            guard other.cameraID != cameraID, other.typeRaw == typeRaw,
+                  let otherLat = other.lat, let otherLon = other.lon,
+                  abs(date.timeIntervalSince(other.date)) <= AppConfig.passDuplicateSeconds else { return false }
+            return GeoMath.fastDistance(lat, lon, otherLat, otherLon) <= AppConfig.passDuplicateMeters
+        }
+    }
+
+    /// Разовая чистка уже записанных повторов: в каждой поездке остаётся
+    /// первый проезд точки. Записи копируются (как `crowdCleaned`), балл
+    /// пересчитывается. Возвращает (история, снятые проезды, менялось ли).
+    static func duplicatesCleaned(_ history: [TripRecord]) -> ([TripRecord], [PassedCamera], Bool) {
+        var changed = false
+        var removed: [PassedCamera] = []
+        let cleaned = history.map { record -> TripRecord in
+            var kept: [PassedCamera] = []
+            var dropped: [PassedCamera] = []
+            for pass in record.passed.sorted(by: { $0.date < $1.date }) {
+                if isDuplicate(cameraID: pass.cameraID, typeRaw: pass.typeRaw, lat: pass.lat, lon: pass.lon,
+                               date: pass.date, of: kept) {
+                    dropped.append(pass)
+                } else {
+                    kept.append(pass)
+                }
+            }
+            guard !dropped.isEmpty else { return record }
+            changed = true
+            removed += dropped
+            var copy = record
+            let droppedIDs = Set(dropped.map(\.id))
+            copy.passed = record.passed.filter { !droppedIDs.contains($0.id) }
+            if record.score != nil {
+                copy.score = DrivingScore.tripScore(
+                    passes: copy.passed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
+                    trackSpeeds: record.trackPoints.map(\.speedKmh))
+            }
+            return copy
+        }
+        return (cleaned, removed, changed)
+    }
+
     private static func isCrowdCaption(_ pass: PassedCamera) -> Bool {
         pass.cameraID >= firstCrowdCameraID && !pass.location.isEmpty
     }

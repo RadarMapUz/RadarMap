@@ -190,12 +190,12 @@ final class RouteService {
                                                "RouteService.onManeuverSpoken") }
     }
 
-    @ObservationIgnored private var offRouteTicks = 0
+    /// Когда перестраивать после съезда (RerouteGate, чистый).
+    @ObservationIgnored private var rerouteGate = RerouteGate()
     /// Последний фикс — дальше `rerouteDeviationMeters` от линии: мы не на
     /// маршруте (съехали, перестроиться нельзя — нет сети). Остаток «по
     /// маршруту» до его камер тогда ничего не значит (сценарий S7).
     @ObservationIgnored private(set) var isOffRoute = false
-    @ObservationIgnored private var lastRebuildAt: Date = .distantPast
     @ObservationIgnored private var isRebuilding = false
     /// Идёт перестроение после съезда — наблюдаемо: машина на это время
     /// показывает «Перестраиваю маршрут» вместо уже неверного поворота.
@@ -208,10 +208,6 @@ final class RouteService {
     @ObservationIgnored private var segmentHint = 0                    // ускоряет проекцию точки на маршрут
     /// Кумулятивная длина выбранного варианта (см. Self.cumulative).
     @ObservationIgnored private var selectedCumulative: [CLLocationDistance] = []
-    /// Подряд неудачных перестроений: каждое удваивает кулдаун (сеть на трассе
-    /// пропадает надолго, и два сетевых захода каждые 20 с — 3 будильника
-    /// радио в минуту на всё время объезда).
-    @ObservationIgnored private var rerouteFailures = 0
 
     var isActive: Bool { !variants.isEmpty }
     var selected: Variant? { variants.first { $0.id == selectedID } }
@@ -526,7 +522,7 @@ final class RouteService {
         stop = nil
         errorMessage = nil
         selectedCumulative = []
-        rerouteFailures = 0
+        rerouteGate.reset()
         resetProgress()
     }
 
@@ -558,7 +554,7 @@ final class RouteService {
         nextStepDistance = 0
         laneNotice = nil
         laneNoticeDistance = 0
-        offRouteTicks = 0
+        rerouteGate.resetTicks()
         isOffRoute = false
         announcedStage = [:]
         segmentHint = 0
@@ -588,7 +584,7 @@ final class RouteService {
         let (along, deviation) = Self.project(point, onto: variant.points,
                                               cum: selectedCumulative,
                                               hint: &segmentHint,
-                                              allowFullScan: offRouteTicks % 3 == 0,
+                                              allowFullScan: rerouteGate.offRouteTicks % 3 == 0,
                                               course: course)
         progressAlong = along
         displaySnap = deviation <= AppConfig.routeSnapMeters
@@ -626,24 +622,11 @@ final class RouteService {
 
         // Отклонение → перестроение (с защитой от шума GPS и кулдауном).
         isOffRoute = deviation > AppConfig.rerouteDeviationMeters
-        guard isOffRoute else {
-            offRouteTicks = 0
-            return
-        }
-        offRouteTicks += 1
-        // Кулдаун растёт с каждой неудачей (×2, потолок ×16): без бэкоффа при
-        // мёртвой сети перестроение долбило MKDirections + OSRM (таймаут 12 с)
-        // каждые 20 с всё время объезда.
-        let cooldown = AppConfig.rerouteCooldownSeconds
-            * pow(2, Double(min(rerouteFailures, 4)))
-        guard offRouteTicks >= AppConfig.rerouteConfirmTicks,
-              Date().timeIntervalSince(lastRebuildAt) > cooldown else { return }
         // Пульт выключил маршруты (OSRM лёг) — не перестраиваем: каждая
         // попытка шла в Apple и OSRM, пока владелец гасил именно это (S24).
-        guard isRoutingEnabled else { return }
+        // Подтверждение шумом, кулдаун и бэкофф — RerouteGate.
+        guard rerouteGate.note(deviation: deviation, now: Date()), isRoutingEnabled else { return }
 
-        offRouteTicks = 0
-        lastRebuildAt = Date()
         isRebuilding = true
         isRerouting = true
         let name = destinationName
@@ -657,12 +640,12 @@ final class RouteService {
             // Перестраиваем без альтернатив — быстрее, и в движении выбор не нужен.
             guard let built = try? await calculate(from: coordinate, via: via, to: destination,
                                                    alternatives: false) else {
-                rerouteFailures += 1
-                Log.route.error("перестроение маршрута не удалось (\(self.rerouteFailures, privacy: .public)-й раз) — остаёмся на старой линии")
+                rerouteGate.noteFailure()
+                Log.route.error("перестроение маршрута не удалось (\(self.rerouteGate.failures, privacy: .public)-й раз) — остаёмся на старой линии")
                 return
             }
             guard gen == generation else { return }   // маршрут успели сбросить/заменить
-            rerouteFailures = 0
+            rerouteGate.noteSuccess()
             await apply(built, name: name, destination: destination,
                         cameras: cameras, gen: gen, history: nil)
             onRerouted?()

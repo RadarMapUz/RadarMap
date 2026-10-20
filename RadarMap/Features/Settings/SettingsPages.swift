@@ -8,6 +8,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 import UIKit
 
 // MARK: - Оповещения и звук
@@ -185,6 +186,8 @@ struct TripSettingsPage: View {
             } footer: {
                 Text("В «Куда» в CarPlay — «АЗС», «Зарядка» или обе: в машине на них одна плитка.")
             }
+
+            FineCheckSection()
 
             Section {
                 Toggle("Подробный трек для регистратора", isOn: $settings.recordTimedTrack)
@@ -779,6 +782,60 @@ struct LanguageSettingsPage: View {
             Button("OK", role: .cancel) { }
         } message: {
             Text("Перезапустите приложение, чтобы язык применился полностью.")
+        }
+    }
+}
+
+// MARK: - Проверить штрафы
+
+/// Госномер и кнопка на официальный портал (FineCheck, 12б.8). Номер — только
+/// в буфер, не в адрес ссылки; рядом своя оценка с честной пометкой.
+private struct FineCheckSection: View {
+    @Environment(AppEnvironment.self) private var env
+    @Environment(\.openURL) private var openURL
+    @State private var copied = false
+
+    var body: some View {
+        @Bindable var settings = env.settings
+        let plate = FineCheck.normalizedPlate(settings.licensePlate)
+        let estimate = FineCheck.estimate(days: env.trip.days, now: Date())
+        Section {
+            TextField("Госномер, например 01 A 123 BC", text: $settings.licensePlate)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .onSubmit {
+                    if let plate { settings.licensePlate = FineCheck.displayPlate(plate) }
+                }
+            if !settings.licensePlate.isEmpty, plate == nil {
+                Text("Не похоже на номер Узбекистана — проверьте буквы и цифры.")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.warning)
+            }
+            Button {
+                if let plate {
+                    UIPasteboard.general.setItems(
+                        [[UTType.plainText.identifier: FineCheck.displayPlate(plate)]],
+                        options: [.localOnly: true,
+                                  .expirationDate: Date().addingTimeInterval(AppConfig.fineCheckClipboardSeconds)])
+                    copied = true
+                }
+                openURL(AppConfig.fineCheckPortalURL)
+            } label: {
+                Label("Проверить штрафы", systemImage: "doc.text.magnifyingglass")
+            }
+            if copied {
+                Text("Номер скопирован — вставьте его на портале.")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            LabeledContent("По нашим замерам за 30 дней") {
+                Text(estimate > 0 ? Formatting.money(estimate) : String(localized: "без штрафов"))
+                    .foregroundStyle(estimate > 0 ? Theme.danger : Theme.success)
+            }
+        } header: {
+            Text("Штрафы")
+        } footer: {
+            Text("Оценка, не постановление: пришёл ли штраф, знает только портал. Номер хранится только на телефоне.")
         }
     }
 }

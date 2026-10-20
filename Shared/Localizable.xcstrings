@@ -3429,6 +3429,22 @@
         }
       }
     },
+    "Госномер, например 01 A 123 BC": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Госномер, например 01 A 123 BC"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Davlat raqami, masalan 01 A 123 BC"
+          }
+        }
+      }
+    },
     "Гостиница": {
       "localizations": {
         "ru": {
@@ -6807,6 +6823,22 @@
         }
       }
     },
+    "Не похоже на номер Узбекистана — проверьте буквы и цифры.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не похоже на номер Узбекистана — проверьте буквы и цифры."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻzbekiston raqamiga oʻxshamaydi — harf va raqamlarni tekshiring."
+          }
+        }
+      }
+    },
     "Не предлагать": {
       "localizations": {
         "ru": {
@@ -7281,6 +7313,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yangi manzil"
+          }
+        }
+      }
+    },
+    "Номер скопирован — вставьте его на портале.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Номер скопирован — вставьте его на портале."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raqam nusxalandi — uni portalga qoʻying."
           }
         }
       }
@@ -8250,6 +8298,22 @@
         }
       }
     },
+    "Оценка, не постановление: пришёл ли штраф, знает только портал. Номер хранится только на телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оценка, не постановление: пришёл ли штраф, знает только портал. Номер хранится только на телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu baho, qaror emas: jarima kelgan-kelmaganini faqat portal biladi. Raqam faqat telefonda saqlanadi."
+          }
+        }
+      }
+    },
     "Очистить историю": {
       "localizations": {
         "ru": {
@@ -8455,6 +8519,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Marshrutda radar 800 metrdan soʻng"
+          }
+        }
+      }
+    },
+    "По нашим замерам за 30 дней": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По нашим замерам за 30 дней"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bizning oʻlchovlarimiz boʻyicha 30 kunda"
           }
         }
       }
@@ -9561,6 +9641,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yangilanishlarni tekshirish"
+          }
+        }
+      }
+    },
+    "Проверить штрафы": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверить штрафы"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarimalarni tekshirish"
           }
         }
       }
@@ -12583,6 +12679,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jarimali oshirishlar: %lld"
+          }
+        }
+      }
+    },
+    "Штрафы": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Штрафы"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarimalar"
           }
         }
       }

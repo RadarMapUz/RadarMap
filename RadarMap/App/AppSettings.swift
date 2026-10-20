@@ -546,6 +546,9 @@ final class AppSettings {
     /// это разные вещи по природе: там факт от живого человека, здесь догадка
     /// о прошлом, и выключать их хочется по отдельности.
     var tripodHints: Bool { didSet { store.set(tripodHints, forKey: Keys.tripodHints) } }
+    /// Госномер для «Проверить штрафы» (FineCheck): только на телефоне,
+    /// пустая строка — не задан. На сервер не уходит никогда.
+    var licensePlate: String { didSet { store.set(licensePlate, forKey: Keys.licensePlate) } }
     /// «Где машина»: метка машины и строка «Машина · 350 м» после парковки
     /// (ParkedCar). Выключенная — точка стирается.
     var parkedCarHint: Bool { didSet { store.set(parkedCarHint, forKey: Keys.parkedCarHint) } }
@@ -707,6 +710,7 @@ final class AppSettings {
         static let commuteLearningOff = "commuteLearningOff"
         static let smartSilence = "smartSilence"
         static let tripodHints = "tripodHints"
+        static let licensePlate = "licensePlate"
         static let parkedCarHint = "parkedCarHint"
         static let mapPlaces = "mapPlaces"
         static let mapHouses = "mapHouses"
@@ -808,6 +812,7 @@ final class AppSettings {
         commuteLearning = !store.bool(forKey: Keys.commuteLearningOff)
         smartSilence = store.bool(forKey: Keys.smartSilence)
         tripodHints = store.bool(forKey: Keys.tripodHints)
+        licensePlate = store.string(forKey: Keys.licensePlate) ?? ""
         parkedCarHint = store.bool(forKey: Keys.parkedCarHint)
         mapPlaces = store.bool(forKey: Keys.mapPlaces)
         // Дома и тротуары — единственные слои схемы БЕЗ значения по умолчанию

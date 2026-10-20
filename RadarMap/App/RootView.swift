@@ -88,6 +88,14 @@ struct RootView: View {
         // Виджет локскрина: radarmap://start-trip — поездка одним тапом с
         // заблокированного экрана. Активную поездку диплинк никогда не трогает.
         .onOpenURL { url in
+            #if DEBUG
+            // Учения (`xcrun simctl openurl … radarmap://end-trip`): конец
+            // поездки кнопкой — между прогонами призрака в симуляторе (8.8.9).
+            if url.scheme == "radarmap", url.host() == "end-trip", env.location.isTripActive {
+                env.location.endTrip()
+                return
+            }
+            #endif
             guard url.scheme == "radarmap", url.host() == "start-trip",
                   !env.location.isTripActive else { return }
             env.location.startTrip()

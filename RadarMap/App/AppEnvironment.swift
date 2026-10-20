@@ -892,12 +892,17 @@ final class AppEnvironment {
               commuteProfiles.isLoaded, let ends = commuteEnds else {
             if Date().timeIntervalSince(startedAt) > AppConfig.commuteGhostStartWaitSeconds {
                 commuteGhostPending = false
+                // Почему призрака нет — в журнал, без координат (учения В5).
+                Log.trips.info("призрак: не дождались — старт \(self.trip.startCoordinate != nil || self.location.currentCoordinate != nil, privacy: .public), профиль \(self.commuteProfiles.isLoaded, privacy: .public), места \(self.commuteEnds != nil, privacy: .public)")
             }
             return
         }
         commuteGhostPending = false
         guard let direction = CommuteLiveService.direction(start: start, home: ends.home, work: ends.work)
-        else { return }
+        else {
+            Log.trips.info("призрак: старт не у дома и не у работы")
+            return
+        }
         // Срок — от того, когда едем сейчас: склеенная поездка хранит начало
         // утренней (спортзал в 5:40), и окно «не раньше чем за 3 ч» по нему
         // теряло срок. Выборка «обычно» — по исходному выезду.

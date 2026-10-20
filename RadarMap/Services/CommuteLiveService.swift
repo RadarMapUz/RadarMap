@@ -65,7 +65,10 @@ final class CommuteLiveService {
         guard let session = CommuteLiveSession(variants: variants,
                                                weekend: !workday && calendar.isDateInWeekend(departure),
                                                departure: departure, calendar: calendar)
-        else { return }
+        else {
+            Log.trips.info("призрак: \(direction.rawValue, privacy: .public) — мало поездок этого часа и дня (вариантов \(variants.count, privacy: .public), строк \(variants.reduce(0) { $0 + $1.rows.count }, privacy: .public))")
+            return
+        }
         self.session = session
         self.direction = direction
         self.deadline = deadline
@@ -86,10 +89,16 @@ final class CommuteLiveService {
         if output.isOff || !output.hasLead {
             // «Сегодня другой дорогой» или ведущий сошёл, а другой путь ещё
             // не подтверждён: прогноз и голос молчат до возврата.
-            if display != nil { display = nil }
+            if display != nil {
+                display = nil
+                Log.trips.info("призрак: \(output.isOff ? "другой дорогой" : "ведущий сошёл", privacy: .public) — прогноз скрыт")
+            }
             return
         }
         guard let forecast = output.forecast else { return }
+        // Журнал прогноза (В5, 8.8.9): на каждом пересчёте — раз в участок
+        // или в 30 с. Без координат: остаток пути, прибытие и отклонение.
+        Log.trips.info("призрак: осталось \(Int(output.remainingMeters), privacy: .public) м, \(Int(forecast.remaining), privacy: .public) с, прибытие \(CommuteGhost.clock(forecast.arrival), privacy: .public), к обычному \(Int(forecast.delta), privacy: .public) с, разброс \(Int(forecast.sigma), privacy: .public) с")
         let minute = (forecast.arrival.timeIntervalSince1970 / 60).rounded() * 60
         let raw = deadline.map { ArrivalTarget.slackMinutes(deadline: $0, arrival: forecast.arrival) }
         let slack: CommuteGhost.TargetSlack? = Self.all(slackTracker.update(slackMinutes: raw, now: now), raw, deadline)

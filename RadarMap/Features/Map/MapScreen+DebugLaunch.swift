@@ -69,6 +69,11 @@ extension MapScreen {
                 env.commuteProfiles.seedDemo(home: TripStats.demoHome, work: TripStats.demoWork,
                                              trips: env.trip.history)
                 env.refreshLearnedPlaces()
+                // Учения призрака: профиль под скорость симулятора поверх демо
+                // (дом и работа — выученные из демо-истории).
+                if args.contains("-ghostDrill") {
+                    env.commuteProfiles.seedDrill(home: TripStats.demoHome, work: TripStats.demoWork)
+                }
             }
         }
         // Демо-история двухнедельной давности: проверка «в этом периоде поездок нет».

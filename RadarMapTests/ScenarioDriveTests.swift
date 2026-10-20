@@ -67,9 +67,19 @@ final class ScenarioDriveTests: XCTestCase {
         /// Где прозвучало каждое «первое» (x, y в метрах).
         private(set) var firstAlertPoints: [Int: [(x: Double, y: Double)]] = [:]
         private(set) var rejected = 0
+        /// Учёт проездов — как в сервисе: на каждом принятом фиксе, с той же
+        /// проверкой «доказанно не на дороге камеры» в точке траверза.
+        var passTracking = PassTracking()
+        /// Записанные проезды: камера → скорость, км/ч.
+        private(set) var passes: [Int: Double] = [:]
         private var progress: Double?
         /// Съехали с линии дальше rerouteDeviationMeters (как RouteService.isOffRoute).
         private var offRoute = false
+
+        /// Конец поездки: незакрытые проезды — как flush в endTrip.
+        mutating func finish() {
+            for pass in passTracking.flush() { passes[pass.camera.id] = pass.speedKmh }
+        }
 
         mutating func run(_ fixes: [LocationFilter.Fix], cameras: [Camera],
                           xy: (Double, Double) -> (x: Double, y: Double)) {
@@ -119,11 +129,19 @@ final class ScenarioDriveTests: XCTestCase {
                     }
                 }
                 candidates.sort { $0.distance < $1.distance }
-                guard let nearest = candidates.first(where: {
+                let found = candidates.first(where: {
                     LocationGates.isOnOurRoad($0.camera, in: situation, isOnRoute: $0.onRoute)
-                }) else { continue }
+                })
                 let radius = AlertEngine.effectiveRadius(speedKmh: speedKmh, baseRadius: AppConfig.alertRadius,
                                                          context: context)
+                for pass in passTracking.update(nearest: found?.camera, nearestDistance: found?.distance,
+                                                coordinate: here, speedKmh: speedKmh, roadLimit: nil,
+                                                radius: radius, course: situation.course,
+                                                now: fix.timestamp,
+                                                offRoad: PassGeometry.isProvenOffRoad(camera:at:)) {
+                    passes[pass.camera.id] = pass.speedKmh
+                }
+                guard let nearest = found else { continue }
                 if let decision = engine.evaluate(cameraID: nearest.camera.id, distance: nearest.distance,
                                                   radius: radius,
                                                   moving: LocationGates.isFilteringActive(situation)),
@@ -511,6 +529,25 @@ final class ScenarioDriveTests: XCTestCase {
         XCTAssertEqual(drive.rejected, 0, "после тоннеля фиксы принимаются")
         XCTAssertEqual(drive.firstAlerts[2], 1, "камера за выездом звучит")
         XCTAssertLessThanOrEqual(drive.firstAlerts[1] ?? 0, 1, "проеханная в тоннеле не звучит после выезда")
+        // Проезды (12в A3): камеру в тоннеле не мерили — проезда нет, и уж
+        // точно не с выдуманной скоростью; камера за выездом — честные 50.
+        drive.finish()
+        XCTAssertNil(drive.passes[1], "камера, проеханная без сигнала, — не проезд")
+        XCTAssertEqual(drive.passes[2] ?? 0, 50.4, accuracy: 1)
+    }
+
+    /// Спидометр после 45 с без сигнала: та же скорость — ни скачка, ни
+    /// «хвоста» от прежнего значения (12в A3).
+    func testSpeedAfterATunnelDoesNotJump() {
+        var smoother = SpeedSmoother()
+        let t0 = start
+        var shown = 0.0
+        for second in 0..<10 { shown = smoother.update(rawKmh: 50, at: t0.addingTimeInterval(Double(second))) }
+        XCTAssertEqual(shown, 50, accuracy: 0.5)
+        let afterGap = smoother.update(rawKmh: 51, at: t0.addingTimeInterval(55))
+        XCTAssertEqual(afterGap, 51, accuracy: 1.5, "после тоннеля — сразу живая цифра")
+        let braked = smoother.update(rawKmh: 20, at: t0.addingTimeInterval(56))
+        XCTAssertLessThan(braked, 30, "настоящее торможение — сразу, без хвоста")
     }
 
     // MARK: - A4: выброс
@@ -581,6 +618,8 @@ extension ScenarioDriveTests {
         var silent: [Int] = []
         var late: [Int] = []
         var offPath: [(target: Int, other: Int, lateral: Int)] = []
+        /// Проехали по своей дороге через камеру, а проезд не записан.
+        var unrecorded: [Int] = []
     }
 
     private func bundledCameras() throws -> [Camera] {
@@ -606,6 +645,16 @@ extension ScenarioDriveTests {
             var drive = Drive()
             drive.context = context
             drive.run(fixes, cameras: nearby, xy: xy)
+            drive.finish()
+            if target.kind.recordsPasses, drive.passes[target.id] == nil,
+               !drive.passes.keys.contains(where: { other in
+                   // Дубль базы в 15 м — его проезд и есть проезд цели (11.1).
+                   guard let camera = nearby.first(where: { $0.id == other }) else { return false }
+                   return GeoMath.fastDistance(camera.lat, camera.lon, target.lat, target.lon)
+                       <= AppConfig.passDuplicateMeters
+               }) {
+                result.unrecorded.append(target.id)
+            }
             let targetXY = xy(target.lat, target.lon)
             // Группа: о камере в voiceGroupMeters от цели сказали — голос
             // объявил и цель («Камеры впереди…»).
@@ -637,11 +686,12 @@ extension ScenarioDriveTests {
             && $0.hasTrustedRoadProfile && $0.needsReview != true }
         let sample = stride(from: 0, to: city.count, by: 4).map { city[$0] }
         let result = ownRoadDrives(sample, all: all, speed: 14, context: .city, minAhead: 60)
-        print("A1: камер \(result.drives), молчали \(result.silent), поздно \(result.late), чужие \(result.offPath.prefix(20))")
+        print("A1: камер \(result.drives), молчали \(result.silent), поздно \(result.late), чужие \(result.offPath.prefix(20)), без проезда \(result.unrecorded)")
         XCTAssertGreaterThan(result.drives, 150)
         XCTAssertEqual(result.silent, [], "о камере на своей дороге молчать нельзя")
         XCTAssertEqual(result.late, [], "первое — заранее, если камера не в группе с соседкой")
         XCTAssertEqual(result.offPath.map(\.other), [], "камера дальше 160 м от пути — не наша")
+        XCTAssertEqual(result.unrecorded, [], "проехали через камеру по её дороге — проезд записан")
     }
 
     /// A2 (план 12в): трасса 94 км/ч — камеры на trunk/motorway вне Ташкента.

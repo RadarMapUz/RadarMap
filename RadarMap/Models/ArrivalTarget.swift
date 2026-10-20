@@ -20,8 +20,10 @@ nonisolated struct ArrivalTarget: Codable, Equatable, Sendable {
     /// И по субботам — шестидневка в Узбекистане обычна.
     var saturday = false
 
-    /// Срок действует сегодня: будни, суббота — если отмечена.
+    /// Срок действует сегодня: будни, суббота — если отмечена; в праздник —
+    /// нет (UzHolidays): «позже срока» в Навруз — неправда о человеке.
     func applies(on date: Date, calendar: Calendar = .current) -> Bool {
+        guard !UzHolidays.isHoliday(date, calendar: calendar) else { return false }
         let weekday = calendar.component(.weekday, from: date)   // 1 — воскресенье
         return (2...6).contains(weekday) || (saturday && weekday == 7)
     }
@@ -58,8 +60,8 @@ nonisolated struct ArrivalTarget: Codable, Equatable, Sendable {
         let since = now.addingTimeInterval(-Double(AppConfig.commuteWindowDays) * 86_400)
         var firstOfDay: [Date: Int] = [:]
         for arrival in arrivals where arrival >= since && arrival <= now {
-            let weekday = calendar.component(.weekday, from: arrival)
-            guard (2...6).contains(weekday) else { continue }
+            // Будни без праздников: приезд в хайит «к 11» не говорит о сроке.
+            guard UzHolidays.isWorkday(arrival, calendar: calendar) else { continue }
             let day = calendar.startOfDay(for: arrival)
             let minute = Commute.minuteOfDay(arrival, calendar: calendar)
             firstOfDay[day] = min(firstOfDay[day] ?? .max, minute)

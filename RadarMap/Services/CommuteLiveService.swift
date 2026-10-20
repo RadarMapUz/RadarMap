@@ -63,7 +63,7 @@ final class CommuteLiveService {
         let resumed = departure == sessionDeparture
         stop()
         guard let session = CommuteLiveSession(variants: variants,
-                                               weekend: !workday && calendar.isDateInWeekend(departure),
+                                               weekend: !workday && UzHolidays.isDayOff(departure, calendar: calendar),
                                                departure: departure, calendar: calendar)
         else { return }
         self.session = session

@@ -35,6 +35,9 @@ final class NotificationService: NSObject {
     private(set) var authorizationStatus: UNAuthorizationStatus = .notDetermined
 
     @ObservationIgnored private let settings: AppSettings
+    /// Камера, о которой висит «Камера через …», — чтобы снять баннер, когда
+    /// её проехали (`clearApproaching(passed:)`).
+    @ObservationIgnored private var approachingCameraID: Int?
 
     /// Решение «за рулём / пассажир» — вешает AppEnvironment.
     @ObservationIgnored var onPassengerConfirmed: (() -> Void)? {
@@ -285,11 +288,22 @@ final class NotificationService: NSObject {
             trigger: nil
         )
         UNUserNotificationCenter.current().add(request)
+        approachingCameraID = camera.id
+    }
+
+    /// Камеру проехали — её «Камера через 132 м» уже неправда. На экране
+    /// блокировки баннер висел под плашкой поездки, которая говорила уже о
+    /// следующей камере: две разные камеры на одном экране (прогон 20.10).
+    /// Баннер о другой камере не трогаем — он о той, что впереди.
+    func clearApproaching(passed cameraID: Int) {
+        guard approachingCameraID == cameraID else { return }
+        clearApproaching()
     }
 
     /// Убрать «камерное» уведомление из Центра (выход на передний план / конец поездки) —
     /// чтобы после проезда баннер не висел.
     func clearApproaching() {
+        approachingCameraID = nil
         let center = UNUserNotificationCenter.current()
         center.removeDeliveredNotifications(withIdentifiers: [Self.approachingID])
         center.removePendingNotificationRequests(withIdentifiers: [Self.approachingID])

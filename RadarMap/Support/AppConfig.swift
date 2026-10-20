@@ -117,6 +117,14 @@ nonisolated enum AppConfig {
     static let derivedCourseMinMeters = 12.0
     /// Дальше этого разрыва прошлая точка уже не опора для курса.
     static let derivedCourseMaxSeconds = 5.0
+    /// Столько держим последний доверенный курс на повторном фиксе на ходу
+    /// (`courseRepeat…`, скорость не ниже `directionalMinSpeedKmh`). Дольше —
+    /// курса нет, гейты молчат.
+    static let courseHoldSeconds = 2.0
+    /// Повтор фикса: пришёл раньше этого после прошлого (iOS отдаёт тот же
+    /// фикс через 2 мс) или сдвинулся меньше этой доли пути по своей скорости.
+    static let courseRepeatMaxSeconds = 0.5
+    static let courseRepeatMoveShare = 0.5
 
     /// Точность скорости, выше которой значение не берём (держим прошлое).
     static let maxSpeedAccuracyMps = 5.0

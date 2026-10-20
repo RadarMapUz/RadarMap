@@ -190,6 +190,29 @@ nonisolated enum LocationGates {
         return offset <= PassGeometry.reapproachLimit(for: camera)
     }
 
+    /// Остаток по маршруту до камеры маршрута — или nil, когда прогрессу по
+    /// маршруту верить нельзя, и камера идёт «как все»: по прямой и через
+    /// гейты (сценарий S7).
+    ///
+    /// Нельзя в двух случаях. Съехали с линии (`isOffRoute`) — проекция
+    /// застыла на старой дороге. И маршрут строится или перестраивается
+    /// (`isProgressFrozen`): `RouteService.updateProgress` ждёт конца
+    /// построения, `progressAlong` стоит там, где машина была до него, а
+    /// машина едет дальше. Замена маршрута без сети серверным (12б.10) идёт
+    /// по живой, ещё не вернувшейся связи — Apple, потом OSRM до 12 с, — и
+    /// на 90 км/ч камера «через 800 м» оставалась такой полкилометра:
+    /// предупреждение опаздывало, а проеханная за это время камера не
+    /// звучала вовсе (ревью 14.2). Прямая короче дороги — предупреждение
+    /// раньше, не позже.
+    ///
+    /// - Parameter cameraAlong: где камера на линии маршрута; nil — камера
+    ///   не на маршруте.
+    static func routeRemaining(cameraAlong: CLLocationDistance?, progressAlong: CLLocationDistance,
+                               isOffRoute: Bool, isProgressFrozen: Bool) -> CLLocationDistance? {
+        guard let cameraAlong, !isOffRoute, !isProgressFrozen else { return nil }
+        return cameraAlong - progressAlong
+    }
+
     /// Кандидат в ближайшие: по маршруту — остаток вдоль него и признак «на
     /// маршруте» для гейта; камера, уехавшая назад по маршруту дальше допуска,
     /// — уже не маршрутная: в движении она снова «как все» (по прямой и через

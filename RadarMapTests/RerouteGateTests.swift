@@ -26,6 +26,30 @@ final class RerouteGateTests: XCTestCase {
         XCTAssertEqual(run(&gate, Array(repeating: on, count: 5) + Array(repeating: off, count: ticks)), [5 + ticks - 1])
     }
 
+    /// Маршрут без сети (12б.10): подъезд к трассе — прямая через кварталы до
+    /// трёх километров, и улицы к ней уходят от неё на сотни метров. С
+    /// обычным порогом это перестраивало без конца — та же прямая от новой
+    /// точки и «Маршрут перестроен» каждые полминуты (ревью 14.2). Свой порог
+    /// пропускает улицы, но не другую трассу.
+    func testOfflineRouteToleratesItsStraightApproach() {
+        let limit = AppConfig.offlineRouteRerouteMeters
+        let ticks = AppConfig.rerouteConfirmTicks
+        var gate = RerouteGate()
+        let streets = Array(repeating: 900.0, count: 3 * ticks)
+        XCTAssertEqual(streets.enumerated().filter { index, deviation in
+            gate.note(deviation: deviation, now: t0.addingTimeInterval(Double(index) * 30), limit: limit)
+        }.count, 0, "в 900 м от прямой подъезда — ещё не съезд")
+        XCTAssertEqual(gate.offRouteTicks, 0)
+        var elsewhere = RerouteGate()
+        let gone = Array(repeating: limit + 500, count: ticks)
+        XCTAssertEqual(gone.enumerated().filter { index, deviation in
+            elsewhere.note(deviation: deviation, now: t0.addingTimeInterval(Double(index)), limit: limit)
+        }.map(\.offset), [ticks - 1], "ушли на другую трассу — перестраиваем")
+        // Обычный маршрут — прежние 150 м.
+        var regular = RerouteGate()
+        XCTAssertFalse(run(&regular, Array(repeating: 900.0, count: ticks)).isEmpty)
+    }
+
     func testNoiseAndReturnToTheLineDoNotRebuild() {
         var gate = RerouteGate()
         // Выброс на 2 фикса и обратно на линию — дважды подряд: счёт с нуля.

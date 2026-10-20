@@ -1184,6 +1184,10 @@ struct EngineMapView: UIViewRepresentable {
                 hasher.combine(station.lat)
                 hasher.combine(station.lon)
                 hasher.combine(name)
+                // Подтверждение меняет только прозрачность, не картинку: без
+                // него в ключе подтверждённый статус до часа оставался
+                // бледным «слухом» (ревью 14.2), как у событий дороги ниже.
+                hasher.combine(station.confirmed)
             }
             let key = hasher.finalize()
             guard key != lastCngKey, let style = view.style,

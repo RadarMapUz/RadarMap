@@ -201,9 +201,15 @@ final class AppEnvironment {
                                                  hasRoute: self.route.isActive)
         }
         // Метан — тем же тактом радио, своим интервалом (только машина на метане).
-        mobile.onRadioAwake = { [weak traffic, weak cng] in
+        mobile.onRadioAwake = { [weak self, weak traffic, weak cng] in
             traffic?.radioIsAwake()
             cng?.refreshIfDue()
+            // Маршрут без сети — серверным, даже если связь для системы не
+            // пропадала и onOnline не придёт (ревью 14.2). Свой срок — внутри.
+            if let self, self.network.isOnline {
+                self.route.retryOfflineRouteIfDue(from: self.location.currentCoordinate,
+                                                  cameras: self.cameras.cameras)
+            }
         }
     }
 

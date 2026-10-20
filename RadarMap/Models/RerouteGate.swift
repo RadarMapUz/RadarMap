@@ -24,8 +24,16 @@ nonisolated struct RerouteGate {
 
     /// Фикс: отклонение от линии. true — пора перестраивать (счётчик и
     /// время перестроения уже отмечены).
-    mutating func note(deviation: CLLocationDistance, now: Date) -> Bool {
-        guard deviation > AppConfig.rerouteDeviationMeters else {
+    ///
+    /// `limit` — с какого отклонения это съезд. У маршрута без сети он свой
+    /// (`offlineRouteRerouteMeters`): подъезд к графу трасс и от него — прямая
+    /// до трёх километров через кварталы, и водитель, едущий по улицам к
+    /// трассе, уходил от неё дальше 150 м сам. Перестроение без сети давало
+    /// ту же прямую от новой точки — и так по кругу: A* по всей стране и
+    /// «Маршрут перестроен» каждые полминуты до самой трассы (ревью 14.2).
+    mutating func note(deviation: CLLocationDistance, now: Date,
+                       limit: CLLocationDistance = AppConfig.rerouteDeviationMeters) -> Bool {
+        guard deviation > limit else {
             offRouteTicks = 0
             return false
         }

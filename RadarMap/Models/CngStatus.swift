@@ -89,6 +89,38 @@ nonisolated enum CngRules {
         return best?.station
     }
 
+    /// Станции для карты: только у АГНКС из своего файла заведений — та же
+    /// привязка ≤ `cngMatchMeters`, что у поиска (`station(for:)`), и точка —
+    /// самой АГНКС. Сервер принимает отметку в любой точке, и без этого
+    /// пилюлю «газ есть / нет» мог поставить кто угодно где угодно (аудит
+    /// сервера 14.3): на карте она выглядела бы фактом о станции, которой нет.
+    /// Файл заведений клетки ещё не прочитан — станций в ней нет: ничего,
+    /// а не всё подряд. На одну АГНКС — одна станция, ближайшая.
+    static func onKnownVenues(_ stations: [CngStation], venues: [Venue]) -> [CngStation] {
+        let cng = venues.filter { $0.kind == .cng }
+        guard !cng.isEmpty else { return [] }
+        var best: [Int: (station: CngStation, meters: Double)] = [:]
+        for station in stations {
+            var nearest: (index: Int, meters: Double)?
+            for (index, venue) in cng.enumerated() {
+                let meters = GeoMath.fastDistance(station.lat, station.lon,
+                                                  venue.point.latitude, venue.point.longitude)
+                guard meters <= AppConfig.cngMatchMeters else { continue }
+                if nearest == nil || meters < nearest!.meters { nearest = (index, meters) }
+            }
+            guard let nearest else { continue }
+            if let kept = best[nearest.index], kept.meters <= nearest.meters { continue }
+            best[nearest.index] = (station, nearest.meters)
+        }
+        return best.keys.sorted().compactMap { index -> CngStation? in
+            guard let station = best[index]?.station else { return nil }
+            let venue = cng[index].point
+            return CngStation(lat: venue.latitude, lon: venue.longitude, status: station.status,
+                              statusAge: station.statusAge, queue: station.queue,
+                              queueAge: station.queueAge, confirmed: station.confirmed)
+        }
+    }
+
     /// Список на сейчас: ответ сервера, состаренный на время с загрузки.
     static func live(_ fetched: [CngStation], fetchedAt: Date, now: Date) -> [CngStation] {
         let minutes = max(0, Int(now.timeIntervalSince(fetchedAt) / 60))

@@ -206,6 +206,11 @@ final class RouteService {
     /// маршруту» до его камер тогда ничего не значит (сценарий S7).
     @ObservationIgnored private(set) var isOffRoute = false
     @ObservationIgnored private var isRebuilding = false
+    /// Прогресс по маршруту сейчас не обновляется: идёт построение или
+    /// перестроение, `updateProgress` ждёт его конца, и `progressAlong`
+    /// застыл там, где машина была до него. Остатку «по маршруту» до камер
+    /// тогда верить нельзя (LocationGates.routeRemaining).
+    var isProgressFrozen: Bool { isBuilding || isRebuilding }
     /// Идёт перестроение после съезда — наблюдаемо: машина на это время
     /// показывает «Перестраиваю маршрут» вместо уже неверного поворота.
     private(set) var isRerouting = false
@@ -633,8 +638,14 @@ final class RouteService {
         isOffRoute = deviation > AppConfig.rerouteDeviationMeters
         // Пульт выключил маршруты (OSRM лёг) — не перестраиваем: каждая
         // попытка шла в Apple и OSRM, пока владелец гасил именно это (S24).
-        // Подтверждение шумом, кулдаун и бэкофф — RerouteGate.
-        guard rerouteGate.note(deviation: deviation, now: Date()), isRoutingEnabled else { return }
+        // Подтверждение шумом, кулдаун и бэкофф — RerouteGate. Маршрут без
+        // сети приблизителен на длину своих прямых подъездов — и съездом
+        // считается только уход дальше их (isOffRoute выше остаётся по 150 м:
+        // остатку до камер дальше линии всё равно не верим).
+        let rerouteLimit = variant.isOffline ? AppConfig.offlineRouteRerouteMeters
+                                             : AppConfig.rerouteDeviationMeters
+        guard rerouteGate.note(deviation: deviation, now: Date(), limit: rerouteLimit),
+              isRoutingEnabled else { return }
 
         isRebuilding = true
         isRerouting = true
@@ -782,6 +793,8 @@ final class RouteService {
             guard stop == nil, let path = await offlinePath?(source, destination), path.points.count >= 2 else {
                 throw error
             }
+            // Сервер только что не ответил — повтор замены не раньше своего срока.
+            offlineReplaceAttemptAt = Date()
             Log.route.notice("маршрут без сети: свой граф трасс, \(Int(path.distance / 1000), privacy: .public) км")
             let arrive = RouteStep(distanceAlong: path.distance, text: String(localized: "Вы на месте"),
                                    icon: "flag.checkered", kind: .arrive)
@@ -795,6 +808,7 @@ final class RouteService {
     /// приблизительный.
     func replaceOfflineRoute(from coordinate: CLLocationCoordinate2D?, cameras: [Camera]) {
         guard isOfflineRoute, !isRebuilding, let coordinate, let destination = destinationCoordinate else { return }
+        offlineReplaceAttemptAt = Date()
         isRebuilding = true
         let name = destinationName
         let gen = generation
@@ -811,6 +825,22 @@ final class RouteService {
             Log.route.notice("маршрут без сети заменён серверным")
             await apply(built, name: name, destination: destination, cameras: cameras, gen: gen, history: nil)
         }
+    }
+
+    /// Последняя попытка до сервера для маршрута без сети: его построение
+    /// (сервер не ответил) или замена.
+    @ObservationIgnored private var offlineReplaceAttemptAt = Date.distantPast
+
+    /// Повтор замены без перехода «нет связи → есть»: для системы связь могла
+    /// и не пропадать (слабый сигнал на трассе, лёг сервер маршрутов), и
+    /// NetworkMonitor.onOnline тогда не придёт никогда — приблизительный
+    /// маршрут без манёвров оставался до конца поездки (ревью 14.2). Зовётся
+    /// на уже проснувшемся радио, не чаще `offlineRouteRetrySeconds`.
+    func retryOfflineRouteIfDue(from coordinate: CLLocationCoordinate2D?, cameras: [Camera],
+                                now: Date = Date()) {
+        guard isOfflineRoute,
+              now.timeIntervalSince(offlineReplaceAttemptAt) >= AppConfig.offlineRouteRetrySeconds else { return }
+        replaceOfflineRoute(from: coordinate, cameras: cameras)
     }
 
     private func appleRoute(from source: CLLocationCoordinate2D,

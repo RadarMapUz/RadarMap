@@ -47,15 +47,19 @@ struct DestinationSuggestionBar: View {
                         Text(target.kind.suggestionTitle)
                             .font(.rounded(15, .bold))
                             .foregroundStyle(Theme.textPrimary)
+                        // Две строки, а не одна: крупный шрифт и узбекское
+                        // «odatda ~35 daq (haydovchilar boʻyicha)» в одну не
+                        // помещались, и обрезалось уже само время.
                         Text(target.subtitle)
                             .font(.rounded(11))
                             .foregroundStyle(Theme.textTertiary)
-                            .lineLimit(1)
+                            .lineLimit(2)
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
                         .font(.rounded(20))
                         .foregroundStyle(Theme.accent)
+                        .accessibilityHidden(true)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
@@ -68,6 +72,14 @@ struct DestinationSuggestionBar: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(PressableStyle())
+            // Голосом — словами: «На работу, сейчас около 44 минут», а не
+            // «тильда 44 мин».
+            .accessibilityLabel(Text(target.spoken))
+            .accessibilityHint(Text("Маршрут сюда"))
+            // «Не предлагать» живёт в долгом нажатии — у VoiceOver его нет.
+            .accessibilityAction(named: Text("Не предлагать")) {
+                env.settings.destinationSuggestions = false
+            }
             .transition(.move(edge: .bottom).combined(with: .opacity))
             // «Сейчас ~44 мин»: сразу при появлении строки, на новых пробках и
             // профиле, и раз в 2 мин, пока строка на экране — без пробок
@@ -103,12 +115,17 @@ struct DestinationSuggestionBar: View {
         let kind: FrequentPlaces.Kind
         let coordinate: CLLocationCoordinate2D
         let subtitle: String
+        /// Строка целиком для VoiceOver.
+        let spoken: String
         var title: String { kind.title }
     }
 
     private var suggestion: Target? {
         guard let guess = Self.guess(env) else { return nil }
-        return Target(kind: guess.kind, coordinate: guess.coordinate, subtitle: guess.subtitle)
+        let spoken = [guess.kind.suggestionTitle, guess.spokenUsualText, guess.placeTitle]
+            .compactMap { $0 }.joined(separator: ", ")
+        return Target(kind: guess.kind, coordinate: guess.coordinate, subtitle: guess.subtitle,
+                      spoken: spoken)
     }
 
     /// Будет ли строка на экране — её же спрашивает предложение офлайн-карты,

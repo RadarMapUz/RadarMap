@@ -827,7 +827,7 @@ struct LanguageSettingsPage: View {
 
 /// Госномер и кнопка на официальный портал (FineCheck, 12б.8). Номер — только
 /// в буфер, не в адрес ссылки; рядом своя оценка с честной пометкой.
-private struct FineCheckSection: View {
+struct FineCheckSection: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.openURL) private var openURL
     @State private var copied = false
@@ -860,6 +860,9 @@ private struct FineCheckSection: View {
             } label: {
                 Label("Проверить штрафы", systemImage: "doc.text.magnifyingglass")
             }
+            // Кнопка уводит из приложения в браузер — об этом говорится до
+            // нажатия, а не после.
+            .accessibilityHint(Text("Откроет портал госуслуг в браузере"))
             if copied {
                 Text("Номер скопирован — вставьте его на портале.")
                     .font(.footnote)

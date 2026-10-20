@@ -24,15 +24,25 @@ struct CommuteCard: View {
     var crowdUsual: TimeInterval? = nil
 
     var body: some View {
+        let monthly = FuelCost.monthly(trips: summary.trips, costPerMeter: fuelCostPerMeter, now: Date())
         VStack(alignment: .leading, spacing: 12) {
             header
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(Formatting.duration(summary.last.duration))
-                    .font(.rounded(30, .heavy))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.textPrimary)
-                if let delay = summary.lastDelay {
-                    CommuteDelayPill(delay: delay)
+            // Пилюля — рядом с цифрой, пока влезает; иначе строкой ниже.
+            // Узбекское «odatdagidan 7 daq uzoqroq» рядом с «55 daq» на
+            // крупном шрифте обрезалось до «uzoqr…» (снимок 14.6) — а в
+            // пилюле весь смысл: дольше или быстрее.
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    lastDuration
+                    if let delay = summary.lastDelay {
+                        CommuteDelayPill(delay: delay)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    lastDuration
+                    if let delay = summary.lastDelay {
+                        CommuteDelayPill(delay: delay)
+                    }
                 }
             }
             if let usual = summary.usual {
@@ -62,7 +72,7 @@ struct CommuteCard: View {
                     .foregroundStyle(week.delta > 0 ? Theme.warning : Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if let monthly = FuelCost.monthly(trips: summary.trips, costPerMeter: fuelCostPerMeter, now: Date()) {
+            if let monthly {
                 // «В месяц ~420 000 сум» (12б.3): та же дорога, тот же расход.
                 Label(String(format: String(localized: "Топливо в месяц ~%@"), Formatting.money(monthly)),
                       systemImage: "fuelpump")
@@ -74,7 +84,38 @@ struct CommuteCard: View {
             }
         }
         .statCard()
-        .accessibilityElement(children: .combine)
+        // Карточка — одна мысль, и голосом словами: «55 минут, на 12 минут
+        // дольше обычного», «с 8:22 до 9:17» — без «мин», стрелок и тильд.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(spoken(monthlyFuel: monthly)))
+    }
+
+    private var lastDuration: some View {
+        Text(Formatting.duration(summary.last.duration))
+            .font(.rounded(30, .heavy))
+            .monospacedDigit()
+            .foregroundStyle(Theme.textPrimary)
+    }
+
+    /// Всё, что на карточке, — фразами для VoiceOver.
+    private func spoken(monthlyFuel: Double?) -> String {
+        var parts = [summary.direction.title,
+                     Self.whenLine(summary.last, spoken: true),
+                     SpokenUnits.duration(summary.last.duration)]
+        if let delay = summary.lastDelay { parts.append(CommuteDelayPill.spoken(delay)) }
+        if let usual = summary.usual {
+            parts.append(Self.usualLine(usual: usual, departure: summary.usualDepartureMinute, spoken: true))
+        } else {
+            if let crowdUsual { parts.append(Self.crowdLine(crowdUsual, spoken: true)) }
+            parts.append(String(format: String(localized: "Ещё %lld — и появится «обычно»"),
+                                max(1, AppConfig.commuteMinTrips - summary.trips.count)))
+        }
+        if let week = summary.week, week.isNoticeable { parts.append(Self.weekLine(week, spoken: true)) }
+        if let monthlyFuel {
+            parts.append(String(format: String(localized: "Топливо в месяц около %@"), Formatting.money(monthlyFuel)))
+        }
+        if let best = summary.best { parts.append(CommuteAdvice.line(best, spoken: true)) }
+        return parts.joined(separator: ". ")
     }
 
     private var header: some View {
@@ -99,9 +140,10 @@ struct CommuteCard: View {
         }
     }
 
-    /// «Обычно 39 мин, выезжаете около 18:37».
-    static func usualLine(usual: TimeInterval, departure: Int?) -> String {
-        let time = Formatting.unbreakable(Formatting.duration(usual))
+    /// «Обычно 39 мин, выезжаете около 18:37». `spoken` — для VoiceOver:
+    /// «Обычно 39 минут, …».
+    static func usualLine(usual: TimeInterval, departure: Int?, spoken: Bool = false) -> String {
+        let time = spoken ? SpokenUnits.duration(usual) : Formatting.unbreakable(Formatting.duration(usual))
         guard let departure else {
             return String(format: String(localized: "Обычно %@"), time)
         }
@@ -109,34 +151,48 @@ struct CommuteCard: View {
                       time, Formatting.clock(minuteOfDay: departure))
     }
 
-    /// «Обычно ~35 мин (по водителям)».
-    static func crowdLine(_ seconds: TimeInterval) -> String {
-        String(format: String(localized: "Обычно ~%@ (по водителям)"),
-               Formatting.unbreakable(Formatting.duration(seconds)))
+    /// «Обычно ~35 мин (по водителям)»; голосом — «Обычно около 35 минут,
+    /// по данным водителей».
+    static func crowdLine(_ seconds: TimeInterval, spoken: Bool = false) -> String {
+        guard !spoken else {
+            return String(format: String(localized: "Обычно около %@, по данным водителей"),
+                          SpokenUnits.duration(seconds))
+        }
+        return String(format: String(localized: "Обычно ~%@ (по водителям)"),
+                      Formatting.unbreakable(Formatting.duration(seconds)))
     }
 
     /// «За 7 дней в среднем 41 мин — на 3 мин дольше обычного». «За 7 дней»,
     /// а не «за неделю»: окно скользящее, а «Неделя» в «Итогах» — календарная.
-    static func weekLine(_ week: Commute.Week) -> String {
-        let average = Formatting.unbreakable(Formatting.duration(week.average))
-        let minutes = Formatting.unbreakable(Formatting.duration(abs(week.delta)))
+    static func weekLine(_ week: Commute.Week, spoken: Bool = false) -> String {
+        let average = spoken ? SpokenUnits.duration(week.average)
+            : Formatting.unbreakable(Formatting.duration(week.average))
+        let minutes = spoken ? SpokenUnits.duration(abs(week.delta))
+            : Formatting.unbreakable(Formatting.duration(abs(week.delta)))
         return week.delta > 0
             ? String(format: String(localized: "За 7 дней в среднем %1$@ — на %2$@ дольше обычного"), average, minutes)
             : String(format: String(localized: "За 7 дней в среднем %1$@ — на %2$@ меньше обычного"), average, minutes)
     }
 
-    /// «Вчера · 8:22 → 9:17», «пт, 9 октября · 18:34 → 19:15».
-    static func whenLine(_ trip: Commute.Trip) -> String {
-        "\(dayLine(trip.departure)) · \(Formatting.clock(trip.departure)) → \(Formatting.clock(trip.arrival))"
+    /// «Вчера · 8:22 → 9:17», «пт, 9 октября · 18:34 → 19:15»; голосом —
+    /// «пятница, 9 октября, с 18:34 до 19:15» (стрелка звучит словом «стрелка»).
+    static func whenLine(_ trip: Commute.Trip, spoken: Bool = false) -> String {
+        guard !spoken else {
+            return dayLine(trip.departure, spoken: true) + ", "
+                + String(format: String(localized: "с %1$@ до %2$@"),
+                         Formatting.clock(trip.departure), Formatting.clock(trip.arrival))
+        }
+        return "\(dayLine(trip.departure)) · \(Formatting.clock(trip.departure)) → \(Formatting.clock(trip.arrival))"
     }
 
     /// День поездки: «Сегодня», «Вчера», иначе с днём недели — дорога на
     /// работу живёт неделями, и «пт» говорит больше, чем «9 октября».
-    static func dayLine(_ date: Date, calendar: Calendar = .current) -> String {
+    /// `spoken` — день недели полностью: «пт» голосом — две буквы.
+    static func dayLine(_ date: Date, calendar: Calendar = .current, spoken: Bool = false) -> String {
         if calendar.isDateInToday(date) || calendar.isDateInYesterday(date) {
             return Formatting.dayTitle(date, calendar: calendar)
         }
-        return date.formatted(.dateTime.weekday(.abbreviated).day().month(.wide))
+        return date.formatted(.dateTime.weekday(spoken ? .wide : .abbreviated).day().month(.wide))
     }
 }
 
@@ -216,6 +272,18 @@ struct CommuteDelayPill: View {
             .background(tint.opacity(0.12), in: Capsule())
             .lineLimit(1)
             .minimumScaleFactor(0.8)
+            .accessibilityLabel(Text(Self.spoken(delay)))
+    }
+
+    /// `Formatting.delayPhrase` голосом: «на 12 минут дольше обычного».
+    static func spoken(_ delay: TimeInterval) -> String {
+        let minutes = Int((abs(delay) / 60).rounded())
+        if abs(delay) < AppConfig.commuteNoticeableDelaySeconds || minutes == 0 {
+            return String(localized: "как обычно")
+        }
+        return delay > 0
+            ? String(format: String(localized: "на %@ дольше обычного"), SpokenUnits.minutes(minutes))
+            : String(format: String(localized: "на %@ быстрее обычного"), SpokenUnits.minutes(minutes))
     }
 }
 
@@ -228,10 +296,7 @@ struct CommuteAdvice: View {
             IconBadge(symbol: "lightbulb.fill", tint: Theme.Icon.rating, size: 28)
             // Число не отрывается от «мин» (unbreakable): «на 7 / мин» через
             // перенос читалось как две разные вещи.
-            Text(String(format: String(localized: "Выезжайте в %1$@ — в среднем %2$@, на %3$@ быстрее"),
-                        Formatting.clock(minuteOfDay: best.startMinute),
-                        Formatting.unbreakable(Formatting.duration(best.medianDuration)),
-                        Formatting.unbreakable(Formatting.duration(best.saving))))
+            Text(Self.line(best))
                 .font(.rounded(13, .medium))
                 .foregroundStyle(Theme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -240,5 +305,18 @@ struct CommuteAdvice: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.success.opacity(0.10),
                     in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(Self.line(best, spoken: true)))
+    }
+
+    /// «Выезжайте в 7:45 — в среднем 37 мин, на 7 мин быстрее»; `spoken` —
+    /// минуты словом, для VoiceOver.
+    static func line(_ best: Commute.BestWindow, spoken: Bool = false) -> String {
+        let time: (TimeInterval) -> String = spoken
+            ? { SpokenUnits.duration($0) }
+            : { Formatting.unbreakable(Formatting.duration($0)) }
+        return String(format: String(localized: "Выезжайте в %1$@ — в среднем %2$@, на %3$@ быстрее"),
+                      Formatting.clock(minuteOfDay: best.startMinute),
+                      time(best.medianDuration), time(best.saving))
     }
 }

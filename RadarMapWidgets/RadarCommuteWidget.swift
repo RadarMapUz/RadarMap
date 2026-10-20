@@ -92,6 +92,7 @@ private struct RadarCommuteView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .voicePhrase(line.map { spoken($0, jamAndHint: false) })
         .widgetURL(URL(string: "radarmap://stats"))
     }
 
@@ -102,6 +103,7 @@ private struct RadarCommuteView: View {
             Image(systemName: line.toWork ? "briefcase.fill" : "house.fill")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(SW.accent)
+                .accessibilityHidden(true)
             Text(title(line))
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .foregroundStyle(SW.secondary)
@@ -112,15 +114,20 @@ private struct RadarCommuteView: View {
             .foregroundStyle(SW.primary)
             .minimumScaleFactor(0.7)
             .lineLimit(1)
+        // Узбекское «hozir · odatda 42 daq» в малом виджете длиннее строки —
+        // ужимается, а не обрезается (14.6).
         Text(caption(line))
             .font(.system(size: 12, design: .rounded))
             .foregroundStyle(SW.tertiary)
             .lineLimit(1)
+            .minimumScaleFactor(0.75)
         if let jam = line.jam {
+            // Две строки: «tirbandlik +8 daq · 8:05 holatiga» в одну не
+            // влезала и при сжатии — терялось время, ради которого строка.
             Text(jamText(jam))
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .foregroundStyle(SW.warning)
-                .lineLimit(1)
+                .lineLimit(2)
                 .minimumScaleFactor(0.8)
         } else if let hint = line.hint {
             Text(hintText(hint))
@@ -136,6 +143,7 @@ private struct RadarCommuteView: View {
             Image(systemName: "briefcase.fill")
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(SW.accent)
+                .accessibilityHidden(true)
             Spacer(minLength: 0)
             // Приглашение, а не ноль: «дороги» ещё нет — так и сказать.
             Text("Дорога на работу появится после трёх поездок между домом и работой")
@@ -177,6 +185,7 @@ private struct RadarCommuteView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
         }
+        .voicePhrase(line.map { spoken($0, jamAndHint: true, other: otherDirection($0)) })
         .widgetURL(URL(string: "radarmap://stats"))
     }
 
@@ -199,11 +208,13 @@ private struct RadarCommuteView: View {
                         .font(.system(size: 11, design: .rounded))
                         .opacity(0.8)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 } else if let hint = line.hint {
                     Text(hintText(hint))
                         .font(.system(size: 11, design: .rounded))
                         .opacity(0.8)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
             } else {
                 Text("Дорога на работу")
@@ -214,6 +225,7 @@ private struct RadarCommuteView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .voicePhrase(line.map { spoken($0, jamAndHint: false) })
         .widgetURL(URL(string: "radarmap://stats"))
     }
 
@@ -227,6 +239,7 @@ private struct RadarCommuteView: View {
                 Text("Дорога на работу")
             }
         }
+        .voicePhrase(line.map { spoken($0, jamAndHint: nil) })
         .widgetURL(URL(string: "radarmap://stats"))
     }
 
@@ -275,8 +288,70 @@ private struct RadarCommuteView: View {
         }
     }
 
+    // MARK: VoiceOver
+
+    /// Виджет одной фразой, словами: «На работу: сейчас около 44 минут,
+    /// обычно 42 минуты. Пробки плюс 8 минут, на 8:05. Выезжайте до 8:10».
+    /// По отдельным строкам VoiceOver читал «тильда 44 мин», «плюс 8 мин» и
+    /// имя значка портфеля. `jamAndHint`: `false` — как на малом и
+    /// локскрине (пробки, иначе подсказка), `true` — обе (средний), `nil` —
+    /// ни одной (строка у часов).
+    private func spoken(_ line: WidgetCommute.Line, jamAndHint: Bool?,
+                        other: CommuteWidgetData.Direction? = nil) -> String {
+        let usual = String(format: String(localized: "обычно %@"), spokenMinutes(line.usualSeconds))
+        var head = usual
+        if let now = line.nowSeconds {
+            head = String(format: String(localized: "сейчас около %@"), spokenMinutes(now)) + ", " + usual
+        }
+        var parts = [title(line) + ": " + head]
+        if let jamAndHint {
+            if let jam = line.jam {
+                parts.append(String(format: String(localized: "пробки плюс %1$@, на %2$@"),
+                                    spokenMinutes(jam.extraSeconds),
+                                    jam.at.formatted(date: .omitted, time: .shortened)))
+            }
+            if let hint = line.hint, line.jam == nil || jamAndHint {
+                parts.append(spokenHint(hint))
+            }
+        }
+        if let other {
+            parts.append((line.toWork ? String(localized: "Домой") : String(localized: "На работу")) + ": "
+                         + String(format: String(localized: "обычно %@"), spokenMinutes(other.usualSeconds)))
+        }
+        return parts.joined(separator: ". ")
+    }
+
+    private func spokenMinutes(_ seconds: Double) -> String {
+        SpokenUnits.minutes(Int((seconds / 60).rounded()))
+    }
+
+    private func spokenHint(_ hint: WidgetCommute.Hint) -> String {
+        switch hint {
+        case .leaveBy(let minute):
+            return String(format: String(localized: "выезжайте до %@"), clock(minute))
+        case .best(let minute, let seconds):
+            return String(format: String(localized: "в %1$@ — %2$@"), clock(minute), spokenMinutes(seconds))
+        case .usualDeparture(let minute):
+            return String(format: String(localized: "выезд около %@"), clock(minute))
+        }
+    }
+
     private func isAdvice(_ hint: WidgetCommute.Hint) -> Bool {
         if case .usualDeparture = hint { return false }
         return true
+    }
+}
+
+private extension View {
+    /// Виджет — одна мысль: VoiceOver читает его одной фразой, если она есть
+    /// (без данных — приглашение читается как есть, строками).
+    @ViewBuilder
+    func voicePhrase(_ phrase: String?) -> some View {
+        if let phrase {
+            accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(phrase))
+        } else {
+            self
+        }
     }
 }

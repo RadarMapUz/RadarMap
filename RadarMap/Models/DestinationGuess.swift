@@ -67,6 +67,24 @@ struct DestinationGuess: Equatable {
         return crowdUsual.map { Self.crowdText($0) }
     }
 
+    /// `usualText` для VoiceOver (14.6): то же решение, но словами — «сейчас
+    /// около 52 минут, пробки плюс 8 минут», без тильды и «мин».
+    var spokenUsualText: String? {
+        if let estimate {
+            let head = String(format: String(localized: "сейчас около %@"),
+                              SpokenUnits.duration(estimate.seconds))
+            let jam = Int((estimate.jamSeconds / 60).rounded())
+            guard jam >= AppConfig.commuteJamShowMinutes else { return head }
+            return head + ", " + String(format: String(localized: "пробки плюс %@"), SpokenUnits.minutes(jam))
+        }
+        if let usual {
+            return String(format: String(localized: "обычно %@"), SpokenUnits.duration(usual))
+        }
+        return crowdUsual.map {
+            String(format: String(localized: "обычно около %@, по данным водителей"), SpokenUnits.duration($0))
+        }
+    }
+
     /// «обычно ~35 мин (по водителям)» — источник назван: это чужие поездки,
     /// не своя история, и выдавать их за своё «обычно» нельзя.
     static func crowdText(_ seconds: TimeInterval) -> String {

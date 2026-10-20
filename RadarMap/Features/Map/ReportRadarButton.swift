@@ -480,27 +480,44 @@ struct MobileConfirmBar: View {
 /// (MobileConfirmGate).
 struct RoadEventConfirmBar: View {
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.dynamicTypeSize) private var typeSize
     var isCovered = false
 
     @State private var task: Task<Void, Never>?
 
     var body: some View {
-        if let event = env.mobile.pendingRoadConfirm, !isCovered {
+        if let event = shownEvent, !isCovered {
             let kind = ReportKind(rawValue: event.kind.rawValue) ?? .closure
-            HStack(spacing: 10) {
-                Image(systemName: kind.symbol)
-                    .font(.rounded(15, .bold))
-                    .foregroundStyle(kind.glyphTint)
-                    .frame(width: 34, height: 34)
-                    .background(kind.tint.gradient, in: Circle())
-                Text(RoadEventPassWatch.question(for: event.kind))
-                    .font(.rounded(15, .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.85)
-                Spacer(minLength: 4)
-                answer(title: String(localized: "Да"), tint: Theme.successFill, value: true, id: event.id)
-                answer(title: String(localized: "Нет"), tint: Theme.dangerFill, value: false, id: event.id)
+            let question = RoadEventPassWatch.question(for: event.kind)
+            Group {
+                // Крупный шрифт: вопрос — во всю ширину, ответы — строкой
+                // ниже. В одну строку рядом с двумя кнопками вопросу
+                // оставалось ~110 pt, и узбекское «Taʼmir hali davom
+                // etyaptimi?» обрезалось до «davom etya…» (снимок 14.6).
+                if typeSize >= .xLarge {
+                    VStack(alignment: .trailing, spacing: 10) {
+                        HStack(spacing: 10) {
+                            glyph(kind)
+                            Text(question)
+                                .font(.rounded(15, .semibold))
+                                .foregroundStyle(Theme.textPrimary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        HStack(spacing: 10) { answers(event) }
+                    }
+                } else {
+                    HStack(spacing: 10) {
+                        glyph(kind)
+                        Text(question)
+                            .font(.rounded(15, .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.85)
+                        Spacer(minLength: 4)
+                        answers(event)
+                    }
+                }
             }
             .padding(.horizontal, 14).padding(.vertical, 10)
             .liftedBackground(Theme.surface,
@@ -509,6 +526,10 @@ struct RoadEventConfirmBar: View {
                 .stroke(Theme.stroke, lineWidth: 1))
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .onAppear {
+                // Плашка появляется сама, без касания: VoiceOver о ней не
+                // узнал бы, пока фокус случайно не дойдёт до неё — а живёт
+                // она двадцать секунд.
+                AccessibilityNotification.Announcement(question).post()
                 task?.cancel()
                 let id = event.id
                 task = Task {
@@ -522,7 +543,40 @@ struct RoadEventConfirmBar: View {
         }
     }
 
-    private func answer(title: String, tint: Color, value: Bool, id: Int) -> some View {
+    /// Событие, о котором спрашиваем.
+    private var shownEvent: (id: Int, kind: RoadEvent.Kind)? {
+        if let event = env.mobile.pendingRoadConfirm { return (event.id, event.kind) }
+        #if DEBUG
+        // Скриншот-хук: `-demoRoadConfirm closure|roadwork` — вопрос без
+        // настоящего проезда (ответ уходит в пустоту: ждущего события нет).
+        let args = ProcessInfo.processInfo.arguments
+        if let at = args.firstIndex(of: "-demoRoadConfirm") {
+            let kind = args.indices.contains(at + 1) ? RoadEvent.Kind(rawValue: args[at + 1]) : nil
+            return (-1, kind ?? .closure)
+        }
+        #endif
+        return nil
+    }
+
+    /// Знак события — украшение: смысл несёт вопрос рядом.
+    private func glyph(_ kind: ReportKind) -> some View {
+        Image(systemName: kind.symbol)
+            .font(.rounded(15, .bold))
+            .foregroundStyle(kind.glyphTint)
+            .frame(width: 34, height: 34)
+            .background(kind.tint.gradient, in: Circle())
+            .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private func answers(_ event: (id: Int, kind: RoadEvent.Kind)) -> some View {
+        answer(title: String(localized: "Да"), spoken: event.kind.spokenAnswer(true),
+               tint: Theme.successFill, value: true, id: event.id)
+        answer(title: String(localized: "Нет"), spoken: event.kind.spokenAnswer(false),
+               tint: Theme.dangerFill, value: false, id: event.id)
+    }
+
+    private func answer(title: String, spoken: String, tint: Color, value: Bool, id: Int) -> some View {
         Button {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             withMotion { env.mobile.answerRoadConfirm(stillThere: value, for: id) }
@@ -537,6 +591,20 @@ struct RoadEventConfirmBar: View {
                             in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(Text(spoken))
+    }
+}
+
+private extension RoadEvent.Kind {
+    /// Ответ для VoiceOver целиком. Голое «Да» — пустое слово, когда фокус
+    /// дошёл до кнопки отдельно от вопроса: на что «да», уже не слышно.
+    func spokenAnswer(_ yes: Bool) -> String {
+        switch (self, yes) {
+        case (.closure, true):   return String(localized: "Да, ещё перекрыто")
+        case (.closure, false):  return String(localized: "Нет, уже открыто")
+        case (.roadwork, true):  return String(localized: "Да, ремонт ещё идёт")
+        case (.roadwork, false): return String(localized: "Нет, ремонт закончился")
+        }
     }
 }
 

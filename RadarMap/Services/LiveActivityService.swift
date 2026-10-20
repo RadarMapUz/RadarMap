@@ -178,6 +178,8 @@ final class LiveActivityService {
         default: break
         }
         if new.etaAlert != old.etaAlert { return true }
+        // Знак лимита и уровень тревоги (9.1) меняются редко и значат много.
+        if new.limitKmh != old.limitKmh || (new.alertLevel ?? 0) != (old.alertLevel ?? 0) { return true }
         switch (old.arrivesAt, new.arrivesAt) {
         case (nil, nil): return false
         case let (sent?, fresh?):

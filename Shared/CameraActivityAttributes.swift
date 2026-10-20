@@ -35,6 +35,11 @@ nonisolated struct CameraActivityAttributes: ActivityAttributes {
         var etaClock: Date? = nil
         var etaCaption: String? = nil
         var etaAlert: Bool? = nil
+        /// Ограничение дороги, км/ч (9.1) — знак рядом с дистанцией; nil — не знаем.
+        var limitKmh: Int? = nil
+        /// Уровень тревоги 0–3 (9.1): цвет дистанции и полосы приближения —
+        /// чем ближе, тем горячее; nil у старых состояний — как 0.
+        var alertLevel: Int? = nil
         // «Камер вокруг» убрано 19.10: строка «следит за N камерами» была шумом,
         // а неквантованный счётчик слал обновления плашки и в пробке на месте.
     }

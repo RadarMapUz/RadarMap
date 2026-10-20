@@ -26,6 +26,34 @@ private enum WTheme {
     static let secondary = SW.fixed(WidgetPalette.secondary.dark)
     /// Подпись призрака: позже срока, впритык, заметно дольше обычного.
     static let warning = SW.fixed(WidgetPalette.warning.dark)
+
+    /// Цвет дистанции и полосы по уровню тревоги (9.1): ближе — горячее.
+    /// Цвет не единственный носитель: уровень 3 — это и дистанция, и полоса
+    /// почти до конца.
+    static func level(_ level: Int?) -> Color {
+        switch level ?? 0 {
+        case 3...: return camera
+        case 2: return warning
+        default: return accent
+        }
+    }
+}
+
+/// Знак ограничения дороги (9.1): белый круг с красной каймой, как на дороге
+/// и на карточке скорости в приложении.
+private struct LimitSign: View {
+    let limit: Int
+    var size: CGFloat = 30
+
+    var body: some View {
+        Text("\(limit)")
+            .font(.system(size: size * 0.42, weight: .heavy, design: .rounded))
+            .foregroundStyle(.black)
+            .minimumScaleFactor(0.6)
+            .frame(width: size, height: size)
+            .background(Circle().fill(.white))
+            .overlay(Circle().stroke(Color(red: 0.86, green: 0.16, blue: 0.16), lineWidth: size * 0.12))
+    }
 }
 
 /// Единицы — через каталог: плашка живёт на экране блокировки в том же
@@ -58,7 +86,7 @@ struct CameraActivityWidget: Widget {
                     if !context.isStale, let distance = context.state.distanceMeters {
                         Text(format(distance))
                             .font(.system(.title3, design: .rounded).bold())
-                            .foregroundStyle(WTheme.accent)
+                            .foregroundStyle(WTheme.level(context.state.alertLevel))
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
@@ -85,7 +113,7 @@ struct CameraActivityWidget: Widget {
                 if !context.isStale, let distance = context.state.distanceMeters {
                     Text(format(distance))
                         .font(.system(.caption2, design: .rounded).bold())
-                        .foregroundStyle(WTheme.accent)
+                        .foregroundStyle(WTheme.level(context.state.alertLevel))
                 }
             } minimal: {
                 typeIcon(context.state, isStale: context.isStale)
@@ -113,7 +141,7 @@ private struct ApproachBar: View {
         if state.nearestTitle != nil, let since = state.since, let arrives = state.arrivesAt, arrives > since {
             ProgressView(timerInterval: since...arrives, countsDown: false) { EmptyView() } currentValueLabel: { EmptyView() }
                 .progressViewStyle(.linear)
-                .tint(WTheme.camera)
+                .tint((state.alertLevel ?? 0) >= 2 ? WTheme.level(state.alertLevel) : WTheme.camera)
         }
     }
 }
@@ -149,7 +177,7 @@ private struct LockScreenView: View {
                 } else if let title = state.nearestTitle, let distance = state.distanceMeters {
                     Text(format(distance))
                         .font(.system(.title3, design: .rounded).bold())
-                        .foregroundStyle(WTheme.accent)
+                        .foregroundStyle(WTheme.level(state.alertLevel))
                     Text(title)
                         .font(.system(.caption, design: .rounded))
                         .foregroundStyle(WTheme.secondary)
@@ -163,12 +191,17 @@ private struct LockScreenView: View {
                 if !isStale { GhostLine(state: state) }
             }
             Spacer(minLength: 0)
+            // Ограничение дороги (9.1) — сравнить «еду / можно» без приложения.
+            if !isStale, let limit = state.limitKmh {
+                LimitSign(limit: limit, size: 36)
+            }
         }
         .padding(14)
     }
 }
 
-/// Призрак дороги на работу (8.8.3б): «9:12 · Работа · +4 мин к обычному».
+/// Прибытие: по маршруту — «9:12 · Работа · 4,2 км» (9.1), без маршрута —
+/// призрак дороги на работу (8.8.3б): «9:12 · Работа · +4 мин к обычному».
 /// Подпись готовит приложение на своём языке; время рисует система.
 private struct GhostLine: View {
     let state: CameraActivityAttributes.ContentState

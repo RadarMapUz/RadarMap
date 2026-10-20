@@ -153,8 +153,36 @@ def init_db():
         pass  # колонка уже есть
     conn.execute("CREATE INDEX IF NOT EXISTS idx_overrides_pub ON overrides(published_at)")
     map_edits.ensure_tables(conn)
+    scrub_unblock_log(conn)
     conn.commit()
     conn.close()
+
+
+def scrubbed_unblock_detail(detail):
+    """«ip 10.1.2.3 · имя» → «ip · имя», «device <uuid>» → «device».
+
+    Запись нового вида («ip, отметка 12 · имя») не трогается: после вида
+    ключа в ней запятая, а не пробел. Уже вычищенная даёт сама себя."""
+    detail = detail or ""
+    for kind in ("ip", "device"):
+        if detail.startswith(kind + " "):
+            who = detail.rsplit(" · ", 1)[1] if " · " in detail else ""
+            return f"{kind} · {who}" if who else kind
+    return detail
+
+
+def scrub_unblock_log(conn):
+    """До 20.10.2026 снятие бана писало в журнал решений сам адрес или UUID —
+    а журнал бессрочный, и адрес жил бы в нём вечно, хотя бан с ним уходит
+    через сутки. Оставляем вид ключа и имя модератора. Идемпотентно; строк
+    такого вида — единицы, поэтому раз при старте."""
+    rows = conn.execute("SELECT id, detail FROM moderation_log "
+                        "WHERE action = 'mobile_unblock'").fetchall()
+    for row_id, detail in rows:
+        scrubbed = scrubbed_unblock_detail(detail)
+        if scrubbed != (detail or ""):
+            conn.execute("UPDATE moderation_log SET detail = ? WHERE id = ?",
+                         (scrubbed, row_id))
 
 
 def log_action(conn, camera_id, action, detail="", who=""):
@@ -1862,9 +1890,16 @@ class Handler(BaseHTTPRequestHandler):
         elif action == "unblock":
             kind, value = field("block_kind"), field("block_value")
             if kind in ("ip", "device") and value:
+                row = conn.execute("SELECT note FROM blocked WHERE kind = ? AND value = ?",
+                                   (kind, value)).fetchone()
                 conn.execute("DELETE FROM blocked WHERE kind = ? AND value = ?",
                              (kind, value))
-                log_action(conn, None, "mobile_unblock", f"{kind} {value}", who=self.who())
+                # Сам адрес или UUID в журнал не пишем: журнал бессрочный, а
+                # бан — нет (RETENTION.md). Чей бан сняли, говорит заметка —
+                # «отметка 123».
+                note = row["note"] if row and row["note"] else ""
+                log_action(conn, None, "mobile_unblock",
+                           f"{kind}, {note}" if note else kind, who=self.who())
         conn.commit()
 
     def feedback_action(self, conn, field):

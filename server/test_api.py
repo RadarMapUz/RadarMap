@@ -3,6 +3,9 @@
 БД и ходим в него HTTP-клиентом stdlib. Запуск: python3 server/test_api.py
 """
 import json
+import os
+import re
+import shutil
 import sqlite3
 import tempfile
 import threading
@@ -13,6 +16,7 @@ import urllib.error
 from http.server import ThreadingHTTPServer
 
 import api
+import telegram_bot
 
 
 def _call(port, method, path, payload=None, ip=None):
@@ -987,6 +991,275 @@ class APITest(ServerTestBase):
         finally:
             server.server_close()
 
+
+# --- Сроки хранения (15.5) ------------------------------------------------------
+
+DAY = 86400
+SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
+# Колонки, по которым строку можно связать с телефоном или человеком. «who»
+# сюда не входит: в панели это имя модератора (candidate_decisions), а хэш
+# человека в bot_limits проверяется отдельно.
+DEVICE_COLUMNS = {"device", "ip", "contact"}
+_CREATE_TABLE = re.compile(r"CREATE TABLE(?: IF NOT EXISTS)?\s+(\w+)\s*\(")
+
+
+def retention_doc(path=None):
+    """Таблица «Таблицы и файлы» из RETENTION.md: имя → потолок в днях или
+    None («—»). Строка — `| \\`имя\\` | … |`, потолок — пятая колонка."""
+    path = path or os.path.join(SERVER_DIR, "RETENTION.md")
+    with open(path, encoding="utf-8") as handle:
+        text = handle.read()
+    section = text.split("## Таблицы и файлы", 1)[1].split("\n## ", 1)[0]
+    out = {}
+    for line in section.splitlines():
+        if not line.startswith("| `"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) != 7:
+            raise AssertionError(f"RETENTION.md: в строке не 7 колонок: {line}")
+        name, ceiling = cells[0].strip("`"), cells[4]
+        if ceiling == "—":
+            out[name] = None
+        elif re.fullmatch(r"\d+", ceiling):
+            out[name] = int(ceiling)
+        else:
+            raise AssertionError(f"RETENTION.md: потолок «{ceiling}» у {name} — не число и не «—»")
+    return out
+
+
+def created_tables(filename):
+    with open(os.path.join(SERVER_DIR, filename), encoding="utf-8") as handle:
+        return set(_CREATE_TABLE.findall(handle.read()))
+
+
+class RetentionTest(ServerTestBase):
+    """Потолок хранения всего, что привязано к устройству. Проверяется то, что
+    должно ИСЧЕЗНУТЬ, и то, что обязано остаться: молча стёртая свежая жалоба
+    на камеру — такой же провал, как вечно живущий адрес."""
+
+    def setUp(self):
+        super().setUp()
+        self.now = time.time()
+        self.conn = sqlite3.connect(api.DB_PATH)
+
+    def tearDown(self):
+        self.conn.close()
+
+    def sweep(self):
+        conn = api.db()
+        try:
+            return api.enforce_retention(conn, self.now)
+        finally:
+            conn.close()
+
+    def ago(self, days):
+        return self.now - days * DAY
+
+    def count(self, sql, args=()):
+        return self.conn.execute(sql, args).fetchone()[0]
+
+    def test_feedback_older_than_ceiling_goes_whole_whatever_its_status(self):
+        """В тексте бывают место и время проезда («Не предупредила») и телефон —
+        вырезать личное из свободного текста нельзя, поэтому строка уходит
+        целиком, и неразобранная тоже."""
+        old = api.LIVE_MAX_DAYS + 1
+        for message, days, status in (("старое новое", old, "new"),
+                                      ("старое отвеченное", old, "answered"),
+                                      ("свежее", api.LIVE_MAX_DAYS - 1, "new")):
+            self.conn.execute("INSERT INTO feedback(message, contact, app_version, device, "
+                              "received, status) VALUES(?, '+998 90 000 00 00', '2.3', 'd1', ?, ?)",
+                              (message, self.ago(days), status))
+        self.conn.commit()
+        self.assertEqual(self.sweep()["feedback"], 2)
+        left = [row[0] for row in self.conn.execute("SELECT message FROM feedback")]
+        self.assertEqual(left, ["свежее"])
+
+    def test_old_camera_report_resolved_goes_unresolved_loses_device_and_ip(self):
+        old, fresh = self.ago(api.LIVE_MAX_DAYS + 5), self.ago(10)
+        rows = ((7, "gone", "dev-a", "10.0.0.1", old, 1),            # разобрана
+                (7, "gone", "dev-b", "10.0.0.2", old, 2),            # отклонена
+                (8, "wrong_location", "dev-c", "10.0.0.3", old, 0),  # ждёт модератора
+                (8, "wrong_location", "dev-d", "10.0.0.4", fresh, 0))
+        for camera_id, reason, device, ip, received, resolved in rows:
+            self.conn.execute("INSERT INTO camera_reports(camera_id, reason, lat, lon, "
+                              "db_version, device, received, ip, resolved) "
+                              "VALUES(?, ?, 41.3, 69.2, 11, ?, ?, ?, ?)",
+                              (camera_id, reason, device, received, ip, resolved))
+        self.conn.commit()
+        done = self.sweep()
+        self.assertEqual((done["camera_reports"], done["camera_reports_stripped"]), (2, 1))
+        left = self.conn.execute("SELECT camera_id, reason, device, ip, received, lat, resolved "
+                                 "FROM camera_reports ORDER BY received").fetchall()
+        self.assertEqual(left, [(8, "wrong_location", "", "", old, 41.3, 0),
+                                (8, "wrong_location", "dev-d", "10.0.0.4", fresh, 41.3, 0)],
+                         "неразобранная жалоба — сигнал очереди: камера, причина и время остаются")
+        self.assertEqual(self.sweep()["camera_reports_stripped"], 0, "повторный проход — без работы")
+
+    def test_usage_stats_and_metrics_have_their_ceilings(self):
+        for device, days in (("old", api.LIVE_MAX_DAYS + 1), ("new", api.LIVE_MAX_DAYS - 1)):
+            self.conn.execute("INSERT INTO usage_stats(device, day, received) VALUES(?, '2026-08-01', ?)",
+                              (device, self.ago(days)))
+        for device, days in (("old", api.METRICS_KEEP_DAYS + 1), ("new", api.METRICS_KEEP_DAYS - 1)):
+            self.conn.execute("INSERT INTO metrics(device, kind, received, payload) "
+                              "VALUES(?, 'metric', ?, '{}')", (device, self.ago(days)))
+        self.conn.commit()
+        self.sweep()
+        self.assertEqual([r[0] for r in self.conn.execute("SELECT device FROM usage_stats")], ["new"])
+        self.assertEqual([r[0] for r in self.conn.execute("SELECT device FROM metrics")], ["new"])
+
+    def test_metrics_go_even_when_no_new_metrics_arrive(self):
+        """Раньше метрики чистились только в POST /api/metrics: выключи их
+        пультом — и строки с UUID жили бы вечно."""
+        self.conn.execute("INSERT INTO metrics(device, kind, received, payload) "
+                          "VALUES('d', 'metric', ?, '{}')", (self.ago(400),))
+        self.conn.commit()
+        self.sweep()
+        self.assertEqual(self.count("SELECT COUNT(*) FROM metrics"), 0)
+
+    def test_ban_goes_when_expired_and_never_outlives_a_month(self):
+        rows = (("ip", "10.1.1.1", self.now - 60, self.ago(1)),          # истёк
+                ("device", "live", self.now + 3600, self.now),            # действует
+                ("ip", "10.2.2.2", self.now + 365 * DAY, self.ago(api.BAN_MAX_DAYS + 1)))
+        for kind, value, until, created in rows:
+            self.conn.execute("INSERT INTO blocked(kind, value, until, note, created) "
+                              "VALUES(?, ?, ?, '', ?)", (kind, value, until, created))
+        self.conn.commit()
+        self.sweep()
+        self.assertEqual([r[0] for r in self.conn.execute("SELECT value FROM blocked")], ["live"])
+        self.assertTrue(api.is_blocked(self.conn, "", "live", self.now), "живой бан обязан работать")
+
+    def test_report_backstop_takes_its_votes(self):
+        """Метку, продлённую модератором за все сроки, всё равно снимает
+        потолок по created — вместе с голосами (в них тоже UUID и адрес)."""
+        for device, created in (("old", self.ago(api.LIVE_MAX_DAYS + 1)), ("new", self.now)):
+            cur = self.conn.execute("INSERT INTO reports(lat, lon, created, expires, device, ip) "
+                                    "VALUES(41.3, 69.2, ?, ?, ?, '10.0.0.1')",
+                                    (created, self.now + 3600, device))
+            self.conn.execute("INSERT INTO votes(report_id, device, value, ts, ip) "
+                              "VALUES(?, ?, 1, ?, '10.0.0.9')", (cur.lastrowid, device + "-voter", created))
+        self.conn.commit()
+        self.sweep()
+        self.assertEqual([r[0] for r in self.conn.execute("SELECT device FROM reports")], ["new"])
+        self.assertEqual([r[0] for r in self.conn.execute("SELECT device FROM votes")], ["new-voter"])
+
+    def test_cng_goes_without_new_cng_posts(self):
+        rows = (("a", self.ago(2), self.ago(2) + 3600),                          # погасла позавчера
+                ("b", self.ago(api.LIVE_MAX_DAYS + 1), self.now + 3600),         # потолок по created
+                ("c", self.now, self.now + 3600))                                # живая
+        for device, created, expires in rows:
+            self.conn.execute("INSERT INTO cng(station, lat, lon, kind, created, expires, device, ip) "
+                              "VALUES('41.3000,69.2000', 41.3, 69.2, 'gas', ?, ?, ?, '10.0.0.1')",
+                              (created, expires, device))
+        self.conn.commit()
+        self.sweep()
+        self.assertEqual([r[0] for r in self.conn.execute("SELECT device FROM cng")], ["c"])
+
+    def test_sweep_rides_the_mobile_poll_once_an_hour(self):
+        """Проход живёт в той же чистке, что и погасшие метки: не на каждый
+        запрос, а раз в RETENTION_SWEEP_SECONDS."""
+        insert = ("INSERT INTO feedback(message, device, received) VALUES('старое', 'd', ?)",
+                  (self.ago(api.LIVE_MAX_DAYS + 1),))
+        self.conn.execute(*insert)
+        self.conn.commit()
+        with api._cleanup_lock:
+            api._last_retention = 0.0
+        self.assertEqual(_call(self.port, "GET", "/api/mobile")[0], 200)
+        self.assertEqual(self.count("SELECT COUNT(*) FROM feedback"), 0, "первый опрос проходит сроки")
+        self.conn.execute(*insert)
+        self.conn.commit()
+        with api._mobile_lock:
+            api._mobile_cache = None
+        self.assertEqual(_call(self.port, "GET", "/api/mobile")[0], 200)
+        self.assertEqual(self.count("SELECT COUNT(*) FROM feedback"), 1,
+                         "второй опрос в пределах часа базу сроков не трогает")
+
+
+class RetentionDocTest(unittest.TestCase):
+    """RETENTION.md — единый источник правды о сроках; эти тесты не дают ему
+    разойтись с кодом, со схемой и со сроками резервных копий."""
+
+    def test_every_table_on_the_server_has_a_row(self):
+        doc = retention_doc()
+        sources = sorted(name for name in os.listdir(SERVER_DIR)
+                         if name.endswith(".py") and not name.startswith("test_"))
+        missing = {}
+        for filename in sources:
+            absent = created_tables(filename) - set(doc)
+            if absent:
+                missing[filename] = sorted(absent)
+        self.assertEqual(missing, {}, "новая таблица без строки в RETENTION.md")
+        self.assertTrue({"feedback", "camera_reports", "overrides"} <= set(doc), "разбор md сломан")
+
+    def test_every_api_table_has_a_ceiling_in_code_equal_to_the_doc(self):
+        doc = retention_doc()
+        self.assertEqual(created_tables("api.py"), set(api.RETENTION_DAYS),
+                         "таблица api.py без записи в api.RETENTION_DAYS")
+        for table, days in api.RETENTION_DAYS.items():
+            self.assertEqual(doc[table], days, f"{table}: RETENTION.md и код разошлись")
+        self.assertEqual(doc["bot_limits"], telegram_bot.BOT_LIMITS_KEEP_DAYS)
+
+    def test_tables_with_device_columns_have_a_ceiling(self):
+        """По живой схеме, а не по списку: колонка ip, добавленная миграцией
+        в «бессрочную» таблицу, тоже должна покраснеть."""
+        doc = retention_doc()
+        saved = api.DB_PATH, api.TRAFFIC_DB_PATH
+        work = tempfile.mkdtemp()
+        try:
+            api.DB_PATH = os.path.join(work, "reports.db")
+            api.TRAFFIC_DB_PATH = os.path.join(work, "traffic.db")
+            api.init_db()
+            api.init_traffic_db()
+            for path in (api.DB_PATH, api.TRAFFIC_DB_PATH):
+                conn = sqlite3.connect(path)
+                try:
+                    tables = [r[0] for r in conn.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table' "
+                        "AND name NOT LIKE 'sqlite_%'")]
+                    for table in tables:
+                        columns = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+                        if columns & DEVICE_COLUMNS:
+                            self.assertIsInstance(doc.get(table), int,
+                                                  f"{table}: поля устройства без срока")
+                finally:
+                    conn.close()
+        finally:
+            api.DB_PATH, api.TRAFFIC_DB_PATH = saved
+            shutil.rmtree(work, ignore_errors=True)
+        bot = telegram_bot.open_db(":memory:")
+        try:
+            columns = {r[1] for r in bot.execute("PRAGMA table_info(bot_limits)")}
+        finally:
+            bot.close()
+        self.assertIn("who", columns, "хэш человека в bot_limits — псевдоустройство")
+        self.assertIsInstance(doc["bot_limits"], int)
+        self.assertIsInstance(doc["blocked"], int, "в blocked.value лежат UUID и адреса")
+
+    def test_ceiling_holds_together_with_backups(self):
+        """90 дней обещаны вместе с копиями: строка, удалённая из базы,
+        ещё лежит в ночной копии на VPS и в копии у владельца."""
+        self.assertEqual(api.RETENTION_CEILING_DAYS, 90)
+        self.assertLessEqual(api.LIVE_MAX_DAYS + api.BACKUP_MAX_DAYS, api.RETENTION_CEILING_DAYS)
+        doc = retention_doc()
+        self.assertLessEqual(max(d for d in doc.values() if d is not None), api.LIVE_MAX_DAYS)
+        with open(os.path.join(SERVER_DIR, "backup_db.sh"), encoding="utf-8") as handle:
+            vps_copies = int(re.search(r"tail -n \+(\d+)", handle.read()).group(1)) - 1
+        with open(os.path.join(SERVER_DIR, "pull_backup.sh"), encoding="utf-8") as handle:
+            offsite_days = int(re.search(r"^KEEP_DAYS=(\d+)$", handle.read(), re.M).group(1))
+        self.assertEqual(vps_copies, 7)
+        self.assertLessEqual(vps_copies, api.BACKUP_MAX_DAYS, "ночных копий на VPS больше, чем заложено")
+        # +3: mtime — время забора (до суток после снимка), find -mtime +N
+        # срабатывает на N+1-е сутки, запуск — раз в сутки.
+        self.assertLessEqual(offsite_days + 3, api.BACKUP_MAX_DAYS,
+                             "копия у владельца живёт дольше, чем заложено в потолок")
+
+    def test_doc_parser_rejects_a_vague_ceiling(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as handle:
+            handle.write("## Таблицы и файлы\n\n| `x` | a | b | c | пару месяцев | d | e |\n")
+        try:
+            with self.assertRaises(AssertionError):
+                retention_doc(handle.name)
+        finally:
+            os.unlink(handle.name)
 
 
 class TrafficTest(ServerTestBase):

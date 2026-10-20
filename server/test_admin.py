@@ -1697,3 +1697,137 @@ class JunctionWorklistPageTests(unittest.TestCase):
         first = [self.row(41.3249, 69.2307), self.row(41.3000, 69.2500)]
         now = [self.row(41.30002, 69.25003)]           # тот же перекрёсток, сдвиг центра
         self.assertEqual(admin.worklist_progress(first, now), (1, 2))
+
+
+class RetentionAdminTest(unittest.TestCase):
+    """Сроки хранения (15.5) со стороны панели: очереди работают после прохода
+    сроков, а журнал решений не хранит адресов и UUID.
+
+    Сервер и базу берём у AdminTest, но не наследуем его: наследник прогнал
+    бы ещё раз все его тесты."""
+    setUpClass = AdminTest.__dict__["setUpClass"]
+    tearDownClass = AdminTest.__dict__["tearDownClass"]
+    login = AdminTest.__dict__["login"]
+    setUp = AdminTest.setUp
+    add_report = AdminTest.add_report
+    queue = AdminTest.queue
+
+    def sweep(self, now=None):
+        conn = api.db()
+        try:
+            return api.enforce_retention(conn, now or time.time())
+        finally:
+            conn.close()
+
+    def log_details(self):
+        conn = sqlite3.connect(admin.DB_PATH)
+        try:
+            return [r[0] for r in conn.execute(
+                "SELECT detail FROM moderation_log WHERE action = 'mobile_unblock' ORDER BY id")]
+        finally:
+            conn.close()
+
+    def test_unblock_does_not_write_the_address_into_the_log(self):
+        """Журнал решений бессрочный, бан — сутки: адрес в журнале пережил бы
+        и бан, и потолок хранения."""
+        conn = sqlite3.connect(admin.DB_PATH)
+        conn.execute("INSERT INTO blocked(kind, value, until, note, created) "
+                     "VALUES('ip', '10.7.7.7', ?, 'отметка 5', ?)",
+                     (time.time() + 86400, time.time()))
+        conn.commit()
+        conn.close()
+        self.assertEqual(_post(self.port, "/mobile/act",
+                               {"action": "unblock", "block_kind": "ip",
+                                "block_value": "10.7.7.7"}), 303)
+        details = self.log_details()
+        self.assertEqual(len(details), 1)
+        self.assertNotIn("10.7.7.7", details[0])
+        self.assertTrue(details[0].startswith("ip, отметка 5"), details[0])
+
+    def test_old_unblock_records_are_scrubbed_at_start(self):
+        conn = sqlite3.connect(admin.DB_PATH)
+        for action, detail in (("mobile_unblock", "ip 10.7.7.7 · owner"),
+                               ("mobile_unblock", "device 3F2A-UUID"),
+                               ("mobile_unblock", "ip, отметка 5 · owner"),
+                               ("mobile_unblock", "ip · owner"),
+                               ("hide", "ip 10.7.7.7 в заметке модератора")):
+            conn.execute("INSERT INTO moderation_log(at, action, detail) VALUES(?, ?, ?)",
+                         (time.time(), action, detail))
+        conn.commit()
+        conn.close()
+        admin.init_db()
+        expected = ["ip · owner", "device", "ip, отметка 5 · owner", "ip · owner"]
+        self.assertEqual(self.log_details(), expected)
+        admin.init_db()
+        self.assertEqual(self.log_details(), expected, "повторный старт ничего не меняет")
+        conn = sqlite3.connect(admin.DB_PATH)
+        other = conn.execute("SELECT detail FROM moderation_log WHERE action = 'hide'").fetchone()[0]
+        conn.close()
+        self.assertEqual(other, "ip 10.7.7.7 в заметке модератора", "чужие записи не трогаем")
+
+    def test_camera_queue_after_the_sweep(self):
+        """Старые жалобы без адреса остаются в очереди и в счёте «стоит не
+        там», но в кворум на скрытие уже не идут — потеря только в безопасную
+        сторону. Свежие работают как раньше."""
+        old = api.LIVE_MAX_DAYS + 5
+        for i in range(3):
+            self.add_report(camera_id=7, ip=f"10.0.0.{i}", device=f"old{i}", days_ago=old)
+        self.add_report(camera_id=8, reason="wrong_location", ip="10.0.1.1",
+                        device="w", days_ago=old)
+        for i in range(3):
+            self.add_report(camera_id=9, ip=f"10.0.2.{i}", device=f"new{i}", days_ago=10)
+        self.add_report(camera_id=10, ip="10.0.3.1", device="done", days_ago=old)
+        conn = sqlite3.connect(admin.DB_PATH)
+        conn.execute("UPDATE camera_reports SET resolved = 1 WHERE camera_id = 10")
+        conn.commit()
+        conn.close()
+        before = {item["camera_id"]: item for item in self.queue()}
+        self.assertTrue(before[7]["suggest_hide"])
+
+        self.sweep()
+        after = {item["camera_id"]: item for item in self.queue()}
+        self.assertEqual(set(after), {7, 8, 9})
+        self.assertEqual(after[7]["counts"]["gone"], 3, "старые жалобы остаются в очереди")
+        self.assertEqual(after[7]["gone_ips"], set())
+        self.assertFalse(after[7]["suggest_hide"], "жалоба без адреса не голосует за скрытие")
+        self.assertTrue(after[9]["suggest_hide"], "свежие жалобы дозревают как раньше")
+        conn = admin.db()
+        try:
+            self.assertEqual(admin.wrong_location_reports(conn), {8: 1},
+                             "«Положение» видит старую жалобу «стоит не там»")
+            left = conn.execute("SELECT COUNT(*) FROM camera_reports WHERE camera_id = 10").fetchone()[0]
+        finally:
+            conn.close()
+        self.assertEqual(left, 0, "разобранная старая жалоба удалена")
+
+    def test_feedback_page_after_the_sweep(self):
+        conn = sqlite3.connect(admin.DB_PATH)
+        for message, days in (("старое письмо", api.LIVE_MAX_DAYS + 1), ("свежее письмо", 3)):
+            conn.execute("INSERT INTO feedback(message, contact, device, received) "
+                         "VALUES(?, 'me@example.com', 'd', ?)", (message, time.time() - days * DAY))
+        conn.commit()
+        conn.close()
+        self.sweep()
+        code, body = _get(self.port, "/feedback")
+        self.assertEqual(code, 200)
+        self.assertIn("свежее письмо", body)
+        self.assertNotIn("старое письмо", body)
+
+    def test_every_table_with_device_columns_has_a_ceiling(self):
+        """Вся схема общей базы — api.py, панель, конструктор карты: таблица с
+        колонкой устройства без срока в RETENTION.md — красный тест."""
+        from test_api import DEVICE_COLUMNS, retention_doc
+        doc = retention_doc()
+        conn = sqlite3.connect(admin.DB_PATH)
+        try:
+            tables = [r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")]
+            self.assertIn("moderation_log", tables)
+            for table in tables:
+                self.assertIn(table, doc, f"{table}: нет строки в RETENTION.md")
+                columns = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+                if columns & DEVICE_COLUMNS:
+                    self.assertIsInstance(doc[table], int, f"{table}: поля устройства без срока")
+                    self.assertLessEqual(doc[table], api.LIVE_MAX_DAYS)
+        finally:
+            conn.close()

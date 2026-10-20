@@ -119,6 +119,11 @@ ROTATION_SECONDS = 30 * 86400
 #: Своя точка без выбранного типа живёт столько.
 PENDING_TTL = 10 * 60
 BOT_DAILY_REPORTS = 15
+#: Суточные счётчики (хэш человека — псевдоустройство) живут трое суток
+#: (RETENTION.md); чистка — при каждой принятой отметке и раз в час из цикла,
+#: чтобы молчащий бот не держал хэши вечно.
+BOT_LIMITS_KEEP_DAYS = 3
+BOT_LIMITS_PRUNE_SECONDS = 3600
 #: = api.py: «минимум 120 с между отметками» устройства одной категории.
 BOT_MIN_INTERVAL = 120
 #: = api.AMEND_WINDOW: своя отметка моложе этого уточняется другим типом.
@@ -240,7 +245,13 @@ def count_accepted(conn, who, now):
     """+1 к суткам — только за отметку, которую API принял (200)."""
     conn.execute("INSERT OR REPLACE INTO bot_limits(who, day, count, last) VALUES(?,?,?,?)",
                  (who, _day(now), daily_count(conn, who, now) + 1, now))
-    conn.execute("DELETE FROM bot_limits WHERE day < ?", (_day(now - 3 * 86400),))
+    prune_limits(conn, now)
+
+
+def prune_limits(conn, now):
+    """Счётчики старше BOT_LIMITS_KEEP_DAYS суток — прочь."""
+    conn.execute("DELETE FROM bot_limits WHERE day < ?",
+                 (_day(now - BOT_LIMITS_KEEP_DAYS * 86400),))
     conn.commit()
 
 
@@ -597,7 +608,14 @@ def main():
               send=lambda method, payload: telegram(token, method, payload, timeout=15),
               api_post=api_post, venues=venues)
     offset = 0
+    pruned_at = 0.0
     while True:
+        if time.time() - pruned_at >= BOT_LIMITS_PRUNE_SECONDS:
+            pruned_at = time.time()
+            try:
+                prune_limits(bot.db, pruned_at)
+            except sqlite3.Error as error:
+                log(f"чистка счётчиков не удалась — {type(error).__name__}")
         try:
             answer = telegram(token, "getUpdates", {"timeout": 30, "offset": offset,
                                                     "allowed_updates": ["message", "callback_query"]})

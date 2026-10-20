@@ -151,6 +151,17 @@ class LimitsTest(unittest.TestCase):
         self.assertTrue(bot.limit_reached(self.db, self.who, NOW))
         self.assertFalse(bot.limit_reached(self.db, self.who, NOW + 86400), "назавтра — заново")
 
+    def test_old_counters_go_even_when_nobody_reports(self):
+        """Счётчик — хэш человека и день. Чистка только при новой отметке
+        оставила бы хэши последних людей молчащему боту навсегда; цикл бота
+        зовёт prune_limits раз в час (RETENTION.md: 3 суток)."""
+        old = NOW - (bot.BOT_LIMITS_KEEP_DAYS + 2) * 86400
+        bot.count_accepted(self.db, self.who, old)
+        bot.count_accepted(self.db, "fresh", NOW - 3600)
+        bot.prune_limits(self.db, NOW)
+        left = [row[0] for row in self.db.execute("SELECT who FROM bot_limits")]
+        self.assertEqual(left, ["fresh"])
+
     def test_interval_is_the_api_rule(self):
         """N9: у API 120 с между отметками одной категории. Бот держал 60 —
         и тап через 61–119 с упирался в 429."""

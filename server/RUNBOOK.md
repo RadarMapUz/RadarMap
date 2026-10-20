@@ -19,7 +19,8 @@ postgres (и в Docker `medicalnode_db_1`), minio, wg-easy, xray, openvpn. Outli
 | БД | `/opt/radarmap/api/reports.db` (WAL) |
 | Раздача | `/opt/radarmap/www` — **только** файлы приложения, 5.5 МБ |
 | Рабочие файлы снапа | `/opt/radarmap/work` — 225 МБ, наружу не отдаются |
-| Бэкапы | `/opt/radarmap/backups`, 7 последних, cron 03:17; копия на мак владельца — `pull_backup.sh`, launchd 11:00 → `~/RadarMapBackups` |
+| Бэкапы | `/opt/radarmap/backups`, 7 последних, cron 03:17; копия на мак владельца — `pull_backup.sh`, launchd 11:00 → `~/RadarMapBackups`, 3 недели |
+| Сроки хранения | `RETENTION.md` — что и сколько хранится (потолок 90 дней вместе с копиями); чистит `api.py` при старте и раз в час |
 | Пульт состояния | `/opt/radarmap/api/status.py`, cron каждые 5 мин (заменил `healthcheck.sh`); страница `/status` в панели, цвета наружу — `/radarmap/status.json` |
 | Сверка с репо | `bash server/drift.sh` — md5 всего, что лежит на VPS; `deploy_api.sh` зовёт её сам |
 | Реестр МВД | `update_cameras.py`, cron пн 05:00 — только замечает изменение, базу сливает владелец |

@@ -172,10 +172,17 @@ extension MapScreen {
                         // знает само (FrequentPlaces).
                         // Разовое «Карта без интернета?» — до первого ответа.
                         // Где оставили машину — капсулой, пока отошли от неё.
-                        ParkedCarChip(map: map)
-                        OfflineOfferCard(ownMap: true)
-                        DestinationSuggestionBar { coordinate, name in
-                            buildRoute(to: coordinate, name: name)
+                        //
+                        // Пока висит вопрос «Радар ещё стоял?» / «Ещё
+                        // перекрыто?» (20 с), подсказки уступают ему место: на SE
+                        // с крупным шрифтом вопрос, «Машина», «Домой» и бар вместе
+                        // загоняли обязательные кнопки колонки под карточку.
+                        if env.mobile.passQuestion == nil, !MobileConfirmBar.showsDemo {
+                            ParkedCarChip(map: map)
+                            OfflineOfferCard(ownMap: true)
+                            DestinationSuggestionBar { coordinate, name in
+                                buildRoute(to: coordinate, name: name)
+                            }
                         }
                         tripButton
                     case .none:

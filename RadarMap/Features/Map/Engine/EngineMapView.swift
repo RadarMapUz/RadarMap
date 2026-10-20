@@ -144,6 +144,16 @@ struct EngineMapView: UIViewRepresentable {
     /// Видимая область после каждого движения карты — для крестика
     /// постановки камеры (центр) и зума точек/кластеров.
     var onRegion: (MKCoordinateRegion) -> Void = { _ in }
+    /// Каждый шаг жеста пальцем, а не только первый (как `onBrowse`): выбор
+    /// точки поднимает булавку, пока карту тянут, и опускает на `onRegion`.
+    var onGesture: () -> Void = {}
+    /// Куда смотрит следящая камера вместо `coordinate`: выбор места
+    /// открывается на сохранённом месте, а стрелка «я» остаётся там, где
+    /// человек на самом деле. nil — камера следит за `coordinate`.
+    var lookAt: CLLocationCoordinate2D?
+    /// Стрелка «я» видна. false — положение неизвестно: стрелка в запасной
+    /// точке (центр Ташкента) говорила бы «вы здесь» о чужом месте.
+    var showsPosition: Bool = true
 
     func makeUIView(context: Context) -> MLNMapView {
         // Сторож тайлов — ДО первой карты: движок начинает качать сразу, и
@@ -298,6 +308,7 @@ struct EngineMapView: UIViewRepresentable {
                 browsing = true
                 current?.onBrowse()
             }
+            current?.onGesture()
             return true
         }
 
@@ -798,7 +809,7 @@ struct EngineMapView: UIViewRepresentable {
                 : EngineMapPresentation.heading(model.courseDegrees, near: view.direction)
             let ahead = DriveCamera.centreAhead(spanMeters: model.spanMeters, anchorY: model.anchorY,
                                                 pitchDegrees: model.pitchDegrees)
-            let centre = GeoMath.destination(from: model.coordinate,
+            let centre = GeoMath.destination(from: model.lookAt ?? model.coordinate,
                                               bearing: heading,
                                               distanceMeters: ahead)
             let zoom = Self.zoom(spanMeters: model.spanMeters, height: view.bounds.height,
@@ -818,6 +829,8 @@ struct EngineMapView: UIViewRepresentable {
                     >= AppConfig.engineCameraZoomThreshold
                 || previous.pitchDegrees != model.pitchDegrees || previous.anchorY != model.anchorY
                 || previous.northUp != model.northUp
+                || previous.lookAt?.latitude != model.lookAt?.latitude
+                || previous.lookAt?.longitude != model.lookAt?.longitude
             } ?? true
             // Частота кадров: полная — только когда водитель сам двигает карту.
             let fps = Self.framesPerSecond(browsing: browsing, performance: model.performance,
@@ -902,6 +915,9 @@ struct EngineMapView: UIViewRepresentable {
                     setPosition(model.coordinate, in: view)
                 }
                 lastPosition = model.coordinate
+            }
+            if let marker = positionView, marker.isHidden == model.showsPosition {
+                marker.isHidden = !model.showsPosition
             }
             lastFollowInterval = nil
             updateCameras(model, in: view)
@@ -1252,6 +1268,7 @@ struct EngineMapView: UIViewRepresentable {
             let marker = UIImageView()
             marker.isUserInteractionEnabled = false
             marker.isAccessibilityElement = false
+            marker.isHidden = !(current?.showsPosition ?? true)
             view.addSubview(marker)
             positionView = marker
             shownPosition = nil   // новый вид — поставить заново, а не «уже стоит»

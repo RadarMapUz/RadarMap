@@ -390,6 +390,15 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
                needsReview: needsReview)
     }
 
+    /// Та же камера без признака «парная» — пары рядом нет (TwinCheck).
+    func withoutTwin() -> Camera {
+        Camera(id: id, region: region, city: city, location: location,
+               lat: lat, lon: lon, type: type, violations: violations,
+               needsReview: needsReview, axis: axis, dir: dir, lanes: lanes,
+               cls: cls, bridge: bridge, road: road, split: split, twin: nil,
+               mobileConfirmed: mobileConfirmed, mobileExpires: mobileExpires)
+    }
+
     /// Камера с исправленным типом. Нарушения выводятся из типа, поэтому
     /// пересобираются: иначе «радар» остался бы со списком нарушений камеры.
     func retyped(to newType: String) -> Camera {

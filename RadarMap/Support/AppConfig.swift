@@ -387,6 +387,10 @@ nonisolated enum AppConfig {
     /// пределах этого времени — повтор (дубли базы стоят в 1–11 м).
     static let passDuplicateMeters: CLLocationDistance = 15
     static let passDuplicateSeconds: TimeInterval = 60
+    /// Пара камер обратных направлений (TwinCheck, снап mark_direction_twins):
+    /// разница направлений больше и расстояние не больше этих.
+    static let twinMinAngle = 120.0
+    static let twinMaxMeters: CLLocationDistance = 100
 
     /// Тот же траверз для камер БЕЗ дорожного профиля — свои точки и
     /// краудсорсные отметки. Их координату ставил человек, а не снап по оси

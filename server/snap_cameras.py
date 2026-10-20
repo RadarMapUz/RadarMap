@@ -574,7 +574,14 @@ def mark_direction_twins(cameras, *, max_meters=100.0, min_angle=120.0):
 
     Такая пара означает, что стороны дороги поделены между двумя камерами: каждая
     смотрит свою, и глушить по направлению безопасно. Возвращает число помеченных.
+
+    Прежние признаки снимаются: база дописывается, а не пересобирается, и
+    признак от камеры, которую с тех пор перенесли или убрали, оставался бы
+    без пары (2009, 2010 в v11) — доказательство без доказательства (11.2).
+    Приложение проверяет пару и само (TwinCheck), но в базе её быть не должно.
     """
+    for cam in cameras:
+        cam.pop("twin", None)
     cell = 0.001   # ~110 м
     grid = {}
     for i, cam in enumerate(cameras):
@@ -616,7 +623,10 @@ def apply_road_profile(out, index, cand):
         # отличать «дорога не разделена» (гейт безопасен) от «мы не знаем» (гейт
         # запрещён): при неизвестности предупреждаем в обе стороны.
         out["split"] = bool(opposite_carriageway(index, cand))
-    if attrs.lanes:
+    # Одна полоса на магистрали — чаще ошибка тега (509, 2205, 3091…), а
+    # узкая «дорога» камеры выводит машину крайнего ряда за её ширину. Без
+    # поля приложение берёт ширину класса — безопасная сторона (11.2).
+    if attrs.lanes and not (attrs.lanes == 1 and attrs.cls in ("motorway", "trunk", "primary")):
         out["lanes"] = attrs.lanes
     if attrs.cls:
         out["cls"] = attrs.cls
@@ -923,6 +933,17 @@ def selftest():
         check(all(abs(d) < 3000 for d in out.get("road", [])),
               "дельты куска дороги в разумных пределах")
 
+    # 8к) Одна полоса на магистрали — без поля lanes (ширина по классу).
+    one_lane = RoadIndex()
+    one_lane.add_linestring([[69.1000, W], [69.1050, W]],
+                            street_tokens("Katta kocha"), set(), 5,
+                            road_attrs_from_props({"highway": "trunk", "lanes": "1", "oneway": "yes"}))
+    res_ol = choose_snap(cam_ow, one_lane, **kwargs)
+    if res_ol:
+        out_ol = {"lat": round(res_ol[0], 6), "lon": round(res_ol[1], 6)}
+        apply_road_profile(out_ol, one_lane, res_ol[5])
+        check("lanes" not in out_ol, "lanes=1 на trunk не пишется")
+
     # 8а) Двусторонняя: направления нет — приложение остаётся на оси.
     two_way = RoadIndex()
     two_way.add_linestring([[69.1000, W], [69.1050, W]],
@@ -993,6 +1014,10 @@ def selftest():
     check(marked == 2 and pair_cams[0].get("twin") and pair_cams[1].get("twin"),
           "парные камеры обратных направлений помечены")
     check("twin" not in pair_cams[2], "одиночная камера парной не считается")
+    # 8и) Признак без пары (камеру-пару перенесли или убрали) — снимается.
+    stale = [{"id": 40, "lat": D, "lon": 69.3400, "dir": 90, "twin": True}]
+    check(mark_direction_twins(stale) == 0 and "twin" not in stale[0],
+          "прежний признак без пары снят")
 
     # 8д) Битые теги дают пустой профиль, а не падение.
     junk = road_attrs_from_props({"lanes": "куда", "layer": "нет", "oneway": "reversible"})

@@ -223,6 +223,14 @@ nonisolated enum RoadClass: Equatable {
     }
 
     /// Сколько полос ожидать, если тега `lanes` в OSM не было.
+    /// Сколько полос у дороги этого класса не меньше — для ширины (`halfWidth`).
+    var minimumLanes: Int {
+        switch self {
+        case .motorway, .trunk, .primary: return 2
+        default: return 1
+        }
+    }
+
     var assumedLanes: Int {
         switch self {
         case .motorway, .trunk: return 4
@@ -422,7 +430,11 @@ nonisolated enum RoadGeometry {
     /// Раньше это была одна константа на весь город (30 м), из-за которой
     /// параллельная проезжая часть в 20 м попадала в «нашу дорогу».
     static func halfWidth(lanes: Int?, roadClass: RoadClass) -> Double {
-        let count = max(1, lanes ?? roadClass.assumedLanes)
+        // Не уже минимума класса: `lanes=1` на trunk/primary — чаще всего
+        // ошибка тега (509, 2205, 3091…), а узкая «дорога» камеры выводила
+        // машину в крайнем ряду за её ширину — и при доказанных сторонах
+        // камера глушилась (11.2). Шире — безопасная сторона.
+        let count = max(roadClass.minimumLanes, lanes ?? roadClass.assumedLanes)
         let roadWidth = Double(count) * AppConfig.laneWidthMeters
         return roadWidth / 2 + AppConfig.roadPositionSlackMeters
     }

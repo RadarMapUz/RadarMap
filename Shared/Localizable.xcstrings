@@ -334,6 +334,38 @@
         }
       }
     },
+    "%@ от дома": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ от дома"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "uydan %@"
+          }
+        }
+      }
+    },
+    "%@ от работы": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ от работы"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ishdan %@"
+          }
+        }
+      }
+    },
     "%@ от старта": {
       "localizations": {
         "ru": {
@@ -3276,6 +3308,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ballarni qayerda yo'qotasiz: %@, tezlik oshirilgan o‘tishlar: %lld"
+          }
+        }
+      }
+    },
+    "Где ушло время": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Где ушло время"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vaqt qayerda ketdi"
           }
         }
       }
@@ -9645,6 +9693,22 @@
         }
       }
     },
+    "Последняя поездка, %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Последняя поездка, %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oxirgi safar, %@"
+          }
+        }
+      }
+    },
     "Последняя проверка: %@": {
       "localizations": {
         "ru": {
@@ -10316,6 +10380,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Shunchaki mening xaritamda yashirish"
+          }
+        }
+      }
+    },
+    "Против ваших обычных поездок в это же время. Стоянки по дороге не считаются.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Против ваших обычных поездок в это же время. Стоянки по дороге не считаются."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shu vaqtdagi odatiy safarlaringizga nisbatan. Yo‘ldagi to‘xtashlar hisobga olinmaydi."
           }
         }
       }
@@ -13502,6 +13582,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "kameralar uchun 70 balldan ortiq olib tashlamaymiz"
+          }
+        }
+      }
+    },
+    "больше всего — %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "больше всего — %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "eng ko‘p — %@"
           }
         }
       }

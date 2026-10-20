@@ -166,10 +166,13 @@ final class CommuteProfileStore {
     /// Снимок `-demoCommutes`: профиль пути дом↔работа по прямой, пять будних
     /// утр и вечеров — «сейчас ~44 мин» без настоящих поездок. Встаёт в ту же
     /// очередь, что и чтение с диска, — после него, и прочитанное его не
-    /// затрёт; на диск не пишется.
-    func seedDemo(home: CLLocationCoordinate2D, work: CLLocationCoordinate2D, now: Date = Date()) {
-        func variant(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D, hour: Int,
-                     minutes: [Double]) -> CommuteProfile.Variant {
+    /// затрёт; на диск не пишется. С `trips` (демо-история «дороги») строки —
+    /// по этим поездкам, а лишнее против обычного лежит посередине пути: так
+    /// у медленных поездок есть «где ушло время» (8.8.8).
+    func seedDemo(home: CLLocationCoordinate2D, work: CLLocationCoordinate2D,
+                  trips: [TripRecord] = [], now: Date = Date()) {
+        func line(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D)
+            -> (line: [Int32], ends: [Float], count: Int) {
             let length = GeoMath.fastDistance(a.latitude, a.longitude, b.latitude, b.longitude)
             let count = max(1, Int(length / 200))
             var line: [Int32] = []
@@ -178,24 +181,70 @@ final class CommuteProfileStore {
                 line.append(Int32(((a.latitude + (b.latitude - a.latitude) * t) * 1e5).rounded()))
                 line.append(Int32(((a.longitude + (b.longitude - a.longitude) * t) * 1e5).rounded()))
             }
-            let ends = (1...count).map { Float(length * Double($0) / Double(count)) }
+            return (line, (1...count).map { Float(length * Double($0) / Double(count)) }, count)
+        }
+        func variant(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D, hour: Int,
+                     minutes: [Double]) -> CommuteProfile.Variant {
+            let path = line(a, b)
             let rows = minutes.enumerated().map { i, total in
                 let day = Calendar.current.date(byAdding: .day, value: -(i + 1) * 7 / 5 - 1, to: now) ?? now
                 let departure = Calendar.current.date(bySettingHour: hour, minute: 20, second: 0, of: day) ?? day
                 return CommuteProfile.Row(tripID: departure.timeIntervalSince1970, departure: departure,
                                           weekend: false, arrivalMinute: 0,
-                                          seconds: [UInt16](repeating: UInt16(total * 60 / Double(count)),
-                                                            count: count))
+                                          seconds: [UInt16](repeating: UInt16(total * 60 / Double(path.count)),
+                                                            count: path.count))
             }
-            return CommuteProfile.Variant(id: UUID(), line: line, ends: ends, limitKmh: [], rows: rows,
+            return CommuteProfile.Variant(id: UUID(), line: path.line, ends: path.ends, limitKmh: [], rows: rows,
                                           lastUsed: now)
         }
-        var book = CommuteProfile.Book()
-        book.toWork = [variant(home, work, hour: 8, minutes: [44, 41, 47, 43, 45])]
-        book.toHome = [variant(work, home, hour: 18, minutes: [39, 37, 42, 38, 40])]
+        /// Строки по демо-поездкам: обычное время — ровно по участкам, лишнее
+        /// против медианы — на участках 40–60 % пути (пробка посередине).
+        func variant(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D,
+                     records: [any CommuteTripSource]) -> CommuteProfile.Variant? {
+            guard records.count >= 4 else { return nil }
+            let path = line(a, b)
+            let durations = records.map(\.movingDuration).sorted()
+            let usual = durations[durations.count / 2]
+            let first = Int(Double(path.count) * 0.4)
+            let jam = first..<max(Int(Double(path.count) * 0.6), first + 1)
+            let rows = records.map { record -> CommuteProfile.Row in
+                let base = min(record.movingDuration, usual) / Double(path.count)
+                let extra = max(0, record.movingDuration - usual) / Double(jam.count)
+                let seconds = (0..<path.count).map { UInt16(min(60_000, base + (jam.contains($0) ? extra : 0))) }
+                return CommuteProfile.Row(tripID: record.id, departure: record.startedAt, weekend: false,
+                                          arrivalMinute: Int16(CommuteProfile.minuteOfDay(record.endedAt,
+                                                                                          calendar: .current)),
+                                          seconds: seconds)
+            }
+            return CommuteProfile.Variant(id: UUID(), line: path.line, ends: path.ends, limitKmh: [],
+                                          rows: rows.sorted { $0.departure > $1.departure }, lastUsed: now)
+        }
+        /// Старт неизвестен (демо прошлых сборок без точки старта) — по
+        /// финишу: «дорога» связывает такие поездки цепочкой.
+        func near(_ point: CLLocationCoordinate2D?, _ place: CLLocationCoordinate2D, unknown: Bool) -> Bool {
+            guard let point else { return unknown }
+            return GeoMath.fastDistance(point.latitude, point.longitude, place.latitude, place.longitude) < 400
+        }
+        func demoBook(from sources: [any CommuteTripSource]) -> CommuteProfile.Book {
+            var seen = Set<Double>()
+            let unique = sources.filter { seen.insert($0.id).inserted }
+            let toWork = unique.filter { near($0.startCoordinate, home, unknown: true)
+                && near($0.endCoordinate, work, unknown: false) }
+            let toHome = unique.filter { near($0.startCoordinate, work, unknown: true)
+                && near($0.endCoordinate, home, unknown: false) }
+            var book = CommuteProfile.Book()
+            book.toWork = [variant(home, work, records: toWork)
+                           ?? variant(home, work, hour: 8, minutes: [44, 41, 47, 43, 45])]
+            book.toHome = [variant(work, home, records: toHome)
+                           ?? variant(work, home, hour: 18, minutes: [39, 37, 42, 38, 40])]
+            return book
+        }
+        // После чтения с диска: журнал «дороги» уже в памяти, и его поездки
+        // (демо прошлых запусков) тоже получают строки.
         enqueue { store in
             store.isDemo = true
-            store.book = book
+            store.book = demoBook(from: trips.map { $0 as any CommuteTripSource }
+                                  + store.ledger.map { $0 as any CommuteTripSource })
             store.onLoaded?()
         }
     }

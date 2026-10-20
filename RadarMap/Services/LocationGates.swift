@@ -50,27 +50,71 @@ nonisolated enum LocationGates {
         situation.course >= 0 && situation.speedKmh >= AppConfig.directionalMinSpeedKmh
     }
 
+    /// Ответ гейтов вместе с причиной. «Наша или нет» — по-прежнему `isOurs`,
+    /// причина нужна охвату предупреждений (AlertRecall): тишина о камере,
+    /// которую гейт ДОКАЗАННО отнёс к чужой дороге (встречный двойник,
+    /// поперечная улица), — верная тишина, а не промах. Эвристика (коридор) и
+    /// «позади» доказательством не считаются.
+    enum Verdict: Equatable {
+        /// Наша: маршрут, своя проезжая часть впереди, коридор.
+        case ours
+        /// Гейты выключены — стоим или курса нет. В пользу предупреждения.
+        case unfiltered
+        /// Доказано: едем против направления односторонней проезжей части, и
+        /// стороны поделены (Camera.allowsDirectionGate).
+        case provenDirection
+        /// Доказано: едем поперёк оси её дороги — мост или поперечная улица.
+        case provenAxis
+        /// Доказано: вне её проезжей части по куску дороги, стороны поделены.
+        case provenOffCarriageway
+        /// На её проезжей части, но камера позади.
+        case behind
+        /// Вне коридора нашей дороги — эвристика, не доказательство.
+        case outsideCorridor
+
+        /// Тот самый ответ `isOnOurRoad`.
+        var isOurs: Bool { self == .ours || self == .unfiltered }
+
+        /// Доказано ли, что камера не наша: true — доказано, false — нет
+        /// (наша, позади, эвристика), nil — гейты воздержались (стоим, курса
+        /// нет): о дороге этот тик не говорит ничего.
+        var provenNotOurs: Bool? {
+            switch self {
+            case .unfiltered: return nil
+            case .provenDirection, .provenAxis, .provenOffCarriageway: return true
+            case .ours, .behind, .outsideCorridor: return false
+            }
+        }
+    }
+
     /// Камера «наша»: подтверждена маршрутом, либо мы на её проезжей части, либо
-    /// она лежит в коридоре нашей дороги впереди. Коридор (`RoadCorridor`)
-    /// считает боковое отклонение в метрах и отсекает параллельные улицы,
-    /// дублёры и эстакады, которые прежний угловой фильтр пропускал (±70° на
-    /// дистанции 400 м — это 375 м вбок).
-    ///
-    /// Порядок здесь и есть политика: сначала прямые доказательства «наша», и
-    /// только потом эвристики, которые вправе глушить.
+    /// она лежит в коридоре нашей дороги впереди. Вся политика — в `verdict`;
+    /// здесь только ответ «да/нет», один на оба вызова (второй копии гейтов нет).
     ///
     /// - Parameter isOnRoute: камера лежит на построенном маршруте. Ответ
     ///   приходит снаружи, потому что маршрут принадлежит `RouteService`, а
     ///   гейт обязан оставаться функцией от геометрии.
     static func isOnOurRoad(_ camera: Camera, in situation: Situation,
                             isOnRoute: Bool) -> Bool {
-        guard isFilteringActive(situation) else { return true }
+        verdict(camera, in: situation, isOnRoute: isOnRoute).isOurs
+    }
+
+    /// Вердикт гейтов с причиной. Коридор (`RoadCorridor`) считает боковое
+    /// отклонение в метрах и отсекает параллельные улицы, дублёры и эстакады,
+    /// которые прежний угловой фильтр пропускал (±70° на дистанции 400 м — это
+    /// 375 м вбок).
+    ///
+    /// Порядок здесь и есть политика: сначала прямые доказательства «наша», и
+    /// только потом эвристики, которые вправе глушить.
+    static func verdict(_ camera: Camera, in situation: Situation,
+                        isOnRoute: Bool) -> Verdict {
+        guard isFilteringActive(situation) else { return .unfiltered }
 
         // 1. Камера на активном маршруте — она на нашем пути по определению, и
         // никакая геометрия этого не отменяет: координата в реестре бывает
         // смещена вбок от полосы. Раньше проверка стояла ПОСЛЕ геометрии, и та
         // успевала заглушить камеру на собственном маршруте пользователя.
-        if isOnRoute { return true }
+        if isOnRoute { return .ours }
 
         let coordinate = situation.coordinate
         let shape = RoadShape(camera: camera)
@@ -83,7 +127,7 @@ nonisolated enum LocationGates {
         if camera.allowsDirectionGate, let direction = camera.dir {
             if GeoMath.angleDifference(situation.course, Double(direction))
                 > AppConfig.cameraDirectionMaxAngle {
-                return false
+                return .provenDirection
             }
         } else if camera.profileMayMute,
                   let axis = shape?.axis(near: coordinate) ?? camera.axis.map(Double.init) {
@@ -93,7 +137,7 @@ nonisolated enum LocationGates {
             // дороги, если он есть: на кривой единственная ось всей дороги врёт.
             if GeoMath.axisDifference(course: situation.course, axis: axis)
                 > AppConfig.cameraAxisMaxAngle {
-                return false
+                return .provenAxis
             }
         }
 
@@ -111,10 +155,10 @@ nonisolated enum LocationGates {
             // отдельная линия, и без этого запаса мы едем в 10–40 м от её куска
             // дороги и глушим камеру, которая нас как раз и снимает.
             if !camera.sidesAreProven { allowed += AppConfig.dividedRoadSpanMeters }
-            if lateral <= allowed { return isAhead(camera, in: situation) }
+            if lateral <= allowed { return isAhead(camera, in: situation) ? .ours : .behind }
             // Мы не на дороге камеры — но глушить вправе только там, где стороны
             // доказанно поделены. Иначе решает коридор.
-            if camera.sidesAreProven { return false }
+            if camera.sidesAreProven { return .provenOffCarriageway }
         }
 
         // 4. Коридор — эвристика для всего остального: куска дороги нет (старая
@@ -138,7 +182,7 @@ nonisolated enum LocationGates {
             : nil
         return RoadCorridor.contains(camera: camera.coordinate, from: coordinate,
                                      course: situation.course, context: context,
-                                     nearWidth: nearWidth)
+                                     nearWidth: nearWidth) ? .ours : .outsideCorridor
     }
 
     /// Камера впереди по курсу (с тем же запасом «немного позади», что у

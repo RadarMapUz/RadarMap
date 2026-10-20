@@ -177,9 +177,8 @@ extension LocationService {
         for camera in trackedCameras {
             let straight = GeoMath.fastDistance(coordinate.latitude, coordinate.longitude,
                                                 camera.lat, camera.lon)
-            if countsPasses, straight <= PassGeometry.traverseLimit(for: camera) {
-                alertRecall.notePassed(cameraID: camera.id)
-            }
+            let atCamera = countsPasses && straight <= PassGeometry.traverseLimit(for: camera)
+            if atCamera { alertRecall.notePassed(cameraID: camera.id) }
             let announced = alertEngine.isAnnounced(camera.id)
             // Проеханные (сценарий S4): о ком сказали, у кого были и кто теперь
             // явно позади — следующий подъезд к ним (разворот, круг) будет
@@ -206,10 +205,23 @@ extension LocationService {
             }
             // Камера уехала назад по маршруту — стоя не пугаем ею, в движении
             // она снова камера «как все» (маршрут с разворотом).
-            guard let candidate = LocationGates.candidateDistance(straight: straight,
-                                                                  routeRemaining: routeRemaining(to: camera),
-                                                                  announced: alertEngine.isAnnounced(camera.id),
-                                                                  in: situation) else { continue }
+            let candidate = LocationGates.candidateDistance(straight: straight,
+                                                            routeRemaining: routeRemaining(to: camera),
+                                                            announced: alertEngine.isAnnounced(camera.id),
+                                                            in: situation)
+            // У самой камеры, о которой не сказали, — спросить гейт, ПОЧЕМУ:
+            // верная тишина (встречный двойник, поперечная улица — доказано)
+            // промахом в охвате не считается. Тот же вердикт, что выбирает
+            // ближайшую, только с причиной; считается на нескольких тиках
+            // траверза у камер, о которых молчали, — не на каждом тике.
+            if atCamera, !alertRecall.wasAlerted(cameraID: camera.id) {
+                let verdict = LocationGates.verdict(camera, in: situation,
+                                                    isOnRoute: candidate?.onRoute ?? false)
+                alertRecall.noteTraverse(cameraID: camera.id,
+                                         provenNotOurs: AlertRecall.traverseEvidence(verdict,
+                                                                                     accuracy: horizontalAccuracy))
+            }
+            guard let candidate else { continue }
             candidates.append((camera, candidate.distance, candidate.onRoute))
         }
         candidates.sort { $0.distance < $1.distance }

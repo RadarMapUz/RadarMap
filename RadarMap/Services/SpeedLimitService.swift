@@ -82,7 +82,9 @@ final class SpeedLimitService {
         }
     }
     @ObservationIgnored private var missCount = 0
-    @ObservationIgnored private var overspeedSince: Date?
+    /// Отсчёт превышения по последним тикам (OverspeedRun): тик без лимита не
+    /// обнуляет его, а судится по лимиту, который стал известен.
+    @ObservationIgnored private var overspeedRun = OverspeedRun()
     @ObservationIgnored private var lastWarnAt: Date = .distantPast
     @ObservationIgnored private var started = false
 
@@ -313,14 +315,23 @@ final class SpeedLimitService {
     /// дороги, зависит догадка о лимите (ПДД РУз, пункт 10). Приходит из
     /// детектора город/трасса, который считается независимо — в том числе
     /// БЕЗ участия предположенных лимитов, иначе догадка кормила бы сама себя.
+    ///
+    /// Только факты тика: лимит и «превышаем ли устойчиво». Зовётся ДО
+    /// оповещения о камере — фраза о ней читает лимит и превышение ЭТОГО тика
+    /// (на дороге без maxspeed запасной лимит появляется вместе с ближайшей
+    /// камерой, и раньше он приходил тиком позже первой фразы). Голос о самом
+    /// превышении — отдельно, после оповещения (`announceOverspeedIfNeeded`):
+    /// ему нужно знать, скажем ли мы о камере.
     func update(coordinate: CLLocationCoordinate2D, course: CLLocationDirection,
-                speedKmh: Double, announce: Bool, fallbackClass: RoadClass = .unknown,
+                speedKmh: Double, fallbackClass: RoadClass = .unknown,
                 inSettlement: Bool = true, cameraAhead: Bool = false) {
         guard settings.speedLimitsEnabled, let index else {
             currentLimit = nil; isCurrentLimitAssumed = false; clearOverspeed()
+            overspeedRun.reset()
             currentRoadHit = nil
             return
         }
+        let now = Date()
 
         // Матчим дорогу только в движении с достоверным курсом;
         // стоя (светофор) держим последний известный лимит — и последнюю
@@ -349,6 +360,9 @@ final class SpeedLimitService {
         }
 
         guard let limit = currentLimit else {
+            // Лимита нет — это «неизвестно», а не «в лимите»: скорость тика
+            // остаётся в отсчёте и будет судиться лимитом, когда он появится.
+            overspeedRun.note(kmh: speedKmh, over: nil, at: now)
             clearOverspeed()
             return
         }
@@ -361,9 +375,10 @@ final class SpeedLimitService {
         // успеть отпустить газ, а не узнать о случившемся.
         let threshold = OverspeedThreshold.kmh(cameraAhead: cameraAhead,
                                                userTolerance: settings.overspeedTolerance)
-        let over = speedKmh > Double(limit) + threshold
+        let line = Double(limit) + threshold
+        let over = speedKmh > line
         if over != isOverspeeding { isOverspeeding = over }
-        overspeedSince = over ? (overspeedSince ?? Date()) : nil
+        overspeedRun.note(kmh: speedKmh, over: over, at: now)
 
         // Устойчивость считаем один раз и здесь: и голос, и градус алерта о камере
         // должны опираться на одно и то же «превышаем по-настоящему».
@@ -371,16 +386,16 @@ final class SpeedLimitService {
         // метров пути, и совет «сбросьте» прозвучал бы уже за стойкой.
         let needed = cameraAhead ? AppConfig.overspeedSustainSecondsNearCamera
                                  : AppConfig.overspeedSustainSeconds
-        let sustained = overspeedSince.map {
-            Date().timeIntervalSince($0) >= needed
-        } ?? false
+        let sustained = overspeedRun.isSustained(line: line, seconds: needed, now: now)
         if sustained != isOverspeedingSustained { isOverspeedingSustained = sustained }
+    }
 
-        // Голос про само превышение: не чаще раза в 30 с.
-        if sustained, announce, Date().timeIntervalSince(lastWarnAt) > 30 {
-            lastWarnAt = Date()
-            onOverspeed?()
-        }
+    /// Голос про само превышение: не чаще раза в 30 с. Зовётся после
+    /// оповещения о камере того же тика — `announce` знает, скажем ли о ней.
+    func announceOverspeedIfNeeded(announce: Bool) {
+        guard isOverspeedingSustained, announce, Date().timeIntervalSince(lastWarnAt) > 30 else { return }
+        lastWarnAt = Date()
+        onOverspeed?()
     }
 
     // MARK: - Смена лимита впереди (LimitAhead)
@@ -453,10 +468,11 @@ final class SpeedLimitService {
         return out
     }
 
+    /// Флаги — только на изменение: @Observable будит подписчиков на каждую
+    /// запись, а тик без лимита на дороге без maxspeed — почти каждый тик.
     private func clearOverspeed() {
-        isOverspeeding = false
-        isOverspeedingSustained = false
-        overspeedSince = nil
+        if isOverspeeding { isOverspeeding = false }
+        if isOverspeedingSustained { isOverspeedingSustained = false }
     }
 }
 

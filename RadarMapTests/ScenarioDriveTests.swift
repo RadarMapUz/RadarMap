@@ -72,6 +72,9 @@ final class ScenarioDriveTests: XCTestCase {
         var passTracking = PassTracking()
         /// Записанные проезды: камера → скорость, км/ч.
         private(set) var passes: [Int: Double] = [:]
+        /// Охват предупреждений — как в сервисе: «проехали» по географии,
+        /// вердикт гейта у самой камеры, о которой молчали, первое оповещение.
+        private(set) var recall = AlertRecall()
         private var progress: Double?
         /// Фикс без скорости — держим прошлую, как сервис (нулём считать
         /// нельзя: «стоим» выключил бы гейты посреди езды).
@@ -105,6 +108,8 @@ final class ScenarioDriveTests: XCTestCase {
                 var candidates: [(camera: Camera, distance: Double, onRoute: Bool)] = []
                 for camera in cameras {
                     let straight = GeoMath.fastDistance(here.latitude, here.longitude, camera.lat, camera.lon)
+                    let atCamera = straight <= PassGeometry.traverseLimit(for: camera)
+                    if atCamera { recall.notePassed(cameraID: camera.id) }
                     if engine.isAnnounced(camera.id) {
                         let atTraverse = straight <= max(PassGeometry.traverseLimit(for: camera),
                                                          AppConfig.alertTraverseMeters)
@@ -118,9 +123,17 @@ final class ScenarioDriveTests: XCTestCase {
                                                                               passLine: engine.passLine(camera.id)))
                     }
                     let remaining = offRoute ? nil : progress.flatMap { p in cameraAlong[camera.id].map { $0 - p } }
-                    guard let candidate = LocationGates.candidateDistance(straight: straight, routeRemaining: remaining,
-                                                                          announced: engine.isAnnounced(camera.id),
-                                                                          in: situation) else { continue }
+                    let candidate = LocationGates.candidateDistance(straight: straight, routeRemaining: remaining,
+                                                                    announced: engine.isAnnounced(camera.id),
+                                                                    in: situation)
+                    if atCamera, !recall.wasAlerted(cameraID: camera.id) {
+                        let verdict = LocationGates.verdict(camera, in: situation,
+                                                            isOnRoute: candidate?.onRoute ?? false)
+                        recall.noteTraverse(cameraID: camera.id,
+                                            provenNotOurs: AlertRecall.traverseEvidence(verdict,
+                                                                                        accuracy: good.accuracy))
+                    }
+                    guard let candidate else { continue }
                     candidates.append((camera, candidate.distance, candidate.onRoute))
                 }
                 // Прогресс по маршруту — после выбора, как в сервисе (отставание на фикс).
@@ -141,7 +154,11 @@ final class ScenarioDriveTests: XCTestCase {
                                                 coordinate: here, speedKmh: speedKmh, roadLimit: nil,
                                                 radius: radius, course: situation.course,
                                                 now: fix.timestamp,
-                                                offRoad: PassGeometry.isProvenOffRoad(camera:at:)) {
+                                                offRoad: PassGeometry.isProvenOffRoad(camera:at:),
+                                                axisDeviation: {
+                                                    PassGeometry.axisDeviation(camera: $0, at: $1, course: $2,
+                                                                               accuracy: good.accuracy)
+                                                }) {
                     passes[pass.camera.id] = pass.speedKmh
                 }
                 guard let nearest = found else { continue }
@@ -149,6 +166,7 @@ final class ScenarioDriveTests: XCTestCase {
                                                   radius: radius,
                                                   moving: LocationGates.isFilteringActive(situation)),
                    decision.isFirst {
+                    recall.noteAlert(cameraID: nearest.camera.id, distance: nearest.distance)
                     firstAlerts[nearest.camera.id, default: 0] += 1
                     firstAlertPoints[nearest.camera.id, default: []].append(xy(good.lat, good.lon))
                 }
@@ -603,6 +621,62 @@ final class ScenarioDriveTests: XCTestCase {
         XCTAssertNil(drive.firstAlerts[2])
     }
 
+    // MARK: - 14.10: перекрёсток — встречный двойник и поперечная улица
+
+    /// Камера со снапом по оси `axis` и куском дороги ±`half` м; `dir` и
+    /// `twin` — как в базе у парных камер разделённой дороги.
+    private func profiledCamera(_ id: Int, x: Double, y: Double, axis: Double, half: Double = 100,
+                                dir: Int? = nil, twin: Bool? = nil) -> Camera {
+        let p = point(x, y)
+        let rad = axis * .pi / 180
+        let dLat = Int((half * cos(rad) / 111_320 * 1e6).rounded())
+        let dLon = Int((half * sin(rad) / kx * 1e6).rounded())
+        return Camera(id: id, region: "Т", city: "", location: "к", lat: p.lat, lon: p.lon,
+                      type: "Стационар камера", violations: [], needsReview: false, axis: Int(axis),
+                      dir: dir, lanes: 3, cls: "primary", road: [-dLat, -dLon, 0, 0, dLat, dLon],
+                      split: true, twin: twin)
+    }
+
+    /// Едем на север через перекрёсток. Своя камера (парная) — предупредили и
+    /// записали. Её двойник на встречной в 17 м и камера поперечной улицы в
+    /// 15 м — проехали вплотную, промолчали ВЕРНО (гейт доказал: направление
+    /// при поделённых сторонах, ось): ни промаха в охвате, ни проезда.
+    func testJunctionTwinAndCrossStreetAreCorrectSilences() {
+        let route = fixes(from: (0, 0), legs: [Leg(x: 0, y: 1600, speed: 14)])
+        let own = profiledCamera(1, x: 5, y: 1000, axis: 0, dir: 0, twin: true)
+        let twin = profiledCamera(2, x: -12, y: 1010, axis: 0, dir: 180, twin: true)
+        let cross = profiledCamera(3, x: 15, y: 700, axis: 90, half: 16)
+        var drive = Drive()
+        drive.run(route, cameras: [own, twin, cross], xy: xy)
+        drive.finish()
+        XCTAssertEqual(drive.firstAlerts[1], 1)
+        XCTAssertNil(drive.firstAlerts[2], "встречная сторона — не наша")
+        XCTAssertNil(drive.firstAlerts[3], "поперечная улица — не наша")
+        let tally = drive.recall.tally()
+        XCTAssertEqual(tally.passed, 3, "география: вплотную проехали все три")
+        XCTAssertEqual(tally.notOurs, 2)
+        XCTAssertEqual(tally.silent, 0, "верная тишина — не промах")
+        XCTAssertEqual(tally.recall, 1)
+        XCTAssertEqual(drive.recall.notOursIDs, [2, 3])
+        XCTAssertNotNil(drive.passes[1])
+        XCTAssertNil(drive.passes[2])
+        XCTAssertNil(drive.passes[3])
+    }
+
+    /// Поперечная улица под 50°: гейт оси оповещений (55°) её пропускает, и
+    /// о ней предупреждают — по подозрению, так и надо. Проезд по ней в 15 м
+    /// не пишется: курс у камеры поперёк оси её дороги (запись — по
+    /// доказательству, порог 45°).
+    func testObliqueCrossStreetWarnsButIsNotRecorded() {
+        let route = fixes(from: (0, 0), legs: [Leg(x: 0, y: 1600, speed: 14)])
+        let oblique = profiledCamera(4, x: 15, y: 1000, axis: 50, half: 16)
+        var drive = Drive()
+        drive.run(route, cameras: [oblique], xy: xy)
+        drive.finish()
+        XCTAssertEqual(drive.firstAlerts[4], 1, "оповещение не тронуто")
+        XCTAssertNil(drive.passes[4], "проезда по поперечной улице нет")
+    }
+
     // MARK: - A4: выброс
 
     /// Один фикс в 300 м вбок посреди поездки (отражение от стены): отброшен,
@@ -745,6 +819,40 @@ extension ScenarioDriveTests {
         XCTAssertEqual(result.late, [], "первое — заранее, если камера не в группе с соседкой")
         XCTAssertEqual(result.offPath.map(\.other), [], "камера дальше 160 м от пути — не наша")
         XCTAssertEqual(result.unrecorded, [], "проехали через камеру по её дороге — проезд записан")
+    }
+
+    /// 14.10 на настоящей базе: поперёк каждой четвёртой ташкентской камеры
+    /// (перпендикуляр к оси её дороги у её точки, траверз в 10 м) проезд не
+    /// пишется. Учёт проездов — напрямую, без гейтов оповещений: здесь
+    /// проверяется запись, а не то, заглушит ли камеру ось. Своя дорога тех
+    /// же камер пишется — это `testCityCamerasOnTheirOwnRoad`.
+    func testCrossStreetPassesAreNotRecordedOnTheRealBase() throws {
+        let all = try bundledCameras()
+        let city = all.filter { $0.region.hasPrefix("Toshkent shahar") && $0.road != nil
+            && $0.profileMayMute && $0.needsReview != true && $0.kind.recordsPasses }
+        let sample = stride(from: 0, to: city.count, by: 4).map { city[$0] }
+        var recorded: [Int] = []
+        for camera in sample {
+            guard let axis = RoadShape(camera: camera)?.axis(near: camera.coordinate) else { continue }
+            let bearing = (axis + 90).truncatingRemainder(dividingBy: 360)
+            let closest = GeoMath.destination(from: camera.coordinate, bearing: bearing + 90, distanceMeters: 10)
+            var tracking = PassTracking()
+            var passes: [PassTracking.Pass] = []
+            for along in stride(from: -420.0, through: 600, by: 14) {
+                let at = GeoMath.destination(from: closest, bearing: bearing, distanceMeters: along)
+                let distance = GeoMath.fastDistance(at.latitude, at.longitude, camera.lat, camera.lon)
+                passes += tracking.update(nearest: camera, nearestDistance: distance, coordinate: at,
+                                          speedKmh: 50, roadLimit: 60, radius: 400, course: bearing,
+                                          offRoad: PassGeometry.isProvenOffRoad(camera:at:),
+                                          axisDeviation: {
+                                              PassGeometry.axisDeviation(camera: $0, at: $1, course: $2, accuracy: 6)
+                                          })
+            }
+            if !(passes + tracking.flush()).isEmpty { recorded.append(camera.id) }
+        }
+        print("14.10: поперёк \(sample.count) камер, записано \(recorded)")
+        XCTAssertGreaterThan(sample.count, 150)
+        XCTAssertEqual(recorded, [], "поперечная улица у камеры — не её проезд")
     }
 
     /// A2 (план 12в): трасса 94 км/ч — камеры на trunk/motorway вне Ташкента.

@@ -237,6 +237,67 @@ final class LocationGatesTests: XCTestCase {
                                                 isOnRoute: false))
     }
 
+    // MARK: - Вердикт с причиной (14.10)
+
+    /// Охват предупреждений не считает промахом тишину, которую гейт ДОКАЗАЛ:
+    /// встречный двойник, поперечная ось, чужая проезжая часть при поделённых
+    /// сторонах. Причина — из той же функции, что решает «наша ли».
+    func testVerdictNamesTheProof() {
+        let oncoming = camera(ahead: 300, roadBearing: 0, dir: 180, twin: true)
+        XCTAssertEqual(LocationGates.verdict(oncoming, in: situation(), isOnRoute: false), .provenDirection)
+        let crossing = camera(ahead: 100, roadBearing: nil, axis: 90)
+        XCTAssertEqual(LocationGates.verdict(crossing, in: situation(), isOnRoute: false), .provenAxis)
+        let aside = camera(ahead: 300, east: 60, roadBearing: 0, roadHalf: 350, twin: true)
+        XCTAssertEqual(LocationGates.verdict(aside, in: situation(), isOnRoute: false), .provenOffCarriageway)
+        for proven in [oncoming, crossing, aside] {
+            XCTAssertEqual(LocationGates.verdict(proven, in: situation(), isOnRoute: false).provenNotOurs, true)
+        }
+    }
+
+    /// Эвристика и «позади» — не доказательство; стоим без курса — гейты
+    /// воздержались. Снап на проезд не доказывает «не наша» и по оси.
+    func testVerdictWithoutProofIsNotAProof() {
+        let farAside = camera(ahead: 300, east: 150, roadBearing: nil, cls: nil)
+        XCTAssertEqual(LocationGates.verdict(farAside, in: situation(), isOnRoute: false), .outsideCorridor)
+        // Кусок дороги дотягивается до нас: мы на её проезжей части, она позади.
+        let behind = camera(ahead: -300, roadBearing: 0, roadHalf: 350)
+        XCTAssertEqual(LocationGates.verdict(behind, in: situation(), isOnRoute: false), .behind)
+        let minorCrossing = camera(ahead: 300, east: 15, roadBearing: 90, cls: "service", axis: 90)
+        XCTAssertEqual(LocationGates.verdict(minorCrossing, in: situation(), isOnRoute: false).provenNotOurs,
+                       false)
+        let unprovenOncoming = camera(ahead: 300, roadBearing: 0, dir: 180, split: true)
+        XCTAssertEqual(LocationGates.verdict(unprovenOncoming, in: situation(), isOnRoute: false), .ours,
+                       "стороны не доказаны — наша, как и раньше")
+        XCTAssertEqual(LocationGates.verdict(behind, in: situation(course: -1), isOnRoute: false), .unfiltered)
+        XCTAssertNil(LocationGates.Verdict.unfiltered.provenNotOurs)
+        XCTAssertEqual(LocationGates.verdict(farAside, in: situation(), isOnRoute: true), .ours,
+                       "маршрут сильнее геометрии")
+    }
+
+    /// «Наша ли» — ровно вердикт: один ответ на оба вызова, на всей сетке
+    /// положений, курсов и профилей.
+    func testIsOnOurRoadIsExactlyTheVerdict() {
+        var checked = 0
+        for ahead in stride(from: -400.0, through: 400, by: 100) {
+            for east in [0.0, 30, 70, 160] {
+                for course in [-1.0, 0, 45, 90, 180] {
+                    for (dir, axis, twin) in [(Int?.none, Int?.none, Bool?.none), (180, nil, true),
+                                              (nil, 90, nil), (0, nil, true)] {
+                        let cam = camera(ahead: ahead, east: east, roadBearing: axis.map(Double.init) ?? 0,
+                                         dir: dir, axis: axis, twin: twin)
+                        for onRoute in [false, true] {
+                            let s = situation(course: course)
+                            XCTAssertEqual(LocationGates.isOnOurRoad(cam, in: s, isOnRoute: onRoute),
+                                           LocationGates.verdict(cam, in: s, isOnRoute: onRoute).isOurs)
+                            checked += 1
+                        }
+                    }
+                }
+            }
+        }
+        XCTAssertEqual(checked, 9 * 4 * 5 * 4 * 2)
+    }
+
     /// Направление фильтрует только в движении и с достоверным курсом: стоящая
     /// машина не «едет мимо», а случайный курс не вправе заглушить камеру
     /// (аудит 19.10: прямого теста не было).

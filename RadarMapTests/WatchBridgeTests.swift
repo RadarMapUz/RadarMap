@@ -35,6 +35,11 @@ final class WatchBridgeTests: XCTestCase {
         XCTAssertTrue(payload(title: "Чиланзар").isUrgent(comparedTo: old), "другая камера")
         XCTAssertTrue(payload(level: 1).isUrgent(comparedTo: old), "уровень тревоги")
         XCTAssertFalse(payload(distance: 700).isUrgent(comparedTo: old), "бегущая дистанция ждёт интервала")
+        // Фронт вниз ждёт интервала: дребезг у самого лимита не будит радио.
+        let over = payload(over: true)
+        XCTAssertFalse(payload().isUrgent(comparedTo: over), "перестали превышать — не срочно")
+        let alarm = payload(level: 1)
+        XCTAssertFalse(payload(level: 1, over: false).isUrgent(comparedTo: alarm))
         XCTAssertTrue(payload().isUrgent(comparedTo: nil), "первое состояние")
     }
 

@@ -93,11 +93,15 @@ struct WatchHUDView: View {
                         .font(.system(size: 40, weight: .heavy, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(session.isOverspeeding ? WatchTheme.danger : WatchTheme.primary)
-                        .minimumScaleFactor(0.7)
+                        .minimumScaleFactor(0.6)
                         .lineLimit(1)
+                        .layoutPriority(1)
+                    // «km/soat» на 40 мм переносился и ломал базовую линию.
                     Text("км/ч")
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
                         .foregroundStyle(WatchTheme.secondary)
+                        .lineLimit(1)
+                        .fixedSize()
                 }
             }
             Spacer(minLength: 0)
@@ -154,6 +158,7 @@ struct WatchHUDView: View {
         switch session.report {
         case .done(ok: true): return "checkmark"
         case .done(ok: false): return "xmark"
+        case .pending: return "ellipsis"
         case .sending, nil: return "dot.radiowaves.left.and.right"
         }
     }
@@ -163,19 +168,22 @@ struct WatchHUDView: View {
         switch session.report {
         case .done(ok: true): Text("Отмечено")
         case .done(ok: false): Text("Не отправлено")
+        case .pending: Text("Отправляется")
         case .sending, nil: Text("Радар!")
         }
     }
 
     private var reportForeground: Color {
-        if case .done = session.report { return .white }
-        return WatchTheme.onAction
+        switch session.report {
+        case .done?, .pending?: return .white
+        case .sending?, nil: return WatchTheme.onAction
+        }
     }
 
     private var reportFill: Color {
         switch session.report {
         case .done(ok: true): return WatchTheme.successFill
-        case .done(ok: false): return WatchTheme.primary.opacity(0.22)
+        case .done(ok: false), .pending: return WatchTheme.primary.opacity(0.22)
         case .sending: return WatchTheme.action.opacity(0.6)
         case nil: return WatchTheme.action
         }

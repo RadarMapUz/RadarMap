@@ -34,8 +34,15 @@ final class WatchSession: NSObject {
 
     enum ReportState: Equatable {
         case sending
+        /// Отметка ещё в пути (слабая связь или прошлое нажатие) — не «✕»:
+        /// итог скажет голос телефона.
+        case pending
         case done(ok: Bool)
     }
+
+    /// Сброс ответа через 3 с — один на нажатие: новое нажатие отменяет
+    /// прошлый, иначе он обрезал бы свежий итог (ревью 9.3).
+    @ObservationIgnored private var clearTask: Task<Void, Never>?
     /// Уровень тревоги AlertEngine (0 — вне радиуса, 1–3 — эскалация).
     private(set) var alertLevel = 0
     /// Телефон доступен (для подсказки «откройте приложение на iPhone»).
@@ -99,27 +106,43 @@ extension WatchSession {
     /// сразу, а не тишина.
     func sendReport() {
         guard report != .sending else { return }
+        clearTask?.cancel()
         report = .sending
         WKInterfaceDevice.current().play(.click)
         let session = WCSession.default
         guard session.activationState == .activated else {
-            finishReport(ok: false)
+            finish(.done(ok: false))
             return
         }
         session.sendMessage(["action": "report"], replyHandler: { reply in
-            let ok = reply["ok"] as? Bool ?? false
-            Task { @MainActor in self.finishReport(ok: ok) }
+            let state: ReportState = reply["pending"] as? Bool == true
+                ? .pending : .done(ok: reply["ok"] as? Bool ?? false)
+            Task { @MainActor in self.finish(state) }
         }, errorHandler: { _ in
-            Task { @MainActor in self.finishReport(ok: false) }
+            Task { @MainActor in self.finish(.done(ok: false)) }
         })
+        // Свой предел ожидания: ни ответа, ни ошибки — кнопка не должна
+        // застыть в «отправке». Телефон отвечает не позже своих 8 с.
+        clearTask = Task {
+            try? await Task.sleep(for: .seconds(12))
+            guard !Task.isCancelled, self.report == .sending else { return }
+            self.finish(.pending)
+        }
     }
 
-    private func finishReport(ok: Bool) {
-        report = .done(ok: ok)
-        WKInterfaceDevice.current().play(ok ? .success : .failure)
-        Task {
+    private func finish(_ state: ReportState) {
+        guard report == .sending else { return }   // поздний ответ после тайм-аута
+        report = state
+        switch state {
+        case .done(ok: true): WKInterfaceDevice.current().play(.success)
+        case .done(ok: false): WKInterfaceDevice.current().play(.failure)
+        case .pending, .sending: WKInterfaceDevice.current().play(.click)
+        }
+        clearTask?.cancel()
+        clearTask = Task {
             try? await Task.sleep(for: .seconds(3))
-            if case .done = self.report { self.report = nil }
+            guard !Task.isCancelled else { return }
+            self.report = nil
         }
     }
 }

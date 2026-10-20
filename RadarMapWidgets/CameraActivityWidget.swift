@@ -137,7 +137,8 @@ struct CameraActivityWidget: Widget {
             .keylineTint(WTheme.accent)
         }
         // Smart Stack часов (9.2) и машины на iOS 26 берут малое лицо: без
-        // него часы показывали бы сжатый экран блокировки с кнопками.
+        // него система собирала бы его из краёв острова (compact leading +
+        // trailing) — значок и цифра без знака и адреса.
         .supplementalActivityFamilies([.small])
     }
 

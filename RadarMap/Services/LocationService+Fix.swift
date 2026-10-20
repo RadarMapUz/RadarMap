@@ -388,7 +388,10 @@ extension LocationService {
                                 distanceMeters: distanceToNearest,
                                 alertLevel: alertLevel,
                                 limitKmh: speedLimits?.currentLimit,
-                                isOverspeeding: speedLimits?.isOverspeeding ?? false)
+                                // Устойчивое: мгновенный флаг щёлкает от шума
+                                // GPS у самого лимита и будил бы радио часов
+                                // раз в секунду (ревью 9.3).
+                                isOverspeeding: speedLimits?.isOverspeedingSustained ?? false)
         }
     }
 

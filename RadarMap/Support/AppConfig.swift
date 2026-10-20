@@ -1728,6 +1728,9 @@ nonisolated enum AppConfig {
     /// скорость на часы не идёт вовсе.
     static let watchAlertInterval: TimeInterval = 3
     static let watchSpeedStepAlert = 2.0
+    /// «Радар!» с часов: дольше ответ не ждём — отвечаем «в пути», итог
+    /// скажет голос телефона. Часы держат свой запас сверх этого.
+    static let watchReplyMaxSeconds: TimeInterval = 8
     /// Плашка Live Activity «устаревает» (нет обновлений) — «Нет сигнала GPS».
     static let liveActivityStaleSeconds: TimeInterval = 300
     /// Пачка кусков пробок за одну отправку.

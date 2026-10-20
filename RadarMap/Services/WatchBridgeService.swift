@@ -45,8 +45,9 @@ final class WatchBridgeService: NSObject {
     /// опросом WCSession на каждом GPS-тике (аудит энергии 19.10).
     private var watchReady = false
 
-    /// «Радар!» с часов (9.3): ответ — ушла ли отметка (или встала в очередь).
-    var onReport: (() async -> Bool)? {
+    /// «Радар!» с часов (9.3): ответ — точка есть (ушла, в очереди или уже
+    /// стояла), нет — или nil: прошлая отметка ещё в пути.
+    var onReport: (() async -> Bool?)? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onReport,
                                                "WatchBridgeService.onReport") }
     }
@@ -73,11 +74,15 @@ final class WatchBridgeService: NSObject {
         var over: Bool
 
         /// Повод отправить сразу, мимо интервала: то, что меняет смысл
-        /// экрана, а не бегущую цифру.
+        /// экрана, а не бегущую цифру. Превышение и появление скорости — по
+        /// фронту вверх: «начали превышать» нужно сразу, а «перестали» ждёт
+        /// интервала — иначе дребезг у самого лимита будил бы радио каждую
+        /// секунду (ревью 9.3).
         func isUrgent(comparedTo old: Payload?) -> Bool {
             guard let old else { return true }
-            return level != old.level || title != old.title || limit != old.limit
-                || over != old.over || active != old.active || (speed == nil) != (old.speed == nil)
+            return level != old.level || title != old.title || symbol != old.symbol
+                || limit != old.limit || active != old.active
+                || (over && !old.over) || (speed != nil && old.speed == nil)
         }
 
         var context: [String: Any] {
@@ -137,6 +142,19 @@ private struct WatchReply: @unchecked Sendable {
     let send: ([String: Any]) -> Void
 }
 
+/// Первый из ответов (итог или «в пути» по тайм-ауту) — единственный.
+@MainActor
+private final class WatchReplyOnce {
+    private var reply: WatchReply?
+
+    init(_ reply: WatchReply) { self.reply = reply }
+
+    func send(_ message: [String: Any]) {
+        reply?.send(message)
+        reply = nil
+    }
+}
+
 extension WatchBridgeService: WCSessionDelegate {
     nonisolated func session(_ session: WCSession,
                              activationDidCompleteWith activationState: WCSessionActivationState,
@@ -172,9 +190,19 @@ extension WatchBridgeService: WCSessionDelegate {
             return
         }
         Task { @MainActor in
-            let ok = await self.onReport?() ?? false
-            Log.network.info("часы: «Радар!» — \(ok ? "принято" : "отказ", privacy: .public)")
-            reply.send(["ok": ok])
+            let once = WatchReplyOnce(reply)
+            // Часы ждут ответа недолго (тайм-аут WatchConnectivity не описан);
+            // отметка на слабой связи может идти дольше — тогда честное «в
+            // пути», а итог скажет голос телефона.
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(AppConfig.watchReplyMaxSeconds))
+                once.send(["pending": true])
+            }
+            guard let onReport = self.onReport else { return once.send(["ok": false]) }
+            let answer = await onReport()
+            Log.network.info("часы: «Радар!» — \(answer.map { $0 ? "принято" : "отказ" } ?? "уже в пути", privacy: .public)")
+            // nil — отметка с прошлого нажатия ещё в пути: не «✕», а «в пути».
+            once.send(answer.map { ["ok": $0] } ?? ["pending": true])
         }
     }
 }

@@ -10,6 +10,7 @@
 import WidgetKit
 import SwiftUI
 import ActivityKit
+import AppIntents
 
 /// Плашка всегда тёмная (и Dynamic Island чёрный), поэтому цвета — ночные
 /// значения палитры А; числа сверяет WidgetPaletteTests.
@@ -26,6 +27,9 @@ private enum WTheme {
     static let secondary = SW.fixed(WidgetPalette.secondary.dark)
     /// Подпись призрака: позже срока, впритык, заметно дольше обычного.
     static let warning = SW.fixed(WidgetPalette.warning.dark)
+    /// «Радар!» — жёлтое главное действие, как на карте.
+    static let action = SW.fixed(WidgetPalette.action)
+    static let onAction = SW.fixed(WidgetPalette.onAction)
 
     /// Цвет дистанции и полосы по уровню тревоги (9.1): ближе — горячее.
     /// Цвет не единственный носитель: уровень 3 — это и дистанция, и полоса
@@ -104,8 +108,12 @@ struct CameraActivityWidget: Widget {
                     }
                         .font(.system(.footnote, design: .rounded))
                         .foregroundStyle(WTheme.secondary)
-                        .lineLimit(2)
-                    if !context.isStale { GhostLine(state: context.state) }
+                        .lineLimit(context.isStale ? 2 : 1)
+                    if !context.isStale {
+                        GhostLine(state: context.state)
+                        ActivityButtons(state: context.state, height: 34)
+                            .padding(.top, 2)
+                    }
                 }
             } compactLeading: {
                 typeIcon(context.state, isStale: context.isStale)
@@ -154,6 +162,16 @@ private struct LockScreenView: View {
     var isStale = false
 
     var body: some View {
+        VStack(spacing: 10) {
+            row
+            // Без сигнала кнопок нет: где мы — неизвестно, и «Радар!» встал
+            // бы не там (а отказ «нет позиции» — лишний звук).
+            if !isStale { ActivityButtons(state: state) }
+        }
+        .padding(14)
+    }
+
+    private var row: some View {
         HStack(spacing: 14) {
             // Без сигнала — не красная камера: цифры под ней уже неправда,
             // и значок говорит о GPS, а не о камере впереди.
@@ -196,7 +214,71 @@ private struct LockScreenView: View {
                 LimitSign(limit: limit, size: 36)
             }
         }
-        .padding(14)
+    }
+}
+
+/// Кнопки плашки (9.1б): «Радар!» — широкая жёлтая, по ней бьют не глядя;
+/// «Звук» — узкая, со значком нынешнего состояния. Намерения выполняет
+/// приложение (Shared/ActivityIntents), ответ приходит следующим состоянием:
+/// ✓ «Отмечено» или ✕ «Не отправлено» (причину говорит голос).
+private struct ActivityButtons: View {
+    let state: CameraActivityAttributes.ContentState
+    var height: CGFloat = 38
+
+    private var muted: Bool { state.muted == true }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button(intent: ActivityReportIntent()) {
+                HStack(spacing: 6) {
+                    Image(systemName: reportSymbol)
+                        .font(.system(size: 15, weight: .bold))
+                    reportTitle
+                        .font(.system(size: 15, weight: .heavy, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                .foregroundStyle(state.reportFlash == nil ? WTheme.onAction : .white)
+                .frame(maxWidth: .infinity, minHeight: height)
+                .background(reportFill, in: Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Button(intent: ActivitySoundIntent()) {
+                Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(muted ? WTheme.warning : WTheme.primary)
+                    .frame(width: 56, height: height)
+                    .background(WTheme.primary.opacity(0.14), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(muted ? Text("Включить звук") : Text("Выключить звук"))
+        }
+    }
+
+    private var reportSymbol: String {
+        switch state.reportFlash {
+        case true?: return "checkmark"
+        case false?: return "xmark"
+        case nil: return "dot.radiowaves.left.and.right"
+        }
+    }
+
+    @ViewBuilder
+    private var reportTitle: some View {
+        switch state.reportFlash {
+        case true?: Text("Отмечено")
+        case false?: Text("Не отправлено")
+        case nil: Text("Радар!")
+        }
+    }
+
+    private var reportFill: Color {
+        switch state.reportFlash {
+        case true?: return WTheme.clearFill
+        case false?: return WTheme.primary.opacity(0.22)
+        case nil: return WTheme.action
+        }
     }
 }
 

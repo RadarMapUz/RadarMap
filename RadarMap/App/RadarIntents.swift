@@ -10,6 +10,7 @@
 import AppIntents
 import CoreLocation
 import Foundation
+import os
 
 struct StartTripIntent: AppIntent {
     static let title: LocalizedStringResource = "Начать поездку"
@@ -219,6 +220,39 @@ struct ReportAccidentIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         .result(dialog: await reportBySiri(.accident))
+    }
+}
+
+/// Кнопки плашки поездки (9.1б). Плашка живёт только в поездке и только
+/// при свёрнутом приложении, так что ответ — голосом и самой плашкой: ✓ или
+/// ✕ на месте «Радар!», значок динамика у «Звука».
+extension AppEnvironment {
+    func performActivityAction(_ action: ActivityAction) async {
+        switch action {
+        case .toggleSound:
+            settings.setMuted(!settings.isMuted)
+            Log.alerts.info("Плашка: звук \(self.settings.isMuted ? "выключен" : "включён", privacy: .public)")
+            location.refreshLiveActivity()
+        case .report:
+            // Та же дверь, что у кнопки на карте: защита от дублей, «с дивана»
+            // и курс для снапа — в quickReport, не здесь.
+            let outcome = await mobile.quickReport(
+                kind: .radar,
+                coordinate: location.currentCoordinate,
+                speedKmh: location.speedKmh,
+                isTripActive: location.isTripActive,
+                course: location.currentCourse)
+            alerts.speak(outcome.spoken)
+            let flash = liveActivity.flashReport(outcome.isSuccess)
+            location.refreshLiveActivity()
+            // Снять отметку — отдельной задачей: намерению плашки система даёт
+            // секунды, и ждать внутри него незачем.
+            Task { [weak self] in
+                await Task.pause(seconds: AppConfig.liveActivityReportFlashSeconds)
+                self?.liveActivity.clearReportFlash(flash)
+                self?.location.refreshLiveActivity()
+            }
+        }
     }
 }
 

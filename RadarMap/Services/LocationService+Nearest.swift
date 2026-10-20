@@ -54,8 +54,20 @@ extension LocationService {
             etaCaption: ghost?.caption,
             etaAlert: ghost?.alert,
             limitKmh: speedLimits?.currentLimit,
-            alertLevel: alertLevel
+            alertLevel: alertLevel,
+            muted: settings.isMuted
         )
+    }
+
+    /// Освежить плашку поездки. Только в поездке: подхваченная плашка
+    /// прошлого процесса без поездки обновлялась бы фоновыми фиксами как
+    /// живая (ревью S14). И проверка ЗДЕСЬ, а не no-op внутри: `activityState`
+    /// — вычисляемое свойство, и собирать его каждую секунду ради вызова,
+    /// который тут же выйдет по guard, незачем.
+    func refreshLiveActivity() {
+        guard isTripActive, liveActivity?.isActive == true else { return }
+        liveActivity?.update(state: activityState,
+                             nearMeters: LiveActivityService.nearZone(alertRadius: effectiveAlertRadius))
     }
 
     /// Обстановка для гейтов «наша ли камера» (чистый модуль LocationGates).

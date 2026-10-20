@@ -33,6 +33,10 @@ nonisolated enum WidgetPalette {
     static let accentFill = Pair(light: 0x2563D9, dark: 0x2A62D6)
     static let dangerFill = Pair(light: 0xC62828, dark: 0xD0362C)
     static let successFill = Pair(light: 0x177A41, dark: 0x1A7F45)
+    /// Theme.action / onAction — жёлтое главное действие («Радар!») и текст
+    /// на нём; одно значение в обеих темах, как в приложении.
+    static let action: UInt32 = 0xFFD43B
+    static let onAction: UInt32 = 0x1C1C1E
     /// Подложка плашки поездки — графит экрана тревоги (Theme.alertSurface):
     /// Live Activity и Dynamic Island всегда тёмные.
     static let alertSurface: UInt32 = 0x14181D

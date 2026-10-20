@@ -3312,6 +3312,22 @@
         }
       }
     },
+    "Выключает или возвращает звук и голос оповещений.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выключает или возвращает звук и голос оповещений."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogohlantirishlar ovozi va signalini o‘chiradi yoki qaytaradi."
+          }
+        }
+      }
+    },
     "Выключенная настройка стирает и то, что приложение выучило.": {
       "localizations": {
         "ru": {
@@ -3356,6 +3372,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "O‘chirsangiz — ekran iOS taymeri bo‘yicha o‘chadi, kameralar haqida ovoz aytadi."
+          }
+        }
+      }
+    },
+    "Выключить звук": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выключить звук"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovozni o‘chirish"
           }
         }
       }
@@ -7334,6 +7366,22 @@
         }
       }
     },
+    "Не отправлено": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не отправлено"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yuborilmadi"
+          }
+        }
+      }
+    },
     "Не получилось отправить — нет связи.": {
       "localizations": {
         "ru": {
@@ -8650,6 +8698,22 @@
         }
       }
     },
+    "Отмечает передвижной радар в текущей точке.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отмечает передвижной радар в текущей точке."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joriy nuqtada ko‘chma radarni belgilaydi."
+          }
+        }
+      }
+    },
     "Отмечать «не пришёл» можно только по сохранённым поездкам — история хранит последние 50.": {
       "localizations": {
         "ru": {
@@ -8678,6 +8742,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Haydovchilar belgilagan, ~%@ da yo'qoladi"
+          }
+        }
+      }
+    },
+    "Отмечено": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отмечено"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belgilandi"
           }
         }
       }

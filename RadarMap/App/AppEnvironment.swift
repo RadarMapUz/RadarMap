@@ -247,6 +247,11 @@ final class AppEnvironment {
             guard let ghost = self.commuteLive.display else { return nil }
             return (ghost.arrival, GhostText.caption(ghost), GhostText.isAlert(ghost))
         }
+        // Кнопки плашки (9.1б): система выполняет их намерения в процессе
+        // приложения, исполнитель — здесь (Shared/ActivityIntents).
+        ActivityActions.perform = { [weak self] action in
+            await self?.performActivityAction(action)
+        }
         self.location.route = route
         self.location.speedLimits = speedLimits
         self.location.hotspots = hotspots

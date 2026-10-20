@@ -4,10 +4,10 @@
 # До 27.09.2026 все семь ночных копий reports.db лежали на том же диске, что и
 # сама база: умер диск — умерло всё сразу. Здесь забирается последняя копия
 # (отметки, жалобы, решения модератора, журнал правок конструктора) и хранится
-# 3 недели.
+# 30 дней.
 #
 # Не дольше: в копии лежат UUID и адреса, а им обещан потолок 90 дней ВМЕСТЕ
-# с копиями (server/RETENTION.md): 60 дней в базе + до 24 дней здесь. Срок
+# с копиями (server/RETENTION.md): 55 дней в базе + до 33 дней здесь. Срок
 # сверяет тест (test_api.RetentionDocTest) — поднять его, не опустив сроки в
 # api.py, нельзя.
 #
@@ -23,7 +23,7 @@
 set -euo pipefail
 HOST="${RADARMAP_HOST:-radarmap-vps}"
 DEST="${RADARMAP_BACKUP_DIR:-$HOME/RadarMapBackups}"
-KEEP_DAYS=21
+KEEP_DAYS=30
 mkdir -p "$DEST"
 
 latest=$(ssh -o BatchMode=yes -o ConnectTimeout=20 "$HOST" \

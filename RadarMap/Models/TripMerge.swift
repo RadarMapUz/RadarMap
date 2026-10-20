@@ -166,6 +166,11 @@ nonisolated enum TripMerge {
             endedManually: next.endedManually,
             batteryDropPercent: mergedBatteryDrop(previous.batteryDropPercent,
                                                   next.batteryDropPercent),
+            // Старт — первой ноги (ревью 14.1, хвост 14.8): без него склейка
+            // через неделю, когда трек вырезан, теряла начало, и дорога на
+            // работу брала старт у финиша прошлой поездки.
+            startLat: previous.startCoordinate?.latitude,
+            startLon: previous.startCoordinate?.longitude,
             // Рейс в склейке — склейка рейс (12б.9): иначе она выпадала из
             // «Смен» и шла в выученные Дом/Работу с адресом пассажира на конце
             // (ревью 14.1). Смешанная — тоже рейс: адрес пассажира учить нельзя.

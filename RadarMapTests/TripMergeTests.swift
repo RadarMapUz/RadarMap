@@ -406,6 +406,76 @@ final class TripMergeTests: XCTestCase {
         XCTAssertEqual(merged.score, direct)
     }
 
+    /// Склейка хранит старт первой ноги, разделение — старт каждой ноги: первая
+    /// — со старта исходной записи, вторая — с точки разреза. Трек вырежут
+    /// через неделю, а дорога на работу смотрит на старт и через месяц; без
+    /// поля она брала старт у финиша прошлой поездки (ревью 14.1, хвост 14.8).
+    func testMergeAndSplitKeepTripStarts() throws {
+        var previous = record(start: base, minutes: 30, km: 6, from: origin, manual: true)
+        previous.startLat = origin.latitude
+        previous.startLon = origin.longitude
+        let next = record(start: base.addingTimeInterval(50 * 60), minutes: 15, km: 4,
+                          from: previous.endCoordinate!)
+        let whole = TripMerge.merged(previous: previous, next: next)
+
+        var pruned = whole
+        pruned.track = nil   // неделя прошла
+        let mergedStart = try XCTUnwrap(pruned.startCoordinate, "склейка потеряла старт")
+        XCTAssertEqual(mergedStart.latitude, origin.latitude, accuracy: 1e-9)
+        XCTAssertEqual(mergedStart.longitude, origin.longitude, accuracy: 1e-9)
+
+        let stop = try XCTUnwrap(whole.stops?.first)
+        let legs = TripHistory.split(whole, at: stop)
+        XCTAssertEqual(legs.count, 2)
+        var (second, first) = (legs[0], legs[1])
+        first.track = nil
+        second.track = nil
+        let firstStart = try XCTUnwrap(first.startCoordinate, "первая нога потеряла старт")
+        XCTAssertEqual(firstStart.latitude, origin.latitude, accuracy: 1e-9)
+        let secondStart = try XCTUnwrap(second.startCoordinate, "вторая нога потеряла старт")
+        XCTAssertEqual(secondStart.latitude, stop.lat, accuracy: 1e-9, "вторая нога — с точки разреза")
+        XCTAssertEqual(secondStart.longitude, stop.lon, accuracy: 1e-9)
+    }
+
+    /// Ретро-чистки истории правят проезды и балл — точку старта они стирать
+    /// не вправе: запись собиралась заново по полям, и старт, которого в
+    /// списке не было, молча исчезал (ревью 14.1, хвост 14.8).
+    func testHistoryCleanupsKeepTripStart() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let base = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)
+        let points = (0..<11).map { Double($0) }.flatMap { i -> [Double] in
+            let p = GeoMath.destination(from: base, bearing: 0, distanceMeters: i * 100)
+            return [p.latitude, p.longitude, 50]
+        }
+        let mid = GeoMath.destination(from: base, bearing: 0, distanceMeters: 500)
+        let far = GeoMath.destination(from: base, bearing: 90, distanceMeters: 5000)
+        func trip(_ pass: PassedCamera) -> TripRecord {
+            var record = TripRecord(id: 1, startedAt: start, endedAt: start.addingTimeInterval(2000),
+                                    distanceMeters: 1000, maxSpeedKmh: 80, passed: [pass],
+                                    track: points, score: 60)
+            record.startLat = base.latitude
+            record.startLon = base.longitude
+            return record
+        }
+        func pass(_ camera: Int, at point: CLLocationCoordinate2D, speed: Double, limit: Int) -> PassedCamera {
+            PassedCamera(id: UUID(), cameraID: camera, typeRaw: "Стационар радар", location: "",
+                         speedKmh: speed, date: start.addingTimeInterval(300),
+                         lat: point.latitude, lon: point.longitude, limitKmh: limit)
+        }
+        // Ложный проезд в пяти километрах в сторону — чистка расстоянием.
+        let (sanitized, s) = TripHistory.sanitized([trip(pass(9, at: far, speed: 80, limit: 60))])
+        // Камера дороги восток-запад поперёк трека на север — мост.
+        let (axis, a) = TripHistory.axisSanitized([trip(pass(9, at: mid, speed: 80, limit: 60))],
+                                                  axisByID: [9: 90])
+        // Тег 50 — поднимается до пола фиксации.
+        let (floored, f) = TripHistory.limitFloored([trip(pass(9, at: mid, speed: 66, limit: 50))])
+        XCTAssertEqual([s, a, f], [true, true, true], "чистка обязана сработать — иначе тест не о том")
+        for (name, cleaned) in [("расстояние", sanitized), ("ось", axis), ("пол лимита", floored)] {
+            XCTAssertEqual(cleaned.first?.startLat, base.latitude, "чистка «\(name)» стёрла старт")
+            XCTAssertEqual(cleaned.first?.startLon, base.longitude, "чистка «\(name)» стёрла старт")
+        }
+    }
+
     func testMergedBatteryUnknownWhenLegUnknown() {
         let previous = record(start: base, minutes: 30, km: 6, from: origin,
                               manual: true, battery: nil)

@@ -187,7 +187,7 @@ final class ScenarioDriveTests: XCTestCase {
         let p = point(x, y)
         return Camera(id: id, region: "Т", city: "", location: "к", lat: p.lat, lon: p.lon,
                       type: type, violations: [], needsReview: false, axis: nil, dir: nil,
-                      lanes: 2, cls: nil, bridge: nil, road: nil, split: nil, twin: nil)
+                      lanes: 2, cls: nil, road: nil, split: nil, twin: nil)
     }
 
     /// Камера со снапом, как в базе: кусок своей проезжей части ±100 м по
@@ -199,7 +199,7 @@ final class ScenarioDriveTests: XCTestCase {
         let dLon = Int((100 * sin(rad) / kx * 1e6).rounded())
         return Camera(id: id, region: "Т", city: "", location: "к", lat: p.lat, lon: p.lon,
                       type: "Стационар радар", violations: [], needsReview: false, axis: Int(axis), dir: nil,
-                      lanes: lanes, cls: "primary", bridge: nil, road: [-dLat, -dLon, 0, 0, dLat, dLon],
+                      lanes: lanes, cls: "primary", road: [-dLat, -dLon, 0, 0, dLat, dLon],
                       split: true, twin: nil)
     }
 

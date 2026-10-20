@@ -262,7 +262,7 @@ final class TimedTrackPrivacyTests: XCTestCase {
     func testCollidingCustomCameraGetsAFreeID() {
         func camera(_ id: Int, lat: Double) -> Camera {
             Camera(id: id, region: "Т", city: "", location: "к", lat: lat, lon: 69.2, type: "Стационар радар",
-                   violations: [], needsReview: false, axis: nil, dir: nil, lanes: nil, cls: nil, bridge: nil,
+                   violations: [], needsReview: false, axis: nil, dir: nil, lanes: nil, cls: nil,
                    road: nil, split: nil, twin: nil)
         }
         let disk = [camera(900_001, lat: 41.30)]

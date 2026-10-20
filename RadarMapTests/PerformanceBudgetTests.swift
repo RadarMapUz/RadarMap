@@ -365,7 +365,7 @@ final class PerformanceBudgetTests: XCTestCase {
             return Camera(id: i, region: "Т", city: "", location: "к",
                           lat: at.latitude, lon: at.longitude, type: "Стационар радар",
                           violations: [], needsReview: false, axis: 90, dir: nil,
-                          lanes: 2, cls: "primary", bridge: nil, road: deltas,
+                          lanes: 2, cls: "primary", road: deltas,
                           split: nil, twin: nil)
         }
         let situation = LocationGates.Situation(coordinate: me, course: 0, speedKmh: 60,

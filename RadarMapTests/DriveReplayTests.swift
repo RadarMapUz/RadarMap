@@ -98,7 +98,7 @@ final class DriveReplayTests: XCTestCase {
         Camera(id: id, region: "Т", city: "", location: "к",
                lat: lat, lon: lon, type: "Стационар радар",
                violations: [], needsReview: false, axis: nil, dir: nil,
-               lanes: 2, cls: nil, bridge: nil, road: nil,
+               lanes: 2, cls: nil, road: nil,
                split: nil, twin: nil)
     }
 

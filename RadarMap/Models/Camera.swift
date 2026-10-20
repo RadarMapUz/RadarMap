@@ -160,8 +160,6 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
     /// Класс дороги OSM («primary», «residential», …): мгновенный контекст
     /// «город или трасса», не дожидаясь трёх минут детектора.
     let cls: String?
-    /// Камера на мосту или эстакаде — второй признак к эвристике по оси.
-    let bridge: Bool?
     /// Кусок проезжей части вокруг камеры: пары дельт (lat, lon) в 1e-6°
     /// от координаты камеры. По нему считается настоящее «я на этой дороге».
     let road: [Int]?
@@ -231,14 +229,14 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
     func withID(_ id: Int) -> Camera {
         Camera(id: id, region: region, city: city, location: location, lat: lat, lon: lon, type: type,
                violations: violations, needsReview: needsReview, axis: axis, dir: dir, lanes: lanes,
-               cls: cls, bridge: bridge, road: road, split: split, twin: twin, mobileConfirmed: mobileConfirmed)
+               cls: cls, road: road, split: split, twin: twin, mobileConfirmed: mobileConfirmed)
     }
 
     /// Та же камера с другими подписями (своя камера на языке интерфейса, S16).
     func withLabels(region: String, location: String) -> Camera {
         Camera(id: id, region: region, city: city, location: location, lat: lat, lon: lon, type: type,
                violations: violations, needsReview: needsReview, axis: axis, dir: dir, lanes: lanes,
-               cls: cls, bridge: bridge, road: road, split: split, twin: twin, mobileConfirmed: mobileConfirmed,
+               cls: cls, road: road, split: split, twin: twin, mobileConfirmed: mobileConfirmed,
                mobileExpires: mobileExpires)
     }
 
@@ -248,14 +246,13 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
     init(id: Int, region: String, city: String, location: String,
          lat: Double, lon: Double, type: String, violations: [String],
          needsReview: Bool?, axis: Int? = nil, dir: Int? = nil,
-         lanes: Int? = nil, cls: String? = nil, bridge: Bool? = nil,
+         lanes: Int? = nil, cls: String? = nil,
          road: [Int]? = nil, split: Bool? = nil, twin: Bool? = nil,
          mobileConfirmed: Bool? = nil, mobileExpires: Date? = nil) {
         self.mobileExpires = mobileExpires
         self.dir = dir
         self.lanes = lanes
         self.cls = cls
-        self.bridge = bridge
         self.road = road
         self.split = split
         self.twin = twin
@@ -288,7 +285,6 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
         dir = try c.decodeIfPresent(Int.self, forKey: .dir)
         lanes = try c.decodeIfPresent(Int.self, forKey: .lanes)
         cls = try c.decodeIfPresent(String.self, forKey: .cls)
-        bridge = try c.decodeIfPresent(Bool.self, forKey: .bridge)
         road = try c.decodeIfPresent([Int].self, forKey: .road)
         split = try c.decodeIfPresent(Bool.self, forKey: .split)
         twin = try c.decodeIfPresent(Bool.self, forKey: .twin)
@@ -377,7 +373,7 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
     /// Камера с исправленной координатой.
     ///
     /// Весь профиль дороги при этом сбрасывается: `axis`, `dir`, `road`,
-    /// `split`, `twin`, `bridge`, `cls`, `lanes` снап измерил В ДРУГОЙ ТОЧКЕ, и
+    /// `split`, `twin`, `cls`, `lanes` снап измерил В ДРУГОЙ ТОЧКЕ, и
     /// после переноса они описывают чужую дорогу. Особенно `road` — это дельты
     /// ОТ координаты камеры, так что вместе с ней уехала бы и «проезжая часть».
     ///
@@ -395,7 +391,7 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
         Camera(id: id, region: region, city: city, location: location,
                lat: lat, lon: lon, type: type, violations: violations,
                needsReview: needsReview, axis: axis, dir: dir, lanes: lanes,
-               cls: cls, bridge: bridge, road: road, split: split, twin: nil,
+               cls: cls, road: road, split: split, twin: nil,
                mobileConfirmed: mobileConfirmed, mobileExpires: mobileExpires)
     }
 
@@ -406,7 +402,7 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
                lat: lat, lon: lon, type: newType,
                violations: Self.defaultViolations(forType: newType),
                needsReview: needsReview, axis: axis, dir: dir, lanes: lanes,
-               cls: cls, bridge: bridge, road: road, split: split, twin: twin)
+               cls: cls, road: road, split: split, twin: twin)
     }
 
     // Равенство/хеш по id — координаты вычисляемые и в синтез не должны попадать.

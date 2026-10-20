@@ -1259,22 +1259,6 @@
         }
       }
     },
-    "0 штрафов за месяц": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "0 штрафов за месяц"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "oyda 0 jarima"
-          }
-        }
-      }
-    },
     "1 000 км": {
       "localizations": {
         "ru": {
@@ -1467,22 +1451,6 @@
         }
       }
     },
-    "999+": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "999+"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "999+"
-          }
-        }
-      }
-    },
     "OK": {
       "localizations": {
         "ru": {
@@ -1515,22 +1483,6 @@
         }
       }
     },
-    "«Авто» сам различает город и трассу: в городе приложение говорит коротко («камера, 300 метров»), на трассе называет камеру полностью. Камеры, стоящие вплотную, объявляются одной фразой, а в пробке голос ждёт, пока вы поедете. Громче — только когда вы реально превышаете или впереди передвижной радар. «Голос только при превышении» — полная тишина, пока едете в лимите.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Авто» сам различает город и трассу: в городе приложение говорит коротко («камера, 300 метров»), на трассе называет камеру полностью. Камеры, стоящие вплотную, объявляются одной фразой, а в пробке голос ждёт, пока вы поедете. Громче — только когда вы реально превышаете или впереди передвижной радар. «Голос только при превышении» — полная тишина, пока едете в лимите."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Avto» shahar va trassani o‘zi ajratadi: shaharda ilova qisqa aytadi («kamera, 300 metr»), trassada kamerani to‘liq nomlaydi. Yonma-yon turgan kameralar bitta ibora bilan aytiladi, tirbandlikda esa ovoz siz yo‘lga chiqishingizni kutadi. Balandroq — faqat siz haqiqatan tezlikni oshirsangiz yoki oldinda ko‘chma radar bo‘lsa. «Ovoz faqat tezlik oshganda» — limitda ketayotganda to‘liq sukunat."
-          }
-        }
-      }
-    },
     "«Авто» — днём светлые панели и карта (тёмное на солнце бликует), ночью графитовые. Экран тревоги тёмный всегда.": {
       "localizations": {
         "ru": {
@@ -1543,22 +1495,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "«Avto» — kunduzi panellar va xarita och rangda (quyoshda to‘q rang yaltiraydi), kechasi grafit rangda. Ogohlantirish ekrani doim to‘q rangda."
-          }
-        }
-      }
-    },
-    "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Avto» — kunduzi yorug' xarita (qorong'i xarita quyoshda yaltiraydi), kechasi doim qorong'i. Interfeys qorong'iligicha qoladi."
           }
         }
       }
@@ -1627,22 +1563,6 @@
         }
       }
     },
-    "«Умный» — поездка включается сама только в вашей машине (CarPlay или знакомая магнитола), в чужой сначала спросит «вы за рулём?». «Авто» — всегда сама. «Ручной» — только кнопкой, слежение за движением выключено совсем. Заезд по пути (магазин, заправка) в новую поездку не превращается — остаётся остановкой внутри той же. Экран в поездке не засыпает, как у навигаторов.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Умный» — поездка включается сама только в вашей машине (CarPlay или знакомая магнитола), в чужой сначала спросит «вы за рулём?». «Авто» — всегда сама. «Ручной» — только кнопкой, слежение за движением выключено совсем. Заезд по пути (магазин, заправка) в новую поездку не превращается — остаётся остановкой внутри той же. Экран в поездке не засыпает, как у навигаторов."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Aqlli» — safar faqat o‘z mashinangizda o‘zi yonadi (CarPlay yoki tanish magnitola), boshqa mashinada avval «rulda siz?» deb so‘raydi. «Avto» — har doim o‘zi. «Qo‘lda» — faqat tugma bilan, harakat kuzatuvi butunlay o‘chiq. Yo‘l-yo‘lakay kirish (do‘kon, zapravka) yangi safarga aylanmaydi — shu safar ichidagi to‘xtash bo‘lib qoladi. Safar davomida ekran navigatorlardek o‘chmaydi."
-          }
-        }
-      }
-    },
     "×%lld": {
       "localizations": {
         "ru": {
@@ -1707,22 +1627,6 @@
         }
       }
     },
-    "Автостарт за рулём: сели — оповещения включились сами": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Автостарт за рулём: сели — оповещения включились сами"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rulda avtostart: o‘tirdingiz — ogohlantirishlar o‘zi yoqiladi"
-          }
-        }
-      }
-    },
     "Адаптивный GPS": {
       "localizations": {
         "ru": {
@@ -1735,22 +1639,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Moslashuvchan GPS"
-          }
-        }
-      }
-    },
-    "Адаптивный GPS (батарея)": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Адаптивный GPS (батарея)"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Moslashuvchan GPS (batareya)"
           }
         }
       }
@@ -1819,22 +1707,6 @@
         }
       }
     },
-    "База камер и статистика поездки": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "База камер и статистика поездки"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kameralar bazasi va safar statistikasi"
-          }
-        }
-      }
-    },
     "Базу не удалось сохранить на телефоне": {
       "localizations": {
         "ru": {
@@ -1847,22 +1719,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bazani telefonga saqlab bo‘lmadi"
-          }
-        }
-      }
-    },
-    "Балл записывается за каждую поездку — смотрите его в истории.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Балл записывается за каждую поездку — смотрите его в истории."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bal har bir safar uchun yoziladi — tarixda ko‘ring."
           }
         }
       }
@@ -2251,22 +2107,6 @@
         }
       }
     },
-    "В городе — коротко: «камера, 300 метров». Камеры на перекрёстке назову одной фразой": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "В городе — коротко: «камера, 300 метров». Камеры на перекрёстке назову одной фразой"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Shaharda qisqa: «kamera, 300 metr». Chorrahadagi kameralarni bitta ibora bilan aytaman"
-          }
-        }
-      }
-    },
     "В дороге на работу будет видно, успеваете ли: «с запасом 9 мин» или «впритык». Без срока — только «как обычно», и никогда «опоздаете». Срок не уходит с телефона.": {
       "localizations": {
         "ru": {
@@ -2312,22 +2152,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cheklov ichida: %lld"
-          }
-        }
-      }
-    },
-    "В пробке молчу: скажу, когда поедете": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "В пробке молчу: скажу, когда поедете"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tirbandlikda jim turaman: yo‘lga chiqqaningizda aytaman"
           }
         }
       }
@@ -2412,22 +2236,6 @@
         }
       }
     },
-    "Варианты маршрута с числом камер — езжайте, где их меньше": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Варианты маршрута с числом камер — езжайте, где их меньше"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kameralar soni bilan marshrut variantlari — kamini tanlang"
-          }
-        }
-      }
-    },
     "Ваш обычный маршрут": {
       "localizations": {
         "ru": {
@@ -2490,22 +2298,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Shahar, ko‘cha yoki obyekt kiriting — yoki tez-tez ishlatiladigan manzillarni yuqorida saqlang."
-          }
-        }
-      }
-    },
-    "Вдали от камер и манёвров точность GPS снижается, у самой камеры возвращается к максимальной. Выключать стоит, только если кажется, что оповещения запаздывают.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Вдали от камер и манёвров точность GPS снижается, у самой камеры возвращается к максимальной. Выключать стоит, только если кажется, что оповещения запаздывают."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kameralar va manevrlardan uzoqda GPS aniqligi pasayadi, kamera yonida maksimalga qaytadi. Faqat ogohlantirishlar kechikayotgandek tuyulsa o'chiring."
           }
         }
       }
@@ -2860,17 +2652,6 @@
         }
       }
     },
-    "Впереди чисто": {
-      "extractionState": "manual",
-      "localizations": {
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Oldinda toza"
-          }
-        }
-      }
-    },
     "Время дороги дом–работа запоминается по участкам — из него получится прогноз «приеду в 9:12, как обычно». Только обычное время, не лучшее: гнать ради цифры незачем.": {
       "localizations": {
         "ru": {
@@ -2979,22 +2760,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Barcha kameralar"
-          }
-        }
-      }
-    },
-    "Все камеры и радары Узбекистана из официальных данных. База обновляется сама.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Все камеры и радары Узбекистана из официальных данных. База обновляется сама."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O‘zbekistonning barcha kamera va radarlari rasmiy ma’lumotlardan. Baza o‘zi yangilanadi."
           }
         }
       }
@@ -3392,22 +3157,6 @@
         }
       }
     },
-    "Выучено по поездкам — адрес не задан": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Выучено по поездкам — адрес не задан"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Safarlaringizdan o‘rganildi — manzil belgilanmagan"
-          }
-        }
-      }
-    },
     "Где теряете баллы": {
       "localizations": {
         "ru": {
@@ -3520,22 +3269,6 @@
         }
       }
     },
-    "Говорю только по делу": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Говорю только по делу"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Faqat kerak joyda gapiraman"
-          }
-        }
-      }
-    },
     "Голос": {
       "localizations": {
         "ru": {
@@ -3548,22 +3281,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ovoz"
-          }
-        }
-      }
-    },
-    "Голос за 22 секунды до камеры — с учётом вашей скорости": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Голос за 22 секунды до камеры — с учётом вашей скорости"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kameraga 22 soniya qolganda ovoz — tezligingiz hisobga olinadi"
           }
         }
       }
@@ -3628,38 +3345,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ovozli navigatsiya"
-          }
-        }
-      }
-    },
-    "Голосовое предупреждение": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Голосовое предупреждение"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ovozli ogohlantirish"
-          }
-        }
-      }
-    },
-    "Голосовые подсказки: «через 300 метров — направо»": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Голосовые подсказки: «через 300 метров — направо»"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ovozli maslahatlar: «300 metrdan so‘ng — o‘ngga»"
           }
         }
       }
@@ -3772,22 +3457,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tayyor: %1$@, kameralar — %2$lld. Yakunlar ilovada."
-          }
-        }
-      }
-    },
-    "Громко — только когда реально превышаете или впереди внезапный радар": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Громко — только когда реально превышаете или впереди внезапный радар"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Baland ovoz — faqat haqiqatan tezlik oshirganingizda yoki oldinda kutilmagan radar bo‘lsa"
           }
         }
       }
@@ -4533,17 +4202,6 @@
         }
       }
     },
-    "Ждём движения": {
-      "extractionState": "manual",
-      "localizations": {
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Harakatni kutamiz"
-          }
-        }
-      }
-    },
     "Ждём спутники": {
       "localizations": {
         "ru": {
@@ -4746,22 +4404,6 @@
         }
       }
     },
-    "Задайте Дом и Работу в настройках RadarMap на iPhone.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Задайте Дом и Работу в настройках RadarMap на iPhone."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "iPhone'dagi RadarMap sozlamalarida Uy va Ishni belgilang."
-          }
-        }
-      }
-    },
     "Задать": {
       "localizations": {
         "ru": {
@@ -4774,38 +4416,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Belgilash"
-          }
-        }
-      }
-    },
-    "Задать дом": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Задать дом"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Uyni belgilash"
-          }
-        }
-      }
-    },
-    "Задать работу": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Задать работу"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ishni belgilash"
           }
         }
       }
@@ -4890,23 +4500,6 @@
         }
       }
     },
-    "Закрыть слои": {
-      "extractionState": "manual",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Закрыть слои"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Qatlamlarni yopish"
-          }
-        }
-      }
-    },
     "Заряд %lld процентов": {
       "localizations": {
         "ru": {
@@ -4919,22 +4512,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quvvat %lld foiz"
-          }
-        }
-      }
-    },
-    "Заряд неизвестен": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Заряд неизвестен"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Quvvat noma’lum"
           }
         }
       }
@@ -4987,54 +4564,6 @@
         }
       }
     },
-    "Звук и вибрация предупреждают о камере всегда — голос отдельно. «Авто» сам различает город и трассу: в городе короткая фраза, на трассе полная, при превышении — громко и с лимитом. О камерах, которые вы проезжаете каждый день спокойно, приложение молчит и только отмечает вибрацией — но заговорит, если подъезжаете к ним с превышением.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Звук и вибрация предупреждают о камере всегда — голос отдельно. «Авто» сам различает город и трассу: в городе короткая фраза, на трассе полная, при превышении — громко и с лимитом. О камерах, которые вы проезжаете каждый день спокойно, приложение молчит и только отмечает вибрацией — но заговорит, если подъезжаете к ним с превышением."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tovush va tebranish kamera haqida doim ogohlantiradi — ovoz alohida. «Avto» shahar va trassani o‘zi ajratadi: shaharda qisqa ibora, trassada to‘liq, tezlikni oshirsangiz — baland ovozda va cheklov bilan. Har kuni xotirjam o‘tadigan kameralaringiz haqida ilova jim turadi va faqat tebranish bilan belgilaydi — lekin tezlikni oshirib yaqinlashsangiz, gapiradi."
-          }
-        }
-      }
-    },
-    "Звук и вибрация предупреждают о камере всегда — голос отдельно. «Авто» сам различает город и трассу: в городе короткая фраза, на трассе полная, при превышении — громко и с лимитом. О камерах, которые вы проезжаете каждый день спокойно, приложение молчит и только отмечает вибрацией — но заговорит, если подъезжаете к ним с превышением. «Голос о превышении» — про фразу без камеры: «У камер» скажет о превышении только когда впереди по вашей дороге камера, в остальное время превышение видно цветом скорости.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Звук и вибрация предупреждают о камере всегда — голос отдельно. «Авто» сам различает город и трассу: в городе короткая фраза, на трассе полная, при превышении — громко и с лимитом. О камерах, которые вы проезжаете каждый день спокойно, приложение молчит и только отмечает вибрацией — но заговорит, если подъезжаете к ним с превышением. «Голос о превышении» — про фразу без камеры: «У камер» скажет о превышении только когда впереди по вашей дороге камера, в остальное время превышение видно цветом скорости."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tovush va tebranish kamera haqida doim ogohlantiradi — ovoz alohida. «Avto» shahar va trassani o‘zi ajratadi: shaharda qisqa ibora, trassada to‘liq, tezlikni oshirsangiz — baland ovozda va cheklov bilan. Har kuni xotirjam o‘tadigan kameralaringiz haqida ilova jim turadi va faqat tebranish bilan belgilaydi — lekin tezlikni oshirib yaqinlashsangiz, gapiradi. «Tezlikni oshirish haqida ovoz» — kamerasiz iboraga tegishli: «Kameralar oldida» rejimida faqat yo‘lingizda oldinda kamera bo‘lsa aytadi, qolgan paytda oshirish tezlik rangida ko‘rinadi."
-          }
-        }
-      }
-    },
-    "Звук и вибрация предупреждают о камере всегда — голос отдельно. «Умно» молчит, пока вы едете в лимите: камеру видно на панели, музыка не прерывается. Заговорит, только если превышаете или впереди внезапная точка (передвижной радар, тренога, ДТП) — о таких вы знать заранее не можете. «Обо всех» возвращает прежнее поведение: в городе короткая фраза, на трассе полная.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Звук и вибрация предупреждают о камере всегда — голос отдельно. «Умно» молчит, пока вы едете в лимите: камеру видно на панели, музыка не прерывается. Заговорит, только если превышаете или впереди внезапная точка (передвижной радар, тренога, ДТП) — о таких вы знать заранее не можете. «Обо всех» возвращает прежнее поведение: в городе короткая фраза, на трассе полная."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tovush va tebranish kamera haqida doim ogohlantiradi — ovoz alohida. «Aqlli» limitda ketayotganingizda jim: kamera panelda ko'rinadi, musiqa to'xtamaydi. Faqat tezlikni oshirsangiz yoki oldinda kutilmagan nuqta bo'lsa gapiradi. «Barchasi haqida» avvalgi xatti-harakatni qaytaradi."
-          }
-        }
-      }
-    },
     "Здесь появятся ваши поездки": {
       "localizations": {
         "ru": {
@@ -5079,54 +4608,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bu yerda tez-tez uchoyoq qo‘yiladi, %@"
-          }
-        }
-      }
-    },
-    "Знак лимита дороги и голос при превышении": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Знак лимита дороги и голос при превышении"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yo‘l cheklovi belgisi va oshirishda ovoz"
-          }
-        }
-      }
-    },
-    "Знак лимита дороги и голос при превышении, подсказки манёвров «через 300 м направо», выбор из нескольких вариантов маршрута. Адаптивный GPS снижает точность вдали от камер — батарея живёт дольше.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Знак лимита дороги и голос при превышении, подсказки манёвров «через 300 м направо», выбор из нескольких вариантов маршрута. Адаптивный GPS снижает точность вдали от камер — батарея живёт дольше."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yo‘l tezlik chegarasi belgisi va oshirishda ovoz, «300 m dan keyin o‘ngga» kabi manyovr eslatmalari, bir necha marshrut variantidan tanlash. Moslashuvchan GPS kameralardan uzoqda aniqlikni pasaytiradi — batareya uzoqroq ishlaydi."
-          }
-        }
-      }
-    },
-    "Знак лимита дороги на панели и голос при превышении. Допуск — на сколько можно превысить, прежде чем приложение сочтёт это превышением.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Знак лимита дороги на панели и голос при превышении. Допуск — на сколько можно превысить, прежде чем приложение сочтёт это превышением."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Panelda yo'l limiti belgisi va oshirilganda ovoz. Bag'rikenglik — ilova buni oshirish deb hisoblagunga qadar qancha oshirish mumkinligi."
           }
         }
       }
@@ -5307,22 +4788,6 @@
         }
       }
     },
-    "Интеллект.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Интеллект."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Intellektual"
-          }
-        }
-      }
-    },
     "Интеллектуальная камера + радар": {
       "localizations": {
         "ru": {
@@ -5484,22 +4949,6 @@
         }
       }
     },
-    "Итоги: трек поездки и скорость у каждой камеры": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Итоги: трек поездки и скорость у каждой камеры"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Natijalar: safar treki va har kameradagi tezlik"
-          }
-        }
-      }
-    },
     "Ищу адрес…": {
       "localizations": {
         "ru": {
@@ -5512,22 +4961,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Manzil qidirilmoqda…"
-          }
-        }
-      }
-    },
-    "Каждая камера с известным лимитом, пройденная без штрафной скорости, — несостоявшийся минимальный штраф в 1 БРВ. Складываем такие проезды. Это оценка, а не гарантия: повторность и допуски конкретных камер мы знать не можем.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Каждая камера с известным лимитом, пройденная без штрафной скорости, — несостоявшийся минимальный штраф в 1 БРВ. Складываем такие проезды. Это оценка, а не гарантия: повторность и допуски конкретных камер мы знать не можем."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Limiti ma’lum kameradan jarima tezligisiz o‘tish — bo‘lmagan 1 BHM minimal jarima. Shunday o‘tishlarni qo‘shamiz. Bu taxmin, kafolat emas: takroriylik va ayrim kameralar dopuskini bila olmaymiz."
           }
         }
       }
@@ -5672,17 +5105,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Oy kalendari"
-          }
-        }
-      }
-    },
-    "Камер в двух километрах нет": {
-      "extractionState": "manual",
-      "localizations": {
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ikki kilometr ichida kamera yo‘q"
           }
         }
       }
@@ -5875,22 +5297,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kamerani panel ko'rsatadi, tebranish ogohlantiradi. Musiqa to'xtamaydi."
-          }
-        }
-      }
-    },
-    "Камеру, которую вы проезжаете шесть и больше раз за месяц и ни разу с превышением, приложение перестаёт называть вслух: на карте у неё галочка, в панели — «своя камера», предупреждение остаётся. Одно превышение — и она снова говорит; о передвижных радарах, треногах и ДТП голос звучит всегда. Дом и работа определяются по распорядку поездок — куда вы приезжаете вечером и куда утром буднего дня. Всё считается на телефоне и никуда не отправляется.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Камеру, которую вы проезжаете шесть и больше раз за месяц и ни разу с превышением, приложение перестаёт называть вслух: на карте у неё галочка, в панели — «своя камера», предупреждение остаётся. Одно превышение — и она снова говорит; о передвижных радарах, треногах и ДТП голос звучит всегда. Дом и работа определяются по распорядку поездок — куда вы приезжаете вечером и куда утром буднего дня. Всё считается на телефоне и никуда не отправляется."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bir oyda olti va undan ko'p marta, birorta ham tezlik oshirmasdan o'tgan kamerangizni ilova ovoz bilan aytishni to'xtatadi: xaritada unda belgi, panelda — «o'z kamerangiz», ogohlantirish esa qoladi. Bitta oshirish — va u yana gapiradi; ko'chma radar, uch oyoq kamera va YTH haqida ovoz doim yangraydi. Uy va ish safarlar tartibiga qarab aniqlanadi — kechqurun qayerga kelasiz va ish kuni ertalab qayerdan chiqasiz. Hammasi telefonda hisoblanadi va hech qayerga yuborilmaydi."
           }
         }
       }
@@ -6183,23 +5589,6 @@
         }
       }
     },
-    "Карты и ограничения скорости — © участники OpenStreetMap. Приложение бесплатное, без рекламы и без слежки.": {
-      "extractionState": "manual",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Карты и ограничения скорости — © участники OpenStreetMap. Приложение бесплатное, без рекламы и без слежки."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Xaritalar va tezlik cheklovlari — © OpenStreetMap ishtirokchilari. Ilova bepul, reklamasiz va kuzatuvsiz."
-          }
-        }
-      }
-    },
     "Километры недели, дни и привычная норма": {
       "localizations": {
         "ru": {
@@ -6361,22 +5750,6 @@
         }
       }
     },
-    "Легенда камер": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Легенда камер"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kameralar belgilari"
-          }
-        }
-      }
-    },
     "Лента": {
       "localizations": {
         "ru": {
@@ -6405,38 +5778,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cheklov %lld"
-          }
-        }
-      }
-    },
-    "Лимит дороги неизвестен — взят по классу дороги": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Лимит дороги неизвестен — взят по классу дороги"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yo‘l chegarasi noma’lum — yo‘l turiga qarab olindi"
-          }
-        }
-      }
-    },
-    "Лимит дороги — из OpenStreetMap. Штраф — оценка первой фиксации: повторность нарушений и допуски конкретной камеры нам неизвестны.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Лимит дороги — из OpenStreetMap. Штраф — оценка первой фиксации: повторность нарушений и допуски конкретной камеры нам неизвестны."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yo'l limiti — OpenStreetMap'dan. Jarima — birinchi qayd etish bo'yicha taxmin: qaytalanish va aniq kameraning yo'l qo'yishlari bizga noma'lum."
           }
         }
       }
@@ -6485,22 +5826,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Marshrut"
-          }
-        }
-      }
-    },
-    "Маршрут в один тап из «Поиска» — домой или на работу.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Маршрут в один тап из «Поиска» — домой или на работу."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Qidiruv»dan bir bosishda uyga yoki ishga marshrut."
           }
         }
       }
@@ -6810,22 +6135,6 @@
         }
       }
     },
-    "Молчать, пока не превышаю": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Молчать, пока не превышаю"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cheklov ichida — jim tur"
-          }
-        }
-      }
-    },
     "Молчит, пока едете в лимите. Голос — только когда превышаете и о внезапных точках: передвижной радар, тренога, ДТП.": {
       "localizations": {
         "ru": {
@@ -6938,22 +6247,6 @@
         }
       }
     },
-    "На трассе полностью: «по маршруту камера через 800 метров»": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "На трассе полностью: «по маршруту камера через 800 метров»"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Trassada to‘liq: «marshrut bo‘yicha kamera 800 metrdan keyin»"
-          }
-        }
-      }
-    },
     "Наведите центр на камеру": {
       "localizations": {
         "ru": {
@@ -6970,22 +6263,6 @@
         }
       }
     },
-    "Навигатор и лимиты": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Навигатор и лимиты"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Navigator va cheklovlar"
-          }
-        }
-      }
-    },
     "Нажали случайно — «Отменить» рядом": {
       "localizations": {
         "ru": {
@@ -6998,23 +6275,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tasodifan bosdingizmi — «Bekor qilish» yonida"
-          }
-        }
-      }
-    },
-    "Нажали случайно — «Отменить» рядом. Нет связи — отправлю, когда появится": {
-      "extractionState": "manual",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Нажали случайно — «Отменить» рядом. Нет связи — отправлю, когда появится"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tasodifan bosdingizmi — «Bekor qilish» yonida. Aloqa yo‘q bo‘lsa, paydo bo‘lganda yuboraman"
           }
         }
       }
@@ -7143,17 +6403,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qachon chiqishni eslatib turaymi?"
-          }
-        }
-      }
-    },
-    "Направление пока неизвестно": {
-      "extractionState": "manual",
-      "localizations": {
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yo‘nalish hozircha noma’lum"
           }
         }
       }
@@ -7446,22 +6695,6 @@
         }
       }
     },
-    "Не отправилось: нет связи": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Не отправилось: нет связи"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yuborilmadi: aloqa yo'q"
-          }
-        }
-      }
-    },
     "Не отправлено": {
       "localizations": {
         "ru": {
@@ -7474,22 +6707,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yuborilmadi"
-          }
-        }
-      }
-    },
-    "Не получилось отправить — нет связи.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Не получилось отправить — нет связи."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yuborib bo'lmadi — aloqa yo'q."
           }
         }
       }
@@ -8680,22 +7897,6 @@
         }
       }
     },
-    "Отметка на карте — спасибо!": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Отметка на карте — спасибо!"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Belgi xaritada — rahmat!"
-          }
-        }
-      }
-    },
     "Отметка ставится в движении": {
       "localizations": {
         "ru": {
@@ -8725,39 +7926,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Belgi olib tashlandi"
-          }
-        }
-      }
-    },
-    "Отметку подтвердили — спасибо!": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Отметку подтвердили — спасибо!"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Belgi tasdiqlandi — rahmat!"
-          }
-        }
-      }
-    },
-    "Отметку проверяет другой водитель. Пока не проверил — рисую пунктиром и честно говорю «отметка водителей»": {
-      "extractionState": "manual",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Отметку проверяет другой водитель. Пока не проверил — рисую пунктиром и честно говорю «отметка водителей»"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Belgini boshqa haydovchi tekshiradi. Tekshirilmaguncha punktir bilan chizaman va halol aytaman: «haydovchilar belgisi»"
           }
         }
       }
@@ -8998,22 +8166,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tarmoq xatosi"
-          }
-        }
-      }
-    },
-    "Ошибки, идеи, неточные камеры — мы читаем каждое сообщение и правим базу.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ошибки, идеи, неточные камеры — мы читаем каждое сообщение и правим базу."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Xatolar, g‘oyalar, noaniq kameralar — har bir xabarni o‘qib, bazani to‘g‘rilaymiz."
           }
         }
       }
@@ -9355,22 +8507,6 @@
         }
       }
     },
-    "Подсказки манёвров «через 300 м направо» и выбор из нескольких вариантов при построении. Панель маршрута может показывать ближайшую камеру по курсу.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Подсказки манёвров «через 300 м направо» и выбор из нескольких вариантов при построении. Панель маршрута может показывать ближайшую камеру по курсу."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«300 m dan keyin o'ngga» manevr maslahatlari va bir nechta variantdan tanlash. Marshrut paneli yo'nalishdagi eng yaqin kamerani ko'rsatishi mumkin."
-          }
-        }
-      }
-    },
     "Подсказки о треногах по памяти": {
       "localizations": {
         "ru": {
@@ -9527,38 +8663,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Safar allaqachon davom etmoqda."
-          }
-        }
-      }
-    },
-    "Поездка. Открыть подробности": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Поездка. Открыть подробности"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Safar. Tafsilotlarni ochish"
-          }
-        }
-      }
-    },
-    "Поездка. Показать на карте": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Поездка. Показать на карте"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Safar. Xaritada ko'rsatish"
           }
         }
       }
@@ -9772,39 +8876,6 @@
         }
       }
     },
-    "Пока машина стоит, направление неизвестно": {
-      "extractionState": "manual",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Пока машина стоит, направление неизвестно"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mashina turganda yo‘nalish noma’lum"
-          }
-        }
-      }
-    },
-    "Пока нет сохранённых мест": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Пока нет сохранённых мест"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hozircha saqlangan joylar yo'q"
-          }
-        }
-      }
-    },
     "Показано вкладов: %lld": {
       "localizations": {
         "ru": {
@@ -9833,22 +8904,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hamma safarlarni ko'rsatish (%lld)"
-          }
-        }
-      }
-    },
-    "Показать всё время": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Показать всё время"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Butun vaqtni ko'rsatish"
           }
         }
       }
@@ -9913,22 +8968,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bu kunning to'liq yozuvlari o'chirilgan — kunlik yakunlar qoldi."
-          }
-        }
-      }
-    },
-    "Положение ещё не определено — отметку ставить не по чему.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Положение ещё не определено — отметку ставить не по чему."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Joylashuv hali aniqlanmadi — belgini qo'yadigan nuqta yo'q."
           }
         }
       }
@@ -10238,22 +9277,6 @@
         }
       }
     },
-    "Предупредит заранее": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Предупредит заранее"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Oldindan ogohlantiradi"
-          }
-        }
-      }
-    },
     "Предупредит о камере заранее": {
       "localizations": {
         "ru": {
@@ -10410,22 +9433,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tirbandlik"
-          }
-        }
-      }
-    },
-    "Пробки смотрите где угодно, о камерах предупредим мы": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Пробки смотрите где угодно, о камерах предупредим мы"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tirbandlikni istalgan joyda ko'ring, kameralar haqida biz ogohlantiramiz"
           }
         }
       }
@@ -10736,22 +9743,6 @@
         }
       }
     },
-    "Просто сверните RadarMap — голос и баннеры о камерах продолжат работать": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Просто сверните RadarMap — голос и баннеры о камерах продолжат работать"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "RadarMap'ni shunchaki yig'ing — ovoz va kamera bannerlari ishlashda davom etadi"
-          }
-        }
-      }
-    },
     "Просто скрыть на моей карте": {
       "localizations": {
         "ru": {
@@ -10848,22 +9839,6 @@
         }
       }
     },
-    "Работает со свёрнутым приложением и погасшим экраном": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Работает со свёрнутым приложением и погасшим экраном"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ilova yopiq va ekran o‘chiq bo‘lsa ham ishlaydi"
-          }
-        }
-      }
-    },
     "Радар": {
       "localizations": {
         "ru": {
@@ -10908,22 +9883,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Radar shu yerda"
-          }
-        }
-      }
-    },
-    "Радар здесь уже отмечен — подтвердили.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Радар здесь уже отмечен — подтвердили."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bu yerda radar allaqachon belgilangan — tasdiqladik."
           }
         }
       }
@@ -10976,22 +9935,6 @@
         }
       }
     },
-    "Радар отмечен. Спасибо, что предупредили!": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Радар отмечен. Спасибо, что предупредили!"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Radar belgilandi. Ogohlantirganingiz uchun rahmat!"
-          }
-        }
-      }
-    },
     "Радар!": {
       "localizations": {
         "ru": {
@@ -11040,22 +9983,6 @@
         }
       }
     },
-    "Раз в сутки отправляем обезличенные счётчики: сколько поездок, километров и оповещений было. Ни маршрутов, ни координат, ни времени — только числа. Идентификатор меняется каждые 30 дней.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Раз в сутки отправляем обезличенные счётчики: сколько поездок, километров и оповещений было. Ни маршрутов, ни координат, ни времени — только числа. Идентификатор меняется каждые 30 дней."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kuniga bir marta shaxssiz hisoblagichlarni yuboramiz: nechta safar, kilometr va ogohlantirish bo‘lgani. Na marshrut, na koordinata, na vaqt — faqat raqamlar. Identifikator har 30 kunda o‘zgaradi."
-          }
-        }
-      }
-    },
     "Раз в сутки — обезличенные числа: поездки, километры, оповещения. Без маршрутов и координат.": {
       "localizations": {
         "ru": {
@@ -11068,54 +9995,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kuniga bir marta — shaxssiz raqamlar: safarlar, kilometrlar, ogohlantirishlar. Marshrut va koordinatasiz."
-          }
-        }
-      }
-    },
-    "Разбор дня": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Разбор дня"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kun tahlili"
-          }
-        }
-      }
-    },
-    "Разбор за всё время": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Разбор за всё время"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Butun davr tahlili"
-          }
-        }
-      }
-    },
-    "Разбор месяца": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Разбор месяца"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Oy tahlili"
           }
         }
       }
@@ -11290,23 +10169,6 @@
         }
       }
     },
-    "Расстояние пока приблизительное": {
-      "extractionState": "manual",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Расстояние пока приблизительное"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Masofa hozircha taxminiy"
-          }
-        }
-      }
-    },
     "Регистратор": {
       "localizations": {
         "ru": {
@@ -11435,22 +10297,6 @@
         }
       }
     },
-    "Рейтинг и километры за период. Как считается рейтинг": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Рейтинг и километры за период. Как считается рейтинг"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Davr uchun reyting va kilometrlar. Reyting qanday hisoblanadi"
-          }
-        }
-      }
-    },
     "Рейтинг периода — среднее баллов, взвешенное по километрам: длинная трасса влияет на него сильнее, чем поездка до магазина.": {
       "localizations": {
         "ru": {
@@ -11463,22 +10309,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Davr reytingi — kilometrlar bo'yicha vaznlangan o'rtacha ball: uzoq trassa unga do'konga borishdan ko'ra kuchliroq ta'sir qiladi."
-          }
-        }
-      }
-    },
-    "Рейтинг по дням": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Рейтинг по дням"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kunlar bo'yicha reyting"
           }
         }
       }
@@ -11511,22 +10341,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reyting %2$@ %1$lld ballga pasaydi"
-          }
-        }
-      }
-    },
-    "Рейтинг, километры и выводы за период. Как считается рейтинг": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Рейтинг, километры и выводы за период. Как считается рейтинг"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Davr uchun reyting, kilometrlar va xulosalar. Reyting qanday hisoblanadi"
           }
         }
       }
@@ -12075,22 +10889,6 @@
         }
       }
     },
-    "Скрыто": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Скрыто"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yashirilgan"
-          }
-        }
-      }
-    },
     "Скрыть детали периода": {
       "localizations": {
         "ru": {
@@ -12365,22 +11163,6 @@
         }
       }
     },
-    "Средний балл поездок за 30 дней. Длинные поездки весят больше коротких.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Средний балл поездок за 30 дней. Длинные поездки весят больше коротких."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "30 kunlik safarlarning o‘rtacha bali. Uzoq safarlar qisqalaridan ko‘proq vazn oladi."
-          }
-        }
-      }
-    },
     "Срок": {
       "localizations": {
         "ru": {
@@ -12623,23 +11405,6 @@
         }
       }
     },
-    "Схема появится в движении": {
-      "extractionState": "manual",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Схема появится в движении"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sxema harakatda paydo bo‘ladi"
-          }
-        }
-      }
-    },
     "Тап по скорости — быстрые переключатели": {
       "localizations": {
         "ru": {
@@ -12848,22 +11613,6 @@
         }
       }
     },
-    "Только камеры впереди по курсу — ничего лишнего": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Только камеры впереди по курсу — ничего лишнего"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Faqat yo‘nalishdagi kameralar — ortiqcha narsa yo‘q"
-          }
-        }
-      }
-    },
     "Только превышения": {
       "localizations": {
         "ru": {
@@ -13025,23 +11774,6 @@
         }
       }
     },
-    "Треноги нет ни в одной официальной базе — расписание закрыто с 2022 года": {
-      "extractionState": "manual",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Треноги нет ни в одной официальной базе — расписание закрыто с 2022 года"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Uch oyoq kameralar biror rasmiy bazada yo‘q — jadval 2022 yildan yopiq"
-          }
-        }
-      }
-    },
     "Тротуары": {
       "localizations": {
         "ru": {
@@ -13199,23 +11931,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ishonchli, lekin xavfli"
-          }
-        }
-      }
-    },
-    "Увидели засаду — одна жёлтая кнопка, не глядя на экран. Всё остальное я сделаю сам": {
-      "extractionState": "manual",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Увидели засаду — одна жёлтая кнопка, не глядя на экран. Всё остальное я сделаю сам"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pistirmani ko‘rdingizmi — ekranga qaramay sariq tugmani bosing. Qolganini o‘zim qilaman"
           }
         }
       }
@@ -13483,22 +12198,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qayd etadi: %@"
-          }
-        }
-      }
-    },
-    "Фон почти не тратит заряд: точный GPS включается только у камер": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Фон почти не тратит заряд: точный GPS включается только у камер"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fon deyarli quvvat sarflamaydi: aniq GPS faqat kameralar yonida yoqiladi"
           }
         }
       }
@@ -13788,38 +12487,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tezlikni oshirish jarimalari — MJtK 128-3-modda"
-          }
-        }
-      }
-    },
-    "Штрафы и лимиты": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Штрафы и лимиты"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Jarimalar va cheklovlar"
-          }
-        }
-      }
-    },
-    "Экран в поездке не засыпает, как у навигаторов. Выключите — и он погаснет по таймеру iOS; о камерах приложение предупредит голосом и с погашенным экраном, при доступе «Всегда».": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Экран в поездке не засыпает, как у навигаторов. Выключите — и он погаснет по таймеру iOS; о камерах приложение предупредит голосом и с погашенным экраном, при доступе «Всегда»."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Safarda ekran navigatorlardagidek o‘chmaydi. O‘chirsangiz, iOS taymeri bo‘yicha o‘chadi; «Doim» ruxsati bo‘lsa, ilova kameralar haqida o‘chgan ekranda ham ovoz bilan ogohlantiradi."
           }
         }
       }
@@ -14130,22 +12797,6 @@
         }
       }
     },
-    "больше 70 баллов за камеры не снимаем": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "больше 70 баллов за камеры не снимаем"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "kameralar uchun 70 balldan ortiq olib tashlamaymiz"
-          }
-        }
-      }
-    },
     "больше всего — %@": {
       "localizations": {
         "ru": {
@@ -14239,22 +12890,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "limitda: %lld"
-          }
-        }
-      }
-    },
-    "в поездке места скрыты": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "в поездке места скрыты"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "safarda joylar yashiriladi"
           }
         }
       }
@@ -14966,22 +13601,6 @@
         }
       }
     },
-    "камер за поездку": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "камер за поездку"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "safar davomida kameralar"
-          }
-        }
-      }
-    },
     "км": {
       "localizations": {
         "ru": {
@@ -15298,22 +13917,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "aylanada %lld-chiqish"
-          }
-        }
-      }
-    },
-    "обновляется сама": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "обновляется сама"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "o‘zi yangilanadi"
           }
         }
       }
@@ -15675,22 +14278,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "safar"
-          }
-        }
-      }
-    },
-    "поездок всего": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "поездок всего"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "jami safarlar"
           }
         }
       }
@@ -16634,38 +15221,6 @@
         }
       }
     },
-    "Своя схема в движении": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Своя схема в движении"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Harakatda o'z sxemamiz"
-          }
-        }
-      }
-    },
-    "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.\n\nСвоя схема — наша карта вместо Apple: полотно, перекрёстки, разметка. Включается только в движении; на стоянке остаётся карта Apple, где ищут адрес и ставят камеру.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.\n\nСвоя схема — наша карта вместо Apple: полотно, перекрёстки, разметка. Включается только в движении; на стоянке остаётся карта Apple, где ищут адрес и ставят камеру."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Avto» — kunduzi yorug' asos (quyoshda qorasi ko'zni qamashtiradi), kechasi doim qorong'i. Interfeys qorong'i qoladi.\n\nO'z sxemamiz — Apple o'rniga bizning xaritamiz: yo'l qoplamasi, chorrahalar, chiziqlar. Faqat harakatda yoqiladi; to'xtaganda Apple xaritasi qoladi — manzil qidirish va kamera qo'yish uchun."
-          }
-        }
-      }
-    },
     "Карта на движке": {
       "extractionState": "manual",
       "localizations": {
@@ -16679,23 +15234,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Xarita dvijokda"
-          }
-        }
-      }
-    },
-    "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.\n\nСвоя схема — наша карта вместо Apple: полотно, перекрёстки, разметка. Включается только в движении; на стоянке остаётся карта Apple, где ищут адрес и ставят камеру.\n\nКарта на движке — те же наши данные, но рисует их настоящий картографический движок: кайма и полотно двумя проходами, круглые стыки, подписи вдоль улиц. Пока сравниваем с своей схемой на живой дороге.": {
-      "extractionState": "manual",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.\n\nСвоя схема — наша карта вместо Apple: полотно, перекрёстки, разметка. Включается только в движении; на стоянке остаётся карта Apple, где ищут адрес и ставят камеру.\n\nКарта на движке — те же наши данные, но рисует их настоящий картографический движок: кайма и полотно двумя проходами, круглые стыки, подписи вдоль улиц. Пока сравниваем с своей схемой на живой дороге."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Avto» — kunduzi yorug' asos (quyoshda qorasi ko'zni qamashtiradi), kechasi doim qorong'i. Interfeys qorong'i qoladi.\n\nO'z sxemamiz — Apple o'rniga bizning xaritamiz: yo'l qoplamasi, chorrahalar, chiziqlar. Faqat harakatda yoqiladi; to'xtaganda Apple xaritasi qoladi — manzil qidirish va kamera qo'yish uchun.\n\nXarita dvijokda — o‘sha bizning ma’lumotlarimiz, lekin ularni haqiqiy kartografik dvijok chizadi: chekka va qatlam ikki o‘tishda, dumaloq tutashuvlar, ko‘chalar bo‘ylab yozuvlar. Hozircha o‘z sxemamiz bilan yo‘lda solishtiryapmiz."
           }
         }
       }
@@ -16751,23 +15289,6 @@
         }
       }
     },
-    "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.\n\nЧем рисовать карту — Apple, своя схема или движок — выбирается кнопкой слоёв на самой карте: там виден результат, и переключение действует сразу.": {
-      "extractionState": "manual",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Авто» — светлая подложка днём (тёмная на солнце бликует), ночью всегда тёмная. Интерфейс остаётся тёмным.\n\nЧем рисовать карту — Apple, своя схема или движок — выбирается кнопкой слоёв на самой карте: там виден результат, и переключение действует сразу."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Avto» — kunduzi yorug‘ asos (quyoshda qorasi yaltiraydi), kechasi doim qorong‘i. Interfeys qorong‘iligicha qoladi.\n\nXaritani nima chizishi — Apple, o‘z sxemamiz yoki dvijok — xaritadagi qatlamlar tugmasi bilan tanlanadi: natija o‘sha yerda ko‘rinadi va o‘zgarish darhol amal qiladi."
-          }
-        }
-      }
-    },
     "Из своей карты · без сети": {
       "localizations": {
         "ru": {
@@ -16780,22 +15301,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "O‘z xaritangizdan · internetsiz"
-          }
-        }
-      }
-    },
-    "Карта загружается": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Карта загружается"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Xarita yuklanmoqda"
           }
         }
       }
@@ -16828,22 +15333,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Belgini boshqa haydovchilarga yuboradi. Bosib turish — turini tanlash"
-          }
-        }
-      }
-    },
-    "Попробуйте название улицы или ближайший ориентир. Свои адреса ищутся и без сети — «улица, номер».": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Попробуйте название улицы или ближайший ориентир. Свои адреса ищутся и без сети — «улица, номер»."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ko‘cha nomini yoki eng yaqin mo‘ljalni kiritib ko‘ring. O‘z manzillaringiz internetsiz ham topiladi — «ko‘cha, raqam»."
           }
         }
       }
@@ -17888,22 +16377,6 @@
         }
       }
     },
-    "Точка каждую секунду со временем — чтобы видео с регистратора можно было поставить на карту. Хранится только на телефоне 30 дней. «Выгрузить все поездки» отдаёт один файл GPX: линии поездок последней недели и проезды камер за месяц.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Точка каждую секунду со временем — чтобы видео с регистратора можно было поставить на карту. Хранится только на телефоне 30 дней. «Выгрузить все поездки» отдаёт один файл GPX: линии поездок последней недели и проезды камер за месяц."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Har soniyada vaqt bilan nuqta — videoregistrator yozuvini xaritaga bog‘lash uchun. Faqat telefonda 30 kun saqlanadi. «Barcha safarlarni yuklash» bitta GPX fayl beradi: oxirgi haftadagi safar chiziqlari va oy davomidagi kamera o‘tishlari."
-          }
-        }
-      }
-    },
     "Из любого ряда, кроме правого": {
       "localizations": {
         "ru": {
@@ -18652,22 +17125,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yo‘l-yo‘lakay to‘xtash — do‘kon, yoqilg‘i quyish shoxobchasi — yangi safar bo‘lmaydi: bu o‘sha safar ichidagi to‘xtash."
-          }
-        }
-      }
-    },
-    "Чем рисовать карту — Apple, своя схема или движок — выбирается кнопкой слоёв на самой карте: там виден результат, и переключение действует сразу.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Чем рисовать карту — Apple, своя схема или движок — выбирается кнопкой слоёв на самой карте: там виден результат, и переключение действует сразу."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Xaritani nima bilan chizish — Apple, o‘z sxemamiz yoki dvijok — xaritaning o‘zidagi qatlamlar tugmasi bilan tanlanadi: natija o‘sha yerda ko‘rinadi va almashtirish darhol ishlaydi."
           }
         }
       }
@@ -19772,22 +18229,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yo‘l cheklovi — OpenStreetMap’dan, lekin 60 km/soatdan past bo‘lsa, unga qarab baho bermaymiz: shahardagi kameralar bundan past tezlikni qayd etmaydi. Jarima — birinchi qayd etish bahosi: qoidabuzarliklarning takrorlanishi va aniq kameraning yo‘l qo‘yadigan chegaralari bizga noma’lum."
-          }
-        }
-      }
-    },
-    "Карта RadarMap": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Карта RadarMap"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "RadarMap xaritasi"
           }
         }
       }
@@ -20910,16 +19351,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%2$@ dan so‘ng tezlik cheklovi %1$lld"
-          }
-        }
-      }
-    },
-    "Бензин или газ": {
-      "localizations": {
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Benzin yoki gaz"
           }
         }
       }

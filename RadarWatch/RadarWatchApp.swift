@@ -23,5 +23,9 @@ struct RadarWatchApp: App {
                 }
             #endif
         }
+        // Контекст с телефона, пока приложение спит, — ради компликации (9.3б).
+        .backgroundTask(.watchConnectivity) {
+            await WatchSession.drainPendingContent()
+        }
     }
 }

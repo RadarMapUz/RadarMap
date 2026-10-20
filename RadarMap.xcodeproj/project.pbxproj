@@ -10,6 +10,7 @@
 		4B4D4C03300649860097B8CA /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = 4B4D4C02300649860097B8CA /* MapLibre */; };
 		4B1546CB300649860097B8CA /* RadarMapWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4B1546C0300649860097B8CA /* RadarMapWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		4BFACE0B300649860097B8CA /* RadarWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 4BFACE01300649860097B8CA /* RadarWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		6FA64B68776CFF9F672540D3 /* RadarWatchWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6FA6B0EA5E57CAEC513894EA /* RadarWatchWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -33,6 +34,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 4BFACE02300649860097B8CA;
 			remoteInfo = RadarWatch;
+		};
+		6FA6E2D1902A0EBDF31DD08A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4B15468D300649860097B8CA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6FA624DA4853D2F77A1AF9AE;
+			remoteInfo = RadarWatchWidgets;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -59,6 +67,17 @@
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6FA6F8A88A04E12A7182B3A1 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				6FA64B68776CFF9F672540D3 /* RadarWatchWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
@@ -66,6 +85,7 @@
 		4B1546C0300649860097B8CA /* RadarMapWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RadarMapWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		4B1546D0300649860097B8CA /* RadarMapTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RadarMapTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4BFACE01300649860097B8CA /* RadarWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RadarWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6FA6B0EA5E57CAEC513894EA /* RadarWatchWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RadarWatchWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -90,6 +110,24 @@
 			);
 			target = 4BFACE02300649860097B8CA /* RadarWatch */;
 		};
+		6FA6567B5517226FABF7A903 /* Exceptions for "RadarWatchWidgets" folder in "RadarWatchWidgets" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 6FA624DA4853D2F77A1AF9AE /* RadarWatchWidgets */;
+		};
+		6FA60E10BB3D788AC0A1248F /* Exceptions for "Shared" folder in "RadarWatchWidgets" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Localizable.xcstrings,
+				NumberFormat.swift,
+				SharedDefaults.swift,
+				WatchComplication.swift,
+				WidgetPalette.swift,
+			);
+			target = 6FA624DA4853D2F77A1AF9AE /* RadarWatchWidgets */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -112,6 +150,9 @@
 		};
 		4B1546C6300649860097B8CA /* Shared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				6FA60E10BB3D788AC0A1248F /* Exceptions for "Shared" folder in "RadarWatchWidgets" target */,
+			);
 			path = Shared;
 			sourceTree = "<group>";
 		};
@@ -123,6 +164,14 @@
 		4BFACE09300649860097B8CA /* RadarWatch */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = RadarWatch;
+			sourceTree = "<group>";
+		};
+		6FA64FABAE0B9D513AC3FD26 /* RadarWatchWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				6FA6567B5517226FABF7A903 /* Exceptions for "RadarWatchWidgets" folder in "RadarWatchWidgets" target */,
+			);
+			path = RadarWatchWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -157,6 +206,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6FA6CC1C6DB770C413D5E4E6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -166,6 +222,7 @@
 				4B154697300649860097B8CA /* RadarMap */,
 				4B1546C5300649860097B8CA /* RadarMapWidgets */,
 				4BFACE09300649860097B8CA /* RadarWatch */,
+				6FA64FABAE0B9D513AC3FD26 /* RadarWatchWidgets */,
 				4B1546D4300649860097B8CA /* RadarMapTests */,
 				4B1546C6300649860097B8CA /* Shared */,
 				4B154696300649860097B8CA /* Products */,
@@ -178,6 +235,7 @@
 				4B154695300649860097B8CA /* RadarMap.app */,
 				4B1546C0300649860097B8CA /* RadarMapWidgets.appex */,
 				4BFACE01300649860097B8CA /* RadarWatch.app */,
+				6FA6B0EA5E57CAEC513894EA /* RadarWatchWidgets.appex */,
 				4B1546D0300649860097B8CA /* RadarMapTests.xctest */,
 			);
 			name = Products;
@@ -266,10 +324,12 @@
 				4BFACE06300649860097B8CA /* Sources */,
 				4BFACE07300649860097B8CA /* Frameworks */,
 				4BFACE08300649860097B8CA /* Resources */,
+				6FA6F8A88A04E12A7182B3A1 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				6FA6686A8733735191D96FB9 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				4B1546C6300649860097B8CA /* Shared */,
@@ -281,6 +341,28 @@
 			productName = RadarWatch;
 			productReference = 4BFACE01300649860097B8CA /* RadarWatch.app */;
 			productType = "com.apple.product-type.application";
+		};
+		6FA624DA4853D2F77A1AF9AE /* RadarWatchWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6FA6B400A64599331B949894 /* Build configuration list for PBXNativeTarget "RadarWatchWidgets" */;
+			buildPhases = (
+				6FA6845B356315A202B6417E /* Sources */,
+				6FA6CC1C6DB770C413D5E4E6 /* Frameworks */,
+				6FA6FDF9E79BC7E72823E6F7 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				6FA64FABAE0B9D513AC3FD26 /* RadarWatchWidgets */,
+			);
+			name = RadarWatchWidgets;
+			packageProductDependencies = (
+			);
+			productName = RadarWatchWidgets;
+			productReference = 6FA6B0EA5E57CAEC513894EA /* RadarWatchWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -326,6 +408,7 @@
 				4B154694300649860097B8CA /* RadarMap */,
 				4B1546C1300649860097B8CA /* RadarMapWidgets */,
 				4BFACE02300649860097B8CA /* RadarWatch */,
+				6FA624DA4853D2F77A1AF9AE /* RadarWatchWidgets */,
 				4B1546D1300649860097B8CA /* RadarMapTests */,
 			);
 		};
@@ -347,6 +430,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		4BFACE08300649860097B8CA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6FA6FDF9E79BC7E72823E6F7 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -384,6 +474,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		6FA6845B356315A202B6417E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -401,6 +498,11 @@
 			isa = PBXTargetDependency;
 			target = 4BFACE02300649860097B8CA /* RadarWatch */;
 			targetProxy = 4BFACE0C300649860097B8CA /* PBXContainerItemProxy */;
+		};
+		6FA6686A8733735191D96FB9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 6FA624DA4853D2F77A1AF9AE /* RadarWatchWidgets */;
+			targetProxy = 6FA6E2D1902A0EBDF31DD08A /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -778,6 +880,66 @@
 			};
 			name = Release;
 		};
+		6FA69888F01DFE16E58889AA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = RadarWatchWidgets/RadarWatchWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 118;
+				DEVELOPMENT_TEAM = RL7M4Z58CJ;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RadarWatchWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RadarMap;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 2.2.23;
+				PRODUCT_BUNDLE_IDENTIFIER = uz.radarmap.ios.watch.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.0;
+			};
+			name = Debug;
+		};
+		6FA652FCB500F33AAA8D707B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = RadarWatchWidgets/RadarWatchWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 118;
+				DEVELOPMENT_TEAM = RL7M4Z58CJ;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RadarWatchWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = RadarMap;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 2.2.23;
+				PRODUCT_BUNDLE_IDENTIFIER = uz.radarmap.ios.watch.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 11.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -822,6 +984,15 @@
 			buildConfigurations = (
 				4BFACE04300649860097B8CA /* Debug */,
 				4BFACE05300649860097B8CA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		6FA6B400A64599331B949894 /* Build configuration list for PBXNativeTarget "RadarWatchWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6FA69888F01DFE16E58889AA /* Debug */,
+				6FA652FCB500F33AAA8D707B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

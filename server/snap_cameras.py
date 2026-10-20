@@ -409,7 +409,10 @@ def _iter_features(path):
                 continue
 
 
-def load_roads(path):
+def load_roads(path, *, keep_highway=None):
+    """keep_highway — необязательный фильтр по тегу highway (функция значения →
+    bool): пересъёмке профиля (resnap_profiles) нужны только проезжие части,
+    тротуар в индексе — это ровно та ошибка, которую она исправляет."""
     index = RoadIndex()
     named = withref = 0
     for feat in _iter_features(path):
@@ -420,6 +423,8 @@ def load_roads(path):
         if len(coords) < 2:
             continue
         props = feat.get("properties") or {}
+        if keep_highway is not None and not keep_highway(props.get("highway")):
+            continue
         tokens = set()
         for key in ("name", "name:uz", "name:ru", "name:en", "int_name",
                     "name:uz-Latn", "name:uz-Cyrl", "alt_name", "official_name"):

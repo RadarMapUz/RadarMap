@@ -1,0 +1,52 @@
+id,location,reason,old_cls,old_axis,new_cls,new_axis,new_dir,new_lanes,new_split,dist_m,status,note
+357,"Mustaqillik mfy 4R-66, Azizobod Q.-vobkеnt Sh.- Aliyor Q.-xuja Porso Q. 36 km",no-profile,,,,,,,,,no_carriageway,"нет проезжей части в 40 м; в 300 м проезжей части нет; camera_fixes: в Фергане, а адрес — Пешку (Бухара); профиля нет, needsReview"
+367,Xo‘jalar mfy 4P-76 avtomobil Yo‘lining 2-KM Xalqaro Matematika maktabi.,pedestrian,footway,166,secondary,166,166,,True,20,fixed,"geometry: геометрия, secondary"
+373,"A-380 ""G'uzor-buxoro-nukus-beyneu"" A/y 240,8 km Gazberon A/p",no-profile,,,,,,,,,no_carriageway,нет проезжей части в 40 м; в 300 м проезжей части нет
+501,D091 avtomobil yo'lining 13-14 km kesishgan chorraha (Mo'ljal Do'stlik Mehmonxonasi),pedestrian,footway,112,secondary,111,,,,18,fixed,"geometry: геометрия, secondary"
+535,Dodxox - Qoriniyoziy - Sanoat ko'chalari kesishgan chorraha (Mo'ljal A.navoiy Teatr),pedestrian,footway,109,secondary,108,288,,True,11,fixed,"geometry: геометрия, secondary"
+536,Dodxox - Qoriniyoziy - Sanoat ko'chalari kesishgan chorraha (Mo'ljal A.navoiy Teatr),pedestrian,footway,114,secondary,115,115,,True,7,fixed,"geometry: геометрия, secondary"
+545,I.karimov - B.marg'iloniy ko'chalari kesishgan chorraha (Mo'ljal Adliya),no-profile,,,,,,,,,no_carriageway,нет проезжей части в 40 м; в 300 м проезжей части нет; camera_fixes: ошибка в цифре широты: 40.19 вместо 40.39 (546/547 — тот же перекрёсток)
+560,Vatan Ravnaqi ko‘chasi Markaz Dexqon bozor,pedestrian,footway,116,,,,,,,ambiguous,перекрёсток без имени: secondary ось 44 в 12 м и secondary ось 139 в 22 м
+600,"D087 avtomobil yo'lining 2,2 km kesishgan chorraha (Mo'ljal Coca-cola)",pedestrian,footway,155,secondary,154,,,,13,fixed,"geometry: геометрия, secondary"
+673,D105 avtomobil yo'lining 302 km kesishgan chorraha (Mo'ljal O'rda Restoran),pedestrian,pedestrian,80,secondary,79,,,,14,fixed,"geometry: геометрия, secondary"
+767,"Olmazor mahallasi, Mustaqillik ko‘chasi piyodalar O‘tish joyi oldi",pedestrian,footway,43,primary,44,44,,True,6,fixed,"geometry: геометрия, primary"
+840,4P462A “G‘ova Qishlog‘iga” avtomobil Yo‘lining 0-1 Kmlar Oralig‘i Chust tumani Hokimligi Binosi Yon Tarafi,no-profile,,,,,,,,,no_carriageway,нет проезжей части в 40 м; ближайшая unclassified в 120 м
+1103,M39 Xalqaro avtomobil Yo‘lining 1287 km Oralig‘ida,no-profile,,,,,,,,,no_carriageway,нет проезжей части в 40 м; в 300 м проезжей части нет
+1153,"A-380 ""G‘uzorbuxoro"" avtomobil Yo‘lining 85-KM, Mestrzarbod Aholi Yashash Punkti (Dehqon Choyxona Ro‘parasi)",no-profile,,,,,,,,,no_carriageway,нет проезжей части в 40 м; в 300 м проезжей части нет
+1156,A380 avtomobil Yoʻlining 74 Kmda,no-profile,,,,,,,,,no_carriageway,нет проезжей части в 40 м; ближайшая residential в 267 м
+1230,D-153-B “Qarshi Xalqaro Aeroporti” avtomobil Yo‘lining 1 km.,pedestrian,footway,138,primary,137,317,,True,12,fixed,"geometry: геометрия, primary"
+1345,Gallamulla Qishlog‘i,no-profile,,,,,,,,,no_carriageway,"ближайшая residential в 32 м — дальше порога 16 м, имя/ref не совпали"
+1397,"95V126 ""Qonliko'l Ofy-bekjap Nasos Stansiyasi-qorabayli Temir yo'l bekati"" A/y 1,25 km",pedestrian,footway,63,,,,,,,ambiguous,перекрёсток без имени: tertiary ось 63 в 15 м и residential ось 140 в 13 м
+1431,"D-232 ""Nukus Sh.-xo‘jayli Sh."" A.y. 2-3 km Oralig‘i",pedestrian,footway,54,,,,,,,ambiguous,перекрёсток без имени: primary ось 53 в 15 м и residential ось 162 в 24 м
+1435,D-234 «D» D-234 Yo'lidan Nukus Tеmir Yo‘l Stansiyasiga (11 Km.dan) A.y 7-8 km Oralig‘i,pedestrian,footway,169,secondary,169,,,,16,fixed,"geometry: геометрия, secondary"
+1455,"Qoraqalpog‘iston ko‘chasi, Uztelekom Pochtasi oldi.",pedestrian,footway,79,,,,,,,ambiguous,перекрёсток без имени: tertiary ось 79 в 14 м и residential ось 168 в 19 м
+1473,"D234 ""Nukus Sh.-chimboy Sh.-taxtako‘pir Sh."" A/y 18 km Oralig‘i",pedestrian,footway,116,,,,,,,ambiguous,перекрёсток без имени: primary ось 24 в 13 м и tertiary ось 134 в 25 м
+1674,M37 A/y 43 Kmda (Samarqand shahar Aylanma yo‘li),no-profile,,,,,,,,,no_carriageway,нет проезжей части в 40 м; ближайшая service в 77 м
+2020,"A.navoiy ko‘chasi, Yashil Dunyo bozori oldi",no-profile,,,,,,,,,no_carriageway,нет проезжей части в 40 м; в 300 м проезжей части нет; camera_fixes: долгота обрезана до 67.0 — ~18 км от Термеза
+2049,"Baxoriston ko‘chasi, Tеmir Yo‘l Mosti oldi",pedestrian,steps,72,,,,,,,ambiguous,перекрёсток без имени: secondary ось 78 в 9 м и tertiary ось 175 в 18 м
+2057,D012 -Bеktеmir Sh.-chirchiq Sh. -G‘azalkеnt Sh. -Chorbog‘ Qo‘rg‘oni avtomobil Yo‘lining 4-5 km Oralig‘i,pedestrian,footway,49,trunk,50,230,,True,11,fixed,"geometry: геометрия, trunk"
+2068,Roxat Krugi Sharq Post tomon,pedestrian,footway,136,trunk,136,136,3,True,16,fixed,"geometry: геометрия, trunk"
+2081,Abu Saxiy bozor qarshisida,pedestrian,footway,166,tertiary,169,349,,True,8,fixed,"geometry: геометрия, tertiary"
+2139,Kxay Farxod Zapchast bozori Avtoturargoxga Kirish Oldiga,pedestrian,footway,178,trunk,178,178,,True,19,fixed,"geometry: геометрия, trunk"
+2218,Fidokor ko‘chasi (6 Uy Ro‘parasi Gosty Bino oldi),no-profile,,,,,,,,,no_carriageway,нет проезжей части в 40 м; в 300 м проезжей части нет; camera_fixes: долгота обрезана до 69.0 — ~22 км от Мирабада
+2224,Kxay ko‘chasi -83-MAKTAB qarshisida,pedestrian,footway,34,trunk,34,214,4,True,15,fixed,"geometry: геометрия, trunk"
+2307,Yuzrabod ko‘chasi (Avtobus Shoh bekati Ichki Qismi Ttz Ashb),pedestrian,platform,135,,,,,,,ambiguous,перекрёсток без имени: service ось 137 в 3 м и service ось 15 в 13 м
+2406,"Saqchimon ko‘chasi ""eski Juva"" bozori oldi (4-NUQTA)",pedestrian,footway,67,,,,,,,no_carriageway,нет проезжей части в 40 м; ближайшая secondary в 54 м
+2407,"Saqchimon ko‘chasi ""eski Juva"" bozori oldi (5-NUQTA)",pedestrian,footway,44,secondary,38,38,3,True,9,fixed,"geometry: геометрия, secondary"
+2455,Chorsu Ashb Ichki Qismi (3-JOY),pedestrian,footway,65,,,,,,,no_carriageway,"ближайшая service в 17 м — дальше порога 16 м, имя/ref не совпали"
+2459,Farobiy ko‘chasi. (Beruniy metro),pedestrian,bus_stop,112,primary,111,111,,True,11,fixed,name: имя «farabi farobiy street ulisa»
+2476,Paxtakor Ashb Ichki Qismi,pedestrian,footway,7,,,,,,,ambiguous,перекрёсток без имени: primary ось 7 в 11 м и primary_link ось 95 в 11 м
+2516,"D001 Txay 59,6 km",pedestrian,footway,88,,,,,,,ambiguous,перекрёсток без имени: trunk ось 90 в 18 м и trunk_link ось 125 в 25 м
+2575,D001 Txay 5-UY qarshisida (Dimax Yarmarkasi qarshisida),pedestrian,footway,17,trunk,14,14,,True,12,fixed,"geometry: геометрия, trunk"
+2576,"D001 Txay 9,6-KM (18-AVTOSTANSIYA)",pedestrian,footway,18,trunk,19,19,,True,15,fixed,"geometry: геометрия, trunk"
+2595,Izza Avtobus Shox Bеkati Oldiga,pedestrian,platform,60,,,,,,,ambiguous,"service в 2 м, но рядом tertiary в 25 м"
+2650,Khay 37-UY qarshisida,pedestrian,footway,34,trunk,35,215,4,True,37,fixed,"geometry: геометрия, trunk"
+2651,"Kxay ""Korzinka"" qarshisida",pedestrian,footway,67,trunk,64,244,4,True,14,fixed,"geometry: геометрия, trunk"
+2747,"Ohangaron Shoh ko‘chasi, Tuzel 2-MAVZE 22B-UY Qarshisidagi piyodalar O‘tish joyi",pedestrian,footway,75,trunk,165,165,3,True,0,fixed,name: имя «ahangaran axangaranskoe ohangaron road»
+3221,D012 “Bektemir Sh. — Chirchiq Sh. — G'azalkent Sh. — Chorbog' Qo'rg'oni” A/y 11-13 km. Bolta Aholi Punkti (18-MAKTAB Qarshisi),pedestrian,footway,19,,,,,,,ambiguous,перекрёсток без имени: trunk ось 24 в 22 м и unclassified ось 113 в 15 м
+3222,D012 “Bektemir Sh. — Chirchiq Sh. — G'azalkent Sh. — Chorbog' Qo'rg'oni” A/y 11-13 km. Bolta Aholi Punkti (18-MAKTAB Qarshisi),pedestrian,footway,25,,,,,,,ambiguous,перекрёсток без имени: trunk ось 24 в 11 м и unclassified ось 113 в 22 м
+3314,D213 A/y 57 km (Muhomon Aholi Yashash Punkiti),pedestrian,footway,27,primary,116,,2,,8,fixed,"geometry: геометрия, primary"
+3361,"M-37 Samarqand-buxoro-turkmanboshi Avtomobil Yo‘lining 263,750 KM",no-profile,,,,,,,,,no_carriageway,нет проезжей части в 40 м; в 300 м проезжей части нет; camera_fixes: долгота обрезана до 63.75 (пустыня); тот же участок М-37 у 252
+3407,D-153 A/y 5-6 km Oralig‘ida. O‘zbekiston mfy,pedestrian,footway,81,primary,81,261,3,True,13,fixed,"geometry: геометрия, primary"
+3441,Kxay - M. Uyg'ur 1-TOR ko'chalari kesishmasi,pedestrian,footway,90,trunk,179,179,,True,6,fixed,"geometry: геометрия, trunk"
+3481,"Ko‘hna Urganch ko‘chasi, Hamkor Bank oldi piyodalar O‘tish joyi",pedestrian,footway,9,,,,,,,ambiguous,перекрёсток без имени: secondary ось 13 в 12 м и residential ось 120 в 12 м

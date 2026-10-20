@@ -191,7 +191,7 @@ final class CameraStore: CameraRepository {
         if downloadedVersion >= AppConfig.bundledDBVersion,
            let decoded = JSONFile.load([Camera].self, from: remoteFileURL, log: Log.cameras),
            decoded.count >= 100 {
-            return (decoded, nil, true)
+            return (normalizedLabels(decoded), nil, true)
         }
         if downloadedVersion > 0, downloadedVersion < AppConfig.bundledDBVersion {
             Log.cameras.notice("скачанная база v\(downloadedVersion, privacy: .public) старше встроенной v\(AppConfig.bundledDBVersion, privacy: .public) — берём встроенную")
@@ -204,7 +204,16 @@ final class CameraStore: CameraRepository {
             Log.cameras.fault("встроенная cameras.json не читается — приложение без базы")
             return ([], String(localized: "Встроенная база камер не читается — переустановите приложение."), false)
         }
-        return (decoded, nil, false)
+        return (normalizedLabels(decoded), nil, false)
+    }
+
+    /// Адреса базы — одним алфавитом (11.6, AddressText). Только базы: свои
+    /// камеры подписаны на языке интерфейса (S16), их не трогаем.
+    nonisolated static func normalizedLabels(_ cameras: [Camera]) -> [Camera] {
+        cameras.map { camera in
+            let location = AddressText.normalized(camera.location)
+            return location == camera.location ? camera : camera.withLabels(region: camera.region, location: location)
+        }
     }
 
     // MARK: - Правки модератора
@@ -274,7 +283,7 @@ final class CameraStore: CameraRepository {
         } catch {
             throw .writeFailed(error.localizedDescription)
         }
-        bundled = decoded
+        bundled = await offMain { Self.normalizedLabels(decoded) }
         dbVersion = version
         Storage.set(version, for: .cameraDBVersion)
         dataChanged()

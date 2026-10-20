@@ -1465,10 +1465,12 @@ class EtaShareTest(ServerTestBase):
         self.assertNotIn("<script", html)
 
     def test_stores_only_four_numbers(self):
+        """Четыре числа и метка «создано ключом или token» (14.12) — и всё."""
         self.post(lat=41.31, lon=69.28, name="Дом", device="abc", dest="Мустакиллик 5")
         with api._eta_lock:
             stored = dict(api._eta_links)
-        self.assertEqual(set(stored[self.TOKEN]), {"eta", "left_m", "status", "updated"})
+        self.assertEqual(set(stored[self.TOKEN]), {"eta", "left_m", "status", "updated", "keyed"})
+        self.assertFalse(stored[self.TOKEN]["keyed"])
         raw = json.dumps(stored, ensure_ascii=False)
         for leak in ("41.31", "69.28", "Дом", "abc", "Мустакиллик"):
             self.assertNotIn(leak, raw)
@@ -1535,6 +1537,136 @@ class EtaShareTest(ServerTestBase):
     def test_family_page_rejects_garbage_token(self):
         status, _, _ = _get_raw(self.port, "/api/eta/f/short")
         self.assertEqual(status, 404)
+
+
+class EtaWriteKeyTest(ServerTestBase):
+    """14.12: ключ записи отдельно от ссылки. У кого ссылка (мама и кому она
+    её переслала) — тот видит, но не пишет: ни ложного «дома», ни чужого
+    времени. Старые сборки (один token) работают как работали."""
+
+    # Тот же вектор — в EtaShareTests.testAddressMatchesTheServer (Swift):
+    # телефон и сервер обязаны получать из ключа один и тот же адрес.
+    KEY = "Zq3xV7kP2mN8rT4wY6bH1c"
+    ADDRESS = "823EP9H7rh1PuBrW-GnHMvJAZH189cTt_vOc6Giih3A"
+
+    def setUp(self):
+        super().setUp()
+        with api._eta_lock:
+            api._eta_links.clear()
+
+    def post(self, ip=None, **fields):
+        payload = {"eta": time.time() + 25 * 60, "left_m": 12400, "status": "driving"}
+        payload.update(fields)
+        return _call(self.port, "POST", "/api/eta", payload, ip=ip)
+
+    def page(self, address=None, family=False):
+        prefix = "/api/eta/f/" if family else "/api/eta/"
+        status, headers, body = _get_raw(self.port, prefix + (address or self.ADDRESS))
+        return status, headers, body.decode()
+
+    def test_address_is_the_hash_of_the_key(self):
+        self.assertEqual(api.eta_address(self.KEY), self.ADDRESS)
+        self.assertEqual(len(self.ADDRESS), 43, "полный sha256 в base64url — длиннее token старых сборок")
+        self.assertTrue(api._ETA_TOKEN.fullmatch(self.ADDRESS), "адрес проходит проверку страницы")
+        self.assertIsNone(api._ETA_LEGACY_TOKEN.fullmatch(self.ADDRESS), "и не проходит как голый token")
+
+    def test_key_creates_updates_and_shows_the_page(self):
+        self.assertEqual(self.post(key=self.KEY)[0], 200)
+        status, headers, html = self.page()
+        self.assertEqual(status, 200)
+        self.assertIn("Будет примерно в", html)
+        self.assertEqual(headers.get("X-Eta-Version"), "2")
+        self.assertEqual(self.post(key=self.KEY, status="arrived", left_m=0)[0], 200)
+        self.assertIn("На месте с", self.page()[2])
+        with api._eta_lock:
+            self.assertTrue(api._eta_links[self.ADDRESS]["keyed"])
+
+    def test_new_phone_sends_key_with_its_address(self):
+        """Новый телефон кладёт рядом с ключом сам адрес — для сервера до 14.12.
+        Здесь адрес обязан быть адресом этого ключа."""
+        self.assertEqual(self.post(key=self.KEY, token=self.ADDRESS)[0], 200)
+        self.assertEqual(self.page()[0], 200)
+        other = "B" * 43
+        self.assertEqual(self.post(key=self.KEY, token=other)[0], 400, "ключ и адрес разошлись")
+        self.assertEqual(self.post(key=self.KEY, token=12345)[0], 400)
+        with api._eta_lock:
+            self.assertNotIn(other, api._eta_links)
+
+    def test_reader_cannot_write_with_the_link(self):
+        """Читатель знает адрес из ссылки — и только. Ни как token, ни как ключ,
+        ни пока запись живёт, ни когда её нет (семейная ссылка между поездками
+        домой, рестарт сервиса)."""
+        status, _ = self.post(token=self.ADDRESS, status="arrived", left_m=0)
+        self.assertEqual(status, 400, "запись по адресу ключа без ключа — пока записи нет")
+        with api._eta_lock:
+            self.assertNotIn(self.ADDRESS, api._eta_links)
+        self.assertIn("Сейчас не в пути", self.page(family=True)[2])
+
+        self.post(key=self.KEY)
+        status, _ = self.post(token=self.ADDRESS, status="arrived", left_m=0)
+        self.assertEqual(status, 400, "запись по адресу ключа без ключа — поверх живой")
+        self.post(key=self.ADDRESS, status="arrived", left_m=0)   # адрес вместо ключа — пишет в другое место
+        self.post(key=self.ADDRESS, token=self.ADDRESS, status="arrived", left_m=0)
+        status, _, html = self.page(family=True)
+        self.assertEqual(status, 200)
+        self.assertIn("Будет примерно в", html, "читатель подменил «в пути» на «дома»")
+        self.assertNotIn("Дома", html)
+
+    def test_token_never_overwrites_an_entry_created_by_key(self):
+        """Вторая стена: даже если адрес ключа когда-нибудь станет похож на
+        token, запись без ключа не ложится поверх записи с ключом."""
+        now = time.time()
+        self.assertEqual(self.post(key=self.KEY)[0], 200)
+        forged = {"eta": now, "left_m": 0, "status": "arrived", "updated": now, "keyed": False}
+        self.assertFalse(api.eta_put(self.ADDRESS, forged, now))
+        with api._eta_lock:
+            self.assertEqual(api._eta_links[self.ADDRESS]["status"], "driving")
+        own = dict(forged, keyed=True)
+        self.assertTrue(api.eta_put(self.ADDRESS, own, now), "ключ свою запись обновляет")
+        legacy = "L" * 22
+        self.assertTrue(api.eta_put(legacy, dict(forged), now))
+        self.assertTrue(api.eta_put(legacy, dict(own), now),
+                        "ключ поверх token — можно: пишет владелец ключа")
+
+    def test_old_builds_keep_their_token_links(self):
+        """Старые сборки шлют один token из 22 знаков — он и адрес, и ключ."""
+        legacy = "Ab3_xY-9" + "q" * 14
+        for status_name, expected in (("driving", "Будет примерно в"), ("arrived", "На месте с")):
+            self.assertEqual(self.post(token=legacy, status=status_name, left_m=0)[0], 200)
+            self.assertIn(expected, self.page(legacy)[2])
+        self.assertEqual(self.post(token=legacy, eta=time.time() + 1200)[0], 200)
+        self.assertIn("Будет примерно в", self.page(legacy, family=True)[2])
+
+    def test_rejects_bad_keys(self):
+        for key in ("short", "x" * 65, "../../etc/passwd" + "x" * 20, "ключ" * 8, 123, True,
+                    ["a" * 22], self.KEY + "\n", ""):
+            self.assertEqual(self.post(key=key)[0], 400, repr(key))
+        self.assertEqual(self.post(token="T" * 42 + "\n")[0], 400, "перевод строки в конце — не token")
+        with api._eta_lock:
+            self.assertEqual(api._eta_links, {})
+
+    def test_key_never_leaves_the_server_or_stays_in_it(self):
+        """Ключ записи не сохраняется и не возвращается: ни в ответе, ни на
+        странице, ни в памяти — только его хэш как адрес."""
+        status, body = self.post(key=self.KEY, token=self.ADDRESS)
+        self.assertEqual(status, 200)
+        self.assertNotIn(self.KEY, json.dumps(body))
+        for family in (False, True):
+            status, headers, html = self.page(family=family)
+            self.assertNotIn(self.KEY, html)
+            self.assertNotIn(self.KEY, json.dumps(headers))
+        with api._eta_lock:
+            self.assertNotIn(self.KEY, json.dumps(api._eta_links))
+        status, body = self.post(key=self.KEY, token="C" * 43)
+        self.assertEqual(status, 400)
+        self.assertNotIn(self.KEY, json.dumps(body), "и в отказе тоже")
+
+    def test_version_header_on_every_page(self):
+        """Проверка выкладки снаружи: и страница устаревшей ссылки, и пробник
+        телефона («A» × 22) отвечают версией."""
+        for path in ("/api/eta/" + "A" * 22, "/api/eta/f/" + "A" * 22, "/api/eta/f/short"):
+            _, headers, _ = _get_raw(self.port, path)
+            self.assertEqual(headers.get("X-Eta-Version"), "2", path)
 
 
 

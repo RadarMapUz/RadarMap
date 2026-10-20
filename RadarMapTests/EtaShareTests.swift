@@ -2,8 +2,9 @@
 //  EtaShareTests.swift
 //  RadarMapTests
 //
-//  «Поделиться прибытием»: ссылку не угадать, на сервер уходят только
-//  четыре поля — ни точки, ни цели, ни устройства.
+//  «Поделиться прибытием»: ссылку не угадать, на сервер уходят только ключ
+//  записи, адрес и четыре поля — ни точки, ни цели, ни устройства; в ссылке —
+//  только хэш ключа (14.12).
 //
 
 import XCTest
@@ -23,16 +24,64 @@ final class EtaShareTests: XCTestCase {
         XCTAssertEqual(url.absoluteString, "https://soulmed.uz/radarmap/api/eta/abc")
     }
 
-    func testPayloadCarriesOnlyFourFields() throws {
-        let body = EtaShare.payload(token: "t", arrival: Date(timeIntervalSince1970: 1_760_000_000.4),
+    func testPayloadCarriesOnlyTheKeyAddressAndFourFields() throws {
+        let key = EtaShare.makeToken()
+        let body = EtaShare.payload(write: .secret(key), arrival: Date(timeIntervalSince1970: 1_760_000_000.4),
                                     remainingMeters: 12_400.6, status: .driving)
-        XCTAssertEqual(Set(body.keys), ["token", "eta", "left_m", "status"])
+        XCTAssertEqual(Set(body.keys), ["key", "token", "eta", "left_m", "status"])
+        XCTAssertEqual(body["key"] as? String, key, "пишет ключ")
+        XCTAssertEqual(body["token"] as? String, EtaShare.address(forKey: key),
+                       "рядом — адрес, для сервера до 14.12; ключом он не служит")
         XCTAssertEqual(body["left_m"] as? Int, 12_401)
         XCTAssertEqual(body["status"] as? String, "driving")
         let raw = String(data: try JSONSerialization.data(withJSONObject: body), encoding: .utf8) ?? ""
         for leak in ["lat", "lon", "device", "dest", "name"] {
             XCTAssertFalse(raw.contains(leak), leak)
         }
+    }
+
+    // MARK: - Ключ записи отдельно от ссылки (14.12)
+
+    /// Тот же вектор — в server/test_api.py (EtaWriteKeyTest): телефон и
+    /// сервер обязаны получать из ключа один и тот же адрес, иначе ссылка
+    /// у близкого и запись разойдутся.
+    func testAddressMatchesTheServer() {
+        XCTAssertEqual(EtaShare.address(forKey: "Zq3xV7kP2mN8rT4wY6bH1c"),
+                       "823EP9H7rh1PuBrW-GnHMvJAZH189cTt_vOc6Giih3A")
+    }
+
+    /// Адрес — 43 знака base64url: проходит в путь страницы и на старом
+    /// сервере (22…64), а длиннее любой ссылки до 14.12 (22) — по этой длине
+    /// сервер и отказывает голому token на адрес с ключом.
+    func testAddressIsStableUrlSafeAndLongerThanOldLinks() {
+        let key = EtaShare.makeToken()
+        let address = EtaShare.address(forKey: key)
+        XCTAssertEqual(address, EtaShare.address(forKey: key), "один ключ — один адрес")
+        XCTAssertEqual(address.count, 43)
+        XCTAssertTrue(address.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") })
+        XCTAssertNotEqual(address, EtaShare.address(forKey: EtaShare.makeToken()))
+        XCTAssertFalse(address.contains(key), "по адресу ключ не прочесть")
+    }
+
+    /// В ссылке, которую водитель отправляет, — адрес, а не ключ.
+    func testSharedLinkCarriesTheAddressNotTheKey() {
+        let key = EtaShare.makeToken()
+        let write = EtaShare.WriteKey.secret(key)
+        let url = EtaShare.link(base: URL(string: "https://soulmed.uz/radarmap")!, token: write.address)
+        XCTAssertEqual(url.lastPathComponent, EtaShare.address(forKey: key))
+        XCTAssertFalse(url.absoluteString.contains(key))
+    }
+
+    /// Ссылка до 14.12 (только семейная, до своей смены): адрес и есть ключ,
+    /// уходит один token — как от старой сборки, и сервер его примет.
+    func testLegacyLinkSendsOnlyItsToken() {
+        let token = EtaShare.makeToken()
+        let write = EtaShare.WriteKey.legacy(token)
+        XCTAssertEqual(write.address, token)
+        let body = EtaShare.payload(write: write, arrival: Date(timeIntervalSince1970: 1_760_000_000),
+                                    remainingMeters: 0, status: .arrived)
+        XCTAssertEqual(Set(body.keys), ["token", "eta", "left_m", "status"])
+        XCTAssertEqual(body["token"] as? String, token)
     }
 
     /// В пробке с тем же прибытием ссылка не дёргает радио каждую минуту;

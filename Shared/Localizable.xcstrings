@@ -4005,6 +4005,22 @@
         }
       }
     },
+    "Да, радар ещё стоял": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Да, радар ещё стоял"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ha, radar hali ham turibdi"
+          }
+        }
+      }
+    },
     "Да, ремонт ещё идёт": {
       "localizations": {
         "ru": {
@@ -7856,6 +7872,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "GPS signali yoʻq"
+          }
+        }
+      }
+    },
+    "Нет, радара уже не было": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет, радара уже не было"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻq, radar ketib qolgan"
           }
         }
       }

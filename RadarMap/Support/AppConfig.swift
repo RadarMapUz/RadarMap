@@ -1011,6 +1011,14 @@ nonisolated enum AppConfig {
     /// Вспышка ответа на «Радар!» и вопрос «Радар ещё стоял?» на телефоне.
     static let reportFlashSeconds: TimeInterval = 2
     static let mobileQuestionSeconds: TimeInterval = 20
+    /// Тот же вопрос (и «Ещё перекрыто?») при включённом VoiceOver. Двадцати
+    /// секунд хватает взгляду, но не слуху: объявление вопроса, затем
+    /// пролистывание до «Да» и «Нет» и двойное касание — плашка уходила
+    /// раньше, чем до неё доходил фокус. 45 с — с запасом на одно повторное
+    /// пролистывание; дольше вопрос о только что пройденной точке теряет смысл,
+    /// и выше `mobileConfirmMaxAgeSeconds` срок не поднимется никогда
+    /// (PassQuestionTimeout).
+    static let mobileQuestionVoiceOverSeconds: TimeInterval = 45
 
     // MARK: - Расписание опроса в поездке
     //

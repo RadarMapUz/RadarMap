@@ -9,6 +9,23 @@ Restart=on-failure
 RestartSec=10
 User=root
 WorkingDirectory=/opt/radarmap/api
+# Песочница — та же, что у api и панели (systemd-radarmap-sandbox.conf): бот
+# разбирает чужой ввод из интернета и держит токен, а работает от root на
+# общем VPS. Писать ему нужно только bot.db (и журнал sqlite рядом) в
+# /opt/radarmap/api; конфиг /opt/radarmap/telegram_bot.conf — только чтение.
+# Сеть — только исходящая к Telegram и к API на 127.0.0.1:8091.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/radarmap/api
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
 [Install]
 WantedBy=multi-user.target

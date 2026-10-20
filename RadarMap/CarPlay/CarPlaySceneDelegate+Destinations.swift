@@ -139,7 +139,8 @@ extension CarPlaySceneDelegate {
         let ahead = RouteCamerasAhead.list(env.route.camerasOnRoute, progress: env.route.progressAlong,
                                            limit: Int(CPListTemplate.maximumItemCount))
         guard !ahead.isEmpty else {
-            return showToast(String(localized: "Камер впереди по маршруту нет"))
+            showToast(String(localized: "Камер впереди по маршруту нет"))
+            return
         }
         let items = ahead.map { item in
             CPListItem(text: "\(Formatting.distance(item.meters)) · \(item.camera.kind.displayName)",
@@ -449,8 +450,6 @@ extension CarPlaySceneDelegate {
         }
     }
 
-    /// Заезд по пути: маршрут к той же цели через `place`. Не вышло — прежний
-    /// маршрут остаётся, и машина говорит почему.
     /// Место из поиска (10.5). Без маршрута — цель. С маршрутом — спросить:
     /// «Заехать по пути» или «Новая цель». До 20.10 заезд был только у плитки
     /// «АЗС», а найденная поиском аптека молча заменяла цель — и маршрут
@@ -478,6 +477,8 @@ extension CarPlaySceneDelegate {
         }
     }
 
+    /// Заезд по пути: маршрут к той же цели через `place`. Не вышло — прежний
+    /// маршрут остаётся, и машина говорит почему.
     func addStop(_ place: SavedPlace) {
         Task { @MainActor [weak self] in
             guard let self else { return }

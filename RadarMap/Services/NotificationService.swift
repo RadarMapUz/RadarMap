@@ -176,7 +176,7 @@ final class NotificationService: NSObject {
             if let previousRating, rating != previousRating {
                 let delta = rating - previousRating
                 parts.append(String(format: String(localized: "рейтинг %1$lld (%2$@)"),
-                                    rating, delta > 0 ? "+\(delta)" : "\(delta)"))
+                                    rating, Formatting.signed(delta)))
             } else {
                 parts.append(String(format: String(localized: "рейтинг %lld"), rating))
             }

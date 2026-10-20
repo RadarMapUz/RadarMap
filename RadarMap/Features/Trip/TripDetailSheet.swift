@@ -441,7 +441,12 @@ struct TripDetailContent: View {
         var over: [MapPicture.Dot] = []
         for pass in record.passed {
             guard let coordinate = pass.coordinate else { continue }
-            if PassStyle.symbol(speed: pass.speedKmh, limit: pass.limitKmh) != nil {
+            // Лимит неизвестен — серая точка, как на карте периода и в Итогах:
+            // ни «в лимите», ни «превышение» про неё сказать нельзя.
+            if pass.limitKmh == nil {
+                picture.dots.append(.init(coordinate: coordinate, diameter: 9,
+                                          fill: Theme.textTertiary, ringWidth: 1.5))
+            } else if PassStyle.symbol(speed: pass.speedKmh, limit: pass.limitKmh) != nil {
                 over.append(.init(coordinate: coordinate, diameter: 24,
                                   fill: PassStyle.color(speed: pass.speedKmh, limit: pass.limitKmh),
                                   ringWidth: 2, label: "\(Int(pass.speedKmh.rounded()))",
@@ -463,12 +468,17 @@ struct TripDetailContent: View {
     /// Легенда на самой карте: без неё зелёная точка и красный круг с числом
     /// — догадка, а не знание.
     @ViewBuilder private var mapLegend: some View {
-        let over = record.passed.filter { PassStyle.symbol(speed: $0.speedKmh, limit: $0.limitKmh) != nil }.count
-        let clean = record.passed.count - over
+        let known = record.passed.filter { $0.limitKmh != nil }
+        let over = known.filter { PassStyle.symbol(speed: $0.speedKmh, limit: $0.limitKmh) != nil }.count
+        let clean = known.count - over
+        let unknown = record.passed.count - known.count
         if !record.passed.isEmpty {
             HStack(spacing: 10) {
                 if clean > 0 { legendDot(Theme.success, String(format: String(localized: "в лимите: %lld"), clean)) }
                 if over > 0 { legendDot(Theme.danger, String(format: String(localized: "превышений: %lld"), over)) }
+                if unknown > 0 {
+                    legendDot(Theme.textTertiary, String(format: String(localized: "лимит неизвестен: %lld"), unknown))
+                }
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
             .background(Theme.surface.opacity(0.92), in: Capsule())
@@ -617,7 +627,7 @@ struct TripDetailContent: View {
                   icon: "clock"),
             .init(value: Formatting.distance(record.distanceMeters), label: String(localized: "пройдено пути"),
                   icon: "point.topleft.down.to.point.bottomright.curvepath"),
-            .init(value: "\(record.camerasPassed)", label: String(localized: "пройдено камер"),
+            .init(value: "\(record.camerasPassed)", label: String(localized: "проездов камер"),
                   icon: Icon.cameras),
             .init(value: "\(Int(record.maxSpeedKmh))", label: String(localized: "максимум, км/ч"),
                   icon: "gauge.with.dots.needle.100percent"),
@@ -764,20 +774,32 @@ struct TripShareCard: View {
     }
 
     /// «Все камеры в лимите» или «Риск ≈ … · место» — главный вывод поездки.
+    /// Решает `TripRecord.verdict`: карточку отправляют наружу, и «в лимите»
+    /// после превышения с предположенным лимитом или после «штраф пришёл»
+    /// было бы враньём в пользу водителя. Лимиты неизвестны — без плашки.
     @ViewBuilder private var verdictChip: some View {
-        let risk = TripHistory.fineRisk(of: record.passed)
-        if risk > 0 {
-            let worst = TripHistorySection.worstPenalty(record)
+        switch record.verdict {
+        case .risk(let risk):
+            // Место — самого дорогого ЖДУЩЕГО штрафа: лидер по баллам мог быть
+            // с отменённым штрафом или предположенным лимитом и в сумму не входит.
+            let place = TripHistorySection.worstRiskPlace(record)
             chip(icon: "exclamationmark.triangle.fill",
-                 text: worst.map {
-                     String(format: String(localized: "Риск ≈ %1$@ · %2$@"),
-                            Formatting.money(risk), $0.place)
+                 text: place.map {
+                     String(format: String(localized: "Риск ≈ %1$@ · %2$@"), Formatting.money(risk), $0)
                  } ?? String(format: String(localized: "Риск ≈ %@"), Formatting.money(risk)),
                  tint: Theme.danger)
-        } else if record.camerasPassed > 0 {
+        case .overspeed(let count):
+            chip(icon: "exclamationmark.triangle.fill",
+                 text: String(format: String(localized: "Штрафуемых превышений: %lld"), count),
+                 tint: Theme.danger)
+        case .clean:
+            // Не «Все камеры в лимите»: у части камер лимит мог быть неизвестен,
+            // а балл снимает и ниже ступени штрафа.
             chip(icon: "checkmark.seal.fill",
-                 text: String(localized: "Все камеры в лимите"),
+                 text: String(localized: "Без штрафуемых превышений"),
                  tint: Theme.success)
+        case .unknownLimits, .noCameras:
+            EmptyView()
         }
     }
 

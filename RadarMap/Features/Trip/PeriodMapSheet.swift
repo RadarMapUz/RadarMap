@@ -147,7 +147,7 @@ struct PeriodMapSheet: View {
         let size = min(34.0, 20 + Double(marker.times) * 2.5)
         return ZStack {
             Circle()
-                .fill(marker.hasViolation ? Theme.danger : Theme.success)
+                .fill(Self.tint(marker))
                 .frame(width: size, height: size)
             if marker.times > 1 {
                 Text("\(marker.times)")
@@ -167,7 +167,16 @@ struct PeriodMapSheet: View {
         // без этого не отвечает на вопрос, ради которого открыли карту.
         .accessibilityLabel(marker.hasViolation
             ? Text("\(marker.location), превышений: \(marker.overTimes) из \(marker.times)")
-            : Text("\(marker.location), без превышений, проездов: \(marker.times)"))
+            : marker.limitUnknown
+                ? Text("\(marker.location), лимит неизвестен, проездов: \(marker.times)")
+                : Text("\(marker.location), без превышений, проездов: \(marker.times)"))
+    }
+
+    /// Красный — превышение, зелёный — в лимите, серый — лимит неизвестен:
+    /// зелёным такую точку красить нельзя, «в лимите» мы о ней не знаем.
+    static func tint(_ marker: PassMarker) -> Color {
+        if marker.hasViolation { return Theme.danger }
+        return marker.limitUnknown ? Theme.textTertiary : Theme.success
     }
 
     /// Карточка выбранной камеры: место, проезды, макс скорость против лимита.
@@ -203,6 +212,10 @@ struct PeriodMapSheet: View {
                               systemImage: "exclamationmark.triangle.fill")
                             .font(.rounded(15, .semibold))
                             .foregroundStyle(Theme.danger)
+                    } else if marker.limitUnknown {
+                        Label("лимит неизвестен", systemImage: "questionmark.circle.fill")
+                            .font(.rounded(15, .semibold))
+                            .foregroundStyle(Theme.textSecondary)
                     } else {
                         Label("все проезды в лимите", systemImage: "checkmark.seal.fill")
                             .font(.rounded(15, .semibold))
@@ -222,7 +235,7 @@ struct PeriodMapSheet: View {
         HStack(spacing: 5) {
             Text("\(Int(marker.maxSpeedKmh.rounded()))")
                 .font(.rounded(17, .heavy).monospacedDigit())
-                .foregroundStyle(marker.hasViolation ? Theme.danger : Theme.success)
+                .foregroundStyle(marker.limitUnknown ? Theme.textPrimary : Self.tint(marker))
             if let limit = marker.limitKmh {
                 Text("/ \(limit)")
                     .font(.rounded(15, .semibold).monospacedDigit())
@@ -233,8 +246,7 @@ struct PeriodMapSheet: View {
                 .foregroundStyle(Theme.textTertiary)
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
-        .background((marker.hasViolation ? Theme.danger : Theme.success).opacity(0.12),
-                    in: Capsule())
+        .background(Self.tint(marker).opacity(0.12), in: Capsule())
     }
 
     private func passCount(_ marker: PassMarker) -> String {

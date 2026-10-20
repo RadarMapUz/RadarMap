@@ -153,29 +153,45 @@ struct TripEndCard: View {
             .frame(width: 46, height: 46)
             .accessibilityLabel(Text(String(format: String(localized: "Балл поездки: %lld"), score)))
         } else {
-            Image(systemName: "checkmark.seal.fill")
+            // Без балла зелёная печать — только у чистой поездки: рядом с
+            // «Лимиты камер неизвестны» она хвалила за то, чего мы не знаем.
+            let clean = record.verdict == .clean
+            let tint = clean ? Theme.success : Theme.accent
+            Image(systemName: clean ? "checkmark.seal.fill" : "checkmark.circle.fill")
                 .font(.rounded(22, .bold))
-                .foregroundStyle(Theme.success)
+                .foregroundStyle(tint)
                 .frame(width: 46, height: 46)
-                .background(Theme.success.opacity(0.12), in: Circle())
+                .background(tint.opacity(0.12), in: Circle())
         }
     }
 
-    /// Одна честная строка про деньги: риск, если он есть, иначе «всё в лимите».
+    /// Одна честная строка про деньги и поведение (`TripRecord.verdict`):
+    /// риск, если он есть; превышения без суммы (лимит предположен) — тоже
+    /// превышения; «нет» — только когда хоть один лимит известен. Граница —
+    /// ступень ШТРАФА: балл снимает и за +3 км/ч, поэтому «штрафуемых», а не
+    /// «превышений нет» (ревью 20.10). Без числа камер: оно в плитке ниже, а
+    /// строка с ним не влезала в карточку на 375–402 pt.
     private var moneyLine: String {
-        let risk = TripHistory.fineRisk(of: record.passed)
-        if risk > 0 {
+        switch record.verdict {
+        case .risk(let risk):
             return String(format: String(localized: "риск ≈ %@"), Formatting.money(risk))
+        case .overspeed(let count):
+            return String(format: String(localized: "Штрафуемых превышений: %lld"), count)
+        case .clean:
+            return String(localized: "Штрафуемых превышений нет")
+        case .unknownLimits:
+            return String(localized: "Лимиты камер неизвестны")
+        case .noCameras:
+            return String(localized: "Без камер и превышений")
         }
-        if record.camerasPassed > 0 {
-            return String(format: String(localized: "Камер: %lld — все в лимите"),
-                          record.camerasPassed)
-        }
-        return String(localized: "Без камер и превышений")
     }
 
     private var moneyTint: Color {
-        TripHistory.fineRisk(of: record.passed) > 0 ? Theme.danger : Theme.success
+        switch record.verdict {
+        case .risk, .overspeed: return Theme.danger
+        case .clean, .noCameras: return Theme.success
+        case .unknownLimits: return Theme.textSecondary
+        }
     }
 
     // MARK: - Склейка «это продолжение прошлой»

@@ -13,7 +13,7 @@
 //  «5–11 августа», а не «последние 168 часов», которые менялись сами по себе.
 //  Сегмента «Всё время» нет: он врал — история чистится, и «всё время»
 //  показывало последние записи. Пожизненная правда живёт в блоке «За всё время»
-//  (LifetimeStats) плюс отдельный экран «Все поездки».
+//  (LifetimeStats) плюс отдельный экран «Архив поездок».
 //
 //  Порядок блоков отвечает на вопросы в том порядке, в каком их задаёт водитель:
 //  «как я езжу» (герой) → «сколько рискую и где» (зона риска) → «покажи на
@@ -473,30 +473,37 @@ private struct LiveTripCard: View {
                 }
             }
             Divider().overlay(Theme.stroke)
+            // Подписи — те же, что в «Деталях» периода (6.3): «проездов
+            // камер», «средняя, км/ч». Цифры спокойные: красный «максимум» в
+            // поездке без единого превышения читался как тревога — цветом в
+            // Итогах говорит только состояние (как KPIStrip).
             HStack(spacing: 0) {
-                metric(Formatting.distance(trip.distanceMeters), "пройдено", Theme.success)
-                metric("\(trip.camerasPassed)", "камер", Theme.accent)
-                metric("\(Int(trip.maxSpeedKmh))", "максимум, км/ч", Theme.danger)
-                metric("\(Int(trip.averageSpeedKmh))", "средняя", Theme.warning)
+                metric(Formatting.distance(trip.distanceMeters), "пройдено")
+                metric("\(trip.camerasPassed)", "проездов камер")
+                metric("\(Int(trip.maxSpeedKmh))", "максимум, км/ч")
+                metric("\(Int(trip.averageSpeedKmh))", "средняя, км/ч")
             }
         }
         .statCard()
     }
 
-    func metric(_ value: String, _ label: LocalizedStringKey,
-                        _ color: Color) -> some View {
+    func metric(_ value: String, _ label: LocalizedStringKey) -> some View {
         VStack(spacing: 3) {
             Text(value)
                 .font(.rounded(18, .heavy).monospacedDigit())
-                .foregroundStyle(color)
+                .foregroundStyle(Theme.textPrimary)
                 .liveNumber()
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+            // Две строки, как у KPIStrip: «проездов камер» в одну строку на SE
+            // ужималось до нечитаемого кегля.
             Text(label)
                 .font(.rounded(10, .medium))
                 .foregroundStyle(Theme.textTertiary)
-                .lineLimit(1)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
                 .minimumScaleFactor(0.8)
+                .frame(height: 26, alignment: .top)
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)

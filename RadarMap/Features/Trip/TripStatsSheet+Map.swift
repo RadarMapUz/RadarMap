@@ -98,9 +98,10 @@ extension TripStatsSheet {
         let clean = markers.filter { !$0.hasViolation }
         let over = markers.filter(\.hasViolation)
         let cleanSize: CGFloat = markers.count > 60 ? 6 : 8
+        // Цвет — тот же, что на полной карте: лимит неизвестен — серая точка.
         return clean.map {
-            MapPicture.Dot(coordinate: $0.coordinate, diameter: cleanSize, fill: Theme.success,
-                           ringWidth: 1.2)
+            MapPicture.Dot(coordinate: $0.coordinate, diameter: cleanSize,
+                           fill: PeriodMapSheet.tint($0), ringWidth: 1.2)
         } + over.map {
             MapPicture.Dot(coordinate: $0.coordinate, diameter: 13, fill: Theme.danger, ringWidth: 2)
         }
@@ -144,7 +145,7 @@ extension TripStatsSheet {
 
     // MARK: - Подпись под картой
 
-    /// Без выбора — легенда с цифрами и вход в полный экран. С выбором — возврат
+    /// Без выбора — легенда цветов и вход в полный экран. С выбором — возврат
     /// ко всем поездкам и вход в деталку: тап по строке теперь занят картой.
     @ViewBuilder var mapFooter: some View {
         if let selected = mapSelection {
@@ -176,41 +177,58 @@ extension TripStatsSheet {
                 .buttonStyle(PressableStyle())
             }
         } else {
-            HStack(spacing: 14) {
-                // На карте — точки, то есть УНИКАЛЬНЫЕ камеры; повторные
-                // проезды одной камеры складываются в один маркер.
-                // «Камер в лимите: 0» с зелёной точкой — не факт, а его
-                // отсутствие: за период камер по пути просто не было.
-                let clean = mapData.markers.filter { !$0.hasViolation }.count
-                if mapData.markers.isEmpty {
-                    Text("Камер по пути не было")
-                        .font(.rounded(11))
-                        .foregroundStyle(Theme.textTertiary)
-                } else if clean > 0 {
-                    legendItem(Theme.success,
-                               String(format: String(localized: "Камер в лимите: %lld"), clean))
+            // Легенда объясняет цвета, а не считает: точки — это РАЗНЫЕ камеры,
+            // и их число рядом с «проездами камер» карточки денег читалось
+            // третьим счётчиком с похожим словом (6.2). Не помещается в строку
+            // с «Открыть» (узбекский, крупный шрифт) — встаёт над ней.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 14) {
+                    legendKeys
+                    Spacer(minLength: 0)
+                    openMapButton
                 }
-                if mapData.markers.contains(where: \.hasViolation) {
-                    legendItem(Theme.danger,
-                               String(format: String(localized: "Камер с превышением: %lld"),
-                                      mapData.markers.filter(\.hasViolation).count))
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 14) { legendKeys }
+                    openMapButton
                 }
-                Spacer(minLength: 0)
-                Button {
-                    openMap(focus: nil)
-                } label: {
-                    HStack(spacing: 4) {
-                        Text("Открыть")
-                            .font(.rounded(11, .semibold))
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.rounded(9, .bold))
-                    }
-                    .foregroundStyle(Theme.accent)
-                    .tapTarget()
-                }
-                .buttonStyle(PressableStyle())
             }
         }
+    }
+
+    /// Ключи цвета — только тех точек, что есть на карте. Пустая легенда —
+    /// честное «камер по пути не было», а не зелёный ноль.
+    @ViewBuilder var legendKeys: some View {
+        let markers = mapData.markers
+        if markers.isEmpty {
+            Text("Камер по пути не было")
+                .font(.rounded(11))
+                .foregroundStyle(Theme.textTertiary)
+        }
+        if markers.contains(where: { !$0.hasViolation && !$0.limitUnknown }) {
+            legendItem(Theme.success, String(localized: "в лимите"))
+        }
+        if markers.contains(where: \.hasViolation) {
+            legendItem(Theme.danger, String(localized: "с превышением"))
+        }
+        if markers.contains(where: { !$0.hasViolation && $0.limitUnknown }) {
+            legendItem(Theme.textTertiary, String(localized: "лимит неизвестен"))
+        }
+    }
+
+    var openMapButton: some View {
+        Button {
+            openMap(focus: nil)
+        } label: {
+            HStack(spacing: 4) {
+                Text("Открыть")
+                    .font(.rounded(11, .semibold))
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.rounded(9, .bold))
+            }
+            .foregroundStyle(Theme.accent)
+            .tapTarget()
+        }
+        .buttonStyle(PressableStyle())
     }
 
     func legendItem(_ color: Color, _ title: String) -> some View {

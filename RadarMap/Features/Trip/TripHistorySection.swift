@@ -212,5 +212,19 @@ struct TripHistorySection: View {
         return worst.map { (Int($0.points.rounded()), $0.place) }
     }
 
+    /// Место самого дорогого ЖДУЩЕГО штрафа — пара к сумме риска. Лидер по
+    /// баллам (`worstPenalty`) мог быть с отменённым штрафом или с
+    /// предположенным лимитом, а в сумму риска такие проезды не входят.
+    static func worstRiskPlace(_ record: TripRecord) -> String? {
+        var best: (fine: Double, place: String)?
+        for pass in record.passed where pass.limitIsCertain && pass.countsTowardFines {
+            guard let limit = pass.limitKmh else { continue }
+            let fine = FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
+            guard fine > 0, fine > (best?.fine ?? 0) else { continue }
+            best = (fine, pass.location.isEmpty ? pass.kind.displayName : pass.location)
+        }
+        return best?.place
+    }
+
     static func scoreColor(_ score: Int) -> Color { Theme.score(score) }
 }

@@ -36,6 +36,16 @@ final class TripArchiveTests: XCTestCase {
         XCTAssertEqual(fined.first?.records.count, 1)
     }
 
+    /// «Только с превышениями» — по поведению, как вердикт поездки:
+    /// предположенный лимит снимает деньги, но не превышение.
+    func testFilterKeepsOverspeedWithAssumedLimit() {
+        var trip = record(5, month: 10, over: true)
+        trip.passed[0].limitAssumed = true
+        XCTAssertTrue(TripArchive.hasOverspeed(trip))
+        XCTAssertEqual(TripArchive.months([trip], onlyFined: true, calendar: utc).first?.records.count, 1)
+        XCTAssertFalse(TripArchive.hasOverspeed(record(6, month: 10, over: false)))
+    }
+
     func testFinishNamesTheNearestPlaceWithinRadius() {
         let home = CLLocationCoordinate2D(latitude: 41.3000, longitude: 69.2000)
         let work = CLLocationCoordinate2D(latitude: 41.3500, longitude: 69.3000)

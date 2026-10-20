@@ -308,6 +308,21 @@ class GeneraliseTests(unittest.TestCase):
                                  open(os.path.join(b, name), "rb").read(),
                                  f"{name} зависит от порядка входа")
 
+    def test_sub_metre_stub_is_not_written(self):
+        # Огрызок короче метра после квантования — одна точка; клиенты до
+        # 20.10 отбрасывали из-за такой записи весь тайл.
+        street = self.line_north(6, 0, 69.25, 41.300, 41.302)
+        stub = self.road(6, 0, [(41.3010000, 69.2510000), (41.3010001, 69.2510001)])
+        with tempfile.TemporaryDirectory() as work:
+            build_roads.write_tiles([street, stub], work)
+            for name in os.listdir(work):
+                if not name.startswith("road2_"):
+                    continue
+                with open(os.path.join(work, name)) as handle:
+                    tile = json.load(handle)
+                for entry in tile.get("roads", []):
+                    self.assertGreaterEqual(len(entry[2]), 4, f"{name}: огрызок из одной точки")
+
     def test_yards_live_in_their_own_file(self):
         # Дворовые проезды — половина всех дорог, а видны только вблизи.
         # В общем файле телефон возил бы их всю дорогу впустую.

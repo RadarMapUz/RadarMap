@@ -354,9 +354,12 @@ nonisolated struct RoadShape {
 /// в «Где теряете баллы» и снятых баллов рейтинга — поэтому здесь неизвестность
 /// НЕ трактуется никак: отклоняем только по доказательству.
 ///
-/// Доказательство одно и твёрдое: кусок собственной проезжей части камеры
-/// (`road`, есть у 99,7 % базы). Боковое отклонение от него — настоящая
-/// измеренная величина, а не эвристический конус коридора.
+/// Доказательств два, оба измеренные, а не эвристический конус коридора:
+/// боковое отклонение от куска собственной проезжей части камеры (`road`,
+/// есть у 99,7 % базы) — параллельная улица и дублёр; и курс поперёк оси её
+/// дороги у самой камеры — поперечная улица перекрёстка, где кусок дороги
+/// короче нас и боковое отклонение молчит. Оба — только для ЗАПИСИ проезда:
+/// гейты оповещений они не трогают.
 nonisolated enum PassGeometry {
 
     /// Насколько близко надо пройти, чтобы камера считалась пройденной.
@@ -380,6 +383,52 @@ nonisolated enum PassGeometry {
               let shape = RoadShape(camera: camera),
               let lateral = shape.lateralOffset(from: coordinate) else { return false }
         return lateral > offRoadLimit(for: camera)
+    }
+
+    /// Отклонение курса от оси дороги камеры в этой точке, 0…90°, — сырьё
+    /// второго доказательства «не наш проезд» (`isProvenCrossing`).
+    ///
+    /// nil — доказывать нечем:
+    /// - курсу верить нельзя (`course < 0`: LocationFilter не дал курса) или
+    ///   фикс хуже `courseProofMaxAccuracyMeters`: курс по земле на таком —
+    ///   шум, а шум доказательством не бывает;
+    /// - профилю нельзя доверить «не наша» (`profileMayMute`): у снапа на
+    ///   тротуар, проезд или жилую зону ось чужая — радар трассы, севший на
+    ///   поперечный проезд, иначе не писался бы никогда (3135, 3136 на D006);
+    /// - позиция камеры не проверена (`needsReview`): снап не нашёл её дорогу
+    ///   по имени, и ось может быть осью поперечной улицы;
+    /// - оси нет вовсе (свои точки, краудсорс).
+    ///
+    /// Ось — с куска дороги у ТЕКУЩЕЙ точки, как у гейта оси: на кривой одна
+    /// ось всей дороги врёт.
+    static func axisDeviation(camera: Camera, at coordinate: CLLocationCoordinate2D,
+                              course: CLLocationDirection,
+                              accuracy: CLLocationAccuracy) -> Double? {
+        guard course >= 0, accuracy <= AppConfig.courseProofMaxAccuracyMeters,
+              camera.profileMayMute, camera.needsReview != true,
+              let axis = RoadShape(camera: camera)?.axis(near: coordinate)
+                ?? camera.axis.map(Double.init) else { return nil }
+        return GeoMath.axisDifference(course: course, axis: axis)
+    }
+
+    /// Доказано ли курсом, что у камеры мы ПЕРЕСЕКАЛИ её дорогу, а не ехали
+    /// по ней: медиана отклонений на тиках у самой камеры больше
+    /// `passCrossingMinAngle`.
+    ///
+    /// Медиана, а не один тик сближения: курс по земле на соседних фиксах
+    /// гуляет на ±5–10°, и именно тик минимума у 2676 был самым «прямым» из
+    /// восьми. Медиане нужно большинство тиков поперёк: свернули с поперечной
+    /// улицы на дорогу камеры до неё — у самой камеры большинство тиков вдоль,
+    /// доказательства нет, и проезд судят прежние гейты. Пусто (курса не было
+    /// или профиль не годится) — доказательства нет, как и раньше.
+    static func isProvenCrossing(_ deviations: [Double]) -> Bool {
+        guard !deviations.isEmpty else { return false }
+        let sorted = deviations.sorted()
+        let middle = sorted.count / 2
+        let median = sorted.count.isMultiple(of: 2)
+            ? (sorted[middle - 1] + sorted[middle]) / 2
+            : sorted[middle]
+        return median > AppConfig.passCrossingMinAngle
     }
 
     /// Дальше этого сбоку от дороги камеры — уже не её дорога.

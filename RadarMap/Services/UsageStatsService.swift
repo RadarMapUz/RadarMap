@@ -104,6 +104,10 @@ final class UsageStatsService {
             $0.alertRecall["late", default: 0] += tally.late
             $0.alertRecall["silent", default: 0] += tally.silent
             $0.alertRecall["unused", default: 0] += tally.unused
+            // Верная тишина (гейт доказал «не наша») — отдельным ключом:
+            // `passed` остаётся географией, как в старых сборках, и ряд на
+            // сервере не рвётся; охват = warned / (passed − notOurs).
+            $0.alertRecall["notOurs", default: 0] += tally.notOurs
         }
     }
 

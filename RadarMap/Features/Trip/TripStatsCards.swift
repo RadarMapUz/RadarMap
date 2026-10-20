@@ -194,7 +194,9 @@ struct AlertRecallCard: View {
     var onExplain: () -> Void = {}
 
     var body: some View {
-        if let recall = tally.recall, tally.passed >= AppConfig.recallMinPassesToShow {
+        // Знаменатель — камеры НАШЕЙ дороги: верная тишина о камере встречной
+        // стороны или поперечной улицы (гейт доказал) промахом не считается.
+        if let recall = tally.recall, tally.ours >= AppConfig.recallMinPassesToShow {
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeader(title: String(localized: "Предупреждения")) {
                     Button(action: onExplain) {
@@ -214,7 +216,7 @@ struct AlertRecallCard: View {
                         .foregroundStyle(recall >= AppConfig.recallGoodShare
                                          ? Theme.success : Theme.warning)
                     Text(String(format: String(localized: "камер названо заранее — %1$lld из %2$lld"),
-                                tally.warned, tally.passed))
+                                tally.warned, tally.ours))
                         .font(.rounded(15))
                         .foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -249,7 +251,7 @@ struct AlertRecallCard: View {
     private func bar(recall: Double) -> some View {
         GeometryReader { geometry in
             let width = geometry.size.width
-            let total = Double(max(tally.passed, 1))
+            let total = Double(max(tally.ours, 1))
             HStack(spacing: 2) {
                 segment(Theme.success, width * Double(tally.warned) / total)
                 segment(Theme.warning, width * Double(tally.late) / total)

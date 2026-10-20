@@ -171,7 +171,7 @@ extension LocationService {
         if !recall.isEmpty { onAlertRecall?(recall) }
         // Номера камер, а не координаты: база публичная, а маршрут по ним
         // восстановить нельзя — промахи и лишние предупреждения названы поштучно.
-        Log.alerts.notice("охват поездки: проехали \(recall.passed, privacy: .public), вовремя \(recall.warned, privacy: .public), поздно \(recall.late, privacy: .public), молча \(self.alertRecall.silentIDs, privacy: .public), впустую \(self.alertRecall.unusedIDs, privacy: .public)")
+        Log.alerts.notice("охват поездки: проехали \(recall.passed, privacy: .public), вовремя \(recall.warned, privacy: .public), поздно \(recall.late, privacy: .public), молча \(self.alertRecall.silentIDs, privacy: .public), не наши (доказано) \(self.alertRecall.notOursIDs, privacy: .public), впустую \(self.alertRecall.unusedIDs, privacy: .public)")
         // Камеры, мимо которых ещё «проезжали» в момент остановки, — ДО сброса
         // счётчика: записи проезда нужно знать, предупреждали ли о камере.
         // После сброса каждый такой проезд выходил «промолчала» — и камера,

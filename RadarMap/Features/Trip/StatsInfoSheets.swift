@@ -272,6 +272,7 @@ struct AlertRecallInfoSheet: View {
     private var numbers: some View {
         VStack(spacing: 10) {
             row(String(localized: "камер проехали"), "\(tally.passed)", Theme.textPrimary)
+            row(String(localized: "из них на чужой дороге"), "\(tally.notOurs)", Theme.textTertiary)
             row(String(localized: "названо заранее"), "\(tally.warned)", Theme.success)
             row(String(localized: "названо вплотную"), "\(tally.late)", Theme.warning)
             row(String(localized: "без предупреждения"), "\(tally.silent)", Theme.danger)
@@ -296,7 +297,7 @@ struct AlertRecallInfoSheet: View {
     private var method: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(String(localized: "Как считаем"))
-            Text("«Проехали» — камера, мимо которой вы прошли вплотную: ближе 40 метров от неё. Это география, а не наше решение — поэтому цифру нельзя подкрутить, ослабив собственные фильтры.")
+            Text("«Проехали» — камера, мимо которой вы прошли вплотную: ближе 40 метров от неё. Это география, а не наше решение. Из доли уходят только камеры чужой дороги — встречной стороны или поперечной улицы, — и только когда фильтр доказал это по направлению, оси или ширине их дороги. Их число показано отдельно, чтобы цифру нельзя было подкрутить, ослабив собственные фильтры.")
                 .font(.rounded(15))
                 .foregroundStyle(Theme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -315,7 +316,7 @@ struct AlertRecallInfoSheet: View {
     private var limits: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(String(localized: "Чего эта цифра не знает"))
-            Text("Почему именно приложение промолчало, счётчик не разбирает: причину пришлось бы спрашивать у самой ответственной части кода, и ради счётчика её переписывать нельзя. «Свои» камеры, о которых мы молчим намеренно, тоже попадают в молчание — вы разрешили эту тишину сами.")
+            Text("Почему приложение промолчало об остальных, счётчик не разбирает. «Свои» камеры, о которых голос молчит намеренно, считаются названными: предупреждение о них сработало, хоть и без голоса.")
                 .font(.rounded(15))
                 .foregroundStyle(Theme.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)

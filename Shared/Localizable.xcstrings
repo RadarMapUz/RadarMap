@@ -19945,6 +19945,22 @@
         }
       }
     },
+    "из них на чужой дороге": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "из них на чужой дороге"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "shundan boshqa yoʻlda"
+          }
+        }
+      }
+    },
     "названо заранее": {
       "localizations": {
         "ru": {
@@ -20009,18 +20025,18 @@
         }
       }
     },
-    "«Проехали» — камера, мимо которой вы прошли вплотную: ближе 40 метров от неё. Это география, а не наше решение — поэтому цифру нельзя подкрутить, ослабив собственные фильтры.": {
+    "«Проехали» — камера, мимо которой вы прошли вплотную: ближе 40 метров от неё. Это география, а не наше решение. Из доли уходят только камеры чужой дороги — встречной стороны или поперечной улицы, — и только когда фильтр доказал это по направлению, оси или ширине их дороги. Их число показано отдельно, чтобы цифру нельзя было подкрутить, ослабив собственные фильтры.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "«Проехали» — камера, мимо которой вы прошли вплотную: ближе 40 метров от неё. Это география, а не наше решение — поэтому цифру нельзя подкрутить, ослабив собственные фильтры."
+            "value": "«Проехали» — камера, мимо которой вы прошли вплотную: ближе 40 метров от неё. Это география, а не наше решение. Из доли уходят только камеры чужой дороги — встречной стороны или поперечной улицы, — и только когда фильтр доказал это по направлению, оси или ширине их дороги. Их число показано отдельно, чтобы цифру нельзя было подкрутить, ослабив собственные фильтры."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "«Oʻtdingiz» — juda yaqinidan, 40 metrdan yaqin oʻtgan kamerangiz. Bu geografiya, bizning qarorimiz emas — shuning uchun oʻz filtrlarimizni boʻshatib, raqamni oʻzgartirib boʻlmaydi."
+            "value": "«Oʻtdingiz» — juda yaqinidan, 40 metrdan yaqin oʻtgan kamerangiz. Bu geografiya, bizning qarorimiz emas. Ulushdan faqat boshqa yoʻl kameralari — qarama-qarshi tomon yoki kesishgan koʻcha kameralari — chiqariladi, va faqat filtr buni ularning yoʻli yoʻnalishi, oʻqi yoki kengligi boʻyicha isbotlaganda. Ularning soni alohida koʻrsatiladi — oʻz filtrlarimizni boʻshatib, raqamni oʻzgartirib boʻlmasligi uchun."
           }
         }
       }
@@ -20073,18 +20089,18 @@
         }
       }
     },
-    "Почему именно приложение промолчало, счётчик не разбирает: причину пришлось бы спрашивать у самой ответственной части кода, и ради счётчика её переписывать нельзя. «Свои» камеры, о которых мы молчим намеренно, тоже попадают в молчание — вы разрешили эту тишину сами.": {
+    "Почему приложение промолчало об остальных, счётчик не разбирает. «Свои» камеры, о которых голос молчит намеренно, считаются названными: предупреждение о них сработало, хоть и без голоса.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Почему именно приложение промолчало, счётчик не разбирает: причину пришлось бы спрашивать у самой ответственной части кода, и ради счётчика её переписывать нельзя. «Свои» камеры, о которых мы молчим намеренно, тоже попадают в молчание — вы разрешили эту тишину сами."
+            "value": "Почему приложение промолчало об остальных, счётчик не разбирает. «Свои» камеры, о которых голос молчит намеренно, считаются названными: предупреждение о них сработало, хоть и без голоса."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ilova aynan nima uchun jim qolganini hisoblagich tahlil qilmaydi: sababni kodning eng masʼuliyatli qismidan soʻrash kerak boʻlardi, uni esa hisoblagich uchun qayta yozib boʻlmaydi. Ataylab jim turadigan «oʻz» kameralaringiz ham jimlikka kiradi — bu jimlikka oʻzingiz ruxsat bergansiz."
+            "value": "Qolganlari haqida ilova nega jim qolganini hisoblagich tahlil qilmaydi. Ovoz ataylab jim turadigan «oʻz» kameralaringiz aytilgan hisoblanadi: ular haqida ogohlantirish ishladi, faqat ovozsiz."
           }
         }
       }

@@ -269,10 +269,30 @@ extension LocationService {
         // Активные оповещения (звук/голос/экран) — в поездке ИЛИ пока приложение открыто.
         if isTripActive || isForeground {
             trip.update(coordinate: coordinate, speedKmh: speedKmh, at: lastFixTime)
+            // Лимит дороги и «превышаем устойчиво» — ДО записи проезда и
+            // оповещения: фраза о камере и запись читают лимит ЭТОГО тика.
+            // Здесь, а не в UI: голос должен работать со свёрнутым приложением.
+            // Класс дороги ближайшей камеры — фолбэк лимита там, где OSM молчит,
+            // а ближайшая камера на дороге без maxspeed появляется ровно на тике
+            // первого оповещения о ней: когда лимит считался после оповещения,
+            // первая фраза на 100 в зоне 70 не бывала срочной (прогон 13.3).
+            let cameraAhead = (distanceToNearest ?? .greatestFiniteMagnitude)
+                <= effectiveAlertRadius
+            speedLimits?.update(
+                coordinate: coordinate, course: course, speedKmh: speedKmh,
+                fallbackClass: nearestCamera?.roadClass ?? .unknown,
+                // ПДД различают не класс дороги, а населённый пункт: в городе
+                // 70 хоть на проспекте, хоть на жилой улице, за городом 100.
+                inSettlement: alertContext == .city,
+                // Впереди камера — порог превышения становится жёстче
+                // штрафного, а подтверждение короче: предупреждение обязано
+                // успеть раньше фиксации.
+                cameraAhead: cameraAhead)
             // Геометрия проверяется в точке сближения, а не при захвате:
             // коридор оповещений на подходе широк намеренно (о камере за
             // поворотом молчать нельзя), и камера соседней улицы, попав под
             // него однажды, доезжала до записи в историю.
+            let fixAccuracy = horizontalAccuracy
             register(passes: passTracking.update(
                 nearest: nearestCamera, nearestDistance: distanceToNearest,
                 coordinate: coordinate, speedKmh: speedKmh,
@@ -283,42 +303,33 @@ extension LocationService {
                 // отдаёт -1 там, где точность курса не доказана, и тогда
                 // направление проезда честно остаётся неизвестным.
                 course: course,
-                offRoad: PassGeometry.isProvenOffRoad(camera:at:)))
+                offRoad: PassGeometry.isProvenOffRoad(camera:at:),
+                // Поперечная улица перекрёстка: курс у самой камеры поперёк
+                // оси её дороги — проезд не наш (только запись, не оповещение).
+                axisDeviation: { camera, point, course in
+                    PassGeometry.axisDeviation(camera: camera, at: point, course: course,
+                                               accuracy: fixAccuracy)
+                }))
             runAlertEngine()
             speakPostponedVoice()
-            // Лимит дороги + превышение; манёвры и прогресс маршрута.
-            // Здесь, а не в UI: голос должен работать со свёрнутым приложением.
-            // Класс дороги ближайшей камеры — фолбэк лимита там, где OSM молчит.
-            //
-            // announce: отдельная фраза «Превышение скорости» звучит, только
-            // если впереди НЕТ камеры, о которой мы сейчас скажем. Иначе
-            // водитель получал две реплики внахлёст, и одна из них терялась —
-            // чаще всего именно та, что про камеру. Про камеру фраза и так
+            // Отдельная фраза «Превышение скорости» звучит, только если
+            // впереди НЕТ камеры, о которой мы сейчас скажем. Иначе водитель
+            // получал две реплики внахлёст, и одна из них терялась — чаще
+            // всего именно та, что про камеру. Про камеру фраза и так
             // содержит скорость с лимитом. Плюс настройка OverspeedVoice:
             // в режиме «У камер» фраза заслужена, только когда впереди по
             // нашей дороге камера в радиусе оповещения (просьба из реальной
             // поездки: честное по лимиту «превышение» без камеры — ворчание).
-            let cameraAhead = (distanceToNearest ?? .greatestFiniteMagnitude)
-                <= effectiveAlertRadius
-            speedLimits?.update(
-                coordinate: coordinate, course: course, speedKmh: speedKmh,
-                // settings.voiceEnabled — общий выключатель голоса («Молча»,
-                // в том числе кнопкой глушилки в машине). Его здесь не было:
-                // камеры замолкали, а фраза о превышении продолжала звучать,
-                // хотя человек только что попросил тишины. Настройка
-                // overspeedVoice уточняет КОГДА говорить, но не отменяет
-                // решения «не говорить вовсе».
+            //
+            // settings.voiceEnabled — общий выключатель голоса («Молча», в том
+            // числе кнопкой глушилки в машине). Его здесь не было: камеры
+            // замолкали, а фраза о превышении продолжала звучать, хотя человек
+            // только что попросил тишины. Настройка overspeedVoice уточняет
+            // КОГДА говорить, но не отменяет решения «не говорить вовсе».
+            speedLimits?.announceOverspeedIfNeeded(
                 announce: isTripActive && settings.voiceEnabled
                     && !willSpeakAboutCameraAhead
-                    && settings.overspeedVoice.allows(cameraAhead: cameraAhead),
-                fallbackClass: nearestCamera?.roadClass ?? .unknown,
-                // ПДД различают не класс дороги, а населённый пункт: в городе
-                // 70 хоть на проспекте, хоть на жилой улице, за городом 100.
-                inSettlement: alertContext == .city,
-                // Впереди камера — порог превышения становится жёстче
-                // штрафного, а подтверждение короче: предупреждение обязано
-                // успеть раньше фиксации.
-                cameraAhead: cameraAhead)
+                    && settings.overspeedVoice.allows(cameraAhead: cameraAhead))
             // Смена лимита впереди — заранее, а не «превышение» после знака:
             // по линии маршрута или по оси текущей дороги (LimitAhead). Та же
             // тишина, что у фразы о превышении: «Молча», камера говорит сама.

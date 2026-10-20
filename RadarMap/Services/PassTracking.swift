@@ -37,6 +37,12 @@ nonisolated struct PassTracking {
         /// момент захвата — дальше камера соседней улицы ехала «своим ходом»
         /// до самой записи в историю.
         var offRoadAtMin = false
+        /// Отклонения курса от оси дороги камеры на тиках у САМОЙ камеры
+        /// (ближе порога траверза, на подходе и на отходе), 0…90°. По медиане
+        /// запись отличает проезд по дороге камеры от пересечения её на
+        /// перекрёстке (PassGeometry.isProvenCrossing). Пусто — доказывать
+        /// нечем, решают прежние гейты.
+        var traverseDeviations: [Double] = []
     }
 
     /// Завершённый проезд, готовый к записи в поездку.
@@ -82,13 +88,18 @@ nonisolated struct PassTracking {
     /// `offRoad` — доказательство «мы не на дороге этой камеры» в текущей точке
     /// (см. PassGeometry). Считается только в момент нового сближения, то есть
     /// пару раз за проезд. По умолчанию доказательства нет — прежнее поведение.
+    /// `axisDeviation` — отклонение курса от оси дороги камеры в точке
+    /// (PassGeometry.axisDeviation); зовётся на тиках ближе порога траверза.
+    /// По умолчанию nil — доказательства нет, прежнее поведение.
     mutating func update(nearest: Camera?, nearestDistance: CLLocationDistance?,
                          coordinate: CLLocationCoordinate2D, speedKmh: Double,
                          roadLimit: Int?, roadLimitAssumed: Bool = false,
                          radius: CLLocationDistance,
                          course: CLLocationDirection = -1,
                          now: Date = Date(),
-                         offRoad: (Camera, CLLocationCoordinate2D) -> Bool = { _, _ in false })
+                         offRoad: (Camera, CLLocationCoordinate2D) -> Bool = { _, _ in false },
+                         axisDeviation: (Camera, CLLocationCoordinate2D, CLLocationDirection) -> Double?
+                            = { _, _, _ in nil })
         -> [Pass] {
         // Вошли в радиус камеры впереди — начинаем следить.
         if let nearest, let distance = nearestDistance,
@@ -111,6 +122,20 @@ nonisolated struct PassTracking {
             var tracker = entry
             let distance = GeoMath.fastDistance(coordinate.latitude, coordinate.longitude,
                                                 tracker.camera.lat, tracker.camera.lon)
+            // Курс у самой камеры — на каждом тике ближе порога траверза, и на
+            // подходе, и на отходе: пересечение её дороги длится весь траверз,
+            // а один тик курса шумит. Только на ходу, как у гейтов: стоящей
+            // машине курс не верят (LocationGates.isFilteringActive).
+            var sampled = false
+            if distance <= PassGeometry.traverseLimit(for: tracker.camera),
+               speedKmh >= AppConfig.directionalMinSpeedKmh,
+               let deviation = axisDeviation(tracker.camera, coordinate, course) {
+                tracker.traverseDeviations.append(deviation)
+                if tracker.traverseDeviations.count > AppConfig.passCrossingSamples {
+                    tracker.traverseDeviations.removeFirst()
+                }
+                sampled = true
+            }
             if distance < tracker.minDist {
                 tracker.minDist = distance
                 tracker.speedAtMin = speedKmh
@@ -139,6 +164,8 @@ nonisolated struct PassTracking {
                 // разгон через квартал — это уже не про эту камеру.
                 tracker.afterMaxSpeed = max(tracker.afterMaxSpeed ?? 0, speedKmh)
                 tracked[id] = tracker
+            } else if sampled {
+                tracked[id] = tracker   // отход у самой камеры: только курс
             }
         }
         return completed
@@ -155,15 +182,21 @@ nonisolated struct PassTracking {
         tracked.removeAll()
     }
 
-    /// Два гейта записи, оба по точке максимального сближения.
+    /// Три гейта записи, все — по траверзу.
     ///
     /// Первый — расстояние: камера снимает проезжую часть, над которой стоит,
     /// и пройти под ней в полусотне метров нельзя. Второй — геометрия её
     /// собственной дороги: он ловит случай, когда мы прошли близко, но по
-    /// соседней полосе-дублёру или поперечной улице развязки.
+    /// соседней полосе-дублёру или поперечной улице развязки. Третий — курс
+    /// поперёк оси её дороги у самой камеры: обычный перекрёсток, где кусок
+    /// её дороги короче нас, второй гейт молчит, а траверз в 17 м проходит
+    /// первый (камера 2676 Руставели при проезде по Бобуру, прогон 13.3).
+    /// Гейты оповещений эти доказательства не трогают: предупреждение —
+    /// по подозрению, запись — по доказательству.
     private static func pass(from tracker: Tracker) -> Pass? {
         guard tracker.minDist <= PassGeometry.traverseLimit(for: tracker.camera),
-              !tracker.offRoadAtMin else { return nil }
+              !tracker.offRoadAtMin,
+              !PassGeometry.isProvenCrossing(tracker.traverseDeviations) else { return nil }
         return Pass(camera: tracker.camera,
                     speedKmh: measuredSpeed(zone: tracker.zone, fallback: tracker.speedAtMin),
                     // Деньги и балл считаются по лимиту не ниже пола фиксации;

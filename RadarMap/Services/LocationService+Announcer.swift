@@ -111,6 +111,9 @@ extension LocationService {
         // перед ней, возврат сигнала, соседняя была ближе) — она входит сразу на
         // втором-третьем уровне, и приложение молчало о ней совсем.
         guard decision.isFirst else { return }
+        // Одна строка на камеру за подъезд: по журналу видно, за сколько метров
+        // предупредили и каким голосом (или почему молча), — без экрана.
+        Log.alerts.notice("оповещение: камера \(camera.id, privacy: .public), \(Int(distance), privacy: .public) м, уровень \(decision.level, privacy: .public), голос \(policy.voice.counterName, privacy: .public), по маршруту \(self.nearestViaRoute, privacy: .public), \(Int(self.speedKmh), privacy: .public) км/ч")
         onAlertFired?()
         // Дистанция ПЕРВОГО предупреждения: по ней потом видно, успели мы
         // сказать заранее или уже на самой камере. Только в поездке — иначе

@@ -106,6 +106,13 @@ nonisolated struct AlertRecall {
         return out
     }
 
+    /// Камеры, мимо которых проехали без единого предупреждения, — для
+    /// журнала конца поездки: по нему прогон в симуляторе (и разбор лога с
+    /// телефона) называет промах по номеру, а не одной цифрой охвата.
+    var silentIDs: [Int] { passedIDs.filter { firstAlertDistance[$0] == nil }.sorted() }
+    /// Предупреждали, а мимо не проехали (камера соседней улицы или свернули).
+    var unusedIDs: [Int] { firstAlertDistance.keys.filter { !passedIDs.contains($0) }.sorted() }
+
     mutating func reset() {
         firstAlertDistance.removeAll()
         passedIDs.removeAll()

@@ -12,9 +12,18 @@
 //  Здесь же решается вопрос курса. Ось дороги камеры (гейт мостов) и коридор
 //  считаются от курса, поэтому недостоверный курс опаснее отсутствующего: он
 //  ЗАГЛУШИТ настоящую камеру. Поэтому сырой курс берётся только когда система
-//  сама в нём уверена (courseAccuracy), иначе считаем курс по земле — по двум
-//  последним принятым фиксам, — а если и это невозможно, отдаём −1: направленные
-//  фильтры при этом отключаются и лучше предупредить лишний раз.
+//  сама в нём уверена (courseAccuracy), иначе считаем курс по земле — от
+//  последнего принятого фикса, отстоящего не меньше чем на
+//  `derivedCourseMinMeters` и не старше `derivedCourseMaxSeconds`, — а если и
+//  это невозможно, отдаём −1: направленные фильтры при этом отключаются и
+//  лучше предупредить лишний раз.
+//
+//  Опора — не обязательно СОСЕДНИЙ фикс. Пока курс по земле считался только
+//  по двум соседним, при фиксах раз в секунду он появлялся лишь быстрее
+//  43 км/ч (12 м за секунду): на городских 30–40 км/ч — ровно там, где сырой
+//  курс хуже всего (каньоны), а параллельных улиц больше всего, — курса не
+//  было вовсе, и гейты молчали всю дорогу. В симуляторе (courseAccuracy там
+//  всегда −1) на 40 км/ч гейты не включались ни разу (прогон 13.3, 20.10).
 //
 //  Одно исключение — повторный фикс на ходу: курс секунду назад был
 //  доверенный, машина едет, а фикс пришёл через миллисекунды или сдвинулся
@@ -78,6 +87,10 @@ nonisolated struct LocationFilter {
     }
 
     private var lastAccepted: (lat: Double, lon: Double, at: Date)?
+    /// Недавние принятые фиксы — опоры для курса по земле, новые в конце.
+    /// Хранятся не дольше `derivedCourseMaxSeconds` и не больше
+    /// `derivedCourseAnchorLimit` штук: дальше опора уже ничего не значит.
+    private var recent: [(lat: Double, lon: Double, at: Date)] = []
     /// Последний доверенный курс — держим его на повторном фиксе на ходу.
     private var lastCourse: (course: CLLocationDirection, at: Date)?
 
@@ -98,6 +111,7 @@ nonisolated struct LocationFilter {
         // цепочка повторов держала бы курс сколько угодно.
         if course.measured { lastCourse = (course.value, fix.timestamp) }
         lastAccepted = (fix.lat, fix.lon, fix.timestamp)
+        remember(fix)
         return .accepted(Accepted(lat: fix.lat, lon: fix.lon, course: course.value,
                                   speed: speed, accuracy: fix.horizontalAccuracy))
     }
@@ -106,6 +120,15 @@ nonisolated struct LocationFilter {
     mutating func reset() {
         lastAccepted = nil
         lastCourse = nil
+        recent.removeAll()
+    }
+
+    private mutating func remember(_ fix: Fix) {
+        recent.removeAll { fix.timestamp.timeIntervalSince($0.at) > AppConfig.derivedCourseMaxSeconds }
+        recent.append((fix.lat, fix.lon, fix.timestamp))
+        if recent.count > AppConfig.derivedCourseAnchorLimit {
+            recent.removeFirst(recent.count - AppConfig.derivedCourseAnchorLimit)
+        }
     }
 
     // MARK: - Проверки
@@ -133,14 +156,17 @@ nonisolated struct LocationFilter {
             return (fix.course, true)
         }
         // Курс по земле: на малой скорости и при плохой геометрии спутников он
-        // надёжнее сырого. Нужен заметный сдвиг, иначе считаем шум.
-        if let last = lastAccepted {
-            let moved = GeoMath.fastDistance(last.lat, last.lon, fix.lat, fix.lon)
-            let dt = fix.timestamp.timeIntervalSince(last.at)
-            if moved >= AppConfig.derivedCourseMinMeters, dt > 0,
-               dt <= AppConfig.derivedCourseMaxSeconds {
+        // надёжнее сырого. Нужен заметный сдвиг, иначе считаем шум. Опора —
+        // САМЫЙ СВЕЖИЙ фикс, от которого сдвиг уже заметный: на 40 км/ч это
+        // позапрошлый (22 м), на 60 — прошлый, как и раньше.
+        for anchor in recent.reversed() {
+            let dt = fix.timestamp.timeIntervalSince(anchor.at)
+            guard dt <= AppConfig.derivedCourseMaxSeconds else { break }
+            guard dt > 0 else { continue }
+            let moved = GeoMath.fastDistance(anchor.lat, anchor.lon, fix.lat, fix.lon)
+            if moved >= AppConfig.derivedCourseMinMeters {
                 return (GeoMath.bearing(
-                    from: CLLocationCoordinate2D(latitude: last.lat, longitude: last.lon),
+                    from: CLLocationCoordinate2D(latitude: anchor.lat, longitude: anchor.lon),
                     to: CLLocationCoordinate2D(latitude: fix.lat, longitude: fix.lon)), true)
             }
         }

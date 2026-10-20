@@ -117,6 +117,10 @@ nonisolated enum AppConfig {
     static let derivedCourseMinMeters = 12.0
     /// Дальше этого разрыва прошлая точка уже не опора для курса.
     static let derivedCourseMaxSeconds = 5.0
+    /// Сколько недавних фиксов хранить опорами для курса по земле. Пять
+    /// секунд при фиксах раз в секунду — пять опор; запас на частые фиксы
+    /// (повторы iOS) — вдвое.
+    static let derivedCourseAnchorLimit = 10
     /// Столько держим последний доверенный курс на повторном фиксе на ходу
     /// (`courseRepeat…`, скорость не ниже `directionalMinSpeedKmh`). Дольше —
     /// курса нет, гейты молчат.

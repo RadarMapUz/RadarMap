@@ -66,12 +66,17 @@ struct CarPlayEngineLayer: View {
                                     bearing: bearing)
         }
         let width = Double(size.width + safe.leading + safe.trailing)
-        // Верх окна машины — бар с кнопками, низ — док HUD, справа — кнопки карты.
+        // Верх окна машины — бар с кнопками, низ — док HUD, справа — кнопки
+        // карты. Док (скорость, камера) — сто точек над низом окна, а кнопки
+        // карты лежат внутри безопасной зоны: до 10.7 «в кадре» считалось
+        // по 12 точкам снизу и без кнопок, и камера впереди вставала ровно под
+        // капсулу «до камеры».
         let clear = compact ? DriveCamera.Clear(width: width)
             : DriveCamera.Clear(top: Double(safe.top) / max(1, height),
-                                bottom: Double(safe.bottom + 12) / max(1, height),
+                                bottom: Double(safe.bottom + 12 + AppConfig.carPlayDockHeight) / max(1, height),
                                 width: width,
-                                side: Double(max(safe.leading, safe.trailing)) + AppConfig.engineKeepSidePoints)
+                                side: Double(max(safe.leading, safe.trailing, model.mapButtonInsets.trailing))
+                                    + AppConfig.engineKeepSidePoints)
         // Профиль экрана машины: впереди секунды пути, а не 100 м разметки
         // (аудит 18.10, «при езде нормального вида нет»).
         let target = DriveCamera.target(

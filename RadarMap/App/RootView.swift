@@ -107,9 +107,12 @@ struct RootView: View {
             // машина, а не растянутой на портретный экран. На портретном
             // телефоне кадр повёрнут на 90° — так он вдвое крупнее, и
             // скриншот достаточно повернуть обратно.
+            // Размер — `-carplaySize 1920x720` (портрет 768x1024, широкий
+            // 1920x720, 10.7), иначе `-carplayWide` (1280×480) или 800×480.
+            // `-carplayButtons` — колонка кнопок карты справа (76 pt), как в
+            // машине: док обязан встать левее неё.
             GeometryReader { geometry in
-                let wide = ProcessInfo.processInfo.arguments.contains("-carplayWide")
-                let size = CGSize(width: wide ? 1280 : 800, height: 480)
+                let size = Self.carPlayPreviewSize
                 let portrait = geometry.size.height > geometry.size.width
                 let room = portrait
                     ? CGSize(width: geometry.size.height, height: geometry.size.width)
@@ -150,6 +153,9 @@ struct RootView: View {
             }
             if ProcessInfo.processInfo.arguments.contains("-carplayPreview") {
                 Task {
+                    if ProcessInfo.processInfo.arguments.contains("-carplayButtons") {
+                        carPlayPreviewModel.mapButtonInsets = EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 76)
+                    }
                     await Task.pause(seconds: 1)
                     // В машине «на экране» ставит делегат сцены по её
                     // состоянию; у предпросмотра сцены нет — он на экране сразу.
@@ -224,3 +230,17 @@ struct RootView: View {
         env.refreshWidgetSnapshot()
     }
 }
+
+#if DEBUG
+extension RootView {
+    /// Размер экрана машины для предпросмотра (`-carplaySize WxH`).
+    static var carPlayPreviewSize: CGSize {
+        let args = ProcessInfo.processInfo.arguments
+        if let index = args.firstIndex(of: "-carplaySize"), index + 1 < args.count {
+            let parts = args[index + 1].split(separator: "x").compactMap { Double($0) }
+            if parts.count == 2 { return CGSize(width: parts[0], height: parts[1]) }
+        }
+        return CGSize(width: args.contains("-carplayWide") ? 1280 : 800, height: 480)
+    }
+}
+#endif

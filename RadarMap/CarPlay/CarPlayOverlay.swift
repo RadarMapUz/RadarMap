@@ -69,9 +69,12 @@ struct CarPlayOverlay: View {
         // под них верхнюю safe area. Пока мы уважали только горизонталь, баннер
         // приближения заезжал под них и обрезался ровно на самом важном — на
         // типе камеры и знаке ограничения.
+        // Безопасную зону окна HUD уважает сам (он не игнорирует её, в
+        // отличие от карты под ним); `.safeAreaPadding()` без длины добавлял
+        // к ней ещё системные ~16 pt с каждой стороны — на 800×480 это треть
+        // высоты баннера манёвра (10.7).
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .safeAreaPadding()
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { safe = $0 }
         .motionAnimation(Motion.standard, value: env.location.isApproachingCamera)

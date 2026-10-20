@@ -1435,6 +1435,22 @@
         }
       }
     },
+    "10 километров обходятся в %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "10 километров обходятся в %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "10 kilometr narxi %@"
+          }
+        }
+      }
+    },
     "10 км обходятся в": {
       "localizations": {
         "ru": {
@@ -3957,6 +3973,38 @@
         }
       }
     },
+    "Да, ещё перекрыто": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Да, ещё перекрыто"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ha, hali ham yopiq"
+          }
+        }
+      }
+    },
+    "Да, ремонт ещё идёт": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Да, ремонт ещё идёт"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ha, taʼmir hali davom etyapti"
+          }
+        }
+      }
+    },
     "Дайте доступ «Всегда» на телефоне": {
       "localizations": {
         "uz": {
@@ -4111,6 +4159,22 @@
         }
       }
     },
+    "До машины %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "До машины %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashinagacha %@"
+          }
+        }
+      }
+    },
     "До следующей камеры": {
       "localizations": {
         "ru": {
@@ -4236,6 +4300,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qoʻshildi: %1$lld safar, %2$lld kun"
+          }
+        }
+      }
+    },
+    "Доля пробега на втором топливе": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доля пробега на втором топливе"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ikkinchi yoqilgʻidagi yurish ulushi"
           }
         }
       }
@@ -6614,22 +6694,6 @@
         }
       }
     },
-    "Машина в %@": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Машина в %@"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mashina %@ uzoqlikda"
-          }
-        }
-      }
-    },
     "Меньше, чем в прошлый период": {
       "localizations": {
         "ru": {
@@ -7780,6 +7844,38 @@
         }
       }
     },
+    "Нет, ремонт закончился": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет, ремонт закончился"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻq, taʼmir tugagan"
+          }
+        }
+      }
+    },
+    "Нет, уже открыто": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет, уже открыто"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻq, allaqachon ochiq"
+          }
+        }
+      }
+    },
     "Ни одного превышения у камер": {
       "localizations": {
         "ru": {
@@ -8118,6 +8214,22 @@
         }
       }
     },
+    "Обычно около %@, по данным водителей": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обычно около %@, по данным водителей"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odatda taxminan %@, haydovchilar maʼlumotiga koʻra"
+          }
+        }
+      }
+    },
     "Ограничения скорости не загрузились": {
       "localizations": {
         "ru": {
@@ -8290,6 +8402,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yoʻldagi toʻxtashlar: %lld"
+          }
+        }
+      }
+    },
+    "Откроет портал госуслуг в браузере": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Откроет портал госуслуг в браузере"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Davlat xizmatlari portalini brauzerda ochadi"
           }
         }
       }
@@ -8938,34 +9066,34 @@
         }
       }
     },
-    "Очередь 30+ мин": {
+    "Очередь больше 30 минут": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Очередь 30+ мин"
+            "value": "Очередь больше 30 минут"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Navbat 30+ daq"
+            "value": "Navbat 30 daqiqadan ortiq"
           }
         }
       }
     },
-    "Очередь ~15 мин": {
+    "Очередь около 15 минут": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Очередь ~15 мин"
+            "value": "Очередь около 15 минут"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Navbat ~15 daq"
+            "value": "Navbat taxminan 15 daqiqa"
           }
         }
       }
@@ -11193,6 +11321,54 @@
         }
       }
     },
+    "Расход, киловатт-часов на 100 километров": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расход, киловатт-часов на 100 километров"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sarf, 100 kilometrga kilovatt-soat"
+          }
+        }
+      }
+    },
+    "Расход, кубометров на 100 километров": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расход, кубометров на 100 километров"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sarf, 100 kilometrga kub metr"
+          }
+        }
+      }
+    },
+    "Расход, литров на 100 километров": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расход, литров на 100 километров"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sarf, 100 kilometrga litr"
+          }
+        }
+      }
+    },
     "Регистратор": {
       "localizations": {
         "ru": {
@@ -12877,6 +13053,38 @@
         }
       }
     },
+    "Топливо в месяц около %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Топливо в месяц около %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oyiga yoqilgʻi taxminan %@"
+          }
+        }
+      }
+    },
+    "Топливо около %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Топливо около %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoqilgʻi taxminan %@"
+          }
+        }
+      }
+    },
     "Точка каждую секунду со временем — чтобы видео с регистратора можно было поставить на карту. Хранится только на телефоне 30 дней.": {
       "localizations": {
         "ru": {
@@ -13494,6 +13702,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ narxi, soʻm"
+          }
+        }
+      }
+    },
+    "Цена за киловатт-час, в сумах": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цена за киловатт-час, в сумах"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bir kilovatt-soat narxi, soʻmda"
+          }
+        }
+      }
+    },
+    "Цена за кубометр, в сумах": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цена за кубометр, в сумах"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bir kub metr narxi, soʻmda"
+          }
+        }
+      }
+    },
+    "Цена за литр, в сумах": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цена за литр, в сумах"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bir litr narxi, soʻmda"
           }
         }
       }
@@ -15169,6 +15425,38 @@
         }
       }
     },
+    "на %@ быстрее обычного": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "на %@ быстрее обычного"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "odatdagidan %@ tezroq"
+          }
+        }
+      }
+    },
+    "на %@ дольше обычного": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "на %@ дольше обычного"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "odatdagidan %@ uzoqroq"
+          }
+        }
+      }
+    },
     "на %lld км/ч": {
       "localizations": {
         "ru": {
@@ -15473,6 +15761,22 @@
         }
       }
     },
+    "обычно около %@, по данным водителей": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "обычно около %@, по данным водителей"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "odatda taxminan %@, haydovchilar maʼlumotiga koʻra"
+          }
+        }
+      }
+    },
     "обычно утром": {
       "localizations": {
         "ru": {
@@ -15702,6 +16006,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "oʻtgan %lld hafta boʻyicha"
+          }
+        }
+      }
+    },
+    "по нынешней цене": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "по нынешней цене"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hozirgi narxda"
           }
         }
       }
@@ -15995,6 +16315,38 @@
         }
       }
     },
+    "пробки плюс %1$@, на %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "пробки плюс %1$@, на %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tirbandlik qoʻshimcha %1$@, %2$@ holatiga"
+          }
+        }
+      }
+    },
+    "пробки плюс %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "пробки плюс %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tirbandlik qoʻshimcha %@"
+          }
+        }
+      }
+    },
     "проездов камер": {
       "localizations": {
         "ru": {
@@ -16235,6 +16587,22 @@
         }
       }
     },
+    "с %1$@ до %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "с %1$@ до %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ dan %2$@ gacha"
+          }
+        }
+      }
+    },
     "с запасом %lld мин": {
       "localizations": {
         "ru": {
@@ -16415,6 +16783,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "hozir · odatda %@"
+          }
+        }
+      }
+    },
+    "сейчас около %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "сейчас около %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hozir taxminan %@"
           }
         }
       }
@@ -16645,6 +17029,22 @@
         }
       }
     },
+    "топливо около %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "топливо около %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yoqilgʻi taxminan %@"
+          }
+        }
+      }
+    },
     "топливо, по нынешней цене": {
       "localizations": {
         "ru": {
@@ -16801,6 +17201,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "jarimalar ~%@"
+          }
+        }
+      }
+    },
+    "штрафы около %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "штрафы около %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "jarimalar taxminan %@"
           }
         }
       }

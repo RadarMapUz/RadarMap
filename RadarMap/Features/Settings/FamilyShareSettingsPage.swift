@@ -12,6 +12,7 @@ import SwiftUI
 struct FamilyShareSettingsPage: View {
     @Environment(AppEnvironment.self) private var env
     @State private var name = ""
+    @State private var sharePayload: ActivityTextPayload?
 
     var body: some View {
         let family = env.family
@@ -20,12 +21,19 @@ struct FamilyShareSettingsPage: View {
                 Section {
                     TextField("Кому, например «Мама»", text: Binding(
                         get: { link.name }, set: { family.rename($0) }))
-                    ShareLink(item: link.url(base: AppConfig.syncBaseURL),
-                              message: Text("Здесь видно, когда я буду дома")) {
+                    // Лист «Поделиться» с ответом, а не ShareLink с жестом
+                    // поверх: двойное касание VoiceOver нажимает кнопку, но не
+                    // жест — ссылка у незрячего водителя навсегда оставалась
+                    // «не отправленной». Заодно «отправлено» — только когда
+                    // её правда отправили, а не открыли лист и закрыли.
+                    Button {
+                        let message = String(localized: "Здесь видно, когда я буду дома")
+                        sharePayload = ActivityTextPayload(
+                            text: message + " " + link.url(base: AppConfig.syncBaseURL).absoluteString)
+                    } label: {
                         Label(link.needsResend ? "Отправить новую ссылку" : "Отправить ссылку",
                               systemImage: "square.and.arrow.up")
                     }
-                    .simultaneousGesture(TapGesture().onEnded { family.markSent() })
                     if link.needsResend {
                         Text("Ссылка обновилась — старая больше не показывает поездки. Отправьте новую.")
                             .font(.footnote)
@@ -57,6 +65,12 @@ struct FamilyShareSettingsPage: View {
             }
         }
         .settingsPage("Близкие видят прибытие")
+        .sheet(item: $sharePayload) { payload in
+            ActivityTextSheet(text: payload.text) { sent in
+                if sent { family.markSent() }
+            }
+            .presentationDetents([.medium, .large])
+        }
     }
 }
 
@@ -84,13 +98,16 @@ struct FamilyLiveChip: View {
                         .foregroundStyle(Theme.textSecondary)
                         .frame(width: 28, height: 28)
                         .background(Theme.background, in: Circle())
+                        // Кружок 28 pt, мишень 44 (правило 22): пауза — это
+                        // касание на ходу, промах — второй взгляд на экран.
+                        .tapTarget()
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("Пауза на эту поездку"))
             }
+            // Высоту капсулы задаёт мишень паузы (44), поэтому сверху и
+            // снизу — без отступов, а справа кружок отстоит на поля мишени.
             .padding(.leading, 12)
-            .padding(.trailing, 6)
-            .padding(.vertical, 5)
             .liftedBackground(Theme.surface, in: Capsule())
             .overlay(Capsule().strokeBorder(Theme.edgePanel, lineWidth: 1))
             .transition(.move(edge: .bottom).combined(with: .opacity))

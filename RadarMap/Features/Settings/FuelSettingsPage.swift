@@ -11,6 +11,7 @@ import SwiftUI
 
 struct FuelSettingsPage: View {
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         let settings = env.settings
@@ -22,10 +23,20 @@ struct FuelSettingsPage: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(String(format: String(localized: "Доля пробега на втором топливе: %lld%%"),
                                     Int((settings.fuelProfile.secondShare * 100).rounded())))
+                            // Подпись и значение озвучивает сам ползунок.
+                            .accessibilityHidden(true)
+                        // Шаг 5 % — тот же, к которому округляет привязка: без
+                        // него VoiceOver шагал на десятую часть шкалы (9 %), и
+                        // число в голосе расходилось с сохранённым.
                         Slider(value: Binding(
                             get: { settings.fuelProfile.secondShare },
                             set: { settings.fuelProfile.secondShare = ($0 * 20).rounded() / 20 }),
-                               in: 0...0.9)
+                               in: 0...0.9, step: 0.05)
+                            .accessibilityLabel(Text("Доля пробега на втором топливе"))
+                            // Своё значение: системное — доля ШКАЛЫ 0…90 %, и
+                            // 45 % пробега звучали бы как «50 процентов».
+                            .accessibilityValue(Text(settings.fuelProfile.secondShare
+                                .formatted(.percent.precision(.fractionLength(0)).locale(Formatting.numberLocale))))
                     }
                 } header: {
                     Text(second.title)
@@ -39,6 +50,9 @@ struct FuelSettingsPage: View {
             Section {
                 if let cost = settings.fuelCost(meters: 10_000) {
                     LabeledContent("10 км обходятся в", value: Formatting.money(cost))
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(Text(String(format: String(localized: "10 километров обходятся в %@"),
+                                                        Formatting.money(cost))))
                 } else {
                     Text("Укажите расход и цену — и в поездках, «Итогах» и «Дороге на работу» появится стоимость.")
                         .foregroundStyle(Theme.textSecondary)
@@ -58,7 +72,7 @@ struct FuelSettingsPage: View {
     private func rateSection(_ fuel: Fuel) -> some View {
         let settings = env.settings
         return Section {
-            LabeledContent(String(format: String(localized: "Расход, %@ на 100 км"), fuel.unit)) {
+            fieldRow(String(format: String(localized: "Расход, %@ на 100 км"), fuel.unit)) {
                 // Пусто, а не «0»: ноль читался как заданный расход.
                 NumberField(placeholder: fuel == .electricity ? "15" : "9", decimals: true,
                             value: settings.fuelProfile.rate(fuel).per100Km) { value in
@@ -66,8 +80,12 @@ struct FuelSettingsPage: View {
                     rate.per100Km = max(0, min(value, 100))
                     settings.fuelProfile.rates[fuel] = rate
                 }
+                // Поле само по себе озвучивалось подсказкой «9»: что в него
+                // вводить и в чём, слышно не было. И единица словом —
+                // «м³» голосом не читается.
+                .accessibilityLabel(Text(fuel.spokenRateLabel))
             }
-            LabeledContent(String(format: String(localized: "Цена за %@, сум"), fuel.unit)) {
+            fieldRow(String(format: String(localized: "Цена за %@, сум"), fuel.unit)) {
                 NumberField(placeholder: "—", decimals: false,
                             value: settings.fuelProfile.rate(fuel).price) { value in
                     var rate = settings.fuelProfile.rate(fuel)
@@ -77,9 +95,54 @@ struct FuelSettingsPage: View {
                     settings.fuelProfile.rates[fuel] = rate
                     settings.fuelProfile.pricesUpdatedAt = Date()
                 }
+                .accessibilityLabel(Text(fuel.spokenPriceLabel))
             }
         } header: {
             Text(fuel.title)
+        }
+    }
+
+    /// Подпись и поле. Своя строка, а не LabeledContent: на крупном (не
+    /// специальном) шрифте поле забирало полстроки, и «Sarf, 100 km ga m³»
+    /// обрезалось до «Sarf, 100 km g…» — пропадала единица, ради которой
+    /// подпись; разрешить перенос LabeledContent не дал — вторая строка
+    /// срезалась высотой строки (снимки 14.6). Здесь подпись переносится, а
+    /// на специальных размерах поле уходит под неё, как у системных строк.
+    /// Голосом подпись читает само поле — текст слева VoiceOver пропускает.
+    @ViewBuilder
+    private func fieldRow<Field: View>(_ label: String, @ViewBuilder field: () -> Field) -> some View {
+        let text = Text(label)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityHidden(true)
+        if typeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 6) {
+                text
+                field().frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        } else {
+            HStack(spacing: 12) {
+                text.layoutPriority(1)
+                field()
+            }
+        }
+    }
+}
+
+private extension Fuel {
+    /// Подписи полей для VoiceOver — единица полным словом.
+    var spokenRateLabel: String {
+        switch self {
+        case .petrol, .propane: return String(localized: "Расход, литров на 100 километров")
+        case .methane:          return String(localized: "Расход, кубометров на 100 километров")
+        case .electricity:      return String(localized: "Расход, киловатт-часов на 100 километров")
+        }
+    }
+
+    var spokenPriceLabel: String {
+        switch self {
+        case .petrol, .propane: return String(localized: "Цена за литр, в сумах")
+        case .methane:          return String(localized: "Цена за кубометр, в сумах")
+        case .electricity:      return String(localized: "Цена за киловатт-час, в сумах")
         }
     }
 }
@@ -100,6 +163,9 @@ private struct NumberField: View {
         TextField(placeholder, text: $text)
             .keyboardType(decimals ? .decimalPad : .numberPad)
             .multilineTextAlignment(.trailing)
+            // Подпись слева переносится и берёт ширину первой — полю
+            // оставлен минимум под «12 500».
+            .frame(minWidth: 80)
             .onAppear { text = Self.display(value, decimals: decimals) }
             .onChange(of: text) { _, newText in
                 onChange(Self.parse(newText) ?? 0)

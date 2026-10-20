@@ -81,10 +81,16 @@ final class NotificationService: NSObject {
         let cngActions = [
             UNNotificationAction(identifier: CngAnswer.gas.rawValue, title: String(localized: "Газ есть")),
             UNNotificationAction(identifier: CngAnswer.nogas.rawValue, title: String(localized: "Газа нет")),
-            UNNotificationAction(identifier: CngAnswer.queue15.rawValue, title: String(localized: "Очередь ~15 мин")),
-            // «30+» — это queue60 сервера: «~30» на карте и в поиске
+            // Словами, а не «~15 мин» / «30+ мин»: у кнопок уведомления нет
+            // отдельной подписи для VoiceOver, и голос читал «тильда» и
+            // «плюс мин» (14.6). Места строке хватает — действия уведомления
+            // идут списком во всю ширину.
+            UNNotificationAction(identifier: CngAnswer.queue15.rawValue,
+                                 title: String(localized: "Очередь около 15 минут")),
+            // «Больше 30» — это queue60 сервера: «~30» на карте и в поиске
             // читалось бы как полчаса, а человек сказал «больше» (ревью 12б.4).
-            UNNotificationAction(identifier: CngAnswer.queue60.rawValue, title: String(localized: "Очередь 30+ мин")),
+            UNNotificationAction(identifier: CngAnswer.queue60.rawValue,
+                                 title: String(localized: "Очередь больше 30 минут")),
         ]
         let cng = UNNotificationCategory(identifier: Self.cngAskCategory, actions: cngActions,
                                          intentIdentifiers: [])

@@ -99,6 +99,7 @@ extension TripStatsSheet {
                                 crowdUsual: env.crowdUsual(commute.direction))
                 }
                 .buttonStyle(PressableStyle())
+                .accessibilityHint(Text("Открыть подробности"))
                 // Срок прибытия выученный — только вопросом и один раз (8.6),
                 // под той карточкой, о которой он.
                 if commute.direction == .toWork, let minute = env.workTargetSuggestion,

@@ -37,8 +37,18 @@ extension TripStatsSheet {
                 Spacer(minLength: 0)
             }
             .statCard(padding: 14, radius: Theme.cornerMedium)
-            .accessibilityElement(children: .combine)
+            // Голосом — словами: «Топливо около 41 000 сум, 68,7 километра»,
+            // а не «тильда 41 000, 68,7 км».
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(Self.spokenFuel(cost: cost, meters: summary.distance, current: current)))
         }
+    }
+
+    static func spokenFuel(cost: Double, meters: Double, current: Bool) -> String {
+        var parts = [String(format: String(localized: "Топливо около %@"), Formatting.money(cost)),
+                     SpokenUnits.distance(meters)]
+        if current { parts.append(String(localized: "по нынешней цене")) }
+        return parts.joined(separator: ", ")
     }
 
     // MARK: - Зона риска (тап — карта с фокусом на камере)

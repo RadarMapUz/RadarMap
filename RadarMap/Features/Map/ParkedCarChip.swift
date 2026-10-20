@@ -47,11 +47,20 @@ struct ParkedCarChip: View {
                 .padding(.vertical, 7)
                 .liftedBackground(Theme.surface, in: Capsule())
                 .overlay(Capsule().strokeBorder(Theme.edgePanel, lineWidth: 1))
-                .contentShape(Capsule())
+                // Капсула 38 pt, мишень — 44 (правило 22): растёт только
+                // область касания, капсула остаётся своего размера.
+                .tapTarget()
             }
             .buttonStyle(PressableStyle())
-            .accessibilityLabel(Text(String(format: String(localized: "Машина в %@"), Formatting.distance(hint.meters))))
+            // Голосом — словами: «До машины 330 метров», а не «Машина в 330 м».
+            .accessibilityLabel(Text(String(format: String(localized: "До машины %@"),
+                                            SpokenUnits.distance(hint.meters))))
             .accessibilityHint(Text("Показать на карте"))
+            // «Забыть» живёт в долгом нажатии — жесте, которого у VoiceOver
+            // нет: то же действие кладём в ротор действий.
+            .accessibilityAction(named: Text("Забыть место")) {
+                env.location.forgetParkedCar()
+            }
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .contextMenu {
                 Button {

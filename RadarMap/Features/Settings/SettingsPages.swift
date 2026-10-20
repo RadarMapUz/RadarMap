@@ -860,6 +860,9 @@ struct FineCheckSection: View {
             } label: {
                 Label("Проверить штрафы", systemImage: "doc.text.magnifyingglass")
             }
+            // Кнопка уводит из приложения в браузер — об этом говорится до
+            // нажатия, а не после.
+            .accessibilityHint(Text("Откроет портал госуслуг в браузере"))
             if copied {
                 Text("Номер скопирован — вставьте его на портале.")
                     .font(.footnote)

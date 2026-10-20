@@ -102,9 +102,9 @@ enum MapPictureRenderer {
             options.preferredConfiguration = config
             options.traitCollection = traits
             do {
-                let snapshot = try await MKMapSnapshotter(options: options).start()
-                base = snapshot.image
-                project = { snapshot.point(for: $0) }
+                let snapshot = FrozenSnapshot(value: try await MKMapSnapshotter(options: options).start())
+                base = snapshot.value.image
+                project = { snapshot.value.point(for: $0) }
             } catch {
                 // Обычно это офлайн: картинка всё равно будет — без подложки.
                 Log.app.notice("снимок карты не получен: \(error.localizedDescription, privacy: .public)")
@@ -250,4 +250,11 @@ enum TripEndpoints {
         [MapPicture.Dot(coordinate: start, diameter: 11, fill: .white, ring: Theme.route, ringWidth: 3),
          MapPicture.Dot(coordinate: finish, diameter: 15, fill: Theme.route, ring: .white, ringWidth: 2.5)]
     }
+}
+
+/// Готовый снимок MapKit — для проекции из compose (вне main). MapKit не
+/// помечает Snapshot как Sendable, но после start() он неизменяем, а
+/// point(for:) — чистая арифметика над его прямоугольником.
+nonisolated private struct FrozenSnapshot: @unchecked Sendable {
+    let value: MKMapSnapshotter.Snapshot
 }

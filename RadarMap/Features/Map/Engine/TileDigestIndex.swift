@@ -235,7 +235,8 @@ nonisolated struct TileDigestIndex: Sendable {
 }
 
 private extension Array where Element == UInt64 {
-    var isSortedAscending: Bool {
+    // nonisolated: проверяет разбор индекса, а он идёт вне main (@concurrent prepare).
+    nonisolated var isSortedAscending: Bool {
         guard count > 1 else { return true }
         for index in 1..<count where self[index - 1] >= self[index] { return false }
         return true

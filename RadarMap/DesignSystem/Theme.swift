@@ -45,14 +45,16 @@ enum Theme {
 
     /// Цвет по теме: `light` днём, `dark` ночью. Решает схема окружения
     /// SwiftUI, а не системная настройка iOS.
-    static func adaptive(_ light: UInt32, _ dark: UInt32,
+    /// nonisolated: чистая сборка цвета, её зовут и nonisolated-палитры
+    /// карты (MapPalette) при ленивой инициализации своих констант.
+    nonisolated static func adaptive(_ light: UInt32, _ dark: UInt32,
                          lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1) -> Color {
         Color(uiColor: UIColor { traits in
             traits.userInterfaceStyle == .dark ? rgb(dark, darkAlpha) : rgb(light, lightAlpha)
         })
     }
 
-    static func rgb(_ hex: UInt32, _ alpha: CGFloat = 1) -> UIColor {
+    nonisolated static func rgb(_ hex: UInt32, _ alpha: CGFloat = 1) -> UIColor {
         UIColor(red: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
                 blue: CGFloat(hex & 0xFF) / 255, alpha: alpha)
     }
@@ -70,7 +72,8 @@ enum Theme {
     /// Внимание: приближение к камере, превышение в допуске, «на грани».
     static let warning = adaptive(0x9A5800, 0xFFB020)
     /// Опасность: штрафуемое превышение, камера вплотную, ошибка.
-    static let danger  = adaptive(0xC62828, 0xFF7A70)
+    /// nonisolated — читается кольцом камеры в MapPalette (nonisolated).
+    nonisolated static let danger  = adaptive(0xC62828, 0xFF7A70)
     /// Норма: в лимите, чисто, выполнено.
     static let success = adaptive(0x177A41, 0x4CC27A)
 
@@ -100,7 +103,8 @@ enum Theme {
 
     /// Линия маршрута — одна на движке, карте Apple и схеме. Движок берёт
     /// её же hex строкой (EngineMapStyle.routeLayers): правя здесь, правь там.
-    static let route = adaptive(0x2A6FF0, 0x5B9BFF)
+    /// nonisolated — это же тело ленты маршрута в MapPalette (nonisolated).
+    nonisolated static let route = adaptive(0x2A6FF0, 0x5B9BFF)
     /// Кайма линии: белая днём (как у Amap), тёмно-синяя ночью.
     static let routeCasing = adaptive(0xFFFFFF, 0x0E1A33)
 

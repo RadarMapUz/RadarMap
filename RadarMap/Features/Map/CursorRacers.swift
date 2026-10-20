@@ -381,7 +381,8 @@ private struct RacerTyres<S: Shape, T: Shape>: View {
 /// Пути из долей коробки — прямоугольники, многоугольники и линии, парные
 /// детали зеркалом относительно оси (как CursorBox.pair).
 private enum RacerPath {
-    static func mirror(_ point: CGPoint) -> CGPoint { CGPoint(x: 1 - point.x, y: point.y) }
+    // nonisolated: передаётся в map ссылкой на функцию, а та не на главном акторе.
+    nonisolated static func mirror(_ point: CGPoint) -> CGPoint { CGPoint(x: 1 - point.x, y: point.y) }
 
     /// Прямоугольник по двум углам; `radius` — доля ширины коробки.
     static func rect(_ box: CursorBox, _ from: CGPoint, _ to: CGPoint, radius: CGFloat) -> Path {

@@ -282,7 +282,7 @@ extension TripHistory {
     /// камер в дневной строке нет, и это осознанный компромисс — за пределами
     /// хранения записей зона риска просто не показывается, а километры,
     /// превышения и рейтинг остаются честными.
-    static func summary(days: [TripDay], history: [TripRecord], period: StatsPeriod,
+    nonisolated static func summary(days: [TripDay], history: [TripRecord], period: StatsPeriod,
                         anchor: Date = Date(),
                         calendar: Calendar = .current) -> PeriodSummary {
         let interval = period.interval(containing: anchor, calendar: calendar)
@@ -429,7 +429,7 @@ extension TripHistory {
     /// экран: раньше он всегда показывал «последние 7» — переключаешь «Месяц», а
     /// список не меняется, и непонятно, чем управляет фильтр. Для «Всего времени»
     /// показываем последние `visibleHistory`: там записей может быть под сотню.
-    static func historyList(_ history: [TripRecord], period: StatsPeriod,
+    nonisolated static func historyList(_ history: [TripRecord], period: StatsPeriod,
                             anchor: Date = Date(),
                             calendar: Calendar = .current) -> [TripRecord] {
         records(history, period: period, anchor: anchor, calendar: calendar)

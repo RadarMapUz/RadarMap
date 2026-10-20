@@ -16,8 +16,9 @@
 import UIKit
 
 enum EnginePlaceIcons {
-    static let fuel = "radar-place-fuel"
-    static let parking = "radar-place-parking"
+    // nonisolated: имена читает сборка стиля (EngineModernStyle) вне main.
+    nonisolated static let fuel = "radar-place-fuel"
+    nonisolated static let parking = "radar-place-parking"
 
     /// Сторона значка, pt. Слой масштабирует его по зуму (EngineModernStyle).
     static let side: CGFloat = 22

@@ -66,8 +66,10 @@ enum DepartureReminder {
         var result: [Reminder] = []
         for offset in 0..<days {
             guard let day = calendar.date(byAdding: .day, value: offset, to: today) else { continue }
+            // Будни без праздников: «Выезжайте раньше» в первый день хайита —
+            // будильник на выходной (UzHolidays).
             let workday = target?.applies(on: day, calendar: calendar)
-                ?? (2...6).contains(calendar.component(.weekday, from: day))   // 1 — воскресенье
+                ?? UzHolidays.isWorkday(day, calendar: calendar)
             guard workday, !(offset == 0 && (drovePastToday || tripActive)) else { continue }
             let fireMinute = leave.minute - AppConfig.departureReminderLeadMinutes
             guard fireMinute >= 0,

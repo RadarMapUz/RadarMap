@@ -231,6 +231,8 @@ final class AppEnvironment {
             trip: trip
         )
         self.location.liveActivity = liveActivity
+        // Маршрут по своей дороге на работу — остаток по призраку (8.8.11).
+        self.route.personalRemaining = { [weak self] in self?.commuteLive.routeRemaining(now: Date()) }
         self.location.route = route
         self.location.speedLimits = speedLimits
         self.location.hotspots = hotspots
@@ -345,6 +347,14 @@ final class AppEnvironment {
             if let self, let location, location.isTripActive {
                 if self.commuteGhostPending { self.tryStartCommuteGhost() }
                 if self.commuteLive.isRunning {
+                    // Пробки впереди по своему пути (8.8.10) — до прогноза;
+                    // маршрут по своей дороге (8.8.11) — сверить один раз.
+                    self.commuteLive.noteTraffic(self.traffic.snapshot, revision: self.traffic.revision,
+                                                 now: location.lastFixTime)
+                    if let route {
+                        self.commuteLive.noteRoute(key: route.polyline.map(ObjectIdentifier.init),
+                                                   coordinates: route.isActive ? route.routeCoordinates : nil)
+                    }
                     self.commuteLive.note(coordinate, accuracy: location.horizontalAccuracy,
                                           at: location.lastFixTime)
                 }

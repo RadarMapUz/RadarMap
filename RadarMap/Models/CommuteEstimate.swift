@@ -38,7 +38,7 @@ nonisolated enum CommuteEstimate {
     /// трогает строку, пока цифра на ней та же.
     static func beforeDeparture(variants: [CommuteProfile.Variant], now: Date,
                                 snapshot: TrafficSnapshot?, calendar: Calendar = .current) -> Estimate? {
-        let weekend = calendar.isDateInWeekend(now)
+        let weekend = UzHolidays.isDayOff(now, calendar: calendar)
         let minute = CommuteProfile.minuteOfDay(now, calendar: calendar)
         var best: (variant: CommuteProfile.Variant, base: CommuteGhost.Baseline, tier: CommuteGhost.RowTier)?
         for variant in variants {

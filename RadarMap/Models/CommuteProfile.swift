@@ -126,7 +126,7 @@ nonisolated enum CommuteProfile {
                                  ends: variant.ends.map(Double.init),
                                  limits: variant.limitKmh, stops: stops)
         let row = Row(tripID: tripID, departure: departure,
-                      weekend: calendar.isDateInWeekend(departure),
+                      weekend: UzHolidays.isDayOff(departure, calendar: calendar),
                       arrivalMinute: Int16(minuteOfDay(arrival, calendar: calendar)),
                       seconds: seconds)
         if Double(row.validCount) >= Double(seconds.count) * AppConfig.commuteProfileMinValidShare {

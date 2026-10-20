@@ -40,6 +40,13 @@ final class CommuteLiveService {
     @ObservationIgnored private var slackTracker = CommuteGhost.SlackTracker()
     @ObservationIgnored private var lateNotice = CommuteGhost.LateNotice()
     @ObservationIgnored private var sessionDeparture: Date?
+    /// Ревизия пробок, уже отданная сессии; −1 — новой сессии пробки не давали.
+    @ObservationIgnored private var trafficRevision = -1
+    /// Маршрут, для которого посчитано совпадение с вариантами (8.8.11).
+    @ObservationIgnored private var routeKey: ObjectIdentifier?
+    @ObservationIgnored private var routeMatches: Set<Int> = []
+    /// Последний прогноз ведущего варианта: остаток, когда посчитан, кто вёл.
+    @ObservationIgnored private var lastForecast: (remaining: TimeInterval, at: Date, lead: Int)?
     /// Фраза призрака (8.7) — голос решает, можно ли сейчас говорить
     /// (оповещение о камере и манёвр важнее); true — сказана. Несказанная
     /// не засчитывается и прозвучит на следующем пересчёте.
@@ -63,12 +70,16 @@ final class CommuteLiveService {
         let resumed = departure == sessionDeparture
         stop()
         guard let session = CommuteLiveSession(variants: variants,
-                                               weekend: !workday && calendar.isDateInWeekend(departure),
+                                               weekend: !workday && UzHolidays.isDayOff(departure, calendar: calendar),
                                                departure: departure, calendar: calendar)
         else { return }
         self.session = session
         self.direction = direction
         self.deadline = deadline
+        trafficRevision = -1
+        routeKey = nil
+        routeMatches = []
+        lastForecast = nil
         sessionDeparture = departure
         slackTracker = CommuteGhost.SlackTracker()
         if !resumed {
@@ -76,6 +87,31 @@ final class CommuteLiveService {
             lateNotice = CommuteGhost.LateNotice()
         }
         Log.trips.info("призрак: \(direction.rawValue, privacy: .public), вариантов \(variants.count, privacy: .public)")
+    }
+
+    /// Построенный маршрут (8.8.11): совпадает с вариантом дороги на работу —
+    /// его остаток считает призрак. Считается один раз на маршрут (`key` —
+    /// линия маршрута), координаты берутся, только если маршрут сменился.
+    func noteRoute(key: ObjectIdentifier?, coordinates: @autoclosure () -> [CLLocationCoordinate2D]?) {
+        guard key != routeKey else { return }
+        routeKey = key
+        routeMatches = key == nil ? [] : (coordinates().flatMap { session?.matchingCandidates(route: $0) } ?? [])
+    }
+
+    /// Остаток пути по призраку для маршрута (8.8.11) — прогноз ведущего
+    /// варианта минус прошедшее с пересчёта; nil — маршрут не по своей
+    /// дороге, прогноза нет или сошли: тогда маршрут считает сам.
+    func routeRemaining(now: Date) -> TimeInterval? {
+        guard display != nil, let forecast = lastForecast, routeMatches.contains(forecast.lead) else { return nil }
+        return max(0, forecast.remaining - now.timeIntervalSince(forecast.at))
+    }
+
+    /// Пробки для прогноза (8.8.10): новый файл `now.json` — в сессию; тот же
+    /// (ревизия не сменилась) — ничего. Зовётся на фиксах поездки.
+    func noteTraffic(_ snapshot: TrafficSnapshot?, revision: Int, now: Date) {
+        guard session != nil, revision != trafficRevision else { return }
+        trafficRevision = revision
+        session?.setTraffic(snapshot, now: now)
     }
 
     func note(_ coordinate: CLLocationCoordinate2D, accuracy: Double, at now: Date) {
@@ -87,9 +123,11 @@ final class CommuteLiveService {
             // «Сегодня другой дорогой» или ведущий сошёл, а другой путь ещё
             // не подтверждён: прогноз и голос молчат до возврата.
             if display != nil { display = nil }
+            lastForecast = nil
             return
         }
         guard let forecast = output.forecast else { return }
+        lastForecast = (forecast.remaining, now, session.active ?? -1)
         let minute = (forecast.arrival.timeIntervalSince1970 / 60).rounded() * 60
         let raw = deadline.map { ArrivalTarget.slackMinutes(deadline: $0, arrival: forecast.arrival) }
         let slack: CommuteGhost.TargetSlack? = Self.all(slackTracker.update(slackMinutes: raw, now: now), raw, deadline)
@@ -130,6 +168,9 @@ final class CommuteLiveService {
         session = nil
         direction = nil
         deadline = nil
+        routeKey = nil
+        routeMatches = []
+        lastForecast = nil
         if display != nil { display = nil }
     }
 

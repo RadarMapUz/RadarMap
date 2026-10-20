@@ -94,6 +94,9 @@ final class AppEnvironment {
     /// Пробки: помогаем считать (куски следа поездки) и показываем (карта,
     /// время маршрута). На оповещения не влияют.
     let traffic: TrafficService
+    /// «Обычно по водителям» (8.8.16): файлы traffic/typical по запросу — для
+    /// дороги на работу, пока своих поездок меньше трёх.
+    let typicalTraffic = TypicalTrafficService()
 
     /// CarPlay подключён. Наблюдаемый флаг для интерфейса телефона: пока едет
     /// машина, телефонная карта уступает место дешёвому экрану передачи —
@@ -454,6 +457,9 @@ final class AppEnvironment {
             Task { await self.offlineRoutes.refreshIfDue() }
         }
         traffic.isOnline = { [weak network] in network?.isOnline ?? false }
+        // «Обычно по водителям» — под теми же выключателями, что пробки.
+        typicalTraffic.isAllowed = { [weak traffic] in traffic?.isShown ?? false }
+        typicalTraffic.isOnline = { [weak network] in network?.isOnline ?? false }
         #if canImport(MapLibre)
         // Сервер карты лёг при живой связи (S22): сторож тайлов сообщает, карта
         // уходит на скачанную область, плашка говорит правду. С областью
@@ -928,6 +934,7 @@ final class AppEnvironment {
             learned: learnedPlaces,
             manual: { [settings] kind in settings.place(for: kind == .home ? .home : .work) },
             usual: { [commute] direction in commute.first { $0.direction == direction }?.usual },
+            crowd: { [weak self] direction in self?.crowdUsual(direction) },
             estimate: { [departureEstimates, departureEstimatesAt] direction in
                 guard let at = departureEstimatesAt,
                       now.timeIntervalSince(at) <= AppConfig.commuteEstimateMaxAgeSeconds else { return nil }
@@ -1101,6 +1108,7 @@ final class AppEnvironment {
         defer {
             refreshDepartureEstimates()
             refreshDepartureReminders()
+            refreshCrowdUsual()
         }
         // Журнал копит концы поездок 45 дней — история держит только 50
         // записей, и «медиана за 30 дней» на ней была медианой за 12–17.
@@ -1122,6 +1130,75 @@ final class AppEnvironment {
             ? ArrivalTarget.suggestion(arrivals: trips.filter { $0.direction == .toWork }.map(\.arrival),
                                        now: Date())
             : nil
+    }
+
+    // MARK: - Обычно по водителям (8.8.16)
+
+    /// «Обычно ~35 мин (по водителям)» по направлениям: линия своего пути,
+    /// сложенная с обычными скоростями чужих поездок в час своего выезда.
+    /// Считается событийно (refreshCommute), не в body.
+    private(set) var crowdUsualTimes: [Commute.Direction: TimeInterval] = [:]
+    /// Опоздавший ответ (места забыли, своё «обычно» уже появилось) не пишется.
+    @ObservationIgnored private var crowdUsualGeneration = 0
+
+    /// Оценка по водителям для показа: только пока своего «обычно» нет и
+    /// пробки включены (выключили — строка гаснет сразу, не со следующего
+    /// пересчёта).
+    func crowdUsual(_ direction: Commute.Direction) -> TimeInterval? {
+        guard traffic.isShown,
+              commute.first(where: { $0.direction == direction })?.usual == nil else { return nil }
+        return crowdUsualTimes[direction]
+    }
+
+    /// Что спросить: направления без своего «обычно», у которых уже есть
+    /// свой путь в профиле и известен час выезда. Дом и работа нужны —
+    /// без них направлений нет.
+    private func crowdRequests() -> [Commute.Direction: TypicalTraffic.Request] {
+        guard traffic.isShown, settings.commuteLearning, commuteProfiles.isLoaded,
+              commuteEnds != nil else { return [:] }
+        var out: [Commute.Direction: TypicalTraffic.Request] = [:]
+        for direction in Commute.Direction.allCases {
+            let summary = commute.first { $0.direction == direction }
+            guard summary?.usual == nil,
+                  let path = TypicalTraffic.line(of: commuteProfiles.book[direction]),
+                  let departure = summary?.last.departure ?? path.lastDeparture else { continue }
+            out[direction] = TypicalTraffic.Request(line: path.coordinates,
+                                                    bucket: TypicalTraffic.bucket(for: departure))
+        }
+        return out
+    }
+
+    func refreshCrowdUsual() {
+        crowdUsualGeneration &+= 1
+        let generation = crowdUsualGeneration
+        let requests = crowdRequests()
+        guard !requests.isEmpty else {
+            if !crowdUsualTimes.isEmpty { crowdUsualTimes = [:] }
+            return
+        }
+        Task {
+            let files = await typicalTraffic.files(for: Set(requests.values.map(\.bucket)))
+            let next = await Self.crowdUsualTimes(requests: requests, files: files)
+            guard generation == crowdUsualGeneration else { return }
+            if next != crowdUsualTimes {
+                crowdUsualTimes = next
+                Log.trips.info("обычно по водителям: направлений \(next.count, privacy: .public)")
+            }
+        }
+    }
+
+    /// Сверка линий с рёбрами — вне main: файл по городу — тысячи рёбер.
+    @concurrent
+    private static func crowdUsualTimes(requests: [Commute.Direction: TypicalTraffic.Request],
+                                        files: [TypicalTraffic.Bucket: TypicalTraffic])
+        async -> [Commute.Direction: TimeInterval] {
+        var out: [Commute.Direction: TimeInterval] = [:]
+        for (direction, request) in requests {
+            guard let file = files[request.bucket],
+                  let estimate = TypicalTraffic.travelTime(along: request.line, typical: file) else { continue }
+            out[direction] = estimate.seconds
+        }
+        return out
     }
 
     /// Виджет «Дорога на работу» (9.4): готовые минуты в App Group; пишется и

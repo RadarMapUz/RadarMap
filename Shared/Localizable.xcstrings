@@ -8022,6 +8022,22 @@
         }
       }
     },
+    "Обычно ~%@ (по водителям)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обычно ~%@ (по водителям)"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odatda ~%@ (haydovchilar boʻyicha)"
+          }
+        }
+      }
+    },
     "Ограничения скорости не загрузились": {
       "localizations": {
         "ru": {
@@ -15277,6 +15293,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "odatda"
+          }
+        }
+      }
+    },
+    "обычно ~%@ (по водителям)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "обычно ~%@ (по водителям)"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "odatda ~%@ (haydovchilar boʻyicha)"
           }
         }
       }

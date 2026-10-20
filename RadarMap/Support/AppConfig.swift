@@ -852,6 +852,20 @@ nonisolated enum AppConfig {
     nonisolated static let commuteJamMinShare = 0.3
     /// «Пробки +N» в подсказке — только от стольких минут: меньше — шум.
     nonisolated static let commuteJamShowMinutes = 3
+
+    // MARK: Обычно по водителям (план 19.10, 8.8.16)
+
+    /// «Обычно ~35 мин (по водителям)» — только если на рёбра traffic/typical
+    /// легла хотя бы такая доля своей линии: остальное едет в темпе
+    /// покрытого, и по трети пути это было бы выдумкой.
+    nonisolated static let crowdCommuteMinCoverage = 0.6
+    /// Короче — не дорога на работу, а соседний квартал: оценки нет, м.
+    nonisolated static let crowdCommuteMinMeters: Double = 1000
+    /// Файл часа перепроверяется (ETag) не чаще этого: сервер пересобирает
+    /// его раз в час, а «обычно» за полдня не меняется, с.
+    static let typicalTrafficRefreshSeconds: TimeInterval = 6 * 3600
+    /// После ошибки сети — повтор не раньше этого, с.
+    static let typicalTrafficRetrySeconds: TimeInterval = 15 * 60
     /// Оценка до выезда пересчитывается со сменой этой «четверти часа» (и
     /// сразу — на новых пробках или профиле), с.
     nonisolated static let commuteEstimateSlotSeconds: TimeInterval = 15 * 60

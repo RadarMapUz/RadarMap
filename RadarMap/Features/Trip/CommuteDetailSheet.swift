@@ -37,7 +37,8 @@ struct CommuteDetailSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     CommuteCard(summary: summary, showsChevron: false,
-                                fuelCostPerMeter: env.settings.fuelCostPerMeter)
+                                fuelCostPerMeter: env.settings.fuelCostPerMeter,
+                                crowdUsual: env.crowdUsual(summary.direction))
                     chartCard
                     lossCard
                     tripsCard

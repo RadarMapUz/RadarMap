@@ -82,6 +82,19 @@ final class LocationService: NSObject {
     /// `currentCoordinate` в body подписывало весь экран с картой на каждый
     /// фикс — раз в секунду пересборка ради ответа, который не менялся.
     private(set) var hasLocation = false
+    /// «Где машина» (ParkedCar): точка конца поездки за рулём. Хранится на
+    /// телефоне, сбрасывается новой поездкой, возвращением и сроком.
+    @ObservationIgnored var parkedCar: ParkedCar? = ParkedCar.load() {
+        didSet { if parkedCar != oldValue { ParkedCar.save(parkedCar) } }
+    }
+    /// Машина на карте (метка) — меняется только на показе и скрытии: её читает
+    /// слой карты, и запись на каждом фиксе пересобирала бы его.
+    var parkedCarOnMap: ParkedCar?
+    /// Строка «Машина · 350 м» — ступенями (ParkedCar.Hint); читает только она.
+    var parkedCarHint: ParkedCar.Hint?
+    @ObservationIgnored var parkedCarRecheck: Task<Void, Never>?
+    /// Последняя точка, где ещё ехали (ParkedCar.Fix): ею паркуемся.
+    @ObservationIgnored var lastDrivenFix: ParkedCar.Fix?
     var speedKmh: Double = 0 { didSet { refreshApproachFlags() } }
 
     /// GPS-курс движения (0–360°, −1 = недостоверен: стоим или нет сигнала).
@@ -296,6 +309,15 @@ final class LocationService: NSObject {
         // «Свои» камеры нужны и вне поездки: карта рисует их спокойными, и
         // список обязан быть готов до первого показа маркеров.
         refreshFamiliarCameras()
+        #if DEBUG
+        // Снимки «Где машина»: машина в ~330 м к северу от точки симулятора
+        // по умолчанию (41.3111, 69.2797), поставлена 10 минут назад.
+        if ProcessInfo.processInfo.arguments.contains("-demoParkedCar") {
+            parkedCar = ParkedCar(lat: 41.3141, lon: 69.2797,
+                                  parkedAt: Date().addingTimeInterval(-600), hasLeft: true)
+        }
+        #endif
+        refreshParkedCar()   // трое суток могли пройти, пока приложение спало
         // Плашка прошлого процесса подхвачена (S14): поездка не возобновилась
         // за пару минут — сирота, снять, а не держать до восьмичасового предела.
         if liveActivity?.isActive == true {

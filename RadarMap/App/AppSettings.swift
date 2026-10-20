@@ -546,6 +546,9 @@ final class AppSettings {
     /// это разные вещи по природе: там факт от живого человека, здесь догадка
     /// о прошлом, и выключать их хочется по отдельности.
     var tripodHints: Bool { didSet { store.set(tripodHints, forKey: Keys.tripodHints) } }
+    /// «Где машина»: метка машины и строка «Машина · 350 м» после парковки
+    /// (ParkedCar). Выключенная — точка стирается.
+    var parkedCarHint: Bool { didSet { store.set(parkedCarHint, forKey: Keys.parkedCarHint) } }
 
     /// Отправлять обезличенную статистику использования (см. `UsageStats`).
     /// Хранится инвертированно («выключено»), чтобы значение по умолчанию у
@@ -704,6 +707,7 @@ final class AppSettings {
         static let commuteLearningOff = "commuteLearningOff"
         static let smartSilence = "smartSilence"
         static let tripodHints = "tripodHints"
+        static let parkedCarHint = "parkedCarHint"
         static let mapPlaces = "mapPlaces"
         static let mapHouses = "mapHouses"
         static let mapSidewalks = "mapSidewalks"
@@ -750,6 +754,7 @@ final class AppSettings {
             Keys.destinationHints: true,
             Keys.smartSilence: true,
             Keys.tripodHints: true,
+            Keys.parkedCarHint: true,
             Keys.mapPlaces: true,
             Keys.mapModernStyle: true,
             Keys.map3D: true,
@@ -803,6 +808,7 @@ final class AppSettings {
         commuteLearning = !store.bool(forKey: Keys.commuteLearningOff)
         smartSilence = store.bool(forKey: Keys.smartSilence)
         tripodHints = store.bool(forKey: Keys.tripodHints)
+        parkedCarHint = store.bool(forKey: Keys.parkedCarHint)
         mapPlaces = store.bool(forKey: Keys.mapPlaces)
         // Дома и тротуары — единственные слои схемы БЕЗ значения по умолчанию
         // в register: `bool(forKey:)` даёт false там, где ключа ещё нет, и это

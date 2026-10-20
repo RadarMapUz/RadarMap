@@ -51,6 +51,9 @@ extension LocationService {
         if !auto { isPassengerSession = false }  // ручной старт — точно за рулём
         isTripActive = true
         onTripStateChanged?(true)
+        // Человек в машине — точка парковки больше не нужна (и при склейке).
+        forgetParkedCar()
+        lastDrivenFix = nil
         lastMovementAt = Date()   // не проваливаться в тир «стоянка» со старым штампом
         // Телефон в держателе — экран не гаснет всю поездку (как у навигаторов).
         // Кроме поездки за рулём CarPlay: там телефон показывает экран передачи,
@@ -180,6 +183,7 @@ extension LocationService {
             trip.discardAsPassenger()
         } else {
             trip.finish(endedManually: !auto, batteryPercent: batteryPercent)
+            parkCar()
             // Автостоп с телефоном в кармане: короткие итоги на локскрин —
             // цифры дошли до человека, даже если он не откроет приложение.
             // Свежесть по endedAt, а не по новому id: у продолженной поездки

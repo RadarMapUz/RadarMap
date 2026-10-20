@@ -170,6 +170,8 @@ extension MapScreen {
                         // заданием от приложения человеку; распорядок оно
                         // знает само (FrequentPlaces).
                         // Разовое «Карта без интернета?» — до первого ответа.
+                        // Где оставили машину — капсулой, пока отошли от неё.
+                        ParkedCarChip(map: map)
                         OfflineOfferCard(ownMap: true)
                         DestinationSuggestionBar { coordinate, name in
                             buildRoute(to: coordinate, name: name)

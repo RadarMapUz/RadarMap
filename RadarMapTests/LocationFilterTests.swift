@@ -147,6 +147,57 @@ final class LocationFilterTests: XCTestCase {
         XCTAssertEqual(result?.course, -1)
     }
 
+    // MARK: - Курс по земле на городской скорости (прогон 13.3)
+
+    /// 40 км/ч, фиксы раз в секунду, сырому курсу верить нельзя: соседние
+    /// фиксы в 11 м друг от друга — меньше шага курса по земле. Раньше курса
+    /// не было ВСЮ дорогу (гейты выключены, звучали камеры соседних улиц);
+    /// теперь опора — позапрошлый фикс.
+    func testCitySpeedDerivesCourseFromEarlierFix() {
+        var filter = LocationFilter()
+        var courses: [CLLocationDirection] = []
+        for step in 0..<6 {
+            let t = Double(step)
+            let point = moved(11.1 * t, bearing: 200)
+            courses.append(accepted(filter.accept(
+                fix(point, speed: 11.1, course: 200, courseAccuracy: -1, at: t),
+                now: now.addingTimeInterval(t)))?.course ?? -2)
+        }
+        XCTAssertEqual(courses[0], -1, "опоры ещё нет")
+        XCTAssertEqual(courses[1], -1, "11 м — меньше шага, а старше опоры нет")
+        for course in courses.dropFirst(2) {
+            XCTAssertEqual(course, 200, accuracy: 1, "с третьего фикса курс есть: \(courses)")
+        }
+    }
+
+    /// Стоящая машина: шум приёмника 3–4 м туда-сюда за пять секунд не
+    /// набирает шага — курса нет, как и раньше.
+    func testStandingNoiseNeverReachesTheStep() {
+        var filter = LocationFilter()
+        let wander: [(Double, Double)] = [(0, 0), (4, 90), (3, 250), (4, 10), (2, 180), (4, 300)]
+        for (step, (meters, bearing)) in wander.enumerated() {
+            let t = Double(step)
+            let course = accepted(filter.accept(
+                fix(moved(meters, bearing: bearing), speed: 0.4, course: -1, courseAccuracy: -1, at: t),
+                now: now.addingTimeInterval(t)))?.course
+            XCTAssertEqual(course, -1, "t=\(t)")
+        }
+    }
+
+    /// Ползём 2 м/с: шаг набирается за 6 с — дольше окна, опора уже не
+    /// годится, курса нет.
+    func testAnchorOlderThanWindowIsIgnored() {
+        var filter = LocationFilter()
+        var last: CLLocationDirection?
+        for step in 0..<8 {
+            let t = Double(step)
+            last = accepted(filter.accept(
+                fix(moved(2 * t, bearing: 90), speed: 2, course: -1, courseAccuracy: -1, at: t),
+                now: now.addingTimeInterval(t)))?.course
+        }
+        XCTAssertEqual(last, -1)
+    }
+
     // MARK: - Повторный фикс на ходу (прогон 20.10)
 
     /// iOS после перенастройки точности отдаёт тот же фикс ещё раз через

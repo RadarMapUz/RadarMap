@@ -117,6 +117,10 @@ nonisolated enum AppConfig {
     static let derivedCourseMinMeters = 12.0
     /// Дальше этого разрыва прошлая точка уже не опора для курса.
     static let derivedCourseMaxSeconds = 5.0
+    /// Сколько недавних фиксов хранить опорами для курса по земле. Пять
+    /// секунд при фиксах раз в секунду — пять опор; запас на частые фиксы
+    /// (повторы iOS) — вдвое.
+    static let derivedCourseAnchorLimit = 10
     /// Столько держим последний доверенный курс на повторном фиксе на ходу
     /// (`courseRepeat…`, скорость не ниже `directionalMinSpeedKmh`). Дольше —
     /// курса нет, гейты молчат.
@@ -176,6 +180,13 @@ nonisolated enum AppConfig {
 
     // MARK: - Дорога камеры (направление, полосы, кусок проезжей части)
     // nonisolated: читаются из чистых RoadShape/RoadCorridor и их тестов.
+
+    /// Классы OSM, снап на которые не доказывает ничего о дороге камеры:
+    /// проезд, грунтовка, жилая зона. Радар на трассе D006 (10–11 и 11–12 км,
+    /// камеры 3135 и 3136) снап посадил на поперечный проезд и жилую улицу в
+    /// 15–20 м от трассы — и гейт оси глушил их на 100 км/ч (прогон 13.3).
+    /// Таким профилям верим, когда они говорят «наша», но не когда «не наша».
+    nonisolated static let minorSnapRoadClasses: Set<String> = ["service", "track", "living_street"]
 
     /// Ширина одной полосы — из неё считается ширина проезжей части.
     nonisolated static let laneWidthMeters = 3.5
@@ -617,6 +628,10 @@ nonisolated enum AppConfig {
     /// падал до нуля (CarPlay, 12.10).
     nonisolated static let standstillEnterKmh = 3.5
     nonisolated static let standstillEnterSeconds: TimeInterval = 2
+    /// То же без доплеровской скорости — только по положению: точка не ушла
+    /// дальше `standstillExitMeters` за 5 с — это медленнее 11 км/ч в среднем,
+    /// машина на ходу так не держится (на 20 км/ч 15 м проходятся за 2,7 с).
+    nonisolated static let standstillBlindEnterSeconds: TimeInterval = 5
     /// Тронулись: два фикса подряд не медленнее этого или смещение от точки
     /// остановки больше max(standstillExitMeters, точность фикса).
     nonisolated static let standstillExitKmh = 6.0

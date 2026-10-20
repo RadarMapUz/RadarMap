@@ -85,7 +85,7 @@ nonisolated enum LocationGates {
                 > AppConfig.cameraDirectionMaxAngle {
                 return false
             }
-        } else if camera.hasTrustedRoadProfile,
+        } else if camera.profileMayMute,
                   let axis = shape?.axis(near: coordinate) ?? camera.axis.map(Double.init) {
             // Ось дороги камеры против курса: едем поперёк — это мост НАД камерой
             // или перпендикулярная улица развязки. Боковое отклонение тут ноль,

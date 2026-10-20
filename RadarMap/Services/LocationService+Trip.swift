@@ -169,6 +169,9 @@ extension LocationService {
         // и промах конвейера от того, кто за рулём, не зависит.
         let recall = alertRecall.tally()
         if !recall.isEmpty { onAlertRecall?(recall) }
+        // Номера камер, а не координаты: база публичная, а маршрут по ним
+        // восстановить нельзя — промахи и лишние предупреждения названы поштучно.
+        Log.alerts.notice("охват поездки: проехали \(recall.passed, privacy: .public), вовремя \(recall.warned, privacy: .public), поздно \(recall.late, privacy: .public), молча \(self.alertRecall.silentIDs, privacy: .public), впустую \(self.alertRecall.unusedIDs, privacy: .public)")
         // Камеры, мимо которых ещё «проезжали» в момент остановки, — ДО сброса
         // счётчика: записи проезда нужно знать, предупреждали ли о камере.
         // После сброса каждый такой проезд выходил «промолчала» — и камера,
@@ -220,6 +223,7 @@ extension LocationService {
         // и не неподтверждённых отметок: подброшенная фальшивка на проспекте
         // стоила бы баллов и «штрафа» каждому, кто мимо проехал (ревью S6).
         for pass in passes where pass.camera.kind.recordsPasses && !pass.camera.isUnconfirmedMobile {
+            Log.trips.notice("проезд камеры \(pass.camera.id, privacy: .public): \(Int(pass.speedKmh), privacy: .public) км/ч, лимит \(pass.limitKmh ?? 0, privacy: .public), предупреждали \(self.alertRecall.wasAlerted(cameraID: pass.camera.id), privacy: .public)")
             guard trip.registerPass(camera: pass.camera, speedKmh: pass.speedKmh,
                                     limitKmh: pass.limitKmh, roadLimitKmh: pass.roadLimitKmh,
                                     limitAssumed: pass.limitAssumed,

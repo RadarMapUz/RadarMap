@@ -217,19 +217,23 @@ struct GhostLatePlaque: View {
                 Text(verbatim: GhostText.headline(ghost))
                     .font(.rounded(15, .semibold))
                     .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                 Text("Предупредить, что задерживаетесь?")
                     .font(.rounded(12))
                     .foregroundStyle(Theme.textSecondary)
             }
             Spacer(minLength: 4)
+            // Значок «поделиться», а не слово: «Предупредить» в узкой кнопке
+            // переносилось по слогам (снимок 20.10); смысл несёт строка слева.
             ShareLink(item: message) {
-                Text("Предупредить")
-                    .font(.rounded(15, .bold))
+                Image(systemName: "square.and.arrow.up")
+                    .font(.rounded(17, .bold))
                     .foregroundStyle(Theme.onAccentFill)
-                    .padding(.horizontal, 12)
-                    .frame(minHeight: 44)
+                    .frame(width: 44, height: 44)
                     .background(Theme.accentFill, in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
             }
+            .accessibilityLabel(Text("Предупредить"))
             .simultaneousGesture(TapGesture().onEnded { onDone() })
             Button(action: onDone) {
                 Image(systemName: "xmark")

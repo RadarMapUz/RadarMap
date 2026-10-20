@@ -26,6 +26,7 @@ Endpoints:
                             только относительное внутри куска; см. «Пробки» ниже)
   POST /api/eta            {token, eta, left_m, status: "driving"|"arrived"|"ended"} -> {"ok": true}
   GET  /api/eta/<token>    -> HTML «будет примерно в 18:40» (см. «Поделиться прибытием» ниже)
+  GET  /api/eta/f/<token>  -> то же для постоянной семейной ссылки: вне поездки «сейчас не в пути»
 
 Правила передвижных радаров (жизненный цикл доверия):
   * новая отметка — на испытательном сроке (радар/тренога 75 мин, пост 2 ч):
@@ -760,12 +761,22 @@ def _eta_expired(item, now):
     return now - item["updated"] > ttl
 
 
-def eta_page(item, now, uz=False):
+def eta_page(item, now, uz=False, family=False):
     """Страница для знакомого: время прибытия по Ташкенту, сколько осталось,
-    когда обновлено. Без скриптов и внешних ресурсов; обновляется сама."""
+    когда обновлено. Без скриптов и внешних ресурсов; обновляется сама.
+
+    family — постоянная семейная ссылка (12б.6): она живёт месяц, а поездка
+    домой — полчаса, поэтому «нет данных» здесь не ошибка, а «сейчас не в
+    пути»; страница обновляется и тогда — следующая поездка домой появится
+    на ней сама."""
     def clock(ts):
         return time.strftime("%H:%M", time.gmtime(ts + 5 * 3600))   # Узбекистан — UTC+5 круглый год
-    if item is None:
+    if family and (item is None or item["status"] == "ended"):
+        title = "Hozir yoʻlda emas" if uz else "Сейчас не в пути"
+        line = ("Uyga yoʻlga chiqqanda vaqt shu yerda chiqadi." if uz
+                else "Когда поедет домой, время прибытия появится здесь.")
+        sub = ""
+    elif item is None:
         title = "Havola eskirgan" if uz else "Ссылка устарела"
         line = ("Safar tugagan yoki yangilanmayapti." if uz
                 else "Поездка закончилась или больше не обновляется.")
@@ -774,6 +785,11 @@ def eta_page(item, now, uz=False):
         title = "Kuzatish tugadi" if uz else "Поездка больше не отслеживается"
         line = ("Haydovchi ulashishni to‘xtatdi." if uz
                 else "Водитель перестал делиться временем прибытия.")
+        sub = ""
+    elif item["status"] == "arrived" and family:
+        title = "Uyda" if uz else "Дома"
+        line = (f"{clock(item['updated'])} da yetib keldi" if uz
+                else f"Приехал(а) в {clock(item['updated'])}")
         sub = ""
     elif item["status"] == "arrived":
         title = "Yetib keldi" if uz else "На месте"
@@ -790,7 +806,15 @@ def eta_page(item, now, uz=False):
             line += (f" · {km:.1f} km qoldi" if uz else f" · осталось {km:.1f} км".replace(".", ","))
         ago = max(0, round((now - item["updated"]) / 60))
         sub = (f"Yangilandi: {ago} daqiqa oldin" if uz else f"Обновлено {ago} мин назад")
-    refresh = "" if item is None else '<meta http-equiv="refresh" content="30">'
+    # Живая поездка — раз в 30 с; семейная вне поездки — раз в минуту (ждёт
+    # следующей поездки домой); устаревшая разовая — не обновляется.
+    if item is not None and item["status"] == "driving":
+        seconds = 30
+    elif family:
+        seconds = 60
+    else:
+        seconds = 0
+    refresh = f'<meta http-equiv="refresh" content="{seconds}">' if seconds else ""
     return f"""<!doctype html><html lang="{'uz' if uz else 'ru'}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">{refresh}<title>RadarMap</title>
 <style>body{{margin:0;font:17px -apple-system,system-ui,sans-serif;background:#f4f6f9;color:#14181f;
@@ -872,6 +896,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?", 1)[0].rstrip("/")   # /api/mobile/?x — тот же эндпоинт
+        if path.startswith("/api/eta/f/"):
+            return self._eta_page(path[len("/api/eta/f/"):], family=True)
         if path.startswith("/api/eta/"):
             return self._eta_page(path[len("/api/eta/"):])
         if path == "/api/health":
@@ -990,12 +1016,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(503, {"error": "busy"})
         self._json(200, {"ok": True})
 
-    def _eta_page(self, token):
+    def _eta_page(self, token, family=False):
         now = time.time()
-        item = eta_get(token, now) if _ETA_TOKEN.match(token or "") else None
+        valid = bool(_ETA_TOKEN.match(token or ""))
+        item = eta_get(token, now) if valid else None
         uz = (self.headers.get("Accept-Language", "") or "").lower().startswith("uz")
-        body = eta_page(item, now, uz=uz).encode()
-        self.send_response(200 if item else 404)
+        body = eta_page(item, now, uz=uz, family=family and valid).encode()
+        # Семейная ссылка вне поездки — не ошибка, а «сейчас не в пути».
+        self.send_response(200 if item or (family and valid) else 404)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")

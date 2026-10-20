@@ -80,6 +80,8 @@ final class AppEnvironment {
     let commuteLive = CommuteLiveService()
     /// «Поделиться прибытием» — ссылка с временем прибытия для знакомого.
     let etaShare = EtaShareService()
+    /// Семейная ссылка прибытия домой (12б.6).
+    let family = FamilyShareService()
     /// Горячие точки треног: подписанный список мест, где водители отмечали
     /// радар снова и снова. Не камеры и не отметки — память, поэтому и живут
     /// отдельным сервисом с недельным обновлением и своим тихим тоном.
@@ -313,6 +315,17 @@ final class AppEnvironment {
             if active { self.traffic.tripStarted() } else { self.traffic.tripEnded() }
             self.commuteGhostPending = active
             if active { self.tryStartCommuteGhost() } else { self.commuteLive.stop() }
+            if active {
+                self.family.tripStarted()
+            } else {
+                // Дома — «дома в 18:42», иначе — «сейчас не в пути».
+                let home = self.commuteEnds?.home
+                let here = self.location.currentCoordinate
+                let nearHome = home.flatMap { home in here.map { here in
+                    GeoMath.fastDistance(here.latitude, here.longitude, home.latitude, home.longitude)
+                        <= AppConfig.commutePlaceRadiusMeters } } ?? false
+                self.family.tripEnded(nearHome: nearHome)
+            }
             // Едем — сегодняшнего «пора выезжать» нет (и показанное — снять);
             // кончили поездку — план заново (машину переставили во дворе —
             // напоминание вернётся).
@@ -394,6 +407,10 @@ final class AppEnvironment {
                     self.commuteLive.note(coordinate, accuracy: location.horizontalAccuracy,
                                           at: location.lastFixTime)
                 }
+                // Близкие видят прибытие — только по дороге домой (12б.6).
+                self.family.update(isTripActive: true, ghost: self.commuteLive.display.map {
+                    ($0.direction == .toHome, $0.arrival)
+                })
             }
             if let traffic, let route, route.isActive { route.refreshTrafficDelay(revision: traffic.revision) }
             // «Впереди пробка» — только без маршрута: с маршрутом пробки уже в
@@ -423,6 +440,7 @@ final class AppEnvironment {
         traffic.allowedByConfig = { [weak config] in config?.current.isTrafficEnabled ?? true }
         etaShare.route = route
         etaShare.allowedByConfig = { [weak config] in config?.current.isEtaShareEnabled ?? true }
+        family.allowedByConfig = { [weak config] in config?.current.isEtaShareEnabled ?? true }
         traffic.isOnline = { [weak network] in network?.isOnline ?? false }
         #if canImport(MapLibre)
         // Сервер карты лёг при живой связи (S22): сторож тайлов сообщает, карта

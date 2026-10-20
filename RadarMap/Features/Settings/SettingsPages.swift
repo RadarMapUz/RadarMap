@@ -180,6 +180,19 @@ struct TripSettingsPage: View {
             }
 
             Section {
+                NavigationLink {
+                    FamilyShareSettingsPage()
+                } label: {
+                    LabeledContent("Близкие видят прибытие") {
+                        Text(env.family.link.map { $0.enabled ? $0.name : String(localized: "выключено") }
+                             ?? String(localized: "нет"))
+                    }
+                }
+            } footer: {
+                Text("Время прибытия домой — одной постоянной ссылкой.")
+            }
+
+            Section {
                 Toggle("Работаю водителем", isOn: $settings.workDriverMode)
                     .onChange(of: settings.workDriverMode) { _, _ in env.refreshLearnedPlaces() }
                 SettingsExplainer([

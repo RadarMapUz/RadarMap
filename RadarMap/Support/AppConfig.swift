@@ -1876,4 +1876,10 @@ nonisolated enum AppConfig {
     static let workShiftsShown = 7
     /// Журнал закрытых смен — столько дней.
     static let workShiftLogDays: Double = 90
+
+    // MARK: - Близкие видят прибытие (FamilyLink, 12б.6)
+
+    /// Токен семейной ссылки живёт столько дней: долгоживущий идентификатор
+    /// человека на сервере не копится, новую ссылку водитель пересылает сам.
+    static let familyLinkRotationDays: Double = 30
 }

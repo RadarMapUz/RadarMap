@@ -143,6 +143,21 @@ nonisolated enum WidgetCommute {
         return calendar.component(.hour, from: now) < eveningHour
     }
 
+    /// Отметка места для новой записи. Точная позиция у дома или работы — она,
+    /// с нынешним временем; позиция известна, но не там (или грубая) — отметки
+    /// нет. Позиции нет вовсе — фоновый подъём перед выездом (процесс поднят
+    /// без GPS) или запуск до первого фикса — прежняя отметка остаётся как
+    /// была: «не знаю, где телефон» не значит «ушёл из дома», а свои 12 часов
+    /// она отсчитывает от своего времени. Раньше такая запись стирала отметку
+    /// ровно в фоновом подъёме, ради которого она и хранится (ревью 14.1).
+    static func placeMark(current: CommuteWidgetData.Place?, positionKnown: Bool,
+                          previous: CommuteWidgetData?, now: Date) -> (place: CommuteWidgetData.Place, at: Date)? {
+        if let current { return (current, now) }
+        guard !positionKnown, let place = previous?.lastPlace, let at = previous?.lastPlaceAt,
+              now >= at, now.timeIntervalSince(at) <= placeMaxAge else { return nil }
+        return (place, at)
+    }
+
     /// Окно таблицы, в которое попадает `now`.
     static func slot(_ slots: [CommuteWidgetData.Slot]?, now: Date) -> CommuteWidgetData.Slot? {
         slots?.first { now >= $0.start && now < $0.start.addingTimeInterval(Double(slotStepMinutes) * 60) }

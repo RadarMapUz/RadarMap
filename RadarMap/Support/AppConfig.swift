@@ -1840,7 +1840,8 @@ nonisolated enum AppConfig {
     static let commuteRefreshTaskID = "uz.radarmap.ios.commute-refresh"
     /// За сколько до обычного выезда просим систему разбудить, с.
     static let commuteRefreshLeadSeconds: TimeInterval = 30 * 60
-    /// Сколько ждать профиль дороги с диска при фоновом пробуждении, шагов по 0,1 с.
+    /// Сколько ждать профиль дороги и историю с диска при фоновом пробуждении,
+    /// шагов по 0,1 с: без истории нет выученных мест, а значит и дороги.
     static let commuteRefreshProfileWaitSteps = 50
 
     // MARK: - Перекрытия и ремонт (RoadEvent, 12б.5)

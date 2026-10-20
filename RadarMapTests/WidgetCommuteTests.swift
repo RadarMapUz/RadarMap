@@ -128,6 +128,33 @@ final class WidgetCommuteTests: XCTestCase {
                        "отметка старше 12 ч — снова по часам")
     }
 
+    /// Фоновый подъём в 14:30 поднимает процесс без GPS: позиции нет, и
+    /// отметка «дома в 13:00» обязана дожить до записи — иначе виджет в 15:00
+    /// показывал «Домой» человеку, который едет на вторую смену (ревью 14.1).
+    func testPlaceMarkSurvivesUnknownPosition() throws {
+        var stored = data()
+        stored.lastPlace = .home
+        stored.lastPlaceAt = at(13)
+        let kept = try XCTUnwrap(WidgetCommute.placeMark(current: nil, positionKnown: false,
+                                                         previous: stored, now: at(14, 30)))
+        XCTAssertEqual(kept.place, .home)
+        XCTAssertEqual(kept.at, at(13), "время — своё: 12 часов от 13:00, а не от подъёма")
+        var next = data(updated: at(14, 30))
+        next.lastPlace = kept.place
+        next.lastPlaceAt = kept.at
+        XCTAssertEqual(WidgetCommute.line(next, now: at(15), calendar: utc)?.toWork, true)
+        XCTAssertTrue(WidgetCommute.sameNumbers(stored, next), "та же отметка — перезагрузки нет")
+
+        XCTAssertNil(WidgetCommute.placeMark(current: nil, positionKnown: true, previous: stored, now: at(14, 30)),
+                     "позиция известна и не у дома — отметки нет")
+        XCTAssertEqual(WidgetCommute.placeMark(current: .work, positionKnown: true, previous: stored,
+                                               now: at(14, 30))?.place, .work)
+        XCTAssertNil(WidgetCommute.placeMark(current: nil, positionKnown: false, previous: stored,
+                                             now: at(13).addingTimeInterval(13 * 3600)),
+                     "старше 12 ч — не тащим")
+        XCTAssertNil(WidgetCommute.placeMark(current: nil, positionKnown: false, previous: nil, now: at(14, 30)))
+    }
+
     /// Пробки пересчитываются каждые 2 минуты — виджет не перезагружается,
     /// пока минуты те же и отметка не старее 10 минут.
     func testJamRecountDoesNotBurnReloads() {

@@ -2748,6 +2748,38 @@
         }
       }
     },
+    "Впереди перекрытие дороги": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Впереди перекрытие дороги"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldinda yoʻl yopiq"
+          }
+        }
+      }
+    },
+    "Впереди ремонт дороги": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Впереди ремонт дороги"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldinda yoʻl taʼmirlanmoqda"
+          }
+        }
+      }
+    },
     "Время дороги дом–работа запоминается по участкам — из него получится прогноз «приеду в 9:12, как обычно». Только обычное время, не лучшее: гнать ради цифры незачем.": {
       "localizations": {
         "ru": {
@@ -8153,6 +8185,22 @@
         }
       }
     },
+    "Отметка водителей: впереди перекрытие": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отметка водителей: впереди перекрытие"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haydovchilar belgisi: oldinda yoʻl yopiq"
+          }
+        }
+      }
+    },
     "Отметка ставится в движении": {
       "localizations": {
         "ru": {
@@ -8503,6 +8551,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Til toʻliq qoʻllanishi uchun ilovani qayta ishga tushiring."
+          }
+        }
+      }
+    },
+    "Перекрытие": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перекрытие"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl yopiq"
+          }
+        }
+      }
+    },
+    "Перекрыто": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перекрыто"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yopiq"
           }
         }
       }
@@ -10693,6 +10773,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Xavfsizlik kamari"
+          }
+        }
+      }
+    },
+    "Ремонт": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ремонт"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taʼmir"
           }
         }
       }
@@ -14445,6 +14541,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "aylanada %lld-chiqish"
+          }
+        }
+      }
+    },
+    "на пути перекрытие — отметка водителей": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "на пути перекрытие — отметка водителей"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yoʻlda yopilgan joy — haydovchilar belgisi"
+          }
+        }
+      }
+    },
+    "на пути перекрытий: %lld — отметки водителей": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "на пути перекрытий: %lld — отметки водителей"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yoʻlda yopilgan joylar: %lld — haydovchilar belgilari"
           }
         }
       }

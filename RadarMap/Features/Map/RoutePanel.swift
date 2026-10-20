@@ -152,7 +152,9 @@ struct RoutePanel: View {
                 if labeled {
                     Text(variant.assessment.labels.first.map { Self.title($0, variant) } ?? " ")
                         .font(.rounded(11, .bold))
-                        .foregroundStyle(isSelected ? Theme.onAccentFill : Theme.accent)
+                        // «Перекрытие» — предупреждение, а не достоинство: янтарём.
+                        .foregroundStyle(isSelected ? Theme.onAccentFill
+                                         : variant.assessment.closures > 0 ? Theme.warning : Theme.accent)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
@@ -194,6 +196,7 @@ struct RoutePanel: View {
 
     static func title(_ label: RouteChoice.Label, _ variant: RouteService.Variant) -> String {
         switch label {
+        case .blocked:         return String(localized: "Перекрытие")
         case .familiar:        return String(localized: "Знакомый")
         case .fastest:         return String(localized: "Быстрый")
         case .fewerCameras:    return variant.cameras.isEmpty
@@ -212,6 +215,11 @@ struct RoutePanel: View {
         var parts: [String] = []
         for label in a.labels {
             switch label {
+            case .blocked:
+                parts.append(a.closures == 1
+                             ? String(localized: "на пути перекрытие — отметка водителей")
+                             : String(format: String(localized: "на пути перекрытий: %lld — отметки водителей"),
+                                      a.closures))
             case .familiar:
                 parts.append(String(format: String(localized: "поездок этим путём: %lld"), a.familiarTrips))
             case .fewerCameras:

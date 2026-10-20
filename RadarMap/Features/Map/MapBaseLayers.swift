@@ -124,6 +124,7 @@ struct EngineBaseLayer: View {
                         overviewCommand: map.overviewCommand,
                         destination: env.route.destinationCoordinate,
                         pressedPoint: map.pressedPoint?.coordinate,
+                        roadEvents: env.mobile.roadEvents,
                         parkedCar: env.location.parkedCarOnMap?.coordinate,
                         hotspots: env.settings.tripodHints ? map.visibleHotspots.map(\.coordinate) : [],
                         centerCommand: map.centerCommand,

@@ -100,6 +100,10 @@ struct MapPointBar: View {
 /// Пикер типа отметки: что впереди — радар, тренога, пост ДПС или ДТП.
 /// Больше типов → живее карта: этим живут Waze и водительские чаты.
 struct ReportPickerBar: View {
+    /// Засады — первым рядом; перекрытие и ремонт — вторым, когда сервер их
+    /// знает (12б.5): дорога — не засада, и в один ряд шесть кружков на SE
+    /// сжимали подписи до нечитаемого.
+    var roadKinds: [ReportKind] = []
     let onPick: (ReportKind) -> Void
     let onCancel: () -> Void
 
@@ -118,8 +122,18 @@ struct ReportPickerBar: View {
                 }
                 .accessibilityLabel(Text("Закрыть"))
             }
+            row(ReportKind.offered)
+            if !roadKinds.isEmpty { row(roadKinds) }
+        }
+        .padding(12)
+        .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous).strokeBorder(Theme.edgePanel, lineWidth: 1))
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private func row(_ kinds: [ReportKind]) -> some View {
             HStack(spacing: 8) {
-                ForEach(ReportKind.offered) { kind in
+                ForEach(kinds) { kind in
                     Button {
                         onPick(kind)
                     } label: {
@@ -128,8 +142,8 @@ struct ReportPickerBar: View {
                         // 1,9:1. Кружок с глифом — тот же язык, что маркер
                         // на карте; подпись — обычный текст.
                         VStack(spacing: 4) {
-                            TypeChipGlyph(symbol: kind.symbol, fill: kind.cameraType.tint,
-                                          glyph: kind.cameraType.glyphTint)
+                            TypeChipGlyph(symbol: kind.symbol, fill: kind.tint,
+                                          glyph: kind.glyphTint)
                             Text(kind.title)
                                 .font(.rounded(10, .medium))
                                 .lineLimit(1)
@@ -144,11 +158,6 @@ struct ReportPickerBar: View {
                     .buttonStyle(PressableStyle())
                 }
             }
-        }
-        .padding(12)
-        .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous).strokeBorder(Theme.edgePanel, lineWidth: 1))
-        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }
 

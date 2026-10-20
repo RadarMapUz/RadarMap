@@ -309,6 +309,9 @@ struct ReportRefineBar: View {
                 Spacer(minLength: 4)
                 option(.tripod, offer: offer)
                 option(.accident, offer: offer)
+                // «Перекрыто» — на ходу: упереться в перекрытие дороже лишнего
+                // тапа. Ремонт ставят с карты (долгий тап) — он не срочный.
+                if env.mobile.roadEventsSupported { option(.closure, offer: offer) }
                 if env.mobile.cancellableReportID() != nil { cancelOption }
             }
             .padding(.horizontal, 14).padding(.vertical, 8)
@@ -384,11 +387,11 @@ struct ReportRefineBar: View {
                     .lineLimit(1)
                     .fixedSize()
             }
-            .foregroundStyle(kind.cameraType.glyphTint)
+            .foregroundStyle(kind.glyphTint)
             // По подписи: «Uch oyoq kamera» в 62 pt выходила кеглем 6 (4.5).
             .padding(.horizontal, 6)
             .frame(minWidth: 62, minHeight: 44)
-            .background(kind.cameraType.tint.gradient,
+            .background(kind.tint.gradient,
                         in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -464,5 +467,20 @@ struct MobileConfirmBar: View {
                             in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
         }
         .buttonStyle(.plain)
+    }
+}
+
+extension ReportKind {
+    /// Заливка и знак: у дороги — свои, не красные (красный на этой карте —
+    /// камера) и не цвет интерфейса.
+    var tint: Color {
+        switch self {
+        case .closure:  return Theme.Icon.streak
+        case .roadwork: return Theme.Icon.work
+        default:        return cameraType.tint
+        }
+    }
+    var glyphTint: Color {
+        isRoadEvent ? .white : cameraType.glyphTint
     }
 }

@@ -81,6 +81,7 @@ class ServerTestBase(unittest.TestCase):
         # версию оно бампает только на запись через API.
         with api._mobile_lock:
             api._mobile_cache = None
+            api._road_cache = None
 
 
 class APITest(ServerTestBase):
@@ -1090,6 +1091,118 @@ class TrafficTest(ServerTestBase):
         conn.close()
         self.assertTrue(all(len(row) == 2 for row in rows), "в отпечатке — только хэш и время приёма")
 
+class RoadEventsTest(ServerTestBase):
+    """Перекрытия и ремонт (12б.5): свой список, свои сроки, курс отметившего."""
+
+    def report(self, rtype, device="d1", lat=41.31, lon=69.25, **extra):
+        body = {"lat": lat, "lon": lon, "device": device, "type": rtype}
+        body.update(extra)
+        return _call(self.port, "POST", "/api/report", body)
+
+    def test_old_clients_never_see_road_events(self):
+        """Старые сборки читают незнакомый тип как «радар» — в /api/mobile
+        перекрытию и ремонту не место."""
+        self.report("closure")
+        self.report("radar", device="d2", lat=41.35)
+        _, mobile = _call(self.port, "GET", "/api/mobile")
+        self.assertEqual([r["type"] for r in mobile["reports"]], ["radar"])
+        _, road = _call(self.port, "GET", "/api/road")
+        self.assertEqual([r["type"] for r in road["reports"]], ["closure"])
+
+    def test_course_travels_and_garbage_is_unknown(self):
+        self.report("closure", course=93.5)
+        self.report("roadwork", device="d2", lat=41.35, course=999)
+        _, road = _call(self.port, "GET", "/api/road")
+        courses = sorted(r["course"] for r in road["reports"])
+        self.assertEqual(courses, [-1, 93.5], "курс вне 0…360 — неизвестен, а не 999")
+
+    def test_lifetimes_probation_and_full(self):
+        api._probation_cache = (time.time(), True)     # испытательный срок включён
+        try:
+            _, made = self.report("roadwork")
+            conn = sqlite3.connect(api.DB_PATH)
+            created, expires = conn.execute(
+                "SELECT created, expires FROM reports WHERE id = ?", (made["id"],)).fetchone()
+            conn.close()
+            self.assertAlmostEqual(expires - created, 24 * 3600, delta=5, msg="ремонт: сутки на испытании")
+            full = api.lifecycle_expires(created, expires, "roadwork", True, created + 3600)
+            self.assertAlmostEqual(full - created, 7 * 86400, delta=5,
+                                   msg="подтверждённый ремонт — неделя, MAX_LIFE его не режет")
+            self.assertAlmostEqual(api.lifecycle_expires(created, created + 3 * 3600, "closure", True,
+                                                         created + 600) - created, 12 * 3600, delta=5)
+        finally:
+            api._probation_cache = (0.0, None)
+
+    def test_road_events_do_not_lock_the_radar_button(self):
+        """Ремонт живёт неделю: три своих ремонта не запирают «Радар!»."""
+        for index in range(3):
+            conn = sqlite3.connect(api.DB_PATH)
+            now = time.time()
+            conn.execute("INSERT INTO reports(lat, lon, created, expires, device, type, ip, active) "
+                         "VALUES(?,?,?,?,?,?,?,1)",
+                         (41.30 + index * 0.02, 69.2, now - 600, now + 86400, "me", "roadwork", "1.1.1.1"))
+            conn.commit()
+            conn.close()
+        status, _ = self.report("radar", device="me", lat=41.40)
+        self.assertEqual(status, 200)
+
+    def test_refine_moves_point_between_lists(self):
+        """«Радар!» → «Что это было?» → «перекрыто»: та же точка уходит из
+        списка камер в список дороги — только по явному amend_id."""
+        _, made = self.report("radar", device="me")
+        status, amended = self.report("closure", device="me", amend_id=made["id"])
+        self.assertEqual(status, 200)
+        self.assertTrue(amended.get("amended"))
+        _, mobile = _call(self.port, "GET", "/api/mobile")
+        _, road = _call(self.port, "GET", "/api/road")
+        self.assertEqual(mobile["reports"], [])
+        self.assertEqual([r["id"] for r in road["reports"]], [made["id"]])
+
+
+    def test_implicit_amend_never_crosses_camera_road_boundary(self):
+        """«Ремонт» рукой в 300 м от своего свежего «Радар!» — новая точка,
+        а не переписанный радар: иначе радар пропадал у всех."""
+        _, radar = self.report("radar", device="me")
+        conn = sqlite3.connect(api.DB_PATH)
+        conn.execute("UPDATE reports SET created = created - 200")   # мимо «не чаще 120 с»
+        conn.commit()
+        conn.close()
+        status, road = self.report("roadwork", device="me", lat=41.3125)
+        self.assertEqual(status, 200)
+        self.assertFalse(road.get("amended"))
+        _, mobile = _call(self.port, "GET", "/api/mobile")
+        self.assertEqual([r["id"] for r in mobile["reports"]], [radar["id"]], "радар жив")
+
+    def test_crossing_amend_takes_new_type_lifetime(self):
+        api._probation_cache = (time.time(), False)     # испытательный срок выключен
+        try:
+            _, made = self.report("radar", device="me")
+            self.report("closure", device="me", amend_id=made["id"])
+            conn = sqlite3.connect(api.DB_PATH)
+            created, expires = conn.execute(
+                "SELECT created, expires FROM reports WHERE id = ?", (made["id"],)).fetchone()
+            conn.close()
+            self.assertAlmostEqual(expires - created, api.PROBATION_TTLS["closure"], delta=5,
+                                   msg="срок перекрытия, а не радара; дороге — всегда испытательный")
+        finally:
+            api._probation_cache = (0.0, None)
+
+    def test_road_events_have_their_own_ip_cap(self):
+        """Дюжина ремонтов за одним адресом не запирает «Радар!» всем за ним."""
+        conn = sqlite3.connect(api.DB_PATH)
+        now = time.time()
+        for index in range(api.MAX_ACTIVE_PER_IP):
+            conn.execute("INSERT INTO reports(lat, lon, created, expires, device, type, ip, active) "
+                         "VALUES(?,?,?,?,?,?,?,1)",
+                         (41.20 + index * 0.01, 69.1, now - 600, now + 86400, f"d{index}", "roadwork",
+                          "127.0.0.1"))
+        conn.commit()
+        conn.close()
+        status, _ = self.report("radar", device="fresh", lat=41.45)
+        self.assertEqual(status, 200)
+        status, _ = self.report("roadwork", device="fresh2", lat=41.46)
+        self.assertEqual(status, 429, "свой кап дороги — исчерпан")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 
@@ -1172,4 +1285,3 @@ class EtaShareTest(ServerTestBase):
         status, _, html = self.page()
         self.assertEqual(status, 200)
         self.assertIn("больше не отслеживается", html)
-

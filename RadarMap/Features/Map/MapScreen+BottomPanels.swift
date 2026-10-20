@@ -56,6 +56,7 @@ extension MapScreen {
                 )
             } else if let report = reportPoint {
                 ReportPickerBar(
+                    roadKinds: env.mobile.roadEventsSupported ? ReportKind.roadOffered : [],
                     onPick: { kind in
                         // Место показано пальцем, тип выбран из списка — это
                         // осознанная постановка: проверку «вы стоите» она

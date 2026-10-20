@@ -29,6 +29,9 @@ nonisolated enum RouteChoice {
     /// Порядок объявления — порядок важности: в узкой плашке варианта
     /// помещается один ярлык, и это первый из его списка.
     enum Label: String, CaseIterable, Equatable, Sendable {
+        /// «На пути перекрытие» (12б.5) — не достоинство, а предупреждение,
+        /// поэтому первым: в узкой плашке виден именно он.
+        case blocked
         case familiar
         case fastest
         case fewerCameras
@@ -46,6 +49,8 @@ nonisolated enum RouteChoice {
         /// Сложные манёвры (левые, развороты, кольца). nil — движок не
         /// назвал типы манёвров (MKDirections): тогда «Проще» не судим.
         let hardManeuvers: Int?
+        /// Подтверждённых перекрытий на пути в нашу сторону (RoadEventRules).
+        var closures: Int = 0
     }
 
     /// Что выбор знает о водителе.
@@ -65,6 +70,7 @@ nonisolated enum RouteChoice {
         /// Камеры варианта, у которых водитель превышал.
         var overspeedCameras = 0
         var hardManeuvers: Int?
+        var closures = 0
 
         static let none = Assessment()
     }
@@ -79,9 +85,15 @@ nonisolated enum RouteChoice {
 
     static func decide(_ inputs: [Input], history: History?) -> Verdict {
         guard inputs.count > 1 else {
-            return Verdict(assessments: inputs.map { _ in .none }, recommended: 0)
+            // Один вариант — выбирать не из чего, но о перекрытии сказать надо.
+            return Verdict(assessments: inputs.map { input in
+                var single = Assessment.none
+                single.closures = input.closures
+                if input.closures > 0 { single.labels = [.blocked] }
+                return single
+            }, recommended: 0)
         }
-        var result = inputs.map { Assessment(hardManeuvers: $0.hardManeuvers) }
+        var result = inputs.map { Assessment(hardManeuvers: $0.hardManeuvers, closures: $0.closures) }
 
         if let history {
             let familiarity = familiarity(of: inputs.map(\.path), tracks: history.tracks)
@@ -98,6 +110,9 @@ nonisolated enum RouteChoice {
         let base = inputs[fastest]
         var labels = Array(repeating: Set<Label>(), count: inputs.count)
         labels[fastest].insert(.fastest)
+        for index in inputs.indices where inputs[index].closures > 0 {
+            labels[index].insert(.blocked)
+        }
 
         // Знакомый: заметно знакомее всех остальных и проезжен не раз.
         if history != nil, let best = result.indices.max(by: { result[$0].familiarShare < result[$1].familiarShare }) {
@@ -152,6 +167,13 @@ nonisolated enum RouteChoice {
                             base.travelTime * AppConfig.routeFamiliarMaxExtraShare) {
                 recommended = familiar
             }
+        }
+        // На пути перекрытие — первым не предлагаем: быстрейший из чистых.
+        // Все перекрыты — оставляем как есть, ярлык скажет сам.
+        if inputs[recommended].closures > 0,
+           let clean = inputs.indices.filter({ inputs[$0].closures == 0 })
+            .min(by: { inputs[$0].travelTime < inputs[$1].travelTime }) {
+            recommended = clean
         }
         return Verdict(assessments: result, recommended: recommended)
     }

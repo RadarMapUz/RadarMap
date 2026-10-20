@@ -541,7 +541,9 @@ extension CarPlaySceneDelegate {
     /// «Другое»: пост, ДТП и «Отменить» — крупные плитки, один тап и обратно
     /// на карту. Набор типов — общий с телефоном (`ReportKind.offered`).
     func presentRefineGrid(offer: ReportGuard.Sent) {
-        var buttons = ReportKind.offered.filter { $0 != .radar && $0 != .tripod }.map { kind in
+        // Перекрытие и ремонт (12б.5) — когда сервер их знает.
+        let road = env.mobile.roadEventsSupported ? ReportKind.roadOffered : []
+        var buttons = (ReportKind.offered + road).filter { $0 != .radar && $0 != .tripod }.map { kind in
             // Действие — после возврата к карте: тост поверх летящего pop
             // CarPlay отклоняет, и быстрый отказ водитель не увидел бы.
             gridButton(symbol: kind.symbol, titles: [kind.title]) { [weak self] in

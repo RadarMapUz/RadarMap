@@ -102,6 +102,7 @@ nonisolated enum EngineMapStyle {
                 "traffic": ["type": "geojson", "data": emptyCollection],
                 "position": ["type": "geojson", "data": emptyCollection],
                 "marks": ["type": "geojson", "data": emptyCollection],
+                "road-events": ["type": "geojson", "data": emptyCollection],
                 "hotspots": ["type": "geojson", "data": emptyCollection],
             ],
             "layers": layers(ground: ground, casing: casing, label: label,
@@ -120,6 +121,7 @@ nonisolated enum EngineMapStyle {
                 "traffic": ["type": "geojson", "data": emptyCollection],
                 "position": ["type": "geojson", "data": emptyCollection],
                 "marks": ["type": "geojson", "data": emptyCollection],
+                "road-events": ["type": "geojson", "data": emptyCollection],
                 "hotspots": ["type": "geojson", "data": emptyCollection],
             ]
             let all = style["layers"] as? [[String: Any]] ?? []
@@ -367,6 +369,15 @@ nonisolated enum EngineMapStyle {
             "id": "hotspot-edge", "type": "line", "source": "hotspots", "minzoom": 13,
             "paint": ["line-color": typeHex(.tripod), "line-opacity": 0.5,
                       "line-width": 1.5, "line-dasharray": [3, 3]],
+        ])
+        // Перекрытия и ремонт (12б.5) — ПОД камерами и без права занимать
+        // их место: ремонт у радара не закрывает радар («камера не исчезает
+        // никогда»). Неподтверждённые — полупрозрачными, как призрак радара.
+        out.append([
+            "id": "road-events", "type": "symbol", "source": "road-events",
+            "layout": ["icon-image": ["get", "icon"], "icon-allow-overlap": true,
+                       "icon-ignore-placement": false, "icon-pitch-alignment": "viewport"],
+            "paint": ["icon-opacity": ["case", ["==", ["get", "confirmed"], true], 1.0, 0.55]],
         ])
         // Ореол только у текущей тревоги; обычные камеры молчат.
         out.append([

@@ -5807,8 +5807,11 @@ def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
     if far is None:
         far = build_far(roads)
 
-    def encoded(items):
+    def encoded(items, min_numbers=2):
         """Запись тайла: код, биты, дельты — и имя четвёртым, если оно есть.
+
+        `min_numbers` — сколько чисел нужно записи: линии — две точки (4),
+        точки (светофоры, места) — одна (2).
 
         Четвёртый элемент необязателен намеренно: имя есть у одной дороги из
         семи, и писать пустую строку каждой остальной значило бы платить за
@@ -5816,7 +5819,14 @@ def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
         """
         out = []
         for item in sorted(items, key=sort_key):
-            entry = [item[0], item[1], encode(item[2])]
+            flat = encode(item[2])
+            # Дорога-огрызок короче метра: после квантования нулевые дельты
+            # ушли, и осталась одна точка. Нарисовать нечего, а клиенты до
+            # 20.10 отбрасывали из-за такой записи ВЕСЬ тайл (3 658 улиц
+            # центра Ташкента терялись из-за пяти огрызков).
+            if len(flat) < min_numbers:
+                continue
+            entry = [item[0], item[1], flat]
             if len(item) > 3 and item[3]:
                 entry.append(item[3])
             out.append(entry)
@@ -5863,7 +5873,7 @@ def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
     # дорог совсем. Убирается, когда в проде не останется старых.
     index_v1 = {}
     for key, items in sorted(tile(roads, TILE_DEGREES).items()):
-        blob = json.dumps({"version": 1, "roads": encoded(items)},
+        blob = json.dumps({"version": 1, "roads": encoded(items, 4)},
                           separators=(",", ":")).encode()
         with open(os.path.join(target_dir, f"tile_{key}.json"), "wb") as handle:
             handle.write(blob)
@@ -5891,6 +5901,7 @@ def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
     # «ключ → sha256», и плоские ключи ложатся в него без единой правки
     # структуры. Телефон просто просит на три ключа больше.
     sets = split_sets(roads, far)
+    line_sets = set(sets)
     sets.update(area_sets)
     # Точки в v1 не попадают намеренно: старый формат один файл на всё, и
     # установленная сборка, не знающая о них, читала бы их как дороги.
@@ -5915,7 +5926,9 @@ def write_tiles(roads, target_dir, degrees=TILE_DEGREES_V2, areas=(), points=(),
         for key, items in sorted(by_key.items()):
             if not items:
                 continue
-            rows = encoded(items)
+            rows = encoded(items, 4 if name in line_sets else 2)
+            if not rows:
+                continue
             blob = json.dumps({"version": 2, "roads": rows},
                               separators=(",", ":")).encode()
             composite = f"{key}_{name}"

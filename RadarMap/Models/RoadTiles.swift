@@ -225,8 +225,14 @@ nonisolated enum RoadTiles {
                   let code = (entry[0] as? NSNumber)?.intValue,
                   let flags = (entry[1] as? NSNumber)?.intValue,
                   let flat = entry[2] as? [NSNumber],
-                  flat.count >= minimumCoordinates * 2,
+                  flat.count >= 2,
                   flat.count % 2 == 0 else { return nil }
+            // Дорога из одной точки — не дрейф формата, а огрызок короче
+            // метра: сервер выбрасывает нулевые дельты после квантования, и
+            // от двух близких точек остаётся одна. Нарисовать её нельзя —
+            // пропускаем запись, а не тайл: до 20.10 пять таких записей
+            // отбрасывали 3 658 улиц центра Ташкента (шесть тайлов «_s»).
+            guard flat.count >= minimumCoordinates * 2 else { continue }
 
             var points: [CLLocationCoordinate2D] = []
             points.reserveCapacity(flat.count / 2)

@@ -70,6 +70,21 @@ final class RoadTilesTests: XCTestCase {
             try! JSONSerialization.data(withJSONObject: ["version": 9, "roads": []])))
         // Нечётное число координат — битая дорога валит весь тайл.
         XCTAssertNil(RoadTiles.decodeTile(tileData([[3, 0, [4_131_000, 6_925_000, 100]]])))
+        // Как и пустая.
+        XCTAssertNil(RoadTiles.decodeTile(tileData([[3, 0, [Int]()]])))
+    }
+
+    /// Огрызок из одной точки (сервер выбросил нулевую дельту) — пропуск
+    /// записи, а не тайла: тайл улиц центра Ташкента терял из-за пяти таких
+    /// все 3 658 дорог (прогон 20.10).
+    func testOnePointStubIsSkippedNotTheTile() {
+        let lines = RoadTiles.decodeTile(tileData([
+            [3, 0, [4_130_000, 6_925_000, 50, 0]],
+            [4, 297, [4_130_100, 6_925_100]],
+            [6, 32, [4_130_200, 6_925_200, 0, 50], "Бешагач улица"],
+        ]))
+        XCTAssertEqual(lines?.count, 2)
+        XCTAssertEqual(lines?.map(\.kind), [.primary, .residential])
     }
 
     // MARK: - Ключи тайлов

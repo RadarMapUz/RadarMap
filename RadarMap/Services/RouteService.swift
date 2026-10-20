@@ -647,10 +647,12 @@ final class RouteService {
                 isRerouting = false
             }
             // Перестраиваем без альтернатив — быстрее, и в движении выбор не нужен.
-            guard let built = try? await calculate(from: coordinate, via: via, to: destination,
-                                                   alternatives: false) else {
+            let built: [BuiltVariant]
+            do {
+                built = try await calculate(from: coordinate, via: via, to: destination, alternatives: false)
+            } catch {
                 rerouteGate.noteFailure()
-                Log.route.error("перестроение маршрута не удалось (\(self.rerouteGate.failures, privacy: .public)-й раз) — остаёмся на старой линии")
+                Log.route.error("перестроение маршрута не удалось (\(self.rerouteGate.failures, privacy: .public)-й раз): \(error.localizedDescription, privacy: .public) — остаёмся на старой линии")
                 return
             }
             guard gen == generation else { return }   // маршрут успели сбросить/заменить
@@ -798,8 +800,14 @@ final class RouteService {
         let gen = generation
         Task {
             defer { isRebuilding = false }
-            guard let built = try? await calculate(from: coordinate, via: nil, to: destination, alternatives: false),
-                  built.contains(where: { !$0.offline }), gen == generation else { return }
+            let built: [BuiltVariant]
+            do {
+                built = try await calculate(from: coordinate, via: nil, to: destination, alternatives: false)
+            } catch {
+                Log.route.notice("серверный маршрут вместо офлайнового не построен: \(error.localizedDescription, privacy: .public)")
+                return
+            }
+            guard built.contains(where: { !$0.offline }), gen == generation else { return }
             Log.route.notice("маршрут без сети заменён серверным")
             await apply(built, name: name, destination: destination, cameras: cameras, gen: gen, history: nil)
         }

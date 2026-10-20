@@ -56,6 +56,7 @@ nonisolated struct TrafficSnapshot: Sendable {
     /// Другая версия или битое ребро — nil/пропуск: показывать догадку о
     /// формате хуже, чем не показывать пробки.
     static func decode(_ data: Data) -> TrafficSnapshot? {
+        // Не JSON — «нет данных»; опрос каждые 2 минуты, журнал им не засоряем.
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               object["v"] as? Int == 1,
               let generated = object["generated"] as? Double ?? (object["generated"] as? Int).map(Double.init),

@@ -93,6 +93,7 @@ final class OfflineRouteService {
     /// С диска: подпись индекса — заново, sha файла — заново.
     @concurrent
     private static func readGraph(envelope: URL, directory: URL) async -> OfflineRouteGraph? {
+        // Файла нет — граф ещё не скачан, это штатно.
         guard let data = try? Data(contentsOf: envelope) else { return nil }
         let manifest: RouteGraphManifest
         do {
@@ -107,6 +108,7 @@ final class OfflineRouteService {
             return nil
         }
         guard let file = manifest.usableFile,
+              // Итог — одна строка журнала ниже: «файл не сошёлся с индексом».
               let bytes = try? Data(contentsOf: directory.appendingPathComponent(file.name)),
               bytes.count == file.bytes, RoadTiles.sha256Hex(of: bytes) == file.sha256,
               let lines = RoadTiles.decodeTile(bytes) else {
@@ -156,6 +158,7 @@ final class OfflineRouteService {
     }
 
     private func removeStale(keeping name: String) {
+        // Каталога нет — чистить нечего.
         let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
         for stale in names where stale.hasPrefix("route_graph.") && stale != name {
             do {

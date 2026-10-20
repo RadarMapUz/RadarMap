@@ -1303,12 +1303,15 @@ final class TripStats {
 
     /// Разбор файла настроек. Чистая — покрыта тестами.
     nonisolated static func legacyFromPlist(_ data: Data, recallFallback: AlertRecall.Tally? = nil) -> Legacy {
+        // Не plist — known: false, и решение принимает source (ревью S9), а не разбор.
         guard let dict = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any] else {
             return Legacy(lifetime: nil, recall: recallFallback, known: false)
         }
         let lifetime = (dict[Storage.Key.lifetimeStats.rawValue] as? Data)
+            // Поля нет или оно старого вида — nil, ниже это законный ответ «не знаем».
             .flatMap { try? JSONDecoder().decode(LifetimeStats.self, from: $0) }
         let recall = (dict[Storage.Key.alertRecallTotal.rawValue] as? Data)
+            // То же для счётчика напоминаний: не читается — берём запасной.
             .flatMap { try? JSONDecoder().decode(AlertRecall.Tally.self, from: $0) } ?? recallFallback
         return Legacy(lifetime: lifetime, recall: recall, known: true)
     }

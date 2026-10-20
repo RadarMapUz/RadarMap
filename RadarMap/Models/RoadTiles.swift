@@ -213,6 +213,7 @@ nonisolated enum RoadTiles {
     /// (server/test_build_roads.py), и разойтись с ним нельзя.
     private static func decodeEntries(_ data: Data,
                                       minimumCoordinates: Int = 2) -> [Entry]? {
+        // Не JSON — тот же nil, что у чужой версии: тайл отклоняется целиком.
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let version = root["version"] as? Int,
               version == formatVersion || version == formatVersionV2,

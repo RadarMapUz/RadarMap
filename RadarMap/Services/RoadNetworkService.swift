@@ -160,6 +160,7 @@ final class RoadNetworkService {
             indexVersion = version
             let url = indexURL
             let loaded = await Task.detached(priority: .utility) { () -> RoadTiles.Index? in
+                // Файла нет — первый запуск; битый отсеет подпись ниже.
                 guard let data = try? Data(contentsOf: url),
                       let envelope = try? JSONDecoder().decode(
                           SignedPayload<RoadTiles.Index>.self, from: data)
@@ -212,6 +213,7 @@ final class RoadNetworkService {
             indexVersion = version
             let name = version >= RoadTiles.formatVersionV2
                 ? "roads_index_v2.json" : "roads_index.json"
+            // Сбой сети APIClient уже записал сам; пробуем индекс другого формата.
             if let data = try? await api.getData(name,
                                                  cachePolicy: .reloadIgnoringLocalCacheData) {
                 payload = data
@@ -223,6 +225,7 @@ final class RoadNetworkService {
 
         let url = indexURL, directory = self.directory
         let fresh = await Task.detached(priority: .utility) { () -> RoadTiles.Index? in
+            // Не прошёл — nil, и строка журнала ниже, после задачи.
             guard let envelope = try? JSONDecoder().decode(
                       SignedPayload<RoadTiles.Index>.self, from: data),
                   let value = envelope.verified(),
@@ -237,7 +240,10 @@ final class RoadNetworkService {
             }
             return value
         }.value
-        guard let fresh else { return }
+        guard let fresh else {
+            Log.route.error("индекс дорог с сервера не прошёл проверку подписи или версии — остаёмся на прежнем")
+            return
+        }
         let replacing = index != nil && index != fresh
         index = fresh
         // Новый индекс — новый набор тайлов; проверить покрытие заново, не
@@ -267,11 +273,13 @@ final class RoadNetworkService {
         })
         Task.detached(priority: .background) {
             let manager = FileManager.default
+            // Каталога нет — чистить нечего.
             guard let names = try? manager.contentsOfDirectory(atPath: directory.path)
             else { return }
             var removed = 0
             for name in names where name.hasPrefix("tile_") || name.hasPrefix("road2_") {
                 guard !live.contains(name) else { continue }
+                // Чистка мусора: не удалился — уберётся при следующем индексе.
                 try? manager.removeItem(at: directory.appendingPathComponent(name))
                 removed += 1
             }
@@ -395,6 +403,7 @@ final class RoadNetworkService {
             RoadTiles.fileName(key: key, version: indexVersion))
 
         let fromDisk = await Task.detached(priority: .utility) { () -> [RoadLine]? in
+            // Нет файла или sha не тот — промах кэша, тайл скачаем заново.
             guard let data = try? Data(contentsOf: fileURL),
                   RoadTiles.sha256Hex(of: data) == expected.sha256 else { return nil }
             return RoadTiles.decodeTile(data)
@@ -418,6 +427,7 @@ final class RoadNetworkService {
         // ровно та дорога между городами, ради которой заведён NetworkMonitor.
         // Диск при этом читается как читался — кэш работает и без сети.
         guard connectivity?.isOnline ?? true else { return }
+        // Сбой сети APIClient уже записал сам.
         guard let data = try? await api.getData(
             "roads/" + RoadTiles.fileName(key: key, version: indexVersion)) else {
             // Одиночная ошибка — не приговор: попробуем при следующем ensureCoverage.
@@ -484,6 +494,7 @@ final class RoadNetworkService {
         let fileURL = directory.appendingPathComponent(
             RoadTiles.fileName(key: key, version: indexVersion))
         if let fromDisk = await Task.detached(priority: .utility, operation: { () -> T? in
+            // Нет файла или sha не тот — промах кэша.
             guard let data = try? Data(contentsOf: fileURL),
                   RoadTiles.sha256Hex(of: data) == expected.sha256 else { return nil }
             return decode(data)
@@ -494,6 +505,7 @@ final class RoadNetworkService {
         // Только с диска (вопрос о метане на стоянке): ради него радио в
         // поездке не будим — нет файла, нет и вопроса.
         guard allowDownload, connectivity?.isOnline ?? true,
+              // Сбой сети APIClient уже записал сам.
               let data = try? await api.getData(
                 "roads/" + RoadTiles.fileName(key: key, version: indexVersion))
         else { return nil }

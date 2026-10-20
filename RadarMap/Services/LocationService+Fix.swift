@@ -135,6 +135,7 @@ extension LocationService {
                              expected * AppConfig.staleWatchdogSlack))
         let sequence = fixSequence
         staleWatchdogTask = Task { [weak self] in
+            // Ошибка sleep — только отмена задачи; что делать после неё, решает проверка ниже.
             try? await Task.sleep(for: .seconds(window))
             guard !Task.isCancelled, let self, self.fixSequence == sequence,
                   self.isTripActive || self.isForeground else { return }
@@ -169,6 +170,7 @@ extension LocationService {
         let fixAt = Date()
         speedDecayTask = Task { [weak self] in
             while !Task.isCancelled {
+                // Ошибка sleep — только отмена задачи; что делать после неё, решает проверка ниже.
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled, let self else { return }
                 let capped = SpeedBound.capped(self.speedKmh, distanceFilter: self.manager.distanceFilter,

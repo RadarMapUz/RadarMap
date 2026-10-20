@@ -113,6 +113,7 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
     private static var cacheURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory,
                                             in: .userDomainMask)[0]
+        // Не создалась — запись индекса ниже не удастся и попадёт в журнал там.
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base.appendingPathComponent("mvt_index.bin")
     }
@@ -145,12 +146,20 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
         // своего хранилища, и мы снова получаем 23,5 МБ. Условие ставим сами,
         // чтобы увидеть именно код ответа.
         request.cachePolicy = .reloadIgnoringLocalCacheData
+        // Метки нет — первый запуск или она стёрта: запрос уйдёт без условия.
         let knownTag = try? String(contentsOf: etagURL, encoding: .utf8)
         if let knownTag, !knownTag.isEmpty {
             request.setValue(knownTag, forHTTPHeaderField: "If-None-Match")
         }
 
-        guard let (data, response) = try? await session.data(for: request),
+        let fetched: (Data, URLResponse)?
+        do {
+            fetched = try await session.data(for: request)
+        } catch {
+            log.notice("индекс MVT: запрос не удался — \(error.localizedDescription, privacy: .public)")
+            fetched = nil
+        }
+        guard let (data, response) = fetched,
               let http = response as? HTTPURLResponse else {
             // Сети нет. Разобранный индекс с прошлого раза — законный запас:
             // он получен из проверенной подписи и лежит в песочнице приложения,
@@ -166,13 +175,18 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
             // (диск очистили, запись не удалась). Без этой ветки метка навсегда
             // запирала бы карту пустой — сервер отвечает «не менялось», брать
             // нечего, и следующий запуск повторял бы то же самое.
-            try? FileManager.default.removeItem(at: etagURL)
+            do {
+                try FileManager.default.removeItem(at: etagURL)
+            } catch {
+                log.error("метка индекса MVT не удалилась: \(error.localizedDescription, privacy: .public)")
+            }
             log.error("метка индекса MVT есть, разобранного файла нет — качаем заново")
             lock.withLock { $0 = nil }
             return await prepare()
         }
 
         guard http.statusCode == 200,
+              // Причина отказа — одна строка журнала ниже: «не проверился».
               let envelope = try? JSONDecoder().decode(SignedPayload<Index>.self, from: data),
               let parsed = envelope.verified()
         else {
@@ -190,7 +204,11 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
         lock.withLock { $0 = index }
         // Запись — уже после того, как индекс принят: даже если диск откажет,
         // текущий сеанс работает.
-        try? index.serialized().write(to: cacheURL, options: .atomic)
+        do {
+            try index.serialized().write(to: cacheURL, options: .atomic)
+        } catch {
+            log.error("разобранный индекс MVT не записан — следующий запуск разберёт заново: \(error.localizedDescription, privacy: .public)")
+        }
         if let tag = http.value(forHTTPHeaderField: "ETag") {
             // Метка — только экономия трафика: не записалась — следующий запуск
             // просто скачает индекс целиком.
@@ -201,6 +219,7 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
 
     /// Поднять разобранный индекс с диска. false — файла нет либо он негоден.
     private static func loadCached() -> Bool {
+        // Файла нет — первый запуск; битый отсеет TileDigestIndex(serialized:).
         guard let data = try? Data(contentsOf: cacheURL, options: .mappedIfSafe),
               let index = TileDigestIndex(serialized: data), !index.isEmpty else { return false }
         lock.withLock { $0 = index }

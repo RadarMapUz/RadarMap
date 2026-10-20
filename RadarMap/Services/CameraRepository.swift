@@ -195,10 +195,12 @@ final class CameraStore: CameraRepository {
         }
         if downloadedVersion > 0, downloadedVersion < AppConfig.bundledDBVersion {
             Log.cameras.notice("скачанная база v\(downloadedVersion, privacy: .public) старше встроенной v\(AppConfig.bundledDBVersion, privacy: .public) — берём встроенную")
+            // Не удалилась — не страшно: версия старше встроенной, и следующий запуск выберет так же.
             try? FileManager.default.removeItem(at: remoteFileURL)
         }
         // 2) встроенная база — её отсутствие означает битую сборку, кричим громко
         guard let url = Bundle.main.url(forResource: "cameras", withExtension: "json"),
+              // Причина не нужна: нечитаемая встроенная база — битая сборка, fault ниже.
               let data = try? Data(contentsOf: url),
               let decoded = try? JSONDecoder().decode([Camera].self, from: data) else {
             Log.cameras.fault("встроенная cameras.json не читается — приложение без базы")

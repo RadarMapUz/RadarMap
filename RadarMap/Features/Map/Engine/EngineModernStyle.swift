@@ -137,8 +137,14 @@ nonisolated enum EngineModernStyle {
         layers += EngineMapStyle.markerLayers(label: label, halo: halo)
         style["layers"] = layers
 
-        guard let data = try? JSONSerialization.data(withJSONObject: style),
-              let text = String(data: data, encoding: .utf8) else { return nil }
+        let data: Data
+        do {
+            data = try JSONSerialization.data(withJSONObject: style)
+        } catch {
+            Log.app.error("стиль новой карты не сериализовался: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+        guard let text = String(data: data, encoding: .utf8) else { return nil }
         return text
     }
 
@@ -210,17 +216,27 @@ nonisolated enum EngineModernStyle {
                          bundle: Bundle = .main) -> [String: Any]? {
         let name = daylight ? lightResource : darkResource
         guard let url = bundle.url(forResource: name, withExtension: "json")
-                ?? bundle.url(forResource: name, withExtension: "json", subdirectory: "MapStyle"),
-              let raw = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+                ?? bundle.url(forResource: name, withExtension: "json", subdirectory: "MapStyle")
+        else { return nil }
+        let raw: String
+        do {
+            raw = try String(contentsOf: url, encoding: .utf8)
+        } catch {
+            Log.app.error("шаблон стиля \(name, privacy: .public) не читается: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
         // Подстановка — по тексту, до разбора: плейсхолдер стоит и в шрифтах,
         // и в спрайте, и в адресах тайлов.
         var text = raw.replacingOccurrences(of: "{{BASE}}", with: TileRelease.root(base))
         if language != "ru" {
             text = text.replacingOccurrences(of: "\"name:ru\"", with: "\"name:\(language)\"")
         }
-        guard let data = text.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return nil }
-        return object
+        guard let data = text.data(using: .utf8) else { return nil }
+        do {
+            return try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        } catch {
+            Log.app.error("шаблон стиля \(name, privacy: .public) — не JSON: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 }

@@ -9,6 +9,7 @@ import SwiftUI
 import MapKit
 import CoreLocation
 import UIKit
+import os
 
 extension MapScreen {
 
@@ -137,8 +138,12 @@ extension MapScreen {
                         let renderer = ImageRenderer(content: view)
                         renderer.scale = 2
                         renderer.proposedSize = ProposedViewSize(format.size)
-                        try? renderer.uiImage?.pngData()?
-                            .write(to: docs.appendingPathComponent("\(name)_\(format.rawValue).png"))
+                        do {
+                            try renderer.uiImage?.pngData()?
+                                .write(to: docs.appendingPathComponent("\(name)_\(format.rawValue).png"))
+                        } catch {
+                            Log.app.error("снимок карточки \(name, privacy: .public) не записан: \(error.localizedDescription, privacy: .public)")
+                        }
                     }
                     write(PeriodShareCard(summary: summary, periodTitle: period.rangeTitle(containing: anchor),
                                           mapImage: periodMap, format: format), "share_stats")

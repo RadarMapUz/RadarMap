@@ -19,6 +19,7 @@ nonisolated enum OTASignature {
         guard let signatureB64,
               let signature = Data(base64Encoded: signatureB64),
               let keyRaw = Data(base64Encoded: publicKeyB64),
+              // Ключ — константа сборки; не разобрался — подпись не проходит (fail closed).
               let key = try? Curve25519.Signing.PublicKey(rawRepresentation: keyRaw)
         else { return false }
         return key.isValidSignature(signature, for: data)

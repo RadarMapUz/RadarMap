@@ -15,7 +15,7 @@ extension LocationService {
     /// Конец поездки за рулём: точка парковки, если фикс точный.
     func parkCar() {
         guard settings.parkedCarHint else { return }
-        parkedCar = ParkedCar.park(lastDriven: lastDrivenFix, asPassenger: false, now: Date())
+        parkedCar = ParkedCar.park(lastDriven: lastDrivenFix, asPassenger: false, speedKmh: speedKmh, now: Date())
         lastDrivenFix = nil
         refreshParkedCar()
     }

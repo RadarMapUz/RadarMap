@@ -1,0 +1,14 @@
+[Unit]
+Description=RadarMap Telegram bot: отметки водителей (long polling, без открытых портов)
+After=network.target radarmap-api.service
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/radarmap/api/telegram_bot.py
+# Без конфига бот выходит с кодом 0 — и не перезапускается по кругу.
+Restart=on-failure
+RestartSec=10
+User=root
+WorkingDirectory=/opt/radarmap/api
+
+[Install]
+WantedBy=multi-user.target

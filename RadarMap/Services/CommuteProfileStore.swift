@@ -248,6 +248,40 @@ final class CommuteProfileStore {
             store.onLoaded?()
         }
     }
+
+    /// Учения призрака `-ghostDrill` (В5, 8.8.9): обычная дорога дом→работа
+    /// по прямой — на скорости симулятора (`simctl location start --speed=14`),
+    /// шесть будних поездок в этот же час с разбросом ±10 %. Так прогон в
+    /// симуляторе за десять минут говорит «как обычно», а медленный отрезок —
+    /// «дольше»; на диск не пишется.
+    func seedDrill(home: CLLocationCoordinate2D, work: CLLocationCoordinate2D,
+                   speedMps: Double = 14, now: Date = Date()) {
+        let length = GeoMath.fastDistance(home.latitude, home.longitude, work.latitude, work.longitude)
+        let count = max(1, Int(length / 200))
+        var line: [Int32] = []
+        for k in 0...count {
+            let t = Double(k) / Double(count)
+            line.append(Int32(((home.latitude + (work.latitude - home.latitude) * t) * 1e5).rounded()))
+            line.append(Int32(((home.longitude + (work.longitude - home.longitude) * t) * 1e5).rounded()))
+        }
+        let ends = (1...count).map { Float(length * Double($0) / Double(count)) }
+        let segment = length / Double(count) / speedMps
+        let rows = [1.0, 0.92, 1.06, 0.97, 1.1, 0.95].enumerated().map { i, scale in
+            let departure = Calendar.current.date(byAdding: .day, value: -(i + 1), to: now) ?? now
+            return CommuteProfile.Row(tripID: departure.timeIntervalSince1970, departure: departure,
+                                      weekend: Calendar.current.isDateInWeekend(now), arrivalMinute: 0,
+                                      seconds: [UInt16](repeating: UInt16((segment * scale).rounded()),
+                                                        count: count))
+        }
+        var book = CommuteProfile.Book()
+        book.toWork = [CommuteProfile.Variant(id: UUID(), line: line, ends: ends, limitKmh: [],
+                                              rows: rows, lastUsed: now)]
+        enqueue { store in
+            store.isDemo = true
+            store.book = book
+            store.onLoaded?()
+        }
+    }
     #endif
 
     // MARK: - Журнал

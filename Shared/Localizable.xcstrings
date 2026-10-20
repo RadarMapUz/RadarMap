@@ -15376,6 +15376,22 @@
         }
       }
     },
+    "пробка": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "пробка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tirbandlik"
+          }
+        }
+      }
+    },
     "пробки +%lld мин": {
       "localizations": {
         "ru": {
@@ -15926,6 +15942,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "o‘rtacha, km/soat"
+          }
+        }
+      }
+    },
+    "стояли": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "стояли"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "to‘xtab turdingiz"
           }
         }
       }

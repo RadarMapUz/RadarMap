@@ -145,6 +145,25 @@ final class CommuteLiveSessionTests: XCTestCase {
         XCTAssertNil(service.routeRemaining(now: t))
     }
 
+    /// Пробка, которую проехали (8.8.12): участки 1–2 км по `now.json` хуже
+    /// обычного, и мы тащились там — причина задержки «пробка».
+    func testPassedJamNamesTheReason() throws {
+        var session = try XCTUnwrap(CommuteLiveSession(variants: [variant()], weekend: false,
+                                                        departure: start, calendar: utc))
+        session.setTraffic(jam(from: 1000, to: 2000, generated: start), now: start)
+        var t = start
+        var out: CommuteLiveSession.Output?
+        for s in stride(from: 0.0, through: 2600, by: 50) {
+            let (la, lo) = coordinate(s)
+            let o = session.note(lat: la, lon: lo, accuracy: 10, at: t)
+            if o.forecast != nil { out = o }
+            t = t.addingTimeInterval((1000...2000).contains(s) ? 18 : 5)   // в пробке ~10 км/ч
+        }
+        let last = try XCTUnwrap(out)
+        XCTAssertGreaterThanOrEqual(last.forecast?.deltaMinutes ?? 0, 1)
+        XCTAssertEqual(last.reason, .jam)
+    }
+
     func testOnScheduleIsUsual() throws {
         var session = try XCTUnwrap(CommuteLiveSession(variants: [variant()], weekend: false,
                                                         departure: start, calendar: utc))

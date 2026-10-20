@@ -740,6 +740,9 @@ nonisolated enum AppConfig {
     /// Плашка «опаздываю — предупредить?» (8.8.14) — только медленнее этого:
     /// лист «Поделиться» на ходу — помеха за рулём.
     nonisolated static let commuteLatePromptMaxKmh = 10.0
+    /// «Стояли» (8.8.12): одна стоянка от 3 мин — фиксы ближе 5 м подряд.
+    nonisolated static let commuteLongStandSeconds: TimeInterval = 180
+    nonisolated static let commuteStandStillMeters: Double = 5
     /// Пересчёт призрака стоя или посреди длинного участка — раз в 30 с.
     nonisolated static let commuteGhostRecomputeSeconds: TimeInterval = 30
     /// С какого отклонения строка призрака становится янтарной (мин).

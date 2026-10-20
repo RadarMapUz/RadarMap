@@ -39,6 +39,8 @@ nonisolated struct CommuteLiveSession: Sendable {
         /// Есть ведущий вариант. Нет — прогноз прятать: ведущий сошёл, а
         /// другой ещё не прошёл своих 1,5 км.
         var hasLead = false
+        /// Почему дольше (8.8.12) — одним словом, и только когда причина видна.
+        var reason: CommuteGhost.Reason?
     }
 
     /// Вариант пути с базой, индексом линии и сегодняшним проездом по ней.
@@ -70,6 +72,8 @@ nonisolated struct CommuteLiveSession: Sendable {
         var crossTimes: [Int: Date] = [:]
         var live: [(seconds: Double, median: Double, length: Double)] = []
         var rho = 1.0
+        /// На пройденном участке пробки по `now.json` были хуже q75 (8.8.12).
+        var sawJam = false
     }
 
     private let frame: CommuteProfile.Frame
@@ -78,6 +82,10 @@ nonisolated struct CommuteLiveSession: Sendable {
     private(set) var active: Int?
     private var lastPoint: SIMD2<Double>?
     private var lastForecastAt: Date?
+    private var lastFixAt: Date?
+    /// Текущая и самая долгая стоянка поездки без движения, с (8.8.12).
+    private var standing: TimeInterval = 0
+    private var longestStand: TimeInterval = 0
     /// Когда сделан файл пробок, легший в `crowd`: старше 10 мин — данных нет,
     /// даже если новый файл не пришёл (поездка ушла из сети).
     private var crowdGenerated: Date?
@@ -133,6 +141,15 @@ nonisolated struct CommuteLiveSession: Sendable {
         let p = frame.xy(lat, lon)
         let step = lastPoint.map { simd_distance($0, p) } ?? 0
         lastPoint = p
+        // Стоянка — фиксы почти на месте подряд; одна долгая (заехал,
+        // ждал у ворот) объясняет задержку словом «стояли» (8.8.12).
+        if let previous = lastFixAt, step < AppConfig.commuteStandStillMeters {
+            standing += now.timeIntervalSince(previous)
+            longestStand = max(longestStand, standing)
+        } else {
+            standing = 0
+        }
+        lastFixAt = now
         let accuracy = max(accuracy, 0)
 
         var crossed = Set<Int>()
@@ -161,7 +178,9 @@ nonisolated struct CommuteLiveSession: Sendable {
         let elapsed = now.timeIntervalSince(joined.at) + c.base.total - c.base.usualRemaining(at: joined.along)
         let forecast = CommuteGhost.forecast(c.base, along: c.floor, elapsed: elapsed, rho: c.rho, now: now,
                                              jamAhead: jamAhead(c, now: now))
-        return Output(forecast: forecast, isOff: false, remainingMeters: remainingMeters, hasLead: true)
+        return Output(forecast: forecast, isOff: false, remainingMeters: remainingMeters, hasLead: true,
+                      reason: CommuteGhost.reason(delta: forecast.delta, sawJam: c.sawJam,
+                                                  longestStand: longestStand))
     }
 
     /// Варианты, по которым идёт построенный маршрут (8.8.11): не меньше
@@ -224,6 +243,10 @@ nonisolated struct CommuteLiveSession: Sendable {
                 let share = (base.ends[j] - lastAlong) / (along - lastAlong)
                 let t = lastTime.addingTimeInterval(share * now.timeIntervalSince(lastTime))
                 c.crossTimes[j] = t
+                // Пройденный участок j — по пробкам хуже обычного разброса.
+                if let crowd = c.crowd, j < crowd.count, let jam = crowd[j], jam > base.q75[j] {
+                    c.sawJam = true
+                }
                 if j > 0, let previous = c.crossTimes[j - 1] {
                     c.live.append((t.timeIntervalSince(previous), base.median[j], base.length(of: j)))
                     // Темпу нужны последние ~2 км — хвост дальше не храним.

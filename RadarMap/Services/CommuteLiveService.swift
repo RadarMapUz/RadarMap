@@ -29,6 +29,8 @@ final class CommuteLiveService {
         let deltaMinutes: Int
         /// Запас до срока «быть к 9:00»; nil — срока нет (или не сегодня).
         var slack: CommuteGhost.TargetSlack?
+        /// Почему дольше — одним словом (8.8.12); nil — причины не видно.
+        var reason: CommuteGhost.Reason? = nil
     }
 
     private(set) var display: Display?
@@ -157,7 +159,7 @@ final class CommuteLiveService {
         let slack: CommuteGhost.TargetSlack? = Self.all(slackTracker.update(slackMinutes: raw, now: now), raw, deadline)
             .map { CommuteGhost.TargetSlack(state: $0, minutes: Int($1.rounded()), deadline: $2) }
         let next = Display(direction: direction, arrival: Date(timeIntervalSince1970: minute),
-                           deltaMinutes: forecast.deltaMinutes, slack: slack)
+                           deltaMinutes: forecast.deltaMinutes, slack: slack, reason: output.reason)
         if next != display { display = next }
         // Голос — на каждом пересчёте (≤ раз в 30 с), а не только при смене
         // строки: фраза, отложенная из-за камеры, не ждёт сдвига на 3 мин.

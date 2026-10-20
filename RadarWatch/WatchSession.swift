@@ -7,12 +7,18 @@
 //  Тактильная эскалация: уровень вырос — часы «тукают» по запястью.
 //  Обратно — «Радар!» сообщением с ответом (9.3): телефон в держателе, рука
 //  на руле, запястье ближе экрана.
+//  Толчок циферблату (14.5) — userInfo с тем же снимком: будит спящее
+//  приложение ради компликации. Это очередь, поэтому берём его, только если
+//  он новее применённого (WatchComplication.acceptsPush), и без тука — тук
+//  остаётся за контекстом, иначе запоздавший толчок «тукнул» бы о камере,
+//  которая уже позади.
 //
 
 import Foundation
 import Observation
 import WatchConnectivity
 import WatchKit
+import os
 
 @MainActor
 @Observable
@@ -51,6 +57,10 @@ final class WatchSession: NSObject {
     @ObservationIgnored private var lastHapticLevel = 0
     /// Компликация «следующая камера» (9.3б) — из того же контекста.
     @ObservationIgnored private let complication = ComplicationFeed()
+    /// Когда телефон отправил последнее применённое состояние (ключ «t»):
+    /// толчок не старше него не берём.
+    @ObservationIgnored private var lastAppliedAt: Date?
+    @ObservationIgnored private let log = Logger(subsystem: "uz.radarmap.ios.watch", category: "session")
 
     #if DEBUG
     /// `-demo`: живой HUD без телефона — для скриншотов и превью на симуляторе.
@@ -75,7 +85,20 @@ final class WatchSession: NSObject {
         WCSession.default.activate()
     }
 
-    private func apply(_ context: [String: Any]) {
+    /// Состояние с телефона. `pushed` — толчок циферблату (userInfo), а не
+    /// контекст: берётся только новее применённого и без тука по запястью.
+    private func apply(_ context: [String: Any], pushed: Bool = false) {
+        let sentAt = (context["t"] as? Double).map { Date(timeIntervalSince1970: $0) }
+        if pushed {
+            guard WatchComplication.acceptsPush(sentAt: sentAt, lastAppliedAt: lastAppliedAt,
+                                                now: Date()) else {
+                log.info("толчок с телефона устарел — не применяем")
+                return
+            }
+        }
+        // Контекст — всегда последний: применяем, даже если часы телефона
+        // сбиты назад, и меряем толчки от него.
+        if let sentAt { lastAppliedAt = sentAt }
         // Пишем только на смене: каждое присваивание @Observable будит HUD,
         // а контекст с телефона приходит и с совпавшими значениями.
         let active = context["active"] as? Bool ?? false
@@ -94,7 +117,12 @@ final class WatchSession: NSObject {
         if over != isOverspeeding { isOverspeeding = over }
         let level = context["level"] as? Int ?? 0
         complication.update(isTripActive: active, symbol: symbol, title: title,
-                            distanceMeters: distance)
+                            distanceMeters: distance, cameraID: context["cid"] as? Int,
+                            sentAt: sentAt)
+        guard !pushed else {
+            if level != alertLevel { alertLevel = level }
+            return
+        }
 
         // Тук на запястье при росте уровня; сброс серии — когда камера позади.
         if isTripActive, level > lastHapticLevel {
@@ -156,7 +184,8 @@ extension WatchSession {
 extension WatchSession {
     /// Фоновое пробуждение ради контекста (`.backgroundTask(.watchConnectivity)`):
     /// компликация на циферблате живёт, пока приложение часов спит, и контекст
-    /// с телефона будит его в фоне. Задачу держим, пока сессия не примет всё,
+    /// или толчок с телефона (14.5) будят его в фоне. `hasContentPending`
+    /// покрывает оба. Задачу держим, пока сессия не примет всё,
     /// и ещё чуть-чуть — чтобы `apply` успел на главном акторе. Не дольше 10 с.
     nonisolated static func drainPendingContent() async {
         let session = WCSession.default
@@ -184,6 +213,12 @@ extension WatchSession: WCSessionDelegate {
     nonisolated func session(_ session: WCSession,
                              didReceiveApplicationContext applicationContext: [String: Any]) {
         Task { @MainActor in self.apply(applicationContext) }
+    }
+
+    /// Толчок циферблату с телефона (`transferCurrentComplicationUserInfo`, 14.5).
+    /// Других userInfo телефон не шлёт.
+    nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
+        Task { @MainActor in self.apply(userInfo, pushed: true) }
     }
 
     nonisolated func sessionReachabilityDidChange(_ session: WCSession) {

@@ -1758,6 +1758,11 @@ nonisolated enum AppConfig {
     /// Шаг дистанции на часах вдали от камеры и вблизи (зона — как у Live Activity).
     static let watchDistanceStepFar = 100.0
     static let watchDistanceStepNear = 25.0
+    /// Толчки циферблату (`transferCurrentComplicationUserInfo`, 50 в сутки):
+    /// последние столько — только на начало и конец поездки (14.5). Четыре —
+    /// конец этой поездки и ещё одна поездка туда-обратно: «в пути» на
+    /// циферблате после парковки хуже, чем опоздавшая камера.
+    static let watchComplicationEdgeReserve = 4
 
     // MARK: - Офлайн-карты (docs/plan_map_offline.md §2.7)
 

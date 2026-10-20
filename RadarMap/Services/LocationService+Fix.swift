@@ -398,6 +398,7 @@ extension LocationService {
             watchBridge?.update(isTripActive: true, speedKmh: speedKmh,
                                 cameraTitle: nearestCamera?.displayTitle,
                                 cameraSymbol: nearestCamera?.kind.symbolName,
+                                cameraID: nearestCamera?.id,
                                 distanceMeters: distanceToNearest,
                                 alertLevel: alertLevel,
                                 limitKmh: speedLimits?.currentLimit,

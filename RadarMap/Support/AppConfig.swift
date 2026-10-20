@@ -1890,6 +1890,43 @@ nonisolated enum AppConfig {
     /// секунд пути: фраза идёт ~2 с, и камера не должна ждать её конца.
     static let roadEventCameraGapSeconds = 8.0
 
+    // MARK: - Погода на перевалах (RoadWeatherAlert, 19.2)
+
+    /// weather/roads.json перечитывается раз в 30 минут — так же часто его
+    /// пересобирает сервер; неизменный файл стоит пустой 304.
+    static let roadWeatherRefreshInterval: TimeInterval = 30 * 60
+    /// Не чаще этого после неудачи (нет сети, сервер молчит).
+    static let roadWeatherRetrySeconds: TimeInterval = 5 * 60
+    /// Файл старше двух часов — данных нет: сервер переписывает его минимум
+    /// раз в час, значит сборщик стоит, а вчерашний туман — не сегодняшний.
+    static let roadWeatherStaleSeconds: TimeInterval = 2 * 3600
+    /// Окно фразы: обычно — за 20–40 км (на трассе это 15–30 минут); ближе
+    /// 20 км — тоже, но это уже «поздно» (в журнал).
+    static let roadWeatherAnnounceMeters: ClosedRange<CLLocationDistance> = 20_000...40_000
+    /// Опасность, которая начнётся не позже чем через час, застанет водителя
+    /// из окна фразы: 40 км даже по 40 км/ч — час.
+    static let roadWeatherLeadSeconds: TimeInterval = 3600
+    /// Точка «на маршруте» — не дальше этого от его линии.
+    static let roadWeatherRouteMeters: CLLocationDistance = 1_000
+    /// Линия маршрута смотрится на окно плюс столько: Камчик из четырёх точек
+    /// тянется на ~30 км, и его дальние точки должны попасть в ту же фразу.
+    static let roadWeatherGroupSpanMeters: CLLocationDistance = 30_000
+    /// Без маршрута — коридор по курсу: 500 м + 8 % дальности (на 30 км —
+    /// 2,9 км; трасса петляет, а точка лежит на ней самой).
+    static let roadWeatherCorridorMeters: CLLocationDistance = 500
+    static let roadWeatherCorridorSlope = 0.08
+    /// Без маршрута — только на ходу: курс стоящей или ползущей машины на
+    /// 30 км вперёд — шум.
+    static let roadWeatherCorridorMinKmh = 40.0
+    /// Как часто смотреть, нет ли опасности впереди (линия маршрута на 70 км
+    /// — не на каждом фиксе).
+    static let roadWeatherCheckSeconds: TimeInterval = 15
+    /// Баннер на телефоне и в машине висит столько, если его не закрыли.
+    static let roadWeatherBannerSeconds: TimeInterval = 15
+    /// Баннер в машине, вернувшийся после камеры с остатком меньше этого, не
+    /// показывается: мелькнувший баннер за рулём хуже никакого.
+    static let carPlayRoadWeatherMinSeconds: TimeInterval = 3
+
     // MARK: - Метан на АГНКС (CngRules, 12б.4)
 
     /// Заведение из своего файла и точка сервера — одна станция, если ближе.

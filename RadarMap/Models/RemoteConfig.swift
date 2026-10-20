@@ -58,6 +58,9 @@ nonisolated struct RemoteConfig: Codable, Equatable, Sendable {
         /// «Поделиться прибытием» — рубильник на случай, если страница на
         /// сервере сломалась. Нет поля — включено.
         var etaShare: Bool?
+        /// Погода на перевалах (19.2): загрузка, голос и баннер — рубильник на
+        /// случай, если с прогнозом что-то не так. Нет поля — включено.
+        var roadWeather: Bool?
     }
 
     /// Значения сборки: то, к чему мы возвращаемся всегда, когда пульту нельзя верить.
@@ -70,6 +73,7 @@ nonisolated struct RemoteConfig: Codable, Equatable, Sendable {
     var areMetricsEnabled: Bool { features?.metrics ?? true }
     var isTrafficEnabled: Bool { features?.traffic ?? true }
     var isEtaShareEnabled: Bool { features?.etaShare ?? true }
+    var isRoadWeatherEnabled: Bool { features?.roadWeather ?? true }
 
     /// Интервал опроса с зажимом в разумные границы: присланные 0 или 86400 —
     /// это не «настройка», а испорченный файл.

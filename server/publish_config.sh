@@ -13,7 +13,8 @@
 #   minVersion          "1.2"      — ниже просим обновиться
 #   message             {title, body, until}  — объявление на карте (until: unix-время)
 #   mobilePollInterval  180        — интервал опроса радаров, 60…3600
-#   features            {routing, mobileReports, metrics}  — что временно выключено
+#   features            {routing, mobileReports, metrics, traffic, etaShare, roadWeather}
+#                                  — что временно выключено (RemoteConfig.Features)
 #
 # Оповещения о камерах отсюда НЕ управляются и управляться не будут: база лежит
 # на телефоне, и предупреждение за рулём обязано работать, даже когда сервера
@@ -70,7 +71,9 @@ if unknown:
 features = raw.get("features") or {}
 if not isinstance(features, dict):
     sys.exit("features должен быть объектом")
-unknown = set(features) - {"routing", "mobileReports", "metrics"}
+# Тот же список, что RemoteConfig.Features в приложении: traffic и etaShare
+# приложение понимало, а здесь их отвергало — рубильник пробок не публиковался.
+unknown = set(features) - {"routing", "mobileReports", "metrics", "traffic", "etaShare", "roadWeather"}
 if unknown:
     sys.exit(f"неизвестные features: {', '.join(sorted(unknown))}")
 for name, value in features.items():

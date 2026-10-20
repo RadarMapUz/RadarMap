@@ -56,6 +56,9 @@ final class RouteService {
         var laneNotices: [LaneNotice] = []
         /// Где по линии остановка по пути (конец первого плеча). nil — без заезда.
         var stopAlong: CLLocationDistance?
+        /// Построен на телефоне по своему графу трасс без сети (12б.10):
+        /// без запретов поворотов и без манёвров — «приблизительно».
+        var isOffline = false
         /// Сколько добавляют пробки (TrafficSnapshot.delay); nil — данных о
         /// пробках нет (не «ноль»: ноль значит «пробок нет», а это мы знаем
         /// только при свежем наборе).
@@ -745,7 +748,19 @@ final class RouteService {
         let steps: [RouteStep]
         var laneNotices: [LaneNotice] = []
         var stopAlong: CLLocationDistance?
+        var offline = false
     }
+
+    /// Маршрут без сети по своему графу трасс (OfflineRouteService, 12б.10).
+    /// nil — графа нет (не скачан, не проверен) или точки далеко от трасс.
+    @ObservationIgnored var offlinePath: ((CLLocationCoordinate2D, CLLocationCoordinate2D) async
+                                          -> OfflineRouteGraph.Path?)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: offlinePath,
+                                               "RouteService.offlinePath") }
+    }
+
+    /// Выбранный маршрут построен без сети — сеть вернулась, пора заменить.
+    var isOfflineRoute: Bool { selected?.isOffline ?? false }
 
     private func calculate(from source: CLLocationCoordinate2D,
                            via stop: Stop?,
@@ -756,7 +771,38 @@ final class RouteService {
         if stop == nil,
            let apple = try? await appleRoute(from: source, to: destination, alternatives: alternatives),
            !apple.isEmpty { return apple }
-        return try await osrmRoute(from: source, via: stop, to: destination, alternatives: alternatives)
+        do {
+            return try await osrmRoute(from: source, via: stop, to: destination, alternatives: alternatives)
+        } catch {
+            // Ни Apple, ни свой сервер — на трассе без связи. Последнее средство —
+            // свой граф трасс: приблизительный маршрут лучше, чем никакого
+            // (12б.10). С остановкой — нет: заезд по пути без сети не считаем.
+            guard stop == nil, let path = await offlinePath?(source, destination), path.points.count >= 2 else {
+                throw error
+            }
+            Log.route.notice("маршрут без сети: свой граф трасс, \(Int(path.distance / 1000), privacy: .public) км")
+            let arrive = RouteStep(distanceAlong: path.distance, text: String(localized: "Вы на месте"),
+                                   icon: "flag.checkered", kind: .arrive)
+            return [BuiltVariant(points: path.points.map(MKMapPoint.init), distance: path.distance,
+                                 travelTime: path.travelTime, steps: [arrive], offline: true)]
+        }
+    }
+
+    /// Сеть вернулась, а маршрут построен без неё — молча заменить серверным
+    /// той же цели (без альтернатив: человек уже едет). Не вышло — остаётся
+    /// приблизительный.
+    func replaceOfflineRoute(from coordinate: CLLocationCoordinate2D?, cameras: [Camera]) {
+        guard isOfflineRoute, !isRebuilding, let coordinate, let destination = destinationCoordinate else { return }
+        isRebuilding = true
+        let name = destinationName
+        let gen = generation
+        Task {
+            defer { isRebuilding = false }
+            guard let built = try? await calculate(from: coordinate, via: nil, to: destination, alternatives: false),
+                  built.contains(where: { !$0.offline }), gen == generation else { return }
+            Log.route.notice("маршрут без сети заменён серверным")
+            await apply(built, name: name, destination: destination, cameras: cameras, gen: gen, history: nil)
+        }
     }
 
     private func appleRoute(from source: CLLocationCoordinate2D,
@@ -1121,6 +1167,7 @@ final class RouteService {
                     assessment: verdict.assessments[index],
                     laneNotices: variant.laneNotices,
                     stopAlong: variant.stopAlong,
+                    isOffline: variant.offline,
                     trafficDelay: trafficDelays[index])
         }
         selectedID = verdict.recommended

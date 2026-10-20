@@ -41,6 +41,12 @@ final class NetworkMonitor {
     private(set) var isExpensive = true
 
     @ObservationIgnored private let monitor = NWPathMonitor()
+    /// Связь вернулась (переход «нет → есть») — маршрут без сети заменить
+    /// серверным (12б.10). Ставит AppEnvironment.
+    @ObservationIgnored var onOnline: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onOnline,
+                                               "NetworkMonitor.onOnline") }
+    }
 
     init() {
         monitor.pathUpdateHandler = { [weak self] path in
@@ -52,6 +58,7 @@ final class NetworkMonitor {
                 guard self.isOnline != online else { return }
                 self.isOnline = online
                 Log.network.notice("связь: \(online ? "есть" : "нет", privacy: .public)")
+                if online { self.onOnline?() }
             }
         }
         monitor.start(queue: DispatchQueue(label: "uz.radarmap.network"))

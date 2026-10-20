@@ -54,6 +54,9 @@ final class OfflineRouteService {
     private let api = APIClient()
     private var graph: OfflineRouteGraph?
     private var loading: Task<OfflineRouteGraph?, Never>?
+    /// Растёт с каждой новой версией графа на диске: чтение, начатое до неё,
+    /// результат в память не кладёт.
+    private var graphGeneration = 0
     private var lastIndexCheck = Date.distantPast
     weak var network: NetworkMonitor?
 
@@ -82,9 +85,14 @@ final class OfflineRouteService {
         if let graph { return graph }
         if let loading { return await loading.value }
         let envelope = envelopeURL, directory = directory
+        let generation = graphGeneration
         let task = Task { await Self.readGraph(envelope: envelope, directory: directory) }
         loading = task
         let result = await task.value
+        // Пока читали, пришла новая версия (refreshIfDue) — прочитанный граф
+        // уже старый: в память его не кладём, следующий маршрут соберёт новый
+        // (правило 12). Иначе старый граф жил бы до перезапуска.
+        guard generation == graphGeneration else { return result }
         loading = nil
         graph = result
         return result
@@ -151,6 +159,8 @@ final class OfflineRouteService {
             try raw.write(to: envelopeURL, options: .atomic)
             removeStale(keeping: file.name)
             graph = nil   // следующий маршрут без сети соберёт новый
+            loading = nil
+            graphGeneration += 1
             Log.route.notice("граф трасс: версия \(manifest.version, privacy: .public)")
         } catch {
             Log.route.notice("граф трасс: индекс не получен — \(error.localizedDescription, privacy: .public)")

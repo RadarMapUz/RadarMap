@@ -99,7 +99,7 @@ extension CarPlaySceneDelegate {
         // дублируются и съедают места из восьми, которые есть у сетки.
         // Сравниваем по координате, а не по названию: одно и то же место
         // может называться по-разному.
-        let pinned = PlaceSlot.allCases.compactMap { env.settings.place(for: $0)?.coordinate }
+        let pinned = PlaceSlot.allCases.compactMap { slotPlace($0)?.saved.coordinate }
         let recent = env.settings.recentPlaces.filter { place in
             !pinned.contains { GeoMath.fastDistance($0.latitude, $0.longitude,
                                                     place.coordinate.latitude,
@@ -219,17 +219,58 @@ extension CarPlaySceneDelegate {
 
     /// Плитка Дом/Работа. Место не задано — плитку всё равно показываем: она
     /// всегда на одном месте (мышечная память), а тап задаёт место поиском.
+    ///
+    /// Три состояния, как у плитки главного экрана машины (10.3): адрес
+    /// задан — маршрут к нему; не задан, но выучен по поездкам
+    /// (FrequentPlaces) — маршрут к выученному («по вашим поездкам»);
+    /// ничего — поиск. До 20.10 выученный дом знала только плитка главного
+    /// экрана, а «Куда» предлагал задать его заново. Ручной адрес всегда
+    /// старше догадки.
     func placeButton(slot: PlaceSlot) -> CPGridButton {
-        let place = env.settings.place(for: slot)
-        let titles = place.map { [ "\(slot.name) · \($0.title)", slot.name ] } ?? [slot.name]
+        let place = slotPlace(slot)
+        // «обычно 39 мин» — медиана своих поездок туда (Commute), без сети.
+        let usual = env.commute
+            .first { $0.direction == (slot == .work ? .toWork : .toHome) }?.usual
+            .map { String(format: String(localized: "обычно %@"), Formatting.duration($0)) }
+        let titles: [String]
+        switch place {
+        case .manual(let saved)?:
+            titles = [usual.map { "\(slot.name) · \($0)" }, "\(slot.name) · \(saved.title)", slot.name]
+                .compactMap { $0 }
+        case .learned?:
+            titles = [usual.map { "\(slot.name) · \($0)" },
+                      "\(slot.name) · \(String(localized: "по вашим поездкам"))", slot.name].compactMap { $0 }
+        case nil:
+            titles = [slot.name]
+        }
         return gridButton(symbol: slot.symbol, titles: titles) { [weak self] in
             guard let self else { return }
             // Не задано — задаём здесь же поиском, как с плитки главного
             // экрана: сценарий в машине обязан проходить без телефона
             // (Руководство CarPlay, стр. 5; аудит 18.10, п. 8).
             guard let place else { return presentAssign(slot) }
-            route(to: place)
+            route(to: place.saved)
         }
+    }
+
+    /// Куда ведёт слот: заданный руками адрес или выученное по поездкам место.
+    enum SlotPlace {
+        case manual(SavedPlace)
+        case learned(SavedPlace)
+
+        var saved: SavedPlace {
+            switch self {
+            case .manual(let place), .learned(let place): return place
+            }
+        }
+    }
+
+    func slotPlace(_ slot: PlaceSlot) -> SlotPlace? {
+        if let place = env.settings.place(for: slot) { return .manual(place) }
+        guard let learned = env.learnedPlaces.first(where: { $0.kind.rawValue == slot.rawValue }) else {
+            return nil
+        }
+        return .learned(SavedPlace(title: slot.name, lat: learned.lat, lon: learned.lon))
     }
 
     func gridButton(symbol: String, titles: [String],

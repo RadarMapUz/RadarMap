@@ -281,7 +281,7 @@ MAX_ID = 2**31               # верхняя граница id: больше �
 # щедрые: за одним адресом оператора живут десятки честных водителей.
 IP_DAILY_CAPS = {"report": 30, "vote": 100, "camera_report": 60,
                  "feedback": 30, "metrics": 60, "stat": 60, "cng": 40}
-MAX_USAGE_ROWS = 2_000_000   # ~90 дней × 20 000 устройств: потолок диска
+MAX_USAGE_ROWS = 2_000_000   # потолок диска на случай ротации device (срок — LIVE_MAX_DAYS)
 # Скрытие отметки требует дизлайков с РАЗНЫХ адресов: три свежих UUID с одного
 # телефона больше не снимают чужую отметку с карты.
 HIDE_DISTINCT_IPS = 3
@@ -289,6 +289,53 @@ HIDE_DISTINCT_IPS = 3
 # держать на карте десяток живых фейков разом. CGNAT помним: за одним адресом
 # оператора — десятки честных водителей, поэтому не 3, а 12.
 MAX_ACTIVE_PER_IP = 12
+
+# --- Сроки хранения (15.5) ----------------------------------------------------
+#
+# Всё, что привязано к устройству, — UUID, IP-адрес, псевдоадрес бота, контакт,
+# — живёт на сервере не дольше RETENTION_CEILING_DAYS, СЧИТАЯ резервные копии:
+# строка, удалённая из базы, ещё лежит в ночной копии на VPS (7 штук,
+# backup_db.sh) и в копии на маке владельца (pull_backup.sh). Поэтому потолок
+# в живой базе — LIVE_MAX_DAYS, а не 90: 60 + 24 < 90.
+#
+# Таблица сроков для людей и для страницы приватности — server/RETENTION.md.
+# Тесты сверяют её с RETENTION_DAYS, со схемой (таблица с колонкой device/ip
+# без срока — красный тест) и со сроками копий в обоих скриптах.
+#
+# До 20.10.2026 сроков не было вовсе у отзывов и жалоб на камеры, а
+# usage_stats и metrics чистились только попутно в POST — замолчи телефоны,
+# и строки жили бы вечно.
+RETENTION_CEILING_DAYS = 90
+LIVE_MAX_DAYS = 60
+# Копия у владельца хранится 21 день; файл получает mtime в момент забора
+# (до суток после ночного снимка), find -mtime +21 срабатывает на 22-й день,
+# и запускается он раз в сутки — отсюда +3.
+BACKUP_MAX_DAYS = 24
+METRICS_KEEP_DAYS = 30
+# Бан — сутки (admin.py), но строка с UUID и адресом не живёт дольше месяца
+# ни при каком until: UUID сам меняется раз в 30 дней, а адрес в Узбекистане —
+# CGNAT, и через месяц он чужой.
+BAN_MAX_DAYS = 30
+# Погасшая отметка или метан лежат ещё сутки: панель считает качество
+# краудсорса за последние сутки (admin.mobile_quality), и погасшие в нём нужны.
+EXPIRED_KEEP = 86400
+# Проход раз в час из той же чистки GET /api/mobile, что и для отметок, плюс
+# один при старте процесса. Сроки здесь — недели, минутная точность не нужна.
+RETENTION_SWEEP_SECONDS = 3600
+# Таблица → потолок в днях для строк с полями устройства; None — полей
+# устройства в таблице нет. Каждая таблица api.py обязана быть здесь (тест).
+RETENTION_DAYS = {
+    "reports": LIVE_MAX_DAYS,        # обычно — сутки после expires; это страховка
+    "votes": LIVE_MAX_DAYS,          # живут, пока жива их отметка
+    "blocked": BAN_MAX_DAYS,
+    "metrics": METRICS_KEEP_DAYS,
+    "camera_reports": LIVE_MAX_DAYS,  # разобранные — удалить, неразобранные — без device/ip
+    "feedback": LIVE_MAX_DAYS,
+    "usage_stats": LIVE_MAX_DAYS,
+    "cng": LIVE_MAX_DAYS,            # обычно — сутки после expires; это страховка
+    "traffic_pieces": None,          # ни устройства, ни адреса; 20 мин (traffic_build.py)
+    "traffic_seen": None,            # отпечаток куска, 30 мин
+}
 
 def db():
     """Соединение для обработки одного запроса.
@@ -451,6 +498,53 @@ def init_db():
     conn.close()
 
 
+def enforce_retention(conn, now):
+    """Потолок хранения всего, что привязано к устройству (см. «Сроки
+    хранения» выше и server/RETENTION.md).
+
+    Большие таблицы (жалобы, отзывы, статистика, метрики) идут по колонке
+    времени с индексом; отметки, голоса, метан и баны малы по построению.
+    Зовётся при старте процесса и раз в RETENTION_SWEEP_SECONDS, а не на
+    каждый запрос. Возвращает {что: строк}, для журнала и тестов.
+
+    Жалобы на камеры старше потолка делятся надвое. Разобранная уже ничего не
+    решает — решение лежит в overrides и журнале модерации, — её удаляем.
+    Неразобранная — сигнал очереди «Положение» и «Камеры»: номер камеры,
+    причина, время и координата камеры остаются, а device и ip стираются. В кворум на
+    скрытие такая строка больше не идёт (он считает только строки с адресом),
+    то есть потеря работает в безопасную сторону: старая жалоба не может снять
+    камеру, может только не помочь её снять.
+    """
+    live = now - LIVE_MAX_DAYS * 86400
+    statements = (
+        ("reports", "DELETE FROM reports WHERE created < ?", (live,)),
+        ("votes", "DELETE FROM votes WHERE report_id NOT IN (SELECT id FROM reports)", ()),
+        ("cng", "DELETE FROM cng WHERE expires < ? OR created < ?", (now - EXPIRED_KEEP, live)),
+        ("blocked", "DELETE FROM blocked WHERE until < ? OR created < ?",
+         (now, now - BAN_MAX_DAYS * 86400)),
+        ("metrics", "DELETE FROM metrics WHERE received < ?", (now - METRICS_KEEP_DAYS * 86400,)),
+        ("feedback", "DELETE FROM feedback WHERE received < ?", (live,)),
+        ("usage_stats", "DELETE FROM usage_stats WHERE received < ?", (live,)),
+        ("camera_reports", "DELETE FROM camera_reports WHERE received < ? "
+         "AND COALESCE(resolved, 0) != 0", (live,)),
+        ("camera_reports_stripped", "UPDATE camera_reports SET device = '', ip = '' "
+         "WHERE received < ? AND (device != '' OR COALESCE(ip, '') != '')", (live,)),
+    )
+    done = {}
+    try:
+        for key, sql, args in statements:
+            done[key] = conn.execute(sql, args).rowcount
+        conn.commit()
+    except sqlite3.Error:
+        conn.rollback()
+        raise
+    touched = {key: n for key, n in done.items() if n}
+    if touched:
+        sys.stderr.write("сроки хранения: " + ", ".join(
+            f"{key} {n}" for key, n in sorted(touched.items())) + "\n")
+    return done
+
+
 # --- Пробки ---------------------------------------------------------------------
 #
 # Телефон присылает куски следа поездки (~1 км), из которых traffic_build.py
@@ -601,6 +695,9 @@ _ip_counters = {}
 # Чистка протухших отметок из GET /api/mobile — не чаще раза в минуту.
 _cleanup_lock = threading.Lock()
 _last_cleanup = 0.0
+# Проход сроков хранения (enforce_retention) — под тем же замком, раз в час.
+# Ноль — первый же опрос после старта проходит сразу.
+_last_retention = 0.0
 
 # Ответ GET /api/mobile — общий для всех: это один и тот же список отметок по
 # стране. Его собирали заново на каждый запрос каждого телефона, хотя между
@@ -975,7 +1072,7 @@ class Handler(BaseHTTPRequestHandler):
         """Список живых отметок: /api/mobile — камеры и посты, /api/road —
         перекрытия и ремонт (с курсом отметившего). Мемо и ETag — у каждого
         списка свои, версия записей — общая."""
-        global _last_cleanup, _mobile_cache, _road_cache
+        global _last_cleanup, _last_retention, _mobile_cache, _road_cache
         now = time.time()
         # Свежее мемо той же версии — отдаём, не трогая базу вовсе.
         with _mobile_lock:
@@ -993,12 +1090,22 @@ class Handler(BaseHTTPRequestHandler):
                 due = now - _last_cleanup >= 60
                 if due:
                     _last_cleanup = now
+                sweep = now - _last_retention >= RETENTION_SWEEP_SECONDS
+                if sweep:
+                    _last_retention = now
             if due:
-                conn.execute("DELETE FROM reports WHERE expires < ?", (now - 86400,))
+                conn.execute("DELETE FROM reports WHERE expires < ?", (now - EXPIRED_KEEP,))
                 # голоса удалённых отметок — сироты, без чистки таблица растёт вечно
                 conn.execute("DELETE FROM votes WHERE report_id NOT IN (SELECT id FROM reports)")
                 conn.commit()
                 bump_mobile_version()
+            if sweep:
+                # Сбой прохода не должен стоить телефонам списка отметок:
+                # пишем в журнал, следующая попытка — через час.
+                try:
+                    enforce_retention(conn, now)
+                except sqlite3.Error as error:
+                    sys.stderr.write(f"сроки хранения: проход не удался — {error}\n")
             # confirmed — по разным устройству И адресу (см.
             # confirmed_independently): клиент рисует неподтверждённые
             # полупрозрачными и говорит «возможно, радар», а не «радар».
@@ -1210,7 +1317,8 @@ class Handler(BaseHTTPRequestHandler):
             if total >= MAX_USAGE_ROWS:
                 # Ротация device не должна заливать диск. Чистим старое и только
                 # потом отказываем: иначе таблица однажды закрывается навсегда.
-                conn.execute("DELETE FROM usage_stats WHERE received < ?", (now - 90 * 86400,))
+                conn.execute("DELETE FROM usage_stats WHERE received < ?",
+                             (now - LIVE_MAX_DAYS * 86400,))
                 if conn.execute("SELECT COUNT(*) FROM usage_stats").fetchone()[0] >= MAX_USAGE_ROWS:
                     conn.commit()
                     return self._json(429, {"error": "too many"})
@@ -1254,7 +1362,8 @@ class Handler(BaseHTTPRequestHandler):
                 (device, now - 86400)).fetchone()[0]
             if count >= 20:
                 return self._json(429, {"error": "too many"})
-            conn.execute("DELETE FROM metrics WHERE received < ?", (now - 30 * 86400,))
+            conn.execute("DELETE FROM metrics WHERE received < ?",
+                         (now - METRICS_KEEP_DAYS * 86400,))
             total = conn.execute("SELECT COUNT(*) FROM metrics").fetchone()[0]
             if total >= MAX_METRICS_ROWS:  # ротация device не должна заливать диск
                 return self._json(429, {"error": "too many"})
@@ -1810,4 +1919,14 @@ class BoundedHTTPServer(ThreadingHTTPServer):
 if __name__ == "__main__":
     init_db()
     init_traffic_db()
+    # Сроки хранения — сразу при старте: после деплоя старое уходит, не
+    # дожидаясь первого опроса /api/mobile.
+    _conn = db()
+    try:
+        enforce_retention(_conn, time.time())
+    except sqlite3.Error as _error:
+        # Не повод не подниматься: следующий проход — с первым опросом.
+        sys.stderr.write(f"сроки хранения: проход при старте не удался — {_error}\n")
+    finally:
+        _conn.close()
     BoundedHTTPServer(("127.0.0.1", 8091), Handler).serve_forever()

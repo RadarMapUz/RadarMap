@@ -1,6 +1,8 @@
 #!/bin/bash
 # Ежедневный бэкап краудсорс-базы (reports.db): консистентная копия через
 # sqlite .backup (не cp — база живая), gzip, храним 7 последних.
+# Больше не надо: в копии — UUID и адреса, а их потолок 90 дней считается
+# вместе с копиями (server/RETENTION.md, тест test_api.RetentionDocTest).
 # Cron на VPS:  17 3 * * *  /opt/radarmap/api/backup_db.sh
 set -euo pipefail
 

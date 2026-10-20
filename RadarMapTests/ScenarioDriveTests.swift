@@ -528,3 +528,101 @@ final class ScenarioDriveTests: XCTestCase {
         XCTAssertEqual(drive.firstAlerts[2], 1)
     }
 }
+
+// MARK: - A1: город с камерами на настоящей базе
+
+extension ScenarioDriveTests {
+    /// Проезд по собственной проезжей части камеры (`road` из базы) с
+    /// разгоном 500 м и выездом 200 м, в её направлении, где оно известно.
+    private func ownRoadDrive(for target: Camera) -> [(x: Double, y: Double)]? {
+        guard let road = target.road, road.count >= 4 else { return nil }
+        var path: [(x: Double, y: Double)] = stride(from: 0, to: road.count - 1, by: 2).map { i in
+            xy(target.lat + Double(road[i]) / 1e6, target.lon + Double(road[i + 1]) / 1e6)
+        }
+        guard let first = path.first, let last = path.last else { return nil }
+        let bearing = (atan2(last.x - first.x, last.y - first.y) * 180 / .pi + 360)
+            .truncatingRemainder(dividingBy: 360)
+        if let dir = target.dir, GeoMath.angleDifference(bearing, Double(dir)) > 90 { path.reverse() }
+        func extended(_ a: (x: Double, y: Double), from b: (x: Double, y: Double), by meters: Double)
+            -> (x: Double, y: Double) {
+            let dx = a.x - b.x, dy = a.y - b.y
+            let length = max(0.1, (dx * dx + dy * dy).squareRoot())
+            return (a.x + dx / length * meters, a.y + dy / length * meters)
+        }
+        let head = extended(path[0], from: path[1], by: 500)
+        let tail = extended(path[path.count - 1], from: path[path.count - 2], by: 200)
+        return [head] + path + [tail]
+    }
+
+    /// Боковое отклонение от пути — только для точки, чья проекция внутри
+    /// него: камера за концом линии (следующая на той же дороге) — не «сбоку»,
+    /// её расстояние продольное. nil — судить нечем.
+    private func lateral(_ p: (x: Double, y: Double), to path: [(x: Double, y: Double)]) -> Double? {
+        let hit = RouteModel(points: path).project(p)
+        let total = zip(path, path.dropFirst()).reduce(0.0) { sum, pair in
+            sum + ((pair.1.x - pair.0.x) * (pair.1.x - pair.0.x) + (pair.1.y - pair.0.y) * (pair.1.y - pair.0.y)).squareRoot()
+        }
+        guard hit.along > 5, hit.along < total - 5 else { return nil }
+        return hit.offset
+    }
+
+    /// A1 (план 12в): ташкентские камеры базы (каждая четвёртая, ~200), проезд
+    /// по их собственной проезжей части через весь конвейер: о самой камере
+    /// предупредили — и заранее, кроме стоящих в группе с камерой перед ней
+    /// (голос объявляет группу); ни одна камера дальше 160 м сбоку от пути
+    /// (параллельная улица, эстакада — коридор города не шире 90 м,
+    /// щедрый — 140) не прозвучала. Камеры за концом пути не судим: их
+    /// расстояние продольное (следующая на той же дороге).
+    func testCityCamerasOnTheirOwnRoad() throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "cameras", withExtension: "json"))
+        let all = TwinCheck.verified(try JSONDecoder().decode([Camera].self, from: Data(contentsOf: url))).cameras
+        let city = all.filter { $0.region.hasPrefix("Toshkent shahar") && $0.road != nil
+            && $0.hasTrustedRoadProfile && $0.needsReview != true }
+        let sample = stride(from: 0, to: city.count, by: 4).map { city[$0] }
+        var silent: [Int] = []
+        var late: [Int] = []
+        var offPath: [(target: Int, other: Int, lateral: Int)] = []
+        for target in sample {
+            guard let path = ownRoadDrive(for: target) else { continue }
+            var legs: [Leg] = []
+            for p in path.dropFirst() { legs.append(Leg(x: p.x, y: p.y, speed: 14)) }
+            let fixes = self.fixes(from: (path[0].x, path[0].y), legs: legs)
+            let nearby = all.filter {
+                GeoMath.fastDistance($0.lat, $0.lon, target.lat, target.lon) <= 3_000
+            }
+            var drive = Drive()
+            drive.run(fixes, cameras: nearby, xy: xy)
+            let targetXY = xy(target.lat, target.lon)
+            if let first = drive.firstAlertPoints[target.id]?.first {
+                let ahead = ((first.x - targetXY.x) * (first.x - targetXY.x)
+                             + (first.y - targetXY.y) * (first.y - targetXY.y)).squareRoot()
+                // Поздно — только если голос не объявил её группой с камерой
+                // перед ней («Камеры впереди…», voiceGroupMeters): тогда своё
+                // первое у неё и должно наступить после проезда соседки.
+                let grouped = drive.firstAlertPoints.keys.contains { other in
+                    guard other != target.id, let camera = nearby.first(where: { $0.id == other }) else { return false }
+                    return GeoMath.fastDistance(camera.lat, camera.lon, target.lat, target.lon)
+                        <= AppConfig.voiceGroupMeters
+                }
+                if ahead < 60, !grouped { late.append(target.id) }
+            } else if !drive.firstAlertPoints.keys.contains(where: { other in
+                // Группа камер вплотную: о соседней в 30 м сказали — сказали и об этой.
+                guard let camera = nearby.first(where: { $0.id == other }) else { return false }
+                return GeoMath.fastDistance(camera.lat, camera.lon, target.lat, target.lon) <= 30
+            }) {
+                silent.append(target.id)
+            }
+            for (other, points) in drive.firstAlertPoints where other != target.id {
+                guard let camera = nearby.first(where: { $0.id == other }), !points.isEmpty else { continue }
+                if let side = lateral(xy(camera.lat, camera.lon), to: path), side > 160 {
+                    offPath.append((target.id, other, Int(side)))
+                }
+            }
+        }
+        print("A1: камер \(sample.count), молчали \(silent), поздно \(late), чужие \(offPath.prefix(20))")
+        XCTAssertGreaterThan(sample.count, 50)
+        XCTAssertEqual(silent, [], "о камере на своей дороге молчать нельзя")
+        XCTAssertEqual(late, [], "первое — заранее, если камера не в группе с соседкой")
+        XCTAssertEqual(offPath.map(\.other), [], "камера дальше 160 м от пути — не наша")
+    }
+}

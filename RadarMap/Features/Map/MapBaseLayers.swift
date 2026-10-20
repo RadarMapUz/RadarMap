@@ -125,7 +125,7 @@ struct EngineBaseLayer: View {
                         destination: env.route.destinationCoordinate,
                         pressedPoint: map.pressedPoint?.coordinate,
                         roadEvents: env.mobile.roadEvents,
-                        cngStations: env.cng.isActive ? env.cng.stations : [],
+                        cngStations: env.cng.isActive ? env.cng.mapStations : [],
                         parkedCar: env.location.parkedCarOnMap?.coordinate,
                         hotspots: env.settings.tripodHints ? map.visibleHotspots.map(\.coordinate) : [],
                         centerCommand: map.centerCommand,

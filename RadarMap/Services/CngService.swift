@@ -28,6 +28,17 @@ final class CngService {
     /// без сети — «газ есть, 5 мин назад» вчерашним утром не показываем.
     var stations: [CngStation] { CngRules.live(fetched, fetchedAt: fetchedAt, now: Date()) }
 
+    /// Станции для карты — только у АГНКС из своих файлов заведений
+    /// (CngRules.onKnownVenues): сервер принимает отметку в любой точке, а
+    /// пилюля на карте выглядит фактом о станции. Поиск и CarPlay сверяют
+    /// со своим заведением сами (`station(for:)`) и берут `stations`.
+    var mapStations: [CngStation] {
+        _ = venueRevision   // прочитали клетку — карта пересчитывает
+        return CngRules.onKnownVenues(stations, venues: Array(cellStations.values.joined()))
+    }
+    /// Растёт, когда с диска прочитана клетка заведений.
+    private(set) var venueRevision = 0
+
     @ObservationIgnored private let api = APIClient()
     /// Тот же ротируемый раз в 30 дней идентификатор, что у отметок.
     @ObservationIgnored private let deviceID = Storage.anonymousID(.mobileDeviceID)
@@ -43,7 +54,8 @@ final class CngService {
     /// АГНКС клетки заведений — в памяти; клетки без файла — с отметкой времени.
     @ObservationIgnored private var cellStations: [String: [Venue]] = [:]
     @ObservationIgnored private var cellMisses: [String: Date] = [:]
-    @ObservationIgnored private var loadingCell: String?
+    /// Клетки в чтении и кто ждёт их конца (вопрос у колонок).
+    @ObservationIgnored private var loadingCells: [String: [() -> Void]] = [:]
 
     /// Пульт гасит краудсорс целиком — и метан с ним (MobileCameraService.isEnabled).
     @ObservationIgnored var crowdEnabled: () -> Bool = { true }
@@ -88,6 +100,8 @@ final class CngService {
             etag = answer.etag
             fetched = answer.value.stations
             fetchedAt = Date()
+            // Карта рисует станции только у своих АГНКС — их клетки с диска.
+            for station in fetched { loadCell(VenueBook.key(for: station.coordinate), around: station.coordinate) }
         } catch {
             Log.network.debug("метан: статусы не загрузились — \(error.localizedDescription, privacy: .public)")
         }
@@ -119,7 +133,10 @@ final class CngService {
         guard speedKmh >= 0, speedKmh < AppConfig.cngStandingKmh else { return }
         let cell = VenueBook.key(for: here)
         guard let venues = cellStations[cell] else {
-            loadCell(cell, around: here, speedKmh: speedKmh)
+            // Тот же момент заново, когда клетка прочитается: телефон в
+            // кармане у колонки шлёт одну «стоим» — второго случая спросить
+            // не будет.
+            loadCell(cell, around: here) { [weak self] in self?.noteFix(here, speedKmh: speedKmh) }
             return
         }
         prune(now: now)
@@ -134,21 +151,28 @@ final class CngService {
     }
 
     /// АГНКС клетки — один раз за сессию и только с диска. Нет файла — не
-    /// спрашиваем повторно полчаса.
-    private func loadCell(_ cell: String, around here: CLLocationCoordinate2D, speedKmh: Double) {
+    /// спрашиваем повторно полчаса. Нужны и вопросу у колонок, и карте
+    /// (`mapStations`). `then` — после успешного чтения.
+    private func loadCell(_ cell: String, around here: CLLocationCoordinate2D,
+                          then: (() -> Void)? = nil) {
         let now = Date()
-        guard loadingCell == nil, let venues else { return }
+        guard cellStations[cell] == nil, let venues else { return }
+        // Клетку уже читают (карта) — вопрос подождёт того же чтения, а не
+        // потеряется.
+        if loadingCells[cell] != nil {
+            if let then { loadingCells[cell]?.append(then) }
+            return
+        }
         if let missed = cellMisses[cell], now.timeIntervalSince(missed) < AppConfig.cngCellRetrySeconds { return }
-        loadingCell = cell
+        loadingCells[cell] = then.map { [$0] } ?? []
         Task { [weak self] in
             let book = await venues(here)
             guard let self else { return }
-            self.loadingCell = nil
+            let waiting = self.loadingCells.removeValue(forKey: cell) ?? []
             if let book {
                 self.cellStations[cell] = book.venues.filter { $0.kind == .cng }
-                // Тот же момент заново: телефон в кармане у колонки шлёт
-                // одну «стоим» — второго случая спросить не будет.
-                self.noteFix(here, speedKmh: speedKmh)
+                self.venueRevision &+= 1
+                waiting.forEach { $0() }
             } else {
                 self.cellMisses[cell] = Date()
             }

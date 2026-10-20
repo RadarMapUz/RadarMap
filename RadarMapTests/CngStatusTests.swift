@@ -113,6 +113,36 @@ final class CngStatusTests: XCTestCase {
         XCTAssertEqual(CngRules.ranked([near, far], stations: [rumor]).map(\.name), ["near", "far"])
     }
 
+    /// Сервер принимает отметку метана в любой точке (аудит сервера 14.3):
+    /// на карту идут только станции у АГНКС из своего файла заведений, и
+    /// пилюля встаёт на саму АГНКС. Файла клетки ещё нет — нет и пилюль:
+    /// ничего, а не всё подряд.
+    func testMapShowsOnlyStationsAtKnownCngVenues() throws {
+        func status(_ point: CLLocationCoordinate2D, _ value: String, confirmed: Bool = true) throws -> CngStation {
+            try decode("""
+            {"lat": \(point.latitude), "lon": \(point.longitude), "status": "\(value)", "status_age": 5,
+             "queue": null, "queue_age": null, "confirmed": \(confirmed)}
+            """)
+        }
+        let agnks = venue()
+        let near = try status(north(30), "gas")
+        let planted = try status(north(200), "nogas")
+        let shown = CngRules.onKnownVenues([near, planted], venues: [agnks])
+        XCTAssertEqual(shown.count, 1, "в 200 м от любой АГНКС — не станция, а чья-то точка")
+        XCTAssertEqual(shown.first?.status, .gas)
+        XCTAssertEqual(shown.first?.lat, agnks.point.latitude, "пилюля — на самой АГНКС")
+        XCTAssertEqual(shown.first?.lon, agnks.point.longitude)
+        XCTAssertTrue(CngRules.onKnownVenues([near, planted], venues: []).isEmpty,
+                      "файл заведений не прочитан — ничего, а не всё подряд")
+        XCTAssertTrue(CngRules.onKnownVenues([near], venues: [venue(.fuel)]).isEmpty,
+                      "бензиновая АЗС — не метан")
+        // Две точки сервера у одной АГНКС — одна пилюля, ближайшая (как у поиска).
+        let closer = try status(north(10), "nogas", confirmed: false)
+        let one = CngRules.onKnownVenues([near, closer], venues: [agnks])
+        XCTAssertEqual(one.count, 1)
+        XCTAssertEqual(one.first?.status, CngRules.station(for: agnks.point, in: [near, closer])?.status)
+    }
+
     func testThirtyPlusIsNotThirty() {
         XCTAssertTrue(CngRules.queueText(60).contains("30+"), "кнопка «30+» — это «больше 30», а не «~30»")
         XCTAssertTrue(CngRules.ago(130).contains("2"), "больше часа — часами")

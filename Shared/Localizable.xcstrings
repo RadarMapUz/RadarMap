@@ -61,7 +61,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@ va %2$@ orasini %3$@ to'xtash ajratadi"
+            "value": "%1$@ va %2$@ orasini %3$@ toʻxtash ajratadi"
           }
         }
       }
@@ -136,7 +136,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "limit %2$lld bo'lganda %1$lld km/soat"
+            "value": "limit %2$lld boʻlganda %1$lld km/soat"
           }
         }
       }
@@ -265,7 +265,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o‘tganiga %@"
+            "value": "oʻtganiga %@"
           }
         }
       }
@@ -281,7 +281,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o‘tgan haftaga %@"
+            "value": "oʻtgan haftaga %@"
           }
         }
       }
@@ -297,7 +297,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o‘tganiga %@"
+            "value": "oʻtganiga %@"
           }
         }
       }
@@ -361,7 +361,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ mln so‘m"
+            "value": "%@ mln soʻm"
           }
         }
       }
@@ -441,7 +441,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ yo'nalish bo'yicha"
+            "value": "%@ yoʻnalish boʻyicha"
           }
         }
       }
@@ -473,7 +473,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ so‘m"
+            "value": "%@ soʻm"
           }
         }
       }
@@ -505,7 +505,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o‘tgan haftaga %@%lld%%"
+            "value": "oʻtgan haftaga %@%lld%%"
           }
         }
       }
@@ -554,7 +554,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@, tezlik oshirilmagan, o‘tishlar: %lld"
+            "value": "%@, tezlik oshirilmagan, oʻtishlar: %lld"
           }
         }
       }
@@ -570,7 +570,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@, limit noma’lum, o‘tishlar: %2$lld"
+            "value": "%1$@, limit nomaʼlum, oʻtishlar: %2$lld"
           }
         }
       }
@@ -958,7 +958,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld ta ogohlantirish — yonidan o‘tmagan kameralaringiz haqida"
+            "value": "%lld ta ogohlantirish — yonidan oʻtmagan kameralaringiz haqida"
           }
         }
       }
@@ -1366,7 +1366,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘zbekistonning 3 400+ kamera va radarlari rasmiy ma’lumotlardan. Ovoz — kameradan 22 soniya oldin, tezlikni hisobga olib; yig‘ilgan ilova va o‘chgan ekranda ham ishlaydi."
+            "value": "Oʻzbekistonning 3 400+ kamera va radarlari rasmiy maʼlumotlardan. Ovoz — kameradan 22 soniya oldin, tezlikni hisobga olib; yigʻilgan ilova va oʻchgan ekranda ham ishlaydi."
           }
         }
       }
@@ -1494,7 +1494,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "«Avto» — kunduzi panellar va xarita och rangda (quyoshda to‘q rang yaltiraydi), kechasi grafit rangda. Ogohlantirish ekrani doim to‘q rangda."
+            "value": "«Avto» — kunduzi panellar va xarita och rangda (quyoshda toʻq rang yaltiraydi), kechasi grafit rangda. Ogohlantirish ekrani doim toʻq rangda."
           }
         }
       }
@@ -1510,7 +1510,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "«Barcha safarlarni yuklab olish» bitta GPX fayl beradi: oxirgi hafta safarlari chiziqlari va bir oylik kamera o‘tishlari."
+            "value": "«Barcha safarlarni yuklab olish» bitta GPX fayl beradi: oxirgi hafta safarlari chiziqlari va bir oylik kamera oʻtishlari."
           }
         }
       }
@@ -1526,7 +1526,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "«Ishga qachon chiqish» ish kunlari eslatadi — faqat boshqa vaqtda chiqish foydaliroq bo‘lsa yoki «gacha yetib borish» muddatiga ulgurish kerak bo‘lsa."
+            "value": "«Ishga qachon chiqish» ish kunlari eslatadi — faqat boshqa vaqtda chiqish foydaliroq boʻlsa yoki «gacha yetib borish» muddatiga ulgurish kerak boʻlsa."
           }
         }
       }
@@ -1590,7 +1590,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Agar limitda bo'lganingizda"
+            "value": "Agar limitda boʻlganingizda"
           }
         }
       }
@@ -1718,7 +1718,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bazani telefonga saqlab bo‘lmadi"
+            "value": "Bazani telefonga saqlab boʻlmadi"
           }
         }
       }
@@ -1798,7 +1798,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Batareya tugayapti — ekranni o‘chiring, kameralar haqida ovoz bilan aytaman"
+            "value": "Batareya tugayapti — ekranni oʻchiring, kameralar haqida ovoz bilan aytaman"
           }
         }
       }
@@ -1814,7 +1814,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kameralar ham, oshirish ham yo'q"
+            "value": "Kameralar ham, oshirish ham yoʻq"
           }
         }
       }
@@ -1926,7 +1926,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yo'l limiti ma'lum bo'lgan har bir kameradan o'tishni olamiz va qayd etilgan tezlikni u bilan solishtiramiz. Jarima bosqichiga tushsa — uning summasini xavfga qo'shamiz. Limiti noma'lum kameralar buzilish deb hisoblanmaydi."
+            "value": "Yoʻl limiti maʼlum boʻlgan har bir kameradan oʻtishni olamiz va qayd etilgan tezlikni u bilan solishtiramiz. Jarima bosqichiga tushsa — uning summasini xavfga qoʻshamiz. Limiti nomaʼlum kameralar buzilish deb hisoblanmaydi."
           }
         }
       }
@@ -1942,7 +1942,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kamera oldidagi 80 m zonadagi eng past tezlikni olamiz — kameraning o'zi ham shunday o'lchaydi. O'tib bo'lgach tezlanish hisobga olinmaydi."
+            "value": "Kamera oldidagi 80 m zonadagi eng past tezlikni olamiz — kameraning oʻzi ham shunday oʻlchaydi. Oʻtib boʻlgach tezlanish hisobga olinmaydi."
           }
         }
       }
@@ -2006,7 +2006,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Eng ko‘p — %@"
+            "value": "Eng koʻp — %@"
           }
         }
       }
@@ -2022,7 +2022,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘tgan davrdagidan ko‘proq"
+            "value": "Oʻtgan davrdagidan koʻproq"
           }
         }
       }
@@ -2070,7 +2070,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "«Natijalar»da davr uchun — %@: ba’zi safarlar saqlanganlardan eski, ularning qatorlari bu yerda yo‘q"
+            "value": "«Natijalar»da davr uchun — %@: baʼzi safarlar saqlanganlardan eski, ularning qatorlari bu yerda yoʻq"
           }
         }
       }
@@ -2102,7 +2102,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Shaharda — qisqa, trassada — to‘liq. Har kuni xotirjam o‘tadigan kameralaringiz haqida jim turadi."
+            "value": "Shaharda — qisqa, trassada — toʻliq. Har kuni xotirjam oʻtadigan kameralaringiz haqida jim turadi."
           }
         }
       }
@@ -2118,7 +2118,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ishga yo‘lda ulgurayotganingiz ko‘rinadi: «9 daq. zaxira bilan» yoki «vaqt zo‘rg‘a yetadi». Muddatsiz — faqat «odatdagidek», hech qachon «kechikasiz» emas. Muddat telefondan chiqmaydi."
+            "value": "Ishga yoʻlda ulgurayotganingiz koʻrinadi: «9 daq. zaxira bilan» yoki «vaqt zoʻrgʻa yetadi». Muddatsiz — faqat «odatdagidek», hech qachon «kechikasiz» emas. Muddat telefondan chiqmaydi."
           }
         }
       }
@@ -2135,7 +2135,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nusxada ma’lumot yo‘q"
+            "value": "Nusxada maʼlumot yoʻq"
           }
         }
       }
@@ -2167,7 +2167,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Davrning saqlangan safarlarida jarima xavfi bo'lgan o'tishlar yo'q"
+            "value": "Davrning saqlangan safarlarida jarima xavfi boʻlgan oʻtishlar yoʻq"
           }
         }
       }
@@ -2183,7 +2183,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu davrda tezlik oshirilgan safarlar yo'q — bu yaxshi xabar."
+            "value": "Bu davrda tezlik oshirilgan safarlar yoʻq — bu yaxshi xabar."
           }
         }
       }
@@ -2199,7 +2199,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu davrda safarlar bo'lmagan"
+            "value": "Bu davrda safarlar boʻlmagan"
           }
         }
       }
@@ -2215,7 +2215,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ishda soat %@ gacha bo‘lishingiz kerakmi?"
+            "value": "Ishda soat %@ gacha boʻlishingiz kerakmi?"
           }
         }
       }
@@ -2247,7 +2247,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Odatdagi yo'nalishingiz"
+            "value": "Odatdagi yoʻnalishingiz"
           }
         }
       }
@@ -2297,7 +2297,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Shahar, ko‘cha yoki obyekt kiriting — yoki tez-tez ishlatiladigan manzillarni yuqorida saqlang."
+            "value": "Shahar, koʻcha yoki obyekt kiriting — yoki tez-tez ishlatiladigan manzillarni yuqorida saqlang."
           }
         }
       }
@@ -2442,7 +2442,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ilova ranglaridagi vidjet: kilometrlar, ball, kunlar va ball qayerda yo‘qotiladi."
+            "value": "Ilova ranglaridagi vidjet: kilometrlar, ball, kunlar va ball qayerda yoʻqotiladi."
           }
         }
       }
@@ -2458,7 +2458,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hissa = ballning 100 gacha kami × yo‘l ulushi: %@"
+            "value": "Hissa = ballning 100 gacha kami × yoʻl ulushi: %@"
           }
         }
       }
@@ -2506,7 +2506,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Taxminiy geolokatsiya yoqilgan — kamera ogohlantirishlari noaniq bo'ladi."
+            "value": "Taxminiy geolokatsiya yoqilgan — kamera ogohlantirishlari noaniq boʻladi."
           }
         }
       }
@@ -2538,7 +2538,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Safardan tashqari — deyarli hech narsa: ilova faqat kameralar yonida uyg‘onadi. Safarda GPS doim ishlaydi, lekin kameralardan uzoqda aniqlik o‘zi pasayadi (Sozlamalar → Batareya). Eng ko‘p ekran sarflaydi: xaritaga qarash shart bo‘lmasa, uni o‘chiring — «Doim» ruxsati bo‘lsa, ilova kameralar haqida o‘chgan ekranda ham ovoz bilan ogohlantiradi."
+            "value": "Safardan tashqari — deyarli hech narsa: ilova faqat kameralar yonida uygʻonadi. Safarda GPS doim ishlaydi, lekin kameralardan uzoqda aniqlik oʻzi pasayadi (Sozlamalar → Batareya). Eng koʻp ekran sarflaydi: xaritaga qarash shart boʻlmasa, uni oʻchiring — «Doim» ruxsati boʻlsa, ilova kameralar haqida oʻchgan ekranda ham ovoz bilan ogohlantiradi."
           }
         }
       }
@@ -2663,7 +2663,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Uy–ish yo‘li vaqti bo‘laklar bo‘yicha eslab qolinadi — undan «9:12 da yetib boraman, odatdagidek» degan prognoz chiqadi. Faqat odatiy vaqt, eng yaxshisi emas: raqam uchun shoshilishning hojati yo‘q."
+            "value": "Uy–ish yoʻli vaqti boʻlaklar boʻyicha eslab qolinadi — undan «9:12 da yetib boraman, odatdagidek» degan prognoz chiqadi. Faqat odatiy vaqt, eng yaxshisi emas: raqam uchun shoshilishning hojati yoʻq."
           }
         }
       }
@@ -2679,7 +2679,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ishga yo‘l vaqti"
+            "value": "Ishga yoʻl vaqti"
           }
         }
       }
@@ -2695,7 +2695,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Xavf vaqti — %1$@: %3$lld tadan %2$lld ta oshirish o'sha payt"
+            "value": "Xavf vaqti — %1$@: %3$lld tadan %2$lld ta oshirish oʻsha payt"
           }
         }
       }
@@ -2823,7 +2823,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Doim to‘liq iboralar va oldindan: kameralar kam, keyingisiga uzoq."
+            "value": "Doim toʻliq iboralar va oldindan: kameralar kam, keyingisiga uzoq."
           }
         }
       }
@@ -2839,7 +2839,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ichki kameralar bazasi o‘qilmayapti — ilovani qayta o‘rnating."
+            "value": "Ichki kameralar bazasi oʻqilmayapti — ilovani qayta oʻrnating."
           }
         }
       }
@@ -2871,7 +2871,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu to‘xtashgacha bo‘lgani bitta safar bo‘ladi, keyingisi — boshqa safar."
+            "value": "Bu toʻxtashgacha boʻlgani bitta safar boʻladi, keyingisi — boshqa safar."
           }
         }
       }
@@ -2952,7 +2952,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Siz yo‘lovchisiz — ogohlantirishlar o‘chiq"
+            "value": "Siz yoʻlovchisiz — ogohlantirishlar oʻchiq"
           }
         }
       }
@@ -3040,7 +3040,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld ta o‘tishingiz bo‘yicha xulosa: bu tomonga har safar tezlikni pasaytirasiz, qarama-qarshi tomonga — yo‘q. Bu kuzatuv, reyestr ma’lumoti emas: kamera haqida ikkala tomonga ham ogohlantirishda davom etamiz."
+            "value": "%lld ta oʻtishingiz boʻyicha xulosa: bu tomonga har safar tezlikni pasaytirasiz, qarama-qarshi tomonga — yoʻq. Bu kuzatuv, reyestr maʼlumoti emas: kamera haqida ikkala tomonga ham ogohlantirishda davom etamiz."
           }
         }
       }
@@ -3056,7 +3056,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Qarama-qarshi yo'nalishga chiqish"
+            "value": "Qarama-qarshi yoʻnalishga chiqish"
           }
         }
       }
@@ -3072,7 +3072,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@ gacha chiqing — %2$@ ga zaxira bilan (yo‘lda odatda %3$@)"
+            "value": "%1$@ gacha chiqing — %2$@ ga zaxira bilan (yoʻlda odatda %3$@)"
           }
         }
       }
@@ -3088,7 +3088,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ogohlantirishlar ovozi va signalini o‘chiradi yoki qaytaradi."
+            "value": "Ogohlantirishlar ovozi va signalini oʻchiradi yoki qaytaradi."
           }
         }
       }
@@ -3104,7 +3104,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘chirilgan sozlama ilova o‘rgangan narsalarni ham o‘chiradi."
+            "value": "Oʻchirilgan sozlama ilova oʻrgangan narsalarni ham oʻchiradi."
           }
         }
       }
@@ -3120,7 +3120,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O'chirilgan"
+            "value": "Oʻchirilgan"
           }
         }
       }
@@ -3136,7 +3136,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘chirsangiz — ekran iOS taymeri bo‘yicha o‘chadi, kameralar haqida ovoz aytadi."
+            "value": "Oʻchirsangiz — ekran iOS taymeri boʻyicha oʻchadi, kameralar haqida ovoz aytadi."
           }
         }
       }
@@ -3152,7 +3152,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ovozni o‘chirish"
+            "value": "Ovozni oʻchirish"
           }
         }
       }
@@ -3168,7 +3168,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ballarni qayerda yo'qotasiz"
+            "value": "Ballarni qayerda yoʻqotasiz"
           }
         }
       }
@@ -3184,7 +3184,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ballarni qayerda yo'qotasiz: %@, tezlik oshirilgan o‘tishlar: %lld"
+            "value": "Ballarni qayerda yoʻqotasiz: %@, tezlik oshirilgan oʻtishlar: %lld"
           }
         }
       }
@@ -3232,7 +3232,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Geolokatsiya o'chirilgan. Kamera ogohlantirishlari uchun «Doim»ni yoqing."
+            "value": "Geolokatsiya oʻchirilgan. Kamera ogohlantirishlari uchun «Doim»ni yoqing."
           }
         }
       }
@@ -3248,7 +3248,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Har bir kamera haqida aytadi: shaharda qisqa, trassada to'liq jumla bilan."
+            "value": "Har bir kamera haqida aytadi: shaharda qisqa, trassada toʻliq jumla bilan."
           }
         }
       }
@@ -3392,7 +3392,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Shahar, ko'cha, joy"
+            "value": "Shahar, koʻcha, joy"
           }
         }
       }
@@ -3546,7 +3546,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ikki ruxsat — va yo‘lga"
+            "value": "Ikki ruxsat — va yoʻlga"
           }
         }
       }
@@ -3690,7 +3690,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Qo'shish"
+            "value": "Qoʻshish"
           }
         }
       }
@@ -3706,7 +3706,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Shu yerga qo'shish"
+            "value": "Shu yerga qoʻshish"
           }
         }
       }
@@ -3722,7 +3722,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kamera qo'shish"
+            "value": "Kamera qoʻshish"
           }
         }
       }
@@ -3738,7 +3738,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Joy qo‘shish"
+            "value": "Joy qoʻshish"
           }
         }
       }
@@ -3754,7 +3754,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Qo'lda qo'shilgan"
+            "value": "Qoʻlda qoʻshilgan"
           }
         }
       }
@@ -3771,7 +3771,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Qo‘shildi: %1$lld safar, %2$lld kun"
+            "value": "Qoʻshildi: %1$lld safar, %2$lld kun"
           }
         }
       }
@@ -3883,7 +3883,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ishga yo‘l uy va ish o‘rtasidagi uchta safardan keyin paydo bo‘ladi"
+            "value": "Ishga yoʻl uy va ish oʻrtasidagi uchta safardan keyin paydo boʻladi"
           }
         }
       }
@@ -3899,7 +3899,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yo'l belgilari va chiziqlar"
+            "value": "Yoʻl belgilari va chiziqlar"
           }
         }
       }
@@ -3931,7 +3931,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yutuq qo'lga kiritildi"
+            "value": "Yutuq qoʻlga kiritildi"
           }
         }
       }
@@ -3996,7 +3996,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Boshqa haydovchi o‘tib tasdiqladi: %@"
+            "value": "Boshqa haydovchi oʻtib tasdiqladi: %@"
           }
         }
       }
@@ -4012,7 +4012,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "CarPlay’da ketyapmiz"
+            "value": "CarPlayʼda ketyapmiz"
           }
         }
       }
@@ -4044,7 +4044,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yandex bilan yurasizmi? RadarMap’ni yig‘ing — ovoz qoladi"
+            "value": "Yandex bilan yurasizmi? RadarMapʼni yigʻing — ovoz qoladi"
           }
         }
       }
@@ -4060,7 +4060,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Agar ilova bu kamera haqida jim qolgan bo‘lsa — ayting. Joy, tezlik va cheklovni ilova qilamiz: ularsiz sababini topib bo‘lmaydi."
+            "value": "Agar ilova bu kamera haqida jim qolgan boʻlsa — ayting. Joy, tezlik va cheklovni ilova qilamiz: ularsiz sababini topib boʻlmaydi."
           }
         }
       }
@@ -4213,7 +4213,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sun'iy yo'ldoshlarni kutmoqdamiz"
+            "value": "Sunʼiy yoʻldoshlarni kutmoqdamiz"
           }
         }
       }
@@ -4229,7 +4229,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "7 kunda o‘rtacha %1$@ — odatdagidan %2$@ uzoqroq"
+            "value": "7 kunda oʻrtacha %1$@ — odatdagidan %2$@ uzoqroq"
           }
         }
       }
@@ -4245,7 +4245,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "7 kunda o‘rtacha %1$@ — odatdagidan %2$@ kamroq"
+            "value": "7 kunda oʻrtacha %1$@ — odatdagidan %2$@ kamroq"
           }
         }
       }
@@ -4399,7 +4399,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "«%@» manzilini iPhone'dagi RadarMap sozlamalarida belgilang."
+            "value": "«%@» manzilini iPhoneʼdagi RadarMap sozlamalarida belgilang."
           }
         }
       }
@@ -4431,7 +4431,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kechikyapman: taxminan %@ da bo‘laman."
+            "value": "Kechikyapman: taxminan %@ da boʻlaman."
           }
         }
       }
@@ -4447,7 +4447,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stop chizig'idan o'tib ketish"
+            "value": "Stop chizigʻidan oʻtib ketish"
           }
         }
       }
@@ -4495,7 +4495,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "E’lonni yopish"
+            "value": "Eʼlonni yopish"
           }
         }
       }
@@ -4575,7 +4575,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu yerda safarlaringiz paydo bo‘ladi"
+            "value": "Bu yerda safarlaringiz paydo boʻladi"
           }
         }
       }
@@ -4591,7 +4591,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu yerda tez-tez uchoyoq qo‘yiladi"
+            "value": "Bu yerda tez-tez uchoyoq qoʻyiladi"
           }
         }
       }
@@ -4607,7 +4607,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu yerda tez-tez uchoyoq qo‘yiladi, %@"
+            "value": "Bu yerda tez-tez uchoyoq qoʻyiladi, %@"
           }
         }
       }
@@ -4719,7 +4719,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ball nimadan yig'ildi"
+            "value": "Ball nimadan yigʻildi"
           }
         }
       }
@@ -4767,7 +4767,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘zgartirish"
+            "value": "Oʻzgartirish"
           }
         }
       }
@@ -4783,7 +4783,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Manzilni o‘zgartirish"
+            "value": "Manzilni oʻzgartirish"
           }
         }
       }
@@ -4832,7 +4832,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Safarlar tarixi faqat shu telefonda saqlanadi va hech qayerga yuborilmaydi. Nusxa — uni yangi telefonga ko‘chirish yoki qayta o‘rnatishdan keyin tiklashning yagona yo‘li."
+            "value": "Safarlar tarixi faqat shu telefonda saqlanadi va hech qayerga yuborilmaydi. Nusxa — uni yangi telefonga koʻchirish yoki qayta oʻrnatishdan keyin tiklashning yagona yoʻli."
           }
         }
       }
@@ -4848,7 +4848,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Safarlar tarixi, uy va ish joyi faqat shu iPhone'da saqlanadi. Serverga faqat marshrut so‘rovi, sizning belgilaringiz va tirbandlik uchun shaxssiz yo‘l bo‘laklari yuboriladi — ularni Sozlamalarda o‘chirish mumkin."
+            "value": "Safarlar tarixi, uy va ish joyi faqat shu iPhoneʼda saqlanadi. Serverga faqat marshrut soʻrovi, sizning belgilaringiz va tirbandlik uchun shaxssiz yoʻl boʻlaklari yuboriladi — ularni Sozlamalarda oʻchirish mumkin."
           }
         }
       }
@@ -4864,7 +4864,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ma’lumot manbalari"
+            "value": "Maʼlumot manbalari"
           }
         }
       }
@@ -4976,7 +4976,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cheklov ma’lum bo‘lgan har bir kameradan o‘tish: kameradan oldingi 80 m ichidagi eng past tezlik olinadi — o‘tgandan keyingi tezlanish hisobga olinmaydi. Jarima pog‘onalari ballni eng ko‘p tushiradi."
+            "value": "Cheklov maʼlum boʻlgan har bir kameradan oʻtish: kameradan oldingi 80 m ichidagi eng past tezlik olinadi — oʻtgandan keyingi tezlanish hisobga olinmaydi. Jarima pogʻonalari ballni eng koʻp tushiradi."
           }
         }
       }
@@ -4992,7 +4992,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘tgan safargidek"
+            "value": "Oʻtgan safargidek"
           }
         }
       }
@@ -5024,7 +5024,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Qanday ko‘tarish mumkin"
+            "value": "Qanday koʻtarish mumkin"
           }
         }
       }
@@ -5120,7 +5120,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Oldinda kamera yo‘q"
+            "value": "Oldinda kamera yoʻq"
           }
         }
       }
@@ -5136,7 +5136,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yo‘nalishda oldinda kamera yo‘q"
+            "value": "Yoʻnalishda oldinda kamera yoʻq"
           }
         }
       }
@@ -5168,7 +5168,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yo‘lda kameralar bo‘lmadi"
+            "value": "Yoʻlda kameralar boʻlmadi"
           }
         }
       }
@@ -5184,7 +5184,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yaqin-atrofda kamera yo'q"
+            "value": "Yaqin-atrofda kamera yoʻq"
           }
         }
       }
@@ -5296,7 +5296,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kamerani panel ko'rsatadi, tebranish ogohlantiradi. Musiqa to'xtamaydi."
+            "value": "Kamerani panel koʻrsatadi, tebranish ogohlantiradi. Musiqa toʻxtamaydi."
           }
         }
       }
@@ -5328,7 +5328,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kamera endi yo‘q"
+            "value": "Kamera endi yoʻq"
           }
         }
       }
@@ -5440,7 +5440,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tanlangan safar xaritasi. To'liq ekranda ochish"
+            "value": "Tanlangan safar xaritasi. Toʻliq ekranda ochish"
           }
         }
       }
@@ -5472,7 +5472,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘zbekiston kameralar xaritasi va navigatori"
+            "value": "Oʻzbekiston kameralar xaritasi va navigatori"
           }
         }
       }
@@ -5488,7 +5488,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Xarita yuklanmayapti — internet yo‘q"
+            "value": "Xarita yuklanmayapti — internet yoʻq"
           }
         }
       }
@@ -5520,7 +5520,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Xarita harakat yo'nalishi bo'yicha"
+            "value": "Xarita harakat yoʻnalishi boʻyicha"
           }
         }
       }
@@ -5536,7 +5536,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘tishlar xaritasi"
+            "value": "Oʻtishlar xaritasi"
           }
         }
       }
@@ -5552,7 +5552,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Davr uchun o‘tishlar xaritasi. To‘liq ekranda ochish"
+            "value": "Davr uchun oʻtishlar xaritasi. Toʻliq ekranda ochish"
           }
         }
       }
@@ -5584,7 +5584,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Xaritalar va tezlik cheklovlari — © OpenStreetMap ishtirokchilari. Kameralar, bankomatlar va mehmonxonalar — O‘zbekiston Respublikasi Ochiq ma’lumotlar portali (CC BY-SA 4.0). Ilova bepul, reklamasiz va kuzatuvsiz."
+            "value": "Xaritalar va tezlik cheklovlari — © OpenStreetMap ishtirokchilari. Kameralar, bankomatlar va mehmonxonalar — Oʻzbekiston Respublikasi Ochiq maʼlumotlar portali (CC BY-SA 4.0). Ilova bepul, reklamasiz va kuzatuvsiz."
           }
         }
       }
@@ -5600,7 +5600,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Haftalik kilometrlar, kunlar va odatiy me’yor"
+            "value": "Haftalik kilometrlar, kunlar va odatiy meʼyor"
           }
         }
       }
@@ -5616,7 +5616,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kunlar bo‘yicha kilometrlar"
+            "value": "Kunlar boʻyicha kilometrlar"
           }
         }
       }
@@ -5664,7 +5664,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Safar qachon o‘zi boshlanadi."
+            "value": "Safar qachon oʻzi boshlanadi."
           }
         }
       }
@@ -5793,7 +5793,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kameralar limiti noma’lum"
+            "value": "Kameralar limiti nomaʼlum"
           }
         }
       }
@@ -5841,7 +5841,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bir bosishda marshrut — xaritadagi «Mening joylarim» tugmasi yoki «Qidiruv»dan. Manzilni so‘z bilan qidirish yoki xaritada ko‘rsatish mumkin."
+            "value": "Bir bosishda marshrut — xaritadagi «Mening joylarim» tugmasi yoki «Qidiruv»dan. Manzilni soʻz bilan qidirish yoki xaritada koʻrsatish mumkin."
           }
         }
       }
@@ -6001,7 +6001,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘tgan davrdagidan kamroq"
+            "value": "Oʻtgan davrdagidan kamroq"
           }
         }
       }
@@ -6098,7 +6098,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mening ma’lumotlarim"
+            "value": "Mening maʼlumotlarim"
           }
         }
       }
@@ -6146,7 +6146,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Limitda ketayotganingizda jim turadi. Ovoz — faqat oshirganda va kutilmagan nuqtalar haqida: ko'chma radar, uch oyoq kamera, YTH."
+            "value": "Limitda ketayotganingizda jim turadi. Ovoz — faqat oshirganda va kutilmagan nuqtalar haqida: koʻchma radar, uch oyoq kamera, YTH."
           }
         }
       }
@@ -6258,7 +6258,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Markazni kameraga to'g'rilang"
+            "value": "Markazni kameraga toʻgʻrilang"
           }
         }
       }
@@ -6290,7 +6290,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Xaritada «Safarni boshlash» tugmasini bosing — trek, har bir kameradagi tezlik va statistikani yig‘amiz."
+            "value": "Xaritada «Safarni boshlash» tugmasini bosing — trek, har bir kameradagi tezlik va statistikani yigʻamiz."
           }
         }
       }
@@ -6434,7 +6434,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "To'xtash qoidalarini buzish"
+            "value": "Toʻxtash qoidalarini buzish"
           }
         }
       }
@@ -6450,7 +6450,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "To'xtab turish qoidalarini buzish"
+            "value": "Toʻxtab turish qoidalarini buzish"
           }
         }
       }
@@ -6466,7 +6466,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘zingiz sozlaysiz."
+            "value": "Oʻzingiz sozlaysiz."
           }
         }
       }
@@ -6498,7 +6498,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sozlamalar → Ilova haqida → Mening ma’lumotlarim → «Nusxani saqlash», so‘ng yangi telefonda — «Fayldan tiklash». Tarix faqat telefonda saqlanadi, biz uni serverga yubormaymiz."
+            "value": "Sozlamalar → Ilova haqida → Mening maʼlumotlarim → «Nusxani saqlash», soʻng yangi telefonda — «Fayldan tiklash». Tarix faqat telefonda saqlanadi, biz uni serverga yubormaymiz."
           }
         }
       }
@@ -6546,7 +6546,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "iPhone'da safarni boshlang — tezlik va kameralar shu yerda ko'rinadi."
+            "value": "iPhoneʼda safarni boshlang — tezlik va kameralar shu yerda koʻrinadi."
           }
         }
       }
@@ -6562,7 +6562,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "«Ballarni qayerda yo'qotasiz» blokidagi kameralardan boshlang — eng ko'p yo'qotish o'sha yerda."
+            "value": "«Ballarni qayerda yoʻqotasiz» blokidagi kameralardan boshlang — eng koʻp yoʻqotish oʻsha yerda."
           }
         }
       }
@@ -6594,7 +6594,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Xato topdingizmi yoki g‘oyangiz bormi? Har bir xabarni o‘qiymiz."
+            "value": "Xato topdingizmi yoki gʻoyangiz bormi? Har bir xabarni oʻqiymiz."
           }
         }
       }
@@ -6610,7 +6610,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Joylashuvingiz ko‘rinmayapti — bekat qoldi"
+            "value": "Joylashuvingiz koʻrinmayapti — bekat qoldi"
           }
         }
       }
@@ -6626,7 +6626,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Joylashuv aniqlanmadi — yana urinib ko'ring."
+            "value": "Joylashuv aniqlanmadi — yana urinib koʻring."
           }
         }
       }
@@ -6642,7 +6642,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Safarda ekranni o'chirmaslik"
+            "value": "Safarda ekranni oʻchirmaslik"
           }
         }
       }
@@ -6690,7 +6690,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yuborilmadi, aloqa yo'q"
+            "value": "Yuborilmadi, aloqa yoʻq"
           }
         }
       }
@@ -6754,7 +6754,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kelmagani: %lld — summaga qo'shilmaydi"
+            "value": "Kelmagani: %lld — summaga qoʻshilmaydi"
           }
         }
       }
@@ -6786,7 +6786,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kameralarni yuklab bo'lmadi"
+            "value": "Kameralarni yuklab boʻlmadi"
           }
         }
       }
@@ -6803,7 +6803,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Manzilni ochib bo‘lmadi"
+            "value": "Manzilni ochib boʻlmadi"
           }
         }
       }
@@ -6819,7 +6819,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bekatni olib tashlab bo‘lmadi — yo‘nalish o‘zgarmadi"
+            "value": "Bekatni olib tashlab boʻlmadi — yoʻnalish oʻzgarmadi"
           }
         }
       }
@@ -6851,7 +6851,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Safarsiz haftalar o'tkazib yuborilgan"
+            "value": "Safarsiz haftalar oʻtkazib yuborilgan"
           }
         }
       }
@@ -6899,7 +6899,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Haftalik yo‘l"
+            "value": "Haftalik yoʻl"
           }
         }
       }
@@ -6947,7 +6947,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yo'q"
+            "value": "Yoʻq"
           }
         }
       }
@@ -6963,7 +6963,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Geolokatsiyaga ruxsat yo'q. RadarMap'ni oching va «Doim»ga ruxsat bering."
+            "value": "Geolokatsiyaga ruxsat yoʻq. RadarMapʼni oching va «Doim»ga ruxsat bering."
           }
         }
       }
@@ -6980,7 +6980,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Joylashuvga ruxsat yo‘q"
+            "value": "Joylashuvga ruxsat yoʻq"
           }
         }
       }
@@ -6996,7 +6996,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ma’lumotlarga ruxsat yo‘q"
+            "value": "Maʼlumotlarga ruxsat yoʻq"
           }
         }
       }
@@ -7012,7 +7012,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Marshrut serveri bilan aloqa yo‘q — internetni tekshiring"
+            "value": "Marshrut serveri bilan aloqa yoʻq — internetni tekshiring"
           }
         }
       }
@@ -7029,7 +7029,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aloqa yo‘q, keyinroq yuboraman"
+            "value": "Aloqa yoʻq, keyinroq yuboraman"
           }
         }
       }
@@ -7045,7 +7045,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tarmoq yo‘q — kameralar ogohlantiradi"
+            "value": "Tarmoq yoʻq — kameralar ogohlantiradi"
           }
         }
       }
@@ -7055,7 +7055,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tarmoq yo‘q — kameralar ishlaydi"
+            "value": "Tarmoq yoʻq — kameralar ishlaydi"
           }
         }
       }
@@ -7071,7 +7071,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Signal yo'q"
+            "value": "Signal yoʻq"
           }
         }
       }
@@ -7087,7 +7087,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "GPS signali yo‘q"
+            "value": "GPS signali yoʻq"
           }
         }
       }
@@ -7103,7 +7103,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kameralar oldida birorta ham tezlik oshirish yo‘q"
+            "value": "Kameralar oldida birorta ham tezlik oshirish yoʻq"
           }
         }
       }
@@ -7119,7 +7119,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Jarima soladigan bironta oshirish yo‘q"
+            "value": "Jarima soladigan bironta oshirish yoʻq"
           }
         }
       }
@@ -7135,7 +7135,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bir og‘iz ham emas. Kamerani panel ko‘rsatadi, tebranish belgilaydi."
+            "value": "Bir ogʻiz ham emas. Kamerani panel koʻrsatadi, tebranish belgilaydi."
           }
         }
       }
@@ -7216,7 +7216,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Me’yor va dinamika"
+            "value": "Meʼyor va dinamika"
           }
         }
       }
@@ -7265,7 +7265,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Baza yangilanishi tekshiruvdan o‘tmadi"
+            "value": "Baza yangilanishi tekshiruvdan oʻtmadi"
           }
         }
       }
@@ -7393,7 +7393,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hajmli ko‘rinish"
+            "value": "Hajmli koʻrinish"
           }
         }
       }
@@ -7425,7 +7425,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kameragacha bitta masofa, e’lonlar to‘xtashni kutadi, «Radar!» birinchi safarlarda yozilgan."
+            "value": "Kameragacha bitta masofa, eʼlonlar toʻxtashni kutadi, «Radar!» birinchi safarlarda yozilgan."
           }
         }
       }
@@ -7441,7 +7441,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Muammo yoki g‘oyani yozing…"
+            "value": "Muammo yoki gʻoyani yozing…"
           }
         }
       }
@@ -7473,7 +7473,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ogohlantirishlar sun'iy yo'ldoshni kutmoqda"
+            "value": "Ogohlantirishlar sunʼiy yoʻldoshni kutmoqda"
           }
         }
       }
@@ -7521,7 +7521,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yozuvni to'xtatadi va safar natijalarini saqlaydi."
+            "value": "Yozuvni toʻxtatadi va safar natijalarini saqlaydi."
           }
         }
       }
@@ -7537,7 +7537,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yo‘ldagi to‘xtashlar"
+            "value": "Yoʻldagi toʻxtashlar"
           }
         }
       }
@@ -7553,7 +7553,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yo‘ldagi to‘xtashlar: %lld"
+            "value": "Yoʻldagi toʻxtashlar: %lld"
           }
         }
       }
@@ -7569,7 +7569,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "iPhone'da RadarMap'ni oching."
+            "value": "iPhoneʼda RadarMapʼni oching."
           }
         }
       }
@@ -7586,7 +7586,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Telefonda RadarMap’ni oching va «Doim» ruxsatini bering — usiz men yo‘lni ko‘rmayman va kameralar haqida jim turaman."
+            "value": "Telefonda RadarMapʼni oching va «Doim» ruxsatini bering — usiz men yoʻlni koʻrmayman va kameralar haqida jim turaman."
           }
         }
       }
@@ -7602,7 +7602,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Safar davom etayotgan bo‘lsa, RadarMap’ni oching"
+            "value": "Safar davom etayotgan boʻlsa, RadarMapʼni oching"
           }
         }
       }
@@ -7618,7 +7618,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kamera kartochkasini oching va «Kamera endi yo‘q» yoki «Noto‘g‘ri joyda turibdi» tugmasini bosing. Moderator tekshirib, bazani hamma uchun tuzatadi. Tekshiruvgacha kamera ogohlantirishda davom etadi — bu xavfsizroq."
+            "value": "Kamera kartochkasini oching va «Kamera endi yoʻq» yoki «Notoʻgʻri joyda turibdi» tugmasini bosing. Moderator tekshirib, bazani hamma uchun tuzatadi. Tekshiruvgacha kamera ogohlantirishda davom etadi — bu xavfsizroq."
           }
         }
       }
@@ -7908,7 +7908,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Belgi harakat paytida qo'yiladi"
+            "value": "Belgi harakat paytida qoʻyiladi"
           }
         }
       }
@@ -7973,7 +7973,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Belgilang: jarima keldimi yo'qmi"
+            "value": "Belgilang: jarima keldimi yoʻqmi"
           }
         }
       }
@@ -7989,7 +7989,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Joriy nuqtada ko'chma radarni belgilaydi — boshqa haydovchilar uni xaritada ko'radi."
+            "value": "Joriy nuqtada koʻchma radarni belgilaydi — boshqa haydovchilar uni xaritada koʻradi."
           }
         }
       }
@@ -8005,7 +8005,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Joriy nuqtada ko‘chma radarni belgilaydi."
+            "value": "Joriy nuqtada koʻchma radarni belgilaydi."
           }
         }
       }
@@ -8021,7 +8021,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "«Kelmadi» belgisini faqat saqlangan safarlarga qo'yish mumkin — tarixda oxirgi 50 tasi saqlanadi."
+            "value": "«Kelmadi» belgisini faqat saqlangan safarlarga qoʻyish mumkin — tarixda oxirgi 50 tasi saqlanadi."
           }
         }
       }
@@ -8037,7 +8037,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Haydovchilar belgilagan, ~%@ da yo'qoladi"
+            "value": "Haydovchilar belgilagan, ~%@ da yoʻqoladi"
           }
         }
       }
@@ -8133,7 +8133,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Qurilma va vaqtsiz yo‘l bo‘laklari — ulardan tirbandlik hisoblanadi."
+            "value": "Qurilma va vaqtsiz yoʻl boʻlaklari — ulardan tirbandlik hisoblanadi."
           }
         }
       }
@@ -8182,7 +8182,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Birinchisi manzilga yetganingizdan so‘ng shu yerda paydo bo‘ladi."
+            "value": "Birinchisi manzilga yetganingizdan soʻng shu yerda paydo boʻladi."
           }
         }
       }
@@ -8214,7 +8214,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ko'chma radar"
+            "value": "Koʻchma radar"
           }
         }
       }
@@ -8230,7 +8230,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Til to'liq qo'llanishi uchun ilovani qayta ishga tushiring."
+            "value": "Til toʻliq qoʻllanishi uchun ilovani qayta ishga tushiring."
           }
         }
       }
@@ -8262,7 +8262,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ish kunlari, chiqishdan %lld daq. oldin — faqat boshqa vaqtda chiqish foydaliroq bo‘lsa yoki muddatga ulgurish kerak bo‘lsa. Safarlaringiz bo‘yicha, telefonda."
+            "value": "Ish kunlari, chiqishdan %lld daq. oldin — faqat boshqa vaqtda chiqish foydaliroq boʻlsa yoki muddatga ulgurish kerak boʻlsa. Safarlaringiz boʻyicha, telefonda."
           }
         }
       }
@@ -8278,7 +8278,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hissa bo'yicha"
+            "value": "Hissa boʻyicha"
           }
         }
       }
@@ -8294,7 +8294,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sana bo'yicha"
+            "value": "Sana boʻyicha"
           }
         }
       }
@@ -8310,7 +8310,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kunlar bo‘yicha"
+            "value": "Kunlar boʻyicha"
           }
         }
       }
@@ -8326,7 +8326,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Marshrutda %@ %lld metrdan so‘ng"
+            "value": "Marshrutda %@ %lld metrdan soʻng"
           }
         }
       }
@@ -8342,7 +8342,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Marshrutda radar 800 metrdan so‘ng"
+            "value": "Marshrutda radar 800 metrdan soʻng"
           }
         }
       }
@@ -8358,7 +8358,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Haftalar bo‘yicha"
+            "value": "Haftalar boʻyicha"
           }
         }
       }
@@ -8454,7 +8454,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Baza imzosi tekshiruvdan o'tmadi"
+            "value": "Baza imzosi tekshiruvdan oʻtmadi"
           }
         }
       }
@@ -8502,7 +8502,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "«300 m dan so‘ng o‘ngga» ko‘rsatmalari va qurishda variantlardan tanlash."
+            "value": "«300 m dan soʻng oʻngga» koʻrsatmalari va qurishda variantlardan tanlash."
           }
         }
       }
@@ -8518,7 +8518,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Uchoyoqlar haqida xotira bo‘yicha maslahatlar"
+            "value": "Uchoyoqlar haqida xotira boʻyicha maslahatlar"
           }
         }
       }
@@ -8582,7 +8582,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Safar o'zi yoqildi. Yo'lovchimisiz? Bosing — quvvatni tejaymiz."
+            "value": "Safar oʻzi yoqildi. Yoʻlovchimisiz? Bosing — quvvatni tejaymiz."
           }
         }
       }
@@ -8743,7 +8743,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hozircha safarlar yo‘q"
+            "value": "Hozircha safarlar yoʻq"
           }
         }
       }
@@ -8759,7 +8759,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Saqlanganlar orasida oshirishli safarlar yo‘q"
+            "value": "Saqlanganlar orasida oshirishli safarlar yoʻq"
           }
         }
       }
@@ -8855,7 +8855,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Joylashuv aniqlanmoqda: reestrdagi manzilni yo‘lga bog‘lab bo‘lmadi. Bunday kamera haqida zaxira bilan ogohlantiramiz."
+            "value": "Joylashuv aniqlanmoqda: reestrdagi manzilni yoʻlga bogʻlab boʻlmadi. Bunday kamera haqida zaxira bilan ogohlantiramiz."
           }
         }
       }
@@ -8887,7 +8887,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ko'rsatilgan hissalar: %lld"
+            "value": "Koʻrsatilgan hissalar: %lld"
           }
         }
       }
@@ -8903,7 +8903,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hamma safarlarni ko'rsatish (%lld)"
+            "value": "Hamma safarlarni koʻrsatish (%lld)"
           }
         }
       }
@@ -8919,7 +8919,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Davr tafsilotlarini ko'rsatish"
+            "value": "Davr tafsilotlarini koʻrsatish"
           }
         }
       }
@@ -8935,7 +8935,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Xaritada ko'rsatish"
+            "value": "Xaritada koʻrsatish"
           }
         }
       }
@@ -8951,7 +8951,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ko'rsatish: %@"
+            "value": "Koʻrsatish: %@"
           }
         }
       }
@@ -8967,7 +8967,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu kunning to'liq yozuvlari o'chirilgan — kunlik yakunlar qoldi."
+            "value": "Bu kunning toʻliq yozuvlari oʻchirilgan — kunlik yakunlar qoldi."
           }
         }
       }
@@ -8983,7 +8983,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Joylashuv hali aniqlanmadi — bir necha soniyadan so'ng urinib ko'ring."
+            "value": "Joylashuv hali aniqlanmadi — bir necha soniyadan soʻng urinib koʻring."
           }
         }
       }
@@ -9047,7 +9047,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ma'lumotlarni tushunish"
+            "value": "Maʼlumotlarni tushunish"
           }
         }
       }
@@ -9159,7 +9159,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yo'ldasiz shekilli"
+            "value": "Yoʻldasiz shekilli"
           }
         }
       }
@@ -9175,7 +9175,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Siz yo‘lda ketayotganga o‘xshaysiz"
+            "value": "Siz yoʻlda ketayotganga oʻxshaysiz"
           }
         }
       }
@@ -9191,7 +9191,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu bitta safarga o'xshaydi"
+            "value": "Bu bitta safarga oʻxshaydi"
           }
         }
       }
@@ -9207,7 +9207,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu avvalgi safarning davomi ko'rinadi"
+            "value": "Bu avvalgi safarning davomi koʻrinadi"
           }
         }
       }
@@ -9224,7 +9224,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Oshirishlar paydo bo'ldi: har 100 km ga %@ ta, o'tgan davrda bo'lmagan edi"
+            "value": "Oshirishlar paydo boʻldi: har 100 km ga %@ ta, oʻtgan davrda boʻlmagan edi"
           }
         }
       }
@@ -9336,7 +9336,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Telefon cho'ntakda, ilova yig'ilgan bo'lsa ham kameralar haqida ogohlantiramiz."
+            "value": "Telefon choʻntakda, ilova yigʻilgan boʻlsa ham kameralar haqida ogohlantiramiz."
           }
         }
       }
@@ -9368,7 +9368,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ilova o'rganadi"
+            "value": "Ilova oʻrganadi"
           }
         }
       }
@@ -9464,7 +9464,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ovozni tekshiring — xaritadagi karnay tugmasi. Tez-tez tezlikni oshirmay o‘tadigan kameralaringiz haqida ilova ataylab jim turadi: xaritada ularda yashil belgi bor (Sozlamalar → Ilova o‘rganadi). Yashirilgan kamerani Sozlamalar → Ilova haqida → Kameralar bazasi → Yashirilgan kameralar bo‘limida qaytarish mumkin. Hech biri to‘g‘ri kelmasa — Natijalardagi shu o‘tish yonidagi «Kamera haqida ogohlantirmadi» tugmasini bosing, holatni ko‘rib chiqamiz."
+            "value": "Ovozni tekshiring — xaritadagi karnay tugmasi. Tez-tez tezlikni oshirmay oʻtadigan kameralaringiz haqida ilova ataylab jim turadi: xaritada ularda yashil belgi bor (Sozlamalar → Ilova oʻrganadi). Yashirilgan kamerani Sozlamalar → Ilova haqida → Kameralar bazasi → Yashirilgan kameralar boʻlimida qaytarish mumkin. Hech biri toʻgʻri kelmasa — Natijalardagi shu oʻtish yonidagi «Kamera haqida ogohlantirmadi» tugmasini bosing, holatni koʻrib chiqamiz."
           }
         }
       }
@@ -9481,7 +9481,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aloqani tekshiring va qaytadan urinib ko‘ring."
+            "value": "Aloqani tekshiring va qaytadan urinib koʻring."
           }
         }
       }
@@ -9513,7 +9513,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kameradan o‘tish"
+            "value": "Kameradan oʻtish"
           }
         }
       }
@@ -9529,7 +9529,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Qizil chiroqda o'tish"
+            "value": "Qizil chiroqda oʻtish"
           }
         }
       }
@@ -9545,7 +9545,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Davr uchun o‘tishlar: %lld"
+            "value": "Davr uchun oʻtishlar: %lld"
           }
         }
       }
@@ -9561,7 +9561,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kamera o‘tishlari: %1$lld · oshirish bilan: %2$lld"
+            "value": "Kamera oʻtishlari: %1$lld · oshirish bilan: %2$lld"
           }
         }
       }
@@ -9577,7 +9577,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kamera o‘tishlari: %lld — jarimali oshirish yo‘q"
+            "value": "Kamera oʻtishlari: %lld — jarimali oshirish yoʻq"
           }
         }
       }
@@ -9593,7 +9593,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Jarima pog'onasiga tushgan o'tishlar: %lld"
+            "value": "Jarima pogʻonasiga tushgan oʻtishlar: %lld"
           }
         }
       }
@@ -9609,7 +9609,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kameralardan limitdan oshmasdan o‘ting — +6 km/soat allaqachon jarima pog‘onasi."
+            "value": "Kameralardan limitdan oshmasdan oʻting — +6 km/soat allaqachon jarima pogʻonasi."
           }
         }
       }
@@ -9625,7 +9625,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Limiti ma’lum shuncha kameradan jarima tezligisiz o‘tish."
+            "value": "Limiti maʼlum shuncha kameradan jarima tezligisiz oʻtish."
           }
         }
       }
@@ -9641,7 +9641,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "RadarMap yoqilgan holda shuncha kilometr bosib o‘tish."
+            "value": "RadarMap yoqilgan holda shuncha kilometr bosib oʻtish."
           }
         }
       }
@@ -9657,7 +9657,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O'tilgan kameralar"
+            "value": "Oʻtilgan kameralar"
           }
         }
       }
@@ -9673,7 +9673,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘tilgan kameralar: %lld"
+            "value": "Oʻtilgan kameralar: %lld"
           }
         }
       }
@@ -9689,7 +9689,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu kameradan %lld km/soat bilan o'tganingizda:"
+            "value": "Bu kameradan %lld km/soat bilan oʻtganingizda:"
           }
         }
       }
@@ -9722,7 +9722,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘tkazib yuborish"
+            "value": "Oʻtkazib yuborish"
           }
         }
       }
@@ -9770,7 +9770,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Shu vaqtdagi odatiy safarlaringizga nisbatan. Yo‘ldagi to‘xtashlar hisobga olinmaydi."
+            "value": "Shu vaqtdagi odatiy safarlaringizga nisbatan. Yoʻldagi toʻxtashlar hisobga olinmaydi."
           }
         }
       }
@@ -9802,7 +9802,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld kundan ko'p o'tdi — odatda endi kelmaydi"
+            "value": "%lld kundan koʻp oʻtdi — odatda endi kelmaydi"
           }
         }
       }
@@ -9818,7 +9818,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O'tgan davr: %lld"
+            "value": "Oʻtgan davr: %lld"
           }
         }
       }
@@ -10090,7 +10090,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O'tishlarni ko'rib chiqish"
+            "value": "Oʻtishlarni koʻrib chiqish"
           }
         }
       }
@@ -10164,7 +10164,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ko‘chma radarlar jadvali 2022 yildan yopiq. Pistirmani ko‘rdingizmi — ekranga qaramay bitta sariq tugma."
+            "value": "Koʻchma radarlar jadvali 2022 yildan yopiq. Pistirmani koʻrdingizmi — ekranga qaramay bitta sariq tugma."
           }
         }
       }
@@ -10228,7 +10228,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Trek bo‘ylab keskin tezlanish va tormozlash balni tushiradi."
+            "value": "Trek boʻylab keskin tezlanish va tormozlash balni tushiradi."
           }
         }
       }
@@ -10292,7 +10292,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Reyting o'sdi: %1$lld → %2$lld (%3$@)"
+            "value": "Reyting oʻsdi: %1$lld → %2$lld (%3$@)"
           }
         }
       }
@@ -10308,7 +10308,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Davr reytingi — kilometrlar bo'yicha vaznlangan o'rtacha ball: uzoq trassa unga do'konga borishdan ko'ra kuchliroq ta'sir qiladi."
+            "value": "Davr reytingi — kilometrlar boʻyicha vaznlangan oʻrtacha ball: uzoq trassa unga doʻkonga borishdan koʻra kuchliroq taʼsir qiladi."
           }
         }
       }
@@ -10420,7 +10420,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tez-tez xavf qilyapsiz: har 100 km ga %1$@ ta oshirish, o'tgan davrda %2$@ edi"
+            "value": "Tez-tez xavf qilyapsiz: har 100 km ga %1$@ ta oshirish, oʻtgan davrda %2$@ edi"
           }
         }
       }
@@ -10436,7 +10436,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Qo‘lda"
+            "value": "Qoʻlda"
           }
         }
       }
@@ -10500,7 +10500,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘zi shahar yoki trassani aniqlaydi. Shaharda — qisqa, trassada — to‘liq, o‘z kameralaringiz haqida — faqat tebranish, tezlikni oshirsangiz — baland ovozda."
+            "value": "Oʻzi shahar yoki trassani aniqlaydi. Shaharda — qisqa, trassada — toʻliq, oʻz kameralaringiz haqida — faqat tebranish, tezlikni oshirsangiz — baland ovozda."
           }
         }
       }
@@ -10532,7 +10532,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yorug'"
+            "value": "Yorugʻ"
           }
         }
       }
@@ -10548,7 +10548,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O'z kameralarim"
+            "value": "Oʻz kameralarim"
           }
         }
       }
@@ -10564,7 +10564,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘zim"
+            "value": "Oʻzim"
           }
         }
       }
@@ -10580,7 +10580,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O'z kameram"
+            "value": "Oʻz kameram"
           }
         }
       }
@@ -10596,7 +10596,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘z kameram — jimman, faqat tebranish"
+            "value": "Oʻz kameram — jimman, faqat tebranish"
           }
         }
       }
@@ -10644,7 +10644,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rulga o‘tirdingiz — safar o‘zi boshlandi"
+            "value": "Rulga oʻtirdingiz — safar oʻzi boshlandi"
           }
         }
       }
@@ -10788,7 +10788,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Odatda qancha yurish va qachon chiqish — safarlaringiz bo‘yicha"
+            "value": "Odatda qancha yurish va qachon chiqish — safarlaringiz boʻyicha"
           }
         }
       }
@@ -10852,7 +10852,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Marshrut bo‘ylab tezlik"
+            "value": "Marshrut boʻylab tezlik"
           }
         }
       }
@@ -10884,7 +10884,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yashirilgan kamera ko‘rinmaydi va ogohlantirmaydi. Uni Sozlamalar → Ilova haqida → Kameralar bazasi → Yashirilgan kameralar bo‘limida qaytarish mumkin."
+            "value": "Yashirilgan kamera koʻrinmaydi va ogohlantirmaydi. Uni Sozlamalar → Ilova haqida → Kameralar bazasi → Yashirilgan kameralar boʻlimida qaytarish mumkin."
           }
         }
       }
@@ -11030,7 +11030,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rahmat — ko‘rib chiqamiz"
+            "value": "Rahmat — koʻrib chiqamiz"
           }
         }
       }
@@ -11062,7 +11062,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rahmat! Har bir xabarni o‘qiymiz."
+            "value": "Rahmat! Har bir xabarni oʻqiymiz."
           }
         }
       }
@@ -11078,7 +11078,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rahmat! Aloqa paydo bo'lganda yuboramiz."
+            "value": "Rahmat! Aloqa paydo boʻlganda yuboramiz."
           }
         }
       }
@@ -11110,7 +11110,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "IIV har bir kamera uchun ro'yxat e'lon qilmaydi — turi imkoniyatlarini ko'rsatamiz"
+            "value": "IIV har bir kamera uchun roʻyxat eʼlon qilmaydi — turi imkoniyatlarini koʻrsatamiz"
           }
         }
       }
@@ -11142,7 +11142,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O'rtacha ko'rsatkichlar, kunlar grafigi, xavf soatlari"
+            "value": "Oʻrtacha koʻrsatkichlar, kunlar grafigi, xavf soatlari"
           }
         }
       }
@@ -11158,7 +11158,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ safarlarning o'rtacha bali. Uzoq safarlar qisqalaridan ko'proq vazn oladi."
+            "value": "%@ safarlarning oʻrtacha bali. Uzoq safarlar qisqalaridan koʻproq vazn oladi."
           }
         }
       }
@@ -11190,7 +11190,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tozaroq hayday boshladingiz: har 100 km ga %1$@ ta oshirish, o'tgan davrda %2$@ edi"
+            "value": "Tozaroq hayday boshladingiz: har 100 km ga %1$@ ta oshirish, oʻtgan davrda %2$@ edi"
           }
         }
       }
@@ -11271,7 +11271,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Noto‘g‘ri joyda turibdi"
+            "value": "Notoʻgʻri joyda turibdi"
           }
         }
       }
@@ -11287,7 +11287,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "To'xtatish"
+            "value": "Toʻxtatish"
           }
         }
       }
@@ -11368,7 +11368,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Summa — tezlikni oshirish jarimalari pog'onalari bo'yicha baho (BHM hisobida), faqat limiti aniq kameralar bo'yicha. Qaror odatda bir necha kun ichida keladi; kelmasa — belgilang, summa Yakunlardan chiqadi. Reytingga bu ta'sir qilmaydi."
+            "value": "Summa — tezlikni oshirish jarimalari pogʻonalari boʻyicha baho (BHM hisobida), faqat limiti aniq kameralar boʻyicha. Qaror odatda bir necha kun ichida keladi; kelmasa — belgilang, summa Yakunlardan chiqadi. Reytingga bu taʼsir qilmaydi."
           }
         }
       }
@@ -11608,7 +11608,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Shunda yo‘lda ulgurayotganingiz ko‘rinadi: «zaxira bilan» yoki «vaqt zo‘rg‘a yetadi». Muddat telefonda qoladi."
+            "value": "Shunda yoʻlda ulgurayotganingiz koʻrinadi: «zaxira bilan» yoki «vaqt zoʻrgʻa yetadi». Muddat telefonda qoladi."
           }
         }
       }
@@ -11688,7 +11688,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Har soniyada vaqtli nuqta — registrator videosini xaritaga qo‘yish uchun. Faqat telefonda 30 kun saqlanadi."
+            "value": "Har soniyada vaqtli nuqta — registrator videosini xaritaga qoʻyish uchun. Faqat telefonda 30 kun saqlanadi."
           }
         }
       }
@@ -11736,7 +11736,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Trek yozilmagan — yangi safarlarda paydo bo‘ladi"
+            "value": "Trek yozilmagan — yangi safarlarda paydo boʻladi"
           }
         }
       }
@@ -11785,7 +11785,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Piyodalar yo‘lagi"
+            "value": "Piyodalar yoʻlagi"
           }
         }
       }
@@ -11801,7 +11801,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Qorong'i"
+            "value": "Qorongʻi"
           }
         }
       }
@@ -11817,7 +11817,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘tilgan kameralarning ko‘pchiligida yo‘l limiti noma’lum — ular bo‘yicha oshirishlar hisoblanmadi"
+            "value": "Oʻtilgan kameralarning koʻpchiligida yoʻl limiti nomaʼlum — ular boʻyicha oshirishlar hisoblanmadi"
           }
         }
       }
@@ -11849,7 +11849,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O'tilgan kameralarda yo'l limiti noma'lum — ular bo'yicha oshirishlar hisoblanmadi"
+            "value": "Oʻtilgan kameralarda yoʻl limiti nomaʼlum — ular boʻyicha oshirishlar hisoblanmadi"
           }
         }
       }
@@ -11914,7 +11914,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bildirishnomalar o'chirilgan — kamera signalini eshitmaysiz."
+            "value": "Bildirishnomalar oʻchirilgan — kamera signalini eshitmaysiz."
           }
         }
       }
@@ -11946,7 +11946,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘chirish"
+            "value": "Oʻchirish"
           }
         }
       }
@@ -11962,7 +11962,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yozuvni o‘chirish"
+            "value": "Yozuvni oʻchirish"
           }
         }
       }
@@ -11978,7 +11978,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kamerani o'chirish"
+            "value": "Kamerani oʻchirish"
           }
         }
       }
@@ -12034,7 +12034,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Endi yo'q"
+            "value": "Endi yoʻq"
           }
         }
       }
@@ -12130,7 +12130,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sekinlashmasligi uchun xaritani soddalashtirdik. Ogohlantirishlar to‘liq ishlaydi"
+            "value": "Sekinlashmasligi uchun xaritani soddalashtirdik. Ogohlantirishlar toʻliq ishlaydi"
           }
         }
       }
@@ -12164,7 +12164,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fayl o‘qilmayapti"
+            "value": "Fayl oʻqilmayapti"
           }
         }
       }
@@ -12213,7 +12213,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Oxirgi %lld ta safar saqlanadi. Oylik natijalar kunlik hisobotlar bo'yicha hisoblanadi — ular o'chirilmaydi."
+            "value": "Oxirgi %lld ta safar saqlanadi. Oylik natijalar kunlik hisobotlar boʻyicha hisoblanadi — ular oʻchirilmaydi."
           }
         }
       }
@@ -12229,7 +12229,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ko'pincha — %1$@: %3$lld tadan %2$lld ta oshirish"
+            "value": "Koʻpincha — %1$@: %3$lld tadan %2$lld ta oshirish"
           }
         }
       }
@@ -12245,7 +12245,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Eng ko‘p: %@ — ko‘rsatish"
+            "value": "Eng koʻp: %@ — koʻrsatish"
           }
         }
       }
@@ -12261,7 +12261,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld metrdan so‘ng — %@"
+            "value": "%lld metrdan soʻng — %@"
           }
         }
       }
@@ -12374,7 +12374,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu o‘tish bilan nimadir noto‘g‘rimi?"
+            "value": "Bu oʻtish bilan nimadir notoʻgʻrimi?"
           }
         }
       }
@@ -12390,7 +12390,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu kamera bilan nimadir noto‘g‘rimi?"
+            "value": "Bu kamera bilan nimadir notoʻgʻrimi?"
           }
         }
       }
@@ -12454,7 +12454,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Jarimali oshirish yo‘q"
+            "value": "Jarimali oshirish yoʻq"
           }
         }
       }
@@ -12502,7 +12502,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu versiya endi qo‘llab-quvvatlanmaydi — ilovani App Store’da yangilang."
+            "value": "Bu versiya endi qoʻllab-quvvatlanmaydi — ilovani App Storeʼda yangilang."
           }
         }
       }
@@ -12518,7 +12518,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu sizning odatiy darajangiz — odatda %1$lld va %2$lld orasida bo'lasiz."
+            "value": "Bu sizning odatiy darajangiz — odatda %1$lld va %2$lld orasida boʻlasiz."
           }
         }
       }
@@ -12551,7 +12551,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu baho, yozilgan jarima emas: takroriylik va aniq kameralarning bag'rikengligi bizga noma'lum."
+            "value": "Bu baho, yozilgan jarima emas: takroriylik va aniq kameralarning bagʻrikengligi bizga nomaʼlum."
           }
         }
       }
@@ -12599,7 +12599,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Men yo'lovchiman"
+            "value": "Men yoʻlovchiman"
           }
         }
       }
@@ -12615,7 +12615,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Men yo'lovchiman — yozuvsiz yakunlash"
+            "value": "Men yoʻlovchiman — yozuvsiz yakunlash"
           }
         }
       }
@@ -12647,7 +12647,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Til o'zgartirildi"
+            "value": "Til oʻzgartirildi"
           }
         }
       }
@@ -12808,7 +12808,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "eng ko‘p — %@"
+            "value": "eng koʻp — %@"
           }
         }
       }
@@ -12905,7 +12905,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "yo‘lda"
+            "value": "yoʻlda"
           }
         }
       }
@@ -12921,7 +12921,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o‘rtacha %@"
+            "value": "oʻrtacha %@"
           }
         }
       }
@@ -12937,7 +12937,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "kuniga o‘rtacha %@"
+            "value": "kuniga oʻrtacha %@"
           }
         }
       }
@@ -13034,7 +13034,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "oldinda o‘ngda"
+            "value": "oldinda oʻngda"
           }
         }
       }
@@ -13050,7 +13050,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "vaqt zo‘rg‘a yetadi"
+            "value": "vaqt zoʻrgʻa yetadi"
           }
         }
       }
@@ -13066,7 +13066,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "hamma o‘tishlar cheklov ichida"
+            "value": "hamma oʻtishlar cheklov ichida"
           }
         }
       }
@@ -13147,7 +13147,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o‘chirilgan"
+            "value": "oʻchirilgan"
           }
         }
       }
@@ -13163,7 +13163,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "oshirish bo'lgan kun"
+            "value": "oshirish boʻlgan kun"
           }
         }
       }
@@ -13195,7 +13195,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o‘ng tomonda yuring"
+            "value": "oʻng tomonda yuring"
           }
         }
       }
@@ -13275,7 +13275,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "ko'chma radargacha"
+            "value": "koʻchma radargacha"
           }
         }
       }
@@ -13467,7 +13467,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o‘tganiga"
+            "value": "oʻtganiga"
           }
         }
       }
@@ -13483,7 +13483,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o‘tgan haftaga nisbatan"
+            "value": "oʻtgan haftaga nisbatan"
           }
         }
       }
@@ -13499,7 +13499,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o‘tganiga"
+            "value": "oʻtganiga"
           }
         }
       }
@@ -13515,7 +13515,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o‘tgan kunga nisbatan"
+            "value": "oʻtgan kunga nisbatan"
           }
         }
       }
@@ -13531,7 +13531,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o‘tgan oyga nisbatan"
+            "value": "oʻtgan oyga nisbatan"
           }
         }
       }
@@ -13547,7 +13547,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o'tgan davrdagidek"
+            "value": "oʻtgan davrdagidek"
           }
         }
       }
@@ -13676,7 +13676,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "keskin o‘ngga buriling"
+            "value": "keskin oʻngga buriling"
           }
         }
       }
@@ -13692,7 +13692,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "limit noma'lum"
+            "value": "limit nomaʼlum"
           }
         }
       }
@@ -13708,7 +13708,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "limit noma’lum: %lld"
+            "value": "limit nomaʼlum: %lld"
           }
         }
       }
@@ -13884,7 +13884,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "odatdagidan %lld%% ko‘p"
+            "value": "odatdagidan %lld%% koʻp"
           }
         }
       }
@@ -14029,7 +14029,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "oqimga qo‘shiling"
+            "value": "oqimga qoʻshiling"
           }
         }
       }
@@ -14061,7 +14061,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "biroz o‘ngga oling"
+            "value": "biroz oʻngga oling"
           }
         }
       }
@@ -14101,7 +14101,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o'tgan %lld kun bo'yicha"
+            "value": "oʻtgan %lld kun boʻyicha"
           }
         }
       }
@@ -14141,7 +14141,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o'tgan %lld oy bo'yicha"
+            "value": "oʻtgan %lld oy boʻyicha"
           }
         }
       }
@@ -14181,7 +14181,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o'tgan %lld hafta bo'yicha"
+            "value": "oʻtgan %lld hafta boʻyicha"
           }
         }
       }
@@ -14197,7 +14197,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "davr safarlari treklari bo'yicha"
+            "value": "davr safarlari treklari boʻyicha"
           }
         }
       }
@@ -14213,7 +14213,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "safar treki bo'yicha"
+            "value": "safar treki boʻyicha"
           }
         }
       }
@@ -14245,7 +14245,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o‘ngga buriling"
+            "value": "oʻngga buriling"
           }
         }
       }
@@ -14341,7 +14341,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "yo'qotildi %lld"
+            "value": "yoʻqotildi %lld"
           }
         }
       }
@@ -14470,7 +14470,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "kamera o‘tishlari"
+            "value": "kamera oʻtishlari"
           }
         }
       }
@@ -14486,7 +14486,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "jarimali o'tishlar: %lld"
+            "value": "jarimali oʻtishlar: %lld"
           }
         }
       }
@@ -14502,7 +14502,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o'tishlar: %lld"
+            "value": "oʻtishlar: %lld"
           }
         }
       }
@@ -14518,7 +14518,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "bosib o‘tildi"
+            "value": "bosib oʻtildi"
           }
         }
       }
@@ -14534,7 +14534,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "bosib o'tilgan yo'l"
+            "value": "bosib oʻtilgan yoʻl"
           }
         }
       }
@@ -14550,7 +14550,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "to'g'rida"
+            "value": "toʻgʻrida"
           }
         }
       }
@@ -14750,7 +14750,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "bir soatdan ko‘p zaxira bilan"
+            "value": "bir soatdan koʻp zaxira bilan"
           }
         }
       }
@@ -14782,7 +14782,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "chiqish yo‘liga buriling"
+            "value": "chiqish yoʻliga buriling"
           }
         }
       }
@@ -14798,7 +14798,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o'z kamerangiz — ovozsiz"
+            "value": "oʻz kamerangiz — ovozsiz"
           }
         }
       }
@@ -14830,7 +14830,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "bugun %@ · o‘rtacha %@"
+            "value": "bugun %@ · oʻrtacha %@"
           }
         }
       }
@@ -14878,7 +14878,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "orqada o'ngda"
+            "value": "orqada oʻngda"
           }
         }
       }
@@ -14895,7 +14895,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "trek nuqtalari orasida tezlik o‘rtacha %1$lld km/soatdan ko‘proq o‘zgargan, xotirjam haydash — %2$lld gacha"
+            "value": "trek nuqtalari orasida tezlik oʻrtacha %1$lld km/soatdan koʻproq oʻzgargan, xotirjam haydash — %2$lld gacha"
           }
         }
       }
@@ -14912,7 +14912,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "trek nuqtalari orasida tezlik o‘rtacha %1$lld km/soatga o‘zgargan, xotirjam haydash — %2$lld gacha"
+            "value": "trek nuqtalari orasida tezlik oʻrtacha %1$lld km/soatga oʻzgargan, xotirjam haydash — %2$lld gacha"
           }
         }
       }
@@ -14960,7 +14960,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o'ngda"
+            "value": "oʻngda"
           }
         }
       }
@@ -14976,7 +14976,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o'rtacha"
+            "value": "oʻrtacha"
           }
         }
       }
@@ -14992,7 +14992,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o‘rtacha, km/soat"
+            "value": "oʻrtacha, km/soat"
           }
         }
       }
@@ -15008,7 +15008,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "to‘xtab turdingiz"
+            "value": "toʻxtab turdingiz"
           }
         }
       }
@@ -15024,7 +15024,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "yo‘l ayirmasiga chiqing"
+            "value": "yoʻl ayirmasiga chiqing"
           }
         }
       }
@@ -15168,7 +15168,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "jarimali o'tishlar: %lld"
+            "value": "jarimali oʻtishlar: %lld"
           }
         }
       }
@@ -15216,7 +15216,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "≈ %lld ming so'm"
+            "value": "≈ %lld ming soʻm"
           }
         }
       }
@@ -15300,7 +15300,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘z xaritangizdan · internetsiz"
+            "value": "Oʻz xaritangizdan · internetsiz"
           }
         }
       }
@@ -15316,7 +15316,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ikki marta bosing: birinchi tegish tasdiq so‘raydi"
+            "value": "Ikki marta bosing: birinchi tegish tasdiq soʻraydi"
           }
         }
       }
@@ -15524,7 +15524,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hajmli ko‘rinish yoqilgan"
+            "value": "Hajmli koʻrinish yoqilgan"
           }
         }
       }
@@ -15540,7 +15540,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tekis ko‘rinish"
+            "value": "Tekis koʻrinish"
           }
         }
       }
@@ -15588,7 +15588,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ovoz o‘chirilgan"
+            "value": "Ovoz oʻchirilgan"
           }
         }
       }
@@ -15636,7 +15636,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ovoz va signallarni o‘chirish"
+            "value": "Ovoz va signallarni oʻchirish"
           }
         }
       }
@@ -15764,7 +15764,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Viloyatlar ro‘yxati yuklanmoqda…"
+            "value": "Viloyatlar roʻyxati yuklanmoqda…"
           }
         }
       }
@@ -15780,7 +15780,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Viloyatlar ro‘yxati yuklanmadi — internetni tekshiring."
+            "value": "Viloyatlar roʻyxati yuklanmadi — internetni tekshiring."
           }
         }
       }
@@ -15876,7 +15876,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yuklab bo‘lmadi — aloqani tekshirib, qayta urinib ko‘ring"
+            "value": "Yuklab boʻlmadi — aloqani tekshirib, qayta urinib koʻring"
           }
         }
       }
@@ -15892,7 +15892,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Butun yo‘nalish"
+            "value": "Butun yoʻnalish"
           }
         }
       }
@@ -15988,7 +15988,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘chiq"
+            "value": "Oʻchiq"
           }
         }
       }
@@ -16004,7 +16004,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Til ilova qayta ishga tushirilgandan keyin to‘liq qo‘llanadi."
+            "value": "Til ilova qayta ishga tushirilgandan keyin toʻliq qoʻllanadi."
           }
         }
       }
@@ -16132,7 +16132,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "shu yo‘ldan safarlar: %lld"
+            "value": "shu yoʻldan safarlar: %lld"
           }
         }
       }
@@ -16148,7 +16148,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "kameralar: %2$lld o‘rniga %1$lld"
+            "value": "kameralar: %2$lld oʻrniga %1$lld"
           }
         }
       }
@@ -16164,7 +16164,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "siz tezlikni oshirgan kameralarsiz (tez yo‘lda: %lld)"
+            "value": "siz tezlikni oshirgan kameralarsiz (tez yoʻlda: %lld)"
           }
         }
       }
@@ -16180,7 +16180,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "murakkab manyovrlar: %2$lld o‘rniga %1$lld"
+            "value": "murakkab manyovrlar: %2$lld oʻrniga %1$lld"
           }
         }
       }
@@ -16212,7 +16212,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "tez yo‘ldan +%@"
+            "value": "tez yoʻldan +%@"
           }
         }
       }
@@ -16244,7 +16244,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Variantlar safarlaringiz bilan solishtiriladi: «Tanish» — siz yurgan yo‘l, «Xotirjamroq» — avval tezlikni oshirgan kameralaringizsiz."
+            "value": "Variantlar safarlaringiz bilan solishtiriladi: «Tanish» — siz yurgan yoʻl, «Xotirjamroq» — avval tezlikni oshirgan kameralaringizsiz."
           }
         }
       }
@@ -16260,7 +16260,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tanish yo‘l, agar tez yo‘ldan ancha uzoq bo‘lmasa, birinchi taklif qilinadi."
+            "value": "Tanish yoʻl, agar tez yoʻldan ancha uzoq boʻlmasa, birinchi taklif qilinadi."
           }
         }
       }
@@ -16292,7 +16292,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aloqa yo‘q — xarita yuklab olingan viloyatdan"
+            "value": "Aloqa yoʻq — xarita yuklab olingan viloyatdan"
           }
         }
       }
@@ -16308,7 +16308,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aloqa yo‘q — xarita yuklanmayapti, kameralar ogohlantiradi"
+            "value": "Aloqa yoʻq — xarita yuklanmayapti, kameralar ogohlantiradi"
           }
         }
       }
@@ -16388,7 +16388,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘ngdan boshqa istalgan qatordan"
+            "value": "Oʻngdan boshqa istalgan qatordan"
           }
         }
       }
@@ -16484,7 +16484,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘ng qatordan"
+            "value": "Oʻng qatordan"
           }
         }
       }
@@ -16500,7 +16500,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘ngdagi ikki qatordan"
+            "value": "Oʻngdagi ikki qatordan"
           }
         }
       }
@@ -16516,7 +16516,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘ngdagi uch qatordan"
+            "value": "Oʻngdagi uch qatordan"
           }
         }
       }
@@ -16532,7 +16532,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘ng qatorlardan"
+            "value": "Oʻng qatorlardan"
           }
         }
       }
@@ -16548,7 +16548,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘rta qatordan"
+            "value": "Oʻrta qatordan"
           }
         }
       }
@@ -16564,7 +16564,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘rta qatorlardan"
+            "value": "Oʻrta qatorlardan"
           }
         }
       }
@@ -16596,7 +16596,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "o‘z xaritamiz"
+            "value": "oʻz xaritamiz"
           }
         }
       }
@@ -16612,7 +16612,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "To‘g‘ri yurish uchun qator"
+            "value": "Toʻgʻri yurish uchun qator"
           }
         }
       }
@@ -16804,7 +16804,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Apple ma’lumotlari bo‘yicha"
+            "value": "Apple maʼlumotlari boʻyicha"
           }
         }
       }
@@ -16836,7 +16836,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Internetsiz faqat o‘z xaritamiz bo‘yicha qidiraman."
+            "value": "Internetsiz faqat oʻz xaritamiz boʻyicha qidiraman."
           }
         }
       }
@@ -16852,7 +16852,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Uyga yo‘nalish"
+            "value": "Uyga yoʻnalish"
           }
         }
       }
@@ -16868,7 +16868,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ishga yo‘nalish"
+            "value": "Ishga yoʻnalish"
           }
         }
       }
@@ -16884,7 +16884,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Uyga yo‘nalish tuzadi va kameralar haqida ogohlantirishni yoqadi."
+            "value": "Uyga yoʻnalish tuzadi va kameralar haqida ogohlantirishni yoqadi."
           }
         }
       }
@@ -16900,7 +16900,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ishga yo‘nalish tuzadi va kameralar haqida ogohlantirishni yoqadi."
+            "value": "Ishga yoʻnalish tuzadi va kameralar haqida ogohlantirishni yoqadi."
           }
         }
       }
@@ -16916,7 +16916,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Uy qayerdaligini bilmayman. Uni RadarMap’da belgilang — yoki yuring, o‘zim o‘rganaman."
+            "value": "Uy qayerdaligini bilmayman. Uni RadarMapʼda belgilang — yoki yuring, oʻzim oʻrganaman."
           }
         }
       }
@@ -16932,7 +16932,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ish qayerdaligini bilmayman. Uni RadarMap’da belgilang — yoki yuring, o‘zim o‘rganaman."
+            "value": "Ish qayerdaligini bilmayman. Uni RadarMapʼda belgilang — yoki yuring, oʻzim oʻrganaman."
           }
         }
       }
@@ -16948,7 +16948,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yo‘nalish tuzilmadi — keyinroq urinib ko‘ring."
+            "value": "Yoʻnalish tuzilmadi — keyinroq urinib koʻring."
           }
         }
       }
@@ -16964,7 +16964,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Uyga ketyapmiz: %@, yo‘lda kameralar — %lld."
+            "value": "Uyga ketyapmiz: %@, yoʻlda kameralar — %lld."
           }
         }
       }
@@ -16980,7 +16980,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ishga ketyapmiz: %@, yo‘lda kameralar — %lld."
+            "value": "Ishga ketyapmiz: %@, yoʻlda kameralar — %lld."
           }
         }
       }
@@ -16996,7 +16996,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "yo‘lda %@ dan keyin"
+            "value": "yoʻlda %@ dan keyin"
           }
         }
       }
@@ -17044,7 +17044,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "«Avto» shahar va trassani ajratadi: shaharda qisqa ibora, trassada to‘liq, tezlik oshganda — balandroq va cheklov bilan."
+            "value": "«Avto» shahar va trassani ajratadi: shaharda qisqa ibora, trassada toʻliq, tezlik oshganda — balandroq va cheklov bilan."
           }
         }
       }
@@ -17060,7 +17060,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Har kuni tinch o‘tadigan kameralaringiz haqida ilova jim turadi va faqat tebranish bilan bildiradi. Tezlikni oshirib yaqinlashsangiz — gapiradi."
+            "value": "Har kuni tinch oʻtadigan kameralaringiz haqida ilova jim turadi va faqat tebranish bilan bildiradi. Tezlikni oshirib yaqinlashsangiz — gapiradi."
           }
         }
       }
@@ -17076,7 +17076,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "«Tezlikni oshirish haqida ovoz» — kamerasiz ibora haqida. «Kameralar oldida» rejimida u faqat yo‘lingizda oldinda kamera bo‘lganda yangraydi; qolgan vaqtda tezlik oshgani tezlik rangidan ko‘rinadi."
+            "value": "«Tezlikni oshirish haqida ovoz» — kamerasiz ibora haqida. «Kameralar oldida» rejimida u faqat yoʻlingizda oldinda kamera boʻlganda yangraydi; qolgan vaqtda tezlik oshgani tezlik rangidan koʻrinadi."
           }
         }
       }
@@ -17092,7 +17092,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "«Aqlli» — safar faqat o‘z mashinangizda o‘zi boshlanadi (CarPlay yoki tanish magnitola); begona mashinada avval «rulda sizmisiz?» deb so‘raydi."
+            "value": "«Aqlli» — safar faqat oʻz mashinangizda oʻzi boshlanadi (CarPlay yoki tanish magnitola); begona mashinada avval «rulda sizmisiz?» deb soʻraydi."
           }
         }
       }
@@ -17108,7 +17108,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "«Avto» — doim o‘zi. «Qo‘lda» — faqat tugma bilan, harakatni kuzatish butunlay o‘chiriladi."
+            "value": "«Avto» — doim oʻzi. «Qoʻlda» — faqat tugma bilan, harakatni kuzatish butunlay oʻchiriladi."
           }
         }
       }
@@ -17124,7 +17124,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yo‘l-yo‘lakay to‘xtash — do‘kon, yoqilg‘i quyish shoxobchasi — yangi safar bo‘lmaydi: bu o‘sha safar ichidagi to‘xtash."
+            "value": "Yoʻl-yoʻlakay toʻxtash — doʻkon, yoqilgʻi quyish shoxobchasi — yangi safar boʻlmaydi: bu oʻsha safar ichidagi toʻxtash."
           }
         }
       }
@@ -17140,7 +17140,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bir oyda olti va undan ko‘p marta, bir marta ham tezlikni oshirmay o‘tgan kamerangizni ilova ovoz chiqarib aytmay qo‘yadi. Xaritada unda belgi turadi, ogohlantirish saqlanadi."
+            "value": "Bir oyda olti va undan koʻp marta, bir marta ham tezlikni oshirmay oʻtgan kamerangizni ilova ovoz chiqarib aytmay qoʻyadi. Xaritada unda belgi turadi, ogohlantirish saqlanadi."
           }
         }
       }
@@ -17156,7 +17156,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bir marta tezlikni oshirsangiz — yana gapiradi. Ko‘chma radarlar, uch oyoq kameralar va YTH haqida ovoz doim yangraydi."
+            "value": "Bir marta tezlikni oshirsangiz — yana gapiradi. Koʻchma radarlar, uch oyoq kameralar va YTH haqida ovoz doim yangraydi."
           }
         }
       }
@@ -17188,7 +17188,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yashirilgan kamera xaritada ko‘rinmaydi va ogohlantirmaydi."
+            "value": "Yashirilgan kamera xaritada koʻrinmaydi va ogohlantirmaydi."
           }
         }
       }
@@ -17236,7 +17236,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kamera endi yo‘qmi?"
+            "value": "Kamera endi yoʻqmi?"
           }
         }
       }
@@ -17268,7 +17268,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kamerani o‘chirasizmi?"
+            "value": "Kamerani oʻchirasizmi?"
           }
         }
       }
@@ -17300,7 +17300,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Moderatorga xabar beramiz. U tekshirguncha kamera ogohlantirishda davom etadi: agar u baribir turgan bo‘lsa, jim qolish ortiqcha signaldan qimmatroqqa tushadi."
+            "value": "Moderatorga xabar beramiz. U tekshirguncha kamera ogohlantirishda davom etadi: agar u baribir turgan boʻlsa, jim qolish ortiqcha signaldan qimmatroqqa tushadi."
           }
         }
       }
@@ -17316,7 +17316,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘z kamerangiz xaritadan yo‘qoladi va ogohlantirmay qo‘yadi."
+            "value": "Oʻz kamerangiz xaritadan yoʻqoladi va ogohlantirmay qoʻyadi."
           }
         }
       }
@@ -17332,7 +17332,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Belgi barcha haydovchilarda yo‘qoladi."
+            "value": "Belgi barcha haydovchilarda yoʻqoladi."
           }
         }
       }
@@ -17508,7 +17508,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "janubi-g‘arbga"
+            "value": "janubi-gʻarbga"
           }
         }
       }
@@ -17524,7 +17524,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "g‘arbga"
+            "value": "gʻarbga"
           }
         }
       }
@@ -17540,7 +17540,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "shimoli-g‘arbga"
+            "value": "shimoli-gʻarbga"
           }
         }
       }
@@ -17588,7 +17588,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aloqa yo‘q — paydo bo‘lishi bilan yuboraman."
+            "value": "Aloqa yoʻq — paydo boʻlishi bilan yuboraman."
           }
         }
       }
@@ -17620,7 +17620,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Joriy nuqtada uch oyoq kamerani belgilaydi — boshqa haydovchilar uni xaritada ko‘radi."
+            "value": "Joriy nuqtada uch oyoq kamerani belgilaydi — boshqa haydovchilar uni xaritada koʻradi."
           }
         }
       }
@@ -17652,7 +17652,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Joriy nuqtada YPX postini belgilaydi — boshqa haydovchilar uni xaritada ko‘radi."
+            "value": "Joriy nuqtada YPX postini belgilaydi — boshqa haydovchilar uni xaritada koʻradi."
           }
         }
       }
@@ -17684,7 +17684,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Joriy nuqtada YTHni belgilaydi — boshqa haydovchilar uni xaritada ko‘radi."
+            "value": "Joriy nuqtada YTHni belgilaydi — boshqa haydovchilar uni xaritada koʻradi."
           }
         }
       }
@@ -17780,7 +17780,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld ta haqida juda yaqinda aytdi — munosabat bildirishga imkon yo‘q edi"
+            "value": "%lld ta haqida juda yaqinda aytdi — munosabat bildirishga imkon yoʻq edi"
           }
         }
       }
@@ -17828,7 +17828,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "kameradan o‘tdingiz"
+            "value": "kameradan oʻtdingiz"
           }
         }
       }
@@ -17908,7 +17908,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "«O‘tdingiz» — juda yaqinidan, 40 metrdan yaqin o‘tgan kamerangiz. Bu geografiya, bizning qarorimiz emas — shuning uchun o‘z filtrlarimizni bo‘shatib, raqamni o‘zgartirib bo‘lmaydi."
+            "value": "«Oʻtdingiz» — juda yaqinidan, 40 metrdan yaqin oʻtgan kamerangiz. Bu geografiya, bizning qarorimiz emas — shuning uchun oʻz filtrlarimizni boʻshatib, raqamni oʻzgartirib boʻlmaydi."
           }
         }
       }
@@ -17924,7 +17924,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "«Oldindan aytildi» — ogohlantirish 80 metrdan uzoqda yangradi, ya’ni gazni qo‘yib yuborishga hali vaqt bor edi. Agar yaqinroqda yangragan bo‘lsa, buni alohida hisoblaymiz: rasman aytildi, amalda — yo‘q."
+            "value": "«Oldindan aytildi» — ogohlantirish 80 metrdan uzoqda yangradi, yaʼni gazni qoʻyib yuborishga hali vaqt bor edi. Agar yaqinroqda yangragan boʻlsa, buni alohida hisoblaymiz: rasman aytildi, amalda — yoʻq."
           }
         }
       }
@@ -17940,7 +17940,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "«Behuda» — yonidan o‘tmagan kamerangiz haqida aytildi. Bu o‘z-o‘zidan xato emas: burilib ketgan bo‘lishingiz mumkin. Ammo bunday holatlar ko‘p bo‘lsa, ilova bekorga qo‘rqitayotgan bo‘ladi."
+            "value": "«Behuda» — yonidan oʻtmagan kamerangiz haqida aytildi. Bu oʻz-oʻzidan xato emas: burilib ketgan boʻlishingiz mumkin. Ammo bunday holatlar koʻp boʻlsa, ilova bekorga qoʻrqitayotgan boʻladi."
           }
         }
       }
@@ -17972,7 +17972,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ilova aynan nima uchun jim qolganini hisoblagich tahlil qilmaydi: sababni kodning eng mas’uliyatli qismidan so‘rash kerak bo‘lardi, uni esa hisoblagich uchun qayta yozib bo‘lmaydi. Ataylab jim turadigan «o‘z» kameralaringiz ham jimlikka kiradi — bu jimlikka o‘zingiz ruxsat bergansiz."
+            "value": "Ilova aynan nima uchun jim qolganini hisoblagich tahlil qilmaydi: sababni kodning eng masʼuliyatli qismidan soʻrash kerak boʻlardi, uni esa hisoblagich uchun qayta yozib boʻlmaydi. Ataylab jim turadigan «oʻz» kameralaringiz ham jimlikka kiradi — bu jimlikka oʻzingiz ruxsat bergansiz."
           }
         }
       }
@@ -17988,7 +17988,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tashqariga faqat shu yig‘indilar ketadi. Hisobotga na kameralar koordinatalari, na o‘tish vaqtlari tushadi."
+            "value": "Tashqariga faqat shu yigʻindilar ketadi. Hisobotga na kameralar koordinatalari, na oʻtish vaqtlari tushadi."
           }
         }
       }
@@ -18036,7 +18036,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Butun vaqtdagi raqamlarni ko‘rsatish"
+            "value": "Butun vaqtdagi raqamlarni koʻrsatish"
           }
         }
       }
@@ -18052,7 +18052,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Barcha safarlarni o‘chirasizmi?"
+            "value": "Barcha safarlarni oʻchirasizmi?"
           }
         }
       }
@@ -18068,7 +18068,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Barcha safarlarni o‘chirish"
+            "value": "Barcha safarlarni oʻchirish"
           }
         }
       }
@@ -18084,7 +18084,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Barcha davrlar uchun tarix, reyting va natijalar telefondan o‘chib ketadi. Ularni qaytarib bo‘lmaydi."
+            "value": "Barcha davrlar uchun tarix, reyting va natijalar telefondan oʻchib ketadi. Ularni qaytarib boʻlmaydi."
           }
         }
       }
@@ -18100,7 +18100,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aloqa yo‘q"
+            "value": "Aloqa yoʻq"
           }
         }
       }
@@ -18164,7 +18164,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Belgilar hozir o‘chirilgan"
+            "value": "Belgilar hozir oʻchirilgan"
           }
         }
       }
@@ -18180,7 +18180,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Serverdan g‘alati javob"
+            "value": "Serverdan gʻalati javob"
           }
         }
       }
@@ -18196,7 +18196,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "O‘tish xaritasini ochish"
+            "value": "Oʻtish xaritasini ochish"
           }
         }
       }
@@ -18212,7 +18212,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yo‘lda %lld belgisi, lekin shahardagi kameralar %lld dan qayd etadi — %lld bo‘yicha hisoblaymiz."
+            "value": "Yoʻlda %lld belgisi, lekin shahardagi kameralar %lld dan qayd etadi — %lld boʻyicha hisoblaymiz."
           }
         }
       }
@@ -18228,7 +18228,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yo‘l cheklovi — OpenStreetMap’dan, lekin 60 km/soatdan past bo‘lsa, unga qarab baho bermaymiz: shahardagi kameralar bundan past tezlikni qayd etmaydi. Jarima — birinchi qayd etish bahosi: qoidabuzarliklarning takrorlanishi va aniq kameraning yo‘l qo‘yadigan chegaralari bizga noma’lum."
+            "value": "Yoʻl cheklovi — OpenStreetMapʼdan, lekin 60 km/soatdan past boʻlsa, unga qarab baho bermaymiz: shahardagi kameralar bundan past tezlikni qayd etmaydi. Jarima — birinchi qayd etish bahosi: qoidabuzarliklarning takrorlanishi va aniq kameraning yoʻl qoʻyadigan chegaralari bizga nomaʼlum."
           }
         }
       }
@@ -18260,7 +18260,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Xabarni o‘chirasizmi?"
+            "value": "Xabarni oʻchirasizmi?"
           }
         }
       }
@@ -18324,7 +18324,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yo‘l-yo‘lakay kirib o‘tib bo‘lmadi — marshrut avvalgidek"
+            "value": "Yoʻl-yoʻlakay kirib oʻtib boʻlmadi — marshrut avvalgidek"
           }
         }
       }
@@ -18340,7 +18340,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "kirib o‘tish: %@"
+            "value": "kirib oʻtish: %@"
           }
         }
       }
@@ -18356,7 +18356,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yo‘l-yo‘lakay kirib o‘tish"
+            "value": "Yoʻl-yoʻlakay kirib oʻtish"
           }
         }
       }
@@ -18372,7 +18372,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yo‘l-yo‘lakay kirib o‘tib bo‘lmadi"
+            "value": "Yoʻl-yoʻlakay kirib oʻtib boʻlmadi"
           }
         }
       }
@@ -18500,7 +18500,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Usiz iOS ilova yig‘ilgan yoki ekran o‘chiq bo‘lganda kameralar haqida ogohlantirishga ruxsat bermaydi va safar o‘zi boshlanmaydi. Fondagi joylashuv faqat telefonda qayta ishlanadi."
+            "value": "Usiz iOS ilova yigʻilgan yoki ekran oʻchiq boʻlganda kameralar haqida ogohlantirishga ruxsat bermaydi va safar oʻzi boshlanmaydi. Fondagi joylashuv faqat telefonda qayta ishlanadi."
           }
         }
       }
@@ -18548,7 +18548,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bular hali hech kim tasdiqlamagan haydovchilar belgilari. Ilova ular haqida ham ogohlantiradi, lekin bu haydovchilar belgisi ekanini aytadi. Tasdiqlash yoki rad etish mumkin — belgi kartochkasida yoki o‘tgandan keyin «radar hali turibdimi?» savoliga javob berib."
+            "value": "Bular hali hech kim tasdiqlamagan haydovchilar belgilari. Ilova ular haqida ham ogohlantiradi, lekin bu haydovchilar belgisi ekanini aytadi. Tasdiqlash yoki rad etish mumkin — belgi kartochkasida yoki oʻtgandan keyin «radar hali turibdimi?» savoliga javob berib."
           }
         }
       }
@@ -18564,7 +18564,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kamera endi yo‘q yoki boshqa joyda turibdi"
+            "value": "Kamera endi yoʻq yoki boshqa joyda turibdi"
           }
         }
       }
@@ -18580,7 +18580,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Safarlarni yangi telefonga qanday ko‘chirish mumkin?"
+            "value": "Safarlarni yangi telefonga qanday koʻchirish mumkin?"
           }
         }
       }
@@ -18612,7 +18612,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Marshrutni bizning serverimiz hisoblaydi. Aloqasiz yuklab olingan hudud xaritasi va kameralar haqidagi ogohlantirishlar ishlaydi, yangi marshrut esa — yo‘q."
+            "value": "Marshrutni bizning serverimiz hisoblaydi. Aloqasiz yuklab olingan hudud xaritasi va kameralar haqidagi ogohlantirishlar ishlaydi, yangi marshrut esa — yoʻq."
           }
         }
       }
@@ -18628,7 +18628,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Marshrut endi yo‘q — kirib o‘tish qo‘shilmadi"
+            "value": "Marshrut endi yoʻq — kirib oʻtish qoʻshilmadi"
           }
         }
       }
@@ -18676,7 +18676,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "safarlaringiz bo‘yicha"
+            "value": "safarlaringiz boʻyicha"
           }
         }
       }
@@ -18692,7 +18692,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ko‘rsatkich"
+            "value": "Koʻrsatkich"
           }
         }
       }
@@ -18772,7 +18772,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Xaritada siz shunday ko‘rinasiz — telefonda ham, CarPlay’da ham. Belgi harakat yo‘nalishiga qarab buriladi."
+            "value": "Xaritada siz shunday koʻrinasiz — telefonda ham, CarPlayʼda ham. Belgi harakat yoʻnalishiga qarab buriladi."
           }
         }
       }
@@ -18804,7 +18804,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ishga yo'l"
+            "value": "Ishga yoʻl"
           }
         }
       }
@@ -18820,7 +18820,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Uyga yo'l"
+            "value": "Uyga yoʻl"
           }
         }
       }
@@ -18836,7 +18836,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yana %lld ta safar — va «odatda» paydo bo'ladi"
+            "value": "Yana %lld ta safar — va «odatda» paydo boʻladi"
           }
         }
       }
@@ -18916,7 +18916,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@ da chiqing — o'rtacha %2$@, %3$@ tezroq"
+            "value": "%1$@ da chiqing — oʻrtacha %2$@, %3$@ tezroq"
           }
         }
       }
@@ -18932,7 +18932,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Uy va ish o'rtasidagi safarlaringiz bo'yicha telefonning o'zida hisoblanadi. Bu ma'lumotlar tashqariga chiqmaydi."
+            "value": "Uy va ish oʻrtasidagi safarlaringiz boʻyicha telefonning oʻzida hisoblanadi. Bu maʼlumotlar tashqariga chiqmaydi."
           }
         }
       }
@@ -18980,7 +18980,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Grafik: chiqish vaqti va yo'ldagi vaqt"
+            "value": "Grafik: chiqish vaqti va yoʻldagi vaqt"
           }
         }
       }
@@ -19108,7 +19108,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Safar davomida yo'lning bir kilometrlik bo'laklarini yuboramiz: mashina qayerda va qanday tezlikda yurgani. Ulardan server hamma uchun tirbandlikni hisoblaydi."
+            "value": "Safar davomida yoʻlning bir kilometrlik boʻlaklarini yuboramiz: mashina qayerda va qanday tezlikda yurgani. Ulardan server hamma uchun tirbandlikni hisoblaydi."
           }
         }
       }
@@ -19140,7 +19140,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu kameralar haqidagi ogohlantirishlarga ta'sir qilmaydi."
+            "value": "Bu kameralar haqidagi ogohlantirishlarga taʼsir qilmaydi."
           }
         }
       }
@@ -19170,7 +19170,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aniq joylashuv yo‘q — hozircha yo‘nalish tuzib bo‘lmaydi"
+            "value": "Aniq joylashuv yoʻq — hozircha yoʻnalish tuzib boʻlmaydi"
           }
         }
       }
@@ -19180,7 +19180,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yo‘nalish tuzilmadi"
+            "value": "Yoʻnalish tuzilmadi"
           }
         }
       }
@@ -19200,7 +19200,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Manzil yoki nomni boshqacha yozib ko‘ring"
+            "value": "Manzil yoki nomni boshqacha yozib koʻring"
           }
         }
       }
@@ -19240,7 +19240,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Umumiy ko‘rinish"
+            "value": "Umumiy koʻrinish"
           }
         }
       }
@@ -19260,7 +19260,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tirbandlikni aylanib o‘tish"
+            "value": "Tirbandlikni aylanib oʻtish"
           }
         }
       }
@@ -19270,7 +19270,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tirbandlikni aylanib o‘tish · %@ orqali"
+            "value": "Tirbandlikni aylanib oʻtish · %@ orqali"
           }
         }
       }
@@ -19280,7 +19280,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Oldinda tirbandlik. %@ tezroq yo‘l bor"
+            "value": "Oldinda tirbandlik. %@ tezroq yoʻl bor"
           }
         }
       }
@@ -19310,7 +19310,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aylanib o‘tish"
+            "value": "Aylanib oʻtish"
           }
         }
       }
@@ -19320,7 +19320,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Oldinda tirbandlik: taxminan %1$@, qo‘shimcha %2$@"
+            "value": "Oldinda tirbandlik: taxminan %1$@, qoʻshimcha %2$@"
           }
         }
       }
@@ -19330,7 +19330,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yandex Navigator bilan birga ishlatsa bo‘ladimi?"
+            "value": "Yandex Navigator bilan birga ishlatsa boʻladimi?"
           }
         }
       }
@@ -19340,7 +19340,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ha. Safarni RadarMap’da boshlang (yoki u o‘zi boshlanadi), so‘ng Yandexni oching. RadarMap kameralar haqida Yandex va musiqa ustidan ovoz bilan ogohlantiradi — buning uchun joylashuvga «Doim» ruxsati kerak va ilovani surib yopmaslik kerak. CarPlay’da ekranda Yandex bo‘ladi: RadarMap ovozi eshitiladi, lekin CarPlay boshqa navigator ustidan kamera bannerini ko‘rsatmasligi mumkin. Tirbandlik va aylanib o‘tish — yo‘nalishni boshqarayotgan navigatorda."
+            "value": "Ha. Safarni RadarMapʼda boshlang (yoki u oʻzi boshlanadi), soʻng Yandexni oching. RadarMap kameralar haqida Yandex va musiqa ustidan ovoz bilan ogohlantiradi — buning uchun joylashuvga «Doim» ruxsati kerak va ilovani surib yopmaslik kerak. CarPlayʼda ekranda Yandex boʻladi: RadarMap ovozi eshitiladi, lekin CarPlay boshqa navigator ustidan kamera bannerini koʻrsatmasligi mumkin. Tirbandlik va aylanib oʻtish — yoʻnalishni boshqarayotgan navigatorda."
           }
         }
       }
@@ -19350,7 +19350,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "%2$@ dan so‘ng tezlik cheklovi %1$lld"
+            "value": "%2$@ dan soʻng tezlik cheklovi %1$lld"
           }
         }
       }
@@ -19380,7 +19380,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "CarPlay’dagi «Qayerga»da — «AYOQSH», «Quvvatlash» yoki ikkalasi: mashinada ular uchun bitta tugma."
+            "value": "CarPlayʼdagi «Qayerga»da — «AYOQSH», «Quvvatlash» yoki ikkalasi: mashinada ular uchun bitta tugma."
           }
         }
       }
@@ -19390,7 +19390,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yo‘nalishni qayta tuzyapman"
+            "value": "Yoʻnalishni qayta tuzyapman"
           }
         }
       }
@@ -19420,7 +19420,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ulashishni to‘xtatish"
+            "value": "Ulashishni toʻxtatish"
           }
         }
       }
@@ -19430,7 +19430,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Harakatni boshlaganingizda safar o‘zi boshlanadi"
+            "value": "Harakatni boshlaganingizda safar oʻzi boshlanadi"
           }
         }
       }
@@ -19470,7 +19470,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yo‘lda"
+            "value": "Yoʻlda"
           }
         }
       }
@@ -19480,7 +19480,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Safarlaringiz bo‘yicha"
+            "value": "Safarlaringiz boʻyicha"
           }
         }
       }
@@ -19522,7 +19522,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "To‘xtaganda qidiruv"
+            "value": "Toʻxtaganda qidiruv"
           }
         }
       }
@@ -19538,7 +19538,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "«%@» — to‘xtaganda"
+            "value": "«%@» — toʻxtaganda"
           }
         }
       }
@@ -19554,7 +19554,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Harakatda manzil qidirib bo‘lmaydi — mashina to‘xtaganda joyni belgilang."
+            "value": "Harakatda manzil qidirib boʻlmaydi — mashina toʻxtaganda joyni belgilang."
           }
         }
       }

@@ -1,0 +1,294 @@
+{
+  "sourceLanguage" : "ru",
+  "strings" : {
+    "Accident here in ${applicationName}" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Accident here in ${applicationName}"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da YTH bor"
+          }
+        }
+      }
+    },
+    "End trip in ${applicationName}" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "End trip in ${applicationName}"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da safarni yakunla"
+          }
+        }
+      }
+    },
+    "Police here in ${applicationName}" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Police here in ${applicationName}"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da post bor"
+          }
+        }
+      }
+    },
+    "Radar here in ${applicationName}" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Radar here in ${applicationName}"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da radar bor"
+          }
+        }
+      }
+    },
+    "Start trip in ${applicationName}" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start trip in ${applicationName}"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da safar boshlash"
+          }
+        }
+      }
+    },
+    "Take me home in ${applicationName}" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Take me home in ${applicationName}"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da uyga yoʻl"
+          }
+        }
+      }
+    },
+    "Take me to work in ${applicationName}" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Take me to work in ${applicationName}"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da ishga yoʻl"
+          }
+        }
+      }
+    },
+    "Tripod here in ${applicationName}" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tripod here in ${applicationName}"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da uch oyoq bor"
+          }
+        }
+      }
+    },
+    "Включи ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}ni yoq"
+          }
+        }
+      }
+    },
+    "Выключи ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}ni oʻchir"
+          }
+        }
+      }
+    },
+    "ДТП здесь в ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da bu yerda YTH"
+          }
+        }
+      }
+    },
+    "Домой в ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da uyga"
+          }
+        }
+      }
+    },
+    "Завершить поездку в ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da safarni tugat"
+          }
+        }
+      }
+    },
+    "На работу в ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da ishga"
+          }
+        }
+      }
+    },
+    "Начать поездку в ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da safarni boshla"
+          }
+        }
+      }
+    },
+    "Отметь ДПС в ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da YPXni belgila"
+          }
+        }
+      }
+    },
+    "Отметь аварию в ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da avariyani belgila"
+          }
+        }
+      }
+    },
+    "Отметь радар в ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da radarni belgila"
+          }
+        }
+      }
+    },
+    "Отметь треногу в ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da uch oyoq kamerani belgila"
+          }
+        }
+      }
+    },
+    "Поехали домой в ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da uyga ketdik"
+          }
+        }
+      }
+    },
+    "Поехали на работу в ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da ishga ketdik"
+          }
+        }
+      }
+    },
+    "Пост здесь в ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da bu yerda YPX posti"
+          }
+        }
+      }
+    },
+    "Радар здесь в ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da bu yerda radar"
+          }
+        }
+      }
+    },
+    "Тренога здесь в ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da bu yerda uch oyoq kamera"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

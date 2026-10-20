@@ -38,6 +38,23 @@ final class DestinationGuessTests: XCTestCase {
         XCTAssertTrue(guess.subtitle.contains(Formatting.unbreakable(Formatting.duration(39 * 60))), guess.subtitle)
     }
 
+    /// Своих поездок меньше трёх — «обычно ~35 мин (по водителям)» (8.8.16);
+    /// своё «обычно» появилось — чужое уходит.
+    func testCrowdUsualOnlyUntilOwnUsualExists() throws {
+        let cold = try XCTUnwrap(DestinationGuess.make(
+            learned: [home, work], manual: { _ in nil }, usual: { _ in nil },
+            crowd: { $0 == .toWork ? 35 * 60 : nil },
+            from: atHome, now: monday(8), calendar: calendar))
+        XCTAssertEqual(cold.crowdUsual, 35 * 60)
+        XCTAssertTrue(cold.subtitle.contains(DestinationGuess.crowdText(35 * 60).dropFirst()), cold.subtitle)
+        let own = try XCTUnwrap(DestinationGuess.make(
+            learned: [home, work], manual: { _ in nil }, usual: { _ in 39 * 60 },
+            crowd: { _ in 35 * 60 },
+            from: atHome, now: monday(8), calendar: calendar))
+        XCTAssertNil(own.crowdUsual, "своё «обычно» старше чужого")
+        XCTAssertFalse(own.subtitle.contains(Formatting.unbreakable(Formatting.duration(35 * 60))), own.subtitle)
+    }
+
     /// Есть профиль на этот час — «сейчас ~44 мин» вместо месячной медианы;
     /// пробки — словом, только от 3 минут.
     func testEstimateForNowOutranksTheMonthlyMedian() throws {

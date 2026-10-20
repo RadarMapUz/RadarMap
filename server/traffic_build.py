@@ -26,6 +26,22 @@ traffic/now.json для телефонов.
        {"v": 1, "generated": t, "edges": [[ulat, ulon, vlat, vlon, level, kmh, model_kmh]]}
      Пробки — данные для показа (как отметки водителей), на оповещения о
      камерах не влияют, поэтому файл не подписывается.
+  5. Раз в час — «обычно по водителям» (план 19.10, 8.8.16): traffic/typical/
+     <класс дня>-<час>.json из traffic_profile, холодный старт «дороги на
+     работу», пока у водителя нет трёх своих поездок:
+       {"v": 1, "bucket": "wd-08", "generated": t, "edges": [[ulat, ulon, vlat, vlon, kmh]]}
+     Класс дня — будни (wd, пн–пт) или выходные (off, сб–вс), а не 168 часов
+     недели: холодный старт — ровно тогда, когда данных мало, и пять будних
+     восьми утра, сложенные в один файл, набирают порог впятеро быстрее, а
+     дорога во вторник в 8:00 от среды в 8:00 не отличается. Ребро попадает
+     в файл, только если его прошли не меньше TYPICAL_MIN_PIECES кусков в этот
+     час И хоть раз два куска прошли его вместе (в одном окне now.json): один
+     человек, каждый будний день едущий в 8:00 по своей улице, набирает пять
+     кусков за неделю — но не два одновременно, и его улица публичной не
+     становится. Скорость — гармоническое среднее (через время на километр):
+     время в пути — это сумма времён, и среднее км/ч по пробке 5 и свободе 50
+     дало бы 27 вместо честных 9. Файл переписывается, только если рёбра
+     сменились: телефон проверяет его с ETag, и неизменный файл стоит 304.
 
 Единица — направленное ребро OSM (u, v): ключ постоянен между обновлениями
 графа, и это тот же формат, что `--segment-speed-file` у OSRM (следующий
@@ -57,6 +73,13 @@ SLOW_RATIO = 0.6             # ниже — медленно (жёлтый)
 TASHKENT_UTC_OFFSET = 5 * 3600
 OUTPUT_VERSION = 1
 
+TYPICAL_DIR = "/opt/radarmap/www/traffic/typical"
+TYPICAL_MIN_PIECES = 5       # кусков на ребро в этот класс дня и час
+TYPICAL_EVERY = 60 * 60      # «обычно» пересобирается не чаще раза в час
+TYPICAL_VERSION = 1
+PACE_MIN_KMH = 3.0           # ниже — «стоим»: темп не уходит в бесконечность
+DAY_CLASSES = ("wd", "off")  # будни (пн–пт), выходные (сб–вс)
+
 
 def schema(conn):
     conn.execute("PRAGMA journal_mode = WAL")
@@ -78,6 +101,21 @@ def schema(conn):
         u INTEGER NOT NULL, v INTEGER NOT NULL, how INTEGER NOT NULL,
         n INTEGER NOT NULL, sum_kmh REAL NOT NULL,
         PRIMARY KEY(u, v, how))""")
+    # «Обычно по водителям» (8.8.16): кусков, а не отрезков (кусок, чьи две
+    # точки следа легли на одно ребро, давал два «наблюдения»), и сумма темпа
+    # (с/км) — для гармонического среднего. Старые строки — с нулями: в
+    # typical они не идут, «обычно» копится с выкладки.
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(traffic_profile)")}
+    if "pieces" not in columns:
+        conn.execute("ALTER TABLE traffic_profile ADD COLUMN pieces INTEGER NOT NULL DEFAULT 0")
+    if "sum_pace" not in columns:
+        conn.execute("ALTER TABLE traffic_profile ADD COLUMN sum_pace REAL NOT NULL DEFAULT 0")
+    # Рёбра, которые хоть раз прошли два куска в одном окне now.json — то
+    # есть не один человек.
+    conn.execute("""CREATE TABLE IF NOT EXISTS traffic_shared(
+        u INTEGER NOT NULL, v INTEGER NOT NULL, PRIMARY KEY(u, v))""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS traffic_meta(
+        key TEXT PRIMARY KEY, value REAL NOT NULL)""")
     conn.commit()
 
 
@@ -171,9 +209,27 @@ def store(conn, piece_id, samples, nodes, models, now):
                      [(i, lat, lon) for i, (lat, lon) in nodes.items()])
     conn.executemany("INSERT OR REPLACE INTO traffic_edges(u, v, model_kmh) VALUES(?, ?, ?)",
                      [(u, v, kmh) for (u, v), kmh in models.items()])
-    conn.executemany("""INSERT INTO traffic_profile(u, v, how, n, sum_kmh) VALUES(?, ?, ?, 1, ?)
-                        ON CONFLICT(u, v, how) DO UPDATE SET n = n + 1, sum_kmh = sum_kmh + excluded.sum_kmh""",
-                     [(u, v, how, kmh) for u, v, kmh, _ in samples])
+    conn.executemany("""INSERT INTO traffic_profile(u, v, how, n, sum_kmh, pieces, sum_pace)
+                        VALUES(?, ?, ?, ?, ?, 1, ?)
+                        ON CONFLICT(u, v, how) DO UPDATE SET n = n + excluded.n,
+                            sum_kmh = sum_kmh + excluded.sum_kmh,
+                            pieces = pieces + 1, sum_pace = sum_pace + excluded.sum_pace""",
+                     [(u, v, how, count, total, pace)
+                      for (u, v), (count, total, pace) in piece_profile(samples).items()])
+
+
+def piece_profile(samples):
+    """Один кусок — одно наблюдение ребра: {(u, v): (отрезков, сумма км/ч,
+    темп с/км)}. Темп — взвешенный по длине отрезков внутри куска."""
+    acc = {}
+    for u, v, kmh, weight in samples:
+        entry = acc.setdefault((u, v), [0, 0.0, 0.0, 0.0])
+        entry[0] += 1
+        entry[1] += kmh
+        entry[2] += weight
+        entry[3] += weight * 3600.0 / max(PACE_MIN_KMH, kmh)
+    return {edge: (count, total, paced / length if length > 0 else 3600.0 / PACE_MIN_KMH)
+            for edge, (count, total, length, paced) in acc.items()}
 
 
 def process(conn, now, matcher=osrm_match):
@@ -266,6 +322,93 @@ def aggregate(conn, now):
     return out
 
 
+def mark_shared(conn, now):
+    """Запомнить рёбра, которые сейчас прошли два независимых куска (то же
+    правило, что у now.json). Признак вечный: «здесь ездит не один
+    человек» со временем не перестаёт быть правдой."""
+    conn.execute("""INSERT OR IGNORE INTO traffic_shared(u, v)
+                    SELECT u, v FROM traffic_samples WHERE ts >= ?
+                    GROUP BY u, v HAVING COUNT(DISTINCT piece) >= ?""",
+                 (now - SAMPLE_WINDOW, MIN_PIECES))
+    conn.commit()
+
+
+# --- «Обычно по водителям» (8.8.16) -------------------------------------------
+
+def bucket_name(how):
+    """Файл часа недели: «wd-08» — будни в 8:00, «off-08» — выходные."""
+    day, hour = divmod(int(how) % 168, 24)
+    return f"{DAY_CLASSES[1] if day >= 5 else DAY_CLASSES[0]}-{hour:02d}"
+
+
+ALL_BUCKETS = tuple(f"{cls}-{hour:02d}" for cls in DAY_CLASSES for hour in range(24))
+
+
+def typical_due(conn, now):
+    row = conn.execute("SELECT value FROM traffic_meta WHERE key = 'typical_built'").fetchone()
+    return row is None or now - row[0] >= TYPICAL_EVERY
+
+
+def typical_buckets(conn):
+    """{имя файла: [(ulat, ulon, vlat, vlon, kmh)]} — только рёбра с
+    TYPICAL_MIN_PIECES кусками в классе дня и часе и прошедшие проверку «не
+    один человек». Отсортировано: одинаковые данные — одинаковый файл."""
+    rows = conn.execute("""SELECT p.how, p.pieces, p.sum_pace, a.lat, a.lon, b.lat, b.lon, p.u, p.v
+                           FROM traffic_profile p
+                           JOIN traffic_shared s ON s.u = p.u AND s.v = p.v
+                           JOIN traffic_nodes a ON a.id = p.u
+                           JOIN traffic_nodes b ON b.id = p.v
+                           WHERE p.pieces > 0""").fetchall()
+    acc = {}
+    for how, pieces, pace, alat, alon, blat, blon, u, v in rows:
+        entry = acc.setdefault((bucket_name(how), u, v), [0, 0.0, (alat, alon, blat, blon)])
+        entry[0] += pieces
+        entry[1] += pace
+    out = {}
+    for (name, _, _), (pieces, pace, coords) in acc.items():
+        if pieces < TYPICAL_MIN_PIECES or pace <= 0:
+            continue
+        kmh = min(MAX_KMH, 3600.0 / (pace / pieces))
+        out.setdefault(name, []).append((*coords, kmh))
+    return {name: sorted(edges) for name, edges in out.items()}
+
+
+def typical_payload(name, edges, now):
+    return {
+        "v": TYPICAL_VERSION,
+        "bucket": name,
+        "generated": int(now),
+        "edges": [[round(a, 5), round(b, 5), round(c, 5), round(d, 5), int(round(kmh))]
+                  for a, b, c, d, kmh in edges],
+    }
+
+
+def write_typical(conn, now, directory=TYPICAL_DIR):
+    """Все 48 файлов (пустой — честное «данных нет», а не 404). Файл
+    переписывается, только если сменились рёбра: иначе ETag и 304 у телефона
+    теряли бы смысл. Возвращает, сколько файлов записано."""
+    buckets = typical_buckets(conn)
+    written = 0
+    for name in ALL_BUCKETS:
+        body = typical_payload(name, buckets.get(name, []), now)
+        path = os.path.join(directory, f"{name}.json")
+        try:
+            with open(path, encoding="utf-8") as f:
+                current = json.load(f)
+            if current.get("v") == body["v"] and current.get("edges") == body["edges"]:
+                continue
+        except FileNotFoundError:
+            pass
+        except (OSError, ValueError) as error:
+            # Битый файл (обрыв диска) — перезаписываем, не падаем.
+            print(f"typical {name}: старый файл не прочитан ({error}) — перезапись", file=sys.stderr)
+        write_atomic(path, json.dumps(body, separators=(",", ":")))
+        written += 1
+    conn.execute("INSERT OR REPLACE INTO traffic_meta(key, value) VALUES('typical_built', ?)", (now,))
+    conn.commit()
+    return written
+
+
 def payload(edges, now):
     return {
         "v": OUTPUT_VERSION,
@@ -293,8 +436,11 @@ def main():
     prune(conn, now)
     edges = aggregate(conn, now)
     write_atomic(OUT_PATH, json.dumps(payload(edges, now), separators=(",", ":")))
+    mark_shared(conn, now)
+    typical = write_typical(conn, now) if typical_due(conn, now) else None
     conn.close()
-    print(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} кусков {pieces}, отрезков {segments}, рёбер в выходе {len(edges)}")
+    note = "" if typical is None else f", «обычно» файлов переписано {typical}"
+    print(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} кусков {pieces}, отрезков {segments}, рёбер в выходе {len(edges)}{note}")
 
 
 if __name__ == "__main__":

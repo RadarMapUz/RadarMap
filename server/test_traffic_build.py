@@ -148,6 +148,152 @@ class PipelineTest(unittest.TestCase):
             self.assertTrue(all(isinstance(x, (int, float)) for x in edge))
 
 
+class TypicalTest(unittest.TestCase):
+    """«Обычно по водителям» (8.8.16): traffic/typical/<класс>-<час>.json."""
+
+    def setUp(self):
+        self.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.conn = sqlite3.connect(self.tmp.name)
+        tb.schema(self.conn)
+        self.now = 1_760_000_000.0
+        self.out = tempfile.mkdtemp()
+
+    def tearDown(self):
+        self.conn.close()
+        os.unlink(self.tmp.name)
+        for name in os.listdir(self.out):
+            os.unlink(os.path.join(self.out, name))
+        os.rmdir(self.out)
+
+    def pieces(self, count, at=None, shared=True, slower=1):
+        """`count` кусков по фикстуре; shared — проверка «не один человек»
+        (два куска в одном окне) пройдена; slower — время следа × N."""
+        at = at or self.now
+        points = [[lat, lon, t * slower, kmh] for lat, lon, t, kmh in FIXTURE["points"]]
+        for _ in range(count):
+            self.conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)",
+                              (at, json.dumps(points)))
+        self.conn.commit()
+        tb.process(self.conn, at, matcher=lambda pts: FIXTURE["response"])
+        if shared:
+            tb.mark_shared(self.conn, at)
+
+    def bucket(self):
+        return tb.bucket_name(tb.hour_of_week(self.now))
+
+    def read(self, name):
+        with open(os.path.join(self.out, f"{name}.json"), encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_bucket_names_split_weekdays_and_days_off(self):
+        self.assertEqual(tb.bucket_name(0), "wd-00")
+        self.assertEqual(tb.bucket_name(4 * 24 + 23), "wd-23", "пятница 23:00 — будни")
+        self.assertEqual(tb.bucket_name(5 * 24 + 8), "off-08", "суббота 8:00 — выходные")
+        self.assertEqual(tb.bucket_name(6 * 24 + 18), "off-18")
+        self.assertEqual(len(tb.ALL_BUCKETS), 48)
+        self.assertEqual(len(set(tb.ALL_BUCKETS)), 48)
+
+    def test_profile_counts_pieces_not_segments(self):
+        self.pieces(2)
+        for n, pieces in self.conn.execute("SELECT n, pieces FROM traffic_profile"):
+            self.assertEqual(pieces, 2, "кусок — одно наблюдение ребра")
+            self.assertGreaterEqual(n, pieces)
+
+    def test_harmonic_speed(self):
+        """Пробка 5 и свобода 50 — это время, а не среднее км/ч: 9, не 27,5."""
+        profile = tb.piece_profile([(1, 2, 50.0, 100.0), (1, 2, 5.0, 100.0)])
+        count, total, pace = profile[(1, 2)]
+        self.assertEqual(count, 2)
+        self.assertAlmostEqual(total, 55.0)
+        self.assertAlmostEqual(3600 / pace, 9.09, places=2)
+        # Стоянка не делает темп бесконечным.
+        self.assertAlmostEqual(tb.piece_profile([(1, 2, 0.0, 10.0)])[(1, 2)][2], 3600 / tb.PACE_MIN_KMH)
+
+    def test_too_few_pieces_publish_nothing(self):
+        self.pieces(tb.TYPICAL_MIN_PIECES - 1)
+        self.assertEqual(tb.typical_buckets(self.conn), {})
+
+    def test_one_driver_never_becomes_typical(self):
+        """Пять кусков по одному — пять дней одного человека: без двух
+        кусков в одном окне ребро в «обычно» не попадает."""
+        for day in range(tb.TYPICAL_MIN_PIECES):
+            self.pieces(1, at=self.now + day * 7 * 86400, shared=False)
+            tb.mark_shared(self.conn, self.now + day * 7 * 86400)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM traffic_shared").fetchone()[0], 0)
+        self.assertEqual(tb.typical_buckets(self.conn), {})
+
+    def test_enough_shared_pieces_publish_in_their_hour(self):
+        self.pieces(tb.TYPICAL_MIN_PIECES)
+        buckets = tb.typical_buckets(self.conn)
+        self.assertEqual(set(buckets), {self.bucket()})
+        edges = buckets[self.bucket()]
+        self.assertGreater(len(edges), 5)
+        for edge in edges:
+            self.assertEqual(len(edge), 5)
+            self.assertTrue(tb.PACE_MIN_KMH <= edge[4] <= tb.MAX_KMH)
+
+    def test_weekdays_add_up_in_one_file(self):
+        """Понедельник и среда в один час — один файл, порог по сумме."""
+        monday_like = self.now
+        self.pieces(3, at=monday_like)
+        other = monday_like + 2 * 86400 if tb.hour_of_week(monday_like) // 24 < 3 else monday_like - 2 * 86400
+        self.assertEqual(tb.bucket_name(tb.hour_of_week(other)), self.bucket())
+        self.pieces(2, at=other)
+        self.assertIn(self.bucket(), tb.typical_buckets(self.conn))
+
+    def test_files_carry_nothing_but_edges(self):
+        self.pieces(tb.TYPICAL_MIN_PIECES)
+        written = tb.write_typical(self.conn, self.now, directory=self.out)
+        self.assertEqual(written, 48, "пустой час — файл с пустыми рёбрами, а не 404")
+        body = self.read(self.bucket())
+        self.assertEqual(set(body), {"v", "bucket", "generated", "edges"})
+        self.assertEqual(body["bucket"], self.bucket())
+        self.assertTrue(body["edges"])
+        for edge in body["edges"]:
+            self.assertEqual(len(edge), 5)
+            self.assertTrue(all(isinstance(x, (int, float)) for x in edge))
+        self.assertEqual(self.read("off-03" if self.bucket() != "off-03" else "wd-03")["edges"], [])
+        raw = open(os.path.join(self.out, f"{self.bucket()}.json"), encoding="utf-8").read()
+        for word in ("piece", "device", "trip", "ts"):
+            self.assertNotIn(word, raw)
+
+    def test_unchanged_files_are_not_rewritten(self):
+        self.pieces(tb.TYPICAL_MIN_PIECES)
+        tb.write_typical(self.conn, self.now, directory=self.out)
+        generated = self.read(self.bucket())["generated"]
+        self.assertEqual(tb.write_typical(self.conn, self.now + 3600, directory=self.out), 0)
+        self.assertEqual(self.read(self.bucket())["generated"], generated, "тот же файл — тот же ETag")
+        self.pieces(1)   # такой же кусок — скорости те же, файл тот же
+        self.assertEqual(tb.write_typical(self.conn, self.now + 5400, directory=self.out), 0)
+        self.pieces(1, slower=3)
+        self.assertGreaterEqual(tb.write_typical(self.conn, self.now + 7200, directory=self.out), 1)
+
+    def test_corrupt_file_is_replaced(self):
+        self.pieces(tb.TYPICAL_MIN_PIECES)
+        with open(os.path.join(self.out, f"{self.bucket()}.json"), "w", encoding="utf-8") as f:
+            f.write("{обрыв")
+        tb.write_typical(self.conn, self.now, directory=self.out)
+        self.assertTrue(self.read(self.bucket())["edges"])
+
+    def test_rebuild_at_most_hourly(self):
+        self.assertTrue(tb.typical_due(self.conn, self.now))
+        tb.write_typical(self.conn, self.now, directory=self.out)
+        self.assertFalse(tb.typical_due(self.conn, self.now + 120))
+        self.assertTrue(tb.typical_due(self.conn, self.now + tb.TYPICAL_EVERY))
+
+    def test_old_profile_table_is_migrated(self):
+        conn = sqlite3.connect(":memory:")
+        conn.execute("""CREATE TABLE traffic_profile(u INTEGER NOT NULL, v INTEGER NOT NULL,
+                        how INTEGER NOT NULL, n INTEGER NOT NULL, sum_kmh REAL NOT NULL,
+                        PRIMARY KEY(u, v, how))""")
+        conn.execute("INSERT INTO traffic_profile VALUES(1, 2, 8, 7, 280.0)")
+        tb.schema(conn)
+        tb.schema(conn)   # повторный запуск cron — без ошибок
+        self.assertEqual(conn.execute("SELECT n, pieces, sum_pace FROM traffic_profile").fetchone(), (7, 0, 0.0),
+                         "старые строки в «обычно» не идут: у них нет кусков")
+        conn.close()
+
+
 class PureTest(unittest.TestCase):
     def test_levels(self):
         self.assertEqual(tb.level(10, 60), 3)

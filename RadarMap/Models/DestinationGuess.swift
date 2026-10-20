@@ -15,6 +15,11 @@
 //  отправить на сервер дом и работу человека, которых он не просил строить.
 //  Время с пробками он увидит, нажав «Поехали».
 //
+//  Пока своих поездок меньше трёх, «обычно» берётся у водителей (8.8.16):
+//  своя линия пути, сложенная на телефоне с обычными скоростями чужих
+//  поездок в этот час (TypicalTraffic) — «обычно ~35 мин (по водителям)».
+//  Своё «обычно» всегда старше.
+//
 
 import CoreLocation
 import Foundation
@@ -27,6 +32,8 @@ struct DestinationGuess: Equatable {
     let placeTitle: String?
     /// Медиана своих поездок туда за 30 дней; nil — истории мало.
     let usual: TimeInterval?
+    /// Обычное время по водителям (8.8.16) — только пока своего `usual` нет.
+    var crowdUsual: TimeInterval? = nil
     /// При выезде сейчас (8.8.6): медиана на этот час по профилю пути плюс
     /// сегодняшние пробки сверх обычного. Только когда мы стоим у начала этой
     /// дороги (у дома — «на работу», у работы — «домой»): из ресторана в 15 км
@@ -36,13 +43,15 @@ struct DestinationGuess: Equatable {
 
     static func == (a: DestinationGuess, b: DestinationGuess) -> Bool {
         a.kind == b.kind && a.placeTitle == b.placeTitle && a.usual == b.usual && a.estimate == b.estimate
+            && a.crowdUsual == b.crowdUsual
             && a.coordinate.latitude == b.coordinate.latitude
             && a.coordinate.longitude == b.coordinate.longitude
     }
 
     /// «сейчас ~52 мин, пробки +8 мин» — если есть оценка на этот час, иначе
-    /// «обычно 39 мин». Пробки — только заметные (от 3 мин): меньше — шум, и
-    /// строка не должна прыгать каждые две минуты вместе с now.json.
+    /// «обычно 39 мин», а без своей истории — «обычно ~35 мин (по водителям)».
+    /// Пробки — только заметные (от 3 мин): меньше — шум, и строка не должна
+    /// прыгать каждые две минуты вместе с now.json.
     var usualText: String? {
         if let estimate {
             let head = String(format: String(localized: "сейчас ~%@"),
@@ -51,8 +60,18 @@ struct DestinationGuess: Equatable {
             guard jam >= AppConfig.commuteJamShowMinutes else { return head }
             return head + ", " + String(localized: "пробки +\(jam) мин")
         }
-        return usual.map { String(format: String(localized: "обычно %@"),
-                                  Formatting.unbreakable(Formatting.duration($0))) }
+        if let usual {
+            return String(format: String(localized: "обычно %@"),
+                          Formatting.unbreakable(Formatting.duration(usual)))
+        }
+        return crowdUsual.map { Self.crowdText($0) }
+    }
+
+    /// «обычно ~35 мин (по водителям)» — источник назван: это чужие поездки,
+    /// не своя история, и выдавать их за своё «обычно» нельзя.
+    static func crowdText(_ seconds: TimeInterval) -> String {
+        String(format: String(localized: "обычно ~%@ (по водителям)"),
+               Formatting.unbreakable(Formatting.duration(seconds)))
     }
 
     /// Строка под заголовком: время и адрес, что есть. Время — первым: строка
@@ -68,9 +87,12 @@ struct DestinationGuess: Equatable {
     /// - Parameters:
     ///   - manual: заданные рукой Дом/Работа (Настройки → Мои места).
     ///   - usual: медиана поездок по направлению (Commute), nil — нет данных.
+    ///   - crowd: обычное время по водителям (8.8.16); берётся, только если
+    ///     своего `usual` нет.
     static func make(learned: [FrequentPlaces.Place],
                      manual: (FrequentPlaces.Kind) -> SavedPlace?,
                      usual: (Commute.Direction) -> TimeInterval?,
+                     crowd: (Commute.Direction) -> TimeInterval? = { _ in nil },
                      estimate: (Commute.Direction) -> CommuteEstimate.Estimate? = { _ in nil },
                      from coordinate: CLLocationCoordinate2D?,
                      now: Date,
@@ -94,12 +116,15 @@ struct DestinationGuess: Equatable {
                 <= AppConfig.commuteGhostStartRadiusMeters
         } ?? false
         let forNow = atOrigin ? estimate(direction) : nil
+        // Своё «обычно» старше чужого: с третьей поездки «по водителям» уходит.
+        let fromCrowd = typical == nil ? crowd(direction) : nil
         if let hand = manual(place.kind) {
             return DestinationGuess(kind: place.kind, coordinate: hand.coordinate,
-                                    placeTitle: hand.title, usual: typical, estimate: forNow)
+                                    placeTitle: hand.title, usual: typical, crowdUsual: fromCrowd,
+                                    estimate: forNow)
         }
         return DestinationGuess(kind: place.kind, coordinate: place.coordinate,
-                                placeTitle: nil, usual: typical, estimate: forNow)
+                                placeTitle: nil, usual: typical, crowdUsual: fromCrowd, estimate: forNow)
     }
 
     private static func zip2<A, B>(_ a: A?, _ b: B?) -> (A, B)? {

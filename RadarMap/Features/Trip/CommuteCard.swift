@@ -20,6 +20,8 @@ struct CommuteCard: View {
     var showsChevron = true
     /// Сумов на метр пути (FuelCost); nil — расход и цена не заданы.
     var fuelCostPerMeter: Double? = nil
+    /// «Обычно ~35 мин (по водителям)» (8.8.16) — пока своего «обычно» нет.
+    var crowdUsual: TimeInterval? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -41,6 +43,13 @@ struct CommuteCard: View {
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
+                if let crowdUsual {
+                    // Чужое «обычно» — с названным источником, своё его сменит.
+                    Text(Self.crowdLine(crowdUsual))
+                        .font(.rounded(13))
+                        .foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Text(String(format: String(localized: "Ещё %lld — и появится «обычно»"),
                             max(1, AppConfig.commuteMinTrips - summary.trips.count)))
                     .font(.rounded(12))
@@ -98,6 +107,12 @@ struct CommuteCard: View {
         }
         return String(format: String(localized: "Обычно %1$@, выезжаете около %2$@"),
                       time, Formatting.clock(minuteOfDay: departure))
+    }
+
+    /// «Обычно ~35 мин (по водителям)».
+    static func crowdLine(_ seconds: TimeInterval) -> String {
+        String(format: String(localized: "Обычно ~%@ (по водителям)"),
+               Formatting.unbreakable(Formatting.duration(seconds)))
     }
 
     /// «За 7 дней в среднем 41 мин — на 3 мин дольше обычного». «За 7 дней»,

@@ -32,6 +32,8 @@ echo "→ Заливка и проверка синтаксиса той же в
   # Пробный прогон: OSRM отвечает, база создаётся, файл пишется.
   python3 $BUILD
   test -s /opt/radarmap/www/traffic/now.json
+  # «Обычно по водителям» (8.8.16): первый прогон пишет все 48 файлов.
+  test -s /opt/radarmap/www/traffic/typical/wd-08.json
   # cron — идемпотентно: строка добавляется один раз.
   ( crontab -l 2>/dev/null | grep -vF 'traffic_build.py'; echo '$CRON' ) | crontab -
   crontab -l | grep -F traffic_build.py
@@ -41,4 +43,7 @@ echo "→ Смоук: файл отдаётся через nginx…"
 curl -sf -o /dev/null -w '  now.json → %{http_code}, %{size_download} байт\n' \
   https://soulmed.uz/radarmap/traffic/now.json || \
   echo "  ⚠ /radarmap/traffic/ не отдаётся — поставьте раздел nginx (см. шапку скрипта)"
+curl -sf -o /dev/null -w '  typical/wd-08.json → %{http_code}, %{size_download} байт\n' \
+  https://soulmed.uz/radarmap/traffic/typical/wd-08.json || \
+  echo "  ⚠ typical/ не отдаётся — тот же раздел nginx"
 echo "✓ Пробки выложены."

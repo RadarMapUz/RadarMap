@@ -169,7 +169,11 @@ struct OfflineMapsView: View {
 
     static func language(_ setting: AppLanguage) -> String { setting.mapCode }
 
+    /// «20,2 МБ» / «20,2 MB» — по языку приложения, как остальные числа.
+    /// ByteCountFormatter брал локаль телефона: на узбекском интерфейсе при
+    /// русской системе карточка писала «Toshkent · 20,2 МБ» кириллицей
+    /// (снимок 14.9 — до того подпись обрезалась и этого не было видно).
     static func size(_ bytes: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        bytes.formatted(.byteCount(style: .file).locale(Formatting.numberLocale))
     }
 }

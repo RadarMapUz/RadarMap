@@ -54,7 +54,9 @@ extension MapScreen {
     /// свою камеру» живёт в меню «Ещё»: оно нужно раз в месяц, а место в баре
     /// занимало всегда (plan_main_screen.md, шаг 4).
     var actionBar: some View {
-        HStack(spacing: 4) {
+        // По верху: на крупном шрифте подпись может уйти в две строки
+        // (ActionBarLabel), и значки соседей не должны съезжать вниз.
+        HStack(alignment: .top, spacing: 4) {
             actionButton("Поиск", "magnifyingglass") { map.showSearch = true }
             // «Мои места» — на месте спидометра, который владелец попросил
             // убрать («мне кажется не нужен»). Дорога домой или на работу —
@@ -163,17 +165,7 @@ extension MapScreen {
     /// Общая разметка кнопки бара — её же носит меню «Ещё».
     func actionLabel(_ title: LocalizedStringKey, _ icon: String,
                              tint: Color = Theme.textPrimary) -> some View {
-        VStack(spacing: 5) {
-                Image(systemName: icon).font(.rounded(19, .semibold))
-                Text(title)
-                    .font(.rounded(10, .medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            .foregroundStyle(tint)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
+        ActionBarLabel(title: title, icon: icon, tint: tint)
     }
 
     @ViewBuilder var permissionBanner: some View {
@@ -232,5 +224,34 @@ extension MapScreen {
     func openSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
+    }
+}
+
+/// Подпись кнопки нижнего бара: значок и слово под ним.
+///
+/// С крупного шрифта — до двух строк. «Mening joylarim» в четверти ширины SE
+/// не помещалось и с ужатием 0,8 — «Mening joyl…» начиная с XL (14.9). На
+/// обычном кегле — одна строка с ужатием, как было: там подпись влезает, а
+/// перенос поднял бы бар ради неё. Своей вью, а не веткой в MapScreen: кегль
+/// читает только подпись, и экран с картой не подписывается на него целиком.
+struct ActionBarLabel: View {
+    let title: LocalizedStringKey
+    let icon: String
+    var tint: Color = Theme.textPrimary
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
+        VStack(spacing: 5) {
+            Image(systemName: icon).font(.rounded(19, .semibold))
+            Text(title)
+                .font(.rounded(10, .medium))
+                .lineLimit(typeSize >= .xLarge ? 2 : 1)
+                .multilineTextAlignment(.center)
+                .minimumScaleFactor(0.8)
+        }
+        .foregroundStyle(tint)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
     }
 }

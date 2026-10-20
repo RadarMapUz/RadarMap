@@ -95,7 +95,7 @@ extension TripStatsSheet {
         VStack(spacing: 10) {
             ForEach(env.commute) { commute in
                 Button { commuteDetail = commute } label: {
-                    CommuteCard(summary: commute)
+                    CommuteCard(summary: commute, fuelCostPerMeter: env.settings.fuelCostPerMeter)
                 }
                 .buttonStyle(PressableStyle())
                 // Срок прибытия выученный — только вопросом и один раз (8.6),

@@ -262,6 +262,7 @@ struct TripDetailSheet: View {
 /// делал шит поверх шита.
 struct TripDetailContent: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppEnvironment.self) private var env
     let record: TripRecord
     /// Открыто из разбора рейтинга — показываем, что поездка отняла у периода.
     var rating: TripRatingContext? = nil
@@ -634,6 +635,16 @@ struct TripDetailContent: View {
             .init(value: "\(Int(record.averageSpeedKmh))", label: String(localized: "средняя, км/ч"),
                   icon: "gauge.with.dots.needle.33percent"),
         ]
+        // Стоимость топлива (12б.3) — только когда расход и цена заданы.
+        // Задним числом цена не хранится: поездка до последней правки цены
+        // посчитана по нынешней, и подпись говорит об этом.
+        if let cost = env.settings.fuelCost(meters: record.distanceMeters) {
+            let current = FuelCost.isAtCurrentPrice(endedAt: record.endedAt, profile: env.settings.fuelProfile)
+            items.append(.init(value: Formatting.money(cost),
+                               label: current ? String(localized: "топливо, по нынешней цене")
+                                              : String(localized: "топливо"),
+                               icon: "fuelpump"))
+        }
         // Цена поездки в заряде — цифрой, а не верой (есть не у всех записей).
         if let drop = record.batteryDropPercent {
             items.append(.init(value: "−\(drop) %", label: String(localized: "заряда за поездку"),

@@ -158,6 +158,7 @@ struct TripStatsSheet: View {
                         VStack(spacing: 8) {
                             riskCard(summary: summary)
                             pendingNudgeRow(itogi)
+                            fuelRow(summary: summary)
                         }
                         .entrance(2, appeared)
                         .id("risk")

@@ -12,6 +12,35 @@ import CoreLocation
 
 extension TripStatsSheet {
 
+    // MARK: - Топливо за период (12б.3)
+
+    /// Сколько стоила дорога за период — рядом с деньгами штрафов. Только
+    /// когда расход и цена заданы; период, начавшийся до последней правки
+    /// цены, посчитан по нынешней — подпись говорит об этом.
+    @ViewBuilder
+    func fuelRow(summary: PeriodSummary) -> some View {
+        if summary.distance > 0, let cost = env.settings.fuelCost(meters: summary.distance) {
+            let start = period.interval(containing: anchor).start
+            let current = FuelCost.isAtCurrentPrice(endedAt: start, profile: env.settings.fuelProfile)
+            HStack(spacing: 12) {
+                IconBadge(symbol: "fuelpump.fill", tint: Theme.Icon.money, size: 30)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(format: String(localized: "Топливо ~%@"), Formatting.money(cost)))
+                        .font(.rounded(15, .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text(current
+                         ? String(format: String(localized: "%@ · по нынешней цене"), Formatting.distance(summary.distance))
+                         : Formatting.distance(summary.distance))
+                        .font(.rounded(12))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+                Spacer(minLength: 0)
+            }
+            .statCard(padding: 14, radius: Theme.cornerMedium)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
     // MARK: - Зона риска (тап — карта с фокусом на камере)
 
     /// Второй блок сверху: главный вопрос после «как я езжу» — «сколько это

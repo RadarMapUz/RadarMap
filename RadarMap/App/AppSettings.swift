@@ -479,6 +479,8 @@ final class AppSettings {
     var vehicleEnergy: VehicleEnergy {
         didSet { store.set(vehicleEnergy.rawValue, forKey: Keys.vehicleEnergy) }
     }
+    /// Расход и цены топлива (FuelCost, 12б.3): только на телефоне.
+    var fuelProfile: FuelProfile { didSet { saveFuelProfile() } }
     var homePlace: SavedPlace? { didSet { save(homePlace, forKey: Keys.home) } }
     var workPlace: SavedPlace? { didSet { save(workPlace, forKey: Keys.work) } }
     /// «Быть на работе к 9:00» (план 19.10, 8.6). nil — срока нет, и призрак
@@ -683,6 +685,7 @@ final class AppSettings {
         static let autoStart = "autoStartTrip"        // legacy, только для миграции
         static let tripStartMode = "tripStartMode"
         static let vehicleEnergy = "vehicleEnergy"
+        static let fuelProfile = "fuelProfile"
         static let volume = "alertVolume"
         static let home = "homePlace"
         static let work = "workPlace"
@@ -793,6 +796,7 @@ final class AppSettings {
         }
         alertVolume = store.double(forKey: Keys.volume)
         vehicleEnergy = VehicleEnergy(rawValue: store.string(forKey: Keys.vehicleEnergy) ?? "") ?? .fuel
+        fuelProfile = Self.loadFuelProfile(store)
         homePlace = Self.load(store, Keys.home)
         workArrivalTarget = Self.loadArrivalTarget(store)
         workTargetAsked = store.bool(forKey: Keys.workTargetAsked)
@@ -946,6 +950,24 @@ final class AppSettings {
         }
     }
 
+    private func saveFuelProfile() {
+        do {
+            store.set(try JSONEncoder().encode(fuelProfile), forKey: Keys.fuelProfile)
+        } catch {
+            Log.app.error("fuelProfile не сохранился: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private static func loadFuelProfile(_ store: UserDefaults) -> FuelProfile {
+        guard let data = store.data(forKey: Keys.fuelProfile) else { return FuelProfile() }
+        do {
+            return try JSONDecoder().decode(FuelProfile.self, from: data)
+        } catch {
+            Log.app.error("fuelProfile не декодировался: \(error.localizedDescription, privacy: .public)")
+            return FuelProfile()
+        }
+    }
+
     private static func load(_ store: UserDefaults, _ key: String) -> SavedPlace? {
         guard let data = store.data(forKey: key) else { return nil }
         do {
@@ -954,5 +976,15 @@ final class AppSettings {
             Log.app.error("SavedPlace(\(key, privacy: .public)) не декодировался: \(error.localizedDescription, privacy: .public)")
             return nil
         }
+    }
+}
+
+extension AppSettings {
+    /// Сумов на метр пути по нынешней «Машине»; nil — расход или цена не заданы.
+    var fuelCostPerMeter: Double? { FuelCost.costPerMeter(profile: fuelProfile, energy: vehicleEnergy) }
+
+    /// Стоимость пути в сумах, nil — профиль не готов.
+    func fuelCost(meters: Double) -> Double? {
+        FuelCost.cost(meters: meters, profile: fuelProfile, energy: vehicleEnergy)
     }
 }

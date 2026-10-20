@@ -183,8 +183,19 @@ struct TripSettingsPage: View {
                 Picker("Машина", selection: $settings.vehicleEnergy) {
                     ForEach(VehicleEnergy.allCases) { Text($0.title).tag($0) }
                 }
+                NavigationLink {
+                    FuelSettingsPage()
+                } label: {
+                    LabeledContent("Расход и цены") {
+                        if let cost = settings.fuelCost(meters: 10_000) {
+                            Text(String(format: String(localized: "%@ за 10 км"), Formatting.money(cost)))
+                        } else {
+                            Text("не заданы")
+                        }
+                    }
+                }
             } footer: {
-                Text("В «Куда» в CarPlay — «АЗС», «Зарядка» или обе: в машине на них одна плитка.")
+                Text("В «Куда» в CarPlay — «АЗС», «Зарядка» или обе: в машине на них одна плитка. Расход и цены — для стоимости поездок.")
             }
 
             FineCheckSection()

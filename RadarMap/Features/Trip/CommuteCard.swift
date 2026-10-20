@@ -18,6 +18,8 @@ struct CommuteCard: View {
     let summary: Commute.Summary
     /// Стрелка «подробнее» — только там, где карточка ведёт дальше (Итоги).
     var showsChevron = true
+    /// Сумов на метр пути (FuelCost); nil — расход и цена не заданы.
+    var fuelCostPerMeter: Double? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -50,6 +52,13 @@ struct CommuteCard: View {
                     .font(.rounded(13))
                     .foregroundStyle(week.delta > 0 ? Theme.warning : Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            if let monthly = FuelCost.monthly(trips: summary.trips, costPerMeter: fuelCostPerMeter, now: Date()) {
+                // «В месяц ~420 000 сум» (12б.3): та же дорога, тот же расход.
+                Label(String(format: String(localized: "Топливо в месяц ~%@"), Formatting.money(monthly)),
+                      systemImage: "fuelpump")
+                    .font(.rounded(13))
+                    .foregroundStyle(Theme.textSecondary)
             }
             if let best = summary.best {
                 CommuteAdvice(best: best)

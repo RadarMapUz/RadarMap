@@ -205,9 +205,8 @@ struct TripStatsSheet: View {
                     }
 
                     // Смены таксиста (12б.9) — из рабочих рейсов; нет их — нет блока.
-                    let shifts = WorkShift.shifts(from: env.trip.history)
-                    if !shifts.isEmpty {
-                        WorkShiftsCard(shifts: shifts)
+                    if !env.workShifts.isEmpty {
+                        WorkShiftsCard(shifts: env.workShifts)
                             .entrance(5, appeared)
                     }
 

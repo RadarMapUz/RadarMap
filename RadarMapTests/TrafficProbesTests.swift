@@ -199,4 +199,22 @@ final class TrafficProbesTests: XCTestCase {
         }
         XCTAssertFalse(fast.takeReadyStamped().contains(where: \.slow))
     }
+
+    /// Подменённая координата в общие пробки не идёт никогда (G1, 20.10):
+    /// тестовая поездка из симулятора уходила на боевой сервер.
+    func testSimulatedDriveNeverContributes() {
+        XCTAssertTrue(TrafficService.contributes(setting: true, config: true,
+                                                 simulatedFix: false, simulatorBuild: false))
+        XCTAssertFalse(TrafficService.contributes(setting: true, config: true,
+                                                  simulatedFix: true, simulatorBuild: false),
+                       "GPX/Xcode на телефоне разработчика")
+        XCTAssertFalse(TrafficService.contributes(setting: true, config: true,
+                                                  simulatedFix: false, simulatorBuild: true),
+                       "сборка для симулятора — даже без пометки системы")
+        XCTAssertFalse(TrafficService.contributes(setting: false, config: true,
+                                                  simulatedFix: false, simulatorBuild: false))
+        XCTAssertFalse(TrafficService.contributes(setting: true, config: false,
+                                                  simulatedFix: false, simulatorBuild: false))
+        XCTAssertTrue(TrafficService.isSimulatorBuild, "тесты идут в симуляторе — ветка сборки проверена")
+    }
 }

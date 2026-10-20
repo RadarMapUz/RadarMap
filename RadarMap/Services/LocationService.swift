@@ -67,9 +67,6 @@ final class LocationService: NSObject {
     /// О каких точках уже сказали в этой поездке. Живёт только в памяти:
     /// повторяться нельзя внутри поездки, а завтра то же место — снова новость.
     @ObservationIgnored var voicedHotspots: Set<Int64> = []
-    /// Перегрев: буст GPS для схемы на экране CarPlay разрешён только пока
-    /// телефон холодный — в жару экономия важнее плавности картинки.
-    @ObservationIgnored weak var thermal: ThermalService?
     /// CoreMotion: «телефон стоит» — сторож сигнала не объявляет потерю.
     @ObservationIgnored weak var motion: MotionService?
 
@@ -220,6 +217,8 @@ final class LocationService: NSObject {
     /// изнутри сервиса — будить SwiftUI-подписчиков этой записью значило бы
     /// перерисовывать экран раз в секунду ради числа, которого нет на экране.
     @ObservationIgnored var horizontalAccuracy: Double = -1
+    /// Последний принятый фикс подменён программой (LocationFilter.Fix.isSimulated).
+    @ObservationIgnored var isFixSimulated = false
     /// Пороги приближения (передний план): чистый движок, покрыт тестами.
     @ObservationIgnored var alertEngine = AlertEngine()
     /// Учёт прохождения камер (траверз + зона измерения): чистый модуль, покрыт тестами.

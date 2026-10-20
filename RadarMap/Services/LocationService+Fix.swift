@@ -83,6 +83,7 @@ extension LocationService {
             // фиксы пачкой, и часы обработки дали бы им одно время.
             lastFixTime = min(fix.timestamp, Date())
             horizontalAccuracy = good.accuracy
+            isFixSimulated = fix.isSimulated
             handleLocation(coordinate: CLLocationCoordinate2D(latitude: good.lat,
                                                               longitude: good.lon),
                            speed: good.speed ?? -1, course: good.course)

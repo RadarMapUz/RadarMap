@@ -46,6 +46,10 @@ nonisolated struct LocationFilter {
         /// Градусы; < 0 — устройство не оценивает точность курса.
         let courseAccuracy: Double
         let timestamp: Date
+        /// Координату подменила программа (симулятор, Xcode, GPX на телефоне
+        /// разработчика): для алертов это обычный фикс, но в общие данные —
+        /// пробки — такая поездка не идёт (TrafficService.contributes).
+        var isSimulated = false
     }
 
     /// Почему фикс отброшен — уходит в лог, молча глотать нельзя.
@@ -187,6 +191,7 @@ extension LocationFilter.Fix {
                   speedAccuracy: location.speedAccuracy,
                   course: location.course,
                   courseAccuracy: location.courseAccuracy,
-                  timestamp: location.timestamp)
+                  timestamp: location.timestamp,
+                  isSimulated: location.sourceInformation?.isSimulatedBySoftware ?? false)
     }
 }

@@ -38,19 +38,62 @@ traffic/now.json для телефонов.
      восьми утра, сложенные в один файл, набирают порог впятеро быстрее, а
      дорога во вторник в 8:00 от среды в 8:00 не отличается. Ребро попадает
      в файл, только если его прошли не меньше TYPICAL_MIN_PIECES кусков в этот
-     час И хоть раз два куска прошли его вместе (в одном окне now.json): один
+     час (эффективных, п. 6) И два куска прошли его вместе (в одном окне
+     now.json) за последние SHARED_TTL: один
      человек, каждый будний день едущий в 8:00 по своей улице, набирает пять
      кусков за неделю — но не два одновременно, и его улица публичной не
      становится. Скорость — гармоническое среднее (через время на километр):
      время в пути — это сумма времён, и среднее км/ч по пробке 5 и свободе 50
      дало бы 27 вместо честных 9. Файл переписывается, только если рёбра
      сменились: телефон проверяет его с ETag, и неизменный файл стоит 304.
+  6. «Обычно» стареет (план 14.4). Без старения профиль копился бы вечно, и
+     перестроенная дорога, новый светофор или открытый мост проступали бы в
+     «обычно» месяцами: неделя новых данных сдвигает среднее за год на 2 %.
+     Кусок весит 2^(−возраст / PROFILE_HALF_LIFE), полураспад — 5 недель:
+     перемена на дороге видна наполовину через 5 недель и на три четверти
+     через 10, а холодный старт почти не замечает старения (кусок
+     двухнедельной давности весит 0,76).
+
+     Хранение — «прямое затухание» (forward decay), а не умножение всего
+     профиля на множитель раз в час или сутки. Такой UPDATE переписывает
+     каждую страницу таблицы, раздувает WAL до её размера и держит замок
+     записи, пока api.py кладёт новые куски в ту же traffic.db (его
+     busy_timeout — 5 с; дольше — POST /api/traffic падает). Вместо этого
+     новый кусок пишется сразу с весом 2^((сейчас − метка) / H), метка —
+     traffic_meta.profile_epoch, общая для всех строк. Сумма в строке — это
+     эффективные куски, умноженные на масштаб decay_scale(метка, сейчас), и
+     читается делением на него; в гармоническом среднем масштаб сокращается.
+     Цена для cron — одна степень на кусок. Раз в сутки (maintain_profile) —
+     DELETE умерших строк (эффективно < PROFILE_DROP: одиночный кусок живёт
+     ~5 месяцев) — таблица ограничена тем, что ездили последние месяцы, а не
+     всей историей, и не растёт в памяти VPS без конца; раз в
+     PROFILE_RENORM_AFTER (~9 месяцев) — один UPDATE, возвращающий числа к
+     метке «сейчас», чтобы масштаб не рос без предела. Скользящее окно из
+     недельных корзин считало бы куски точно, но умножило бы строки профиля
+     на число недель и обрывало бы данные ступенькой.
+
+     Порог TYPICAL_MIN_PIECES — в эффективных кусках. Свежий кусок весит 1,
+     старый меньше, поэтому старение делает порог только строже: пять
+     эффективных — это не меньше пяти настоящих (обычно 5–6 за последние
+     недели), а в установившемся режиме ребро держится в файле, если в этот
+     класс дня и час по нему проходит ≳ 0,7 куска в неделю (5 · ln 2 / 5 нед.).
+
+     Отметка «не один человек» (traffic_shared) тоже стареет: ребро идёт в
+     файл, только если два куска прошли его вместе за последние SHARED_TTL
+     (= полураспад — тот срок, за который набирается половина веса
+     публикуемого числа). Вечная отметка вместе со старением профиля
+     ослабила бы защиту: улица, по которой когда-то раз проехали двое, а
+     теперь ездит один человек, через пару полураспадов публиковала бы
+     данные только его — под давним «не один». Теперь, если за SHARED_TTL
+     второго водителя на улице не было, она уходит из файлов, хотя
+     эффективных кусков у неё может хватать.
 
 Единица — направленное ребро OSM (u, v): ключ постоянен между обновлениями
 графа, и это тот же формат, что `--segment-speed-file` у OSRM (следующий
 шаг — MLD + customize, маршрут прямо с учётом пробок).
 """
 import datetime
+import fcntl
 import functools
 import json
 import math
@@ -83,7 +126,15 @@ TYPICAL_MIN_PIECES = 5       # кусков на ребро в этот клас
 TYPICAL_EVERY = 60 * 60      # «обычно» пересобирается не чаще раза в час
 TYPICAL_VERSION = 1
 PACE_MIN_KMH = 3.0           # ниже — «стоим»: темп не уходит в бесконечность
-DAY_CLASSES = ("wd", "off")  # будни (пн–пт), выходные (сб–вс)
+DAY_CLASSES = ("wd", "off")  # будни (пн–пт), выходные (сб–вс и праздники)
+
+# Старение «обычно» (14.4, п. 6 шапки).
+PROFILE_HALF_LIFE = 35 * 86400           # вес куска падает вдвое за 5 недель
+PROFILE_DROP = 0.05                      # эффективно легче — строка удаляется
+PROFILE_MAINTAIN_EVERY = 24 * 3600       # уборка профиля — раз в сутки
+PROFILE_RENORM_AFTER = 8 * PROFILE_HALF_LIFE   # масштаб 256 — числа обратно к метке «сейчас»
+SHARED_TTL = PROFILE_HALF_LIFE           # «не один человек» без подтверждения дольше — не в счёт
+LOCK_PATH = DB_PATH + ".lock"            # два прогона cron разом не идут
 
 
 def schema(conn):
@@ -110,18 +161,30 @@ def schema(conn):
     # точки следа легли на одно ребро, давал два «наблюдения»), и сумма темпа
     # (с/км) — для гармонического среднего. Старые строки — с нулями: в
     # typical они не идут, «обычно» копится с выкладки.
-    columns = {row[1] for row in conn.execute("PRAGMA table_info(traffic_profile)")}
-    if "pieces" not in columns:
-        conn.execute("ALTER TABLE traffic_profile ADD COLUMN pieces INTEGER NOT NULL DEFAULT 0")
-    if "sum_pace" not in columns:
-        conn.execute("ALTER TABLE traffic_profile ADD COLUMN sum_pace REAL NOT NULL DEFAULT 0")
-    # Рёбра, которые хоть раз прошли два куска в одном окне now.json — то
-    # есть не один человек.
+    # Со старением (14.4) n, sum_kmh, pieces и sum_pace — суммы весов в
+    # масштабе метки profile_epoch (п. 6 шапки), а не целые счётчики.
+    add_column(conn, "traffic_profile", "pieces", "INTEGER NOT NULL DEFAULT 0")
+    add_column(conn, "traffic_profile", "sum_pace", "REAL NOT NULL DEFAULT 0")
+    # Рёбра, которые два куска прошли в одном окне now.json — то есть не
+    # один человек; seen — когда это было в последний раз (живёт SHARED_TTL).
+    # Отметки 8.8.16 без времени получают 0 — просрочены: их возраст
+    # неизвестен, а улица с настоящим движением подтвердится в первом же
+    # окне, где по ней проедут двое.
     conn.execute("""CREATE TABLE IF NOT EXISTS traffic_shared(
-        u INTEGER NOT NULL, v INTEGER NOT NULL, PRIMARY KEY(u, v))""")
+        u INTEGER NOT NULL, v INTEGER NOT NULL, seen REAL NOT NULL DEFAULT 0,
+        PRIMARY KEY(u, v))""")
+    add_column(conn, "traffic_shared", "seen", "REAL NOT NULL DEFAULT 0")
     conn.execute("""CREATE TABLE IF NOT EXISTS traffic_meta(
         key TEXT PRIMARY KEY, value REAL NOT NULL)""")
     conn.commit()
+
+
+def add_column(conn, table, column, decl):
+    """ALTER TABLE … ADD COLUMN, только если столбца ещё нет: schema() идёт
+    каждые 2 минуты, и ALTER, падающий на каждом прогоне, — не миграция."""
+    columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in columns:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
 
 # --- Сопоставление ----------------------------------------------------------
@@ -261,20 +324,42 @@ def profile_slot(ts):
     return how + HOLIDAY_SLOT if is_holiday(ts) else how
 
 
+def profile_epoch(conn, now):
+    """Метка весов профиля (п. 6 шапки). Нет метки — ставится `now`: строки,
+    накопленные до старения (8.8.16), считаются снятыми в первом прогоне
+    после выкладки — их возраст неизвестен, а копились они считанные недели."""
+    row = conn.execute("SELECT value FROM traffic_meta WHERE key = 'profile_epoch'").fetchone()
+    if row is not None:
+        return row[0]
+    conn.execute("INSERT INTO traffic_meta(key, value) VALUES('profile_epoch', ?)", (now,))
+    return now
+
+
+def decay_scale(epoch, now):
+    """Масштаб весов: кусок из `now` весит, как 2^((now − epoch) / H) кусков
+    из метки. Эффективное значение строки — хранимое, делённое на масштаб."""
+    return 2.0 ** ((now - epoch) / PROFILE_HALF_LIFE)
+
+
 def store(conn, piece_id, samples, nodes, models, now):
     how = profile_slot(now)
+    weight = decay_scale(profile_epoch(conn, now), now)
     conn.executemany("INSERT INTO traffic_samples(u, v, kmh, weight, ts, piece) VALUES(?, ?, ?, ?, ?, ?)",
                      [(u, v, kmh, w, now, piece_id) for u, v, kmh, w in samples])
     conn.executemany("INSERT OR REPLACE INTO traffic_nodes(id, lat, lon) VALUES(?, ?, ?)",
                      [(i, lat, lon) for i, (lat, lon) in nodes.items()])
     conn.executemany("INSERT OR REPLACE INTO traffic_edges(u, v, model_kmh) VALUES(?, ?, ?)",
                      [(u, v, kmh) for (u, v), kmh in models.items()])
+    # Кусок — вес `weight` в масштабе метки: и счётчики, и суммы стареют
+    # вместе, поэтому средние (sum_kmh / n, sum_pace / pieces) от масштаба не
+    # зависят.
     conn.executemany("""INSERT INTO traffic_profile(u, v, how, n, sum_kmh, pieces, sum_pace)
-                        VALUES(?, ?, ?, ?, ?, 1, ?)
+                        VALUES(?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(u, v, how) DO UPDATE SET n = n + excluded.n,
                             sum_kmh = sum_kmh + excluded.sum_kmh,
-                            pieces = pieces + 1, sum_pace = sum_pace + excluded.sum_pace""",
-                     [(u, v, how, count, total, pace)
+                            pieces = pieces + excluded.pieces,
+                            sum_pace = sum_pace + excluded.sum_pace""",
+                     [(u, v, how, count * weight, total * weight, weight, pace * weight)
                       for (u, v), (count, total, pace) in piece_profile(samples).items()])
 
 
@@ -383,13 +468,14 @@ def aggregate(conn, now):
 
 
 def mark_shared(conn, now):
-    """Запомнить рёбра, которые сейчас прошли два независимых куска (то же
-    правило, что у now.json). Признак вечный: «здесь ездит не один
-    человек» со временем не перестаёт быть правдой."""
-    conn.execute("""INSERT OR IGNORE INTO traffic_shared(u, v)
-                    SELECT u, v FROM traffic_samples WHERE ts >= ?
-                    GROUP BY u, v HAVING COUNT(DISTINCT piece) >= ?""",
-                 (now - SAMPLE_WINDOW, MIN_PIECES))
+    """Отметить временем `now` рёбра, которые сейчас прошли два независимых
+    куска (то же правило, что у now.json). Отметка живёт SHARED_TTL: «здесь
+    ездит не один человек» — правда о недавнем, а не навсегда (п. 6 шапки)."""
+    conn.execute("""INSERT INTO traffic_shared(u, v, seen)
+                    SELECT u, v, ? FROM traffic_samples WHERE ts >= ?
+                    GROUP BY u, v HAVING COUNT(DISTINCT piece) >= ?
+                    ON CONFLICT(u, v) DO UPDATE SET seen = MAX(seen, excluded.seen)""",
+                 (now, now - SAMPLE_WINDOW, MIN_PIECES))
     conn.commit()
 
 
@@ -412,28 +498,57 @@ def typical_due(conn, now):
     return row is None or now - row[0] >= TYPICAL_EVERY
 
 
-def typical_buckets(conn):
+def typical_buckets(conn, now):
     """{имя файла: [(ulat, ulon, vlat, vlon, kmh)]} — только рёбра с
-    TYPICAL_MIN_PIECES кусками в классе дня и часе и прошедшие проверку «не
-    один человек». Отсортировано: одинаковые данные — одинаковый файл."""
-    rows = conn.execute("""SELECT p.how, p.pieces, p.sum_pace, a.lat, a.lon, b.lat, b.lon, p.u, p.v
+    TYPICAL_MIN_PIECES эффективными кусками в классе дня и часе и прошедшие
+    проверку «не один человек» за последние SHARED_TTL. Сложение и порог —
+    в SQLite: в Python приходят только публикуемые рёбра, а не весь профиль.
+    Отсортировано: одинаковые данные — одинаковый файл."""
+    scale = decay_scale(profile_epoch(conn, now), now)
+    # Класс дня — тем же bucket_name, что и везде: правило в одном месте.
+    conn.create_function("bucket_name", 1, bucket_name)
+    # Допуск 1e-9: пять кусков одного момента — пять, а не 4,999… от
+    # сложения степеней.
+    rows = conn.execute("""SELECT bucket_name(p.how) AS bucket, SUM(p.pieces), SUM(p.sum_pace),
+                                  a.lat, a.lon, b.lat, b.lon
                            FROM traffic_profile p
                            JOIN traffic_shared s ON s.u = p.u AND s.v = p.v
                            JOIN traffic_nodes a ON a.id = p.u
                            JOIN traffic_nodes b ON b.id = p.v
-                           WHERE p.pieces > 0""").fetchall()
-    acc = {}
-    for how, pieces, pace, alat, alon, blat, blon, u, v in rows:
-        entry = acc.setdefault((bucket_name(how), u, v), [0, 0.0, (alat, alon, blat, blon)])
-        entry[0] += pieces
-        entry[1] += pace
+                           WHERE p.pieces > 0 AND s.seen >= ?
+                           GROUP BY p.u, p.v, bucket
+                           HAVING SUM(p.pieces) >= ? AND SUM(p.sum_pace) > 0""",
+                        (now - SHARED_TTL, TYPICAL_MIN_PIECES * scale * (1 - 1e-9)))
     out = {}
-    for (name, _, _), (pieces, pace, coords) in acc.items():
-        if pieces < TYPICAL_MIN_PIECES or pace <= 0:
-            continue
+    for name, pieces, pace, alat, alon, blat, blon in rows:
         kmh = min(MAX_KMH, 3600.0 / (pace / pieces))
-        out.setdefault(name, []).append((*coords, kmh))
+        out.setdefault(name, []).append((alat, alon, blat, blon, kmh))
     return {name: sorted(edges) for name, edges in out.items()}
+
+
+def maintain_profile(conn, now):
+    """Уборка профиля не чаще раза в PROFILE_MAINTAIN_EVERY (п. 6 шапки):
+    умершие строки, просроченные отметки «не один человек» и, раз в
+    PROFILE_RENORM_AFTER, перевод сумм к метке «сейчас». True — уборка была."""
+    row = conn.execute("SELECT value FROM traffic_meta WHERE key = 'profile_maintained'").fetchone()
+    if row is not None and now - row[0] < PROFILE_MAINTAIN_EVERY:
+        return False
+    epoch = profile_epoch(conn, now)
+    scale = decay_scale(epoch, now)
+    # n ≥ pieces у каждой строки (кусок даёт ребру хотя бы один отрезок), а
+    # строки до 8.8.16 — с pieces = 0: умирают, когда отстареет и n.
+    conn.execute("DELETE FROM traffic_profile WHERE pieces < ? AND n < ?",
+                 (PROFILE_DROP * scale, PROFILE_DROP * scale))
+    conn.execute("DELETE FROM traffic_shared WHERE seen < ?", (now - SHARED_TTL,))
+    if now - epoch >= PROFILE_RENORM_AFTER:
+        # Одна транзакция с новой меткой: числа и метка меняются разом.
+        factor = 1.0 / scale
+        conn.execute("""UPDATE traffic_profile SET n = n * ?, sum_kmh = sum_kmh * ?,
+                            pieces = pieces * ?, sum_pace = sum_pace * ?""", (factor,) * 4)
+        conn.execute("INSERT OR REPLACE INTO traffic_meta(key, value) VALUES('profile_epoch', ?)", (now,))
+    conn.execute("INSERT OR REPLACE INTO traffic_meta(key, value) VALUES('profile_maintained', ?)", (now,))
+    conn.commit()
+    return True
 
 
 def typical_payload(name, edges, now):
@@ -450,7 +565,7 @@ def write_typical(conn, now, directory=TYPICAL_DIR):
     """Все 48 файлов (пустой — честное «данных нет», а не 404). Файл
     переписывается, только если сменились рёбра: иначе ETag и 304 у телефона
     теряли бы смысл. Возвращает, сколько файлов записано."""
-    buckets = typical_buckets(conn)
+    buckets = typical_buckets(conn, now)
     written = 0
     for name in ALL_BUCKETS:
         body = typical_payload(name, buckets.get(name, []), now)
@@ -490,20 +605,42 @@ def write_atomic(path, body):
     os.replace(tmp, path)
 
 
-def main():
-    now = time.time()
-    conn = sqlite3.connect(DB_PATH, timeout=5)
-    conn.execute("PRAGMA busy_timeout = 5000")
+def run(conn, now, matcher=osrm_match, out_path=OUT_PATH, typical_dir=TYPICAL_DIR):
+    """Один прогон без замка и печати (main и тесты). Возвращает (кусков,
+    отрезков, рёбер в now.json, переписано файлов «обычно» или None)."""
     schema(conn)
-    pieces, segments = process(conn, now)
+    pieces, segments = process(conn, now, matcher=matcher)
     prune(conn, now)
     edges = aggregate(conn, now)
-    write_atomic(OUT_PATH, json.dumps(payload(edges, now), separators=(",", ":")))
+    write_atomic(out_path, json.dumps(payload(edges, now), separators=(",", ":")))
     mark_shared(conn, now)
-    typical = write_typical(conn, now) if typical_due(conn, now) else None
-    conn.close()
+    typical = None
+    if typical_due(conn, now):
+        maintain_profile(conn, now)
+        typical = write_typical(conn, now, directory=typical_dir)
+    return pieces, segments, len(edges), typical
+
+
+def main():
+    # Прогон, затянувшийся дольше 2 минут (OSRM тормозит), не должен
+    # встретиться со следующим: второй взял бы те же ждущие куски до их
+    # удаления первым и сложил бы их в профиль дважды — порог «пяти кусков»
+    # набирался бы вдвое быстрее.
+    with open(LOCK_PATH, "w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} прошлый прогон ещё идёт — пропуск")
+            return
+        now = time.time()
+        conn = sqlite3.connect(DB_PATH, timeout=5)
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            pieces, segments, edges, typical = run(conn, now)
+        finally:
+            conn.close()
     note = "" if typical is None else f", «обычно» файлов переписано {typical}"
-    print(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} кусков {pieces}, отрезков {segments}, рёбер в выходе {len(edges)}{note}")
+    print(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} кусков {pieces}, отрезков {segments}, рёбер в выходе {edges}{note}")
 
 
 if __name__ == "__main__":

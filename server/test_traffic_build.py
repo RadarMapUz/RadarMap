@@ -151,8 +151,8 @@ class PipelineTest(unittest.TestCase):
             self.assertTrue(all(isinstance(x, (int, float)) for x in edge))
 
 
-class TypicalTest(unittest.TestCase):
-    """«Обычно по водителям» (8.8.16): traffic/typical/<класс>-<час>.json."""
+class ProfileFixture:
+    """База, каталог выхода и куски по фикстуре для тестов профиля."""
 
     def setUp(self):
         self.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
@@ -188,6 +188,16 @@ class TypicalTest(unittest.TestCase):
         with open(os.path.join(self.out, f"{name}.json"), encoding="utf-8") as f:
             return json.load(f)
 
+    def effective(self, now):
+        """{(u, v, how): эффективные куски} — хранимое, делённое на масштаб."""
+        scale = tb.decay_scale(tb.profile_epoch(self.conn, now), now)
+        return {(u, v, how): pieces / scale for u, v, how, pieces in
+                self.conn.execute("SELECT u, v, how, pieces FROM traffic_profile")}
+
+
+class TypicalTest(ProfileFixture, unittest.TestCase):
+    """«Обычно по водителям» (8.8.16): traffic/typical/<класс>-<час>.json."""
+
     def test_bucket_names_split_weekdays_and_days_off(self):
         self.assertEqual(tb.bucket_name(0), "wd-00")
         self.assertEqual(tb.bucket_name(4 * 24 + 23), "wd-23", "пятница 23:00 — будни")
@@ -214,7 +224,7 @@ class TypicalTest(unittest.TestCase):
 
     def test_too_few_pieces_publish_nothing(self):
         self.pieces(tb.TYPICAL_MIN_PIECES - 1)
-        self.assertEqual(tb.typical_buckets(self.conn), {})
+        self.assertEqual(tb.typical_buckets(self.conn, self.now), {})
 
     def test_one_driver_never_becomes_typical(self):
         """Пять кусков по одному — пять дней одного человека: без двух
@@ -223,11 +233,11 @@ class TypicalTest(unittest.TestCase):
             self.pieces(1, at=self.now + day * 7 * 86400, shared=False)
             tb.mark_shared(self.conn, self.now + day * 7 * 86400)
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM traffic_shared").fetchone()[0], 0)
-        self.assertEqual(tb.typical_buckets(self.conn), {})
+        self.assertEqual(tb.typical_buckets(self.conn, self.now + 28 * 86400), {})
 
     def test_enough_shared_pieces_publish_in_their_hour(self):
         self.pieces(tb.TYPICAL_MIN_PIECES)
-        buckets = tb.typical_buckets(self.conn)
+        buckets = tb.typical_buckets(self.conn, self.now)
         self.assertEqual(set(buckets), {self.bucket()})
         edges = buckets[self.bucket()]
         self.assertGreater(len(edges), 5)
@@ -236,13 +246,15 @@ class TypicalTest(unittest.TestCase):
             self.assertTrue(tb.PACE_MIN_KMH <= edge[4] <= tb.MAX_KMH)
 
     def test_weekdays_add_up_in_one_file(self):
-        """Понедельник и среда в один час — один файл, порог по сумме."""
+        """Понедельник и среда в один час — один файл, порог по сумме
+        (эффективных кусков: двухдневные весят 0,96)."""
         monday_like = self.now
         self.pieces(3, at=monday_like)
         other = monday_like + 2 * 86400 if tb.hour_of_week(monday_like) // 24 < 3 else monday_like - 2 * 86400
         self.assertEqual(tb.bucket_name(tb.hour_of_week(other)), self.bucket())
-        self.pieces(2, at=other)
-        self.assertIn(self.bucket(), tb.typical_buckets(self.conn))
+        self.assertEqual(tb.typical_buckets(self.conn, max(monday_like, other)), {}, "одного дня мало")
+        self.pieces(3, at=other)
+        self.assertIn(self.bucket(), tb.typical_buckets(self.conn, max(monday_like, other)))
 
     def test_files_carry_nothing_but_edges(self):
         self.pieces(tb.TYPICAL_MIN_PIECES)
@@ -261,7 +273,8 @@ class TypicalTest(unittest.TestCase):
             self.assertNotIn(word, raw)
 
     def test_unchanged_files_are_not_rewritten(self):
-        self.pieces(tb.TYPICAL_MIN_PIECES)
+        # С запасом над порогом: за пару часов пять кусков отстареют до 4,99.
+        self.pieces(tb.TYPICAL_MIN_PIECES + 1)
         tb.write_typical(self.conn, self.now, directory=self.out)
         generated = self.read(self.bucket())["generated"]
         self.assertEqual(tb.write_typical(self.conn, self.now + 3600, directory=self.out), 0)
@@ -295,6 +308,253 @@ class TypicalTest(unittest.TestCase):
         self.assertEqual(conn.execute("SELECT n, pieces, sum_pace FROM traffic_profile").fetchone(), (7, 0, 0.0),
                          "старые строки в «обычно» не идут: у них нет кусков")
         conn.close()
+
+
+H = tb.PROFILE_HALF_LIFE
+
+
+class AgingTest(ProfileFixture, unittest.TestCase):
+    """«Обычно» стареет (14.4): полураспад, порог в эффективных кусках,
+    уборка, перевод к новой метке и срок отметки «не один человек».
+    self.now + k·H — тот же час недели (H = 5 недель)."""
+
+    def test_scale_doubles_every_half_life(self):
+        self.assertEqual(tb.decay_scale(self.now, self.now), 1.0)
+        self.assertAlmostEqual(tb.decay_scale(self.now, self.now + H), 2.0)
+        self.assertAlmostEqual(tb.decay_scale(self.now, self.now + 3 * H), 8.0)
+        self.assertAlmostEqual(tb.decay_scale(self.now, self.now - H), 0.5, msg="часы назад — не авария")
+        self.assertEqual(tb.hour_of_week(self.now + 8 * H), tb.hour_of_week(self.now))
+
+    def test_piece_weighs_half_after_a_half_life(self):
+        self.pieces(4)
+        for value in self.effective(self.now).values():
+            self.assertAlmostEqual(value, 4.0)
+        for value in self.effective(self.now + H).values():
+            self.assertAlmostEqual(value, 2.0)
+        for value in self.effective(self.now + 2 * H).values():
+            self.assertAlmostEqual(value, 1.0)
+
+    def test_threshold_counts_effective_pieces(self):
+        """Пять кусков пять недель назад — 2,5 эффективных: в файле их нет,
+        хотя настоящих пять. Три свежих добирают до 5,5."""
+        self.pieces(tb.TYPICAL_MIN_PIECES)
+        self.assertIn(self.bucket(), tb.typical_buckets(self.conn, self.now))
+        self.assertEqual(tb.typical_buckets(self.conn, self.now + H), {})
+        self.pieces(3, at=self.now + H)
+        self.assertIn(self.bucket(), tb.typical_buckets(self.conn, self.now + H))
+        for value in self.effective(self.now + H).values():
+            self.assertAlmostEqual(value, 5.5)
+
+    def test_effective_never_exceeds_real_pieces(self):
+        """Вес куска ≤ 1, поэтому старение порог только ужесточает."""
+        moments = [self.now, self.now + 3 * 86400, self.now + 7 * 86400, self.now + 40 * 86400]
+        for at in moments:
+            self.pieces(1, at=at, shared=False)
+        for (_, _, how), value in self.effective(moments[-1]).items():
+            real = sum(1 for at in moments if tb.profile_slot(at) == how)
+            self.assertLessEqual(value, real + 1e-9)
+
+    def test_rebuilt_road_shows_through(self):
+        """Дорогу перестроили: шесть медленных кусков два полураспада назад
+        весят вчетверо меньше шести новых — «обычно» тянется к новой
+        скорости, а не стоит на среднем за всю историю."""
+        self.pieces(6, slower=3)
+        later = self.now + 2 * H
+        self.pieces(6, at=later)
+        slow_points = [[lat, lon, t * 3, kmh] for lat, lon, t, kmh in FIXTURE["points"]]
+        slow = tb.piece_profile(tb.edges_from_match(FIXTURE["response"], slow_points)[0])
+        fast = tb.piece_profile(tb.edges_from_match(FIXTURE["response"], FIXTURE["points"])[0])
+        nodes = dict(tb.edges_from_match(FIXTURE["response"], FIXTURE["points"])[1])
+        published = {(round(e[0], 6), round(e[1], 6), round(e[2], 6), round(e[3], 6)): e[4]
+                     for e in tb.typical_buckets(self.conn, later)[self.bucket()]}
+        checked = 0
+        for (u, v), (_, _, pace_fast) in fast.items():
+            if u not in nodes or v not in nodes:
+                continue
+            key = tuple(round(x, 6) for x in (*nodes[u], *nodes[v]))
+            if key not in published:
+                continue
+            pace_slow = slow[(u, v)][2]
+            aged = 3600 / ((0.25 * pace_slow + pace_fast) / 1.25)
+            flat = 3600 / ((pace_slow + pace_fast) / 2)
+            self.assertAlmostEqual(published[key], min(tb.MAX_KMH, aged), places=6)
+            if pace_slow > pace_fast:
+                self.assertGreater(aged, flat, "новые данные перевешивают старые")
+            checked += 1
+        self.assertGreater(checked, 5)
+
+    def test_maintenance_drops_dead_rows_and_keeps_live(self):
+        tb.profile_epoch(self.conn, self.now)
+        self.conn.executemany("INSERT INTO traffic_profile(u, v, how, n, sum_kmh, pieces, sum_pace) "
+                              "VALUES(?, ?, ?, ?, ?, ?, ?)",
+                              [(1, 2, 8, 1, 40.0, 1, 90.0),     # один кусок: 1/32 < 0,05
+                               (1, 2, 9, 3, 120.0, 3, 270.0),   # три: 3/32 — ещё живая
+                               (3, 4, 8, 7, 280.0, 0, 0.0)])    # строка до 8.8.16: n = 7
+        self.conn.executemany("INSERT INTO traffic_shared(u, v, seen) VALUES(?, ?, ?)",
+                              [(5, 6, self.now), (7, 8, self.now + 5 * H - 86400)])
+        self.conn.commit()
+        self.assertTrue(tb.maintain_profile(self.conn, self.now))
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM traffic_profile").fetchone()[0], 3)
+        self.assertFalse(tb.maintain_profile(self.conn, self.now + 3600), "уборка — раз в сутки")
+        self.assertTrue(tb.maintain_profile(self.conn, self.now + 5 * H))
+        left = {row for row in self.conn.execute("SELECT u, v, how FROM traffic_profile")}
+        self.assertEqual(left, {(1, 2, 9), (3, 4, 8)})
+        shared = [row for row in self.conn.execute("SELECT u, v FROM traffic_shared")]
+        self.assertEqual(shared, [(7, 8)])
+        self.assertTrue(tb.maintain_profile(self.conn, self.now + 7 * H))
+        self.assertEqual([row for row in self.conn.execute("SELECT u, v, how FROM traffic_profile")],
+                         [(3, 4, 8)], "строка до 8.8.16 живёт, пока не отстареет её n (7/128)")
+        self.assertTrue(tb.maintain_profile(self.conn, self.now + 8 * H))
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM traffic_profile").fetchone()[0], 0,
+                         "7/256 < 0,05 — и её нет")
+
+    def test_renormalization_changes_nothing_visible(self):
+        """Раз в PROFILE_RENORM_AFTER суммы переводятся к метке «сейчас»: те
+        же рёбра, та же скорость, а числа в базе — снова около настоящих."""
+        self.pieces(6)
+        later = self.now + tb.PROFILE_RENORM_AFTER
+        self.pieces(6, at=later)
+        before = tb.typical_buckets(self.conn, later)
+        self.assertTrue(before)
+        self.assertTrue(tb.maintain_profile(self.conn, later))
+        self.assertEqual(tb.profile_epoch(self.conn, later), later)
+        after = tb.typical_buckets(self.conn, later)
+        self.assertEqual(set(after), set(before))
+        for name in before:
+            self.assertEqual(len(after[name]), len(before[name]))
+            for a, b in zip(after[name], before[name]):
+                self.assertEqual(a[:4], b[:4])
+                self.assertAlmostEqual(a[4], b[4], places=6)
+        stored = [row[0] for row in self.conn.execute("SELECT pieces FROM traffic_profile")]
+        for value in stored:
+            self.assertAlmostEqual(value, 6 + 6 / 256)
+
+    def test_shared_mark_expires(self):
+        """Двое проехали улицу однажды, дальше ездит один: пока отметка
+        свежая — улица в файле, через SHARED_TTL без второго водителя — нет,
+        хотя кусков у неё хватает. Снова проехали двое — снова в файле."""
+        self.pieces(2)                                         # двое в одном окне
+        lone = self.now + tb.SHARED_TTL - 2 * 3600
+        self.pieces(8, at=lone, shared=False)                  # дальше — один человек
+        self.assertTrue(tb.typical_buckets(self.conn, self.now + tb.SHARED_TTL - 3600))
+        self.assertEqual(tb.typical_buckets(self.conn, self.now + tb.SHARED_TTL + 3600), {},
+                         "давнее «не один» не прикрывает данные одного человека")
+        again = self.now + tb.SHARED_TTL + 3600
+        self.pieces(2, at=again)
+        self.assertTrue(tb.typical_buckets(self.conn, again))
+        seen = {row[0] for row in self.conn.execute("SELECT seen FROM traffic_shared")}
+        self.assertEqual(seen, {again}, "отметка обновилась")
+
+
+# Схема traffic.db, как её оставляет 8.8.16 (cbbe5e1) — то, что лежит на VPS.
+SCHEMA_8_8_16 = (
+    """CREATE TABLE traffic_pieces(id INTEGER PRIMARY KEY AUTOINCREMENT,
+        received REAL NOT NULL, points TEXT NOT NULL)""",
+    """CREATE TABLE traffic_samples(u INTEGER NOT NULL, v INTEGER NOT NULL,
+        kmh REAL NOT NULL, weight REAL NOT NULL, ts REAL NOT NULL, piece INTEGER NOT NULL)""",
+    "CREATE INDEX traffic_samples_ts ON traffic_samples(ts)",
+    "CREATE TABLE traffic_nodes(id INTEGER PRIMARY KEY, lat REAL NOT NULL, lon REAL NOT NULL)",
+    """CREATE TABLE traffic_edges(u INTEGER NOT NULL, v INTEGER NOT NULL, model_kmh REAL NOT NULL,
+        PRIMARY KEY(u, v))""",
+    """CREATE TABLE traffic_profile(u INTEGER NOT NULL, v INTEGER NOT NULL, how INTEGER NOT NULL,
+        n INTEGER NOT NULL, sum_kmh REAL NOT NULL, pieces INTEGER NOT NULL DEFAULT 0,
+        sum_pace REAL NOT NULL DEFAULT 0, PRIMARY KEY(u, v, how))""",
+    "CREATE TABLE traffic_shared(u INTEGER NOT NULL, v INTEGER NOT NULL, PRIMARY KEY(u, v))",
+    "CREATE TABLE traffic_meta(key TEXT PRIMARY KEY, value REAL NOT NULL)",
+)
+
+
+class MigrationTest(unittest.TestCase):
+    """Первый прогон нового сборщика на базе, которую оставил 8.8.16."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.db = os.path.join(self.dir, "traffic.db")
+        self.out = os.path.join(self.dir, "www", "now.json")
+        self.typical = os.path.join(self.dir, "www", "typical")
+        self.now = 1_760_000_000.0
+        conn = sqlite3.connect(self.db)
+        for statement in SCHEMA_8_8_16:
+            conn.execute(statement)
+        # Профиль 8.8.16: по 6 кусков на рёбрах фикстуры в этот час, их
+        # узлы, вечные отметки «не один» и вчерашняя пересборка «обычно».
+        samples, nodes, models = tb.edges_from_match(FIXTURE["response"], FIXTURE["points"])
+        self.profile = tb.piece_profile(samples)
+        how = tb.profile_slot(self.now)
+        conn.executemany("INSERT INTO traffic_profile VALUES(?, ?, ?, ?, ?, ?, ?)",
+                         [(u, v, how, 6 * count, 6 * total, 6, 6 * pace)
+                          for (u, v), (count, total, pace) in self.profile.items()])
+        conn.executemany("INSERT INTO traffic_shared VALUES(?, ?)", list(self.profile))
+        conn.executemany("INSERT INTO traffic_nodes VALUES(?, ?, ?)",
+                         [(i, lat, lon) for i, (lat, lon) in nodes.items()])
+        conn.executemany("INSERT INTO traffic_edges VALUES(?, ?, ?)",
+                         [(u, v, kmh) for (u, v), kmh in models.items()])
+        conn.executemany("INSERT INTO traffic_samples VALUES(?, ?, ?, ?, ?, ?)",
+                         [(u, v, kmh, w, self.now - 60, 900) for u, v, kmh, w in samples[:5]])
+        conn.execute("INSERT INTO traffic_meta VALUES('typical_built', ?)", (self.now - 86400,))
+        conn.commit()
+        conn.close()
+
+    def tearDown(self):
+        for root, dirs, files in os.walk(self.dir, topdown=False):
+            for name in files:
+                os.unlink(os.path.join(root, name))
+            for name in dirs:
+                os.rmdir(os.path.join(root, name))
+        os.rmdir(self.dir)
+
+    def run_builder(self, now, pending=0):
+        conn = sqlite3.connect(self.db)
+        try:
+            for _ in range(pending):
+                conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)",
+                             (now, json.dumps(FIXTURE["points"])))
+            conn.commit()
+            return tb.run(conn, now, matcher=lambda pts: FIXTURE["response"],
+                          out_path=self.out, typical_dir=self.typical)
+        finally:
+            conn.close()
+
+    def typical_edges(self, now):
+        name = tb.bucket_name(tb.profile_slot(now))
+        with open(os.path.join(self.typical, f"{name}.json"), encoding="utf-8") as f:
+            return json.load(f)["edges"]
+
+    def test_first_run_on_the_8_8_16_database(self):
+        result = self.run_builder(self.now)
+        self.assertEqual(result[3], 48, "первый прогон пишет все 48 файлов")
+        self.run_builder(self.now + 120)                       # и второй — без ошибок схемы
+        conn = sqlite3.connect(self.db)
+        try:
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(traffic_shared)")}
+            self.assertIn("seen", columns)
+            self.assertEqual(tb.profile_epoch(conn, self.now + 120), self.now,
+                             "метка — первый прогон после выкладки")
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM traffic_shared").fetchone()[0], 0,
+                             "отметки без времени не в счёт и убраны")
+            pieces = {row[0] for row in conn.execute("SELECT pieces FROM traffic_profile")}
+            self.assertEqual(pieces, {6}, "накопленный профиль сохранён как есть")
+        finally:
+            conn.close()
+        self.assertTrue(os.path.getsize(self.out) > 0)
+        self.assertEqual(self.typical_edges(self.now), [],
+                         "до нового подтверждения «не один» старые рёбра не публикуются")
+
+    def test_old_profile_comes_back_once_two_drivers_confirm(self):
+        self.run_builder(self.now)
+        self.run_builder(self.now + 120, pending=2)            # двое в одном окне
+        self.run_builder(self.now + tb.TYPICAL_EVERY + 120)
+        edges = self.typical_edges(self.now)
+        self.assertTrue(edges)
+        # Скорость — старые 6 и новые 2 куска одной скорости: та же, что у
+        # фикстуры (масштаб сокращается).
+        nodes = tb.edges_from_match(FIXTURE["response"], FIXTURE["points"])[1]
+        expected = {}
+        for (u, v), (_, _, pace) in self.profile.items():
+            if u in nodes and v in nodes:
+                expected[tuple(round(x, 5) for x in (*nodes[u], *nodes[v]))] = int(round(3600 / pace))
+        for edge in edges:
+            self.assertEqual(edge[4], expected[tuple(edge[:4])])
 
 
 SWIFT_HOLIDAYS = os.path.join(HERE, "..", "RadarMap", "Models", "UzHolidays.swift")
@@ -399,7 +659,7 @@ class HolidayTest(unittest.TestCase):
             conn.commit()
             tb.process(conn, at, matcher=lambda pts: FIXTURE["response"])
             tb.mark_shared(conn, at)
-            buckets = tb.typical_buckets(conn)
+            buckets = tb.typical_buckets(conn, at)
             self.assertEqual(set(buckets), {"off-08"}, "праздничный четверг — не будни")
         finally:
             conn.close()

@@ -291,8 +291,16 @@ extension MapScreen {
 
     /// Ссылка «Поделиться прибытием» — один путь для меню поездки и панели
     /// маршрута: отправка начнётся, только когда лист скажет, что отправили.
+    /// Сервер ссылки не показывает (не выложен) — уходит одно время, без
+    /// ссылки и без отправок на сервер.
     func shareArrival() {
-        if let share = env.etaShare.prepare() { etaSharePayload = ActivityTextPayload(text: share.message) }
+        Task {
+            if await env.etaShare.ensureServerSupport() {
+                if let share = env.etaShare.prepare() { etaSharePayload = ActivityTextPayload(text: share.message) }
+            } else if let text = env.etaShare.messageWithoutLink() {
+                lateSharePayload = ActivityTextPayload(text: text)
+            }
+        }
     }
 
     /// Построить авто-маршрут от текущей позиции и показать все варианты целиком.

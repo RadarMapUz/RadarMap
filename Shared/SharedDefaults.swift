@@ -18,9 +18,11 @@
 import Foundation
 
 enum SharedDefaults {
-    static let appGroup = "group.uz.radarmap.ios"
+    nonisolated static let appGroup = "group.uz.radarmap.ios"
 
-    static var store: UserDefaults? { UserDefaults(suiteName: appGroup) }
+    // nonisolated: UserDefaults потокобезопасен, а читают его и виджет, и чистые
+    // nonisolated-модели снимков (WidgetCommute) — без прыжка на главный актор.
+    nonisolated static var store: UserDefaults? { UserDefaults(suiteName: appGroup) }
 
     /// Выдан ли App Group на самом деле. Проверять `store == nil` НЕЛЬЗЯ:
     /// `UserDefaults(suiteName:)` возвращает рабочий объект и без права на
@@ -28,7 +30,7 @@ enum SharedDefaults {
     /// телефоне показывал «Готов к поездке» вместо «Нет доступа»: он видел
     /// пустое хранилище и честно считал, что поездок не было. Контейнер же
     /// без entitlement недоступен, и это единственная надёжная проверка.
-    static var hasAppGroup: Bool {
+    nonisolated static var hasAppGroup: Bool {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) != nil
     }
 

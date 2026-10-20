@@ -886,7 +886,11 @@ final class AppEnvironment {
 
     func refreshWorkShifts(now: Date = Date()) {
         let history = trip.history
-        let next = WorkShift.logged(workShiftLog, history: history, now: now)
+        // Идущий рейс — ещё не в истории, но смену продолжает: без него она
+        // закрылась бы посреди рейса (WorkShift.isClosed). Рейс ли это,
+        // решает режим на финише (trip.finish(work:)) — им и судим.
+        let ongoing = location.isTripActive && settings.workDriverMode ? trip.startedAt : nil
+        let next = WorkShift.logged(workShiftLog, history: history, now: now, ongoingSince: ongoing)
         if next != workShiftLog {
             workShiftLog = next
             do {

@@ -7,6 +7,7 @@
 //
 
 import XCTest
+import CoreLocation
 @testable import RadarMap
 
 final class WorkShiftTests: XCTestCase {
@@ -83,6 +84,56 @@ final class WorkShiftTests: XCTestCase {
         let history = [trip(0, 20), trip(30, 10)]
         XCTAssertTrue(WorkShift.logged([], history: history, now: now).isEmpty, "смена ещё идёт")
         XCTAssertEqual(WorkShift.display(log: [], history: history).first?.trips, 2)
+    }
+
+    /// Рейс идёт, а с конца прошлого прошло больше часа: смена не закрыта —
+    /// рейс попадёт в историю только на финише. Раньше пересчёт посреди
+    /// такого рейса писал смену в журнал урезанной, и остаток дня совпадал с
+    /// ней по времени и пропадал из «Смен» (ревью 14.1).
+    func testShiftStaysOpenWhileWorkTripRuns() {
+        let first = [trip(0, 20)]                        // 8:00–8:20
+        let now = day.addingTimeInterval(100 * 60)       // 9:40 — 80 мин после 8:20
+        XCTAssertTrue(WorkShift.logged([], history: first, now: now,
+                                       ongoingSince: day.addingTimeInterval(50 * 60)).isEmpty,
+                      "рейс с 8:50 ещё идёт — смена открыта")
+        XCTAssertTrue(WorkShift.logged([], history: first, now: now,
+                                       ongoingSince: day.addingTimeInterval(30 * 60)).isEmpty,
+                      "продолженная склейкой запись вне истории — смена тоже открыта")
+        XCTAssertEqual(WorkShift.logged([], history: first, now: now,
+                                        ongoingSince: day.addingTimeInterval(85 * 60)).first?.trips, 1,
+                       "рейс после часа простоя — уже новая смена, прошлая закрыта")
+        // Рейс закончился в 9:50: смена целиком — оба рейса.
+        let after = first + [trip(50, 60)]
+        XCTAssertEqual(WorkShift.logged([], history: after, now: day.addingTimeInterval(4 * 3600)).first?.trips, 2)
+        // Почему ошибку журнала не поправить потом: урезанная запись прячет остаток.
+        let truncated = WorkShift.logged([], history: first, now: now)
+        XCTAssertEqual(WorkShift.display(log: truncated, history: after).first?.trips, 1)
+    }
+
+    /// Разделить или склеить рейс руками — рейс и останется: без пометки он
+    /// выпадал из «Смен» и учился как своя поездка, с адресом пассажира в
+    /// выученных Дом/Работа (ревью 14.1).
+    func testSplitAndMergeKeepWorkFlag() {
+        XCTAssertEqual(TripMerge.merged(previous: trip(0, 20), next: trip(30, 20)).work, true)
+        XCTAssertEqual(TripMerge.merged(previous: trip(0, 20, work: nil), next: trip(30, 20)).work, true,
+                       "смешанная склейка — рейс: адрес пассажира учить нельзя")
+        XCTAssertNil(TripMerge.merged(previous: trip(0, 20, work: nil), next: trip(30, 20, work: nil)).work)
+
+        let base = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)
+        let points = (0..<11).flatMap { i -> [Double] in
+            let p = GeoMath.destination(from: base, bearing: 0, distanceMeters: Double(i) * 100)
+            return [p.latitude, p.longitude, 50]
+        }
+        let middle = GeoMath.destination(from: base, bearing: 0, distanceMeters: 500)
+        let stop = TripStop(id: UUID(), lat: middle.latitude, lon: middle.longitude,
+                            from: day.addingTimeInterval(600), to: day.addingTimeInterval(1200))
+        var record = trip(0, 40)
+        record.track = points
+        record.stops = [stop]
+        let legs = TripHistory.split(record, at: stop)
+        XCTAssertEqual(legs.count, 2)
+        XCTAssertEqual(legs.map(\.work), [true, true])
+        XCTAssertEqual(WorkShift.shifts(from: legs).first?.trips, 2, "обе половины — в смене")
     }
 
     func testLogForgetsAfterNinetyDays() {

@@ -165,7 +165,11 @@ nonisolated enum TripMerge {
             stops: (previous.stops ?? []) + [gapStop] + (next.stops ?? []),
             endedManually: next.endedManually,
             batteryDropPercent: mergedBatteryDrop(previous.batteryDropPercent,
-                                                  next.batteryDropPercent))
+                                                  next.batteryDropPercent),
+            // Рейс в склейке — склейка рейс (12б.9): иначе она выпадала из
+            // «Смен» и шла в выученные Дом/Работу с адресом пассажира на конце
+            // (ревью 14.1). Смешанная — тоже рейс: адрес пассажира учить нельзя.
+            work: previous.work == true || next.work == true ? true : nil)
     }
 
     /// Сумма дельт заряда — только когда известны обе ноги: «−2 %» за поездку,

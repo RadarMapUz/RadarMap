@@ -56,13 +56,29 @@ nonisolated struct WorkShift: Identifiable, Equatable, Sendable, Codable {
     /// дня рейсов. Поэтому закрытая смена (простой после неё дольше часа)
     /// записывается в журнал один раз и дальше от истории не зависит;
     /// журнал хранит 90 дней. Идущая смена считается из истории вживую.
+    /// `ongoingSince` — старт идущего рабочего рейса (nil — рейса нет).
     static func logged(_ log: [WorkShift], history: [TripRecord], now: Date,
+                       ongoingSince: Date? = nil,
                        gap: TimeInterval = AppConfig.workShiftGapSeconds) -> [WorkShift] {
         let closed = shifts(from: history, gap: gap).filter {
-            now.timeIntervalSince($0.end) > gap && !overlaps($0, log)
+            isClosed($0, now: now, ongoingSince: ongoingSince, gap: gap) && !overlaps($0, log)
         }
         let horizon = now.addingTimeInterval(-AppConfig.workShiftLogDays * 86_400)
         return (log + closed).filter { $0.end >= horizon }.sorted { $0.start > $1.start }
+    }
+
+    /// Смена закрыта: простой после неё дольше часа, и идущий рабочий рейс её
+    /// не продолжает. Рейс ложится в историю только на финише — без второй
+    /// проверки пересчёт посреди долгого рейса (старт сцены, возврат из
+    /// приложения такси) записывал смену урезанной, а остаток дня совпадал с
+    /// ней по времени и пропадал из «Смен» насовсем (ревью 14.1). Продолженная
+    /// склейкой запись тоже вне истории, пока едем, — её старт раньше конца
+    /// оставшейся части, и смена так же открыта.
+    static func isClosed(_ shift: WorkShift, now: Date, ongoingSince: Date?,
+                         gap: TimeInterval = AppConfig.workShiftGapSeconds) -> Bool {
+        guard now.timeIntervalSince(shift.end) > gap else { return false }
+        if let ongoingSince, ongoingSince.timeIntervalSince(shift.end) <= gap { return false }
+        return true
     }
 
     /// Что показать: журнал и идущие смены из истории, без повторов, новые первыми.

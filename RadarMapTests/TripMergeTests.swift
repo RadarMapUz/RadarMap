@@ -28,6 +28,25 @@ final class TripMergeTests: XCTestCase {
 
     // MARK: - Склеиваем
 
+    /// Сценарий A5 (12в): один выезд со всем, что бывает по пути, — светофор
+    /// 2 мин, пробка 10 мин, магазин 20 мин — одна поездка; приехали домой и
+    /// простояли 25 мин — дальше новая. Остановки и длительность копятся так
+    /// же, как в TripStats: каждая склейка — ещё одна остановка.
+    func testOneOutingWithLightJamAndShopIsOneTrip() {
+        var stops = 0
+        var duration: TimeInterval = 20 * 60
+        for (minutes, label) in [(2, "светофор"), (10, "пробка"), (20, "магазин")] {
+            let stop = TimeInterval(minutes * 60)
+            XCTAssertTrue(TripMerge.shouldMerge(context(stop: stop, meters: 60, stops: stops, previous: duration)),
+                          "\(label) — та же поездка")
+            stops += 1
+            duration += stop + 15 * 60
+        }
+        XCTAssertFalse(TripMerge.shouldMerge(context(stop: 25 * 60, meters: 40, nearSaved: true,
+                                                     stops: stops, previous: duration)),
+                       "25 минут дома — приехали")
+    }
+
     func testShortStopIsMerged() {
         XCTAssertTrue(TripMerge.shouldMerge(context(stop: 6 * 60)),
                       "шесть минут в магазине — та же поездка")

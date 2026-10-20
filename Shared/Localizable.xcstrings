@@ -4939,6 +4939,22 @@
         }
       }
     },
+    "Звук в машине": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Звук в машине"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashinada ovoz"
+          }
+        }
+      }
+    },
     "Звук и баннер при приближении к камере.": {
       "localizations": {
         "ru": {
@@ -7969,6 +7985,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Barchasi haqida"
+          }
+        }
+      }
+    },
+    "Обо всех камерах": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обо всех камерах"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Barcha kameralar haqida"
           }
         }
       }
@@ -11627,6 +11659,22 @@
         }
       }
     },
+    "Сейчас: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сейчас: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hozir: %@"
+          }
+        }
+      }
+    },
     "Сели за руль — поездка началась сама": {
       "localizations": {
         "ru": {
@@ -11735,6 +11783,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Birorta kamera jarimaga tutmaydigan ketma-ket safarlar seriyasi."
+          }
+        }
+      }
+    },
+    "Сигнал": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сигнал"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signal"
           }
         }
       }
@@ -12608,6 +12672,22 @@
         }
       }
     },
+    "Тишина до конца поездки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тишина до конца поездки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar oxirigacha jimlik"
+          }
+        }
+      }
+    },
     "Тогда в дороге будет видно, успеваете ли: «с запасом» или «впритык». Срок останется на телефоне.": {
       "localizations": {
         "ru": {
@@ -12684,6 +12764,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Faqat oshirishlar bilan"
+          }
+        }
+      }
+    },
+    "Только сигнал": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только сигнал"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faqat signal"
           }
         }
       }
@@ -13128,6 +13224,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aqlli"
+          }
+        }
+      }
+    },
+    "Умно — при превышении": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Умно — при превышении"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aqlli — tezlik oshganda"
           }
         }
       }

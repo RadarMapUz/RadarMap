@@ -300,6 +300,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// любое касание отслеживаемого (а MapKit дёргал слежение на каждом «+»),
     /// поэтому отправляем только реально изменившееся.
     var sentBar: [Bool]?
+    /// Звук, с которым собран бар (10.1): значок кнопки — нынешний выбор.
+    var sentSound: CarPlaySoundChoice?
     var sentMapButtons: [Bool]?
 
     /// Открыт ли сейчас осмотр карты: бар на это время — одна кнопка «Готово».

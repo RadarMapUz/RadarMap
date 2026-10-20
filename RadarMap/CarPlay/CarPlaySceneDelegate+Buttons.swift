@@ -27,7 +27,9 @@ extension CarPlaySceneDelegate {
         withObservationTracking {
             let tripActive = env.location.isTripActive
             let routeActive = env.route.isActive
-            let muted = isMuted   // читает оба тумблера — оба и отслеживаем
+            // Читает оба тумблера — оба и отслеживаем.
+            let sound = CarPlaySoundChoice.current(soundEnabled: env.settings.soundEnabled,
+                                                   voiceMode: env.settings.voiceMode)
             let following = model.isFollowing
             let panning = isPanning
             let previewing = model.isPreviewing
@@ -36,10 +38,11 @@ extension CarPlaySceneDelegate {
             // и требует её В БАРЕ (заголовок CPMapTemplate). Раньше «выйти»
             // было кнопкой карты, а бар после осмотра никто не возвращал — и
             // в 2.2.3 он исчезал насовсем: без «Поездки», «Куда» и «Радар!».
-            let bar = [tripActive, routeActive, muted, panning, previewing]
-            if bar != sentBar {
+            let bar = [tripActive, routeActive, panning, previewing]
+            if bar != sentBar || sound != sentSound {
                 sentBar = bar
-                Log.carplay.notice("бар шаблона: поездка=\(tripActive), маршрут=\(routeActive), тишина=\(muted), осмотр=\(panning), выбор=\(previewing)")
+                sentSound = sound
+                Log.carplay.notice("бар шаблона: поездка=\(tripActive), маршрут=\(routeActive), звук=\(String(describing: sound), privacy: .public), осмотр=\(panning), выбор=\(previewing)")
                 if panning {
                     mapTemplate.leadingNavigationBarButtons = []
                     mapTemplate.trailingNavigationBarButtons = [panDoneButton]
@@ -48,7 +51,7 @@ extension CarPlaySceneDelegate {
                     mapTemplate.trailingNavigationBarButtons = []
                 } else {
                     mapTemplate.leadingNavigationBarButtons = [tripButton(active: tripActive),
-                                                               soundButton(muted: muted)]
+                                                               soundButton(sound)]
                     mapTemplate.trailingNavigationBarButtons = [destinationsButton(routeActive: routeActive),
                                                                 reportButton]
                 }
@@ -299,16 +302,55 @@ extension CarPlaySceneDelegate {
         return button
     }
 
-    /// Тумблер тишины: заглушить оповещения, не доставая телефон (спит пассажир,
-    /// идёт разговор). Значок показывает текущее состояние, а HUD пишет
-    /// «Без звука» (CarPlayStatusChips) — в баре звук стоит рядом с
-    /// «Поездкой», и промах слепого тапа не должен глушить камеры незаметно.
-    func soundButton(muted: Bool) -> CPBarButton {
-        barButton(symbol: muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
-                  title: muted ? String(localized: "Без звука")
-                               : String(localized: "Звук")) { [weak self] _ in
-            self?.toggleMute()   // наблюдение пересоберёт кнопку
+    /// Звук в машине (10.1): значок — нынешний выбор, нажатие — короткий
+    /// список. Раньше кнопка только глушила всё разом; водителю с пассажиром
+    /// нужна середина — «только при превышении» или «только сигнал».
+    /// HUD по-прежнему пишет «Без звука» (CarPlayStatusChips) — в баре звук
+    /// стоит рядом с «Поездкой», и промах слепого тапа заметен.
+    func soundButton(_ sound: CarPlaySoundChoice) -> CPBarButton {
+        barButton(symbol: sound.symbol, title: sound.shortTitle) { [weak self] _ in
+            self?.presentSoundSheet()
         }
+    }
+
+    /// Список выбора: три строки, кроме нынешней (она — в заголовке), и
+    /// «Отмена». Лист действий — разрешённый навигатору шаблон.
+    func presentSoundSheet() {
+        let current = CarPlaySoundChoice.current(soundEnabled: env.settings.soundEnabled,
+                                                 voiceMode: env.settings.voiceMode)
+        var actions = CarPlaySoundChoice.allCases.filter { $0 != current }.map { choice in
+            CPAlertAction(title: choice.title, style: choice == .silent ? .destructive : .default) { [weak self] _ in
+                self?.dismissTopTemplate()
+                self?.applySound(choice)   // наблюдение пересоберёт кнопку
+            }
+        }
+        actions.append(CPAlertAction(title: String(localized: "Отмена"), style: .cancel) { [weak self] _ in
+            self?.dismissTopTemplate()
+        })
+        let sheet = CPActionSheetTemplate(
+            title: String(localized: "Звук в машине"),
+            message: String(format: String(localized: "Сейчас: %@"), current.shortTitle),
+            actions: actions)
+        interfaceController?.presentTemplate(sheet, animated: true) { _, error in
+            if let error {
+                Log.carplay.error("presentTemplate(звук): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// Применить выбор. Тишина — прежней кнопкой (с запоминанием и откатом
+    /// при выходе из машины); голосовой режим — настройка, как на телефоне,
+    /// и маркер тишины снимается: иначе выход из машины «вернул бы» звук
+    /// поверх только что сделанного выбора.
+    func applySound(_ choice: CarPlaySoundChoice) {
+        Log.carplay.info("звук в машине: \(String(describing: choice), privacy: .public)")
+        if choice == .silent {
+            if !isMuted { toggleMute() }
+            return
+        }
+        Storage.set(false, for: .carPlayMuted)
+        env.settings.soundEnabled = choice.soundEnabled
+        env.settings.voiceMode = choice.voiceMode
     }
 
     /// Тишина — это молчат и писк, и голос: водитель, нажавший «динамик», ждёт

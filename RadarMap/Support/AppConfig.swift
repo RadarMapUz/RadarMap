@@ -1865,6 +1865,57 @@ nonisolated enum AppConfig {
     /// заправках меняются, а старая цена молча врала бы в каждой поездке.
     static let fuelPriceStaleDays: Double = 60
 
+    // MARK: - Обслуживание машины (Maintenance, 18)
+    //
+    // Интервалы — стартовые: у каждой машины свой регламент, и водитель
+    // правит их у себя. Ошибка в сторону раньше дешевле: лишнее «скоро»
+    // стоит одного взгляда, пропущенная замена масла — мотора.
+
+    /// «Скоро» — когда до срока по пробегу осталось не больше…
+    static let maintenanceSoonKm = 500.0
+    /// …или до срока по дате — не больше стольких дней.
+    static let maintenanceSoonDays = 14
+    /// Работа по пробегу/времени «просрочена», когда срок прошёл больше чем на
+    /// столько км или дней; до того — «пора». Документ просрочен на следующий
+    /// день после последнего дня действия: ездить без полиса — уже нарушение.
+    static let maintenanceOverdueKm = 1_000.0
+    static let maintenanceOverdueDays = 30
+    /// Моторное масло: 8 000 км или год — что раньше. Машине на газу часто
+    /// меньше (масло на метане стареет быстрее) — это правится у себя.
+    static let maintenanceOilKm = 8_000.0
+    static let maintenanceOilMonths = 12
+    /// Воздушный и салонный фильтры: в пыльном городе — каждые 15 000 км или год.
+    static let maintenanceAirFilterKm = 15_000.0
+    static let maintenanceAirFilterMonths = 12
+    static let maintenanceCabinFilterKm = 15_000.0
+    static let maintenanceCabinFilterMonths = 12
+    /// Тормозная жидкость набирает воду по времени, не по пробегу: раз в два года.
+    static let maintenanceBrakeFluidMonths = 24
+    /// Ремень ГРМ: 60 000 км (у цепи срока нет — пункт выключается).
+    static let maintenanceTimingBeltKm = 60_000.0
+    /// Свечи зажигания: 30 000 км; на газу — короче, правится у себя.
+    static let maintenanceSparkPlugsKm = 30_000.0
+    /// 👤 ПОДТВЕРДИТЬ: срок освидетельствования газового баллона (метан и
+    /// пропан). Взят год — короче возможного регламента: раннее напоминание
+    /// безвредно, просроченный баллон — штраф и опасность. Показывается только
+    /// машине на метане или пропане (настройка «Машина»).
+    static let maintenanceGasCylinderMonths = 12
+    /// 👤 ПОДТВЕРДИТЬ: периодичность техосмотра легковой машины. Обычно дату
+    /// водитель вводит с талона — интервал нужен только «Продлено сегодня».
+    static let maintenanceInspectionMonths = 12
+    /// ОСАГО и КАСКО — полис на год (короткий полис — своей датой «действует до»).
+    static let maintenanceOsagoMonths = 12
+    static let maintenanceKaskoMonths = 12
+    /// 👤 ПОДТВЕРДИТЬ: срок разрешения на тонировку.
+    static let maintenanceTintMonths = 12
+    /// Напоминания приходят только днём: с этого часа…
+    static let maintenanceNotifyFromHour = 9
+    /// …и до этого (не включая). Вечером после поездки — утром в 9:00.
+    static let maintenanceNotifyUntilHour = 21
+    /// После стоянки — через столько секунд: человек выходит из машины, а
+    /// «Стоп» рукой мог быть нажат ещё за рулём.
+    static let maintenanceParkedDelaySeconds: TimeInterval = 120
+
     // MARK: - Виджет «На работу» (12б.2)
 
     /// Фоновое обновление пробок перед выездом (BGAppRefreshTask). Тот же

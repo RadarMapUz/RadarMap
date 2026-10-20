@@ -14,7 +14,7 @@
         "uz" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Aynan siz yurgan yo'ldagi kameralar haqida o'z vaqtida ogohlantirish uchun aniq geojoylashuv kerak."
+            "value" : "Aynan siz yurgan yoʻldagi kameralar haqida oʻz vaqtida ogohlantirish uchun aniq geojoylashuv kerak."
           }
         }
       }
@@ -68,7 +68,7 @@
         "uz" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ilova yig‘ilgan bo‘lsa ham harakat paytida kameralar haqida ogohlantirish uchun RadarMap fonda joylashuvdan foydalanadi. Ogohlantirishlar qurilmada ishlaydi. Safar davomida tirbandlik uchun shaxssiz yo‘l bo‘laklari yuboriladi — qurilmasiz, safarning boshi va oxirisiz, uy va ish yonidagi joylarsiz; buni sozlamalarda o‘chirish mumkin."
+            "value" : "Ilova yigʻilgan boʻlsa ham harakat paytida kameralar haqida ogohlantirish uchun RadarMap fonda joylashuvdan foydalanadi. Ogohlantirishlar qurilmada ishlaydi. Safar davomida tirbandlik uchun shaxssiz yoʻl boʻlaklari yuboriladi — qurilmasiz, safarning boshi va oxirisiz, uy va ish yonidagi joylarsiz; buni sozlamalarda oʻchirish mumkin."
           }
         }
       }
@@ -86,7 +86,7 @@
         "uz" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "RadarMap yaqin atrofdagi video qayd kameralarini xaritada ko'rsatadi va eng yaqin kameralar haqida ogohlantirish uchun joylashuvingizni aniqlaydi."
+            "value" : "RadarMap yaqin atrofdagi video qayd kameralarini xaritada koʻrsatadi va eng yaqin kameralar haqida ogohlantirish uchun joylashuvingizni aniqlaydi."
           }
         }
       }

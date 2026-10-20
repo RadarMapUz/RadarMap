@@ -36,6 +36,8 @@ struct OnboardingView: View {
         return 0
     }
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
     var body: some View {
         ZStack {
             Theme.screenBackground.ignoresSafeArea()
@@ -48,9 +50,13 @@ struct OnboardingView: View {
                     permissionsPage.tag(3)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
+                // Прокручиваемая страница не рисуется под точками и кнопкой:
+                // на SE с крупным шрифтом нижняя строка ложилась на точки (12в F1).
+                .clipped()
                 .motionAnimation(Motion.standard, value: page)
 
                 pageDots
+                    .padding(.top, 12)
                     .padding(.bottom, 18)
 
                 if page < lastPage {
@@ -179,6 +185,16 @@ struct OnboardingView: View {
                     .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
             .scrollBounceBehavior(.basedOnSize)
+            // Низ — затуханием: не влезшая строка не обрывается посередине
+            // букв у точек страниц, а уходит под край — видно, что дальше
+            // есть ещё (SE с крупным шрифтом, 12в F1).
+            .mask {
+                VStack(spacing: 0) {
+                    Color.black
+                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                        .frame(height: 28)
+                }
+            }
         }
     }
 
@@ -253,17 +269,34 @@ struct OnboardingView: View {
         env.notifications.authorizationStatus == .authorized ? .granted : .pending
     }
 
+    /// Крупный шрифт — кнопка под текстом: в строку на SE она сжимала
+    /// заголовок до «Уведомлен-ия» и сама рвалась на «Разреши-ть» (12в F1).
     private func permissionRow(icon: String, title: LocalizedStringKey, subtitle: LocalizedStringKey,
                                state: PermState, action: @escaping () -> Void) -> some View {
-        HStack(spacing: 14) {
-            IconBadge(symbol: icon, tint: Theme.accent, size: 44)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.rounded(15, .semibold)).foregroundStyle(Theme.textPrimary)
-                Text(subtitle).font(.rounded(12)).foregroundStyle(Theme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        let texts = VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.rounded(15, .semibold)).foregroundStyle(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(subtitle).font(.rounded(12)).foregroundStyle(Theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        return Group {
+            if typeSize >= .xLarge {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .top, spacing: 14) {
+                        IconBadge(symbol: icon, tint: Theme.accent, size: 44)
+                        texts
+                        Spacer(minLength: 0)
+                    }
+                    trailing(for: state, action: action)
+                }
+            } else {
+                HStack(spacing: 14) {
+                    IconBadge(symbol: icon, tint: Theme.accent, size: 44)
+                    texts
+                    Spacer(minLength: 8)
+                    trailing(for: state, action: action)
+                }
             }
-            Spacer(minLength: 8)
-            trailing(for: state, action: action)
         }
         .padding(14)
         .statCard(padding: 0)
@@ -290,6 +323,8 @@ struct OnboardingView: View {
             Text(title)
                 .font(.rounded(15, .semibold))
                 .foregroundStyle(tint)
+                .lineLimit(1)
+                .fixedSize()
                 .padding(.horizontal, 14)
                 .frame(minHeight: Theme.controlSize)
                 .background(tint.opacity(0.12), in: Capsule())

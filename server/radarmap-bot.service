@@ -12,7 +12,8 @@ WorkingDirectory=/opt/radarmap/api
 # Песочница — та же, что у api и панели (systemd-radarmap-sandbox.conf): бот
 # разбирает чужой ввод из интернета и держит токен, а работает от root на
 # общем VPS. Писать ему нужно только bot.db (и журнал sqlite рядом) в
-# /opt/radarmap/api; конфиг /opt/radarmap/telegram_bot.conf — только чтение.
+# /opt/radarmap/api; конфиг /opt/radarmap/telegram_bot.conf и файлы заведений
+# /opt/radarmap/www/roads (АГНКС для метана) — только чтение.
 # Сеть — только исходящая к Telegram и к API на 127.0.0.1:8091.
 NoNewPrivileges=yes
 PrivateTmp=yes

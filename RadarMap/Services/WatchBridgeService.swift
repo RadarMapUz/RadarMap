@@ -184,11 +184,11 @@ extension WatchBridgeService: WCSessionDelegate {
     /// него на запястье не узнать, ушла ли отметка.
     nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any],
                              replyHandler: @escaping ([String: Any]) -> Void) {
-        let reply = WatchReply(send: replyHandler)
         guard message["action"] as? String == "report" else {
-            reply.send([:])
+            replyHandler([:])
             return
         }
+        let reply = WatchReply(send: replyHandler)
         Task { @MainActor in
             let once = WatchReplyOnce(reply)
             // Часы ждут ответа недолго (тайм-аут WatchConnectivity не описан);

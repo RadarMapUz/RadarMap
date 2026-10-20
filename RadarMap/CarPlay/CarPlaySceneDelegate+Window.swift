@@ -106,7 +106,7 @@ extension CarPlaySceneDelegate {
     /// templateDidAppear, либо активная сцена с подтверждённой установкой
     /// (CarPlayRootWatch): первый система присылает не всегда.
     func rootDidShow(via source: String) {
-        guard !rootShown, let mapTemplate else { return }
+        guard !rootShown, mapTemplate != nil else { return }
         rootShown = true
         templateWatch?.cancel()
         Log.carplay.notice("корневой шаблон на экране: \(source, privacy: .public)")

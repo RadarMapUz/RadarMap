@@ -60,14 +60,14 @@ struct Map3DToggle: View {
             env.settings.map3D.toggle()
             map.prefers3D = env.settings.map3D
         } label: {
-            Text(on ? "3D" : "2D")
+            (on ? Text("3D") : Text("2D"))
                 .font(.rounded(15, .heavy))
                 .foregroundStyle(on ? Theme.accent : Theme.textPrimary)
                 .controlCircle()
         }
         .buttonStyle(PressableStyle())
         .tapTarget()
-        .accessibilityLabel(Text(on ? "Объёмный вид, включён" : "Плоский вид"))
+        .accessibilityLabel((on ? Text("Объёмный вид, включён") : Text("Плоский вид")))
         .onAppear { map.prefers3D = on }
     }
 }
@@ -126,7 +126,7 @@ struct MapMuteButton: View {
         }
         .buttonStyle(PressableStyle())
         .tapTarget()
-        .accessibilityLabel(Text(muted ? "Звук выключен" : "Звук включён"))
-        .accessibilityHint(Text(muted ? "Включить голос и сигналы" : "Выключить голос и сигналы"))
+        .accessibilityLabel((muted ? Text("Звук выключен") : Text("Звук включён")))
+        .accessibilityHint((muted ? Text("Включить голос и сигналы") : Text("Выключить голос и сигналы")))
     }
 }

@@ -434,7 +434,7 @@ struct SearchView: View {
             Text("Заведения")
         } footer: {
             if model.category != nil, !model.categoryResults.isEmpty {
-                Text(model.categoryFromApple ? "По данным Apple" : "Из своей карты · без сети")
+                (model.categoryFromApple ? Text("По данным Apple") : Text("Из своей карты · без сети"))
             }
         }
         .listRowBackground(Theme.surface)

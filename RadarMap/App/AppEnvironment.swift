@@ -459,7 +459,8 @@ final class AppEnvironment {
         // уходит на скачанную область, плашка говорит правду. С областью
         // онлайн-запросов нет — через 3 минуты пробуем онлайн снова.
         EngineTileGuard.observeHealth { [weak self] down in
-            Task { @MainActor in self?.tileServerHealthChanged(down: down) }
+            guard let self else { return }
+            Task { @MainActor in self.tileServerHealthChanged(down: down) }
         }
         #endif
         traffic.privacyZones = { [weak self] in

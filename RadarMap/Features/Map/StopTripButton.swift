@@ -55,7 +55,7 @@ struct StopTripButton: View {
             HStack(spacing: 8) {
                 Image(systemName: isArmed ? "questionmark" : "stop.fill")
                     .contentTransition(.symbolEffect(.replace))
-                Text(isArmed ? "Точно? Нажмите ещё раз" : "Завершить поездку")
+                (isArmed ? Text("Точно? Нажмите ещё раз") : Text("Завершить поездку"))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
@@ -68,7 +68,7 @@ struct StopTripButton: View {
         }
         .buttonStyle(PressableStyle())
         .motionAnimation(.spring(response: 0.3, dampingFraction: 0.8), value: isArmed)
-        .accessibilityLabel(Text(isArmed ? "Подтвердить завершение поездки" : "Завершить поездку"))
+        .accessibilityLabel((isArmed ? Text("Подтвердить завершение поездки") : Text("Завершить поездку")))
         .accessibilityHint(Text("Нажмите дважды: первое касание спрашивает подтверждение"))
         .onDisappear { disarmTask?.cancel() }
     }
@@ -95,8 +95,7 @@ struct StopTripButton: View {
         }
         .buttonStyle(.plain)
         .motionAnimation(.spring(response: 0.3, dampingFraction: 0.8), value: isArmed)
-        .accessibilityLabel(Text(isArmed ? "Подтвердить завершение поездки"
-                                         : "Завершить поездку"))
+        .accessibilityLabel(isArmed ? Text("Подтвердить завершение поездки") : Text("Завершить поездку"))
         .accessibilityHint(Text("Нажмите дважды: первое касание спрашивает подтверждение"))
         .onDisappear { disarmTask?.cancel() }
     }

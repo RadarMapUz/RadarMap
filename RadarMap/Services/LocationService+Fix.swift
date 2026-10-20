@@ -253,6 +253,7 @@ extension LocationService {
         if currentCourse != course { currentCourse = course }
         locationTick &+= 1
         onAcceptedFix?(coordinate)
+        if isTripActive { noteDrivenFix(coordinate) } else if parkedCar != nil { refreshParkedCar() }
         retileIfNeeded(around: coordinate)
         recomputeNearest(from: coordinate, fromFix: true)
         recomputeDirection()

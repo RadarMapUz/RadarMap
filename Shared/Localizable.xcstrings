@@ -1515,6 +1515,22 @@
         }
       }
     },
+    "«Где оставили машину»: после поездки, когда вы отошли дальше 150 м, на карте появляются метка машины и строка с расстоянием и стрелкой. Точка забывается, когда вы вернулись к машине, начали поездку или прошло трое суток.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Где оставили машину»: после поездки, когда вы отошли дальше 150 м, на карте появляются метка машины и строка с расстоянием и стрелкой. Точка забывается, когда вы вернулись к машине, начали поездку или прошло трое суток."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Mashina qayerda qolgani»: safardan keyin 150 m dan uzoqlashganingizda xaritada mashina belgisi va masofa hamda yoʻnalish koʻrsatkichli qator paydo boʻladi. Mashinaga qaytganingizda, safar boshlanganda yoki uch kun oʻtganda nuqta unutiladi."
+          }
+        }
+      }
+    },
     "«Когда выезжать на работу» напоминает по будням, только если выехать в другое время выгоднее или нужно успеть к сроку «быть к».": {
       "localizations": {
         "ru": {
@@ -3157,6 +3173,22 @@
         }
       }
     },
+    "Где оставили машину": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Где оставили машину"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina qayerda qolgani"
+          }
+        }
+      }
+    },
     "Где теряете баллы": {
       "localizations": {
         "ru": {
@@ -4294,6 +4326,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kameradan necha metr oldin ogohlantirish. Ovoz yaqinlashgan sari bosqichlarni aytib boradi."
+          }
+        }
+      }
+    },
+    "Забыть место": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Забыть место"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joyni unutish"
           }
         }
       }
@@ -6002,6 +6050,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Masshtab"
+          }
+        }
+      }
+    },
+    "Машина · %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Машина · %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina · %@"
+          }
+        }
+      }
+    },
+    "Машина в %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Машина в %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina %@ uzoqlikda"
           }
         }
       }

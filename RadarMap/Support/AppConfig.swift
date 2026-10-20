@@ -1782,4 +1782,21 @@ nonisolated enum AppConfig {
     /// на стоянке фиксы не приходят (distanceFilter), и после минуты у подъезда
     /// карточка не появлялась вовсе — поездка выглядела пропавшей.
     nonisolated static let tripEndCardFreshSeconds: TimeInterval = 60
+
+    // MARK: - Где машина (ParkedCar, 12б.1)
+
+    /// Паркует только точный фикс: грубая точка из помещения показала бы
+    /// машину в соседнем квартале.
+    static let parkedCarMaxAccuracyMeters = 30.0
+    /// Фикс быстрее этого — ещё едем: точка машины. Выше пешей скорости и
+    /// бега — автостоп приходит через три минуты, человек к тому времени идёт.
+    static let parkedCarDrivingKmh = 12.0
+    /// Отошли дальше — показываем метку машины и строку; ближе машину видно глазами.
+    static let parkedCarShowMeters = 150.0
+    /// И не раньше: сразу после парковки подсказка не нужна.
+    static let parkedCarShowAfterSeconds: TimeInterval = 120
+    /// Подошли ближе (после того как отходили) — вернулись к машине.
+    static let parkedCarReachedMeters = 30.0
+    /// Через трое суток точку забываем: машину за это время двигали.
+    static let parkedCarMaxAgeSeconds: TimeInterval = 3 * 24 * 3600
 }

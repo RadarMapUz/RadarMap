@@ -130,6 +130,8 @@ struct EngineMapView: UIViewRepresentable {
     /// Флаг цели маршрута и точка долгого тапа (бар действий открыт).
     var destination: CLLocationCoordinate2D?
     var pressedPoint: CLLocationCoordinate2D?
+    /// «Где машина» (ParkedCar): метка машины, пока подсказка показана.
+    var parkedCar: CLLocationCoordinate2D?
     /// Зоны «здесь часто ставят треногу»: пустые — слоя нет.
     var hotspots: [CLLocationCoordinate2D] = []
     /// Перенести центр в точку (счётчик, как у остальных команд): нужно
@@ -537,9 +539,23 @@ struct EngineMapView: UIViewRepresentable {
                     .draw(in: CGRect(x: 2, y: 2, width: 28, height: 28))
             }
             style.setImage(pin, forName: "radar-pin")
+            // Машина — синий диск с белой машиной и белым кольцом, как флаг
+            // цели: «P» спутали бы с парковками карты (их значок — тоже «P»).
+            let parked = UIGraphicsImageRenderer(size: CGSize(width: 34, height: 34)).image { _ in
+                UIColor.white.setFill()
+                UIBezierPath(ovalIn: CGRect(x: 1, y: 1, width: 32, height: 32)).fill()
+                Theme.rgb(0x2563D9).setFill()
+                UIBezierPath(ovalIn: CGRect(x: 3, y: 3, width: 28, height: 28)).fill()
+                if let car = UIImage(systemName: "car.fill",
+                                     withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .bold))?
+                    .withTintColor(.white, renderingMode: .alwaysOriginal) {
+                    car.draw(at: CGPoint(x: 17 - car.size.width / 2, y: 17 - car.size.height / 2))
+                }
+            }
+            style.setImage(parked, forName: "radar-parked")
             for place in EnginePlaceIcons.all { style.setImage(place.image, forName: place.name) }
             let names = ["radar-signal", EngineModernStyle.trafficLightImage, "radar-stop", "radar-flag",
-                         "radar-pin", CameraMarkerLook.ghostBadge, CameraMarkerLook.ownBadge]
+                         "radar-pin", "radar-parked", CameraMarkerLook.ghostBadge, CameraMarkerLook.ownBadge]
                 + EnginePlaceIcons.all.map(\.name)
                 + kinds.flatMap { kind in Self.markerLooks.map { kind.symbolName + $0.suffix } }
             for name in names { Self.iconCache[name] = style.image(forName: name) }
@@ -1122,13 +1138,18 @@ struct EngineMapView: UIViewRepresentable {
 
         private func updateMarks(_ model: EngineMapView, in view: MLNMapView) {
             let key = [model.destination?.latitude ?? .nan, model.destination?.longitude ?? .nan,
-                       model.pressedPoint?.latitude ?? .nan, model.pressedPoint?.longitude ?? .nan]
+                       model.pressedPoint?.latitude ?? .nan, model.pressedPoint?.longitude ?? .nan,
+                       model.parkedCar?.latitude ?? .nan, model.parkedCar?.longitude ?? .nan]
             if key.map({ $0.isNaN ? 0 : $0 }) != lastMarksKey.map({ $0.isNaN ? 0 : $0 }) || lastMarksKey.isEmpty {
                 lastMarksKey = key
                 var points: [MLNPointFeature] = []
                 if let destination = model.destination {
                     let flag = MLNPointFeature(); flag.coordinate = destination
                     flag.attributes = ["icon": "radar-flag"]; points.append(flag)
+                }
+                if let parked = model.parkedCar {
+                    let mark = MLNPointFeature(); mark.coordinate = parked
+                    mark.attributes = ["icon": "radar-parked"]; points.append(mark)
                 }
                 if let pressed = model.pressedPoint {
                     let pin = MLNPointFeature(); pin.coordinate = pressed

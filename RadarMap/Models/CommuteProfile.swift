@@ -130,9 +130,14 @@ nonisolated enum CommuteProfile {
                       arrivalMinute: Int16(minuteOfDay(arrival, calendar: calendar)),
                       seconds: seconds)
         if Double(row.validCount) >= Double(seconds.count) * AppConfig.commuteProfileMinValidShare {
-            // Склейка финиширует ту же поездку второй раз — строка заменяется.
+            // Склейка финиширует ту же поездку второй раз — строка заменяется,
+            // и в ДРУГИХ вариантах тоже: первая нога могла лечь в другой путь,
+            // и её строка осталась бы там второй строкой той же поездки.
             variant.rows.removeAll { $0.tripID == tripID }
             variant.rows.insert(row, at: 0)
+            for other in variants.indices where other != index {
+                variants[other].rows.removeAll { $0.tripID == tripID }
+            }
         }
         let oldest = now.addingTimeInterval(-AppConfig.commuteProfileKeepDays * 86_400)
         variant.rows = Array(variant.rows.filter { $0.departure >= oldest }

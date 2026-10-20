@@ -130,6 +130,16 @@ final class CommuteProfileTests: XCTestCase {
         XCTAssertEqual(Double(book.toWork[0].rows[0].seconds[3]), 40, accuracy: 2)
     }
 
+    /// Склейка, вторая нога которой ушла другим путём: строка первой ноги в
+    /// прежнем варианте снимается — у поездки одна строка, и «где ушло время»
+    /// не возьмёт половину поездки из старого пути (ревью 8.8.8).
+    func testMergedTripRowMovesBetweenVariants() {
+        var book = fold(track(straight, speed: 10), id: 7)
+        book = fold(track([(0, 0), (0, 600), (3000, 600), (3000, 0)], speed: 10), into: book, id: 7)
+        XCTAssertEqual(book.toWork.count, 2)
+        XCTAssertEqual(book.toWork.flatMap(\.rows).filter { $0.tripID == 7 }.count, 1)
+    }
+
     func testOldestVariantIsEvicted() {
         var book = P.Book()
         for (i, north) in [0.0, 1500, 3000, 4500].enumerated() {

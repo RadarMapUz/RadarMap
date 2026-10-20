@@ -762,6 +762,9 @@ nonisolated enum AppConfig {
     nonisolated static let commuteLossNameMeters: Double = 150
     /// Строк в «Последних поездках» экрана дороги.
     nonisolated static let commuteDetailTripRows = 12
+    /// Пробел посреди пробки (стояние дольше двух минут на границе участков)
+    /// не рвёт отрезок, если он не длиннее двух участков (~400 м).
+    nonisolated static let commuteLossBridgeSegments = 2
 
     // MARK: «Выезжайте раньше» (план 19.10, 8.8.7)
 

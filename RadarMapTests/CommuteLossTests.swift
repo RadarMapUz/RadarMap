@@ -31,10 +31,11 @@ final class CommuteLossTests: XCTestCase {
     }
 
     /// Прямая 4 км на восток, 20 участков по 200 м. Обычные утренние поездки —
-    /// 18–25 с на участок (медиана 20, q75 22), вечерние вдвое дольше; своя
+    /// 18–25 с на участок (медиана 20, q75 22), вечерние втрое дольше; своя
     /// поездка — `mine` (секунды по участкам), выезд в 8:05.
     private func variant(mine: [UInt16], others: [Int] = [18, 20, 20, 22, 25],
-                         evening: Bool = true) -> CommuteProfile.Variant {
+                         evening: Bool = true, morning: Bool = true,
+                         unmeasured: Set<Int> = []) -> CommuteProfile.Variant {
         var line: [Int32] = []
         for i in 0..<81 {
             let p = point(50 * Double(i))
@@ -44,9 +45,11 @@ final class CommuteLossTests: XCTestCase {
         var rows = [CommuteProfile.Row(tripID: tripID, departure: at(8, 5), weekend: false,
                                        arrivalMinute: 0, seconds: mine)]
         for (i, s) in others.enumerated() {
-            rows.append(CommuteProfile.Row(tripID: Double(i), departure: at(8, day: 4 + i), weekend: false,
-                                           arrivalMinute: 0,
-                                           seconds: [UInt16](repeating: UInt16(s), count: 20)))
+            let seconds = (0..<20).map { unmeasured.contains($0) ? CommuteProfile.Row.noData : UInt16(s) }
+            if morning {
+                rows.append(CommuteProfile.Row(tripID: Double(i), departure: at(8, day: 4 + i), weekend: false,
+                                               arrivalMinute: 0, seconds: seconds))
+            }
             if evening {
                 rows.append(CommuteProfile.Row(tripID: Double(100 + i), departure: at(18, day: 4 + i),
                                                weekend: false, arrivalMinute: 0,
@@ -78,11 +81,15 @@ final class CommuteLossTests: XCTestCase {
                                                middle.latitude, middle.longitude), 20)
     }
 
-    /// Медленнее медианы, но в обычном разбросе (22 с при q75 22) — не потеря:
-    /// иначе каждый светофор стал бы «местом, где ушло время».
+    /// Медленнее медианы, но в обычном разбросе — не потеря: другие ездят
+    /// 18–30 с (медиана 20, q75 26), наша — 26 с на каждом участке, это 120 с
+    /// «против медианы», но не хуже обычного разброса. Сравнение с медианой
+    /// назвало бы всю дорогу потерей — каждый светофор.
     func testWithinTheUsualSpreadIsNotALoss() {
-        let mine = [UInt16](repeating: 22, count: 20)
-        XCTAssertTrue(CommuteLoss.stretches(in: variant(mine: mine), tripID: tripID, calendar: utc).isEmpty)
+        let mine = [UInt16](repeating: 26, count: 20)
+        let found = CommuteLoss.stretches(in: variant(mine: mine, others: [18, 20, 20, 26, 30]),
+                                          tripID: tripID, calendar: utc)
+        XCTAssertTrue(found.isEmpty, "\(found)")
     }
 
     /// Только медленные места: быстрая поездка ничего не называет.
@@ -91,25 +98,69 @@ final class CommuteLossTests: XCTestCase {
         XCTAssertTrue(CommuteLoss.stretches(in: variant(mine: mine), tripID: tripID, calendar: utc).isEmpty)
     }
 
-    /// Стоянка посреди пробки (участок не измерен) — два отрезка, а не один
-    /// с магазином внутри.
-    func testAStopSplitsTheStretch() {
-        var mine = usual(Dictionary(uniqueKeysWithValues: (4...10).map { ($0, UInt16(50)) }))
+    /// Короткий пробел посреди пробки — стояние в очереди дольше двух минут на
+    /// границе участков — не рвёт отрезок: потеря пробела — как у соседей.
+    /// Длинный пробел (стоянка, сошли с линии) — два отрезка.
+    func testAStandstillGapIsBridgedALongGapSplits() {
+        var mine = usual(Dictionary(uniqueKeysWithValues: (5...9).map { ($0, UInt16(60)) }))
         mine[7] = CommuteProfile.Row.noData
-        let found = CommuteLoss.stretches(in: variant(mine: mine), tripID: tripID, calendar: utc)
-        XCTAssertEqual(found.map(\.segments), [4...6, 8...10])
+        let jam = CommuteLoss.stretches(in: variant(mine: mine), tripID: tripID, calendar: utc)
+        XCTAssertEqual(jam.map(\.segments), [5...9])
+        XCTAssertEqual(jam.first?.lostSeconds ?? 0, 200, accuracy: 0.5)
+
+        var split = usual(Dictionary(uniqueKeysWithValues: (3...12).map { ($0, UInt16(50)) }))
+        for j in 6...8 { split[j] = CommuteProfile.Row.noData }
+        let found = CommuteLoss.stretches(in: variant(mine: split), tripID: tripID, calendar: utc)
+        XCTAssertEqual(found.map(\.segments), [9...12, 3...5], "длинный пробел рвёт; большая потеря — первой")
     }
 
-    /// Меньше минуты — не место; больше трёх мест — три самых дорогих.
-    func testSmallLossesAreDroppedAndAtMostThreeKept() {
+    /// Меньше минуты — не место (порог, а не потолок списка: мест всего два).
+    func testLessThanAMinuteIsNotAPlace() {
         var overrides: [Int: UInt16] = [1: 70]                 // 50 с — не место
-        for j in 3...4 { overrides[j] = 60 }                   // 80 с
+        for j in 7...9 { overrides[j] = 70 }                   // 150 с
+        let found = CommuteLoss.stretches(in: variant(mine: usual(overrides)), tripID: tripID, calendar: utc)
+        XCTAssertEqual(found.map(\.segments), [7...9])
+    }
+
+    /// Больше трёх мест — три самых дорогих, по убыванию.
+    func testAtMostThreePlacesKept() {
+        var overrides: [Int: UInt16] = [:]
+        for j in 2...3 { overrides[j] = 60 }                   // 80 с
         for j in 7...9 { overrides[j] = 70 }                   // 150 с
         for j in 12...13 { overrides[j] = 75 }                 // 110 с
         for j in 16...17 { overrides[j] = 65 }                 // 90 с
         let found = CommuteLoss.stretches(in: variant(mine: usual(overrides)), tripID: tripID, calendar: utc)
         XCTAssertEqual(found.map(\.segments), [7...9, 12...13, 16...17])
         XCTAssertEqual(found.map(\.lostSeconds), [150, 110, 90])
+    }
+
+    /// Участки, которые другие поездки почти не мерили (автостарт в полукило-
+    /// метре от ворот), — не потеря: «обычно» там выдумано средним темпом.
+    func testSegmentsOthersDidNotMeasureAreNotLosses() {
+        let mine = usual([0: 90, 1: 90, 2: 90])
+        let found = CommuteLoss.stretches(in: variant(mine: mine, unmeasured: [0, 1, 2]),
+                                          tripID: tripID, calendar: utc)
+        XCTAssertTrue(found.isEmpty, "\(found)")
+    }
+
+    /// Только поездки этого часа (±2 ч): с одними вечерними сравнивать утреннюю
+    /// — не «в это же время»; тишина.
+    func testOnlyAllDayRowsMeansSilence() {
+        let mine = usual(Dictionary(uniqueKeysWithValues: (5...9).map { ($0, UInt16(60)) }))
+        XCTAssertTrue(CommuteLoss.stretches(in: variant(mine: mine, morning: false),
+                                            tripID: tripID, calendar: utc).isEmpty)
+    }
+
+    /// Места — у последней поездки и у медленных; у не медленных строки нет.
+    func testPlacesOnlyForTheLastAndSlowerTrips() {
+        let mine = usual(Dictionary(uniqueKeysWithValues: (5...9).map { ($0, UInt16(60)) }))
+        let v = variant(mine: mine)
+        XCTAssertEqual(CommuteLoss.places(for: [(id: tripID, slower: false)], lastID: tripID, in: [v],
+                                          calendar: utc).keys.sorted(), [tripID])
+        XCTAssertTrue(CommuteLoss.places(for: [(id: tripID, slower: false)], lastID: 1, in: [v],
+                                         calendar: utc).isEmpty, "не последняя и не медленная")
+        XCTAssertEqual(CommuteLoss.places(for: [(id: tripID, slower: true)], lastID: 1, in: [v],
+                                          calendar: utc)[tripID]?.count, 1, "у медленной — одно место")
     }
 
     /// Сравниваем с поездками этого часа: вечерние втрое дольше и в утреннее

@@ -45,7 +45,8 @@ nonisolated enum CommuteLoss {
 
     /// Медленные отрезки поездки `tripID` в варианте — от большей потери к
     /// меньшей. Пусто, если строки этой поездки в варианте нет или сравнить
-    /// не с чем (меньше трёх других поездок того же класса дня).
+    /// не с чем: меньше трёх других поездок того же класса дня В ЭТОТ ЖЕ ЧАС
+    /// (±2 ч) — медиана всего дня меряла бы поездку в 9:30 утренним часом пик.
     static func stretches(in variant: CommuteProfile.Variant, tripID: Double,
                           calendar: Calendar = .current,
                           minLossSeconds: Double = AppConfig.commuteLossMinSeconds,
@@ -55,19 +56,55 @@ nonisolated enum CommuteLoss {
         // медиану к себе и прятала собственную потерю.
         let others = variant.rows.filter { $0.tripID != tripID }
         let minute = CommuteProfile.minuteOfDay(row.departure, calendar: calendar)
-        guard let rows = CommuteGhost.selectRows(others, weekend: row.weekend, departureMinute: minute,
-                                                 calendar: calendar),
-              let base = CommuteGhost.baseline(ends: variant.ends, limitKmh: variant.limitKmh, rows: rows)
+        guard let selected = CommuteGhost.selectRowsTiered(others, weekend: row.weekend,
+                                                           departureMinute: minute, calendar: calendar),
+              selected.tier <= .twoHours,
+              let base = CommuteGhost.baseline(ends: variant.ends, limitKmh: variant.limitKmh,
+                                               rows: selected.rows)
         else { return [] }
 
         let count = min(row.seconds.count, base.median.count)
+        // Состояние участка. «Обычно» есть, только где его мерили хотя бы две
+        // другие поездки: остальное база заполняет средним темпом для прогноза,
+        // и сравнение с ним выдумывало бы «потери» у дома, где автостарт
+        // начинает поездки в полукилометре от ворот.
+        enum State { case slow(Double), normal, gap, unknown }
+        var states = [State](repeating: .unknown, count: count)
+        for j in 0..<count {
+            let measured = selected.rows.reduce(0) {
+                $0 + (j < $1.seconds.count && $1.seconds[j] != CommuteProfile.Row.noData ? 1 : 0)
+            }
+            guard measured >= 2 else { continue }
+            let raw = row.seconds[j]
+            if raw == CommuteProfile.Row.noData {
+                states[j] = .gap
+            } else if Double(raw) > base.q75[j] {
+                states[j] = .slow(Double(raw) - base.median[j])
+            } else {
+                states[j] = .normal
+            }
+        }
+        // Пробел посреди пробки — не разрыв: стояние в очереди дольше двух
+        // минут на границе участков даёт неизмеренные соседние участки, и ровно
+        // там ушло больше всего времени. Короткий пробел между двумя медленными
+        // участками входит в отрезок с потерей, как у соседей; длинный или у
+        // края — разрыв (стоянка, сошли с линии).
+        var j = 0
+        while j < count {
+            guard case .gap = states[j] else { j += 1; continue }
+            var end = j
+            while end + 1 < count, case .gap = states[end + 1] { end += 1 }
+            if end - j + 1 <= AppConfig.commuteLossBridgeSegments, j > 0, end + 1 < count,
+               case .slow(let left) = states[j - 1], case .slow(let right) = states[end + 1] {
+                for k in j...end { states[k] = .slow((left + right) / 2) }
+            }
+            j = end + 1
+        }
         var runs: [(first: Int, last: Int, lost: Double)] = []
         var open: (first: Int, lost: Double)?
         for j in 0..<count {
-            let raw = row.seconds[j]
-            let seconds = Double(raw)
-            if raw != CommuteProfile.Row.noData, seconds > base.q75[j] {
-                open = (open?.first ?? j, (open?.lost ?? 0) + seconds - base.median[j])
+            if case .slow(let lost) = states[j] {
+                open = (open?.first ?? j, (open?.lost ?? 0) + lost)
             } else if let run = open {
                 runs.append((run.first, j - 1, run.lost))
                 open = nil
@@ -91,5 +128,22 @@ nonisolated enum CommuteLoss {
                 return Stretch(segments: run.first...run.last, startMeters: start, endMeters: end,
                                lostSeconds: run.lost, midLat: middle.latitude, midLon: middle.longitude)
             }
+    }
+
+    /// Места потерь для поездок экрана «Дорога»: у последней — все (до трёх),
+    /// у остальных — самое дорогое, и только у поездок, которые и правда
+    /// дольше обычного (`slower`). Вариант — тот, где лежит строка поездки.
+    static func places(for trips: [(id: Double, slower: Bool)], lastID: Double,
+                       in variants: [CommuteProfile.Variant],
+                       calendar: Calendar = .current) -> [Double: [Stretch]] {
+        var found: [Double: [Stretch]] = [:]
+        for trip in trips where trip.id == lastID || trip.slower {
+            guard let variant = variants.first(where: { $0.rows.contains { $0.tripID == trip.id } })
+            else { continue }
+            let stretches = Self.stretches(in: variant, tripID: trip.id, calendar: calendar)
+            guard !stretches.isEmpty else { continue }
+            found[trip.id] = trip.id == lastID ? stretches : Array(stretches.prefix(1))
+        }
+        return found
     }
 }

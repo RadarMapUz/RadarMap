@@ -475,6 +475,10 @@ final class TripStats {
         applyLifetime(.trips(-1))
         persist()
         persistLifetime()
+        // Вторая нога как отдельная поездка исчезла — журнал «дороги» и профиль
+        // забывают её id: иначе в «Последних поездках» оставалась фантомная
+        // поездка (ревью 8.8.8). Склейка живёт под id первой ноги.
+        if merged.id != next.id { onRecordsErased?([next.id]) }
         Log.trips.info("поездки объединены вручную: \(Int(merged.distanceMeters), privacy: .public) м")
     }
 

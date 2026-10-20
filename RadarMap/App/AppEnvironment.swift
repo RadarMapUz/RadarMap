@@ -84,6 +84,8 @@ final class AppEnvironment {
     let family = FamilyShareService()
     /// Граф трасс для маршрута без сети (12б.10).
     let offlineRoutes = OfflineRouteService()
+    /// Коридор длинного маршрута (19.3): карта и граф по пути, «По пути».
+    let corridor = RouteCorridorService()
     /// Горячие точки треног: подписанный список мест, где водители отмечали
     /// радар снова и снова. Не камеры и не отметки — память, поэтому и живут
     /// отдельным сервисом с недельным обновлением и своим тихим тоном.
@@ -457,6 +459,12 @@ final class AppEnvironment {
         // приблизительный маршрут молча заменяется серверным.
         offlineRoutes.network = network
         route.offlinePath = { [weak offlineRoutes] from, to in await offlineRoutes?.path(from: from, to: to) }
+        // Коридор длинного маршрута (19.3): области карты и граф по пути,
+        // файлы заведений «По пути» — сам он ничего не качает без правил.
+        corridor.maps = offlineMaps
+        corridor.graph = offlineRoutes
+        corridor.roads = roads
+        corridor.network = network
         network.onOnline = { [weak self] in
             guard let self else { return }
             self.route.replaceOfflineRoute(from: self.location.currentCoordinate, cameras: self.cameras.cameras)

@@ -481,6 +481,23 @@ final class RoadNetworkService {
                        allowDownload: allowDownload)
     }
 
+    /// Размер файла заведений клетки по подписанному индексу. nil — клетки в
+    /// индексе нет (не опубликована) или индекса ещё нет: качать нечего.
+    /// Им «По пути» говорит, сколько весит недостающее, до того, как качать.
+    func venueCellBytes(for coordinate: CLLocationCoordinate2D) -> Int? {
+        guard indexVersion >= RoadTiles.formatVersionV2 else { return nil }
+        return index?.tiles[VenueBook.key(for: coordinate)]?.bytes
+    }
+
+    /// Положить файл заведений клетки на диск, не разбирая (коридор длинного
+    /// маршрута по Wi-Fi, 19.3): sha сверяется так же, разбор — при чтении.
+    /// true — файл на телефоне.
+    @discardableResult
+    func prefetchVenues(for coordinate: CLLocationCoordinate2D) async -> Bool {
+        await cellFile(key: VenueBook.key(for: coordinate), what: "заведения",
+                       decode: { _ in true }) ?? false
+    }
+
     /// Файл крупной клетки из подписанного индекса: с диска, если sha сошёлся,
     /// иначе с сервера (только со связью) — и на диск. Не сошёлся sha или
     /// формат — клетка помечается битой до следующего индекса.

@@ -152,6 +152,21 @@ final class ReportGuardTests: XCTestCase {
                                             from: point(metresEast: 400)))
     }
 
+    func testDoesNotAskAboutOwnReport() {
+        // Свою отметку водитель видел сам, а его голос сервер не засчитает
+        // (тот же телефон) — вопрос о ней был бы пустым тапом за рулём.
+        let own = mobileCamera(id: 5, metresEast: 0)
+        let other = mobileCamera(id: 6, metresEast: 30)
+        var tracks: [Int: MobilePassWatch.Track] = [:]
+        _ = MobilePassWatch.update(tracks: &tracks, mobileCameras: [own, other],
+                                   from: point(metresEast: -10), excluded: [own.id])
+        XCTAssertEqual(MobilePassWatch.update(tracks: &tracks, mobileCameras: [own, other],
+                                              from: point(metresEast: 250), excluded: [own.id]),
+                       other.id)
+        XCTAssertNil(MobilePassWatch.update(tracks: &tracks, mobileCameras: [own, other],
+                                            from: point(metresEast: 300), excluded: [own.id]))
+    }
+
     func testForgetsPointsThatExpired() {
         // Точка истекла на сервере — её наблюдение не должно жить в памяти
         // всю поездку.

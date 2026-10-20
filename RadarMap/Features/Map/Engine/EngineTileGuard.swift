@@ -137,7 +137,9 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
     /// вызывающего — то есть на главном (EngineMapView зовёт из MainActor), и
     /// разбор 23,5 МБ с проверкой подписи и записью 6,6 МБ подвешивал экран на
     /// секунды (аудит 11.10). Всё состояние — под `lock`, главный ему не нужен.
-    @concurrent static func prepare() async {
+    /// `conditional: false` — повтор после 304 без файла: без условия, чтобы
+    /// неудалённая метка не зациклила 304 → повтор → 304.
+    @concurrent static func prepare(conditional: Bool = true) async {
         if isReady { return }
         let url = AppConfig.syncBaseURL.appendingPathComponent("mvt_index.json")
         var request = URLRequest(url: url)
@@ -147,7 +149,7 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
         // чтобы увидеть именно код ответа.
         request.cachePolicy = .reloadIgnoringLocalCacheData
         // Метки нет — первый запуск или она стёрта: запрос уйдёт без условия.
-        let knownTag = try? String(contentsOf: etagURL, encoding: .utf8)
+        let knownTag = conditional ? try? String(contentsOf: etagURL, encoding: .utf8) : nil
         if let knownTag, !knownTag.isEmpty {
             request.setValue(knownTag, forHTTPHeaderField: "If-None-Match")
         }
@@ -171,6 +173,10 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
 
         if http.statusCode == 304 {
             if loadCached() { return }
+            guard conditional else {
+                log.error("индекс MVT: 304 на безусловный запрос — карта на движке останется пустой")
+                return
+            }
             // 304 есть, а разобранного индекса нет: метка пережила файл
             // (диск очистили, запись не удалась). Без этой ветки метка навсегда
             // запирала бы карту пустой — сервер отвечает «не менялось», брать
@@ -182,7 +188,7 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
             }
             log.error("метка индекса MVT есть, разобранного файла нет — качаем заново")
             lock.withLock { $0 = nil }
-            return await prepare()
+            return await prepare(conditional: false)
         }
 
         guard http.statusCode == 200,

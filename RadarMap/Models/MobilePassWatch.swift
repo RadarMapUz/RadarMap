@@ -49,11 +49,15 @@ nonisolated enum MobilePassWatch {
     /// Возвращает id точки, о которой уместен вопрос, или nil. Состояние
     /// передаётся и возвращается целиком: держать его должен вызывающий,
     /// а движок остаётся чистым.
+    /// `excluded` — свои отметки водителя: отметивший сам видел, что там, а
+    /// его «да» сервер всё равно не засчитает (тот же телефон — не
+    /// независимое подтверждение). Вопрос был бы пустым тапом за рулём.
     static func update(tracks: inout [Int: Track],
                        mobileCameras: [Camera],
-                       from coordinate: CLLocationCoordinate2D) -> Int? {
+                       from coordinate: CLLocationCoordinate2D,
+                       excluded: Set<Int> = []) -> Int? {
         var askAbout: Int?
-        for camera in mobileCameras {
+        for camera in mobileCameras where !excluded.contains(camera.id) {
             let distance = GeoMath.fastDistance(coordinate.latitude, coordinate.longitude,
                                                 camera.lat, camera.lon)
             // Далеко и не наблюдали — не заводим запись: сотни точек по стране

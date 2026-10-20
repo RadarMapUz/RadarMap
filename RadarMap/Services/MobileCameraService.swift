@@ -874,6 +874,10 @@ final class MobileCameraService {
 
     @ObservationIgnored private var passTracks: [Int: MobilePassWatch.Track] = [:]
 
+    /// Id своих отметок в пространстве карты (со сдвигом) — вопросы «ещё
+    /// стоит?» о них не задаются.
+    private var ownReportIDs: Set<Int> { Set(mine.map { Self.idOffset + $0.id }) }
+
     /// Тик положения: обновить наблюдение за передвижными точками.
     ///
     /// Зовётся на каждом принятом фиксе из LocationService (AppEnvironment),
@@ -890,9 +894,11 @@ final class MobileCameraService {
         // Проезды отслеживаются и пока висит вопрос: с погашенным экраном он
         // висит до пяти минут, и без этого все отметки, мимо которых проехали
         // за это время, пропадали из наблюдения.
+        // Свои отметки не спрашиваем — как у событий дороги.
         let askID = MobilePassWatch.update(tracks: &passTracks,
                                            mobileCameras: reports,
-                                           from: coordinate)
+                                           from: coordinate,
+                                           excluded: ownReportIDs)
         if pendingConfirm == nil, let askID {
             pendingConfirm = reports.first { $0.id == askID }
             pendingConfirmAt = pendingConfirm == nil ? nil : now
@@ -946,10 +952,9 @@ final class MobileCameraService {
                                  now: Date) {
         guard !roadEvents.isEmpty || !roadPassTracks.isEmpty else { return }
         // Свои отметки не спрашиваем: отметивший только что видел сам.
-        let own = Set(mine.map { Self.idOffset + $0.id })
         let askID = RoadEventPassWatch.update(tracks: &roadPassTracks, events: roadEvents,
                                               from: coordinate, course: course,
-                                              excluded: own, now: now)
+                                              excluded: ownReportIDs, now: now)
         guard pendingRoadConfirm == nil, let askID else { return }
         pendingRoadConfirm = roadEvents.first { $0.id == askID }
         pendingRoadConfirmAt = pendingRoadConfirm == nil ? nil : now

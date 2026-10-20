@@ -4299,6 +4299,22 @@
         }
       }
     },
+    "Другое": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Другое"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boshqa"
+          }
+        }
+      }
+    },
     "Другой водитель проехал и подтвердил: %@": {
       "extractionState": "manual",
       "localizations": {
@@ -10828,6 +10844,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Radar joyida"
+          }
+        }
+      }
+    },
+    "Радар отмечен": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Радар отмечен"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radar belgilandi"
+          }
+        }
+      }
+    },
+    "Радар отмечен — что это было?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Радар отмечен — что это было?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radar belgilandi — bu nima edi?"
           }
         }
       }

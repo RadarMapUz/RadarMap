@@ -226,6 +226,7 @@ extension CarPlaySceneDelegate {
     }
 
     /// Отметить засаду прямо на ходу — иконкой, чтобы бар не распухал.
+    /// Одно касание — сразу радар; тип уточняет баннер (10.2, `quickRadar`).
     ///
     /// Треугольник, как у жёлтой «Радар!» на телефоне и у команды Siri:
     /// водитель учит один значок, а не два. Речевой пузырь (до 12.10) был
@@ -236,11 +237,11 @@ extension CarPlaySceneDelegate {
     var reportButton: CPBarButton {
         guard let image = buttonImage(Icon.reportRadar) else {
             return CPBarButton(title: String(localized: "Радар")) { [weak self] _ in
-                self?.presentReport()
+                self?.quickRadar()
             }
         }
         return CPBarButton(image: image) { [weak self] _ in
-            self?.presentReport()
+            self?.quickRadar()
         }
     }
 

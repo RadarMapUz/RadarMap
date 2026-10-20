@@ -383,52 +383,94 @@ extension CarPlaySceneDelegate {
 
     // MARK: - Отметка засады из машины
 
-    /// Радар, тренога, ДТП — крупные плитки, один тап и обратно на карту.
-    /// Координата берётся текущая, ничего уточнять не нужно. Набор типов —
-    /// общий с телефоном (`ReportKind.offered`), чтобы из машины нельзя было
-    /// поставить то, чего нет на экране.
-    func presentReport() {
-        let buttons = ReportKind.offered.map { kind in
-            gridButton(symbol: kind.symbol, titles: [kind.title]) { [weak self] in
-                self?.submitReport(kind)
-            }
-        }
-        guard beginPush("отметка") else { return }
-        let grid = CPGridTemplate(title: String(localized: "Что впереди?"), gridButtons: buttons)
-        interfaceController?.pushTemplate(grid, animated: true) { [weak self] _, error in
-            Task { @MainActor [weak self] in self?.endPush() }
-            if let error {
-                Log.carplay.error("pushTemplate(отметка): \(error.localizedDescription, privacy: .public)")
+    /// «Радар!» одним касанием (10.2). Раньше касание открывало сетку
+    /// «Что впереди?» — второй тап и взгляд на экран ровно там, где руки
+    /// должны быть на руле. Теперь радар ставится сразу (он покрывает почти
+    /// все случаи), а уточнить тип можно баннером: «Тренога» одним касанием,
+    /// «Другое» — сетка. Молчание честно оставляет «радар», как на телефоне
+    /// (`ReportRefineBar`). Та же дверь, что у плашки и часов
+    /// (`remoteRadarReport`): защита от дублей и двойного нажатия, итог голосом.
+    func quickRadar() {
+        Task { @MainActor [weak self] in
+            guard let self, let outcome = await env.remoteRadarReport() else { return }
+            // Уточнять можно только свою свежесозданную точку — её и даёт
+            // refineOffer (чужая merged-точка уточнением родила бы вторую).
+            if case .sent(.created) = outcome, let offer = env.mobile.refineOffer {
+                showRefineBanner(offer: offer)
+            } else {
+                showToast(outcome.spoken)
             }
         }
     }
 
-    /// Отметка засады из машины.
-    ///
-    /// Идёт тем же путём, что тап на телефоне (`quickReport`), а не прямым
-    /// `report(at:)`. Разница не косметическая: прямой вызов проходил мимо
-    /// `ReportGuard` — не работала защита от повтора (не понял, нажалось ли, —
-    /// поставил вторую точку рядом), отметка не попадала в дневную статистику,
-    /// и главное: при отсутствии сети она УЖЕ ложилась в очередь и уходила
-    /// позже, а водителю говорили «не отправилось». Врать про потерю того,
-    /// что не потеряно, — худший из ответов.
-    func submitReport(_ kind: ReportKind) {
+    /// Баннер уточнения — ответ на касание водителя (`.request`): камера
+    /// впереди его вытеснит, и тогда остаётся «радар», а голос итог уже сказал.
+    func showRefineBanner(offer: ReportGuard.Sent) {
+        let banner = CPNavigationAlert(
+            titleVariants: [String(localized: "Радар отмечен — что это было?"),
+                            String(localized: "Радар отмечен")],
+            subtitleVariants: nil,
+            image: nil,
+            primaryAction: CPAlertAction(title: ReportKind.tripod.title, style: .default) { [weak self] _ in
+                self?.refineReport(to: .tripod, offer: offer)
+            },
+            secondaryAction: CPAlertAction(title: String(localized: "Другое"), style: .default) { [weak self] _ in
+                self?.presentRefineGrid(offer: offer)
+            },
+            duration: AppConfig.reportRefineSeconds)
+        if banners?.show(banner, kind: .request) != true {
+            Log.carplay.notice("уточнение отметки не показано: экран занят")
+        }
+    }
+
+    /// «Другое»: пост, ДТП и «Отменить» — крупные плитки, один тап и обратно
+    /// на карту. Набор типов — общий с телефоном (`ReportKind.offered`).
+    func presentRefineGrid(offer: ReportGuard.Sent) {
+        var buttons = ReportKind.offered.filter { $0 != .radar && $0 != .tripod }.map { kind in
+            gridButton(symbol: kind.symbol, titles: [kind.title]) { [weak self] in
+                self?.popToMap()
+                self?.refineReport(to: kind, offer: offer)
+            }
+        }
+        if env.mobile.cancellableReportID() != nil {
+            buttons.append(gridButton(symbol: "arrow.uturn.backward", titles: [String(localized: "Отменить")]) { [weak self] in
+                self?.popToMap()
+                self?.cancelOwnReport()
+            })
+        }
+        guard beginPush("уточнение") else { return }
+        let grid = CPGridTemplate(title: String(localized: "Что это было?"), gridButtons: buttons)
+        interfaceController?.pushTemplate(grid, animated: true) { [weak self] _, error in
+            Task { @MainActor [weak self] in self?.endPush() }
+            if let error {
+                Log.carplay.error("pushTemplate(уточнение): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// Второй тап: сервер переписывает тип ТОЙ ЖЕ точки (amend). Слова — те
+    /// же, что у плашки уточнения на телефоне.
+    func refineReport(to kind: ReportKind, offer: ReportGuard.Sent) {
+        env.mobile.dismissRefine()
         Task { @MainActor [weak self] in
             guard let self else { return }
-            let outcome = await env.mobile.quickReport(
-                kind: kind,
-                coordinate: env.location.currentCoordinate,
-                speedKmh: env.location.speedKmh,
-                isTripActive: env.location.isTripActive,
-                course: env.location.currentCourse)
-            // Фраза одна и та же, что звучит голосом на телефоне: экран машины
-            // и голос не имеют права расходиться в оценке того, что случилось.
-            // Тост — после возврата к карте: поверх летящего pop CarPlay
-            // диалог отклонял, и подтверждения водитель не видел.
-            // И голосом, как на телефоне (ReportRadarButton): пока впереди
-            // камера, баннер ответа уступает ей, а ответ на тап обязан дойти.
-            env.alerts.speak(outcome.spoken)
-            popToMap { [weak self] in self?.showToast(outcome.spoken) }
+            let text = await env.mobile.refine(to: kind, offer: offer)
+                ? kind.title : String(localized: "Не отправилось, нет связи")
+            env.alerts.speak(text)
+            showToast(text)
+        }
+    }
+
+    /// «Не то» — отзыв своей свежей, никем не подтверждённой отметки.
+    func cancelOwnReport() {
+        env.mobile.dismissRefine()
+        guard let id = env.mobile.cancellableReportID() else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let text = await env.mobile.cancelReport(id: id)
+                ? String(localized: "Отметка убрана") : String(localized: "Не отправилось, нет связи")
+            env.alerts.speak(text)
+            showToast(text)
         }
     }
 }

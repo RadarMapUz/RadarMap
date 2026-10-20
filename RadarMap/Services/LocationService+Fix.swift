@@ -187,6 +187,12 @@ extension LocationService {
                     // Скорость погасла без фиксов — стоим: следующий фикс-шум
                     // стрелку не сдвинет (Standstill).
                     self.standstill.stopIfIdle(at: self.displayCoordinate ?? self.currentCoordinate)
+                    // Встали, а фиксов больше нет (distanceFilter): метан у
+                    // АГНКС узнаёт о стоянке отсюда, иначе телефон в кармане
+                    // у колонки не дождался бы вопроса никогда (ревью 12б.4).
+                    if let here = self.displayCoordinate ?? self.currentCoordinate {
+                        self.onStoppedWithoutFix?(here)
+                    }
                     return
                 }
             }

@@ -8,6 +8,7 @@
 
 import Foundation
 import UserNotifications
+import CoreLocation
 import os
 import Observation
 import UIKit
@@ -74,7 +75,20 @@ final class NotificationService: NSObject {
         let category = UNNotificationCategory(identifier: Self.driverCheckCategory,
                                               actions: [driver, passenger],
                                               intentIdentifiers: [])
-        UNUserNotificationCenter.current().setNotificationCategories([category])
+        // «Как на заправке?» — четыре ответа прямо на экране блокировки:
+        // на АГНКС из машины выходят, телефон в кармане. Фоновые действия —
+        // ответ уходит, не открывая приложение.
+        let cngActions = [
+            UNNotificationAction(identifier: CngAnswer.gas.rawValue, title: String(localized: "Газ есть")),
+            UNNotificationAction(identifier: CngAnswer.nogas.rawValue, title: String(localized: "Газа нет")),
+            UNNotificationAction(identifier: CngAnswer.queue15.rawValue, title: String(localized: "Очередь ~15 мин")),
+            // «30+» — это queue60 сервера: «~30» на карте и в поиске
+            // читалось бы как полчаса, а человек сказал «больше» (ревью 12б.4).
+            UNNotificationAction(identifier: CngAnswer.queue60.rawValue, title: String(localized: "Очередь 30+ мин")),
+        ]
+        let cng = UNNotificationCategory(identifier: Self.cngAskCategory, actions: cngActions,
+                                         intentIdentifiers: [])
+        UNUserNotificationCenter.current().setNotificationCategories([category, cng])
     }
 
     /// Автостарт в незнакомой машине: спрашиваем ненавязчиво. Молчание = за рулём
@@ -93,6 +107,44 @@ final class NotificationService: NSObject {
         let center = UNUserNotificationCenter.current()
         center.removeDeliveredNotifications(withIdentifiers: [Self.driverCheckID])
         center.removePendingNotificationRequests(withIdentifiers: [Self.driverCheckID])
+    }
+
+    // MARK: - «Как на заправке?» (метан, 12б.4)
+
+    nonisolated static let cngAskID = "cng-ask"
+    private static let cngAskCategory = "cng-ask-category"
+
+    /// Ответ из уведомления — вешает AppEnvironment (CngService.answer).
+    @ObservationIgnored var onCngAnswer: ((CngAnswer, CLLocationCoordinate2D) async -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onCngAnswer,
+                                               "NotificationService.onCngAnswer") }
+    }
+
+    /// Поставить вопрос на через `after` секунд: машина встала у АГНКС. Тихо —
+    /// без звука: это просьба, а не тревога.
+    func scheduleCngAsk(station: String, point: CLLocationCoordinate2D, after: TimeInterval) {
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "Как на заправке?")
+        content.body = String(format: String(localized: "%@: есть газ, очередь? Ответ увидят водители рядом."),
+                              station)
+        content.categoryIdentifier = Self.cngAskCategory
+        content.userInfo = ["lat": point.latitude, "lon": point.longitude]
+        content.sound = nil
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, after), repeats: false)
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: Self.cngAskID, content: content, trigger: trigger))
+    }
+
+    /// Делегат зовётся вне main — ответ передаём на главный актор.
+    func deliverCngAnswer(_ answer: CngAnswer, point: CLLocationCoordinate2D) async {
+        await onCngAnswer?(answer, point)
+    }
+
+    /// Тронулись до вопроса или после — снять: за рулём не спрашиваем.
+    func cancelCngAsk() {
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [Self.cngAskID])
+        center.removeDeliveredNotifications(withIdentifiers: [Self.cngAskID])
     }
 
     // MARK: - Итоги поездки (после автозавершения)
@@ -336,6 +388,15 @@ extension NotificationService: UNUserNotificationCenterDelegate {
            let link = response.notification.request.content.userInfo["deeplink"] as? String,
            let url = URL(string: link) {
             await MainActor.run { UIApplication.shared.open(url) }
+            return
+        }
+        if id == Self.cngAskID {
+            // Тап по самому баннеру — не ответ: без выбора не уходит ничего.
+            guard let answer = CngAnswer(rawValue: response.actionIdentifier),
+                  let info = response.notification.request.content.userInfo as? [String: Any],
+                  let lat = info["lat"] as? Double, let lon = info["lon"] as? Double else { return }
+            let point = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+            await deliverCngAnswer(answer, point: point)
             return
         }
         guard id == Self.driverCheckID else { return }

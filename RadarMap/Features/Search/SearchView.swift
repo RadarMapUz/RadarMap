@@ -420,7 +420,11 @@ struct SearchView: View {
                         .font(.rounded(13))
                         .foregroundStyle(Theme.textSecondary)
                 } else {
-                    ForEach(model.categoryResults.prefix(AppConfig.searchCategoryLimit)) { venue in
+                    // «Метан» — сначала где газ есть, «нет газа» в конце (12б.4).
+                    let results = kind == .cng && env.cng.isActive
+                        ? CngRules.ranked(model.categoryResults, stations: env.cng.stations)
+                        : model.categoryResults
+                    ForEach(results.prefix(AppConfig.searchCategoryLimit)) { venue in
                         venueRow(venue)
                     }
                 }
@@ -472,6 +476,14 @@ struct SearchView: View {
                             Text(Formatting.distance(distance))
                                 .font(.rounded(12))
                                 .foregroundStyle(Theme.textSecondary)
+                        }
+                        if venue.kind == .cng, env.cng.isActive,
+                           let station = env.cng.station(for: venue.point),
+                           let caption = CngRules.caption(station) {
+                            Text(caption)
+                                .font(.rounded(12, .medium))
+                                .foregroundStyle(station.status == .nogas ? Theme.textTertiary : Theme.success)
+                                .lineLimit(1)
                         }
                     }
                 }

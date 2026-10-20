@@ -67,6 +67,7 @@ enum Storage {
         case carPlayVoiceSet        // rawValue VoiceMode, поставленный машиной
         case carPlaySoundSet        // soundEnabled, поставленный машиной
         case parkedCar              // «Где машина»: точка конца поездки (ParkedCar, JSON)
+        case cngAskedAt             // метан: о какой станции и когда спрашивали (JSON, 3 ч)
     }
 
     private static var defaults: UserDefaults { .standard }

@@ -70,6 +70,11 @@ final class LocationService: NSObject {
     /// Перекрытия и ремонт (12б.5): ставит AppEnvironment (MobileCameraService).
     /// Голос — один раз за поездку на событие (`voicedRoadEvents`).
     @ObservationIgnored var roadEvents: (() -> [RoadEvent])?
+    /// Скорость погасла до нуля без нового фикса — стоим (метан, 12б.4).
+    @ObservationIgnored var onStoppedWithoutFix: ((CLLocationCoordinate2D) -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onStoppedWithoutFix,
+                                               "LocationService.onStoppedWithoutFix") }
+    }
     @ObservationIgnored var voicedRoadEvents: Set<Int> = []
     /// CoreMotion: «телефон стоит» — сторож сигнала не объявляет потерю.
     @ObservationIgnored weak var motion: MotionService?

@@ -45,6 +45,8 @@ final class AppEnvironment {
     let location: LocationService
     let sync: RemoteSyncService
     let mobile: MobileCameraService
+    /// Метан на АГНКС (12б.4).
+    let cng: CngService
     let motion: MotionService
     let route = RouteService()
     let speedLimits: SpeedLimitService
@@ -191,7 +193,11 @@ final class AppEnvironment {
             return NetworkRhythm.trafficInterval(screenOn: self.isPhoneSceneActive || self.isCarPlayConnected,
                                                  hasRoute: self.route.isActive)
         }
-        mobile.onRadioAwake = { [weak traffic] in traffic?.radioIsAwake() }
+        // Метан — тем же тактом радио, своим интервалом (только машина на метане).
+        mobile.onRadioAwake = { [weak traffic, weak cng] in
+            traffic?.radioIsAwake()
+            cng?.refreshIfDue()
+        }
     }
 
     /// Ставит RootView по scenePhase телефона.
@@ -213,6 +219,7 @@ final class AppEnvironment {
         let cameras = CameraStore()
         self.sync = RemoteSyncService(store: cameras)
         self.mobile = MobileCameraService(store: cameras)
+        self.cng = CngService(settings: settings)
         self.motion = MotionService(settings: settings)
         let notifications = NotificationService(settings: settings)
         let alerts = AlertPlayer(settings: settings)
@@ -350,7 +357,9 @@ final class AppEnvironment {
         location.onCameraSpoken = { [weak usage] grade in usage?.noteCameraSpoken(grade) }
         // «Радар ещё стоял?» — наблюдение за проездом мимо передвижных точек
         // на каждом фиксе, и с погашенным экраном тоже (MobileCameraService).
-        location.onAcceptedFix = { [weak self, weak mobile, weak traffic, weak location, weak route, weak alerts] coordinate in
+        location.onAcceptedFix = { [weak self, weak mobile, weak traffic, weak location, weak route, weak alerts, weak cng] coordinate in
+            // Метан: встали у АГНКС — вопрос через 3 мин, тронулись — снять.
+            cng?.noteFix(coordinate, speedKmh: location?.speedKmh ?? -1)
             // Без withAnimation: транзакция анимации на КАЖДОМ фиксе, в том
             // числе в фоне, ради смены вопроса раз в поездку. Появление
             // вопроса анимирует сам гейт (MobileConfirmGate).
@@ -396,6 +405,13 @@ final class AppEnvironment {
             }
         }
         route.roadEvents = { [weak mobile] in mobile?.roadEvents ?? [] }
+        // Метан (12б.4): пульт, заведения, уведомление «Как на заправке?».
+        cng.crowdEnabled = { [weak mobile] in mobile?.isEnabled ?? false }
+        cng.venues = { [weak roads] point in await roads?.venueBook(for: point, allowDownload: false) }
+        location.onStoppedWithoutFix = { [weak cng] here in cng?.noteFix(here, speedKmh: 0) }
+        cng.notifier = notifications
+        cng.network = network
+        notifications.onCngAnswer = { [weak cng] answer, point in await cng?.answer(answer, point: point) }
         location.roadEvents = { [weak mobile] in mobile?.roadEvents ?? [] }
         route.trafficSnapshot = { [weak traffic] in
             guard let traffic, traffic.isShown, let snapshot = traffic.snapshot,

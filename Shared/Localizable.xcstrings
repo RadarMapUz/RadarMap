@@ -82,6 +82,22 @@
         }
       }
     },
+    "%1$@, %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, %2$@"
+          }
+        }
+      }
+    },
     "%1$lld · до %2$@": {
       "extractionState": "manual",
       "localizations": {
@@ -169,6 +185,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ %@, %lld metr"
+          }
+        }
+      }
+    },
+    "%@ (по словам водителя)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (по словам водителя)"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (haydovchi soʻziga koʻra)"
           }
         }
       }
@@ -624,6 +656,22 @@
         }
       }
     },
+    "%@: есть газ, очередь? Ответ увидят водители рядом.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: есть газ, очередь? Ответ увидят водители рядом."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: gaz bormi, navbat bormi? Javobni yaqindagi haydovchilar koʻradi."
+          }
+        }
+      }
+    },
     "%lld": {
       "localizations": {
         "ru": {
@@ -915,6 +963,22 @@
         }
       }
     },
+    "%lld мин назад": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld мин назад"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld daq oldin"
+          }
+        }
+      }
+    },
     "%lld поездок": {
       "localizations": {
         "ru": {
@@ -1007,6 +1071,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld soat %lld daq"
+          }
+        }
+      }
+    },
+    "%lld ч назад": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ч назад"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld soat oldin"
           }
         }
       }
@@ -3285,6 +3365,38 @@
         }
       }
     },
+    "Газ есть": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Газ есть"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gaz bor"
+          }
+        }
+      }
+    },
+    "Газа нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Газа нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gaz yoʻq"
+          }
+        }
+      }
+    },
     "Где оставили машину": {
       "localizations": {
         "ru": {
@@ -5201,6 +5313,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tezlikni qanday hisoblaymiz"
+          }
+        }
+      }
+    },
+    "Как на заправке?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Как на заправке?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shoxobchada qanday?"
           }
         }
       }
@@ -8454,6 +8582,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bu baho, qaror emas: jarima kelgan-kelmaganini faqat portal biladi. Raqam faqat telefonda saqlanadi."
+          }
+        }
+      }
+    },
+    "Очередь 30+ мин": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очередь 30+ мин"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navbat 30+ daq"
+          }
+        }
+      }
+    },
+    "Очередь ~15 мин": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очередь ~15 мин"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navbat ~15 daq"
           }
         }
       }
@@ -14686,6 +14846,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "belgi"
+          }
+        }
+      }
+    },
+    "очередь 30+ мин": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "очередь 30+ мин"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "navbat 30+ daq"
+          }
+        }
+      }
+    },
+    "очередь ~%lld мин": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "очередь ~%lld мин"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "navbat ~%lld daq"
           }
         }
       }

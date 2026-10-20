@@ -38,6 +38,9 @@ nonisolated struct Standstill: Sendable {
 
     private var slowSince: Date?
     private var slowStart: CLLocationCoordinate2D?
+    /// Медленный отрезок начат фиксом БЕЗ скорости — о стоянке говорит одно
+    /// положение, и ждать его подтверждения дольше (`standstillBlindEnterSeconds`).
+    private var startedBlind = false
     private var fastFixes = 0
     private var lastCourse: Double = -1
 
@@ -60,6 +63,7 @@ nonisolated struct Standstill: Sendable {
         // Скорости нет — медленным считаем, только пока точка почти на месте
         // относительно начала медленного отрезка.
         let slow: Bool
+        var blind = false
         if rawKmh >= 0 {
             slow = rawKmh < AppConfig.standstillEnterKmh
         } else if let start = slowStart {
@@ -67,18 +71,31 @@ nonisolated struct Standstill: Sendable {
                                         coordinate.latitude, coordinate.longitude)
                 < AppConfig.standstillExitMeters
         } else {
-            slow = false
+            // Скорости нет, а медленного отрезка ещё нет — начинаем его по
+            // положению. Раньше здесь было «не медленно», и машина, вставшая
+            // под фиксами без скорости (Wi-Fi в подземном паркинге, iOS
+            // отдаёт −1 стоя; симулятор на стоянке), не вставала НИКОГДА:
+            // спидометр держал последние 40 км/ч, а полноэкранная тревога о
+            // камере в 300 м позади висела, пока не тронешься (прогон 13.3).
+            slow = true
+            blind = true
         }
         guard slow else {
             slowSince = nil
             slowStart = nil
+            startedBlind = false
             return
         }
         if slowSince == nil {
             slowSince = time
             slowStart = coordinate
+            startedBlind = blind
+        } else if rawKmh >= 0 {
+            startedBlind = false   // доплер подтвердил: медленно — обычный порог
         }
-        if let since = slowSince, time.timeIntervalSince(since) >= AppConfig.standstillEnterSeconds {
+        let needed = startedBlind ? AppConfig.standstillBlindEnterSeconds
+                                  : AppConfig.standstillEnterSeconds
+        if let since = slowSince, time.timeIntervalSince(since) >= needed {
             isStopped = true
             anchor = slowStart ?? coordinate
             anchorCourse = lastCourse
@@ -105,6 +122,7 @@ nonisolated struct Standstill: Sendable {
         anchor = nil
         slowSince = nil
         slowStart = nil
+        startedBlind = false
         fastFixes = 0
     }
 }

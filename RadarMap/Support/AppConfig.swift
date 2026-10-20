@@ -621,6 +621,10 @@ nonisolated enum AppConfig {
     /// падал до нуля (CarPlay, 12.10).
     nonisolated static let standstillEnterKmh = 3.5
     nonisolated static let standstillEnterSeconds: TimeInterval = 2
+    /// То же без доплеровской скорости — только по положению: точка не ушла
+    /// дальше `standstillExitMeters` за 5 с — это медленнее 11 км/ч в среднем,
+    /// машина на ходу так не держится (на 20 км/ч 15 м проходятся за 2,7 с).
+    nonisolated static let standstillBlindEnterSeconds: TimeInterval = 5
     /// Тронулись: два фикса подряд не медленнее этого или смещение от точки
     /// остановки больше max(standstillExitMeters, точность фикса).
     nonisolated static let standstillExitKmh = 6.0

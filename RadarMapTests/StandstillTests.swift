@@ -83,6 +83,37 @@ final class StandstillTests: XCTestCase {
         XCTAssertEqual(s.anchorCourse, 15, "стоя стрелка смотрит, куда ехала, а не крутится")
     }
 
+    /// Встали, а фиксы приходят без скорости (Wi-Fi в паркинге, симулятор
+    /// на стоянке): по положению — стоянка, иначе спидометр навсегда
+    /// оставался на скорости последнего фикса со скоростью (прогон 13.3).
+    func testStopUnderFixesWithoutSpeedIsAStop() {
+        var s = Standstill()
+        s.update(shifted(-30), rawKmh: 40, accuracy: 5, course: 10, at: t0)
+        for i in 1...4 {
+            s.update(shifted(Double(i % 2) * 3), rawKmh: -1, accuracy: 10, course: -1,
+                     at: t0.addingTimeInterval(Double(i)))
+            XCTAssertFalse(s.isStopped, "без скорости ждём дольше: t=\(i)")
+        }
+        for i in 5...7 {
+            s.update(spot, rawKmh: -1, accuracy: 10, course: -1, at: t0.addingTimeInterval(Double(i)))
+        }
+        XCTAssertTrue(s.isStopped)
+        XCTAssertEqual(s.anchorCourse, 10)
+    }
+
+    /// Едем под фиксами без скорости (короткий плохой участок) — не стоянка
+    /// ни на 20, ни на 40 км/ч: точка уходит дальше 15 м раньше 5 секунд.
+    func testMovingWithoutSpeedIsNotAStop() {
+        for mps in [5.5, 11.1] {
+            var s = Standstill()
+            for i in 0..<20 {
+                s.update(shifted(Double(i) * mps), rawKmh: -1, accuracy: 10, course: -1,
+                         at: t0.addingTimeInterval(Double(i)))
+                XCTAssertFalse(s.isStopped, "\(mps) м/с, t=\(i)")
+            }
+        }
+    }
+
     func testIdleDecayStops() {
         var s = Standstill()
         s.stopIfIdle(at: spot)

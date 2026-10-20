@@ -212,6 +212,99 @@ def ref_tokens_from_tag(value):
     return out
 
 
+# --- Номера дорог нового реестра: D006, 10V006, A373a, 4Р-85 (14.11) ---------
+#
+# Узкий разбор выше (М/А/4Р) писался до перенумерации: теперь дороги
+# Узбекистана в OSM — «D006» (государственные), «10V006» (код области + V),
+# старые «4Р85»/«4К700» лежат в old_ref. В адресах реестра «D…» — самый частый
+# номер (≈ 900 упоминаний в базе v12), и узкий разбор их не видит вовсе: камера
+# «D006 23 км» снапалась по геометрии на ближайший проезд. Полный снап и 11.3 пока
+# на узком разборе — переход на этот перевёл бы камеры D-трасс на другую
+# дорогу, и это отдельное решение; пересъёмка 14.11 берёт этот.
+
+_HW_LETTERS = "a-zа-яёўқғҳ"
+#: Номер дороги в тексте. Буква-приставка — по старой и новой нумерации, с
+#: кириллическими двойниками (4Р = 4P = 4R, 10В = 10B = 10V, Д = D);
+#: необязательная буква ответвления (A373a, «A373 "A"», «D154 B»). Цифр у
+#: D и A ровно три, у M — две: «д 39» из «дом 39» номером не станет.
+_HW_REF = re.compile(
+    r"(?<![" + _HW_LETTERS + r"0-9ʻ‘’'`])"
+    r"(?:(?P<nn>\d{2})\s?(?P<v>[vвb])\s?-?\s?(?P<nnum>\d{1,3})"
+    r"|(?P<four>4)(?P<x>[rрpkкnнh])\s?-?\s?(?P<fnum>\d{1,4})"
+    r"|(?P<m>[mм])\s?-?\s?(?P<mnum>\d{2})"
+    r"|(?P<a>[aа])\s?-?\s?(?P<anum>\d{3})"
+    r"|(?P<d>[dд])\s?-?\s?(?P<dnum>\d{3}))"
+    # Ответвление: буква вплотную (две — только заглавные: D076HI, но не
+    # падеж «D006ga»; не «…km»), одна через пробел (не «A/y», не
+    # «X.do‘stlik») или в кавычках.
+    r"(?:(?!km|км)(?P<suf>(?-i:[A-ZА-Я]{2})|[" + _HW_LETTERS + r"])"
+    r"|\s(?P<suf2>[a-z])(?![./])"
+    r"|\s?[\"“”«»](?P<suf3>[a-z])[\"“”«»])?"
+    r"(?=km|км|[^" + _HW_LETTERS + r"0-9ʻ‘’'`/]|$)",
+    re.IGNORECASE)
+
+_HW_SERIES = {"r": "r", "р": "r", "p": "r", "k": "k", "к": "k",
+              "n": "n", "н": "n", "h": "n"}
+
+#: Теги дороги с номером. old_ref — прежний номер ТОЙ ЖЕ дороги: адреса
+#: реестра часто пишут его («4P85 "Qamashi Chimqurg‘on"»).
+HW_REF_KEYS = ("ref", "int_ref", "nat_ref", "official_ref", "old_ref")
+
+
+def _hw_canon(m):
+    g = m.groupdict()
+    if g["nn"]:
+        head, num = g["nn"] + "v", g["nnum"]
+    elif g["four"]:
+        head, num = "4" + _HW_SERIES[g["x"].lower()], g["fnum"]
+    elif g["m"]:
+        head, num = "m", g["mnum"]
+    elif g["a"]:
+        head, num = "a", g["anum"]
+    else:
+        head, num = "d", g["dnum"]
+    suffix = translit((g["suf"] or g["suf2"] or g["suf3"] or "").lower())
+    # Номер без ведущих нулей: «D006» в OSM и «D 6»/«D-006» в адресе — одна дорога.
+    return f"{head}{int(num)}{suffix}"
+
+
+#: Номер дороги в адресе: канонический ('d6', '10v6', 'a373a', '4r85'),
+#: позиция в тексте и как написан («D006», «4P-85»).
+RefMention = collections.namedtuple("RefMention", "ref pos text")
+
+
+def highway_refs_in_text(text):
+    """Номера дорог в адресе по порядку упоминания → [RefMention, …]."""
+    if not text:
+        return []
+    return [RefMention(_hw_canon(m), m.start(), m.group(0).strip())
+            for m in _HW_REF.finditer(text)]
+
+
+def highway_refs_from_tag(value):
+    """Тег ref/old_ref (бывает списком: 'M39;M34', 'ref=4Р10') → канонические
+    номера; чужие форматы (E 40, AH5, КХ-50) пропускаются."""
+    if not value:
+        return set()
+    out = set()
+    for part in re.split(r"[;,]", str(value)):
+        part = part.strip()
+        if part.lower().startswith("ref="):
+            part = part[4:].strip()
+        m = _HW_REF.match(part)
+        if m and m.end() == len(part):
+            out.add(_hw_canon(m))
+    return out
+
+
+def highway_refs_from_props(props):
+    """Все номера дороги по тегам HW_REF_KEYS — для load_roads(refs_of=…)."""
+    out = set()
+    for key in HW_REF_KEYS:
+        out |= highway_refs_from_tag(props.get(key))
+    return out
+
+
 # --- Геометрия (локальная равнопромежуточная проекция, город ≤ сотни метров) --
 
 _M_PER_DEG_LAT = 110540.0
@@ -409,10 +502,12 @@ def _iter_features(path):
                 continue
 
 
-def load_roads(path, *, keep_highway=None):
+def load_roads(path, *, keep_highway=None, refs_of=None):
     """keep_highway — необязательный фильтр по тегу highway (функция значения →
     bool): пересъёмке профиля (resnap_profiles) нужны только проезжие части,
-    тротуар в индексе — это ровно та ошибка, которую она исправляет."""
+    тротуар в индексе — это ровно та ошибка, которую она исправляет.
+    refs_of — необязательный разбор номеров дороги (props → set); без него —
+    прежний узкий ref_tokens_from_tag, на котором стоят снап и 11.3."""
     index = RoadIndex()
     named = withref = 0
     for feat in _iter_features(path):
@@ -429,9 +524,12 @@ def load_roads(path, *, keep_highway=None):
         for key in ("name", "name:uz", "name:ru", "name:en", "int_name",
                     "name:uz-Latn", "name:uz-Cyrl", "alt_name", "official_name"):
             tokens |= street_tokens(props.get(key))
-        refs = set()
-        for key in ("ref", "int_ref", "nat_ref", "official_ref"):
-            refs |= ref_tokens_from_tag(props.get(key))
+        if refs_of is not None:
+            refs = refs_of(props)
+        else:
+            refs = set()
+            for key in ("ref", "int_ref", "nat_ref", "official_ref"):
+                refs |= ref_tokens_from_tag(props.get(key))
         rank = _HIGHWAY_RANK.get(props.get("highway", ""), 2)
         if tokens:
             named += 1

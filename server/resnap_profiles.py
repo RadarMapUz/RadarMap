@@ -32,19 +32,33 @@
      магистрали в радиусе нет вовсе.
 needsReview не трогается: точку человек не проверял.
 
-Запуск (локально, ничего не публикует):
+Третья группа (14.11, --mode links) — профиль ЕСТЬ и приложение ему верит,
+но снят с безымянного проезда, жилой улицы или съезда, хотя адрес называет
+трассу («D006 … 23 km» — 2977 на unclassified поперёк D006). Правило — «решает
+адрес»: профиль берётся с названной трассы (номер, кольцо, проспект) в
+LINK_RADIUS_M, при перекрёстке двух трасс или улиц без номера — без изменений;
+подробно — у resnap_links ниже.
+
+Запуск (локально, ничего не публикует), два шага в один кандидат:
   python3 resnap_profiles.py --roads ~/RadarMapBuild/roads.geojsonl \
       --cameras ../RadarMap/Resources/cameras.json \
       --out review/cameras_v13_resnap_candidate.json \
       --report review/resnap_profiles_2026-10-20.csv
+  python3 resnap_profiles.py --mode links --roads ~/RadarMapBuild/roads.geojsonl \
+      --cameras review/cameras_v13_resnap_candidate.json \
+      --out review/cameras_v13_resnap_candidate.json \
+      --report review/resnap_links_2026-10-20.csv
+Второй шаг идемпотентен: исправленные камеры уходят из его классов.
 
 Дальше владелец: CSV глазами → deploy_db.sh 13 с кандидатом (подпись — только
 его ключом). Тесты: python3 -W ignore -m unittest test_resnap_profiles
 """
 import argparse
+import collections
 import csv
 import json
 import os
+import re
 import sys
 
 import snap_cameras as snap
@@ -254,6 +268,343 @@ def verify_diff(old, new, allowed_ids):
             "twin_removed": twin_removed}
 
 
+# --- 14.11: снап на unclassified/residential/съезд при трассе в адресе ---------
+#
+# Третья группа: полный снап посадил камеру на дорогу, которая о проезжей части
+# камеры почти ничего не говорит — безымянный проезд (unclassified), жилую
+# улицу или съезд развязки (*_link), — хотя адрес называет трассу. Причина
+# одна: «D006», «10V006», «4P85» узкий разбор номеров не видел (см.
+# snap_cameras.highway_refs_in_text), и камера «D006 23 км» снапалась по
+# геометрии на ближайший проезд — ПОПЕРЁК трассы. Приложение такому профилю
+# верит (в minorSnapRoadClasses этих классов нет), и гейт оси глушит камеру
+# для машин на самой трассе — тот же класс тишины, что 3135/3136 (прогон 13.3).
+#
+# Правило: решает адрес, а не близость.
+#   - Трасса — номер дороги вне кавычек (в кавычках — описание маршрута:
+#     «D002 "Toshkent — A373 (44 km)"» говорит о D002, не об A373) или
+#     кольцо: «Txay» = D001, «Kxay» = Kichik halqa yo‘li. Ищем её проезжую
+#     часть (не съезд) в LINK_RADIUS_M и берём профиль ближайшей.
+#   - Трасса и улица на одном перекрёстке («D006 … 23 km bilan Furqat
+#     ko‘chasi tutashgan chorraha»): трасса. Адрес привязан к её километру, а
+#     радар на трассе — ровно та камера, которую глушил профиль проезда.
+#   - Две трассы на перекрёстке («D006 … bilan 10V006 … kesishgan
+#     chorraxa»): берём, только если обе найдены и идут одной осью; иначе
+#     какую снимает камера, адрес не говорит — без изменений, в отчёт.
+#   - Проспект/шоссе без номера («Amir Temur shoh ko‘chasi», «Farg‘ona yo‘li
+#     ko‘chasi»): по имени, предпочтительно магистраль; на перекрёстке двух
+#     улиц — без изменений (неоднозначно).
+#   - Номер есть только у съезда, на котором стоит камера, — камера на
+#     съезде, OSM с адресом согласен: без изменений.
+#   - Трасса не найдена в радиусе — без изменений, в отчёт.
+# Координата не двигается; needsReview не трогается.
+
+#: Классы снапа, профиль которых 14.11 перепроверяет по адресу.
+LINK_SNAP_CLASSES = frozenset((
+    "unclassified", "residential", "motorway_link", "trunk_link",
+    "primary_link", "secondary_link", "tertiary_link"))
+#: Радиус поиска названной трассы, м. Точка камеры уже на оси съезда/проезда:
+#: от неё до проезжей части трассы 0–22 м у всех найденных (замер по базе
+#: v13, отчёт 14.11); следующая — 53 м (484: камера у перекрёстка ДРУГОЙ
+#: дороги, D089 за ним). Дальше 40 м — уже не проезжая часть камеры.
+LINK_RADIUS_M = 40.0
+#: Ось новой дороги с той же, что у старой, и класс тот же — это та же
+#: дорога, запись не трогаем (без лишних байтов в диффе).
+SAME_ROAD_AXIS = 5
+#: Кольцевые без номера в адресе: «Txay» (Toshkent halqa avtomobil yo‘li) —
+#: D001; «Kxay» (Kichik halqa avtomobil yo‘li) номера в OSM не имеет, только имя.
+RING_REFS = {"txay": "d1", "tkad": "d1"}
+RING_NAMES = {"kxay": frozenset(("kichik", "halqa"))}
+#: Слова перекрёстка (после транслита, вне кавычек).
+_JUNCTION = re.compile(
+    r"\b(kesish\w*|chorrah\w*|chorrax\w*|tutash\w*|bilan|va|perekrest\w*|peresech\w*)\b")
+#: Проспект/шоссе/кольцо/объездная без номера — «дорога с именем».
+_AVENUE = re.compile(
+    r"\b(sho[hx]\s*ko\W?chasi|shohkochasi|prospekt\w*|shosse\w*|trakt\w*|"
+    r"halqa|xalqa|aylanma|yo\W?li\s+ko\W?chasi)\b")
+#: «Автомобильная дорога» без распознанного номера («4D072 avtomobil
+#: yo‘lining 24 km») — трасса в адресе есть, но какая, не сказать.
+_HIGHWAY_WORDS = re.compile(
+    r"(?i)avtomobil\W+yo\W?l|avtoyo\W?l|(?<!\w)a/y(?!\w)|автомобил\w*\s+дорог|\btrassa")
+_QUOTE_PAIRS = {'"': '"', "“": "”", "«": "»", "„": "“"}
+
+AddressRoads = collections.namedtuple("AddressRoads",
+                                      "highways avenue junction highway_word")
+#: Трасса из адреса: kind 'ref' (key — канонический номер) или 'name' (key —
+#: обязательные токены имени); label — для отчёта.
+Highway = collections.namedtuple("Highway", "kind key label")
+
+
+def _quoted_spans(text):
+    """Отрезки текста в кавычках: [(начало, конец), …]. Незакрытая кавычка
+    тянется до конца строки."""
+    spans, i, n = [], 0, len(text)
+    while i < n:
+        close = _QUOTE_PAIRS.get(text[i])
+        if close is None:
+            i += 1
+            continue
+        j = text.find(close, i + 1)
+        if j < 0:
+            j = n
+        spans.append((i, j))
+        i = j + 1
+    return spans
+
+
+def _outside(text, spans):
+    out, last = [], 0
+    for a, b in spans:
+        out.append(text[last:a])
+        last = b + 1
+    out.append(text[last:])
+    return " ".join(out)
+
+
+def address_roads(location):
+    """Что адрес говорит о дороге камеры → AddressRoads.
+
+    highways — трассы по порядку упоминания: номера вне кавычек (если вне
+    кавычек номера нет — номер, с которого начинается кавычка: «"D025G"
+    Samarqand…») и кольца-синонимы; avenue — в адресе проспект/шоссе/кольцо
+    без номера; junction — адрес описывает перекрёсток; highway_word —
+    «avtomobil yo‘li»/«A/y» (трасса названа, даже если номер не разобран).
+    """
+    text = location or ""
+    spans = _quoted_spans(text)
+
+    def inside(pos):
+        return any(a <= pos <= b for a, b in spans)
+
+    mentions = snap.highway_refs_in_text(text)
+    outer = [m for m in mentions if not inside(m.pos)]
+    if not outer:
+        outer = [m for m in mentions if any(m.pos == a + 1 for a, _ in spans)]
+    found = [(m.pos, Highway("ref", m.ref, m.text)) for m in outer]
+    # Кольца ищем в исходном тексте: транслит сдвигает позиции (ч → ch).
+    for word, ref in RING_REFS.items():
+        for m in re.finditer(rf"(?i)\b{word}\b", text):
+            if not inside(m.start()):
+                found.append((m.start(), Highway("ref", ref, f"{m.group(0)} ({ref.upper()})")))
+    for word, tokens in RING_NAMES.items():
+        for m in re.finditer(rf"(?i)\b{word}\b", text):
+            if not inside(m.start()):
+                found.append((m.start(), Highway("name", tokens, m.group(0))))
+    found.sort(key=lambda item: item[0])
+    highways, seen = [], set()
+    for _, hw in found:
+        if (hw.kind, hw.key) not in seen:
+            seen.add((hw.kind, hw.key))
+            highways.append(hw)
+    plain = snap.translit(_outside(text, spans)).translate(snap._PUNCT)
+    return AddressRoads(highways=highways,
+                        avenue=bool(_AVENUE.search(plain)),
+                        junction=bool(_JUNCTION.search(plain)),
+                        highway_word=bool(_HIGHWAY_WORDS.search(text)))
+
+
+def is_link(cls):
+    return bool(cls) and cls.endswith("_link")
+
+
+def _carries(hw, cand):
+    if hw.kind == "ref":
+        return hw.key in cand.refs
+    return hw.key <= cand.tokens
+
+
+def _same_road_conflict(pick, others, margin=AMBIGUITY_MARGIN_M):
+    """Та же дорога рядом под другой осью (развязка, кольцо, петля) — какая
+    из её проезжих частей у камеры, не сказать."""
+    for other in others:
+        if other.way == pick.way or other.dist > pick.dist + margin:
+            continue
+        if _axis_delta(other.axis, pick.axis) > AMBIGUITY_ANGLE:
+            return other
+    return None
+
+
+#: Решение 14.11 по одной камере. cand None — профиль не менять, и how
+#: говорит почему: 'skip' (в адресе нет трассы/проспекта), 'not_found',
+#: 'on_link', 'ambiguous'; иначе how — чем доказано: 'ref', 'ring', 'name'.
+#: label — какую дорогу назвал адрес; dist — до неё, м (None — не нашлась и
+#: в REPORT_PROBE_M).
+Choice = collections.namedtuple("Choice", "cand how label note dist")
+
+
+def choose_named_road(cam, index, *, radius=LINK_RADIUS_M):
+    """Дорога, которую называет адрес камеры, рядом с её точкой → Choice."""
+    roads = address_roads(cam.get("location", ""))
+    if not roads.highways and not roads.avenue:
+        if roads.highway_word:
+            return Choice(None, "not_found", "трасса без номера",
+                          "в адресе трасса, но номер не распознан", None)
+        return Choice(None, "skip", "", "в адресе нет трассы или проспекта", None)
+    lat, lon = cam["lat"], cam["lon"]
+
+    def ways(r):
+        cands = [c for c in per_way(index.nearby(lat, lon, r)) if c.axis is not None]
+        return cands, [c for c in cands if not is_link(index.attrs[c.way].cls)]
+
+    cands, main = ways(radius)
+
+    def where(c):
+        return f"{index.attrs[c.way].cls} ось {c.axis} в {c.dist:.0f} м"
+
+    def farther(hw):
+        """Названная дорога дальше радиуса — для отчёта, не для решения."""
+        far = [c for c in ways(REPORT_PROBE_M)[1] if _carries(hw, c)]
+        if not far:
+            return f"; в {REPORT_PROBE_M:.0f} м её нет", None
+        return f"; ближайшая её проезжая часть — {where(far[0])}", far[0].dist
+
+    def hint():
+        """Что за магистраль рядом, раз названной нет: часто дорога с ДРУГИМ
+        номером — реестр и OSM нумеруют по-разному."""
+        major = [c for c in main if c.rank >= 3]
+        if not major:
+            return ""
+        c = major[0]
+        what = "/".join(sorted(r.upper() for r in c.refs)) or "без номера"
+        return f"; рядом {where(c)} ({what})"
+
+    if roads.highways:
+        hws = roads.highways
+        if len(hws) >= 2 and roads.junction:
+            label = " × ".join(h.label for h in hws)
+            picks = []
+            for hw in hws:
+                found = [c for c in main if _carries(hw, c)]
+                if not found:
+                    more, dist = farther(hw)
+                    return Choice(None, "ambiguous", label, (
+                        f"перекрёсток трасс, {hw.label} в {radius:.0f} м не найдена "
+                        f"— какую снимает камера, адрес не говорит{more}"),
+                        min([p.dist for _, p in picks] + ([] if dist is None else [dist]),
+                            default=None))
+                picks.append((hw, found[0]))
+            for hw, c in picks[1:]:
+                if _axis_delta(c.axis, picks[0][1].axis) > AMBIGUITY_ANGLE:
+                    return Choice(None, "ambiguous", label, (
+                        f"перекрёсток трасс: {picks[0][0].label} — {where(picks[0][1])}, "
+                        f"{hw.label} — {where(c)}"), min(p.dist for _, p in picks))
+            hw, pick = min(picks, key=lambda item: item[1].dist)
+            found = [c for c in main if _carries(hw, c)]
+        else:
+            hw = hws[0]
+            label = hw.label
+            found = [c for c in main if _carries(hw, c)]
+            if not found:
+                on_link = [c for c in cands if _carries(hw, c)]
+                if on_link:
+                    return Choice(None, "on_link", label, (
+                        f"номер {hw.label} в OSM только у съезда ({where(on_link[0])}) "
+                        "— камера на съезде, адрес с OSM согласен"), on_link[0].dist)
+                more, dist = farther(hw)
+                return Choice(None, "not_found", label, (
+                    f"{hw.label} в {radius:.0f} м не найдена{more}{hint()}"), dist)
+            pick = found[0]
+        conflict = _same_road_conflict(pick, found)
+        if conflict is not None:
+            return Choice(None, "ambiguous", label, (
+                f"{hw.label} рядом под двумя осями: {where(pick)} и {where(conflict)}"),
+                pick.dist)
+        note = f"{hw.label}: {where(pick)}"
+        if roads.junction and len(hws) == 1:
+            note += "; адрес — перекрёсток, трасса в нём одна: берём её"
+        return Choice(pick, "ref" if hw.kind == "ref" else "ring", label, note, pick.dist)
+
+    # Проспект/шоссе без номера — по имени.
+    tokens = snap.street_tokens(cam.get("location", ""))
+    label = "по имени: " + " ".join(sorted(tokens))
+    if roads.junction:
+        return Choice(None, "ambiguous", label, (
+            "перекрёсток улиц без номера трассы — какую снимает камера, "
+            "адрес не говорит"), None)
+    named = [c for c in main if snap.tokens_match(tokens, c.tokens)]
+    if not named:
+        return Choice(None, "not_found", label,
+                      f"улица из адреса в {radius:.0f} м не найдена{hint()}", None)
+    # «Farg‘ona yo‘li ko‘chasi»: имя совпадает и у тупика «Farg‘ona berk» —
+    # адрес говорит о проспекте, значит магистраль.
+    named = [c for c in named if c.rank >= 3] or named
+    pick = named[0]
+    conflict = _same_road_conflict(pick, named)
+    if conflict is not None:
+        return Choice(None, "ambiguous", label, (
+            f"по имени две дороги под разными осями: {where(pick)} и "
+            f"{where(conflict)}"), pick.dist)
+    return Choice(pick, "name", "по имени: " + " ".join(sorted(pick.tokens)),
+                  where(pick), pick.dist)
+
+
+def _dir_delta(a, b):
+    d = abs(a - b) % 360
+    return min(d, 360 - d)
+
+
+def resnap_links(cameras, index, *, radius=LINK_RADIUS_M, notes=None):
+    """Чистая часть 14.11. → (новый список камер, строки отчёта).
+
+    Как resnap_profiles: камеры копируются, исходный список не меняется;
+    координата, id, тип, адрес и needsReview не трогаются ни у кого; профиль
+    меняется только у камер со снапом из LINK_SNAP_CLASSES и только по
+    названной в адресе дороге; twin переразмечается по всей базе.
+    """
+    notes = notes or {}
+    result = [dict(cam) for cam in cameras]
+    rows = []
+    for i, cam in enumerate(result):
+        if cam.get("cls") not in LINK_SNAP_CLASSES:
+            continue
+        choice = choose_named_road(cam, index, radius=radius)
+        status, note, new = choice.how, choice.note, None
+        if choice.cand is not None:
+            cand = choice.cand
+            new = dict(cam)
+            for key in PROFILE_KEYS:
+                new.pop(key, None)
+            new["axis"] = cand.axis
+            snap.apply_road_profile(new, index, cand)
+            note = f"{choice.how}: {note}"
+            status = "fixed"
+            old_axis = cam.get("axis")
+            if (new.get("cls") == cam.get("cls") and old_axis is not None
+                    and _axis_delta(old_axis, cand.axis) <= SAME_ROAD_AXIS):
+                status, new = "unchanged", None
+                note += "; камера уже на этой дороге"
+            elif (cam.get("dir") is not None and new.get("dir") is not None
+                  and old_axis is not None
+                  and _axis_delta(old_axis, cand.axis) <= AMBIGUITY_ANGLE
+                  and _dir_delta(cam["dir"], new["dir"]) > 90):
+                # Съезд идёт вдоль трассы, а ближайшая её проезжая часть —
+                # встречная: на чьей стороне камера, не сказать.
+                status, new = "ambiguous", None
+                note += (f"; направление: у съезда {cam['dir']}°, а ближайшая "
+                         "проезжая часть трассы — встречная")
+        if cam["id"] in notes:
+            note += f"; camera_fixes: {notes[cam['id']]}"
+        if new is not None:
+            result[i] = new
+        rows.append({
+            "id": cam["id"], "location": cam.get("location", ""),
+            "old_cls": cam.get("cls", ""), "old_axis": cam.get("axis", ""),
+            "old_dir": cam.get("dir", ""), "named_road": choice.label,
+            "new_cls": new.get("cls", "") if new else "",
+            "new_axis": new.get("axis", "") if new else "",
+            "new_dir": new.get("dir", "") if new else "",
+            "new_split": new.get("split", "") if new else "",
+            "dist_m": "" if choice.dist is None else f"{choice.dist:.0f}",
+            "status": status, "note": note,
+        })
+    snap.mark_direction_twins(result)
+    return result, rows
+
+
+LINK_REPORT_FIELDS = ("id", "location", "old_cls", "old_axis", "old_dir",
+                      "named_road", "new_cls", "new_axis", "new_dir",
+                      "new_split", "dist_m", "status", "note")
+
+
 def load_fix_notes(path):
     """id → проблема из review/camera_fixes_*.csv (там координаты, которые
     профилем не починить: обрезанная долгота, чужая область)."""
@@ -277,31 +628,46 @@ REPORT_FIELDS = ("id", "location", "reason", "old_cls", "old_axis", "new_cls",
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     ap = argparse.ArgumentParser(
-        description="Пересъёмка дорожного профиля камер на той же точке (11.3)")
+        description="Пересъёмка дорожного профиля камер на той же точке (11.3, 14.11)")
+    ap.add_argument("--mode", choices=("pedestrian", "links"), default="pedestrian",
+                    help="pedestrian — тротуары и камеры без профиля (11.3); "
+                         "links — unclassified/residential/съезды при трассе в адресе (14.11)")
     ap.add_argument("--roads", required=True, help="GeoJSON(seq) дорог OSM")
     ap.add_argument("--cameras", required=True, help="исходная база cameras.json")
     ap.add_argument("--out", required=True, help="база-кандидат")
     ap.add_argument("--report", required=True, help="CSV для просмотра")
     ap.add_argument("--fixes", default=os.path.join(here, "review",
                                                     "camera_fixes_2026-10-19.csv"))
-    ap.add_argument("--radius", type=float, default=RADIUS_M)
+    ap.add_argument("--radius", type=float, default=None,
+                    help=f"радиус, м (по умолчанию {RADIUS_M:.0f} / {LINK_RADIUS_M:.0f})")
     args = ap.parse_args()
+    links = args.mode == "links"
+    radius = args.radius or (LINK_RADIUS_M if links else RADIUS_M)
 
     print(f"загрузка проезжих частей: {args.roads} …")
-    index, _, _ = snap.load_roads(args.roads, keep_highway=is_carriageway)
+    # 14.11 сверяет номера трасс нового реестра (D006, 10V006) и old_ref.
+    index, _, _ = snap.load_roads(
+        args.roads, keep_highway=is_carriageway,
+        refs_of=snap.highway_refs_from_props if links else None)
     print(f"  кусков: {index.count}")
     cameras = json.load(open(args.cameras, encoding="utf-8"))
-    targets = {c["id"] for c in cameras if needs_resnap(c)}
-    print(f"камер: {len(cameras)} · к пересъёмке: {len(targets)}")
-
-    result, rows = resnap_profiles(cameras, index, radius=args.radius,
-                                   notes=load_fix_notes(args.fixes))
+    notes = load_fix_notes(args.fixes)
+    if links:
+        targets = {c["id"] for c in cameras if c.get("cls") in LINK_SNAP_CLASSES}
+        print(f"камер: {len(cameras)} · снап на проезд/жилую/съезд: {len(targets)}")
+        result, rows = resnap_links(cameras, index, radius=radius, notes=notes)
+        fields = LINK_REPORT_FIELDS
+    else:
+        targets = {c["id"] for c in cameras if needs_resnap(c)}
+        print(f"камер: {len(cameras)} · к пересъёмке: {len(targets)}")
+        result, rows = resnap_profiles(cameras, index, radius=radius, notes=notes)
+        fields = REPORT_FIELDS
     stats = verify_diff(cameras, result, targets)
 
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, separators=(",", ":"))
     with open(args.report, "w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=REPORT_FIELDS)
+        w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
         w.writerows(rows)
 

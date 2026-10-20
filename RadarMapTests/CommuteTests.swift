@@ -126,6 +126,31 @@ final class CommuteTests: XCTestCase {
         XCTAssertEqual(summary.usualDepartureMinute, 8 * 60 + 22)
     }
 
+    /// Неделя дороги (8.8.15): средняя за 7 суток против медианы месяца.
+    /// Обычно 44 мин; на этой неделе 50, 47 и 53 — в среднем 50, на 6 мин
+    /// дольше. Средняя, а не медиана: тяжёлый вторник — часть недели.
+    func testWeekAverageAgainstUsual() throws {
+        let trips = weekOfMornings([(1, 8, 20, 50), (2, 8, 25, 47), (3, 8, 22, 53),
+                                    (9, 8, 20, 44), (10, 8, 18, 43), (11, 8, 25, 44), (12, 8, 30, 45),
+                                    (15, 8, 20, 42), (16, 8, 22, 44)])
+        let summary = try XCTUnwrap(Commute.summary(.toWork, trips: trips, now: now, calendar: calendar))
+        let week = try XCTUnwrap(summary.week)
+        XCTAssertEqual(week.trips, 3)
+        XCTAssertEqual(week.average, 50 * 60, accuracy: 1)
+        XCTAssertEqual(week.delta, week.average - (summary.usual ?? 0), accuracy: 1)
+        XCTAssertTrue(week.isNoticeable)
+    }
+
+    /// Меньше двух поездок за неделю или без «обычно» — недели нет; разница
+    /// меньше 2 мин — строка «как обычно» ничего не добавляет.
+    func testWeekNeedsTwoTripsAndAnUsual() {
+        let one = weekOfMornings([(1, 8, 20, 50), (9, 8, 20, 44), (10, 8, 18, 43), (11, 8, 25, 44)])
+        XCTAssertNil(Commute.summary(.toWork, trips: one, now: now, calendar: calendar)?.week)
+        XCTAssertNil(Commute.week(one, usual: nil, now: now))
+        let calm = weekOfMornings([(1, 8, 20, 45), (2, 8, 25, 44), (9, 8, 20, 44), (10, 8, 18, 43)])
+        XCTAssertEqual(Commute.summary(.toWork, trips: calm, now: now, calendar: calendar)?.week?.isNoticeable, false)
+    }
+
     func testBestWindowAdvisesEarlierDeparture() {
         let trips = weekOfMornings([
             (1, 8, 22, 55), (2, 8, 20, 52), (3, 8, 25, 50), (6, 8, 21, 54),

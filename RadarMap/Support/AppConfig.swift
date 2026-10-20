@@ -676,6 +676,10 @@ nonisolated enum AppConfig {
     nonisolated static let commuteWindowDays = 30
     /// «Обычно» говорим с трёх поездок: по одной-двум медиана — случайность.
     nonisolated static let commuteMinTrips = 3
+    /// Неделя дороги (8.8.15): от двух поездок за 7 дней; строка — только при
+    /// отклонении средней от «обычно» хотя бы на 2 мин.
+    nonisolated static let commuteWeekMinTrips = 2
+    nonisolated static let commuteWeekNoticeableSeconds: TimeInterval = 2 * 60
     /// Окно времени выезда для поиска лучшего — четверть часа.
     nonisolated static let commuteBucketMinutes = 15
     /// В окне нужно хотя бы столько поездок, чтобы советовать его.

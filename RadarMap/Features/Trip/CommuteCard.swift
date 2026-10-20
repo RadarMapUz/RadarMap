@@ -44,6 +44,13 @@ struct CommuteCard: View {
                     .font(.rounded(12))
                     .foregroundStyle(Theme.textTertiary)
             }
+            if let week = summary.week, week.isNoticeable {
+                // Неделя дороги (8.8.15) — только если она не «как обычно».
+                Text(Self.weekLine(week))
+                    .font(.rounded(13))
+                    .foregroundStyle(week.delta > 0 ? Theme.warning : Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let best = summary.best {
                 CommuteAdvice(best: best)
             }
@@ -82,6 +89,15 @@ struct CommuteCard: View {
         }
         return String(format: String(localized: "Обычно %1$@, выезжаете около %2$@"),
                       time, Formatting.clock(minuteOfDay: departure))
+    }
+
+    /// «За неделю в среднем 41 мин — на 3 мин дольше обычного».
+    static func weekLine(_ week: Commute.Week) -> String {
+        let average = Formatting.unbreakable(Formatting.duration(week.average))
+        let minutes = Formatting.unbreakable(Formatting.duration(abs(week.delta)))
+        return week.delta > 0
+            ? String(format: String(localized: "За неделю в среднем %1$@ — на %2$@ дольше обычного"), average, minutes)
+            : String(format: String(localized: "За неделю в среднем %1$@ — на %2$@ меньше обычного"), average, minutes)
     }
 
     /// «Вчера · 8:22 → 9:17», «пт, 9 октября · 18:34 → 19:15».

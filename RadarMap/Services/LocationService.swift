@@ -52,6 +52,13 @@ final class LocationService: NSObject {
     let trip: TripStats
     /// Live Activity на локскрине (подключается после инициализации, см. AppEnvironment).
     @ObservationIgnored weak var liveActivity: LiveActivityService?
+    /// Призрак дороги на работу для плашки Live Activity (8.8.3б): прибытие,
+    /// готовая подпись на языке приложения и тревожность. Подаёт
+    /// AppEnvironment из CommuteLiveService — сервис геопозиции о призраке не знает.
+    @ObservationIgnored var activityGhost: (() -> (clock: Date, caption: String, alert: Bool)?)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: activityGhost,
+                                               "LocationService.activityGhost") }
+    }
     @ObservationIgnored weak var watchBridge: WatchBridgeService?
     @ObservationIgnored weak var route: RouteService?
     @ObservationIgnored weak var speedLimits: SpeedLimitService?

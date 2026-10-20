@@ -275,6 +275,19 @@ private struct CarPlayDashboardGauge: View {
                         .font(.rounded(11, .semibold).monospacedDigit())
                         .foregroundStyle(Theme.textSecondary)
                 }
+            } else if let ghost = env.commuteLive.display {
+                // Дорога на работу без маршрута (8.8.3б): время прибытия по
+                // своим поездкам и хвост подписи — на плитке тесно для места.
+                Rectangle().fill(Theme.stroke).frame(width: 1, height: 24)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(ghost.arrival, style: .time)
+                        .font(.rounded(16, .heavy).monospacedDigit())
+                        .foregroundStyle(Theme.textPrimary)
+                    Text(verbatim: GhostText.tail(ghost))
+                        .font(.rounded(11, .semibold))
+                        .foregroundStyle(GhostText.tint(ghost))
+                        .lineLimit(1)
+                }
             }
         }
         .padding(.horizontal, 12)

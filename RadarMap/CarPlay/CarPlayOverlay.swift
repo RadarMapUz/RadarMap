@@ -106,6 +106,11 @@ struct CarPlayOverlay: View {
             if showsManeuver, isGuiding, env.route.isActive, Self.fitsRoute(hudWidth: width) {
                 pill { etaCell }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else if !env.route.isActive, let ghost = env.commuteLive.display, Self.fitsRoute(hudWidth: width) {
+                // Дорога на работу без маршрута (8.8.3б): прибытие по своим
+                // поездкам — на месте капсулы прибытия маршрута.
+                pill { ghostCell(ghost) }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             cameraPill
             speedBadge
@@ -330,6 +335,23 @@ struct CarPlayOverlay: View {
                             .labelStyle(.titleAndIcon)
                     }
                 }
+            }
+        }
+    }
+
+    /// Призрак: «9:12» крупно, «Работа · +4 мин к обычному» мелко — те же
+    /// слова, что на панели поездки телефона (GhostText).
+    private func ghostCell(_ ghost: CommuteLiveService.Display) -> some View {
+        HStack(spacing: 10) {
+            glyphTile(GhostText.symbol(ghost), fill: Theme.accent.opacity(0.18), glyph: Theme.accent)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(ghost.arrival, style: .time)
+                    .font(.rounded(24, .heavy).monospacedDigit())
+                    .foregroundStyle(Theme.textPrimary)
+                    .contentTransition(.numericText())
+                Text(verbatim: GhostText.caption(ghost))
+                    .font(.rounded(13, .semibold))
+                    .foregroundStyle(GhostText.tint(ghost))
             }
         }
     }

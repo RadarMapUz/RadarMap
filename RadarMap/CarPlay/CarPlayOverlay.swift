@@ -281,13 +281,29 @@ struct CarPlayOverlay: View {
                                      : (env.location.isApproachingCamera ? Theme.danger
                                                                          : Theme.textPrimary))
                     .liveNumber()
-                Text(env.location.isPositionCoarse
-                     ? String(localized: "уточняем положение")
-                     : camera.kind.genitivePhrase)
+                if env.location.isPositionCoarse {
+                    Text("уточняем положение")
+                        .font(.rounded(13, .semibold))
+                        .foregroundStyle(Theme.warning)
+                        .lineLimit(1)
+                } else if env.location.familiarCameraIDs.contains(camera.id) {
+                    // «Своя» камера (10.6): голоса о ней не будет, и в машине
+                    // тишина читалась бы как поломка — как на телефоне
+                    // (SpeedHUDView.caption), коротко и с галочкой.
+                    HStack(spacing: 3) {
+                        Image(systemName: "checkmark")
+                            .fontWeight(.bold)
+                        Text("без голоса")
+                    }
                     .font(.rounded(13, .semibold))
-                    .foregroundStyle(env.location.isPositionCoarse ? Theme.warning
-                                                                   : Theme.textSecondary)
+                    .foregroundStyle(Theme.success)
                     .lineLimit(1)
+                } else {
+                    Text(camera.kind.genitivePhrase)
+                        .font(.rounded(13, .semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(1)
+                }
             }
 
             // Ограничение У КАМЕРЫ — только когда оно другое, чем знак у

@@ -79,6 +79,7 @@ private func routeBySiri(_ slot: PlaceSlot) async -> IntentDialog {
     // а выученные места считаются по ней (onHistoryLoaded). Без ожидания
     // водитель без ручного адреса всегда слышал «не знаю, где дом».
     for _ in 0..<AppConfig.siriHistoryWaitSteps where !env.trip.isLoaded {
+        // Ошибка sleep — только отмена интента: тогда просто перестаём ждать.
         try? await Task.sleep(for: .milliseconds(100))
     }
     let manual = env.settings.place(for: slot)

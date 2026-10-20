@@ -97,6 +97,7 @@ actor TileReleaseStore {
 
     /// Конверт → проверенный корень. Подпись — до разбора JSON (SignedPayload).
     nonisolated static func verify(_ data: Data) -> TileRelease? {
+        // Битый конверт — nil: сетевой путь пишет «не прошёл проверку» сам, а битый файл на диске — просто нет корня.
         guard let envelope = try? JSONDecoder().decode(SignedPayload<TileRelease>.self, from: data),
               let release = envelope.verified(), !release.sets.isEmpty else { return nil }
         return release
@@ -121,6 +122,7 @@ actor TileReleaseStore {
                 return index
             }
             let url = release.bucketURL(base: base, set: tile.set, name: name)
+            // Сбой сети и сбой проверки — одна строка журнала ниже, по ключу корзины.
             guard let (data, response) = try? await session.data(from: url),
                   (response as? HTTPURLResponse)?.statusCode == 200,
                   let index = Self.parse(data, digest: digest) else {
@@ -170,11 +172,13 @@ actor TileReleaseStore {
     private nonisolated static var directory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("TileRelease", isDirectory: true)
+        // Не создалась — запись корзины/корня упадёт следом и попадёт в журнал там.
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base
     }
 
     private nonisolated static func readRoot() -> TileRelease? {
+        // Файла нет — первый запуск, не ошибка; битый отсеет подпись в verify.
         guard let data = try? Data(contentsOf: directory.appendingPathComponent("root.json")) else { return nil }
         return verify(data)
     }
@@ -193,6 +197,7 @@ actor TileReleaseStore {
     }
 
     private nonisolated static func readBucket(version: Int, key: String) -> Data? {
+        // Файла нет — промах кэша: корзину скачают и проверят.
         try? Data(contentsOf: bucketFile(version: version, key: key))
     }
 
@@ -204,8 +209,10 @@ actor TileReleaseStore {
             let folder = file.deletingLastPathComponent()
             if !FileManager.default.fileExists(atPath: folder.path) {
                 let root = folder.deletingLastPathComponent()
+                // Каталога ещё нет — чистить нечего.
                 for old in (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
                 where Int(old) != nil && old != "\(version)" {
+                    // Чистка старья: не удалилось — уберётся при следующем выпуске, корзины текущего не задевает.
                     try? FileManager.default.removeItem(at: root.appendingPathComponent(old))
                 }
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

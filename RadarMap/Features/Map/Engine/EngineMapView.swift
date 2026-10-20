@@ -741,9 +741,14 @@ struct EngineMapView: UIViewRepresentable {
 
         private static func layers(daylight: Bool) -> [[String: Any]] {
             let json = EngineMapStyle.json(daylight: daylight, base: AppConfig.syncBaseURL, houses: true)
-            guard let data = json.data(using: .utf8),
-                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
-            return object["layers"] as? [[String: Any]] ?? []
+            guard let data = json.data(using: .utf8) else { return [] }
+            do {
+                let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+                return object?["layers"] as? [[String: Any]] ?? []
+            } catch {
+                Log.app.error("слои стиля карты не разобрались: \(error.localizedDescription, privacy: .public)")
+                return []
+            }
         }
 
         /// UIColor constants avoid Foundation's unsupported CAST(hex, UIColor).

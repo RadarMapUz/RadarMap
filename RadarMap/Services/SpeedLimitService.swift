@@ -671,6 +671,7 @@ struct LimitIndex: Sendable, RoadNetworkSource {
                 let code = (try? c.decode(Number.self))?.value ?? 0
                 cls = RoadClass(code: abs(code) < 1000 ? Int(code) : 0)
             }
+            // Не массив чисел — сегмент негоден (value = nil), так задумано.
             guard let flat = (try? c.decode(Numbers.self))?.values, flat.count >= 4,
                   Self.isGeometry(flat) else {
                 value = nil
@@ -691,6 +692,7 @@ struct LimitIndex: Sendable, RoadNetworkSource {
     nonisolated private struct Number: Decodable {
         let value: Double?
         init(from decoder: Decoder) throws {
+            // Не число — nil, а не исключение: иначе курсор массива не сдвинется.
             value = try? decoder.singleValueContainer().decode(Double.self)
         }
     }
@@ -699,6 +701,7 @@ struct LimitIndex: Sendable, RoadNetworkSource {
     nonisolated private struct Numbers: Decodable {
         let values: [Double]?
         init(from decoder: Decoder) throws {
+            // Не массив чисел — nil, геометрию отбросит вызывающий.
             values = try? decoder.singleValueContainer().decode([Double].self)
         }
     }

@@ -13,7 +13,7 @@ import MapKit
 /// Замороженная копия LimitIndex до пакета памяти 2.19 (main, 20.10) — эталон
 /// для теста совпадения результатов. Не трогать: он и есть «до».
 struct LegacyLimitIndex: Sendable {
-    struct Segment: Sendable {
+    nonisolated struct Segment: Sendable {
         let limit: Int
         /// Класс дороги. `.unknown` у файла формата 1 — там его просто нет.
         let cls: RoadClass

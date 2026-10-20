@@ -65,6 +65,7 @@ final class MetricsService: NSObject, MXMetricManagerSubscriber {
             let api = APIClient(timeout: 20)
             var delivered = false
             for data in payloads {
+                // Причина не нужна: пакет либо JSON, либо мусор — факт пишется ниже.
                 guard let parsed = try? JSONSerialization.jsonObject(with: data) else {
                     Log.network.error("MetricKit-пакет \(kind, privacy: .public) не распарсился")
                     continue

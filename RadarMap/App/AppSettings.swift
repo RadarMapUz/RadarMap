@@ -928,8 +928,8 @@ final class AppSettings {
     }
 
     private func save(_ place: SavedPlace?, forKey key: String) {
+        // Кодирование двух строк и координат не падает; nil ниже — осознанное удаление.
         if let place, let data = try? JSONEncoder().encode(place) {
-            // Кодирование двух строк и координат не падает; nil ниже — осознанное удаление.
             store.set(data, forKey: key)
         } else {
             store.removeObject(forKey: key)

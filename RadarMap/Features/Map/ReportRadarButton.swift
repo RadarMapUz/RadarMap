@@ -120,6 +120,7 @@ struct ReportRadarButton: View {
 
     private func armHold() {
         holdTask = Task {
+            // Ошибка sleep — только отмена задачи; что делать после неё, решает проверка ниже.
             try? await Task.sleep(for: Self.holdToOpen)
             guard !Task.isCancelled, fan == nil, !isSending else { return }
             openFan()
@@ -323,6 +324,7 @@ struct ReportRefineBar: View {
             .onAppear {
                 task?.cancel()
                 task = Task {
+                    // Ошибка sleep — только отмена задачи; что делать после неё, решает проверка ниже.
                     try? await Task.sleep(for: .seconds(AppConfig.reportRefineSeconds))
                     guard !Task.isCancelled else { return }
                     // Время вышло — молчание оставляет «радар».
@@ -439,6 +441,7 @@ struct MobileConfirmBar: View {
             .onAppear {
                 task?.cancel()
                 task = Task {
+                    // Ошибка sleep — только отмена задачи; что делать после неё, решает проверка ниже.
                     try? await Task.sleep(for: .seconds(AppConfig.mobileQuestionSeconds))
                     guard !Task.isCancelled else { return }
                     // Время вышло — снимаем вопрос, ничего не отправляя.

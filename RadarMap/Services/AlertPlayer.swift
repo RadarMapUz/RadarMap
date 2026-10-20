@@ -79,7 +79,14 @@ final class AlertPlayer: NSObject {
             let engine = try CHHapticEngine()
             engine.isAutoShutdownEnabled = true   // сам гаснет в простое — экономит батарею
             // Движок могут сбросить/остановить (звонок, фон) — поднимаем обратно.
-            engine.resetHandler = { [weak engine] in try? engine?.start() }
+            engine.resetHandler = { [weak engine] in
+                do {
+                    try engine?.start()
+                } catch {
+                    // Не страшно: haptic(level:) ещё раз запустит движок перед узором.
+                    Log.alerts.notice("тактильный движок не поднялся после сброса: \(error.localizedDescription, privacy: .public)")
+                }
+            }
             engine.stoppedHandler = { _ in }
             // Без start(): haptic(level:) запускает движок сам перед каждым
             // узором. Запуск здесь стоил запуску времени, а при фоновом

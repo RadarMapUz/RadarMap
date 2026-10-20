@@ -93,6 +93,7 @@ nonisolated struct AddressBook: Sendable {
     /// Разобрать файл клетки. nil — файл не наш или битый: ответ «адресов
     /// нет» честнее, чем половина списка.
     static func decode(_ data: Data) -> AddressBook? {
+        // Не JSON — тот же ответ «файл не наш» (nil), что и при чужом формате.
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let streets = root["streets"] as? [[String: Any]]
         else { return nil }
@@ -240,6 +241,7 @@ nonisolated struct AddressBook: Sendable {
 
     /// Шаблон «улица + номер» — компилируется один раз, а не на каждую букву
     /// запроса (поиск зовёт splitHouse на каждом нажатии; аудит 11.10).
+    // Шаблон — константа, покрытая тестами поиска: ошибки компиляции здесь не бывает.
     private static let houseRegex = try? NSRegularExpression(
         pattern: #"^(.*?)[\s,]+(?:(?:д|дом|uy|d|№)\.?\s*)?(\d+\s*[\p{L}]?(?:\s*[/-]\s*\d+\s*[\p{L}]?)?)\s*$"#,
         options: [.caseInsensitive])

@@ -80,7 +80,7 @@ final class UsageStatsTests: XCTestCase {
         "memoryWarnings",
     ]
 
-    private static func allKeys(of value: Any) -> [String] {
+    nonisolated private static func allKeys(of value: Any) -> [String] {
         switch value {
         case let map as [String: Any]:
             return Array(map.keys) + map.values.flatMap(allKeys(of:))
@@ -91,7 +91,7 @@ final class UsageStatsTests: XCTestCase {
         }
     }
 
-    private static func allStringValues(of value: Any) -> [String] {
+    nonisolated private static func allStringValues(of value: Any) -> [String] {
         switch value {
         case let map as [String: Any]:
             return map.values.flatMap(allStringValues(of:))

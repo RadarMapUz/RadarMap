@@ -179,6 +179,7 @@ extension LocationService {
         staleWatchdogTask?.cancel()
         let sequence = fixSequence
         staleWatchdogTask = Task { [weak self] in
+            // Ошибка sleep — только отмена задачи; что делать после неё, решает проверка ниже.
             try? await Task.sleep(for: .seconds(AppConfig.staleWatchdogMaxSeconds))
             guard !Task.isCancelled, let self, self.fixSequence == sequence,
                   self.isTripActive || self.isForeground else { return }

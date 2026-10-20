@@ -112,6 +112,7 @@ struct StopTripButton: View {
             isArmed = true
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             disarmTask = Task {
+                // Ошибка sleep — только отмена задачи; что делать после неё, решает проверка ниже.
                 try? await Task.sleep(for: Self.armedSeconds)
                 guard !Task.isCancelled else { return }
                 isArmed = false

@@ -54,7 +54,8 @@ enum SharedDefaults {
         static let updatedAt = "widget.updatedAt"
     }
 
-    struct Snapshot: Equatable {
+    /// nonisolated: снимок сравнивает чистый WidgetWeek.needsRefresh.
+    nonisolated struct Snapshot: Equatable {
         /// Начало недели, за которую здесь цифры. Без него виджет не может
         /// отличить «эта неделя» от «та, на которой человек последний раз
         /// открывал приложение», — и всю новую неделю честно показывал бы

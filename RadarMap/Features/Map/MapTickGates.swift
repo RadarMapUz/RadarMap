@@ -212,6 +212,7 @@ struct GhostLateGate: View {
                 .onAppear { live.markLatePlaqueShown() }
                 .task {
                     // Не ответили — уходит сама: напоминать весь остаток пути незачем.
+                    // Ошибка sleep — только отмена задачи; что делать после неё, решает проверка ниже.
                     try? await Task.sleep(for: .seconds(AppConfig.commuteLatePromptSeconds))
                     guard !Task.isCancelled else { return }
                     live.dismissLatePlaque()

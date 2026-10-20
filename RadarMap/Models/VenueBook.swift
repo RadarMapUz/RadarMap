@@ -125,6 +125,7 @@ nonisolated struct VenueBook: Sendable {
     /// nil — файл не наш; запись с незнакомым кодом или битыми числами —
     /// пропускается, а не роняет клетку.
     static func decode(_ data: Data) -> VenueBook? {
+        // Не JSON — тот же ответ «файл не наш» (nil), что и при чужом формате.
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let rows = root["venues"] as? [[Any]] else { return nil }
         var out: [Venue] = []

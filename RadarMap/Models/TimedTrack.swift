@@ -138,6 +138,7 @@ nonisolated enum TimedTrackStore {
     }
 
     static func load(tripID: Double) -> [TimedPoint]? {
+        // Файла нет — трек старше keepDays уже вычищен (prune), это штатно.
         guard let text = try? String(contentsOf: url(for: tripID), encoding: .utf8) else { return nil }
         let points = TimedTrack.decode(text)
         return points.isEmpty ? nil : points

@@ -195,6 +195,7 @@ extension WatchBridgeService: WCSessionDelegate {
             // отметка на слабой связи может идти дольше — тогда честное «в
             // пути», а итог скажет голос телефона.
             Task { @MainActor in
+                // Задачу никто не отменяет; ошибка sleep — только отмена, и ответ «в пути» тогда тоже уместен.
                 try? await Task.sleep(for: .seconds(AppConfig.watchReplyMaxSeconds))
                 once.send(["pending": true])
             }

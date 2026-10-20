@@ -142,7 +142,8 @@ nonisolated struct UsageStatsFile: Codable, Sendable {
 /// семи неотправленных дней (сценарий S16, правило 18). Нет поля — значение
 /// по умолчанию.
 extension UsageStats {
-    init(from decoder: Decoder) throws {
+    // nonisolated: тип nonisolated, и разбор файла не должен требовать main.
+    nonisolated init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(day: try c.decode(String.self, forKey: .day))
         onboarded = try c.decodeIfPresent(Bool.self, forKey: .onboarded) ?? onboarded

@@ -19,6 +19,7 @@
 //
 
 import Foundation
+import os
 
 nonisolated enum EngineMapStyle {
 
@@ -132,9 +133,14 @@ nonisolated enum EngineMapStyle {
                 return source != "near" && source != "far"
             }
         }
-        guard let data = try? JSONSerialization.data(withJSONObject: style),
-              let text = String(data: data, encoding: .utf8) else { return "" }
-        return text
+        let data: Data
+        do {
+            data = try JSONSerialization.data(withJSONObject: style)
+        } catch {
+            Log.app.error("стиль карты не сериализовался: \(error.localizedDescription, privacy: .public)")
+            return ""
+        }
+        return String(data: data, encoding: .utf8) ?? ""
     }
 
     private static let emptyCollection: [String: Any] = [

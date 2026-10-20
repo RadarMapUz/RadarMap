@@ -61,6 +61,7 @@ final class OfflineMapService {
 
     init() {
         installed = JSONFile.load([String: Installed].self, from: Self.manifestURL, log: Log.network) ?? [:]
+        // Каталога нет — первый запуск; битый отсеет подпись в verify.
         if let data = try? Data(contentsOf: Self.catalogURL) {
             catalog = Self.verify(data)
         }
@@ -89,6 +90,7 @@ final class OfflineMapService {
     }
 
     nonisolated static func verify(_ data: Data) -> RegionCatalog? {
+        // Битый конверт — nil; сетевой путь пишет «не прошёл проверку подписи» сам.
         guard let envelope = try? JSONDecoder().decode(SignedPayload<RegionCatalog>.self, from: data),
               let catalog = envelope.verified(), !catalog.regions.isEmpty else { return nil }
         return catalog
@@ -106,6 +108,7 @@ final class OfflineMapService {
 
     var usedBytes: Int64 {
         installed.values.flatMap(\.files.values).reduce(0) { total, name in
+            // Файла нет — 0 байт: это подпись в настройках, а не проверка целостности.
             let size = (try? Self.directory.appendingPathComponent(name)
                 .resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
             return total + Int64(size)
@@ -176,6 +179,7 @@ final class OfflineMapService {
                     // файла против подписанного каталога.
                     let digest = try await Self.sha256(of: temporary)
                     guard digest == file.sha256.lowercased() else {
+                        // Временный файл загрузки: не удалился — его уберёт система; ошибка ниже — про sha.
                         try? FileManager.default.removeItem(at: temporary)
                         throw OfflineError.digestMismatch(file.file)
                     }
@@ -191,7 +195,7 @@ final class OfflineMapService {
                 _ = JSONFile.save(self.installed, to: Self.manifestURL, log: Log.network)
                 // Прежняя версия — только после того, как новая на месте.
                 for name in old?.files.values ?? [:].values where !saved.values.contains(name) {
-                    try? FileManager.default.removeItem(at: Self.directory.appendingPathComponent(name))
+                    Self.remove(name)
                 }
                 Log.network.info("офлайн-регион \(region.id, privacy: .public) v\(catalog.version, privacy: .public) установлен")
             } catch is CancellationError {
@@ -201,7 +205,7 @@ final class OfflineMapService {
                 self?.errors[region.id] = String(localized: "Не удалось скачать — проверьте связь и попробуйте ещё раз")
                 // Недокачанное — не в карту: удаляем то, что успело лечь.
                 for name in saved.values {
-                    try? FileManager.default.removeItem(at: Self.directory.appendingPathComponent(name))
+                    Self.remove(name)
                 }
             }
             self?.progress[region.id] = nil
@@ -221,12 +225,22 @@ final class OfflineMapService {
         guard let have = installed.removeValue(forKey: region.id) else { return }
         offlineFilesCache[region.id] = nil
         for name in have.files.values {
-            try? FileManager.default.removeItem(at: Self.directory.appendingPathComponent(name))
+            Self.remove(name)
         }
         _ = JSONFile.save(installed, to: Self.manifestURL, log: Log.network)
     }
 
     // MARK: - Диск
+
+    /// Удалить файл региона. Неудача не ломает карту, но оставляет на диске
+    /// сотни мегабайт, которых не видно в «Занято», — поэтому в журнал.
+    private nonisolated static func remove(_ name: String) {
+        do {
+            try FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+        } catch {
+            Log.network.error("офлайн-файл \(name, privacy: .public) не удалён: \(error.localizedDescription, privacy: .public)")
+        }
+    }
 
     enum OfflineError: LocalizedError {
         case digestMismatch(String)
@@ -272,6 +286,7 @@ final class OfflineMapService {
     /// sha256 большого файла кусками по мегабайту — вне главного потока.
     @concurrent nonisolated static func sha256(of url: URL) async throws -> String {
         let handle = try FileHandle(forReadingFrom: url)
+        // Файл открыт только на чтение: ошибка закрытия ничего не теряет.
         defer { try? handle.close() }
         var hasher = SHA256()
         while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty {

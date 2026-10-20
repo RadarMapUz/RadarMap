@@ -34,6 +34,22 @@
         }
       }
     },
+    "%1$@ · обычно %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · обычно %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · odatda %2$@"
+          }
+        }
+      }
+    },
     "%1$@ и %2$@ разделяет стоянка %3$@": {
       "localizations": {
         "ru": {
@@ -4151,6 +4167,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ruxsat — ilova buzilish deb hisoblashidan oldin qancha oshirish mumkinligi."
+          }
+        }
+      }
+    },
+    "Дорога на работу появится после трёх поездок между домом и работой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дорога на работу появится после трёх поездок между домом и работой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishga yo‘l uy va ish o‘rtasidagi uchta safardan keyin paydo bo‘ladi"
           }
         }
       }
@@ -11643,6 +11675,22 @@
         }
       }
     },
+    "Сколько обычно ехать и когда выезжать — по вашим поездкам": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сколько обычно ехать и когда выезжать — по вашим поездкам"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odatda qancha yurish va qachon chiqish — safarlaringiz bo‘yicha"
+          }
+        }
+      }
+    },
     "Скопировать координаты": {
       "localizations": {
         "ru": {
@@ -13778,6 +13826,22 @@
         }
       }
     },
+    "в %1$@ — %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "в %1$@ — %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ da — %2$@"
+          }
+        }
+      }
+    },
     "в %@ от вас": {
       "localizations": {
         "ru": {
@@ -14064,6 +14128,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "yetib keldingiz"
+          }
+        }
+      }
+    },
+    "выезд около %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "выезд около %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "chiqish taxminan %@"
+          }
+        }
+      }
+    },
+    "выезжайте до %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "выезжайте до %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ gacha chiqing"
           }
         }
       }
@@ -14886,6 +14982,22 @@
         }
       }
     },
+    "обычно": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "обычно"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "odatda"
+          }
+        }
+      }
+    },
     "обычно вечером": {
       "localizations": {
         "ru": {
@@ -15243,6 +15355,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "jami safarlar"
+          }
+        }
+      }
+    },
+    "после трёх поездок": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "после трёх поездок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "uchta safardan keyin"
           }
         }
       }

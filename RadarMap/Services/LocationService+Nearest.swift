@@ -52,7 +52,9 @@ extension LocationService {
             since: now,
             etaClock: ghost?.clock,
             etaCaption: ghost?.caption,
-            etaAlert: ghost?.alert
+            etaAlert: ghost?.alert,
+            limitKmh: speedLimits?.currentLimit,
+            alertLevel: alertLevel
         )
     }
 

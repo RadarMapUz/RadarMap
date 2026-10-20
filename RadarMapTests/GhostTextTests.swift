@@ -110,3 +110,28 @@ final class GhostReasonTests: XCTestCase {
         XCTAssertEqual(GhostText.tail(calm), "как обычно", "как обычно — без причины")
     }
 }
+
+/// Плашка Live Activity (9.1): знак лимита и уровень тревоги — повод обновить.
+final class LiveActivityLevelTests: XCTestCase {
+    func testLimitAndLevelChangesUpdate() {
+        var old = CameraActivityAttributes.ContentState(nearestTitle: "Юнусабад", nearestSymbol: "camera.fill",
+                                                        distanceMeters: 300, arrivesAt: nil, since: nil)
+        old.limitKmh = 60
+        old.alertLevel = 1
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        var limit = old
+        limit.limitKmh = 40
+        XCTAssertTrue(LiveActivityService.differs(limit, from: old, now: now))
+        var level = old
+        level.alertLevel = 3
+        XCTAssertTrue(LiveActivityService.differs(level, from: old, now: now))
+        var same = old
+        same.alertLevel = 1
+        XCTAssertFalse(LiveActivityService.differs(same, from: old, now: now))
+        var legacy = old
+        legacy.alertLevel = nil
+        var zero = old
+        zero.alertLevel = 0
+        XCTAssertFalse(LiveActivityService.differs(zero, from: legacy, now: now), "nil у старых — как 0")
+    }
+}

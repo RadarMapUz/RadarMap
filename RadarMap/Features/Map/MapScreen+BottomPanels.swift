@@ -196,6 +196,8 @@ extension MapScreen {
             // копией в другой ветке, SwiftUI считал их разными видами — на
             // 0,3 с анимации на экране было две панели и сбрасывался
             // взведённый «Стоп».
+            // «Сейчас видят: Мама» — над строкой поездки, пока ссылка живая (12б.6).
+            if env.location.isTripActive { FamilyLiveChip() }
             if !map.isAddingCamera,
                TripScreenLayout.showsTripBar(mode: mode, arrivalShown: arrivalShown) {
                 TripLiveBar(

@@ -1409,3 +1409,28 @@ class EtaShareTest(ServerTestBase):
         status, _, html = self.page()
         self.assertEqual(status, 200)
         self.assertIn("больше не отслеживается", html)
+
+    def test_family_link_says_not_on_the_way(self):
+        """Семейная ссылка живёт месяц: вне поездки — «сейчас не в пути», 200,
+        и страница обновляется сама до следующей поездки домой."""
+        status, _, body = _get_raw(self.port, "/api/eta/f/" + self.TOKEN)
+        self.assertEqual(status, 200)
+        self.assertIn("Сейчас не в пути", body.decode())
+        self.assertIn('http-equiv="refresh" content="60"', body.decode())
+        _call(self.port, "POST", "/api/eta", {"token": self.TOKEN, "eta": time.time() + 1200,
+                                               "left_m": 0, "status": "driving"})
+        status, _, body = _get_raw(self.port, "/api/eta/f/" + self.TOKEN)
+        self.assertIn("Будет примерно в", body.decode())
+        self.assertNotIn("осталось", body.decode(), "без остатка пути, если его не прислали")
+        _call(self.port, "POST", "/api/eta", {"token": self.TOKEN, "eta": time.time(),
+                                               "left_m": 0, "status": "arrived"})
+        self.assertIn("Дома", _get_raw(self.port, "/api/eta/f/" + self.TOKEN)[2].decode())
+        _call(self.port, "POST", "/api/eta", {"token": self.TOKEN, "eta": time.time(),
+                                               "left_m": 0, "status": "ended"})
+        self.assertIn("Сейчас не в пути", _get_raw(self.port, "/api/eta/f/" + self.TOKEN)[2].decode(),
+                      "пауза водителя — не «перестал делиться навсегда»")
+
+    def test_family_page_rejects_garbage_token(self):
+        status, _, _ = _get_raw(self.port, "/api/eta/f/short")
+        self.assertEqual(status, 404)
+

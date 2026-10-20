@@ -2155,6 +2155,38 @@
         }
       }
     },
+    "Близкие видят прибытие": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Близкие видят прибытие"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yaqinlar kelishni koʻradi"
+          }
+        }
+      }
+    },
+    "Близкий": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Близкий"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yaqin kishi"
+          }
+        }
+      }
+    },
     "Болид": {
       "localizations": {
         "ru": {
@@ -2344,6 +2376,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cheklov ichida: %lld"
+          }
+        }
+      }
+    },
+    "В поездке — «Сейчас видят: Мама» и пауза одним касанием.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В поездке — «Сейчас видят: Мама» и пауза одним касанием."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarda — «Hozir koʻrmoqda: Onam» va bir teginishda pauza."
           }
         }
       }
@@ -2655,6 +2703,22 @@
         }
       }
     },
+    "Видно только время прибытия домой и «в пути / дома» — без карты и адреса.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Видно только время прибытия домой и «в пути / дома» — без карты и адреса."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faqat uyga yetib kelish vaqti va «yoʻlda / uyda» koʻrinadi — xarita va manzilsiz."
+          }
+        }
+      }
+    },
     "Вклад = недобор балла до 100 × доля пути: %@": {
       "localizations": {
         "ru": {
@@ -2920,6 +2984,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ishga yoʻl vaqti"
+          }
+        }
+      }
+    },
+    "Время прибытия домой — одной постоянной ссылкой.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Время прибытия домой — одной постоянной ссылкой."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyga yetib kelish vaqti — bitta doimiy havolada."
           }
         }
       }
@@ -4948,6 +5028,22 @@
         }
       }
     },
+    "Здесь видно, когда я буду дома": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Здесь видно, когда я буду дома"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu yerda uyga qachon kelishim koʻrinadi"
+          }
+        }
+      }
+    },
     "Здесь появятся ваши поездки": {
       "localizations": {
         "ru": {
@@ -6101,6 +6197,22 @@
         }
       }
     },
+    "Кому, например «Мама»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Кому, например «Мама»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kimga, masalan «Onam»"
+          }
+        }
+      }
+    },
     "Контакт для ответа (необязательно)": {
       "localizations": {
         "ru": {
@@ -6691,6 +6803,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ishga %@ da"
+          }
+        }
+      }
+    },
+    "На сервер уходят только время прибытия и «в пути / дома» — ни точки, ни маршрута, ни телефона. Хранится в памяти сервера и гаснет само.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На сервер уходят только время прибытия и «в пути / дома» — ни точки, ни маршрута, ни телефона. Хранится в памяти сервера и гаснет само."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serverga faqat yetib kelish vaqti va «yoʻlda / uyda» ketadi — nuqta ham, marshrut ham, telefon ham emas. Server xotirasida saqlanadi va oʻzi oʻchadi."
           }
         }
       }
@@ -7894,6 +8022,22 @@
         }
       }
     },
+    "Одна постоянная ссылка: по дороге домой близкий видит, когда вы будете, в остальное время — «сейчас не в пути».": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Одна постоянная ссылка: по дороге домой близкий видит, когда вы будете, в остальное время — «сейчас не в пути»."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bitta doimiy havola: uyga yoʻlda yaqiningiz qachon kelishingizni koʻradi, boshqa paytda — «hozir yoʻlda emas»."
+          }
+        }
+      }
+    },
     "Одно расстояние до камеры, объявления ждут остановки, «Радар!» подписан в первых поездках.": {
       "localizations": {
         "ru": {
@@ -8586,6 +8730,38 @@
         }
       }
     },
+    "Отправить новую ссылку": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправить новую ссылку"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yangi havolani yuborish"
+          }
+        }
+      }
+    },
+    "Отправить ссылку": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправить ссылку"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Havolani yuborish"
+          }
+        }
+      }
+    },
     "Отправляем…": {
       "localizations": {
         "ru": {
@@ -8726,6 +8902,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tarmoq xatosi"
+          }
+        }
+      }
+    },
+    "Пауза на эту поездку": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пауза на эту поездку"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu safarga pauza"
           }
         }
       }
@@ -9339,6 +9531,22 @@
         }
       }
     },
+    "Поездку домой приложение узнаёт по вашему распорядку, как подсказку «Домой»: в магазин и к друзьям ссылка молчит.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездку домой приложение узнаёт по вашему распорядку, как подсказку «Домой»: в магазин и к друзьям ссылка молчит."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyga safarni ilova kun tartibingizdan biladi, «Uyga» maslahati kabi: doʻkonga va doʻstlarga borganda havola jim."
+          }
+        }
+      }
+    },
     "Поездок пока нет": {
       "extractionState": "manual",
       "localizations": {
@@ -9560,6 +9768,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Koʻrsatish: %@"
+          }
+        }
+      }
+    },
+    "Показывать поездки домой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показывать поездки домой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyga safarlarni koʻrsatish"
           }
         }
       }
@@ -10623,6 +10847,22 @@
         }
       }
     },
+    "Раз в 30 дней ссылка меняется: так у сервера не копится постоянный идентификатор. Новую нужно отправить ещё раз.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Раз в 30 дней ссылка меняется: так у сервера не копится постоянный идентификатор. Новую нужно отправить ещё раз."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Har 30 kunda havola almashadi: shunda serverda doimiy identifikator toʻplanmaydi. Yangisini yana yuborish kerak."
+          }
+        }
+      }
+    },
     "Раз в сутки — обезличенные числа: поездки, километры, оповещения. Без маршрутов и координат.": {
       "localizations": {
         "ru": {
@@ -11305,6 +11545,22 @@
         }
       }
     },
+    "Сейчас видят: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сейчас видят: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hozir koʻrmoqda: %@"
+          }
+        }
+      }
+    },
     "Сейчас: %@": {
       "localizations": {
         "ru": {
@@ -11705,6 +11961,22 @@
         }
       }
     },
+    "Создать ссылку": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Создать ссылку"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Havola yaratish"
+          }
+        }
+      }
+    },
     "Сохранить": {
       "localizations": {
         "ru": {
@@ -11895,6 +12167,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Muddat"
+          }
+        }
+      }
+    },
+    "Ссылка обновилась — старая больше не показывает поездки. Отправьте новую.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ссылка обновилась — старая больше не показывает поездки. Отправьте новую."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Havola yangilandi — eskisi endi safarlarni koʻrsatmaydi. Yangisini yuboring."
           }
         }
       }
@@ -12747,6 +13035,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kamerani oʻchirish"
+          }
+        }
+      }
+    },
+    "Удалить ссылку": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить ссылку"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Havolani oʻchirish"
           }
         }
       }
@@ -14893,6 +15197,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "kiritilmagan"
+          }
+        }
+      }
+    },
+    "нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yoʻq"
           }
         }
       }

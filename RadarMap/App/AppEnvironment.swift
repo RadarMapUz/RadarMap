@@ -449,7 +449,8 @@ final class AppEnvironment {
         // Поездка дом↔работа — строкой в профиль участков (будущий «призрак»).
         // Направление — тем же правилом, что «Дорога на работу» в Итогах.
         trip.onTrackFinished = { [weak self] record, track, times in
-            guard let self, self.settings.commuteLearning, let ends = self.commuteEnds,
+            // Рабочий рейс — не дорога на работу (12б.9).
+            guard let self, self.settings.commuteLearning, record.work != true, let ends = self.commuteEnds,
                   let direction = Commute.trips(history: [record], home: ends.home,
                                                 work: ends.work).first?.direction else { return }
             self.commuteProfiles.ingest(record: record, track: track, times: times,
@@ -850,14 +851,16 @@ final class AppEnvironment {
             refreshCommute()
             return
         }
-        learnedPlaces = FrequentPlaces.learn(history: trip.history, now: Date())
+        // Концы рабочих рейсов — адреса пассажиров, не свои Дом и Работа.
+        learnedPlaces = FrequentPlaces.learn(history: trip.history.filter { $0.work != true }, now: Date())
         refreshCommute()
     }
 
     /// «Куда едем?» сейчас — одна догадка для телефона и машины
     /// (DestinationGuess); nil — нечего предложить или подсказки выключены.
     func destinationGuess(now: Date) -> DestinationGuess? {
-        guard settings.destinationSuggestions else { return nil }
+        // В смене «Домой/На работу» — не та подсказка (12б.9).
+        guard settings.destinationSuggestions, !settings.workDriverMode else { return nil }
         return DestinationGuess.make(
             learned: learnedPlaces,
             manual: { [settings] kind in settings.place(for: kind == .home ? .home : .work) },
@@ -940,7 +943,7 @@ final class AppEnvironment {
     /// домом и работой и стартом поездки у одного из них.
     private func tryStartCommuteGhost() {
         guard commuteGhostPending else { return }
-        guard settings.commuteLearning else {
+        guard settings.commuteLearning, !settings.workDriverMode else {
             commuteGhostPending = false
             return
         }
@@ -1045,9 +1048,9 @@ final class AppEnvironment {
             return
         }
         let trips = settings.commuteLearning
-            ? Commute.trips(history: commuteProfiles.updateLedger(with: trip.history),
+            ? Commute.trips(history: commuteProfiles.updateLedger(with: trip.history.filter { $0.work != true }),
                             home: ends.home, work: ends.work)
-            : Commute.trips(history: trip.history, home: ends.home, work: ends.work)
+            : Commute.trips(history: trip.history.filter { $0.work != true }, home: ends.home, work: ends.work)
         commute = Commute.summaries(trips: trips, now: Date())
         refreshCommuteWidget()
         // Вопрос о сроке — про выученный распорядок: обучение выключено —

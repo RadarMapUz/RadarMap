@@ -1867,4 +1867,11 @@ nonisolated enum AppConfig {
     static let cngQueueMaxMinutes = 45
     /// Опрос статусов — пока приложение на экране или идёт поездка.
     static let cngPollSeconds: TimeInterval = 300
+
+    // MARK: - Режим водителя такси / курьера (WorkShift, 12б.9)
+
+    /// Простой дольше — смена кончилась: перерыв на обед короче часа.
+    static let workShiftGapSeconds: TimeInterval = 3600
+    /// Сколько смен показывать в «Итогах».
+    static let workShiftsShown = 7
 }

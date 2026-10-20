@@ -98,6 +98,22 @@
         }
       }
     },
+    "%1$@–%2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@–%2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@–%2$@"
+          }
+        }
+      }
+    },
     "%1$lld · до %2$@": {
       "extractionState": "manual",
       "localizations": {
@@ -2332,6 +2348,22 @@
         }
       }
     },
+    "В смене нет подсказок «Домой» и «На работу», рейсы не учатся как дорога на работу и не меняют выученные Дом и Работу.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В смене нет подсказок «Домой» и «На работу», рейсы не учатся как дорога на работу и не меняют выученные Дом и Работу."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smenada «Uyga» va «Ishga» maslahatlari yoʻq, reyslar ishga yoʻl sifatida oʻrganilmaydi va oʻrganilgan Uy va Ishni oʻzgartirmaydi."
+          }
+        }
+      }
+    },
     "В сохранённых поездках периода нет проездов с риском штрафа": {
       "localizations": {
         "ru": {
@@ -3301,6 +3333,22 @@
         }
       }
     },
+    "Выключение режима прошлые поездки не трогает.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выключение режима прошлые поездки не трогает."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rejimni oʻchirish oldingi safarlarga taʼsir qilmaydi."
+          }
+        }
+      }
+    },
     "Выключенная настройка стирает и то, что приложение выучило.": {
       "localizations": {
         "ru": {
@@ -3553,6 +3601,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kameralar haqida ovoz"
+          }
+        }
+      }
+    },
+    "Голос о камерах — короткий, если режим оповещений «Авто».": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голос о камерах — короткий, если режим оповещений «Авто»."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralar haqidagi ovoz — qisqa, agar ogohlantirish rejimi «Avto» boʻlsa."
           }
         }
       }
@@ -3883,6 +3947,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Masofa"
+          }
+        }
+      }
+    },
+    "Для такси и доставки. Поездки собираются в смены — от первого рейса до простоя дольше часа; в «Итогах» появляются «Смены»: часы, километры, превышения, штрафы по замерам и топливо.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для такси и доставки. Поездки собираются в смены — от первого рейса до простоя дольше часа; в «Итогах» появляются «Смены»: часы, километры, превышения, штрафы по замерам и топливо."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taksi va yetkazib berish uchun. Safarlar smenaga yigʻiladi — birinchi reysdan bir soatdan uzoq toʻxtashgacha; «Natijalar»da «Smenalar» paydo boʻladi: soatlar, kilometrlar, oshirishlar, oʻlchovlar boʻyicha jarimalar va yoqilgʻi."
           }
         }
       }
@@ -10383,6 +10463,22 @@
         }
       }
     },
+    "Работаю водителем": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Работаю водителем"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haydovchi boʻlib ishlayman"
+          }
+        }
+      }
+    },
     "Радар": {
       "localizations": {
         "ru": {
@@ -11577,6 +11673,22 @@
         }
       }
     },
+    "Смены": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Смены"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smenalar"
+          }
+        }
+      }
+    },
     "Снято с балла поездки": {
       "localizations": {
         "ru": {
@@ -12009,6 +12121,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sxema"
+          }
+        }
+      }
+    },
+    "Такси, доставка: день — это смена, а не поездки.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Такси, доставка: день — это смена, а не поездки."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taksi, yetkazib berish: kun — bu smena, safarlar emas."
           }
         }
       }
@@ -13481,6 +13609,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "safarlarsiz"
+          }
+        }
+      }
+    },
+    "без превышений": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "без превышений"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oshirishlarsiz"
           }
         }
       }
@@ -15467,6 +15611,22 @@
         }
       }
     },
+    "рейсов: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "рейсов: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "reyslar: %lld"
+          }
+        }
+      }
+    },
     "рейтинг": {
       "localizations": {
         "ru": {
@@ -15957,6 +16117,22 @@
         }
       }
     },
+    "топливо ~%@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "топливо ~%@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yoqilgʻi ~%@"
+          }
+        }
+      }
+    },
     "топливо, по нынешней цене": {
       "localizations": {
         "ru": {
@@ -16097,6 +16273,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "jarimali oʻtishlar: %lld"
+          }
+        }
+      }
+    },
+    "штрафы ~%@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "штрафы ~%@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "jarimalar ~%@"
           }
         }
       }

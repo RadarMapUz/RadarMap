@@ -180,6 +180,19 @@ struct TripSettingsPage: View {
             }
 
             Section {
+                Toggle("Работаю водителем", isOn: $settings.workDriverMode)
+                    .onChange(of: settings.workDriverMode) { _, _ in env.refreshLearnedPlaces() }
+                SettingsExplainer([
+                    "Для такси и доставки. Поездки собираются в смены — от первого рейса до простоя дольше часа; в «Итогах» появляются «Смены»: часы, километры, превышения, штрафы по замерам и топливо.",
+                    "В смене нет подсказок «Домой» и «На работу», рейсы не учатся как дорога на работу и не меняют выученные Дом и Работу.",
+                    "Голос о камерах — короткий, если режим оповещений «Авто».",
+                    "Выключение режима прошлые поездки не трогает.",
+                ])
+            } footer: {
+                Text("Такси, доставка: день — это смена, а не поездки.")
+            }
+
+            Section {
                 Picker("Машина", selection: $settings.vehicleEnergy) {
                     ForEach(VehicleEnergy.allCases) { Text($0.title).tag($0) }
                 }

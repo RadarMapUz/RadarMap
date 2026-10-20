@@ -183,7 +183,8 @@ extension LocationService {
         if asPassenger {
             trip.discardAsPassenger()
         } else {
-            trip.finish(endedManually: !auto, batteryPercent: batteryPercent)
+            trip.finish(endedManually: !auto, batteryPercent: batteryPercent,
+                        work: settings.workDriverMode)
             parkCar()
             // Автостоп с телефоном в кармане: короткие итоги на локскрин —
             // цифры дошли до человека, даже если он не откроет приложение.

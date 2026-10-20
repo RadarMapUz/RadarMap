@@ -60,7 +60,9 @@ extension LocationService {
     /// времени — отсюда и брались фразы внахлёст и молчание о камере.
     func situation(for camera: Camera, crawling: Bool) -> VoiceDirector.Situation {
         let context: AlertPolicy.Context = switch settings.alertMode {
-        case .auto: alertContext
+        // Таксист весь день в городе и слышит камеры сотни раз: короткая
+        // фраза по умолчанию (12б.9). Выбранный рукой режим — выше.
+        case .auto: settings.workDriverMode ? .city : alertContext
         case .city: .city
         case .highway: .highway
         }

@@ -188,5 +188,22 @@ class ApiIntegrationTest(unittest.TestCase):
             self.assertNotIn(str(USER).encode(), handle.read())
 
 
+class UnitFileTest(unittest.TestCase):
+    """Бот разбирает чужой ввод из интернета и держит токен — работает от
+    root, как api и панель, значит и песочница у него та же
+    (systemd-radarmap-sandbox.conf): ошибка в разборе не должна давать запись
+    по всему общему VPS."""
+
+    def test_bot_unit_is_sandboxed_like_the_api(self):
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "radarmap-bot.service")
+        with open(path, encoding="utf-8") as handle:
+            lines = {line.strip() for line in handle}
+        for directive in ("NoNewPrivileges=yes", "ProtectSystem=strict", "ProtectHome=yes",
+                          "PrivateTmp=yes", "PrivateDevices=yes",
+                          "ReadWritePaths=/opt/radarmap/api",
+                          "RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX"):
+            self.assertIn(directive, lines, f"в юните бота нет {directive}")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -34,5 +34,10 @@ struct RadarMapApp: App {
                 .environment(\.colorScheme, env.interfaceIsDaylight ? .light : .dark)
                 .tint(Theme.accent)
         }
+        // Пробки на виджет «На работу» за 30 мин до выезда (12б.2):
+        // система будит приложение в фоне по заявке из AppEnvironment.
+        .backgroundTask(.appRefresh(AppConfig.commuteRefreshTaskID)) {
+            await AppEnvironment.shared.commuteBackgroundRefresh()
+        }
     }
 }

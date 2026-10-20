@@ -1818,4 +1818,14 @@ nonisolated enum AppConfig {
     /// Через столько дней после правки цены просим её обновить: цены на
     /// заправках меняются, а старая цена молча врала бы в каждой поездке.
     static let fuelPriceStaleDays: Double = 60
+
+    // MARK: - Виджет «На работу» (12б.2)
+
+    /// Фоновое обновление пробок перед выездом (BGAppRefreshTask). Тот же
+    /// идентификатор — в Info.plist (BGTaskSchedulerPermittedIdentifiers).
+    static let commuteRefreshTaskID = "uz.radarmap.ios.commute-refresh"
+    /// За сколько до обычного выезда просим систему разбудить, с.
+    static let commuteRefreshLeadSeconds: TimeInterval = 30 * 60
+    /// Сколько ждать профиль дороги с диска при фоновом пробуждении, шагов по 0,1 с.
+    static let commuteRefreshProfileWaitSteps = 50
 }

@@ -90,6 +90,45 @@ final class TripCheckpointTests: XCTestCase {
         XCTAssertEqual(record?.movingDuration ?? 0, 300, accuracy: 0.5)
     }
 
+    /// Слепок рейса — так, как его пишет checkpointIfDue: восстановленная запись
+    /// остаётся рейсом и со своим стартом, как у finish() (ревью 14.1, хвост
+    /// 14.8). Раньше рейс восстанавливался личной поездкой (шёл в выученные
+    /// Дом/Работу с адресом пассажира), а через неделю, когда трек вырезан,
+    /// терял и старт — дорога на работу его не узнавала.
+    func testRestoreKeepsWorkFlagAndStart() throws {
+        let json = """
+        {"startedAt":820000000,"lastPointAt":820000600,"distanceMeters":5200,"maxSpeedKmh":72,
+         "passed":[],"stops":[],"track":[41.31,69.20,55,41.31,69.21,55,41.31,69.25,55],
+         "endLat":41.31,"endLon":69.25,"startLat":41.30,"startLon":69.19,"work":true}
+        """
+        let snapshot = try JSONDecoder().decode(TripStats.InflightTrip.self, from: Data(json.utf8))
+        var record = try XCTUnwrap(TripStats.record(from: snapshot))
+        XCTAssertEqual(record.work, true, "рейс восстановился личной поездкой")
+        record.track = nil   // неделя прошла — трек вырезан
+        let start = try XCTUnwrap(record.startCoordinate, "старт пропал вместе с треком")
+        XCTAssertEqual(start.latitude, 41.30, accuracy: 1e-9)
+        XCTAssertEqual(start.longitude, 69.19, accuracy: 1e-9)
+    }
+
+    /// Слепок, записанный до 14.8, — без старта и пометки рейса: читается
+    /// (правило 18 — иначе поездка после вылета пропала бы целиком), запись
+    /// личная, старт — первая точка его трека.
+    func testOldSnapshotWithoutStartAndWorkStillRestores() throws {
+        let json = """
+        {"startedAt":820000000,"lastPointAt":820000600,"distanceMeters":5200,"maxSpeedKmh":72,
+         "passed":[],"stops":[],"track":[41.31,69.20,55,41.31,69.21,55,41.31,69.25,55],
+         "endLat":41.31,"endLon":69.25}
+        """
+        let snapshot = try JSONDecoder().decode(TripStats.InflightTrip.self, from: Data(json.utf8))
+        var record = try XCTUnwrap(TripStats.record(from: snapshot))
+        XCTAssertNil(record.work)
+        XCTAssertEqual(record.distanceMeters, 5_200, accuracy: 0.1)
+        record.track = nil
+        let start = try XCTUnwrap(record.startCoordinate, "старт старого слепка не взят из трека")
+        XCTAssertEqual(start.latitude, 41.31, accuracy: 1e-9)
+        XCTAssertEqual(start.longitude, 69.20, accuracy: 1e-9)
+    }
+
     func testSnapshotRoundTripsThroughJSON() throws {
         let original = snapshot(distance: 5_200, track: flatTrack(points: 52),
                                 passed: [pass(58, limit: 60)])

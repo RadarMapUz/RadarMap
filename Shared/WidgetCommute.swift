@@ -26,6 +26,7 @@
 //
 
 import Foundation
+import os
 
 nonisolated struct CommuteWidgetData: Codable, Equatable, Sendable {
     struct Direction: Codable, Equatable, Sendable {
@@ -236,13 +237,23 @@ nonisolated enum WidgetCommute {
         return [now] + Array(Set(starts)).sorted()
     }
 
+    /// Не закодировалось (NaN в длительностях — JSONEncoder такого не пишет) —
+    /// запись снимается, как при «дороги нет»: старые числа виджет показывал бы
+    /// как свежие. Но не молча (правило 3): Log приложения сюда не доходит —
+    /// файл общий с виджетом, поэтому свой Logger той же подсистемы.
     static func write(_ data: CommuteWidgetData?) {
         guard let store = SharedDefaults.store else { return }
-        guard let data, let encoded = try? JSONEncoder().encode(data) else {
+        guard let data else {
             store.removeObject(forKey: key)
             return
         }
-        store.set(encoded, forKey: key)
+        do {
+            store.set(try JSONEncoder().encode(data), forKey: key)
+        } catch {
+            Logger(subsystem: "uz.radarmap.ios", category: "app")
+                .error("виджет дороги не записан: \(error.localizedDescription, privacy: .public)")
+            store.removeObject(forKey: key)
+        }
     }
 
     /// Битая запись — как её отсутствие: виджет покажет приглашение, а

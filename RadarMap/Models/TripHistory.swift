@@ -251,29 +251,16 @@ nonisolated enum TripHistory {
             }
             guard kept.count != record.passed.count else { return record }
             changed = true
+            // Копия с правкой, а не сборка по полям: чистка выбрасывает ЛОЖНЫЕ
+            // проезды и пересчитывает балл, остальное — как было. Сборка по
+            // полям молча теряла каждое поле с дефолтом nil, которое забыли
+            // передать: расход заряда, пометку рейса (12б.9), точку старта
+            // (ревью 14.1, хвост 14.8).
             var out = record
-            out = TripRecord(id: record.id, startedAt: record.startedAt,
-                             endedAt: record.endedAt,
-                             distanceMeters: record.distanceMeters,
-                             maxSpeedKmh: record.maxSpeedKmh, passed: kept,
-                             endLat: record.endLat, endLon: record.endLon,
-                             track: record.track,
-                             score: DrivingScore.tripScore(
-                                 passes: kept.map {
-                                     DrivingScore.Pass(speedKmh: $0.speedKmh,
-                                                       limitKmh: $0.limitKmh)
-                                 },
-                                 trackSpeeds: track.map(\.speedKmh)),
-                             stops: record.stops,
-                             endedManually: record.endedManually,
-                             // Чистка выбрасывает ЛОЖНЫЕ проезды камер и
-                             // пересчитывает балл — к расходу заряда это
-                             // отношения не имеет. Поле с дефолтом nil, и без
-                             // явной передачи честно измеренная цифра молча
-                             // исчезала при обновлении приложения. Пометка
-                             // рейса (12б.9) — по той же причине.
-                             batteryDropPercent: record.batteryDropPercent,
-                             work: record.work)
+            out.passed = kept
+            out.score = DrivingScore.tripScore(
+                passes: kept.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
+                trackSpeeds: track.map(\.speedKmh))
             return out
         }
         return (cleaned, changed)
@@ -303,25 +290,15 @@ nonisolated enum TripHistory {
                 out.limitKmh = EnforcedLimit.applied(to: pass.limitKmh)
                 return out
             }
-            return TripRecord(id: record.id, startedAt: record.startedAt,
-                              endedAt: record.endedAt,
-                              distanceMeters: record.distanceMeters,
-                              maxSpeedKmh: record.maxSpeedKmh, passed: raised,
-                              endLat: record.endLat, endLon: record.endLon,
-                              track: record.track,
-                              // Балла может не быть вовсе (старая запись без
-                              // трека) — тогда его и не появляется: выдумывать
-                              // рейтинг там, где его не считали, нельзя.
-                              score: record.score == nil ? nil : DrivingScore.tripScore(
-                                  passes: raised.map {
-                                      DrivingScore.Pass(speedKmh: $0.speedKmh,
-                                                        limitKmh: $0.limitKmh)
-                                  },
-                                  trackSpeeds: record.trackPoints.map(\.speedKmh)),
-                              stops: record.stops,
-                              endedManually: record.endedManually,
-                              batteryDropPercent: record.batteryDropPercent,
-                              work: record.work)
+            // Копия с правкой — остальные поля как были (см. axisSanitized).
+            var out = record
+            out.passed = raised
+            // Балла может не быть вовсе (старая запись без трека) — тогда его и
+            // не появляется: выдумывать рейтинг там, где его не считали, нельзя.
+            out.score = record.score == nil ? nil : DrivingScore.tripScore(
+                passes: raised.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
+                trackSpeeds: record.trackPoints.map(\.speedKmh))
+            return out
         }
         return (cleaned, changed)
     }
@@ -342,22 +319,13 @@ nonisolated enum TripHistory {
             }
             guard kept.count != record.passed.count else { return record }
             changed = true
-            return TripRecord(id: record.id, startedAt: record.startedAt,
-                              endedAt: record.endedAt,
-                              distanceMeters: record.distanceMeters,
-                              maxSpeedKmh: record.maxSpeedKmh, passed: kept,
-                              endLat: record.endLat, endLon: record.endLon,
-                              track: record.track,
-                              score: DrivingScore.tripScore(
-                                  passes: kept.map {
-                                      DrivingScore.Pass(speedKmh: $0.speedKmh,
-                                                        limitKmh: $0.limitKmh)
-                                  },
-                                  trackSpeeds: track.map(\.speedKmh)),
-                              stops: record.stops,
-                              endedManually: record.endedManually,
-                              batteryDropPercent: record.batteryDropPercent,
-                              work: record.work)
+            // Копия с правкой — остальные поля как были (см. axisSanitized).
+            var out = record
+            out.passed = kept
+            out.score = DrivingScore.tripScore(
+                passes: kept.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
+                trackSpeeds: track.map(\.speedKmh))
+            return out
         }
         return (cleaned, changed)
     }
@@ -518,12 +486,17 @@ nonisolated enum TripHistory {
             .flatMap { total in headDrop.map { total - $0 } }
 
         let remaining = (record.stops ?? []).filter { $0.id != stop.id }
+        // Старт первой ноги — старт исходной записи, второй — точка разреза
+        // (там же кончается первая): без них ноги через неделю, когда трек
+        // вырезан, теряли начало (ревью 14.1, хвост 14.8).
         let first = leg(of: record, track: head, stops: remaining.filter { $0.to <= stop.from },
+                        start: record.startCoordinate,
                         from: record.startedAt, to: stop.from,
                         distance: record.distanceMeters * headShare,
                         passes: record.passed.filter { $0.date <= stop.from },
                         batteryDrop: headDrop)
         let second = leg(of: record, track: tail, stops: remaining.filter { $0.from >= stop.to },
+                         start: tail.first.map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon) },
                          from: stop.to, to: record.endedAt,
                          distance: record.distanceMeters * (1 - headShare),
                          passes: record.passed.filter { $0.date > stop.from },
@@ -532,6 +505,7 @@ nonisolated enum TripHistory {
     }
 
     private static func leg(of record: TripRecord, track: [TrackPoint], stops: [TripStop],
+                            start: CLLocationCoordinate2D?,
                             from: Date, to: Date, distance: CLLocationDistance,
                             passes: [PassedCamera], batteryDrop: Int?) -> TripRecord {
         let speeds = track.map(\.speedKmh)
@@ -551,6 +525,7 @@ nonisolated enum TripHistory {
             stops: stops.isEmpty ? nil : stops,
             endedManually: record.endedManually,
             batteryDropPercent: batteryDrop,
+            startLat: start?.latitude, startLon: start?.longitude,
             // Половины рейса — рейсы (12б.9): без пометки разделённый рейс
             // выпадал из «Смен» и учился как своя поездка (ревью 14.1).
             work: record.work)

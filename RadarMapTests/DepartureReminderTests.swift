@@ -114,6 +114,36 @@ final class DepartureReminderTests: XCTestCase {
         XCTAssertEqual(plan.first?.id, DepartureReminder.id(for: monday(0), calendar: calendar))
     }
 
+    /// После перезагрузки телефона процесс поднимается до первой разблокировки:
+    /// история и профиль дороги не читаются, план выходит пустым — и прежнее
+    /// «план ≠ поставленного → переставить» снимало всю неделю напоминаний
+    /// (ревью 14.1, хвост 14.8). Пока не прочитано, поставленное не трогаем;
+    /// поехали — снимаем только сегодняшнее.
+    func testUnreadHistoryNeverClearsScheduledReminders() {
+        let plan = DepartureReminder.plan(summary: summary(lastDeparture: monday(8, 20, plusDays: -3)),
+                                          target: nil, now: monday(6), calendar: calendar)
+        XCTAssertFalse(plan.isEmpty, "иначе тест не о том")
+        // Новый процесс: что поставлено прошлым, он не знает (nil).
+        XCTAssertEqual(DepartureReminder.step(plan: [], scheduled: nil, dataLoaded: false,
+                                              tripEdge: false, tripActive: false), .keep,
+                       "не прочитано — пустой план не снимает поставленное")
+        XCTAssertEqual(DepartureReminder.step(plan: [], scheduled: nil, dataLoaded: false,
+                                              tripEdge: true, tripActive: false), .keep,
+                       "поездка кончилась до чтения — неделю не трогаем")
+        XCTAssertEqual(DepartureReminder.step(plan: [], scheduled: nil, dataLoaded: false,
+                                              tripEdge: true, tripActive: true), .dropToday,
+                       "поехали до чтения — только сегодняшнее")
+        // Прочитано — как было: пустой план честно снимает, тот же — не трогает.
+        XCTAssertEqual(DepartureReminder.step(plan: [], scheduled: nil, dataLoaded: true,
+                                              tripEdge: false, tripActive: false),
+                       .replace(deliveredToday: false))
+        XCTAssertEqual(DepartureReminder.step(plan: plan, scheduled: plan, dataLoaded: true,
+                                              tripEdge: false, tripActive: false), .keep)
+        XCTAssertEqual(DepartureReminder.step(plan: plan, scheduled: plan, dataLoaded: true,
+                                              tripEdge: true, tripActive: true),
+                       .replace(deliveredToday: true), "поехали — и показанное сегодня снять")
+    }
+
     func testNightShiftTargetHasNoLeaveBy() {
         XCTAssertNil(DepartureReminder.leaveBy(target: ArrivalTarget(minute: 30), usual: 48 * 60))
     }

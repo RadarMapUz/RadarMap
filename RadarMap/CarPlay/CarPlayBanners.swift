@@ -12,8 +12,8 @@
 //  Руководство CarPlay для таких событий даёт именно баннер навигатора.
 //
 //  Здесь — очередь по важности: камера старше всего, подтверждение уступает
-//  всему. Вытесненный вопрос или объезд не теряется: их владелец показывает
-//  своё снова, когда экран освободится (`onIdle`).
+//  всему. Вытесненный вопрос, погода на перевале или объезд не теряется: их
+//  владелец показывает своё снова, когда экран освободится (`onIdle`).
 //
 
 import CarPlay
@@ -30,6 +30,9 @@ nonisolated enum CarPlayBannerPolicy {
         case suggestion
         /// «Радар ещё на месте?» — подождёт и вернётся.
         case question
+        /// «На перевале Камчик туман» (19.2) — о дороге за 20–40 км: уступает
+        /// камере, объезду и запросу водителя, подождёт и вернётся.
+        case roadWeather
         /// Объезд пробки — уступает только камере и запросу водителя.
         case detour
         /// Ответ на касание самого водителя («Завершить поездку?»): его не
@@ -43,13 +46,14 @@ nonisolated enum CarPlayBannerPolicy {
 
         /// Не показанный или вытесненный баннер этого вида владелец покажет
         /// снова, когда экран освободится; остальные забываются.
-        var comesBack: Bool { self == .question || self == .detour }
+        var comesBack: Bool { self == .question || self == .roadWeather || self == .detour }
 
         var description: String {
             switch self {
             case .info:       return "подтверждение"
             case .suggestion: return "предложение"
             case .question:   return "вопрос"
+            case .roadWeather: return "погода на перевале"
             case .detour:     return "объезд"
             case .request:    return "запрос водителя"
             case .camera:     return "камера"

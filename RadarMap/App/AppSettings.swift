@@ -578,6 +578,13 @@ final class AppSettings {
         didSet { store.set(!trafficContribution, forKey: Keys.trafficContributionOff) }
     }
 
+    /// Погода на перевалах (19.2): голос и баннер «На перевале Камчик туман».
+    /// Хранится инвертированно, как пробки: включено по умолчанию и после
+    /// обновления.
+    var roadWeatherAlerts: Bool {
+        didSet { store.set(!roadWeatherAlerts, forKey: Keys.roadWeatherOff) }
+    }
+
     /// Профиль оповещений. Записывает нижележащие `voiceMode`/`alertMode`,
     /// поэтому остальной код о нём знать не обязан (см. AlertProfile).
     var alertProfile: AlertProfile {
@@ -732,6 +739,7 @@ final class AppSettings {
         static let usageStats = "usageStatsDisabled"
         static let trafficHidden = "trafficHidden"
         static let trafficContributionOff = "trafficContributionOff"
+        static let roadWeatherOff = "roadWeatherOff"
         static let alertProfile = "alertProfile"
     }
 
@@ -842,6 +850,7 @@ final class AppSettings {
         usageStatsEnabled = !store.bool(forKey: Keys.usageStats)
         trafficShown = !store.bool(forKey: Keys.trafficHidden)
         trafficContribution = !store.bool(forKey: Keys.trafficContributionOff)
+        roadWeatherAlerts = !store.bool(forKey: Keys.roadWeatherOff)
         // Переезд со старой версии: профиля ещё нет — выводим его из того, что
         // человек уже выбрал, чтобы ни одна привычка не сменилась молча.
         let storedProfile = AlertProfile(rawValue: store.string(forKey: Keys.alertProfile) ?? "")

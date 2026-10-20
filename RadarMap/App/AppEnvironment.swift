@@ -97,6 +97,9 @@ final class AppEnvironment {
     /// «Обычно по водителям» (8.8.16): файлы traffic/typical по запросу — для
     /// дороги на работу, пока своих поездок меньше трёх.
     let typicalTraffic = TypicalTrafficService()
+    /// Погода на перевалах (19.2): файл сервера по open-meteo, одна фраза и
+    /// баннер о снеге или тумане впереди. На оповещения о камерах не влияет.
+    let roadWeather: RoadWeatherService
 
     /// CarPlay подключён. Наблюдаемый флаг для интерфейса телефона: пока едет
     /// машина, телефонная карта уступает место дешёвому экрану передачи —
@@ -189,7 +192,10 @@ final class AppEnvironment {
     /// Пробки нужны, пока на них кто-то смотрит: экран телефона, машина или
     /// идущая поездка (её время в пути).
     func refreshTrafficWanted() {
-        traffic.setWanted(isPhoneSceneActive || isCarPlayConnected || location.isTripActive)
+        let wanted = isPhoneSceneActive || isCarPlayConnected || location.isTripActive
+        traffic.setWanted(wanted)
+        // Погода на перевалах — по тому же правилу: экран, машина или поездка.
+        roadWeather.setWanted(wanted)
     }
 
     /// Ритм сети в поездке (NetworkRhythm): пробки — одним тактом и вместе с
@@ -241,6 +247,7 @@ final class AppEnvironment {
 
         self.usage = UsageStatsService(settings: settings)
         self.traffic = TrafficService(settings: settings)
+        self.roadWeather = RoadWeatherService(settings: settings)
         self.settings = settings
         self.cameras = cameras
         self.notifications = notifications
@@ -279,6 +286,7 @@ final class AppEnvironment {
         self.location.route = route
         self.location.speedLimits = speedLimits
         self.location.hotspots = hotspots
+        self.location.roadWeather = roadWeather
         self.location.watchBridge = watchBridge
         // «Радар!» с часов (9.3) — та же дверь, что у плашки.
         watchBridge.onReport = { [weak self] in
@@ -325,6 +333,7 @@ final class AppEnvironment {
             guard let self else { return }
             self.mobile.setTripActive(active)
             if active { self.traffic.tripStarted() } else { self.traffic.tripEnded() }
+            if active { self.roadWeather.tripStarted() } else { self.roadWeather.tripEnded() }
             self.commuteGhostPending = active
             if active { self.tryStartCommuteGhost() } else { self.commuteLive.stop() }
             if active {
@@ -463,6 +472,9 @@ final class AppEnvironment {
             Task { await self.offlineRoutes.refreshIfDue() }
         }
         traffic.isOnline = { [weak network] in network?.isOnline ?? false }
+        // Погода на перевалах: пульт (`features.roadWeather`) и сеть.
+        roadWeather.allowedByConfig = { [weak config] in config?.current.isRoadWeatherEnabled ?? true }
+        roadWeather.isOnline = { [weak network] in network?.isOnline ?? false }
         // «Обычно по водителям» — под теми же выключателями, что пробки.
         typicalTraffic.isAllowed = { [weak traffic] in traffic?.isShown ?? false }
         typicalTraffic.isOnline = { [weak network] in network?.isOnline ?? false }

@@ -76,6 +76,9 @@ final class LocationService: NSObject {
                                                "LocationService.onStoppedWithoutFix") }
     }
     @ObservationIgnored var voicedRoadEvents: Set<Int> = []
+    /// Погода на перевалах (19.2): ставит AppEnvironment. Голос — ниже камеры
+    /// (LocationService+RoadWeather).
+    @ObservationIgnored weak var roadWeather: RoadWeatherService?
     /// CoreMotion: «телефон стоит» — сторож сигнала не объявляет потерю.
     @ObservationIgnored weak var motion: MotionService?
 

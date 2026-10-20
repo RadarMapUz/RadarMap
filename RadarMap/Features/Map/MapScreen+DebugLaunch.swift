@@ -60,6 +60,13 @@ extension MapScreen {
                 env.route.seedDemoDetourOffer()
             }
         }
+        // Погода на перевале — карточка и баннер машины на снимок без сервера.
+        if args.contains("-demoRoadWeather") {
+            Task {
+                await Task.pause(seconds: 3)
+                env.roadWeather.seedDemo()
+            }
+        }
         // Дорога на работу и домой: четыре недели будней поверх истории.
         if args.contains("-demoCommutes") {
             Task {

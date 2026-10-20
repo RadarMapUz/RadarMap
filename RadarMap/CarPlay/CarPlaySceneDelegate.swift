@@ -461,6 +461,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         }
         watchRootTemplate()
         presentPendingConfirmIfNeeded()
+        retryOneTimeShows()
     }
 
     /// Проверка «корень действительно на экране машины», когда сцена стала

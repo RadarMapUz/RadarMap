@@ -1338,6 +1338,9 @@ nonisolated enum AppConfig {
     /// «Куда едем?» в машине: через сколько после показа карты предложить
     /// (первый точный фикс) и сколько держать баннер.
     static let carPlayDestinationOfferDelay: TimeInterval = 4
+    /// «Куда едем?», не показанный при подключении (экран машины был занят),
+    /// ещё ждёт экрана столько — дальше это уже не «сели и поехали» (10.9).
+    static let carPlayDestinationOfferWindow: TimeInterval = 180
     static let carPlayDestinationOfferSeconds: TimeInterval = 12
     /// Метаданные ведения для приборки и проекции на стекло. Поля все на
     /// месте (тип перекрёстка, угол, состояние); выключено, пока не проверено

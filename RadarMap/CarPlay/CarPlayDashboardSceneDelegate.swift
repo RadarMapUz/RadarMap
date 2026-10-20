@@ -216,9 +216,14 @@ struct CarPlayDashboardView: View {
             } else {
                 Theme.background.ignoresSafeArea()
             }
-            CarPlayDashboardGauge()
-                .padding(10)
-                .safeAreaPadding()
+            // Прибор — тоже только на экране (10.10): он читает скорость и
+            // дистанцию каждого фикса, и плитка, которую никто не видит,
+            // пересобиралась бы всю поездку.
+            if model.isOnScreen {
+                CarPlayDashboardGauge()
+                    .padding(10)
+                    .safeAreaPadding()
+            }
         }
         .environment(\.colorScheme, model.isDaylight ? .light : .dark)
         .onChange(of: env.sunIsUp, initial: true) { _, day in

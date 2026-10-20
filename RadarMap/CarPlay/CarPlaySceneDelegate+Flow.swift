@@ -191,6 +191,21 @@ extension CarPlaySceneDelegate {
         showToast(CarPlayTripSummary.lines(for: record)[0], variants: CarPlayTripSummary.lines(for: record))
     }
 
+    /// Одноразовые показы ждут экрана (10.9): итог поездки и «Куда едем?»
+    /// проверяли «экран наш и шаблон свободен» один раз и, не застав этого
+    /// (на экране машины другое приложение, сверху «Куда»), пропадали до
+    /// следующего раза. Теперь их пробуют снова, когда карта снова на экране
+    /// — у каждого свои условия свежести.
+    func retryOneTimeShows() {
+        guard Self.activeDelegate === self, model.isOnScreen, shownTemplate == nil else { return }
+        showTripSummaryIfFresh()
+        // «Сели и поехали» — первые минуты подключения (`connectedAt`).
+        if rootShown, !offeredDestination, let connectedAt,
+           Date().timeIntervalSince(connectedAt) < AppConfig.carPlayDestinationOfferWindow {
+            offerDestinationIfUseful()
+        }
+    }
+
     /// Сев в машину, водитель чаще всего едет туда же, куда всегда: утром из
     /// дома — на работу, вечером — домой (DestinationGuess — та же догадка,
     /// что строка на телефоне). Одно касание вместо «Куда → Работа».

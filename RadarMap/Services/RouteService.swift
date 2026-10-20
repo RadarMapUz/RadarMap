@@ -300,11 +300,19 @@ final class RouteService {
         return max(0, selected.distance - progressAlong)
     }
     var remainingTime: TimeInterval {
-        guard let selected, selected.distance > 0 else { return 0 }
+        guard selected != nil else { return 0 }
         // Маршрут по своей дороге на работу (8.8.11) — остаток по своим
         // прошлым поездкам (призрак): сами улучшаются прибытие в панели,
         // CarPlay и «Поделиться прибытием».
         if let personal = personalRemaining?() { return personal }
+        return engineRemaining
+    }
+
+    /// Остаток по оценке самого маршрута (движок + пробки) — для сравнения с
+    /// другими вариантами (объезд): личное «обычно в этот час» нельзя мерить
+    /// против времени OSRM — в час пик это выдумало бы выгодный объезд.
+    var engineRemaining: TimeInterval {
+        guard let selected, selected.distance > 0 else { return 0 }
         return selected.travelTime * remainingDistance / selected.distance + remainingTrafficDelay
     }
 
@@ -1216,7 +1224,8 @@ final class RouteService {
         detourSearchAt = now
         let gen = generation
         let current = Self.remaining(variant.points, after: progressAlong)
-        let currentRemaining = remainingTime
+        // Той же меркой, что варианты: движок + пробки, не личный остаток (8.8.11).
+        let currentRemaining = engineRemaining
         let via = stop
         Log.route.notice("объезд: ищу — впереди +\(Int(self.remainingTrafficDelay), privacy: .public) с, ползём \(Int(crawl), privacy: .public) с")
         Task {

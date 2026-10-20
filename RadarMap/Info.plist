@@ -24,10 +24,16 @@
 	<string>RadarMap показывает камеры видеофиксации на карте рядом с вами и определяет ваше положение, чтобы предупреждать о ближайших камерах.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Чтобы предупреждать о камерах в движении, даже когда приложение свёрнуто, RadarMap использует геолокацию в фоне. Оповещения работают на устройстве. Во время поездки для пробок уходят обезличенные отрезки пути — без устройства, без начала и конца поездки и без мест у дома и работы; это можно выключить в настройках.</string>
+	<!-- Пробки на виджет «На работу» за 30 мин до выезда (12б.2) -->
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>uz.radarmap.ios.commute-refresh</string>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
 		<string>audio</string>
+		<string>fetch</string>
 	</array>
 	<!-- CarPlay: отдельная сцена с собственным окном карты. Телефонный UI остаётся
 	     на SwiftUI-жизненном цикле — здесь описана только CarPlay-роль. -->

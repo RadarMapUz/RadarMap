@@ -5,6 +5,7 @@
 //  Композиционный корень зависимостей. Создаётся один раз и раздаётся через SwiftUI Environment.
 //
 
+import BackgroundTasks
 import CoreLocation
 import Foundation
 import Observation
@@ -875,6 +876,8 @@ final class AppEnvironment {
             guard generation == departureEstimatesGeneration, settings.commuteLearning else { return }
             departureEstimatesAt = now
             if next != departureEstimates { departureEstimates = next }
+            // Пробки «+8 мин» на виджет — запись только при смене минут.
+            refreshCommuteWidget(now: now)
         }
     }
 
@@ -1057,18 +1060,104 @@ final class AppEnvironment {
                     if leave > now { leaveBy = leave; break }
                 }
             }
-            return CommuteWidgetData.Direction(usualSeconds: usual,
-                                               usualDepartureMinute: summary.usualDepartureMinute,
-                                               bestStartMinute: summary.best?.startMinute,
-                                               bestSeconds: summary.best?.medianDuration,
-                                               leaveBy: leaveBy)
+            var result = CommuteWidgetData.Direction(usualSeconds: usual,
+                                                     usualDepartureMinute: summary.usualDepartureMinute,
+                                                     bestStartMinute: summary.best?.startMinute,
+                                                     bestSeconds: summary.best?.medianDuration,
+                                                     leaveBy: leaveBy)
+            // «Сейчас ~44 мин» (12б.2): окно ближайшего выезда по 15 минут —
+            // медиана своих поездок этого часа, без пробок (пробки — отдельно
+            // и со сроком). Окно без своих поездок не пишется: обещать нечего.
+            if settings.commuteLearning, commuteProfiles.isLoaded, let departure = summary.usualDepartureMinute {
+                let variants = commuteProfiles.book[kind]
+                let slots = WidgetCommute.slotStarts(usualDepartureMinute: departure, now: now).compactMap { start in
+                    CommuteEstimate.beforeDeparture(variants: variants, now: start, snapshot: nil)
+                        .map { CommuteWidgetData.Slot(start: start, seconds: $0.seconds) }
+                }
+                result.slots = slots.isEmpty ? nil : slots
+            }
+            // Пробки — из последнего пересчёта «сейчас» (на экране или в
+            // фоновом обновлении перед выездом), с его временем: виджет сам
+            // погасит их через 30 минут.
+            if let at = departureEstimatesAt, let jam = departureEstimates[kind]?.jamSeconds,
+               jam >= WidgetCommute.jamMinSeconds {
+                result.jam = CommuteWidgetData.Jam(extraSeconds: (jam / 60).rounded() * 60, at: at)
+            }
+            return result
         }
         let toWork = direction(.toWork), toHome = direction(.toHome)
-        let data = toWork == nil && toHome == nil
+        var data = toWork == nil && toHome == nil
             ? nil : CommuteWidgetData(toWork: toWork, toHome: toHome, updatedAt: now)
+        // Где телефон — только «дом»/«работа», без координат.
+        if let place = commuteWidgetPlace() {
+            data?.lastPlace = place
+            data?.lastPlaceAt = now
+        }
+        scheduleCommuteBackgroundRefresh(data, now: now)
         guard !WidgetCommute.sameNumbers(WidgetCommute.read(), data) else { return }
         WidgetCommute.write(data)
         WidgetCenter.shared.reloadTimelines(ofKind: "RadarCommuteWidget")
+    }
+
+    /// Последний заказанный системе фоновый подъём: заявка переставляется
+    /// только при смене времени, а не на каждом пересчёте пробок.
+    @ObservationIgnored private var commuteRefreshScheduledFor: Date?
+
+    /// Попросить систему разбудить приложение за 30 мин до обычного выезда —
+    /// за пробками для виджета. Только при включённых пробках и обучении:
+    /// иначе будить не за чем.
+    private func scheduleCommuteBackgroundRefresh(_ data: CommuteWidgetData?, now: Date) {
+        guard settings.commuteLearning, traffic.isShown,
+              let at = WidgetCommute.nextBackgroundRefresh(data: data, now: now,
+                                                           lead: AppConfig.commuteRefreshLeadSeconds) else {
+            if commuteRefreshScheduledFor != nil {
+                BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: AppConfig.commuteRefreshTaskID)
+                commuteRefreshScheduledFor = nil
+            }
+            return
+        }
+        guard at != commuteRefreshScheduledFor else { return }
+        let request = BGAppRefreshTaskRequest(identifier: AppConfig.commuteRefreshTaskID)
+        request.earliestBeginDate = at
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            commuteRefreshScheduledFor = at
+        } catch {
+            Log.app.notice("фоновое обновление дороги не заказано: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Фоновое пробуждение перед выездом: свежие пробки → «сейчас» по дороге
+    /// → виджет. Без GPS: место телефона берётся из последней отметки.
+    func commuteBackgroundRefresh() async {
+        Log.app.notice("фоновое обновление дороги на работу")
+        commuteRefreshScheduledFor = nil   // заявка израсходована
+        var steps = 0
+        while !commuteProfiles.isLoaded, steps < AppConfig.commuteRefreshProfileWaitSteps {
+            await Task.pause(seconds: 0.1)
+            steps += 1
+        }
+        guard settings.commuteLearning, commuteProfiles.isLoaded else { return }
+        if commute.isEmpty { refreshCommute() }
+        await traffic.refresh()
+        let now = Date()
+        let next = await Self.departureEstimates(book: commuteProfiles.book, snapshot: traffic.snapshot, now: now)
+        departureEstimatesAt = now
+        if next != departureEstimates { departureEstimates = next }
+        refreshCommuteWidget(now: now)
+    }
+
+    /// Телефон у дома или у работы (точная позиция, радиус концов дороги).
+    private func commuteWidgetPlace() -> CommuteWidgetData.Place? {
+        guard let ends = commuteEnds, let here = location.currentCoordinate,
+              !location.isPositionCoarse else { return nil }
+        func near(_ place: CLLocationCoordinate2D) -> Bool {
+            GeoMath.fastDistance(here.latitude, here.longitude, place.latitude, place.longitude)
+                <= AppConfig.commutePlaceRadiusMeters
+        }
+        if near(ends.home) { return .home }
+        if near(ends.work) { return .work }
+        return nil
     }
 
     /// Напоминать есть о чём (выгодный выезд или срок) — для предложения в «Итогах».
@@ -1165,6 +1254,9 @@ final class AppEnvironment {
             return
         }
         #endif
+        // «Дорога на работу»: где телефон остался (дом/работа) — направление
+        // на утро; запись — только если что-то сменилось.
+        refreshCommuteWidget()
         let calendar = Calendar.current
         let now = Date()
         let week = TripHistory.summary(days: trip.days, history: trip.history,

@@ -34,18 +34,18 @@
         }
       }
     },
-    "%1$@ · обычно %2$@": {
+    "%1$@ · %2$@": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@ · обычно %2$@"
+            "value": "%1$@ · %2$@"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@ · odatda %2$@"
+            "value": "%1$@ · %2$@"
           }
         }
       }
@@ -1527,6 +1527,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "RadarMap"
+          }
+        }
+      }
+    },
+    "~%@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~%@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "~%@"
           }
         }
       }
@@ -14971,6 +14987,22 @@
         }
       }
     },
+    "пробки +%1$@ · на %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "пробки +%1$@ · на %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tirbandlik +%1$@ · %2$@ holatiga"
+          }
+        }
+      }
+    },
     "пробки +%lld мин": {
       "localizations": {
         "ru": {
@@ -15375,6 +15407,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "hozir ~%@"
+          }
+        }
+      }
+    },
+    "сейчас · обычно %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "сейчас · обычно %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hozir · odatda %@"
           }
         }
       }

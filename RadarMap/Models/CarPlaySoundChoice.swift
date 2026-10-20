@@ -14,8 +14,12 @@
 //    * «Тишина до конца поездки» — ни голоса, ни сигналов; как и прежняя
 //      кнопка — атрибут поездки, откатывается при выходе из машины.
 //
-//  Голосовой режим, выбранный в машине, — настройка, как в «Настройках»: он
-//  остаётся. Тишина — нет (спит пассажир, идёт разговор — это про поездку).
+//  Любой выбор здесь — атрибут поездки в машине, как и прежняя тишина: «Только
+//  сигнал» для спящего пассажира не должен навсегда выключить голос на
+//  телефоне. При выходе из машины поле возвращается к «до машины» — если с
+//  тех пор его никто не трогал (ревью 20.10). Сигналы выбор голоса не
+//  трогает, кроме выхода из тишины: выключенные руками на телефоне они
+//  молча не включаются.
 //
 //  Чистая логика — CarPlaySoundChoiceTests.
 //
@@ -35,8 +39,7 @@ enum CarPlaySoundChoice: CaseIterable, Hashable {
         }
     }
 
-    /// Голосовой режим выбора; у тишины его ставит сама тишина (с запоминанием
-    /// прежнего — `CarPlaySceneDelegate.toggleMute`).
+    /// Голосовой режим выбора.
     var voiceMode: VoiceMode {
         switch self {
         case .all: return .always
@@ -46,6 +49,32 @@ enum CarPlaySoundChoice: CaseIterable, Hashable {
     }
 
     var soundEnabled: Bool { self != .silent }
+
+    /// Звук целиком: сигналы и голос.
+    struct Sound: Equatable {
+        var enabled: Bool
+        var voice: VoiceMode
+    }
+
+    /// Что ставит выбор поверх нынешнего. Сигналы — суть «Только сигнал» и
+    /// «Тишины»; голосовые режимы их не трогают, кроме выхода из тишины.
+    static func applying(_ choice: CarPlaySoundChoice, to current: Sound) -> Sound {
+        switch choice {
+        case .silent: return Sound(enabled: false, voice: .off)
+        case .beepOnly: return Sound(enabled: true, voice: .off)
+        case .all, .smart:
+            let wasSilent = !current.enabled && current.voice == .off
+            return Sound(enabled: wasSilent || current.enabled, voice: choice.voiceMode)
+        }
+    }
+
+    /// Выход из машины: поле возвращается к «до машины», только если оно
+    /// всё ещё такое, каким его поставила машина, — поменянное с тех пор
+    /// руками (на светофоре, в «Настройках») — осознанный выбор, его не трогаем.
+    static func restoring(before: Sound, carSet: Sound, current: Sound) -> Sound {
+        Sound(enabled: current.enabled == carSet.enabled ? before.enabled : current.enabled,
+              voice: current.voice == carSet.voice ? before.voice : current.voice)
+    }
 
     var title: String {
         switch self {

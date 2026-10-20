@@ -663,7 +663,7 @@ final class MobileCameraService {
         // Окно уточнения типа — только для СВОЕЙ свежесозданной точки:
         // merged-точка чужая, и «уточнение» родило бы рядом вторую сущность.
         if kind == .radar, result == .created, placement == .blind {
-            refineOffer = lastSent
+            storedRefineOffer = lastSent
         }
         return .sent(result)
     }
@@ -680,15 +680,32 @@ final class MobileCameraService {
     /// Предложение уточнить тип только что созданной отметки. Показывается
     /// несколько секунд (AppConfig.reportRefineSeconds); молчание оставляет
     /// «радар» — он покрывает почти все случаи.
-    private(set) var refineOffer: ReportGuard.Sent?
+    ///
+    /// Срок — в самой модели, а не только в таймере плашки телефона: отметку
+    /// с плашки, часов или машины ставят при запертом телефоне, и открытая
+    /// через сорок минут карта предлагала «Что это было?» о давней точке —
+    /// а уточнение вне окна сервера родило бы новую треногу там, где ничего
+    /// нет (ревью 20.10).
+    var refineOffer: ReportGuard.Sent? {
+        guard let offer = storedRefineOffer,
+              Date().timeIntervalSince(offer.at) <= AppConfig.reportRefineMaxAgeSeconds else { return nil }
+        return offer
+    }
+    private var storedRefineOffer: ReportGuard.Sent?
 
-    func dismissRefine() { refineOffer = nil }
+    func dismissRefine() { storedRefineOffer = nil }
 
     /// Второй тап: «это была тренога/пост/ДТП». Сервер переписывает тип ТОЙ ЖЕ
     /// точки (amend) — новая не создаётся, срок жизни не продлевается.
     func refine(to kind: ReportKind, offer: ReportGuard.Sent) async -> Bool {
         struct Response: Decodable { let id: Int; let merged: Bool; let amended: Bool? }
         guard isEnabled else { return false }
+        // Вне окна сервера (10 мин / 400 м) это уже не уточнение, а новая
+        // отметка в старой точке — отказ, а не выдуманная засада.
+        guard Date().timeIntervalSince(offer.at) <= AppConfig.reportAmendWindowSeconds else {
+            Log.network.notice("уточнение типа отклонено: отметка старше окна сервера")
+            return false
+        }
         do {
             let payload = ["lat": offer.latitude, "lon": offer.longitude,
                            "device": deviceID, "type": kind.rawValue] as [String: Any]
@@ -731,7 +748,7 @@ final class MobileCameraService {
             mine.removeAll { $0.id == id }
             saveMine()
             if lastSentID == id { lastSentID = nil; lastSent = nil }
-            refineOffer = nil
+            storedRefineOffer = nil
             await refresh()
             return true
         } catch {
@@ -847,7 +864,7 @@ final class MobileCameraService {
         // Свежая своя отметка — иначе «Отменить» в панели не показать на
         // скриншотах, а именно её и надо смотреть глазами.
         lastSentID = 900_003
-        refineOffer = sent
+        storedRefineOffer = sent
     }
     #endif
 

@@ -67,6 +67,21 @@ extension CarPlaySceneDelegate {
                 env.route.clear()
                 popToMap()
             })
+            // Весь маршрут и камеры на нём (10.4): во время ведения число
+            // камер впереди не было видно нигде.
+            buttons.append(gridButton(symbol: "map",
+                                      titles: [String(localized: "Весь маршрут"),
+                                               String(localized: "Обзор")]) { [weak self] in
+                self?.popToMap { [weak self] in self?.model.showOverview() }
+            })
+            let ahead = RouteCamerasAhead.list(env.route.camerasOnRoute, progress: env.route.progressAlong)
+            buttons.append(gridButton(symbol: "camera.fill",
+                                      titles: ahead.isEmpty
+                                        ? [String(localized: "Камер впереди нет")]
+                                        : [String(format: String(localized: "Камер впереди: %lld"), ahead.count),
+                                           String(format: String(localized: "Камеры: %lld"), ahead.count)]) { [weak self] in
+                self?.presentRouteCameras()
+            })
         }
 
         for slot in PlaceSlot.allCases {
@@ -113,7 +128,32 @@ extension CarPlaySceneDelegate {
             })
         }
 
-        return buttons
+        // Сетка держит не больше восьми: с маршрутом и двумя заправками
+        // постоянных плиток ровно столько — лишняя не должна ронять шаблон.
+        return Array(buttons.prefix(AppConfig.carPlayGridLimit))
+    }
+
+    /// Камеры впереди по маршруту — список с остатком пути до каждой.
+    /// Справочный: строки не нажимаются, ведение не прерывается.
+    func presentRouteCameras() {
+        let ahead = RouteCamerasAhead.list(env.route.camerasOnRoute, progress: env.route.progressAlong,
+                                           limit: Int(CPListTemplate.maximumItemCount))
+        guard !ahead.isEmpty else {
+            return showToast(String(localized: "Камер впереди по маршруту нет"))
+        }
+        let items = ahead.map { item in
+            CPListItem(text: "\(Formatting.distance(item.meters)) · \(item.camera.kind.displayName)",
+                       detailText: item.camera.displayTitle)
+        }
+        guard beginPush("камеры маршрута") else { return }
+        let list = CPListTemplate(title: String(localized: "Камеры на маршруте"),
+                                  sections: [CPListSection(items: items)])
+        interfaceController?.pushTemplate(list, animated: true) { [weak self] _, error in
+            Task { @MainActor [weak self] in self?.endPush() }
+            if let error {
+                Log.carplay.error("pushTemplate(камеры маршрута): \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     func presentNearest(_ kind: Venue.Kind) {
@@ -249,7 +289,13 @@ extension CarPlaySceneDelegate {
             // экрана: сценарий в машине обязан проходить без телефона
             // (Руководство CarPlay, стр. 5; аудит 18.10, п. 8).
             guard let place else { return presentAssign(slot) }
-            route(to: place.saved)
+            // Выученное место в «недавние» не пишем: оно двигается с привычками
+            // и забывается выключателем — а запись осталась бы вторым «Домом».
+            if case .learned = place {
+                route(to: place.saved, remember: false)
+            } else {
+                route(to: place.saved)
+            }
         }
     }
 
@@ -286,7 +332,7 @@ extension CarPlaySceneDelegate {
     }
 
     /// Строим маршрут и сразу едем: за рулём выбирать из альтернатив некогда.
-    func route(to place: SavedPlace, allowPreview: Bool = true) {
+    func route(to place: SavedPlace, allowPreview: Bool = true, remember: Bool = true) {
         let key = "route:\(place.lat),\(place.lon)"
         guard actionsInFlight.insert(key).inserted else {
             return Log.carplay.notice("повторное касание — маршрут уже строится")
@@ -312,7 +358,7 @@ extension CarPlaySceneDelegate {
             await env.route.build(from: from, to: place.coordinate,
                                   name: place.title, cameras: env.cameras.cameras,
                                   alternatives: preview)
-            env.settings.addRecent(title: place.title, lat: place.lat, lon: place.lon)
+            if remember { env.settings.addRecent(title: place.title, lat: place.lat, lon: place.lon) }
             if preview, env.route.isActive, env.route.errorMessage == nil {
                 showPreview(name: place.title, destination: place.coordinate)
                 return
@@ -468,15 +514,15 @@ extension CarPlaySceneDelegate {
     /// на карту. Набор типов — общий с телефоном (`ReportKind.offered`).
     func presentRefineGrid(offer: ReportGuard.Sent) {
         var buttons = ReportKind.offered.filter { $0 != .radar && $0 != .tripod }.map { kind in
+            // Действие — после возврата к карте: тост поверх летящего pop
+            // CarPlay отклоняет, и быстрый отказ водитель не увидел бы.
             gridButton(symbol: kind.symbol, titles: [kind.title]) { [weak self] in
-                self?.popToMap()
-                self?.refineReport(to: kind, offer: offer)
+                self?.popToMap { [weak self] in self?.refineReport(to: kind, offer: offer) }
             }
         }
         if env.mobile.cancellableReportID() != nil {
             buttons.append(gridButton(symbol: "arrow.uturn.backward", titles: [String(localized: "Отменить")]) { [weak self] in
-                self?.popToMap()
-                self?.cancelOwnReport()
+                self?.popToMap { [weak self] in self?.cancelOwnReport() }
             })
         }
         guard beginPush("уточнение") else { return }

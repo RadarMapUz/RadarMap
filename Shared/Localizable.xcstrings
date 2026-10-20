@@ -5687,6 +5687,54 @@
         }
       }
     },
+    "Камер впереди нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камер впереди нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldinda kamera yo‘q"
+          }
+        }
+      }
+    },
+    "Камер впереди по маршруту нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камер впереди по маршруту нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo‘nalishda oldinda kamera yo‘q"
+          }
+        }
+      }
+    },
+    "Камер впереди: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камер впереди: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldinda kameralar: %lld"
+          }
+        }
+      }
+    },
     "Камер по пути не было": {
       "localizations": {
         "ru": {
@@ -5939,6 +5987,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kameralar odatdagidek ogohlantiradi: baza telefonda saqlanadi"
+          }
+        }
+      }
+    },
+    "Камеры: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камеры: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralar: %lld"
           }
         }
       }

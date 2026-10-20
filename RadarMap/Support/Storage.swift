@@ -54,12 +54,16 @@ enum Storage {
         case mergeSuggestDismissedID // id поездки, для которой «Объединить?» отклонили
         case pendingReports         // отметки, ждущие связи (ReportQueue)
         case myReports              // свои отметки и их судьба (счётчик в Итогах)
-        // Тишина, включённая кнопкой в CarPlay. Хранится, а не живёт в делегате:
-        // при переподключении делегат создаётся заново и «что было до тишины»
-        // терялось — восстановление включало звук тем, кто выключал его намеренно.
-        case carPlayMuted           // тишина активна (снимается при выходе из машины)
-        case carPlayVoiceBeforeMute // rawValue VoiceMode до тишины
-        case carPlaySoundBeforeMute // soundEnabled до тишины
+        // Звук, выбранный в CarPlay (10.1; до 20.10 — только тишина). Хранится,
+        // а не живёт в делегате: при переподключении делегат создаётся заново
+        // и «что было до машины» терялось — восстановление включало звук тем,
+        // кто выключал его намеренно. Имена ключей — прежние: маркер старой
+        // тишины читается как «машина меняла звук».
+        case carPlayMuted           // машина меняла звук (снимается при выходе из машины)
+        case carPlayVoiceBeforeMute // rawValue VoiceMode до машины
+        case carPlaySoundBeforeMute // soundEnabled до машины
+        case carPlayVoiceSet        // rawValue VoiceMode, поставленный машиной
+        case carPlaySoundSet        // soundEnabled, поставленный машиной
     }
 
     private static var defaults: UserDefaults { .standard }

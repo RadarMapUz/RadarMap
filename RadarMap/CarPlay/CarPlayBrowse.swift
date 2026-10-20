@@ -94,7 +94,10 @@ nonisolated enum CarPlayBrowse {
 
         case .overview:
             state.following = false
-            return [.cancelIdle]
+            // На выборе маршрута обзор стоит, пока выбирают; во время ведения
+            // («Весь маршрут» из сетки, 10.4) — вернётся к машине сам, как
+            // свободная карта.
+            return previewing ? [.cancelIdle] : [.armIdle]
 
         case .recenter:
             let wasPanning = state.panning

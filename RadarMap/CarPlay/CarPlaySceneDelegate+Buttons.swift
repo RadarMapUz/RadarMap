@@ -197,11 +197,13 @@ extension CarPlaySceneDelegate {
     }
 
     /// Закрыть верхний модальный шаблон, не глотая ошибку.
-    func dismissTopTemplate() {
+    func dismissTopTemplate(then: (@MainActor () -> Void)? = nil) {
         interfaceController?.dismissTemplate(animated: true) { _, error in
             if let error {
                 Log.carplay.error("dismissTemplate: \(error.localizedDescription, privacy: .public)")
             }
+            guard let then else { return }
+            Task { @MainActor in then() }
         }
     }
 
@@ -321,8 +323,10 @@ extension CarPlaySceneDelegate {
                                                  voiceMode: env.settings.voiceMode)
         var actions = CarPlaySoundChoice.allCases.filter { $0 != current }.map { choice in
             CPAlertAction(title: choice.title, style: choice == .silent ? .destructive : .default) { [weak self] _ in
-                self?.dismissTopTemplate()
-                self?.applySound(choice)   // наблюдение пересоберёт кнопку
+                // Применить, когда лист закрылся: смена настроек пересобирает
+                // бар, а кнопки, отправленные под уходящим модальным
+                // шаблоном, головное устройство теряет (2.2.1/2.2.3).
+                self?.dismissTopTemplate { [weak self] in self?.applySound(choice) }
             }
         }
         actions.append(CPAlertAction(title: String(localized: "Отмена"), style: .cancel) { [weak self] _ in
@@ -339,73 +343,44 @@ extension CarPlaySceneDelegate {
         }
     }
 
-    /// Применить выбор. Тишина — прежней кнопкой (с запоминанием и откатом
-    /// при выходе из машины); голосовой режим — настройка, как на телефоне,
-    /// и маркер тишины снимается: иначе выход из машины «вернул бы» звук
-    /// поверх только что сделанного выбора.
+    /// Применить выбор (10.1). Первый за поездку в машине запоминает «до
+    /// машины»; каждый — что поставила машина: при выходе вернём только то,
+    /// что с тех пор никто не трогал (`restoreCarSound`).
     func applySound(_ choice: CarPlaySoundChoice) {
-        Log.carplay.info("звук в машине: \(String(describing: choice), privacy: .public)")
-        if choice == .silent {
-            if !isMuted { toggleMute() }
-            return
-        }
-        Storage.set(false, for: .carPlayMuted)
-        env.settings.soundEnabled = choice.soundEnabled
-        env.settings.voiceMode = choice.voiceMode
-    }
-
-    /// Тишина — это молчат и писк, и голос: водитель, нажавший «динамик», ждёт
-    /// тишины, а не «звук выключил, а голос остался».
-    ///
-    /// Читает ТОЛЬКО @Observable-настройки: isMuted стоит внутри
-    /// withObservationTracking, и чтение Storage здесь оставило бы кнопку
-    /// без перерисовки после нажатия.
-    var isMuted: Bool {
-        !env.settings.soundEnabled && env.settings.voiceMode == .off
-    }
-
-    func toggleMute() {
-        if isMuted {
-            unmute()
-        } else {
-            // «До тишины» — в Storage, а не в полях делегата: при
-            // переподключении делегат создаётся заново, и поля-умолчания
-            // «включали в подарок» звук и голос тем, кто выключил их намеренно.
-            // Хранится сам rawValue VoiceMode: восстановление через фасад
-            // voiceEnabled превращало «Обо всех» в «Умно».
-            Storage.set(env.settings.soundEnabled, for: .carPlaySoundBeforeMute)
-            Storage.set(env.settings.voiceMode.rawValue, for: .carPlayVoiceBeforeMute)
+        let current = CarPlaySoundChoice.Sound(enabled: env.settings.soundEnabled,
+                                               voice: env.settings.voiceMode)
+        if !Storage.bool(.carPlayMuted) {
+            Storage.set(current.enabled, for: .carPlaySoundBeforeMute)
+            Storage.set(current.voice.rawValue, for: .carPlayVoiceBeforeMute)
             Storage.set(true, for: .carPlayMuted)
-            env.settings.soundEnabled = false
-            env.settings.voiceMode = .off
         }
+        let next = CarPlaySoundChoice.applying(choice, to: current)
+        Storage.set(next.enabled, for: .carPlaySoundSet)
+        Storage.set(next.voice.rawValue, for: .carPlayVoiceSet)
+        Log.carplay.info("звук в машине: \(String(describing: choice), privacy: .public)")
+        env.settings.soundEnabled = next.enabled
+        env.settings.voiceMode = next.voice
     }
 
-    /// Возвращаем ровно то, что было до заглушения. Если тишину включили не
-    /// кнопкой машины (всё выключено руками в настройках), «размучивание» —
-    /// осознанное желание слышать: включаем разумный минимум.
-    ///
-    /// Восстановление слепым быть не может. Пока водитель ехал молча, он мог
-    /// на светофоре взять телефон и поменять настройки сам — например выбрать
-    /// профиль, который ставит свой `voiceMode`. Вернуть тогда «как было до
-    /// кнопки» значит затереть его же осознанный выбор более поздним
-    /// прошлым. Поэтому откатываем только то, что с тех пор никто не трогал:
-    /// поле восстанавливается, лишь если оно и сейчас в том состоянии, в
-    /// которое его поставила кнопка машины (звук выключен, голос молчит).
-    func unmute() {
+    /// Вышли из машины: звук — атрибут поездки, а не настройка. Без отката
+    /// телефон навсегда оставался бы в «Молча», и человек не связал бы это с
+    /// кнопкой в машине. Откатываем только поля, которые и сейчас такие,
+    /// какими их поставила машина: выбранное с тех пор руками не трогаем.
+    func restoreCarSound() {
         defer { Storage.set(false, for: .carPlayMuted) }
-        guard Storage.bool(.carPlayMuted) else {
-            env.settings.soundEnabled = true
-            env.settings.voiceMode = .smart
-            return
-        }
-        if env.settings.soundEnabled == false {
-            env.settings.soundEnabled = Storage.bool(.carPlaySoundBeforeMute)
-        }
-        if env.settings.voiceMode == .off {
-            env.settings.voiceMode = Storage.string(.carPlayVoiceBeforeMute)
-                .flatMap(VoiceMode.init(rawValue:)) ?? .smart
-        }
+        guard Storage.bool(.carPlayMuted) else { return }
+        let before = CarPlaySoundChoice.Sound(
+            enabled: Storage.bool(.carPlaySoundBeforeMute),
+            voice: Storage.string(.carPlayVoiceBeforeMute).flatMap(VoiceMode.init(rawValue:)) ?? .smart)
+        // Маркер прежней тишины (до 20.10) без «поставленного» — это тишина.
+        let carSet = CarPlaySoundChoice.Sound(
+            enabled: Storage.bool(.carPlaySoundSet),
+            voice: Storage.string(.carPlayVoiceSet).flatMap(VoiceMode.init(rawValue:)) ?? .off)
+        let current = CarPlaySoundChoice.Sound(enabled: env.settings.soundEnabled,
+                                               voice: env.settings.voiceMode)
+        let next = CarPlaySoundChoice.restoring(before: before, carSet: carSet, current: current)
+        if next.enabled != current.enabled { env.settings.soundEnabled = next.enabled }
+        if next.voice != current.voice { env.settings.voiceMode = next.voice }
     }
 
     /// Значок кнопки машины. 24 пункта, а не 20: систему кнопок рисует

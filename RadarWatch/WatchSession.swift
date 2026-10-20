@@ -49,6 +49,8 @@ final class WatchSession: NSObject {
     private(set) var isReachable = false
 
     @ObservationIgnored private var lastHapticLevel = 0
+    /// Компликация «следующая камера» (9.3б) — из того же контекста.
+    @ObservationIgnored private let complication = ComplicationFeed()
 
     #if DEBUG
     /// `-demo`: живой HUD без телефона — для скриншотов и превью на симуляторе.
@@ -61,6 +63,8 @@ final class WatchSession: NSObject {
         limitKmh = 60
         isOverspeeding = true
         alertLevel = 2
+        complication.update(isTripActive: true, symbol: cameraSymbol, title: cameraTitle,
+                            distanceMeters: distanceMeters)
     }
     #endif
 
@@ -89,6 +93,8 @@ final class WatchSession: NSObject {
         let over = context["over"] as? Bool ?? false
         if over != isOverspeeding { isOverspeeding = over }
         let level = context["level"] as? Int ?? 0
+        complication.update(isTripActive: active, symbol: symbol, title: title,
+                            distanceMeters: distance)
 
         // Тук на запястье при росте уровня; сброс серии — когда камера позади.
         if isTripActive, level > lastHapticLevel {
@@ -144,6 +150,22 @@ extension WatchSession {
             guard !Task.isCancelled else { return }
             self.report = nil
         }
+    }
+}
+
+extension WatchSession {
+    /// Фоновое пробуждение ради контекста (`.backgroundTask(.watchConnectivity)`):
+    /// компликация на циферблате живёт, пока приложение часов спит, и контекст
+    /// с телефона будит его в фоне. Задачу держим, пока сессия не примет всё,
+    /// и ещё чуть-чуть — чтобы `apply` успел на главном акторе. Не дольше 10 с.
+    nonisolated static func drainPendingContent() async {
+        let session = WCSession.default
+        for _ in 0..<50 {
+            if Task.isCancelled { return }
+            if session.activationState == .activated, !session.hasContentPending { break }
+            do { try await Task.sleep(for: .milliseconds(200)) } catch { return }   // отмена
+        }
+        do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
     }
 }
 

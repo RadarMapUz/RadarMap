@@ -57,4 +57,25 @@ nonisolated enum WidgetPalette {
     static func scoreTier(_ rating: Int) -> Int {
         rating >= 75 ? 2 : rating >= 60 ? 1 : 0
     }
+
+    /// Цвет типа камеры (Theme.Types) по SF Symbol, который телефон шлёт
+    /// часам (CameraType.symbolName): компликация часов красит диск камеры
+    /// тем же цветом, что маркер на карте. Тест сверяет с Theme.Types.
+    /// ДТП — заливка опасности (ночной danger светлый, белый на нём не
+    /// читается); неизвестный тип — графит поста, не синий интерфейса.
+    static func cameraFill(symbol: String?) -> UInt32 {
+        switch symbol {
+        case "camera.fill": return 0xD93025
+        case "speedometer", "light.beacon.max.fill": return 0xF2B200
+        case "sensor.tag.radiowaves.forward.fill": return 0x6A3FD6
+        case "dot.radiowaves.left.and.right": return 0xC2409E
+        case "exclamationmark.triangle.fill": return dangerFill.dark
+        default: return 0x46525E
+        }
+    }
+
+    /// Значок на заливке типа: на светлом янтаре радара и треноги — тёмный.
+    static func cameraGlyph(symbol: String?) -> UInt32 {
+        cameraFill(symbol: symbol) == 0xF2B200 ? onAction : 0xFFFFFF
+    }
 }

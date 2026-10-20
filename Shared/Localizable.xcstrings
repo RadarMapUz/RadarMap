@@ -1595,6 +1595,54 @@
         }
       }
     },
+    "< %@ км": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "< %@ км"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "< %@ km"
+          }
+        }
+      }
+    },
+    "< %@ м": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "< %@ м"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "< %@ m"
+          }
+        }
+      }
+    },
+    "> %@ км": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "> %@ км"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "> %@ km"
+          }
+        }
+      }
+    },
     "OK": {
       "localizations": {
         "ru": {
@@ -5685,6 +5733,22 @@
         }
       }
     },
+    "Камера впереди и расстояние до неё во время поездки.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камера впереди и расстояние до неё во время поездки."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar davomida oldindagi kamera va unga masofa."
+          }
+        }
+      }
+    },
     "Камера на месте": {
       "localizations": {
         "ru": {
@@ -7605,6 +7669,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Maʼlumotlarga ruxsat yoʻq"
+          }
+        }
+      }
+    },
+    "Нет поездки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет поездки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar yoʻq"
           }
         }
       }
@@ -11945,6 +12025,22 @@
         }
       }
     },
+    "Следующая камера": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Следующая камера"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keyingi kamera"
+          }
+        }
+      }
+    },
     "Следующая камера в панели": {
       "localizations": {
         "ru": {
@@ -14396,6 +14492,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "oʻchirilgan"
+          }
+        }
+      }
+    },
+    "данные на %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "данные на %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ holatiga"
           }
         }
       }

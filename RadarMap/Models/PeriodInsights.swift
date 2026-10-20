@@ -97,7 +97,10 @@ nonisolated enum PeriodInsights {
     /// лимитом, легенда карты — разные камеры, «Детали» — все проезды; три
     /// числа под похожими словами. Число проездов — в карточке денег рядом.
     private static func cleanInsight(_ summary: PeriodSummary) -> Insight? {
-        guard summary.overPasses == 0, summary.cleanPasses > 0 else { return nil }
+        // Чистым период называем, только если судили хотя бы половину
+        // проездов: один проезд с лимитом из сорока — не «ни одного превышения».
+        guard summary.overPasses == 0, summary.cleanPasses > 0,
+              summary.cleanPasses >= summary.cameras - summary.cleanPasses else { return nil }
         return Insight(
             id: "clean", kind: .good, icon: "checkmark.shield.fill",
             text: String(localized: "Ни одного штрафуемого превышения"))
@@ -145,10 +148,16 @@ nonisolated enum PeriodInsights {
     /// Честная оговорка: камеры проезжали, но лимит дороги у них неизвестен —
     /// значит, нули в «превышениях» это не заслуга водителя, а нехватка данных.
     private static func limitsInsight(_ summary: PeriodSummary) -> Insight? {
-        guard summary.cameras > 0, summary.cleanPasses + summary.overPasses == 0 else { return nil }
+        let judged = summary.cleanPasses + summary.overPasses
+        guard summary.cameras > 0, judged * 2 < summary.cameras else { return nil }
+        // Ни одного известного лимита — прежняя фраза; большинство неизвестно
+        // (1 из 41) — та же оговорка про большинство: иначе «превышений нет»
+        // карточки денег стояло бы без объяснения, почему судили одну камеру.
         return Insight(
             id: "limits", kind: .neutral, icon: "questionmark.circle.fill",
-            text: String(localized: "У пройденных камер неизвестен лимит дороги — превышения по ним не считались"))
+            text: judged == 0
+                ? String(localized: "У пройденных камер неизвестен лимит дороги — превышения по ним не считались")
+                : String(localized: "У большинства пройденных камер неизвестен лимит дороги — превышения по ним не считались"))
     }
 
     /// «1,2» — одна цифра после запятой в локали приложения.

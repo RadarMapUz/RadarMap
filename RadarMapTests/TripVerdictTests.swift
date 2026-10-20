@@ -62,7 +62,9 @@ final class TripVerdictTests: XCTestCase {
         XCTAssertEqual(record([]).verdict, .noCameras)
     }
 
-    /// Допуск камеры (+5 км/ч) — ещё не превышение, как во всех сводках.
+    /// Граница вердикта — ступень штрафа: допуск камеры (+5 км/ч) ещё не
+    /// штрафуемое превышение, как во всех сводках. Балл снимает и здесь —
+    /// поэтому на экранах «штрафуемых превышений нет», а не «превышений нет».
     func testWithinToleranceIsClean() {
         let edge = 60 + FineSchedule.toleranceKmh
         XCTAssertEqual(record([pass(1, speed: edge, limit: 60)]).verdict, .clean)
@@ -79,9 +81,35 @@ final class TripVerdictTests: XCTestCase {
         var summary = PeriodSummary()
         summary.cameras = 34
         summary.cleanPasses = 31
-        let insight = try XCTUnwrap(PeriodInsights.build(summary).first)
-        XCTAssertEqual(insight.id, "clean")
+        let insight = try XCTUnwrap(PeriodInsights.build(summary).first { $0.id == "clean" })
         XCTAssertFalse(insight.text.contains(where: \.isNumber), insight.text)
+    }
+
+    /// Судили одну камеру из сорока одной — «ни одного превышения» не
+    /// говорим; говорим, что у большинства лимит неизвестен.
+    func testMostlyUnknownLimitsAreSaidNotPraised() {
+        var summary = PeriodSummary()
+        summary.cameras = 41
+        summary.cleanPasses = 1
+        let ids = PeriodInsights.build(summary).map(\.id)
+        XCTAssertFalse(ids.contains("clean"), "\(ids)")
+        XCTAssertTrue(ids.contains("limits"), "\(ids)")
+        // Половина судима — это уже период, о котором можно сказать «чисто».
+        summary.cleanPasses = 21
+        XCTAssertTrue(PeriodInsights.build(summary).map(\.id).contains("clean"))
+    }
+
+    /// Место в «Риск ≈ … · место» — у ждущего штрафа, а не у лидера по
+    /// баллам, чей штраф отменён или лимит предположен.
+    func testRiskPlaceIsThePendingFine() {
+        var dismissed = pass(1, speed: 110, limit: 60, dismissed: true)
+        dismissed.location = "Чиланзар"
+        var assumed = pass(2, speed: 105, limit: 60, assumed: true)
+        assumed.location = "Сергели"
+        var pending = pass(3, speed: 80, limit: 60)
+        pending.location = "Юнусабад"
+        XCTAssertEqual(TripHistorySection.worstRiskPlace(record([dismissed, assumed, pending])), "Юнусабад")
+        XCTAssertNil(TripHistorySection.worstRiskPlace(record([dismissed, assumed])))
     }
 
     /// Точка без лимита — нейтральная: ни зелёная, ни красная.

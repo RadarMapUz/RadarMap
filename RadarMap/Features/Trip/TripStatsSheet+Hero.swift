@@ -156,7 +156,13 @@ extension TripStatsSheet {
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         distance.minimumScaleFactor(0.6)
-                        if let delta = summary.distanceDeltaPercent { deltaBadge(delta, short: true) }
+                        if let delta = summary.distanceDeltaPercent { deltaBadge(delta, words: .short) }
+                    }
+                    // Последний — голый процент: на SE при xxxLarge и короткое
+                    // «к прошлому» не помещается, а fixedSize выдавил бы карточку.
+                    VStack(alignment: .leading, spacing: 4) {
+                        distance.minimumScaleFactor(0.6)
+                        if let delta = summary.distanceDeltaPercent { deltaBadge(delta, words: .none) }
                     }
                 }
                 if let rating = summary.rating {
@@ -259,10 +265,16 @@ extension TripStatsSheet {
         }
     }
 
-    func deltaBadge(_ delta: Int, short: Bool = false) -> some View {
+    enum DeltaWords { case full, short, none }
+
+    func deltaBadge(_ delta: Int, words: DeltaWords = .full) -> some View {
         let up = delta >= 0
-        let versus = short ? period.versusPreviousShort : period.versusPrevious
-        let text: LocalizedStringKey = "\(abs(delta))% \(versus)"
+        let text: LocalizedStringKey
+        switch words {
+        case .full:  text = "\(abs(delta))% \(period.versusPrevious)"
+        case .short: text = "\(abs(delta))% \(period.versusPreviousShort)"
+        case .none:  text = "\(abs(delta))%"
+        }
         return Label(text, systemImage: up ? "arrow.up.right" : "arrow.down.right")
             .font(.rounded(11, .bold))
             .foregroundStyle(up ? Theme.accent : Theme.textSecondary)

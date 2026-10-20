@@ -26,7 +26,7 @@ nonisolated enum TripArchive {
                        calendar: Calendar = .current) -> [Month] {
         var order: [Date] = []
         var byMonth: [Date: [TripRecord]] = [:]
-        for record in history where !onlyFined || hasFinedPass(record) {
+        for record in history where !onlyFined || hasOverspeed(record) {
             let key = calendar.dateInterval(of: .month, for: record.startedAt)?.start
                 ?? calendar.startOfDay(for: record.startedAt)
             if byMonth[key] == nil { order.append(key) }
@@ -35,12 +35,13 @@ nonisolated enum TripArchive {
         return order.map { Month(start: $0, records: byMonth[$0] ?? []) }
     }
 
-    /// Хоть один проезд со ступенью штрафа — та же граница, что у денег.
-    static func hasFinedPass(_ record: TripRecord) -> Bool {
-        record.passed.contains { pass in
-            guard pass.limitIsCertain, let limit = pass.limitKmh else { return false }
-            return FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) > 0
-        }
+    /// Хоть один проезд со ступенью штрафа — та же граница, что у вердикта
+    /// поездки и сводки периода. Предположенный лимит снимает деньги, но не
+    /// поведение: раньше фильтр требовал достоверный лимит, и поездка с
+    /// красным «Штрафуемых превышений: 1» на карточке пропадала из
+    /// «только с превышениями» (ревью 20.10).
+    static func hasOverspeed(_ record: TripRecord) -> Bool {
+        !record.isClean
     }
 
     enum Finish: Equatable, Sendable { case home, work }

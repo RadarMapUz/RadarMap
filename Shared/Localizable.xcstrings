@@ -1979,6 +1979,22 @@
         }
       }
     },
+    "Без штрафуемых превышений": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Без штрафуемых превышений"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarimali oshirishlarsiz"
+          }
+        }
+      }
+    },
     "Бензин": {
       "localizations": {
         "ru": {
@@ -2602,7 +2618,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ulush = ballning 100 gacha kami × yo‘l ulushi: %@"
+            "value": "Hissa = ballning 100 gacha kami × yo‘l ulushi: %@"
           }
         }
       }
@@ -2915,22 +2931,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Barcha kameralar"
-          }
-        }
-      }
-    },
-    "Все камеры в лимите": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Все камеры в лимите"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Barcha kameralar cheklov ichida"
           }
         }
       }
@@ -6181,6 +6181,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yo'l limiti — OpenStreetMap'dan. Jarima — birinchi qayd etish bo'yicha taxmin: qaytalanish va aniq kameraning yo'l qo'yishlari bizga noma'lum."
+          }
+        }
+      }
+    },
+    "Лимиты камер неизвестны": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лимиты камер неизвестны"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralar limiti noma’lum"
           }
         }
       }
@@ -9838,22 +9854,6 @@
         }
       }
     },
-    "Превышений: %lld": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Превышений: %lld"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Oshirishlar: %lld"
-          }
-        }
-      }
-    },
     "Предположительно %lld": {
       "localizations": {
         "ru": {
@@ -10159,34 +10159,18 @@
         }
       }
     },
-    "Проездов камер: %lld · лимит неизвестен": {
+    "Проездов камер: %lld — штрафуемых превышений нет": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Проездов камер: %lld · лимит неизвестен"
+            "value": "Проездов камер: %lld — штрафуемых превышений нет"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kamera o‘tishlari: %lld · limit noma’lum"
-          }
-        }
-      }
-    },
-    "Проездов камер: %lld — превышений нет": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Проездов камер: %lld — превышений нет"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kamera o‘tishlari: %lld — oshirish yo‘q"
+            "value": "Kamera o‘tishlari: %lld — jarimali oshirish yo‘q"
           }
         }
       }
@@ -12562,6 +12546,22 @@
         }
       }
     },
+    "У большинства пройденных камер неизвестен лимит дороги — превышения по ним не считались": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "У большинства пройденных камер неизвестен лимит дороги — превышения по ним не считались"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘tilgan kameralarning ko‘pchiligida yo‘l limiti noma’lum — ular bo‘yicha oshirishlar hisoblanmadi"
+          }
+        }
+      }
+    },
     "У камер": {
       "localizations": {
         "ru": {
@@ -13196,6 +13196,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jarima keldi"
+          }
+        }
+      }
+    },
+    "Штрафуемых превышений нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Штрафуемых превышений нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarimali oshirish yo‘q"
+          }
+        }
+      }
+    },
+    "Штрафуемых превышений: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Штрафуемых превышений: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarimali oshirishlar: %lld"
           }
         }
       }
@@ -14438,6 +14470,22 @@
         }
       }
     },
+    "лимит неизвестен: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "лимит неизвестен: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "limit noma’lum: %lld"
+          }
+        }
+      }
+    },
     "лучшая серия": {
       "localizations": {
         "ru": {
@@ -15179,7 +15227,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "kameralardan o'tish"
+            "value": "kamera o‘tishlari"
           }
         }
       }

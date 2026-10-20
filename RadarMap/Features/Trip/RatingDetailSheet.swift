@@ -809,8 +809,10 @@ private struct ContributionFormula: View {
     var body: some View {
         // Арифметика — одним неразрывным куском: «≈» в конце строки и «−27,2»
         // на следующей читались как два разных выражения.
+        // Произведение положительное — и результат без минуса: «18 × 23 % ≈
+        // −4,1» читалось как ошибка знака; минус у вклада стоит в строке.
         let math = Formatting.unbreakable(
-            "\(item.deficit) × \(Int((item.weightShare * 100).rounded())) % ≈ \(Formatting.points(item.points))")
+            "\(item.deficit) × \(Int((item.weightShare * 100).rounded())) % ≈ \(Formatting.decimal(item.points))")
         Text(String(format: String(localized: "Вклад = недобор балла до 100 × доля пути: %@"), math))
             .font(.rounded(11))
             .foregroundStyle(Theme.textTertiary)

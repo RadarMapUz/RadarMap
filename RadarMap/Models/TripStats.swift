@@ -255,10 +255,17 @@ final class TripStats {
     }
 
     /// Зафиксировать прохождение камеры (скорость — в точке максимального сближения).
+    /// false — повтор той же точки (дубль камеры в базе, 11.1): не пишем.
+    @discardableResult
     func registerPass(camera: Camera, speedKmh: Double, limitKmh: Int?,
                       roadLimitKmh: Int? = nil, limitAssumed: Bool = false,
                       courseDegrees: Double? = nil, speedAfterKmh: Double? = nil,
-                      silent: Bool = false, date: Date = Date()) {
+                      silent: Bool = false, date: Date = Date()) -> Bool {
+        guard !TripHistory.isDuplicate(cameraID: camera.id, typeRaw: camera.type, lat: camera.lat,
+                                       lon: camera.lon, date: date, of: passed) else {
+            Log.trips.info("проезд \(camera.id, privacy: .public) — повтор той же точки, не пишу")
+            return false
+        }
         passed.append(PassedCamera(
             id: UUID(), cameraID: camera.id, typeRaw: camera.type,
             // Отметка водителей: её подпись — «исчезнет ~14:05», и в истории,
@@ -276,6 +283,7 @@ final class TripStats {
             courseDegrees: courseDegrees, speedAfterKmh: speedAfterKmh,
             silent: silent ? true : nil
         ))
+        return true
     }
 
     /// Сбросить поездку без записи в историю: пассажирский старт («я в такси»)
@@ -1455,6 +1463,29 @@ final class TripStats {
                 Log.trips.info("чистка отметок: снято проездов мимо поста/ДТП — \(removed.count, privacy: .public)")
             }
             Storage.set(true, for: .passCrowdCleanup1)
+        }
+        // Разовая чистка повторов (11.1): проезд пары камер-дублей писался
+        // дважды. Хирургически, как чистка S30.
+        if isLifetimeTrusted, !Storage.bool(.passDuplicateCleanup1) {
+            let before = history
+            let (cleaned, removed, changed) = TripHistory.duplicatesCleaned(history)
+            if changed {
+                for (old, new) in zip(before, cleaned) where old.passed.count != new.passed.count {
+                    let key = Calendar.current.startOfDay(for: old.startedAt)
+                    if days.contains(where: { $0.day == key }) {
+                        days = TripDayBook.unfolded(old, from: days)
+                        days = TripDayBook.folded(new, into: days)
+                    }
+                }
+                history = cleaned
+                lifetime = LifetimeStats.subtractingPasses(
+                    removed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) }, from: lifetime)
+                persist()
+                persistLifetime()
+                persistDays()
+                Log.trips.info("чистка повторов: снято проездов — \(removed.count, privacy: .public)")
+            }
+            Storage.set(true, for: .passDuplicateCleanup1)
         }
         // Подъём лимитов до пола фиксации. Старые записи судились по тегу OSM
         // ниже 60 — в городе таких камер нет, и выставленные по ним штрафы и

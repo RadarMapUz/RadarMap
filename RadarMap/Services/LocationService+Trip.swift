@@ -213,13 +213,13 @@ extension LocationService {
         // и не неподтверждённых отметок: подброшенная фальшивка на проспекте
         // стоила бы баллов и «штрафа» каждому, кто мимо проехал (ревью S6).
         for pass in passes where pass.camera.kind.recordsPasses && !pass.camera.isUnconfirmedMobile {
-            trip.registerPass(camera: pass.camera, speedKmh: pass.speedKmh,
-                              limitKmh: pass.limitKmh, roadLimitKmh: pass.roadLimitKmh,
-                              limitAssumed: pass.limitAssumed,
-                              courseDegrees: pass.courseDegrees,
-                              speedAfterKmh: pass.speedAfterKmh,
-                              silent: !alertRecall.wasAlerted(cameraID: pass.camera.id),
-                              date: pass.date)
+            guard trip.registerPass(camera: pass.camera, speedKmh: pass.speedKmh,
+                                    limitKmh: pass.limitKmh, roadLimitKmh: pass.roadLimitKmh,
+                                    limitAssumed: pass.limitAssumed,
+                                    courseDegrees: pass.courseDegrees,
+                                    speedAfterKmh: pass.speedAfterKmh,
+                                    silent: !alertRecall.wasAlerted(cameraID: pass.camera.id),
+                                    date: pass.date) else { continue }
             onPassRecorded?(pass.limitKmh == nil ? "none"
                             : (pass.limitAssumed ? "assumed" : "tag"))
         }

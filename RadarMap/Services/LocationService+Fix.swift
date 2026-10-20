@@ -384,8 +384,11 @@ extension LocationService {
         if isTripActive {
             watchBridge?.update(isTripActive: true, speedKmh: speedKmh,
                                 cameraTitle: nearestCamera?.displayTitle,
+                                cameraSymbol: nearestCamera?.kind.symbolName,
                                 distanceMeters: distanceToNearest,
-                                alertLevel: alertLevel)
+                                alertLevel: alertLevel,
+                                limitKmh: speedLimits?.currentLimit,
+                                isOverspeeding: speedLimits?.isOverspeeding ?? false)
         }
     }
 

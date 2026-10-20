@@ -1721,12 +1721,12 @@ nonisolated enum AppConfig {
     /// карте (`reportFlashSeconds`): до локскрина обновление идёт с задержкой,
     /// а взгляд падает на плашку позже, чем на палец у экрана.
     static let liveActivityReportFlashSeconds: TimeInterval = 5
-    /// Часы без тревоги: не чаще раза в столько секунд.
+    /// Часы без скорости на экране: не чаще раза в столько секунд.
     static let watchCalmInterval: TimeInterval = 10
-    /// Часы в тревоге: не чаще раза в столько секунд; шаг скорости на часах
-    /// без тревоги и в тревоге.
+    /// Часы со скоростью (тревога или превышение, 9.3): не чаще раза в
+    /// столько секунд, шаг скорости — `watchSpeedStepAlert`. Без тревоги
+    /// скорость на часы не идёт вовсе.
     static let watchAlertInterval: TimeInterval = 3
-    static let watchSpeedStepCalm = 5.0
     static let watchSpeedStepAlert = 2.0
     /// Плашка Live Activity «устаревает» (нет обновлений) — «Нет сигнала GPS».
     static let liveActivityStaleSeconds: TimeInterval = 300

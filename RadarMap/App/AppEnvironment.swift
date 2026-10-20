@@ -345,6 +345,9 @@ final class AppEnvironment {
             if let self, let location, location.isTripActive {
                 if self.commuteGhostPending { self.tryStartCommuteGhost() }
                 if self.commuteLive.isRunning {
+                    // Пробки впереди по своему пути (8.8.10) — до прогноза.
+                    self.commuteLive.noteTraffic(self.traffic.snapshot, revision: self.traffic.revision,
+                                                 now: location.lastFixTime)
                     self.commuteLive.note(coordinate, accuracy: location.horizontalAccuracy,
                                           at: location.lastFixTime)
                 }

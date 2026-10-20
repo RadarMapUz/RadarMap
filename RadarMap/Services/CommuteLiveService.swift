@@ -40,6 +40,8 @@ final class CommuteLiveService {
     @ObservationIgnored private var slackTracker = CommuteGhost.SlackTracker()
     @ObservationIgnored private var lateNotice = CommuteGhost.LateNotice()
     @ObservationIgnored private var sessionDeparture: Date?
+    /// Ревизия пробок, уже отданная сессии; −1 — новой сессии пробки не давали.
+    @ObservationIgnored private var trafficRevision = -1
     /// Фраза призрака (8.7) — голос решает, можно ли сейчас говорить
     /// (оповещение о камере и манёвр важнее); true — сказана. Несказанная
     /// не засчитывается и прозвучит на следующем пересчёте.
@@ -69,6 +71,7 @@ final class CommuteLiveService {
         self.session = session
         self.direction = direction
         self.deadline = deadline
+        trafficRevision = -1
         sessionDeparture = departure
         slackTracker = CommuteGhost.SlackTracker()
         if !resumed {
@@ -76,6 +79,14 @@ final class CommuteLiveService {
             lateNotice = CommuteGhost.LateNotice()
         }
         Log.trips.info("призрак: \(direction.rawValue, privacy: .public), вариантов \(variants.count, privacy: .public)")
+    }
+
+    /// Пробки для прогноза (8.8.10): новый файл `now.json` — в сессию; тот же
+    /// (ревизия не сменилась) — ничего. Зовётся на фиксах поездки.
+    func noteTraffic(_ snapshot: TrafficSnapshot?, revision: Int, now: Date) {
+        guard session != nil, revision != trafficRevision else { return }
+        trafficRevision = revision
+        session?.setTraffic(snapshot, now: now)
     }
 
     func note(_ coordinate: CLLocationCoordinate2D, accuracy: Double, at now: Date) {

@@ -217,13 +217,16 @@ nonisolated enum CommuteGhost {
     /// Остаток пути от точки `along` при сегодняшнем темпе `rho`, и прибытие.
     /// `elapsed` — сколько уже в пути (включая стоянки). Стоянка не двигает
     /// `along`, а `elapsed` растёт — так стоянка честно сдвигает прибытие.
+    /// `jamAhead` — пробки сверх обычного дальше по линии (8.8.10, по рёбрам
+    /// `now.json`, только хуже q75 водителя — обычная пробка уже в медиане).
     static func forecast(_ base: Baseline, along: Double, elapsed: Double, rho: Double,
-                         now: Date, decayMeters: Double = AppConfig.commuteGhostDecayMeters) -> Forecast {
+                         now: Date, jamAhead: Double = 0,
+                         decayMeters: Double = AppConfig.commuteGhostDecayMeters) -> Forecast {
         let (k, f) = base.locate(along)
         let a = min(max(0, along), base.length)
         let here = base.median[k] * (1 - f) * rho
         let ahead = base.suffix[k + 1] + (rho - 1) * exp(a / decayMeters) * base.decayed[k + 1]
-        let remaining = max(0, here + ahead)
+        let remaining = max(0, here + ahead + max(0, jamAhead))
         let sk = (base.q75[k] - base.q25[k]) / 1.35
         let variance = sk * sk * (1 - f) + base.spreadSquared[k + 1]
         return Forecast(remaining: remaining, delta: elapsed + remaining - base.total,

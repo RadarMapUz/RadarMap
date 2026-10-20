@@ -727,6 +727,9 @@ nonisolated enum AppConfig {
     /// продержаться (второй пересчёт не раньше чем через минуту).
     nonisolated static let commuteGhostSlackHysteresisMinutes = 1.5
     nonisolated static let commuteGhostSlackHoldSeconds: TimeInterval = 60
+    /// Пробки из `now.json` — только дальше этого впереди по линии (8.8.10):
+    /// ближе пробку уже несёт сегодняшний темп.
+    nonisolated static let commuteGhostJamAheadMeters: Double = 2000
     /// Пересчёт призрака стоя или посреди длинного участка — раз в 30 с.
     nonisolated static let commuteGhostRecomputeSeconds: TimeInterval = 30
     /// С какого отклонения строка призрака становится янтарной (мин).

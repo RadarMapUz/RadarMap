@@ -46,6 +46,11 @@ nonisolated struct CommuteLiveSession: Sendable {
         let base: CommuteGhost.Baseline
         let xy: [SIMD2<Double>]
         let cumulative: [Double]
+        /// Линия в координатах — для рёбер пробок (CommuteEstimate.crowdSeconds).
+        let coordinates: [CLLocationCoordinate2D]
+        /// Время по пробкам на участках из последнего свежего `now.json`; nil —
+        /// данных нет (8.8.10).
+        var crowd: [Double?]?
         // Проекция.
         var cursor = 0
         var floor = 0.0
@@ -73,6 +78,29 @@ nonisolated struct CommuteLiveSession: Sendable {
     private(set) var active: Int?
     private var lastPoint: SIMD2<Double>?
     private var lastForecastAt: Date?
+    /// Когда сделан файл пробок, легший в `crowd`: старше 10 мин — данных нет,
+    /// даже если новый файл не пришёл (поездка ушла из сети).
+    private var crowdGenerated: Date?
+    /// Пришли новые пробки — пересчитать прогноз на ближайшем фиксе.
+    private var crowdChanged = false
+
+    /// Пробки на линиях вариантов (8.8.10): файл свежий — время по рёбрам на
+    /// каждом участке, иначе — нет данных. Сам прогноз берёт из этого только
+    /// участки дальше 2 км впереди: ближе сегодняшний темп уже знает пробку.
+    mutating func setTraffic(_ snapshot: TrafficSnapshot?, now: Date) {
+        guard let snapshot, snapshot.isFresh(now: now) else {
+            if crowdGenerated != nil { crowdChanged = true }
+            crowdGenerated = nil
+            for i in candidates.indices { candidates[i].crowd = nil }
+            return
+        }
+        crowdGenerated = snapshot.generated
+        crowdChanged = true
+        for i in candidates.indices {
+            candidates[i].crowd = CommuteEstimate.crowdSeconds(line: candidates[i].coordinates,
+                                                               base: candidates[i].base, snapshot: snapshot)
+        }
+    }
 
     /// nil — призрака нет: ни у одного варианта направления нет трёх
     /// подходящих поездок (выходной, непривычный час, мало истории).
@@ -93,7 +121,8 @@ nonisolated struct CommuteLiveSession: Sendable {
             guard xy.count >= 2 else { continue }
             var cumulative: [Double] = [0]
             for (a, b) in zip(xy, xy.dropFirst()) { cumulative.append(cumulative.last! + simd_distance(a, b)) }
-            built.append(Candidate(base: base, xy: xy, cumulative: cumulative))
+            built.append(Candidate(base: base, xy: xy, cumulative: cumulative,
+                                   coordinates: variant.coordinates, crowd: nil))
         }
         guard let lat0, !built.isEmpty else { return nil }
         frame = CommuteProfile.Frame(latitude: lat0)
@@ -119,18 +148,30 @@ nonisolated struct CommuteLiveSession: Sendable {
         }
         let c = candidates[index]
         let remainingMeters = max(0, c.base.length - c.floor)
-        let due = index != previous || crossed.contains(index) || lastForecastAt.map {
+        let due = index != previous || crossed.contains(index) || crowdChanged || lastForecastAt.map {
             now.timeIntervalSince($0) >= AppConfig.commuteGhostRecomputeSeconds
         } ?? true
         guard due, let joined = c.joined else {
             return Output(forecast: nil, isOff: false, remainingMeters: remainingMeters, hasLead: true)
         }
         lastForecastAt = now
+        crowdChanged = false
         // «В пути» — как если бы ехали от начала линии: сегодня с точки входа
         // плюс обычное время до неё.
         let elapsed = now.timeIntervalSince(joined.at) + c.base.total - c.base.usualRemaining(at: joined.along)
-        let forecast = CommuteGhost.forecast(c.base, along: c.floor, elapsed: elapsed, rho: c.rho, now: now)
+        let forecast = CommuteGhost.forecast(c.base, along: c.floor, elapsed: elapsed, rho: c.rho, now: now,
+                                             jamAhead: jamAhead(c, now: now))
         return Output(forecast: forecast, isOff: false, remainingMeters: remainingMeters, hasLead: true)
+    }
+
+    /// Пробки сверх обычного на участках дальше `commuteGhostJamAheadMeters`
+    /// впереди (8.8.10): ближе их уже несёт сегодняшний темп ρ — сложить оба
+    /// значило бы посчитать одну пробку дважды. Файл старше 10 мин — ноль.
+    private func jamAhead(_ c: Candidate, now: Date) -> Double {
+        guard let crowd = c.crowd, let generated = crowdGenerated,
+              now.timeIntervalSince(generated) <= AppConfig.trafficStaleSeconds else { return 0 }
+        let from = c.base.locate(c.floor + AppConfig.commuteGhostJamAheadMeters).segment + 1
+        return CommuteEstimate.jamExtra(c.base, crowd: crowd, from: from)
     }
 
     /// Фикс по одной линии: проекция, сход/возврат, пересечения границ и

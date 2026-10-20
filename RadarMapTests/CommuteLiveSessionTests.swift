@@ -62,6 +62,49 @@ final class CommuteLiveSessionTests: XCTestCase {
         return last
     }
 
+    /// Рёбра пробки 10 км/ч по ходу на отрезке [from, to] линии.
+    private func jam(from: Double, to: Double, generated: Date) -> TrafficSnapshot {
+        var edges: [TrafficEdge] = []
+        var x = from
+        while x < to {
+            let (la, lo) = coordinate(x), (lb, lb2) = coordinate(x + 100)
+            edges.append(TrafficEdge(a: CLLocationCoordinate2D(latitude: la, longitude: lo),
+                                     b: CLLocationCoordinate2D(latitude: lb, longitude: lb2),
+                                     level: 3, kmh: 10, modelKmh: 50))
+            x += 100
+        }
+        return TrafficSnapshot(generated: generated, edges: edges)
+    }
+
+    /// Пробка дальше 2 км впереди по своему пути (8.8.10): участок берёт время
+    /// пробки сверх обычного — 72 с вместо 20 на двух последних участках.
+    /// Ближе 2 км её уже несёт темп ρ — не прибавляем; файл старше 10 мин —
+    /// данных нет.
+    func testJamFarAheadAddsOnlyBeyondTwoKilometers() throws {
+        func session() throws -> CommuteLiveSession {
+            try XCTUnwrap(CommuteLiveSession(variants: [variant()], weekend: false, departure: start, calendar: utc))
+        }
+        var free = try session()
+        let usual = try XCTUnwrap(drive(&free, speed: 10, until: 1600)?.forecast)
+
+        var far = try session()
+        far.setTraffic(jam(from: 3600, to: 4000, generated: start), now: start)
+        let ahead = try XCTUnwrap(drive(&far, speed: 10, until: 1600)?.forecast)
+        XCTAssertEqual(ahead.remaining - usual.remaining, 2 * (200 / (10 / 3.6) - 20), accuracy: 8)
+        XCTAssertEqual(ahead.arrival.timeIntervalSince(usual.arrival), ahead.remaining - usual.remaining,
+                       accuracy: 1)
+
+        var near = try session()
+        near.setTraffic(jam(from: 2000, to: 3000, generated: start), now: start)
+        let close = try XCTUnwrap(drive(&near, speed: 10, until: 1600)?.forecast)
+        XCTAssertEqual(close.remaining, usual.remaining, accuracy: 1, "ближе 2 км — уже темп, не файл")
+
+        var stale = try session()
+        stale.setTraffic(jam(from: 3600, to: 4000, generated: start.addingTimeInterval(-11 * 60)), now: start)
+        let old = try XCTUnwrap(drive(&stale, speed: 10, until: 1600)?.forecast)
+        XCTAssertEqual(old.remaining, usual.remaining, accuracy: 1, "файл старше 10 мин — данных нет")
+    }
+
     func testOnScheduleIsUsual() throws {
         var session = try XCTUnwrap(CommuteLiveSession(variants: [variant()], weekend: false,
                                                         departure: start, calendar: utc))

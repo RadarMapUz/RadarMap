@@ -295,6 +295,15 @@ final class NotificationService: NSObject {
         }
     }
 
+    /// Поехали, а план считать ещё не из чего (история не прочитана): снять
+    /// только сегодняшнее напоминание — поставленное на остальные дни остаётся.
+    func dropTodayDepartureReminder(now: Date = Date()) {
+        let center = UNUserNotificationCenter.current()
+        let today = DepartureReminder.id(for: now)
+        center.removePendingNotificationRequests(withIdentifiers: [today])
+        center.removeDeliveredNotifications(withIdentifiers: [today])
+    }
+
     /// Разрешение на уведомления — с ответом: напоминание, которое некуда
     /// показать, не должно стоять включённым.
     func requestAuthorizationResult() async -> Bool {

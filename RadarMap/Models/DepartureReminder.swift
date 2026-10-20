@@ -84,6 +84,32 @@ enum DepartureReminder {
         return result
     }
 
+    /// Что сделать с уже поставленными напоминаниями.
+    enum Step: Equatable {
+        /// Ничего: план тот же — или считать его ещё не из чего.
+        case keep
+        /// Снять поставленное и поставить план; `deliveredToday` — снять и
+        /// показанное сегодня (поехали).
+        case replace(deliveredToday: Bool)
+        /// Поехали, а план считать не из чего: снять только сегодняшнее.
+        case dropToday
+    }
+
+    /// `dataLoaded` — история и профиль дороги прочитаны с диска. До этого
+    /// пустой план значит «ещё не знаем», а не «напоминать не о чем»: после
+    /// перезагрузки телефона процесс поднимается до первой разблокировки,
+    /// история не читается, выученных Дом/Работы нет — и пересчёт снимал всю
+    /// поставленную неделю (ревью 14.1, хвост 14.8; то же правило, что у
+    /// виджета дороги). Прочитается второе из двух — его колбэк и переставит.
+    /// Поехали до чтения — сегодняшнее «пора выезжать» снимается и так: для
+    /// этого план не нужен.
+    static func step(plan: [Reminder], scheduled: [Reminder]?, dataLoaded: Bool,
+                     tripEdge: Bool, tripActive: Bool) -> Step {
+        guard dataLoaded else { return tripEdge && tripActive ? .dropToday : .keep }
+        guard plan != scheduled || tripEdge else { return .keep }
+        return .replace(deliveredToday: tripEdge && tripActive)
+    }
+
     /// `departure-2026-10-21` — один id на день: замена, а не копия.
     static func id(for day: Date, calendar: Calendar = .current) -> String {
         let parts = calendar.dateComponents([.year, .month, .day], from: day)

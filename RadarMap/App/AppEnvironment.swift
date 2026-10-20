@@ -1353,19 +1353,32 @@ final class AppEnvironment {
     /// «Выезжайте раньше» (8.8.7): по будням за 10 мин до выгодного выезда —
     /// из своей истории, без сервера. Выключено — снимаем всё поставленное.
     func refreshDepartureReminders(now: Date = Date(), tripEdge: Bool = false) {
-        // Срок — только пока учится дорога: без неё его и задать негде.
-        let target = settings.commuteLearning ? settings.workArrivalTarget : nil
-        let candidate = DepartureReminder.plan(summary: commute.first { $0.direction == .toWork },
-                                               target: target, now: now, tripActive: location.isTripActive)
-        // Есть что напомнить и куда показать — предложение в «Итогах» имеет смысл.
-        let available = !candidate.isEmpty && notifications.authorizationStatus != .denied
-        if departureReminderAvailable != available { departureReminderAvailable = available }
-        let plan = settings.departureReminders ? candidate : []
-        guard plan != scheduledReminders || tripEdge else { return }
-        // Без разрешения не запоминаем «поставлено»: разрешат — поставим.
-        scheduledReminders = notifications.canNotify ? plan : nil
-        notifications.scheduleDepartureReminders(plan, now: now,
-                                                 deliveredToday: tripEdge && location.isTripActive)
+        // Пока история или профиль дороги не прочитаны, пустой план — «ещё не
+        // знаем»: снимать по нему поставленное нельзя (DepartureReminder.step).
+        let loaded = trip.isLoaded && commuteProfiles.isLoaded
+        var plan: [DepartureReminder.Reminder] = []
+        if loaded {
+            // Срок — только пока учится дорога: без неё его и задать негде.
+            let target = settings.commuteLearning ? settings.workArrivalTarget : nil
+            let candidate = DepartureReminder.plan(summary: commute.first { $0.direction == .toWork },
+                                                   target: target, now: now, tripActive: location.isTripActive)
+            // Есть что напомнить и куда показать — предложение в «Итогах» имеет смысл.
+            let available = !candidate.isEmpty && notifications.authorizationStatus != .denied
+            if departureReminderAvailable != available { departureReminderAvailable = available }
+            plan = settings.departureReminders ? candidate : []
+        }
+        switch DepartureReminder.step(plan: plan, scheduled: scheduledReminders, dataLoaded: loaded,
+                                      tripEdge: tripEdge, tripActive: location.isTripActive) {
+        case .keep:
+            return
+        case .dropToday:
+            Log.app.info("напоминания о выезде: поехали до чтения истории — снято только сегодняшнее")
+            notifications.dropTodayDepartureReminder(now: now)
+        case .replace(let deliveredToday):
+            // Без разрешения не запоминаем «поставлено»: разрешат — поставим.
+            scheduledReminders = notifications.canNotify ? plan : nil
+            notifications.scheduleDepartureReminders(plan, now: now, deliveredToday: deliveredToday)
+        }
     }
 
     #if DEBUG

@@ -30,7 +30,10 @@ traffic/now.json для телефонов.
      <класс дня>-<час>.json из traffic_profile, холодный старт «дороги на
      работу», пока у водителя нет трёх своих поездок:
        {"v": 1, "bucket": "wd-08", "generated": t, "edges": [[ulat, ulon, vlat, vlon, kmh]]}
-     Класс дня — будни (wd, пн–пт) или выходные (off, сб–вс), а не 168 часов
+     Класс дня — будни (wd, пн–пт) или выходные (off, сб–вс и праздники
+     Узбекистана по ташкентской дате — тот же список, что UzHolidays на
+     телефоне: кусок из Навруза во вторник ложится в off, как и запрос
+     телефона в этот день), а не 168 часов
      недели: холодный старт — ровно тогда, когда данных мало, и пять будних
      восьми утра, сложенные в один файл, набирают порог впятеро быстрее, а
      дорога во вторник в 8:00 от среды в 8:00 не отличается. Ребро попадает
@@ -47,6 +50,8 @@ traffic/now.json для телефонов.
 графа, и это тот же формат, что `--segment-speed-file` у OSRM (следующий
 шаг — MLD + customize, маршрут прямо с учётом пробок).
 """
+import datetime
+import functools
 import json
 import math
 import os
@@ -201,8 +206,63 @@ def hour_of_week(ts):
     return t.tm_wday * 24 + t.tm_hour
 
 
+# --- Праздники Узбекистана ----------------------------------------------------
+# Зеркало RadarMap/Models/UzHolidays.swift (8.8.13): телефон ищет файл
+# «обычно» праздничного дня в выходном классе, значит и сервер должен класть
+# туда кусок, снятый в праздник — иначе Навруз во вторник портит будничный
+# файл, а праздничный выходной его не видит. Списки сверяет тест
+# (test_traffic_build.HolidayTest) — правка одного без другого его роняет.
+
+# Постоянные праздники (Трудовой кодекс, ст. 132): (месяц, день).
+HOLIDAYS_FIXED = ((1, 1), (3, 8), (3, 21), (5, 9), (9, 1), (10, 1), (12, 8))
+# Хайиты и дополнительные нерабочие дни по годам; 2027–2028 — оценка, как
+# в UzHolidays.moving (сверять с постановлением года — в обоих местах).
+HOLIDAYS_MOVING = {
+    2026: ((3, 20), (5, 27), (5, 28), (5, 29)),
+    2027: ((3, 9), (5, 16)),
+    2028: ((2, 26), (5, 5)),
+}
+HOLIDAY_SLOT = 168           # how праздника = час недели + 168 (см. profile_slot)
+
+
+@functools.lru_cache(maxsize=None)
+def holidays(year):
+    """Нерабочие праздничные дни года как месяц × 100 + день, с переносом:
+    праздник в субботу или воскресенье даёт ближайший рабочий день, который
+    ещё не праздник и не занят прежним переносом (UzHolidays.days)."""
+    listed = HOLIDAYS_FIXED + HOLIDAYS_MOVING.get(year, ())
+    result = {month * 100 + day for month, day in listed}
+    for month, day in sorted(listed):
+        date = datetime.date(year, month, day)
+        if date.weekday() < 5:
+            continue
+        for _ in range(10):
+            date += datetime.timedelta(days=1)
+            key = date.month * 100 + date.day
+            if date.weekday() < 5 and key not in result and date.year == year:
+                result.add(key)
+                break
+    return frozenset(result)
+
+
+def is_holiday(ts):
+    """Праздник по ташкентской дате момента `ts` (часовой пояс сервера не
+    участвует: gmtime + UTC+5)."""
+    t = time.gmtime(ts + TASHKENT_UTC_OFFSET)
+    return t.tm_mon * 100 + t.tm_mday in holidays(t.tm_year)
+
+
+def profile_slot(ts):
+    """Ключ `how` строки профиля: час недели (0–167), а в праздник — тот же
+    час + HOLIDAY_SLOT (168–335). Праздник не сливается с субботой: час
+    недели остаётся в ключе для будущего прогноза по 168 часам, а в файл
+    «обычно» такая строка идёт выходным классом (bucket_name)."""
+    how = hour_of_week(ts)
+    return how + HOLIDAY_SLOT if is_holiday(ts) else how
+
+
 def store(conn, piece_id, samples, nodes, models, now):
-    how = hour_of_week(now)
+    how = profile_slot(now)
     conn.executemany("INSERT INTO traffic_samples(u, v, kmh, weight, ts, piece) VALUES(?, ?, ?, ?, ?, ?)",
                      [(u, v, kmh, w, now, piece_id) for u, v, kmh, w in samples])
     conn.executemany("INSERT OR REPLACE INTO traffic_nodes(id, lat, lon) VALUES(?, ?, ?)",
@@ -336,9 +396,12 @@ def mark_shared(conn, now):
 # --- «Обычно по водителям» (8.8.16) -------------------------------------------
 
 def bucket_name(how):
-    """Файл часа недели: «wd-08» — будни в 8:00, «off-08» — выходные."""
-    day, hour = divmod(int(how) % 168, 24)
-    return f"{DAY_CLASSES[1] if day >= 5 else DAY_CLASSES[0]}-{hour:02d}"
+    """Файл строки профиля: «wd-08» — будни в 8:00, «off-08» — выходные или
+    праздник (how ≥ HOLIDAY_SLOT, см. profile_slot) в 8:00."""
+    how = int(how)
+    day, hour = divmod(how % 168, 24)
+    off = day >= 5 or how >= HOLIDAY_SLOT
+    return f"{DAY_CLASSES[1] if off else DAY_CLASSES[0]}-{hour:02d}"
 
 
 ALL_BUCKETS = tuple(f"{cls}-{hour:02d}" for cls in DAY_CLASSES for hour in range(24))

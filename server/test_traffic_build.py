@@ -5,11 +5,14 @@
 Темура (fixtures/osrm_match_amir_temur.json): в середине следа «пробка» —
 три шага по 40 с вместо 8.
 """
+import calendar
 import json
 import math
 import os
+import re
 import sqlite3
 import tempfile
+import time
 import unittest
 
 import traffic_build as tb
@@ -292,6 +295,115 @@ class TypicalTest(unittest.TestCase):
         self.assertEqual(conn.execute("SELECT n, pieces, sum_pace FROM traffic_profile").fetchone(), (7, 0, 0.0),
                          "старые строки в «обычно» не идут: у них нет кусков")
         conn.close()
+
+
+SWIFT_HOLIDAYS = os.path.join(HERE, "..", "RadarMap", "Models", "UzHolidays.swift")
+
+
+def tashkent_ts(year, month, day, hour, minute=0):
+    """Момент по ташкентским часам (UTC+5) как unix-время."""
+    return calendar.timegm((year, month, day, hour, minute, 0)) - tb.TASHKENT_UTC_OFFSET
+
+
+def swift_holiday_lists():
+    """(fixed, moving) из UzHolidays.swift: телефон и сервер обязаны делить
+    один список — иначе файл «обычно» праздника собран не из тех дней,
+    которые телефон в нём ищет."""
+    source = open(SWIFT_HOLIDAYS, encoding="utf-8").read()
+    source = re.sub(r"//[^\n]*", "", source)
+    pair = re.compile(r"\((\d+),\s*(\d+)\)")
+    fixed_block = re.search(r"static let fixed[^=]*=\s*\[(.*?)\]\s*\n", source, re.S).group(1)
+    fixed = tuple((int(m), int(d)) for m, d in pair.findall(fixed_block))
+    moving_block = re.search(r"static let moving[^=]*=\s*\[(.*?)\n\s*\]", source, re.S).group(1)
+    moving = {int(year): tuple((int(m), int(d)) for m, d in pair.findall(days))
+              for year, days in re.findall(r"(\d{4}):\s*\[([^\]]*)\]", moving_block)}
+    return fixed, moving
+
+
+class HolidayTest(unittest.TestCase):
+    """Праздник — выходной класс «обычно», как у телефона (UzHolidays)."""
+
+    def test_lists_match_the_phone(self):
+        if not os.path.exists(SWIFT_HOLIDAYS):
+            self.skipTest("нет исходника телефона рядом (запуск вне репозитория)")
+        fixed, moving = swift_holiday_lists()
+        self.assertEqual(len(fixed), 7, "разбор UzHolidays.fixed")
+        self.assertEqual(fixed, tb.HOLIDAYS_FIXED)
+        self.assertEqual(moving, tb.HOLIDAYS_MOVING)
+
+    def test_days_match_the_phone_tests(self):
+        """Те же даты, что UzHolidaysTests: перенос с выходного на ближайший
+        рабочий день, один перенос на праздник, год вне списка."""
+        def holiday(year, month, day):
+            return month * 100 + day in tb.holidays(year)
+
+        for m, d in [(1, 1), (3, 8), (3, 9), (3, 20), (3, 21), (3, 23), (5, 9), (5, 11),
+                     (5, 27), (5, 28), (5, 29), (9, 1), (10, 1), (12, 8)]:
+            self.assertTrue(holiday(2026, m, d), f"2026-{m}-{d}")
+        for m, d in [(3, 24), (5, 26), (6, 1), (9, 2), (10, 20)]:
+            self.assertFalse(holiday(2026, m, d), f"будний 2026-{m}-{d}")
+        for m, d in [(1, 1), (3, 8), (3, 9), (3, 21), (3, 22), (5, 9), (5, 10), (5, 16), (5, 17),
+                     (9, 1), (10, 1), (12, 8)]:
+            self.assertTrue(holiday(2027, m, d), f"2027-{m}-{d}")
+        self.assertFalse(holiday(2027, 3, 10))
+        self.assertFalse(holiday(2027, 5, 18))
+        for m, d in [(1, 1), (1, 3), (2, 26), (2, 28), (3, 8), (3, 21), (5, 5), (5, 9), (9, 1),
+                     (10, 1), (12, 8)]:
+            self.assertTrue(holiday(2028, m, d), f"2028-{m}-{d}")
+        self.assertFalse(holiday(2028, 2, 29), "один перенос на один праздник")
+        self.assertTrue(holiday(2030, 1, 1))
+        self.assertTrue(holiday(2030, 3, 21))
+        self.assertFalse(holiday(2030, 3, 20))
+
+    def test_date_is_tashkent_whatever_the_server_zone(self):
+        """23.03.2026 (перенос Навруза, понедельник) начинается в Ташкенте в
+        19:00 UTC воскресенья; часовой пояс сервера роли не играет."""
+        saved = os.environ.get("TZ")
+        try:
+            os.environ["TZ"] = "America/New_York"
+            if hasattr(time, "tzset"):
+                time.tzset()
+            self.assertTrue(tb.is_holiday(tashkent_ts(2026, 3, 23, 0, 30)))
+            self.assertFalse(tb.is_holiday(tashkent_ts(2026, 3, 22, 23, 30)),
+                             "воскресенье 22-го — не праздник: перенос лёг на понедельник")
+            self.assertFalse(tb.is_holiday(tashkent_ts(2026, 3, 24, 0, 30)), "вторник 24-го — будни")
+            self.assertTrue(tb.is_holiday(tashkent_ts(2026, 5, 28, 8, 30)))
+        finally:
+            if saved is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = saved
+            if hasattr(time, "tzset"):
+                time.tzset()
+
+    def test_slots_and_buckets(self):
+        thursday = tashkent_ts(2026, 5, 28, 8, 30)       # Курбан хайит, доп. нерабочий день
+        self.assertEqual(tb.hour_of_week(thursday), 3 * 24 + 8)
+        self.assertEqual(tb.profile_slot(thursday), tb.HOLIDAY_SLOT + 3 * 24 + 8)
+        self.assertEqual(tb.bucket_name(tb.profile_slot(thursday)), "off-08")
+        workday = tashkent_ts(2026, 10, 20, 8, 30)       # обычный вторник
+        self.assertEqual(tb.profile_slot(workday), tb.hour_of_week(workday))
+        self.assertEqual(tb.bucket_name(tb.profile_slot(workday)), "wd-08")
+        for how in range(2 * tb.HOLIDAY_SLOT):
+            self.assertIn(tb.bucket_name(how), tb.ALL_BUCKETS)
+
+    def test_holiday_piece_goes_to_days_off(self):
+        tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        conn = sqlite3.connect(tmp.name)
+        try:
+            tb.schema(conn)
+            at = tashkent_ts(2026, 5, 28, 8, 30)
+            for _ in range(tb.TYPICAL_MIN_PIECES):
+                conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)",
+                             (at, json.dumps(FIXTURE["points"])))
+            conn.commit()
+            tb.process(conn, at, matcher=lambda pts: FIXTURE["response"])
+            tb.mark_shared(conn, at)
+            buckets = tb.typical_buckets(conn)
+            self.assertEqual(set(buckets), {"off-08"}, "праздничный четверг — не будни")
+        finally:
+            conn.close()
+            os.unlink(tmp.name)
 
 
 class PureTest(unittest.TestCase):

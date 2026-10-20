@@ -1812,4 +1812,10 @@ nonisolated enum AppConfig {
     /// Скопированный номер живёт в буфере не дольше этого и не уходит на
     /// другие устройства (Universal Clipboard).
     static let fineCheckClipboardSeconds: TimeInterval = 300
+
+    // MARK: - Расходы на топливо (FuelCost, 12б.3)
+
+    /// Через столько дней после правки цены просим её обновить: цены на
+    /// заправках меняются, а старая цена молча врала бы в каждой поездке.
+    static let fuelPriceStaleDays: Double = 60
 }

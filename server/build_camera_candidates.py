@@ -103,11 +103,20 @@ class SpotIndex:
         return int(math.floor(lat / GRID)), int(math.floor(lon / GRID))
 
     def nearest_meters(self, lat, lon):
+        """До ближайшей точки, м; None — точек нет вовсе. Дальше соседних клеток
+        (~1 км) — полным перебором: модератору «в 3,4 км от ближайшей камеры»
+        говорит больше пустого поля (63 кандидата без расстояния, план 11.12)."""
         row, column = self.key(lat, lon)
         best = None
         for dr in (-1, 0, 1):
             for dc in (-1, 0, 1):
                 for other in self.cells.get((row + dr, column + dc), ()):
+                    meters = distance(lat, lon, other[0], other[1])
+                    if best is None or meters < best:
+                        best = meters
+        if best is None:
+            for points in self.cells.values():
+                for other in points:
                     meters = distance(lat, lon, other[0], other[1])
                     if best is None or meters < best:
                         best = meters

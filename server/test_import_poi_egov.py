@@ -214,5 +214,35 @@ class FetchTests(unittest.TestCase):
             poi.fetch_all("guid", page=3, fetch=fetch, sleep=lambda s: None)
 
 
+
+class PlaceholderTest(unittest.TestCase):
+    """Заглушки геокодера и точки вне страны (план 11.12)."""
+
+    def test_one_point_with_different_addresses_is_a_placeholder(self):
+        records = [
+            {"name": "Агробанк", "lat": 41.31115, "lon": 69.27975, "address": "24/7"},
+            {"name": "Халк банки", "lat": 41.31115, "lon": 69.27975, "address": "здание филиала"},
+            {"name": "Капиталбанк", "lat": 41.32, "lon": 69.25, "address": "ул. Навои, 1"},
+        ]
+        self.assertEqual([r["name"] for r in poi.drop_placeholders(records)], ["Капиталбанк"])
+
+    def test_round_coordinates_are_dropped(self):
+        records = [{"name": "Узпромстройбанк", "lat": 40.0, "lon": 64.0, "address": "ТРЦ"},
+                   {"name": "Агробанк", "lat": 40.1234, "lon": 64.4321, "address": "банк"}]
+        self.assertEqual([r["name"] for r in poi.drop_placeholders(records)], ["Агробанк"])
+
+    def test_same_address_twice_is_a_duplicate_not_a_placeholder(self):
+        records = [{"name": "Агробанк", "lat": 41.3, "lon": 69.21, "address": "банк"},
+                   {"name": "Агробанк", "lat": 41.3, "lon": 69.21, "address": "банк"}]
+        self.assertEqual(len(poi.drop_placeholders(records)), 2, "повтор схлопнет dedup, не этот фильтр")
+
+    def test_north_of_the_country_is_outside(self):
+        # Гостиница с адресом в Ташкентской области на 45.65° — Казахстан.
+        def cells(lat, lon):
+            return {"latitude": {"text": None, "number": 0.0, "data": lat, "default": lat},
+                    "longitude": {"text": None, "number": 0.0, "data": lon, "default": lon}}
+        self.assertIsNone(poi.coordinates(cells("45.653803", "69.402083")))
+        self.assertIsNotNone(poi.coordinates(cells("45.55", "58.9")), "север Каракалпакстана")
+
 if __name__ == "__main__":
     unittest.main()

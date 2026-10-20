@@ -29,6 +29,7 @@ operator, addr:full): сборка заведений ничего не знае
 """
 import argparse
 import json
+from collections import defaultdict
 import math
 import os
 import re
@@ -54,8 +55,11 @@ DATASETS = {
 
 #: Границы Узбекистана с запасом. Строки с lat=39809352 (запятая потеряна при
 #: вводе) и с нулями режутся здесь.
-LAT_RANGE = (37.0, 46.0)
-LON_RANGE = (55.0, 74.0)
+#: Рамка — по крайним точкам страны (37.18…45.59, 55.99…73.13): с прежними
+#: 46° на север гостиница «RANO ECO VILLAGE» с адресом в Ташкентской области
+#: стояла на 45.65° — в Казахстане (план 11.12).
+LAT_RANGE = (37.15, 45.6)
+LON_RANGE = (55.95, 73.2)
 #: Один объект, занесённый дважды (две карты в одном банкомате, две записи
 #: одного отеля) — одно название ближе этого расстояния.
 DUPLICATE_METERS = 20.0
@@ -191,6 +195,34 @@ def name_key(name):
     return re.sub(r"[^\w]+", "", (name or "").lower())
 
 
+def is_round(lat, lon):
+    """Координата без дробной части после первого знака — «40.0, 64.0»: это
+    заглушка, а не место."""
+    return lat == round(lat, 1) and lon == round(lon, 1)
+
+
+def placeholder_points(points):
+    """Индексы точек-заглушек в [(lat, lon, адрес)].
+
+    Одна точка с РАЗНЫМИ адресами — координата не своя: десять банкоматов
+    разных банков с разными адресами стояли ровно в центре Ташкента
+    (41.31115, 69.27975) — так геокодер портала отвечает «не знаю» (11.12).
+    Плюс «круглые» координаты. Такие записи уходят все: неверное место хуже
+    пропуска.
+    """
+    by_spot = defaultdict(set)
+    for lat, lon, address in points:
+        by_spot[(round(lat, 5), round(lon, 5))].add((address or "").strip().lower())
+    shared = {spot for spot, addresses in by_spot.items() if len(addresses) > 1}
+    return {index for index, (lat, lon, _) in enumerate(points)
+            if (round(lat, 5), round(lon, 5)) in shared or is_round(lat, lon)}
+
+
+def drop_placeholders(records):
+    bad = placeholder_points([(r["lat"], r["lon"], r.get("address")) for r in records])
+    return [record for index, record in enumerate(records) if index not in bad]
+
+
 def dedup(records, meters=DUPLICATE_METERS):
     """Одно название ближе `meters` — одна запись; остаётся первая.
 
@@ -265,7 +297,29 @@ def build(kind, rows):
     """Строки портала → проверенные, без дублей записи. Чистая часть прогона."""
     parse = PARSERS[kind]
     parsed = [record for record in (parse(row) for row in rows) if record]
-    return dedup(parsed)
+    return dedup(drop_placeholders(parsed))
+
+
+def refilter_file(path):
+    """Прогнать уже лежащий файл через нынешние фильтры, без сети: рамку
+    страны и заглушки. Возвращает (было, стало)."""
+    with open(path, encoding="utf-8") as handle:
+        lines = [line.lstrip("\x1e").strip() for line in handle if line.strip()]
+    head, features = json.loads(lines[0]), [json.loads(line) for line in lines[1:]]
+    points = [(f["geometry"]["coordinates"][1], f["geometry"]["coordinates"][0],
+               f["properties"].get("addr:full")) for f in features]
+    bad = placeholder_points(points) | {
+        index for index, (lat, lon, _) in enumerate(points)
+        if not (LAT_RANGE[0] <= lat <= LAT_RANGE[1] and LON_RANGE[0] <= lon <= LON_RANGE[1])}
+    keep = [feature for index, feature in enumerate(features) if index not in bad]
+    head["count"] = len(keep)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as handle:
+        handle.write("\x1e" + json.dumps(head, ensure_ascii=False) + "\n")
+        for feature in keep:
+            handle.write("\x1e" + json.dumps(feature, ensure_ascii=False, separators=(",", ":")) + "\n")
+    os.replace(tmp, path)
+    return len(features), len(keep)
 
 
 # --- сеть ------------------------------------------------------------------
@@ -314,7 +368,17 @@ def main():
     ap.add_argument("--page", type=int, default=PAGE, help="строк на страницу API")
     ap.add_argument("--only", choices=sorted(DATASETS), default=None,
                     help="только один набор")
+    ap.add_argument("--refilter", action="store_true",
+                    help="без сети: прогнать лежащие файлы через нынешние фильтры")
     args = ap.parse_args()
+    if args.refilter:
+        for kind in sorted(DATASETS):
+            if args.only and kind != args.only:
+                continue
+            path = os.path.join(args.out_dir, f"egov_{kind}.geojsonl")
+            before, after = refilter_file(path)
+            print(f"{kind}: {before} → {after} ({path})")
+        return 0
 
     fetched_at = time.strftime("%Y-%m-%d", time.gmtime())
     failed = 0

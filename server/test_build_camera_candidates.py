@@ -95,9 +95,11 @@ class BuildTests(unittest.TestCase):
         self.assertEqual([k["id"] for k in kept], ["osm:2"])
         self.assertEqual(kept[0]["nearest_m"], 445)
 
-    def test_far_from_everything_has_no_nearest(self):
+    def test_far_from_everything_still_has_its_distance(self):
+        # Дальше соседних клеток — полным перебором, а не пустое поле (11.12).
         lone = bcc.candidate_from_node(3, 42.0, 60.0, {"highway": "speed_camera"})
-        self.assertIsNone(bcc.build([lone], [], self.CAMERAS)[0]["nearest_m"])
+        self.assertGreater(bcc.build([lone], [], self.CAMERAS)[0]["nearest_m"], 100_000)
+        self.assertIsNone(bcc.SpotIndex([]).nearest_meters(42.0, 60.0), "камер нет вовсе — None")
 
     def test_osm_node_and_regional_row_at_one_spot_are_one_candidate(self):
         osm = bcc.candidate_from_node(5, 41.4000, 69.3000,

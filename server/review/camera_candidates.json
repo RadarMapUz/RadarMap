@@ -54,7 +54,7 @@
    "type": "ПДД Камера, Стационар Радар",
    "source": "egov-buxoro",
    "note": "Ромитон Тумани · Наврўз Ахоли Яшаш Пункти 4Р-68 А/Й 19.5 КМ",
-   "nearest_m": null
+   "nearest_m": 1845
   },
   {
    "id": "egov-buxoro:649036a9320e217ad3e2ef64",
@@ -72,7 +72,7 @@
    "type": "ПДД Камера, Стационар Радар",
    "source": "egov-buxoro",
    "note": "Ромитон Тумани · Ромитан Тумани, А-380 Автомобил Йўлининг 432 КМ, Қизилработ АЯЖ",
-   "nearest_m": null
+   "nearest_m": 7851
   },
   {
    "id": "egov-navoiy:6490375f320e217ad3e2ef86",
@@ -81,7 +81,7 @@
    "type": "ПДД Камера, Стационар Радар",
    "source": "egov-navoiy",
    "note": "Қизилтепа Тумани · Қизилтепа Тумани 4R65 Автомобил Йўлининг 19 КМ 800 М Арабон АЯЖ",
-   "nearest_m": null
+   "nearest_m": 9443
   },
   {
    "id": "egov-navoiy:6490375f320e217ad3e2ef87",
@@ -123,7 +123,7 @@
    "type": "ПДД Камера, Стационар Радар",
    "source": "egov-navoiy",
    "note": "Кармана Тумани · Кармана Тумани М37 Автомобил Йўлининг 178 КМ 980М \"ТИР Парк\" Қаршисида",
-   "nearest_m": null
+   "nearest_m": 2779
   },
   {
    "id": "egov-navoiy:6490375f320e217ad3e2ef89",
@@ -141,7 +141,7 @@
    "type": "ПДД Камера, Стационар Радар",
    "source": "egov-navoiy",
    "note": "Навбахор тумани · 4R-48 автомобил йўлининг 198.9 км.да “Кескантерак”ахоли яшаш пункти",
-   "nearest_m": null
+   "nearest_m": 4660
   },
   {
    "id": "egov-qoraqalpogiston:649035bd320e217ad3e2ef05",
@@ -150,7 +150,7 @@
    "type": "ПДД Камера, Стационар Радар",
    "source": "egov-qoraqalpogiston",
    "note": "Нукус Шаҳри · А.Дустназаров билан Беруний. (Туркистон чоррахаси)",
-   "nearest_m": null
+   "nearest_m": 54847
   },
   {
    "id": "egov-qoraqalpogiston:649035bd320e217ad3e2ef0e",
@@ -195,7 +195,7 @@
    "type": "ПДД Камера, Стационар Радар",
    "source": "egov-qoraqalpogiston",
    "note": "Кунгирот Тумани · 4Р173 Кунгрот-мойнок А.Й. 3-4 КМ (50КМ/С)",
-   "nearest_m": null
+   "nearest_m": 2140
   },
   {
    "id": "egov-xorazm:64903637320e217ad3e2ef29",
@@ -204,7 +204,7 @@
    "type": "ПДД Камера, Стационар Радар",
    "source": "egov-xorazm",
    "note": "Хазорасп Тумани · Хоразм Вилояти Хазарасп Тумани 4Р156 А/Й 62 КМ (карвак Ахоли Яшаш Пункити)",
-   "nearest_m": null
+   "nearest_m": 4252
   },
   {
    "id": "egov-xorazm:64903637320e217ad3e2ef2b",
@@ -231,7 +231,7 @@
    "type": "ПДД Камера, Стационар Радар",
    "source": "egov-xorazm",
    "note": "Янгиариқ Тумани · Хоразм Вилояти Янгиариқ Тумани 4Р164 А/Й 12 КМ (таган Ахоли Яшаш Пункити)",
-   "nearest_m": null
+   "nearest_m": 5788
   },
   {
    "id": "egov-xorazm:64903637320e217ad3e2ef2c",
@@ -249,7 +249,7 @@
    "type": "ПДД Камера, Стационар Радар",
    "source": "egov-xorazm",
    "note": "Қўшқўпир Тумани · Хоразим Вилояти Қўшқўпир Тумани 4Р158 Автомобил Йўлининг 11 КМ (шихмашхад Ахоли Яшаш Пункти)",
-   "nearest_m": null
+   "nearest_m": 2696
   },
   {
    "id": "egov-xorazm:64903637320e217ad3e2ef15",
@@ -300,7 +300,7 @@
    "type": "ПДД Камера, Стационар Радар",
    "source": "egov-xorazm",
    "note": "Шовот Тумани · Хоразм Вилояти Шовот Тумани 4Р159 А/Й 30 КМ (киёт Ахоли Яшаш Пункти)",
-   "nearest_m": null
+   "nearest_m": 2245
   },
   {
    "id": "osm:7904050711",
@@ -356,7 +356,7 @@
    "note": "Радар-С",
    "maxspeed": 100,
    "direction": "305",
-   "nearest_m": null
+   "nearest_m": 8010
   },
   {
    "id": "osm:1891563971",
@@ -366,7 +366,7 @@
    "source": "osm",
    "note": "РАДАР",
    "maxspeed": 70,
-   "nearest_m": null
+   "nearest_m": 2974
   },
   {
    "id": "osm:6185342495",
@@ -390,7 +390,7 @@
    "note": "",
    "maxspeed": 30,
    "direction": "305",
-   "nearest_m": null
+   "nearest_m": 33136
   },
   {
    "id": "osm:6185342586",
@@ -514,7 +514,7 @@
    "source": "osm",
    "note": "Р А Д А Р",
    "maxspeed": 70,
-   "nearest_m": null,
+   "nearest_m": 2247,
    "also": [
     "osm"
    ]
@@ -623,7 +623,7 @@
    "note": "Радар работал на состояние от Ноября 2019 года до 1 января 2020 года.",
    "maxspeed": 70,
    "direction": "84",
-   "nearest_m": null
+   "nearest_m": 3227
   },
   {
    "id": "osm:6081834633",
@@ -633,7 +633,7 @@
    "source": "osm",
    "note": "Радар камера · Kamera Radar",
    "maxspeed": 70,
-   "nearest_m": null,
+   "nearest_m": 1980,
    "also": [
     "osm"
    ]
@@ -683,7 +683,7 @@
    "note": "",
    "maxspeed": 100,
    "direction": "230",
-   "nearest_m": null
+   "nearest_m": 3035
   },
   {
    "id": "osm:6185342190",
@@ -725,7 +725,7 @@
    "source": "osm",
    "note": "",
    "maxspeed": 100,
-   "nearest_m": null,
+   "nearest_m": 5814,
    "also": [
     "osm"
    ]
@@ -739,7 +739,7 @@
    "note": "По состояние 2020 года январь месяца, радар работал.",
    "maxspeed": 70,
    "direction": "255",
-   "nearest_m": null
+   "nearest_m": 1183
   },
   {
    "id": "osm:975394938",
@@ -778,7 +778,7 @@
    "note": "",
    "maxspeed": 100,
    "direction": "78",
-   "nearest_m": null
+   "nearest_m": 6445
   },
   {
    "id": "osm:6002857175",
@@ -802,7 +802,7 @@
    "note": "",
    "maxspeed": 100,
    "direction": "230",
-   "nearest_m": null
+   "nearest_m": 3423
   },
   {
    "id": "osm:2255665350",
@@ -890,7 +890,7 @@
    "note": "",
    "maxspeed": 70,
    "direction": "25",
-   "nearest_m": null,
+   "nearest_m": 1666,
    "also": [
     "osm"
    ]
@@ -903,7 +903,7 @@
    "source": "osm",
    "note": "",
    "maxspeed": 100,
-   "nearest_m": null,
+   "nearest_m": 1936,
    "also": [
     "osm"
    ]
@@ -917,7 +917,7 @@
    "note": "",
    "maxspeed": 70,
    "direction": "250",
-   "nearest_m": null
+   "nearest_m": 3605
   },
   {
    "id": "osm:2114508867",
@@ -942,7 +942,7 @@
    "note": "Радар · Радар бор",
    "maxspeed": 100,
    "direction": "160",
-   "nearest_m": null,
+   "nearest_m": 19292,
    "also": [
     "osm"
    ]
@@ -955,7 +955,7 @@
    "source": "osm",
    "note": "",
    "maxspeed": 70,
-   "nearest_m": null,
+   "nearest_m": 1552,
    "also": [
     "osm"
    ]
@@ -969,7 +969,7 @@
    "note": "",
    "maxspeed": 110,
    "direction": "40",
-   "nearest_m": null,
+   "nearest_m": 1896,
    "also": [
     "osm"
    ]
@@ -982,7 +982,7 @@
    "source": "osm",
    "note": "Radar",
    "maxspeed": 100,
-   "nearest_m": null,
+   "nearest_m": 22429,
    "also": [
     "osm"
    ]
@@ -1010,7 +1010,7 @@
    "note": "Ayrilma",
    "maxspeed": 55,
    "direction": "180",
-   "nearest_m": null
+   "nearest_m": 5451
   },
   {
    "id": "osm:13521156936",
@@ -1021,7 +1021,7 @@
    "note": "",
    "maxspeed": 100,
    "direction": "145",
-   "nearest_m": null
+   "nearest_m": 11579
   },
   {
    "id": "osm:6057210060",
@@ -1032,7 +1032,7 @@
    "note": "",
    "maxspeed": 70,
    "direction": "348",
-   "nearest_m": null
+   "nearest_m": 1887
   },
   {
    "id": "osm:6473648996",
@@ -1043,7 +1043,7 @@
    "note": "Радар",
    "maxspeed": 100,
    "direction": "306",
-   "nearest_m": null
+   "nearest_m": 40800
   },
   {
    "id": "osm:6011616586",
@@ -1074,7 +1074,7 @@
    "note": "",
    "maxspeed": 100,
    "direction": "155",
-   "nearest_m": null
+   "nearest_m": 11445
   },
   {
    "id": "osm:6014272285",
@@ -1095,7 +1095,7 @@
    "note": "",
    "maxspeed": 100,
    "direction": "155",
-   "nearest_m": null
+   "nearest_m": 8725
   },
   {
    "id": "osm:8456731985",
@@ -1117,7 +1117,7 @@
    "note": "",
    "maxspeed": 100,
    "direction": "155",
-   "nearest_m": null
+   "nearest_m": 6227
   },
   {
    "id": "osm:2219644395",
@@ -1161,7 +1161,7 @@
    "source": "osm",
    "note": "",
    "maxspeed": 100,
-   "nearest_m": null
+   "nearest_m": 2000
   },
   {
    "id": "osm:14081845446",
@@ -1171,7 +1171,7 @@
    "source": "osm",
    "note": "",
    "maxspeed": 100,
-   "nearest_m": null
+   "nearest_m": 2358
   },
   {
    "id": "osm:8519326668",
@@ -1191,7 +1191,7 @@
    "source": "osm",
    "note": "",
    "maxspeed": 100,
-   "nearest_m": null
+   "nearest_m": 2150
   },
   {
    "id": "osm:14099460752",
@@ -1201,7 +1201,7 @@
    "source": "osm",
    "note": "",
    "maxspeed": 100,
-   "nearest_m": null
+   "nearest_m": 2212
   },
   {
    "id": "osm:8519355196",
@@ -1273,7 +1273,7 @@
    "source": "osm",
    "note": "",
    "maxspeed": 100,
-   "nearest_m": null
+   "nearest_m": 22212
   },
   {
    "id": "osm:1657752580",
@@ -1339,7 +1339,7 @@
    "note": "",
    "maxspeed": 100,
    "direction": "155",
-   "nearest_m": null
+   "nearest_m": 27165
   },
   {
    "id": "osm:13512553265",
@@ -1350,7 +1350,7 @@
    "note": "",
    "maxspeed": 100,
    "direction": "155",
-   "nearest_m": null
+   "nearest_m": 32486
   },
   {
    "id": "osm:13512553193",
@@ -1361,7 +1361,7 @@
    "note": "",
    "maxspeed": 100,
    "direction": "340",
-   "nearest_m": null
+   "nearest_m": 36078
   },
   {
    "id": "osm:6002848870",
@@ -1417,7 +1417,7 @@
    "note": "",
    "maxspeed": 100,
    "direction": "330",
-   "nearest_m": null
+   "nearest_m": 41183
   },
   {
    "id": "osm:9127993432",
@@ -1428,7 +1428,7 @@
    "note": "",
    "maxspeed": 70,
    "direction": "255",
-   "nearest_m": null
+   "nearest_m": 2642
   },
   {
    "id": "osm:14177740136",
@@ -1450,7 +1450,7 @@
    "note": "",
    "maxspeed": 70,
    "direction": "218",
-   "nearest_m": null
+   "nearest_m": 2361
   },
   {
    "id": "osm:7097424520",
@@ -1461,7 +1461,7 @@
    "note": "",
    "maxspeed": 100,
    "direction": "140",
-   "nearest_m": null
+   "nearest_m": 33894
   },
   {
    "id": "osm:6354852911",
@@ -1485,7 +1485,7 @@
    "note": "",
    "maxspeed": 100,
    "direction": "330",
-   "nearest_m": null
+   "nearest_m": 31168
   },
   {
    "id": "osm:6354231355",
@@ -1537,7 +1537,7 @@
    "note": "",
    "maxspeed": 80,
    "direction": "220",
-   "nearest_m": null
+   "nearest_m": 2551
   },
   {
    "id": "osm:6327717785",
@@ -1602,7 +1602,7 @@
    "source": "osm",
    "note": "Радар стационарный",
    "maxspeed": 100,
-   "nearest_m": null
+   "nearest_m": 1336
   },
   {
    "id": "osm:6920368922",
@@ -1879,7 +1879,7 @@
    "type": "radar",
    "source": "osm",
    "note": "",
-   "nearest_m": null,
+   "nearest_m": 1930,
    "also": [
     "osm"
    ]
@@ -1901,7 +1901,7 @@
    "source": "osm",
    "note": "Аранчи пост ГАИ",
    "maxspeed": 70,
-   "nearest_m": null,
+   "nearest_m": 1727,
    "also": [
     "osm"
    ]
@@ -1982,7 +1982,7 @@
    "type": "radar",
    "source": "osm",
    "note": "РАДАР",
-   "nearest_m": null
+   "nearest_m": 1939
   },
   {
    "id": "osm:7984369311",
@@ -1992,7 +1992,7 @@
    "source": "osm",
    "note": "",
    "maxspeed": 50,
-   "nearest_m": null,
+   "nearest_m": 2039,
    "also": [
     "osm"
    ]
@@ -2004,7 +2004,7 @@
    "type": "radar",
    "source": "osm",
    "note": "",
-   "nearest_m": null
+   "nearest_m": 1677
   },
   {
    "id": "osm:12067982177",
@@ -2014,7 +2014,7 @@
    "source": "osm",
    "note": "Urganch shahri / Город Ургенч / Urgench city · 4Р160 а/й 6 км (Юқори дурман ахоли яшаш пункити)",
    "direction": "250",
-   "nearest_m": null,
+   "nearest_m": 3726,
    "also": [
     "egov-xorazm"
    ]
@@ -2118,7 +2118,7 @@
    "note": "",
    "maxspeed": 60,
    "direction": "150",
-   "nearest_m": null
+   "nearest_m": 2720
   },
   {
    "id": "osm:247311880",
@@ -2128,7 +2128,7 @@
    "source": "osm",
    "note": "",
    "maxspeed": 50,
-   "nearest_m": null
+   "nearest_m": 1980
   },
   {
    "id": "osm:6468041965",
@@ -2138,7 +2138,7 @@
    "source": "osm",
    "note": "",
    "maxspeed": 50,
-   "nearest_m": null
+   "nearest_m": 5114
   },
   {
    "id": "osm:13267665045",
@@ -2149,7 +2149,7 @@
    "note": "",
    "maxspeed": 60,
    "direction": "180",
-   "nearest_m": null
+   "nearest_m": 4227
   },
   {
    "id": "osm:9388858202",
@@ -2159,7 +2159,7 @@
    "source": "osm",
    "note": "Кегейли Тумани · Кегейли Тумани 4P178 \"станция Кумшунгул-ауыл Казанкеткен\" А.Й.26.5 КМ (абат ОФЙ 3-МАКТАБ)",
    "maxspeed": 50,
-   "nearest_m": null,
+   "nearest_m": 13097,
    "also": [
     "egov-qoraqalpogiston"
    ]
@@ -2185,7 +2185,7 @@
    "source": "osm",
    "note": "",
    "maxspeed": 50,
-   "nearest_m": null
+   "nearest_m": 4403
   }
  ]
 }

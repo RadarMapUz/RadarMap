@@ -48,6 +48,8 @@ final class AppEnvironment {
     let route = RouteService()
     let speedLimits: SpeedLimitService
     let liveActivity = LiveActivityService()
+    /// «Радар!» с плашки или часов в пути (`remoteRadarReport`).
+    @ObservationIgnored var remoteReportInFlight = false
     /// Мост на Apple Watch: HUD поездки + тук на запястье.
     let watchBridge = WatchBridgeService()
     let metrics = MetricsService()
@@ -246,6 +248,11 @@ final class AppEnvironment {
             }
             guard let ghost = self.commuteLive.display else { return nil }
             return (ghost.arrival, GhostText.caption(ghost), GhostText.isAlert(ghost))
+        }
+        // Кнопки плашки (9.1б): система выполняет их намерения в процессе
+        // приложения, исполнитель — здесь (Shared/ActivityIntents).
+        ActivityActions.perform = { [weak self] action in
+            await self?.performActivityAction(action)
         }
         self.location.route = route
         self.location.speedLimits = speedLimits

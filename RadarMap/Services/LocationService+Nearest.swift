@@ -54,8 +54,20 @@ extension LocationService {
             etaCaption: ghost?.caption,
             etaAlert: ghost?.alert,
             limitKmh: speedLimits?.currentLimit,
-            alertLevel: alertLevel
+            alertLevel: alertLevel,
+            muted: settings.isMuted
         )
+    }
+
+    /// Освежить плашку поездки. Только в поездке: подхваченная плашка
+    /// прошлого процесса без поездки обновлялась бы фоновыми фиксами как
+    /// живая (ревью S14). И проверка ЗДЕСЬ, а не no-op внутри: `activityState`
+    /// — вычисляемое свойство, и собирать его каждую секунду ради вызова,
+    /// который тут же выйдет по guard, незачем.
+    func refreshLiveActivity() {
+        guard isTripActive, liveActivity?.isActive == true else { return }
+        liveActivity?.update(state: activityState,
+                             nearMeters: LiveActivityService.nearZone(alertRadius: effectiveAlertRadius))
     }
 
     /// Обстановка для гейтов «наша ли камера» (чистый модуль LocationGates).
@@ -180,8 +192,14 @@ extension LocationService {
                     alertEngine.noteApproach(camera.id, distance: straight, at: coordinate,
                                              course: situation.course)
                 }
+                let behind = LocationGates.isClearlyBehind(camera, in: situation)
+                // Камера явно позади — её баннер «Камера через …» уже неправда.
+                // Здесь, а не по записи проезда: проезд закрывается за сотни
+                // метров и не пишется вовсе для камеры соседней улицы — а
+                // ложный баннер именно о ней (прогон и ревью 20.10).
+                if behind { notifier.clearApproaching(passed: camera.id) }
                 alertEngine.noteGeometry(camera.id, atTraverse: atTraverse,
-                                         behind: LocationGates.isClearlyBehind(camera, in: situation),
+                                         behind: behind,
                                          ahead: alertEngine.isPassed(camera.id)
                                             && LocationGates.isReapproach(camera, in: situation,
                                                                           passLine: alertEngine.passLine(camera.id)))

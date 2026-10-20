@@ -37,6 +37,11 @@ final class LiveActivityService {
     /// Когда обновляли (ритм — quantize/interval: 50 м / 5 с вблизи камеры,
     /// 200 м / 30 с вдали, полосу между обновлениями ведёт система).
     private var lastSentAt = Date.distantPast
+    /// Ответ на «Радар!» с плашки (9.1б) — накладывается на каждое состояние,
+    /// пока не снят: `activityState` о нажатии не знает.
+    private var reportFlash: Bool?
+    /// Номер последней вспышки: снятие от прошлого нажатия не гасит новую.
+    private var reportFlashID = 0
 
     var isActive: Bool { activity != nil }
 
@@ -89,6 +94,7 @@ final class LiveActivityService {
         // Квантуем расстояние и не шлём одинаковые состояния — у Live Activity
         // ограниченный бюджет обновлений.
         var quantized = Self.quantize(state, nearMeters: nearMeters)
+        quantized.reportFlash = reportFlash
         let now = Date()
         // Полоса — от начала подъезда к ЭТОЙ камере, а не от прошлой отправки:
         // иначе каждое обновление обнуляло бы её (ревью 19.10).
@@ -99,7 +105,8 @@ final class LiveActivityService {
         guard keepAlive || Self.differs(quantized, from: lastSentState, now: now) else { return }
         // Смена камеры (заголовка) — сразу; бегущая дистанция и полоса — не
         // чаще интервала ступени.
-        if !keepAlive, quantized.nearestTitle == lastSentState?.nearestTitle,
+        if !keepAlive, !Self.answersTap(quantized, from: lastSentState),
+           quantized.nearestTitle == lastSentState?.nearestTitle,
            now.timeIntervalSince(lastSentAt) < Self.interval(for: quantized,
                                                              nearMeters: nearMeters) { return }
         lastSentState = quantized
@@ -108,9 +115,24 @@ final class LiveActivityService {
                                            staleDate: Self.staleDate())) }
     }
 
+    /// Показать ответ на «Радар!»; отправка — следующим `update`, его зовёт
+    /// тот, кто нажал. Возвращает номер для `clearReportFlash`.
+    func flashReport(_ ok: Bool) -> Int {
+        reportFlash = ok
+        reportFlashID += 1
+        return reportFlashID
+    }
+
+    /// Снять ответ, если он всё ещё от этого нажатия.
+    func clearReportFlash(_ id: Int) {
+        guard id == reportFlashID else { return }
+        reportFlash = nil
+    }
+
     func end() {
         self.activity = nil
         lastSentState = nil
+        reportFlash = nil
         // Все плашки этого типа, а не только своя: осиротевшая от прошлого
         // процесса не должна пережить конец поездки (S14).
         for activity in Activity<CameraActivityAttributes>.activities {
@@ -178,6 +200,7 @@ final class LiveActivityService {
         default: break
         }
         if new.etaAlert != old.etaAlert { return true }
+        if answersTap(new, from: old) { return true }
         // Знак лимита и уровень тревоги (9.1) меняются редко и значат много.
         if new.limitKmh != old.limitKmh || (new.alertLevel ?? 0) != (old.alertLevel ?? 0) { return true }
         switch (old.arrivesAt, new.arrivesAt) {
@@ -187,6 +210,15 @@ final class LiveActivityService {
             return abs(fresh.timeIntervalSince(sent)) > max(3, remaining * AppConfig.liveActivityArrivalDrift)
         default: return true
         }
+    }
+
+    /// Ответ на нажатие кнопки плашки (9.1б): сменился значок звука или
+    /// отметка «Радар!». Это ответ человеку, который смотрит на плашку, — он
+    /// уходит сразу, мимо ступени и интервала.
+    static func answersTap(_ new: CameraActivityAttributes.ContentState,
+                           from old: CameraActivityAttributes.ContentState?) -> Bool {
+        guard let old else { return false }
+        return (new.muted ?? false) != (old.muted ?? false) || new.reportFlash != old.reportFlash
     }
 
     /// Граница частых обновлений — по настоящей зоне оповещения, а не одна

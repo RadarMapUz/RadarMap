@@ -96,6 +96,10 @@ final class WidgetPaletteTests: XCTestCase {
                      WidgetPalette.primary.dark, WidgetPalette.secondary.dark] {
             XCTAssertGreaterThanOrEqual(contrast(text, WidgetPalette.alertSurface), 4.5)
         }
+        // «Радар!» на плашке (9.1б) — тот же жёлтый, что у кнопки на карте.
+        XCTAssertEqual(WidgetPalette.action, hex(Theme.action, .dark))
+        XCTAssertEqual(WidgetPalette.onAction, hex(Theme.onAction, .dark))
+        XCTAssertGreaterThanOrEqual(contrast(WidgetPalette.onAction, WidgetPalette.action), 4.5)
     }
 
     func testScoreTiersMatchTheApp() {

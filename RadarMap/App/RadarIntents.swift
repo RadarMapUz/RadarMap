@@ -10,6 +10,7 @@
 import AppIntents
 import CoreLocation
 import Foundation
+import os
 
 struct StartTripIntent: AppIntent {
     static let title: LocalizedStringResource = "Начать поездку"
@@ -219,6 +220,62 @@ struct ReportAccidentIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         .result(dialog: await reportBySiri(.accident))
+    }
+}
+
+/// Кнопки плашки поездки (9.1б). Плашка живёт только в поездке и только
+/// при свёрнутом приложении, так что ответ — голосом и самой плашкой: ✓ или
+/// ✕ на месте «Радар!», значок динамика у «Звука».
+extension AppEnvironment {
+    func performActivityAction(_ action: ActivityAction) async {
+        switch action {
+        case .toggleSound:
+            settings.setMuted(!settings.isMuted)
+            Log.alerts.info("Плашка: звук \(self.settings.isMuted ? "выключен" : "включён", privacy: .public)")
+            location.refreshLiveActivity()
+        case .report:
+            guard let outcome = await remoteRadarReport() else { return }
+            // Повтор на том же месте — точка уже стоит: ✓, а не «✕ Не
+            // отправлено» поверх голоса «Уже отметили здесь» (ревью 20.10).
+            let flash = liveActivity.flashReport(outcome.pointExists)
+            location.refreshLiveActivity()
+            // Снять отметку — отдельной задачей: намерению плашки система даёт
+            // секунды, и ждать внутри него незачем.
+            Task { [weak self] in
+                await Task.pause(seconds: AppConfig.liveActivityReportFlashSeconds)
+                self?.liveActivity.clearReportFlash(flash)
+                self?.location.refreshLiveActivity()
+            }
+        }
+    }
+}
+
+extension AppEnvironment {
+    /// «Радар!» без взгляда на телефон — с плашки (и с часов, 9.3). Та же
+    /// дверь, что у кнопки на карте: защита от дублей, «с дивана» и курс для
+    /// снапа — в quickReport, не здесь. Итог произносится: на экран за рулём
+    /// не смотрят.
+    ///
+    /// nil — отметка с прошлого нажатия ещё в пути: на слабой связи ответ
+    /// идёт секунды, водитель жмёт ещё раз, и второе нажатие проходило мимо
+    /// защиты от дублей (она узнаёт об отметке только после ответа сервера) —
+    /// кнопка на карте держит для этого `isSending` (ревью 20.10).
+    func remoteRadarReport() async -> MobileCameraService.QuickOutcome? {
+        guard !remoteReportInFlight else { return nil }
+        remoteReportInFlight = true
+        defer { remoteReportInFlight = false }
+        // Плашка и часы поднимают приложение и из выгруженного состояния —
+        // точки тогда ещё нет; одноразовый фикс, как у Siri.
+        var coordinate = location.currentCoordinate
+        if coordinate == nil { coordinate = await location.awaitCoordinate() }
+        let outcome = await mobile.quickReport(
+            kind: .radar,
+            coordinate: coordinate,
+            speedKmh: location.speedKmh,
+            isTripActive: location.isTripActive,
+            course: location.currentCourse)
+        alerts.speak(outcome.spoken)
+        return outcome
     }
 }
 

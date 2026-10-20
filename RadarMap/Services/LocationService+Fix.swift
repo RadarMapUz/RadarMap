@@ -375,16 +375,8 @@ extension LocationService {
                                    roadClass: nearestCamera?.roadClass ?? .unknown)
             if contextDetector.context != alertContext { alertContext = contextDetector.context }
         }
-        // Live Activity живёт только в поездке. Проверяем ЗДЕСЬ, а не полагаемся
-        // на no-op внутри: `activityState` — вычисляемое свойство, и оно
-        // собиралось каждую секунду ради вызова, который тут же выходил по
-        // guard. Плашка не запущена почти всю жизнь приложения.
-        // И только в поездке: подхваченная плашка прошлого процесса без
-        // поездки обновлялась бы фоновыми фиксами как живая (ревью S14).
-        if isTripActive, liveActivity?.isActive == true {
-            liveActivity?.update(state: activityState,
-                                 nearMeters: LiveActivityService.nearZone(alertRadius: effectiveAlertRadius))
-        }
+        // Live Activity — только в поездке (условие внутри).
+        refreshLiveActivity()
         // Часы: только в поездке. Вне её HUD часов рисует «нет поездки» без
         // цифр, а меняющаяся скорость пробивала дедуп и будила BT-радио ради
         // данных, которые часы не показывают. Переход в «нет поездки» шлёт

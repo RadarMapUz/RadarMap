@@ -135,3 +135,53 @@ final class LiveActivityLevelTests: XCTestCase {
         XCTAssertFalse(LiveActivityService.differs(zero, from: legacy, now: now), "nil у старых — как 0")
     }
 }
+
+/// Кнопки плашки (9.1б): ответ на нажатие — значок звука и ✓/✕ у «Радар!»
+/// — уходит сразу, мимо ступени и интервала; без нажатия повода нет.
+final class LiveActivityButtonsTests: XCTestCase {
+    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private var base: CameraActivityAttributes.ContentState {
+        CameraActivityAttributes.ContentState(nearestTitle: "Юнусабад", nearestSymbol: "camera.fill",
+                                              distanceMeters: 800, arrivesAt: nil, since: nil)
+    }
+
+    func testTapAnswersGoAtOnce() {
+        let old = base
+        var muted = old
+        muted.muted = true
+        XCTAssertTrue(LiveActivityService.answersTap(muted, from: old))
+        XCTAssertTrue(LiveActivityService.differs(muted, from: old, now: now))
+        var flash = old
+        flash.reportFlash = true
+        XCTAssertTrue(LiveActivityService.answersTap(flash, from: old))
+        var refused = flash
+        refused.reportFlash = false
+        XCTAssertTrue(LiveActivityService.answersTap(refused, from: flash), "✓ → ✕ — тоже ответ")
+        var cleared = flash
+        cleared.reportFlash = nil
+        XCTAssertTrue(LiveActivityService.answersTap(cleared, from: flash), "снятие ✓ — тоже сразу")
+    }
+
+    func testNoTapNoAnswer() {
+        var old = base
+        old.muted = false
+        var legacy = base
+        legacy.muted = nil
+        XCTAssertFalse(LiveActivityService.answersTap(legacy, from: old), "nil у старых — как «звук есть»")
+        XCTAssertFalse(LiveActivityService.differs(legacy, from: old, now: now))
+        XCTAssertFalse(LiveActivityService.answersTap(base, from: nil), "первое состояние — не ответ")
+    }
+
+    /// ✓ на плашке — «точка на карте есть»: повтор на том же месте её уже
+    /// имеет, а «✕ Не отправлено» спорило бы с голосом «Уже отметили здесь».
+    func testRepeatOnTheSameSpotShowsTick() {
+        typealias Outcome = MobileCameraService.QuickOutcome
+        XCTAssertTrue(Outcome.refused(.duplicate).pointExists)
+        XCTAssertTrue(Outcome.sent(.created).pointExists)
+        XCTAssertTrue(Outcome.queued(.offline).pointExists, "ждёт сети — тап принят")
+        XCTAssertFalse(Outcome.refused(.noPosition).pointExists)
+        XCTAssertFalse(Outcome.refused(.notDriving).pointExists)
+        XCTAssertFalse(Outcome.sent(.failed(.tooOften)).pointExists)
+    }
+}

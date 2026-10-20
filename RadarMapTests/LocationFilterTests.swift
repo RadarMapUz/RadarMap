@@ -140,11 +140,83 @@ final class LocationFilterTests: XCTestCase {
 
     func testTinyMoveDoesNotProduceCourse() {
         var filter = LocationFilter()
-        _ = filter.accept(fix(base, courseAccuracy: 4), now: now)
+        _ = filter.accept(fix(base, speed: 0.5, courseAccuracy: 4), now: now)
         // Сдвиг 3 м — это шум стоящей машины, а не направление.
-        let result = accepted(filter.accept(fix(moved(3), courseAccuracy: -1, at: 1),
+        let result = accepted(filter.accept(fix(moved(3), speed: 0.5, courseAccuracy: -1, at: 1),
                                             now: now.addingTimeInterval(1)))
         XCTAssertEqual(result?.course, -1)
+    }
+
+    // MARK: - Повторный фикс на ходу (прогон 20.10)
+
+    /// iOS после перенастройки точности отдаёт тот же фикс ещё раз через
+    /// 2 мс — без своего курса, и по земле его не посчитать (сдвиг ноль).
+    /// −1 на один тик выключал гейты, и звучала камера соседней улицы.
+    func testRepeatedFixOnTheMoveKeepsTheCourse() {
+        var filter = LocationFilter()
+        _ = filter.accept(fix(base, speed: 14, course: 2, courseAccuracy: 4), now: now)
+        let repeated = accepted(filter.accept(fix(base, speed: 14, course: -1, courseAccuracy: -1, at: 0.002),
+                                              now: now.addingTimeInterval(0.002)))
+        XCTAssertEqual(repeated?.course, 2)
+        // Симулятор на точке пути: секунда прошла, а сдвиг 2 м при 14 м/с —
+        // тоже повтор, не измерение.
+        let stalled = accepted(filter.accept(fix(moved(2, bearing: 2), speed: 14, course: -1,
+                                                 courseAccuracy: -1, at: 1),
+                                             now: now.addingTimeInterval(1)))
+        XCTAssertEqual(stalled?.course, 2)
+    }
+
+    /// Настоящий фикс в повороте на 30 км/ч сдвигается на свои 8 м — меньше
+    /// шага курса по земле, но это измерение, а не повтор: курса нет, гейты
+    /// молчат, как и раньше.
+    func testRealSlowFixIsNotARepeat() {
+        var filter = LocationFilter()
+        _ = filter.accept(fix(base, speed: 8.3, course: 90, courseAccuracy: 4), now: now)
+        let turning = accepted(filter.accept(fix(moved(8, bearing: 150), speed: 8.3, course: -1,
+                                                 courseAccuracy: -1, at: 1),
+                                             now: now.addingTimeInterval(1)))
+        XCTAssertEqual(turning?.course, -1)
+    }
+
+    /// Сырой курс повтора, пусть недоверенный, смотрит в другую сторону —
+    /// это поворот (городской каньон отстаёт позицией), курс не держим.
+    func testRawCourseFarFromHeldIsATurnNotARepeat() {
+        var filter = LocationFilter()
+        _ = filter.accept(fix(base, speed: 8, course: 90, courseAccuracy: 4), now: now)
+        let turned = accepted(filter.accept(fix(moved(2, bearing: 170), speed: 8, course: 175,
+                                                courseAccuracy: 40, at: 1),
+                                            now: now.addingTimeInterval(1)))
+        XCTAssertEqual(turned?.course, -1)
+        let close = accepted(filter.accept(fix(moved(3, bearing: 95), speed: 8, course: 100,
+                                               courseAccuracy: 40, at: 1.2),
+                                           now: now.addingTimeInterval(1.2)))
+        XCTAssertEqual(close?.course, 90, "рядом с удержанным — повтор, держим")
+    }
+
+    /// Стоя курс не держим, удержанный опору не продлевает, а дольше
+    /// `courseHoldSeconds` курса нет.
+    func testHoldIsShortAndOnlyOnTheMove() {
+        var standing = LocationFilter()
+        _ = standing.accept(fix(base, speed: 1, course: 90, courseAccuracy: 4), now: now)
+        XCTAssertEqual(accepted(standing.accept(fix(base, speed: 1, course: -1, courseAccuracy: -1, at: 0.002),
+                                                now: now.addingTimeInterval(0.002)))?.course, -1)
+
+        var filter = LocationFilter()
+        _ = filter.accept(fix(base, speed: 14, course: 90, courseAccuracy: 4), now: now)
+        var t = 0.0
+        var last: CLLocationDirection?
+        // Цепочка «застывших» фиксов раз в секунду: держим, пока не истёк срок.
+        for _ in 0..<4 {
+            t += 1
+            last = accepted(filter.accept(fix(base, speed: 14, course: -1, courseAccuracy: -1, at: t),
+                                          now: now.addingTimeInterval(t)))?.course
+            if t <= AppConfig.courseHoldSeconds { XCTAssertEqual(last, 90, "t=\(t)") }
+        }
+        XCTAssertEqual(last, -1, "удержание не продлевает само себя")
+        filter.reset()
+        XCTAssertEqual(accepted(filter.accept(fix(base, speed: 14, course: -1, courseAccuracy: -1, at: t + 0.002),
+                                              now: now.addingTimeInterval(t + 0.002)))?.course, -1,
+                       "после сброса держать нечего")
     }
 
     func testResetForgetsPreviousFix() {

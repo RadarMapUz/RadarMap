@@ -616,6 +616,13 @@ final class MobileCameraService {
             if case .sent(let result) = self { return !result.isFailure }
             return false
         }
+
+        /// Точка на карте есть: отправлена, ждёт сети или уже стояла (повтор
+        /// на том же месте) — для ✓ там, где ответ виден без голоса.
+        var pointExists: Bool {
+            if case .refused(.duplicate) = self { return true }
+            return isSuccess
+        }
     }
 
     /// Один тап: проверить, отправить, ответить. Вся кнопка «Радар!» — здесь,

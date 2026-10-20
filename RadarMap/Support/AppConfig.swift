@@ -117,6 +117,17 @@ nonisolated enum AppConfig {
     static let derivedCourseMinMeters = 12.0
     /// Дальше этого разрыва прошлая точка уже не опора для курса.
     static let derivedCourseMaxSeconds = 5.0
+    /// Столько держим последний доверенный курс на повторном фиксе на ходу
+    /// (`courseRepeat…`, скорость не ниже `directionalMinSpeedKmh`). Дольше —
+    /// курса нет, гейты молчат.
+    static let courseHoldSeconds = 2.0
+    /// Повтор фикса: пришёл раньше этого после прошлого (iOS отдаёт тот же
+    /// фикс через 2 мс) или сдвинулся меньше этой доли пути по своей скорости.
+    static let courseRepeatMaxSeconds = 0.5
+    static let courseRepeatMoveShare = 0.5
+    /// Сырой (даже недоверенный) курс повтора разошёлся с удержанным больше
+    /// этого — поворот, курс не держим.
+    static let courseHoldMaxTurnDegrees = 45.0
 
     /// Точность скорости, выше которой значение не берём (держим прошлое).
     static let maxSpeedAccuracyMps = 5.0
@@ -1706,6 +1717,10 @@ nonisolated enum AppConfig {
     /// Неизменное состояние всё равно освежается раньше staleDate (300 с):
     /// «Нет сигнала GPS» — только когда приложение и правда молчит.
     static let liveActivityKeepAliveSeconds: TimeInterval = 240
+    /// ✓/✕ на месте «Радар!» на плашке (9.1б). Дольше вспышки кнопки на
+    /// карте (`reportFlashSeconds`): до локскрина обновление идёт с задержкой,
+    /// а взгляд падает на плашку позже, чем на палец у экрана.
+    static let liveActivityReportFlashSeconds: TimeInterval = 5
     /// Часы без тревоги: не чаще раза в столько секунд.
     static let watchCalmInterval: TimeInterval = 10
     /// Часы в тревоге: не чаще раза в столько секунд; шаг скорости на часах

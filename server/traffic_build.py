@@ -13,8 +13,14 @@ traffic/now.json для телефонов.
      сопоставления: сырой след живёт минуты, дальше остаются только скорости
      на рёбрах.
   2. Текущая скорость ребра — взвешенная медиана за SAMPLE_WINDOW, и только
-     если её подтвердили MIN_PIECES разных кусков: один водитель, вставший у
-     обочины, пробку не рисует.
+     если её подтвердили MIN_PIECES разных кусков, прошедших ребро насквозь:
+     один водитель, вставший у обочины, пробку не рисует. «Насквозь» — не
+     ближе PIECE_END_GUARD к концам совпадения: соседние куски одной машины
+     стыкуются на одном ребре (следующий начинается со следующего фикса,
+     метрах в 10–15), и по одному лишь касанию эта машина сама с собой
+     набирала бы «два куска» на стыке, а машина, стоящая на месте, — на
+     своём ребре каждые 8–10 минут. Скорость участков у концов в медиану
+     идёт как обычно; не в счёт они только как свидетели.
   3. Уровень — от отношения текущей скорости к скорости графа (car.lua) на
      этом ребре: свободно / медленно / пробка. Скорость графа есть с первого
      дня, поэтому холодного старта у «свободной скорости» нет; обычная
@@ -115,6 +121,7 @@ SAMPLE_KEEP = 60 * 60        # сырые скорости рёбер храня
 MIN_PIECES = 2               # независимых кусков на ребро, чтобы показать его
 MIN_CONFIDENCE = 0.1         # совпадение OSRM ниже — кусок не про дорогу
 MATCH_RADIUS = 25            # метров: GPS в городе + ширина проспекта
+PIECE_END_GUARD = MATCH_RADIUS   # метров у концов совпадения: ребро задето, а не пройдено
 MAX_KMH = 150.0
 JAM_RATIO = 0.35             # ниже — пробка (красный)
 SLOW_RATIO = 0.6             # ниже — медленно (жёлтый)
@@ -146,7 +153,12 @@ def schema(conn):
     conn.execute("""CREATE TABLE IF NOT EXISTS traffic_samples(
         u INTEGER NOT NULL, v INTEGER NOT NULL,
         kmh REAL NOT NULL, weight REAL NOT NULL,
-        ts REAL NOT NULL, piece INTEGER NOT NULL)""")
+        ts REAL NOT NULL, piece INTEGER NOT NULL,
+        passed INTEGER NOT NULL DEFAULT 0)""")
+    # passed — кусок прошёл ребро насквозь (п. 2 шапки). Строки до выкладки
+    # получают 0: свидетелями не считаются, а живут они час (SAMPLE_KEEP), и
+    # now.json первые 15 минут после выкладки строится только из новых.
+    add_column(conn, "traffic_samples", "passed", "INTEGER NOT NULL DEFAULT 0")
     conn.execute("CREATE INDEX IF NOT EXISTS traffic_samples_ts ON traffic_samples(ts)")
     conn.execute("""CREATE TABLE IF NOT EXISTS traffic_nodes(
         id INTEGER PRIMARY KEY, lat REAL NOT NULL, lon REAL NOT NULL)""")
@@ -203,13 +215,20 @@ def osrm_match(points, base=OSRM, timeout=10):
         return json.loads(resp.read())
 
 
+def leg_length(leg):
+    """Длина участка по отрезкам его рёбер (то, что идёт в samples)."""
+    return sum(d for d in ((leg.get("annotation") or {}).get("distance") or []) if d > 0)
+
+
 def edges_from_match(response, points):
     """Скорости по рёбрам из ответа OSRM.
 
     Возвращает (samples, nodes, models):
-      samples — [(u, v, kmh, weight_m)], скорость участка между соседними
-                точками следа на каждом ребре этого участка, вес — длина
-                отрезка ребра внутри участка;
+      samples — [(u, v, kmh, weight_m, passed)], скорость участка между
+                соседними точками следа на каждом ребре этого участка, вес —
+                длина отрезка ребра внутри участка, passed — отрезок не
+                ближе PIECE_END_GUARD к концам совпадения (кусок прошёл это
+                ребро, а не начался или кончился на нём);
       nodes   — {id: (lat, lon)} узлов, чьё положение видно в геометрии;
       models  — {(u, v): kmh} скорость графа на ребре (длина / время OSRM).
 
@@ -232,6 +251,9 @@ def edges_from_match(response, points):
         if len(ends) != len(legs) + 1:
             continue
         geometry = (matching.get("geometry") or {}).get("coordinates") or []
+        # Метры вдоль совпадения: где начинается и кончается каждый отрезок.
+        total = sum(leg_length(leg) for leg in legs)
+        along = 0.0
         offset = 0
         for k, leg in enumerate(legs):
             annotation = leg.get("annotation") or {}
@@ -241,6 +263,7 @@ def edges_from_match(response, points):
             m = len(dist)
             if m == 0 or len(ids) != m + 1:
                 offset += m
+                along += leg_length(leg)
                 continue
             for j in range(1, m):
                 if offset + j < len(geometry):
@@ -251,13 +274,16 @@ def edges_from_match(response, points):
             dt = points[b][2] - points[a][2]
             length = leg.get("distance") or 0
             if dt <= 0:
+                along += leg_length(leg)
                 continue
             kmh = min(MAX_KMH, length / dt * 3.6)
             for j in range(m):
                 if dist[j] <= 0:
                     continue
+                start, along = along, along + dist[j]
+                passed = start >= PIECE_END_GUARD and along <= total - PIECE_END_GUARD
                 edge = (ids[j], ids[j + 1])
-                samples.append((edge[0], edge[1], kmh, dist[j]))
+                samples.append((edge[0], edge[1], kmh, dist[j], passed))
                 if j < len(dur) and dur[j] > 0:
                     models[edge] = dist[j] / dur[j] * 3.6
     return samples, nodes, models
@@ -344,8 +370,9 @@ def decay_scale(epoch, now):
 def store(conn, piece_id, samples, nodes, models, now):
     how = profile_slot(now)
     weight = decay_scale(profile_epoch(conn, now), now)
-    conn.executemany("INSERT INTO traffic_samples(u, v, kmh, weight, ts, piece) VALUES(?, ?, ?, ?, ?, ?)",
-                     [(u, v, kmh, w, now, piece_id) for u, v, kmh, w in samples])
+    conn.executemany("""INSERT INTO traffic_samples(u, v, kmh, weight, ts, piece, passed)
+                        VALUES(?, ?, ?, ?, ?, ?, ?)""",
+                     [(u, v, kmh, w, now, piece_id, int(passed)) for u, v, kmh, w, passed in samples])
     conn.executemany("INSERT OR REPLACE INTO traffic_nodes(id, lat, lon) VALUES(?, ?, ?)",
                      [(i, lat, lon) for i, (lat, lon) in nodes.items()])
     conn.executemany("INSERT OR REPLACE INTO traffic_edges(u, v, model_kmh) VALUES(?, ?, ?)",
@@ -367,7 +394,7 @@ def piece_profile(samples):
     """Один кусок — одно наблюдение ребра: {(u, v): (отрезков, сумма км/ч,
     темп с/км)}. Темп — взвешенный по длине отрезков внутри куска."""
     acc = {}
-    for u, v, kmh, weight in samples:
+    for u, v, kmh, weight, _ in samples:
         entry = acc.setdefault((u, v), [0, 0.0, 0.0, 0.0])
         entry[0] += 1
         entry[1] += kmh
@@ -441,7 +468,7 @@ def level(kmh, model_kmh):
 
 def aggregate(conn, now):
     """Рёбра для выхода: [(ulat, ulon, vlat, vlon, level, kmh, model_kmh)]."""
-    rows = conn.execute("""SELECT s.u, s.v, s.kmh, s.weight, s.piece, e.model_kmh,
+    rows = conn.execute("""SELECT s.u, s.v, s.kmh, s.weight, s.piece, s.passed, e.model_kmh,
                                   a.lat, a.lon, b.lat, b.lon
                            FROM traffic_samples s
                            JOIN traffic_edges e ON e.u = s.u AND e.v = s.v
@@ -449,11 +476,13 @@ def aggregate(conn, now):
                            JOIN traffic_nodes b ON b.id = s.v
                            WHERE s.ts >= ?""", (now - SAMPLE_WINDOW,)).fetchall()
     grouped = {}
-    for u, v, kmh, weight, piece, model, alat, alon, blat, blon in rows:
+    for u, v, kmh, weight, piece, passed, model, alat, alon, blat, blon in rows:
         entry = grouped.setdefault((u, v), {"pairs": [], "pieces": set(), "model": model,
                                             "coords": (alat, alon, blat, blon)})
         entry["pairs"].append((kmh, weight))
-        entry["pieces"].add(piece)
+        # Свидетель — только кусок, прошедший ребро насквозь (п. 2 шапки).
+        if passed:
+            entry["pieces"].add(piece)
     out = []
     for entry in grouped.values():
         if len(entry["pieces"]) < MIN_PIECES:
@@ -472,7 +501,7 @@ def mark_shared(conn, now):
     куска (то же правило, что у now.json). Отметка живёт SHARED_TTL: «здесь
     ездит не один человек» — правда о недавнем, а не навсегда (п. 6 шапки)."""
     conn.execute("""INSERT INTO traffic_shared(u, v, seen)
-                    SELECT u, v, ? FROM traffic_samples WHERE ts >= ?
+                    SELECT u, v, ? FROM traffic_samples WHERE ts >= ? AND passed = 1
                     GROUP BY u, v HAVING COUNT(DISTINCT piece) >= ?
                     ON CONFLICT(u, v) DO UPDATE SET seen = MAX(seen, excluded.seen)""",
                  (now, now - SAMPLE_WINDOW, MIN_PIECES))

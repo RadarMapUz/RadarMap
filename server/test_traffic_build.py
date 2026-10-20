@@ -33,15 +33,16 @@ class EdgesFromMatchTest(unittest.TestCase):
 
     def test_samples_are_osm_edges_with_sane_speeds(self):
         self.assertGreater(len(self.samples), 10)
-        for u, v, kmh, weight in self.samples:
+        for u, v, kmh, weight, passed in self.samples:
             self.assertIsInstance(u, int)
             self.assertIsInstance(v, int)
             self.assertNotEqual(u, v)
             self.assertTrue(0 <= kmh <= tb.MAX_KMH)
             self.assertGreater(weight, 0)
+            self.assertIsInstance(passed, bool)
 
     def test_jam_part_of_the_trace_is_slower(self):
-        speeds = sorted({round(kmh) for _, _, kmh, _ in self.samples})
+        speeds = sorted({round(kmh) for _, _, kmh, _, _ in self.samples})
         self.assertLess(speeds[0], 15, "шаги по 40 с — это ползком")
         self.assertGreater(speeds[-1], 30, "шаги по 8 с — это ход")
 
@@ -58,11 +59,48 @@ class EdgesFromMatchTest(unittest.TestCase):
         for kmh in self.models.values():
             self.assertTrue(5 < kmh < 130)
 
+    def test_piece_ends_are_touched_not_passed(self):
+        """Первое и последнее рёбра совпадения кусок задел, а не прошёл; в
+        свидетели идут только отрезки не ближе PIECE_END_GUARD к концам."""
+        self.assertEqual(self.samples[0][:2], (1164782806, 1564859142))
+        self.assertFalse(self.samples[0][4])
+        self.assertEqual(self.samples[-1][:2], (4467322436, 13438299814))
+        self.assertFalse(self.samples[-1][4])
+        total = sum(s[3] for s in self.samples)
+        along, passed = 0.0, 0
+        for _, _, _, weight, through in self.samples:
+            start, along = along, along + weight
+            self.assertEqual(through, start >= tb.PIECE_END_GUARD and along <= total - tb.PIECE_END_GUARD)
+            passed += through
+        self.assertGreater(passed, 10)
+
     def test_low_confidence_and_errors_give_nothing(self):
         self.assertEqual(tb.edges_from_match({"code": "NoMatch"}, self.points), ([], {}, {}))
         weak = json.loads(json.dumps(FIXTURE["response"]))
         weak["matchings"][0]["confidence"] = 0.01
         self.assertEqual(tb.edges_from_match(weak, self.points)[0], [])
+
+
+def split_fixture(at):
+    """Две соседние части следа фикстуры — как два куска одной машины:
+    первый кончается на точке `at`, второй с неё начинается (тот же ответ
+    OSRM, разрезанный по участкам)."""
+    matching = FIXTURE["response"]["matchings"][0]
+    legs = matching["legs"]
+    coords = matching["geometry"]["coordinates"]
+    cut = sum(len(leg["annotation"]["distance"]) for leg in legs[:at])
+
+    def part(lo, hi, geometry):
+        points = FIXTURE["points"][lo:hi + 1]
+        t0 = points[0][2]
+        points = [[lat, lon, t - t0, kmh] for lat, lon, t, kmh in points]
+        response = {"code": "Ok",
+                    "tracepoints": [{"waypoint_index": i, "matchings_index": 0} for i in range(hi - lo + 1)],
+                    "matchings": [{"confidence": matching["confidence"],
+                                   "geometry": {"coordinates": geometry}, "legs": legs[lo:hi]}]}
+        return points, response
+
+    return part(0, at, coords[:cut + 1]), part(at, len(legs), coords[cut:])
 
 
 class PipelineTest(unittest.TestCase):
@@ -114,6 +152,43 @@ class PipelineTest(unittest.TestCase):
         self.assertTrue(edges)
         self.assertEqual({e[4] for e in edges} - {1, 2, 3}, set())
         self.assertIn(3, {e[4] for e in edges}, "ползком на проспекте — пробка")
+
+    def test_neighbour_pieces_of_one_car_vouch_for_nothing(self):
+        """Соседние куски одной машины стыкуются на одном ребре: по касанию
+        это были бы «два куска» — пробка в now.json и «не один человек» для
+        «обычно» от одного водителя."""
+        (pa, ra), (pb, rb) = split_fixture(5)
+        edges_a = {s[:2] for s in tb.edges_from_match(ra, pa)[0]}
+        edges_b = {s[:2] for s in tb.edges_from_match(rb, pb)[0]}
+        self.assertTrue(edges_a & edges_b, "стык — общее ребро")
+        for points in (pa, pb):
+            self.conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)",
+                              (self.now, json.dumps(points)))
+        self.conn.commit()
+        tb.process(self.conn, self.now, matcher=lambda pts: ra if pts == pa else rb)
+        self.assertEqual(self.conn.execute("SELECT COUNT(DISTINCT piece) FROM traffic_samples").fetchone()[0], 2)
+        self.assertEqual(tb.aggregate(self.conn, self.now), [])
+        tb.mark_shared(self.conn, self.now)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM traffic_shared").fetchone()[0], 0)
+
+    def test_standing_car_paints_no_jam(self):
+        """Машина стоит: кусок закрывается по времени, и все его точки — на
+        одном ребре. Два таких куска подряд — всё ещё одна машина."""
+        points = [[41.3, 69.28, 0, 0], [41.30001, 69.28, 250, 0], [41.30002, 69.28, 500, 0]]
+        leg = {"distance": 1.1, "annotation": {"nodes": [10, 11], "distance": [1.1], "duration": [0.1]}}
+        response = {"code": "Ok",
+                    "tracepoints": [{"waypoint_index": i, "matchings_index": 0} for i in range(3)],
+                    "matchings": [{"confidence": 0.9, "legs": [leg, leg],
+                                   "geometry": {"coordinates": [[69.28, 41.3], [69.28, 41.30001],
+                                                                [69.28, 41.30002]]}}]}
+        self.conn.executemany("INSERT INTO traffic_nodes VALUES(?, ?, ?)", [(10, 41.3, 69.28), (11, 41.3001, 69.28)])
+        for start in (self.now - 500, self.now):
+            self.conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)",
+                              (start, json.dumps(points)))
+        self.conn.commit()
+        tb.process(self.conn, self.now, matcher=lambda pts: response)
+        self.assertEqual(self.conn.execute("SELECT COUNT(DISTINCT piece) FROM traffic_samples").fetchone()[0], 2)
+        self.assertEqual(tb.aggregate(self.conn, self.now), [], "одна стоящая машина — не пробка")
 
     def test_prune_clears_old_repeat_marks(self):
         # Таблицу создаёт api.py; старого api.py без неё cron не роняет.
@@ -214,13 +289,13 @@ class TypicalTest(ProfileFixture, unittest.TestCase):
 
     def test_harmonic_speed(self):
         """Пробка 5 и свобода 50 — это время, а не среднее км/ч: 9, не 27,5."""
-        profile = tb.piece_profile([(1, 2, 50.0, 100.0), (1, 2, 5.0, 100.0)])
+        profile = tb.piece_profile([(1, 2, 50.0, 100.0, True), (1, 2, 5.0, 100.0, True)])
         count, total, pace = profile[(1, 2)]
         self.assertEqual(count, 2)
         self.assertAlmostEqual(total, 55.0)
         self.assertAlmostEqual(3600 / pace, 9.09, places=2)
         # Стоянка не делает темп бесконечным.
-        self.assertAlmostEqual(tb.piece_profile([(1, 2, 0.0, 10.0)])[(1, 2)][2], 3600 / tb.PACE_MIN_KMH)
+        self.assertAlmostEqual(tb.piece_profile([(1, 2, 0.0, 10.0, True)])[(1, 2)][2], 3600 / tb.PACE_MIN_KMH)
 
     def test_too_few_pieces_publish_nothing(self):
         self.pieces(tb.TYPICAL_MIN_PIECES - 1)
@@ -490,7 +565,7 @@ class MigrationTest(unittest.TestCase):
         conn.executemany("INSERT INTO traffic_edges VALUES(?, ?, ?)",
                          [(u, v, kmh) for (u, v), kmh in models.items()])
         conn.executemany("INSERT INTO traffic_samples VALUES(?, ?, ?, ?, ?, ?)",
-                         [(u, v, kmh, w, self.now - 60, 900) for u, v, kmh, w in samples[:5]])
+                         [(u, v, kmh, w, self.now - 60, 900) for u, v, kmh, w, _ in samples[:5]])
         conn.execute("INSERT INTO traffic_meta VALUES('typical_built', ?)", (self.now - 86400,))
         conn.commit()
         conn.close()
@@ -528,6 +603,10 @@ class MigrationTest(unittest.TestCase):
         try:
             columns = {row[1] for row in conn.execute("PRAGMA table_info(traffic_shared)")}
             self.assertIn("seen", columns)
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(traffic_samples)")}
+            self.assertIn("passed", columns)
+            self.assertEqual(conn.execute("SELECT DISTINCT passed FROM traffic_samples WHERE piece = 900")
+                             .fetchall(), [(0,)], "сэмплы до выкладки — не свидетели")
             self.assertEqual(tb.profile_epoch(conn, self.now + 120), self.now,
                              "метка — первый прогон после выкладки")
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM traffic_shared").fetchone()[0], 0,

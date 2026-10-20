@@ -1799,4 +1799,17 @@ nonisolated enum AppConfig {
     static let parkedCarReachedMeters = 30.0
     /// Через трое суток точку забываем: машину за это время двигали.
     static let parkedCarMaxAgeSeconds: TimeInterval = 3 * 24 * 3600
+
+    // MARK: - Проверить штрафы (FineCheck, 12б.8)
+
+    /// Официальный портал проверки штрафов. Номер в адрес не кладётся —
+    /// только копируется в буфер. 👤 Владелец подтверждает точную страницу
+    /// услуги; до тех пор — главная Единого портала интерактивных
+    /// госуслуг, откуда услуга находится поиском «штраф».
+    static let fineCheckPortalURL = URL(string: "https://my.gov.uz/")!
+    /// Окно своей оценки «по нашим замерам», дней.
+    static let fineCheckWindowDays = 30
+    /// Скопированный номер живёт в буфере не дольше этого и не уходит на
+    /// другие устройства (Universal Clipboard).
+    static let fineCheckClipboardSeconds: TimeInterval = 300
 }

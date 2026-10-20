@@ -1000,6 +1000,7 @@ final class AppEnvironment {
         guard let ends = commuteEnds else {
             commute = []
             workTargetSuggestion = nil
+            refreshCommuteWidget()
             return
         }
         let trips = settings.commuteLearning
@@ -1007,12 +1008,47 @@ final class AppEnvironment {
                             home: ends.home, work: ends.work)
             : Commute.trips(history: trip.history, home: ends.home, work: ends.work)
         commute = Commute.summaries(trips: trips, now: Date())
+        refreshCommuteWidget()
         // Вопрос о сроке — про выученный распорядок: обучение выключено —
         // не спрашиваем (и срок без призрака ничего бы не дал).
         workTargetSuggestion = settings.commuteLearning
             ? ArrivalTarget.suggestion(arrivals: trips.filter { $0.direction == .toWork }.map(\.arrival),
                                        now: Date())
             : nil
+    }
+
+    /// Виджет «Дорога на работу» (9.4): готовые минуты в App Group; пишется и
+    /// перезагружается, только когда числа сменились (бюджет WidgetKit).
+    private func refreshCommuteWidget(now: Date = Date()) {
+        let target = settings.commuteLearning ? settings.workArrivalTarget : nil
+        func direction(_ kind: Commute.Direction) -> CommuteWidgetData.Direction? {
+            guard let summary = commute.first(where: { $0.direction == kind }), let usual = summary.usual else {
+                return nil
+            }
+            var leaveBy: Date?
+            if kind == .toWork, let target {
+                // Ближайший день, когда срок действует, и выезд к нему ещё впереди.
+                for offset in 0...7 {
+                    guard let day = Calendar.current.date(byAdding: .day, value: offset,
+                                                          to: Calendar.current.startOfDay(for: now)),
+                          target.applies(on: day) else { continue }
+                    let leave = day.addingTimeInterval(Double(target.minute) * 60 - usual
+                                                       - Double(AppConfig.departureReminderMarginMinutes) * 60)
+                    if leave > now { leaveBy = leave; break }
+                }
+            }
+            return CommuteWidgetData.Direction(usualSeconds: usual,
+                                               usualDepartureMinute: summary.usualDepartureMinute,
+                                               bestStartMinute: summary.best?.startMinute,
+                                               bestSeconds: summary.best?.medianDuration,
+                                               leaveBy: leaveBy)
+        }
+        let toWork = direction(.toWork), toHome = direction(.toHome)
+        let data = toWork == nil && toHome == nil
+            ? nil : CommuteWidgetData(toWork: toWork, toHome: toHome, updatedAt: now)
+        guard !WidgetCommute.sameNumbers(WidgetCommute.read(), data) else { return }
+        WidgetCommute.write(data)
+        WidgetCenter.shared.reloadTimelines(ofKind: "RadarCommuteWidget")
     }
 
     /// Напоминать есть о чём (выгодный выезд или срок) — для предложения в «Итогах».

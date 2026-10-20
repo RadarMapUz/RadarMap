@@ -10,6 +10,8 @@
 0 5 * * 1 /usr/bin/python3 /opt/radarmap/api/update_cameras.py >/dev/null 2>&1
 # Пробки: куски следа → OSRM match → /radarmap/traffic/now.json, раз в час typical/<wd|off>-<час>.json (traffic_build.py). Выкладка — deploy_traffic.sh.
 */2 * * * * /usr/bin/python3 /opt/radarmap/api/traffic_build.py >> /var/log/radarmap-traffic.log 2>&1
+# Погода на трассах: open-meteo → /radarmap/weather/roads.json (build_road_weather.py, точки — road_weather_points.json). Выкладка — deploy_road_weather.sh.
+*/30 * * * * /usr/bin/python3 /opt/radarmap/api/build_road_weather.py >> /var/log/radarmap-weather.log 2>&1
 # Telegram-канал: подтверждённые треноги и посты по городам (telegram_publish.py). ВКЛЮЧИТЬ ПОСЛЕ СОЗДАНИЯ КАНАЛА:
 # завести канал, сделать бота его администратором, положить /opt/radarmap/telegram.conf (token=, chat_id=@канал) и раскомментировать.
 # Без конфига скрипт выходит с кодом 0 — строку можно включить и раньше, он просто молчит.

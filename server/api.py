@@ -88,6 +88,12 @@ ROAD_TYPES = ("closure", "roadwork")
 # бы «Радар!» всем за ним, а сорок адресов — всей стране.
 MAX_ACTIVE_ROAD = 300
 MAX_ACTIVE_ROAD_PER_IP = 6
+# Кворум скрытия события дороги считает только голоса этого окна. Ремонт живёт
+# до недели, и «да» понедельника не говорит, идёт ли он в пятницу: пять
+# подтверждений начала держали бы закончившийся ремонт против любых «нет»
+# (кворум требует дизлайков больше, чем лайков). Радару окно не нужно — он
+# живёт часы, и все его голоса и так свежие.
+ROAD_VOTE_FRESH = 6 * 3600
 
 
 def is_road(rtype):
@@ -1627,6 +1633,9 @@ class Handler(BaseHTTPRequestHandler):
             up, down = conn.execute(
                 "SELECT COALESCE(SUM(value = 1), 0), COALESCE(SUM(value = -1), 0) "
                 "FROM votes WHERE report_id = ?", (rid,)).fetchone()
+            # Против чего меряется кворум скрытия: у дороги — свежее окно
+            # (ROAD_VOTE_FRESH), у камер — все голоса, как было.
+            since = now - ROAD_VOTE_FRESH if is_road(rtype) else 0
             if value == 1:
                 # Продление и полный срок — только за независимое подтверждение
                 # (другое устройство И другой адрес): см. lifecycle_expires.
@@ -1647,8 +1656,12 @@ class Handler(BaseHTTPRequestHandler):
             # лучше передержать отметку, чем дать её снять анонимной ротацией.
             down_ips = conn.execute(
                 "SELECT COUNT(DISTINCT ip) FROM votes "
-                "WHERE report_id = ? AND value = -1 AND ip != ''", (rid,)).fetchone()[0]
-            active = 0 if (down >= 3 and down > up and down_ips >= HIDE_DISTINCT_IPS) else 1
+                "WHERE report_id = ? AND value = -1 AND ip != '' AND ts >= ?",
+                (rid, since)).fetchone()[0]
+            q_up, q_down = conn.execute(
+                "SELECT COALESCE(SUM(value = 1), 0), COALESCE(SUM(value = -1), 0) "
+                "FROM votes WHERE report_id = ? AND ts >= ?", (rid, since)).fetchone()
+            active = 0 if (q_down >= 3 and q_down > q_up and down_ips >= HIDE_DISTINCT_IPS) else 1
             conn.execute("UPDATE reports SET up = ?, down = ?, expires = ?, active = ?, "
                          "closed = CASE WHEN ? = 0 THEN 'quorum' ELSE closed END WHERE id = ?",
                          (up, down, expires, active, active, rid))

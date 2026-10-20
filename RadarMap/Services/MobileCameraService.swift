@@ -229,6 +229,9 @@ final class MobileCameraService {
         if !roadEvents.isEmpty { roadEvents = [] }
         roadConfirmations = [:]
         lastRoadETag = nil
+        roadPassTracks = [:]
+        if pendingRoadConfirm != nil { pendingRoadConfirm = nil }
+        pendingRoadConfirmAt = nil
         guard !reports.isEmpty else { return }
         reports = []
         confirmations = [:]
@@ -387,6 +390,12 @@ final class MobileCameraService {
                                  confirmed: report.confirmed ?? true)
             }
             if fresh != roadEvents { roadEvents = fresh }
+            // Событие сняли (кворум «нет», модератор, срок) — вопрос о нём
+            // больше не нужен: «да» ушло бы в пустоту, «нет» — в мёртвую точку.
+            if let asked = pendingRoadConfirm, !fresh.contains(where: { $0.id == asked.id }) {
+                pendingRoadConfirm = nil
+                pendingRoadConfirmAt = nil
+            }
             roadConfirmations = Dictionary(uniqueKeysWithValues: answer.value.reports.map { report in
                 (Self.idOffset + report.id,
                  Confirmation(upvotes: report.up ?? 0,
@@ -409,6 +418,10 @@ final class MobileCameraService {
         // События дороги снимаются по сроку так же — без сервера.
         if roadEvents.contains(where: { $0.expires <= now }) {
             roadEvents.removeAll { $0.expires <= now }
+        }
+        if let asked = pendingRoadConfirm, asked.expires <= now {
+            pendingRoadConfirm = nil
+            pendingRoadConfirmAt = nil
         }
         guard !gone.isEmpty else { return false }
         reports.removeAll { gone.contains($0.id) }
@@ -868,7 +881,10 @@ final class MobileCameraService {
     /// включённом экране: в поездке с телефоном в кармане или под CarPlay без
     /// карты на телефоне проезд мимо треноги не замечался вовсе, и вопрос
     /// «радар ещё стоял?» — то, что держит данные свежими, — не задавался.
-    func trackPasses(from coordinate: CLLocationCoordinate2D, now: Date = Date()) {
+    /// `course` — наш курс (−1 — недостоверен): событию дороги нужен проезд
+    /// по его ходу (RoadEventPassWatch); радару курс не нужен.
+    func trackPasses(from coordinate: CLLocationCoordinate2D, course: CLLocationDegrees = -1,
+                     now: Date = Date()) {
         expireStaleConfirm(now: now)
         guard isEnabled else { return }
         // Проезды отслеживаются и пока висит вопрос: с погашенным экраном он
@@ -877,9 +893,11 @@ final class MobileCameraService {
         let askID = MobilePassWatch.update(tracks: &passTracks,
                                            mobileCameras: reports,
                                            from: coordinate)
-        guard pendingConfirm == nil, let askID else { return }
-        pendingConfirm = reports.first { $0.id == askID }
-        pendingConfirmAt = pendingConfirm == nil ? nil : now
+        if pendingConfirm == nil, let askID {
+            pendingConfirm = reports.first { $0.id == askID }
+            pendingConfirmAt = pendingConfirm == nil ? nil : now
+        }
+        trackRoadPasses(from: coordinate, course: course, now: now)
     }
 
     /// Снять вопрос, который никто не увидел за `mobileConfirmMaxAgeSeconds`.
@@ -888,6 +906,11 @@ final class MobileCameraService {
     /// мимо которого проехали час назад, показываться уже не должен.
     /// Молчание ничего не отправляет — как и «Пропустить».
     func expireStaleConfirm(now: Date = Date()) {
+        if pendingRoadConfirm != nil, let at = pendingRoadConfirmAt,
+           now.timeIntervalSince(at) > AppConfig.mobileConfirmMaxAgeSeconds {
+            pendingRoadConfirm = nil
+            pendingRoadConfirmAt = nil
+        }
         guard pendingConfirm != nil, let at = pendingConfirmAt,
               now.timeIntervalSince(at) > AppConfig.mobileConfirmMaxAgeSeconds else { return }
         pendingConfirm = nil
@@ -907,6 +930,71 @@ final class MobileCameraService {
         // origin="pass" — голос после реального проезда: сервер хранит пометку,
         // модератор в админке отличает его от тапа в карточке с дивана.
         Task { await vote(cameraID: camera.id, stillThere: stillThere, origin: "pass") }
+    }
+
+    // MARK: - «Ещё перекрыто?» после проезда события дороги
+
+    /// Событие дороги, о котором уместно спросить. Свой слот, отдельно от
+    /// радара: вопросы не вытесняют друг друга, а показывается сначала радар
+    /// (`passQuestion`) — засада важнее асфальта.
+    private(set) var pendingRoadConfirm: RoadEvent?
+    /// Когда задан — тот же срок `mobileConfirmMaxAgeSeconds`, что у радара.
+    @ObservationIgnored private var pendingRoadConfirmAt: Date?
+    @ObservationIgnored private var roadPassTracks: [Int: RoadEventPassWatch.Track] = [:]
+
+    private func trackRoadPasses(from coordinate: CLLocationCoordinate2D, course: CLLocationDegrees,
+                                 now: Date) {
+        guard !roadEvents.isEmpty || !roadPassTracks.isEmpty else { return }
+        // Свои отметки не спрашиваем: отметивший только что видел сам.
+        let own = Set(mine.map { Self.idOffset + $0.id })
+        let askID = RoadEventPassWatch.update(tracks: &roadPassTracks, events: roadEvents,
+                                              from: coordinate, course: course,
+                                              excluded: own, now: now)
+        guard pendingRoadConfirm == nil, let askID else { return }
+        pendingRoadConfirm = roadEvents.first { $0.id == askID }
+        pendingRoadConfirmAt = pendingRoadConfirm == nil ? nil : now
+    }
+
+    /// Ответили. `nil` — закрыли или промолчали: не шлём ничего. «Да» —
+    /// лайк (подтверждает по тому же правилу независимого водителя, что у
+    /// радара), «нет» — дизлайк: с разных адресов срезает срок и скрывает.
+    /// `id` — о каком событии был вопрос; ответ на сменившийся игнорируется.
+    func answerRoadConfirm(stillThere: Bool?, for id: Int? = nil) {
+        guard let event = pendingRoadConfirm, id == nil || id == event.id else { return }
+        pendingRoadConfirm = nil
+        pendingRoadConfirmAt = nil
+        guard let stillThere else { return }
+        Task { await vote(cameraID: event.id, stillThere: stillThere, origin: "pass") }
+    }
+
+    /// Вопрос после проезда, как его показывают телефон и CarPlay: один за
+    /// раз, радар первым.
+    enum PassQuestion {
+        case camera(Camera)
+        case road(RoadEvent)
+
+        var id: Int {
+            switch self {
+            case .camera(let camera): return camera.id
+            case .road(let event):    return event.id
+            }
+        }
+    }
+
+    var passQuestion: PassQuestion? {
+        if let pendingConfirm { return .camera(pendingConfirm) }
+        if let pendingRoadConfirm { return .road(pendingRoadConfirm) }
+        return nil
+    }
+
+    /// Ответ на `passQuestion` по id — кому бы он ни принадлежал. Id радаров
+    /// и событий дороги из одной таблицы сервера и не пересекаются.
+    func answerPassQuestion(stillThere: Bool?, for id: Int) {
+        if pendingConfirm?.id == id {
+            answerConfirm(stillThere: stillThere, for: id)
+        } else if pendingRoadConfirm?.id == id {
+            answerRoadConfirm(stillThere: stillThere, for: id)
+        }
     }
 
     /// value: true = «радар на месте» (продлевает жизнь), false = «радара нет».

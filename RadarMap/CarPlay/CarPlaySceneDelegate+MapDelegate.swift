@@ -101,8 +101,8 @@ extension CarPlaySceneDelegate {
             if let id {
                 Task { @MainActor [weak self] in
                     await Task.pause(seconds: AppConfig.carPlayQuestionAnswerGraceSeconds)
-                    guard let self, self.env.mobile.pendingConfirm?.id == id else { return }
-                    self.env.mobile.answerConfirm(stillThere: nil, for: id)
+                    guard let self, self.env.mobile.passQuestion?.id == id else { return }
+                    self.env.mobile.answerPassQuestion(stillThere: nil, for: id)
                 }
             }
         }

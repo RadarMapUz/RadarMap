@@ -152,7 +152,7 @@ struct DrivingHintChip: View {
     }
 }
 
-/// «Радар ещё стоял?» на карте. Условие «накрыто» читает пер-тиковую
+/// «Радар ещё стоял?» и «Ещё перекрыто?» на карте. Условие «накрыто» читает пер-тиковую
 /// isApproachingCamera (внутри — дистанция и скорость, пишутся каждым фиксом):
 /// вычисленное В BODY MapScreen оно делало весь экран с двумя сотнями
 /// маркеров заложником тика — глазами читалось как булев флаг, а было
@@ -161,9 +161,18 @@ struct MobileConfirmGate: View {
     @Environment(AppEnvironment.self) private var env
 
     var body: some View {
-        MobileConfirmBar(isCovered: env.location.isApproachingCamera)
-            .onAppear { env.mobile.expireStaleConfirm() }
-            .motionAnimation(Motion.standard, value: env.mobile.pendingConfirm?.id)
+        let covered = env.location.isApproachingCamera
+        // Один вопрос за раз: радар первым, «ещё перекрыто?» — когда о радаре
+        // спрашивать нечего (MobileCameraService.passQuestion).
+        Group {
+            if env.mobile.pendingConfirm != nil {
+                MobileConfirmBar(isCovered: covered)
+            } else {
+                RoadEventConfirmBar(isCovered: covered)
+            }
+        }
+        .onAppear { env.mobile.expireStaleConfirm() }
+        .motionAnimation(Motion.standard, value: env.mobile.passQuestion?.id)
     }
 }
 

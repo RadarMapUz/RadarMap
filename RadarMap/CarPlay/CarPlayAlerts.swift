@@ -3,7 +3,7 @@
 //  RadarMap
 //
 //  Разговор с водителем на экране машины: подтверждения, короткие ответы и
-//  вопрос «радар ещё стоял?».
+//  вопросы после проезда — «радар ещё стоял?» и «ещё перекрыто?».
 //
 //  Вынесено из CarPlaySceneDelegate — тот отвечает за жизненный цикл сцены и
 //  сборку шаблонов, и разговор с водителем в нём был третьей обязанностью.
@@ -23,7 +23,9 @@ extension CarPlaySceneDelegate {
 
     // MARK: - «Радар ещё стоял?» в машине
 
-    /// Вопрос после реального проезда мимо чужой отметки.
+    /// Вопрос после реального проезда мимо чужой отметки — радара или
+    /// события дороги (MobileCameraService.passQuestion: один за раз, радар
+    /// первым). Оба — один вид баннера, `.question`, с одними правилами.
     ///
     /// Молчание по-прежнему ничего не отправляет: «не знаю» портит данные
     /// сильнее, чем их отсутствие, поэтому баннер, закрытый или истёкший без
@@ -31,7 +33,7 @@ extension CarPlaySceneDelegate {
     func observePendingConfirm() {
         let session = session
         withObservationTracking {
-            _ = env.mobile.pendingConfirm
+            _ = env.mobile.passQuestion?.id
             // И тревогу тоже: вопрос ждёт, пока впереди камера, — значит,
             // снятие тревоги обязано перепоказать вопрос.
             _ = env.location.isApproachingCamera
@@ -47,7 +49,7 @@ extension CarPlaySceneDelegate {
     func presentPendingConfirmIfNeeded() {
         env.mobile.expireStaleConfirm()
         guard let banners else { return }
-        let pending = env.mobile.pendingConfirm
+        let pending = env.mobile.passQuestion
         // Показанный вопрос ещё про ту же отметку — всё на месте.
         if confirmBanner != nil, pending?.id == confirmBannerID { return }
         // Показан, а ответ уже не нужен (истёк, отвечен на телефоне) или
@@ -56,22 +58,32 @@ extension CarPlaySceneDelegate {
         let stale = confirmBanner
         confirmBanner = nil
         confirmBannerID = nil
-        guard let camera = pending, camera.id != skippedConfirmID, canAskNow() else {
+        guard let question = pending, question.id != skippedConfirmID, canAskNow() else {
             if let stale { banners.dismiss(stale) }
             return
         }
-        let id = camera.id
+        let id = question.id
+        let titles: [String]
+        let symbolName: String
+        switch question {
+        case .camera(let camera):
+            titles = [String(format: String(localized: "%@ ещё на месте?"), camera.kind.displayName),
+                      String(localized: "Ещё на месте?")]
+            symbolName = camera.kind.symbolName
+        case .road(let event):
+            titles = [RoadEventPassWatch.question(for: event.kind)]
+            symbolName = (ReportKind(rawValue: event.kind.rawValue) ?? .closure).symbol
+        }
         let alert = CPNavigationAlert(
-            titleVariants: [String(format: String(localized: "%@ ещё на месте?"), camera.kind.displayName),
-                            String(localized: "Ещё на месте?")],
+            titleVariants: titles,
             subtitleVariants: [],
-            image: CarPlayGuidance.symbol(camera.kind.symbolName, pointSize: 30,
+            image: CarPlayGuidance.symbol(symbolName, pointSize: 30,
                                           onDark: model.carIsDark ?? !model.isDaylight),
             primaryAction: CPAlertAction(title: String(localized: "Да"), style: .default) { [weak self] _ in
-                self?.env.mobile.answerConfirm(stillThere: true, for: id)
+                self?.env.mobile.answerPassQuestion(stillThere: true, for: id)
             },
             secondaryAction: CPAlertAction(title: String(localized: "Нет"), style: .destructive) { [weak self] _ in
-                self?.env.mobile.answerConfirm(stillThere: false, for: id)
+                self?.env.mobile.answerPassQuestion(stillThere: false, for: id)
             },
             duration: AppConfig.carPlayQuestionSeconds)
         // Прежний вопрос заменит новый сам (show). Занято важнее (камера,
@@ -82,7 +94,11 @@ extension CarPlaySceneDelegate {
         }
         confirmBanner = alert
         confirmBannerID = id
-        Log.carplay.notice("вопрос «ещё на месте?»: баннер")
+        if case .road = question {
+            Log.carplay.notice("вопрос «ещё перекрыто?»: баннер")
+        } else {
+            Log.carplay.notice("вопрос «ещё на месте?»: баннер")
+        }
     }
 
     /// Можно ли спросить сейчас. Баннер живёт на шаблоне карты: под «Куда»
@@ -111,7 +127,7 @@ extension CarPlaySceneDelegate {
             while !Task.isCancelled {
                 await Task.pause(seconds: AppConfig.carPlayQuestionPollSeconds)
                 guard let self, self.session == session else { return }
-                guard self.env.mobile.pendingConfirm != nil, self.confirmBanner == nil else {
+                guard self.env.mobile.passQuestion != nil, self.confirmBanner == nil else {
                     self.confirmWatch = nil
                     return
                 }

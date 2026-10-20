@@ -379,7 +379,7 @@ final class AppEnvironment {
             // Без withAnimation: транзакция анимации на КАЖДОМ фиксе, в том
             // числе в фоне, ради смены вопроса раз в поездку. Появление
             // вопроса анимирует сам гейт (MobileConfirmGate).
-            mobile?.trackPasses(from: coordinate)
+            mobile?.trackPasses(from: coordinate, course: location?.currentCourse ?? -1)
             if let self, !self.themeHadPosition {
                 self.themeHadPosition = true
                 self.refreshInterfaceAppearance()

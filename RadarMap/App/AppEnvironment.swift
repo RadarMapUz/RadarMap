@@ -264,7 +264,6 @@ final class AppEnvironment {
             return await self.remoteRadarReport()?.pointExists
         }
         self.location.motion = motion     // «стоим» — сигнал не потерян
-        self.location.thermal = thermal   // буст GPS приборки — только пока холодно
 
         // Пульт раздаём тем, кого он имеет право глушить. Список намеренно
         // короткий: всё это зависит от нашего сервера, а оповещения о камерах
@@ -369,7 +368,8 @@ final class AppEnvironment {
                location.isTripActive || location.isProbablyDriving || self.isCarPlayConnected {
                 self.roads.ensureCoverage(around: coordinate)
             }
-            traffic?.note(coordinate, speedKmh: location?.speedKmh ?? -1)
+            traffic?.note(coordinate, speedKmh: location?.speedKmh ?? -1,
+                          simulated: location?.isFixSimulated ?? false)
             if let self, let location, location.isTripActive {
                 if self.commuteGhostPending { self.tryStartCommuteGhost() }
                 if self.commuteLive.isRunning {

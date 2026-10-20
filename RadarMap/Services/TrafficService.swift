@@ -75,7 +75,28 @@ final class TrafficService {
         self.settings = settings
     }
 
-    private var contributes: Bool { settings.trafficContribution && allowedByConfig() }
+    private var contributes: Bool {
+        Self.contributes(setting: settings.trafficContribution, config: allowedByConfig(),
+                         simulatedFix: false, simulatorBuild: Self.isSimulatorBuild)
+    }
+
+    /// Отдаём ли куски пробок. Подменённая координата — никогда: тестовая
+    /// поездка из симулятора (60 км/ч по прямой сквозь кварталы) уходила на
+    /// боевой сервер и могла стать «свободным» или «пробкой» на чужом
+    /// маршруте (G1, 20.10). Сборка для симулятора не отдаёт вовсе — даже
+    /// если система не пометила координату.
+    nonisolated static func contributes(setting: Bool, config: Bool,
+                                        simulatedFix: Bool, simulatorBuild: Bool) -> Bool {
+        setting && config && !simulatedFix && !simulatorBuild
+    }
+
+    nonisolated static var isSimulatorBuild: Bool {
+        #if targetEnvironment(simulator)
+        return true
+        #else
+        return false
+        #endif
+    }
     var isShown: Bool { settings.trafficShown && allowedByConfig() }
 
     // MARK: - Поездка (отправка)
@@ -93,10 +114,11 @@ final class TrafficService {
     }
 
     /// Принятый фикс поездки (из LocationService.onAcceptedFix).
-    func note(_ coordinate: CLLocationCoordinate2D, speedKmh: Double) {
+    func note(_ coordinate: CLLocationCoordinate2D, speedKmh: Double, simulated: Bool = false) {
         guard probes.isActive else { return }
-        guard contributes else {
-            // Выключили на ходу — ничего собранного не отправляем.
+        guard contributes, !simulated else {
+            // Выключили на ходу или координата подменена — ничего
+            // собранного не отправляем.
             probes.finish()
             _ = probes.takeReady()
             queue = []

@@ -73,6 +73,9 @@ final class ScenarioDriveTests: XCTestCase {
         /// Записанные проезды: камера → скорость, км/ч.
         private(set) var passes: [Int: Double] = [:]
         private var progress: Double?
+        /// Фикс без скорости — держим прошлую, как сервис (нулём считать
+        /// нельзя: «стоим» выключил бы гейты посреди езды).
+        private var speedKmh = 0.0
         /// Съехали с линии дальше rerouteDeviationMeters (как RouteService.isOffRoute).
         private var offRoute = false
 
@@ -95,7 +98,7 @@ final class ScenarioDriveTests: XCTestCase {
                     continue
                 }
                 let here = CLLocationCoordinate2D(latitude: good.lat, longitude: good.lon)
-                let speedKmh = max(0, good.speed ?? 0) * 3.6
+                if let speed = good.speed { speedKmh = max(0, speed) * 3.6 }
                 let situation = LocationGates.Situation(coordinate: here, course: good.course,
                                                         speedKmh: speedKmh,
                                                         horizontalAccuracy: good.accuracy, context: context)
@@ -548,6 +551,56 @@ final class ScenarioDriveTests: XCTestCase {
         XCTAssertEqual(afterGap, 51, accuracy: 1.5, "после тоннеля — сразу живая цифра")
         let braked = smoother.update(rawKmh: 20, at: t0.addingTimeInterval(56))
         XCTAssertLessThan(braked, 30, "настоящее торможение — сразу, без хвоста")
+    }
+
+    // MARK: - A4: плохая точность
+
+    /// Каньон: после 300 м нормального GPS — фиксы точностью 60 м без курса
+    /// и скорости системы, с дрожанием ±35 м вбок (12в A4). Гарантировано:
+    /// своя камера звучит, проезда мимо камеры соседней улицы нет.
+    ///
+    /// НЕ гарантировано и вынесено владельцу (план 12в, «Ждёт владельца»):
+    /// курс по земле между такими точками иногда не считается (сдвиг меньше
+    /// 12 м), курс на тик «неизвестен», гейты выключаются — и по правилу
+    /// «неизвестно — предупреждать» звучит камера соседней улицы, даже в
+    /// 300 м. Заглушить такой тик — риск задержать настоящую камеру.
+    private func noisyFixes(lateralNoise: Double, accuracy: Double) -> [LocationFilter.Fix] {
+        let clean = fixes(from: (0, 0), legs: [Leg(x: 2000, y: 0, speed: 12)])
+        // Первые 300 м — нормальный GPS (скорость и курс есть), дальше каньон.
+        let goodPrefix = 25
+        var seed: UInt64 = 0x2545F4914F6CDD1D
+        func next() -> Double {   // xorshift — воспроизводимо
+            seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17
+            return Double(seed % 10_000) / 10_000 * 2 - 1
+        }
+        return clean.enumerated().map { index, fix in
+            guard index >= goodPrefix else { return fix }
+            let p = xy(fix.lat, fix.lon)
+            let q = point(p.x + next() * lateralNoise * 0.3, p.y + next() * lateralNoise)
+            return LocationFilter.Fix(lat: q.lat, lon: q.lon, horizontalAccuracy: accuracy,
+                                      speed: -1, speedAccuracy: -1, course: -1, courseAccuracy: -1,
+                                      timestamp: fix.timestamp)
+        }
+    }
+
+    func testWiFiQualityFixesKeepTheOwnCameraAndRecordNoFalsePass() {
+        var drive = Drive()
+        drive.run(noisyFixes(lateralNoise: 35, accuracy: 60),
+                  cameras: [snappedCamera(1, x: 1000, y: 300, axis: 90), snappedCamera(2, x: 1600, y: 0, axis: 90)],
+                  xy: xy)
+        drive.finish()
+        XCTAssertEqual(drive.firstAlerts[2], 1, "своя камера звучит и при плохом GPS")
+        XCTAssertNil(drive.passes[1], "проезда мимо камеры соседней улицы нет")
+        XCTAssertNotNil(drive.passes[2], "проезд своей записан")
+    }
+
+    /// Хуже 65 м — фикс в оповещения не идёт вовсе.
+    func testWorseThanTheLimitIsRejected() {
+        var drive = Drive()
+        drive.run(noisyFixes(lateralNoise: 35, accuracy: AppConfig.maxHorizontalAccuracyMeters + 5),
+                  cameras: [snappedCamera(2, x: 1600, y: 0, axis: 90)], xy: xy)
+        XCTAssertGreaterThan(drive.rejected, 100)
+        XCTAssertNil(drive.firstAlerts[2])
     }
 
     // MARK: - A4: выброс

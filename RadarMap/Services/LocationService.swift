@@ -67,6 +67,10 @@ final class LocationService: NSObject {
     /// О каких точках уже сказали в этой поездке. Живёт только в памяти:
     /// повторяться нельзя внутри поездки, а завтра то же место — снова новость.
     @ObservationIgnored var voicedHotspots: Set<Int64> = []
+    /// Перекрытия и ремонт (12б.5): ставит AppEnvironment (MobileCameraService).
+    /// Голос — один раз за поездку на событие (`voicedRoadEvents`).
+    @ObservationIgnored var roadEvents: (() -> [RoadEvent])?
+    @ObservationIgnored var voicedRoadEvents: Set<Int> = []
     /// CoreMotion: «телефон стоит» — сторож сигнала не объявляет потерю.
     @ObservationIgnored weak var motion: MotionService?
 

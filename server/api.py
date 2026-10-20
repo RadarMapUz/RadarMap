@@ -7,9 +7,10 @@ Stdlib-only (sqlite3 + http.server): без pip-зависимостей на о
 Endpoints:
   GET  /api/health         -> {"ok": true}
   GET  /api/mobile         -> {"reports": [{id, lat, lon, created, expires, up, down,
-                                            type, confirmed}]}
-  POST /api/report         {lat, lon, device, type}  -> {"id": N, "merged": bool
-                                                         [, "amended": true]}
+                                            type, confirmed}]}   (без перекрытий и ремонта)
+  GET  /api/road           -> {"reports": [... то же + course]}  (только closure/roadwork)
+  POST /api/report         {lat, lon, device, type [, course]}  -> {"id": N, "merged": bool
+                                                                    [, "amended": true]}
   POST /api/vote           {id, device, value: 1|-1 [, kind: "pass"]} -> {"ok": true}
   POST /api/metrics        {device, kind, payload}   -> {"ok": true}   (MetricKit)
   POST /api/camera_report  {camera_id, reason, lat, lon, db_version, device} -> {"ok": true}
@@ -70,13 +71,29 @@ EXTEND = 30 * 60
 MAX_LIFE = 6 * 3600
 # ПОЛНЫЙ срок жизни по типам — его отметка получает только после независимого
 # подтверждения. Пост стоит долго, ДТП рассасывается за час.
-REPORT_TTLS = {"radar": TTL, "tripod": TTL, "post": 6 * 3600, "accident": 3600}
+REPORT_TTLS = {"radar": TTL, "tripod": TTL, "post": 6 * 3600, "accident": 3600,
+               "closure": 12 * 3600, "roadwork": 7 * 86400}
+# Перекрытие и ремонт (12б.5) — события дороги, а не камеры. Живут в своём
+# списке GET /api/road: старые сборки читают незнакомый тип в /api/mobile как
+# «радар» и предупреждали бы о ремонте как о передвижном радаре. Отдельный
+# список им не виден вовсе. Свой и кап активных отметок устройства: ремонт
+# живёт неделю, и три отмеченных ремонта не должны запирать «Радар!».
+ROAD_TYPES = ("closure", "roadwork")
+# Свои капы активных точек у событий дороги: ремонт живёт до недели, и при
+# общих капах дюжина ремонтов за одним адресом оператора (CGNAT) запирала
+# бы «Радар!» всем за ним, а сорок адресов — всей стране.
+MAX_ACTIVE_ROAD = 300
+MAX_ACTIVE_ROAD_PER_IP = 6
+
+
+def is_road(rtype):
+    return rtype in ROAD_TYPES
 # Испытательный срок новой отметки. Ставить фейки должно быть бессмысленно:
 # точка, которую не подтвердил ни один независимый водитель, умирает сама —
 # ни модерации, ни кворума не нужно. Цена: одинокая честная тренога на пустой
 # дороге живёт 75 мин вместо трёх часов — но там её и видят единицы.
 PROBATION_TTLS = {"radar": 75 * 60, "tripod": 75 * 60, "post": 2 * 3600,
-                  "accident": 3600}
+                  "accident": 3600, "closure": 3 * 3600, "roadwork": 24 * 3600}
 
 # --- Испытательный срок и холодный старт --------------------------------------
 #
@@ -269,7 +286,8 @@ def init_db():
 
     # --- миграции живой БД (порядок: только после CREATE всех таблиц) ---
     migrate(conn, "votes", "ts REAL DEFAULT 0")               # суточный лимит голосов
-    migrate(conn, "reports", "type TEXT DEFAULT 'radar'")     # radar/tripod/post/accident
+    migrate(conn, "reports", "type TEXT DEFAULT 'radar'")     # radar/tripod/post/accident/closure/roadwork
+    migrate(conn, "reports", "course REAL DEFAULT -1")       # курс отметившего (перекрытие одной стороны)
     migrate(conn, "feedback", "status TEXT DEFAULT 'new'")    # new/open/answered (админка)
     migrate(conn, "feedback", "note TEXT DEFAULT ''")         # заметка модератора
     # IP голосов, отметок и репортов о камерах. Все device-лимиты обходятся
@@ -506,6 +524,7 @@ _last_cleanup = 0.0
 # отзыв) обнуляет его сразу, а не через секунду.
 _mobile_lock = threading.Lock()
 _mobile_cache = None          # (version, built_at, etag, body)
+_road_cache = None            # то же для GET /api/road
 _mobile_version = 0
 MOBILE_MEMO_SECONDS = 1.0
 
@@ -569,15 +588,26 @@ def merge_radius(cls):
     return MERGE_METERS_BY_CLASS.get(cls or "", MERGE_METERS)
 
 
+def road_new_ttl(conn, rtype, now):
+    """Срок новой (или переведённой через границу) точки. Событиям дороги —
+    всегда испытательный: без независимого подтверждения неделя ремонта от
+    одного тапа на холодном старте висела бы неделю, а снять её водителю нечем."""
+    if is_road(rtype) or probation_active(conn, now):
+        return PROBATION_TTLS[rtype]
+    return REPORT_TTLS[rtype]
+
+
 def lifecycle_expires(created, expires, rtype, confirmed, now):
     """Новый expires после лайка. Неподтверждённой точке лайк жизнь НЕ
     продлевает (испытательный срок идёт), подтверждённой — полный срок её типа
     плюс 30 мин за голос, но не дальше MAX_LIFE от создания."""
     if not confirmed:
         return expires
-    new_exp = max(max(expires, now) + EXTEND,
-                  created + REPORT_TTLS.get(rtype, TTL))
-    return min(created + MAX_LIFE, new_exp)
+    full = REPORT_TTLS.get(rtype, TTL)
+    new_exp = max(max(expires, now) + EXTEND, created + full)
+    # Потолок — не меньше полного срока типа: ремонт живёт неделю, и шесть
+    # часов MAX_LIFE обрезали бы его до испытательного дня.
+    return min(created + max(MAX_LIFE, full), new_exp)
 
 # --- Поделиться прибытием -------------------------------------------------
 #
@@ -755,63 +785,81 @@ class Handler(BaseHTTPRequestHandler):
             return None
 
     def do_GET(self):
-        global _last_cleanup, _mobile_cache
         path = self.path.split("?", 1)[0].rstrip("/")   # /api/mobile/?x — тот же эндпоинт
         if path.startswith("/api/eta/"):
             return self._eta_page(path[len("/api/eta/"):])
         if path == "/api/health":
             return self._json(200, {"ok": True})
         if path == "/api/mobile":
-            now = time.time()
-            # Свежее мемо той же версии — отдаём, не трогая базу вовсе.
-            with _mobile_lock:
-                cached = _mobile_cache
-                version = _mobile_version
-            if (cached and cached[0] == version
-                    and now - cached[1] < MOBILE_MEMO_SECONDS):
-                return self._json_cached(cached[3], cached[2])
-            conn = db()
-            try:
-                # Чистку не гоняем на каждый GET: это два DELETE и commit в
-                # файле, куда параллельно пишет /api/report, — при 10 r/s с IP
-                # чтение превращалось в постоянную запись. Раз в минуту хватает.
-                with _cleanup_lock:
-                    due = now - _last_cleanup >= 60
-                    if due:
-                        _last_cleanup = now
-                if due:
-                    conn.execute("DELETE FROM reports WHERE expires < ?", (now - 86400,))
-                    # голоса удалённых отметок — сироты, без чистки таблица растёт вечно
-                    conn.execute("DELETE FROM votes WHERE report_id NOT IN (SELECT id FROM reports)")
-                    conn.commit()
-                    bump_mobile_version()
-                # confirmed — по разным устройству И адресу (см.
-                # confirmed_independently): клиент рисует неподтверждённые
-                # полупрозрачными и говорит «возможно, радар», а не «радар».
-                rows = conn.execute(
-                    "SELECT r.id, r.lat, r.lon, r.created, r.expires, r.up, r.down, r.type, "
-                    "EXISTS(SELECT 1 FROM votes v WHERE v.report_id = r.id AND v.value = 1 "
-                    "AND v.device != r.device AND v.ip != '' AND v.ip != r.ip) "
-                    "FROM reports r WHERE r.active = 1 AND r.expires > ?", (now,)).fetchall()
-            finally:
-                conn.close()
-            body = json.dumps({"reports": [
-                {"id": r[0], "lat": r[1], "lon": r[2], "created": r[3],
-                 "expires": r[4], "up": r[5], "down": r[6], "type": r[7],
-                 "confirmed": bool(r[8])} for r in rows]}).encode()
-            # Отпечаток — по СОДЕРЖИМОМУ, а не по времени сборки: пока список
-            # не меняется, ETag тот же, и телефон получает 304 хоть каждую
-            # секунду. По времени он менялся бы на каждой пересборке, и весь
-            # смысл 304 пропал бы.
-            etag = '"%s"' % hashlib.sha1(body).hexdigest()[:32]
-            with _mobile_lock:
-                # Версию перечитываем: пока шёл SELECT, кто-то мог записать
-                # отметку. Тогда наше тело уже старое — отдаём его этому
-                # клиенту, но в мемо не кладём.
-                if _mobile_version == version:
-                    _mobile_cache = (version, now, etag, body)
-            return self._json_cached(body, etag)
+            return self._reports_list(road=False)
+        if path == "/api/road":
+            return self._reports_list(road=True)
         self._json(404, {"error": "not found"})
+
+    def _reports_list(self, road):
+        """Список живых отметок: /api/mobile — камеры и посты, /api/road —
+        перекрытия и ремонт (с курсом отметившего). Мемо и ETag — у каждого
+        списка свои, версия записей — общая."""
+        global _last_cleanup, _mobile_cache, _road_cache
+        now = time.time()
+        # Свежее мемо той же версии — отдаём, не трогая базу вовсе.
+        with _mobile_lock:
+            cached = _road_cache if road else _mobile_cache
+            version = _mobile_version
+        if (cached and cached[0] == version
+                and now - cached[1] < MOBILE_MEMO_SECONDS):
+            return self._json_cached(cached[3], cached[2])
+        conn = db()
+        try:
+            # Чистку не гоняем на каждый GET: это два DELETE и commit в
+            # файле, куда параллельно пишет /api/report, — при 10 r/s с IP
+            # чтение превращалось в постоянную запись. Раз в минуту хватает.
+            with _cleanup_lock:
+                due = now - _last_cleanup >= 60
+                if due:
+                    _last_cleanup = now
+            if due:
+                conn.execute("DELETE FROM reports WHERE expires < ?", (now - 86400,))
+                # голоса удалённых отметок — сироты, без чистки таблица растёт вечно
+                conn.execute("DELETE FROM votes WHERE report_id NOT IN (SELECT id FROM reports)")
+                conn.commit()
+                bump_mobile_version()
+            # confirmed — по разным устройству И адресу (см.
+            # confirmed_independently): клиент рисует неподтверждённые
+            # полупрозрачными и говорит «возможно, радар», а не «радар».
+            rows = conn.execute(
+                "SELECT r.id, r.lat, r.lon, r.created, r.expires, r.up, r.down, r.type, "
+                "EXISTS(SELECT 1 FROM votes v WHERE v.report_id = r.id AND v.value = 1 "
+                "AND v.device != r.device AND v.ip != '' AND v.ip != r.ip), r.course "
+                "FROM reports r WHERE r.active = 1 AND r.expires > ? "
+                "AND (r.type IN (?, ?)) = ?",
+                (now, ROAD_TYPES[0], ROAD_TYPES[1], 1 if road else 0)).fetchall()
+        finally:
+            conn.close()
+        items = []
+        for r in rows:
+            item = {"id": r[0], "lat": r[1], "lon": r[2], "created": r[3],
+                    "expires": r[4], "up": r[5], "down": r[6], "type": r[7],
+                    "confirmed": bool(r[8])}
+            if road:
+                item["course"] = r[9] if r[9] is not None else -1
+            items.append(item)
+        body = json.dumps({"reports": items}).encode()
+        # Отпечаток — по СОДЕРЖИМОМУ, а не по времени сборки: пока список
+        # не меняется, ETag тот же, и телефон получает 304 хоть каждую
+        # секунду. По времени он менялся бы на каждой пересборке, и весь
+        # смысл 304 пропал бы.
+        etag = '"%s"' % hashlib.sha1(body).hexdigest()[:32]
+        with _mobile_lock:
+            # Версию перечитываем: пока шёл SELECT, кто-то мог записать
+            # отметку. Тогда наше тело уже старое — отдаём его этому
+            # клиенту, но в мемо не кладём.
+            if _mobile_version == version:
+                if road:
+                    _road_cache = (version, now, etag, body)
+                else:
+                    _mobile_cache = (version, now, etag, body)
+        return self._json_cached(body, etag)
 
     def do_POST(self):
         path = self.path.split("?", 1)[0].rstrip("/")
@@ -1145,12 +1193,20 @@ class Handler(BaseHTTPRequestHandler):
             device = as_str(data["device"])[:64]
             rtype = as_str(data.get("type"), default="radar")
             cls = as_str(data.get("cls"), default="")[:24]
+            course = float(data.get("course", -1))
         except (KeyError, TypeError, ValueError):
             return self._json(400, {"error": "bad fields"})
         if not (UZ_LAT[0] <= lat <= UZ_LAT[1] and UZ_LON[0] <= lon <= UZ_LON[1]) or not device:
             return self._json(400, {"error": "out of bounds"})
         if rtype not in REPORT_TTLS:
             return self._json(400, {"error": "bad type"})
+        # Курс отметившего — сторона дороги для перекрытия; мусор — «неизвестно».
+        if not (0 <= course < 360) or math.isnan(course):
+            course = -1.0
+        try:
+            amend_id = int(data.get("amend_id") or 0)
+        except (TypeError, ValueError):
+            amend_id = 0
         ip = self._ip()
         if ip_quota_exceeded("report", ip, IP_DAILY_CAPS["report"]):
             return self._json(429, {"error": "too many"})
@@ -1163,26 +1219,56 @@ class Handler(BaseHTTPRequestHandler):
             # типом рождал ВТОРУЮ точку рядом. Проверка стоит ДО лимитов:
             # amend не создаёт новых точек, и глушить его капом «минимум 120 с
             # между отметками» значило бы сломать само уточнение.
+            #
+            # Граница камера/дорога (12б.5): неявное уточнение — только внутри
+            # своей категории. Иначе «Ремонт», поставленный рукой в 300 м от
+            # своего свежего «Радар!», переписывал ЖИВОЙ радар в ремонт — и
+            # радар пропадал у всех, старых сборок тоже. Через границу — только
+            # явно: «Что это было? → Перекрыто» присылает amend_id той точки.
             own = conn.execute(
-                "SELECT id, lat, lon, type FROM reports "
+                "SELECT id, lat, lon, type, created FROM reports "
                 "WHERE device = ? AND active = 1 AND expires > ? AND created > ?",
                 (device, now, now - AMEND_WINDOW)).fetchall()
             for r in own:
-                if r[3] != rtype and haversine(lat, lon, r[1], r[2]) <= AMEND_METERS:
+                if r[3] == rtype or haversine(lat, lon, r[1], r[2]) > AMEND_METERS:
+                    continue
+                crossing = is_road(r[3]) != is_road(rtype)
+                if crossing and r[0] != amend_id:
+                    continue
+                if crossing:
+                    # Кап своих активных точек — категории, куда переводим:
+                    # иначе «три радара → в ремонт → ещё три радара» обходил его.
+                    target = conn.execute(
+                        "SELECT COUNT(*) FROM reports WHERE device = ? AND active = 1 "
+                        "AND expires > ? AND (type IN (?, ?)) = ?",
+                        (device, now, ROAD_TYPES[0], ROAD_TYPES[1],
+                         1 if is_road(rtype) else 0)).fetchone()[0]
+                    if target >= 3:
+                        return self._json(429, {"error": "too many active reports"})
+                    # Через границу срок — по НОВОМУ типу, от создания: иначе
+                    # перекрытие жило бы сроком радара (75 мин вместо 3 ч), а
+                    # радар из перекрытия — сроком перекрытия. Как у новой
+                    # точки — испытательный, без подтверждения не продлевается.
+                    ttl = road_new_ttl(conn, rtype, now)
+                    conn.execute("UPDATE reports SET type = ?, expires = ? WHERE id = ?",
+                                 (rtype, max(now + 60, r[4] + ttl), r[0]))
+                else:
                     # Срок не трогаем: уточнение типа — не подтверждение, иначе
                     # amend был бы бесплатным продлением собственной отметки.
                     conn.execute("UPDATE reports SET type = ? WHERE id = ?",
                                  (rtype, r[0]))
-                    conn.commit()
-                    bump_mobile_version()
-                    # merged=True — для старых клиентов, знающих только это поле.
-                    return self._json(200, {"id": r[0], "merged": True,
-                                            "amended": True})
+                conn.commit()
+                bump_mobile_version()
+                # merged=True — для старых клиентов, знающих только это поле.
+                return self._json(200, {"id": r[0], "merged": True,
+                                        "amended": True})
 
             # rate limits per device
+            road = rtype in ROAD_TYPES
             recent = conn.execute(
-                "SELECT COUNT(*), MAX(created) FROM reports WHERE device = ? AND active = 1 AND expires > ?",
-                (device, now)).fetchone()
+                "SELECT COUNT(*), MAX(created) FROM reports WHERE device = ? AND active = 1 "
+                "AND expires > ? AND (type IN (?, ?)) = ?",
+                (device, now, ROAD_TYPES[0], ROAD_TYPES[1], 1 if road else 0)).fetchone()
             if recent[0] >= 3:
                 return self._json(429, {"error": "too many active reports"})
             if recent[1] and now - recent[1] < 120:
@@ -1221,16 +1307,19 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json(200, {"id": r[0], "merged": True})
 
             # Глобальный кап: ротация device не должна ни заваливать карту
-            # фейками, ни раздувать O(N)-скан дедупликации выше.
-            if len(active_rows) >= MAX_ACTIVE_REPORTS:
+            # фейками, ни раздувать O(N)-скан дедупликации выше. По категории:
+            # недельный ремонт не съедает место радаров.
+            same_category = [r for r in active_rows if is_road(r[5]) == road]
+            if len(same_category) >= (MAX_ACTIVE_ROAD if road else MAX_ACTIVE_REPORTS):
                 return self._json(429, {"error": "too many active"})
             # Пер-IP кап активных точек: суточный кап не мешал одному адресу
             # держать на карте десяток живых фейков одновременно.
             if ip:
                 mine = conn.execute(
-                    "SELECT COUNT(*) FROM reports WHERE ip = ? AND active = 1 AND expires > ?",
-                    (ip, now)).fetchone()[0]
-                if mine >= MAX_ACTIVE_PER_IP:
+                    "SELECT COUNT(*) FROM reports WHERE ip = ? AND active = 1 AND expires > ? "
+                    "AND (type IN (?, ?)) = ?",
+                    (ip, now, ROAD_TYPES[0], ROAD_TYPES[1], 1 if road else 0)).fetchone()[0]
+                if mine >= (MAX_ACTIVE_ROAD_PER_IP if road else MAX_ACTIVE_PER_IP):
                     return self._json(429, {"error": "too many active"})
             # Теневой бан: строка ложится в базу мёртвой. Ответ обычный —
             # заблокированный не должен узнать, что он заблокирован, иначе
@@ -1240,17 +1329,16 @@ class Handler(BaseHTTPRequestHandler):
             # независимого подтверждения (см. lifecycle_expires).
             # Срок жизни новой точки: испытательный, только пока в стране
             # есть кому подтверждать (см. probation_active).
-            ttl = PROBATION_TTLS[rtype] if probation_active(conn, now) \
-                else REPORT_TTLS[rtype]
+            ttl = road_new_ttl(conn, rtype, now)
             # Отметка из очереди телефона (не было связи): срок — от момента,
             # когда её поставили, а не от приёма — иначе тренога, отмеченная
             # сорок минут назад, жила бы полный срок с этой минуты (S25).
             observed = now - report_age(data)
             cur = conn.execute(
                 "INSERT INTO reports(lat, lon, created, expires, device, type, ip, cls, "
-                "active, closed) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                "active, closed, course) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                 (lat, lon, now, max(now + 60, observed + ttl), device, rtype, ip, cls,
-                 0 if blocked else 1, "blocked" if blocked else ""))
+                 0 if blocked else 1, "blocked" if blocked else "", course))
             conn.commit()
             bump_mobile_version()
             return self._json(200, {"id": cur.lastrowid, "merged": False})

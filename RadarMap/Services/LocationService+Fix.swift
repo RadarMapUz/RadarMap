@@ -324,6 +324,9 @@ extension LocationService {
             // Память о треногах — строго ПОСЛЕ speedLimits.update: подсказка
             // звучит только при превышении, а знает о нём именно он.
             announceHotspotIfNeeded(from: coordinate)
+            // Перекрытие и ремонт впереди — спокойно, раз за поездку, и
+            // только когда о камере сказать нечего: камера — выше.
+            if !willSpeakAboutCameraAhead { announceRoadEventIfNeeded(from: coordinate) }
             // Прижим КАРТИНКИ к оси дороги — тем же RoadHit, что нашёл лимит,
             // без второго запроса. Строго после speedLimits.update и строго
             // только для отображения (см. RoadSnapper): гейты выше уже

@@ -150,6 +150,9 @@ nonisolated struct PendingReport: Codable, Equatable {
     let lon: Double
     let cls: String
     let at: Date
+    /// Курс отметившего (0…360): по нему перекрытие одной стороны не мешает
+    /// встречной (12б.5). nil — неизвестен; старые записи очереди без поля.
+    var course: Double? = nil
 }
 
 /// Политика очереди — чистая, вся в тестах: сервису остаётся только сеть.

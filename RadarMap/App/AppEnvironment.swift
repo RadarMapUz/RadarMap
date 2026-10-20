@@ -395,6 +395,8 @@ final class AppEnvironment {
                 alerts?.speak(jam.spoken)
             }
         }
+        route.roadEvents = { [weak mobile] in mobile?.roadEvents ?? [] }
+        location.roadEvents = { [weak mobile] in mobile?.roadEvents ?? [] }
         route.trafficSnapshot = { [weak traffic] in
             guard let traffic, traffic.isShown, let snapshot = traffic.snapshot,
                   snapshot.isFresh(now: Date()) else { return nil }

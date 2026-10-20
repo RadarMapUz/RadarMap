@@ -130,6 +130,8 @@ struct EngineMapView: UIViewRepresentable {
     /// Флаг цели маршрута и точка долгого тапа (бар действий открыт).
     var destination: CLLocationCoordinate2D?
     var pressedPoint: CLLocationCoordinate2D?
+    /// Перекрытия и ремонт (12б.5): точка и вид — «radar-closure»/«radar-roadwork».
+    var roadEvents: [RoadEvent] = []
     /// «Где машина» (ParkedCar): метка машины, пока подсказка показана.
     var parkedCar: CLLocationCoordinate2D?
     /// Зоны «здесь часто ставят треногу»: пустые — слоя нет.
@@ -539,6 +541,23 @@ struct EngineMapView: UIViewRepresentable {
                     .draw(in: CGRect(x: 2, y: 2, width: 28, height: 28))
             }
             style.setImage(pin, forName: "radar-pin")
+            // Перекрытие и ремонт: диск своего цвета с белым знаком и белым
+            // кольцом — как маркер, но не красный (красный — камера).
+            for (name, symbol, hex) in [("radar-closure", "nosign", UInt32(0xC2410C)),
+                                        ("radar-roadwork", "cone.fill", UInt32(0x9C5300))] {
+                let image = UIGraphicsImageRenderer(size: CGSize(width: 30, height: 30)).image { _ in
+                    UIColor.white.setFill()
+                    UIBezierPath(ovalIn: CGRect(x: 1, y: 1, width: 28, height: 28)).fill()
+                    Theme.rgb(hex).setFill()
+                    UIBezierPath(ovalIn: CGRect(x: 3, y: 3, width: 24, height: 24)).fill()
+                    if let glyph = UIImage(systemName: symbol,
+                                           withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .bold))?
+                        .withTintColor(.white, renderingMode: .alwaysOriginal) {
+                        glyph.draw(at: CGPoint(x: 15 - glyph.size.width / 2, y: 15 - glyph.size.height / 2))
+                    }
+                }
+                style.setImage(image, forName: name)
+            }
             // Машина — синий диск с белой машиной и белым кольцом, как флаг
             // цели: «P» спутали бы с парковками карты (их значок — тоже «P»).
             let parked = UIGraphicsImageRenderer(size: CGSize(width: 34, height: 34)).image { _ in
@@ -555,7 +574,7 @@ struct EngineMapView: UIViewRepresentable {
             style.setImage(parked, forName: "radar-parked")
             for place in EnginePlaceIcons.all { style.setImage(place.image, forName: place.name) }
             let names = ["radar-signal", EngineModernStyle.trafficLightImage, "radar-stop", "radar-flag",
-                         "radar-pin", "radar-parked", CameraMarkerLook.ghostBadge, CameraMarkerLook.ownBadge]
+                         "radar-pin", "radar-parked", "radar-closure", "radar-roadwork", CameraMarkerLook.ghostBadge, CameraMarkerLook.ownBadge]
                 + EnginePlaceIcons.all.map(\.name)
                 + kinds.flatMap { kind in Self.markerLooks.map { kind.symbolName + $0.suffix } }
             for name in names { Self.iconCache[name] = style.image(forName: name) }
@@ -584,6 +603,12 @@ struct EngineMapView: UIViewRepresentable {
             hiddenLayers = nil
             modernDrivingLayerIDs = nil
             lastTrafficRevision = -1
+            // Источники нового стиля пусты: флаг цели, машина, треноги и
+            // события дороги — заново (до этого после смены дня и ночи они
+            // пропадали, пока что-то в них не менялось).
+            lastMarksKey = []
+            lastHotspotsKey = -1
+            lastRoadEventsKey = -1
             lastPosition = nil
             cameraRegion = nil
             style.layer(withIdentifier: "houses")?.isVisible = current?.houses ?? false
@@ -1133,6 +1158,30 @@ struct EngineMapView: UIViewRepresentable {
         /// Флаг цели, точка долгого тапа, зоны треног — только на изменение:
         /// запись в источник будит перерисовку слоя.
         private var lastMarksKey: [Double] = []
+        private var lastRoadEventsKey: Int = -1
+
+        /// Перекрытия и ремонт — свой источник под камерами (12б.5). Ключ —
+        /// id, вид и подтверждение: уточнение «перекрыто → ремонт» не меняет
+        /// id, и по одному id значок оставался бы прежним.
+        private func updateRoadEvents(_ events: [RoadEvent], in view: MLNMapView) {
+            var hasher = Hasher()
+            for event in events {
+                hasher.combine(event.id)
+                hasher.combine(event.kind.rawValue)
+                hasher.combine(event.confirmed)
+            }
+            let key = hasher.finalize()
+            guard key != lastRoadEventsKey,
+                  let source = view.style?.source(withIdentifier: "road-events") as? MLNShapeSource else { return }
+            lastRoadEventsKey = key
+            source.shape = MLNShapeCollectionFeature(shapes: events.map { event in
+                let mark = MLNPointFeature()
+                mark.coordinate = event.coordinate
+                mark.attributes = ["icon": event.kind == .closure ? "radar-closure" : "radar-roadwork",
+                                   "confirmed": event.confirmed]
+                return mark
+            })
+        }
         private var lastHotspotsKey: Int = -1
         private var lastCenterCommand = 0
 
@@ -1158,6 +1207,7 @@ struct EngineMapView: UIViewRepresentable {
                 (view.style?.source(withIdentifier: "marks") as? MLNShapeSource)?.shape =
                     MLNShapeCollectionFeature(shapes: points)
             }
+            updateRoadEvents(model.roadEvents, in: view)
             var hasher = Hasher()
             for spot in model.hotspots { hasher.combine(spot.latitude); hasher.combine(spot.longitude) }
             let hotspotsKey = hasher.finalize()

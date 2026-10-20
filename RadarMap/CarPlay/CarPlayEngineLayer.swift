@@ -149,6 +149,9 @@ struct CarPlayEngineLayer: View {
                                           bottom: safe.bottom + 30,
                                           right: model.mapButtonInsets.trailing + 30),
             panTotal: model.panTotal,
+            // Перекрытия и ремонт (12б.5) — в машине тоже: о ремонте говорит
+            // голос, и значок должен стоять там, где о нём сказали.
+            roadEvents: env.mobile.roadEvents,
             onHeading: { model.mapDirection = $0 },
             onBrowse: { model.mapStartedBrowsing() })
     }

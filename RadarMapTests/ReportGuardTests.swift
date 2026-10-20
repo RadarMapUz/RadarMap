@@ -32,7 +32,8 @@ final class ReportGuardTests: XCTestCase {
     /// пост было нечем: «радар» его не заменяет — у поста и время жизни
     /// другое, шесть часов против трёх.
     func testEveryKindTheServerKnowsCanBeTapped() {
-        XCTAssertEqual(Set(ReportKind.offered), Set(ReportKind.allCases),
+        // Перекрытие и ремонт (12б.5) — вторым рядом, когда сервер их знает.
+        XCTAssertEqual(Set(ReportKind.offered + ReportKind.roadOffered), Set(ReportKind.allCases),
                        "тип есть на сервере, а нажать его негде")
     }
 

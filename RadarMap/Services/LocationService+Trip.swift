@@ -67,6 +67,7 @@ extension LocationService {
         roadSnapper.reset()
         voicedInGroup.removeAll()
         voicedHotspots.removeAll()
+        voicedRoadEvents.removeAll()
         postponedVoice = nil
         // Заезд по пути — не новая поездка: если пауза похожа на «забежал в
         // магазин», поднимаем прошлую запись обратно в живую сессию.

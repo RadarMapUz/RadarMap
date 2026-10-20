@@ -103,6 +103,13 @@ final class MobileCameraService {
 
     private(set) var reports: [Camera] = []
     private(set) var isRefreshing = false
+    /// Перекрытия и ремонт (12б.5) — свой список, не камеры: в CameraStore
+    /// и в цепочку оповещений не попадают никогда.
+    private(set) var roadEvents: [RoadEvent] = []
+    /// Сервер знает перекрытия и ремонт (ответил на /api/road). До этого
+    /// типы не предлагаются: старый сервер отвечает «bad type», и отметка
+    /// водителя пропала бы с «не отправилось».
+    private(set) var roadEventsSupported = false
 
     @ObservationIgnored private weak var store: CameraStore?
     @ObservationIgnored private let api = APIClient()
@@ -216,6 +223,12 @@ final class MobileCameraService {
 
     /// Убрать отметки с карты (пульт погасил краудсорс). Идемпотентно.
     private func clearAll() {
+        // Выключатель гасит и дорогу: проверка только камер оставляла
+        // ремонт на карте, в голосе и в выборе маршрута навсегда (ревью 12б.5).
+        if roadEventsSupported { roadEventsSupported = false }
+        if !roadEvents.isEmpty { roadEvents = [] }
+        roadConfirmations = [:]
+        lastRoadETag = nil
         guard !reports.isEmpty else { return }
         reports = []
         confirmations = [:]
@@ -236,6 +249,8 @@ final class MobileCameraService {
         let lon: Double
         let expires: Double
         let type: String?      // старый сервер поля не шлёт — трактуем как радар
+        /// Курс отметившего — только в /api/road; < 0 или нет — неизвестен.
+        let course: Double?
         let up: Int?
         let created: Double?
         /// Подтверждена ли независимым водителем (другое устройство и адрес).
@@ -257,6 +272,16 @@ final class MobileCameraService {
     /// Только в памяти сессии: на холодном старте честнее взять список целиком,
     /// чем поверить отпечатку, пережившему переустановку базы.
     @ObservationIgnored private var lastETag: String?
+    @ObservationIgnored private var lastRoadETag: String?
+    /// Подтверждения событий дороги — для сверки своих отметок.
+    @ObservationIgnored private var roadConfirmations: [Int: Confirmation] = [:]
+    /// Расхождение часов с сервером по последнему полному ответу.
+    @ObservationIgnored private var lastSkew: TimeInterval = 0
+
+    /// Живые подтверждения обоих списков.
+    private func liveConfirmations() -> [Int: Confirmation] {
+        confirmations.merging(roadConfirmations) { camera, _ in camera }
+    }
 
     func confirmation(for cameraID: Int) -> Confirmation? { confirmations[cameraID] }
 
@@ -283,7 +308,14 @@ final class MobileCameraService {
                                                           as: MobileResponse.self,
                                                           etag: lastETag) else {
                 // 304: список тот же. Ни разбора, ни пересчёта окна камер —
-                // ради этой ветки всё и затевалось.
+                // ради этой ветки всё и затевалось. Но список дороги — свой:
+                // новое перекрытие общий список не меняет, и без этого опроса
+                // оно доходило бы до телефона, только когда где-то в стране
+                // сменится радар (ревью 12б.5).
+                await refreshRoadEvents(skew: lastSkew)
+                for confirmed in reconcileMine(live: liveConfirmations()) {
+                    onMyReportConfirmed?(confirmed)
+                }
                 return
             }
             lastETag = answer.etag
@@ -292,8 +324,12 @@ final class MobileCameraService {
             // десять минут — тренога «исчезала» на десять минут раньше, пока
             // ещё стоит (молчание), отстают — висела дольше (S31, 20.10).
             let skew = Self.clockSkew(serverDate: answer.serverDate, localNow: Date())
+            lastSkew = skew
             var fresh: [Int: Confirmation] = [:]
-            reports = decoded.reports.map { report in
+            // Перекрытие и ремонт в общем списке не приходят (у них свой) —
+            // а пришли бы, камерой не становятся: это не засада, а дорога.
+            reports = decoded.reports.filter { !(ReportKind(rawValue: $0.type ?? "")?.isRoadEvent ?? false) }
+                .map { report in
                 let kind = ReportKind(rawValue: report.type ?? "") ?? .radar
                 let id = Self.idOffset + report.id
                 fresh[id] = Confirmation(upvotes: report.up ?? 0,
@@ -318,13 +354,48 @@ final class MobileCameraService {
             // Окно ближайших камер пересоберёт наблюдатель ревизии базы
             // (AppEnvironment.observeCameraRevision) — сразу, и без экрана.
             store?.setMobileCameras(reports)
-            for confirmed in reconcileMine(live: fresh) {
+            // Свои отметки сверяются с ОБОИМИ списками: своё «перекрыто»
+            // живёт в списке дороги, и по одному списку камер оно числилось
+            // бы пропавшим сразу после постановки.
+            await refreshRoadEvents(skew: skew)
+            for confirmed in reconcileMine(live: liveConfirmations()) {
                 onMyReportConfirmed?(confirmed)
             }
         } catch {
             // Сети нет или сервер не ответил — живём на последнем известном
             // списке (и снимаем истёкшее сами, pruneExpired).
             Log.network.notice("отметки водителей: опрос не удался — \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// Список дороги (GET /api/road). Старый сервер отвечает 404 — значит,
+    /// перекрытий он не знает, и типы не предлагаются.
+    private func refreshRoadEvents(skew: TimeInterval) async {
+        do {
+            guard let answer = try await api.getIfChanged("api/road", as: MobileResponse.self,
+                                                          etag: lastRoadETag) else {
+                if !roadEventsSupported { roadEventsSupported = true }
+                return
+            }
+            lastRoadETag = answer.etag
+            if !roadEventsSupported { roadEventsSupported = true }
+            let fresh = answer.value.reports.compactMap { report -> RoadEvent? in
+                guard let kind = ReportKind(rawValue: report.type ?? "")?.roadEventKind else { return nil }
+                return RoadEvent(id: Self.idOffset + report.id, kind: kind, lat: report.lat, lon: report.lon,
+                                 course: report.course ?? -1,
+                                 expires: Date(timeIntervalSince1970: report.expires + skew),
+                                 confirmed: report.confirmed ?? true)
+            }
+            if fresh != roadEvents { roadEvents = fresh }
+            roadConfirmations = Dictionary(uniqueKeysWithValues: answer.value.reports.map { report in
+                (Self.idOffset + report.id,
+                 Confirmation(upvotes: report.up ?? 0,
+                              created: Date(timeIntervalSince1970: (report.created ?? 0) + skew),
+                              confirmed: report.confirmed ?? true))
+            })
+        } catch {
+            if roadEventsSupported { roadEventsSupported = false }
+            Log.network.debug("события дороги недоступны: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -335,6 +406,10 @@ final class MobileCameraService {
             camera.mobileExpires.map { (camera.id, $0) }
         })
         let gone = Self.expired(expiries, now: now)
+        // События дороги снимаются по сроку так же — без сервера.
+        if roadEvents.contains(where: { $0.expires <= now }) {
+            roadEvents.removeAll { $0.expires <= now }
+        }
         guard !gone.isEmpty else { return false }
         reports.removeAll { gone.contains($0.id) }
         for id in gone { confirmations[id] = nil }
@@ -390,7 +465,8 @@ final class MobileCameraService {
         let origin = ReportPlacement.backdated(coordinate, course: course, speedKmh: speedKmh)
         let (point, cls) = placed(origin, course: course)
         return await send(PendingReport(kind: kind.rawValue, lat: point.latitude,
-                                        lon: point.longitude, cls: cls, at: Date()),
+                                        lon: point.longitude, cls: cls, at: Date(),
+                                        course: course >= 0 ? course : nil),
                           queueOnFailure: true)
     }
 
@@ -408,6 +484,7 @@ final class MobileCameraService {
             let age = Date().timeIntervalSince(item.at)
             if age >= 30 { payload["age"] = Int(age) }
             if !item.cls.isEmpty { payload["cls"] = item.cls }
+            if let course = item.course { payload["course"] = (course * 10).rounded() / 10 }
             let response = try await api.post("api/report", json: payload, as: Response.self)
             lastSent = ReportGuard.Sent(kind: kind, latitude: item.lat,
                                         longitude: item.lon, at: item.at)
@@ -501,7 +578,8 @@ final class MobileCameraService {
     /// единственный бесплатный) мотиватор, и его не было.
     struct MyReport: Codable, Equatable, Identifiable {
         let id: Int
-        let kind: String
+        /// var: уточнение «Что это было?» переписывает тип той же точки.
+        var kind: String
         let lat: Double
         let lon: Double
         let at: Date
@@ -711,9 +789,18 @@ final class MobileCameraService {
             return false
         }
         do {
-            let payload = ["lat": offer.latitude, "lon": offer.longitude,
+            var payload = ["lat": offer.latitude, "lon": offer.longitude,
                            "device": deviceID, "type": kind.rawValue] as [String: Any]
+            // Через границу камера/дорога («Радар!» → «Перекрыто») сервер
+            // уточняет только точку, названную явно (12б.5).
+            if let id = lastSentID { payload["amend_id"] = id }
             let response = try await api.post("api/report", json: payload, as: Response.self)
+            // «Ваша отметка подтверждена» должна назвать то, что на карте
+            // теперь, а не первый тап.
+            if response.amended == true, let index = mine.firstIndex(where: { $0.id == response.id }) {
+                mine[index].kind = kind.rawValue
+                saveMine()
+            }
             // Дубль-гейту важен итоговый тип, а время оставляем исходное:
             // окно «а вдруг не нажалось» считается от первого тапа.
             lastSent = ReportGuard.Sent(kind: kind, latitude: offer.latitude,
@@ -735,7 +822,7 @@ final class MobileCameraService {
               now.timeIntervalSince(sent.at) <= AppConfig.reportCancelWindow else { return nil }
         // Точку, которую уже подтвердил кто-то ещё, автор не снимает — сервер
         // откажет, и незачем показывать кнопку, которая не сработает.
-        if let confirmation = confirmations[Self.idOffset + id], confirmation.upvotes > 0 {
+        if let confirmation = liveConfirmations()[Self.idOffset + id], confirmation.upvotes > 0 {
             return nil
         }
         return id
@@ -894,7 +981,24 @@ final class MobileCameraService {
 /// (радар/тренога — часы, пост стоит дольше, ДТП рассасывается за час).
 enum ReportKind: String, CaseIterable, Identifiable {
     case radar, tripod, post, accident
+    /// Перекрытие и ремонт (12б.5): события дороги, не камеры — свой список
+    /// на сервере, свой вид, в оповещения о камерах не входят.
+    case closure, roadwork
     var id: String { rawValue }
+
+    var isRoadEvent: Bool { roadEventKind != nil }
+
+    var roadEventKind: RoadEvent.Kind? {
+        switch self {
+        case .closure: return .closure
+        case .roadwork: return .roadwork
+        case .radar, .tripod, .post, .accident: return nil
+        }
+    }
+
+    /// Типы дороги — предлагаются, только когда сервер их знает
+    /// (`MobileCameraService.roadEventsSupported`).
+    static var roadOffered: [ReportKind] { [.closure, .roadwork] }
 
     /// Что предлагаем ставить рукой.
     ///
@@ -910,14 +1014,31 @@ enum ReportKind: String, CaseIterable, Identifiable {
     /// поставленные отметки продолжают работать.
     static var offered: [ReportKind] { [.radar, .tripod, .post, .accident] }
 
+    /// Тип камеры отметки. У событий дороги его нет по смыслу — `.other`
+    /// с названием только ради вида; камерой они не становятся никогда (см.
+    /// разбор /api/mobile).
     var cameraType: CameraType {
         switch self {
         case .radar:    return .mobileRadar
         case .tripod:   return .tripod
         case .post:     return .dpsPost
         case .accident: return .accident
+        case .closure, .roadwork: return .other(title)
         }
     }
-    var title: String { cameraType.displayName }
-    var symbol: String { cameraType.symbolName }
+    var title: String {
+        switch self {
+        case .closure:  return String(localized: "Перекрыто")
+        case .roadwork: return String(localized: "Ремонт")
+        default:        return cameraType.displayName
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .closure:  return "nosign"
+        case .roadwork: return "cone.fill"
+        default:        return cameraType.symbolName
+        }
+    }
+
 }

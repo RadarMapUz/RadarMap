@@ -195,6 +195,23 @@ extension LocationService {
         alerts.speak(HotspotAlert.phrase(for: spot))
     }
 
+    /// «Впереди ремонт дороги» (12б.5): решение — в чистом RoadEventRules,
+    /// здесь живые данные и голос. Ниже камеры: при оповещении о камере
+    /// молчит, событие останется «несказанным» до следующего фикса.
+    func announceRoadEventIfNeeded(from coordinate: CLLocationCoordinate2D) {
+        guard isTripActive, settings.voiceEnabled, alertLevel == 0,
+              let events = roadEvents?(), !events.isEmpty else { return }
+        // Синтезатор ставит фразы в очередь: камера, вошедшая в радиус через
+        // тик, ждала бы конца «Впереди ремонт дороги». Камера ближе радиуса
+        // плюс несколько секунд пути — молчим, событие скажем после неё.
+        if let distance = distanceToNearest,
+           distance <= effectiveAlertRadius + speedKmh / 3.6 * AppConfig.roadEventCameraGapSeconds { return }
+        guard let event = RoadEventRules.ahead(of: coordinate, course: currentCourse, events: events,
+                                               voiced: voicedRoadEvents, now: Date()) else { return }
+        voicedRoadEvents.insert(event.id)
+        alerts.speak(RoadEventRules.phrase(for: event))
+    }
+
     /// Фраза предупреждения. Спокойная — как у навигатора, только тип и округлённое
     /// расстояние; про скорость и лимит говорим лишь в срочном режиме, потому что
     /// именно превышение и есть причина повышать голос.

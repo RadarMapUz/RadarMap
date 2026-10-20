@@ -140,6 +140,12 @@ final class RouteService {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: trafficSnapshot,
                                                "RouteService.trafficSnapshot") }
     }
+    /// Живые перекрытия и ремонт (12б.5) — для ярлыка «на пути перекрытие».
+    /// Ставит AppEnvironment (MobileCameraService.roadEvents).
+    @ObservationIgnored var roadEvents: (() -> [RoadEvent])? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: roadEvents,
+                                               "RouteService.roadEvents") }
+    }
     /// Задержка пробками на ОСТАВШЕЙСЯ части маршрута — пересчитывается не на
     /// каждом фиксе, а каждые `routeTrafficRecomputeMeters` и на новом наборе.
     private(set) var remainingTrafficDelay: TimeInterval = 0
@@ -1068,6 +1074,8 @@ final class RouteService {
         let inputs = built.filter { $0.points.count >= 2 }
         guard !inputs.isEmpty else { return }
         let traffic = trafficSnapshot?()
+        let events = roadEvents?() ?? []
+        let eventsNow = Date()
 
         // Там же — выбор варианта по своим поездкам: сравнение с сотней
         // треков стоит десятки миллисекунд, главному потоку они не нужны.
@@ -1087,7 +1095,9 @@ final class RouteService {
                                   distance: inputs[index].distance,
                                   travelTime: inputs[index].travelTime + (delays[index] ?? 0),
                                   cameraIDs: found[index].map(\.camera.id),
-                                  hardManeuvers: RouteChoice.hardManeuvers(inputs[index].steps))
+                                  hardManeuvers: RouteChoice.hardManeuvers(inputs[index].steps),
+                                  closures: RoadEventRules.closures(on: inputs[index].points.map(\.coordinate),
+                                                                    events: events, now: eventsNow))
             }, history: history)
             return (found, choice, delays)
         }

@@ -1828,4 +1828,18 @@ nonisolated enum AppConfig {
     static let commuteRefreshLeadSeconds: TimeInterval = 30 * 60
     /// Сколько ждать профиль дороги с диска при фоновом пробуждении, шагов по 0,1 с.
     static let commuteRefreshProfileWaitSteps = 50
+
+    // MARK: - Перекрытия и ремонт (RoadEvent, 12б.5)
+
+    /// Вариант маршрута ближе этого к перекрытию — «на пути перекрытие».
+    static let roadEventRouteMeters = 30.0
+    /// Та же сторона дороги: курс пути против курса отметившего, не больше.
+    static let roadEventSameSideDegrees = 45.0
+    /// Голос — за столько метров впереди…
+    static let roadEventVoiceMeters = 400.0
+    /// …и не дальше этого вбок от курса.
+    static let roadEventCorridorMeters = 30.0
+    /// Фраза о событии дороги — только если до радиуса камеры больше стольких
+    /// секунд пути: фраза идёт ~2 с, и камера не должна ждать её конца.
+    static let roadEventCameraGapSeconds = 8.0
 }

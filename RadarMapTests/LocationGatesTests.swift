@@ -52,7 +52,7 @@ final class LocationGatesTests: XCTestCase {
         return Camera(id: 1, region: "Т", city: "", location: "к",
                       lat: at.latitude, lon: at.longitude, type: type,
                       violations: [], needsReview: needsReview, axis: axis, dir: dir,
-                      lanes: 2, cls: cls, bridge: nil, road: road,
+                      lanes: 2, cls: cls, road: road,
                       split: split, twin: twin)
     }
 

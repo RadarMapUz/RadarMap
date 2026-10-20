@@ -18,7 +18,7 @@ final class CameraOverrideTests: XCTestCase {
         Camera(id: id, region: "Ташкент", city: "Ташкент", location: "Тест",
                lat: lat, lon: lon, type: type,
                violations: Camera.defaultViolations(forType: type), needsReview: nil,
-               axis: 90, dir: 90, lanes: 2, cls: "primary", bridge: false,
+               axis: 90, dir: 90, lanes: 2, cls: "primary",
                road: [0, 0, 100, 100], split: false, twin: true)
     }
 

@@ -26,7 +26,7 @@ final class OwnRoadOffsetTests: XCTestCase {
         }
         return Camera(id: 1, region: "Т", city: "", location: "к", lat: lat0, lon: lon0,
                       type: "Стационар радар", violations: [], needsReview: false, axis: axis, dir: nil,
-                      lanes: 3, cls: "primary", bridge: nil, road: road, split: true, twin: nil)
+                      lanes: 3, cls: "primary", road: road, split: true, twin: nil)
     }
 
     func testOnThePieceItIsTheDistanceToIt() throws {

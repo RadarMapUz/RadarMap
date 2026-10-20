@@ -32,7 +32,7 @@ final class RoadShapeTests: XCTestCase {
         return Camera(id: id, region: "Т", city: "", location: "к",
                       lat: center.latitude, lon: center.longitude,
                       type: "Стационар радар", violations: [], needsReview: false,
-                      axis: axis, dir: dir, lanes: lanes, cls: cls, bridge: nil, road: road)
+                      axis: axis, dir: dir, lanes: lanes, cls: cls, road: road)
     }
 
     // MARK: - Распаковка

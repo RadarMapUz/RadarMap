@@ -630,9 +630,8 @@ def apply_road_profile(out, index, cand):
         out["lanes"] = attrs.lanes
     if attrs.cls:
         out["cls"] = attrs.cls
-    # Мост/эстакада: второй независимый признак к эвристике по оси.
-    if attrs.bridge or attrs.layer > 0:
-        out["bridge"] = True
+    # Мост/эстакада больше не пишется (11.5): приложение признак не читало —
+    # глушить по нему без высоты нельзя, а проезд поперёк ловит гейт оси.
     stub = road_stub(index, cand, out["lat"], out["lon"])
     if len(stub) >= 4:
         out["road"] = stub
@@ -963,14 +962,14 @@ def selftest():
     check(road_direction(rev, rev.nearby(W, 69.1020, 30)[0]) == 270,
           "oneway=-1 → азимут 270°")
 
-    # 8в) Мост: флаг ставится по bridge/layer — второй признак к оси.
+    # 8в) Мост: флаг в профиль не пишется (11.5).
     bridge_index = RoadIndex()
     bridge_index.add_linestring([[69.1000, W], [69.1050, W]], set(), set(), 5,
                                 road_attrs_from_props({"bridge": "yes", "layer": "1",
                                                        "highway": "trunk"}))
     out_br = {"lat": W, "lon": 69.1020}
     apply_road_profile(out_br, bridge_index, bridge_index.nearby(W, 69.1020, 30)[0])
-    check(out_br.get("bridge") is True, "камера на мосту помечена")
+    check("bridge" not in out_br, "мост в профиль не пишется (приложение его не читает)")
 
     # 8г) Кусок дороги на кривой сохраняет форму (упрощение не срезает поворот).
     curve = RoadIndex()

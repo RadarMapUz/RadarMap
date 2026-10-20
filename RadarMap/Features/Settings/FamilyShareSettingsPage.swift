@@ -12,6 +12,7 @@ import SwiftUI
 struct FamilyShareSettingsPage: View {
     @Environment(AppEnvironment.self) private var env
     @State private var name = ""
+    @State private var sharePayload: ActivityTextPayload?
 
     var body: some View {
         let family = env.family
@@ -20,12 +21,14 @@ struct FamilyShareSettingsPage: View {
                 Section {
                     TextField("Кому, например «Мама»", text: Binding(
                         get: { link.name }, set: { family.rename($0) }))
-                    ShareLink(item: link.url(base: AppConfig.syncBaseURL),
-                              message: Text("Здесь видно, когда я буду дома")) {
+                    Button {
+                        sharePayload = ActivityTextPayload(text: String(
+                            format: String(localized: "Здесь видно, когда я буду дома: %@"),
+                            link.url(base: AppConfig.syncBaseURL).absoluteString))
+                    } label: {
                         Label(link.needsResend ? "Отправить новую ссылку" : "Отправить ссылку",
                               systemImage: "square.and.arrow.up")
                     }
-                    .simultaneousGesture(TapGesture().onEnded { family.markSent() })
                     if link.needsResend {
                         Text("Ссылка обновилась — старая больше не показывает поездки. Отправьте новую.")
                             .font(.footnote)
@@ -57,6 +60,15 @@ struct FamilyShareSettingsPage: View {
             }
         }
         .settingsPage("Близкие видят прибытие")
+        // «Отправлено» — только по ответу листа: тап по ShareLink снимал
+        // «отправьте новую» и тогда, когда лист закрыли, ничего не отправив, —
+        // а старая ссылка после смены токена уже не показывает поездки (ревью 14.1).
+        .sheet(item: $sharePayload) { payload in
+            ActivityTextSheet(text: payload.text) { sent in
+                if sent { env.family.markSent() }
+            }
+            .presentationDetents([.medium, .large])
+        }
     }
 }
 

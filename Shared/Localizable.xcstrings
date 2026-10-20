@@ -5076,18 +5076,18 @@
         }
       }
     },
-    "Здесь видно, когда я буду дома": {
+    "Здесь видно, когда я буду дома: %@": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Здесь видно, когда я буду дома"
+            "value": "Здесь видно, когда я буду дома: %@"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bu yerda uyga qachon kelishim koʻrinadi"
+            "value": "Bu yerda uyga qachon kelishim koʻrinadi: %@"
           }
         }
       }

@@ -733,6 +733,9 @@ nonisolated enum AppConfig {
     /// Пробки из `now.json` — только дальше этого впереди по линии (8.8.10):
     /// ближе пробку уже несёт сегодняшний темп.
     nonisolated static let commuteGhostJamAheadMeters: Double = 2000
+    /// Плашка «опаздываю — предупредить?» (8.8.14) — только медленнее этого:
+    /// лист «Поделиться» на ходу — помеха за рулём.
+    nonisolated static let commuteLatePromptMaxKmh = 10.0
     /// Пересчёт призрака стоя или посреди длинного участка — раз в 30 с.
     nonisolated static let commuteGhostRecomputeSeconds: TimeInterval = 30
     /// С какого отклонения строка призрака становится янтарной (мин).

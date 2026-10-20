@@ -43,12 +43,16 @@ extension LocationService {
     /// Текущее состояние для Live Activity.
     var activityState: CameraActivityAttributes.ContentState {
         let now = Date()
+        let ghost = activityGhost?()
         return CameraActivityAttributes.ContentState(
             nearestTitle: nearestCamera?.displayTitle,
             nearestSymbol: nearestCamera?.kind.symbolName ?? "checkmark.shield.fill",
             distanceMeters: distanceToNearest,
             arrivesAt: LiveActivityService.arrival(distance: distanceToNearest, speedKmh: speedKmh, now: now),
-            since: now
+            since: now,
+            etaClock: ghost?.clock,
+            etaCaption: ghost?.caption,
+            etaAlert: ghost?.alert
         )
     }
 

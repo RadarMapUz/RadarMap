@@ -233,6 +233,12 @@ final class AppEnvironment {
         self.location.liveActivity = liveActivity
         // Маршрут по своей дороге на работу — остаток по призраку (8.8.11).
         self.route.personalRemaining = { [weak self] in self?.commuteLive.routeRemaining(now: Date()) }
+        // Плашка Live Activity — со строкой призрака (8.8.3б): прибытие и
+        // слова те же, что на панели поездки.
+        self.location.activityGhost = { [weak self] in
+            guard let ghost = self?.commuteLive.display else { return nil }
+            return (ghost.arrival, GhostText.caption(ghost), GhostText.isAlert(ghost))
+        }
         self.location.route = route
         self.location.speedLimits = speedLimits
         self.location.hotspots = hotspots

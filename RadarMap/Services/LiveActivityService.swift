@@ -168,6 +168,9 @@ final class LiveActivityService {
         guard let old else { return true }
         if new.nearestTitle != old.nearestTitle || new.nearestSymbol != old.nearestSymbol
             || new.distanceMeters != old.distanceMeters { return true }
+        // Призрак (8.8.3б) — со сменой минуты прибытия или подписи, не чаще:
+        // прибытие уже округлено до минуты, подпись меняется с отклонением.
+        if new.etaClock != old.etaClock || new.etaCaption != old.etaCaption { return true }
         switch (old.arrivesAt, new.arrivesAt) {
         case (nil, nil): return false
         case let (sent?, fresh?):

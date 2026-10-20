@@ -24,6 +24,8 @@ private enum WTheme {
     static let background = SW.fixed(WidgetPalette.alertSurface)
     static let primary = SW.fixed(WidgetPalette.primary.dark)
     static let secondary = SW.fixed(WidgetPalette.secondary.dark)
+    /// Подпись призрака: позже срока, впритык, заметно дольше обычного.
+    static let warning = SW.fixed(WidgetPalette.warning.dark)
 }
 
 /// Единицы — через каталог: плашка живёт на экране блокировки в том же
@@ -75,6 +77,7 @@ struct CameraActivityWidget: Widget {
                         .font(.system(.footnote, design: .rounded))
                         .foregroundStyle(WTheme.secondary)
                         .lineLimit(2)
+                    if !context.isStale { GhostLine(state: context.state) }
                 }
             } compactLeading: {
                 typeIcon(context.state, isStale: context.isStale)
@@ -157,9 +160,30 @@ private struct LockScreenView: View {
                         .font(.system(.headline, design: .rounded))
                         .foregroundStyle(WTheme.primary)
                 }
+                if !isStale { GhostLine(state: state) }
             }
             Spacer(minLength: 0)
         }
         .padding(14)
+    }
+}
+
+/// Призрак дороги на работу (8.8.3б): «9:12 · Работа · +4 мин к обычному».
+/// Подпись готовит приложение на своём языке; время рисует система.
+private struct GhostLine: View {
+    let state: CameraActivityAttributes.ContentState
+
+    var body: some View {
+        if let clock = state.etaClock, let caption = state.etaCaption {
+            HStack(spacing: 4) {
+                Text(clock, style: .time)
+                    .monospacedDigit()
+                    .foregroundStyle(WTheme.primary)
+                Text(verbatim: "· \(caption)")
+                    .foregroundStyle(state.etaAlert == true ? WTheme.warning : WTheme.secondary)
+                    .lineLimit(1)
+            }
+            .font(.system(.caption, design: .rounded).weight(.semibold))
+        }
     }
 }

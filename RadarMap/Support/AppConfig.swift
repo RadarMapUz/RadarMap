@@ -1268,9 +1268,6 @@ nonisolated enum AppConfig {
 
     /// До какого расстояния показывать ближайшую камеру в HUD машины.
     static let carPlayNearestCameraMeters: CLLocationDistance = 3000
-    /// Обзорный зум карты CarPlay (широта, градусы): дальше камеры не рисуем —
-    /// это уровень «вся область», маркеры сливаются.
-    static let carPlayCameraZoomThreshold = 0.6
     /// Максимум маркеров камер на экране машины. Не 120, как на телефоне:
     /// экран в машине меньше, смотрят на него боковым зрением и долю секунды —
     /// всё, что не про ближайший километр, водитель всё равно не разбирает.
@@ -1285,9 +1282,6 @@ nonisolated enum AppConfig {
     /// вытянутой руки). Высота идёт следом за кеглем, иначе цифра упрётся в
     /// подпись «км/ч» и та уедет под срез.
     static let carPlayDockHeight: CGFloat = 100
-    /// На столько карта поджимает свои служебные подписи снизу (логотип и
-    /// «Правовые документы») — панель высотой carPlayDockHeight плюс отступы.
-    static let carPlayDockBottomInset: CGFloat = 126
     /// Потолок ширины приборной панели. На экране в 1900 точек три зоны,
     /// растянутые по третям всей ширины, разъезжаются так, что глаз пробегает
     /// весь дисплей ради одной строки данных. Остров, а не лента.
@@ -1307,13 +1301,6 @@ nonisolated enum AppConfig {
     /// Уже — прибытие уходит, скорость и камера остаются.
     static let carPlayDockThreeZoneWidth: CGFloat = 570
 
-    /// Сколько панель занимает снизу НА САМОМ ДЕЛЕ: своя высота плюс нижний
-    /// отступ HUD. Отдельно от carPlayDockBottomInset, который решает другую
-    /// задачу — поджимает служебные подписи MKMapView и потому взят с запасом.
-    /// Схема считала резерв по нему и добавляла сверху ещё и зазор, из-за чего
-    /// под панель в 100 точек уходило 140, а 40 точек высоты схемы просто
-    /// пропадали в чёрное поле.
-    static let carPlayDockReserve: CGFloat = carPlayDockHeight + 12
 
     /// Быстрее этого «Завершить» спрашивает подтверждение: промах слепого тапа
     /// по соседней кнопке на ходу молча выключал бы оповещения о камерах.
@@ -1448,9 +1435,6 @@ nonisolated enum AppConfig {
     static let etaShareRemainingStepMeters: Double = 500
     static let etaShareKeepAliveSeconds: TimeInterval = 10 * 60
     static let etaShareArrivalFreshSeconds: TimeInterval = 120
-    /// Шаг обновления «пройденной» части маршрута: перекладывать оверлей на
-    /// каждый фикс GPS — лишняя работа рендера, глазу хватает и таких шагов.
-    static let carPlayTraveledStepMeters: CLLocationDistance = 25
 
     // MARK: - CarPlay: карта на движке
 
@@ -1509,10 +1493,6 @@ nonisolated enum AppConfig {
     static let carPlayArrivalFreshSeconds: TimeInterval = 10
     /// Одна и та же цель маршрута — в этом радиусе.
     static let carPlaySameDestinationMeters: CLLocationDistance = 30
-    /// Карта Apple в машине: стартовый охват и пределы зума (градусы).
-    static let carPlayAppleStartSpanMeters: CLLocationDistance = 2600
-    static let carPlayAppleMinDelta = 0.002
-    static let carPlayAppleMaxDelta = 4.0
     /// Тема по солнцу пересчитывается с этим шагом, пока на экран смотрят
     /// (телефон или машина) — AppEnvironment, один расчёт на все сцены.
     static let interfaceThemeRefreshSeconds: TimeInterval = 300

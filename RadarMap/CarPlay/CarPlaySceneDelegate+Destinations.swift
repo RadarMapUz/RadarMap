@@ -392,7 +392,7 @@ extension CarPlaySceneDelegate {
         let origin = MKMapItem(placemark: MKPlacemark(coordinate: env.location.currentCoordinate ?? destination))
         let target = MKMapItem(placemark: MKPlacemark(coordinate: destination))
         target.name = name
-        let trip = CPTrip(origin: origin, destination: target, routeChoices: choices)
+        let trip = CarPlayGuidance.makeTrip(origin: origin, destination: target, choices: choices)
         if previewTrip != nil { mapTemplate.hideTripPreviews() }
         previewTrip = trip
         previewDestination = destination

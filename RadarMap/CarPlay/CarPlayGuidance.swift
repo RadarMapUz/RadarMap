@@ -435,7 +435,7 @@ final class CarPlayGuidance {
         let choice = CPRouteChoice(summaryVariants: [summary.isEmpty ? route.destinationName : summary],
                                    additionalInformationVariants: [],
                                    selectionSummaryVariants: [])
-        let trip = CPTrip(origin: origin, destination: target, routeChoices: [choice])
+        let trip = Self.makeTrip(origin: origin, destination: target, choices: [choice])
         self.trip = trip
         tripDestination = destination
         let started = template.startNavigationSession(for: trip)
@@ -732,5 +732,20 @@ final class CarPlayGuidance {
     static func same(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Bool {
         GeoMath.fastDistance(a.latitude, a.longitude, b.latitude, b.longitude)
             < AppConfig.carPlaySameDestinationMeters
+    }
+}
+
+extension CarPlayGuidance {
+    /// Поездка для сессии и выбора маршрута (10.11): на iOS 26.4+ — через
+    /// точки пути (`CPNavigationWaypoint`; init с MKMapItem там устарел),
+    /// раньше — как было.
+    static func makeTrip(origin: MKMapItem, destination: MKMapItem, choices: [CPRouteChoice]) -> CPTrip {
+        if #available(iOS 26.4, *) {
+            return CPTrip(originWaypoint: CPNavigationWaypoint(mapItem: origin, locationThreshold: nil, entryPoints: []),
+                          destinationWaypoint: CPNavigationWaypoint(mapItem: destination, locationThreshold: nil,
+                                                                    entryPoints: []),
+                          routeChoices: choices)
+        }
+        return CPTrip(origin: origin, destination: destination, routeChoices: choices)
     }
 }

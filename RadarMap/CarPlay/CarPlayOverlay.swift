@@ -76,8 +76,8 @@ struct CarPlayOverlay: View {
         .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { safe = $0 }
         .motionAnimation(Motion.standard, value: env.location.isApproachingCamera)
         .motionAnimation(Motion.standard, value: env.route.isActive)
-        // HUD — только показывает: жесты карты (тап, панорама, щипок) должны
-        // проходить сквозь него в MKMapView.
+        // HUD — только показывает: касаний в окне машины нет (осмотр и зум
+        // приходят командами шаблона), и ничего перехватывать он не должен.
         .allowsHitTesting(false)
     }
 

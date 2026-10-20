@@ -1842,4 +1842,29 @@ nonisolated enum AppConfig {
     /// Фраза о событии дороги — только если до радиуса камеры больше стольких
     /// секунд пути: фраза идёт ~2 с, и камера не должна ждать её конца.
     static let roadEventCameraGapSeconds = 8.0
+
+    // MARK: - Метан на АГНКС (CngRules, 12б.4)
+
+    /// Заведение из своего файла и точка сервера — одна станция, если ближе.
+    static let cngMatchMeters = 60.0
+    /// «Стоим»: медленнее этого.
+    static let cngStandingKmh = 3.0
+    /// Спрашиваем только у станции ближе этого: у колонок, а не на проезжей
+    /// части перед станцией (ревью 12б.4 — 150 м цепляли пробку на проспекте).
+    static let cngAskMeters = 60.0
+    /// Через столько стоянки — вопрос «Как на заправке?».
+    static let cngAskDelaySeconds: TimeInterval = 180
+    /// О той же станции не чаще.
+    static let cngAskCooldownSeconds: TimeInterval = 3 * 3600
+    /// Тронулись: быстрее этого или дальше этого от станции — вопрос снять.
+    static let cngLeftKmh = 5.0
+    static let cngLeftMeters = 80.0
+    /// Клетка заведений без файла на диске — не перечитывать раньше.
+    static let cngCellRetrySeconds: TimeInterval = 30 * 60
+    /// Статус живёт 3 ч, очередь — 45 мин (как на сервере): без сети и
+    /// между опросами телефон старит и снимает их сам.
+    static let cngStatusMaxMinutes = 180
+    static let cngQueueMaxMinutes = 45
+    /// Опрос статусов — пока приложение на экране или идёт поездка.
+    static let cngPollSeconds: TimeInterval = 300
 }

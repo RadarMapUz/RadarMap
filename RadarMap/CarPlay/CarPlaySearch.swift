@@ -93,18 +93,31 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
                 venues.alongRoute(kind, points: points, progress: progress, limit: limit)
             }
             if !along.isEmpty {
-                return along.map { venue, ahead in
-                    (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),
-                     String(format: String(localized: "через %@ по пути"), Formatting.distance(ahead)),
-                     true)
+                // «Метан» по пути — тот же порядок по статусу, расстояние остаётся.
+                let cngAlong = kind == .cng && env.cng.isActive
+                let order = cngAlong ? CngRules.ranked(along.map(\.venue), stations: env.cng.stations)
+                                     : along.map(\.venue)
+                let ahead = Dictionary(along.map { ($0.venue.id, $0.ahead) }, uniquingKeysWith: { first, _ in first })
+                return order.map { venue in
+                    let distance = String(format: String(localized: "через %@ по пути"),
+                                          Formatting.distance(ahead[venue.id] ?? 0))
+                    let status = cngAlong ? env.cng.station(for: venue.point).flatMap(CngRules.caption) : nil
+                    return (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),
+                            status.map { "\($0) · \(distance)" } ?? distance, true)
                 }
             }
         }
-        let own = venues?.nearest(kind, to: near, limit: limit) ?? []
+        var own = venues?.nearest(kind, to: near, limit: limit) ?? []
+        // «Метан» в машине — сначала где газ есть, со строкой статуса (12б.4).
+        let cng = kind == .cng && env.cng.isActive
+        if cng { own = CngRules.ranked(own, stations: env.cng.stations) }
         if !own.isEmpty {
             return own.map { venue in
-                (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),
-                 Self.detail(near: near, point: venue.point, offline: true), false)
+                let status = cng ? env.cng.station(for: venue.point).flatMap(CngRules.caption) : nil
+                let detail = Self.detail(near: near, point: venue.point, offline: true)
+                // В машине расстояние не теряем: «Газ есть, 15 мин назад · 1,2 км».
+                return (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),
+                        status.map { "\($0) · \(detail)" } ?? detail, false)
             }
         }
         guard env.network.isOnline else { return [] }

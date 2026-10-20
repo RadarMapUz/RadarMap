@@ -466,15 +466,17 @@ final class RoadNetworkService {
     }
 
     /// Заведения клетки (АЗС, парковки…) — тем же путём, что адреса.
-    func venueBook(for coordinate: CLLocationCoordinate2D) async -> VenueBook? {
-        await cellFile(key: VenueBook.key(for: coordinate), what: "заведения", decode: VenueBook.decode)
+    func venueBook(for coordinate: CLLocationCoordinate2D, allowDownload: Bool = true) async -> VenueBook? {
+        await cellFile(key: VenueBook.key(for: coordinate), what: "заведения", decode: VenueBook.decode,
+                       allowDownload: allowDownload)
     }
 
     /// Файл крупной клетки из подписанного индекса: с диска, если sha сошёлся,
     /// иначе с сервера (только со связью) — и на диск. Не сошёлся sha или
     /// формат — клетка помечается битой до следующего индекса.
     private func cellFile<T: Sendable>(key: String, what: StaticString,
-                                       decode: @escaping @Sendable (Data) -> T?) async -> T? {
+                                       decode: @escaping @Sendable (Data) -> T?,
+                                       allowDownload: Bool = true) async -> T? {
         guard indexVersion >= RoadTiles.formatVersionV2,
               let expected = index?.tiles[key], !broken.contains(key)
         else { return nil }
@@ -489,7 +491,9 @@ final class RoadNetworkService {
             return fromDisk
         }
 
-        guard connectivity?.isOnline ?? true,
+        // Только с диска (вопрос о метане на стоянке): ради него радио в
+        // поездке не будим — нет файла, нет и вопроса.
+        guard allowDownload, connectivity?.isOnline ?? true,
               let data = try? await api.getData(
                 "roads/" + RoadTiles.fileName(key: key, version: indexVersion))
         else { return nil }

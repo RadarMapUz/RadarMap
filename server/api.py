@@ -9,6 +9,9 @@ Endpoints:
   GET  /api/mobile         -> {"reports": [{id, lat, lon, created, expires, up, down,
                                             type, confirmed}]}   (без перекрытий и ремонта)
   GET  /api/road           -> {"reports": [... то же + course]}  (только closure/roadwork)
+  GET  /api/cng            -> {"stations": [{lat, lon, status, status_age, queue, queue_age, confirmed}]}
+  POST /api/cng            {lat, lon, kind: gas|nogas|queue15|queue30|queue60, device} -> {"ok": true}
+                           (метан на АГНКС; см. «Метан» ниже)
   POST /api/report         {lat, lon, device, type [, course]}  -> {"id": N, "merged": bool
                                                                     [, "amended": true]}
   POST /api/vote           {id, device, value: 1|-1 [, kind: "pass"]} -> {"ok": true}
@@ -88,6 +91,77 @@ MAX_ACTIVE_ROAD_PER_IP = 6
 
 def is_road(rtype):
     return rtype in ROAD_TYPES
+
+
+# --- Метан (12б.4) -----------------------------------------------------------
+#
+# Тот же жизненный цикл доверия, что у радаров: новая отметка живёт
+# испытательный срок, полный — только после подтверждения тем же ответом
+# НЕЗАВИСИМОГО водителя (другое устройство и другой адрес). Статус живёт
+# 3 ч, очередь — 45 мин: очередь меняется быстрее, чем наличие газа.
+# В ответе — ни устройства, ни адреса, ни времени отметки: только возраст,
+# округлённый вверх до 5 минут («12 мин назад» на карте — это «15»).
+CNG_STATUS = ("gas", "nogas")
+CNG_QUEUE = {"queue15": 15, "queue30": 30, "queue60": 60}
+CNG_FULL_TTL = {"status": 3 * 3600, "queue": 45 * 60}
+CNG_PROBATION_TTL = {"status": 3600, "queue": 20 * 60}
+CNG_AGE_STEP = 5 * 60
+# Станций за сутки с одного устройства: «газа нет» на сорока станциях от
+# одного телефона — не наблюдение, а кампания.
+CNG_DEVICE_DAILY_STATIONS = 10
+
+
+def cng_category(kind):
+    if kind in CNG_STATUS:
+        return "status"
+    if kind in CNG_QUEUE:
+        return "queue"
+    return None
+
+
+def cng_station_key(lat, lon):
+    """Станция — точка, округлённая до 1e-4° (~10 м): у разных телефонов
+    координата заведения одна, из одного файла."""
+    return "%.4f,%.4f" % (lat, lon)
+
+
+def cng_age(created, now):
+    """Возраст ступенью 5 мин вверх, минимум 5: точного времени отметки в
+    ответе нет."""
+    return int(math.ceil(max(0.0, now - created) / CNG_AGE_STEP) * CNG_AGE_STEP / 60) or 5
+
+
+def cng_stations(conn, now):
+    """Живой статус всех станций. Статус — подтверждённый важнее более
+    свежего неподтверждённого: один слух «газа нет» не перекрывает факт
+    «газ есть», который подтвердил независимый водитель. У статуса и очереди
+    — свой возраст: свежая очередь не делает старый статус свежим."""
+    rows = conn.execute(
+        "SELECT c.station, c.lat, c.lon, c.kind, c.created, "
+        "EXISTS(SELECT 1 FROM cng o WHERE o.station = c.station AND o.kind = c.kind "
+        "AND o.active = 1 AND o.expires > ? AND o.device != c.device "
+        "AND o.ip != '' AND o.ip != c.ip) "
+        "FROM cng c WHERE c.active = 1 AND c.expires > ? ORDER BY c.created",
+        (now, now)).fetchall()
+    stations = {}
+    for station, lat, lon, kind, created, confirmed in rows:
+        item = stations.setdefault(station, {"lat": round(lat, 5), "lon": round(lon, 5),
+                                             "status": None, "status_age": None,
+                                             "queue": None, "queue_age": None,
+                                             "confirmed": False})
+        if kind in CNG_STATUS:
+            # Строки по возрастанию created: более новая заменяет, если
+            # она не слабее — неподтверждённая не вытесняет подтверждённую.
+            if item["status"] is None or confirmed or not item["confirmed"]:
+                item["status"] = kind
+                item["status_age"] = cng_age(created, now)
+                item["confirmed"] = bool(confirmed)
+        else:
+            item["queue"] = CNG_QUEUE[kind]
+            item["queue_age"] = cng_age(created, now)
+    out = sorted(stations.values(), key=lambda x: (x["lat"], x["lon"]))
+    return out
+
 # Испытательный срок новой отметки. Ставить фейки должно быть бессмысленно:
 # точка, которую не подтвердил ни один независимый водитель, умирает сама —
 # ни модерации, ни кворума не нужно. Цена: одинокая честная тренога на пустой
@@ -118,6 +192,7 @@ PROBATION_MODE = os.environ.get("RADARMAP_PROBATION", "auto").strip().lower()
 
 _probation_cache = (0.0, None)
 _probation_lock = threading.Lock()
+
 
 
 def probation_active(conn, now):
@@ -197,7 +272,7 @@ MAX_ID = 2**31               # верхняя граница id: больше �
 # а 250 — сбор метрик на месяц. CGNAT мобильных сетей помним, поэтому капы
 # щедрые: за одним адресом оператора живут десятки честных водителей.
 IP_DAILY_CAPS = {"report": 30, "vote": 100, "camera_report": 60,
-                 "feedback": 30, "metrics": 60, "stat": 60}
+                 "feedback": 30, "metrics": 60, "stat": 60, "cng": 40}
 MAX_USAGE_ROWS = 2_000_000   # ~90 дней × 20 000 устройств: потолок диска
 # Скрытие отметки требует дизлайков с РАЗНЫХ адресов: три свежих UUID с одного
 # телефона больше не снимают чужую отметку с карты.
@@ -330,11 +405,22 @@ def init_db():
     # квартале — та же самая.
     migrate(conn, "reports", "cls TEXT DEFAULT ''")
 
+    # Метан на АГНКС (12б.4): «газ есть / нет / очередь». Станция — точка
+    # заведения из файла заведений телефона, округлённая до ~10 м: сервер
+    # не знает и не хранит списка станций, водители сами называют, о какой.
+    conn.execute("""CREATE TABLE IF NOT EXISTS cng(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        station TEXT NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL,
+        kind TEXT NOT NULL, created REAL NOT NULL, expires REAL NOT NULL,
+        device TEXT NOT NULL, ip TEXT DEFAULT '', active INTEGER DEFAULT 1)""")
+
     # --- индексы ---
     # Раньше не было ни одного: каждая проверка суточного капа была полным
     # сканом таблицы, а горячий GET /api/mobile сканировал все отметки.
     for statement in (
         "CREATE INDEX IF NOT EXISTS idx_reports_live ON reports(active, expires)",
+        "CREATE INDEX IF NOT EXISTS idx_cng_live ON cng(active, expires)",
+        "CREATE INDEX IF NOT EXISTS idx_cng_station ON cng(station, active, expires)",
         "CREATE INDEX IF NOT EXISTS idx_reports_device ON reports(device, active, expires)",
         "CREATE INDEX IF NOT EXISTS idx_reports_ip ON reports(ip, active, expires)",
         "CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created)",
@@ -794,6 +880,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._reports_list(road=False)
         if path == "/api/road":
             return self._reports_list(road=True)
+        if path == "/api/cng":
+            conn = db()
+            try:
+                body = json.dumps({"stations": cng_stations(conn, time.time())}).encode()
+            finally:
+                conn.close()
+            return self._json_cached(body, '"%s"' % hashlib.sha1(body).hexdigest()[:32])
         self._json(404, {"error": "not found"})
 
     def _reports_list(self, road):
@@ -881,6 +974,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._traffic()
         if path == "/api/eta":
             return self._eta()
+        if path == "/api/cng":
+            return self._cng()
         self._json(404, {"error": "not found"})
 
     def _eta(self):
@@ -1344,6 +1439,67 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"id": cur.lastrowid, "merged": False})
         finally:
             conn.close()
+
+    def _cng(self):
+        """Ответ водителя у АГНКС. Своя прошлая отметка той же категории на
+        той же станции заменяется: передумал — это не второй голос."""
+        data = self._body()
+        if not data:
+            return self._json(400, {"error": "bad json"})
+        try:
+            lat, lon = float(data["lat"]), float(data["lon"])
+            device = as_str(data["device"])[:64]
+            kind = as_str(data["kind"])
+        except (KeyError, TypeError, ValueError):
+            return self._json(400, {"error": "bad fields"})
+        category = cng_category(kind)
+        if category is None or not device:
+            return self._json(400, {"error": "bad kind"})
+        if not (UZ_LAT[0] <= lat <= UZ_LAT[1] and UZ_LON[0] <= lon <= UZ_LON[1]):
+            return self._json(400, {"error": "out of bounds"})
+        ip = self._ip()
+        if ip_quota_exceeded("cng", ip, IP_DAILY_CAPS["cng"]):
+            return self._json(429, {"error": "too many"})
+        now = time.time()
+        station = cng_station_key(lat, lon)
+        kinds = CNG_STATUS if category == "status" else tuple(CNG_QUEUE)
+        conn = db()
+        try:
+            # Теневой бан — как у отметок радаров: ответ обычный, строка мёртвая.
+            blocked = is_blocked(conn, ip, device, now)
+            stations_today = conn.execute(
+                "SELECT COUNT(DISTINCT station) FROM cng WHERE device = ? AND created > ? AND station != ?",
+                (device, now - 86400, station)).fetchone()[0]
+            if stations_today >= CNG_DEVICE_DAILY_STATIONS:
+                return self._json(429, {"error": "too many"})
+            placeholders = ",".join("?" * len(kinds))
+            conn.execute(f"UPDATE cng SET active = 0 WHERE station = ? AND device = ? "
+                         f"AND kind IN ({placeholders}) AND active = 1", (station, device) + kinds)
+            conn.execute("INSERT INTO cng(station, lat, lon, kind, created, expires, device, ip, active) "
+                         "VALUES(?,?,?,?,?,?,?,?,?)",
+                         (station, lat, lon, kind, now, now + CNG_PROBATION_TTL[category], device, ip,
+                          0 if blocked else 1))
+            if blocked:
+                conn.commit()
+                return self._json(200, {"ok": True})
+            # Независимое подтверждение (другое устройство И адрес) — обоим
+            # полный срок от их создания: слух стал фактом.
+            peers = conn.execute(
+                "SELECT id, created FROM cng WHERE station = ? AND kind = ? AND active = 1 "
+                "AND expires > ? AND device != ? AND ip != '' AND ip != ?",
+                (station, kind, now, device, ip)).fetchall()
+            if peers:
+                full = CNG_FULL_TTL[category]
+                for row_id, created in peers:
+                    conn.execute("UPDATE cng SET expires = MAX(expires, ?) WHERE id = ?",
+                                 (created + full, row_id))
+                conn.execute("UPDATE cng SET expires = ? WHERE station = ? AND device = ? "
+                             "AND kind = ? AND active = 1", (now + full, station, device, kind))
+            conn.execute("DELETE FROM cng WHERE expires < ?", (now - 86400,))
+            conn.commit()
+        finally:
+            conn.close()
+        return self._json(200, {"ok": True})
 
     def _report_cancel(self):
         """Отзыв своей случайной отметки.

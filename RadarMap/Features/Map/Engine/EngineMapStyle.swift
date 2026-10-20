@@ -103,6 +103,7 @@ nonisolated enum EngineMapStyle {
                 "position": ["type": "geojson", "data": emptyCollection],
                 "marks": ["type": "geojson", "data": emptyCollection],
                 "road-events": ["type": "geojson", "data": emptyCollection],
+                "cng-status": ["type": "geojson", "data": emptyCollection],
                 "hotspots": ["type": "geojson", "data": emptyCollection],
             ],
             "layers": layers(ground: ground, casing: casing, label: label,
@@ -122,6 +123,7 @@ nonisolated enum EngineMapStyle {
                 "position": ["type": "geojson", "data": emptyCollection],
                 "marks": ["type": "geojson", "data": emptyCollection],
                 "road-events": ["type": "geojson", "data": emptyCollection],
+                "cng-status": ["type": "geojson", "data": emptyCollection],
                 "hotspots": ["type": "geojson", "data": emptyCollection],
             ]
             let all = style["layers"] as? [[String: Any]] ?? []
@@ -373,6 +375,17 @@ nonisolated enum EngineMapStyle {
         // Перекрытия и ремонт (12б.5) — ПОД камерами и без права занимать
         // их место: ремонт у радара не закрывает радар («камера не исчезает
         // никогда»). Неподтверждённые — полупрозрачными, как призрак радара.
+        // Метан на АГНКС (12б.4): пилюля «● 15 мин» над значком станции —
+        // тоже под камерами и без права занимать их место. Только у машины
+        // на метане (источник пуст у остальных).
+        out.append([
+            "id": "cng-status", "type": "symbol", "source": "cng-status", "minzoom": 12,
+            "layout": ["icon-image": ["get", "icon"], "icon-allow-overlap": true,
+                       "icon-ignore-placement": false, "icon-anchor": "bottom",
+                       "icon-offset": [0, -10], "icon-pitch-alignment": "viewport"],
+            // Неподтверждённый статус — слабее: слух виден, но не как факт.
+            "paint": ["icon-opacity": ["case", ["==", ["get", "confirmed"], true], 1.0, 0.6]],
+        ])
         out.append([
             "id": "road-events", "type": "symbol", "source": "road-events",
             "layout": ["icon-image": ["get", "icon"], "icon-allow-overlap": true,

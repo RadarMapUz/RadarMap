@@ -64,7 +64,7 @@ class ServerTestBase(unittest.TestCase):
     def setUp(self):
         conn = sqlite3.connect(api.DB_PATH)
         for table in ("reports", "votes", "metrics", "camera_reports", "feedback",
-                      "usage_stats", "blocked"):
+                      "usage_stats", "blocked", "cng"):
             conn.execute(f"DELETE FROM {table}")
         conn.commit()
         conn.close()
@@ -1202,6 +1202,130 @@ class RoadEventsTest(ServerTestBase):
         self.assertEqual(status, 200)
         status, _ = self.report("roadwork", device="fresh2", lat=41.46)
         self.assertEqual(status, 429, "свой кап дороги — исчерпан")
+
+class CngTest(ServerTestBase):
+    """Метан на АГНКС (12б.4): тот же цикл доверия, что у радаров, и ответ
+    без устройства, адреса и времени отметки."""
+
+    STATION = {"lat": 41.31234, "lon": 69.25678}
+
+    def post(self, kind, device="d1", **extra):
+        body = dict(self.STATION, kind=kind, device=device)
+        body.update(extra)
+        return _call(self.port, "POST", "/api/cng", body)
+
+    def stations(self):
+        _, answer = _call(self.port, "GET", "/api/cng")
+        return answer["stations"]
+
+    def test_status_and_queue_per_station(self):
+        self.assertEqual(self.post("gas")[0], 200)
+        self.assertEqual(self.post("queue30", device="d2")[0], 200)
+        [station] = self.stations()
+        self.assertEqual(station["status"], "gas")
+        self.assertEqual(station["queue"], 30)
+        self.assertEqual(station["status_age"], 5, "возраст — ступенью 5 мин, не точным временем")
+        self.assertEqual(station["queue_age"], 5)
+
+    def test_answer_has_no_device_ip_or_time(self):
+        self.post("nogas", device="secret-device")
+        _, _, body = _get_raw(self.port, "/api/cng")
+        text = body.decode()
+        for leak in ("secret-device", "device", "ip", "127.0.0.1", "created", "expires"):
+            self.assertNotIn(leak, text, f"в ответе {leak!r}")
+
+    def test_own_change_of_mind_replaces_not_adds(self):
+        self.post("gas")
+        self.post("nogas")
+        [station] = self.stations()
+        self.assertEqual(station["status"], "nogas", "передумал — это не второй голос")
+        conn = sqlite3.connect(api.DB_PATH)
+        live = conn.execute("SELECT COUNT(*) FROM cng WHERE active = 1").fetchone()[0]
+        conn.close()
+        self.assertEqual(live, 1)
+
+    def test_probation_and_independent_confirmation(self):
+        self.post("gas", device="a")
+        conn = sqlite3.connect(api.DB_PATH)
+        created, expires = conn.execute("SELECT created, expires FROM cng").fetchone()
+        conn.close()
+        self.assertAlmostEqual(expires - created, api.CNG_PROBATION_TTL["status"], delta=5)
+        self.assertFalse(self.stations()[0]["confirmed"])
+        # Второй голос с другого устройства, но того же адреса — не подтверждение.
+        self.post("gas", device="b")
+        self.assertFalse(self.stations()[0]["confirmed"], "тот же адрес — не независимый")
+        conn = sqlite3.connect(api.DB_PATH)
+        conn.execute("UPDATE cng SET ip = '10.0.0.9' WHERE device = 'b'")
+        conn.commit()
+        conn.close()
+        self.post("gas", device="c")   # пересчёт: c с 127.0.0.1, b с 10.0.0.9 — независимы
+        self.assertTrue(self.stations()[0]["confirmed"])
+        conn = sqlite3.connect(api.DB_PATH)
+        created, expires = conn.execute("SELECT created, expires FROM cng WHERE device = 'b'").fetchone()
+        conn.close()
+        self.assertAlmostEqual(expires - created, api.CNG_FULL_TTL["status"], delta=5)
+
+    def test_queue_lives_shorter_than_status(self):
+        self.assertLess(api.CNG_FULL_TTL["queue"], api.CNG_FULL_TTL["status"])
+        self.post("queue60")
+        conn = sqlite3.connect(api.DB_PATH)
+        created, expires = conn.execute("SELECT created, expires FROM cng").fetchone()
+        conn.close()
+        self.assertAlmostEqual(expires - created, api.CNG_PROBATION_TTL["queue"], delta=5)
+
+    def test_bad_input_is_refused(self):
+        self.assertEqual(self.post("maybe")[0], 400)
+        self.assertEqual(_call(self.port, "POST", "/api/cng",
+                               {"lat": 55.7, "lon": 37.6, "kind": "gas", "device": "x"})[0], 400)
+
+    def test_expired_is_not_shown(self):
+        self.post("gas")
+        conn = sqlite3.connect(api.DB_PATH)
+        conn.execute("UPDATE cng SET expires = ?", (time.time() - 1,))
+        conn.commit()
+        conn.close()
+        self.assertEqual(self.stations(), [])
+
+    def test_fresh_queue_does_not_freshen_old_status(self):
+        self.post("gas")
+        conn = sqlite3.connect(api.DB_PATH)
+        conn.execute("UPDATE cng SET created = created - 7000, expires = expires + 3600")
+        conn.commit()
+        conn.close()
+        self.post("queue15", device="d2")
+        [station] = self.stations()
+        self.assertGreaterEqual(station["status_age"], 115, "статусу почти два часа")
+        self.assertEqual(station["queue_age"], 5)
+
+    def test_unconfirmed_rumor_does_not_override_confirmed_status(self):
+        conn = sqlite3.connect(api.DB_PATH)
+        now = time.time()
+        for device, ip in (("a", "10.0.0.1"), ("b", "10.0.0.2")):
+            conn.execute("INSERT INTO cng(station, lat, lon, kind, created, expires, device, ip) "
+                         "VALUES(?,?,?,?,?,?,?,?)",
+                         (api.cng_station_key(**self.STATION), self.STATION["lat"], self.STATION["lon"],
+                          "gas", now - 600, now + 3600, device, ip))
+        conn.commit()
+        conn.close()
+        self.post("nogas", device="rumor")
+        [station] = self.stations()
+        self.assertEqual(station["status"], "gas", "один слух не перекрывает подтверждённый факт")
+        self.assertTrue(station["confirmed"])
+
+    def test_blocked_source_posts_nothing_visible(self):
+        conn = sqlite3.connect(api.DB_PATH)
+        conn.execute("INSERT INTO blocked(kind, value, until, created) VALUES('device', 'bad', ?, ?)",
+                     (time.time() + 3600, time.time()))
+        conn.commit()
+        conn.close()
+        self.assertEqual(self.post("nogas", device="bad")[0], 200, "заблокированный не должен узнать о блоке")
+        self.assertEqual(self.stations(), [])
+
+    def test_one_device_cannot_mark_every_station(self):
+        for index in range(api.CNG_DEVICE_DAILY_STATIONS):
+            self.assertEqual(self.post("nogas", lat=41.20 + index * 0.01)[0], 200)
+        self.assertEqual(self.post("nogas", lat=41.40)[0], 429)
+        self.assertEqual(self.post("gas", lat=41.20)[0], 200, "своя станция — ответ можно поменять")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -132,6 +132,8 @@ struct EngineMapView: UIViewRepresentable {
     var pressedPoint: CLLocationCoordinate2D?
     /// Перекрытия и ремонт (12б.5): точка и вид — «radar-closure»/«radar-roadwork».
     var roadEvents: [RoadEvent] = []
+    /// Метан на АГНКС (12б.4): статусы станций — только у машины на метане.
+    var cngStations: [CngStation] = []
     /// «Где машина» (ParkedCar): метка машины, пока подсказка показана.
     var parkedCar: CLLocationCoordinate2D?
     /// Зоны «здесь часто ставят треногу»: пустые — слоя нет.
@@ -609,6 +611,8 @@ struct EngineMapView: UIViewRepresentable {
             lastMarksKey = []
             lastHotspotsKey = -1
             lastRoadEventsKey = -1
+            lastCngKey = -1
+            cngImageNames = []
             lastPosition = nil
             cameraRegion = nil
             style.layer(withIdentifier: "houses")?.isVisible = current?.houses ?? false
@@ -1159,6 +1163,84 @@ struct EngineMapView: UIViewRepresentable {
         /// запись в источник будит перерисовку слоя.
         private var lastMarksKey: [Double] = []
         private var lastRoadEventsKey: Int = -1
+        private var lastCngKey: Int = -1
+
+        /// Картинки пилюль, лежащие в стиле: лишние убираются, иначе каждая
+        /// новая ступень возраста копила бы картинку до перезагрузки стиля.
+        private var cngImageNames: Set<String> = []
+
+        /// Статусы метана — пилюлей «● 15 мин назад» / «● очередь ~15».
+        /// Картинки рисуются по мере надобности: статус × очередь × ступень
+        /// возраста × язык — не больше нескольких десятков.
+        private func updateCng(_ stations: [CngStation], in view: MLNMapView) {
+            let names = stations.map(Self.cngIconName)
+            var hasher = Hasher()
+            for (station, name) in zip(stations, names) {
+                hasher.combine(station.lat)
+                hasher.combine(station.lon)
+                hasher.combine(name)
+            }
+            let key = hasher.finalize()
+            guard key != lastCngKey, let style = view.style,
+                  let source = style.source(withIdentifier: "cng-status") as? MLNShapeSource else { return }
+            lastCngKey = key
+            for (station, name) in zip(stations, names) where style.image(forName: name) == nil {
+                style.setImage(Self.cngIcon(station), forName: name)
+            }
+            source.shape = MLNShapeCollectionFeature(shapes: zip(stations, names).map { station, name in
+                let mark = MLNPointFeature()
+                mark.coordinate = station.coordinate
+                mark.attributes = ["icon": name, "confirmed": station.status == nil || station.confirmed]
+                return mark
+            })
+            let current = Set(names)
+            for stale in cngImageNames.subtracting(current) { style.removeImage(forName: stale) }
+            cngImageNames = current
+        }
+
+        /// Возраст ступенями: 5, 15, 30 мин, 1, 2, 3 ч.
+        static func cngAgeBucket(_ minutes: Int) -> Int {
+            [5, 15, 30, 60, 120, 180].first { minutes <= $0 } ?? 180
+        }
+
+        static func cngIconName(_ station: CngStation) -> String {
+            let age = cngAgeBucket(station.statusAge ?? station.queueAge ?? 5)
+            return "radar-cng-\(station.status?.rawValue ?? "none")-\(station.queue ?? 0)-\(age)-"
+                + Formatting.numberLocale.identifier
+        }
+
+        /// Белая пилюля: кружок цвета статуса (зелёный — газ есть, графит —
+        /// газа нет: красный на этой карте — камера; янтарь — известна только
+        /// очередь) и «15 мин назад» или «очередь ~15».
+        static func cngIcon(_ station: CngStation) -> UIImage {
+            let fill: UInt32
+            let glyph: String
+            switch station.status {
+            case .gas?: fill = 0x1E8E3E; glyph = "checkmark"
+            case .nogas?: fill = 0x4B5563; glyph = "xmark"
+            case nil: fill = 0xB45309; glyph = "clock"
+            }
+            let text = station.queue.map(CngRules.queueText)
+                ?? CngRules.ago(cngAgeBucket(station.statusAge ?? 5))
+            let font = UIFont.systemFont(ofSize: 10, weight: .bold)
+            let textSize = (text as NSString).size(withAttributes: [.font: font])
+            let size = CGSize(width: ceil(textSize.width) + 30, height: 20)
+            return UIGraphicsImageRenderer(size: size).image { _ in
+                let pill = UIBezierPath(roundedRect: CGRect(origin: .zero, size: size).insetBy(dx: 0.5, dy: 0.5),
+                                        cornerRadius: 10)
+                UIColor.white.setFill(); pill.fill()
+                UIColor(white: 0, alpha: 0.18).setStroke(); pill.lineWidth = 1; pill.stroke()
+                Theme.rgb(fill).setFill()
+                UIBezierPath(ovalIn: CGRect(x: 3, y: 3, width: 14, height: 14)).fill()
+                if let icon = UIImage(systemName: glyph,
+                                      withConfiguration: UIImage.SymbolConfiguration(pointSize: 7, weight: .black))?
+                    .withTintColor(.white, renderingMode: .alwaysOriginal) {
+                    icon.draw(at: CGPoint(x: 10 - icon.size.width / 2, y: 10 - icon.size.height / 2))
+                }
+                (text as NSString).draw(at: CGPoint(x: 21, y: (size.height - textSize.height) / 2),
+                                        withAttributes: [.font: font, .foregroundColor: UIColor(white: 0.12, alpha: 1)])
+            }
+        }
 
         /// Перекрытия и ремонт — свой источник под камерами (12б.5). Ключ —
         /// id, вид и подтверждение: уточнение «перекрыто → ремонт» не меняет
@@ -1208,6 +1290,7 @@ struct EngineMapView: UIViewRepresentable {
                     MLNShapeCollectionFeature(shapes: points)
             }
             updateRoadEvents(model.roadEvents, in: view)
+            updateCng(model.cngStations, in: view)
             var hasher = Hasher()
             for spot in model.hotspots { hasher.combine(spot.latitude); hasher.combine(spot.longitude) }
             let hotspotsKey = hasher.finalize()

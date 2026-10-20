@@ -61,9 +61,15 @@ extension MapScreen {
         }
         // Дорога на работу и домой: четыре недели будней поверх истории.
         if args.contains("-demoCommutes") {
-            env.trip.seedDemoCommutes()
-            env.commuteProfiles.seedDemo(home: TripStats.demoHome, work: TripStats.demoWork)
-            env.refreshLearnedPlaces()
+            Task {
+                // После чтения истории с диска: прочитанное позже вливается
+                // поверх демо, и строки профиля не совпали бы с поездками.
+                while !env.trip.isLoaded { await Task.pause(seconds: 0.2) }
+                env.trip.seedDemoCommutes()
+                env.commuteProfiles.seedDemo(home: TripStats.demoHome, work: TripStats.demoWork,
+                                             trips: env.trip.history)
+                env.refreshLearnedPlaces()
+            }
         }
         // Демо-история двухнедельной давности: проверка «в этом периоде поездок нет».
         if args.contains("-demoHistoryOld") { env.trip.seedDemoHistory(shiftDays: 14) }

@@ -751,6 +751,21 @@ nonisolated enum AppConfig {
     /// дом и работа), если поездка началась раньше — запуск Siri, фон.
     nonisolated static let commuteGhostStartWaitSeconds: TimeInterval = 180
 
+    // MARK: «Где ушло время» (CommuteLoss, 8.8.8)
+    /// Отрезок называется, если потерял против медианы хотя бы минуту: десять
+    /// секунд у светофора — не место, где «ушло время».
+    nonisolated static let commuteLossMinSeconds: TimeInterval = 60
+    /// Не больше трёх мест: список из десяти — уже не ответ, а таблица.
+    nonisolated static let commuteLossMaxStretches = 3
+    /// Подпись места — улица ближайшего дома не дальше этого: середина отрезка
+    /// лежит на оси дороги, а дома на широком проспекте — в 50–100 м от неё.
+    nonisolated static let commuteLossNameMeters: Double = 150
+    /// Строк в «Последних поездках» экрана дороги.
+    nonisolated static let commuteDetailTripRows = 12
+    /// Пробел посреди пробки (стояние дольше двух минут на границе участков)
+    /// не рвёт отрезок, если он не длиннее двух участков (~400 м).
+    nonisolated static let commuteLossBridgeSegments = 2
+
     // MARK: «Выезжайте раньше» (план 19.10, 8.8.7)
 
     /// Напоминание — за столько минут до выгодного выезда.

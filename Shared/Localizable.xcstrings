@@ -4698,6 +4698,22 @@
         }
       }
     },
+    "Задерживаюсь: буду примерно в %@.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задерживаюсь: буду примерно в %@."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kechikyapman: taxminan %@ da bo‘laman."
+          }
+        }
+      }
+    },
     "Заезд за стоп-линию": {
       "localizations": {
         "ru": {
@@ -9962,6 +9978,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kamera haqida oldindan ogohlantiradi"
+          }
+        }
+      }
+    },
+    "Предупредить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Предупредить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogohlantirish"
+          }
+        }
+      }
+    },
+    "Предупредить, что задерживаетесь?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Предупредить, что задерживаетесь?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kechikayotganingizni ogohlantirasizmi?"
           }
         }
       }

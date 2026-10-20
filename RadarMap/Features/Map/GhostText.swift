@@ -33,6 +33,12 @@ enum GhostText {
             : String(localized: "как обычно")
     }
 
+    /// Хвост с заглавной — заголовок плашки: «На 7 мин позже 9:00».
+    static func headline(_ ghost: CommuteLiveService.Display) -> String {
+        let tail = tail(ghost)
+        return tail.prefix(1).uppercased() + tail.dropFirst()
+    }
+
     /// Подпись тревожная: позже срока, впритык или заметно дольше обычного.
     static func isAlert(_ ghost: CommuteLiveService.Display) -> Bool {
         switch ghost.slack?.shown {

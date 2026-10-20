@@ -57,3 +57,21 @@ final class GhostTextTests: XCTestCase {
         XCTAssertTrue(LiveActivityService.differs(worse, from: old, now: arrival))
     }
 }
+
+/// «Опаздываю — предупредить?» (8.8.14): только «позже срока», стоя, не под
+/// оповещением о камере и один раз за поездку.
+final class GhostLatePlaqueTests: XCTestCase {
+    func testShownOnlyLateStandingOnce() {
+        XCTAssertTrue(CommuteLiveService.showsLatePlaque(slack: .late, done: false, speedKmh: 0, coveredByCamera: false))
+        XCTAssertFalse(CommuteLiveService.showsLatePlaque(slack: .tight, done: false, speedKmh: 0, coveredByCamera: false),
+                       "впритык — ещё не опаздываем")
+        XCTAssertFalse(CommuteLiveService.showsLatePlaque(slack: nil, done: false, speedKmh: 0, coveredByCamera: false),
+                       "без срока — никогда")
+        XCTAssertFalse(CommuteLiveService.showsLatePlaque(slack: .late, done: false, speedKmh: 45, coveredByCamera: false),
+                       "на ходу лист «Поделиться» — помеха")
+        XCTAssertFalse(CommuteLiveService.showsLatePlaque(slack: .late, done: true, speedKmh: 0, coveredByCamera: false),
+                       "одна на поездку")
+        XCTAssertFalse(CommuteLiveService.showsLatePlaque(slack: .late, done: false, speedKmh: 0, coveredByCamera: true),
+                       "под оповещением о камере ждёт")
+    }
+}

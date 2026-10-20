@@ -179,6 +179,75 @@ struct ReportRefineGate: View {
 
 
 
+/// «Опаздываю — предупредить?» (8.8.14): пер-тиковые скорость и «накрыто
+/// камерой» читает гейт, а не body MapScreen (та же дисциплина, что выше).
+struct GhostLateGate: View {
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        if let ghost = env.commuteLive.display, let slack = ghost.slack,
+           CommuteLiveService.showsLatePlaque(slack: slack.shown, done: env.commuteLive.latePlaqueDone,
+                                              speedKmh: env.location.speedKmh,
+                                              coveredByCamera: env.location.isApproachingCamera) {
+            GhostLatePlaque(ghost: ghost) { env.commuteLive.dismissLatePlaque() }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+}
+
+/// Плашка: «на 7 мин позже 9:00 — предупредить?» и лист «Поделиться» с
+/// текстом прибытия. Ничего на сервер: это обычное сообщение от водителя.
+struct GhostLatePlaque: View {
+    let ghost: CommuteLiveService.Display
+    let onDone: () -> Void
+
+    private var message: String {
+        let clock = ghost.arrival.formatted(date: .omitted, time: .shortened)
+        return String(localized: "Задерживаюсь: буду примерно в \(clock).")
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "clock.badge.exclamationmark.fill")
+                .font(.rounded(15, .bold))
+                .foregroundStyle(Theme.warning)
+                .frame(width: 34, height: 34)
+                .background(Theme.warning.opacity(0.14), in: Circle())
+            VStack(alignment: .leading, spacing: 1) {
+                Text(verbatim: GhostText.headline(ghost))
+                    .font(.rounded(15, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                Text("Предупредить, что задерживаетесь?")
+                    .font(.rounded(12))
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            Spacer(minLength: 4)
+            ShareLink(item: message) {
+                Text("Предупредить")
+                    .font(.rounded(15, .bold))
+                    .foregroundStyle(Theme.onAccentFill)
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 44)
+                    .background(Theme.accentFill, in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
+            }
+            .simultaneousGesture(TapGesture().onEnded { onDone() })
+            Button(action: onDone) {
+                Image(systemName: "xmark")
+                    .font(.rounded(13, .bold))
+                    .foregroundStyle(Theme.textTertiary)
+                    .tapTarget()
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Скрыть"))
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .liftedBackground(Theme.surface,
+                          in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
+            .stroke(Theme.stroke, lineWidth: 1))
+    }
+}
+
 struct LocationFollowDriver: View {
     @Environment(AppEnvironment.self) private var env
     let map: MapState

@@ -32,6 +32,20 @@ final class CommuteLiveService {
     }
 
     private(set) var display: Display?
+    /// Плашку «опаздываю — предупредить?» (8.8.14) в этой поездке уже закрыли
+    /// или использовали: она одна на поездку.
+    private(set) var latePlaqueDone = false
+
+    func dismissLatePlaque() { latePlaqueDone = true }
+
+    /// Показывать ли плашку «опаздываю» (8.8.14): только со сроком и когда
+    /// показано «позже срока», стоя (лист «Поделиться» на ходу — помеха за
+    /// рулём), не под оповещением о камере и один раз за поездку. Сама
+    /// никогда ничего не отправляет и «поторопитесь» не говорит.
+    nonisolated static func showsLatePlaque(slack: CommuteGhost.Slack?, done: Bool, speedKmh: Double,
+                                            coveredByCamera: Bool) -> Bool {
+        slack == .late && !done && !coveredByCamera && speedKmh < AppConfig.commuteLatePromptMaxKmh
+    }
 
     @ObservationIgnored private var session: CommuteLiveSession?
     @ObservationIgnored private var direction: Commute.Direction?
@@ -74,6 +88,7 @@ final class CommuteLiveService {
         if !resumed {
             announcer = CommuteGhost.Announcer()
             lateNotice = CommuteGhost.LateNotice()
+            latePlaqueDone = false
         }
         Log.trips.info("призрак: \(direction.rawValue, privacy: .public), вариантов \(variants.count, privacy: .public)")
     }

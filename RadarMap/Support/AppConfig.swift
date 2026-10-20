@@ -727,6 +727,9 @@ nonisolated enum AppConfig {
     /// продержаться (второй пересчёт не раньше чем через минуту).
     nonisolated static let commuteGhostSlackHysteresisMinutes = 1.5
     nonisolated static let commuteGhostSlackHoldSeconds: TimeInterval = 60
+    /// Плашка «опаздываю — предупредить?» (8.8.14) — только медленнее этого:
+    /// лист «Поделиться» на ходу — помеха за рулём.
+    nonisolated static let commuteLatePromptMaxKmh = 10.0
     /// Пересчёт призрака стоя или посреди длинного участка — раз в 30 с.
     nonisolated static let commuteGhostRecomputeSeconds: TimeInterval = 30
     /// С какого отклонения строка призрака становится янтарной (мин).

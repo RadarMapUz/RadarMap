@@ -7956,6 +7956,22 @@
         }
       }
     },
+    "Новая цель": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новая цель"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yangi manzil"
+          }
+        }
+      }
+    },
     "Норма": {
       "localizations": {
         "ru": {

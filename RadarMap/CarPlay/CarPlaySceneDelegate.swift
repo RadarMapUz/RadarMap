@@ -71,7 +71,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     lazy var guidance = CarPlayGuidance(model: model)
     /// Поиск адреса в машине: тот же порядок источников, что на телефоне.
     lazy var search: CarPlaySearch = {
-        let search = CarPlaySearch { [weak self] place in self?.route(to: place) }
+        let search = CarPlaySearch { [weak self] place in self?.pickFromSearch(place) }
         search.present = { [weak self] template in self?.pushSearchResults(template) }
         return search
     }()

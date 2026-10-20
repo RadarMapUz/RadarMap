@@ -1,0 +1,126 @@
+id,location,old_cls,old_axis,old_dir,named_road,new_cls,new_axis,new_dir,new_split,dist_m,status,note
+10,Alisher Navoi va N.oxunov va Dilkushod ko'chalari kesishgan chorrahasi,residential,62,,,,,,,,skip,в адресе нет трассы или проспекта
+23,Bobur Shox-mangulik ko'chalari kesishmasi,residential,76,,,,,,,,skip,в адресе нет трассы или проспекта
+37,Boʼston Dаhаsi (Kаpeykа Doʼkoni Qаrshisidа),residential,0,,,,,,,,skip,в адресе нет трассы или проспекта
+46,D-109 avtomobil Yo`lining 85KM,residential,173,,D-109,primary,172,352,True,18,fixed,ref: D-109: primary ось 172 в 18 м
+63,Mangulik ko‘chasi (yangi bozor Dehqon bozori Darvozasi Qarshisi),residential,91,,,,,,,,skip,в адресе нет трассы или проспекта
+64,Mangulik va Ustalar Ko‘chalari chorrahasi,residential,92,,,,,,,,skip,в адресе нет трассы или проспекта
+84,Toshkent va Muhiddinov ko'chalari kesishgan chorraha,unclassified,109,,,,,,,,skip,в адресе нет трассы или проспекта
+87,yangi Aylanma yo'l va Asaka yo'li kesishgan chorrahasi,residential,99,,по имени: asaka aylanma yangi yol,,,,,,ambiguous,"перекрёсток улиц без номера трассы — какую снимает камера, адрес не говорит"
+109,"Baraka mfy, J.rumiy ko‘chasi bozor Yonidagi “Korzinka” Qarama-qarshisi",residential,110,,,,,,,,skip,в адресе нет трассы или проспекта
+110,"Baraka mfy, J.rumiy ko‘chasi bozor Yonidagi “Samarqand Gilamlari” Ro‘parasi",residential,110,,,,,,,,skip,в адресе нет трассы или проспекта
+111,"Birdamlik mfy, J.rumiy ko‘chasi yangi Avtoturargoh (Kamolot Uylari oldi)",residential,118,,,,,,,,skip,в адресе нет трассы или проспекта
+112,"Birdamlik mfy, Toshkenboyev ko‘chasi Boshi",residential,97,,,,,,,,skip,в адресе нет трассы или проспекта
+129,"D146 ""A373 avtomobil Yoʼli (348 Km.dan) – Buloqboshi T."" avtomobil Yoʼlining 10 km va D139 ""Xoʼjaobod T. – Buloqboshi T. – Marhamat T."" avtomobil Yoʼlining 6 km bilan kesishgan chorraha",secondary_link,118,118,D146 × D139,,,,,6,ambiguous,"перекрёсток трасс: D146 — primary ось 171 в 20 м, D139 — secondary ось 80 в 6 м"
+146,"D 087 Marg‘ilon Sh. - Quva Sh. - Marhamat Sh. - Qirg‘iziston respublikasi Chegarasi 59 km. (Buyuk Ipak yo‘li ko‘chasi, Imkon Do‘koni Ro‘parasi)",residential,10,,D 087,primary,99,,,0,fixed,ref: D 087: primary ось 99 в 0 м
+172,60V011 avtomobil Yo‘lining 1 km,unclassified,51,,60V011,,,,,,not_found,60V011 в 40 м не найдена; в 300 м её нет
+206,A-373 “Toshkent-o‘sh” avtomobil Yo‘lining 349 km. (Munduz),unclassified,9,,A-373,,,,,,not_found,A-373 в 40 м не найдена; в 300 м её нет; рядом trunk ось 105 в 10 м (без номера)
+484,"D089 avtomobil yo'lining 1,6 km kesishgan chorraha (Mo'ljal 5-SONLI maktab)",secondary_link,65,245,D089,,,,,53,not_found,D089 в 40 м не найдена; ближайшая её проезжая часть — primary ось 116 в 53 м; рядом secondary ось 41 в 3 м (D91B)
+529,Dodxoh - Yoshlik ko'chalari kesishgan chorraha (Mo'ljal Glaznoy),residential,2,,,,,,,,skip,в адресе нет трассы или проспекта
+605,"D087 avtomobil yo'lining 2,6 km kesishgan chorraha (Mo'ljal Temir yo'l Vokzal)",primary_link,79,259,D087,,,,,,not_found,D087 в 40 м не найдена; в 300 м её нет; рядом primary ось 68 в 2 м (40V20/4K850)
+646,D099 avtomobil Yo'lini 2 km kesishgan chorraha (Mo'ljal Sud),trunk_link,20,20,D099,trunk,4,,,4,fixed,"ref: D099: trunk ось 4 в 4 м; адрес — перекрёсток, трасса в нём одна: берём её"
+655,D099 avtomobil yo'lining 5 km kesishgan chorraha (Mo'ljal Mediapark),trunk_link,131,311,D099,trunk,91,271,True,17,fixed,"ref: D099: trunk ось 91 в 17 м; адрес — перекрёсток, трасса в нём одна: берём её"
+662,D105 avtomobil yo'lining 301 km kesishgan chorraha (Mo'ljal Mikrokredit Bank),secondary_link,3,3,D105,,,,,,not_found,D105 в 40 м не найдена; в 300 м её нет; рядом secondary ось 159 в 5 м (4R153/D97)
+664,D105 avtomobil yo'lining 301 km kesishgan chorraha (Mo'ljal Mikrokredit Bank),secondary_link,112,112,D105,,,,,,not_found,D105 в 40 м не найдена; в 300 м её нет; рядом primary ось 66 в 14 м (без номера)
+676,D105 avtomobil yo'lining 305 km kesishgan chorraha (Mo'ljal Aloqa Bank),trunk_link,72,72,D105,,,,,,not_found,D105 в 40 м не найдена; в 300 м её нет; рядом trunk ось 55 в 5 м (4R17E/D99)
+677,D105 avtomobil yo'lining 305 km kesishgan chorraha (Mo'ljal Aloqa Bank),trunk_link,77,257,D105,,,,,,not_found,D105 в 40 м не найдена; в 300 м её нет; рядом trunk ось 59 в 7 м (A373B)
+682,Istiqlol va Qo'qon Sadosi Ko‘chalari Kеsishmasi,residential,150,,,,,,,,skip,в адресе нет трассы или проспекта
+715,"40V142 avtomobil Yo‘lining 1,6 -Km.da (Yozyovon Dexkon bozori)",residential,95,,40V142,,,,,,not_found,40V142 в 40 м не найдена; в 300 м её нет; рядом secondary ось 11 в 4 м (без номера)
+778,Xolqabot ko‘chasi (Mo‘ljal:katta Bozari oldi),residential,165,345,,,,,,,skip,в адресе нет трассы или проспекта
+780,"Zilol mahallasi, Mustaqillik ko‘chasi 5-UY oldi",residential,46,,,,,,,,skip,в адресе нет трассы или проспекта
+814,"D046 - ""Jizzаx Sh. Rаvot Q. Zomin Q. Sаvot Q. Tojikiston Respublikаsi Chegаrаsi"" Аvtomobil Yoʼli Buyuk Ipаk Yoʼli Vа Ulugʼbek Koʼchаlаri Chorrаxаsi",primary_link,38,,D046,primary,114,294,True,3,fixed,"ref: D046: primary ось 114 в 3 м; адрес — перекрёсток, трасса в нём одна: берём её"
+830,R.alimov va Mustaqillik ko'chalari,residential,120,,,,,,,,skip,в адресе нет трассы или проспекта
+836,Chortoq shahri markazi Zafar Diyor mfy (Dehqon bozori),unclassified,138,,,,,,,,skip,в адресе нет трассы или проспекта
+896,Hamroh ko‘chasi (Masjid Oldiga),residential,92,,,,,,,,skip,в адресе нет трассы или проспекта
+923,"Soxilbo‘yi – Sanoatchilar Ko‘chalari kesishmasi, (Sohilbo‘yi Chorraxasi)",residential,29,,,,,,,,skip,в адресе нет трассы или проспекта
+1003,Uychi - Soku Ko‘chalari Kеsishmasi,unclassified,125,,,,,,,,skip,в адресе нет трассы или проспекта
+1026,"Karmana shahri, D076H va D076HI avtomobil Yo‘llari Kеsishgan chorrahasi (Oq Qush Markеt chorrahasi)",residential,73,,D076H × D076HI,,,,,,ambiguous,"перекрёсток трасс, D076H в 40 м не найдена — какую снимает камера, адрес не говорит; в 300 м её нет"
+1129,D-153 “Qarshi Sh. - Beshkent Sh. - Qamashi Q. - Kasbi Q - Koson Sh.” avtomobil Yo‘lining 22 km. Talliyulg‘un mfy,residential,171,,D-153,primary,107,,,16,fixed,ref: D-153: primary ось 107 в 16 м
+1147,Ipak yo‘li va Markaziy O‘yingoh Ko‘chalari Kеsishgan chorraha,residential,116,,,,,,,,skip,в адресе нет трассы или проспекта
+1195,O‘zbеkiston va Qori Niyoziy Ko‘chalari Kеsishgan Chorraxa,residential,109,,,,,,,,skip,в адресе нет трассы или проспекта
+1209,Qamashi tumani Hududida 4P85 “Qamashi Chimqurg‘on” A/y 9-10 km,unclassified,18,,4P85,,,,,,not_found,4P85 в 40 м не найдена; в 300 м её нет; рядом secondary ось 115 в 7 м (4K340/70V71)
+1241,I.karimov va Turkiston Ko‘chalari Kеsishgan chorraha,residential,111,,,,,,,,skip,в адресе нет трассы или проспекта
+1289,A.tеmur ko‘chasi va Bog‘ieram Ko‘chalari Kеsishgan Chorraxa,residential,2,,,,,,,,skip,в адресе нет трассы или проспекта
+1369,"Bеruniy shahri, Shayx Abbos Vali ko‘chasi (Kardiologiya oldi)",residential,23,,,,,,,,skip,в адресе нет трассы или проспекта
+1387,"Jipek yo‘li mfy, A.temur ko‘chasi, Dehqon bozor oldi.",residential,16,,,,,,,,skip,в адресе нет трассы или проспекта
+1442,"D234E Avtoyoʻli 0–1 km Oraligʻida, 5-MAKTAB qarshisida.",residential,81,,D234E,primary,30,,,6,fixed,ref: D234E: primary ось 30 в 6 м
+1477,"G‘arezsizlik Go‘zari mfy, Ajiniyaz ko‘chasi, Dehqon bozor oldi.",residential,35,,,,,,,,skip,в адресе нет трассы или проспекта
+1575,Nurbuloq mahallasi Hududidan O‘tuvchi 4D072 avtomobil Yo‘lining 24 km Oralig‘i,residential,126,,трасса без номера,,,,,,not_found,"в адресе трасса, но номер не распознан"
+1656,Husayn Boyqaro va Alisher Navoiy ko'chalari,residential,12,,,,,,,,skip,в адресе нет трассы или проспекта
+1691,Narpay Abu Bakir Roziy ko‘chasi,residential,2,,,,,,,,skip,в адресе нет трассы или проспекта
+1720,Rudakiy ko‘chasi Shodiyona Ko‘prik Tagi,primary_link,34,,,,,,,,skip,в адресе нет трассы или проспекта
+1722,Rudakiy-kurchatova Ko‘chalari kesishmasi,unclassified,26,,,,,,,,skip,в адресе нет трассы или проспекта
+1727,Shohruh Mirzo-kamol Otaturk-o'zbekiston ko'chalari kesishmasi,residential,51,,,,,,,,skip,в адресе нет трассы или проспекта
+1783,"D069 avtomobil Yo‘lining 7-8 km Oralig‘i, Novzandak Aholi Punkti, 27-MAKTAB",residential,39,,D069,primary,124,,,7,fixed,ref: D069: primary ось 124 в 7 м
+1817,I.karimov ko’chasi 27 Uy (Guliston Moliya Bo’limi oldi),residential,167,,,,,,,,skip,в адресе нет трассы или проспекта
+1818,I.karimov ko’chasi 29 Uy (viloyat Soliq Boshqarmasi oldi),residential,167,,,,,,,,skip,в адресе нет трассы или проспекта
+1837,O‘zbеkiston-navoiy Ko‘chalari chorrahasi,residential,77,,,,,,,,skip,в адресе нет трассы или проспекта
+1885,"Sayxun Shaharchasi, Navbaxor va Ravonlik Ko‘chalari Chorrahasida",residential,91,,,,,,,,skip,в адресе нет трассы или проспекта
+1994,Sеbzor mahallasi 4K584 Yo‘lning 4 km,unclassified,140,,4K584,,,,,,not_found,4K584 в 40 м не найдена; в 300 м её нет
+2033,"T.mirzayeva ko‘chasi, Markaziy Dеxqon bozori Qarshisi",residential,132,,,,,,,,skip,в адресе нет трассы или проспекта
+2034,Taraqqiyot va Barkamol Avlod Ko‘chalari Chorrahasida.,residential,172,,,,,,,,skip,в адресе нет трассы или проспекта
+2038,"75V035 ""Salovat Q. - 164-SON Temir yo'l Stansiyasiga"" 3-KM, Guliston Aholi Yashash Punkti",residential,59,,75V035,,,,,,not_found,75V035 в 40 м не найдена; в 300 м её нет; рядом tertiary ось 59 в 0 м (без номера)
+2062,Qo‘yliq Dehqon bozori Yon Tomoni (Ko‘prik Yon Qismi 1),trunk_link,156,156,,,,,,,skip,в адресе нет трассы или проспекта
+2113,Chilonzor Buyum bozori Avtomobillar Turargohi qarshisida,trunk_link,41,41,,,,,,,skip,в адресе нет трассы или проспекта
+2116,Chilonzor metro (Idea Magazin oldi),tertiary_link,125,305,,,,,,,skip,в адресе нет трассы или проспекта
+2132,"Gavhar ko‘chasi, ""Olmazor"" Mеtro Bеkati qarshisida",primary_link,92,92,,,,,,,skip,в адресе нет трассы или проспекта
+2153,"Muqumiy ko‘chasi, Snukеr Billard Binosi, Ko‘prik Osti 1A Uy oldi",primary_link,130,130,,,,,,,skip,в адресе нет трассы или проспекта
+2154,Mеhr ko‘chasi 56-UY qarshisida,unclassified,126,306,,,,,,,skip,в адресе нет трассы или проспекта
+2155,Mеhr ko‘chasi 56-UY qarshisida,unclassified,126,306,,,,,,,skip,в адресе нет трассы или проспекта
+2157,Olmazor Mеtro Bеkati qarshisida,primary_link,11,191,,,,,,,skip,в адресе нет трассы или проспекта
+2211,"Farg‘ona yo‘li ko‘chasi, 21-UY qarshisida (tuman Xokimiyati)",residential,25,25,по имени: fargona fergana ferganskoe,primary,153,333,True,5,fixed,name: primary ось 153 в 5 м
+2244,Turkiston va Amir Tеmur Shox ko‘chasi Chorraxasi,residential,49,49,по имени: amir chorraxasi shox temur turkiston,,,,,,ambiguous,"перекрёсток улиц без номера трассы — какую снимает камера, адрес не говорит"
+2272,Kxay ko‘chasi Salar Ko‘prigiga Yetmasdan Salar Bo‘yi ko‘chasi qarshisida,residential,12,,Kxay,trunk,14,194,True,16,fixed,ring: Kxay: trunk ось 14 в 16 м
+2275,M.ulug‘bek - Parkent chorrahasi 51-UY Yoni (Ilg‘or Tibbiy Tadqiqotlar Instituti),primary_link,66,246,,,,,,,skip,в адресе нет трассы или проспекта
+2285,Mo‘minov va Olimlar Ko‘chalari chorrahasi,residential,134,,,,,,,,skip,в адресе нет трассы или проспекта
+2392,Qorasaroy-changalzor Mavzuk Ko‘chalari Kеsishmasi,unclassified,81,,,,,,,,skip,в адресе нет трассы или проспекта
+2397,Sagbon – Gulsaroy Ko‘chalari chorrahasi,primary_link,126,306,,,,,,,skip,в адресе нет трассы или проспекта
+2418,Talabalar – Ziyo Ko‘chalari Kеsishmasi,residential,60,,,,,,,,skip,в адресе нет трассы или проспекта
+2450,"Botir Zokirov Ko‘chasidan ""Tashkent Siti Mall"" Binosiga Asosiy Kirish Kismida",unclassified,5,185,,,,,,,skip,в адресе нет трассы или проспекта
+2491,"Zargar Ko‘chasidan ""Summit"" Biznes markazi Binosi Postiga Kirish",residential,95,,,,,,,,skip,в адресе нет трассы или проспекта
+2498,Алишер Навоий - Пахтакор Кўчаси,residential,160,340,,,,,,,skip,в адресе нет трассы или проспекта
+2519,"D001 Txay, “Drivers Village” Avtosaloni qarshisida",trunk_link,28,28,D001,trunk,28,28,True,15,fixed,ref: D001: trunk ось 28 в 15 м
+2535,Qipchoq ko‘chasi (Avtobus bekati),unclassified,62,242,,,,,,,skip,в адресе нет трассы или проспекта
+2591,Foziltеpa va Izza Ko‘chalari chorrahasi,unclassified,12,192,,,,,,,skip,в адресе нет трассы или проспекта
+2604,Kxay -To‘xtagul Ko‘chalari chorrahasi,residential,117,,Kxay,trunk,178,358,True,0,fixed,"ring: Kxay: trunk ось 178 в 0 м; адрес — перекрёсток, трасса в нём одна: берём её"
+2648,Janubiy Vokzal (Ko‘prik),trunk_link,144,144,,,,,,,skip,в адресе нет трассы или проспекта
+2652,Kxay - 4/5- Uy qarshisida,trunk_link,150,,Kxay,trunk,57,237,True,5,fixed,ring: Kxay: trunk ось 57 в 5 м
+2653,Kxay - A.qaxxor 9-TOR Ko‘chalari chorrahasi,trunk_link,150,330,Kxay,trunk,64,244,True,8,fixed,"ring: Kxay: trunk ось 64 в 8 м; адрес — перекрёсток, трасса в нём одна: берём её"
+2667,Sh. Rustavelli-muqimiy Ko‘chalari kesishmasi,primary_link,60,60,,,,,,,skip,в адресе нет трассы или проспекта
+2672,Sh.rustavеli - Yakkasaroy ko‘chasi chorrahasi,residential,129,,,,,,,,skip,в адресе нет трассы или проспекта
+2682,"kichik Beshyog‘och ko‘chasi, 128/6-UY oldi",residential,59,,,,,,,,skip,в адресе нет трассы или проспекта
+2683,"kichik Beshyog‘och ko‘chasi, 130-UY oldi",residential,42,,,,,,,,skip,в адресе нет трассы или проспекта
+2688,"4R21 Txay ""Arzon Market"" Doʻkoni qarshisida",residential,50,,4R21,trunk,49,49,True,17,fixed,ref: 4R21: trunk ось 49 в 17 м
+2720,Bеshariq va Birlashgan 6-TOR Ko‘chalari chorrahasi,residential,149,,,,,,,,skip,в адресе нет трассы или проспекта
+2770,A.donish ko’chasi (Universam Dehqon BOZORI-2 Avtoturargohdan Chiqish),primary_link,48,48,,,,,,,skip,в адресе нет трассы или проспекта
+2773,A.temir - A.donish ko'chalari kesishmasi Ko'prik Krug tomon,primary_link,7,7,,,,,,,skip,в адресе нет трассы или проспекта
+2780,"Ahmad Donish ko‘chasi, 32-UY qarshisida",primary_link,44,224,,,,,,,skip,в адресе нет трассы или проспекта
+2799,Buyuk Turon ko‘chasi O‘zbekiston respublikasi Iqtisodiyot va Moliya Vazirligi,residential,36,,,,,,,,skip,в адресе нет трассы или проспекта
+2803,Istiqlol ko‘chasi Alisher Navoiy Nomidagi O‘zbekiston Milliy Kutubxonasi,residential,107,,,,,,,,skip,в адресе нет трассы или проспекта
+2805,Kxay 9 Uy qarshisida,trunk_link,106,286,Kxay,trunk,95,275,True,10,fixed,ring: Kxay: trunk ось 95 в 10 м
+2808,Kxay-turkqo‘rg'on Ko‘chalari chorrahasi,residential,38,38,Kxay,trunk,127,127,True,1,fixed,"ring: Kxay: trunk ось 127 в 1 м; адрес — перекрёсток, трасса в нём одна: берём её"
+2812,Oloy bozori Tor Ko’cha (62 Uy oldi),primary_link,98,98,,,,,,,skip,в адресе нет трассы или проспекта
+2813,"Oloy bozori Tor ko‘chasi, 64-UY oldi",primary_link,97,97,,,,,,,skip,в адресе нет трассы или проспекта
+2839,Yunusobod Dеhqon bozori qarshisida,primary_link,59,59,,,,,,,skip,в адресе нет трассы или проспекта
+2863,Chirkizov - Ma’rifat Ko‘chalari Kеsishgan chorraha,residential,150,330,,,,,,,skip,в адресе нет трассы или проспекта
+2880,"D020 - ""Qorasuv K.-bo‘ka Sh.-bekobod Sh."" avtomobil Yo‘lining (Isfara Aholi Yashash Punkti ) 94-95 Km.lari Oralig‘i",residential,103,,D020,primary,23,,,8,fixed,ref: D020: primary ось 23 в 8 м
+2891,Do‘stlik mfy Navro‘z ko‘chasi 51-UY Qarshisi,residential,67,,,,,,,,skip,в адресе нет трассы или проспекта
+2896,"Uyas mfy, D 036 avtomobil yo‘li, Shodlik ko‘chasi 41-UY Ro‘parasi",unclassified,142,,D 036,,,,,229,not_found,D 036 в 40 м не найдена; ближайшая её проезжая часть — secondary ось 176 в 229 м
+2959,Alisher Navoiy va Bo'zsuv ko'chalari,unclassified,137,,,,,,,,skip,в адресе нет трассы или проспекта
+2971,"D006 “Toshkent Sh. — Chirchiq Sh. — Chimyon Q.” avtomobil Yo‘lining 17,7 Kilometri bilan 15 Abtobus Saroyi ko‘chasi kesishgan chorraha",primary_link,116,,D006,primary,24,204,True,3,fixed,"ref: D006: primary ось 24 в 3 м; адрес — перекрёсток, трасса в нём одна: берём её"
+2977,D006 “Toshkent Sh. — Chirchiq Sh. — Chimyon Q.” avtomobil Yo‘lining 23 Kilometri bilan Furqat ko‘chasi Tutashgan chorraha,unclassified,126,,D006,primary,35,35,True,11,fixed,"ref: D006: primary ось 35 в 11 м; адрес — перекрёсток, трасса в нём одна: берём её"
+2982,Markaziy bozor oldi,residential,36,,,,,,,,skip,в адресе нет трассы или проспекта
+3046,A373 avtomobil yo'lining 45 km - A373 A avtomobil yo'lining 0 km kesishgan chorraha (Mo'ljal Ohangaron Yhxb Binosi),trunk_link,21,21,A373 × A373 A,,,,,36,ambiguous,"перекрёсток трасс, A373 A в 40 м не найдена — какую снимает камера, адрес не говорит; ближайшая её проезжая часть — trunk ось 176 в 54 м"
+3077,"D002 – “Toshkent Sh. — Nurafshon Sh. — A373 avtomobil Yoʻli (44 Km.ga)” avtomobil Yo‘lining (O‘rtachirchiq tumani, O‘rtaovul mfy hududi) 30-31 Kilometrlari Oralig‘i",residential,25,,D002,primary,116,,,5,fixed,ref: D002: primary ось 116 в 5 м
+3088,"D023- ""Nurafshon Sh. -D002 A/y (26 km) Pskеnt Sh - A373 ""A"" Avtoyo‘li (24 km)"" avtomobil Yo‘lining 5 Kilomеtridagi Svеtofor",residential,68,,D023,primary,173,,,1,fixed,ref: D023: primary ось 173 в 1 м
+3112,"A373A-"" A373 avtomobil Yo‘lidan Ohangaron-guliston-sardoba Yo‘liga Shahobcha"" avtomobil Yo‘lining (Aholi Yashash Punktidan Tashqari) 19-20 km Oralig‘i (Turon Kafe Qarshisi)",unclassified,10,,A373A,trunk,96,96,True,22,fixed,ref: A373A: trunk ось 96 в 22 м
+3113,"A373A-"" A373 avtomobil Yo‘lidan Ohangaron-guliston-sardoba Yo‘liga Shahobcha"" avtomobil Yo‘lining (Oqtepa Aholi Yashash Punkti) 27 km Oralig‘i",unclassified,177,,A373A,trunk,92,92,True,9,fixed,ref: A373A: trunk ось 92 в 9 м
+3126,"10V09 ""Toshkеnt Sh.- O‘nqo‘rg‘on Q.-yonariq Q.-M-39 Avtoyo‘li (808 km)"" A/y Univеrsitеt Ko‘chasi-tajribakor ko‘chasi Kеsishgan chorraha",unclassified,118,,10V09,,,,,,not_found,10V09 в 40 м не найдена; в 300 м её нет; рядом secondary ось 25 в 1 м (4K700)
+3138,"D006 ""Toshkеnt Sh.-chirchiq Sh.-chimyon Q."" A/y bilan 10V006 A/y Kеsishgan Chorraxa (Qipchoq).",primary_link,162,,D006 × 10V006,,,,,3,ambiguous,"перекрёсток трасс, 10V006 в 40 м не найдена — какую снимает камера, адрес не говорит; в 300 м её нет"
+3139,"D006 ""Toshkеnt Sh.-chirchiq Sh.-chimеn Q."" A/y 6-7 km Arg‘in Chorraxasi",primary_link,142,,D006,primary,52,232,True,4,fixed,"ref: D006: primary ось 52 в 4 м; адрес — перекрёсток, трасса в нём одна: берём её"
+3183,"Samarqand ko‘chasi, bozor qarshisida",primary_link,84,264,,,,,,,skip,в адресе нет трассы или проспекта
+3346,Uzbekiston Ovozi VA Shastri Kuchalari Chorraxasi,unclassified,86,,,,,,,,skip,в адресе нет трассы или проспекта
+3348,"Qamashi Shahri, A.temur VA Ma’rifat ko‘chalari Kesishgan Chorrahasi",residential,31,,,,,,,,skip,в адресе нет трассы или проспекта
+3419,"A373A) ""Ohangaron - Guliston - Sardoba yo'li"" avtomobil yo'lining 125 Km.dagi Tinchlik ko'chasi bilan kesishgan chorraha, ""Sardoba"" Aholi Yashash Punkti",residential,34,,A373A,trunk,125,125,True,5,fixed,"ref: A373A: trunk ось 125 в 5 м; адрес — перекрёсток, трасса в нём одна: берём её"
+3433,D025K) “Sherobod Shahriga Kirish” avtomobil Yo‘lining 1-KM Oralig‘i,residential,59,,D025K,primary,143,,,13,fixed,ref: D025K: primary ось 143 в 13 м
+3444,Txay - Dehqonobod ko'chalari kesishgan chorraha,trunk_link,151,151,Txay (D1),trunk,163,163,True,6,fixed,"ref: Txay (D1): trunk ось 163 в 6 м; адрес — перекрёсток, трасса в нём одна: берём её"

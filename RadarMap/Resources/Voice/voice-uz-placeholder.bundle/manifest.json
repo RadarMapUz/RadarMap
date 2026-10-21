@@ -212,6 +212,21 @@
    "file": "lane.all_but_right.m4a",
    "sha256": "ff1414638c535f8ec944e595eeb385a91ebb8498a0b69a6a8c50a122a4938ef0"
   },
+  "lane.edge_far_left": {
+   "duration": 1.777,
+   "file": "lane.edge_far_left.m4a",
+   "sha256": "4ea74faf310752fa7c2f30df6193ef74d6b840d38c848d210f7d583a23d9bed4"
+  },
+  "lane.edge_left": {
+   "duration": 1.472,
+   "file": "lane.edge_left.m4a",
+   "sha256": "f70f3a59c5c45ed6318493287c1325ddfeddb15bd1d4d3b7cb296a4cbf416694"
+  },
+  "lane.edge_right": {
+   "duration": 1.492,
+   "file": "lane.edge_right.m4a",
+   "sha256": "d1e4a0d00c0113114035b006a59b1f1185cd746b9f5bb58cf416050f05da0483"
+  },
   "lane.left_many": {
    "duration": 1.31,
    "file": "lane.left_many.m4a",

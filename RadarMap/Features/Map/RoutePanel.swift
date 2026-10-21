@@ -342,9 +342,30 @@ struct ManeuverBanner: View {
             Spacer(minLength: 0)
         }
         .padding(14)
+        if let edge = step.laneEdge, showsLaneRow {
+            Rectangle().fill(ink.opacity(0.22)).frame(height: 1)
+            // Полос от OSRM нет — край словами и значком «к кромке»: ряд
+            // стрелок по догадке рисовать нельзя, а «перестройтесь в левый
+            // ряд» — правило ПДД для многополосного подъезда (20.3).
+            HStack(spacing: 10) {
+                Image(systemName: LaneAdvice.symbol(edge))
+                    .font(.rounded(20, .heavy))
+                    .foregroundStyle(fill)
+                    .frame(width: 44, height: 34)
+                    .background(ink, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                Text(LaneAdvice.spoken(edge))
+                    .font(.rounded(16, .bold))
+                    .foregroundStyle(ink)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .accessibilityElement(children: .combine)
+        }
         if !step.lanes.isEmpty, step.lanes.count <= 8,
-           step.lanes.contains(where: \.isValid),
-           lanesShownFor == step.distanceAlong || distance <= LaneAdvice.showDistance(speedKmh: speedKmh) {
+           step.lanes.contains(where: \.isValid), showsLaneRow {
             Rectangle().fill(ink.opacity(0.22)).frame(height: 1)
             // Как у Amap: ряд полос — сама дорога, полосы разделены
             // разметкой, нужные — залиты белым, и над рядом словами,
@@ -359,10 +380,13 @@ struct ManeuverBanner: View {
                 HStack(spacing: 0) {
                     ForEach(Array(step.lanes.enumerated()), id: \.offset) { index, lane in
                         if index > 0 {
+                            // Высота разделителя — своя, а не «сколько дадут»:
+                            // прямоугольник без высоты растягивал весь ряд на
+                            // высоту экрана (снимок 21.10 — пол-экрана синей
+                            // панели под карточкой манёвра).
                             Rectangle()
                                 .fill(ink.opacity(0.3))
-                                .frame(width: 1.5)
-                                .padding(.vertical, 6)
+                                .frame(width: 1.5, height: 28)
                         }
                         Image(systemName: lane.primaryArrow(for: step.kind).symbolName)
                             .font(.rounded(24, lane.isValid ? .heavy : .regular))
@@ -391,6 +415,11 @@ struct ManeuverBanner: View {
         .onChange(of: distance <= LaneAdvice.showDistance(speedKmh: speedKmh), initial: true) { _, near in
             if near { lanesShownFor = step.distanceAlong }
         }
+    }
+
+    /// Ряд (стрелки или край) — на подходе, и раз показанный уже не прячется.
+    private var showsLaneRow: Bool {
+        lanesShownFor == step.distanceAlong || distance <= LaneAdvice.showDistance(speedKmh: speedKmh)
     }
 }
 

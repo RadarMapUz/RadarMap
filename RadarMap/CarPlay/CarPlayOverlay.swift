@@ -411,7 +411,7 @@ struct CarPlayOverlay: View {
                     .font(.rounded(22, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.onAccentFill)
                     .liveNumber()
-                Text(step.text)
+                Text(step.compactInstruction)
                     .font(.rounded(16, .semibold))
                     .foregroundStyle(Theme.onAccentFillSecondary)
                     .lineLimit(1)

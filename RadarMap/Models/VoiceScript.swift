@@ -106,6 +106,14 @@ nonisolated enum VoiceScript {
         for run in VoiceEvent.LaneRun.allCases {
             events.append(.maneuver(.init(action: .turnLeft, meters: 300, lanes: run)))
         }
+        // Край без полос (20.2): по команде, у которой он бывает.
+        let edgeActions: [VoiceEvent.LaneEdge: VoiceEvent.Action] = [
+            .left: .turnLeft, .farLeft: .uturn, .right: .turnRight,
+            .keepLeft: .offRamp, .keepRight: .offRamp]
+        for edge in VoiceEvent.LaneEdge.allCases {
+            events.append(.maneuver(.init(action: edgeActions[edge] ?? .turnLeft, meters: 300,
+                                          lanes: nil, edge: edge)))
+        }
         // Лимит впереди.
         for meters in stride(from: Bounds.limitAheadMeters.lowerBound,
                              through: Bounds.limitAheadMeters.upperBound, by: 50) {
@@ -344,6 +352,9 @@ nonisolated enum VoiceScript {
             "lane.all_but_left": "Chapdan boshqa istalgan qatordan",
             "lane.middle_one": "Oʻrta qatordan",
             "lane.middle_many": "Oʻrta qatorlardan",
+            "lane.edge_left": "Chap qatorga oʻting",
+            "lane.edge_far_left": "Eng chap qatorga oʻting",
+            "lane.edge_right": "Oʻng qatorga oʻting",
             "peak.night": "odatda kechasi",
             "peak.morning": "odatda ertalab",
             "peak.day": "odatda kunduzi",
@@ -483,6 +494,9 @@ nonisolated enum VoiceScript {
             "lane.all_but_left": "Из любого ряда, кроме левого",
             "lane.middle_one": "Из среднего ряда",
             "lane.middle_many": "Из средних рядов",
+            "lane.edge_left": "Перестройтесь в левый ряд",
+            "lane.edge_far_left": "Перестройтесь в крайний левый ряд",
+            "lane.edge_right": "Перестройтесь в правый ряд",
             "peak.night": "обычно ночью",
             "peak.morning": "обычно утром",
             "peak.day": "обычно днём",

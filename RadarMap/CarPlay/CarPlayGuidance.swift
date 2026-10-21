@@ -28,14 +28,23 @@ nonisolated enum CarPlayGuidanceMapping {
     /// CarPlay берёт первый, что помещается; без короткого узкая карточка
     /// оставалась пустой. С заглавной буквы — это подпись, а не продолжение
     /// фразы голоса.
-    static func instructionVariants(text: String, shortText: String?) -> [String] {
+    ///
+    /// Край без полос OSRM («…, левый ряд») — в каждом варианте, кроме
+    /// последнего запасного: в узкой карточке край важнее улицы, и «Поверните
+    /// налево, левый ряд» идёт раньше полной фразы без края (20.3 — на месте
+    /// схемы развязки владелец просил «с какого края повернуть»).
+    static func instructionVariants(text: String, shortText: String?,
+                                    advice: LaneAdvice.Advice? = nil) -> [String] {
         var result: [String] = []
-        for variant in [text, shortText].compactMap({ $0 }) {
+        func add(_ variant: String) {
             let trimmed = variant.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { continue }
+            guard !trimmed.isEmpty else { return }
             let capitalized = trimmed.prefix(1).uppercased() + trimmed.dropFirst()
             if !result.contains(capitalized) { result.append(capitalized) }
         }
+        let plain = [text, shortText].compactMap { $0 }
+        for variant in plain { add(LaneAdvice.instruction(variant, advice: advice)) }
+        if let last = plain.last { add(last) }
         return result.isEmpty ? [text] : result
     }
 
@@ -497,35 +506,11 @@ final class CarPlayGuidance {
             Log.carplay.notice("манёвра нет — в машине остаётся прежний: \(self.maneuver != nil, privacy: .public)")
             return
         }
-        let next = CPManeuver()
-        next.instructionVariants = CarPlayGuidanceMapping.instructionVariants(
-            text: step.text, shortText: step.shortText)
-        // Плитка главного экрана — та же фраза явно, а не через запасной путь.
-        next.dashboardInstructionVariants = next.instructionVariants
-        // Цвет стрелки — под фон НАШЕЙ карточки (guidanceBackgroundColor —
-        // синяя всегда, значит стрелка белая): до машины доезжает одна
-        // картинка, та, что создана. Баннеры поверх чужого приложения и
-        // плитка панели рисуются в теме МАШИНЫ — им свой цвет.
-        let symbolName = step.kind?.isDrawable == false ? "flag.checkered" : step.icon
-        next.symbolImage = Self.symbol(symbolName, pointSize: 34, onDark: true)
-        let carDark = model.carIsDark ?? !model.isDaylight
-        next.notificationSymbolImage = Self.symbol(symbolName, pointSize: 34, onDark: carDark)
-        next.dashboardSymbolImage = Self.symbol(symbolName, pointSize: 34, onDark: carDark)
-        // Схема развязки — для узла с другими дорогами (JunctionSketch): какой
-        // из трёх правых съездов наш, стрелка не говорит.
-        if let plan = junctionPlan(for: step) {
-            next.junctionImage = Self.junctionImage(plan, onDark: true)
-            next.dashboardJunctionImage = Self.junctionImage(plan, onDark: carDark)
-        }
-        next.maneuverType = CarPlayGuidanceMapping.maneuverType(step.kind)
-        next.trafficSide = .right
-        next.junctionType = CarPlayGuidanceMapping.junctionType(step.kind)
-        if let angle = CarPlayGuidanceMapping.exitAngle(step.kind) {
-            next.junctionExitAngle = Measurement(value: angle, unit: .degrees)
-        }
+        let card = Self.card(for: step, carDark: model.carIsDark ?? !model.isDaylight)
+        let next = card.maneuver
         maneuverShownAt = Date()
         sentManeuverState = nil
-        let lanes = CarPlayGuidanceMapping.lanes(step.lanes, kind: step.kind)
+        let lanes = card.lanes
         if CarPlayGuidanceMapping.isUseful(lanes) {
             let guidance = CPLaneGuidance()
             guidance.lanes = lanes.map { lane in
@@ -551,15 +536,9 @@ final class CarPlayGuidance {
             seconds: CarPlayGuidanceMapping.timeToManeuver(stepDistance: distance,
                                                            remainingDistance: env.route.remainingDistance,
                                                            remainingTime: env.route.remainingTime))
-        // Ряд полос на экране машины — вторым «манёвром» из одной картинки
-        // (Руководство CarPlay, стр. 48; стиль — mapTemplate(_:displayStyleFor:)).
-        // CPLaneGuidance выше уходит только в метаданные для приборки, а они
-        // выключены: до 18.10 полос в машине не было нигде (аудит, п. 5).
-        // С метаданными ряд не шлём: приборка прочла бы его вторым поворотом.
-        let laneRow = AppConfig.carPlayNavigationMetadata || !CarPlayGuidanceMapping.isUseful(lanes)
-            ? nil : Self.laneRow(step.lanes, kind: step.kind)
+        let laneRow = card.laneRow
         // Улика на случай пустой карточки: что именно ушло в машину.
-        Log.carplay.notice("манёвр в машину: вариантов \(next.instructionVariants.count, privacy: .public), первый \(next.instructionVariants.first?.count ?? 0, privacy: .public) симв., стрелка \(next.symbolImage != nil, privacy: .public), полосы \(laneRow != nil, privacy: .public), \(Int(distance), privacy: .public) м")
+        Log.carplay.notice("манёвр в машину: вариантов \(next.instructionVariants.count, privacy: .public), первый \(next.instructionVariants.first?.count ?? 0, privacy: .public) симв., стрелка \(next.symbolImage != nil, privacy: .public), полосы \(laneRow != nil, privacy: .public), край \(step.laneEdge?.rawValue ?? "-", privacy: .public), \(Int(distance), privacy: .public) м")
         maneuver = next
         upcoming = [next] + (laneRow.map { [$0] } ?? [])
         // Каждый манёвр, попадающий в upcomingManeuvers, сначала регистрируется
@@ -569,6 +548,57 @@ final class CarPlayGuidance {
         // выключены, так что приборка его вторым поворотом не прочтёт.
         session.add(upcoming)
         session.upcomingManeuvers = upcoming
+    }
+
+    // MARK: - Карточка манёвра
+
+    /// Что уходит в машину о манёвре: сам манёвр и, если есть, ряд полос
+    /// вторым. Без сессии и состояния — тестируется (CarPlayGuidanceTests).
+    struct Card {
+        let maneuver: CPManeuver
+        /// Ряд полос вторым «манёвром»; nil — полос OSRM нет или выбирать
+        /// нечего. Край без полос — в тексте манёвра, картинкой не рисуется.
+        let laneRow: CPManeuver?
+        /// Полосы для CPLaneGuidance (метаданные приборки).
+        let lanes: [CarPlayGuidanceMapping.Lane]
+    }
+
+    /// `carDark` — тема МАШИНЫ: в ней рисуются баннер поверх чужого
+    /// приложения и плитка панели. `metadata` — метаданные для приборки
+    /// (с ними ряд полос не шлём: приборка прочла бы его вторым поворотом).
+    static func card(for step: RouteStep, carDark: Bool,
+                     metadata: Bool = AppConfig.carPlayNavigationMetadata) -> Card {
+        let next = CPManeuver()
+        next.instructionVariants = CarPlayGuidanceMapping.instructionVariants(
+            text: step.text, shortText: step.shortText, advice: step.laneAdvice)
+        // Плитка главного экрана — та же фраза явно, а не через запасной путь.
+        next.dashboardInstructionVariants = next.instructionVariants
+        // Цвет стрелки — под фон НАШЕЙ карточки (guidanceBackgroundColor —
+        // синяя всегда, значит стрелка белая): до машины доезжает одна
+        // картинка, та, что создана. Баннеры поверх чужого приложения и
+        // плитка панели рисуются в теме МАШИНЫ — им свой цвет.
+        let symbolName = step.kind?.isDrawable == false ? "flag.checkered" : step.icon
+        next.symbolImage = symbol(symbolName, pointSize: 34, onDark: true)
+        next.notificationSymbolImage = symbol(symbolName, pointSize: 34, onDark: carDark)
+        next.dashboardSymbolImage = symbol(symbolName, pointSize: 34, onDark: carDark)
+        // Схемы развязки (junctionImage) больше нет (21.10, владелец: «мини-
+        // карту убери, там лучше — с какого края нужно повернуть»): грубая
+        // схема узла занимала место, где система показывает второй манёвр, —
+        // а там теперь ряд полос; без полос край стоит в тексте выше.
+        next.maneuverType = CarPlayGuidanceMapping.maneuverType(step.kind)
+        next.trafficSide = .right
+        next.junctionType = CarPlayGuidanceMapping.junctionType(step.kind)
+        if let angle = CarPlayGuidanceMapping.exitAngle(step.kind) {
+            next.junctionExitAngle = Measurement(value: angle, unit: .degrees)
+        }
+        let lanes = CarPlayGuidanceMapping.lanes(step.lanes, kind: step.kind)
+        // Ряд полос на экране машины — вторым «манёвром» из одной картинки
+        // (Руководство CarPlay, стр. 48; стиль — mapTemplate(_:displayStyleFor:)).
+        // CPLaneGuidance уходит только в метаданные для приборки, а они
+        // выключены: до 18.10 полос в машине не было нигде (аудит, п. 5).
+        let row = metadata || !CarPlayGuidanceMapping.isUseful(lanes)
+            ? nil : laneRow(step.lanes, kind: step.kind)
+        return Card(maneuver: next, laneRow: row, lanes: lanes)
     }
 
     // MARK: - Ряд полос на экране машины
@@ -581,12 +611,17 @@ final class CarPlayGuidance {
         (maneuver.userInfo as? String) == laneRowTag
     }
 
-    /// Второй «манёвр» карточки: картинка ряда полос без текста.
+    /// Второй «манёвр» карточки: картинка ряда полос, текст не показывается
+    /// (`.symbolOnly`). Вариант фразы всё же есть: заголовок CPManeuver
+    /// требует хотя бы один («You must provide at least one variant»), и с
+    /// пустым списком машина вправе выбросить манёвр — а с ним, возможно, и
+    /// весь список. До 21.10 ряд уходил с пустым, и владелец полос в машине
+    /// не видел ни разу.
     static func laneRow(_ hints: [LaneHint], kind: ManeuverKind?) -> CPManeuver? {
         guard let image = laneImage(hints, kind: kind) else { return nil }
         let row = CPManeuver()
         row.symbolImage = image
-        row.instructionVariants = []
+        row.instructionVariants = [LaneAdvice.phrase(hints) ?? String(localized: "Ряд полос")]
         row.userInfo = laneRowTag
         return row
     }
@@ -682,60 +717,6 @@ final class CarPlayGuidance {
     static func tripEstimates(meters: Double, seconds: Double) -> CPTravelEstimates {
         CPTravelEstimates(distanceRemaining: CarPlayGuidanceMapping.tripDistance(meters: meters),
                           timeRemaining: max(0, seconds))
-    }
-
-    /// План схемы развязки для шага или nil — узел простой или сети нет.
-    private func junctionPlan(for step: RouteStep) -> JunctionSketch.Plan? {
-        guard step.kind?.isDrawable == true, let route = env.route.selected else { return nil }
-        let coordinates = route.points.map(\.coordinate)
-        guard let center = JunctionSketch.point(on: coordinates, at: step.distanceAlong) else { return nil }
-        let roads = env.roads.vehicleNetwork
-            .roads(near: center, radius: AppConfig.junctionRadiusMeters * 1.2)
-            .map(\.points)
-        guard let plan = JunctionSketch.plan(route: coordinates, maneuverAlong: step.distanceAlong, roads: roads),
-              plan.roads.count >= AppConfig.junctionMinRoads else { return nil }
-        return plan
-    }
-
-    /// Картинка схемы: дороги узла серым, наш путь — цветом маршрута со
-    /// стрелкой на съезде. Фон прозрачный — под ним карточка манёвра.
-    static func junctionImage(_ plan: JunctionSketch.Plan, onDark: Bool) -> UIImage {
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = AppConfig.carPlaySymbolScale
-        format.opaque = false
-        let image = UIGraphicsImageRenderer(size: plan.size, format: format).image { context in
-            let g = context.cgContext
-            g.setLineCap(.round)
-            g.setLineJoin(.round)
-            func stroke(_ line: [CGPoint]) {
-                guard let first = line.first else { return }
-                g.beginPath()
-                g.move(to: first)
-                for point in line.dropFirst() { g.addLine(to: point) }
-                g.strokePath()
-            }
-            g.setStrokeColor((onDark ? UIColor(white: 1, alpha: 0.30) : UIColor(white: 0, alpha: 0.20)).cgColor)
-            g.setLineWidth(7)
-            plan.roads.forEach(stroke)
-            let route = onDark ? Theme.rgb(0x5B9BFF) : Theme.rgb(0x2A6FF0)
-            g.setStrokeColor(route.cgColor)
-            g.setLineWidth(6)
-            stroke(plan.path)
-            // Стрелка на конце съезда.
-            if plan.path.count >= 2 {
-                let tip = plan.path[plan.path.count - 1], from = plan.path[plan.path.count - 2]
-                let angle = atan2(tip.y - from.y, tip.x - from.x)
-                let size: CGFloat = 9
-                g.setFillColor(route.cgColor)
-                g.beginPath()
-                g.move(to: CGPoint(x: tip.x + cos(angle) * size, y: tip.y + sin(angle) * size))
-                g.addLine(to: CGPoint(x: tip.x + cos(angle + 2.4) * size, y: tip.y + sin(angle + 2.4) * size))
-                g.addLine(to: CGPoint(x: tip.x + cos(angle - 2.4) * size, y: tip.y + sin(angle - 2.4) * size))
-                g.closePath()
-                g.fillPath()
-            }
-        }
-        return image.withRenderingMode(.alwaysOriginal)
     }
 
     /// Значок для карточки CarPlay: белый на тёмном фоне, чёрный на светлом.

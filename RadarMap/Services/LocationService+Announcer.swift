@@ -39,6 +39,15 @@ extension LocationService {
         return voicePlan(for: camera, crawling: isCrawling).voice != .none
     }
 
+    /// Камера впереди держит голос: она в радиусе оповещения или войдёт в
+    /// него за `laneAdviceCameraGapSeconds` пути. Ранний совет о ряде перед
+    /// манёвром в это время ждёт и едет на обычной ближней фразе —
+    /// фраза о камере не должна стоять в очереди за ним (LaneAdvice.calls).
+    var cameraHoldsVoice: Bool {
+        guard let distance = distanceToNearest else { return false }
+        return distance <= effectiveAlertRadius + speedKmh / 3.6 * AppConfig.laneAdviceCameraGapSeconds
+    }
+
     /// Пересчитать «свои» камеры по истории. Зовётся на старте поездки:
     /// история за 30 дней меняется медленно, на каждом тике это лишняя работа.
     func refreshFamiliarCameras() {

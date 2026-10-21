@@ -194,6 +194,12 @@ final class RouteService {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onManeuver,
                                                "RouteService.onManeuver") }
     }
+    /// Дороги своей сети вокруг точки — сколько полос на подъезде к манёвру
+    /// (совет о ряде без полос OSRM, 20.2). nil — сети нет, края не будет.
+    @ObservationIgnored var approachRoads: ((CLLocationCoordinate2D, CLLocationDistance) -> [RoadLine])? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: approachRoads,
+                                               "RouteService.approachRoads") }
+    }
 
     /// Тип впервые произнесённого манёвра — для суточного счётчика. Отдельно
     /// от `onManeuver`: тот несёт фразу и срабатывает до трёх раз на манёвр, а
@@ -224,6 +230,12 @@ final class RouteService {
     /// или перетирал свежепостроенный к новой цели.
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var announcedStage: [Int: Int] = [:]   // индекс шага → стадия (2 далеко, 1 близко, 0 сейчас)
+    /// Шаги, ряд которых уже назван: совет звучит один раз на манёвр.
+    @ObservationIgnored private var laneAdviceSaid: Set<Int> = []
+    /// Полос на подъезде по индексу шага (LaneAdvice.approachLanes) и когда
+    /// спрашивали сеть, не найдя дороги: тайлы могли ещё не приехать.
+    @ObservationIgnored private var approachLanesByStep: [Int: Int] = [:]
+    @ObservationIgnored private var approachMissedAt: [Int: Date] = [:]
     @ObservationIgnored private var segmentHint = 0                    // ускоряет проекцию точки на маршрут
     /// Кумулятивная длина выбранного варианта (см. Self.cumulative).
     @ObservationIgnored private var selectedCumulative: [CLLocationDistance] = []
@@ -579,6 +591,9 @@ final class RouteService {
         rerouteGate.resetTicks()
         isOffRoute = false
         announcedStage = [:]
+        laneAdviceSaid = []
+        approachLanesByStep = [:]
+        approachMissedAt = [:]
         segmentHint = 0
         // Задержка пробками — с варианта (посчитана при построении); дальше
         // её ведёт refreshTrafficDelay по ходу и по новым наборам.
@@ -591,8 +606,11 @@ final class RouteService {
     /// Вызывается на каждой GPS-точке. `announce` — озвучивать ли манёвры (в поездке).
     /// `course` — курс, которому МОЖНО верить (его выдаёт LocationFilter);
     /// `-1` означает «курса нет», и тогда он в выборе положения не участвует.
+    /// `speedKmh` — когда назвать ряд (LaneAdvice.adviceDistance);
+    /// `cameraHolds` — камера впереди держит голос, ранний ряд ждёт её.
     func updateProgress(coordinate: CLLocationCoordinate2D, cameras: [Camera], announce: Bool,
-                        course: CLLocationDirection = -1) {
+                        course: CLLocationDirection = -1, speedKmh: Double = 0,
+                        cameraHolds: Bool = false) {
         guard let variant = selected, !isBuilding, !isRebuilding,
               let destination = destinationCoordinate else { return }
         let point = MKMapPoint(coordinate)
@@ -640,7 +658,8 @@ final class RouteService {
             nextCamera = nil
         }
 
-        updateManeuvers(variant: variant, along: along, announce: announce)
+        updateManeuvers(variant: variant, along: along, announce: announce,
+                        speedKmh: speedKmh, cameraHolds: cameraHolds)
 
         // Отклонение → перестроение (с защитой от шума GPS и кулдауном).
         isOffRoute = deviation > AppConfig.rerouteDeviationMeters
@@ -682,7 +701,8 @@ final class RouteService {
         }
     }
 
-    private func updateManeuvers(variant: Variant, along: CLLocationDistance, announce: Bool) {
+    private func updateManeuvers(variant: Variant, along: CLLocationDistance, announce: Bool,
+                                 speedKmh: Double = 0, cameraHolds: Bool = false) {
         // Первый манёвр впереди (с запасом, чтобы не «перескакивал» на повороте).
         let index = variant.steps.firstIndex(where: {
             $0.distanceAlong > along + AppConfig.maneuverAheadSlackMeters
@@ -693,40 +713,71 @@ final class RouteService {
             nextStep = nil
             return
         }
-        let step = variant.steps[index]
+        var step = variant.steps[index]
+        step.approachLanes = approachLanes(step: index, of: variant)
         let distance = step.distanceAlong - along
-        nextStep = step
+        // Присваиваем только смену: свойство наблюдаемое, а тик — раз в секунду.
+        if nextStep != step { nextStep = step }
         nextStepDistance = distance
 
         guard announce else { return }
         let stage = announcedStage[index] ?? 3
-        switch Self.voiceStage(distance: distance, spoken: stage,
-                               earlyCall: step.kind?.deservesEarlyCall ?? true) {
-        case 0?:
-            announcedStage[index] = 0
+        let advice = step.laneAdvice
+        let calls = LaneAdvice.calls(earlyCall: step.kind?.deservesEarlyCall ?? true,
+                                     hasAdvice: advice != nil, speedKmh: speedKmh,
+                                     cameraHolds: cameraHolds)
+        guard let next = Self.voiceStage(distance: distance, spoken: stage, calls: calls) else { return }
+        announcedStage[index] = next
+        // Ряд — один раз на манёвр, в первой фразе, которая его несёт.
+        let said = LaneAdvice.attaches(stage: next, calls: calls,
+                                       alreadySaid: laneAdviceSaid.contains(index))
+            ? advice : nil
+        if said != nil { laneAdviceSaid.insert(index) }
+        // Улика для разбора поездки: какая ступень, где и с рядом ли (фраза
+        // целиком не пишется — в ней улица).
+        Log.route.notice("манёвр голосом: ступень \(next, privacy: .public), \(Int(distance), privacy: .public) м, \(Int(speedKmh), privacy: .public) км/ч, ряд \(said?.logName ?? "-", privacy: .public), камера держит \(cameraHolds, privacy: .public)")
+        if next == 0 {
             onManeuver?(step.text, step.voiceEvent(meters: nil))
-        case 1?:
-            announcedStage[index] = 1
-            let meters = Int((distance / 50).rounded() * 50)
-            onManeuver?(Self.withLanes(String(format: String(localized: "Через %lld метров — %@"),
-                                              meters, step.text),
-                                       step.lanes),
-                        step.voiceEvent(meters: meters))
-        case 2?:
-            announcedStage[index] = 2
-            let meters = Int((distance / 100).rounded() * 100)
-            onManeuver?(Self.withLanes(String(format: String(localized: "Через %lld метров — %@"),
-                                              meters, step.text),
-                                       step.lanes),
-                        step.voiceEvent(meters: meters))
-        default:
-            break
+        } else {
+            let meters = Self.spokenMeters(distance, far: next == 2)
+            onManeuver?(Self.withAdvice(String(format: String(localized: "Через %lld метров — %@"),
+                                               meters, step.text), said),
+                        step.voiceEvent(meters: meters, advice: said))
         }
         // Считаем манёвр один раз — при первом объявлении. Хранимые ступени
         // это 0…2, поэтому «было 3» означает «до сих пор не объявляли».
-        if stage == 3, announcedStage[index] != nil {
+        if stage == 3 {
             onManeuverSpoken?(step.kind?.rawValue ?? "unknown")
         }
+    }
+
+    /// Полос в нашу сторону на подъезде к шагу — по своей сети, один раз на
+    /// шаг. Не нашли дороги — спросим снова через laneApproachRetrySeconds:
+    /// тайлы окрестности могли ещё ехать. Спрашиваем только шаг, которому
+    /// край нужен и у которого нет полос OSRM.
+    private func approachLanes(step index: Int, of variant: Variant) -> Int? {
+        let step = variant.steps[index]
+        guard step.lanes.isEmpty, step.edge != nil, let approachRoads else { return nil }
+        if let known = approachLanesByStep[index] { return known }
+        if let missed = approachMissedAt[index],
+           Date().timeIntervalSince(missed) < AppConfig.laneApproachRetrySeconds { return nil }
+        if selectedCumulative.count != variant.points.count {
+            selectedCumulative = Self.cumulative(of: variant.points)
+        }
+        for back in AppConfig.laneApproachProbeMeters {
+            guard let probe = Self.pointAndCourse(along: step.distanceAlong - back, pts: variant.points,
+                                                  cum: selectedCumulative) else { continue }
+            let roads = approachRoads(probe.coordinate, AppConfig.laneApproachMatchMeters)
+            if let lanes = LaneAdvice.approachLanes(at: probe.coordinate, course: probe.course,
+                                                    roads: roads) {
+                approachLanesByStep[index] = lanes
+                approachMissedAt[index] = nil
+                Log.route.notice("полос на подъезде к манёвру \(index, privacy: .public): \(lanes, privacy: .public)")
+                return lanes
+            }
+        }
+        approachMissedAt[index] = Date()
+        return nil
     }
 
     /// Какую ступень голоса манёвра пора произнести: 2 — далеко («через 800
@@ -736,10 +787,24 @@ final class RouteService {
     /// поворота), сразу говорим ближнюю, а не догоняем пропущенную.
     nonisolated static func voiceStage(distance: CLLocationDistance, spoken: Int,
                                        earlyCall: Bool) -> Int? {
+        voiceStage(distance: distance, spoken: spoken, calls: .standard(earlyCall: earlyCall))
+    }
+
+    /// То же со ступенями, которые сдвинул совет о ряде (LaneAdvice.calls).
+    nonisolated static func voiceStage(distance: CLLocationDistance, spoken: Int,
+                                       calls: LaneAdvice.Calls) -> Int? {
         if distance < AppConfig.maneuverNowCallMeters, spoken > 0 { return 0 }
-        if distance < AppConfig.maneuverNearCallMeters, spoken > 1 { return 1 }
-        if distance < AppConfig.maneuverFarCallMeters, spoken > 2, earlyCall { return 2 }
+        if distance < calls.near, spoken > 1 { return 1 }
+        if let far = calls.far, distance < far, spoken > 2 { return 2 }
         return nil
+    }
+
+    /// Расстояние во фразе: дальняя — до 100 м, ближняя — до 50 м, а от
+    /// 400 м (ближняя, сдвинутая к окну ряда) — до 100, как у камер:
+    /// «через 450 метров» записи нет, и фраза ушла бы синтезатору.
+    nonisolated static func spokenMeters(_ distance: CLLocationDistance, far: Bool) -> Int {
+        let step: Double = far || distance >= 400 ? 100 : 50
+        return Int((distance / step).rounded() * step)
     }
 
     /// Ограничение полос впереди: до манёвра (его ряд — в баннере манёвра) и
@@ -757,11 +822,12 @@ final class RouteService {
     }
 
     /// Заблаговременная фраза манёвра + в какой ряд встать («…на Беруни.
-    /// Из двух левых рядов.»). Только для ранних объявлений: на «сейчас»
-    /// перестраиваться уже поздно, и лишние слова там мешают.
-    nonisolated static func withLanes(_ phrase: String, _ lanes: [LaneHint]) -> String {
-        guard let advice = LaneAdvice.phrase(lanes) else { return phrase }
-        return phrase + ". " + advice
+    /// Из двух левых рядов.», «…налево. Перестройтесь в левый ряд»). Только
+    /// для ранних объявлений: на «сейчас» перестраиваться уже поздно, и
+    /// лишние слова там мешают.
+    nonisolated static func withAdvice(_ phrase: String, _ advice: LaneAdvice.Advice?) -> String {
+        guard let advice else { return phrase }
+        return phrase + ". " + LaneAdvice.spoken(advice)
     }
 
     // MARK: - Движки
@@ -1112,7 +1178,8 @@ final class RouteService {
         return RouteStep(distanceAlong: along, text: result, icon: icon,
                          kind: kind, lanes: lanes(of: step),
                          shortText: result == phrase ? nil : phrase,
-                         voiceAction: voiceAction)
+                         voiceAction: voiceAction,
+                         edge: LaneAdvice.edge(osrmType: m.type, modifier: m.modifier))
     }
 
     /// Полосы на подходе к манёвру.

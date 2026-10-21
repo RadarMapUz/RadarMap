@@ -379,7 +379,8 @@ extension LocationService {
                 // Курс — чтобы положение не прыгнуло на встречную ветку
                 // маршрута там, где он возвращается сам к себе.
                 route?.updateProgress(coordinate: coordinate, cameras: repository.cameras,
-                                      announce: isTripActive, course: course)
+                                      announce: isTripActive, course: course,
+                                      speedKmh: speedKmh, cameraHolds: cameraHoldsVoice)
             }
             // На маршруте стрелка садится на его линию: OSRM ведёт по нужной
             // проезжей части, и машина на карте едет по своей стороне

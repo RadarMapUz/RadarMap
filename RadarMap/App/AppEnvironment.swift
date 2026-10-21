@@ -414,9 +414,10 @@ final class AppEnvironment {
                 self.themeHadPosition = true
                 self.refreshInterfaceAppearance()
             }
-            // Улицы вокруг машины — для посадки «Радар!» на дорогу и схемы
-            // развязки в CarPlay. После удаления схемы приборки (11.10)
-            // ensureCoverage не звал никто, сеть была пустой, и отметки уходили
+            // Улицы вокруг машины — для посадки «Радар!» на дорогу и числа
+            // полос на подъезде к манёвру (совет о ряде, 20.2). После
+            // удаления схемы приборки (11.10) ensureCoverage не звал никто,
+            // сеть была пустой, и отметки уходили
             // сырой координатой водителя (аудит 19.10). В поездке, с машиной
             // или когда похоже, что едем без поездки («Радар!» доступен и так);
             // гейт внутри — дёшево, пока окрестность та же.
@@ -680,6 +681,12 @@ final class AppEnvironment {
         route.onManeuver = { [weak alerts] text, event in
             guard settings.turnByTurnVoice else { return }
             alerts?.speak(text, event: event)
+        }
+        // Совет о ряде без полос OSRM: сколько полос в нашу сторону на подъезде
+        // к манёвру — по тайлам улиц (знают класс и тег lanes), иначе по
+        // индексу лимитов, который класса не знает и края не даст.
+        route.approachRoads = { [weak roads] point, radius in
+            roads?.vehicleNetwork.roads(near: point, radius: radius) ?? []
         }
         speedLimits.onOverspeed = { [weak alerts] in
             alerts?.speak(String(localized: "Превышение скорости"))

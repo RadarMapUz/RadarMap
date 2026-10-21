@@ -92,8 +92,8 @@ enum VoiceText {
         let command = text(call.action)
         guard let meters = call.meters else { return command }
         let line = String(format: String(localized: "Через %lld метров — %@"), meters, command)
-        guard let run = call.lanes else { return line }
-        return line + ". " + LaneAdvice.text(for: run)
+        let advice: LaneAdvice.Advice? = call.lanes.map { .lanes($0) } ?? call.edge.map { .edge($0) }
+        return RouteService.withAdvice(line, advice)
     }
 
     static func text(_ action: VoiceEvent.Action) -> String {

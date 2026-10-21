@@ -4767,6 +4767,38 @@
         }
       }
     },
+    "Держитесь левее": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Держитесь левее"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chap tomonda yuring"
+          }
+        }
+      }
+    },
+    "Держитесь правее": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Держитесь правее"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻng tomonda yuring"
+          }
+        }
+      }
+    },
     "Детали периода": {
       "localizations": {
         "ru": {
@@ -11291,6 +11323,54 @@
         }
       }
     },
+    "Перестройтесь в крайний левый ряд": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перестройтесь в крайний левый ряд"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eng chap qatorga oʻting"
+          }
+        }
+      }
+    },
+    "Перестройтесь в левый ряд": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перестройтесь в левый ряд"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chap qatorga oʻting"
+          }
+        }
+      }
+    },
+    "Перестройтесь в правый ряд": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перестройтесь в правый ряд"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻng qatorga oʻting"
+          }
+        }
+      }
+    },
     "Плавность езды": {
       "localizations": {
         "ru": {
@@ -14469,6 +14549,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qoʻlda"
+          }
+        }
+      }
+    },
+    "Ряд полос": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ряд полос"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl qatorlari"
           }
         }
       }
@@ -19153,6 +19249,22 @@
         }
       }
     },
+    "крайний левый ряд": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "крайний левый ряд"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "eng chap qator"
+          }
+        }
+      }
+    },
     "круто налево": {
       "localizations": {
         "ru": {
@@ -19197,6 +19309,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "l"
+          }
+        }
+      }
+    },
+    "левее": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "левее"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "chaproq"
+          }
+        }
+      }
+    },
+    "левый ряд": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "левый ряд"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "chap qator"
           }
         }
       }
@@ -20278,6 +20422,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "yoʻqotildi %lld"
+          }
+        }
+      }
+    },
+    "правее": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "правее"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oʻngroq"
+          }
+        }
+      }
+    },
+    "правый ряд": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "правый ряд"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oʻng qator"
           }
         }
       }

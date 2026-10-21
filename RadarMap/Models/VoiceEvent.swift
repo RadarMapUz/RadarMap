@@ -64,7 +64,8 @@ nonisolated enum VoiceEvent: Hashable, Sendable {
     case camera(CameraCall)
     /// Одно название типа: ответ на уточнение отметки («Тренога»).
     case cameraName(Kind)
-    /// Манёвр маршрута: «Через 300 метров — поверните направо. Из левого ряда».
+    /// Манёвр маршрута: «Через 300 метров — поверните направо. Из левого ряда»
+    /// или, без полос, «…поверните налево. Перестройтесь в левый ряд».
     case maneuver(ManeuverCall)
     /// «Ограничение 40 через 200 м».
     case limitAhead(limit: Int, meters: Int)
@@ -149,12 +150,31 @@ nonisolated enum VoiceEvent: Hashable, Sendable {
         case middleOne, middleMany
     }
 
+    /// С какого края проезжей части выполнять манёвр, когда полос от OSRM
+    /// нет (`LaneAdvice.Edge`, этап 20.2): тип поворота плюс число полос
+    /// нашей дороги из своей сети.
+    enum LaneEdge: String, CaseIterable, Hashable, Sendable {
+        /// Поворот налево: «Перестройтесь в левый ряд».
+        case left
+        /// Разворот: «Перестройтесь в крайний левый ряд».
+        case farLeft
+        /// Поворот направо: «Перестройтесь в правый ряд».
+        case right
+        /// Съезд, не называющий стороны: «Держитесь левее».
+        case keepLeft
+        /// «Держитесь правее».
+        case keepRight
+    }
+
     struct ManeuverCall: Hashable, Sendable {
         var action: Action
         /// nil — сама команда, у манёвра («поверните направо»).
         var meters: Int?
         /// Ряд — только в предупреждении заранее (у самого манёвра его не говорят).
         var lanes: LaneRun?
+        /// Край без данных о полосах — там же и так же один раз, как `lanes`;
+        /// вместе с `lanes` не бывает (полосы OSRM точнее догадки).
+        var edge: LaneEdge? = nil
     }
 
     // MARK: - Треноги и фразы

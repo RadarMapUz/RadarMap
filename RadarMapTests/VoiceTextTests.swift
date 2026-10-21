@@ -69,26 +69,52 @@ final class VoiceTextTests: XCTestCase {
                 }
                 voiced += 1
                 XCTAssertEqual(VoiceText.render(now), step.text, "\(type)/\(modifier ?? "-")")
-                for meters in [50, 300, 800] {
-                    let spoken = RouteService.withLanes(
-                        String(format: String(localized: "Через %lld метров — %@"), meters, step.text), step.lanes)
-                    XCTAssertEqual(step.voiceEvent(meters: meters).map(VoiceText.render), spoken)
+                // Край — как у многополосного подъезда: тоже должен совпасть.
+                var wide = step
+                wide.approachLanes = 3
+                for candidate in [step, wide] {
+                    for meters in [50, 300, 800] {
+                        let spoken = RouteService.withAdvice(
+                            String(format: String(localized: "Через %lld метров — %@"), meters, candidate.text),
+                            candidate.laneAdvice)
+                        XCTAssertEqual(candidate.voiceEvent(meters: meters, advice: candidate.laneAdvice)
+                            .map(VoiceText.render), spoken, "\(type)/\(modifier ?? "-")")
+                    }
                 }
             }
         }
         XCTAssertGreaterThan(voiced, 20)
     }
 
-    func testManeuverLanesRenderLikeWithLanes() {
+    func testManeuverLanesRenderLikeWithAdvice() {
         let lanes = "++--".map { LaneHint(arrows: [.left], isValid: $0 == "+") }
         let step = RouteStep(distanceAlong: 500, text: VoiceText.text(.turnLeft), icon: "arrow.turn.up.left",
                              kind: nil, lanes: lanes, voiceAction: .turnLeft)
-        let spoken = RouteService.withLanes(
-            String(format: String(localized: "Через %lld метров — %@"), 300, step.text), step.lanes)
-        XCTAssertEqual(step.voiceEvent(meters: 300).map(VoiceText.render), spoken)
+        let spoken = RouteService.withAdvice(
+            String(format: String(localized: "Через %lld метров — %@"), 300, step.text), step.laneAdvice)
+        XCTAssertEqual(step.voiceEvent(meters: 300, advice: step.laneAdvice).map(VoiceText.render), spoken)
         XCTAssertTrue(spoken.hasSuffix(String(localized: "Из двух левых рядов")), spoken)
-        XCTAssertEqual(step.voiceEvent(meters: nil), .maneuver(.init(action: .turnLeft, meters: nil, lanes: nil)),
+        XCTAssertEqual(step.voiceEvent(meters: nil, advice: step.laneAdvice),
+                       .maneuver(.init(action: .turnLeft, meters: nil, lanes: nil)),
                        "у самого манёвра ряд не называют")
+    }
+
+    /// Край без полос (20.2) звучит записью тем же текстом, что сказал код;
+    /// фраза без совета (ряд уже назван раньше) — без хвоста.
+    func testManeuverEdgeRendersLikeWithAdvice() {
+        let cases: [(VoiceEvent.Action, LaneAdvice.Edge)] = [
+            (.turnLeft, .left), (.uturn, .farLeft), (.turnRight, .right),
+            (.offRamp, .keepLeft), (.offRamp, .keepRight)]
+        for (action, edge) in cases {
+            let step = RouteStep(distanceAlong: 500, text: VoiceText.text(action), icon: "arrow.up",
+                                 kind: nil, voiceAction: action, edge: edge, approachLanes: 2)
+            let line = String(format: String(localized: "Через %lld метров — %@"), 350, step.text)
+            XCTAssertEqual(step.voiceEvent(meters: 350, advice: step.laneAdvice).map(VoiceText.render),
+                           RouteService.withAdvice(line, step.laneAdvice))
+            XCTAssertTrue(RouteService.withAdvice(line, step.laneAdvice).hasSuffix(LaneAdvice.spoken(edge)))
+            XCTAssertEqual(step.voiceEvent(meters: 350).map(VoiceText.render), line,
+                           "ряд уже назван — фраза без хвоста")
+        }
     }
 
     func testStreetsAndStopsStaySynthesized() {

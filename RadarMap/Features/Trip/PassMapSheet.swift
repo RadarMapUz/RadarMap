@@ -348,10 +348,17 @@ struct PassDetailView: View {
                                 : fineOutcome == .dismissed ? Theme.textTertiary
                                 : Theme.danger,
                             title: fineTitle,
-                            value: Formatting.money(fine))
-                    // Судьба штрафа отмечается и отсюда: человек смотрит на
-                    // конкретный проезд — незачем гонять его в общий список.
-                    if record != nil {
+                            // Внесённое постановление — его сумма, а не оценка.
+                            value: pass.fineAmount.map { FineFormat.money($0) } ?? Formatting.money(fine))
+                    if pass.fineReceiptID != nil {
+                        // Сверен с постановлением (этап 17): судьбу правит
+                        // экран «Штрафы» — там же сумма, срок и оплата.
+                        Label("Постановление внесено — в «Штрафах»", systemImage: "doc.text")
+                            .font(.rounded(13, .medium))
+                            .foregroundStyle(Theme.textSecondary)
+                    } else if record != nil {
+                        // Судьба штрафа отмечается и отсюда: человек смотрит на
+                        // конкретный проезд — незачем гонять его в общий список.
                         fineOutcomeRow
                     }
                 }

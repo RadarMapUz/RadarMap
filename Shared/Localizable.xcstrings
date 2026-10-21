@@ -50,6 +50,38 @@
         }
       }
     },
+    "%1$@ · %2$lld км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$lld км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$lld km/soat"
+          }
+        }
+      }
+    },
+    "%1$@ · %2$lld км/ч при %3$lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$lld км/ч при %3$lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$lld km/soat, cheklov %3$lld"
+          }
+        }
+      }
+    },
     "%1$@ · через %2$@": {
       "localizations": {
         "ru": {
@@ -2251,6 +2283,22 @@
         }
       }
     },
+    "Без поездки в истории": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Без поездки в истории"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarixda safarsiz"
+          }
+        }
+      }
+    },
     "Без риска штрафов": {
       "localizations": {
         "ru": {
@@ -2391,6 +2439,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Eng yaqin kameralar"
+          }
+        }
+      }
+    },
+    "Ближайший срок — %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ближайший срок — %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eng yaqin muddat — %@"
           }
         }
       }
@@ -2712,6 +2776,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bu davrda safarlar boʻlmagan"
+          }
+        }
+      }
+    },
+    "В этот день было превышение, но запись поездки уже не хранится — сверим по сводке дня.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В этот день было превышение, но запись поездки уже не хранится — сверим по сводке дня."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu kuni tezlik oshirilgan, lekin safar yozuvi endi saqlanmaydi — kunlik xulosa boʻyicha solishtiramiz."
           }
         }
       }
@@ -3071,6 +3151,38 @@
         }
       }
     },
+    "Внести постановление": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Внести постановление"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qarorni kiritish"
+          }
+        }
+      }
+    },
+    "Внести штраф": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Внести штраф"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarimani kiritish"
+          }
+        }
+      }
+    },
     "Во сколько обошёлся": {
       "localizations": {
         "ru": {
@@ -3244,6 +3356,22 @@
         }
       }
     },
+    "Время": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Время"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vaqt"
+          }
+        }
+      }
+    },
     "Время дороги дом–работа запоминается по участкам — из него получится прогноз «приеду в 9:12, как обычно». Только обычное время, не лучшее: гнать ради цифры незачем.": {
       "localizations": {
         "ru": {
@@ -3272,6 +3400,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ishga yoʻl vaqti"
+          }
+        }
+      }
+    },
+    "Время известно": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Время известно"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vaqti maʼlum"
           }
         }
       }
@@ -3436,6 +3580,38 @@
         }
       }
     },
+    "Вставьте сюда текст СМС или уведомления о штрафе": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вставьте сюда текст СМС или уведомления о штрафе"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarima haqidagi SMS yoki bildirishnoma matnini shu yerga qoʻying"
+          }
+        }
+      }
+    },
+    "Вставьте текст СМС — сверим с поездкой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вставьте текст СМС — сверим с поездкой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SMS matnini qoʻying — safar bilan solishtiramiz"
+          }
+        }
+      }
+    },
     "Встроенная база камер не читается — переустановите приложение.": {
       "localizations": {
         "ru": {
@@ -3497,6 +3673,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nusxadagi hamma narsa telefonda allaqachon bor"
+          }
+        }
+      }
+    },
+    "Всё оплачено": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Всё оплачено"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hammasi toʻlangan"
           }
         }
       }
@@ -3609,6 +3801,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Manzil tanlash"
+          }
+        }
+      }
+    },
+    "Выбран проезд": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выбран проезд"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tanlangan oʻtish"
           }
         }
       }
@@ -4351,6 +4559,38 @@
         }
       }
     },
+    "Дата нарушения": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дата нарушения"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qoidabuzarlik sanasi"
+          }
+        }
+      }
+    },
+    "Дата постановления": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дата постановления"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qaror sanasi"
+          }
+        }
+      }
+    },
     "Дата": {
       "localizations": {
         "ru": {
@@ -4571,6 +4811,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kunlar ustunlari — rulda ikkinchi kundan"
+          }
+        }
+      }
+    },
+    "До %1$@ — %2$@.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "До %1$@ — %2$@."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ gacha — %2$@."
+          }
+        }
+      }
+    },
+    "До %1$@ — ≈ %2$@. Условия — в постановлении.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "До %1$@ — ≈ %2$@. Условия — в постановлении."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ gacha — ≈ %2$@. Shartlar — qarorda."
+          }
+        }
+      }
+    },
+    "До %@. Условия — в постановлении.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "До %@. Условия — в постановлении."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ gacha. Shartlar — qarorda."
           }
         }
       }
@@ -6197,6 +6485,22 @@
         }
       }
     },
+    "К оплате": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "К оплате"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toʻlash kerak"
+          }
+        }
+      }
+    },
     "КАСКО": {
       "localizations": {
         "ru": {
@@ -6273,6 +6577,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Oʻtgan safargidek"
+          }
+        }
+      }
+    },
+    "Как в уведомлении: улица, перекрёсток": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Как в уведомлении: улица, перекрёсток"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bildirishnomadagidek: koʻcha, chorraha"
           }
         }
       }
@@ -7029,6 +7349,22 @@
         }
       }
     },
+    "Когда и где": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Когда и где"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qachon va qayerda"
+          }
+        }
+      }
+    },
     "Когда поездка начинается сама.": {
       "localizations": {
         "ru": {
@@ -7202,6 +7538,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tezlik cheklovlari"
+          }
+        }
+      }
+    },
+    "Льготный срок оплаты штрафа": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Льготный срок оплаты штрафа"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarimani imtiyozli toʻlash muddati"
+          }
+        }
+      }
+    },
+    "Льготный срок — до %1$@: ≈ %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Льготный срок — до %1$@: ≈ %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imtiyozli muddat — %1$@ gacha: ≈ %2$@"
+          }
+        }
+      }
+    },
+    "Льготный срок — до %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Льготный срок — до %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imtiyozli muddat — %@ gacha"
           }
         }
       }
@@ -7478,6 +7862,22 @@
         }
       }
     },
+    "Место": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Место"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joy"
+          }
+        }
+      }
+    },
     "Место не задано": {
       "localizations": {
         "ru": {
@@ -7490,6 +7890,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Manzil belgilanmagan"
+          }
+        }
+      }
+    },
+    "Место не указано": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Место не указано"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joy koʻrsatilmagan"
           }
         }
       }
@@ -7571,6 +7987,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mening joylarim"
+          }
+        }
+      }
+    },
+    "Мои штрафы": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Мои штрафы"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mening jarimalarim"
           }
         }
       }
@@ -7927,6 +8359,22 @@
         }
       }
     },
+    "Напомним %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Напомним %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ eslatamiz"
+          }
+        }
+      }
+    },
     "Например, Дача": {
       "localizations": {
         "ru": {
@@ -8119,6 +8567,38 @@
         }
       }
     },
+    "Нашли проезд": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нашли проезд"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻtish topildi"
+          }
+        }
+      }
+    },
+    "Нашли: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нашли: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Topildi: %@"
+          }
+        }
+      }
+    },
     "Не в поездке: после стоянки или в 9:00.": {
       "localizations": {
         "ru": {
@@ -8247,6 +8727,38 @@
         }
       }
     },
+    "Не оплачен": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не оплачен"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toʻlanmagan"
+          }
+        }
+      }
+    },
+    "Не оплачено: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не оплачено: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toʻlanmagan: %lld"
+          }
+        }
+      }
+    },
     "Не отправилось, нет связи": {
       "localizations": {
         "ru": {
@@ -8327,6 +8839,22 @@
         }
       }
     },
+    "Не похоже на уведомление о штрафе — заполните поля вручную": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не похоже на уведомление о штрафе — заполните поля вручную"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarima haqidagi bildirishnomaga oʻxshamaydi — maydonlarni qoʻlda toʻldiring"
+          }
+        }
+      }
+    },
     "Не предлагать": {
       "localizations": {
         "ru": {
@@ -8387,6 +8915,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kelmadi"
+          }
+        }
+      }
+    },
+    "Не распознали ни одного поля — заполните вручную": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не распознали ни одного поля — заполните вручную"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Birorta maydon aniqlanmadi — qoʻlda toʻldiring"
+          }
+        }
+      }
+    },
+    "Не тот проезд — без поездки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не тот проезд — без поездки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu oʻtish emas — safarsiz"
           }
         }
       }
@@ -8788,6 +9348,22 @@
         }
       }
     },
+    "Ни один из них — без поездки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ни один из них — без поездки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hech biri emas — safarsiz"
+          }
+        }
+      }
+    },
     "Ни одного превышения у камер": {
       "localizations": {
         "ru": {
@@ -8881,6 +9457,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yangi manzil"
+          }
+        }
+      }
+    },
+    "Номер": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Номер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raqam"
+          }
+        }
+      }
+    },
+    "Номер постановления скопирован — вставьте его на портале.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Номер постановления скопирован — вставьте его на портале."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qaror raqami nusxalandi — uni portalda qoʻying."
           }
         }
       }
@@ -9190,6 +9798,22 @@
         }
       }
     },
+    "Ограничение, км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ограничение, км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cheklov, km/soat"
+          }
+        }
+      }
+    },
     "Ограничения скорости не загрузились": {
       "localizations": {
         "ru": {
@@ -9238,6 +9862,38 @@
         }
       }
     },
+    "Ожидаются": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидаются"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kutilmoqda"
+          }
+        }
+      }
+    },
+    "Ожидаются — по нашим замерам": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ожидаются — по нашим замерам"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kutilmoqda — oʻlchovlarimiz boʻyicha"
+          }
+        }
+      }
+    },
     "Одна спокойная фраза и баннер о погоде на перевале впереди.": {
       "localizations": {
         "ru": {
@@ -9266,6 +9922,86 @@
           "stringUnit": {
             "state": "translated",
             "value": "Muammo yoki gʻoyani yozing…"
+          }
+        }
+      }
+    },
+    "Оплатить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оплатить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toʻlash"
+          }
+        }
+      }
+    },
+    "Оплатить до %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оплатить до %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ gacha toʻlash"
+          }
+        }
+      }
+    },
+    "Оплатить до %@ — ориентир": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оплатить до %@ — ориентир"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ gacha toʻlash — taxminiy"
+          }
+        }
+      }
+    },
+    "Оплачен": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оплачен"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toʻlangan"
+          }
+        }
+      }
+    },
+    "Оплачен %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оплачен %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toʻlangan: %@"
           }
         }
       }
@@ -9603,6 +10339,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tafsilotlarni ochish"
+          }
+        }
+      }
+    },
+    "Открыть штраф": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть штраф"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarimani ochish"
           }
         }
       }
@@ -9946,6 +10698,22 @@
         }
       }
     },
+    "Отмечены «пришёл» без постановления": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отмечены «пришёл» без постановления"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Keldi» deb belgilangan, qarorsiz"
+          }
+        }
+      }
+    },
     "Отправить": {
       "localizations": {
         "ru": {
@@ -10102,6 +10870,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bu baho, qaror emas: jarima kelgan-kelmaganini faqat portal biladi. Raqam faqat telefonda saqlanadi."
+          }
+        }
+      }
+    },
+    "Оценка, не постановление: пришёл ли штраф, знает только портал. Пришедший штраф внесите в «Мои штрафы» — сверим с поездкой и напомним о сроке. Номер и штрафы хранятся только на телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оценка, не постановление: пришёл ли штраф, знает только портал. Пришедший штраф внесите в «Мои штрафы» — сверим с поездкой и напомним о сроке. Номер и штрафы хранятся только на телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu taxmin, qaror emas: jarima kelgan-kelmaganini faqat portal biladi. Kelgan jarimani «Mening jarimalarim»ga kiriting — safar bilan solishtiramiz va muddatni eslatamiz. Raqam va jarimalar faqat telefonda saqlanadi."
           }
         }
       }
@@ -10439,6 +11223,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Haftalar boʻyicha"
+          }
+        }
+      }
+    },
+    "По сводке дня %@: превышение было, запись поездки не хранится": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По сводке дня %@: превышение было, запись поездки не хранится"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ kunlik xulosasi boʻyicha: tezlik oshirilgan, safar yozuvi saqlanmaydi"
           }
         }
       }
@@ -11404,6 +12204,38 @@
         }
       }
     },
+    "Постановление": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Постановление"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qaror"
+          }
+        }
+      }
+    },
+    "Постановление внесено — в «Штрафах»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Постановление внесено — в «Штрафах»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qaror kiritilgan — «Jarimalar»da"
+          }
+        }
+      }
+    },
     "Потолок штрафа за камеры": {
       "localizations": {
         "ru": {
@@ -11416,6 +12248,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kameralar jarimasining chegarasi"
+          }
+        }
+      }
+    },
+    "Похоже на несколько проездов — выберите свой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Похоже на несколько проездов — выберите свой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bir nechta oʻtishga oʻxshaydi — oʻzingiznikini tanlang"
           }
         }
       }
@@ -11657,6 +12505,102 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qabul qilindi, rahmat"
+          }
+        }
+      }
+    },
+    "Пришедшие штрафы и сроки оплаты": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пришедшие штрафы и сроки оплаты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kelgan jarimalar va toʻlov muddatlari"
+          }
+        }
+      }
+    },
+    "Пришедших штрафов нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пришедших штрафов нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kelgan jarimalar yoʻq"
+          }
+        }
+      }
+    },
+    "Пришли": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пришли"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kelganlar"
+          }
+        }
+      }
+    },
+    "Пришло": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пришло"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keldi"
+          }
+        }
+      }
+    },
+    "Пришло постановление — вставьте текст СМС или заполните форму: сверим с поездкой и напомним о сроке оплаты.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пришло постановление — вставьте текст СМС или заполните форму: сверим с поездкой и напомним о сроке оплаты."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qaror keldimi — SMS matnini qoʻying yoki shaklni toʻldiring: safar bilan solishtiramiz va toʻlov muddatini eslatamiz."
+          }
+        }
+      }
+    },
+    "Пришло постановление? Внесите — сверим с поездкой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пришло постановление? Внесите — сверим с поездкой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qaror keldimi? Kiriting — safar bilan solishtiramiz"
           }
         }
       }
@@ -11918,6 +12862,22 @@
         }
       }
     },
+    "Проверьте: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверьте: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tekshiring: %@"
+          }
+        }
+      }
+    },
     "Продлевать на, мес.": {
       "localizations": {
         "ru": {
@@ -11982,6 +12942,38 @@
         }
       }
     },
+    "Проезд %1$@ · %2$lld км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проезд %1$@ · %2$lld км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻtish %1$@ · %2$lld km/soat"
+          }
+        }
+      }
+    },
+    "Проезд %1$@ · %2$lld км/ч при %3$lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проезд %1$@ · %2$lld км/ч при %3$lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻtish %1$@ · %2$lld km/soat, cheklov %3$lld"
+          }
+        }
+      }
+    },
     "Проезд камеры": {
       "localizations": {
         "ru": {
@@ -12010,6 +13002,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qizil chiroqda oʻtish"
+          }
+        }
+      }
+    },
+    "Проезд снова станет «ожидается», напоминание снимется.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проезд снова станет «ожидается», напоминание снимется."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻtish yana «kutilmoqda» boʻladi, eslatma olib tashlanadi."
+          }
+        }
+      }
+    },
+    "Проезда в истории нет — сохраним штраф без поездки.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проезда в истории нет — сохраним штраф без поездки."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarixda oʻtish yoʻq — jarimani safarsiz saqlaymiz."
           }
         }
       }
@@ -12074,6 +13098,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jarima pogʻonasiga tushgan oʻtishlar: %lld"
+          }
+        }
+      }
+    },
+    "Проезды этого дня: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проезды этого дня: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shu kungi oʻtishlar: %lld"
           }
         }
       }
@@ -12315,6 +13355,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Oʻtgan davr: %lld"
+          }
+        }
+      }
+    },
+    "Пустое поле — в постановлении его нет. Срок оплаты не указан — посчитаем ориентир от даты постановления.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пустое поле — в постановлении его нет. Срок оплаты не указан — посчитаем ориентир от даты постановления."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boʻsh maydon — qarorda u yoʻq. Toʻlov muddati koʻrsatilmagan boʻlsa — qaror sanasidan taxminiy muddatni hisoblaymiz."
           }
         }
       }
@@ -12635,6 +13691,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Oʻtishlarni koʻrib chiqish"
+          }
+        }
+      }
+    },
+    "Разобрать текст": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Разобрать текст"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Matnni tahlil qilish"
           }
         }
       }
@@ -13241,6 +14313,54 @@
         }
       }
     },
+    "Сверен с поездкой — её запись уже не хранится": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сверен с поездкой — её запись уже не хранится"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar bilan solishtirilgan — uning yozuvi endi saqlanmaydi"
+          }
+        }
+      }
+    },
+    "Сверенный проезд получит «штраф пришёл»: сумма уйдёт из «возможных» в «пришло». Рейтинг не меняется.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сверенный проезд получит «штраф пришёл»: сумма уйдёт из «возможных» в «пришло». Рейтинг не меняется."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solishtirilgan oʻtish «jarima keldi» boʻladi: summa «ehtimoliy»dan «keldi»ga oʻtadi. Reyting oʻzgarmaydi."
+          }
+        }
+      }
+    },
+    "Сверить заново": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сверить заново"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qayta solishtirish"
+          }
+        }
+      }
+    },
     "Сверьте с приборкой раз в несколько месяцев: GPS считает чуть иначе.": {
       "localizations": {
         "ru": {
@@ -13801,6 +14921,22 @@
         }
       }
     },
+    "Скорость, км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скорость, км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tezlik, km/soat"
+          }
+        }
+      }
+    },
     "Скрытая камера не показывается и не предупреждает. Вернуть её можно в Настройках → О приложении → База камер → Скрытые камеры.": {
       "localizations": {
         "ru": {
@@ -14155,6 +15291,86 @@
         }
       }
     },
+    "Срок оплаты": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Срок оплаты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toʻlov muddati"
+          }
+        }
+      }
+    },
+    "Срок оплаты прошёл %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Срок оплаты прошёл %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toʻlov muddati oʻtdi: %@"
+          }
+        }
+      }
+    },
+    "Срок оплаты прошёл: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Срок оплаты прошёл: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toʻlov muddati oʻtgan: %lld"
+          }
+        }
+      }
+    },
+    "Срок оплаты штрафа": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Срок оплаты штрафа"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarimani toʻlash muddati"
+          }
+        }
+      }
+    },
+    "Сроки и льготный срок — ориентир по общим правилам; точные даты и суммы — в постановлении. Ожидаемые — оценка по нашим замерам, не постановления. Рейтинг от отметок не меняется.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сроки и льготный срок — ориентир по общим правилам; точные даты и суммы — в постановлении. Ожидаемые — оценка по нашим замерам, не постановления. Рейтинг от отметок не меняется."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muddatlar va imtiyozli muddat — umumiy qoidalar boʻyicha taxminiy; aniq sana va summalar — qarorda. Kutilayotganlar — oʻlchovlarimiz boʻyicha baho, qaror emas. Belgilar reytingni oʻzgartirmaydi."
+          }
+        }
+      }
+    },
     "Срок — что наступит раньше: пробег или дата. «Скоро» — за 500 км или 14 дней.": {
       "localizations": {
         "ru": {
@@ -14413,6 +15629,22 @@
         }
       }
     },
+    "Сумма, сум": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сумма, сум"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Summa, soʻm"
+          }
+        }
+      }
+    },
     "Суперкар": {
       "localizations": {
         "ru": {
@@ -14473,6 +15705,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tezlikka bosish — tezkor tugmalar"
+          }
+        }
+      }
+    },
+    "Текст разбирается на телефоне и не сохраняется: номер машины и имя из него никуда не попадут.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Текст разбирается на телефоне и не сохраняется: номер машины и имя из него никуда не попадут."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Matn telefonda tahlil qilinadi va saqlanmaydi: undagi avtomobil raqami va ism hech qayerga ketmaydi."
+          }
+        }
+      }
+    },
+    "Текст уведомления": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Текст уведомления"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bildirishnoma matni"
           }
         }
       }
@@ -15215,6 +16479,38 @@
         }
       }
     },
+    "Удалить штраф": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить штраф"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarimani oʻchirish"
+          }
+        }
+      }
+    },
+    "Удалить штраф?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить штраф?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarima oʻchirilsinmi?"
+          }
+        }
+      }
+    },
     "Удержано %lld баллов из 100": {
       "localizations": {
         "ru": {
@@ -15287,6 +16583,22 @@
         }
       }
     },
+    "Укажите дату — сверим с поездками этого дня.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Укажите дату — сверим с поездками этого дня."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sanani koʻrsating — shu kungi safarlar bilan solishtiramiz."
+          }
+        }
+      }
+    },
     "Укажите расход и цену — и в поездках, «Итогах» и «Дороге на работу» появится стоимость.": {
       "localizations": {
         "ru": {
@@ -15315,6 +16627,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sarf va narxni kiriting — narx safarlarda va «Natijalar»da paydo boʻladi. Oʻsha yerda — davlat raqami boʻyicha jarimalarni tekshirish."
+          }
+        }
+      }
+    },
+    "Указать дату нарушения": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Указать дату нарушения"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qoidabuzarlik sanasini koʻrsatish"
           }
         }
       }
@@ -15867,6 +17195,22 @@
         }
       }
     },
+    "Штраф": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Штраф"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarima"
+          }
+        }
+      }
+    },
     "Штраф не пришёл": {
       "localizations": {
         "ru": {
@@ -15895,6 +17239,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jarima keldi"
+          }
+        }
+      }
+    },
+    "Штраф пришёл: внести постановление": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Штраф пришёл: внести постановление"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarima keldi: qarorni kiritish"
           }
         }
       }
@@ -15959,6 +17319,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tezlikni oshirish jarimalari — MJtK 128-3-modda"
+          }
+        }
+      }
+    },
+    "Штрафы хранятся только на телефоне. Номер машины никуда не отправляется.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Штрафы хранятся только на телефоне. Номер машины никуда не отправляется."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarimalar faqat telefonda saqlanadi. Avtomobil raqami hech qayerga yuborilmaydi."
+          }
+        }
+      }
+    },
+    "Штрафы: к оплате %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Штрафы: к оплате %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarimalar: toʻlash kerak %@"
           }
         }
       }
@@ -16591,6 +17983,22 @@
         }
       }
     },
+    "время": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "время"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "vaqt"
+          }
+        }
+      }
+    },
     "все проезды в лимите": {
       "localizations": {
         "ru": {
@@ -16732,6 +18140,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ holatiga"
+          }
+        }
+      }
+    },
+    "дата": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "дата"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sana"
+          }
+        }
+      }
+    },
+    "дата постановления": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "дата постановления"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "qaror sanasi"
           }
         }
       }
@@ -17116,6 +18556,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "safar uchun quvvat"
+          }
+        }
+      }
+    },
+    "и без суммы: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "и без суммы: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "va summasiz: %lld"
           }
         }
       }
@@ -17537,6 +18993,22 @@
         }
       }
     },
+    "место": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "место"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "joy"
+          }
+        }
+      }
+    },
     "маршрут без сети": {
       "localizations": {
         "ru": {
@@ -17809,6 +19281,54 @@
         }
       }
     },
+    "не оплачено: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "не оплачено: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "toʻlanmagan: %lld"
+          }
+        }
+      }
+    },
+    "не указан": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "не указан"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "koʻrsatilmagan"
+          }
+        }
+      }
+    },
+    "не указано": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "не указано"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "koʻrsatilmagan"
+          }
+        }
+      }
+    },
     "нет": {
       "localizations": {
         "ru": {
@@ -17821,6 +19341,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "yoʻq"
+          }
+        }
+      }
+    },
+    "ничего": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ничего"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hech narsa"
+          }
+        }
+      }
+    },
+    "номер постановления": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "номер постановления"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "qaror raqami"
           }
         }
       }
@@ -17933,6 +19485,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "odatda ertalab"
+          }
+        }
+      }
+    },
+    "ограничение": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ограничение"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "cheklov"
+          }
+        }
+      }
+    },
+    "оплачено %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "оплачено %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "toʻlangan %@"
           }
         }
       }
@@ -18587,6 +20171,22 @@
         }
       }
     },
+    "проверьте": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "проверьте"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tekshiring"
+          }
+        }
+      }
+    },
     "проездов камер": {
       "localizations": {
         "ru": {
@@ -19075,6 +20675,22 @@
         }
       }
     },
+    "скорость": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "скорость"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tezlik"
+          }
+        }
+      }
+    },
     "скоро: %lld": {
       "localizations": {
         "ru": {
@@ -19237,6 +20853,22 @@
         }
       }
     },
+    "срок оплаты": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "срок оплаты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "toʻlov muddati"
+          }
+        }
+      }
+    },
     "срок был %@": {
       "localizations": {
         "ru": {
@@ -19281,6 +20913,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "toʻxtab turdingiz"
+          }
+        }
+      }
+    },
+    "сумма": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "сумма"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "summa"
+          }
+        }
+      }
+    },
+    "сумма не указана": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "сумма не указана"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "summa koʻrsatilmagan"
           }
         }
       }
@@ -19525,6 +21189,22 @@
         }
       }
     },
+    "штраф %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "штраф %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "jarima %@"
+          }
+        }
+      }
+    },
     "штраф не пришёл": {
       "localizations": {
         "ru": {
@@ -19617,6 +21297,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "jarimalar taxminan %@"
+          }
+        }
+      }
+    },
+    "№ %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "№ %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "№ %@"
           }
         }
       }

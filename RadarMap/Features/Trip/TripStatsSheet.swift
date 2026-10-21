@@ -56,6 +56,8 @@ struct TripStatsSheet: View {
     @State var showRecallInfo = false
     /// Экран «Возможные штрафы» со строками проездов и пометкой «не пришёл».
     @State var showFines = false
+    /// «Штрафы» — пришедшие постановления, сроки, оплата (этап 17).
+    @State var showReceivedFines = false
     @State var selectedBadge: Achievement?
     /// Вся сохранённая история отдельным экраном — вместо сегмента «Всё время»,
     /// который обещал показать всё, а показывал последние записи.
@@ -173,6 +175,7 @@ struct TripStatsSheet: View {
                         VStack(spacing: 8) {
                             riskCard(summary: summary)
                             pendingNudgeRow(itogi)
+                            receivedFinesRow(summary: summary)
                             fuelRow(summary: summary)
                         }
                         .entrance(2, appeared)
@@ -378,6 +381,7 @@ struct TripStatsSheet: View {
                     if args.contains("-showRatingInfo") { showRatingInfo = true }
                     if args.contains("-showSavingsInfo") { showFinesInfo = true }
                     if args.contains("-showFines") { showFines = true }
+                    if args.contains("-showReceivedFines") { showReceivedFines = true }
                     if args.contains("-showPeriodMap") { openMap(focus: nil) }
                     if args.contains("-showAllTrips") { showAllTrips = true }
                     if args.contains("-shareStats") {
@@ -419,6 +423,7 @@ struct TripStatsSheet: View {
         .sheet(isPresented: $showFines) {
             FinesSheet(period: period, anchor: anchor, periodRisk: current.summary.fineRisk)
         }
+        .sheet(isPresented: $showReceivedFines) { FinesScreen() }
         .sheet(item: $selectedBadge) { badge in AchievementInfoSheet(badge: badge) }
         .sheet(item: $commuteDetail) { commute in
             CommuteDetailSheet(summary: commute)

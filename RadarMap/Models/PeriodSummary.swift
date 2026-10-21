@@ -334,6 +334,9 @@ extension TripHistory {
             kmByDay[day, default: 0] += record.distanceMeters / 1000
 
             for pass in record.passed {
+                // Пришедшие деньги — по одному правилу с днём (paidAmount):
+                // сумма постановления — факт и без нашего лимита.
+                if let paid = pass.paidAmount { result.finesPaid += paid }
                 // Без известного лимита нарушения не выдумываем — как в month30.
                 guard let limit = pass.limitKmh else { continue }
                 let fine = FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
@@ -344,7 +347,6 @@ extension TripHistory {
                     // Судьба штрафа делит деньги: «ожидается» — в риск,
                     // «пришёл» — в факт, «не пришёл» — никуда.
                     if pass.limitIsCertain, pass.countsTowardFines { result.fineRisk += fine }
-                    if pass.limitIsCertain, pass.finePaid == true { result.finesPaid += fine }
                     result.overByHour[calendar.component(.hour, from: pass.date)] += 1
                     if !pass.location.isEmpty { overByLocation[pass.location, default: 0] += 1 }
                 } else {

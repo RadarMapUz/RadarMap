@@ -104,6 +104,8 @@ final class AppEnvironment {
     let roadWeather: RoadWeatherService
     /// Обслуживание машины (18): пробег, масло, документы — только на телефоне.
     let maintenance: MaintenanceService
+    /// Пришедшие штрафы (этап 17): только на телефоне; сверка и сроки — AppEnvironment+Fines.
+    let fines = FineStore()
 
     /// CarPlay подключён. Наблюдаемый флаг для интерфейса телефона: пока едет
     /// машина, телефонная карта уступает место дешёвому экрану передачи —

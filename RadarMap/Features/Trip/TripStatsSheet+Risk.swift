@@ -184,6 +184,58 @@ extension TripStatsSheet {
         }
     }
 
+    /// «Штрафы» (этап 17): пришедшие постановления — к оплате и ближайший
+    /// срок. Нет ни штрафов, ни превышений в периоде — нет и строки: тому, кто
+    /// ездит в лимите, приглашение «внесите штраф» ни к чему.
+    @ViewBuilder func receivedFinesRow(summary: PeriodSummary) -> some View {
+        let dues = FineLedger.dues(env.fines.fines, now: Date())
+        if !env.fines.fines.isEmpty || summary.overPasses > 0 {
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                showReceivedFines = true
+            } label: {
+                HStack(spacing: 12) {
+                    IconBadge(symbol: "doc.text.fill", tint: Theme.Icon.money, size: 30)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(dues.toPay > 0
+                             ? String(format: String(localized: "Штрафы: к оплате %@"), FineFormat.money(dues.toPay))
+                             : String(localized: "Штрафы"))
+                            .font(.rounded(14, .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        Text(receivedFinesCaption(dues))
+                            .font(.rounded(11))
+                            .foregroundStyle(dues.overdue > 0 ? Theme.danger : Theme.textTertiary)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.rounded(15, .bold))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+                .statCard(padding: 12, radius: Theme.cornerMedium)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func receivedFinesCaption(_ dues: FineLedger.Dues) -> String {
+        if dues.overdue > 0 {
+            return String(format: String(localized: "Срок оплаты прошёл: %lld"), dues.overdue)
+        }
+        if let next = dues.nextDeadline {
+            return String(format: String(localized: "Ближайший срок — %@"), FineFormat.day(next))
+        }
+        if dues.unpaid > 0 {
+            return String(format: String(localized: "Не оплачено: %lld"), dues.unpaid)
+        }
+        if env.fines.fines.isEmpty {
+            return String(localized: "Пришло постановление? Внесите — сверим с поездкой")
+        }
+        return String(localized: "Всё оплачено")
+    }
+
     /// «Проездов камер: 6 · с превышением: 2» — два счётчика с подписью (6.2).
     /// Проезды — ВСЕ, то же число, что в «Деталях»: раньше здесь считались
     /// только проезды с известным лимитом, и под одним словом на экране стояли

@@ -1,0 +1,9 @@
+{
+  "fine": true,
+  "date": "2026-10-12",
+  "amount": 2200000,
+  "unsure": [
+    "date",
+    "amount"
+  ]
+}

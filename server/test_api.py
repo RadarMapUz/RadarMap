@@ -2084,7 +2084,9 @@ class FamilyPageTest(ServerTestBase):
         later = first + 6 * 60
         self.post(eta=later)
         _, _, html = self.page()
-        self.assertIn(f"Задерживается — около {self.clock(later)}", html)
+        self.assertIn("Задерживается на 6 мин", html, "насколько позже первого обещания")
+        self.assertIn(f'<p class="big">{self.clock(later)}</p>', html, "новое время — крупно, один раз")
+        self.assertEqual(html.count(self.clock(later)), 1, "время не повторяется в строке статуса")
         self.post(eta=first + 60)
         self.assertIn("В пути — будет в", self.page()[2], "пробка рассосалась — уже не задерживается")
 
@@ -2147,6 +2149,10 @@ class FamilyPageTest(ServerTestBase):
         self.assertIn("soniya oldin yangilandi", html)
         self.post(status="arrived", eta=None)
         self.assertIn("Uyda — ", self.page("uz")[2])
+        first = time.time() + 25 * 60
+        self.post(eta=first)
+        self.post(eta=first + 12 * 60)
+        self.assertIn("12 daqiqaga kechikmoqda", self.page("uz")[2])
 
     # --- 22.4: края ---
 
@@ -2183,7 +2189,7 @@ class FamilyPageTest(ServerTestBase):
         self.age(18 * 60)            # 18 минут в магазине — без обновлений
         self.assertIn("В пути — будет в", self.page()[2])
         self.post(eta=first + 15 * 60)
-        self.assertIn("Задерживается — около", self.page()[2])
+        self.assertIn("Задерживается на 15 мин", self.page()[2])
 
     # --- подсказка Telegram, значок, заголовки ---
 

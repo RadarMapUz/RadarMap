@@ -1193,7 +1193,11 @@ def family_page(item, now, uz=False, bot=None, address=None):
             line = ("Deyarli uyda" if uz else "Почти дома") if home else (
                 "Manzilga yaqin" if uz else "Почти на месте")
         elif state == "delayed":
-            line = f"Kechikmoqda — taxminan {at} da" if uz else f"Задерживается — около {at}"
+            # Крупное время уже над строкой — строка говорит, НАСКОЛЬКО позже
+            # первого обещания этой поездки (ревью 22: «около 17:24» под
+            # крупным «17:24» повторяло то же время).
+            late = max(1, round((item["eta"] - item["first_eta"]) / 60))
+            line = f"{late} daqiqaga kechikmoqda" if uz else f"Задерживается на {late} мин"
         elif home:
             line = f"Yoʻlda — {at} da uyda boʻladi" if uz else f"В пути — будет в {at}"
         else:

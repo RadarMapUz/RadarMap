@@ -190,7 +190,7 @@ struct EngineBaseLayer: View {
         guard env.location.isTripActive else {
             map.cameraSmoother.reset()
             let span = AppConfig.engineOverviewSpan * pow(2, -map.zoomBias)
-            let pitch = pitchAllowed ? AppConfig.engineMapPitchDegrees : 0
+            let pitch = pitchAllowed ? AppConfig.engineOverviewPitchDegrees : 0
             let zoom = log2(DriveCamera.span(zoom: 0, viewHeight: viewHeight, latitude: me.latitude) / span)
             return (span, pitch, DriveCamera.visibleAhead(zoom: zoom, pitchDegrees: pitch, viewHeight: viewHeight,
                                                           carY: insets.meY, latitude: me.latitude))

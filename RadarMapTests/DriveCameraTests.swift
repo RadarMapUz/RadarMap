@@ -53,7 +53,9 @@ final class DriveCameraTests: XCTestCase {
     // MARK: - Обзор и наклон
 
     func testStandingIsTopDown() {
-        for kmh in [0.0, 5, 10, 15] {
+        // С 21.10 (25.D) сверху — только стоя и ползком; город уже с 10 км/ч
+        // под наклоном (DrivePitchTests).
+        for kmh in [0.0, 3, 6] {
             XCTAssertEqual(frame(kmh, height: 382).pitchDegrees, 0, "\(kmh) км/ч — сверху")
         }
     }

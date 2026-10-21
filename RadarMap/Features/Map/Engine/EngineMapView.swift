@@ -180,9 +180,8 @@ struct EngineMapView: UIViewRepresentable {
         view.isScrollEnabled = true
         view.isZoomEnabled = true
         view.isRotateEnabled = true
-        // Наклон двумя пальцами — как у навигаторов, но не круче 45°: выше
-        // начинается известная беда движка (#3029, перегрев), см.
-        // AppConfig.engineMapPitchDegrees.
+        // Наклон двумя пальцами — как у навигаторов, не круче потолка поездки
+        // (58°, AppConfig.engineMapPitchDegrees: там же — про #3029).
         view.isPitchEnabled = true
         view.maximumPitch = AppConfig.engineMapPitchDegrees
         view.compassView.isHidden = true

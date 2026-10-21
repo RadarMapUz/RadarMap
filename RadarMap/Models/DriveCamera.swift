@@ -18,7 +18,7 @@
 //  ту же дорогу крупнее. Правило одно: самый крупный масштаб, при котором
 //  впереди видно `lookahead` секунд пути, — но не мельче порога полос там,
 //  где полосы решают (город, подъезд к развилке). Обзор на скорости даёт
-//  прежде всего наклон (до 45° — см. AppConfig.engineMapPitchDegrees), и
+//  прежде всего наклон (до 58° — см. AppConfig.engineMapPitchDegrees), и
 //  только потом отдаление: так у Amap и Baidu, где водитель видит свою полосу.
 //
 //  Перед манёвром камера подтягивается к развилке: наклон уменьшается, порог
@@ -114,22 +114,27 @@ nonisolated enum DriveCamera {
         let kmh, pitch, seconds, minZoom, maxZoom, share: Double
     }
 
-    /// С наклоном. До 15 км/ч — строго сверху (стоянка, светофор, ползком в
-    /// пробке: полосы и перекрёсток сверху — владелец, 12.10); дальше наклон
-    /// растёт со скоростью. Здесь — желаемый наклон, как у Amap; в движок он
-    /// идёт не круче `maxPitch` (AppConfig.engineMapPitchDegrees, 45°: выше —
-    /// открытая беда движка с перегревом, maplibre-native #3029, пока нет
-    /// замера на живом телефоне). Обзор при меньшем наклоне добирает масштаб.
-    /// В городе порог масштаба — полосы; на трассе ниже: на прямой важнее
-    /// видеть дальше, а у съезда камера и так вернётся к полосам (манёвр).
+    /// С наклоном. Стоя и ползком (до 6 км/ч: стоянка, светофор, шум GPS на
+    /// месте) — строго сверху, полосы и перекрёсток (владелец, 12.10); уже с
+    /// 10 км/ч — наклон, как у Яндекса и Amap: дома в объёме и дорога
+    /// уходит вдаль («у Яндекса богато под наклоном», 21.10, план 25.D).
+    /// До 21.10 сверху было до 15 км/ч, и город на 10–40 км/ч выглядел
+    /// чертежом. В движок наклон идёт не круче `maxPitch`
+    /// (AppConfig.engineMapPitchDegrees, 58°); горячий телефон — плоская
+    /// таблица. Обзор при меньшем наклоне добирает масштаб. В городе порог
+    /// масштаба — полосы; на трассе ниже: на прямой важнее видеть дальше, а
+    /// у съезда камера и так вернётся к полосам (манёвр).
+    /// Узел 6 км/ч лежит на прямой 0…15 по всем столбцам, кроме наклона, —
+    /// масштаб, обзор и место машины от него не меняются (их ведёт 25.A).
     private static let pitched: [Knot] = [
         Knot(kmh: 0, pitch: 0, seconds: 0, minZoom: 17.0, maxZoom: 18.0, share: 0.62),
-        Knot(kmh: 15, pitch: 0, seconds: 8, minZoom: 17.0, maxZoom: 18.0, share: 0.62),
-        Knot(kmh: 30, pitch: 22, seconds: 9, minZoom: 17.0, maxZoom: 17.9, share: 0.66),
-        Knot(kmh: 50, pitch: 36, seconds: 10, minZoom: 17.0, maxZoom: 17.7, share: 0.70),
-        Knot(kmh: 70, pitch: 45, seconds: 11, minZoom: 17.0, maxZoom: 17.5, share: 0.72),
-        Knot(kmh: 90, pitch: 52, seconds: 13, minZoom: 16.4, maxZoom: 17.4, share: 0.74),
-        Knot(kmh: 110, pitch: 56, seconds: 14, minZoom: 16.1, maxZoom: 17.3, share: 0.75),
+        Knot(kmh: 6, pitch: 0, seconds: 3.2, minZoom: 17.0, maxZoom: 18.0, share: 0.62),
+        Knot(kmh: 15, pitch: 40, seconds: 8, minZoom: 17.0, maxZoom: 18.0, share: 0.62),
+        Knot(kmh: 30, pitch: 50, seconds: 9, minZoom: 17.0, maxZoom: 17.9, share: 0.66),
+        Knot(kmh: 50, pitch: 54, seconds: 10, minZoom: 17.0, maxZoom: 17.7, share: 0.70),
+        Knot(kmh: 70, pitch: 56, seconds: 11, minZoom: 17.0, maxZoom: 17.5, share: 0.72),
+        Knot(kmh: 90, pitch: 57, seconds: 13, minZoom: 16.4, maxZoom: 17.4, share: 0.74),
+        Knot(kmh: 110, pitch: 58, seconds: 14, minZoom: 16.1, maxZoom: 17.3, share: 0.75),
         Knot(kmh: 130, pitch: 58, seconds: 15, minZoom: 15.9, maxZoom: 17.2, share: 0.75),
     ]
 
@@ -144,19 +149,21 @@ nonisolated enum DriveCamera {
         Knot(kmh: 130, pitch: 0, seconds: 12, minZoom: 15.0, maxZoom: 16.8, share: 0.75),
     ]
 
-    /// Экран машины с наклоном. Стоя и ползком — сверху и на полосах
-    /// (z17, около 100 м вперёд); с 30 км/ч впереди 20–25 секунд пути, как у
+    /// Экран машины с наклоном. Стоя и ползком (до 6 км/ч) — сверху и на
+    /// полосах (z17, около 100 м вперёд); с 10 км/ч — наклон (25.D, как
+    /// у Яндекса в той же машине); с 30 км/ч впереди 20–25 секунд пути, как у
     /// Apple и Яндекса на том же экране: на 40 км/ч — 261 м, на 60 — 408 м
     /// (382 pt, расчёт DriveCameraTests). Разметка полос с z17 на ходу в
     /// городе не видна — её возвращает подъезд к манёвру (порог z17.3).
     private static let carPitched: [Knot] = [
         Knot(kmh: 0, pitch: 0, seconds: 0, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
-        Knot(kmh: 15, pitch: 0, seconds: 10, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
-        Knot(kmh: 30, pitch: 25, seconds: 22, minZoom: 16.4, maxZoom: 17.4, share: 0.66),
-        Knot(kmh: 50, pitch: 40, seconds: 25, minZoom: 16.0, maxZoom: 17.2, share: 0.70),
-        Knot(kmh: 70, pitch: 45, seconds: 24, minZoom: 15.7, maxZoom: 17.0, share: 0.72),
-        Knot(kmh: 90, pitch: 52, seconds: 22, minZoom: 15.5, maxZoom: 16.8, share: 0.74),
-        Knot(kmh: 110, pitch: 56, seconds: 21, minZoom: 15.3, maxZoom: 16.6, share: 0.75),
+        Knot(kmh: 6, pitch: 0, seconds: 4, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
+        Knot(kmh: 15, pitch: 38, seconds: 10, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
+        Knot(kmh: 30, pitch: 48, seconds: 22, minZoom: 16.4, maxZoom: 17.4, share: 0.66),
+        Knot(kmh: 50, pitch: 53, seconds: 25, minZoom: 16.0, maxZoom: 17.2, share: 0.70),
+        Knot(kmh: 70, pitch: 55, seconds: 24, minZoom: 15.7, maxZoom: 17.0, share: 0.72),
+        Knot(kmh: 90, pitch: 57, seconds: 22, minZoom: 15.5, maxZoom: 16.8, share: 0.74),
+        Knot(kmh: 110, pitch: 58, seconds: 21, minZoom: 15.3, maxZoom: 16.6, share: 0.75),
         Knot(kmh: 130, pitch: 58, seconds: 20, minZoom: 15.1, maxZoom: 16.4, share: 0.75),
     ]
 

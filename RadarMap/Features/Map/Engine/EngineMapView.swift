@@ -1435,6 +1435,15 @@ struct EngineMapView: UIViewRepresentable {
         /// в замере 19.10, perf_audit_2026-10-19.md).
         private func layoutPositionView(in view: MLNMapView) {
             guard let coordinate = displayedPosition else { return }
+            #if DEBUG
+            if MarkerLagLog.enabled {
+                let now = CACurrentMediaTime()
+                if now - lastMarkerLog >= 0.2 {
+                    lastMarkerLog = now
+                    Log.location.notice("МЕТКА знак \(Date().timeIntervalSince1970, format: .fixed(precision: 3), privacy: .public) \(coordinate.latitude, format: .fixed(precision: 7), privacy: .public) \(coordinate.longitude, format: .fixed(precision: 7), privacy: .public) \(view.centerCoordinate.latitude, format: .fixed(precision: 7), privacy: .public) \(view.centerCoordinate.longitude, format: .fixed(precision: 7), privacy: .public)")
+                }
+            }
+            #endif
             let marker = positionView ?? makePositionView(in: view)
             let point = view.convert(coordinate, toPointTo: view)
             let angle = (positionHeading - view.direction) * .pi / 180
@@ -1448,6 +1457,9 @@ struct EngineMapView: UIViewRepresentable {
             marker.layer.setAffineTransform(CGAffineTransform(rotationAngle: angle))
             CATransaction.commit()
         }
+        #if DEBUG
+        private var lastMarkerLog: CFTimeInterval = 0
+        #endif
         /// Что стрелка показывает сейчас (точка и угол) — для пропуска повторов.
         private var shownPosition: (point: CGPoint, angle: Double)?
 

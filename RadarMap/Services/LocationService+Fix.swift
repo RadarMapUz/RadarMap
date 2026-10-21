@@ -82,6 +82,12 @@ extension LocationService {
             // Время точки трека — время ФИКСА: после фоновой паузы iOS отдаёт
             // фиксы пачкой, и часы обработки дали бы им одно время.
             lastFixTime = min(fix.timestamp, Date())
+            #if DEBUG
+            // Замер лага значка (25.B): истинная точка — сам фикс со своим временем.
+            if MarkerLagLog.enabled {
+                Log.location.notice("МЕТКА фикс \(fix.timestamp.timeIntervalSince1970, format: .fixed(precision: 3), privacy: .public) \(Date().timeIntervalSince1970, format: .fixed(precision: 3), privacy: .public) \(fix.lat, format: .fixed(precision: 7), privacy: .public) \(fix.lon, format: .fixed(precision: 7), privacy: .public) \(fix.speed, format: .fixed(precision: 2), privacy: .public)")
+            }
+            #endif
             horizontalAccuracy = good.accuracy
             isFixSimulated = fix.isSimulated
             handleLocation(coordinate: CLLocationCoordinate2D(latitude: good.lat,

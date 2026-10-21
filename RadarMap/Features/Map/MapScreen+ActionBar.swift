@@ -104,6 +104,10 @@ extension MapScreen {
             Button { showRouteCameras = true } label: {
                 Label("Камеры на маршруте", systemImage: Icon.cameras)
             }
+            // Заправки (метан — со статусом), гостиницы, кафе впереди (19.3).
+            Button { showAlongRoute = true } label: {
+                Label("По пути", systemImage: AlongRouteText.symbol(env.settings.vehicleEnergy))
+            }
         }
         // Время прибытия знакомому — пока идёт маршрут (EtaShareService).
         if env.etaShare.isSharing {

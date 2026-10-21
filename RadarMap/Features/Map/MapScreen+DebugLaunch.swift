@@ -244,6 +244,34 @@ extension MapScreen {
                 }
             }
         }
+        // Дальняя поездка (19.3): настоящий маршрут до Самарканда (симулятор
+        // ставят в Ташкент), демо-заведения вдоль него и статусы метана —
+        // снимки карточки «Карта по пути» и листа «По пути» (-openAlong);
+        // -driveDemo — поездка начата, машина стоит.
+        if args.contains("-demoLongRoute") {
+            Task {
+                await Task.pause(seconds: 2)
+                let name = env.settings.appLanguage == .uz ? "Samarqand" : "Самарканд"
+                buildRoute(to: CLLocationCoordinate2D(latitude: 39.6542, longitude: 66.9597), name: name)
+                for _ in 0..<60 where !env.route.isActive { await Task.pause(seconds: 0.5) }
+                guard env.route.isActive else { return }
+                let cng = env.corridor.seedDemoVenues(route: env.route).filter { $0.kind == .cng }
+                let looks: [(CngStation.Status?, Int?, Bool)] = [(.gas, nil, true), (.nogas, nil, false), (.gas, 30, true)]
+                env.cng.seedDemo(zip(cng, looks).map { venue, look in
+                    CngStation(lat: venue.point.latitude, lon: venue.point.longitude, status: look.0,
+                               statusAge: 40, queue: look.1, queueAge: look.1.map { _ in 10 }, confirmed: look.2)
+                })
+                // «Поехали» без касания: карточка в поездке, пока стоим.
+                if args.contains("-driveDemo") {
+                    await Task.pause(seconds: 1)
+                    env.location.startTrip()
+                }
+                if args.contains("-openAlong") {
+                    await Task.pause(seconds: 1.5)
+                    showAlongRoute = true
+                }
+            }
+        }
         if args.contains("-demoRoute") {
             Task {
                 await Task.pause(seconds: 2)

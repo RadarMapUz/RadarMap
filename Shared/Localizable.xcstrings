@@ -510,6 +510,22 @@
         }
       }
     },
+    "%@ от дороги": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ от дороги"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yoʻldan %@ uzoqda"
+          }
+        }
+      }
+    },
     "%@ от работы": {
       "localizations": {
         "ru": {
@@ -3148,6 +3164,22 @@
         }
       }
     },
+    "Впереди в %@ от дороги ничего не нашлось": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Впереди в %@ от дороги ничего не нашлось"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldinda yoʻldan %@ masofada hech narsa topilmadi"
+          }
+        }
+      }
+    },
     "Впереди перекрытие дороги": {
       "localizations": {
         "ru": {
@@ -4085,6 +4117,22 @@
         }
       }
     },
+    "Гостиницы": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Гостиницы"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mehmonxonalar"
+          }
+        }
+      }
+    },
     "Готов к поездке": {
       "localizations": {
         "ru": {
@@ -4443,6 +4491,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fonda ogohlantirishlar uchun «Doim» ruxsatini tanlang."
+          }
+        }
+      }
+    },
+    "Для этого пути данных о заведениях пока нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для этого пути данных о заведениях пока нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu yoʻl boʻyidagi joylar haqida hozircha maʼlumot yoʻq"
           }
         }
       }
@@ -5444,6 +5508,22 @@
         }
       }
     },
+    "Заправки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заправки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoqilgʻi"
+          }
+        }
+      }
+    },
     "Заряд %lld процентов": {
       "localizations": {
         "ru": {
@@ -5456,6 +5536,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quvvat %lld foiz"
+          }
+        }
+      }
+    },
+    "Зарядки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зарядки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quvvatlash stansiyalari"
           }
         }
       }
@@ -5985,6 +6081,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hafta yakunlari 🚗"
+          }
+        }
+      }
+    },
+    "Ищем по пути…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ищем по пути…"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl boʻyidan qidirilmoqda…"
           }
         }
       }
@@ -6645,6 +6757,22 @@
         }
       }
     },
+    "Карта по пути без интернета": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Карта по пути без интернета"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl boʻyi xaritasi internetsiz"
+          }
+        }
+      }
+    },
     "Карта по ходу движения": {
       "localizations": {
         "ru": {
@@ -6705,6 +6833,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Xarita sizni kuzatmoqda"
+          }
+        }
+      }
+    },
+    "Кафе": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Кафе"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kafe"
           }
         }
       }
@@ -7122,6 +7266,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Shu yerga marshrut"
+          }
+        }
+      }
+    },
+    "Маршрута нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрута нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrut yoʻq"
           }
         }
       }
@@ -7943,6 +8103,22 @@
         }
       }
     },
+    "Не дальше %@ от дороги, по порядку вдоль пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не дальше %@ от дороги, по порядку вдоль пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻldan %@ gacha, yoʻl boʻyicha tartibda"
+          }
+        }
+      }
+    },
     "Не задано": {
       "localizations": {
         "ru": {
@@ -8389,6 +8565,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Marshrut serveri bilan aloqa yoʻq — internetni tekshiring"
+          }
+        }
+      }
+    },
+    "Нет связи — в списке то, что уже на телефоне": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет связи — в списке то, что уже на телефоне"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aloqa yoʻq — roʻyxatda faqat telefonda bor maʼlumotlar"
           }
         }
       }
@@ -10167,6 +10359,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Haftalar boʻyicha"
+          }
+        }
+      }
+    },
+    "По пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl boʻyida"
+          }
+        }
+      }
+    },
+    "По пути: заправки, гостиницы, кафе": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По пути: заправки, гостиницы, кафе"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl boʻyida: yoqilgʻi, mehmonxonalar, kafelar"
           }
         }
       }
@@ -13241,6 +13465,54 @@
         }
       }
     },
+    "Скачать · %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачать · %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yuklab olish · %@"
+          }
+        }
+      }
+    },
+    "Скачать карту по пути, %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачать карту по пути, %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl boʻyi xaritasini yuklab olish, %@"
+          }
+        }
+      }
+    },
+    "Скачать по мобильной сети · %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачать по мобильной сети · %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mobil tarmoq orqali yuklab olish · %@"
+          }
+        }
+      }
+    },
     "Сколько обычно ехать и когда выезжать — по вашим поездкам": {
       "localizations": {
         "ru": {
@@ -15210,6 +15482,38 @@
         }
       }
     },
+    "Часть пути не загрузилась — %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Часть пути не загрузилась — %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻlning bir qismi yuklanmadi — %@"
+          }
+        }
+      }
+    },
+    "Часть пути пока без данных — %@. Скачаются по Wi-Fi.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Часть пути пока без данных — %@. Скачаются по Wi-Fi."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻlning bir qismi hali maʼlumotsiz — %@. Wi-Fi orqali yuklanadi."
+          }
+        }
+      }
+    },
     "Чаще всего — %1$@: превышений %2$lld из %3$lld": {
       "localizations": {
         "ru": {
@@ -16208,6 +16512,22 @@
         }
       }
     },
+    "гостиница": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "гостиница"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "mehmonxona"
+          }
+        }
+      }
+    },
     "гололёд": {
       "localizations": {
         "ru": {
@@ -16560,6 +16880,54 @@
         }
       }
     },
+    "заправка": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "заправка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yoqilgʻi quyish shoxobchasi"
+          }
+        }
+      }
+    },
+    "заправка метан": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "заправка метан"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "metan quyish shoxobchasi"
+          }
+        }
+      }
+    },
+    "заправка пропан": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "заправка пропан"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "propan quyish shoxobchasi"
+          }
+        }
+      }
+    },
     "заряда за поездку": {
       "localizations": {
         "ru": {
@@ -16572,6 +16940,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "safar uchun quvvat"
+          }
+        }
+      }
+    },
+    "зарядная станция": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "зарядная станция"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "quvvatlash stansiyasi"
           }
         }
       }
@@ -16769,6 +17153,22 @@
         }
       }
     },
+    "кафе": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "кафе"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kafe"
+          }
+        }
+      }
+    },
     "км": {
       "localizations": {
         "ru": {
@@ -16957,6 +17357,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "maksimal, km/soat"
+          }
+        }
+      }
+    },
+    "маршрут без сети": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "маршрут без сети"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tarmoqsiz marshrut"
           }
         }
       }
@@ -17394,6 +17810,38 @@
         }
       }
     },
+    "очередь больше 30 минут": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "очередь больше 30 минут"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "navbat 30 daqiqadan ortiq"
+          }
+        }
+      }
+    },
+    "очередь около %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "очередь около %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "navbat taxminan %@"
+          }
+        }
+      }
+    },
     "перестройтесь в поток": {
       "localizations": {
         "ru": {
@@ -17574,6 +18022,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "hozirgi narxda"
+          }
+        }
+      }
+    },
+    "по словам водителя": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "по словам водителя"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "haydovchi soʻziga koʻra"
           }
         }
       }
@@ -18741,6 +19205,22 @@
         }
       }
     },
+    "у дороги": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "у дороги"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yoʻl yonida"
+          }
+        }
+      }
+    },
     "туман": {
       "localizations": {
         "ru": {
@@ -18785,6 +19265,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "joylashuv aniqlanmoqda"
+          }
+        }
+      }
+    },
+    "через %1$@, %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "через %1$@, %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ dan keyin, %2$@"
+          }
+        }
+      }
+    },
+    "через %1$@, %2$@ от дороги": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "через %1$@, %2$@ от дороги"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ dan keyin, yoʻldan %2$@ uzoqda"
+          }
+        }
+      }
+    },
+    "через %@, у дороги": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "через %@, у дороги"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ dan keyin, yoʻl yonida"
           }
         }
       }

@@ -112,6 +112,14 @@ final class CngService {
         CngRules.station(for: point, in: stations)
     }
 
+    #if DEBUG
+    /// Скриншот-хук «По пути» (`-demoLongRoute`): статусы станций без сервера.
+    func seedDemo(_ stations: [CngStation]) {
+        fetched = stations
+        fetchedAt = Date()
+    }
+    #endif
+
     // MARK: - Вопрос «Как на заправке?»
 
     /// Фикс или погасшая без фиксов скорость: тронулись — снять вопрос;

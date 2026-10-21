@@ -39,7 +39,7 @@ extension MapScreen {
     /// повернули руками.
     @ViewBuilder var tripControls: some View {
         let extras = TripScreenLayout.columnExtras(
-            slots: columnSlots, fixed: 3,
+            slots: columnSlots, fixed: AppConfig.mapColumnFixedButtons,
             candidates: map.isRotated ? [(.compass, 1)] : [])
         MapMuteButton()
         orientationControl
@@ -74,7 +74,7 @@ extension MapScreen {
         // вход в смену подложки); остальное по важности, пока есть место до
         // нижних панелей (TripScreenLayout.columnExtras).
         let extras = TripScreenLayout.columnExtras(
-            slots: columnSlots, fixed: 3,
+            slots: columnSlots, fixed: AppConfig.mapColumnFixedButtons,
             candidates: (map.isRotated ? [(.compass, 1)] : [])
                 + (env.route.isActive ? [(.overview, 1)] : [])
                 + [(.threeD, 1)]
@@ -127,8 +127,11 @@ extension MapScreen {
     /// мест только при его смене — см. `columnSlots`.
     func updateColumnSlots() {
         let measured = topPanelEdge > 0 && bottomPanelEdge > 0
-        let slots = TripScreenLayout.columnSlots(room: measured ? bottomPanelEdge - topPanelEdge : nil)
+        let room = measured ? bottomPanelEdge - topPanelEdge : nil
+        let slots = TripScreenLayout.columnSlots(room: room)
         if slots != columnSlots { columnSlots = slots }
+        // Просвет целиком — для карточки «Карта по пути» (CorridorOfferPlacement).
+        map.setColumnRoom(room)
     }
 
     var orientationControl: some View {

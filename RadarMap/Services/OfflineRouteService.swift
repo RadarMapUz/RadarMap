@@ -130,6 +130,37 @@ final class OfflineRouteService {
 
     // MARK: - Скачивание
 
+    /// Граф на телефоне (лежит его индекс). Подпись здесь не проверяется: это
+    /// вопрос «качать ли», а не «верить ли» — верит чтение (readGraph).
+    var hasGraph: Bool { FileManager.default.fileExists(atPath: envelopeURL.path) }
+
+    /// Размер графа по проверенному индексу сервера, пока самого файла на
+    /// телефоне нет (загрузка сорвалась). nil — граф есть или сервер его не
+    /// публикует: предлагать скачать нечего.
+    private(set) var pendingBytes: Int?
+    private var lastMissingCheck = Date.distantPast
+
+    /// Длинный маршрут, а графа нет (19.3): проверить индекс сейчас, а не
+    /// через неделю — неудачная первая попытка иначе оставляла без маршрута
+    /// без сети ровно перед дальней дорогой. Правило загрузки прежнее:
+    /// первый файл — любой связью. Повтор — не чаще
+    /// `offlineGraphMissingRecheckSeconds`; `force` — согласие водителя
+    /// («Скачать карту по пути»). Ответ — `pendingBytes`.
+    @discardableResult
+    func ensureGraph(force: Bool = false, now: Date = Date()) async -> Int? {
+        guard !hasGraph else {
+            pendingBytes = nil
+            return nil
+        }
+        guard force || now.timeIntervalSince(lastMissingCheck) >= AppConfig.offlineGraphMissingRecheckSeconds
+        else { return pendingBytes }
+        lastMissingCheck = now
+        lastIndexCheck = .distantPast
+        await refreshIfDue(now: now)
+        if hasGraph { pendingBytes = nil }
+        return pendingBytes
+    }
+
     /// Раз в неделю: подписанный индекс; новый файл — скачать, сверить,
     /// положить рядом и только потом индекс.
     func refreshIfDue(now: Date = Date()) async {
@@ -147,6 +178,7 @@ final class OfflineRouteService {
                 return
             }
             let target = directory.appendingPathComponent(file.name)
+            if !haveGraph { pendingBytes = file.bytes }
             if !FileManager.default.fileExists(atPath: target.path) {
                 let data = try await api.getData("routes/" + file.name)
                 guard data.count == file.bytes, RoadTiles.sha256Hex(of: data) == file.sha256 else {
@@ -157,6 +189,7 @@ final class OfflineRouteService {
                 try data.write(to: target, options: .atomic)
             }
             try raw.write(to: envelopeURL, options: .atomic)
+            pendingBytes = nil
             removeStale(keeping: file.name)
             graph = nil   // следующий маршрут без сети соберёт новый
             loading = nil

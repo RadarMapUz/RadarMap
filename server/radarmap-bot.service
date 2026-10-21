@@ -13,8 +13,10 @@ WorkingDirectory=/opt/radarmap/api
 # разбирает чужой ввод из интернета и держит токен, а работает от root на
 # общем VPS. Писать ему нужно только bot.db и family.db (подписки и очередь
 # близких, 22.3; и журналы sqlite рядом) в
-# /opt/radarmap/api; конфиг /opt/radarmap/telegram_bot.conf и файлы заведений
-# /opt/radarmap/www/roads (АГНКС для метана) — только чтение.
+# /opt/radarmap/api; конфиг /opt/radarmap/telegram_bot.conf, файлы заведений и
+# адресов /opt/radarmap/www/roads (АГНКС для метана, улицы), база камер
+# /opt/radarmap/www/cameras.json, погода weather/roads.json и пульт config.json
+# (23.x) — только чтение; reports.db — только чтение (подписки на город).
 # Сеть — только исходящая к Telegram и к API на 127.0.0.1:8091.
 NoNewPrivileges=yes
 PrivateTmp=yes

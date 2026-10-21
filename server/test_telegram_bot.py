@@ -330,7 +330,7 @@ class FlowTest(unittest.TestCase):
         self.assertEqual(body["device"], bot.device_for(SALT, USER, NOW))
         self.assertEqual(ip, bot.pseudo_ip_for(SALT, USER, NOW))
         self.assertNotIn(str(USER), json.dumps(body) + ip, "id не уходит в API")
-        self.assertEqual(self.text(), bot.TEXTS["created"])
+        self.assertEqual(self.text(), bot.TEXTS["ru"]["created"])
         self.assertEqual(self.counted(), 1)
 
     def test_cng_is_posted_at_the_venue_not_at_the_person(self):
@@ -339,7 +339,7 @@ class FlowTest(unittest.TestCase):
         here = offset(CNG_POINT, north=25, east=20)
         self.location(point=here)
         self.tap("cng")
-        self.assertEqual(self.text(), bot.TEXTS["pick_cng_at"].format(name="АГНКС Чиланзар"))
+        self.assertEqual(self.text(), bot.TEXTS["ru"]["pick_cng_at"].format(name="АГНКС Чиланзар"))
         self.tap("nogas")
         path, body, _ = self.posted[-1]
         self.assertEqual(path, "/api/cng")
@@ -347,16 +347,16 @@ class FlowTest(unittest.TestCase):
         self.assertEqual((body["lat"], body["lon"]), CNG_POINT, "координата колонки, до бита")
         self.assertEqual(api.cng_station_key(body["lat"], body["lon"]), api.cng_station_key(*CNG_POINT))
         self.assertNotEqual(api.cng_station_key(body["lat"], body["lon"]), api.cng_station_key(*here))
-        self.assertEqual(self.text(), bot.TEXTS["cng_ok"])
+        self.assertEqual(self.text(), bot.TEXTS["ru"]["cng_ok"])
 
     def test_cng_without_a_station_nearby_is_refused_and_not_counted(self):
         self.location(point=self.lpg)
         self.tap("cng")
-        self.assertEqual(self.text(), bot.TEXTS["cng_far"])
+        self.assertEqual(self.text(), bot.TEXTS["ru"]["cng_far"])
         self.assertEqual(self.text(), "Рядом нет заправки метаном в нашей базе — "
                                       "отправьте геопозицию у самой колонки.")
         self.tap("gas")   # callback_data присылает клиент — второй ряд мог прийти и без первого
-        self.assertEqual(self.text(), bot.TEXTS["cng_far"])
+        self.assertEqual(self.text(), bot.TEXTS["ru"]["cng_far"])
         self.assertEqual(self.posted, [])
         self.assertEqual(self.counted(), 0, "отказ — не в суточный лимит")
         self.tap("radar")
@@ -373,7 +373,7 @@ class FlowTest(unittest.TestCase):
         for data in ("cng", "gas"):
             broken.handle({"callback_query": {"id": "q", "data": data, "from": {"id": USER},
                                               "message": {"chat": {"id": 1}}}})
-            self.assertEqual(self.text(), bot.TEXTS["cng_unavailable"])
+            self.assertEqual(self.text(), bot.TEXTS["ru"]["cng_unavailable"])
         self.assertEqual(self.posted, [])
         self.assertEqual(len(self.logs), 1, "в журнал — один раз")
         self.assertEqual(self.counted(), 0)
@@ -386,7 +386,7 @@ class FlowTest(unittest.TestCase):
         self.location()
         self.tap("radar")
         self.assertEqual(len(self.posted), 1, "заведомый 429 не тратит кап адреса в API")
-        self.assertEqual(self.text(), bot.TEXTS["slow"])
+        self.assertEqual(self.text(), bot.TEXTS["ru"]["slow"])
         self.assertTrue(self.text().startswith("Не так часто"))
         self.assertEqual(self.counted(), 1)
         self.clock[0] = NOW + bot.BOT_MIN_INTERVAL
@@ -399,19 +399,19 @@ class FlowTest(unittest.TestCase):
         self.answer = (429, {"error": "too fast"})
         self.location()
         self.tap("radar")
-        self.assertEqual(self.text(), bot.TEXTS["slow"])
+        self.assertEqual(self.text(), bot.TEXTS["ru"]["slow"])
         self.assertEqual(self.counted(), 0)
         self.answer = (429, {"error": "too many active reports"})
         self.tap("radar")
-        self.assertEqual(self.text(), bot.TEXTS["busy"])
+        self.assertEqual(self.text(), bot.TEXTS["ru"]["busy"])
         self.assertTrue(self.text().startswith("Не так часто"))
         self.answer = (500, {})
         self.tap("radar")
-        self.assertEqual(self.text(), bot.TEXTS["error"])
+        self.assertEqual(self.text(), bot.TEXTS["ru"]["error"])
         self.assertEqual(self.counted(), 0, "в счёт — только 200")
         self.answer = (200, {"id": 5, "merged": False})
         self.tap("radar")
-        self.assertEqual(self.text(), bot.TEXTS["created"], "точка пережила отказы")
+        self.assertEqual(self.text(), bot.TEXTS["ru"]["created"], "точка пережила отказы")
         self.assertEqual(self.counted(), 1)
 
     def test_cng_refusal_is_not_counted_either(self):
@@ -433,12 +433,12 @@ class FlowTest(unittest.TestCase):
         self.location()
         self.tap("tripod")
         self.assertEqual(len(self.posted), 2)
-        self.assertEqual(self.text(), bot.TEXTS["amended"])
+        self.assertEqual(self.text(), bot.TEXTS["ru"]["amended"])
         self.clock[0] = NOW + 60
         self.location()
         self.tap("tripod")
         self.assertEqual(len(self.posted), 2, "тот же тип после уточнения — заведомый 429")
-        self.assertEqual(self.text(), bot.TEXTS["slow"])
+        self.assertEqual(self.text(), bot.TEXTS["ru"]["slow"])
 
     def test_categories_and_merges_do_not_share_the_interval(self):
         self.location()
@@ -470,12 +470,12 @@ class FlowTest(unittest.TestCase):
         self.location()
         self.tap("radar")
         self.assertEqual(len(self.posted), bot.BOT_DAILY_REPORTS)
-        self.assertEqual(self.text(), bot.TEXTS["limit"])
+        self.assertEqual(self.text(), bot.TEXTS["ru"]["limit"])
 
     def test_type_without_fresh_point_is_refused(self):
         self.tap("radar")
         self.assertEqual(self.posted, [])
-        self.assertEqual(self.text(), bot.TEXTS["expired"])
+        self.assertEqual(self.text(), bot.TEXTS["ru"]["expired"])
         self.location()
         self.clock[0] += bot.PENDING_TTL + 1
         self.tap("radar")
@@ -587,13 +587,13 @@ class ApiIntegrationTest(unittest.TestCase):
                      (now - (bot.BOT_MIN_INTERVAL - 5), now + 3600, device, ip))
         conn.commit()
         self.report(b, USER, (41.33, 69.29), "radar")
-        self.assertEqual(sent[-1]["text"], bot.TEXTS["slow"])
+        self.assertEqual(sent[-1]["text"], bot.TEXTS["ru"]["slow"])
         self.assertEqual(bot.daily_count(b.db, bot.user_hash(SALT, USER, time.time()), time.time()), 0)
         conn.execute("UPDATE reports SET created = ?", (time.time() - (bot.BOT_MIN_INTERVAL + 1),))
         conn.commit()
         b.handle({"callback_query": {"id": "q", "data": "radar", "from": {"id": USER},
                                      "message": {"chat": {"id": 1}}}})
-        self.assertEqual(sent[-1]["text"], bot.TEXTS["created"], "та же кнопка, точка дождалась")
+        self.assertEqual(sent[-1]["text"], bot.TEXTS["ru"]["created"], "та же кнопка, точка дождалась")
         self.assertEqual(bot.daily_count(b.db, bot.user_hash(SALT, USER, time.time()), time.time()), 1)
         conn.close()
 
@@ -657,7 +657,8 @@ class FamilyRoutingTest(unittest.TestCase):
         self.assertEqual(self.message(f"/start f_{self.ADDRESS}"), family_notify.REPLIES["ru"]["subscribed"])
         self.assertEqual(self.message(f"/start f_{self.ADDRESS}", lang="uz", user=OTHER),
                          family_notify.REPLIES["uz"]["subscribed"])
-        self.assertEqual(self.message("/stop"), family_notify.REPLIES["ru"]["stopped"])
+        self.assertEqual(self.message("/stop"), bot.TEXTS["ru"]["stop_done"],
+                         "/stop снимает и близких, и подписки бота — один ответ")
         conn = sqlite3.connect(self.path)
         try:
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM family_subs").fetchone()[0], 1)
@@ -671,26 +672,28 @@ class FamilyRoutingTest(unittest.TestCase):
 
     def test_other_text_still_gets_the_greeting(self):
         for text in ("/start", "привет", "/start ref42"):
-            self.assertEqual(self.message(text), bot.TEXTS["start"], text)
+            self.assertEqual(self.message(text), bot.TEXTS["ru"]["start"], text)
 
     def test_without_family_the_link_gets_the_greeting(self):
-        self.assertEqual(self.message(f"/start f_{self.ADDRESS}", target=self.make(None)), bot.TEXTS["start"])
+        self.assertEqual(self.message(f"/start f_{self.ADDRESS}", target=self.make(None)), bot.TEXTS["ru"]["start"])
 
     def test_location_flow_is_untouched(self):
         self.bot.handle({"message": {"chat": {"id": 1}, "from": {"id": USER},
                                      "location": {"latitude": 41.31, "longitude": 69.28}}})
-        self.assertEqual(self.sent[-1]["text"], bot.TEXTS["pick"])
+        self.assertEqual(self.sent[-1]["text"], bot.TEXTS["ru"]["pick"])
         self.assertIn("reply_markup", self.sent[-1])
 
     def test_one_kdf_per_family_command(self):
+        """Подписка близкого — один хэш (чата). /stop — два: хэш чата снимает
+        подписки, хэш человека — трансляцию и язык ответа."""
         calls = []
         real = bot._kdf
         bot._kdf = lambda password, salt: (calls.append(1), real(password, salt))[1]
         try:
-            for text in (f"/start f_{self.ADDRESS}", "/stop"):
+            for text, expected in ((f"/start f_{self.ADDRESS}", 1), ("/stop", 2)):
                 calls.clear()
                 self.message(text)
-                self.assertEqual(len(calls), 1, text)
+                self.assertEqual(len(calls), expected, text)
         finally:
             bot._kdf = real
 

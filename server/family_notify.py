@@ -281,21 +281,30 @@ def seal(address, chat_id, nonce=None):
     """Номер чата, зашифрованный ключом из адреса: nonce(16) · шифр(8) ·
     подпись(8), hex. Подпись — чтобы испорченная строка не превратилась в
     номер ЧУЖОГО чата: такая подписка снимается, а не пишет незнакомцу."""
-    key = _box_key(address)
+    return seal_key(_box_key(address), chat_id, nonce)
+
+
+def unseal(address, box):
+    """Номер чата или None — не тот адрес или строка испорчена."""
+    return unseal_key(_box_key(address), box)
+
+
+def seal_key(key, chat_id, nonce=None):
+    """Тот же шифр с готовым ключом (32 байта). Подписки бота на город и
+    перевалы (bot_subs.py) берут ключ из соли сервера — у них нет ссылки,
+    которая приносила бы ключ извне."""
     nonce = nonce if nonce is not None else os.urandom(16)
     body = bytes(a ^ b for a, b in zip(struct.pack(">q", chat_id), _pad(key, nonce)))
     return (nonce + body + _tag(key, nonce, body)).hex()
 
 
-def unseal(address, box):
-    """Номер чата или None — не тот адрес или строка испорчена."""
+def unseal_key(key, box):
     try:
         raw = bytes.fromhex(box)
     except (TypeError, ValueError):
         return None
     if len(raw) != 32:
         return None
-    key = _box_key(address)
     nonce, body, tag = raw[:16], raw[16:24], raw[24:]
     if not hmac.compare_digest(tag, _tag(key, nonce, body)):
         return None
@@ -625,13 +634,31 @@ class FamilyCommands:
 
     def _stop(self, chat_id):
         """Все подписки этого чата и их неотправленные сообщения — сразу."""
-        tag = chat_tag(self.salt, chat_id, self.kdf)
+        return "stopped" if self.stop_tag(chat_tag(self.salt, chat_id, self.kdf)) else "none"
+
+    def stop_tag(self, tag):
+        """То же по готовому хэшу чата (бот считает его один раз на /stop и
+        снимает им и подписки близких, и свои). Сколько снято."""
         with transaction(self.conn):
             ids = [r[0] for r in self.conn.execute("SELECT id FROM family_subs WHERE chat = ?", (tag,))]
             if ids:
                 self.conn.executemany("DELETE FROM family_outbox WHERE sub = ?", [(i,) for i in ids])
                 self.conn.execute("DELETE FROM family_subs WHERE chat = ?", (tag,))
-        return "stopped" if ids else "none"
+        return len(ids)
+
+    def listed(self, tag):
+        """Подписки чата для /my: [(номер, когда создана)], старые первыми.
+        Ни адреса, ни имени водителя у сервера нет — только номер и дата."""
+        return self.conn.execute("SELECT id, created FROM family_subs WHERE chat = ? ORDER BY id",
+                                 (tag,)).fetchall()
+
+    def remove(self, tag, sid):
+        """Одна подписка — только своя (номер из кнопки присылает клиент)."""
+        with transaction(self.conn):
+            done = self.conn.execute("DELETE FROM family_subs WHERE id = ? AND chat = ?", (sid, tag)).rowcount
+            if done:
+                self.conn.execute("DELETE FROM family_outbox WHERE sub = ?", (sid,))
+        return bool(done)
 
 
 # --- бот: доставка из очереди --------------------------------------------------------
@@ -667,16 +694,27 @@ def classify(error, attempts):
 
 class Courier:
     """Поток бота, который разбирает очередь. Соединение — своё, создаётся в
-    том потоке, где идёт разбор (sqlite не делит соединение между потоками)."""
+    том потоке, где идёт разбор (sqlite не делит соединение между потоками).
 
-    def __init__(self, send, path=None, now=time.time, sleep=time.sleep):
+    Та же доставка служит и подпискам самого бота (город, перевалы —
+    bot_subs.py): у них своя пара таблиц той же формы в bot.db и свой проход
+    сроков. Имена таблиц — константы кода, не ввод."""
+
+    def __init__(self, send, path=None, now=time.time, sleep=time.sleep,
+                 outbox="family_outbox", subs="family_subs", sweeper=None, extra=None):
         self.send = send            # (method, payload) -> dict; сбой — исключение urllib
         self.path = path
         self.now = now
         self.sleep = sleep
+        self.outbox = outbox
+        self.subs = subs
+        self.sweeper = sweeper or sweep
+        self.extra = dict(extra or {})
         self._conn = None
         self._swept = 0.0
         self.sent = 0
+        #: Счётчики с запуска — для /stats владельца (только числа).
+        self.totals = {"sent": 0, "gone": 0, "drop": 0, "failed": 0}
 
     def _db(self):
         if self._conn is None:
@@ -688,7 +726,7 @@ class Courier:
         (http.client.IncompleteRead — не OSError) без этого уронил бы проход
         и слал бы то же сообщение каждые 2 с; так — не больше SEND_ATTEMPTS."""
         try:
-            self.send("sendMessage", {"chat_id": chat_id, "text": text})
+            self.send("sendMessage", dict(self.extra, chat_id=chat_id, text=text))
         except Exception as error:      # исход разбирает classify, ничего не теряется
             return error
         return None
@@ -698,11 +736,11 @@ class Courier:
         conn = self._db()
         now = self.now()
         done = {"sent": 0, "gone": 0, "drop": 0, "later": 0, "flood": 0, "failed": 0}
-        done["stale"] = conn.execute("DELETE FROM family_outbox WHERE created < ?",
+        done["stale"] = conn.execute(f"DELETE FROM {self.outbox} WHERE created < ?",
                                      (now - OUTBOX_TTL,)).rowcount
         if done["stale"]:
             log(f"не ушло за {OUTBOX_TTL // 60} мин — снято {done['stale']}")
-        rows = conn.execute("SELECT id, sub, chat_id, text, attempts FROM family_outbox "
+        rows = conn.execute(f"SELECT id, sub, chat_id, text, attempts FROM {self.outbox} "
                             "WHERE next_try <= ? ORDER BY id LIMIT ?", (now, DRAIN_BATCH)).fetchall()
         closed = set()
         for rid, sub, chat_id, text, attempts in rows:
@@ -711,28 +749,31 @@ class Courier:
             error = self._try(chat_id, text)
             verdict, pause = classify(error, attempts)
             done[verdict] += 1
+            if verdict in self.totals:
+                self.totals[verdict] += 1
             if verdict == "sent":
-                conn.execute("DELETE FROM family_outbox WHERE id = ?", (rid,))
+                conn.execute(f"DELETE FROM {self.outbox} WHERE id = ?", (rid,))
                 self.sent += 1
             elif verdict == "gone":
                 with transaction(conn):
-                    conn.execute("DELETE FROM family_outbox WHERE sub = ?", (sub,))
-                    conn.execute("DELETE FROM family_subs WHERE id = ?", (sub,))
+                    conn.execute(f"DELETE FROM {self.outbox} WHERE sub = ?", (sub,))
+                    conn.execute(f"DELETE FROM {self.subs} WHERE id = ?", (sub,))
                 closed.add(sub)
                 log(f"чат закрыт ({error.code}) — подписка снята")
             elif verdict == "drop":
-                conn.execute("DELETE FROM family_outbox WHERE id = ?", (rid,))
+                conn.execute(f"DELETE FROM {self.outbox} WHERE id = ?", (rid,))
                 log(f"Telegram отказал ({error.code}) — сообщение снято")
             elif verdict == "flood":
-                conn.execute("UPDATE family_outbox SET next_try = ? WHERE id = ?", (now + pause, rid))
+                conn.execute(f"UPDATE {self.outbox} SET next_try = ? WHERE id = ?", (now + pause, rid))
                 log(f"Telegram просит подождать {pause} с")
                 break
             elif attempts + 1 >= SEND_ATTEMPTS:
-                conn.execute("DELETE FROM family_outbox WHERE id = ?", (rid,))
+                conn.execute(f"DELETE FROM {self.outbox} WHERE id = ?", (rid,))
                 done["failed"] += 1
+                self.totals["failed"] += 1
                 log(f"не доставлено за {SEND_ATTEMPTS} попытки ({type(error).__name__}) — снято")
             else:
-                conn.execute("UPDATE family_outbox SET attempts = ?, next_try = ? WHERE id = ?",
+                conn.execute(f"UPDATE {self.outbox} SET attempts = ?, next_try = ? WHERE id = ?",
                              (attempts + 1, now + pause, rid))
         return done
 
@@ -744,7 +785,7 @@ class Courier:
                 log(f"за час отправлено {self.sent}")
             self._swept = now
             self.sent = 0
-            sweep(self._db(), now)
+            self.sweeper(self._db(), now)
         return self.drain()
 
     def run(self, stop=None):

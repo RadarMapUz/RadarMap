@@ -11,8 +11,15 @@
 #     salt=<openssl rand -hex 32>        (не менять: от неё хэши подписок близких)
 #     username=<имя бота без @>          (ссылка t.me/<имя>?start=f_… на странице близкого)
 #     venues_dir=/opt/radarmap/www/roads   (необязательно, это значение по умолчанию)
+#     app_url=<ссылка App Store>         (необязательно; нет — /app скажет «скоро в App Store»)
+#     owner_hash=<хэш владельца>         (необязательно; /stats. Получить на сервере:
+#                                         echo <ваш Telegram-id> | python3 /opt/radarmap/api/telegram_bot.py --owner-hash)
 # Без конфига бот честно выходит и не крутится в перезапусках.
-# Подписки близких — /opt/radarmap/api/family.db, бот создаёт её сам.
+# Подписки близких — /opt/radarmap/api/family.db, бот создаёт её сам; подписки
+# на город и перевалы, язык и очередь — в bot.db рядом.
+#
+# Профиль (имя, описания, меню команд ru/uz) бот выставляет сам при запуске,
+# если текст изменился. Аватар — только руками в @BotFather (/setuserpic).
 #
 # Метан бот принимает только у АГНКС из опубликованных файлов заведений
 # (road2_*_v.json в venues_dir, их кладёт publish_roads.sh). Нет файлов —
@@ -29,7 +36,7 @@ fi
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "→ Тесты бота и близких локально…"
-(cd "$DIR" && python3 -W ignore -m unittest -q test_telegram_bot test_family_notify)
+(cd "$DIR" && python3 -W ignore -m unittest -q test_telegram_bot test_bot_features test_family_notify)
 
 # Хэш человека — scrypt (аудит 14.3, N6). Python без него бот не запустит —
 # проверяем ДО замены рабочего файла, а не после рестарта.
@@ -38,13 +45,16 @@ echo "→ Python на сервере: hashlib.scrypt…"
     || { echo "✗ в /usr/bin/python3 на сервере нет hashlib.scrypt — бот не выкладываю"; exit 1; }
 
 echo "→ Заливка…"
-"${SCP[@]}" "$DIR/telegram_bot.py" "$HOST:/opt/radarmap/api/telegram_bot.py.new"
-"${SCP[@]}" "$DIR/family_notify.py" "$HOST:/opt/radarmap/api/family_notify.py.new"
+# Модули бота (23.x) и то, что он берёт у канала (telegram_publish.py — его же
+# возит deploy_api.sh; здесь тот же файл, чтобы бот и крон не разошлись).
+MODULES="telegram_bot.py bot_texts.py bot_near.py bot_subs.py family_notify.py telegram_publish.py"
+for f in $MODULES; do
+    "${SCP[@]}" "$DIR/$f" "$HOST:/opt/radarmap/api/$f.new"
+done
 "${SCP[@]}" "$DIR/radarmap-bot.service" "$HOST:/etc/systemd/system/radarmap-bot.service"
-"${SSH[@]}" "$HOST" "python3 -m py_compile /opt/radarmap/api/telegram_bot.py.new \
-    && python3 -m py_compile /opt/radarmap/api/family_notify.py.new \
-    && mv /opt/radarmap/api/family_notify.py.new /opt/radarmap/api/family_notify.py \
-    && mv /opt/radarmap/api/telegram_bot.py.new /opt/radarmap/api/telegram_bot.py \
+"${SSH[@]}" "$HOST" "cd /opt/radarmap/api \
+    && for f in $MODULES; do python3 -m py_compile \$f.new || exit 1; done \
+    && for f in $MODULES; do mv \$f.new \$f; done \
     && systemctl daemon-reload && systemctl enable radarmap-bot >/dev/null \
     && systemctl restart radarmap-bot && sleep 2 && systemctl --no-pager --lines=5 status radarmap-bot || true"
 echo "✓ Готово. Нет конфига — в статусе будет «нет конфига», это не ошибка."

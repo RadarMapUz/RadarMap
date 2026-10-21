@@ -14,8 +14,10 @@
 #   message             {title, body, until}  — объявление на карте (until: unix-время)
 #   mobilePollInterval  180        — интервал опроса радаров, 60…3600
 #   features            {routing, mobileReports, metrics, traffic, etaShare, roadWeather,
-#                        laneOverlay}
-#                                  — что временно выключено (RemoteConfig.Features)
+#                        laneOverlay, bot}
+#                                  — что временно выключено (RemoteConfig.Features;
+#                                    bot — Telegram-бот: «что рядом», метан, трансляция,
+#                                    перевалы и город; отметки через бота работают всегда)
 #
 # Оповещения о камерах отсюда НЕ управляются и управляться не будут: база лежит
 # на телефоне, и предупреждение за рулём обязано работать, даже когда сервера
@@ -76,8 +78,9 @@ if not isinstance(features, dict):
 # приложение понимало, а здесь их отвергало — рубильник пробок не публиковался.
 # laneOverlay — рубильник слоя полос (docs/lanes_overlay_contract.md, 20.8):
 # сборка, которая о нём ещё не знает, ключ просто пропустит.
+# bot — читает только Telegram-бот (bot_near.Pult): приложение ключ пропускает.
 unknown = set(features) - {"routing", "mobileReports", "metrics", "traffic", "etaShare",
-                           "roadWeather", "laneOverlay"}
+                           "roadWeather", "laneOverlay", "bot"}
 if unknown:
     sys.exit(f"неизвестные features: {', '.join(sorted(unknown))}")
 for name, value in features.items():

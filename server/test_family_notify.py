@@ -14,6 +14,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import sqlite3
 import string
@@ -908,7 +909,10 @@ class DeployTest(unittest.TestCase):
         self.assertIn("$FAMILY.new", api_deploy.split("for f in", 1)[0], "синтаксис проверяется до подмены")
         self.assertRegex(api_deploy, r"mv \$FAMILY\.new \$FAMILY")
         bot_deploy = self.read("deploy_bot.sh")
-        self.assertIn('"$DIR/family_notify.py"', bot_deploy)
+        modules = re.search(r'^MODULES="([^"]+)"$', bot_deploy, re.M)
+        self.assertIsNotNone(modules, "deploy_bot.sh возит модули списком MODULES")
+        self.assertIn("family_notify.py", modules.group(1).split())
+        self.assertIn('"$DIR/$f"', bot_deploy)
         self.assertIn("test_family_notify", bot_deploy)
         self.assertRegex(self.read("drift.sh"), r"(?m)^family_notify\.py\s+/opt/radarmap/api/family_notify\.py$")
 

@@ -156,6 +156,15 @@ def nearest_address(roads_dir, lat, lon, max_meters=ADDRESS_MAX_METERS):
             cell = json.load(handle)
     except (OSError, ValueError):
         return None
+    return nearest_in_cell(cell, lat, lon, max_meters)
+
+
+def nearest_in_cell(cell, lat, lon, max_meters=ADDRESS_MAX_METERS):
+    """Тот же поиск по уже прочитанной клетке. Бот (telegram_bot.py) держит
+    клетки в памяти: ему адрес нужен на каждую строку «что рядом», а клетка
+    Ташкента — мегабайты."""
+    if not isinstance(cell, dict):
+        return None
     best, best_meters = None, max_meters
     for street in cell.get("streets") or []:
         numbers, packed = street.get("h") or [], street.get("p") or []

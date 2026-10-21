@@ -356,7 +356,9 @@ extension CarPlaySceneDelegate {
             if previewTrip != nil { mapTemplate?.hideTripPreviews() }
             previewTrip = nil
             model.isPreviewing = preview
-            await env.route.build(from: from, to: place.coordinate,
+            // На ходу — по курсу (20.9); стоя (выбор варианта) курса нет.
+            await env.route.build(from: from, heading: env.location.routeHeading,
+                                  to: place.coordinate,
                                   name: place.title, cameras: env.cameras.cameras,
                                   alternatives: preview)
             if remember { env.settings.addRecent(title: place.title, lat: place.lat, lon: place.lon) }
@@ -489,7 +491,8 @@ extension CarPlaySceneDelegate {
             }
             popToMap()
             await env.route.addStop(place.coordinate, name: place.title,
-                                    from: from, cameras: env.cameras.cameras)
+                                    from: from, heading: env.location.routeHeading,
+                                    cameras: env.cameras.cameras)
             if let error = env.route.errorMessage {
                 showAlert(title: String(localized: "Не удалось заехать по пути"), message: error)
             }

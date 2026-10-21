@@ -285,4 +285,219 @@ final class RouteGeometryTests: XCTestCase {
         XCTAssertEqual(value(viaStop, "radiuses"), "\(radius);unlimited;unlimited")
         XCTAssertNil(value(RouteService.osrmQueryItems(alternatives: false, heading: -1, waypoints: 2), "bearings"))
     }
+
+    // MARK: - Ход навстречу маршруту и курс первого маршрута (20.9)
+
+    /// Градусов долготы на метр на широте 41.30.
+    private let lonPerMeter = 1 / (111_320 * cos(41.30 * .pi / 180))
+
+    /// Фикс машины: где, курс (достоверный, −1 — нет), скорость.
+    private struct Fix {
+        let coordinate: CLLocationCoordinate2D
+        let course: CLLocationDirection
+        let speedKmh: Double
+    }
+
+    /// Прогон фиксов той же цепочкой, что RouteService.updateProgress:
+    /// проекция с курсом и подсказкой сегмента → ветка, которую она выбрала
+    /// (`hint` после project) → RerouteGate со всеми тремя правилами.
+    /// Индексы фиксов, на которых пора перестраивать, и худшее отклонение.
+    private func drive(_ fixes: [Fix], on pts: [MKMapPoint],
+                       gate: inout RerouteGate) -> (rebuilds: [Int], maxDeviation: Double) {
+        let cum = RouteService.cumulative(of: pts)
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        var hint = 0
+        var rebuilds: [Int] = []
+        var maxDeviation = 0.0
+        for (index, fix) in fixes.enumerated() {
+            let (along, deviation) = RouteService.project(MKMapPoint(fix.coordinate), onto: pts, cum: cum,
+                                                          hint: &hint,
+                                                          allowFullScan: gate.offRouteTicks % 3 == 0,
+                                                          course: fix.course)
+            maxDeviation = max(maxDeviation, deviation)
+            let heading = RouteService.routeHeading(along: along, segment: hint, pts: pts,
+                                                    course: fix.course, speedKmh: fix.speedKmh)
+            if gate.note(deviation: deviation, now: t0.addingTimeInterval(Double(index)),
+                         drift: RerouteGate.driftLimit(accuracy: nil), heading: heading) {
+                rebuilds.append(index)
+            }
+        }
+        return (rebuilds, maxDeviation)
+    }
+
+    /// Фиксы по прямой вдоль широты `lat`: от долготы `lon` шагами `step`
+    /// метров (минус — на запад), курс `course`, 43 км/ч (12 м за фикс).
+    private func leg(lat: Double, lon: Double, step: Double, count: Int,
+                     course: CLLocationDirection) -> [Fix] {
+        (0..<count).map {
+            Fix(coordinate: CLLocationCoordinate2D(latitude: lat,
+                                                   longitude: lon + Double($0) * step * lonPerMeter),
+                course: course, speedKmh: 43)
+        }
+    }
+
+    /// Развернулись на той же улице и едем назад по встречной стороне (11 м
+    /// от линии): отклонение никогда не дойдёт ни до 150, ни до 50 м, и
+    /// прежде маршрут вёл назад до самой цели. Теперь — перестроение на
+    /// четвёртом фиксе навстречу.
+    func testUTurnOnTheRouteStreetRebuilds() {
+        let pts = straightRoute
+        let east = leg(lat: 41.30, lon: 69.21, step: 12, count: 40, course: 90)
+        let turn = Fix(coordinate: CLLocationCoordinate2D(latitude: 41.30005,
+                                                          longitude: east.last!.coordinate.longitude),
+                       course: 0, speedKmh: 15)
+        let west = leg(lat: 41.30010, lon: east.last!.coordinate.longitude, step: -12, count: 12, course: 270)
+        var gate = RerouteGate()
+        let run = drive(east + [turn] + west, on: pts, gate: &gate)
+        XCTAssertEqual(run.rebuilds, [east.count + 1 + AppConfig.rerouteWrongWayTicks - 1],
+                       "четвёртый фикс навстречу")
+        XCTAssertLessThan(run.maxDeviation, 15, "на линии: правила отклонения тут слепы")
+
+        var blind = RerouteGate()
+        let cum = RouteService.cumulative(of: pts)
+        var hint = 0
+        let old = (east + [turn] + west).enumerated().filter { index, fix in
+            let (_, deviation) = RouteService.project(MKMapPoint(fix.coordinate), onto: pts, cum: cum,
+                                                      hint: &hint, course: fix.course)
+            return blind.note(deviation: deviation, now: Date(timeIntervalSince1970: Double(index)),
+                              drift: RerouteGate.driftLimit(accuracy: nil))
+        }
+        XCTAssertTrue(old.isEmpty, "без правила 20.9 — никогда")
+    }
+
+    /// Прямая трассы, узлы через 418 м: окно проекции вперёд считалось от
+    /// НАЧАЛА сегмента подсказки, и сегмент длиннее окна не пускал в него
+    /// следующий — за каждым узлом отклонение росло до 200 м, и снос 20.6
+    /// перестраивал маршрут на ровной дороге. 100 км/ч, 3 км — ни одного
+    /// перестроения, машина на линии.
+    func testLongStraightSegmentsKeepTheCarOnTheLine() {
+        let fixes = (0..<110).map {
+            Fix(coordinate: CLLocationCoordinate2D(latitude: 41.30001,
+                                                   longitude: 69.2001 + Double($0) * 28 * lonPerMeter),
+                course: 90, speedKmh: 100)
+        }
+        var gate = RerouteGate()
+        let run = drive(fixes, on: straightRoute, gate: &gate)
+        XCTAssertEqual(run.rebuilds, [])
+        XCTAssertLessThan(run.maxDeviation, 3, "за узлом — следующий сегмент, а не конец прошлого")
+        XCTAssertEqual(gate.driftTicks, 0)
+    }
+
+    /// Маршрут «туда и обратно» по одной и той же линии (развернуться в конце
+    /// улицы и вернуться): обратная ветка совпадает с прямой, и ехать по ней
+    /// на запад законно. Проекция с курсом выбирает попутную ветку — правило,
+    /// глядящее на её сегмент, молчит всю дорогу.
+    func testOutAndBackRouteOnTheSameStreetDoesNotRebuild() {
+        let out = (0...10).map {
+            MKMapPoint(CLLocationCoordinate2D(latitude: 41.30, longitude: 69.20 + Double($0) * 0.001))
+        }
+        let pts = out + out.reversed().dropFirst()
+        let length = 0.01 / lonPerMeter
+        let count = Int(length / 12)
+        let east = leg(lat: 41.30002, lon: 69.20, step: 12, count: count, course: 90)
+        // Разворот в конце: курс отстаёт на фикс, потом — на запад.
+        let turn = [Fix(coordinate: CLLocationCoordinate2D(latitude: 41.30003, longitude: 69.21),
+                        course: 90, speedKmh: 12),
+                    Fix(coordinate: CLLocationCoordinate2D(latitude: 41.29999, longitude: 69.21),
+                        course: 180, speedKmh: 12)]
+        let west = leg(lat: 41.29998, lon: 69.21, step: -12, count: count - 2, course: 270)
+        var gate = RerouteGate()
+        let run = drive(east + turn + west, on: pts, gate: &gate)
+        XCTAssertEqual(run.rebuilds, [], "обратная ветка маршрута попутна")
+        XCTAssertEqual(gate.wrongWayTicks, 0)
+
+        // Та же петля, но развернулись на полпути: обратная ветка здесь —
+        // через километр по маршруту, проекция остаётся на прямой, и мы
+        // едем ей навстречу — перестроение.
+        var early = RerouteGate()
+        let half = Array(east.prefix(count / 2))
+        let back = leg(lat: 41.29998, lon: half.last!.coordinate.longitude, step: -12, count: 10, course: 270)
+        XCTAssertEqual(drive(half + back, on: pts, gate: &early).rebuilds,
+                       [half.count + AppConfig.rerouteWrongWayTicks - 1])
+    }
+
+    /// Петля, возвращающаяся по соседней проезжей части (loopRoute: туда по
+    /// 41.30000, обратно по 41.30018): весь круг по маршруту — ни одного
+    /// перестроения.
+    func testLoopRouteDrivenAsPlannedNeverRebuilds() {
+        let pts = loopRoute
+        let length = 0.05 / lonPerMeter
+        let count = Int(length / 12)
+        let east = leg(lat: 41.30001, lon: 69.20, step: 12, count: count, course: 90)
+        let connector = [Fix(coordinate: CLLocationCoordinate2D(latitude: 41.30009, longitude: 69.2501),
+                             course: 0, speedKmh: 15)]
+        let west = leg(lat: 41.30017, lon: 69.25, step: -12, count: count - 1, course: 270)
+        var gate = RerouteGate()
+        let run = drive(east + connector + west, on: pts, gate: &gate)
+        XCTAssertEqual(run.rebuilds, [])
+        XCTAssertLessThan(run.maxDeviation, 15)
+    }
+
+    /// Стоим на маршруте: приёмник гуляет ±10 м, курс выдержан против линии,
+    /// но скорость — шум 0–6 км/ч. Ни одного перестроения.
+    func testStandingNoiseOnTheRouteNeverRebuilds() {
+        let pts = straightRoute
+        let jitter: [(Double, Double)] = [(0, 0), (-8, 3), (6, -4), (-10, 2), (9, 5), (-3, -6)]
+        let fixes = (0..<90).map { tick -> Fix in
+            let (dx, dy) = jitter[tick % jitter.count]
+            return Fix(coordinate: CLLocationCoordinate2D(latitude: 41.30 + dy / 111_320,
+                                                          longitude: 69.25 + dx * lonPerMeter),
+                       course: 270, speedKmh: Double(tick % 7))
+        }
+        var gate = RerouteGate()
+        XCTAssertEqual(drive(fixes, on: pts, gate: &gate).rebuilds, [])
+        XCTAssertEqual(gate.wrongWayTicks, 0)
+    }
+
+    /// Направление ветки — с сегмента проекции; повтор точки (сегмент
+    /// нулевой длины) берёт соседний, за краем маршрута — nil.
+    func testSegmentCourseOfThePickedBranch() throws {
+        let a = MKMapPoint(CLLocationCoordinate2D(latitude: 41.30, longitude: 69.20))
+        let b = MKMapPoint(CLLocationCoordinate2D(latitude: 41.30, longitude: 69.21))
+        let c = MKMapPoint(CLLocationCoordinate2D(latitude: 41.31, longitude: 69.21))
+        XCTAssertEqual(try XCTUnwrap(RouteService.segmentCourse([a, b, c], at: 0)), 90, accuracy: 0.5)
+        XCTAssertEqual(try XCTUnwrap(RouteService.segmentCourse([a, b, c], at: 1)), 0, accuracy: 0.5)
+        XCTAssertEqual(try XCTUnwrap(RouteService.segmentCourse([c, b, a], at: 1)), 270, accuracy: 0.5)
+        XCTAssertEqual(try XCTUnwrap(RouteService.segmentCourse([a, b, b, c], at: 1)), 0, accuracy: 0.5,
+                       "повтор точки — следующий сегмент")
+        XCTAssertEqual(try XCTUnwrap(RouteService.segmentCourse([a, b, b], at: 1)), 90, accuracy: 0.5,
+                       "повтор в конце — предыдущий")
+        XCTAssertNil(RouteService.segmentCourse([a, b], at: 1))
+        XCTAssertNil(RouteService.segmentCourse([a, a], at: 0))
+        XCTAssertNil(RouteService.segmentCourse([a, b], at: -1))
+    }
+
+    /// Первый маршрут на ходу просит OSRM начать по курсу машины; стоя или
+    /// без достоверного курса — запрос прежний, без `bearings`.
+    func testFirstRouteSendsHeadingOnlyWhenMovingWithTrustedCourse() {
+        func bearings(course: CLLocationDirection, speedKmh: Double, alternatives: Bool = true) -> String? {
+            RouteService.osrmQueryItems(alternatives: alternatives,
+                                        heading: RouteService.requestHeading(course: course, speedKmh: speedKmh),
+                                        waypoints: 2)
+                .first { $0.name == "bearings" }?.value
+        }
+        let range = AppConfig.rerouteBearingRangeDegrees
+        XCTAssertEqual(bearings(course: 87.6, speedKmh: 40), "88,\(range);", "едем — по курсу")
+        XCTAssertEqual(bearings(course: 90, speedKmh: AppConfig.directionalMinSpeedKmh), "90,\(range);")
+        XCTAssertNil(bearings(course: 90, speedKmh: AppConfig.directionalMinSpeedKmh - 0.1),
+                     "ползём — водитель может поехать в любую сторону")
+        XCTAssertNil(bearings(course: 90, speedKmh: 0), "стоим у светофора с выдержанным курсом")
+        XCTAssertNil(bearings(course: -1, speedKmh: 60), "курса нет")
+        XCTAssertNil(bearings(course: .nan, speedKmh: 60))
+        let items = RouteService.osrmQueryItems(alternatives: true,
+                                                heading: RouteService.requestHeading(course: 200, speedKmh: 50),
+                                                waypoints: 2)
+        XCTAssertEqual(items.first { $0.name == "alternatives" }?.value, "true", "варианты — и с курсом")
+        XCTAssertEqual(items.first { $0.name == "radiuses" }?.value,
+                       "\(AppConfig.rerouteBearingRadiusMeters);unlimited")
+    }
+
+    /// Запрос по курсу не дошёл до сервера — без повтора (второй ждал бы
+    /// тот же таймаут); сервер отказал (NoSegment, 4xx/5xx) — повтор без курса.
+    func testHeadingRetryOnlyAfterAServerAnswer() {
+        XCTAssertFalse(RouteService.retriesWithoutHeading(after: RouteService.RouteError.noConnection))
+        XCTAssertTrue(RouteService.retriesWithoutHeading(after: RouteService.RouteError.serverUnreachable))
+        XCTAssertTrue(RouteService.retriesWithoutHeading(after: RouteService.RouteError.noRoute))
+        XCTAssertTrue(RouteService.retriesWithoutHeading(after: URLError(.badServerResponse)))
+    }
 }

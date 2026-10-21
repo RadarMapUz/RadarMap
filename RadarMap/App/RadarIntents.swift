@@ -97,7 +97,8 @@ private func routeBySiri(_ slot: PlaceSlot) async -> IntentDialog {
     guard let from = await env.location.awaitPreciseCoordinate() else {
         return IntentDialog("Не вижу геопозицию — попробуйте ещё раз.")
     }
-    await env.route.build(from: from, to: destination, name: title,
+    await env.route.build(from: from, heading: env.location.routeHeading,
+                          to: destination, name: title,
                           cameras: env.cameras.cameras, alternatives: false)
     // Не построился — RouteService оставляет ПРЕЖНИЙ маршрут: «есть ли
     // маршрут» отвечало бы цифрами старой цели. Сверяем, что он — наш.

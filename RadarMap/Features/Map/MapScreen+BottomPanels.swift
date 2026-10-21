@@ -311,7 +311,8 @@ extension MapScreen {
                 env.route.reportNoFixForStop()
                 return
             }
-            await env.route.removeStop(from: from, cameras: env.cameras.cameras)
+            await env.route.removeStop(from: from, heading: env.location.routeHeading,
+                                       cameras: env.cameras.cameras)
         }
     }
 
@@ -338,6 +339,7 @@ extension MapScreen {
                 return
             }
             await env.route.addStop(coordinate, name: name, from: from,
+                                    heading: env.location.routeHeading,
                                     cameras: env.cameras.cameras)
         }
     }
@@ -352,7 +354,9 @@ extension MapScreen {
                 env.route.reportNoFix()
                 return
             }
-            await env.route.build(from: from, to: coordinate, name: name,
+            // Курс — только на ходу: маршрут пойдёт туда, куда едем (20.9).
+            await env.route.build(from: from, heading: env.location.routeHeading,
+                                  to: coordinate, name: name,
                                   cameras: env.cameras.cameras,
                                   alternatives: env.settings.routeAlternatives)
             guard env.route.isActive else { return }

@@ -460,19 +460,19 @@ struct EngineMapView: UIViewRepresentable {
         /// Стрелка направления вдоль линии маршрута: шеврон носом вправо
         /// (движок сам кладёт ось картинки вдоль линии), белый с каймой цвета
         /// каймы линии — читается и на синем теле, и на янтаре/красном пробки,
-        /// и на светлой середине. 14×12 pt; размер по масштабу — в стиле.
+        /// и на светлой середине. 16×14 pt; размер по масштабу — в стиле.
         static func routeArrowIcon(rim: UInt32) -> UIImage {
-            UIGraphicsImageRenderer(size: CGSize(width: 14, height: 12)).image { _ in
+            UIGraphicsImageRenderer(size: CGSize(width: 16, height: 14)).image { _ in
                 let chevron = UIBezierPath()
-                chevron.move(to: CGPoint(x: 4, y: 2.2))
-                chevron.addLine(to: CGPoint(x: 10.2, y: 6))
-                chevron.addLine(to: CGPoint(x: 4, y: 9.8))
+                chevron.move(to: CGPoint(x: 4.5, y: 2.5))
+                chevron.addLine(to: CGPoint(x: 11.5, y: 7))
+                chevron.addLine(to: CGPoint(x: 4.5, y: 11.5))
                 chevron.lineCapStyle = .round
                 chevron.lineJoinStyle = .round
-                chevron.lineWidth = 4.4
+                chevron.lineWidth = 4.8
                 Theme.rgb(rim).setStroke()
                 chevron.stroke()
-                chevron.lineWidth = 2.4
+                chevron.lineWidth = 2.8
                 Theme.rgb(RouteColors.arrow).setStroke()
                 chevron.stroke()
             }
@@ -1182,7 +1182,7 @@ struct EngineMapView: UIViewRepresentable {
             let bounds = view.visibleCoordinateBounds
             let inView = cachedCameras.filter { MLNCoordinateInCoordinateBounds($0.coordinate, bounds) }.count
             let course = model.courseDegrees
-            Log.carplay.notice("карта \(tag, privacy: .public): приложение \(app, privacy: .public), сцена \(scene, privacy: .public), экран телефона \(onMain, privacy: .public), спит \(dormant, privacy: .public), таймер кадров \(link, privacy: .public), кадров \(self.framesRendered, privacy: .public) за \(Int(seconds), privacy: .public) с, обновлений \(self.applyCount, privacy: .public), ходов камеры \(self.followCount, privacy: .public), осмотр \(self.browsing, privacy: .public), поворот \(Int(view.direction), privacy: .public)° курс \(Int(course), privacy: .public)°, масштаб \(view.zoomLevel, format: .fixed(precision: 1), privacy: .public), камер в источнике \(self.cachedCameras.count, privacy: .public), в кадре \(inView, privacy: .public), кадров/с \(self.lastFPS ?? 0, privacy: .public)")
+            Log.carplay.notice("карта \(tag, privacy: .public): приложение \(app, privacy: .public), сцена \(scene, privacy: .public), экран телефона \(onMain, privacy: .public), спит \(dormant, privacy: .public), таймер кадров \(link, privacy: .public), кадров \(self.framesRendered, privacy: .public) за \(Int(seconds), privacy: .public) с, обновлений \(self.applyCount, privacy: .public), ходов камеры \(self.followCount, privacy: .public), осмотр \(self.browsing, privacy: .public), поворот \(Int(view.direction), privacy: .public)° наклон \(Int(view.camera.pitch), privacy: .public)° курс \(Int(course), privacy: .public)°, масштаб \(view.zoomLevel, format: .fixed(precision: 1), privacy: .public), камер в источнике \(self.cachedCameras.count, privacy: .public), в кадре \(inView, privacy: .public), кадров/с \(self.lastFPS ?? 0, privacy: .public)")
             framesRendered = 0
             applyCount = 0
             followCount = 0
@@ -1551,6 +1551,10 @@ struct EngineMapView: UIViewRepresentable {
             marker.isUserInteractionEnabled = false
             marker.isAccessibilityElement = false
             marker.isHidden = !(current?.showsPosition ?? true)
+            // Под наклоном значок поворачивается в глубину (cursorTransform):
+            // без запаса по z его дальняя половина уходила ЗА слой карты и
+            // нос срезало ровно по середине (снимок 25.D).
+            marker.layer.zPosition = AppConfig.engineCursorZPosition
             view.addSubview(marker)
             positionView = marker
             shownPosition = nil   // новый вид — поставить заново, а не «уже стоит»

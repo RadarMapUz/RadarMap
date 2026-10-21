@@ -170,12 +170,12 @@ nonisolated enum EngineMapStyle {
     ///
     /// Нижняя граница — 6 точек на ЛЮБОМ масштабе (25.D, 21.10): прежние
     /// 2,5–3 на z11–14 в машине на отъезде линию почти теряли, а у Яндекса в
-    /// той же машине линия — главный предмет кадра. Вблизи (z17–19) — 9–13:
-    /// шире полосы, но уже проезжей части.
+    /// той же машине линия — главный предмет кадра. Вблизи (z17–19) — 11–16:
+    /// около полосы (у Яндекса линия — в полосу шириной), но уже проезжей части.
     private static func routeWidth(extra: Double, share: Double = 1) -> [Any] {
         ["interpolate", ["linear"], ["zoom"],
-         11, 6 * share + extra, 15, 6.5 * share + extra, 17, 9 * share + extra,
-         19, 13 * share + extra, 20, 15 * share + extra]
+         11, 6 * share + extra, 15, 7 * share + extra, 17, 11 * share + extra,
+         19, 16 * share + extra, 20, 19 * share + extra]
     }
 
     /// Стрелка направления вдоль линии маршрута (EngineMapView.routeArrowIcon):
@@ -388,9 +388,9 @@ nonisolated enum EngineMapStyle {
             "layout": ["symbol-placement": "line",
                        "symbol-spacing": ["interpolate", ["linear"], ["zoom"], 13, 70, 17, 110, 19, 160],
                        "icon-image": routeArrowImage(daylight: daylight),
-                       // Картинка 14×12 pt; высота стрелки — ~0,8 тела линии.
+                       // Картинка 16×14 pt, шеврон 9 pt — ~0,7 тела линии.
                        "icon-size": ["interpolate", ["linear"], ["zoom"],
-                                     13, 0.42, 15, 0.45, 17, 0.6, 19, 0.87, 20, 1.0],
+                                     13, 0.5, 15, 0.6, 17, 0.85, 19, 1.2, 20, 1.4],
                        "icon-rotation-alignment": "map", "icon-pitch-alignment": "map",
                        "icon-allow-overlap": true, "icon-ignore-placement": true,
                        "icon-padding": 0],

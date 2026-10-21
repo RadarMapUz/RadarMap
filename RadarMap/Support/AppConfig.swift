@@ -1918,6 +1918,9 @@ nonisolated enum AppConfig {
     static let engineCursorTiltShare = 0.45
     static let engineCursorPerspectivePoints = 420.0
     static let engineCursorPitchGrow = 0.12
+    /// Запас значка «я» по глубине над слоем карты, точки: наклонённый
+    /// значок не должен уходить половиной за карту.
+    static let engineCursorZPosition: CGFloat = 400
     /// Наклон обзора города вне поездки — прежние 45°: вид района под
     /// крутым наклоном прячет половину города за горизонтом.
     static let engineOverviewPitchDegrees: Double = 45

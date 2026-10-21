@@ -521,6 +521,16 @@ final class AppSettings {
     /// не «упрощённая линия для итогов», а точная история передвижений.
     var recordTimedTrack: Bool { didSet { store.set(recordTimedTrack, forKey: Keys.timedTrack) } }
     var turnByTurnVoice: Bool { didSet { store.set(turnByTurnVoice, forKey: Keys.turnByTurn) } }
+    /// «Манёвры на приборке и HUD» (26.4): метаданные ведения CarPlay —
+    /// машина с приборкой или проекцией сама рисует там стрелку и расстояние.
+    /// По умолчанию — `AppConfig.carPlayNavigationMetadata` (выключено): с
+    /// метаданными ряд полос на экране CarPlay не отправляется (25.H2).
+    /// Система спрашивает об этом при начале навигационной сессии
+    /// (`CPMapTemplate.startNavigationSession`), поэтому CarPlayGuidance при
+    /// смене настройки начинает сессию заново.
+    var carPlayNavigationMetadata: Bool {
+        didSet { store.set(carPlayNavigationMetadata, forKey: Keys.navigationMetadata) }
+    }
     /// Чей голос читает фразы (этап 16). nil — человек не выбирал: тогда
     /// записанный, если пакет для языка есть (`VoiceSource.effective`).
     var voiceSourceChoice: VoiceSource? {
@@ -759,6 +769,7 @@ final class AppSettings {
         static let personalRoutes = "personalRoutes"
         static let timedTrack = "recordTimedTrack"
         static let turnByTurn = "turnByTurnVoice"
+        static let navigationMetadata = "carPlayNavigationMetadata"
         static let voiceSource = "voiceSource"
         static let placeholderVoice = "placeholderVoice"
         static let speedLimits = "speedLimitsEnabled"
@@ -818,6 +829,7 @@ final class AppSettings {
             Keys.alternatives: true,
             Keys.personalRoutes: true,
             Keys.turnByTurn: true,
+            Keys.navigationMetadata: AppConfig.carPlayNavigationMetadata,
             Keys.speedLimits: true,
             Keys.overspeed: 5.0,
             Keys.adaptive: true,
@@ -874,6 +886,7 @@ final class AppSettings {
         personalRoutes = store.bool(forKey: Keys.personalRoutes)
         recordTimedTrack = store.bool(forKey: Keys.timedTrack)
         turnByTurnVoice = store.bool(forKey: Keys.turnByTurn)
+        carPlayNavigationMetadata = store.bool(forKey: Keys.navigationMetadata)
         voiceSourceChoice = VoiceSource(rawValue: store.string(forKey: Keys.voiceSource) ?? "")
         #if DEBUG
         placeholderVoice = store.bool(forKey: Keys.placeholderVoice)

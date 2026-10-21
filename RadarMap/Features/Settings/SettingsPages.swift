@@ -350,6 +350,17 @@ struct RouteSettingsPage: View {
             } footer: {
                 Text("Метки «Моя дорога», «Знакомый» и «Спокойнее» на вариантах маршрута.")
             }
+
+            // 26.4: метаданные ведения CarPlay. Действует сразу — идущее
+            // ведение в машине начинается заново (CarPlayGuidance).
+            Section {
+                Toggle("Манёвры на приборке и HUD", isOn: $settings.carPlayNavigationMetadata)
+            } header: {
+                Text(verbatim: "CarPlay")
+            } footer: {
+                Text("Машина покажет стрелку и расстояние на приборке или проекции, если умеет; ряд полос на экране CarPlay при этом не показывается.")
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .settingsPage("Маршрут")
     }

@@ -214,14 +214,44 @@ final class CarPlayGuidanceTests: XCTestCase {
         XCTAssertTrue(CarPlayGuidance.isLaneRow(without.upcoming[1]))
     }
 
-    /// Флаг по умолчанию и карточка согласованы: какой бы ни был флаг,
-    /// ряд полос и метаданные вместе не уходят никогда.
-    func testDefaultCardNeverSendsLaneRowTogetherWithMetadata() {
+    /// Переключатель «Манёвры на приборке и HUD» (26.4): по умолчанию
+    /// выключен (значение — AppConfig), включённый переживает перезапуск, и в
+    /// любом положении ряд полос и метаданные вместе не уходят никогда (25.H2).
+    @MainActor
+    func testSettingDrivesMetadataAndNeverSendsLaneRowWithIt() {
+        let key = "carPlayNavigationMetadata"
+        let defaults = UserDefaults.standard
+        let saved = defaults.object(forKey: key)
+        defer {
+            if let saved { defaults.set(saved, forKey: key) } else { defaults.removeObject(forKey: key) }
+        }
+        defaults.removeObject(forKey: key)
+        XCTAssertFalse(AppConfig.carPlayNavigationMetadata, "по умолчанию — выключено: ряд полос важнее (25.H2)")
+        XCTAssertEqual(AppSettings().carPlayNavigationMetadata, AppConfig.carPlayNavigationMetadata)
+
         let lanes = [LaneHint(arrows: [.right], isValid: true), LaneHint(arrows: [.straight], isValid: false)]
         let step = RouteStep(distanceAlong: 500, text: "поверните направо", icon: "arrow.turn.up.right",
                              kind: .right, lanes: lanes)
-        let card = CarPlayGuidance.card(for: step, carDark: false)
-        XCTAssertEqual(card.laneRow == nil, AppConfig.carPlayNavigationMetadata)
+        for on in [true, false] {
+            let settings = AppSettings()
+            settings.carPlayNavigationMetadata = on
+            XCTAssertEqual(AppSettings().carPlayNavigationMetadata, on, "настройка сохраняется")
+            let card = CarPlayGuidance.card(for: step, carDark: false, metadata: settings.carPlayNavigationMetadata)
+            XCTAssertEqual(card.laneRow == nil, on, "метаданные \(on): ряд полос")
+            XCTAssertEqual(card.upcoming.count, on ? 1 : 2, "метаданные \(on): манёвров в списке")
+            XCTAssertFalse(on && card.upcoming.contains(where: CarPlayGuidance.isLaneRow))
+        }
+    }
+
+    /// Система спрашивает о метаданных только при начале сессии, поэтому
+    /// переключение при живой сессии начинает её заново, а без сессии —
+    /// ничего не трогает (новая спросит сама).
+    func testMetadataSwitchRestartsOnlyALiveSession() {
+        XCTAssertTrue(CarPlayGuidance.metadataNeedsNewSession(hasSession: true, sessionMetadata: false, wanted: true))
+        XCTAssertTrue(CarPlayGuidance.metadataNeedsNewSession(hasSession: true, sessionMetadata: true, wanted: false))
+        XCTAssertFalse(CarPlayGuidance.metadataNeedsNewSession(hasSession: true, sessionMetadata: true, wanted: true))
+        XCTAssertFalse(CarPlayGuidance.metadataNeedsNewSession(hasSession: true, sessionMetadata: false, wanted: false))
+        XCTAssertFalse(CarPlayGuidance.metadataNeedsNewSession(hasSession: false, sessionMetadata: false, wanted: true))
     }
 
     /// Поля, которые читает приборка, заданы у каждого типа манёвра по

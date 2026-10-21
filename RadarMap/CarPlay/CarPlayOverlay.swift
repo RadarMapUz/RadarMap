@@ -23,6 +23,8 @@ struct CarPlayOverlay: View {
     /// Сколько занимают кнопки карты по краям окна (CarPlayWindowRoot →
     /// mapButtonSafeAreaLayoutGuide): док у правого края встаёт левее них.
     var buttonInsets = EdgeInsets()
+    /// Ведение на паузе «Нет сигнала GPS» — плашку об этом рисует система.
+    var systemLocating = false
     /// Безопасная зона окна — от неё уже отступает весь HUD.
     @State private var safe = EdgeInsets()
     /// Ширина HUD. Меняется только со сменой экрана, а не тиком: решение
@@ -54,7 +56,7 @@ struct CarPlayOverlay: View {
             // нет сети, жара, объявление владельца. Раньше здесь был только
             // чип жары — про серую карту без сети машина молчала.
             HStack {
-                CarPlayStatusChips()
+                CarPlayStatusChips(systemLocating: systemLocating)
                 Spacer(minLength: 0)
             }
             Spacer(minLength: 0)

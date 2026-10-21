@@ -382,6 +382,19 @@ extension CarPlaySceneDelegate {
         env.settings.voiceMode = next.voice
     }
 
+    /// «Звук» из панели «…» (iOS 27): есть звук — тишина; тишина — то, что
+    /// было до неё в этой машине (CarPlayOptionsPanelContent.soundToggle).
+    func toggleSoundFromPanel() {
+        let current = CarPlaySoundChoice.current(soundEnabled: env.settings.soundEnabled,
+                                                 voiceMode: env.settings.voiceMode)
+        let before = Storage.bool(.carPlayMuted)
+            ? CarPlaySoundChoice.current(
+                soundEnabled: Storage.bool(.carPlaySoundBeforeMute),
+                voiceMode: Storage.string(.carPlayVoiceBeforeMute).flatMap(VoiceMode.init(rawValue:)) ?? .smart)
+            : nil
+        applySound(CarPlayOptionsPanelContent.soundToggle(current: current, before: before))
+    }
+
     /// Вышли из машины: звук — атрибут поездки, а не настройка. Без отката
     /// телефон навсегда оставался бы в «Молча», и человек не связал бы это с
     /// кнопкой в машине. Откатываем только поля, которые и сейчас такие,

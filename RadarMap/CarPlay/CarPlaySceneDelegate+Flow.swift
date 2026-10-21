@@ -21,6 +21,7 @@ extension CarPlaySceneDelegate {
         // экране машины (ревью 20.10). Показ корня это ограничение снимает.
         guidance.mayStartSession = !background || guidingAtConnect
         Log.carplay.notice("ведение подключено \(background ? "в фоне" : "на экране", privacy: .public)")
+        guidance.optionsPanel = optionsPanel
         guidance.attach(to: mapTemplate, banners: banners)
     }
 

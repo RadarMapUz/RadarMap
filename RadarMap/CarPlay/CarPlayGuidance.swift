@@ -234,8 +234,17 @@ final class CarPlayGuidance {
     /// Когда показан текущий манёвр — для состояния «начальный».
     private var maneuverShownAt = Date.distantPast
     private var sentManeuverState: CPManeuverState?
-    /// Ведение на паузе «Перестраиваю маршрут» (CPTripPauseReason.rerouting).
-    private var pausedForReroute = false
+    /// Ведение на паузе: «Перестраиваю маршрут» (.rerouting) или «Нет сигнала
+    /// GPS» (.locating, iOS 27) — CarPlayGuidancePause. Плашка «Нет сигнала
+    /// GPS» на нашей карте при паузе поиска сигнала уступает карточке системы.
+    private var pause: CarPlayGuidancePause.Reason? {
+        didSet {
+            let locating = pause == .locating
+            if model.isLocatingPaused != locating { model.isLocatingPaused = locating }
+        }
+    }
+    /// Панель «…» плашки прибытия (iOS 27) — ставит делегат сцены.
+    var optionsPanel: CarPlayOptionsPanel?
     private var generation = 0
     /// Наше приложение на экране машины. От этого зависит, как долго висит
     /// баннер камеры: на нашем экране — весь подъезд, поверх чужого
@@ -292,7 +301,7 @@ final class CarPlayGuidance {
         upcoming = []
         maneuverStep = nil
         laneGuidances = []
-        pausedForReroute = false
+        pause = nil
         cancelledDestination = tripDestination
         model.hasSystemGuidance = false
     }
@@ -314,7 +323,7 @@ final class CarPlayGuidance {
         upcoming = []
         maneuverStep = nil
         laneGuidances = []
-        pausedForReroute = false
+        pause = nil
         model.hasSystemGuidance = false
         sync()
     }
@@ -328,7 +337,7 @@ final class CarPlayGuidance {
         upcoming = []
         maneuverStep = nil
         laneGuidances = []
-        pausedForReroute = false
+        pause = nil
         template = nil
         banners = nil
         cameraBanner.reset()
@@ -438,7 +447,7 @@ final class CarPlayGuidance {
                 upcoming = []
                 maneuverStep = nil
                 laneGuidances = []
-                pausedForReroute = false
+                pause = nil
                 model.hasSystemGuidance = false
             }
             updateCameraBanner()
@@ -459,23 +468,9 @@ final class CarPlayGuidance {
                 cancelledDestination = nil
                 start(on: template, to: destination)
             }
-            // Перестроение: старый поворот уже неверен — пауза с причиной, как
-            // у Mapbox. Снимает её новый манёвр (upcomingManeuvers), а если
-            // перестроить не удалось — прежний: карточка «перестраиваю» не
-            // застревает ни в одном исходе.
-            if route.isRerouting {
-                if let session, !pausedForReroute {
-                    pausedForReroute = true
-                    session.pauseTrip(for: .rerouting,
-                                      description: String(localized: "Перестраиваю маршрут"))
-                    Log.carplay.notice("ведение: пауза на перестроение")
-                }
-            } else if pausedForReroute {
-                pausedForReroute = false
-                maneuverStep = nil   // манёвр — заново: это и снимает паузу
-                Log.carplay.notice("ведение: перестроение закончено")
-            }
-            if !pausedForReroute { updateManeuver() }
+            updatePause()
+            if pause == nil { updateManeuver() }
+            optionsPanel?.refresh()
             updateEstimates(on: template)
         } else if let session {
             // Маршрут снят или поездка кончилась: доехали — «завершить»,
@@ -495,10 +490,52 @@ final class CarPlayGuidance {
             upcoming = []
             maneuverStep = nil
             laneGuidances = []
-            pausedForReroute = false
+            pause = nil
             model.hasSystemGuidance = false
         }
         updateCameraBanner()
+    }
+
+    // MARK: - Пауза
+
+    /// Пауза поиска сигнала — с iOS 27 (план 25.H1; сам `.locating` старше,
+    /// но поведение на iOS 18–26 оставлено прежним).
+    static var pausesForLocating: Bool {
+        if #available(iOS 27.0, *) { return true }
+        return false
+    }
+
+    /// Перестроение: старый поворот уже неверен — пауза с причиной, как у
+    /// Mapbox. Нет сигнала (iOS 27): карточка не ведёт по застывшей точке.
+    /// Снимает паузу новый манёвр (upcomingManeuvers), а если перестроить не
+    /// удалось — прежний: карточка не застревает ни в одном исходе.
+    private func updatePause() {
+        guard let session else { return }
+        let wanted = CarPlayGuidancePause.wanted(rerouting: env.route.isRerouting,
+                                                 signalStale: env.location.isSignalStale,
+                                                 hasManeuver: maneuver != nil,
+                                                 locatingEnabled: Self.pausesForLocating)
+        switch CarPlayGuidancePause.step(current: pause, wanted: wanted) {
+        case .none:
+            return
+        case .pause(.rerouting):
+            pause = .rerouting
+            session.pauseTrip(for: .rerouting, description: String(localized: "Перестраиваю маршрут"))
+            Log.carplay.notice("ведение: пауза на перестроение")
+        case .pause(.locating):
+            pause = .locating
+            session.pauseTrip(for: .locating, description: String(localized: "Нет сигнала GPS"))
+            Log.carplay.notice("ведение: пауза — нет сигнала GPS")
+        case .resume:
+            let was = pause
+            pause = nil
+            // Манёвр — заново: это и снимает паузу. Шага может и не быть
+            // (последние метры) — тогда прежний список, иначе «нет сигнала»
+            // висел бы при живом сигнале.
+            maneuverStep = nil
+            if env.route.nextStep == nil, !upcoming.isEmpty { session.upcomingManeuvers = upcoming }
+            Log.carplay.notice("ведение: пауза снята (\(was == .locating ? "сигнал есть" : "перестроение закончено", privacy: .public))")
+        }
     }
 
     // MARK: - Сессия
@@ -525,12 +562,13 @@ final class CarPlayGuidance {
         // Пока манёвра нет — «загружаю», а не пустая карточка (Руководство
         // CarPlay, стр. 47): снимает паузу первый же upcomingManeuvers.
         started.pauseTrip(for: .loading, description: nil)
+        if #available(iOS 27.0, *) { started.optionsPanel = optionsPanel?.attach() }
         session = started
         maneuver = nil
         upcoming = []
         maneuverStep = nil
         laneGuidances = []
-        pausedForReroute = false
+        pause = nil
         sentStepDistance = nil
         sentTripDistance = nil
         model.hasSystemGuidance = true
@@ -554,7 +592,8 @@ final class CarPlayGuidance {
             Log.carplay.notice("манёвра нет — в машине остаётся прежний: \(self.maneuver != nil, privacy: .public)")
             return
         }
-        let card = Self.card(for: step, carDark: model.carIsDark ?? !model.isDaylight)
+        let card = Self.card(for: step, carDark: model.carIsDark ?? !model.isDaylight,
+                             limitSign: limitSign(for: step))
         let next = card.maneuver
         maneuverShownAt = Date()
         sentManeuverState = nil
@@ -617,11 +656,20 @@ final class CarPlayGuidance {
     /// `carDark` — тема МАШИНЫ: в ней рисуются баннер поверх чужого
     /// приложения и плитка панели. `metadata` — метаданные для приборки
     /// (с ними ряд полос не шлём: приборка прочла бы его вторым поворотом).
+    ///
+    /// `limitSign` — ограничение после манёвра (CarPlayManeuverLimit): на iOS 27
+    /// встаёт знаком в конец фразы (`attributedInstructionVariants`), раньше —
+    /// не показывается.
     static func card(for step: RouteStep, carDark: Bool,
-                     metadata: Bool = AppConfig.carPlayNavigationMetadata) -> Card {
+                     metadata: Bool = AppConfig.carPlayNavigationMetadata,
+                     limitSign: Int? = nil) -> Card {
         let next = CPManeuver()
         next.instructionVariants = CarPlayGuidanceMapping.instructionVariants(
             text: step.text, shortText: step.shortText, advice: step.laneAdvice)
+        if #available(iOS 27.0, *), let limitSign {
+            next.attributedInstructionVariants = CarPlayBannerArt.instructionVariants(next.instructionVariants,
+                                                                                      limit: limitSign)
+        }
         // Плитка главного экрана — та же фраза явно, а не через запасной путь.
         next.dashboardInstructionVariants = next.instructionVariants
         // Фон карточки — на самом манёвре: он старше цвета шаблона, и только
@@ -653,6 +701,18 @@ final class CarPlayGuidance {
         let row = metadata || !CarPlayGuidanceMapping.isUseful(lanes)
             ? nil : laneRow(step.lanes, kind: step.kind)
         return Card(maneuver: next, laneRow: row, lanes: lanes)
+    }
+
+    /// Знак ограничения после манёвра — только на iOS 27 и только когда он
+    /// новость (CarPlayManeuverLimit). Считается раз на манёвр: индекс лимитов
+    /// отвечает за микросекунды, линия маршрута — из кэша.
+    private func limitSign(for step: RouteStep) -> Int? {
+        guard #available(iOS 27.0, *), let index = env.speedLimits.limitIndex else { return nil }
+        return CarPlayManeuverLimit.sign(along: step.distanceAlong, kind: step.kind,
+                                         path: env.route.routeCoordinates,
+                                         current: env.speedLimits.currentLimit) { point, bearing in
+            index.match(point, courseDegrees: bearing)
+        }
     }
 
     // MARK: - Ряд полос на экране машины

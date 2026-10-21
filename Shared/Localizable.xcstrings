@@ -5994,6 +5994,22 @@
         }
       }
     },
+    "Завершить маршрут": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завершить маршрут"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrutni yakunlash"
+          }
+        }
+      }
+    },
     "Завершить маршрут?": {
       "localizations": {
         "ru": {
@@ -7409,6 +7425,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kamera endi yoʻq"
+          }
+        }
+      }
+    },
+    "Камеры впереди": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камеры впереди"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldindagi kameralar"
           }
         }
       }

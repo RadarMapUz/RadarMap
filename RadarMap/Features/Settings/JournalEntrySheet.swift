@@ -123,9 +123,12 @@ struct JournalEntrySheet: View {
 
     // MARK: - Разделы
 
+    /// Вид — своей строкой без фона над карточкой: в одной секции с датой
+    /// переключатель рвал карточку (снимок 21.10 — кромка и линия поверх).
+    @ViewBuilder
     private var whatSection: some View {
-        Section {
-            if kinds.count > 1 {
+        if kinds.count > 1 {
+            Section {
                 Picker(selection: $form.kind) {
                     ForEach(kinds, id: \.self) { kind in
                         Text(JournalText.choice(kind)).tag(kind)
@@ -137,6 +140,8 @@ struct JournalEntrySheet: View {
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
             }
+        }
+        Section {
             DatePicker(selection: $form.date, in: ...Date()) {
                 Text("Когда")
             }

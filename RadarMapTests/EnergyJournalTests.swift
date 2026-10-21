@@ -317,8 +317,9 @@ final class EnergyJournalTests: XCTestCase {
         let entries = [fill(3, 30, 390_000, km: 10_000, full: true), fill(17, 40, 520_000, km: 10_600, full: true)]
         let journal = EnergyJournal.period(entries, in: DateInterval(start: date(1, 0), end: date(1, 0, month: 11)))
         let lines = PeriodEnergyRow.lines(use, model: model, current: false, journal: journal)
-        XCTAssertTrue(lines.title.hasPrefix(JournalText.spent(journal.spending)))
-        XCTAssertEqual(lines.detail, JournalText.estimate(78_000))
+        XCTAssertEqual(lines.title, JournalText.spent(journal.spending))
+        XCTAssertEqual(lines.detail, JournalText.counts(journal.spending))
+        XCTAssertEqual(lines.estimate, JournalText.estimate(78_000))
         XCTAssertNil(lines.allPetrol)
         XCTAssertEqual(lines.measured, JournalText.measured(journal.measured))
         XCTAssertNotNil(lines.measured)

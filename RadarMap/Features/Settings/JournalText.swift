@@ -83,8 +83,8 @@ enum JournalText {
     /// «3 заправки, 9 зарядок»; без зарядок — только заправки.
     static func counts(_ spending: EnergyJournal.Spending) -> String {
         var parts: [String] = []
-        if spending.fills > 0 { parts.append(String(localized: "\(spending.fills) заправок")) }
-        if spending.charges > 0 { parts.append(String(localized: "\(spending.charges) зарядок")) }
+        if spending.fills > 0 { parts.append(Formatting.unbreakable(String(localized: "\(spending.fills) заправок"))) }
+        if spending.charges > 0 { parts.append(Formatting.unbreakable(String(localized: "\(spending.charges) зарядок"))) }
         return parts.joined(separator: ", ")
     }
 

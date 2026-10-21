@@ -142,7 +142,7 @@ struct PeriodEnergyRow: View {
                     .font(.rounded(12))
                     .foregroundStyle(Theme.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
-                if let extra = lines.allPetrol ?? lines.measured {
+                ForEach([lines.estimate, lines.allPetrol, lines.measured].compactMap { $0 }, id: \.self) { extra in
                     Text(extra)
                         .font(.rounded(12))
                         .foregroundStyle(Theme.textSecondary)
@@ -158,7 +158,7 @@ struct PeriodEnergyRow: View {
         .statCard(padding: 14, radius: Theme.cornerMedium)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: EnergyText.spoken(
-            [lines.title, lines.detail, lines.allPetrol, lines.measured].compactMap { $0 }.joined(separator: ". "))))
+            [lines.title, lines.detail, lines.estimate, lines.allPetrol, lines.measured].compactMap { $0 }.joined(separator: ". "))))
         .accessibilityHint(journal?.isEmpty == false ? Text("Открыть журнал заправок")
                                                      : Text("Открыть «Машина и расходы»"))
     }
@@ -175,6 +175,8 @@ struct PeriodEnergyRow: View {
         var title: String
         var detail: String
         var allPetrol: String?
+        /// «по расчёту ≈ …» — оценка под реальными деньгами журнала.
+        var estimate: String?
         /// «по факту 5,8 л/100 км» — только из журнала, только «бак к баку».
         var measured: String?
     }
@@ -214,20 +216,19 @@ struct PeriodEnergyRow: View {
         return Lines(title: title, detail: detail, allPetrol: allPetrol)
     }
 
-    /// По журналу: «Потрачено 412 000 сум · 3 заправки, 9 зарядок», ниже —
+    /// По журналу: «Потрачено 412 000 сум», под ним «3 заправки, 9 зарядок»,
     /// «по расчёту ≈ …» (оценка вторым планом) и расход по факту, если он
     /// есть. «На бензине вышло бы» здесь нет: это сравнение двух оценок, а
-    /// сверху теперь реальные деньги.
+    /// сверху теперь реальные деньги. Счёт — своей строкой: в заголовке
+    /// «· 2» оставалось в конце строки, а «заправки» уезжали на следующую.
     private static func journalLines(_ journal: EnergyJournal.Period, use: EnergySplit.Use,
                                      current: Bool) -> Lines {
-        let title = JournalText.spent(journal.spending) + " · " + JournalText.counts(journal.spending)
-        var detail: String
+        var estimate: String?
         if let cost = use.cost {
-            detail = JournalText.estimate(cost)
-            if current { detail += " · " + String(localized: "по нынешней цене") }
-        } else {
-            detail = Formatting.distance(use.totalMeters)
+            estimate = JournalText.estimate(cost)
+            if current { estimate? += " · " + Formatting.unbreakable(String(localized: "по нынешней цене")) }
         }
-        return Lines(title: title, detail: detail, measured: JournalText.measured(journal.measured))
+        return Lines(title: JournalText.spent(journal.spending), detail: JournalText.counts(journal.spending),
+                     estimate: estimate, measured: JournalText.measured(journal.measured))
     }
 }

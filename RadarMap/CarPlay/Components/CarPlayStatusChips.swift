@@ -55,6 +55,14 @@ struct CarPlayStatusChips: View {
                                       tint: Theme.warning,
                                       text: String(localized: "Дайте доступ «Всегда» на телефоне")))
         }
+        // Нет фиксов: камеры молчат не потому, что их нет. До 21.10 это
+        // говорила ячейка камеры в доке; камера из дока ушла (CarPlayCameraCue) —
+        // состояние переехало сюда, к остальным «о чём водитель обязан знать».
+        if env.location.isAuthorized, env.location.isSignalStale {
+            result.append(CarPlayChip(id: "gps", symbol: Icon.noGPSSignal,
+                                      tint: Theme.warning,
+                                      text: String(localized: "Нет сигнала GPS")))
+        }
         // Тишина включается кнопкой в баре рядом с «Поездкой»: промах слепого
         // тапа не должен глушить камеры незаметно. Выше сети и жары — это
         // единственное состояние, при котором водитель не услышит камеру.

@@ -42,6 +42,13 @@ struct CarPlayEngineLayer: View {
         }
     }
 
+    private func cameraLabel(_ cue: CarPlayCameraCue.Cue) -> CarPlayCameraCue.Label? {
+        guard cue.distanceLabel, let camera = env.location.nearestCamera,
+              let distance = env.location.distanceToNearest else { return nil }
+        return CarPlayCameraCue.Label(id: camera.id, latitude: camera.lat, longitude: camera.lon,
+                                      text: Formatting.distance(distance))
+    }
+
     private func map(me: CLLocationCoordinate2D, size: CGSize, safe: EdgeInsets) -> some View {
         let maneuverDistance = env.route.nextStep.map { _ in env.route.nextStepDistance }
         // Камера поездки (DriveCamera) — общая с телефоном: масштаб, а не
@@ -85,6 +92,7 @@ struct CarPlayEngineLayer: View {
             viewHeight: height, latitude: me.latitude, clear: clear,
             carY: { compact ? AppConfig.carPlayDashboardMeY : Self.meY(size: size, safe: safe, share: $0) })
         let frame = model.cameraSmoother.step(toward: target, at: Date())
+        let cue = CarPlayCameraCue.current(env.location)
         let offlineFiles: OfflineFiles? = env.network.isMapOnline
             ? nil : env.offlineMaps.offlineFiles(at: me)
         return EngineMapView(
@@ -105,7 +113,9 @@ struct CarPlayEngineLayer: View {
             // Лимит под значком камеры не рисуется: он один — у скорости
             // («в одном месте со скоростью хватит» — владелец, 12.10).
             limitProvider: nil,
-            alertCameraID: env.location.isApproachingCamera ? env.location.nearestCamera?.id : nil,
+            // Тревожный облик и подпись «400 м» — по CarPlayCameraCue: своя
+            // камера остаётся значком с галочкой, без тревоги и цифры.
+            alertCameraID: cue.mapAlertID,
             // Вариант B: цвет типа — только у камер на нашем пути.
             pathCameraIDs: CameraMarkerLook.pathIDs(
                 route: env.route.camerasOnRoute.map { (id: $0.id, along: $0.distanceAlong) },
@@ -113,6 +123,7 @@ struct CarPlayEngineLayer: View {
                 passedTolerance: AppConfig.routePassedToleranceMeters,
                 nearest: env.location.nearestCamera?.id),
             familiarCameraIDs: env.location.familiarCameraIDs,
+            cameraLabel: cameraLabel(cue),
             route: env.route.routeCoordinates,
             routeObject: env.route.polyline,
             routeProgress: env.route.progressAlong,

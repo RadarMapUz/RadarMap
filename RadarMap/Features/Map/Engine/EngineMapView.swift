@@ -65,6 +65,9 @@ struct EngineMapView: UIViewRepresentable {
     var pathCameraIDs: Set<Int> = []
     /// Свои камеры — голос о них молчит, на значке галочка.
     var familiarCameraIDs: Set<Int> = []
+    /// Подпись «400 м» у значка алерт-камеры — только в машине
+    /// (CarPlayCameraCue); на телефоне nil, там расстояние в своём HUD.
+    var cameraLabel: CarPlayCameraCue.Label?
     var cameraLimits: [Int: Int] = [:]
     var route: [CLLocationCoordinate2D]
     var routeObject: MKPolyline?
@@ -626,6 +629,8 @@ struct EngineMapView: UIViewRepresentable {
             // пропадали, пока что-то в них не менялось).
             lastMarksKey = []
             lastHotspotsKey = -1
+            shownCameraLabel = nil
+            cameraLabelWritten = false
             lastRoadEventsKey = -1
             lastCngKey = -1
             cngImageNames = []
@@ -990,6 +995,7 @@ struct EngineMapView: UIViewRepresentable {
             lastFollowInterval = nil
             updateCameras(model, in: view)
             updateMarks(model, in: view)
+            updateCameraLabel(model.cameraLabel, in: view)
             updateTraffic(model, in: view)
             let newRoute = !routeInitialized || lastRouteObject !== model.routeObject
             if newRoute || lastManeuverAlong != model.maneuverAlong
@@ -1293,6 +1299,37 @@ struct EngineMapView: UIViewRepresentable {
         }
         private var lastHotspotsKey: Int = -1
         private var lastCenterCommand = 0
+
+        private var shownCameraLabel: CarPlayCameraCue.Label?
+        private var cameraLabelWritten = false
+        private var cameraLabelAt = Date.distantPast
+
+        /// Подпись расстояния у алерт-камеры: смена камеры — сразу, новая
+        /// цифра — не чаще раза в секунду (CarPlayCameraCue.shouldRefreshLabel).
+        private func updateCameraLabel(_ label: CarPlayCameraCue.Label?, in view: MLNMapView) {
+            let now = Date()
+            if cameraLabelWritten {
+                guard CarPlayCameraCue.shouldRefreshLabel(shown: shownCameraLabel, new: label,
+                                                          sinceLast: now.timeIntervalSince(cameraLabelAt))
+                else { return }
+            } else if label == nil {
+                // Источник после загрузки стиля и так пуст.
+                cameraLabelWritten = true
+                return
+            }
+            guard let source = view.style?.source(withIdentifier: "camera-label") as? MLNShapeSource else { return }
+            var points: [MLNPointFeature] = []
+            if let label {
+                let point = MLNPointFeature()
+                point.coordinate = label.coordinate
+                point.attributes = ["text": label.text]
+                points.append(point)
+            }
+            source.shape = MLNShapeCollectionFeature(shapes: points)
+            shownCameraLabel = label
+            cameraLabelWritten = true
+            cameraLabelAt = now
+        }
 
         private func updateMarks(_ model: EngineMapView, in view: MLNMapView) {
             let key = [model.destination?.latitude ?? .nan, model.destination?.longitude ?? .nan,

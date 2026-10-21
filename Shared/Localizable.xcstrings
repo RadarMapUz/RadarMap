@@ -2027,6 +2027,22 @@
         }
       }
     },
+    "± %lld мин": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "± %lld мин"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "± %lld daq"
+          }
+        }
+      }
+    },
     "×%lld": {
       "localizations": {
         "ru": {
@@ -2139,18 +2155,18 @@
         }
       }
     },
-    "Архив ZIP: таблица trips.csv — строка на поездку — и треки GPX тех поездок, у которых трек ещё хранится. Дом и работа в нём не подписаны.": {
+    "Архив ZIP: таблица trips.csv — строка на поездку — и треки GPX тех поездок, у которых трек ещё хранится. Дом и работа в них не подписаны. Отдельно — commute_forecast.csv, точность прогноза дороги на работу: по нему поездки дом↔работа узнаются.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Архив ZIP: таблица trips.csv — строка на поездку — и треки GPX тех поездок, у которых трек ещё хранится. Дом и работа в нём не подписаны."
+            "value": "Архив ZIP: таблица trips.csv — строка на поездку — и треки GPX тех поездок, у которых трек ещё хранится. Дом и работа в них не подписаны. Отдельно — commute_forecast.csv, точность прогноза дороги на работу: по нему поездки дом↔работа узнаются."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "ZIP arxiv: trips.csv jadvali — har bir safar uchun bir qator — va treki hali saqlanayotgan safarlarning GPX treklari. Uy va ish unda belgilanmagan."
+            "value": "ZIP arxiv: trips.csv jadvali — har bir safar uchun bir qator — va treki hali saqlanayotgan safarlarning GPX treklari. Uy va ish ularda belgilanmagan. Alohida — commute_forecast.csv, ishga yoʻl prognozi aniqligi: undan uy↔ish safarlari bilinadi."
           }
         }
       }
@@ -2808,6 +2824,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Davrning saqlangan safarlarida jarima xavfi boʻlgan oʻtishlar yoʻq"
+          }
+        }
+      }
+    },
+    "В среднем приезжали на %lld мин позже прогноза": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В среднем приезжали на %lld мин позже прогноза"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻrtacha prognozdan %lld daq kech yetib kelgansiz"
+          }
+        }
+      }
+    },
+    "В среднем приезжали на %lld мин раньше прогноза": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В среднем приезжали на %lld мин раньше прогноза"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻrtacha prognozdan %lld daq erta yetib kelgansiz"
           }
         }
       }
@@ -11803,6 +11851,22 @@
         }
       }
     },
+    "По последним %lld поездкам. Прогноз понемногу подстраивается под свою ошибку.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По последним %lld поездкам. Прогноз понемногу подстраивается под свою ошибку."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oxirgi %lld ta safar boʻyicha. Prognoz oʻz xatosiga asta-sekin moslashadi."
+          }
+        }
+      }
+    },
     "По сводке дня %@: превышение было, запись поездки не хранится": {
       "localizations": {
         "ru": {
@@ -13085,6 +13149,22 @@
         }
       }
     },
+    "Прибытие сдвинулось: около %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Прибытие сдвинулось: около %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yetib borish vaqti oʻzgardi: taxminan %@"
+          }
+        }
+      }
+    },
     "Приложение учится": {
       "localizations": {
         "ru": {
@@ -13482,6 +13562,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tekshiring: %@"
+          }
+        }
+      }
+    },
+    "Прогноз прибытия ошибался в среднем на %lld мин": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Прогноз прибытия ошибался в среднем на %lld мин"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yetib borish prognozi oʻrtacha %lld daq xato qildi"
+          }
+        }
+      }
+    },
+    "Прогноз прибытия точен до минуты": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Прогноз прибытия точен до минуты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yetib borish prognozi bir daqiqagacha aniq"
           }
         }
       }
@@ -16729,6 +16841,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Xaritadagi nuqta"
+          }
+        }
+      }
+    },
+    "Точность прогноза": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Точность прогноза"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prognoz aniqligi"
           }
         }
       }
@@ -20759,6 +20887,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "tirbandlik"
+          }
+        }
+      }
+    },
+    "пробка впереди": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "пробка впереди"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oldinda tirbandlik"
           }
         }
       }

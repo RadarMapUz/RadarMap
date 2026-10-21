@@ -2,8 +2,9 @@
 //  CommuteProfileStore.swift
 //  RadarMap
 //
-//  Где живут профиль дороги по участкам (CommuteProfile) и журнал поездок
-//  для «дороги» (CommuteLedger): Application Support/Commute, вне резервной
+//  Где живут профиль дороги по участкам (CommuteProfile), журнал поездок
+//  для «дороги» (CommuteLedger) и журнал точности прибытия (CommuteAccuracy,
+//  24.1): Application Support/Commute, вне резервной
 //  копии — это дом, работа и распорядок дня, их не должно быть ни на
 //  сервере, ни в чужой копии телефона. Пересобирается сам из новых поездок,
 //  поэтому терять его не страшно.
@@ -30,6 +31,8 @@ final class CommuteProfileStore {
     /// «сейчас ~44 мин» понимает, что считать заново.
     private(set) var revision = 0
     private(set) var ledger: [CommuteLedger.Entry] = []
+    /// Что призрак обещал и когда доехали (24.1), новые первыми.
+    private(set) var accuracy: [CommuteAccuracy.Entry] = [] { didSet { revision &+= 1 } }
     /// Файлы прочитаны: до этого журнал на диск не пишется — запись затёрла
     /// бы его огрызком из одной истории.
     @ObservationIgnored private(set) var isLoaded = false
@@ -58,20 +61,23 @@ final class CommuteProfileStore {
     private func loadFromDisk() async {
         guard !isLoaded else { return }
         let started = generation
-        let (book, ledger) = await Self.read()
+        let (book, ledger, accuracy) = await Self.read()
         // Файл есть, но не читается (процесс подняли до первой разблокировки):
         // загруженным не считаем — свёртка поездки поверх пустого профиля
         // затёрла бы месяц дороги на работу (ревью S9). Повтор с паузой.
         if case .unreadable = book { return retryLoad() }
         if case .unreadable = ledger { return retryLoad() }
+        if case .unreadable = accuracy { return retryLoad() }
         // Стёрли, пока читали, — прочитанное уже не наше.
         if started == generation {
             // Битый откладываем; не вышло отложить — как «не читается»:
             // запись поверх затёрла бы его без копии.
             if case .corrupt = book, !JSONFile.setAside(Self.profileURL, log: Log.trips) { return retryLoad() }
             if case .corrupt = ledger, !JSONFile.setAside(Self.ledgerURL, log: Log.trips) { return retryLoad() }
+            if case .corrupt = accuracy, !JSONFile.setAside(Self.accuracyURL, log: Log.trips) { return retryLoad() }
             if case .loaded(let value) = book { self.book = value }
             if case .loaded(let value) = ledger { self.ledger = value }
+            if case .loaded(let value) = accuracy { self.accuracy = value }
         }
         blocked = false
         isLoaded = true
@@ -282,7 +288,68 @@ final class CommuteProfileStore {
             store.onLoaded?()
         }
     }
+
+    /// Снимок `-demoForecastLog` (24.1): журнал точности за три недели будней
+    /// — утром прогноз чаще опаздывает (+1…+4 мин), вечером точнее; на диск
+    /// не пишется.
+    func seedAccuracyDemo(now: Date = Date()) {
+        let calendar = Calendar.current
+        var entries: [CommuteAccuracy.Entry] = []
+        let errors: [Commute.Direction: [Double]] = [.toWork: [4, -1, 2, 3, 0, 5, 1, -2, 3, 2, 1, 4, -1, 2],
+                                                     .toHome: [1, -1, 0, 2, -2, 1, 0, 1, -1, 0, 2, 1, -1, 0]]
+        for (direction, minutes) in errors {
+            for (i, error) in minutes.enumerated() {
+                guard let day = calendar.date(byAdding: .day, value: -(i + 1) * 7 / 5 - 1, to: now) else { continue }
+                let hour = direction == .toWork ? 8 : 18
+                let departure = calendar.date(bySettingHour: hour, minute: 15 + (i % 3) * 10, second: 0,
+                                              of: day) ?? day
+                let said = departure.addingTimeInterval(40 * 60)
+                let point = CommuteAccuracy.Checkpoint(at: departure.addingTimeInterval(90), arrival: said)
+                entries.append(CommuteAccuracy.Entry(tripID: departure.timeIntervalSince1970 + (direction == .toWork ? 0 : 1),
+                                                     direction: direction, departure: departure,
+                                                     arrival: said.addingTimeInterval(error * 60),
+                                                     start: point, confirmed: point, middle: nil))
+            }
+        }
+        enqueue { store in
+            store.isDemo = true
+            store.accuracy = entries.sorted { $0.departure > $1.departure }
+        }
+    }
     #endif
+
+    // MARK: - Журнал точности (24.1)
+
+    /// Запись по закончившейся поездке; nil — поездку не мерить, и прежняя
+    /// запись о ней (склейка финиширует поездку второй раз) уходит.
+    func recordAccuracy(_ entry: CommuteAccuracy.Entry?, tripID: Double) {
+        let next = entry.map { CommuteAccuracy.appended(accuracy, $0, now: Date()) }
+            ?? accuracy.filter { $0.tripID != tripID }
+        guard next != accuracy else { return }
+        accuracy = next
+        if let entry, let said = entry.headline {
+            Log.trips.info("точность прибытия: \(entry.direction.rawValue, privacy: .public), сказано \(CommuteGhost.clock(said.arrival), privacy: .public), доехали \(CommuteGhost.clock(entry.arrival), privacy: .public), ошибка \(Int(entry.error(said)), privacy: .public) с")
+        }
+        guard isLoaded else { return }
+        #if DEBUG
+        if isDemo { return }
+        #endif
+        saveAccuracy()
+    }
+
+    /// «Прогноз ошибался в среднем на N мин» направления — с пяти поездок.
+    func accuracyStats(_ direction: Commute.Direction) -> CommuteAccuracy.Stats? {
+        CommuteAccuracy.shownStats(accuracy, direction: direction)
+    }
+
+    private func saveAccuracy() {
+        let accuracy = accuracy
+        let started = generation
+        enqueue { store in
+            guard store.generation == started else { return }
+            await Self.save(accuracy, to: Self.accuracyURL)
+        }
+    }
 
     // MARK: - Журнал
 
@@ -302,6 +369,8 @@ final class CommuteProfileStore {
     func forget(_ ids: Set<Double>?) {
         guard let ids else { return clear() }
         ledger.removeAll { ids.contains($0.id) }
+        let hadAccuracy = accuracy.contains { ids.contains($0.tripID) }
+        if hadAccuracy { accuracy.removeAll { ids.contains($0.tripID) } }
         for direction in Commute.Direction.allCases {
             book[direction] = book[direction].map { variant in
                 var variant = variant
@@ -314,6 +383,7 @@ final class CommuteProfileStore {
             return
         }
         saveLedger()
+        if hadAccuracy { saveAccuracy() }
         let book = book
         let started = generation
         enqueue { store in
@@ -332,6 +402,7 @@ final class CommuteProfileStore {
         generation += 1
         book = CommuteProfile.Book()
         ledger = []
+        accuracy = []
         enqueue { _ in await Self.removeFiles() }
     }
 
@@ -348,9 +419,11 @@ final class CommuteProfileStore {
 
     @concurrent
     private static func read() async -> (JSONFile.LoadResult<CommuteProfile.Book>,
-                                         JSONFile.LoadResult<[CommuteLedger.Entry]>) {
+                                         JSONFile.LoadResult<[CommuteLedger.Entry]>,
+                                         JSONFile.LoadResult<[CommuteAccuracy.Entry]>) {
         (JSONFile.loadChecked(CommuteProfile.Book.self, from: profileURL, log: Log.trips),
-         JSONFile.loadChecked([CommuteLedger.Entry].self, from: ledgerURL, log: Log.trips))
+         JSONFile.loadChecked([CommuteLedger.Entry].self, from: ledgerURL, log: Log.trips),
+         JSONFile.loadChecked([CommuteAccuracy.Entry].self, from: accuracyURL, log: Log.trips))
     }
 
     @concurrent
@@ -361,7 +434,7 @@ final class CommuteProfileStore {
 
     @concurrent
     private static func removeFiles() async {
-        for url in [profileURL, ledgerURL] where FileManager.default.fileExists(atPath: url.path) {
+        for url in [profileURL, ledgerURL, accuracyURL] where FileManager.default.fileExists(atPath: url.path) {
             do {
                 try FileManager.default.removeItem(at: url)
             } catch {
@@ -375,6 +448,7 @@ final class CommuteProfileStore {
             .appendingPathComponent("Commute", isDirectory: true)
     nonisolated private static let profileURL = directory.appendingPathComponent("profiles.json")
     nonisolated private static let ledgerURL = directory.appendingPathComponent("ledger.json")
+    nonisolated private static let accuracyURL = directory.appendingPathComponent("accuracy.json")
 
     /// Папка — вне резервной копии: один флаг закрывает оба файла.
     nonisolated private static func prepareDirectory() {

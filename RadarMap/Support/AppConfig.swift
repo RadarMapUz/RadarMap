@@ -941,6 +941,63 @@ nonisolated enum AppConfig {
     /// дом и работа), если поездка началась раньше — запуск Siri, фон.
     nonisolated static let commuteGhostStartWaitSeconds: TimeInterval = 180
 
+    // MARK: Точность прибытия (этап 24: «дал 8:25, приехал 8:38»)
+    /// Ядро выезда: строка, выехавшая на 20 мин раньше, весит 0,6; на 40 —
+    /// 0,14. Ступени ±60/±120 смешивали 7:40 и 8:20 — в восемь утра это
+    /// разные дороги (синтетика 12 км, CommuteCalibrationTests: прогноз был
+    /// один, правда — 26 и 32 мин). Одно ядро тянет края часа пик к его
+    /// середине (~70 с), поэтому внутри ядра ещё наклон по выезду
+    /// (departureTrend): ~40 с; узкое ядро в 10 мин без наклона давало те
+    /// же ~40 с, но реже набирает три «поездки» и чаще падает на ступени.
+    nonisolated static let commuteGhostKernelMinutes: Double = 20
+    /// Строка с весом меньше — не в выборке (дальше ~50 мин от выезда).
+    nonisolated static let commuteGhostKernelMinWeight = 0.05
+    /// Сумма весов, без которой ядро не «обычно» — тогда прежние ступени.
+    nonisolated static let commuteGhostKernelMinMass = 3.0
+    /// Наклон по выезду внутри ядра: от четырёх строк, выезды разнесены хотя
+    /// бы на ±5 мин (дисперсия 25 мин²), и не больше ±10 % базы.
+    nonisolated static let commuteGhostTrendMinRows = 4
+    nonisolated static let commuteGhostTrendMinVariance: Double = 25
+    nonisolated static let commuteGhostTrendMaxShare = 0.1
+    /// Тот же день недели — две трети веса выборки, если таких строк рядом
+    /// на три поездки (понедельник утром медленнее вторника); меньше — все
+    /// дни на равных. В 20 строках профиля на день приходится ~4 поездки.
+    nonisolated static let commuteGhostWeekdayMinMass = 3.0
+    nonisolated static let commuteGhostWeekdayShare = 2.0 / 3
+    /// Поправка на светофоры: сумма медиан участков → медиана целых поездок.
+    /// Границы — чтобы одна странная неделя не переписала модель: ниже 0,9
+    /// целые поездки не бывают (медиана суммы ≥ суммы медиан почти всегда),
+    /// выше 1,4 — это уже не светофоры, а другая дорога.
+    nonisolated static let commuteCalibrationMin = 0.9
+    nonisolated static let commuteCalibrationMax = 1.4
+    /// Сдвиг журнала точности: только с пяти поездок направления, по
+    /// последним десяти, половиной найденного и в узких границах — поправка
+    /// медленная, чтобы неделя ремонта не учила призрака навсегда.
+    nonisolated static let commuteAccuracyMinTrips = 5
+    nonisolated static let commuteAccuracyBiasWindow = 10
+    nonisolated static let commuteAccuracyBiasGain = 0.5
+    nonisolated static let commuteAccuracyBiasMin = 0.92
+    nonisolated static let commuteAccuracyBiasMax = 1.12
+    /// Прогноз короче — в сдвиг не идёт: у финиша доля шума велика.
+    nonisolated static let commuteAccuracyMinRemainingSeconds: TimeInterval = 300
+    /// Журнал: столько поездок и столько дней (на телефоне, вне копии).
+    nonisolated static let commuteAccuracyMaxEntries = 60
+    nonisolated static let commuteAccuracyKeepDays: Double = 60
+    /// «Ошибался в среднем на N мин» — по последним стольким поездкам направления.
+    nonisolated static let commuteAccuracyStatsTrips = 20
+    /// Доехали: до конца линии ближе этого — время прибытия для журнала.
+    nonisolated static let commuteAccuracyEndMeters: Double = 150
+    /// Ранний прогноз (24.3): с 300 м по линии, если въехали на неё у её
+    /// начала (выехали от дома, а не пересекли путь на перекрёстке). Гейт
+    /// «уехал с пути» остаётся; голос — по-прежнему с 1,5 км.
+    nonisolated static let commuteGhostEarlyAlongMeters: Double = 300
+    nonisolated static let commuteGhostEarlyJoinMeters: Double = 300
+    /// Пробка толпы впереди — хуже своей медианы на четверть (а не хуже q75):
+    /// при широком своём разбросе q75 съедал настоящие пробки.
+    nonisolated static let commuteCrowdOverMedian = 1.25
+    /// «Прибытие сдвинулось» голосом — от стольких минут против сказанного.
+    nonisolated static let commuteShiftAnnounceMinutes = 5
+
     // MARK: «Где ушло время» (CommuteLoss, 8.8.8)
     /// Отрезок называется, если потерял против медианы хотя бы минуту: десять
     /// секунд у светофора — не место, где «ушло время».

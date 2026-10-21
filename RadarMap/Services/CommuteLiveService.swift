@@ -31,6 +31,9 @@ final class CommuteLiveService {
         var slack: CommuteGhost.TargetSlack?
         /// Почему дольше — одним словом (8.8.12); nil — причины не видно.
         var reason: CommuteGhost.Reason? = nil
+        /// Ранний прогноз (24.3, до 1,5 км): «± N мин» — честная вилка; nil —
+        /// прогноз уже уверенный.
+        var spreadMinutes: Int? = nil
     }
 
     private(set) var display: Display?
@@ -61,6 +64,11 @@ final class CommuteLiveService {
     @ObservationIgnored private var deadline: Date?
     @ObservationIgnored private var slackTracker = CommuteGhost.SlackTracker()
     @ObservationIgnored private var lateNotice = CommuteGhost.LateNotice()
+    /// «Прибытие сдвинулось» (24.3) — одна фраза за поездку.
+    @ObservationIgnored private var shiftNotice = CommuteGhost.ShiftNotice()
+    /// Журнал точности этой поездки (24.1): переживает `stop()` — конец
+    /// поездки гасит призрака раньше, чем трек доезжает до свёртки.
+    @ObservationIgnored private var recorder: CommuteAccuracy.Recorder?
     @ObservationIgnored private var sessionDeparture: Date?
     /// Ревизия пробок, уже отданная сессии; −1 — новой сессии пробки не давали.
     @ObservationIgnored private var trafficRevision = -1
@@ -84,8 +92,10 @@ final class CommuteLiveService {
     /// срок «быть к» на сегодня (ArrivalTarget.deadline), иначе nil.
     /// `workday` — суббота шестидневки (срок «и по субботам»): её поездки
     /// сравниваются с будними, а не с воскресными.
+    /// `bias` — поправка сдвига из журнала точности этого направления (24.2).
     func start(direction: Commute.Direction, variants: [CommuteProfile.Variant], departure: Date,
-               deadline: Date? = nil, workday: Bool = false, calendar: Calendar = .current) {
+               deadline: Date? = nil, workday: Bool = false, bias: Double = 1,
+               calendar: Calendar = .current) {
         // Та же поездка, продолженная после остановки (TripMerge), — голос
         // помнит, что уже сказал: иначе «позже срока» звучало бы после
         // каждого заезда.
@@ -93,7 +103,7 @@ final class CommuteLiveService {
         stop()
         guard let session = CommuteLiveSession(variants: variants,
                                                weekend: !workday && UzHolidays.isDayOff(departure, calendar: calendar),
-                                               departure: departure, calendar: calendar)
+                                               departure: departure, bias: bias, calendar: calendar)
         else {
             Log.trips.info("призрак: \(direction.rawValue, privacy: .public) — мало поездок этого часа и дня (вариантов \(variants.count, privacy: .public), строк \(variants.reduce(0) { $0 + $1.rows.count }, privacy: .public))")
             return
@@ -110,10 +120,14 @@ final class CommuteLiveService {
         if !resumed {
             announcer = CommuteGhost.Announcer()
             lateNotice = CommuteGhost.LateNotice()
+            shiftNotice = CommuteGhost.ShiftNotice()
             latePlaqueDone = false
             latePlaqueShown = false
         }
-        Log.trips.info("призрак: \(direction.rawValue, privacy: .public), вариантов \(variants.count, privacy: .public)")
+        if !resumed || recorder?.direction != direction {
+            recorder = CommuteAccuracy.Recorder(direction: direction, departure: departure, factor: bias)
+        }
+        Log.trips.info("призрак: \(direction.rawValue, privacy: .public), вариантов \(variants.count, privacy: .public), поправка \(bias, format: .fixed(precision: 3), privacy: .public)")
     }
 
     /// Построенный маршрут (8.8.11): совпадает с вариантом дороги на работу —
@@ -154,6 +168,7 @@ final class CommuteLiveService {
         if output.isOff || !output.hasLead {
             // «Сегодня другой дорогой» или ведущий сошёл, а другой путь ещё
             // не подтверждён: прогноз и голос молчат до возврата.
+            if output.isOff { recorder?.noteLeftLine() }
             if display != nil {
                 display = nil
                 Log.trips.info("призрак: \(output.isOff ? "другой дорогой" : "ведущий сошёл", privacy: .public) — прогноз скрыт")
@@ -161,31 +176,76 @@ final class CommuteLiveService {
             lastForecast = nil
             return
         }
-        guard let forecast = output.forecast else { return }
+        guard let forecast = output.forecast else {
+            recorder?.notePosition(along: output.alongMeters, length: output.lengthMeters, now: now)
+            return
+        }
         lastForecast = (forecast.remaining, now, session.active ?? -1)
+        recorder?.note(arrival: forecast.arrival, along: output.alongMeters, length: output.lengthMeters,
+                       early: output.early, now: now)
         // Журнал прогноза (В5, 8.8.9): на каждом пересчёте — раз в участок
         // или в 30 с. Без координат: остаток пути, прибытие и отклонение.
-        Log.trips.info("призрак: осталось \(Int(output.remainingMeters), privacy: .public) м, \(Int(forecast.remaining), privacy: .public) с, прибытие \(CommuteGhost.clock(forecast.arrival), privacy: .public), к обычному \(Int(forecast.delta), privacy: .public) с, разброс \(Int(forecast.sigma), privacy: .public) с")
+        Log.trips.info("призрак: осталось \(Int(output.remainingMeters), privacy: .public) м, \(Int(forecast.remaining), privacy: .public) с, прибытие \(CommuteGhost.clock(forecast.arrival), privacy: .public), к обычному \(Int(forecast.delta), privacy: .public) с, разброс \(Int(output.spread), privacy: .public) с\(output.early ? ", рано" : "", privacy: .public)")
         let minute = (forecast.arrival.timeIntervalSince1970 / 60).rounded() * 60
         let raw = deadline.map { ArrivalTarget.slackMinutes(deadline: $0, arrival: forecast.arrival) }
         let slack: CommuteGhost.TargetSlack? = Self.all(slackTracker.update(slackMinutes: raw, now: now), raw, deadline)
             .map { CommuteGhost.TargetSlack(state: $0, minutes: Int($1.rounded()), deadline: $2) }
         let next = Display(direction: direction, arrival: Date(timeIntervalSince1970: minute),
-                           deltaMinutes: forecast.deltaMinutes, slack: slack, reason: output.reason)
+                           deltaMinutes: forecast.deltaMinutes, slack: slack, reason: output.reason,
+                           spreadMinutes: output.early ? max(1, Int((output.spread / 60).rounded())) : nil)
         if next != display { display = next }
+        // Ранний прогноз — только строкой: голос с 1,5 км, когда путь уверен.
+        guard !output.early else { return }
+        announce(next, direction: direction, remainingMeters: output.remainingMeters, now: now)
+    }
+
+    /// Голос призрака на пересчёте: позже срока — своё правило; иначе
+    /// «прибытие сдвинулось» (24.3), иначе обычная фраза. Несказанная (камера,
+    /// манёвр) не засчитывается и прозвучит на следующем пересчёте.
+    private func announce(_ next: Display, direction: Commute.Direction, remainingMeters: Double, now: Date) {
+        let slack = next.slack
         // Голос — на каждом пересчёте (≤ раз в 30 с), а не только при смене
         // строки: фраза, отложенная из-за камеры, не ждёт сдвига на 3 мин.
         // Позже срока — своё правило: один раз и снова, только если хуже на 5 мин.
         let late = slack?.shown == .late ? slack?.lateMinutes : nil
-        let wants = late.map {
-            lateNotice.wants(lateMinutes: $0)
-                && announcer.allowsLate(remainingMeters: output.remainingMeters, now: now)
-        } ?? announcer.wants(deltaMinutes: next.deltaMinutes, remainingMeters: output.remainingMeters, now: now)
-        if wants, onAnnounce?(CommuteGhost.phrase(direction: direction, arrival: next.arrival,
-                                                  deltaMinutes: next.deltaMinutes, slack: slack)) == true {
+        if let late {
+            guard lateNotice.wants(lateMinutes: late),
+                  announcer.allowsLate(remainingMeters: remainingMeters, now: now),
+                  onAnnounce?(CommuteGhost.phrase(direction: direction, arrival: next.arrival,
+                                                  deltaMinutes: next.deltaMinutes, slack: slack)) == true
+            else { return }
             announcer.commit(deltaMinutes: next.deltaMinutes, now: now)
-            if let late { lateNotice.commit(lateMinutes: late) }
+            lateNotice.commit(lateMinutes: late)
+            shiftNotice.said(arrival: next.arrival)
+            return
         }
+        if shiftNotice.wants(arrival: next.arrival),
+           announcer.allowsLate(remainingMeters: remainingMeters, now: now) {
+            let later = next.arrival > (shiftNotice.reference ?? next.arrival)
+            if onAnnounce?(CommuteGhost.shiftPhrase(arrival: next.arrival, later: later, reason: next.reason)) == true {
+                announcer.commit(deltaMinutes: next.deltaMinutes, now: now)
+                shiftNotice.commit(arrival: next.arrival)
+                Log.trips.info("призрак: сказано «прибытие сдвинулось» — \(CommuteGhost.clock(next.arrival), privacy: .public)")
+            }
+            return
+        }
+        guard announcer.wants(deltaMinutes: next.deltaMinutes, remainingMeters: remainingMeters, now: now),
+              onAnnounce?(CommuteGhost.phrase(direction: direction, arrival: next.arrival,
+                                              deltaMinutes: next.deltaMinutes, slack: slack)) == true
+        else { return }
+        announcer.commit(deltaMinutes: next.deltaMinutes, now: now)
+        shiftNotice.said(arrival: next.arrival)
+    }
+
+    /// Запись журнала точности по закончившейся поездке (24.1) — одна на
+    /// поездку и только для той, что призрак вёл (`departure` совпал).
+    /// Стоянки — интервалы TripStop: магазин по дороге — не ошибка прогноза.
+    func finishAccuracy(tripID: Double, departure: Date, endedAt: Date,
+                        stops: [ClosedRange<Date>]) -> CommuteAccuracy.Entry? {
+        guard let recorder, recorder.departure == departure else { return nil }
+        // Пока поездка идёт (склейка подхватила её), запись ещё пригодится.
+        if session == nil { self.recorder = nil }
+        return recorder.entry(tripID: tripID, endedAt: endedAt, stops: stops)
     }
 
     /// Три необязательных — вместе или ничего.
@@ -196,9 +256,16 @@ final class CommuteLiveService {
 
     #if DEBUG
     /// Скриншот-хук `-demoGhost`: строка призрака без настоящей истории.
+    /// `reason`/`spreadMinutes` — «пробка впереди» и ранняя вилка (24.3);
+    /// `phrase` — фраза «прибытие сдвинулось» голосом, как в поездке.
     func showDemo(direction: Commute.Direction, arrival: Date, deltaMinutes: Int,
-                  slack: CommuteGhost.TargetSlack? = nil) {
-        display = Display(direction: direction, arrival: arrival, deltaMinutes: deltaMinutes, slack: slack)
+                  slack: CommuteGhost.TargetSlack? = nil, reason: CommuteGhost.Reason? = nil,
+                  spreadMinutes: Int? = nil, speaksShift: Bool = false) {
+        display = Display(direction: direction, arrival: arrival, deltaMinutes: deltaMinutes, slack: slack,
+                          reason: reason, spreadMinutes: spreadMinutes)
+        if speaksShift {
+            _ = onAnnounce?(CommuteGhost.shiftPhrase(arrival: arrival, later: true, reason: reason))
+        }
     }
     #endif
 

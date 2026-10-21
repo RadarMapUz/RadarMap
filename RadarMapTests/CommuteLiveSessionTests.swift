@@ -224,10 +224,180 @@ final class CommuteLiveSessionTests: XCTestCase {
         XCTAssertTrue((5...7).contains(out.deltaMinutes), "вдвое медленнее: \(out.deltaMinutes) мин")
     }
 
-    func testSilentBeforeOnePointFiveKilometres() throws {
+    /// Ранний прогноз (24.3): выехали от начала линии — прибытие видно с
+    /// 300 м, с пометкой «рано» (вилка на экране, голос молчит до 1,5 км);
+    /// до 300 м — ничего.
+    func testEarlyForecastFromThreeHundredMetres() throws {
         var session = try XCTUnwrap(CommuteLiveSession(variants: [variant()], weekend: false,
                                                         departure: start, calendar: utc))
-        XCTAssertNil(drive(&session, speed: 10, until: 1200)?.forecast)
+        XCTAssertNil(drive(&session, speed: 10, until: 250)?.forecast, "заезд у дома — ещё не дорога")
+        // Свои поездки разные (16–30 с на участок) — вилка не нулевая.
+        var spread = variant()
+        spread.rows = [16, 20, 22, 24, 30].enumerated().map { i, sec in
+            CommuteProfile.Row(tripID: Double(i), departure: start.addingTimeInterval(-Double(i + 1) * 86_400),
+                               weekend: false, arrivalMinute: 0, seconds: [UInt16](repeating: UInt16(sec), count: 20))
+        }
+        var early = try XCTUnwrap(CommuteLiveSession(variants: [spread], weekend: false,
+                                                      departure: start, calendar: utc))
+        let out = try XCTUnwrap(drive(&early, speed: 10, until: 1200))
+        XCTAssertNotNil(out.forecast)
+        XCTAssertTrue(out.early)
+        XCTAssertGreaterThan(out.spread, 0, "вилка честная, не ноль")
+        var confirmed = try XCTUnwrap(CommuteLiveSession(variants: [variant()], weekend: false,
+                                                          departure: start, calendar: utc))
+        XCTAssertEqual(drive(&confirmed, speed: 10, until: 1700)?.early, false)
+    }
+
+    /// Въехали на линию посреди пути (пересекли её на перекрёстке или
+    /// автостарт поздно) — раннего прогноза нет, ждём 1,5 км по линии.
+    func testNoEarlyForecastWhenJoinedMidway() throws {
+        var session = try XCTUnwrap(CommuteLiveSession(variants: [variant()], weekend: false,
+                                                        departure: start, calendar: utc))
+        XCTAssertNil(drive(&session, speed: 10, until: 1400, from: 800)?.forecast)
+    }
+
+    /// Стоим посреди участка (24.3): прибытие уходит сразу — каждые 30 с
+    /// пересчёта — не меньше чем на время стоянки, и темп узнаёт стоянку
+    /// раньше, чем мы пересечём границу участка.
+    func testStandingMovesArrivalAtOnce() throws {
+        var session = try XCTUnwrap(CommuteLiveSession(variants: [variant()], weekend: false,
+                                                        departure: start, calendar: utc))
+        var t = start
+        var last: CommuteGhost.Forecast?
+        for s in stride(from: 0.0, through: 2100, by: 50) {
+            let (la, lo) = coordinate(s)
+            if let f = session.note(lat: la, lon: lo, accuracy: 10, at: t).forecast { last = f }
+            t = t.addingTimeInterval(5)
+        }
+        let moving = try XCTUnwrap(last)
+        let (la, lo) = coordinate(2100)
+        var standing: CommuteGhost.Forecast?
+        for _ in 0..<36 {   // 3 мин на месте, фикс раз в 5 с
+            t = t.addingTimeInterval(5)
+            if let f = session.note(lat: la, lon: lo, accuracy: 10, at: t).forecast { standing = f }
+        }
+        let stood = try XCTUnwrap(standing)
+        XCTAssertGreaterThanOrEqual(stood.arrival.timeIntervalSince(moving.arrival), 150,
+                                    "три минуты стоим — прибытие ушло почти на столько же")
+        XCTAssertGreaterThan(stood.remaining, moving.remaining - 10,
+                             "остаток не тает, пока стоим: темп узнал пробку")
+    }
+
+    /// Пробка толпы хуже своей медианы, но не хуже своего q75 (24.3): свой
+    /// разброс широкий (16–40 с на участок), и прежний порог q75 эту пробку
+    /// не видел; теперь — видит.
+    func testCrowdJamCountsAgainstOwnMedian() throws {
+        var v = variant()
+        v.rows = [16, 20, 22, 40, 40].enumerated().map { i, sec in
+            CommuteProfile.Row(tripID: Double(i), departure: start.addingTimeInterval(-Double(i + 1) * 86_400),
+                               weekend: false, arrivalMinute: 0, seconds: [UInt16](repeating: UInt16(sec), count: 20))
+        }
+        func run(_ snapshot: TrafficSnapshot?) throws -> CommuteGhost.Forecast {
+            var session = try XCTUnwrap(CommuteLiveSession(variants: [v], weekend: false, departure: start,
+                                                            calendar: utc))
+            session.setTraffic(snapshot, now: start)
+            return try XCTUnwrap(drive(&session, speed: 9, until: 1600)?.forecast)
+        }
+        // 22 км/ч → 33 с на участок: хуже медианы×1,25, но не хуже q75 (40).
+        var edges = jam(from: 3000, to: 4000, generated: start)
+        edges = TrafficSnapshot(generated: start, edges: edges.edges.map {
+            TrafficEdge(a: $0.a, b: $0.b, level: 2, kmh: 22, modelKmh: 50)
+        })
+        let free = try run(nil)
+        let jammed = try run(edges)
+        XCTAssertGreaterThan(jammed.remaining - free.remaining, 20)
+    }
+
+    /// «Прибытие сдвинулось» (24.3): после первой фразы впереди появилась
+    /// пробка и прибытие ушло на 5+ мин — одна фраза с причиной; голос ниже
+    /// камеры, несказанная не засчитана.
+    @MainActor
+    func testShiftIsAnnouncedOnceWithReason() throws {
+        let service = CommuteLiveService()
+        var spoken: [String] = []
+        var busy = false
+        service.onAnnounce = { phrase in
+            guard !busy else { return false }
+            spoken.append(phrase)
+            return true
+        }
+        // Длинная линия: 20 км, чтобы до финиша оставалось больше 2 км.
+        let long = longVariant()
+        service.start(direction: .toWork, variants: [long], departure: start, calendar: utc)
+        // Пробка 10 км/ч на 12–16 км: +5 мин и больше; файл свежий на каждом фиксе.
+        var edges: [TrafficEdge] = []
+        for x in stride(from: 12_000.0, to: 16_000, by: 100) {
+            let (la, lo) = coordinate(x), (lb, lb2) = coordinate(x + 100)
+            edges.append(TrafficEdge(a: CLLocationCoordinate2D(latitude: la, longitude: lo),
+                                     b: CLLocationCoordinate2D(latitude: lb, longitude: lb2),
+                                     level: 3, kmh: 10, modelKmh: 50))
+        }
+        var t = start
+        var revision = 0
+        var jamOn = false
+        func fix(_ s: Double) {
+            if jamOn {
+                revision += 1
+                service.noteTraffic(TrafficSnapshot(generated: t, edges: edges), revision: revision, now: t)
+            }
+            let (la, lo) = coordinate(s)
+            service.note(CLLocationCoordinate2D(latitude: la, longitude: lo), accuracy: 10, at: t)
+            t = t.addingTimeInterval(5)
+        }
+        for s in stride(from: 0.0, through: 2000, by: 50) { fix(s) }
+        XCTAssertEqual(spoken.count, 1, "первая фраза — после 1,5 км")
+        busy = true
+        jamOn = true
+        for s in stride(from: 2050.0, through: 6000, by: 50) { fix(s) }
+        XCTAssertEqual(spoken.count, 1, "под камерой — молчим и не засчитываем")
+        busy = false
+        for s in stride(from: 6050.0, through: 9000, by: 50) { fix(s) }
+        XCTAssertEqual(spoken.count, 2, spoken.joined(separator: " | "))
+        XCTAssertTrue(spoken.last?.hasPrefix("Прибытие сдвинулось") == true, spoken.last ?? "")
+        XCTAssertTrue(spoken.last?.hasSuffix("пробка впереди") == true, spoken.last ?? "")
+        XCTAssertEqual(service.display?.reason, .jamAhead)
+        for s in stride(from: 9050.0, through: 11_000, by: 50) { fix(s) }
+        XCTAssertEqual(spoken.filter { $0.hasPrefix("Прибытие сдвинулось") }.count, 1, "одна за поездку")
+    }
+
+    /// Журнал точности из живой сессии (24.1): поездка до конца линии даёт
+    /// запись с первым прогнозом и фактом; конец сессии её не теряет.
+    @MainActor
+    func testServiceRecordsAccuracyEntry() throws {
+        let service = CommuteLiveService()
+        service.start(direction: .toWork, variants: [variant()], departure: start, calendar: utc)
+        var t = start
+        for s in stride(from: 0.0, through: 4000, by: 50) {
+            let (la, lo) = coordinate(s)
+            service.note(CLLocationCoordinate2D(latitude: la, longitude: lo), accuracy: 10, at: t)
+            t = t.addingTimeInterval(6)   // чуть медленнее обычного
+        }
+        service.stop()
+        let entry = try XCTUnwrap(service.finishAccuracy(tripID: 1, departure: start,
+                                                         endedAt: t.addingTimeInterval(120), stops: []))
+        XCTAssertNotNil(entry.start)
+        XCTAssertNotNil(entry.confirmed)
+        XCTAssertNotNil(entry.middle)
+        XCTAssertLessThan(entry.arrival, t.addingTimeInterval(60), "прибытие — у конца линии, а не после парковки")
+        XCTAssertGreaterThan(entry.error(try XCTUnwrap(entry.headline)), 0, "ехали медленнее обещанного")
+        XCTAssertNil(service.finishAccuracy(tripID: 1, departure: start, endedAt: t, stops: []),
+                     "запись одна на поездку")
+    }
+
+    /// Прямая 20 км на восток, участки по 200 м, обычно 20 с на участок.
+    private func longVariant() -> CommuteProfile.Variant {
+        var line: [Int32] = []
+        for i in 0...200 {
+            let (la, lo) = coordinate(100.0 * Double(i))
+            line.append(Int32((la * 1e5).rounded()))
+            line.append(Int32((lo * 1e5).rounded()))
+        }
+        let rows = (0..<5).map { i in
+            CommuteProfile.Row(tripID: Double(i), departure: start.addingTimeInterval(-Double(i + 1) * 86_400),
+                               weekend: false, arrivalMinute: 0, seconds: [UInt16](repeating: 20, count: 100))
+        }
+        return CommuteProfile.Variant(id: UUID(), line: line, ends: (1...100).map { Float($0 * 200) },
+                                      limitKmh: [], rows: rows, lastUsed: start)
     }
 
     func testOtherRoadSilencesTheGhost() throws {

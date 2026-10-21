@@ -19,12 +19,17 @@ enum GhostText {
 
     /// Хвост без места — для тесных мест (плитка CarPlay). Почему дольше —
     /// одним словом через точку (8.8.12): «+6 мин к обычному · пробка».
+    /// Ранний прогноз (24.3, до 1,5 км) — с вилкой: «как обычно · ± 3 мин».
     static func tail(_ ghost: CommuteLiveService.Display) -> String {
-        let base = core(ghost)
+        var base = core(ghost)
+        if let spread = ghost.spreadMinutes {
+            base += " · " + String(localized: "± \(spread) мин")
+        }
         guard let reason = ghost.reason, ghost.deltaMinutes >= 1 || ghost.slack?.shown == .late else { return base }
         switch reason {
-        case .jam:   return "\(base) · " + String(localized: "пробка")
-        case .stood: return "\(base) · " + String(localized: "стояли")
+        case .jam:      return "\(base) · " + String(localized: "пробка")
+        case .jamAhead: return "\(base) · " + String(localized: "пробка впереди")
+        case .stood:    return "\(base) · " + String(localized: "стояли")
         }
     }
 

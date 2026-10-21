@@ -53,7 +53,7 @@ struct TripHistorySettingsPage: View {
                 .disabled(!canExport)
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Архив ZIP: таблица trips.csv — строка на поездку — и треки GPX тех поездок, у которых трек ещё хранится. Дом и работа в нём не подписаны.")
+                    Text("Архив ZIP: таблица trips.csv — строка на поездку — и треки GPX тех поездок, у которых трек ещё хранится. Дом и работа в них не подписаны. Отдельно — commute_forecast.csv, точность прогноза дороги на работу: по нему поездки дом↔работа узнаются.")
                     if journal > 0 {
                         Text("Журнал заправок и зарядок — таблица energy_journal.csv.")
                     }
@@ -116,6 +116,7 @@ struct TripHistorySettingsPage: View {
             await env.trip.loadAllMonths()
             do {
                 let archive = try await TripExport.makeArchive(env.trip.history,
+                                                               forecasts: env.commuteProfiles.accuracy,
                                                                journal: env.energyJournal.entries,
                                                                now: Date(), timeZone: .current)
                 exportFolder = archive.folder

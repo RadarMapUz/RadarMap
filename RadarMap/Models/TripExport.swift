@@ -4,7 +4,8 @@
 //
 //  «Экспорт всех поездок» (15.3): архив ZIP — trips.csv, одна строка на
 //  поездку (начало, конец, км, время в движении, балл, проезды камер, риск
-//  штрафов, рейс), и GPX каждой поездки, у которой трек ещё хранится.
+//  штрафов, рейс), GPX каждой поездки, у которой трек ещё хранится, и
+//  commute_forecast.csv — журнал точности прибытия (24.1), если он есть.
 //  С 21.6 — и energy_journal.csv, журнал заправок и зарядок, если он не пуст:
 //  «Скачать мои данные» обещает всё, что человек вписал сам.
 //
@@ -150,8 +151,8 @@ nonisolated enum TripExport {
     static let workPrefix = "RadarMap-export-"
 
     @concurrent
-    static func makeArchive(_ records: [TripRecord], journal: [JournalEntry] = [], now: Date,
-                            timeZone: TimeZone,
+    static func makeArchive(_ records: [TripRecord], forecasts: [CommuteAccuracy.Entry] = [],
+                            journal: [JournalEntry] = [], now: Date, timeZone: TimeZone,
                             root: URL = FileManager.default.temporaryDirectory) async throws -> Archive {
         cleanUpStale(in: root)
         let fm = FileManager.default
@@ -169,6 +170,11 @@ nonisolated enum TripExport {
             let names = gpxNames(for: records.filter { tracks[$0.id] != nil }, timeZone: timeZone)
             try csv(records, gpxNames: names, timeZone: timeZone)
                 .write(to: folder.appendingPathComponent("trips.csv"), atomically: true, encoding: .utf8)
+            if !forecasts.isEmpty {
+                try CommuteAccuracy.csv(forecasts, timeZone: timeZone)
+                    .write(to: folder.appendingPathComponent("commute_forecast.csv"), atomically: true,
+                           encoding: .utf8)
+            }
             if !journal.isEmpty {
                 try journalCSV(journal, timeZone: timeZone)
                     .write(to: folder.appendingPathComponent(journalFile), atomically: true, encoding: .utf8)

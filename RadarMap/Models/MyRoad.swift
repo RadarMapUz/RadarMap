@@ -63,6 +63,10 @@ nonisolated enum MyRoad {
         let line: [CLLocationCoordinate2D]
         let lineLength: Double
         let via: [Via]
+        /// Сдвиг журнала точности направления (CommuteAccuracy.biasFactor,
+        /// 24.2) — тот же, что у призрака в пути: «Моя дорога 26 мин» на
+        /// плашке и прибытие по дороге не должны расходиться.
+        var bias: Double = 1
 
         /// Поездок этим путём в профиле (45 дней).
         var trips: Int { variant.rows.count }
@@ -309,18 +313,19 @@ nonisolated enum MyRoad {
 
     // MARK: - Время
 
-    /// Своя дорога от точки старта «сейчас»: медиана своих поездок этим
-    /// путём в этот час (окно ±60/±120 мин, как у «сейчас ~44 мин» — медиана
-    /// всего дня в три ночи — не «сейчас»), плюс пробки толпы сверх своего
-    /// q75 и подъезд к линии медленным ходом. nil — у часа нет трёх поездок.
+    /// Своя дорога от точки старта «сейчас»: своё время этим путём в этот
+    /// час — та же база, что у призрака в пути и «сейчас ~44 мин» (24.2:
+    /// строки по близости выезда, поправка на светофоры, наклон по выезду,
+    /// сдвиг журнала `plan.bias`; медиана всего дня в три ночи — не
+    /// «сейчас»), плюс пробки толпы заметно хуже своей медианы и подъезд к
+    /// линии медленным ходом. nil — у часа нет трёх поездок.
     static func estimate(_ plan: Plan, now: Date, snapshot: TrafficSnapshot?,
                          calendar: Calendar = .current) -> Estimate? {
         let variant = plan.variant
-        guard let selected = CommuteGhost.selectRowsTiered(
-                variant.rows, weekend: UzHolidays.isDayOff(now, calendar: calendar),
-                departureMinute: CommuteProfile.minuteOfDay(now, calendar: calendar), calendar: calendar),
+        guard let selected = CommuteGhost.select(variant.rows, weekend: UzHolidays.isDayOff(now, calendar: calendar),
+                                                 departure: now, calendar: calendar),
               selected.tier < .allDay,
-              let base = CommuteGhost.baseline(ends: variant.ends, limitKmh: variant.limitKmh, rows: selected.rows)
+              let base = CommuteGhost.calibratedBaseline(variant, selection: selected, bias: plan.bias)
         else { return nil }
         var jam = 0.0
         if let snapshot, snapshot.isFresh(now: now) {

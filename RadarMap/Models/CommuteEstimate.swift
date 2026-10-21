@@ -11,8 +11,9 @@
 //
 //  Пробки без двойного счёта: медиана водителя в восемь утра уже содержит
 //  обычную восьмичасовую пробку. Поэтому участок берёт время по пробкам,
-//  только если оно хуже его q75 — то есть сегодня хуже, чем бывает в трёх
-//  случаях из четырёх; иначе остаётся медиана. Свободные рёбра ничего не
+//  только если оно заметно хуже его медианы (на четверть, 24.3; прежний q75
+//  при широком своём разбросе пропускал настоящие пробки); иначе остаётся
+//  медиана. Свободные рёбра ничего не
 //  убавляют: «сегодня пусто» по нескольким кускам — не повод обещать
 //  приезд раньше обычного.
 //
@@ -32,21 +33,23 @@ nonisolated enum CommuteEstimate {
 
     /// Оценка при выезде в `now`: вариант, чья выборка ближе к этому часу
     /// (окно ±60 лучше ±120), при равенстве — богаче, затем недавний; его
-    /// медиана плюс пробки сверх q75. nil — у этого часа нет трёх поездок в
+    /// медиана плюс пробки заметно хуже неё. nil — у этого часа нет трёх поездок в
     /// окне ±120 мин: медиана всего дня — не «сейчас», и строка остаётся при
     /// «обычно» за месяц. Округлено до минут: пересчёт по новым пробкам не
     /// трогает строку, пока цифра на ней та же.
+    /// Выборка и база — те же, что у призрака в пути (24.2): веса по близости
+    /// выезда, поправка на светофоры и сдвиг журнала `bias`; иначе «сейчас
+    /// ~44 мин» до выезда и прибытие через минуту после него расходились бы.
     static func beforeDeparture(variants: [CommuteProfile.Variant], now: Date,
-                                snapshot: TrafficSnapshot?, calendar: Calendar = .current) -> Estimate? {
+                                snapshot: TrafficSnapshot?, bias: Double = 1,
+                                calendar: Calendar = .current) -> Estimate? {
         let weekend = UzHolidays.isDayOff(now, calendar: calendar)
-        let minute = CommuteProfile.minuteOfDay(now, calendar: calendar)
         var best: (variant: CommuteProfile.Variant, base: CommuteGhost.Baseline, tier: CommuteGhost.RowTier)?
         for variant in variants {
-            guard let selected = CommuteGhost.selectRowsTiered(variant.rows, weekend: weekend,
-                                                               departureMinute: minute, calendar: calendar),
+            guard let selected = CommuteGhost.select(variant.rows, weekend: weekend, departure: now,
+                                                     calendar: calendar),
                   selected.tier < .allDay,
-                  let base = CommuteGhost.baseline(ends: variant.ends, limitKmh: variant.limitKmh,
-                                                   rows: selected.rows)
+                  let base = CommuteGhost.calibratedBaseline(variant, selection: selected, bias: bias)
             else { continue }
             if let current = best {
                 let better: Bool
@@ -126,11 +129,13 @@ nonisolated enum CommuteEstimate {
     }
 
     /// Пробки сверх обычного с участка `segment` до конца: участок, где по
-    /// пробкам выходит хуже q75, добавляет разницу с медианой; остальные — 0.
+    /// пробкам выходит хуже своей медианы на `commuteCrowdOverMedian` (24.3 —
+    /// тот же порог, что у призрака в пути), добавляет разницу с медианой;
+    /// остальные — 0.
     static func jamExtra(_ base: CommuteGhost.Baseline, crowd: [Double?], from segment: Int = 0) -> Double {
         var extra = 0.0
         for j in max(0, segment)..<min(crowd.count, base.median.count) {
-            guard let time = crowd[j], time > base.q75[j] else { continue }
+            guard let time = crowd[j], time > base.median[j] * AppConfig.commuteCrowdOverMedian else { continue }
             extra += time - base.median[j]
         }
         return extra

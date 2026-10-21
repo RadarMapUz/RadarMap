@@ -173,5 +173,61 @@ final class CarPlayMapButtonsTests: XCTestCase {
                 do { try image.pngData()?.write(to: file) } catch { XCTFail("\(error)") }
             }
         }
+        // Макет столбика кнопок карты в поездке и правой половины бара — днём
+        // и ночью. Круги и капсулы рисует здесь тест, а не CarPlay: это
+        // приближение, чтобы увидеть картинку среди соседей.
+        for night in [false, true] {
+            let mock = mockColumn(night: night)
+            let file = url.appendingPathComponent("carplay_buttons_mock_\(night ? "night" : "day").png")
+            do { try mock.pngData()?.write(to: file) } catch { XCTFail("\(error)") }
+        }
+    }
+
+    private func mockColumn(night: Bool) -> UIImage {
+        let circle: CGFloat = 44, gap: CGFloat = 8
+        let barHeight: CGFloat = 36
+        let size = CGSize(width: 260, height: barHeight + 24 + 4 * circle + 3 * gap + 16)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 3
+        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            let map = night ? UIColor(white: 0.13, alpha: 1) : UIColor(white: 0.93, alpha: 1)
+            let button = night ? UIColor(white: 0.24, alpha: 1) : UIColor.white
+            let ink = night ? UIColor.white : UIColor(white: 0.11, alpha: 1)
+            map.setFill(); UIRectFill(CGRect(origin: .zero, size: size))
+            // Правая половина бара: «Куда» (лупа) и «Радар!» словом.
+            let font = UIFont.systemFont(ofSize: 15, weight: .semibold)
+            let title = "Радар!" as NSString
+            let titleSize = title.size(withAttributes: [.font: font])
+            let radar = CGRect(x: size.width - 12 - titleSize.width - 24, y: 8,
+                               width: titleSize.width + 24, height: barHeight)
+            let search = CGRect(x: radar.minX - 8 - 52, y: 8, width: 52, height: barHeight)
+            for rect in [search, radar] {
+                button.setFill(); UIBezierPath(roundedRect: rect, cornerRadius: barHeight / 2).fill()
+            }
+            title.draw(at: CGPoint(x: radar.midX - titleSize.width / 2, y: radar.midY - titleSize.height / 2),
+                       withAttributes: [.font: font, .foregroundColor: ink])
+            let symbolConfig = UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
+            if let glass = UIImage(systemName: "magnifyingglass", withConfiguration: symbolConfig)?
+                .withTintColor(ink, renderingMode: .alwaysOriginal) {
+                glass.draw(at: CGPoint(x: search.midX - glass.size.width / 2, y: search.midY - glass.size.height / 2))
+            }
+            // Столбик кнопок карты в поездке: «Радар!», +, −, осмотр.
+            let x = size.width - 12 - circle
+            var y = barHeight + 24
+            let report = CarPlayReportImage.render(title: "Радар!", scale: 3)
+            let mapConfig = UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)
+            let images: [UIImage?] = [report] + ["plus", "minus", "arrow.up.and.down.and.arrow.left.and.right"]
+                .map { UIImage(systemName: $0, withConfiguration: mapConfig)?.withTintColor(ink, renderingMode: .alwaysOriginal) }
+            for image in images {
+                let rect = CGRect(x: x, y: y, width: circle, height: circle)
+                button.setFill(); UIBezierPath(ovalIn: rect).fill()
+                if let image {
+                    let fit = min(1, (circle - 4) / max(image.size.width, image.size.height))
+                    let w = image.size.width * fit, h = image.size.height * fit
+                    image.draw(in: CGRect(x: rect.midX - w / 2, y: rect.midY - h / 2, width: w, height: h))
+                }
+                y += circle + gap
+            }
+        }
     }
 }

@@ -86,13 +86,56 @@ final class SpeedSmootherTests: XCTestCase {
 
     // MARK: - Без фиксов (SpeedBound)
 
-    /// Стоим у светофора: последний фикс торможения — 13 км/ч, дальше фиксов
-    /// нет (distanceFilter 6 м). Через 3 с машина проехала меньше 6 м —
-    /// скорость не больше 7,2 км/ч; через 10 с — ноль, а не вечные 13.
+    /// Молчание с фильтром расстояния — верхняя граница: за t секунд машина
+    /// проехала меньше фильтра. 40 км/ч при фильтре 25 м: фикс раз в 2,25 с,
+    /// через 3 с молчания — не больше 30 км/ч, через 40 с — ноль.
     func testSilenceBoundsTheSpeed() {
+        XCTAssertEqual(SpeedBound.capped(40, distanceFilter: 25, secondsSinceFix: 1), 40, "обычный интервал")
+        XCTAssertEqual(SpeedBound.capped(40, distanceFilter: 25, secondsSinceFix: 3), 30, accuracy: 0.01)
+        XCTAssertEqual(SpeedBound.capped(40, distanceFilter: 25, secondsSinceFix: 40), 0)
+    }
+
+    /// Стоим у светофора: последний фикс торможения — 13 км/ч, дальше фиксов
+    /// нет (distanceFilter 6 м). Прежняя граница держала 7,2 км/ч на 3-й
+    /// секунде и 3 км/ч на 7-й; низкая скорость и молчание дольше полутора
+    /// интервалов фиксов — это остановка: ноль (25.C).
+    func testLowSpeedSilenceWithAFilterIsAStop() {
         XCTAssertEqual(SpeedBound.capped(13, distanceFilter: 6, secondsSinceFix: 1), 13, "обычный интервал")
-        XCTAssertEqual(SpeedBound.capped(13, distanceFilter: 6, secondsSinceFix: 3), 7.2, accuracy: 0.01)
-        XCTAssertEqual(SpeedBound.capped(13, distanceFilter: 6, secondsSinceFix: 10), 0)
+        XCTAssertEqual(SpeedBound.capped(13, distanceFilter: 6, secondsSinceFix: 3), 0)
+        // 12 км/ч при фильтре 25: фикс раз в 7,5 с — до 11,25 с честная
+        // граница, дольше — ноль.
+        XCTAssertEqual(SpeedBound.capped(12, distanceFilter: 25, secondsSinceFix: 10), 9, accuracy: 0.01)
+        XCTAssertEqual(SpeedBound.capped(12, distanceFilter: 25, secondsSinceFix: 12), 0)
+        // Ниже порога шума цифра сама могла быть шумом: ноль через 2,5 с
+        // молчания при любом фильтре.
+        XCTAssertEqual(SpeedBound.capped(5, distanceFilter: 30, secondsSinceFix: 2), 5)
+        XCTAssertEqual(SpeedBound.capped(5, distanceFilter: 30, secondsSinceFix: 3), 0)
+    }
+
+    /// CoreMotion уверен, что стоим, — на низкой скорости ноль сразу после
+    /// обычного интервала; на ходу его мнение цифру не трогает.
+    func testMotionStationaryZeroesOnlyALowSpeed() {
+        XCTAssertEqual(SpeedBound.capped(9, distanceFilter: -1, secondsSinceFix: 2, motionStationary: true), 0)
+        XCTAssertEqual(SpeedBound.capped(9, distanceFilter: -1, secondsSinceFix: 1, motionStationary: true), 9)
+        XCTAssertEqual(SpeedBound.capped(60, distanceFilter: -1, secondsSinceFix: 2, motionStationary: true), 60)
+    }
+
+    /// Без фильтра (экран, CarPlay) низкая скорость без фиксов — ноль через
+    /// 2,5 с, а не через 8 (окно «нет сигнала» для высокой).
+    func testNoFilterLowSpeedSilenceIsAStop() {
+        XCTAssertEqual(SpeedBound.capped(9, distanceFilter: -1, secondsSinceFix: 2), 9)
+        XCTAssertEqual(SpeedBound.capped(9, distanceFilter: -1, secondsSinceFix: 3), 0)
+        XCTAssertEqual(SpeedBound.capped(30, distanceFilter: -1, secondsSinceFix: 3), 30, "на ходу — окно «нет сигнала»")
+    }
+
+    /// Фиксы без доплера идут, а скорость — нет: стоя (точка на месте) цифра
+    /// гаснет по времени последнего доплера; если точка уходит — едем без
+    /// доплера, цифру держим.
+    func testFixesWithoutSpeedDoNotHoldACrawl() {
+        XCTAssertEqual(SpeedBound.capped(8, distanceFilter: -1, secondsSinceFix: 0.5,
+                                         secondsSinceSpeed: 3, movedSinceSpeed: 4, accuracy: 10), 0)
+        XCTAssertEqual(SpeedBound.capped(8, distanceFilter: -1, secondsSinceFix: 0.5,
+                                         secondsSinceSpeed: 3, movedSinceSpeed: 25, accuracy: 10), 8)
     }
 
     /// На ходу граница ничего не отнимает: 60 км/ч при фильтре 25 м — фикс

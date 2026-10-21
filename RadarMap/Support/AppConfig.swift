@@ -760,6 +760,29 @@ nonisolated enum AppConfig {
     /// остановки больше max(standstillExitMeters, точность фикса).
     nonisolated static let standstillExitKmh = 6.0
     nonisolated static let standstillExitMeters: CLLocationDistance = 15
+    /// Доплеровский шум на месте (25.C, снимок CarPlay 21.10: стоит у
+    /// стоп-линии — «3 км/ч»). В городском каньоне приёмник стоя показывает
+    /// и 4–7 км/ч, а прежний вход требовал КАЖДЫЙ фикс ниже 3,5 км/ч две
+    /// секунды подряд — один фикс в 4 км/ч обнулял отсчёт, и стоянка не
+    /// наступала вовсе. Ниже этого порога фикс может быть шумом, и решает
+    /// положение: за `standstillEnterSeconds` точка не ушла дальше
+    /// `standstillNoiseNetMeters` и прошла меньше `standstillNoiseNetShare`
+    /// пути, который обещал доплер. Ползком 5 км/ч за две секунды машина
+    /// проходит 2,8 м ровно туда, куда обещал доплер, — это не шум.
+    nonisolated static let standstillNoiseMaxKmh = 8.0
+    nonisolated static let standstillNoiseNetMeters: CLLocationDistance = 3
+    nonisolated static let standstillNoiseNetShare = 0.4
+    /// Доплер сам говорит «может быть и ноль» (скорость не больше своей
+    /// погрешности speedAccuracy) или CoreMotion видит стоянку — тогда
+    /// хватает того, что точка почти на месте: за две секунды не дальше этого.
+    nonisolated static let standstillNoiseStillMeters: CLLocationDistance = 1.5
+    /// Тронулись по ОДНОМУ фиксу: скорость не ниже `standstillExitKmh` и не
+    /// меньше стольких своих погрешностей — число на экране через секунду, а
+    /// не через два фикса (25.C). Через секунду после трогания (2 м/с²) это
+    /// 7 км/ч при погрешности на ходу 1–2 км/ч; шум стоя с погрешностью
+    /// 3–4 км/ч до трёх её величин не дотягивает. Без speedAccuracy —
+    /// прежние два фикса.
+    nonisolated static let standstillExitSigmas = 3.0
 
     // MARK: - Пробки (TrafficProbes, TrafficService, server/traffic_build.py)
 

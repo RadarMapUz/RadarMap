@@ -236,7 +236,7 @@ extension CarPlaySceneDelegate {
     /// Словом «Радар!», а не значком (25.H3). Значок волн
     /// (`Icon.reportRadar`) без подписи в машине читался как AirPlay или
     /// «вещание» (владелец 21.10), а текст в баре CarPlay — штатный вид
-    /// кнопки (`CPBarButton(title:)`, «текст важнее картинки»). Слово то же,
+    /// кнопки (`CPBarButton(title:)`, рядом со значками бара допустим). Слово то же,
     /// что на жёлтой кнопке телефона и на кнопке карты в поездке.
     var reportButton: CPBarButton {
         CPBarButton(title: String(localized: "Радар!")) { [weak self] _ in

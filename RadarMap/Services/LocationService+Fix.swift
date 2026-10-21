@@ -192,6 +192,7 @@ extension LocationService {
                     // спидометр гас до 0, а «Похоже, вы едете» висело до
                     // следующей поездки (телефон владельца, 11.10).
                     self.refreshDrivingFlag()
+                    self.pushWatch()
                 }
                 if capped == 0 {
                     // Скорость погасла без фиксов — стоим (Speedometer поставил
@@ -207,6 +208,28 @@ extension LocationService {
                 }
             }
         }
+    }
+
+    /// Часы: только в поездке. Вне её HUD часов рисует «нет поездки» без
+    /// цифр, а меняющаяся скорость пробивала дедуп и будила BT-радио ради
+    /// данных, которые часы не показывают. Переход в «нет поездки» шлёт
+    /// endTrip явными нулями. Зовётся на фиксе и на затухании скорости без
+    /// фиксов: стоя у камеры в кармане (фильтр расстояния) часы иначе
+    /// держали скорость торможения до следующего фикса (25.C). Без изменений
+    /// — no-op (дедуп в WatchBridgeService).
+    func pushWatch() {
+        guard isTripActive else { return }
+        watchBridge?.update(isTripActive: true, speedKmh: speedKmh,
+                            cameraTitle: nearestCamera?.displayTitle,
+                            cameraSymbol: nearestCamera?.kind.symbolName,
+                            cameraID: nearestCamera?.id,
+                            distanceMeters: distanceToNearest,
+                            alertLevel: alertLevel,
+                            limitKmh: speedLimits?.currentLimit,
+                            // Устойчивое: мгновенный флаг щёлкает от шума
+                            // GPS у самого лимита и будил бы радио часов
+                            // раз в секунду (ревью 9.3).
+                            isOverspeeding: speedLimits?.isOverspeedingSustained ?? false)
     }
 
     func freezeDisplayIfStopped(shownBefore: CLLocationCoordinate2D?, courseBefore: CLLocationDirection) {
@@ -414,23 +437,7 @@ extension LocationService {
         }
         // Live Activity — только в поездке (условие внутри).
         refreshLiveActivity()
-        // Часы: только в поездке. Вне её HUD часов рисует «нет поездки» без
-        // цифр, а меняющаяся скорость пробивала дедуп и будила BT-радио ради
-        // данных, которые часы не показывают. Переход в «нет поездки» шлёт
-        // endTrip явными нулями.
-        if isTripActive {
-            watchBridge?.update(isTripActive: true, speedKmh: speedKmh,
-                                cameraTitle: nearestCamera?.displayTitle,
-                                cameraSymbol: nearestCamera?.kind.symbolName,
-                                cameraID: nearestCamera?.id,
-                                distanceMeters: distanceToNearest,
-                                alertLevel: alertLevel,
-                                limitKmh: speedLimits?.currentLimit,
-                                // Устойчивое: мгновенный флаг щёлкает от шума
-                                // GPS у самого лимита и будил бы радио часов
-                                // раз в секунду (ревью 9.3).
-                                isOverspeeding: speedLimits?.isOverspeedingSustained ?? false)
-        }
+        pushWatch()
         // Приехали к цели — стоим у неё достаточно, и поездка закроется сама
         // (ArrivalFinish). Последним в тике: закрытая посреди тика поездка
         // оставила бы его хвост работать по уже закрытой.

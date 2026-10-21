@@ -1784,8 +1784,10 @@ nonisolated enum AppConfig {
     static let laneApproachMatchMeters = 20.0
     static let laneApproachCourseDegrees = 30.0
     /// Не нашли дороги на подъезде (тайлы ещё едут) — спросить снова не
-    /// раньше чем через столько секунд, а не на каждом фиксе.
-    static let laneApproachRetrySeconds: TimeInterval = 15
+    /// раньше чем через столько секунд, а не на каждом фиксе. Запрос —
+    /// поиск по сетке в памяти, микросекунды; пять секунд на 60 км/ч — 80 м,
+    /// и ближний манёвр сразу после построения маршрута не теряет совет.
+    static let laneApproachRetrySeconds: TimeInterval = 5
 
     // MARK: - Поиск
 

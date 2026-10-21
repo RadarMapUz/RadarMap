@@ -39,6 +39,14 @@ nonisolated enum LaneAdvice {
         case lanes(VoiceEvent.LaneRun)
         /// Край по типу поворота и числу полос своей дороги.
         case edge(Edge)
+
+        /// Имя для журнала: «edge.left», «lanes.leftTwo».
+        var logName: String {
+            switch self {
+            case .lanes(let run): return "lanes." + run.rawValue
+            case .edge(let edge): return "edge." + edge.rawValue
+            }
+        }
     }
 
     // MARK: - Полосы OSRM

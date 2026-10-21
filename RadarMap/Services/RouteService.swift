@@ -727,6 +727,9 @@ final class RouteService {
                                        alreadySaid: laneAdviceSaid.contains(index))
             ? advice : nil
         if said != nil { laneAdviceSaid.insert(index) }
+        // Улика для разбора поездки: какая ступень, где и с рядом ли (фраза
+        // целиком не пишется — в ней улица).
+        Log.route.notice("манёвр голосом: ступень \(next, privacy: .public), \(Int(distance), privacy: .public) м, \(Int(speedKmh), privacy: .public) км/ч, ряд \(said?.logName ?? "-", privacy: .public), камера держит \(cameraHolds, privacy: .public)")
         if next == 0 {
             onManeuver?(step.text, step.voiceEvent(meters: nil))
         } else {
@@ -763,6 +766,7 @@ final class RouteService {
                                                     roads: roads) {
                 approachLanesByStep[index] = lanes
                 approachMissedAt[index] = nil
+                Log.route.notice("полос на подъезде к манёвру \(index, privacy: .public): \(lanes, privacy: .public)")
                 return lanes
             }
         }

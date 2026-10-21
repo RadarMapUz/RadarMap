@@ -380,10 +380,13 @@ struct ManeuverBanner: View {
                 HStack(spacing: 0) {
                     ForEach(Array(step.lanes.enumerated()), id: \.offset) { index, lane in
                         if index > 0 {
+                            // Высота разделителя — своя, а не «сколько дадут»:
+                            // прямоугольник без высоты растягивал весь ряд на
+                            // высоту экрана (снимок 21.10 — пол-экрана синей
+                            // панели под карточкой манёвра).
                             Rectangle()
                                 .fill(ink.opacity(0.3))
-                                .frame(width: 1.5)
-                                .padding(.vertical, 6)
+                                .frame(width: 1.5, height: 28)
                         }
                         Image(systemName: lane.primaryArrow(for: step.kind).symbolName)
                             .font(.rounded(24, lane.isValid ? .heavy : .regular))

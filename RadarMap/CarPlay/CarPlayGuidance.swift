@@ -39,19 +39,45 @@ nonisolated enum CarPlayGuidanceMapping {
         return result.isEmpty ? [text] : result
     }
 
-    /// Расстояние для карточки машины. Система печатает Measurement в ТОЙ
-    /// единице, в которой его дали: метры давали «12,834 meter» на панели
-    /// прибытия (CarPlay Simulator, 11.10). От километра — километры с
-    /// десятой (дальше сотни — целые), ближе — метры, кратные десяти: «47 м»
-    /// за рулём не читается точнее, чем «50 м».
+    /// Расстояние до МАНЁВРА (карточка поворота и баннер поверх чужого
+    /// приложения). Система печатает Measurement в ТОЙ единице, в которой его
+    /// дали, — карточка манёвра средним стилем (`_CPSFormattedDistanceWithMediumUnit`
+    /// в CarPlaySupport: «120 m», «120 м»). От километра — километры с десятой
+    /// (дальше сотни — целые), ближе — метры, кратные десяти: «47 м» за рулём
+    /// не читается точнее, чем «50 м». От километра — ровно то же число, что
+    /// у панели прибытия (`tripDistance`).
     static func distance(meters: Double) -> Measurement<UnitLength> {
         let meters = max(0, meters)
         guard meters >= 1000 else {
             return Measurement(value: (meters / 10).rounded() * 10, unit: .meters)
         }
+        return Measurement(value: kilometers(meters), unit: .kilometers)
+    }
+
+    /// Остаток ПОЕЗДКИ (панель прибытия «08:29 · 1 мин · 0,8 км» и карточки
+    /// выбора маршрута) — всегда в километрах.
+    ///
+    /// Панель прибытия печатает иначе, чем карточка манёвра: число — своим
+    /// NumberFormatter (десятая до сотни, дальше целые), а единицу —
+    /// `MeasurementFormatter.string(from: unit)` КОРОТКИМ стилем
+    /// (`_CPSFormattedDistanceSepartedShortUnit`, CarPlaySupport iOS 26.2).
+    /// Для километров это «km»/«км» во всех языках, а для метров — длинное
+    /// слово: «meter» в en_US (поездка 21.10: «780 meter» под карточкой
+    /// «120 m»; 11.10 — «12,834 meter»), «metr» в узбекском, «Meter» в
+    /// немецком. Печатает система по языку ТЕЛЕФОНА, не приложения, — так что
+    /// единственная единица, короткая везде, — километр. Ближе километра —
+    /// «0,8 км»; ненулевой остаток не показываем нулём, пока не приехали.
+    static func tripDistance(meters: Double) -> Measurement<UnitLength> {
+        let meters = max(0, meters)
+        guard meters > 0 else { return Measurement(value: 0, unit: .kilometers) }
+        return Measurement(value: max(0.1, kilometers(meters)), unit: .kilometers)
+    }
+
+    /// Километры так, как их напечатает CarPlay: десятая до сотни, дальше
+    /// целые — округляем сами, чтобы на экран шло то, что проверено тестом.
+    private static func kilometers(_ meters: Double) -> Double {
         let km = meters / 1000
-        let shown = km >= 100 ? km.rounded() : (km * 10).rounded() / 10
-        return Measurement(value: shown, unit: .kilometers)
+        return km >= 100 ? km.rounded() : (km * 10).rounded() / 10
     }
 
     /// Угол стрелки полосы, градусы: 0 — прямо, минус — влево, плюс — вправо.
@@ -627,7 +653,7 @@ final class CarPlayGuidance {
                                                    elapsed: now.timeIntervalSince(sentTripTime)) {
                 sentTripDistance = distance
                 sentTripTime = now
-                template.updateEstimates(Self.estimates(meters: distance, seconds: route.remainingTime),
+                template.updateEstimates(Self.tripEstimates(meters: distance, seconds: route.remainingTime),
                                          for: trip)
             }
         }
@@ -645,8 +671,16 @@ final class CarPlayGuidance {
 
     // MARK: - Картинки и оценки
 
+    /// Оценки до манёвра — карточка поворота («120 m»).
     static func estimates(meters: Double, seconds: Double) -> CPTravelEstimates {
         CPTravelEstimates(distanceRemaining: CarPlayGuidanceMapping.distance(meters: meters),
+                          timeRemaining: max(0, seconds))
+    }
+
+    /// Оценки всей поездки — панель прибытия и выбор маршрута: всегда
+    /// километры (CarPlayGuidanceMapping.tripDistance — почему).
+    static func tripEstimates(meters: Double, seconds: Double) -> CPTravelEstimates {
+        CPTravelEstimates(distanceRemaining: CarPlayGuidanceMapping.tripDistance(meters: meters),
                           timeRemaining: max(0, seconds))
     }
 

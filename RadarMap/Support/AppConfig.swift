@@ -1764,6 +1764,36 @@ nonisolated enum AppConfig {
     static let laneNoticeMeters = 400.0
     static let laneNoticeBeforeManeuverMeters = 30.0
 
+    /// Совет о ряде без полос OSRM (LaneAdvice, 20.2): край звучит, только
+    /// если в нашу сторону столько полос и больше — на однополосной улице
+    /// ряд не выбирают.
+    static let laneAdviceMinLanes = 2
+    /// Когда назвать ряд (LaneAdvice.adviceDistance): в городе не ближе
+    /// 300 м и 20 с пути, на трассе (от laneHighwaySpeedKmh) — 600 м и 30 с.
+    /// Перестроение через полосу в потоке занимает 5–10 с, плюс время понять
+    /// фразу и дождаться окна в соседнем ряду.
+    static let laneAdviceTownMinMeters = 300.0
+    static let laneAdviceTownSeconds = 20.0
+    static let laneAdviceHighwayMinMeters = 600.0
+    static let laneAdviceHighwaySeconds = 30.0
+    /// Окно ряда не дальше ближней фразы на столько — ближняя переезжает к
+    /// окну (одна фраза вместо двух подряд с разницей в пару секунд); дальше —
+    /// ряд в дальней фразе.
+    static let laneAdviceMergeGapMeters = 150.0
+    /// Ранний ряд ждёт камеру: она в радиусе оповещения или войдёт в него за
+    /// столько секунд пути (как у событий дороги — фраза манёвра с рядом идёт
+    /// 3–4 с, и камера не должна ждать её конца).
+    static let laneAdviceCameraGapSeconds = 8.0
+    /// Полосы своей дороги на подъезде: точка за столько метров до манёвра
+    /// (ещё до кармана и стоп-линии; второй — если первая не нашла дороги)…
+    static let laneApproachProbeMeters: [Double] = [30, 60]
+    /// …линия не дальше этого от точки и по курсу подъезда с этим допуском.
+    static let laneApproachMatchMeters = 20.0
+    static let laneApproachCourseDegrees = 30.0
+    /// Не нашли дороги на подъезде (тайлы ещё едут) — спросить снова не
+    /// раньше чем через столько секунд, а не на каждом фиксе.
+    static let laneApproachRetrySeconds: TimeInterval = 15
+
     // MARK: - Поиск
 
     /// Один и тот же адрес ближе этого — один дом (точка и контур в OSM).

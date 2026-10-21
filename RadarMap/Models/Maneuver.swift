@@ -181,4 +181,30 @@ nonisolated struct RouteStep: Equatable, Sendable {
     /// говорит только синтезатор: в ней улица, остановка, или её построил
     /// MKDirections готовой строкой.
     var voiceAction: VoiceEvent.Action? = nil
+    /// С какого края выполнять манёвр по его типу (`LaneAdvice.edge`) — ещё
+    /// без числа полос. nil — у манёвра края нет (развилка, кольцо, прямо).
+    var edge: LaneAdvice.Edge? = nil
+    /// Полос в нашу сторону на подъезде — по своей сети дорог, когда манёвр
+    /// стал ближайшим (RouteService). nil — ещё не знаем.
+    var approachLanes: Int? = nil
+
+    /// В какой ряд встать: полосы OSRM, иначе край при многополосном подъезде.
+    var laneAdvice: LaneAdvice.Advice? {
+        LaneAdvice.advice(lanes: lanes, edge: edge, lanesPerDirection: approachLanes)
+    }
+
+    /// Край без полос OSRM — для строки под фразой манёвра; nil — показывать
+    /// нечего (или есть ряд стрелок).
+    var laneEdge: LaneAdvice.Edge? {
+        guard case .edge(let edge)? = laneAdvice else { return nil }
+        return edge
+    }
+
+    /// Одна строка карточки (свой баннер в машине): с краем — команда без
+    /// улицы и край, «поверните налево, левый ряд»: в одну строку улица
+    /// уступает краю.
+    var compactInstruction: String {
+        guard laneEdge != nil else { return text }
+        return LaneAdvice.instruction(shortText ?? text, advice: laneAdvice)
+    }
 }

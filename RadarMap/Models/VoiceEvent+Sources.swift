@@ -151,11 +151,19 @@ extension VoiceEvent.Action {
 
 extension RouteStep {
     /// Событие голоса для ступени объявления: `meters` nil — сама команда.
-    /// Ряд называется только заранее, как и в тексте (`withLanes`).
-    func voiceEvent(meters: Int?) -> VoiceEvent? {
+    /// Ряд — тот, что назвал текст (`withAdvice`): только заранее и только в
+    /// той фразе, где его решили сказать (один раз на манёвр).
+    func voiceEvent(meters: Int?, advice: LaneAdvice.Advice? = nil) -> VoiceEvent? {
         guard let voiceAction else { return nil }
-        return .maneuver(.init(action: voiceAction, meters: meters,
-                               lanes: meters == nil ? nil : LaneAdvice.run(lanes)))
+        let said = meters == nil ? nil : advice
+        var run: VoiceEvent.LaneRun?
+        var edge: VoiceEvent.LaneEdge?
+        switch said {
+        case .lanes(let value)?: run = value
+        case .edge(let value)?:  edge = value
+        case nil:                break
+        }
+        return .maneuver(.init(action: voiceAction, meters: meters, lanes: run, edge: edge))
     }
 }
 

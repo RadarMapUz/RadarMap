@@ -145,6 +145,42 @@ final class VoiceComposerTests: XCTestCase {
         XCTAssertEqual(uz(.phrase(.sample)), "Kamera, uch yuz metr")
     }
 
+    /// Край без полос (20.2): своя запись у «перестройтесь», а «держитесь
+    /// левее» — та же запись, что у команды развилки.
+    func testLaneEdgePhrasesInBothLanguages() {
+        typealias M = VoiceEvent.ManeuverCall
+        XCTAssertEqual(uz(.maneuver(M(action: .turnLeft, meters: 350, lanes: nil, edge: .left))),
+                       "Uch yuz ellik metrdan soʻng, chapga buriling. Chap qatorga oʻting")
+        XCTAssertEqual(uz(.maneuver(M(action: .uturn, meters: 300, lanes: nil, edge: .farLeft))),
+                       "Uch yuz metrdan soʻng, orqaga buriling. Eng chap qatorga oʻting")
+        XCTAssertEqual(uz(.maneuver(M(action: .offRamp, meters: 800, lanes: nil, edge: .keepRight))),
+                       "Sakkiz yuz metrdan soʻng, chiqish yoʻliga buriling. Oʻng tomonda yuring")
+        XCTAssertEqual(ru(.maneuver(M(action: .turnRight, meters: 300, lanes: nil, edge: .right))),
+                       "Через триста метров, поверните направо. Перестройтесь в правый ряд")
+        XCTAssertEqual(VoiceComposer.edge(.keepLeft), "man.keep_left", "второй отрывок диктору не нужен")
+        XCTAssertEqual(ru(.maneuver(M(action: .turnLeft, meters: 300, lanes: .leftTwo, edge: .left))),
+                       "Через триста метров, поверните налево. Из двух левых рядов",
+                       "полосы OSRM точнее края — край не добавляется")
+    }
+
+    /// Текст записи края — тот же, что узбекский перевод фразы на экране и у
+    /// синтезатора (каталог строк): диктор читает ровно то, что написано.
+    func testLaneEdgeRecordingMatchesTheCatalog() throws {
+        let path = try XCTUnwrap(Bundle(for: Self.self).path(forResource: "uz", ofType: "lproj")
+                                 ?? Bundle.main.path(forResource: "uz", ofType: "lproj"))
+        let bundle = try XCTUnwrap(Bundle(path: path))
+        let spoken: [VoiceEvent.LaneEdge: String] = [
+            .left: "Перестройтесь в левый ряд", .farLeft: "Перестройтесь в крайний левый ряд",
+            .right: "Перестройтесь в правый ряд", .keepLeft: "Держитесь левее", .keepRight: "Держитесь правее"]
+        for edge in VoiceEvent.LaneEdge.allCases {
+            let key = try XCTUnwrap(spoken[edge])
+            let translated = bundle.localizedString(forKey: key, value: nil, table: "Localizable")
+            XCTAssertNotEqual(translated, key, "нет узбекского у «\(key)»")
+            XCTAssertEqual(VoiceScript.text(of: [.stop, VoiceComposer.edge(edge)], language: .uz)?
+                .trimmingCharacters(in: CharacterSet(charactersIn: ". ")), translated, key)
+        }
+    }
+
     /// Русский — тот же механизм со своей грамматикой: предлог внутри
     /// записи, «около» с родительным, женский род минут.
     func testRussianUsesItsOwnGrammar() {

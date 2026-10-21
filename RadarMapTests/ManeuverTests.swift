@@ -168,6 +168,30 @@ final class ManeuverTests: XCTestCase {
         XCTAssertEqual(RouteService.voiceStage(distance: 200, spoken: 3, earlyCall: false), 1)
     }
 
+    /// Ступени, сдвинутые советом о ряде: ближняя — к окну, дальняя у
+    /// съезда — на краю окна; без совета — как было.
+    func testVoiceStageFollowsTheLaneCalls() {
+        let town = LaneAdvice.Calls(far: 850, near: 333, adviceOnFar: false)
+        XCTAssertEqual(RouteService.voiceStage(distance: 330, spoken: 2, calls: town), 1)
+        XCTAssertNil(RouteService.voiceStage(distance: 340, spoken: 2, calls: town))
+        let exit = LaneAdvice.Calls(far: 833, near: 280, adviceOnFar: true)
+        XCTAssertEqual(RouteService.voiceStage(distance: 820, spoken: 3, calls: exit), 2)
+        XCTAssertEqual(RouteService.voiceStage(distance: 270, spoken: 2, calls: exit), 1)
+        XCTAssertEqual(RouteService.voiceStage(distance: 820, spoken: 3, calls: .standard(earlyCall: false)), nil)
+    }
+
+    // MARK: - Край для совета о ряде (20.2)
+
+    /// Разбор кладёт в шаг край по типу OSRM; полосы подъезда — позже, из сети.
+    func testParsedStepCarriesItsEdge() {
+        XCTAssertEqual(step("turn", "left", name: "Labzak ko'chasi")?.edge, .left)
+        XCTAssertEqual(step("continue", "uturn")?.edge, .farLeft)
+        XCTAssertEqual(step("turn", "right")?.edge, .right)
+        XCTAssertNil(step("fork", "slight left")?.edge)
+        XCTAssertNil(step("turn", "left")?.approachLanes, "полос подъезда разбор не знает")
+        XCTAssertNil(step("turn", "left")?.laneAdvice, "без полос подъезда края не говорим")
+    }
+
     // MARK: - Короткая фраза для машины (11.10)
 
     /// Узкая карточка машины берёт первый влезающий вариант: без короткой

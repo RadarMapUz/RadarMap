@@ -102,6 +102,18 @@ nonisolated enum VoiceComposer {
         }
     }
 
+    /// Край без данных о полосах. «Держитесь левее» — та же запись, что у
+    /// команды развилки: слова одни, второй отрывок диктору не нужен.
+    static func edge(_ edge: VoiceEvent.LaneEdge) -> SegmentID {
+        switch edge {
+        case .left:      return "lane.edge_left"
+        case .farLeft:   return "lane.edge_far_left"
+        case .right:     return "lane.edge_right"
+        case .keepLeft:  return "man.keep_left"
+        case .keepRight: return "man.keep_right"
+        }
+    }
+
     static func peak(_ peak: VoiceEvent.Peak) -> SegmentID {
         SegmentID("peak.\(peak.rawValue)")
     }
@@ -187,7 +199,8 @@ nonisolated enum VoiceComposer {
         return out
     }
 
-    /// Манёвр: «через 300 метров, поверните направо. Из левого ряда».
+    /// Манёвр: «через 300 метров, поверните направо. Из левого ряда» или
+    /// «…поверните налево. Перестройтесь в левый ряд».
     static func maneuver(_ call: VoiceEvent.ManeuverCall) -> [SegmentID]? {
         guard let command = action(call.action) else { return nil }
         var out: [SegmentID] = []
@@ -196,7 +209,11 @@ nonisolated enum VoiceComposer {
             out += [d, .comma]
         }
         out += command
-        if let run = call.lanes { out += [.stop, lane(run)] }
+        if let run = call.lanes {
+            out += [.stop, lane(run)]
+        } else if let side = call.edge {
+            out += [.stop, edge(side)]
+        }
         return out
     }
 }

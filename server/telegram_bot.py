@@ -163,7 +163,8 @@ DEFAULT_CONFIG = "/opt/radarmap/telegram_bot.conf"
 DEFAULT_DB = "/opt/radarmap/api/bot.db"
 #: Опубликованные файлы заведений — каталог `roads/` webroot (publish_roads.sh).
 DEFAULT_VENUES_DIR = "/opt/radarmap/www/roads"
-#: Webroot: cameras.json (deploy_db.sh), weather/roads.json, config.json (пульт).
+#: Webroot: cameras.json (deploy_db.sh) и решения модератора overrides.json
+#: (publish_overrides.sh), weather/roads.json, config.json (пульт).
 DEFAULT_WEBROOT = "/opt/radarmap/www"
 #: База отметок — только чтение, для подписок на город (выборка канала).
 DEFAULT_REPORTS_DB = "/opt/radarmap/api/reports.db"
@@ -1303,7 +1304,9 @@ def build_sources(config):
     venues = CngVenues(venues_dir)
     sources = bot_near.Sources(
         api_get=api_get,
-        cameras=bot_near.CameraDb(config.get("cameras_path") or os.path.join(webroot, "cameras.json")),
+        cameras=bot_near.CameraDb(config.get("cameras_path") or os.path.join(webroot, "cameras.json"),
+                                  overrides_path=config.get("overrides_path")
+                                  or os.path.join(webroot, "overrides.json")),
         venues=venues,
         addresses=bot_near.Addresses(venues_dir),
         weather_path=config.get("weather_path") or os.path.join(webroot, "weather", "roads.json"))

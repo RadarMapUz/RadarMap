@@ -301,22 +301,6 @@
         }
       }
     },
-    "%@ · по нынешней цене": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · по нынешней цене"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ · hozirgi narxda"
-          }
-        }
-      }
-    },
     "%@ · поездок: %lld": {
       "localizations": {
         "ru": {
@@ -346,22 +330,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ hali ham joyidami?"
-          }
-        }
-      }
-    },
-    "%@ за 10 км": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ за 10 км"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "10 km uchun %@"
           }
         }
       }
@@ -1611,38 +1579,6 @@
         }
       }
     },
-    "10 километров обходятся в %@": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "10 километров обходятся в %@"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "10 kilometr narxi %@"
-          }
-        }
-      }
-    },
-    "10 км обходятся в": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "10 км обходятся в"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "10 km narxi"
-          }
-        }
-      }
-    },
     "100 км": {
       "localizations": {
         "ru": {
@@ -2615,22 +2551,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "«Natijalar»da davr uchun — %@: baʼzi safarlar saqlanganlardan eski, ularning qatorlari bu yerda yoʻq"
-          }
-        }
-      }
-    },
-    "В «Куда» в CarPlay — «АЗС», «Зарядка» или обе: в машине на них одна плитка. Расход и цены — для стоимости поездок.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "В «Куда» в CarPlay — «АЗС», «Зарядка» или обе: в машине на них одна плитка. Расход и цены — для стоимости поездок."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "CarPlayʼdagi «Qayerga»da — «AYOQSH», «Quvvatlash» yoki ikkalasi: mashinada ular uchun bitta tugma. Sarf va narxlar — safarlar narxi uchun."
           }
         }
       }
@@ -5148,38 +5068,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hujjatlar va tekshiruvlar"
-          }
-        }
-      }
-    },
-    "Доля пробега на втором топливе": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Доля пробега на втором топливе"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ikkinchi yoqilgʻidagi yurish ulushi"
-          }
-        }
-      }
-    },
-    "Доля пробега на втором топливе: %lld%%": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Доля пробега на втором топливе: %lld%%"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ikkinchi yoqilgʻidagi yurish ulushi: %lld%%"
           }
         }
       }
@@ -14137,22 +14025,6 @@
         }
       }
     },
-    "Расход и цены": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Расход и цены"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sarf va narxlar"
-          }
-        }
-      }
-    },
     "Расход и цены топлива": {
       "localizations": {
         "ru": {
@@ -14165,70 +14037,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yoqilgʻi sarfi va narxlari"
-          }
-        }
-      }
-    },
-    "Расход, %@ на 100 км": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Расход, %@ на 100 км"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sarf, 100 km ga %@"
-          }
-        }
-      }
-    },
-    "Расход, киловатт-часов на 100 километров": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Расход, киловатт-часов на 100 километров"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sarf, 100 kilometrga kilovatt-soat"
-          }
-        }
-      }
-    },
-    "Расход, кубометров на 100 километров": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Расход, кубометров на 100 километров"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sarf, 100 kilometrga kub metr"
-          }
-        }
-      }
-    },
-    "Расход, литров на 100 километров": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Расход, литров на 100 километров"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sarf, 100 kilometrga litr"
           }
         }
       }
@@ -15141,22 +14949,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Odatda qancha yurish va qachon chiqish — safarlaringiz boʻyicha"
-          }
-        }
-      }
-    },
-    "Сколько примерно проезжаете не на основном топливе. Ноль — второе не учитывается.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Сколько примерно проезжаете не на основном топливе. Ноль — второе не учитывается."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Asosiy boʻlmagan yoqilgʻida taxminan qancha yurasiz. Nol — ikkinchisi hisobga olinmaydi."
           }
         }
       }
@@ -16381,70 +16173,6 @@
         }
       }
     },
-    "Топливо ~%@": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Топливо ~%@"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yoqilgʻi ~%@"
-          }
-        }
-      }
-    },
-    "Топливо в месяц ~%@": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Топливо в месяц ~%@"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Oyiga yoqilgʻi ~%@"
-          }
-        }
-      }
-    },
-    "Топливо в месяц около %@": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Топливо в месяц около %@"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Oyiga yoqilgʻi taxminan %@"
-          }
-        }
-      }
-    },
-    "Топливо около %@": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Топливо около %@"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yoqilgʻi taxminan %@"
-          }
-        }
-      }
-    },
     "Тормозная жидкость": {
       "localizations": {
         "ru": {
@@ -16983,22 +16711,6 @@
         }
       }
     },
-    "Укажите расход и цену — и в поездках, «Итогах» и «Дороге на работу» появится стоимость.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Укажите расход и цену — и в поездках, «Итогах» и «Дороге на работу» появится стоимость."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sarf va narxni kiriting — safarlarda, «Natijalar»da va «Ishga yoʻl»da narx paydo boʻladi."
-          }
-        }
-      }
-    },
     "Укажите расход и цену — стоимость появится в поездках и «Итогах». Там же — проверка штрафов по госномеру.": {
       "localizations": {
         "ru": {
@@ -17254,86 +16966,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Oxirgi %lld ta safar saqlanadi. Oylik natijalar kunlik hisobotlar boʻyicha hisoblanadi — ular oʻchirilmaydi."
-          }
-        }
-      }
-    },
-    "Цен по умолчанию нет: они меняются, своя цена честнее. Считается только на телефоне.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Цен по умолчанию нет: они меняются, своя цена честнее. Считается только на телефоне."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Standart narxlar yoʻq: ular oʻzgaradi, oʻz narxingiz aniqroq. Faqat telefonda hisoblanadi."
-          }
-        }
-      }
-    },
-    "Цена за %@, сум": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Цена за %@, сум"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ narxi, soʻm"
-          }
-        }
-      }
-    },
-    "Цена за киловатт-час, в сумах": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Цена за киловатт-час, в сумах"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bir kilovatt-soat narxi, soʻmda"
-          }
-        }
-      }
-    },
-    "Цена за кубометр, в сумах": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Цена за кубометр, в сумах"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bir kub metr narxi, soʻmda"
-          }
-        }
-      }
-    },
-    "Цена за литр, в сумах": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Цена за литр, в сумах"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bir litr narxi, soʻmda"
           }
         }
       }
@@ -19713,22 +19345,6 @@
         }
       }
     },
-    "не заданы": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "не заданы"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "kiritilmagan"
-          }
-        }
-      }
-    },
     "не оплачено: %lld": {
       "localizations": {
         "ru": {
@@ -21457,70 +21073,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "bosing — kun batafsil"
-          }
-        }
-      }
-    },
-    "топливо": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "топливо"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "yoqilgʻi"
-          }
-        }
-      }
-    },
-    "топливо ~%@": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "топливо ~%@"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "yoqilgʻi ~%@"
-          }
-        }
-      }
-    },
-    "топливо около %@": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "топливо около %@"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "yoqilgʻi taxminan %@"
-          }
-        }
-      }
-    },
-    "топливо, по нынешней цене": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "топливо, по нынешней цене"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "yoqilgʻi, hozirgi narxda"
           }
         }
       }
@@ -26137,6 +25689,2774 @@
           "stringUnit": {
             "state": "translated",
             "value": " yoki "
+          }
+        }
+      }
+    },
+    "%1$@ × %2$@ ÷ %3$@ — из ёмкости и реального запаса": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ × %2$@ ÷ %3$@ — из ёмкости и реального запаса"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ × %2$@ ÷ %3$@ — sigʻim va haqiqiy zaxiradan"
+          }
+        }
+      }
+    },
+    "%1$@ за %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ за %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$@ uchun %1$@"
+          }
+        }
+      }
+    },
+    "%1$@ по %2$@ × %3$@ — поправьте, если знаете свой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ по %2$@ × %3$@ — поправьте, если знаете свой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$@ boʻyicha %1$@ × %3$@ — oʻzingiznikini bilsangiz, tuzating"
+          }
+        }
+      }
+    },
+    "%1$@ пути — %2$@, %3$@ — %4$@.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ пути — %2$@, %3$@ — %4$@."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻlning %1$@ qismi — %2$@, %3$@ qismi — %4$@."
+          }
+        }
+      }
+    },
+    "%@ · оценка": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · оценка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · taxminiy"
+          }
+        }
+      }
+    },
+    "%@ на 100 км": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ на 100 км"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "100 km ga %@"
+          }
+        }
+      }
+    },
+    "%@ на два дня": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ на два дня"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ikki kunga %@"
+          }
+        }
+      }
+    },
+    "%@ на неделю": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ на неделю"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "bir haftaga %@"
+          }
+        }
+      }
+    },
+    "%@ на электричестве": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ на электричестве"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ elektrda"
+          }
+        }
+      }
+    },
+    "%@/100 км": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@/100 км"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@/100 km"
+          }
+        }
+      }
+    },
+    "%1$@ × %2$@ × %3$@ ≈ %4$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ × %2$@ × %3$@ ≈ %4$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ × %2$@ × %3$@ ≈ %4$@"
+          }
+        }
+      }
+    },
+    "%1$@ × %2$@ ≈ %3$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ × %2$@ ≈ %3$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ × %2$@ ≈ %3$@"
+          }
+        }
+      }
+    },
+    "Ёмкость батареи": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ёмкость батареи"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Batareya sigʻimi"
+          }
+        }
+      }
+    },
+    "Бензин или дизель": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Бензин или дизель"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benzin yoki dizel"
+          }
+        }
+      }
+    },
+    "Бензин — в гибридном режиме, когда батарея села. Электричество посчитаем из запаса.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Бензин — в гибридном режиме, когда батарея села. Электричество посчитаем из запаса."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benzin — batareya tugaganda, gibrid rejimda. Elektrni zaxiradan oʻzimiz hisoblaymiz."
+          }
+        }
+      }
+    },
+    "Бензин, когда батарея села": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Бензин, когда батарея села"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Batareya tugaganda benzin"
+          }
+        }
+      }
+    },
+    "Бензин, когда газа нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Бензин, когда газа нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gaz boʻlmaganda benzin"
+          }
+        }
+      }
+    },
+    "Бензин: %1$@ → %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Бензин: %1$@ → %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benzin: %1$@ → %2$@"
+          }
+        }
+      }
+    },
+    "В городе реально": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В городе реально"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shaharda haqiqatda"
+          }
+        }
+      }
+    },
+    "Ваш гибрид заряжается от розетки?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ваш гибрид заряжается от розетки?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gibridingiz rozetkadan quvvatlanadimi?"
+          }
+        }
+      }
+    },
+    "Ваш обычный день: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ваш обычный день: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oddiy kuningiz: %@"
+          }
+        }
+      }
+    },
+    "Ваша поездка за последние 30 дней": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ваша поездка за последние 30 дней"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Soʻnggi 30 kundagi safaringiz"
+          }
+        }
+      }
+    },
+    "Где вы заряжаете?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Где вы заряжаете?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qayerda quvvatlaysiz?"
+          }
+        }
+      }
+    },
+    "Где заряжаете": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Где заряжаете"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qayerda quvvatlaysiz"
+          }
+        }
+      }
+    },
+    "Гибрид без розетки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Гибрид без розетки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rozetkasiz gibrid"
+          }
+        }
+      }
+    },
+    "Гибрид с розеткой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Гибрид с розеткой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rozetkali gibrid"
+          }
+        }
+      }
+    },
+    "Да, от розетки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Да, от розетки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ha, rozetkadan"
+          }
+        }
+      }
+    },
+    "Длиннее реального запаса — нужна зарядка в пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Длиннее реального запаса — нужна зарядка в пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haqiqiy zaxiradan uzun — yoʻlda quvvatlash kerak"
+          }
+        }
+      }
+    },
+    "Длиннее реального запаса — нужна зарядка в пути.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Длиннее реального запаса — нужна зарядка в пути."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haqiqiy zaxiradan uzun — yoʻlda quvvatlash kerak."
+          }
+        }
+      }
+    },
+    "Добавьте цены — появится сумма.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавьте цены — появится сумма."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Narxlarni kiriting — summa paydo boʻladi."
+          }
+        }
+      }
+    },
+    "Дома свет в разы дешевле, чем на станции.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дома свет в разы дешевле, чем на станции."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyda elektr stansiyadagidan bir necha baravar arzon."
+          }
+        }
+      }
+    },
+    "Дома, от розетки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дома, от розетки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyda, rozetkadan"
+          }
+        }
+      }
+    },
+    "Доля дома": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доля дома"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyda ulushi"
+          }
+        }
+      }
+    },
+    "Есть в документах. Необязательно — без неё расход будет оценкой.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Есть в документах. Необязательно — без неё расход будет оценкой."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hujjatlarda bor. Majburiy emas — usiz sarf taxminiy boʻladi."
+          }
+        }
+      }
+    },
+    "За этот период поездок нет — сверять не с чем.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "За этот период поездок нет — сверять не с чем."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu davrda safar yoʻq — solishtiradigan narsa yoʻq."
+          }
+        }
+      }
+    },
+    "Запас из паспорта, а реальный в городе посчитаем сами — и его можно поправить.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запас из паспорта, а реальный в городе посчитаем сами — и его можно поправить."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zaxira — pasportdan, shahardagi haqiqiysini oʻzimiz hisoblaymiz — uni tuzatish mumkin."
+          }
+        }
+      }
+    },
+    "Запас на электричестве": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запас на электричестве"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elektrda yurish zaxirasi"
+          }
+        }
+      }
+    },
+    "Запас на электричестве по паспорту": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запас на электричестве по паспорту"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pasport boʻyicha elektrda yurish zaxirasi"
+          }
+        }
+      }
+    },
+    "Заряд снова полный: %@.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заряд снова полный: %@."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zaryad yana toʻla: %@."
+          }
+        }
+      }
+    },
+    "Заряд тратится первым, потом — бензин. Поэтому важно, как часто батарея снова полная.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заряд тратится первым, потом — бензин. Поэтому важно, как часто батарея снова полная."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avval zaryad sarflanadi, keyin — benzin. Shuning uchun batareya qanchalik tez-tez toʻlishi muhim."
+          }
+        }
+      }
+    },
+    "Зарядная станция": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зарядная станция"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quvvatlash stansiyasi"
+          }
+        }
+      }
+    },
+    "Зимой запас меньше на 20–30 % — учтите, если считаете по зиме.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зимой запас меньше на 20–30 % — учтите, если считаете по зиме."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qishda zaxira 20–30 % kam — qish boʻyicha hisoblasangiz, buni hisobga oling."
+          }
+        }
+      }
+    },
+    "И там и там": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "И там и там"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ikkalasida ham"
+          }
+        }
+      }
+    },
+    "Из квитанции за свет. Цена — только на этом телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Из квитанции за свет. Цена — только на этом телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elektr kvitansiyasidan. Narx faqat shu telefonda qoladi."
+          }
+        }
+      }
+    },
+    "Изменить тип машины": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменить тип машины"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina turini oʻzgartirish"
+          }
+        }
+      }
+    },
+    "Каждое утро снова %@ на электричестве": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Каждое утро снова %@ на электричестве"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Har tong yana elektrda %@"
+          }
+        }
+      }
+    },
+    "Каждую ночь": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Каждую ночь"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Har kecha"
+          }
+        }
+      }
+    },
+    "Каждый день поездки сначала тратят заряд — его хватает на %@; дальше — бензин.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Каждый день поездки сначала тратят заряд — его хватает на %@; дальше — бензин."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Har kuni safarlar avval zaryadni sarflaydi — u %@ ga yetadi; keyin — benzin."
+          }
+        }
+      }
+    },
+    "Как в паспорте": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Как в паспорте"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pasportdagidek"
+          }
+        }
+      }
+    },
+    "Как вы заряжаете?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Как вы заряжаете?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qanday quvvatlaysiz?"
+          }
+        }
+      }
+    },
+    "Как заряжаете": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Как заряжаете"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qanday quvvatlaysiz"
+          }
+        }
+      }
+    },
+    "Как посчитано": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Как посчитано"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qanday hisoblangan"
+          }
+        }
+      }
+    },
+    "Как часто батарея снова полная": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Как часто батарея снова полная"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Batareya qanchalik tez-tez yana toʻladi"
+          }
+        }
+      }
+    },
+    "Какая у вас машина?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Какая у вас машина?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashinangiz qanday?"
+          }
+        }
+      }
+    },
+    "Машина и расходы": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Машина и расходы"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina va xarajatlar"
+          }
+        }
+      }
+    },
+    "Медиана ваших дней за два месяца": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Медиана ваших дней за два месяца"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ikki oydagi kunlaringiz medianasi"
+          }
+        }
+      }
+    },
+    "Метан, иногда бензин": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Метан, иногда бензин"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metan, baʼzan benzin"
+          }
+        }
+      }
+    },
+    "Мы посчитали за %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Мы посчитали за %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ uchun hisobimiz"
+          }
+        }
+      }
+    },
+    "На станциях": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На станциях"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stansiyalarda"
+          }
+        }
+      }
+    },
+    "На электричестве": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На электричестве"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elektrda"
+          }
+        }
+      }
+    },
+    "Назад": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Назад"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orqaga"
+          }
+        }
+      }
+    },
+    "Необычно для такой машины — проверьте цифру.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Необычно для такой машины — проверьте цифру."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bunday mashina uchun gʻayrioddiy — raqamni tekshiring."
+          }
+        }
+      }
+    },
+    "Обе цены, доля — ниже": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обе цены, доля — ниже"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ikkala narx, ulush — pastda"
+          }
+        }
+      }
+    },
+    "Обновлены %@. Через два месяца приложение напомнит проверить.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновлены %@. Через два месяца приложение напомнит проверить."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ yangilangan. Ikki oydan keyin ilova tekshirishni eslatadi."
+          }
+        }
+      }
+    },
+    "Обычно %1$@–%2$@ %3$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обычно %1$@–%2$@ %3$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odatda %1$@–%2$@ %3$@"
+          }
+        }
+      }
+    },
+    "Обычно 5–10 % — когда АГНКС нет рядом или там очередь.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обычно 5–10 % — когда АГНКС нет рядом или там очередь."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odatda 5–10 % — yaqinda metan shoxobchasi boʻlmaganda yoki u yerda navbat boʻlganda."
+          }
+        }
+      }
+    },
+    "Обычный день, например: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обычный день, например: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oddiy kun, masalan: %@"
+          }
+        }
+      }
+    },
+    "От этого зависит, как считать расходы и какие заправки показывать в CarPlay.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "От этого зависит, как считать расходы и какие заправки показывать в CarPlay."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarajatlar qanday hisoblanishi va CarPlayʼda qaysi shoxobchalar koʻrsatilishi shunga bogʻliq."
+          }
+        }
+      }
+    },
+    "Открыть «Машина и расходы»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть «Машина и расходы»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Mashina va xarajatlar»ni ochish"
+          }
+        }
+      }
+    },
+    "Оценка — укажите ёмкость батареи или цифру с панели": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оценка — укажите ёмкость батареи или цифру с панели"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taxminiy — batareya sigʻimini yoki paneldagi raqamni kiriting"
+          }
+        }
+      }
+    },
+    "Период": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Период"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Davr"
+          }
+        }
+      }
+    },
+    "По домашнему тарифу — дешевле всего": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По домашнему тарифу — дешевле всего"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uy tarifi boʻyicha — eng arzoni"
+          }
+        }
+      }
+    },
+    "По трассе %1$@ — заряд там тратится в %2$@ раза быстрее.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По трассе %1$@ — заряд там тратится в %2$@ раза быстрее."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trassada %1$@ — u yerda zaryad %2$@ baravar tez sarflanadi."
+          }
+        }
+      }
+    },
+    "По трассе заряд тратится в %@ раза быстрее": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По трассе заряд тратится в %@ раза быстрее"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trassada zaryad %@ baravar tez sarflanadi"
+          }
+        }
+      }
+    },
+    "По цене зарядной станции": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По цене зарядной станции"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quvvatlash stansiyasi narxida"
+          }
+        }
+      }
+    },
+    "Поездка %@ по трассе, например": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездка %@ по трассе, например"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trassa boʻylab %@ safar, masalan"
+          }
+        }
+      }
+    },
+    "Поездка длиннее %@ — с пометкой «нужна зарядка в пути».": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездка длиннее %@ — с пометкой «нужна зарядка в пути»."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ dan uzun safar — «yoʻlda quvvatlash kerak» belgisi bilan."
+          }
+        }
+      }
+    },
+    "Поправить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поправить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tuzatish"
+          }
+        }
+      }
+    },
+    "Поправлено": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поправлено"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tuzatildi"
+          }
+        }
+      }
+    },
+    "Потери при зарядке не учитываются — счёт за свет будет чуть больше.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Потери при зарядке не учитываются — счёт за свет будет чуть больше."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quvvatlashdagi yoʻqotishlar hisobga olinmaydi — elektr uchun hisob biroz koʻproq boʻladi."
+          }
+        }
+      }
+    },
+    "Похоже на опечатку — проверьте цифру.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Похоже на опечатку — проверьте цифру."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xatoga oʻxshaydi — raqamni tekshiring."
+          }
+        }
+      }
+    },
+    "Почти всё на бензине — доля ниже": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Почти всё на бензине — доля ниже"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deyarli hammasi benzinda — ulush pastda"
+          }
+        }
+      }
+    },
+    "Почти никогда": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Почти никогда"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deyarli hech qachon"
+          }
+        }
+      }
+    },
+    "Пример": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пример"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Misol"
+          }
+        }
+      }
+    },
+    "Пример — своих поездок пока мало": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пример — своих поездок пока мало"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Misol — oʻz safarlaringiz hozircha kam"
+          }
+        }
+      }
+    },
+    "Пробег, расход и цены никуда не уходят — считается только на телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пробег, расход и цены никуда не уходят — считается только на телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yurgan masofa, sarf va narxlar hech qayerga ketmaydi — faqat telefonda hisoblanadi."
+          }
+        }
+      }
+    },
+    "Проверьте: это на 100 км?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверьте: это на 100 км?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tekshiring: bu 100 km gami?"
+          }
+        }
+      }
+    },
+    "Проверьте: это цена за одну единицу, в сумах?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверьте: это цена за одну единицу, в сумах?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tekshiring: bu bir birlik narxi, soʻmdami?"
+          }
+        }
+      }
+    },
+    "Пройти настройку по шагам": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пройти настройку по шагам"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sozlashni bosqichma-bosqich oʻtish"
+          }
+        }
+      }
+    },
+    "Пропан, иногда бензин": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пропан, иногда бензин"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Propan, baʼzan benzin"
+          }
+        }
+      }
+    },
+    "Пропустить и закончить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пропустить и закончить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻtkazib yuborish va tugatish"
+          }
+        }
+      }
+    },
+    "Пути на бензине": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пути на бензине"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻlning benzindagi qismi"
+          }
+        }
+      }
+    },
+    "Пути на электричестве": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пути на электричестве"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻlning elektrdagi qismi"
+          }
+        }
+      }
+    },
+    "Раз в неделю": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Раз в неделю"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haftada bir marta"
+          }
+        }
+      }
+    },
+    "Расход бензина": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расход бензина"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benzin sarfi"
+          }
+        }
+      }
+    },
+    "Расход в кВт·ч посчитаем из ёмкости батареи — или введите цифру с панели.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расход в кВт·ч посчитаем из ёмкости батареи — или введите цифру с панели."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kVt·soatdagi sarfni batareya sigʻimidan hisoblaymiz — yoki paneldagi raqamni kiriting."
+          }
+        }
+      }
+    },
+    "Расход метана": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расход метана"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metan sarfi"
+          }
+        }
+      }
+    },
+    "Расход пропана": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расход пропана"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Propan sarfi"
+          }
+        }
+      }
+    },
+    "Расход с панели машины": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расход с панели машины"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina panelidagi sarf"
+          }
+        }
+      }
+    },
+    "Расход электричества": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расход электричества"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elektr sarfi"
+          }
+        }
+      }
+    },
+    "Расход электричества — оценка: укажите ёмкость батареи или цифру с панели.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расход электричества — оценка: укажите ёмкость батареи или цифру с панели."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elektr sarfi taxminiy: batareya sigʻimini yoki paneldagi raqamni kiriting."
+          }
+        }
+      }
+    },
+    "Расход электричества: %1$@ × %2$@ ÷ %3$@ ≈ %4$@.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расход электричества: %1$@ × %2$@ ÷ %3$@ ≈ %4$@."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elektr sarfi: %1$@ × %2$@ ÷ %3$@ ≈ %4$@."
+          }
+        }
+      }
+    },
+    "Расход электричества: %@ — оценка, без ёмкости батареи и цифры с панели.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расход электричества: %@ — оценка, без ёмкости батареи и цифры с панели."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elektr sarfi: %@ — taxminiy, batareya sigʻimi va paneldagi raqamsiz."
+          }
+        }
+      }
+    },
+    "Расход электричества: %@ — с панели машины.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расход электричества: %@ — с панели машины."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elektr sarfi: %@ — mashina panelidan."
+          }
+        }
+      }
+    },
+    "Расходы в месяц около %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расходы в месяц около %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oyiga xarajatlar taxminan %@"
+          }
+        }
+      }
+    },
+    "Расходы в месяц ≈ %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расходы в месяц ≈ %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oyiga xarajatlar ≈ %@"
+          }
+        }
+      }
+    },
+    "Расходы ≈ %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расходы ≈ %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarajatlar ≈ %@"
+          }
+        }
+      }
+    },
+    "Реальный запас в городе": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Реальный запас в городе"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shahardagi haqiqiy zaxira"
+          }
+        }
+      }
+    },
+    "Реальный запас — %@: вы указали сами.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Реальный запас — %@: вы указали сами."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haqiqiy zaxira — %@: oʻzingiz kiritgansiz."
+          }
+        }
+      }
+    },
+    "Реальный запас: %1$@ по %2$@ × %3$@ ≈ %4$@ в городе.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Реальный запас: %1$@ по %2$@ × %3$@ ≈ %4$@ в городе."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haqiqiy zaxira: %2$@ boʻyicha %1$@ × %3$@ ≈ shaharda %4$@."
+          }
+        }
+      }
+    },
+    "Реальный запас: %1$@ → %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Реальный запас: %1$@ → %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haqiqiy zaxira: %1$@ → %2$@"
+          }
+        }
+      }
+    },
+    "С панели машины": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "С панели машины"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina panelidan"
+          }
+        }
+      }
+    },
+    "С розеткой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "С розеткой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rozetkali"
+          }
+        }
+      }
+    },
+    "С розеткой — сначала едет на электричестве, без розетки — только на бензине. От этого зависят расходы и плитка «Зарядка» в CarPlay.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "С розеткой — сначала едет на электричестве, без розетки — только на бензине. От этого зависят расходы и плитка «Зарядка» в CarPlay."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rozetkali gibrid avval elektrda yuradi, rozetkasizi — faqat benzinda. Xarajatlar va CarPlayʼdagi «Quvvatlash» tugmasi shunga bogʻliq."
+          }
+        }
+      }
+    },
+    "Самая длинная за месяц: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Самая длинная за месяц: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oydagi eng uzun safar: %@"
+          }
+        }
+      }
+    },
+    "Сверить с машиной": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сверить с машиной"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina bilan solishtirish"
+          }
+        }
+      }
+    },
+    "Свет дома": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Свет дома"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uydagi elektr"
+          }
+        }
+      }
+    },
+    "Свой реальный запас в городе": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Свой реальный запас в городе"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shahardagi oʻz haqiqiy zaxirangiz"
+          }
+        }
+      }
+    },
+    "Своя цена честнее средней. Можно пропустить — километры видны и без цен.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Своя цена честнее средней. Можно пропустить — километры видны и без цен."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻz narxingiz oʻrtachadan toʻgʻriroq. Oʻtkazib yuborish mumkin — kilometrlar narxsiz ham koʻrinadi."
+          }
+        }
+      }
+    },
+    "Сколько проезжает на электричестве?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сколько проезжает на электричестве?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elektrda qancha yuradi?"
+          }
+        }
+      }
+    },
+    "Сколько тратит машина": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сколько тратит машина"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina qancha sarflaydi"
+          }
+        }
+      }
+    },
+    "Средние из бортового компьютера за тот же период. Заполните, что знаете, — остальное можно оставить пустым.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Средние из бортового компьютера за тот же период. Заполните, что знаете, — остальное можно оставить пустым."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shu davr uchun bort kompyuteridagi oʻrtacha qiymatlar. Bilganingizni kiriting — qolganini boʻsh qoldirish mumkin."
+          }
+        }
+      }
+    },
+    "Средний расход из бортового компьютера — если знаете, он точнее всего.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Средний расход из бортового компьютера — если знаете, он точнее всего."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bort kompyuteridagi oʻrtacha sarf — bilsangiz, u eng aniq."
+          }
+        }
+      }
+    },
+    "Средний расход — из бортового компьютера или по опыту.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Средний расход — из бортового компьютера или по опыту."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻrtacha sarf — bort kompyuteridan yoki tajribadan."
+          }
+        }
+      }
+    },
+    "Старые поездки считаются по нынешней цене — прошлых цен приложение не знает.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Старые поездки считаются по нынешней цене — прошлых цен приложение не знает."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eski safarlar hozirgi narxda hisoblanadi — ilova oldingi narxlarni bilmaydi."
+          }
+        }
+      }
+    },
+    "Сходится — расчёт близок к машине.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сходится — расчёт близок к машине."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mos keladi — hisob mashinanikiga yaqin."
+          }
+        }
+      }
+    },
+    "Тип машины": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тип машины"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina turi"
+          }
+        }
+      }
+    },
+    "Тип машины, расход и цены — теперь в разделе «Машина и расходы» в начале настроек.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тип машины, расход и цены — теперь в разделе «Машина и расходы» в начале настроек."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina turi, sarf va narxlar endi sozlamalar boshidagi «Mashina va xarajatlar» boʻlimida."
+          }
+        }
+      }
+    },
+    "Только бензин — Prius, Camry Hybrid": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только бензин — Prius, Camry Hybrid"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faqat benzin — Prius, Camry Hybrid"
+          }
+        }
+      }
+    },
+    "Только электричество": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только электричество"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faqat elektr"
+          }
+        }
+      }
+    },
+    "Трасса (быстрее %1$@ км/ч) тратит заряд в %2$@ раза быстрее.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Трасса (быстрее %1$@ км/ч) тратит заряд в %2$@ раза быстрее."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trassa (%1$@ km/soatdan tez) zaryadni %2$@ baravar tez sarflaydi."
+          }
+        }
+      }
+    },
+    "Трасса не учтена: профиля скорости уже нет (он хранится неделю).": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Трасса не учтена: профиля скорости уже нет (он хранится неделю)."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trassa hisobga olinmagan: tezlik profili endi yoʻq (u bir hafta saqlanadi)."
+          }
+        }
+      }
+    },
+    "У китайских машин обычно CLTC, у европейских — WLTP. Он есть в документах или на сайте производителя.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "У китайских машин обычно CLTC, у европейских — WLTP. Он есть в документах или на сайте производителя."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xitoy mashinalarida odatda CLTC, Yevropa mashinalarida — WLTP. U hujjatlarda yoki ishlab chiqaruvchi saytida bor."
+          }
+        }
+      }
+    },
+    "Укажите запас на электричестве": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Укажите запас на электричестве"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elektrda yurish zaxirasini kiriting"
+          }
+        }
+      }
+    },
+    "Укажите запас на электричестве — и станет видно, сколько пути на электричестве.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Укажите запас на электричестве — и станет видно, сколько пути на электричестве."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elektrda yurish zaxirasini kiriting — yoʻlning qancha qismi elektrda ekani koʻrinadi."
+          }
+        }
+      }
+    },
+    "Укажите расход бензина — появятся литры и сумма.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Укажите расход бензина — появятся литры и сумма."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benzin sarfini kiriting — litrlar va summa paydo boʻladi."
+          }
+        }
+      }
+    },
+    "Указали сами": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Указали сами"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻzingiz kiritgansiz"
+          }
+        }
+      }
+    },
+    "Цен по умолчанию нет: они меняются, своя цена честнее.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цен по умолчанию нет: они меняются, своя цена честнее."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standart narxlar yoʻq: ular oʻzgaradi, oʻz narxingiz toʻgʻriroq."
+          }
+        }
+      }
+    },
+    "Цен по умолчанию нет: они меняются, своя цена честнее. Через два месяца приложение напомнит их проверить.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цен по умолчанию нет: они меняются, своя цена честнее. Через два месяца приложение напомнит их проверить."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standart narxlar yoʻq: ular oʻzgaradi, oʻz narxingiz toʻgʻriroq. Ikki oydan keyin ilova ularni tekshirishni eslatadi."
+          }
+        }
+      }
+    },
+    "Цена кВт·ч — %1$@ дома и %2$@ на станции.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цена кВт·ч — %1$@ дома и %2$@ на станции."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kVt·soat narxi — %1$@ uyda va %2$@ stansiyada."
+          }
+        }
+      }
+    },
+    "Цены": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цены"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Narxlar"
+          }
+        }
+      }
+    },
+    "Цикл из паспорта": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цикл из паспорта"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pasportdagi sikl"
+          }
+        }
+      }
+    },
+    "Через день": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Через день"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kun ora"
+          }
+        }
+      }
+    },
+    "Шаг %1$lld из %2$lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Шаг %1$lld из %2$lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$lld dan %1$lld-qadam"
+          }
+        }
+      }
+    },
+    "Электричество, потом бензин — BYD DM-i, Li Auto": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Электричество, потом бензин — BYD DM-i, Li Auto"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avval elektr, keyin benzin — BYD DM-i, Li Auto"
+          }
+        }
+      }
+    },
+    "Электричество: %1$@ → %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Электричество: %1$@ → %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elektr: %1$@ → %2$@"
+          }
+        }
+      }
+    },
+    "Электро": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Электро"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elektr"
+          }
+        }
+      }
+    },
+    "всё %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "всё %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hammasi %@"
+          }
+        }
+      }
+    },
+    "запас": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "запас"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "zaxira"
+          }
+        }
+      }
+    },
+    "киловатт-часов": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "киловатт-часов"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kilovatt-soat"
+          }
+        }
+      }
+    },
+    "киловатт-часов на 100 километров": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "киловатт-часов на 100 километров"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "100 kilometrga kilovatt-soat"
+          }
+        }
+      }
+    },
+    "километров": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "километров"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kilometr"
+          }
+        }
+      }
+    },
+    "кубометров на 100 километров": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "кубометров на 100 километров"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "100 kilometrga kubometr"
+          }
+        }
+      }
+    },
+    "литров на 100 километров": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "литров на 100 километров"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "100 kilometrga litr"
+          }
+        }
+      }
+    },
+    "на бензине": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "на бензине"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "benzinda"
+          }
+        }
+      }
+    },
+    "на бензине вышло бы ≈ %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "на бензине вышло бы ≈ %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "benzinda ≈ %@ boʻlardi"
+          }
+        }
+      }
+    },
+    "на метане": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "на метане"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "metanda"
+          }
+        }
+      }
+    },
+    "на пропане": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "на пропане"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "propanda"
+          }
+        }
+      }
+    },
+    "на электричестве": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "на электричестве"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "elektrda"
+          }
+        }
+      }
+    },
+    "не указана": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "не указана"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "koʻrsatilmagan"
+          }
+        }
+      }
+    },
+    "около": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "около"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "taxminan"
+          }
+        }
+      }
+    },
+    "около %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "около %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "taxminan %@"
+          }
+        }
+      }
+    },
+    "раскрыто": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "раскрыто"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ochiq"
+          }
+        }
+      }
+    },
+    "расходы около %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "расходы около %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "xarajatlar taxminan %@"
+          }
+        }
+      }
+    },
+    "расходы ≈ %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "расходы ≈ %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "xarajatlar ≈ %@"
+          }
+        }
+      }
+    },
+    "с трассой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "с трассой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "trassa bilan"
+          }
+        }
+      }
+    },
+    "свёрнуто": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "свёрнуто"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yigʻilgan"
+          }
+        }
+      }
+    },
+    "сум за %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "сум за %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ uchun soʻm"
+          }
+        }
+      }
+    },
+    "сумов за киловатт-час": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "сумов за киловатт-час"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kilovatt-soat uchun soʻm"
+          }
+        }
+      }
+    },
+    "сумов за кубометр": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "сумов за кубометр"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kubometr uchun soʻm"
+          }
+        }
+      }
+    },
+    "сумов за литр": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "сумов за литр"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "litr uchun soʻm"
+          }
+        }
+      }
+    },
+    "укажите запас на электричестве": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "укажите запас на электричестве"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "elektrda yurish zaxirasini kiriting"
+          }
+        }
+      }
+    },
+    "укажите расход — появятся литры и сумма": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "укажите расход — появятся литры и сумма"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sarfni kiriting — litrlar va summa paydo boʻladi"
           }
         }
       }

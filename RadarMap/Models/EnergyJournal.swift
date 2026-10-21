@@ -291,4 +291,22 @@ nonisolated enum EnergyJournal {
     static func newestFirst(_ entries: [JournalEntry]) -> [JournalEntry] {
         entries.sorted { $0.date > $1.date }
     }
+
+    /// Месяц журнала: записи и потраченное за него.
+    struct Month: Identifiable, Equatable, Sendable {
+        let start: Date
+        let entries: [JournalEntry]
+        var id: Date { start }
+        var amount: Double { entries.reduce(0) { $0 + $1.amount } }
+    }
+
+    /// Журнал по месяцам, новые сверху; окно месяца — у календаря, полуинтервал.
+    static func months(_ all: [JournalEntry], calendar: Calendar) -> [Month] {
+        var groups: [Date: [JournalEntry]] = [:]
+        for entry in all {
+            guard let month = calendar.dateInterval(of: .month, for: entry.date) else { continue }
+            groups[month.start, default: []].append(entry)
+        }
+        return groups.keys.sorted(by: >).map { Month(start: $0, entries: newestFirst(groups[$0] ?? [])) }
+    }
 }

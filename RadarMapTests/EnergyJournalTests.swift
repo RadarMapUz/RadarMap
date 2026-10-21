@@ -295,6 +295,23 @@ final class EnergyJournalTests: XCTestCase {
         XCTAssertGreaterThan(names.count, 1)
     }
 
+    // MARK: - Месяцы журнала
+
+    /// Полночь первого числа — уже новый месяц; новые сверху.
+    func testMonthsGroupNewestFirst() {
+        let entries = [
+            fill(30, 30, 375_000, hour: 23),
+            fill(1, 20, 250_000, hour: 0),
+            JournalEntry(date: date(1, 0, month: 11), kind: .homeCharge, quantity: 18, amount: 18_000),
+            fill(15, 10, 125_000),
+        ]
+        let months = EnergyJournal.months(entries, calendar: calendar)
+        XCTAssertEqual(months.map(\.start), [date(1, 0, month: 11), date(1, 0)])
+        XCTAssertEqual(months[0].entries.count, 1)
+        XCTAssertEqual(months[1].entries.map(\.quantity), [30, 10, 20])
+        XCTAssertEqual(months[1].amount, 750_000)
+    }
+
     // MARK: - Экспорт
 
     func testJournalCSV() {

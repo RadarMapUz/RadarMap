@@ -37,6 +37,12 @@ def local(lat0, a, b):
     return ((b[1] - a[1]) * M_PER_DEG * k, (b[0] - a[0]) * M_PER_DEG)
 
 
+def honest(a, b):
+    dx, dy = local(a[1], (a[1], a[2]), (b[1], b[2]))
+    expected = a[3] * (b[0] - a[0])
+    return expected > 0 and abs(math.hypot(dx, dy) - expected) <= 0.1 * expected
+
+
 def lags(fixes, marks):
     out = []
     j = 0
@@ -47,6 +53,12 @@ def lags(fixes, marks):
             continue
         a, b = fixes[j], fixes[j + 1]
         if b[0] - a[0] > 2.5 or a[3] < 1:   # провал фиксов или стоянка — не меряем
+            continue
+        # `simctl location start` замирает на каждой путевой точке, а скорость
+        # фикса пишет прежнюю: такой интервал — не равномерное движение, и
+        # истина между фиксами там неизвестна. Меряем, где фикс честен
+        # (сдвиг = скорость × время на этом и на прошлом интервале).
+        if not (honest(a, b) and j > 0 and honest(fixes[j - 1], a)):
             continue
         s = (t - a[0]) / (b[0] - a[0])
         true = (a[1] + (b[1] - a[1]) * s, a[2] + (b[2] - a[2]) * s)

@@ -13,7 +13,8 @@
 #   minVersion          "1.2"      — ниже просим обновиться
 #   message             {title, body, until}  — объявление на карте (until: unix-время)
 #   mobilePollInterval  180        — интервал опроса радаров, 60…3600
-#   features            {routing, mobileReports, metrics, traffic, etaShare, roadWeather}
+#   features            {routing, mobileReports, metrics, traffic, etaShare, roadWeather,
+#                        laneOverlay}
 #                                  — что временно выключено (RemoteConfig.Features)
 #
 # Оповещения о камерах отсюда НЕ управляются и управляться не будут: база лежит
@@ -73,7 +74,10 @@ if not isinstance(features, dict):
     sys.exit("features должен быть объектом")
 # Тот же список, что RemoteConfig.Features в приложении: traffic и etaShare
 # приложение понимало, а здесь их отвергало — рубильник пробок не публиковался.
-unknown = set(features) - {"routing", "mobileReports", "metrics", "traffic", "etaShare", "roadWeather"}
+# laneOverlay — рубильник слоя полос (docs/lanes_overlay_contract.md, 20.8):
+# сборка, которая о нём ещё не знает, ключ просто пропустит.
+unknown = set(features) - {"routing", "mobileReports", "metrics", "traffic", "etaShare",
+                           "roadWeather", "laneOverlay"}
 if unknown:
     sys.exit(f"неизвестные features: {', '.join(sorted(unknown))}")
 for name, value in features.items():

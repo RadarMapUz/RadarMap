@@ -26,6 +26,7 @@ extension LocationService {
     }
 
     func handleFix(_ fix: LocationFilter.Fix) {
+        noteQuietFix(fix)
         switch locationFilter.accept(fix) {
         case .rejected(let reason):
             Log.location.debug("фикс отброшен: \(reason.rawValue, privacy: .public), точность \(fix.horizontalAccuracy, privacy: .public) м")

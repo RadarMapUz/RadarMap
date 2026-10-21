@@ -48,6 +48,8 @@ final class AppEnvironment {
     /// Метан на АГНКС (12б.4).
     let cng: CngService
     let motion: MotionService
+    /// Своя машина подключена (CarPlay / выбранная магнитола) — «Только в машине».
+    let carLink: CarLinkService
     let route = RouteService()
     let speedLimits: SpeedLimitService
     let liveActivity = LiveActivityService()
@@ -128,6 +130,8 @@ final class AppEnvironment {
     func setCarPlayConnected(_ connected: Bool) {
         isCarPlayConnected = connected
         location.setCarPlayConnected(connected)
+        if connected { Storage.set(true, for: .carPlaySeen) }
+        carLink.setCarPlay(connected)
         refreshTrafficWanted()
         updateThemeClock()
         if connected {
@@ -256,6 +260,7 @@ final class AppEnvironment {
         self.mobile = MobileCameraService(store: cameras)
         self.cng = CngService(settings: settings)
         self.motion = MotionService(settings: settings)
+        self.carLink = CarLinkService(settings: settings)
         let notifications = NotificationService(settings: settings)
         let alerts = AlertPlayer(settings: settings)
         let trip = TripStats()
@@ -375,6 +380,7 @@ final class AppEnvironment {
             }
         }
         wireCommuteVoice()
+        wireCarLink()
         // Ответ на «Вы за рулём?»: пассажир — гасим поездку без следа,
         // водитель — запоминаем магнитолу машины, чтобы не переспрашивать.
         notifications.onPassengerConfirmed = { [weak location] in location?.markPassenger() }
@@ -796,7 +802,12 @@ final class AppEnvironment {
     /// Автостарт пришёл раньше истории с диска (процесс подняли в фоне на
     /// ходу): склейка с только что прерванной поездкой и восстановление
     /// снимка ещё не видят её — ждём историю (ревью S3, 20.10).
-    @ObservationIgnored private var pendingAutoStart = false
+    @ObservationIgnored var pendingAutoStart = false
+    /// Отключились от машины — поездка закончится после паузы (AppEnvironment+CarLink).
+    @ObservationIgnored var carLinkStopTask: Task<Void, Never>?
+    /// Меняется на ответе на предложение «Только в машине» — экран настроек
+    /// перечитывает `offersCarOnlyMode` (флаги лежат в Storage, не наблюдаемы).
+    var carOnlyOfferRevision = 0
 
     @ObservationIgnored private var tileProbeTask: Task<Void, Never>?
 
@@ -818,7 +829,10 @@ final class AppEnvironment {
     private func startPendingAutoStart() {
         guard pendingAutoStart else { return }
         pendingAutoStart = false
-        if motion.isDriving, settings.tripStartMode.usesMotion, !location.isTripActive {
+        guard !location.isTripActive else { return }
+        if settings.tripStartMode == .carOnly {
+            if carLink.isLinked { location.startTrip(byCarLink: true) }
+        } else if motion.isDriving, settings.tripStartMode.usesMotion {
             location.startTrip(auto: true)
         }
     }
@@ -1036,11 +1050,13 @@ final class AppEnvironment {
             // домашний адрес, которым не пользуемся, незачем. Дорога на работу
             // остаётся только по заданным вручную местам.
             learnedPlaces = []
+            noteLearnedQuietZones()
             refreshCommute()
             return
         }
         // Концы рабочих рейсов — адреса пассажиров, не свои Дом и Работа.
         learnedPlaces = FrequentPlaces.learn(history: trip.history.filter { $0.work != true }, now: Date())
+        noteLearnedQuietZones()
         refreshCommute()
     }
 

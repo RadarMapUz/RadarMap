@@ -204,18 +204,26 @@ struct TripSettingsPage: View {
     var body: some View {
         @Bindable var settings = env.settings
         Form {
+            CarOnlyOfferSection()
+
             Section {
                 Picker("Старт поездки", selection: $settings.tripStartMode) {
                     ForEach(TripStartMode.allCases) { Text($0.title).tag($0) }
                 }
-                .onChange(of: settings.tripStartMode) { _, _ in env.motion.syncEnabled() }
+                .onChange(of: settings.tripStartMode) { _, mode in env.setTripStartMode(mode) }
                 SettingsExplainer([
+                    "«Только в машине» — поездка начинается при подключении к CarPlay или к магнитоле, выбранной ниже, и заканчивается при отключении. В такси не пишется.",
                     "«Умный» — поездка включается сама только в вашей машине (CarPlay или знакомая магнитола); в чужой сначала спросит «вы за рулём?».",
-                    "«Авто» — всегда сама. «Ручной» — только кнопкой, слежение за движением выключено совсем.",
+                    "«Авто» — сама, как только тронулись; если магнитола выбрана ниже, а её нет — сначала спросит. «Ручной» — только кнопкой, слежение за движением выключено совсем.",
+                    "Уведомления о камерах без поездки приходят, только когда понятно, что вы едете на машине: дома, на стоянке и пешком — тишина.",
                     "Заезд по пути — магазин, заправка — новой поездкой не становится: это остановка внутри той же.",
                 ])
             } footer: {
                 Text("Когда поездка начинается сама.")
+            }
+
+            if settings.tripStartMode != .manual {
+                CarLinkDevicesSection()
             }
 
             Section {

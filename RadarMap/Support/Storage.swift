@@ -76,6 +76,10 @@ enum Storage {
         case familyNoticeShownAt    // когда показали «Мама увидит, что вы едете домой» (раз в день)
         case maintenanceBook        // обслуживание машины: пробег и пункты (MaintenanceBook, JSON)
         case maintenanceReminders   // журнал напоминаний об обслуживании: id → момент показа (JSON)
+        case quietAlertLog          // тихий фон: камера → когда уведомили (QuietAlertGate, JSON, окно повтора)
+        case quietZones             // выученные Дом/Работа для тишины тихого фона ([[lat, lon]], JSON)
+        case carPlaySeen            // CarPlay хоть раз подключался (предложение «Только в машине», 26.2)
+        case carOnlyOfferAnswered   // на предложение «Только в машине» ответили (любой ответ)
     }
 
     private static var defaults: UserDefaults { .standard }

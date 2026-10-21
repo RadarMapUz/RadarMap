@@ -192,6 +192,11 @@ enum TripStartMode: String, CaseIterable, Identifiable {
     /// Сама — только в знакомой машине (CarPlay или своя магнитола по Bluetooth).
     /// В чужой машине не стартует, а спрашивает «вы за рулём?».
     case smart
+    /// Только при подключении к своей машине — CarPlay или выбранная в
+    /// настройках магнитола по Bluetooth (26.2); отключились — поездка
+    /// закончилась. Ни CoreMotion, ни вопросов: такси и автобус не пишутся,
+    /// фоновые уведомления о камерах — тоже только в машине.
+    case carOnly
     /// Только кнопкой. CoreMotion не работает вовсе — ещё и экономия заряда.
     case manual
 
@@ -199,22 +204,25 @@ enum TripStartMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .auto:   return String(localized: "Авто")
-        case .smart:  return String(localized: "Умный")
-        case .manual: return String(localized: "Ручной")
+        case .auto:    return String(localized: "Авто")
+        case .smart:   return String(localized: "Умный")
+        case .carOnly: return String(localized: "Только в машине")
+        case .manual:  return String(localized: "Ручной")
         }
     }
 
     var symbol: String {
         switch self {
-        case .auto:   return "bolt.fill"
-        case .smart:  return "wand.and.stars"
-        case .manual: return "hand.tap.fill"
+        case .auto:    return "bolt.fill"
+        case .smart:   return "wand.and.stars"
+        case .carOnly: return "carplay"
+        case .manual:  return "hand.tap.fill"
         }
     }
 
-    /// Слежение CoreMotion нужно только если поездка может стартовать сама.
-    var usesMotion: Bool { self != .manual }
+    /// Слежение CoreMotion нужно только если поездку стартует движение.
+    /// «Только в машине» стартует подключение — CoreMotion ему не нужен.
+    var usesMotion: Bool { self == .auto || self == .smart }
 }
 
 /// Чем машина заправляется: какие плитки «в дороге» показывать в «Куда»
@@ -697,6 +705,9 @@ final class AppSettings {
     /// Имена знакомых автомобильных магнитол (BT): подключены к своей машине —
     /// автостарт не переспрашивает «вы за рулём?».
     var knownCarAudio: [String] { didSet { store.set(knownCarAudio, forKey: Keys.knownCarAudio) } }
+    /// Устройства своей машины, выбранные в настройках (CarLink, 26.2): по
+    /// ним «Только в машине» начинает поездку, а «Авто» не пишет чужую молча.
+    var carDevices: [CarAudioDevice] { didSet { saveCarDevices() } }
     /// Режим оповещений: «Авто» сам различает город/трассу, вручную можно зафиксировать.
     var alertMode: AlertMode {
         didSet {
@@ -790,6 +801,7 @@ final class AppSettings {
         static let cursorStyle = "cursorStyle"
         static let alertMode = "alertMode"
         static let knownCarAudio = "knownCarAudio"
+        static let carDevices = "carDevices"
         static let usageStats = "usageStatsDisabled"
         static let trafficHidden = "trafficHidden"
         static let trafficContributionOff = "trafficContributionOff"
@@ -905,6 +917,7 @@ final class AppSettings {
         alertMode = loadedMode
         cursorStyle = CursorStyle(stored: store.string(forKey: Keys.cursorStyle))
         knownCarAudio = store.stringArray(forKey: Keys.knownCarAudio) ?? []
+        carDevices = Self.loadCarDevices(store)
         weeklyDigest = store.bool(forKey: Keys.digest)
         usageStatsEnabled = !store.bool(forKey: Keys.usageStats)
         trafficShown = !store.bool(forKey: Keys.trafficHidden)
@@ -1039,6 +1052,24 @@ final class AppSettings {
         } catch {
             Log.app.error("fuelProfile не декодировался: \(error.localizedDescription, privacy: .public)")
             return FuelProfile()
+        }
+    }
+
+    private static func loadCarDevices(_ store: UserDefaults) -> [CarAudioDevice] {
+        guard let data = store.data(forKey: Keys.carDevices) else { return [] }
+        do {
+            return try JSONDecoder().decode([CarAudioDevice].self, from: data)
+        } catch {
+            Log.app.error("carDevices не декодировались: \(error.localizedDescription, privacy: .public)")
+            return []
+        }
+    }
+
+    private func saveCarDevices() {
+        do {
+            store.set(try JSONEncoder().encode(carDevices), forKey: Keys.carDevices)
+        } catch {
+            Log.app.error("carDevices не закодировались: \(error.localizedDescription, privacy: .public)")
         }
     }
 

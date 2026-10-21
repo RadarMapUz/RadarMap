@@ -1366,6 +1366,55 @@ nonisolated enum AppConfig {
     nonisolated static let uzLatRange: ClosedRange<Double> = 37.0...46.0
     nonisolated static let uzLonRange: ClosedRange<Double> = 55.0...74.0
 
+    // MARK: - Тихий фон: уведомление о камере только в машине (QuietAlertGate, 26.1)
+    /// Об одной камере вне поездки — не чаще раза в это окно. Выход из
+    /// геозоны его не сбрасывает: дрожание Wi-Fi дома входит и выходит
+    /// каждые несколько минут, и раньше каждый вход был новым пушем.
+    nonisolated static let quietAlertRepeatSeconds: TimeInterval = 20 * 60
+    /// Машина по CoreMotion за столько секунд до «стоим» — это светофор.
+    nonisolated static let quietAlertMotionWindowSeconds: TimeInterval = 180
+    /// Сколько истории CoreMotion читать на входе: сэмпл длится до
+    /// следующего, и лежащий с утра телефон даёт один сэмпл многочасовой давности.
+    nonisolated static let quietAlertMotionLookbackSeconds: TimeInterval = 6 * 3600
+    /// Фикс «свежий» для доплеровской скорости и проверки «вход ложный».
+    nonisolated static let quietAlertFreshFixSeconds: TimeInterval = 60
+    /// Спутниковый фикс: точность не хуже (Wi-Fi дома — 65 м и хуже).
+    nonisolated static let quietAlertDopplerMaxAccuracy: CLLocationDistance = 50
+    /// Погрешность скорости больше — доплеру не верим.
+    nonisolated static let quietAlertMaxSpeedErrorKmh: Double = 10
+    /// Скорость машины, а не пешехода и не бега (велосипед проходит —
+    /// у велосипеда та же камера на той же дороге).
+    nonisolated static let quietAlertMinSpeedKmh: Double = 20
+    /// Выше — не езда, а перелёт координаты.
+    nonisolated static let quietAlertMaxSpeedKmh: Double = 200
+    /// Фиксы для смещения: точность не хуже и возраст не больше.
+    nonisolated static let quietAlertMaxFixAccuracy: CLLocationDistance = 100
+    nonisolated static let quietAlertFixWindowSeconds: TimeInterval = 5 * 60
+    /// Смещение меньше — дрожание (Wi-Fi дома прыгает на 300 м).
+    nonisolated static let quietAlertMinDisplacementMeters: CLLocationDistance = 400
+    /// Два фикса ближе по времени — одна и та же оценка, не путь.
+    nonisolated static let quietAlertMinFixGapSeconds: TimeInterval = 10
+    /// Запас «вход ложный»: фикс дальше радиуса + погрешности + этого.
+    nonisolated static let quietAlertOutsideMarginMeters: CLLocationDistance = 100
+    /// Зона Дома/Работы, где без CoreMotion-машины молчим.
+    nonisolated static let quietZoneMeters: CLLocationDistance = 300
+    /// Сколько ждать доказательства после входа в геозону: столько фоновое
+    /// пробуждение и живёт; одноразовый фикс приходит за 2–8 с.
+    static let quietAlertEvidenceSeconds: TimeInterval = 10
+    /// Шаг пересмотра решения в этом окне.
+    static let quietAlertEvidenceStepSeconds: TimeInterval = 1
+    /// Сколько последних фиксов тихого фона помнить.
+    static let quietAlertFixBuffer = 6
+
+    // MARK: - «Только в машине» (CarLink, 26.2)
+    /// Пробуждение тихого фона перечитывает аудио-маршрут не чаще этого:
+    /// значимые перемещения в пробке приходят пачкой.
+    static let carLinkWakeRefreshSeconds: TimeInterval = 30
+    /// Отключились от машины — поездка заканчивается через столько секунд,
+    /// если не подключились снова: Bluetooth отваливается на перезапуске
+    /// мотора и при звонке. Заправку и магазин дальше склеит TripMerge.
+    static let carLinkStopGraceSeconds: TimeInterval = 120
+
     /// Через сколько секунд устойчивой остановки авто-завершать поездку (не гасим на светофоре).
     static let autoStopAfterSeconds: Double = 180
 

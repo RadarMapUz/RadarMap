@@ -77,6 +77,11 @@ nonisolated enum TripDayBook {
             day.scoreWeight += weight
         }
         for pass in record.passed {
+            // Пришедшие деньги — до проверки лимита: сумма внесённого
+            // постановления — факт и без нашего лимита (PassedCamera.paidAmount).
+            // Условие обязано совпадать с unfolded — иначе починка дня «снять
+            // старую запись, положить новую» разъедется на суммах.
+            if let paid = pass.paidAmount { day.finePaid = (day.finePaid ?? 0) + paid }
             // Без известного лимита нарушения не выдумываем — как везде.
             guard let limit = pass.limitKmh else { continue }
             let fine = FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
@@ -85,13 +90,8 @@ nonisolated enum TripDayBook {
                 // Деньги — только по достоверному лимиту: сумма в сумах,
                 // названная по догадке о классе дороги, — это ложь про деньги.
                 // Судьба штрафа делит деньги («ожидается» — риск, «пришёл» —
-                // факт, «не пришёл» — никуда); условия обязаны совпадать с
-                // unfolded — иначе починка дня «снять старую запись, положить
-                // новую» разъедется на суммах.
+                // факт, «не пришёл» — никуда).
                 if pass.limitIsCertain, pass.countsTowardFines { day.fineRisk += fine }
-                if pass.limitIsCertain, pass.finePaid == true {
-                    day.finePaid = (day.finePaid ?? 0) + fine
-                }
                 day.overByHour[calendar.component(.hour, from: pass.date)] += 1
             } else {
                 day.cleanPasses += 1
@@ -129,16 +129,14 @@ nonisolated enum TripDayBook {
             day.scoreWeight = max(0, day.scoreWeight - weight)
         }
         for pass in record.passed {
+            // Зеркально folded: вычитаем ровно то, что туда попало.
+            if let paid = pass.paidAmount { day.finePaid = max(0, (day.finePaid ?? 0) - paid) }
             guard let limit = pass.limitKmh else { continue }
             let fine = FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
             if fine > 0 {
                 day.overPasses = max(0, day.overPasses - 1)
-                // Зеркально folded: вычитаем ровно то, что туда попало.
                 if pass.limitIsCertain, pass.countsTowardFines {
                     day.fineRisk = max(0, day.fineRisk - fine)
-                }
-                if pass.limitIsCertain, pass.finePaid == true {
-                    day.finePaid = max(0, (day.finePaid ?? 0) - fine)
                 }
                 let hour = calendar.component(.hour, from: pass.date)
                 day.overByHour[hour] = max(0, day.overByHour[hour] - 1)

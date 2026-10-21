@@ -522,6 +522,56 @@ final class TripStats {
         persist()
     }
 
+    /// Внесённое постановление сверено с проездом (этап 17.1): «штраф пришёл»
+    /// с суммой постановления — в записи и в дне, той же хирургией, что
+    /// setFineOutcome. Рейтинг не трогается. false — записи или проезда нет,
+    /// либо проезд уже сверен с другим постановлением.
+    @discardableResult
+    func linkReceivedFine(_ fineID: UUID, amount: Double?, passID: UUID, tripID: Double) -> Bool {
+        guard editAllowed("сверка штрафа"),
+              let index = history.firstIndex(where: { $0.id == tripID }),
+              let updated = TripHistory.linkingReceivedFine(history[index], passID: passID,
+                                                            fineID: fineID, amount: amount)
+        else { return false }
+        replaceRecord(at: index, with: updated)
+        return true
+    }
+
+    /// Снять сверку: проезд снова «ожидается». false — записи уже нет или
+    /// проезд сверен не с этим постановлением.
+    @discardableResult
+    func unlinkReceivedFine(_ fineID: UUID, passID: UUID, tripID: Double) -> Bool {
+        guard editAllowed("отвязка штрафа"),
+              let index = history.firstIndex(where: { $0.id == tripID }),
+              let updated = TripHistory.unlinkingReceivedFine(history[index], passID: passID,
+                                                              fineID: fineID)
+        else { return false }
+        replaceRecord(at: index, with: updated)
+        return true
+    }
+
+    /// Штраф сверен с днём, чья запись вычищена: деньги переносятся только
+    /// в строке дня (FineMatch.dayShift), `reverse` возвращает их при отвязке.
+    @discardableResult
+    func shiftDayFine(day: Date, riskMoved: Double, paidAdded: Double, reverse: Bool) -> Bool {
+        guard editAllowed("штраф по сводке дня"),
+              let shifted = TripDayBook.shiftingFine(day: day, riskMoved: riskMoved, paidAdded: paidAdded,
+                                                     reverse: reverse, in: days)
+        else { return false }
+        days = shifted
+        persistDays()
+        return true
+    }
+
+    /// Правка одной записи: день — снять старую, положить новую (в своей
+    /// строке и после смены пояса, S16), затем запись.
+    private func replaceRecord(at index: Int, with updated: TripRecord) {
+        days = TripDayBook.replaced([history[index]], with: [updated], in: days)
+        persistDays()
+        history[index] = updated
+        persist()
+    }
+
     /// Одноразовая чистка «мостовых» проездов: направление трека у камеры против
     /// оси её дороги (появилась в базе v8). Вызывается из onDatabaseLoaded
     /// CameraRepository — база декодируется асинхронно, и на момент сборки

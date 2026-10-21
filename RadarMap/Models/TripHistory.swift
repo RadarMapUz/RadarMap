@@ -82,15 +82,11 @@ nonisolated enum TripHistory {
         }
     }
 
-    /// «Пришло штрафов» — суммы проездов, по которым постановление дошло.
-    /// Те же ворота достоверности, что у fineRisk: деньги — только по
-    /// известному лимиту.
+    /// «Пришло штрафов» — суммы проездов, по которым постановление дошло:
+    /// сумма постановления, если его внесли, иначе оценка по достоверному
+    /// лимиту (PassedCamera.paidAmount — одно правило с днём и периодом).
     static func finesPaid(of passes: [PassedCamera]) -> Double {
-        passes.reduce(0.0) { total, pass in
-            guard pass.limitIsCertain, pass.finePaid == true,
-                  let limit = pass.limitKmh else { return total }
-            return total + FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
-        }
+        passes.reduce(0.0) { $0 + ($1.paidAmount ?? 0) }
     }
 
     /// Зависшие штрафы: денежные ожидания без ответа дольше `olderThanDays` —
@@ -127,7 +123,11 @@ nonisolated enum TripHistory {
                                    outcome: PassedCamera.FineOutcome) -> TripRecord? {
         guard let index = record.passed.firstIndex(where: { $0.id == passID }),
               let limit = record.passed[index].limitKmh,
-              FineSchedule.fine(overKmh: record.passed[index].speedKmh - Double(limit)) > 0
+              FineSchedule.fine(overKmh: record.passed[index].speedKmh - Double(limit)) > 0,
+              // Сверен с внесённым постановлением — судьбу правит экран
+              // «Штрафы» (отвязка), а не кнопка: иначе штраф в списке и
+              // проезд разошлись бы.
+              record.passed[index].fineReceiptID == nil
         else { return nil }
         var updated = record
         // nil, а не false: непомеченная запись не должна раздуваться полями.

@@ -169,7 +169,7 @@ nonisolated enum TimedTrackStore {
         removeFile(url(for: tripID))
     }
 
-    /// Все треки — «Удалить все поездки».
+    /// Все треки — «Удалить всю историю».
     static func removeAll() {
         removeFile(directory)
     }

@@ -2926,6 +2926,22 @@
         }
       }
     },
+    "Вернуть удалённое нельзя.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вернуть удалённое нельзя."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻchirilganni qaytarib boʻlmaydi."
+          }
+        }
+      }
+    },
     "Вернуть штраф в сумму": {
       "localizations": {
         "ru": {
@@ -4037,6 +4053,22 @@
         }
       }
     },
+    "Выученные Дом и Работа, знакомые камеры": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выученные Дом и Работа, знакомые камеры"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻrganilgan Uy va Ish, tanish kameralar"
+          }
+        }
+      }
+    },
     "Газ есть": {
       "localizations": {
         "ru": {
@@ -4975,6 +5007,22 @@
         }
       }
     },
+    "Добавленные вами камеры": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавленные вами камеры"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Siz qoʻshgan kameralar"
+          }
+        }
+      }
+    },
     "Добавлено вручную": {
       "localizations": {
         "ru": {
@@ -5164,6 +5212,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ruxsat — ilova buzilish deb hisoblashidan oldin qancha oshirish mumkinligi."
+          }
+        }
+      }
+    },
+    "Дорога на работу и журнал смен": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дорога на работу и журнал смен"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishga yoʻl va smenalar jurnali"
           }
         }
       }
@@ -6453,6 +6517,22 @@
         }
       }
     },
+    "Итоги по дням и «За всё время»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Итоги по дням и «За всё время»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kunlik natijalar va «Butun vaqt uchun»"
+          }
+        }
+      }
+    },
     "Ищем по пути…": {
       "localizations": {
         "ru": {
@@ -7445,6 +7525,22 @@
         }
       }
     },
+    "Копии в «Файлах»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Копии в «Файлах»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Fayllar»dagi nusxalar"
+          }
+        }
+      }
+    },
     "Копия сохранена": {
       "extractionState": "manual",
       "localizations": {
@@ -7858,6 +7954,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Joylar"
+          }
+        }
+      }
+    },
+    "Места, заданные вручную": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Места, заданные вручную"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qoʻlda belgilangan joylar"
           }
         }
       }
@@ -9016,6 +9128,22 @@
         }
       }
     },
+    "Недавние места": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Недавние места"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Soʻnggi manzillar"
+          }
+        }
+      }
+    },
     "Недели без поездок пропущены": {
       "localizations": {
         "ru": {
@@ -10098,6 +10226,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yozuvni toʻxtatadi va safar natijalarini saqlaydi."
+          }
+        }
+      }
+    },
+    "Останется": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Останется"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qoladi"
           }
         }
       }
@@ -11403,6 +11547,22 @@
         }
       }
     },
+    "Подробные треки регистратора": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подробные треки регистратора"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Videoregistrator uchun batafsil treklar"
+          }
+        }
+      }
+    },
     "Подсказка «Домой» и «На работу»": {
       "localizations": {
         "ru": {
@@ -11671,6 +11831,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Safarlar va ulardan hisoblangan hamma narsa. Sozlamalar qoladi."
+          }
+        }
+      }
+    },
+    "Поездки с треками и проездами камер": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездки с треками и проездами камер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarlar — treklari va kameralardan oʻtishlari bilan"
           }
         }
       }
@@ -11976,6 +12152,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Joylashuv hali aniqlanmadi — bir necha soniyadan soʻng urinib koʻring."
+          }
+        }
+      }
+    },
+    "Полученные штрафы": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Полученные штрафы"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kelgan jarimalar"
           }
         }
       }
@@ -13817,6 +14009,22 @@
         }
       }
     },
+    "Расход и цены топлива": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расход и цены топлива"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoqilgʻi sarfi va narxlari"
+          }
+        }
+      }
+    },
     "Расход, %@ на 100 км": {
       "localizations": {
         "ru": {
@@ -14245,22 +14453,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Oshirish bilan: %lld"
-          }
-        }
-      }
-    },
-    "С телефона сотрутся: все поездки с треками и проездами камер; итоги по дням и «За всё время»; подробные треки регистратора; дорога на работу и журнал смен; выученные Дом и Работа и знакомые камеры; цифры виджета. Останутся: настройки, расход и цены топлива, места, заданные вручную, добавленные вами камеры и копии в «Файлах». Вернуть удалённое нельзя.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "С телефона сотрутся: все поездки с треками и проездами камер; итоги по дням и «За всё время»; подробные треки регистратора; дорога на работу и журнал смен; выученные Дом и Работа и знакомые камеры; цифры виджета. Останутся: настройки, расход и цены топлива, места, заданные вручную, добавленные вами камеры и копии в «Файлах». Вернуть удалённое нельзя."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Telefondan oʻchiriladi: barcha safarlar — treklari va kameralardan oʻtishlari bilan; kunlik natijalar va «Butun vaqt uchun»; videoregistrator uchun batafsil treklar; ishga yoʻl va smenalar jurnali; oʻrganilgan Uy va Ish hamda tanish kameralar; vidjet raqamlari. Qoladi: sozlamalar, yoqilgʻi sarfi va narxlari, qoʻlda belgilangan joylar, siz qoʻshgan kameralar va «Fayllar»dagi nusxalar. Oʻchirilganni qaytarib boʻlmaydi."
           }
         }
       }
@@ -16383,6 +16575,22 @@
         }
       }
     },
+    "Удалится": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалится"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻchiriladi"
+          }
+        }
+      }
+    },
     "Удалить": {
       "localizations": {
         "ru": {
@@ -16966,6 +17174,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Narxlar ikki oydan beri yangilanmagan — oʻzgarmaganini tekshiring."
+          }
+        }
+      }
+    },
+    "Цифры виджета": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цифры виджета"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vidjet raqamlari"
           }
         }
       }
@@ -24181,38 +24405,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Butun vaqtdagi raqamlarni koʻrsatish"
-          }
-        }
-      }
-    },
-    "Удалить все поездки?": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Удалить все поездки?"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Barcha safarlarni oʻchirasizmi?"
-          }
-        }
-      }
-    },
-    "Удалить все поездки": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Удалить все поездки"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Barcha safarlarni oʻchirish"
           }
         }
       }

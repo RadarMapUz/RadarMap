@@ -2041,6 +2041,19 @@ class FamilyPageTest(ServerTestBase):
         with api._eta_lock:
             self.assertNotIn("name", api._eta_links[self.ADDRESS], "пустое имя не хранится")
 
+    def test_revoke_passes_only_with_the_write_key_and_ended(self):
+        """«Убрать близкого» / «Сменить ссылку»: revoke доходит до хука Telegram
+        (family_notify снимает подписки) только с ключом записи и «не в пути»."""
+        now = time.time()
+        base = {"key": self.KEY, "eta": now, "left_m": 0, "status": "ended", "revoke": True}
+        self.assertTrue(api.clean_eta(base, now)[1].get("revoke"))
+        self.assertNotIn("revoke", api.clean_eta(dict(base, status="driving"), now)[1])
+        self.assertNotIn("revoke", api.clean_eta(dict(base, revoke=1), now)[1])
+        legacy = {"token": "L" * 22, "eta": now, "left_m": 0, "status": "ended", "revoke": True}
+        self.assertNotIn("revoke", api.clean_eta(legacy, now)[1], "без ключа — не отзыв")
+        self.assertIsNone(api.clean_eta(dict(base, key=None, token=self.ADDRESS), now),
+                          "читатель с адресом из ссылки не пишет вовсе")
+
     def test_name_shown_but_never_a_position(self):
         """Что бы ни прислали рядом (координаты, цель, скорость), на странице
         и в памяти — только статус, время и имя."""
@@ -2189,6 +2202,12 @@ class FamilyPageTest(ServerTestBase):
             self.assertNotIn(secret, json.dumps(headers))
         _, probe_headers, _ = _get_raw(self.port, "/api/eta/" + "A" * 22)
         self.assertEqual(probe_headers.get("X-Eta-Bot"), "RadarMapUzBot", "пробник телефона узнаёт имя бота")
+        legacy = "Ab3_xY-9" + "q" * 14
+        _call(self.port, "POST", "/api/eta", {"token": legacy, "eta": time.time() + 600, "left_m": 0,
+                                               "status": "driving"})
+        _, _, legacy_page = _get_raw(self.port, "/api/eta/f/" + legacy)
+        self.assertNotIn("t.me", legacy_page.decode(),
+                         "ссылка без ключа не подписывается: читатель прислал бы ложное «дома»")
         for bad in ("username=bad name\n", "username=\n", "username=<b>x</b>\n", "token=1\n"):
             self.bot_config(bad)
             _, headers, html = self.page()

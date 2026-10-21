@@ -967,6 +967,11 @@ def clean_eta(data, now):
         item["name"] = name
     if isinstance(data.get("home"), bool):
         item["home"] = data["home"]
+    # «Убрать близкого» и «Сменить ссылку» (22.1): последнее «не в пути» по
+    # старому адресу снимает его подписки в Telegram сразу (family_notify).
+    # Только с ключом записи: читатель ссылки чужую подписку не снимет.
+    if data.get("revoke") is True and keyed and status == "ended":
+        item["revoke"] = True
     return address, item
 
 
@@ -1106,10 +1111,10 @@ ETA_ALMOST_SECONDS = 3 * 60      # до прибытия меньше — «по
 # сдвинулось на 2 мин, и не реже раза в 10 мин (EtaShare.shouldSend), так
 # что 12 минут тишины — уже не «едет ровно», а «пропала связь».
 ETA_STALE_SECONDS = 12 * 60
-_ETA_BOT_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]{3,31}$")
-# Конфиг бота (22.3): отсюда берётся только строка username= — ни токен, ни
-# соль в память API не попадают. Перечитывается раз в 5 минут.
-ETA_BOT_CONFIG = os.environ.get("RADARMAP_BOT_CONFIG", "/opt/radarmap/telegram_bot.conf")
+# Конфиг бота (22.3): отсюда берётся только строка username=
+# (family_notify.read_username) — ни токен, ни соль в память API не
+# попадают. Перечитывается раз в 5 минут: страницу открывают раз в 30 с.
+ETA_BOT_CONFIG = os.environ.get("RADARMAP_BOT_CONFIG", family_notify.DEFAULT_CONFIG)
 ETA_BOT_RECHECK = 300
 _eta_bot = {"checked": None, "username": None}
 _eta_bot_lock = threading.Lock()
@@ -1121,16 +1126,7 @@ def eta_bot_username(now):
     with _eta_bot_lock:
         if _eta_bot["checked"] is not None and now - _eta_bot["checked"] < ETA_BOT_RECHECK:
             return _eta_bot["username"]
-        username = None
-        try:
-            with open(ETA_BOT_CONFIG, encoding="utf-8") as handle:
-                for line in handle:
-                    key, sep, value = line.partition("=")
-                    if sep and key.strip() == "username":
-                        candidate = value.strip().lstrip("@")
-                        username = candidate if _ETA_BOT_NAME.fullmatch(candidate) else None
-        except OSError:
-            username = None    # бота нет — подсказки нет, это не ошибка
+        username = family_notify.read_username(ETA_BOT_CONFIG)
         _eta_bot.update(checked=now, username=username)
         return username
 
@@ -1222,8 +1218,10 @@ def family_page(item, now, uz=False, bot=None, address=None):
         parts.append(f'<p class="age">{age}</p>')
     if stale:
         parts.append(f'<p class="stale">{stale}</p>')
-    if bot and address and _ETA_TOKEN.fullmatch(address):
-        link = f"https://t.me/{bot}?start=f_{address}"
+    # Подписаться можно только на ссылку с ключом (family_notify.deep_link):
+    # по старой 22-значной любой читатель прислал бы ложное «дома».
+    link = family_notify.deep_link(bot, address) if bot and address else None
+    if link:
         parts.append(f'<a class="tg" href="{link}">{"Xabarlarni Telegramda olish" if uz else "Получать сообщения в Telegram"}</a>'
                      f'<p class="note">{"Yoʻlga chiqqanda, kechikkanda va uyga yetganda xabar beradi." if uz else "Напишет, когда выедет, задержится и будет дома."}</p>')
     parts.append(f'<p class="note">{"Sahifani bosh ekranga qoʻshing: «Ulashish» → «Bosh ekranga»." if uz else "Чтобы открывать одним касанием: «Поделиться» → «На экран „Домой“»."}</p>')

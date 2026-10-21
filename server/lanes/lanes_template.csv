@@ -1,0 +1,4 @@
+id,lat,lon,bearing,tolerance,lanes,src,checked
+example-1,41.31102,69.27951,352,30,left|left;straight|straight|straight|straight;right,survey,2026-10-21
+example-2,41.32417,69.28833,85,,reverse;left|through|through;right,dashcam,2026-10-20
+example-3,41.29988,69.24071,180,25,left|straight|right,osm,2026-10-19

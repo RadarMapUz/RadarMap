@@ -74,8 +74,10 @@ if not isinstance(features, dict):
     sys.exit("features должен быть объектом")
 # Тот же список, что RemoteConfig.Features в приложении: traffic и etaShare
 # приложение понимало, а здесь их отвергало — рубильник пробок не публиковался.
-unknown = set(features) - {"routing", "mobileReports", "metrics", "traffic", "etaShare", "roadWeather",
-                           "laneOverlay"}
+# laneOverlay — рубильник слоя полос (docs/lanes_overlay_contract.md, 20.8):
+# сборка, которая о нём ещё не знает, ключ просто пропустит.
+unknown = set(features) - {"routing", "mobileReports", "metrics", "traffic", "etaShare",
+                           "roadWeather", "laneOverlay"}
 if unknown:
     sys.exit(f"неизвестные features: {', '.join(sorted(unknown))}")
 for name, value in features.items():

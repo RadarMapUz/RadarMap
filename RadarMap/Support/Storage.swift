@@ -54,6 +54,7 @@ enum Storage {
         case hintTogglesShown       // разовая подсказка «долгий тап — переключатели» показана
         case hintRadarShown         // разовая подсказка «жёлтая кнопка — радар» показана
         case hintSilenceShown       // разовая подсказка «знакомые камеры не называю вслух» показана
+        case hintCarOnlyShown       // разовая подсказка «поездка только в машине — Настройки» показана (26.2)
         case offlineOfferAnswered   // на предложение «скачать карту области» ответили (любой ответ)
         case mergeSuggestDismissedID // id поездки, для которой «Объединить?» отклонили
         case pendingReports         // отметки, ждущие связи (ReportQueue)
@@ -76,6 +77,10 @@ enum Storage {
         case familyNoticeShownAt    // когда показали «Мама увидит, что вы едете домой» (раз в день)
         case maintenanceBook        // обслуживание машины: пробег и пункты (MaintenanceBook, JSON)
         case maintenanceReminders   // журнал напоминаний об обслуживании: id → момент показа (JSON)
+        case quietAlertLog          // тихий фон: камера → когда уведомили (QuietAlertGate, JSON, окно повтора)
+        case quietZones             // выученные Дом/Работа для тишины тихого фона ([[lat, lon]], JSON)
+        case carPlaySeen            // CarPlay хоть раз подключался (предложение «Только в машине», 26.2)
+        case carOnlyOfferAnswered   // на предложение «Только в машине» ответили (любой ответ)
     }
 
     private static var defaults: UserDefaults { .standard }

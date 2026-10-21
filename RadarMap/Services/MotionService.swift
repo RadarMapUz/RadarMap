@@ -9,6 +9,7 @@
 import Foundation
 import CoreMotion
 import Observation
+import os
 
 @MainActor
 @Observable
@@ -86,6 +87,31 @@ final class MotionService {
     /// Перечитать настройку (сменили режим старта поездки).
     func syncEnabled() {
         settings.tripStartMode.usesMotion ? start() : stop()
+    }
+
+    /// Что CoreMotion знает о последних часах — для тихого фона (26.1).
+    /// История копится сопроцессором и без слежения (режим «Ручной» и
+    /// «Только в машине» тоже), нужна только авторизация: без неё — «не знаем»
+    /// (спросить её из фона нельзя, и запрос здесь показал бы диалог).
+    func recentMotion(now: Date = Date()) async -> QuietAlertGate.Motion {
+        guard Self.isAvailable, CMMotionActivityManager.authorizationStatus() == .authorized else {
+            return .unknown
+        }
+        let from = now.addingTimeInterval(-AppConfig.quietAlertMotionLookbackSeconds)
+        let samples: [QuietAlertGate.MotionSample] = await withCheckedContinuation { continuation in
+            manager.queryActivityStarting(from: from, to: now, to: .main) { activities, error in
+                if let error {
+                    Log.location.error("история CoreMotion: \(error.localizedDescription, privacy: .public)")
+                }
+                continuation.resume(returning: (activities ?? []).map {
+                    QuietAlertGate.MotionSample(start: $0.startDate, automotive: $0.automotive,
+                                                walking: $0.walking, running: $0.running,
+                                                cycling: $0.cycling, stationary: $0.stationary,
+                                                confident: $0.confidence != .low)
+                })
+            }
+        }
+        return QuietAlertGate.motion(from: samples, now: now)
     }
 
     /// Поездку закрыли у цели, пока CoreMotion считает, что мы едем (стоим с

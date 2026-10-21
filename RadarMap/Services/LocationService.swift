@@ -514,6 +514,34 @@ final class LocationService: NSObject {
     /// Вход второй раз не придёт — телефон уже внутри (сценарий S3, 20.10).
     @ObservationIgnored var pendingRegionEnters = RegionEnterQueue()
 
+    // MARK: Тихий фон и своя машина (этап 26)
+
+    /// Своя машина подключена (CarLinkService) — ставит AppEnvironment.
+    @ObservationIgnored var carLinked: (() -> Bool)?
+    /// Пробуждение тихого фона (фикс, геозона): AppEnvironment перечитывает
+    /// аудио-маршрут — Bluetooth машины сам приложение не будит.
+    @ObservationIgnored var onQuietWake: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onQuietWake,
+                                               "LocationService.onQuietWake") }
+    }
+    /// Идущая поездка началась от подключения к машине (или застала его):
+    /// отключение её закончит («Только в машине»).
+    @ObservationIgnored var tripFromCarLink = false
+    /// Сырые фиксы тихого фона — доказательство езды для QuietAlertGate.
+    @ObservationIgnored var quietFixes: [LocationFilter.Fix] = []
+    /// Камеры, по которым решение тихого фона ещё ждёт доказательства.
+    @ObservationIgnored var quietPending: Set<Int> = []
+    /// Выученные Дом/Работа (FrequentPlaces) — ставит AppEnvironment и
+    /// хранит на диске: геозона будит процесс без сцены, выученное там не
+    /// пересчитывается.
+    @ObservationIgnored var learnedQuietZones: [CLLocationCoordinate2D] =
+        (Storage.decoded([[Double]].self, for: .quietZones) ?? [])
+            .compactMap { $0.count == 2 ? CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1]) : nil } {
+        didSet {
+            Storage.encode(learnedQuietZones.map { [$0.latitude, $0.longitude] }, for: .quietZones)
+        }
+    }
+
 }
 
 // MARK: - CLLocationManagerDelegate

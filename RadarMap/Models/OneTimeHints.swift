@@ -10,7 +10,7 @@
 //  кнопкой с подписью, а потом был убран совсем. Тап по HUD, который раньше
 //  открывал его, теперь открывает переключатели — поэтому и подсказка про
 //  них говорит о тапе, а не о долгом тапе (он тоже работает).
-//  Три однострочные подсказки, каждая показывается ОДИН раз за
+//  Однострочные подсказки, каждая показывается ОДИН раз за
 //  жизнь приложения и не больше ОДНОЙ за запуск — чтобы новичка не заваливало.
 //
 //  Здесь только чистое решение «какую показать»; хранение — в Storage,
@@ -29,6 +29,10 @@ nonisolated enum OneTimeHints {
         /// Появляется, только когда первая камера уже стала «своей»: объяснять
         /// тишину заранее нечего, а вот когда голос впервые пропал — нужно.
         case smartSilence
+        /// «Только в машине» (26.2) — тем, у кого CarPlay уже подключался и
+        /// кто ещё не ответил на предложение в настройках. Сама подсказка
+        /// режим не меняет: только говорит, где его включить.
+        case carOnlyOffer
 
         var text: String {
             switch self {
@@ -40,6 +44,8 @@ nonisolated enum OneTimeHints {
                 return String(localized: "«Радар!» — отметка для других. Удержите — тренога или ДТП")
             case .smartSilence:
                 return String(localized: "Знакомые камеры больше не называю вслух — вы их знаете")
+            case .carOnlyOffer:
+                return String(localized: "Поездка может начинаться только в машине — Настройки → Поездка")
             }
         }
     }
@@ -49,10 +55,11 @@ nonisolated enum OneTimeHints {
     /// которой не видно, значит путать, а не помогать. `hasFamiliarCameras` —
     /// то же правило для умной тишины: пока своих камер нет, объяснять нечего.
     static func next(shown: Set<Hint>, radarVisible: Bool,
-                     hasFamiliarCameras: Bool = false) -> Hint? {
+                     hasFamiliarCameras: Bool = false, offersCarOnly: Bool = false) -> Hint? {
         for hint in Hint.allCases where !shown.contains(hint) {
             if hint == .radar, !radarVisible { continue }
             if hint == .smartSilence, !hasFamiliarCameras { continue }
+            if hint == .carOnlyOffer, !offersCarOnly { continue }
             return hint
         }
         return nil

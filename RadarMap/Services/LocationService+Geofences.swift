@@ -136,18 +136,28 @@ extension LocationService {
               // пугаем (сценарий S5, 20.10).
               !camera.isExpiredMobile(at: Date()),
               settings.backgroundAlerts.allows(camera) else { return }
-        alertedCameraIDs.insert(id)
-        notifier.notifyApproaching(camera)
+        // Пробуждение — повод перечитать, не подключена ли машина.
+        onQuietWake?()
+        // Вход в геозону — ещё не доказательство езды: систему будит Wi-Fi и
+        // вышки с ошибкой 100–500 м, и телефон, лежащий дома у края круга,
+        // «входит» в него от дрожания (владелец, 21.10: «Камера через 550 м»
+        // дома). Решают ворота QuietAlertGate (26.1).
+        //
         // Live Activity здесь не обновляем: она живёт только в поездке
         // (startIfNeeded зовётся из startTrip), а сюда мы попадаем строго вне
         // её — update() всегда выходил по guard, ветка была мёртвой и только
         // читалась как живой путь.
+        evaluateQuietEntry(camera)
     }
 
     func handleExit(regionID: String) {
         // Вошли и вышли, пока читалась база, — камера уже позади, не пугаем.
         pendingRegionEnters.exit(regionID)
+        if !isTripActive, !isForeground { onQuietWake?() }
         guard let id = Self.cameraID(from: regionID) else { return }
+        // Повтор об этой же камере после выхода сторожит журнал тихого фона
+        // (quietAlertRepeatSeconds), а не этот набор: дрожание дома входило и
+        // выходило, и каждый новый вход был новым пушем.
         alertedCameraIDs.remove(id)
     }
 

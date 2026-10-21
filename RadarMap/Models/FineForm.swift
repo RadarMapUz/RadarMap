@@ -45,7 +45,7 @@ nonisolated struct FineForm: Equatable {
         place = fine.place ?? ""
         speed = fine.speedKmh.map(String.init) ?? ""
         limit = fine.limitKmh.map(String.init) ?? ""
-        amount = fine.amount.map { String(Int($0.rounded())) } ?? ""
+        amount = fine.amount.map { Self.grouped(Int($0.rounded())) } ?? ""
         resolution = fine.resolution ?? ""
         issued = fine.issuedAt
         due = fine.dueAt
@@ -78,7 +78,7 @@ nonisolated struct FineForm: Equatable {
         if let place = draft.place { self.place = place.value }
         if let speed = draft.speedKmh { self.speed = String(speed.value) }
         if let limit = draft.limitKmh { self.limit = String(limit.value) }
-        if let amount = draft.amount { self.amount = String(Int(amount.value.rounded())) }
+        if let amount = draft.amount { self.amount = Self.grouped(Int(amount.value.rounded())) }
         if let resolution = draft.resolution { self.resolution = resolution.value }
         if let issued = draft.issued { self.issued = FineDraft.date(issued.value, calendar: calendar) }
         if let due = draft.due { self.due = FineDraft.date(due.value, calendar: calendar) }
@@ -121,6 +121,18 @@ nonisolated struct FineForm: Equatable {
     }
 
     /// Целое из поля: только цифры («1 650 000» и «1.650.000» — одно число).
+    /// Сумма с разделителями разрядов по языку приложения: «2 200 000», а не
+    /// «2200000» — сверять с постановлением глазами. `integer` берёт только
+    /// цифры, поэтому пробелы разбору не мешают.
+    static func grouped(_ value: Int) -> String {
+        value.formatted(.number.grouping(.automatic).locale(Formatting.numberLocale))
+    }
+
+    /// То же для ввода: цифры из набранного → с разделителями; пусто — пусто.
+    static func groupedDigits(_ text: String) -> String {
+        integer(text).map(grouped) ?? ""
+    }
+
     static func integer(_ text: String) -> Int? {
         let digits = text.filter(\.isNumber)
         guard !digits.isEmpty, digits.count <= 10 else { return nil }

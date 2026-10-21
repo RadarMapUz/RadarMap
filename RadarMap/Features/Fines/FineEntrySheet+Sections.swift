@@ -234,7 +234,8 @@ extension FineEntrySheet {
     /// (подстановка разбора идёт мимо неё и пометку не снимает).
     private func text(_ path: WritableKeyPath<FineForm, String>, _ name: FineDraft.Name) -> Binding<String> {
         Binding(get: { form[keyPath: path] }, set: {
-            form[keyPath: path] = $0
+            // Сумму группируем по разрядам прямо при вводе.
+            form[keyPath: path] = name == .amount ? FineForm.groupedDigits($0) : $0
             form.unsure.remove(name)
         })
     }

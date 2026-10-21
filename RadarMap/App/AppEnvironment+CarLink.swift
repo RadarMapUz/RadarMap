@@ -79,7 +79,12 @@ extension AppEnvironment {
 
     /// Показать ли одноразовое предложение (CarPlay уже подключался).
     var offersCarOnlyMode: Bool {
-        CarLink.shouldOffer(carPlaySeen: Storage.bool(.carPlaySeen),
+        #if DEBUG
+        // Снимок предложения без CarPlay в истории.
+        if ProcessInfo.processInfo.arguments.contains("-carOnlyOffer"),
+           !Storage.bool(.carOnlyOfferAnswered) { return settings.tripStartMode != .carOnly }
+        #endif
+        return CarLink.shouldOffer(carPlaySeen: Storage.bool(.carPlaySeen),
                             mode: settings.tripStartMode,
                             answered: Storage.bool(.carOnlyOfferAnswered))
     }

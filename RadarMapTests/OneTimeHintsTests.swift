@@ -46,4 +46,15 @@ final class OneTimeHintsTests: XCTestCase {
                                          hasFamiliarCameras: true), .smartSilence)
     }
 
+    /// «Только в машине» — только тем, кому предложение положено (CarPlay
+    /// уже был, ещё не ответили), и один раз.
+    func testCarOnlyHintNeedsOffer() {
+        let seen: Set<OneTimeHints.Hint> = [.toggles, .radar, .smartSilence]
+        XCTAssertNil(OneTimeHints.next(shown: seen, radarVisible: true, offersCarOnly: false))
+        XCTAssertEqual(OneTimeHints.next(shown: seen, radarVisible: true, offersCarOnly: true),
+                       .carOnlyOffer)
+        XCTAssertNil(OneTimeHints.next(shown: seen.union([.carOnlyOffer]), radarVisible: true,
+                                       offersCarOnly: true))
+    }
+
 }

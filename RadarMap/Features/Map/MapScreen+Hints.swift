@@ -41,15 +41,20 @@ extension MapScreen {
         if Storage.bool(.hintTogglesShown) { shown.insert(.toggles) }
         if Storage.bool(.hintRadarShown) { shown.insert(.radar) }
         if Storage.bool(.hintSilenceShown) { shown.insert(.smartSilence) }
+        if Storage.bool(.hintCarOnlyShown) { shown.insert(.carOnlyOffer) }
         guard let hint = OneTimeHints.next(
             shown: shown,
             radarVisible: mode.showsReportButton,
-            hasFamiliarCameras: !env.location.familiarCameraIDs.isEmpty) else { return }
+            hasFamiliarCameras: !env.location.familiarCameraIDs.isEmpty,
+            // Не за рулём: подсказка ведёт в настройки.
+            offersCarOnly: env.offersCarOnlyMode && !env.location.isTripActive
+                && !env.isCarPlayConnected) else { return }
         hintConsumedThisLaunch = true
         switch hint {
         case .toggles:   Storage.set(true, for: .hintTogglesShown)
         case .radar:     Storage.set(true, for: .hintRadarShown)
         case .smartSilence: Storage.set(true, for: .hintSilenceShown)
+        case .carOnlyOffer: Storage.set(true, for: .hintCarOnlyShown)
         }
         withMotion(Motion.standard) { activeHint = hint }
         Task {

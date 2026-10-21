@@ -30516,6 +30516,22 @@
           }
         }
       }
+    },
+    "Поездка может начинаться только в машине — Настройки → Поездка": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездка может начинаться только в машине — Настройки → Поездка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar faqat mashinada boshlanishi mumkin — Sozlamalar → Safar"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

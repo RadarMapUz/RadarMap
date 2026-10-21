@@ -24,6 +24,10 @@ admin.py                      /opt/radarmap/api/admin.py
 admin_auth.py                 /opt/radarmap/api/admin_auth.py
 notify.py                     /opt/radarmap/api/notify.py
 family_notify.py              /opt/radarmap/api/family_notify.py
+telegram_bot.py               /opt/radarmap/api/telegram_bot.py
+bot_texts.py                  /opt/radarmap/api/bot_texts.py
+bot_near.py                   /opt/radarmap/api/bot_near.py
+bot_subs.py                   /opt/radarmap/api/bot_subs.py
 map_edits.py                  /opt/radarmap/api/map_edits.py
 osm_queue.py                  /opt/radarmap/api/osm_queue.py
 status.py                     /opt/radarmap/api/status.py

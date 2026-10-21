@@ -1939,6 +1939,40 @@ nonisolated enum AppConfig {
     /// (шум курса/точности), прежде чем сняться.
     static let carPlayCameraBannerGraceSeconds: TimeInterval = 2
 
+    // MARK: - CarPlay на iOS 27 (25.H1)
+
+    /// Полоса приближения в картинке баннера камеры — ступенями: картинка —
+    /// растр, и каждая перерисовка уходит в машину целиком. Десять ступеней —
+    /// шаг 40 м при радиусе 400 м: глазу полоса движется, сообщений за
+    /// подъезд не больше десяти.
+    static let carPlayBannerProximitySteps = 10
+    /// Желаемый размер картинки баннера (знак + полоса), pt. Вписывается в
+    /// `CPNavigationAlert.maximumAlertImageSize` — тот известен только во
+    /// время работы. Высота — как у значка манёвра: знак читается с места
+    /// водителя, а полоса остаётся полосой, а не кнопкой.
+    static let carPlayBannerAlertImageSize = CGSize(width: 220, height: 40)
+    /// Желаемый размер аватара баннера (значок типа камеры), pt; вписывается
+    /// в `CPNavigationAlert.maximumAvatarImageSize`.
+    static let carPlayBannerAvatarSize = CGSize(width: 40, height: 40)
+    /// Знак ограничения в тексте манёвра: вложение не больше 64×25 pt
+    /// (CPManeuver.h) — круг в высоту строки.
+    static let carPlayManeuverLimitSignPoints: CGFloat = 25
+    /// Пробы лимита после манёвра, метры за точкой поворота по маршруту: обе
+    /// должны дать одно число. Ближняя у самого перекрёстка могла лечь на
+    /// поперечную улицу, дальняя — уже точно на новой дороге.
+    static let carPlayManeuverLimitProbesAfter: [Double] = [50, 120]
+    /// Проба лимита ДО манёвра — столько метров перед ним по маршруту.
+    static let carPlayManeuverLimitProbeBefore: Double = 40
+    /// Камер в панели «…» плашки прибытия: ближайшие по маршруту. Больше
+    /// пяти за рулём не читают, а панель на 800×480 начинает прокручиваться.
+    static let carPlayOptionsPanelCameras = 5
+    /// Открытая панель «…» переписывает расстояния не чаще этого: каждое
+    /// обновление — сообщение в машину, а цифры меняются на каждом фиксе.
+    static let carPlayOptionsPanelRefreshSeconds: TimeInterval = 3
+    /// Значок типа камеры в строке панели «…», pt: диск маркера, мельче
+    /// предела строки списка, чтобы читался значком, а не плиткой.
+    static let carPlayOptionsPanelIconPoints: CGFloat = 24
+
     // MARK: - Дороги и карта на движке
 
     /// Не чаще этого перепроверять индекс дорог, когда скачанный тайл не

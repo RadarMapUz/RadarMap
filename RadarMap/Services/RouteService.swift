@@ -610,7 +610,7 @@ final class RouteService {
     /// `cameraHolds` — камера впереди держит голос, ранний ряд ждёт её.
     func updateProgress(coordinate: CLLocationCoordinate2D, cameras: [Camera], announce: Bool,
                         course: CLLocationDirection = -1, speedKmh: Double = 0,
-                        cameraHolds: Bool = false) {
+                        cameraHolds: Bool = false, accuracy: CLLocationAccuracy? = nil) {
         guard let variant = selected, !isBuilding, !isRebuilding,
               let destination = destinationCoordinate else { return }
         let point = MKMapPoint(coordinate)
@@ -674,7 +674,7 @@ final class RouteService {
         let rerouteLimit = variant.isOffline ? AppConfig.offlineRouteRerouteMeters
                                              : AppConfig.rerouteDeviationMeters
         guard rerouteGate.note(deviation: deviation, now: Date(), limit: rerouteLimit,
-                               drift: variant.isOffline ? nil : AppConfig.rerouteDriftMeters),
+                               drift: variant.isOffline ? nil : RerouteGate.driftLimit(accuracy: accuracy)),
               isRoutingEnabled else { return }
 
         isRebuilding = true

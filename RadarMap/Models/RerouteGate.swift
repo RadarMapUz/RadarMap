@@ -60,6 +60,17 @@ nonisolated struct RerouteGate {
     mutating func noteSuccess() { failures = 0 }
 
     /// Новый маршрут или сброс прогресса: счёт съезда — с нуля.
+    /// Порог устойчивого съезда с запасом на погрешность фикса — то же
+    /// правило 1:1 сверх 10 м, что у коридора и повторного подхода (14.14–14.16).
+    /// Между домами позицию уводит на 40–60 м при верном курсе, и голые 50 м
+    /// перестраивали бы маршрут по кругу с «Маршрут перестроен». nil — точность
+    /// не передали (тесты): без запаса.
+    static func driftLimit(accuracy: CLLocationAccuracy?) -> CLLocationDistance {
+        guard let accuracy else { return AppConfig.rerouteDriftMeters }
+        return AppConfig.rerouteDriftMeters
+            + RoadCorridor.accuracyAllowance(LocationGates.accuracyOrPoorest(accuracy))
+    }
+
     mutating func resetTicks() {
         offRouteTicks = 0
         driftTicks = 0

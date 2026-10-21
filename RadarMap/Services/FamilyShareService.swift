@@ -157,7 +157,9 @@ final class FamilyShareService {
     /// Фикс в поездке (и любое изменение, которое может поменять, кому
     /// видно): кому слать, что слать, кого закрыть — решает FamilyTrip.
     func update(now: Date = Date()) {
-        guard allowedByConfig(), let context = context() else { return }
+        // Близких нет и слать некому — на фиксе ничего не считаем (правило 8).
+        guard !circle.recipients.isEmpty || !trip.open.isEmpty,
+              allowedByConfig(), let context = context() else { return }
         perform(trip.update(circle, context: context, now: now))
         if trip.holdUntil == nil { cancelHoldTimer() }
     }
@@ -243,6 +245,8 @@ final class FamilyShareService {
     /// В очередь: после всего, что ушло раньше.
     @discardableResult
     private func enqueue(_ body: [String: Any]) -> Task<Bool, Never> {
+        // Демо-близкие для снимков никуда не пишут: их ключи выдуманы.
+        if Self.isDemo { return Task { false } }
         let previous = chain
         // [String: Any] не Sendable — тело уходит в задачу готовыми байтами.
         let data: Data

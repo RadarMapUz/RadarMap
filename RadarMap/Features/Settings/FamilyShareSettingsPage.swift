@@ -24,7 +24,7 @@ struct FamilyShareSettingsPage: View {
         Form {
             Section {
                 if circle.recipients.isEmpty {
-                    Text("Добавьте того, кто ждёт вас дома: по ссылке он увидит, когда вы будете, — и не будет звонить за рулём.")
+                    Text("Добавьте того, кто ждёт вас дома: по ссылке видно, когда вы будете, — и звонить вам за рулём не придётся.")
                         .font(.rounded(15))
                         .foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)

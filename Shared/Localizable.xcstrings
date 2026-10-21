@@ -5344,22 +5344,6 @@
         }
       }
     },
-    "Добавьте того, кто ждёт вас дома: по ссылке он увидит, когда вы будете, — и не будет звонить за рулём.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Добавьте того, кто ждёт вас дома: по ссылке он увидит, когда вы будете, — и не будет звонить за рулём."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sizni uyda kutayotgan odamni qoʻshing: havola orqali u qachon kelishingizni koʻradi — va rul ortida qoʻngʻiroq qilmaydi."
-          }
-        }
-      }
-    },
     "Доверенность": {
       "localizations": {
         "ru": {
@@ -7120,7 +7104,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yaqinlaringiz sizni qanday nom bilan koʻradi"
+            "value": "Yaqinlar uchun ismingiz"
           }
         }
       }
@@ -26729,6 +26713,22 @@
           "stringUnit": {
             "state": "translated",
             "value": " yoki "
+          }
+        }
+      }
+    },
+    "Добавьте того, кто ждёт вас дома: по ссылке видно, когда вы будете, — и звонить вам за рулём не придётся.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавьте того, кто ждёт вас дома: по ссылке видно, когда вы будете, — и звонить вам за рулём не придётся."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sizni uyda kutayotgan odamni qoʻshing: havolada qachon kelishingiz koʻrinadi — rul ortida sizga qoʻngʻiroq qilish shart boʻlmaydi."
           }
         }
       }

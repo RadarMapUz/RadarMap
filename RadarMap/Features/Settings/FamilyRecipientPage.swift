@@ -134,6 +134,8 @@ struct FamilyRecipientPage: View {
     }
 
     private func emojiRow(_ recipient: FamilyRecipient) -> some View {
+        // Выбранный — в кадре: восьмой смайлик на узком экране уходил за край.
+        ScrollViewReader { proxy in
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
                 ForEach(Self.emojis, id: \.self) { emoji in
@@ -150,9 +152,14 @@ struct FamilyRecipientPage: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(selected ? .isSelected : [])
+                    .id(emoji)
                 }
             }
             .padding(.vertical, 2)
+        }
+        .onAppear {
+            if !recipient.emoji.isEmpty { proxy.scrollTo(recipient.emoji, anchor: .center) }
+        }
         }
     }
 

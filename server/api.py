@@ -25,12 +25,14 @@ Endpoints:
                            (куски следа для пробок: без устройства, без поездки, время —
                             только относительное внутри куска; см. «Пробки» ниже)
   POST /api/eta            {key [, token], [eta], left_m, status: "driving"|"arrived"|"ended"
-                            [, name] [, home]}
+                            [, name] [, home] [, revoke]}
                            -> {"ok": true}; key — ключ записи, адрес страницы — его хэш
                            (старые сборки шлют один token — он же адрес; см. «Поделиться
                            прибытием» ниже). Без eta «в пути» — время неизвестно («едет
                            домой»); name — как водитель назвал себя близким (≤ 32 знаков,
-                           только в памяти, пока живёт запись); home — поездка домой
+                           только в памяти, пока живёт запись); home — поездка домой;
+                           revoke (только с key и «ended») — близкого убрали или сменили
+                           ему ссылку: подписки адреса в Telegram снимаются сразу
   GET  /api/eta/<token>    -> HTML «будет примерно в 18:40»; заголовок X-Eta-Version: 3
                            (и X-Eta-Bot: имя бота, если он настроен)
   GET  /api/eta/f/<token>  -> страница близкого (22.2): «в пути — будет в 18:40»,
@@ -1239,7 +1241,8 @@ display:flex;min-height:100vh;align-items:center;justify-content:center}}
 main{{background:#fff;border-radius:24px;padding:28px 22px;max-width:380px;width:calc(100% - 32px);
 box-sizing:border-box;box-shadow:0 6px 24px rgba(0,0,0,.08);text-align:center}}
 .who{{font-size:17px;font-weight:600;color:#4a5260;margin:0 0 4px}}
-.big{{font-size:64px;font-weight:800;letter-spacing:-1px;margin:0;line-height:1.1;font-variant-numeric:tabular-nums}}
+.big{{font-size:64px;font-weight:800;letter-spacing:-1px;margin:0;line-height:1.1;font-variant-numeric:tabular-nums;
+color:#14181f}}
 h1{{font-size:22px;margin:6px 0 8px}}h1.word{{font-size:28px;margin:4px 0 10px}}
 h1.ok{{color:#1a7f37}}h1.late{{color:#b35900}}
 p{{margin:4px 0;color:#4a5260;overflow-wrap:anywhere}}.age{{color:#6b7380;font-size:15px}}
@@ -1248,7 +1251,7 @@ p{{margin:4px 0;color:#4a5260;overflow-wrap:anywhere}}.age{{color:#6b7380;font-s
 font-weight:600;text-decoration:none}}
 .note{{color:#6b7380;font-size:14px;margin-top:12px}}
 @media(prefers-color-scheme:dark){{body{{background:#14181f;color:#eef1f5}}main{{background:#1e232a}}
-p,.who{{color:#b8c0cc}}.age,.note{{color:#9aa3ae}}h1.ok{{color:#4ac26b}}h1.late,.stale{{color:#f0a23b}}}}
+p,.who{{color:#b8c0cc}}.big{{color:#eef1f5}}.age,.note{{color:#9aa3ae}}h1.ok{{color:#4ac26b}}h1.late,.stale{{color:#f0a23b}}}}
 </style></head><body><main>{"".join(parts)}</main></body></html>"""
 
 

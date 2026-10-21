@@ -831,6 +831,8 @@ struct FineCheckSection: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.openURL) private var openURL
     @State private var copied = false
+    /// «Мои штрафы» — пришедшие постановления (этап 17).
+    @State private var showsFines = false
 
     var body: some View {
         @Bindable var settings = env.settings
@@ -872,10 +874,24 @@ struct FineCheckSection: View {
                 Text(estimate > 0 ? Formatting.money(estimate) : String(localized: "без штрафов"))
                     .foregroundStyle(estimate > 0 ? Theme.danger : Theme.success)
             }
+            Button {
+                showsFines = true
+            } label: {
+                LabeledContent {
+                    let unpaid = env.fines.fines.count { !$0.isPaid }
+                    if unpaid > 0 {
+                        Text(String(format: String(localized: "не оплачено: %lld"), unpaid))
+                    }
+                } label: {
+                    Label("Мои штрафы", systemImage: "doc.text")
+                }
+            }
+            .foregroundStyle(Theme.textPrimary)
         } header: {
             Text("Штрафы")
         } footer: {
-            Text("Оценка, не постановление: пришёл ли штраф, знает только портал. Номер хранится только на телефоне.")
+            Text("Оценка, не постановление: пришёл ли штраф, знает только портал. Пришедший штраф внесите в «Мои штрафы» — сверим с поездкой и напомним о сроке. Номер и штрафы хранятся только на телефоне.")
         }
+        .sheet(isPresented: $showsFines) { FinesScreen() }
     }
 }

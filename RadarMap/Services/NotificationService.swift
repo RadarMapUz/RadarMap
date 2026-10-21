@@ -266,6 +266,40 @@ final class NotificationService: NSObject {
             .removePendingNotificationRequests(withIdentifiers: [Self.digestID])
     }
 
+    // MARK: - Срок оплаты штрафа (этап 17.3)
+
+    /// Префикс id напоминаний: одно на штраф, id — от штрафа.
+    nonisolated private static let fineReminderPrefix = "fine-due-"
+
+    /// Одно напоминание об оплате (FineReminder решает когда и пришло ли уже).
+    /// Тап открывает экран «Штрафы» (radarmap://fines). Ответ системы — в
+    /// замыкание: штраф помечается «напомнили» только если запрос принят.
+    func scheduleFineReminder(fineID: UUID, at fire: Date, title: String, body: String,
+                              completion: @escaping @MainActor (Bool) -> Void) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.userInfo = ["deeplink": DeepLink.finesURL.absoluteString]
+        let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: parts, repeats: false)
+        let id = Self.fineReminderPrefix + fineID.uuidString
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: id, content: content, trigger: trigger)) { error in
+            if let error {
+                Log.app.error("напоминание об оплате штрафа не поставлено: \(error.localizedDescription, privacy: .public)")
+            }
+            Task { @MainActor in completion(error == nil) }
+        }
+    }
+
+    func cancelFineReminder(fineID: UUID) {
+        let id = Self.fineReminderPrefix + fineID.uuidString
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [id])
+        center.removeDeliveredNotifications(withIdentifiers: [id])
+    }
+
     // MARK: - «Выезжайте раньше» (8.8.7)
 
     /// Заменить запланированные напоминания о выезде новыми. Снимаем по id
@@ -397,9 +431,10 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse
     ) async {
         let id = response.notification.request.identifier
-        // Итоги поездки: тап → диплинк тем же путём, что и виджеты (onOpenURL).
+        // Итоги поездки и срок оплаты штрафа: тап → диплинк тем же путём, что
+        // и виджеты (onOpenURL).
         // open() очередится системой и доедет до сцены даже при холодном старте.
-        if id == Self.tripSummaryID,
+        if id == Self.tripSummaryID || id.hasPrefix(Self.fineReminderPrefix),
            let link = response.notification.request.content.userInfo["deeplink"] as? String,
            let url = URL(string: link) {
             await MainActor.run { UIApplication.shared.open(url) }

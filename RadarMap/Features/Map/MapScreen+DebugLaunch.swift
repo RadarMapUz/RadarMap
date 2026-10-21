@@ -26,6 +26,14 @@ extension MapScreen {
             env.trip.seedDemoHistory(scale: args.contains("-demoBigNumbers") ? 20 : 1)
         }
         if args.contains("-demoMergePair") { env.trip.seedDemoMergePair() }
+        // Пришедшие штрафы поверх демо-истории — после её чтения: сверка
+        // правит записи, а до чтения правка истории отклоняется.
+        if args.contains("-demoFines") {
+            Task {
+                while !env.trip.isLoaded { await Task.pause(seconds: 0.2) }
+                FineDemo.seed(env)
+            }
+        }
         // С паузой: настоящие пробки приходят уже после загрузки карты, и
         // слой обязан перерисоваться на новом наборе, а не только на старте.
         if args.contains("-demoTraffic") {
@@ -35,7 +43,7 @@ extension MapScreen {
             }
         }
         // Снимки экранов для обзора вёрстки: -openScreen settings|search|
-        // places|nearby|stats|camera — открыть экран сразу после запуска.
+        // places|nearby|stats|camera|fines — открыть экран сразу после запуска.
         if let index = args.firstIndex(of: "-openScreen"), index + 1 < args.count {
             let screen = args[index + 1]
             Task {
@@ -46,6 +54,7 @@ extension MapScreen {
                 case "places": showMyPlaces = true
                 case "nearby": map.showNearbySheet = true
                 case "stats": map.showStats = true
+                case "fines": showFines = true
                 case "camera":
                     let here = env.location.currentCoordinate
                     map.selectedCamera = here.flatMap { env.cameras.nearest(to: $0, limit: 1).first } ?? env.cameras.cameras.first

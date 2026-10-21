@@ -19,6 +19,8 @@ nonisolated enum DeepLink: Equatable, Sendable {
     case trip(id: Double)
     /// Последняя сохранённая поездка (пуши до 19.10: radarmap://trip/last).
     case lastTrip
+    /// Экран «Штрафы» (напоминание об оплате: radarmap://fines).
+    case fines
 
     static let scheme = "radarmap"
 
@@ -28,11 +30,15 @@ nonisolated enum DeepLink: Equatable, Sendable {
         URL(string: "\(scheme)://trip/\(id)")!
     }
 
+    static let finesURL = URL(string: "\(scheme)://fines")!
+
     static func parse(_ url: URL) -> DeepLink? {
         guard url.scheme == scheme else { return nil }
         switch url.host() {
         case "stats":
             return .stats
+        case "fines":
+            return .fines
         case "trip":
             let path = url.pathComponents.filter { $0 != "/" }
             guard path.count == 1 else { return .stats }

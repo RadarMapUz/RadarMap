@@ -48,6 +48,8 @@ struct MapScreen: View {
     /// Итог только что завершённой поездки («Поездка сохранена») и деталка из него.
     @State var tripEndRecord: TripRecord?
     @State var tripEndDetail: TripRecord?
+    /// Экран «Штрафы» с карты: напоминание об оплате (radarmap://fines).
+    @State var showFines = false
     /// Текст ссылки «Поделиться прибытием» для системного листа.
     @State var etaSharePayload: ActivityTextPayload?
     /// «Задерживаюсь: буду в 9:07» — лист от экрана, а не от плашки (8.8.14).
@@ -251,6 +253,7 @@ struct MapScreen: View {
             ActivityTextSheet(text: payload.text) { _ in }
                 .presentationDetents([.medium, .large])
         }
+        .sheet(isPresented: $showFines) { FinesScreen() }
         .sheet(item: $tripEndDetail) { record in
             TripDetailSheet(record: record,
                             onRoute: !env.location.hasLocation ? nil : { coord, name in
@@ -264,7 +267,8 @@ struct MapScreen: View {
         // Диплинки на статистику (DeepLink.parse):
         // radarmap://trip/<id> — пуш «Итоги поездки», открывает ЭТУ поездку;
         // radarmap://trip — виджет недели на локскрине,
-        // radarmap://stats — домашний виджет километров.
+        // radarmap://stats — домашний виджет километров,
+        // radarmap://fines — напоминание о сроке оплаты штрафа.
         .onOpenURL { url in
             guard let link = DeepLink.parse(url) else { return }
             // Поверх может быть другой шит — вторая презентация молча не
@@ -278,6 +282,7 @@ struct MapScreen: View {
             showMyPlaces = false
             showsWhatsNew = false
             tripEndDetail = nil
+            showFines = false
             // Деталка — отдельный шит карты: поверх открытых Итогов не встанет.
             if link != .stats { map.showStats = false }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
@@ -293,6 +298,8 @@ struct MapScreen: View {
                     }
                 case .lastTrip:
                     if let last = env.trip.history.first { tripEndDetail = last } else { map.showStats = true }
+                case .fines:
+                    showFines = true
                 }
             }
         }

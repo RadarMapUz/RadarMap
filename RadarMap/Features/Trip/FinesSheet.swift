@@ -5,7 +5,9 @@
 //  «Возможные штрафы» периода: каждый проезд со штрафной ступенью — строкой
 //  с суммой и кнопкой «Не пришёл». Пометка убирает сумму из всех сводок
 //  (запись + дневной агрегат, см. TripStats.setFineOutcome) и отменяется
-//  той же кнопкой — деньги списываются только рукой владельца.
+//  той же кнопкой — деньги списываются только рукой владельца. «Пришёл»
+//  открывает форму постановления (этап 17), сверенную с этим проездом:
+//  сумма, срок и напоминание живут уже на экране «Штрафы».
 //
 //  В список идут только проезды с ДОСТОВЕРНЫМ лимитом — как в fineRisk:
 //  сумма в сумах по догадке о классе дороги была бы ложью про деньги.
@@ -37,6 +39,10 @@ struct FinesSheet: View {
     /// Проезд, открытый на карте.
     @State private var selectedItem: PassMapPayload?
     @State private var explainerOpen = false
+    /// «Пришёл» — форма постановления, сверенная с этим проездом (этап 17).
+    @State private var entry: FineEntryRequest?
+    /// «Штрафы» — пришедшие постановления и сроки оплаты.
+    @State private var showsReceived = false
 
     /// Слепок для шита карты: пара (проезд, запись) в момент тапа.
     struct PassMapPayload: Identifiable {
@@ -50,7 +56,8 @@ struct FinesSheet: View {
         // «Пришёл»/«Не пришёл» обновляет и шапку, и вид строки.
         let items = Self.items(env.trip.history, period: period, anchor: anchor)
         let pendingSum = items.filter(\.pass.countsTowardFines).reduce(0.0) { $0 + $1.fine }
-        let paidSum = items.filter { $0.pass.fineOutcome == .paid }.reduce(0.0) { $0 + $1.fine }
+        // Пришедшие — суммой постановления, если его внесли (paidAmount).
+        let paidSum = items.reduce(0.0) { $0 + ($1.pass.paidAmount ?? 0) }
         let dismissedCount = items.count { $0.pass.fineOutcome == .dismissed }
 
         NavigationStack {
@@ -59,6 +66,7 @@ struct FinesSheet: View {
                 LazyVStack(spacing: 12) {
                     // Один экран (6.9): шапка → строки → «Откуда сумма и как
                     // считаем» раскрывашкой. Нет штрафов — объяснение раскрыто.
+                    receivedLink
                     if items.isEmpty {
                         emptyHint
                     } else {
@@ -106,6 +114,34 @@ struct FinesSheet: View {
             PassMapSheet(pass: payload.pass, track: payload.record.trackPoints,
                          record: payload.record)
         }
+        .sheet(item: $entry) { request in FineEntrySheet(request: request) }
+        .sheet(isPresented: $showsReceived) { FinesScreen() }
+    }
+
+    /// Вход в «Штрафы»: пришедшие постановления, сроки, «Оплатить».
+    private var receivedLink: some View {
+        Button {
+            showsReceived = true
+        } label: {
+            HStack(spacing: 10) {
+                IconBadge(symbol: "doc.text.fill", tint: Theme.Icon.money, size: 30)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Пришедшие штрафы и сроки оплаты")
+                        .font(.rounded(14, .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text("Вставьте текст СМС — сверим с поездкой")
+                        .font(.rounded(11))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.rounded(13, .bold))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            .statCard(padding: 12, radius: Theme.cornerMedium)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// «Откуда сумма и как считаем» — заголовок-раскрывашка и FinesExplainer.
@@ -253,8 +289,10 @@ struct FinesSheet: View {
             VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(outcome == .paid
-                         ? String(format: String(localized: "штраф ≈ %@"),
-                                  Formatting.money(item.fine))
+                         ? (item.pass.fineAmount.map {
+                               String(format: String(localized: "штраф %@"), FineFormat.money($0))
+                           } ?? String(format: String(localized: "штраф ≈ %@"),
+                                       Formatting.money(item.fine)))
                          : String(format: String(localized: "риск ≈ %@"),
                                   Formatting.money(item.fine)))
                         .font(.rounded(15, .bold))
@@ -270,11 +308,22 @@ struct FinesSheet: View {
                     }
                 }
                 HStack(spacing: 8) {
-                if outcome == .pending {
-                    outcomeButton(item, set: .paid,
-                                  title: String(localized: "Пришёл"),
-                                  symbol: "envelope.badge", tint: Theme.warning,
-                                  hint: String(localized: "Отметить: штраф пришёл"))
+                if item.pass.fineReceiptID != nil {
+                    // Сверен с внесённым постановлением: судьбу правит экран
+                    // «Штрафы», иначе штраф там и проезд здесь разошлись бы.
+                    Label("Постановление внесено — в «Штрафах»", systemImage: "doc.text")
+                        .font(.rounded(13, .medium))
+                        .foregroundStyle(Theme.textSecondary)
+                } else if outcome == .pending {
+                    Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        entry = FineEntryRequest(pass: item.pass, tripID: item.record.id)
+                    } label: {
+                        outcomeLabel(String(localized: "Пришёл"), symbol: "envelope.badge",
+                                     tint: Theme.warning)
+                    }
+                    .buttonStyle(PressableStyle())
+                    .accessibilityLabel(Text("Штраф пришёл: внести постановление"))
                     outcomeButton(item, set: .dismissed,
                                   title: String(localized: "Не пришёл"),
                                   symbol: "checkmark.circle", tint: Theme.success,
@@ -304,21 +353,25 @@ struct FinesSheet: View {
                                         tripID: item.record.id)
             }
         } label: {
-            Label(title, systemImage: symbol)
-                .font(.rounded(15, .semibold))
-                .foregroundStyle(tint)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 11).padding(.vertical, 7)
-                .background(tint.opacity(0.12), in: Capsule())
-                // Капсула ~34 pt остаётся прежней на глаз, а мишень — 44:
-                // «Пришёл» и «Не пришёл» стоят рядом, и промах ставит деньгам
-                // не ту судьбу.
-                .tapTarget()
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            outcomeLabel(title, symbol: symbol, tint: tint)
         }
         .buttonStyle(PressableStyle())
         .accessibilityLabel(Text(hint))
+    }
+
+    private func outcomeLabel(_ title: String, symbol: String, tint: Color) -> some View {
+        Label(title, systemImage: symbol)
+            .font(.rounded(15, .semibold))
+            .foregroundStyle(tint)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 11).padding(.vertical, 7)
+            .background(tint.opacity(0.12), in: Capsule())
+            // Капсула ~34 pt остаётся прежней на глаз, а мишень — 44:
+            // «Пришёл» и «Не пришёл» стоят рядом, и промах ставит деньгам
+            // не ту судьбу.
+            .tapTarget()
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
     }
 
     // MARK: - Пустое состояние и сноска

@@ -101,7 +101,7 @@ struct CarPlayEngineLayer: View {
             cameras: [],
             cameraRevision: env.cameras.revision,
             limitRevision: env.speedLimits.indexRevision * 2 + (env.settings.speedLimitsEnabled ? 1 : 0),
-            cameraProvider: { env.cameras.cameras(in: $0, limit: AppConfig.engineCameraViewportLimit) },
+            cameraProvider: { env.cameras.cameras(in: $0, limit: $1) },
             // Лимит под значком камеры не рисуется: он один — у скорости
             // («в одном месте со скоростью хватит» — владелец, 12.10).
             limitProvider: nil,

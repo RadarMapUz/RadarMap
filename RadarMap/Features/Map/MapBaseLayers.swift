@@ -79,7 +79,7 @@ struct EngineBaseLayer: View {
                         cameras: [],
                         cameraRevision: env.cameras.revision,
                         limitRevision: env.speedLimits.indexRevision * 2 + (env.settings.speedLimitsEnabled ? 1 : 0),
-                        cameraProvider: { env.cameras.cameras(in: $0, limit: AppConfig.engineCameraViewportLimit) },
+                        cameraProvider: { env.cameras.cameras(in: $0, limit: $1) },
                         // Лимит — только у скорости, не под каждой камерой
                         // (владелец, 12.10); заодно нет сотни запросов лимитов
                         // на главном потоке при выезде за край области.

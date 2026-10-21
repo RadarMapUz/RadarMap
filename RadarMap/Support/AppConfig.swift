@@ -1821,6 +1821,9 @@ nonisolated enum AppConfig {
     static let engineRouteProgressStep = 30.0
     static let engineCameraViewportLimit = 160
     static let engineCameraViewportPadding = 1.5
+    /// Урезанная бюджетом выборка камер верна только для своего вида: сдвиг
+    /// центра или охвата больше этой доли охвата — выборка заново (20.1).
+    static let engineCameraViewTolerance = 0.01
     static let engineMetricsSampleCount = 300
     /// Подавление дрожания стоящей машины и повторных анимаций от обновления UI.
     static let engineCameraMoveThreshold = 2.0

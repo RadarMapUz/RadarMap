@@ -77,6 +77,59 @@ nonisolated enum EngineMapPresentation {
             latitudeDelta: min(170, region.span.latitudeDelta * AppConfig.engineCameraViewportPadding),
             longitudeDelta: min(350, region.span.longitudeDelta * AppConfig.engineCameraViewportPadding)))
     }
+
+    /// Что лежит в источнике камер: по какому виду сделана выборка, область
+    /// с запасом и полна ли она.
+    ///
+    /// Выборка ограничена бюджетом (`engineCameraViewportLimit`) и при
+    /// переполнении оставляет камеры, ближайшие к ЦЕНТРУ области. Урезанная
+    /// выборка не покрывает область, по которой сделана, и «вид внутри
+    /// прежней области» для неё ничего не значит. Поездка 21.10 (P0 20.1):
+    /// обзор маршрута в 12 км набирал 160 камер вокруг середины пути, кадр
+    /// ведения (z17 у машины) лежал внутри той области — и выборка не
+    /// повторялась: у машины в источнике не было ни одной камеры всю поездку,
+    /// на телефоне и в машине. Так же — первый кадр новой карты (вид всего
+    /// мира до установки камеры): CarPlay, подключённый на ходу, оставался без
+    /// камер до конца поездки.
+    struct CameraWindow {
+        /// Вид, по которому сделана выборка.
+        let view: MKCoordinateRegion
+        /// Область выборки — вид с запасом.
+        let padded: MKCoordinateRegion
+        /// Бюджет выборку не урезал: в ней все камеры области.
+        let complete: Bool
+
+        /// `found` — сколько камер вернула выборка с бюджетом `limit`: ровно
+        /// бюджет — значит, могла быть урезана.
+        init(view: MKCoordinateRegion, found: Int, limit: Int) {
+            self.view = view
+            padded = EngineMapPresentation.padded(view)
+            complete = found < limit
+        }
+    }
+
+    /// Нужна ли новая выборка для вида. Полная — повторяется, только когда
+    /// вид вышел из области с запасом (меньше перестановок символов при
+    /// осмотре). Урезанная верна лишь для своего вида: любой сдвиг или
+    /// масштаб — выборка заново, иначе приближение к машине оставляло бы
+    /// камеры вокруг чужого центра.
+    static func needsCameraQuery(_ window: CameraWindow?, view: MKCoordinateRegion) -> Bool {
+        guard let window else { return true }
+        if window.complete { return !contains(window.padded, view) }
+        return !sameView(window.view, view)
+    }
+
+    /// Тот же вид с точностью до шума пересчёта границ.
+    static func sameView(_ a: MKCoordinateRegion, _ b: MKCoordinateRegion) -> Bool {
+        let tolerance = AppConfig.engineCameraViewTolerance
+        let lat = max(a.span.latitudeDelta, b.span.latitudeDelta) * tolerance
+        let lon = max(a.span.longitudeDelta, b.span.longitudeDelta) * tolerance
+        return abs(a.center.latitude - b.center.latitude) <= lat
+            && abs(a.center.longitude - b.center.longitude) <= lon
+            && abs(a.span.latitudeDelta - b.span.latitudeDelta) <= lat
+            && abs(a.span.longitudeDelta - b.span.longitudeDelta) <= lon
+    }
+
     static func maneuver(_ coordinates: [CLLocationCoordinate2D], at distance: Double?, progress: Double)
         -> [CLLocationCoordinate2D] {
         guard let distance, distance >= progress,

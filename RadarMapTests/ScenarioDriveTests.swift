@@ -114,8 +114,8 @@ final class ScenarioDriveTests: XCTestCase {
                     let atCamera = straight <= PassGeometry.traverseLimit(for: camera)
                     if atCamera { recall.notePassed(cameraID: camera.id) }
                     if engine.isAnnounced(camera.id) {
-                        let atTraverse = straight <= max(PassGeometry.traverseLimit(for: camera),
-                                                         AppConfig.alertTraverseMeters)
+                        let atTraverse = straight <= LocationGates.alertTraverseLimit(
+                            for: camera, accuracy: situation.horizontalAccuracy)
                         if atTraverse {
                             engine.noteApproach(camera.id, distance: straight, at: here, course: situation.course,
                                                 accuracy: situation.horizontalAccuracy)
@@ -527,14 +527,16 @@ final class ScenarioDriveTests: XCTestCase {
     /// — хорошие 6 м); на развороте сдвиг меняется плавно — каньон не
     /// перепрыгивает улицу за секунду. Скорость и курс доплеровские,
     /// уверенные: LocationFilter им верит, гейты работают (как в 14.14).
+    /// `startX` — по какой проезжей части едем туда (14.16: дальняя сторона
+    /// широкого проспекта, а не дорога камеры).
     private func uTurnFixes(there: Double, back: Double,
-                            uTurnTo returnX: Double = 12) -> [LocationFilter.Fix] {
-        let legs = [Leg(x: 0, y: 300, speed: 13.9),
+                            uTurnTo returnX: Double = 12, from startX: Double = 0) -> [LocationFilter.Fix] {
+        let legs = [Leg(x: startX, y: 300, speed: 13.9),
                     Leg(x: returnX, y: 300, speed: 5, stopSeconds: 5),
                     Leg(x: returnX, y: -900, speed: 13.9)]
-        let thereCount = fixes(from: (0, -900), legs: [legs[0]]).count
-        let turnCount = fixes(from: (0, 300), legs: [legs[1]]).count
-        return fixes(from: (0, -900), legs: legs).enumerated().map { index, fix in
+        let thereCount = fixes(from: (startX, -900), legs: [legs[0]]).count
+        let turnCount = fixes(from: (startX, 300), legs: [legs[1]]).count
+        return fixes(from: (startX, -900), legs: legs).enumerated().map { index, fix in
             let shift: Double
             let accuracy: Double
             if index < thereCount {
@@ -602,6 +604,67 @@ final class ScenarioDriveTests: XCTestCase {
                 XCTAssertEqual(drive.firstAlerts[1], 1,
                                "точность \(Int(accuracy)) м, \(target.type): \(drive.firstAlertPoints[1] ?? [])")
             }
+        }
+    }
+
+    // MARK: - 14.16: траверз на плохом GPS
+
+    /// 14.16: широкий проспект, туда — по ДАЛЬНЕЙ проезжей части (`far` м от
+    /// дороги камеры, у которой стороны не доказаны — она снимает и нашу), а
+    /// GPS плохой (35–65 м, курс уверенный), и точка уехала ещё дальше от её
+    /// дороги на свою погрешность. Сближение — `far` + сдвиг, и при 95–105 м
+    /// оно не укладывалось в траверз оповещения (90 м): камера «не
+    /// проезжалась», серия не закрывалась — и после разворота на её же
+    /// сторону (поправка 14.15 там уже была) она молчала весь обратный
+    /// подъезд. Теперь траверз шире на ту же погрешность сверх 10 м. Три
+    /// профиля, как в 14.15: снап (своя дорога — кусок и ось), тренога и
+    /// камера с непроверенной позицией (своя дорога — линия проезда, и её
+    /// точка сближения снимается на тех же тиках траверза).
+    func testFarCarriagewayOnPoorGPSWarnsAgainAfterAUTurn() {
+        let targets: [Camera] = [
+            snappedCamera(1, x: 0, y: 0, axis: 0),
+            camera(1, x: 0, y: 0, type: "Тренога"),
+            profiledCamera(1, x: 0, y: 0, axis: 0, needsReview: true),
+        ]
+        for far in [30.0, 35, 40] {
+            for accuracy in [35.0, 50, 60, AppConfig.maxHorizontalAccuracyMeters] {
+                for target in targets {
+                    let label = "дальняя сторона \(Int(far)) м, точность и сдвиг \(Int(accuracy)) м, "
+                        + "\(target.type), needsReview \(target.needsReview == true)"
+                    var drive = Drive()
+                    drive.run(uTurnFixes(there: accuracy, back: accuracy, uTurnTo: 0, from: far),
+                              cameras: [target], xy: xy)
+                    XCTAssertEqual(drive.rejected, 0, label)
+                    XCTAssertEqual(drive.firstAlerts[1], 2, "туда и после разворота обратно — \(label)")
+                    XCTAssertGreaterThanOrEqual(drive.firstAlertPoints[1]?.dropFirst().first?.y ?? -.infinity,
+                                                150, "обратно — заранее, а не у самой камеры: \(label)")
+                }
+            }
+        }
+    }
+
+    /// Тот же проезд по дальней стороне без разворота: для оповещения камеру
+    /// проехали (серия закрыта, следующий подъезд будет новым), а запись
+    /// проезда и охват — нет: у них траверз прежний (40 м у снапа), по
+    /// доказательству, и погрешность его не расширяет.
+    func testFarCarriagewayOnPoorGPSIsPassedForTheAlertOnly() {
+        for accuracy in [50.0, 60, AppConfig.maxHorizontalAccuracyMeters] {
+            let label = "точность и сдвиг \(Int(accuracy)) м"
+            let track = fixes(from: (35, -900), legs: [Leg(x: 35, y: 600, speed: 13.9)]).map { fix in
+                let p = xy(fix.lat, fix.lon)
+                let q = point(p.x + accuracy, p.y)
+                return LocationFilter.Fix(lat: q.lat, lon: q.lon, horizontalAccuracy: accuracy,
+                                          speed: fix.speed, speedAccuracy: fix.speedAccuracy, course: fix.course,
+                                          courseAccuracy: fix.courseAccuracy, timestamp: fix.timestamp)
+            }
+            var drive = Drive()
+            drive.run(track, cameras: [snappedCamera(1, x: 0, y: 0, axis: 0)], xy: xy)
+            drive.finish()
+            XCTAssertEqual(drive.rejected, 0, label)
+            XCTAssertEqual(drive.firstAlerts[1], 1, label)
+            XCTAssertTrue(drive.engine.isPassed(1), "для оповещения проехали — \(label)")
+            XCTAssertNil(drive.passes[1], "проезд не записан — \(label)")
+            XCTAssertEqual(drive.recall.tally().passed, 0, "охват: у камеры не были — \(label)")
         }
     }
 

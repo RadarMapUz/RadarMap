@@ -444,6 +444,119 @@ final class LocationGatesTests: XCTestCase {
         }
     }
 
+    // MARK: - Траверз оповещения на плохом фиксе (14.16)
+
+    private func distance(to camera: Camera) -> Double {
+        GeoMath.fastDistance(me.latitude, me.longitude, camera.lat, camera.lon)
+    }
+
+    /// Движок серии ровно так, как его ведёт сервис: о камере сказали, потом
+    /// по фиксу на каждую позицию камеры относительно нас (мы едем на север,
+    /// камера уходит назад) — траверз оповещения и «явно позади».
+    private func passed(_ positions: [Camera], accuracy: Double) -> Bool {
+        var engine = AlertEngine()
+        XCTAssertNotNil(engine.evaluate(cameraID: 1, distance: 300, radius: 400, moving: true))
+        let s = situation(accuracy: accuracy)
+        for position in positions {
+            let atTraverse = distance(to: position)
+                <= LocationGates.alertTraverseLimit(for: position, accuracy: accuracy)
+            engine.noteGeometry(1, atTraverse: atTraverse,
+                                behind: LocationGates.isClearlyBehind(position, in: s), ahead: false)
+        }
+        return engine.isPassed(1)
+    }
+
+    /// Дальняя проезжая часть широкого проспекта (35 м от дороги камеры) и
+    /// фикс, уехавший от её дороги ещё на свои 60 м: сближение — 95 м. До
+    /// 14.16 траверз оповещения был 90 м ровно, и камера не «проезжалась»:
+    /// серия не закрывалась, после разворота новый подъезд не взводился.
+    /// Теперь траверз шире на погрешность сверх 10 м — камеру проехали.
+    /// Неизвестная точность — как худшая принятая. На хорошем фиксе та же
+    /// геометрия — по-прежнему не траверз.
+    func testPoorFixFarCarriagewayCountsAsPassed() {
+        let abeam = camera(ahead: 0, east: -95, roadBearing: 0, axis: 0, split: true)
+        let behind = [-60.0, -80].map { camera(ahead: $0, east: -95, roadBearing: 0, axis: 0, split: true) }
+        XCTAssertEqual(distance(to: abeam), 95, accuracy: 1)
+        for accuracy in [60.0, AppConfig.maxHorizontalAccuracyMeters, -1] {
+            XCTAssertTrue(passed([abeam] + behind, accuracy: accuracy), "точность \(Int(accuracy)) м")
+        }
+        for accuracy in [5.0, AppConfig.corridorAccuracyBaselineMeters] {
+            XCTAssertFalse(passed([abeam] + behind, accuracy: accuracy),
+                           "хороший фикс, 95 м — не траверз (точность \(Int(accuracy)) м)")
+        }
+    }
+
+    /// Шире траверз — не значит «проехали» раньше: камера в 134 м впереди
+    /// (уже внутри траверза плохого фикса) проеханной не становится, пока не
+    /// окажется явно позади два фикса подряд — сближение должно кончиться.
+    func testWideTraverseDoesNotPassACameraStillAhead() {
+        let approach = [120.0, 90, 60, 30].map { camera(ahead: $0, east: -60, roadBearing: 0, axis: 0, split: true) }
+        XCTAssertLessThanOrEqual(distance(to: approach[0]),
+                                 LocationGates.alertTraverseLimit(for: approach[0], accuracy: 60))
+        XCTAssertFalse(passed(approach, accuracy: 60), "камера впереди — не проехали")
+        let after = [-60.0, -80].map { camera(ahead: $0, east: -60, roadBearing: 0, axis: 0, split: true) }
+        XCTAssertFalse(passed(approach + [after[0]], accuracy: 60), "позади один фикс — ещё нет")
+        XCTAssertTrue(passed(approach + after, accuracy: 60), "позади два подряд — проехали")
+    }
+
+    /// На хорошем GPS (до базы 10 м включительно) траверз оповещения ровно
+    /// прежний — 90 м у снапа и у камеры без профиля; сверх базы он растёт
+    /// метр на метр и упирается в худшую принятую погрешность: не шире
+    /// 145 м ни на каком фиксе, даже на точности, которую фильтр не пропустил бы.
+    func testAlertTraverseIsUnchangedOnAGoodFixAndBounded() {
+        let snapped = camera(ahead: 0, roadBearing: 0, axis: 0, split: true)
+        let bare = camera(ahead: 0, roadBearing: nil, cls: nil)
+        for target in [snapped, bare] {
+            for accuracy in [3.0, 5, AppConfig.corridorAccuracyBaselineMeters] {
+                XCTAssertEqual(LocationGates.alertTraverseLimit(for: target, accuracy: accuracy),
+                               AppConfig.alertTraverseMeters)
+            }
+            XCTAssertEqual(LocationGates.alertTraverseLimit(for: target, accuracy: 35), 115, accuracy: 1e-9)
+            let worst = AppConfig.alertTraverseMeters + AppConfig.maxHorizontalAccuracyMeters
+                - AppConfig.corridorAccuracyBaselineMeters
+            XCTAssertEqual(worst, 145)
+            for accuracy in [AppConfig.maxHorizontalAccuracyMeters, -1, 0, 200, 5_000] {
+                XCTAssertEqual(LocationGates.alertTraverseLimit(for: target, accuracy: accuracy), worst,
+                               "точность \(Int(accuracy))")
+            }
+        }
+    }
+
+    /// Запись проезда и охват — свой траверз, и погрешность его не трогает:
+    /// 40 м у снапа, 80 у камеры без профиля, на любом фиксе — и он никогда
+    /// не шире траверза оповещения (записанный проезд для серии тоже «был»).
+    /// Сближение в 95 м на плохом фиксе проездом не пишется.
+    func testRecordTraverseIsUntouchedByAccuracy() {
+        let snapped = camera(ahead: 0, roadBearing: 0, axis: 0, split: true)
+        let bare = camera(ahead: 0, roadBearing: nil, cls: nil)
+        XCTAssertEqual(PassGeometry.traverseLimit(for: snapped), AppConfig.passTraverseMaxMeters)
+        XCTAssertEqual(PassGeometry.traverseLimit(for: bare), AppConfig.passTraverseNoProfileMeters)
+        XCTAssertEqual(AppConfig.passTraverseMaxMeters, 40)
+        XCTAssertEqual(AppConfig.passTraverseNoProfileMeters, 80)
+        for target in [snapped, bare] {
+            for accuracy in [5.0, 35, AppConfig.maxHorizontalAccuracyMeters, -1] {
+                XCTAssertGreaterThanOrEqual(LocationGates.alertTraverseLimit(for: target, accuracy: accuracy),
+                                            PassGeometry.traverseLimit(for: target))
+            }
+        }
+        // Проезд мимо снапа по дальней стороне, фикс 60 м: сближение 95 м.
+        var tracking = PassTracking()
+        var passes: [PassTracking.Pass] = []
+        for along in stride(from: -400.0, through: 600, by: 14) {
+            let at = GeoMath.destination(from: GeoMath.destination(from: snapped.coordinate, bearing: 90,
+                                                                   distanceMeters: 95),
+                                         bearing: 0, distanceMeters: along)
+            let d = GeoMath.fastDistance(at.latitude, at.longitude, snapped.lat, snapped.lon)
+            passes += tracking.update(nearest: snapped, nearestDistance: d, coordinate: at, speedKmh: 50,
+                                      roadLimit: 60, radius: 400, course: 0,
+                                      offRoad: PassGeometry.isProvenOffRoad(camera:at:),
+                                      axisDeviation: {
+                                          PassGeometry.axisDeviation(camera: $0, at: $1, course: $2, accuracy: 60)
+                                      })
+        }
+        XCTAssertTrue((passes + tracking.flush()).isEmpty, "95 м — не проезд, на любом фиксе")
+    }
+
     // MARK: - Коридор: старая база и внезапные точки
 
     /// Камера без профиля дороги прямо по курсу — коридор принимает.

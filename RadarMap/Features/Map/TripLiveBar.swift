@@ -141,11 +141,11 @@ struct TripLiveBar: View {
         let route = env.route
         let location = env.location
         let chipShown = TripScreenLayout.showsCameraChip(
-            distance: location.nearestCamera == nil ? nil : location.distanceToNearest,
+            distance: location.displayNearestCamera == nil ? nil : location.displayDistanceToNearest,
             isAlerting: location.alertLevel >= 1, isSignalStale: location.isSignalStale)
         if route.isActive, env.settings.showNextCamera, let next = route.nextCamera,
            TripScreenLayout.showsCameraCapsule(capsuleCameraID: next.camera.id,
-                                               chipCameraID: location.nearestCamera?.id,
+                                               chipCameraID: location.displayNearestCamera?.id,
                                                chipShown: chipShown,
                                                isSignalStale: location.isSignalStale) {
             Button(action: onShowCameras) {

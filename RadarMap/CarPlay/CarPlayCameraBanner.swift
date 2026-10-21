@@ -16,6 +16,12 @@
 //  Решение «предупреждать ли» по-прежнему принимают гейты оповещений: баннер
 //  говорит ровно о той камере, о которой говорит голос и док.
 //
+//  iOS 27 (25.H1): аватар — значок типа цветом маркера, картинка над кнопкой —
+//  знак ограничения у камеры и полоса приближения (CarPlayCameraBannerLook,
+//  CarPlayBannerArt); крестика нет — закрывает «Понятно». Картинка
+//  перерисовывается вместе с расстоянием, но только при смене ступени
+//  полосы или знака. Раньше iOS 27 — как было: значок типа и строка лимита.
+//
 
 import CarPlay
 import os
@@ -60,6 +66,16 @@ nonisolated enum CarPlayCameraBannerText {
     }
 }
 
+extension CarPlayCameraCue {
+    /// Решение по живому состоянию — одно для карты, баннера и оценок поездки.
+    @MainActor
+    static func current(_ location: LocationService) -> Cue {
+        let id = location.nearestCamera?.id
+        return decide(cameraID: id, approaching: location.isApproachingCamera,
+                      familiar: id.map { location.familiarCameraIDs.contains($0) } ?? false)
+    }
+}
+
 /// Баннер камеры одного подключения. Зовётся на каждом пересчёте ведения.
 @MainActor
 final class CarPlayCameraBanner {
@@ -72,6 +88,13 @@ final class CarPlayCameraBanner {
     /// приложения (уведомление на несколько секунд).
     private var presentedOnScreen = false
     private var shownText: CarPlayCameraBannerText.Text?
+    /// Картинка баннера на iOS 27 (знак, ступень полосы) и тема, под которую
+    /// она нарисована, — что ушло последним.
+    private var shownArt: CarPlayCameraBannerLook.Art?
+    private var shownArtDark: Bool?
+    /// Пределы картинок баннера (iOS 27) — спрашиваем систему один раз за
+    /// подключение, не на пути тревоги (ARCHITECTURE.md, правило 21).
+    private var imageSizes: (avatar: CGSize, alert: CGSize)?
     private var updatedAt = Date.distantPast
     /// Ограничение у камеры — одно на подъезд: поиск по индексу дорог на
     /// каждом тике ради сравнения строк не нужен.
@@ -87,7 +110,10 @@ final class CarPlayCameraBanner {
 
     func update(banners: CarPlayBanners, onScreen: Bool, onDark: Bool) {
         let location = env.location
-        guard location.isApproachingCamera, let camera = location.nearestCamera,
+        // Тревога гейтов (в радиусе = уровень ≥ 1, скорость от
+        // directionalMinSpeedKmh) — баннер; своя камера — без баннера: голос о
+        // ней молчит, и на карте у неё галочка (CarPlayCameraCue).
+        guard CarPlayCameraCue.current(location).banner, let camera = location.nearestCamera,
               let distance = location.distanceToNearest else {
             // Проехали или тревога снята: баннер уходит, следующий подъезд —
             // заново, в том числе к той же камере. Короткое мигание тревоги
@@ -127,9 +153,22 @@ final class CarPlayCameraBanner {
                 let since = Date().timeIntervalSince(updatedAt)
                 guard since >= AppConfig.carPlayCameraBannerUpdateSeconds else { return }
                 let text = text(for: camera, distance: distance)
-                guard CarPlayCameraBannerText.shouldUpdate(shown: shownText, new: text, sinceLast: since)
-                else { return }
-                alert.updateTitleVariants(text.titles, subtitleVariants: text.subtitles)
+                let art = art(for: camera, distance: distance)
+                let textChanged = CarPlayCameraBannerText.shouldUpdate(shown: shownText, new: text, sinceLast: since)
+                let artChanged = art != nil && (art != shownArt || onDark != shownArtDark)
+                guard textChanged || artChanged else { return }
+                if #available(iOS 27.0, *), artChanged, let art {
+                    // Картинка — вместе с цифрой одним сообщением; кнопки те же,
+                    // срок прежний (-1 — «не менять», CPNavigationAlert.h).
+                    let images = images(for: camera, art: art, onDark: onDark)
+                    alert.updateTitleVariants(text.titles, subtitleVariants: text.subtitles,
+                                              avatarImage: images.avatar, alert: images.alert,
+                                              actions: alert.actions, duration: -1)
+                    shownArt = art
+                    shownArtDark = onDark
+                } else {
+                    alert.updateTitleVariants(text.titles, subtitleVariants: text.subtitles)
+                }
                 shownText = text
                 updatedAt = Date()
                 return
@@ -141,15 +180,29 @@ final class CarPlayCameraBanner {
         }
 
         let text = text(for: camera, distance: distance)
-        let next = CPNavigationAlert(
-            titleVariants: text.titles,
-            subtitleVariants: text.subtitles,
-            image: CarPlayGuidance.symbol(camera.kind.symbolName, pointSize: 30, onDark: onDark),
-            primaryAction: CPAlertAction(title: String(localized: "Понятно"), style: .cancel) { _ in },
-            secondaryAction: nil,
-            // На нашем экране — до конца подъезда (снимаем сами); поверх
-            // чужого приложения — уведомление, как до 18.10.
-            duration: onScreen ? 0 : AppConfig.carPlayCameraAlertSeconds)
+        let art = art(for: camera, distance: distance)
+        // На нашем экране — до конца подъезда (снимаем сами); поверх чужого
+        // приложения — уведомление, как до 18.10.
+        let duration = onScreen ? 0 : AppConfig.carPlayCameraAlertSeconds
+        let understood = CPAlertAction(title: String(localized: "Понятно"), style: .cancel) { _ in }
+        let next: CPNavigationAlert
+        if #available(iOS 27.0, *), let art {
+            let images = images(for: camera, art: art, onDark: onDark)
+            next = CPNavigationAlert(titleVariants: text.titles, subtitleVariants: text.subtitles,
+                                     avatarImage: images.avatar, alert: images.alert,
+                                     actions: [understood], duration: duration)
+            // Закрывает «Понятно»; второй крестик рядом с ним — лишняя цель
+            // для пальца на ходу.
+            next.showsCloseButton = false
+        } else {
+            next = CPNavigationAlert(
+                titleVariants: text.titles,
+                subtitleVariants: text.subtitles,
+                image: CarPlayGuidance.symbol(camera.kind.symbolName, pointSize: 30, onDark: onDark),
+                primaryAction: understood,
+                secondaryAction: nil,
+                duration: duration)
+        }
         // Прежний баннер не снимаем отдельно: камера заменяет всё, и замену
         // делает очередь — два снятия подряд CarPlay мог бы сложить так, что
         // новый баннер не встал бы вовсе.
@@ -159,6 +212,8 @@ final class CarPlayCameraBanner {
         cameraID = camera.id
         presentedOnScreen = onScreen
         shownText = text
+        shownArt = art
+        shownArtDark = onDark
         updatedAt = Date()
         Log.carplay.notice("камера \(camera.id, privacy: .public): баннер \(onScreen ? "на нашем экране" : "поверх другого приложения", privacy: .public)")
     }
@@ -172,13 +227,44 @@ final class CarPlayCameraBanner {
                                             limit: limit?.value)
     }
 
+    /// Картинка баннера — только на iOS 27 (раньше у баннера её нет).
+    private func art(for camera: Camera, distance: Double) -> CarPlayCameraBannerLook.Art? {
+        guard #available(iOS 27.0, *) else { return nil }
+        if limit?.cameraID != camera.id {
+            limit = (camera.id, env.speedLimits.limit(near: camera.coordinate))
+        }
+        return CarPlayCameraBannerLook.art(limit: limit?.value, distance: distance,
+                                           radius: env.location.effectiveAlertRadius)
+    }
+
+    @available(iOS 27.0, *)
+    private func images(for camera: Camera, art: CarPlayCameraBannerLook.Art,
+                        onDark: Bool) -> (avatar: UIImage, alert: UIImage) {
+        let sizes = imageSizes ?? (
+            CarPlayCameraBannerLook.fit(AppConfig.carPlayBannerAvatarSize,
+                                        into: CPNavigationAlert.maximumAvatarImageSize),
+            CarPlayCameraBannerLook.fit(AppConfig.carPlayBannerAlertImageSize,
+                                        into: CPNavigationAlert.maximumAlertImageSize))
+        if imageSizes == nil {
+            imageSizes = sizes
+            Log.carplay.notice("баннер камеры iOS 27: аватар \(Int(sizes.avatar.width), privacy: .public)×\(Int(sizes.avatar.height), privacy: .public), картинка \(Int(sizes.alert.width), privacy: .public)×\(Int(sizes.alert.height), privacy: .public) (предел \(Int(CPNavigationAlert.maximumAlertImageSize.width), privacy: .public)×\(Int(CPNavigationAlert.maximumAlertImageSize.height), privacy: .public)), кнопок до \(CPNavigationAlert.maximumActionsCount, privacy: .public)")
+        }
+        return (CarPlayBannerArt.avatar(camera.kind, size: sizes.avatar),
+                CarPlayBannerArt.alertImage(art, type: camera.kind, size: sizes.alert, onDark: onDark))
+    }
+
     /// Подключение кончилось.
-    func reset() { clear() }
+    func reset() {
+        clear()
+        imageSizes = nil   // другая машина — другие пределы
+    }
 
     private func clear() {
         alert = nil
         cameraID = nil
         shownText = nil
+        shownArt = nil
+        shownArtDark = nil
         updatedAt = .distantPast
         limit = nil
         lostSince = nil

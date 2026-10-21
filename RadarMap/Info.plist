@@ -45,6 +45,10 @@
 		     RadarMap на главный экран CarPlay не попадал вовсе. -->
 		<key>CPSupportsDashboardNavigationScene</key>
 		<true/>
+		<!-- Приборка (25.H2): своя карта в окне кластера машины. Тоже ВНУТРИ
+		     манифеста сцен, рядом с ключом плитки; роль — ниже. -->
+		<key>CPSupportsInstrumentClusterNavigationScene</key>
+		<true/>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<true/>
 		<key>UISceneConfigurations</key>
@@ -69,6 +73,17 @@
 					<string>CarPlay Dashboard</string>
 					<key>UISceneDelegateClassName</key>
 					<string>$(PRODUCT_MODULE_NAME).CarPlayDashboardSceneDelegate</string>
+				</dict>
+			</array>
+			<key>CPTemplateApplicationInstrumentClusterSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>CPTemplateApplicationInstrumentClusterScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>CarPlay Instrument Cluster</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).CarPlayInstrumentClusterSceneDelegate</string>
 				</dict>
 			</array>
 		</dict>

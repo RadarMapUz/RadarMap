@@ -21,6 +21,9 @@ import SwiftUI
 
 struct CarPlayStatusChips: View {
     @Environment(AppEnvironment.self) private var env
+    /// Ведение на паузе «Нет сигнала GPS» (iOS 27): то же говорит карточка
+    /// манёвра системы — плашку не дублируем (CarPlayGuidancePause).
+    var systemLocating = false
 
     var body: some View {
         // Только две верхние по важности: третья уже не читается за рулём.
@@ -54,6 +57,16 @@ struct CarPlayStatusChips: View {
             result.append(CarPlayChip(id: "whenInUse", symbol: "location.circle",
                                       tint: Theme.warning,
                                       text: String(localized: "Дайте доступ «Всегда» на телефоне")))
+        }
+        // Нет фиксов: камеры молчат не потому, что их нет. До 21.10 это
+        // говорила ячейка камеры в доке; камера из дока ушла (CarPlayCameraCue) —
+        // состояние переехало сюда, к остальным «о чём водитель обязан знать».
+        if env.location.isAuthorized,
+           CarPlayGuidancePause.showsGPSChip(signalStale: env.location.isSignalStale,
+                                             systemLocating: systemLocating) {
+            result.append(CarPlayChip(id: "gps", symbol: Icon.noGPSSignal,
+                                      tint: Theme.warning,
+                                      text: String(localized: "Нет сигнала GPS")))
         }
         // Тишина включается кнопкой в баре рядом с «Поездкой»: промах слепого
         // тапа не должен глушить камеры незаметно. Выше сети и жары — это

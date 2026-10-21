@@ -123,6 +123,25 @@ struct RadarStatsWidget: Widget {
         // экрана. Неделя на локскрине живёт отдельным виджетом (RadarWeekWidget).
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge,
                             .accessoryCircular, .accessoryRectangular])
+        .notInCarPlay()
+    }
+}
+
+private extension WidgetConfiguration {
+    /// «Итоги» не для машины (25.H3). С iOS 26 малые виджеты (`systemSmall`)
+    /// идут и на главный экран CarPlay, а километры и норма недели за рулём —
+    /// разглядывание, а не дело. В машине остаётся «Дорога на работу»: «На
+    /// работу ~44 мин» отвечает на вопрос, который там и задают.
+    /// Запретить место WidgetKit не даёт (в SDK iOS 27 это единственный API
+    /// мест): `disfavored` уносит виджет в раздел «Другие» галереи машины,
+    /// с глаз долой из предложенных. Что с уже поставленным — документация
+    /// молчит; проверка в машине (🚗).
+    func notInCarPlay() -> some WidgetConfiguration {
+        if #available(iOSApplicationExtension 26.0, *) {
+            return disfavoredLocations([.carPlay], for: [.systemSmall])
+        } else {
+            return self
+        }
     }
 }
 

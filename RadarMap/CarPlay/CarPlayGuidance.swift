@@ -225,6 +225,8 @@ final class CarPlayGuidance {
     private var sentStepTime = Date.distantPast
     private var sentTripDistance: Double?
     private var sentTripTime = Date.distantPast
+    /// Строка «📷 400 м» в оценках поездки (iOS 27), что ушла последней.
+    private var sentCameraDetail: String?
     /// Баннеры поверх карты — общая очередь подключения (CarPlayBanners).
     private weak var banners: CarPlayBanners?
     /// Камера впереди — системным баннером, на нашем экране тоже.
@@ -232,8 +234,17 @@ final class CarPlayGuidance {
     /// Когда показан текущий манёвр — для состояния «начальный».
     private var maneuverShownAt = Date.distantPast
     private var sentManeuverState: CPManeuverState?
-    /// Ведение на паузе «Перестраиваю маршрут» (CPTripPauseReason.rerouting).
-    private var pausedForReroute = false
+    /// Ведение на паузе: «Перестраиваю маршрут» (.rerouting) или «Нет сигнала
+    /// GPS» (.locating, iOS 27) — CarPlayGuidancePause. Плашка «Нет сигнала
+    /// GPS» на нашей карте при паузе поиска сигнала уступает карточке системы.
+    private var pause: CarPlayGuidancePause.Reason? {
+        didSet {
+            let locating = pause == .locating
+            if model.isLocatingPaused != locating { model.isLocatingPaused = locating }
+        }
+    }
+    /// Панель «…» плашки прибытия (iOS 27) — ставит делегат сцены.
+    var optionsPanel: CarPlayOptionsPanel?
     private var generation = 0
     /// Наше приложение на экране машины. От этого зависит, как долго висит
     /// баннер камеры: на нашем экране — весь подъезд, поверх чужого
@@ -290,7 +301,7 @@ final class CarPlayGuidance {
         upcoming = []
         maneuverStep = nil
         laneGuidances = []
-        pausedForReroute = false
+        pause = nil
         cancelledDestination = tripDestination
         model.hasSystemGuidance = false
     }
@@ -312,7 +323,7 @@ final class CarPlayGuidance {
         upcoming = []
         maneuverStep = nil
         laneGuidances = []
-        pausedForReroute = false
+        pause = nil
         model.hasSystemGuidance = false
         sync()
     }
@@ -326,7 +337,7 @@ final class CarPlayGuidance {
         upcoming = []
         maneuverStep = nil
         laneGuidances = []
-        pausedForReroute = false
+        pause = nil
         template = nil
         banners = nil
         cameraBanner.reset()
@@ -336,13 +347,59 @@ final class CarPlayGuidance {
 
     /// Карточка манёвра — синяя, как на телефоне (`Theme.accentFill`,
     /// вариант А «Синий навигатор»), днём и ночью: один цвет «куда я еду» на
-    /// обоих экранах. Стрелка на ней — белая, и это не выбор CarPlay, а наш
-    /// битмап (`symbol(onDark: true)`): с 2.2.15 в машину уезжает одна
-    /// картинка того цвета, что нарисован, поэтому чёрной стрелки на синем
-    /// быть не может. Системный текст карточки CarPlay красит сам по
-    /// светлоте фона — на синем 0x2563D9 он белый.
+    /// обоих экранах.
+    ///
+    /// До 21.10 карточка в машине была чёрной (снимки владельца 63–64), хотя
+    /// шаблону ставился синий `accentFill`. Причина — проверка контраста
+    /// (CPMapTemplate.h: «если цвет не проходит, берётся системный»), и она
+    /// строже, чем казалось: замер 21.10 — сеттеры CPManeuver и CPMapTemplate
+    /// принимают фон только при контрасте с белым от 7:1, а у `accentFill`
+    /// 5,4:1. Теперь — свой, более тёмный синий (`carPlayCardFillUIColor`,
+    /// 7,2:1, один на обе темы), и стоит ещё и на каждом манёвре
+    /// (`CPManeuver.cardBackgroundColor`, iOS 15.4 — он старше цвета шаблона).
     func applyTheme(daylight: Bool) {
-        template?.guidanceBackgroundColor = daylight ? Theme.rgb(0x2563D9) : Theme.rgb(0x2A62D6)
+        template?.guidanceBackgroundColor = Self.cardColor
+    }
+
+    /// Фон карточки манёвра: синий `Theme.carPlayCardFillUIColor` с
+    /// контрастом к белому от 7:1 — иначе CarPlay подменяет
+    /// его системным (замер 21.10, CarPlayGuidanceTests).
+    static var cardColor: UIColor { Theme.carPlayCardFillUIColor }
+
+    /// Белая ли стрелка на фоне `card` в теме машины `dark`: фон берётся в
+    /// той же теме, в какой его нарисует машина, и стрелка — того цвета
+    /// (белый или чёрный), что даёт больший контраст. На синей карточке —
+    /// белая в обеих темах; окажись фон светлым (системный днём) — чёрная, а
+    /// не белая на белом.
+    static func whiteArrow(on card: UIColor, dark: Bool) -> Bool {
+        let luminance = relativeLuminance(card, dark: dark)
+        // Контраст с белым (1.05 / (L + 0.05)) против контраста с чёрным
+        // ((L + 0.05) / 0.05) — WCAG, тот же, что в PaletteTests.
+        return 1.05 / (luminance + 0.05) >= (luminance + 0.05) / 0.05
+    }
+
+    /// Цвет фона так, как его разрешит машина в своей теме, — «#2563D9».
+    /// Для журнала: что именно ушло в машину.
+    static func hex(_ color: UIColor, dark: Bool) -> String {
+        let (r, g, b) = components(color, dark: dark)
+        return String(format: "#%02X%02X%02X", Int((r * 255).rounded()), Int((g * 255).rounded()),
+                      Int((b * 255).rounded()))
+    }
+
+    private static func components(_ color: UIColor, dark: Bool) -> (CGFloat, CGFloat, CGFloat) {
+        let resolved = color.resolvedColor(with: UITraitCollection(userInterfaceStyle: dark ? .dark : .light))
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        resolved.getRed(&r, green: &g, blue: &b, alpha: &a)
+        return (r, g, b)
+    }
+
+    private static func relativeLuminance(_ color: UIColor, dark: Bool) -> Double {
+        let (r, g, b) = components(color, dark: dark)
+        func channel(_ c: CGFloat) -> Double {
+            let v = Double(min(1, max(0, c)))
+            return v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
     }
 
     // MARK: - Наблюдение
@@ -390,7 +447,7 @@ final class CarPlayGuidance {
                 upcoming = []
                 maneuverStep = nil
                 laneGuidances = []
-                pausedForReroute = false
+                pause = nil
                 model.hasSystemGuidance = false
             }
             updateCameraBanner()
@@ -411,23 +468,9 @@ final class CarPlayGuidance {
                 cancelledDestination = nil
                 start(on: template, to: destination)
             }
-            // Перестроение: старый поворот уже неверен — пауза с причиной, как
-            // у Mapbox. Снимает её новый манёвр (upcomingManeuvers), а если
-            // перестроить не удалось — прежний: карточка «перестраиваю» не
-            // застревает ни в одном исходе.
-            if route.isRerouting {
-                if let session, !pausedForReroute {
-                    pausedForReroute = true
-                    session.pauseTrip(for: .rerouting,
-                                      description: String(localized: "Перестраиваю маршрут"))
-                    Log.carplay.notice("ведение: пауза на перестроение")
-                }
-            } else if pausedForReroute {
-                pausedForReroute = false
-                maneuverStep = nil   // манёвр — заново: это и снимает паузу
-                Log.carplay.notice("ведение: перестроение закончено")
-            }
-            if !pausedForReroute { updateManeuver() }
+            updatePause()
+            if pause == nil { updateManeuver() }
+            optionsPanel?.refresh()
             updateEstimates(on: template)
         } else if let session {
             // Маршрут снят или поездка кончилась: доехали — «завершить»,
@@ -447,10 +490,52 @@ final class CarPlayGuidance {
             upcoming = []
             maneuverStep = nil
             laneGuidances = []
-            pausedForReroute = false
+            pause = nil
             model.hasSystemGuidance = false
         }
         updateCameraBanner()
+    }
+
+    // MARK: - Пауза
+
+    /// Пауза поиска сигнала — с iOS 27 (план 25.H1; сам `.locating` старше,
+    /// но поведение на iOS 18–26 оставлено прежним).
+    static var pausesForLocating: Bool {
+        if #available(iOS 27.0, *) { return true }
+        return false
+    }
+
+    /// Перестроение: старый поворот уже неверен — пауза с причиной, как у
+    /// Mapbox. Нет сигнала (iOS 27): карточка не ведёт по застывшей точке.
+    /// Снимает паузу новый манёвр (upcomingManeuvers), а если перестроить не
+    /// удалось — прежний: карточка не застревает ни в одном исходе.
+    private func updatePause() {
+        guard let session else { return }
+        let wanted = CarPlayGuidancePause.wanted(rerouting: env.route.isRerouting,
+                                                 signalStale: env.location.isSignalStale,
+                                                 hasManeuver: maneuver != nil,
+                                                 locatingEnabled: Self.pausesForLocating)
+        switch CarPlayGuidancePause.step(current: pause, wanted: wanted) {
+        case .none:
+            return
+        case .pause(.rerouting):
+            pause = .rerouting
+            session.pauseTrip(for: .rerouting, description: String(localized: "Перестраиваю маршрут"))
+            Log.carplay.notice("ведение: пауза на перестроение")
+        case .pause(.locating):
+            pause = .locating
+            session.pauseTrip(for: .locating, description: String(localized: "Нет сигнала GPS"))
+            Log.carplay.notice("ведение: пауза — нет сигнала GPS")
+        case .resume:
+            let was = pause
+            pause = nil
+            // Манёвр — заново: это и снимает паузу. Шага может и не быть
+            // (последние метры) — тогда прежний список, иначе «нет сигнала»
+            // висел бы при живом сигнале.
+            maneuverStep = nil
+            if env.route.nextStep == nil, !upcoming.isEmpty { session.upcomingManeuvers = upcoming }
+            Log.carplay.notice("ведение: пауза снята (\(was == .locating ? "сигнал есть" : "перестроение закончено", privacy: .public))")
+        }
     }
 
     // MARK: - Сессия
@@ -477,12 +562,13 @@ final class CarPlayGuidance {
         // Пока манёвра нет — «загружаю», а не пустая карточка (Руководство
         // CarPlay, стр. 47): снимает паузу первый же upcomingManeuvers.
         started.pauseTrip(for: .loading, description: nil)
+        if #available(iOS 27.0, *) { started.optionsPanel = optionsPanel?.attach() }
         session = started
         maneuver = nil
         upcoming = []
         maneuverStep = nil
         laneGuidances = []
-        pausedForReroute = false
+        pause = nil
         sentStepDistance = nil
         sentTripDistance = nil
         model.hasSystemGuidance = true
@@ -506,21 +592,12 @@ final class CarPlayGuidance {
             Log.carplay.notice("манёвра нет — в машине остаётся прежний: \(self.maneuver != nil, privacy: .public)")
             return
         }
-        let card = Self.card(for: step, carDark: model.carIsDark ?? !model.isDaylight)
+        let card = Self.card(for: step, carDark: model.carIsDark ?? !model.isDaylight,
+                             limitSign: limitSign(for: step))
         let next = card.maneuver
         maneuverShownAt = Date()
         sentManeuverState = nil
-        let lanes = card.lanes
-        if CarPlayGuidanceMapping.isUseful(lanes) {
-            let guidance = CPLaneGuidance()
-            guidance.lanes = lanes.map { lane in
-                let angles = lane.angles.map { Measurement(value: $0, unit: UnitAngle.degrees) }
-                guard let highlighted = lane.highlighted else { return CPLane(angles: angles) }
-                return CPLane(angles: angles,
-                              highlightedAngle: Measurement(value: highlighted, unit: UnitAngle.degrees),
-                              isPreferred: true)
-            }
-            guidance.instructionVariants = next.instructionVariants
+        if let guidance = Self.laneGuidance(card.lanes, instructions: next.instructionVariants) {
             laneGuidances.append(guidance)
             session.add([guidance])
             next.linkedLaneGuidance = guidance
@@ -538,9 +615,12 @@ final class CarPlayGuidance {
                                                            remainingTime: env.route.remainingTime))
         let laneRow = card.laneRow
         // Улика на случай пустой карточки: что именно ушло в машину.
-        Log.carplay.notice("манёвр в машину: вариантов \(next.instructionVariants.count, privacy: .public), первый \(next.instructionVariants.first?.count ?? 0, privacy: .public) симв., стрелка \(next.symbolImage != nil, privacy: .public), полосы \(laneRow != nil, privacy: .public), край \(step.laneEdge?.rawValue ?? "-", privacy: .public), \(Int(distance), privacy: .public) м")
+        let carDark = model.carIsDark ?? !model.isDaylight
+        let background = next.cardBackgroundColor.map { Self.hex($0, dark: carDark) } ?? "системный"
+        let arrow = Self.whiteArrow(on: Self.cardColor, dark: carDark) ? "белая" : "чёрная"
+        Log.carplay.notice("манёвр в машину: вариантов \(next.instructionVariants.count, privacy: .public), первый \(next.instructionVariants.first?.count ?? 0, privacy: .public) симв., стрелка \(next.symbolImage != nil, privacy: .public) (\(arrow, privacy: .public)), фон карточки \(background, privacy: .public) (\(carDark ? "тёмная" : "светлая", privacy: .public) машина), полосы \(laneRow != nil, privacy: .public), край \(step.laneEdge?.rawValue ?? "-", privacy: .public), \(Int(distance), privacy: .public) м")
         maneuver = next
-        upcoming = [next] + (laneRow.map { [$0] } ?? [])
+        upcoming = card.upcoming
         // Каждый манёвр, попадающий в upcomingManeuvers, сначала регистрируется
         // в сессии — ряд полос тоже: заголовок требует этого для ВСЕХ
         // элементов списка (CPNavigationSession.h, iOS 17.4+), а машина вправе
@@ -561,24 +641,58 @@ final class CarPlayGuidance {
         let laneRow: CPManeuver?
         /// Полосы для CPLaneGuidance (метаданные приборки).
         let lanes: [CarPlayGuidanceMapping.Lane]
+
+        /// Что уходит в `upcomingManeuvers`: манёвр и ряд полос под ним. С
+        /// метаданными ряда нет (`card(metadata:)`) — в списке один манёвр,
+        /// и приборка не прочтёт картинку полос вторым поворотом.
+        var upcoming: [CPManeuver] { [maneuver] + (laneRow.map { [$0] } ?? []) }
+    }
+
+    /// Полосы для метаданных приборки (CPLaneGuidance), nil — выбирать
+    /// нечего. Подсвеченный угол не входит в `angles` (CPLane.h), фраза — та
+    /// же, что у манёвра: «You must provide at least one variant».
+    static func laneGuidance(_ lanes: [CarPlayGuidanceMapping.Lane], instructions: [String]) -> CPLaneGuidance? {
+        guard CarPlayGuidanceMapping.isUseful(lanes), !instructions.isEmpty else { return nil }
+        let guidance = CPLaneGuidance()
+        guidance.lanes = lanes.map { lane in
+            let angles = lane.angles.map { Measurement(value: $0, unit: UnitAngle.degrees) }
+            guard let highlighted = lane.highlighted else { return CPLane(angles: angles) }
+            return CPLane(angles: angles,
+                          highlightedAngle: Measurement(value: highlighted, unit: UnitAngle.degrees),
+                          isPreferred: true)
+        }
+        guidance.instructionVariants = instructions
+        return guidance
     }
 
     /// `carDark` — тема МАШИНЫ: в ней рисуются баннер поверх чужого
     /// приложения и плитка панели. `metadata` — метаданные для приборки
     /// (с ними ряд полос не шлём: приборка прочла бы его вторым поворотом).
+    ///
+    /// `limitSign` — ограничение после манёвра (CarPlayManeuverLimit): на iOS 27
+    /// встаёт знаком в конец фразы (`attributedInstructionVariants`), раньше —
+    /// не показывается.
     static func card(for step: RouteStep, carDark: Bool,
-                     metadata: Bool = AppConfig.carPlayNavigationMetadata) -> Card {
+                     metadata: Bool = AppConfig.carPlayNavigationMetadata,
+                     limitSign: Int? = nil) -> Card {
         let next = CPManeuver()
         next.instructionVariants = CarPlayGuidanceMapping.instructionVariants(
             text: step.text, shortText: step.shortText, advice: step.laneAdvice)
+        if #available(iOS 27.0, *), let limitSign {
+            next.attributedInstructionVariants = CarPlayBannerArt.instructionVariants(next.instructionVariants,
+                                                                                      limit: limitSign)
+        }
         // Плитка главного экрана — та же фраза явно, а не через запасной путь.
         next.dashboardInstructionVariants = next.instructionVariants
-        // Цвет стрелки — под фон НАШЕЙ карточки (guidanceBackgroundColor —
-        // синяя всегда, значит стрелка белая): до машины доезжает одна
-        // картинка, та, что создана. Баннеры поверх чужого приложения и
-        // плитка панели рисуются в теме МАШИНЫ — им свой цвет.
+        // Фон карточки — на самом манёвре: он старше цвета шаблона, и только
+        // так карточка синяя, а не системная чёрная (снимки 63–64, 21.10).
+        next.cardBackgroundColor = cardColor
+        // Цвет стрелки — под фактический фон карточки в теме машины: до
+        // машины доезжает одна картинка, та, что создана. Баннеры поверх
+        // чужого приложения и плитка панели рисуются в теме МАШИНЫ без нашей
+        // карточки — им свой цвет.
         let symbolName = step.kind?.isDrawable == false ? "flag.checkered" : step.icon
-        next.symbolImage = symbol(symbolName, pointSize: 34, onDark: true)
+        next.symbolImage = symbol(symbolName, pointSize: 34, onDark: whiteArrow(on: cardColor, dark: carDark))
         next.notificationSymbolImage = symbol(symbolName, pointSize: 34, onDark: carDark)
         next.dashboardSymbolImage = symbol(symbolName, pointSize: 34, onDark: carDark)
         // Схемы развязки (junctionImage) больше нет (21.10, владелец: «мини-
@@ -601,6 +715,18 @@ final class CarPlayGuidance {
         return Card(maneuver: next, laneRow: row, lanes: lanes)
     }
 
+    /// Знак ограничения после манёвра — только на iOS 27 и только когда он
+    /// новость (CarPlayManeuverLimit). Считается раз на манёвр: индекс лимитов
+    /// отвечает за микросекунды, линия маршрута — из кэша.
+    private func limitSign(for step: RouteStep) -> Int? {
+        guard #available(iOS 27.0, *), let index = env.speedLimits.limitIndex else { return nil }
+        return CarPlayManeuverLimit.sign(along: step.distanceAlong, kind: step.kind,
+                                         path: env.route.routeCoordinates,
+                                         current: env.speedLimits.currentLimit) { point, bearing in
+            index.match(point, courseDegrees: bearing)
+        }
+    }
+
     // MARK: - Ряд полос на экране машины
 
     /// Метка ряда полос среди upcomingManeuvers — по ней делегат шаблона
@@ -621,6 +747,8 @@ final class CarPlayGuidance {
         guard let image = laneImage(hints, kind: kind) else { return nil }
         let row = CPManeuver()
         row.symbolImage = image
+        // Тот же синий фон, что у манёвра: ряд белых стрелок рисуется на нём.
+        row.cardBackgroundColor = cardColor
         row.instructionVariants = [LaneAdvice.phrase(hints) ?? String(localized: "Ряд полос")]
         row.userInfo = laneRowTag
         return row
@@ -684,11 +812,18 @@ final class CarPlayGuidance {
         }
         if let trip {
             let distance = route.remainingDistance
-            if CarPlayGuidanceMapping.shouldUpdate(previous: sentTripDistance, current: distance,
-                                                   elapsed: now.timeIntervalSince(sentTripTime)) {
+            // Камера впереди — строкой в оценках поездки (CPRouteDetail, iOS
+            // 27): своя камера и «нет тревоги» — без строки (CarPlayCameraCue).
+            let camera = Self.cameraDetail()
+            let cameraChanged = camera != sentCameraDetail
+                && now.timeIntervalSince(sentTripTime) >= AppConfig.carPlayCameraLabelUpdateSeconds
+            if cameraChanged || CarPlayGuidanceMapping.shouldUpdate(previous: sentTripDistance, current: distance,
+                                                                    elapsed: now.timeIntervalSince(sentTripTime)) {
                 sentTripDistance = distance
                 sentTripTime = now
-                template.updateEstimates(Self.tripEstimates(meters: distance, seconds: route.remainingTime),
+                sentCameraDetail = camera
+                template.updateEstimates(Self.tripEstimates(meters: distance, seconds: route.remainingTime,
+                                                            camera: camera),
                                          for: trip)
             }
         }
@@ -714,9 +849,28 @@ final class CarPlayGuidance {
 
     /// Оценки всей поездки — панель прибытия и выбор маршрута: всегда
     /// километры (CarPlayGuidanceMapping.tripDistance — почему).
-    static func tripEstimates(meters: Double, seconds: Double) -> CPTravelEstimates {
-        CPTravelEstimates(distanceRemaining: CarPlayGuidanceMapping.tripDistance(meters: meters),
-                          timeRemaining: max(0, seconds))
+    ///
+    /// `camera` — «400 м» до камеры впереди: на iOS 27 уходит строкой
+    /// `CPRouteDetail` со значком камеры (система решает, показать ли её — по
+    /// месту); раньше iOS 27 не уходит никуда.
+    static func tripEstimates(meters: Double, seconds: Double, camera: String? = nil) -> CPTravelEstimates {
+        let distance = CarPlayGuidanceMapping.tripDistance(meters: meters)
+        if #available(iOS 27.0, *), let camera {
+            let detail = CPRouteDetail(symbolName: "camera.fill", value: camera)
+            // Цвет значка — только динамический (CPRouteDetail.h): красный камеры.
+            detail.symbolTintColor = Theme.adaptiveUIColor(0xC62828, 0xFF7A70)
+            return CPTravelEstimates(distanceRemaining: distance, distanceRemainingToDisplay: distance,
+                                     timeRemaining: max(0, seconds), routeDetails: [detail])
+        }
+        return CPTravelEstimates(distanceRemaining: distance, timeRemaining: max(0, seconds))
+    }
+
+    /// Расстояние до камеры для оценок поездки или nil (CarPlayCameraCue).
+    private static func cameraDetail() -> String? {
+        let location = AppEnvironment.shared.location
+        guard CarPlayCameraCue.current(location).distanceLabel,
+              let distance = location.distanceToNearest else { return nil }
+        return Formatting.distance(distance)
     }
 
     /// Значок для карточки CarPlay: белый на тёмном фоне, чёрный на светлом.

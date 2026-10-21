@@ -116,12 +116,12 @@ extension LocationService {
             manager.pausesLocationUpdatesAutomatically = true
             isSignalStale = false   // без непрерывного GPS «нет сигнала» не про нас
             locationFilter.reset()
-            speedSmoother.reset()
             roadSnapper.reset()
-            standstill.reset()
+            speedometer.reset()
             frozenDisplay = nil
             displayCoordinate = nil
             displayCourse = -1
+            markerMotion = nil
             // Вернулись в тихий фон — геозоны снова единственный способ узнать
             // о камере, и ставить их надо вокруг того места, где мы сейчас.
             // Пока шёл непрерывный GPS, retile их не трогал (см. там), так что

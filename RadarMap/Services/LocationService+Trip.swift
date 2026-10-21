@@ -63,7 +63,7 @@ extension LocationService {
         passTracking.reset()
         alertRecall.reset()
         locationFilter.reset()
-        speedSmoother.reset()
+        speedometer.restartSmoothing()
         roadSnapper.reset()
         voicedInGroup.removeAll()
         voicedHotspots.removeAll()

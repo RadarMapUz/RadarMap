@@ -49,9 +49,17 @@ enum Theme {
     /// карты (MapPalette) при ленивой инициализации своих констант.
     nonisolated static func adaptive(_ light: UInt32, _ dark: UInt32,
                          lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1) -> Color {
-        Color(uiColor: UIColor { traits in
+        Color(uiColor: adaptiveUIColor(light, dark, lightAlpha: lightAlpha, darkAlpha: darkAlpha))
+    }
+
+    /// То же для UIKit: динамический UIColor с вариантами светлой и тёмной
+    /// темы. CarPlay (карточка манёвра, CPRouteDetail) принимает только
+    /// динамический цвет — статичный он молча заменяет системным.
+    nonisolated static func adaptiveUIColor(_ light: UInt32, _ dark: UInt32,
+                                            lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1) -> UIColor {
+        UIColor { traits in
             traits.userInterfaceStyle == .dark ? rgb(dark, darkAlpha) : rgb(light, lightAlpha)
-        })
+        }
     }
 
     nonisolated static func rgb(_ hex: UInt32, _ alpha: CGFloat = 1) -> UIColor {
@@ -89,7 +97,19 @@ enum Theme {
     /// Заливка под БЕЛЫМ текстом: карточка манёвра, синяя кнопка. Ночью
     /// `accent` светлый (он бывает текстом на графите), и белое на нём не
     /// читается (2,4:1) — поэтому заливка отдельным токеном: 5,4:1 / 5,5:1.
-    static let accentFill = adaptive(0x2563D9, 0x2A62D6)
+    static let accentFill = Color(uiColor: accentFillUIColor)
+    /// `accentFill` для UIKit.
+    nonisolated static let accentFillUIColor = adaptiveUIColor(0x2563D9, 0x2A62D6)
+    /// Карточка манёвра CarPlay (CPManeuver.cardBackgroundColor) — синий
+    /// ТЕМНЕЕ `accentFill`. CarPlay принимает фон карточки только при
+    /// контрасте с белым не ниже 7:1 (замер 21.10: сеттер CPManeuver отдаёт
+    /// назад системный белый/чёрный для 6,96:1 и принимает 7,07:1), а у
+    /// `accentFill` 5,4:1 — отсюда чёрная карточка в машине. 7,2:1; по
+    /// оттенку — как у карточки Яндекса (снимок 65). Один цвет на обе темы:
+    /// сеттер CarPlay динамический цвет не хранит, а замораживает в одном
+    /// варианте (замер: светлый вариант читался назад тёмным) — второй
+    /// вариант всё равно не доехал бы до машины.
+    nonisolated static let carPlayCardFillUIColor = adaptiveUIColor(0x124EC4, 0x124EC4)
     static let onAccentFill = Color(uiColor: rgb(0xFFFFFF))
     /// Вторая строка на синей заливке (улица под расстоянием) — 4,8:1 / 5,0:1.
     static let onAccentFillSecondary = adaptive(0xEAF0FD, 0xEEF3FD)

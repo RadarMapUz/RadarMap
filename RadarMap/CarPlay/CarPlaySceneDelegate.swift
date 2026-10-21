@@ -7,8 +7,10 @@
 //  в одном экземпляре AppEnvironment.
 //
 //  Раскладка управления рассчитана на слепой тап за рулём:
-//  • бар — «Поездка/Завершить» и звук слева, «Куда» и «Радар!» справа;
-//  • кнопки карты — зум, осмотр, «к себе»;
+//  • бар — «Поездка/Завершить» и звук слева, «Куда» и «Радар!» (словом)
+//    справа;
+//  • кнопки карты — зум, осмотр, «к себе»; в поездке первой — крупная
+//    «Радар!», а осмотр и «к себе» делят одно место (CarPlayMapButtons);
 //  • осмотр — по правилам CarPlay: в баре одна кнопка «Готово», на карте
 //    две кнопки зума (больше система в осмотре не показывает);
 //  • «Куда» — сетка крупных плиток (Дом, Работа, недавние) вместо списка:
@@ -71,6 +73,17 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Навигационная сессия CarPlay: манёвр, время в пути, полосы, камеры
     /// поверх чужого приложения.
     lazy var guidance = CarPlayGuidance(model: model)
+    /// Панель «…» плашки прибытия (iOS 27, 25.H1): камеры впереди, звук,
+    /// «Завершить маршрут».
+    lazy var optionsPanel: CarPlayOptionsPanel = {
+        let panel = CarPlayOptionsPanel()
+        panel.onToggleSound = { [weak self] in self?.toggleSoundFromPanel() }
+        panel.onEndRoute = { [weak self] in
+            guard let self, env.route.isActive else { return }
+            env.route.clear()
+        }
+        return panel
+    }()
     /// Поиск адреса в машине: тот же порядок источников, что на телефоне.
     lazy var search: CarPlaySearch = {
         let search = CarPlaySearch { [weak self] place in self?.pickFromSearch(place) }
@@ -224,6 +237,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         stopPanHold()
         isPanning = false
         guidance.detach()
+        optionsPanel.reset()
         guidanceAttached = false
         guidanceAttachedInBackground = false
         session += 1   // гасим подписки syncTemplate этой сессии
@@ -303,7 +317,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     var sentBar: [Bool]?
     /// Звук, с которым собран бар (10.1): значок кнопки — нынешний выбор.
     var sentSound: CarPlaySoundChoice?
-    var sentMapButtons: [Bool]?
+    var sentMapButtons: [CarPlayMapButtons.Kind]?
 
     /// Открыт ли сейчас осмотр карты: бар на это время — одна кнопка «Готово».
     var isPanning = false

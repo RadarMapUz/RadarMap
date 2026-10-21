@@ -23,6 +23,8 @@ struct CarPlayOverlay: View {
     /// Сколько занимают кнопки карты по краям окна (CarPlayWindowRoot →
     /// mapButtonSafeAreaLayoutGuide): док у правого края встаёт левее них.
     var buttonInsets = EdgeInsets()
+    /// Ведение на паузе «Нет сигнала GPS» — плашку об этом рисует система.
+    var systemLocating = false
     /// Безопасная зона окна — от неё уже отступает весь HUD.
     @State private var safe = EdgeInsets()
     /// Ширина HUD. Меняется только со сменой экрана, а не тиком: решение
@@ -54,7 +56,7 @@ struct CarPlayOverlay: View {
             // нет сети, жара, объявление владельца. Раньше здесь был только
             // чип жары — про серую карту без сети машина молчала.
             HStack {
-                CarPlayStatusChips()
+                CarPlayStatusChips(systemLocating: systemLocating)
                 Spacer(minLength: 0)
             }
             Spacer(minLength: 0)
@@ -77,7 +79,6 @@ struct CarPlayOverlay: View {
         .padding(.vertical, 12)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { safe = $0 }
-        .motionAnimation(Motion.standard, value: env.location.isApproachingCamera)
         .motionAnimation(Motion.standard, value: env.route.isActive)
         // HUD — только показывает: касаний в окне машины нет (осмотр и зум
         // приходят командами шаблона), и ничего перехватывать он не должен.
@@ -101,28 +102,34 @@ struct CarPlayOverlay: View {
     /// посреди карты — на дорогу перед машиной («расположены вещи не
     /// правильно», владелец, 12.10). Справа он группируется с кнопками, а
     /// скорость со знаком лимита стоит крайней — одно место для «еду/можно».
+    ///
+    /// С 21.10 камеры в доке нет (CarPlayCameraCue): Руководство CarPlay
+    /// (стр. 7, 36) своих панелей поверх карты не любит, Waze и Google Maps
+    /// держат в углу только скорость с лимитом, а о камере говорят системный
+    /// баннер и подпись «400 м» у её значка на самой карте. Док — скорость со
+    /// знаком; прибытие или призрак — только пока их не рисует сама машина.
     private var dock: some View {
-        HStack(alignment: .bottom, spacing: 10) {
+        let items = CarPlayCameraCue.dock(ownArrival: showsManeuver && isGuiding && env.route.isActive,
+                                          hasRoute: env.route.isActive,
+                                          hasGhost: env.commuteLive.display != nil,
+                                          fitsSecond: Self.fitsRoute(hudWidth: width))
+        return HStack(alignment: .bottom, spacing: 10) {
             Spacer(minLength: 0)
-            // Прибытие — только пока манёвр не рисует сама машина: в
-            // навигационной сессии время в пути стоит в её карточке.
-            if showsManeuver, isGuiding, env.route.isActive, Self.fitsRoute(hudWidth: width) {
+            if items.contains(.arrival) {
                 pill { etaCell }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
-            } else if !env.route.isActive, let ghost = env.commuteLive.display, Self.fitsRoute(hudWidth: width) {
+            } else if items.contains(.ghost), let ghost = env.commuteLive.display {
                 // Дорога на работу без маршрута (8.8.3б): прибытие по своим
                 // поездкам — на месте капсулы прибытия маршрута.
                 pill { ghostCell(ghost) }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            cameraPill
             speedBadge
         }
         // Левее кнопок карты: HUD уже отступил на безопасную зону и 14 pt,
         // добираем до ширины колонки кнопок и 8 pt воздуха.
         .padding(.trailing, max(0, buttonInsets.trailing + 8 - safe.trailing - 14))
         .frame(height: AppConfig.carPlayDockHeight, alignment: .bottom)
-        .motionAnimation(.easeOut(duration: 0.3), value: env.location.alertLevel)
     }
 
     /// Скорость в круге и знак ограничения поверх его угла — сравнение
@@ -167,12 +174,6 @@ struct CarPlayOverlay: View {
         .motionAnimation(Motion.standard, value: env.speedLimits.currentLimit)
     }
 
-    /// Камера — капсулой по размеру текста; кромка и тень в тон тревоги.
-    private var cameraPill: some View {
-        pill(edge: dockEdge, edgeWidth: alertTint == nil ? 1 : 3,
-             glow: alertTint) { cameraCell }
-    }
-
     /// Общая подложка капсулы низа: тёмное стекло темы, кромка, тень. Размер —
     /// по содержимому (`fixedSize`): обрезать текст ради ровной сетки нельзя.
     private func pill<Content: View>(edge: Color = Theme.stroke, edgeWidth: CGFloat = 1,
@@ -200,34 +201,6 @@ struct CarPlayOverlay: View {
         return dock >= AppConfig.carPlayDockThreeZoneWidth
     }
 
-    /// Ближайшая камера — честные состояния: нет сигнала, уточняем положение,
-    /// есть цель, чисто.
-    ///
-    /// «Уточняем положение» появилось потому, что дистанция считается и от
-    /// грубой координаты — от фикса, который в алерты не пустили. Зелёный щит
-    /// при этом хуже неверной цифры: это утверждение, а не число.
-    ///
-    /// Вид (11.10): цветной квадрат-значок слева и ОДНА строка там, где хватает
-    /// одной. Было «Чисто» крупно и «Камер рядом нет» мелко под ним — две
-    /// строки ради одной мысли, и вторая на 800×480 обрезалась до «Камер…».
-    @ViewBuilder
-    private var cameraCell: some View {
-        if env.location.isSignalStale {
-            statusCell(symbol: Icon.noGPSSignal, tint: Theme.warning,
-                       title: String(localized: "Нет сигнала GPS"))
-        } else if let camera = env.location.nearestCamera,
-                  let distance = env.location.distanceToNearest,
-                  distance <= AppConfig.carPlayNearestCameraMeters {
-            nearestCameraCell(camera: camera, distance: distance)
-        } else if env.location.isPositionCoarse {
-            statusCell(symbol: "location.magnifyingglass", tint: Theme.warning,
-                       title: String(localized: "Уточняем положение"))
-        } else {
-            statusCell(symbol: "checkmark.shield.fill", tint: Theme.success,
-                       title: String(localized: "Камер рядом нет"))
-        }
-    }
-
     /// Значок карточки: квадрат со скруглением, глиф по центру. Один на все
     /// карточки низа — камера, состояние, прибытие читаются как семья.
     private func glyphTile(_ symbol: String, fill: some ShapeStyle, glyph: Color) -> some View {
@@ -237,99 +210,6 @@ struct CarPlayOverlay: View {
             .foregroundStyle(glyph)
             .frame(width: 40, height: 40)
             .background(fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    private func nearestCameraCell(camera: Camera, distance: CLLocationDistance) -> some View {
-        HStack(spacing: 12) {
-            ZStack {
-                // Кольцо приближения вокруг значка вместо полоски под текстом:
-                // заполняется к камере и видно боковым зрением, не занимая
-                // строки. По грубой точке не рисуем — там прогресса никто не мерил.
-                if !env.location.isPositionCoarse, let progress = env.location.approachProgress {
-                    Circle()
-                        .stroke(Theme.stroke, lineWidth: 3)
-                        .frame(width: 52, height: 52)
-                    Circle()
-                        .trim(from: 0, to: max(progress, 0.03))
-                        .stroke(Theme.role(progress > 0.66 ? .alarm : progress > 0.33 ? .attention : .neutral),
-                                style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                        .frame(width: 52, height: 52)
-                        .motionAnimation(.easeOut(duration: 0.3), value: progress)
-                }
-                glyphTile(camera.kind.symbolName,
-                          fill: proximityTint(distance, camera).gradient,
-                          glyph: proximityGlyph(distance, camera))
-
-                // Стрелка направления на камеру относительно курса (вверх =
-                // прямо по ходу): по ходу камера или уводит в сторону.
-                if let relative = env.location.relativeBearingToNearest {
-                    let angle = CameraDirection.arrowAngle(relativeBearing: relative)
-                    Image(systemName: "arrowtriangle.up.fill")
-                        .font(.system(size: 11, weight: .black))
-                        .foregroundStyle(camera.kind.tint)
-                        .shadow(color: .black.opacity(0.8), radius: 2)
-                        .offset(y: -33)
-                        .rotationEffect(.degrees(angle))
-                        .motionAnimation(.easeOut(duration: 0.3), value: Int(angle / 10))
-                }
-            }
-            .frame(width: 56, height: 56)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(Formatting.distance(distance))
-                    .font(.rounded(env.location.isApproachingCamera ? 30 : 24, .heavy)
-                        .monospacedDigit())
-                    .foregroundStyle(env.location.isPositionCoarse ? Theme.textSecondary
-                                     : (env.location.isApproachingCamera ? Theme.danger
-                                                                         : Theme.textPrimary))
-                    .liveNumber()
-                if env.location.isPositionCoarse {
-                    Text("уточняем положение")
-                        .font(.rounded(13, .semibold))
-                        .foregroundStyle(Theme.warning)
-                        .lineLimit(1)
-                } else if env.location.familiarCameraIDs.contains(camera.id) {
-                    // «Своя» камера (10.6): голоса о ней не будет, и в машине
-                    // тишина читалась бы как поломка — как на телефоне
-                    // (SpeedHUDView.caption), коротко и с галочкой.
-                    HStack(spacing: 3) {
-                        Image(systemName: "checkmark")
-                            .fontWeight(.bold)
-                        Text("без голоса")
-                    }
-                    .font(.rounded(13, .semibold))
-                    .foregroundStyle(Theme.success)
-                    .lineLimit(1)
-                } else {
-                    Text(camera.kind.genitivePhrase)
-                        .font(.rounded(13, .semibold))
-                        .foregroundStyle(Theme.textSecondary)
-                        .lineLimit(1)
-                }
-            }
-
-            // Ограничение У КАМЕРЫ — только когда оно другое, чем знак у
-            // скорости: та же цифра рядом дважды — шум, а «камера на 50, едем
-            // по 70» — ровно то, ради чего водитель смотрит вниз.
-            if env.location.isApproachingCamera,
-               let limit = env.speedLimits.limit(near: camera.coordinate),
-               limit != env.speedLimits.currentLimit {
-                SpeedLimitSign(limit: limit, diameter: 40)
-                    .transition(.scale.combined(with: .opacity))
-            }
-        }
-        .motionAnimation(.easeOut(duration: 0.25), value: env.location.isApproachingCamera)
-    }
-
-    private func statusCell(symbol: String, tint: Color, title: String) -> some View {
-        HStack(spacing: 10) {
-            glyphTile(symbol, fill: tint.opacity(0.18), glyph: tint)
-            Text(title)
-                .font(.rounded(17, .semibold))
-                .foregroundStyle(Theme.textPrimary)
-                .lineLimit(1)
-        }
     }
 
     /// Прибытие. Главное число — СКОЛЬКО ЕХАТЬ: это первый вопрос водителя, и
@@ -434,19 +314,6 @@ struct CarPlayOverlay: View {
 
     // MARK: - Цвета и мелочи
 
-    /// Цвет тревоги по уровню эскалации: янтарь → оранжевый → красный.
-    /// nil — тревоги нет, кромка панели остаётся нейтральной.
-    private var alertTint: Color? {
-        switch env.location.alertLevel {
-        case 1:  return Theme.role(.attention)
-        case 2:  return Theme.warning
-        case 3...: return Theme.role(.alarm)
-        default: return nil
-        }
-    }
-
-    private var dockEdge: Color { alertTint ?? Theme.stroke }
-
     /// Цвет скорости: белый в рамках лимита, янтарный при превышении без штрафа,
     /// красный — когда превышение уже стоит денег.
     private var speedColor: Color {
@@ -460,21 +327,5 @@ struct CarPlayOverlay: View {
         case .attention:        return Theme.warning
         case .alarm:            return Theme.danger
         }
-    }
-
-    /// Цвет значка камеры по БЛИЗОСТИ, а не по типу: красный кружок при камере
-    /// в трёх километрах читается как тревога, хотя ехать до неё минуты.
-    /// Значок поверх `proximityTint`: на цвете типа — его glyphTint (тёмный на
-    /// светлом радаре), на сером «далеко» — контрастный фону темы.
-    private func proximityGlyph(_ distance: CLLocationDistance, _ camera: Camera) -> Color {
-        distance <= env.location.effectiveAlertRadius * 3
-            ? camera.kind.glyphTint : Theme.background
-    }
-
-    private func proximityTint(_ distance: CLLocationDistance, _ camera: Camera) -> Color {
-        let radius = env.location.effectiveAlertRadius
-        if distance <= radius { return camera.kind.tint }
-        if distance <= radius * 3 { return camera.kind.tint.opacity(0.55) }
-        return Theme.textTertiary
     }
 }

@@ -65,6 +65,9 @@ struct EngineMapView: UIViewRepresentable {
     var pathCameraIDs: Set<Int> = []
     /// Свои камеры — голос о них молчит, на значке галочка.
     var familiarCameraIDs: Set<Int> = []
+    /// Подпись «400 м» у значка алерт-камеры — только в машине
+    /// (CarPlayCameraCue); на телефоне nil, там расстояние в своём HUD.
+    var cameraLabel: CarPlayCameraCue.Label?
     var cameraLimits: [Int: Int] = [:]
     var route: [CLLocationCoordinate2D]
     var routeObject: MKPolyline?
@@ -165,6 +168,11 @@ struct EngineMapView: UIViewRepresentable {
     /// Стрелка «я» видна. false — положение неизвестно: стрелка в запасной
     /// точке (центр Ташкента) говорила бы «вы здесь» о чужом месте.
     var showsPosition: Bool = true
+    /// Последний фикс для значка «я» (LocationService.markerMotion): скорость,
+    /// время и линия маршрута. Стрелка и точка следящей камеры идут по оценке
+    /// «где машина сейчас» (MarkerPredictor), а не по фиксу, — иначе значок
+    /// всегда на фикс позади. nil или фикс другой точки — без предсказания.
+    var markerMotion: MarkerPredictor.Fix?
 
     func makeUIView(context: Context) -> MLNMapView {
         // Сторож тайлов — ДО первой карты: движок начинает качать сразу, и
@@ -228,7 +236,7 @@ struct EngineMapView: UIViewRepresentable {
     static func dismantleUIView(_ view: MLNMapView, coordinator: Coordinator) {
         coordinator.routeTask?.cancel()
         coordinator.routeGeneration += 1
-        coordinator.stopPositionGlide()
+        coordinator.stopMarkerLink()
         view.delegate = nil
         (view as? EngineNativeMapView)?.onLayout = nil
     }
@@ -264,17 +272,21 @@ struct EngineMapView: UIViewRepresentable {
         private var routeIndex: EngineMapPresentation.RouteIndex?
         fileprivate var routeTask: Task<Void, Never>?
         fileprivate var routeGeneration = 0
-        private var lastPosition: CLLocationCoordinate2D?
         private var positionHeading = 0.0
-        /// Плавный ход стрелки между фиксами — синхронно с камерой. Камера
-        /// ехала к новой точке за интервал между фиксами, а стрелка прыгала
-        /// туда сразу: она убегала вперёд, камера её догоняла, и стрелка
-        /// дёргалась по экрану (поездка 07.10.2026).
-        private var glideLink: CADisplayLink?
-        private var glideFrom: CLLocationCoordinate2D?
-        private var glideTo: CLLocationCoordinate2D?
-        private var glideStart: CFTimeInterval = 0
-        private var glideDuration: CFTimeInterval = 0
+        /// Значок между фиксами: где машина СЕЙЧАС (MarkerPredictor). До 21.10
+        /// стрелка плыла к последнему фиксу за интервал между фиксами и всегда
+        /// была на фикс позади («машина опаздывает»). Такт кадров — только
+        /// пока значок движется; камера едет к оценке на момент конца своего хода.
+        private var markerLink: CADisplayLink?
+        private var predictor = MarkerPredictor()
+        /// Последний фикс, отданный предсказателю.
+        private var fedFix: MarkerPredictor.Fix?
+        /// Когда пришёл последний фикс и сколько было между двумя последними
+        /// (часы CACurrentMediaTime): камера едет до ожидаемого следующего.
+        private var fixArrival: CFTimeInterval = 0
+        private var fixGap: CFTimeInterval = AppConfig.engineCameraDuration
+        /// Курс модели, по которому стрелка повёрнута на последнем фиксе.
+        private var lastMarkerCourse: Double?
         private var cameraWindow: EngineMapPresentation.CameraWindow?
         private var cachedCameras: [Camera] = []
         private var cachedLimits: [Int: Int] = [:]
@@ -657,10 +669,12 @@ struct EngineMapView: UIViewRepresentable {
             // пропадали, пока что-то в них не менялось).
             lastMarksKey = []
             lastHotspotsKey = -1
+            shownCameraLabel = nil
+            cameraLabelWritten = false
             lastRoadEventsKey = -1
             lastCngKey = -1
             cngImageNames = []
-            lastPosition = nil
+            fedFix = nil
             cameraWindow = nil
             style.layer(withIdentifier: "houses")?.isVisible = current?.houses ?? false
             styleReady = true
@@ -908,7 +922,31 @@ struct EngineMapView: UIViewRepresentable {
                 : EngineMapPresentation.cameraHeading(model.courseDegrees, current: view.direction)
             let ahead = DriveCamera.centreAhead(spanMeters: model.spanMeters, anchorY: model.anchorY,
                                                 pitchDegrees: model.pitchDegrees)
-            let centre = GeoMath.destination(from: model.lookAt ?? model.coordinate,
+            // Значок и камера — по оценке «где машина сейчас», а не по фиксу.
+            let reduceMotion = UIAccessibility.isReduceMotionEnabled
+            let wall = Date().timeIntervalSinceReferenceDate
+            let fix = Self.markerFix(model)
+            let fixChanged = fix != fedFix
+            if fixChanged {
+                let media = CACurrentMediaTime()
+                if fedFix != nil {
+                    fixGap = min(AppConfig.engineCameraDuration, max(0, media - fixArrival))
+                }
+                fixArrival = media
+                predictor.update(fix, now: wall, immediate: !cameraPlaced || reduceMotion || fedFix == nil)
+                fedFix = fix
+            }
+            // Ход камеры — столько, сколько прошло с прошлого хода, и не
+            // меньше, чем осталось до ожидаемого фикса: обновление между
+            // фиксами (масштаб, наклон) не обрывает ход на полпути. Цель —
+            // оценка на КОНЕЦ хода: камера приходит туда же и тогда же, что и значок.
+            let followNow = CACurrentMediaTime()
+            let sinceFollow = lastFollowTime.map { min(AppConfig.engineCameraDuration, max(0, followNow - $0)) }
+                ?? AppConfig.engineCameraDuration
+            let untilFix = min(AppConfig.engineCameraDuration, max(0, fixArrival + fixGap - followNow))
+            let followDuration = cameraPlaced && !reduceMotion ? max(sinceFollow, untilFix) : 0
+            let followPoint = predictor.pose(at: wall + followDuration)?.coordinate ?? model.coordinate
+            let centre = GeoMath.destination(from: model.lookAt ?? followPoint,
                                               bearing: heading,
                                               distanceMeters: ahead)
             let zoom = Self.zoom(spanMeters: model.spanMeters, height: view.bounds.height,
@@ -978,19 +1016,14 @@ struct EngineMapView: UIViewRepresentable {
                     browsing = true
                     model.onBrowse()
                 }
-                stopPositionGlide()
                 let target = CGPoint(x: view.bounds.midX - step.width,
                                      y: view.bounds.midY - step.height)
                 view.setCenter(view.convert(target, toCoordinateFrom: view), animated: false)
             }
             if !browsing && changed {
-                let now = CACurrentMediaTime()
-                let interval = lastFollowTime.map { min(AppConfig.engineCameraDuration, max(0, now - $0)) }
-                    ?? AppConfig.engineCameraDuration
-                lastFollowTime = now
-                lastFollowInterval = cameraPlaced ? interval : 0
+                lastFollowTime = followNow
                 os_signpost(.event, log: performanceLog, name: "Follow camera")
-                view.setCamera(camera, withDuration: cameraPlaced && !UIAccessibility.isReduceMotionEnabled ? interval : 0,
+                view.setCamera(camera, withDuration: followDuration,
                            animationTimingFunction: CAMediaTimingFunction(name: .linear))
                 lastCameraModel = model
                 followCount &+= 1
@@ -999,28 +1032,26 @@ struct EngineMapView: UIViewRepresentable {
                 Log.network.info("MapLibre: камера установлена, zoom \(view.zoomLevel, privacy: .public)")
             }
             cameraPlaced = true
-            let rotation = EngineMapPresentation.heading(model.courseDegrees, near: positionHeading)
-            if lastPosition?.latitude != model.coordinate.latitude
-                || lastPosition?.longitude != model.coordinate.longitude || rotation != positionHeading {
-                positionHeading = rotation
-                // Ход — ровно та длительность, с которой в ЭТОМ обновлении
-                // поехала камера; камера не двигалась — ставим сразу.
-                let glide = lastFollowInterval ?? 0
-                if !browsing, glide > 0, let from = displayedPosition ?? lastPosition,
-                   !UIAccessibility.isReduceMotionEnabled {
-                    startPositionGlide(from: from, to: model.coordinate, duration: glide, in: view)
+            // Курс модели — на фиксе; между фиксами по линии маршрута значок
+            // крутит сам (stepMarker). Сравнение с прошлым курсом МОДЕЛИ, а не
+            // с нарисованным: иначе каждое обновление SwiftUI между фиксами
+            // возвращало бы поворот к курсу фикса, и стрелка дрожала бы.
+            if fixChanged || model.courseDegrees != lastMarkerCourse {
+                lastMarkerCourse = model.courseDegrees
+                positionHeading = EngineMapPresentation.heading(model.courseDegrees, near: positionHeading)
+                stepMarker(at: wall, in: view)
+                if !reduceMotion, predictor.isMoving(at: wall) {
+                    startMarkerLink(in: view)
                 } else {
-                    stopPositionGlide()
-                    setPosition(model.coordinate, in: view)
+                    stopMarkerLink()
                 }
-                lastPosition = model.coordinate
             }
             if let marker = positionView, marker.isHidden == model.showsPosition {
                 marker.isHidden = !model.showsPosition
             }
-            lastFollowInterval = nil
             updateCameras(model, in: view)
             updateMarks(model, in: view)
+            updateCameraLabel(model.cameraLabel, in: view)
             updateTraffic(model, in: view)
             let newRoute = !routeInitialized || lastRouteObject !== model.routeObject
             if newRoute || lastManeuverAlong != model.maneuverAlong
@@ -1366,6 +1397,37 @@ struct EngineMapView: UIViewRepresentable {
         private var lastHotspotsKey: Int = -1
         private var lastCenterCommand = 0
 
+        private var shownCameraLabel: CarPlayCameraCue.Label?
+        private var cameraLabelWritten = false
+        private var cameraLabelAt = Date.distantPast
+
+        /// Подпись расстояния у алерт-камеры: смена камеры — сразу, новая
+        /// цифра — не чаще раза в секунду (CarPlayCameraCue.shouldRefreshLabel).
+        private func updateCameraLabel(_ label: CarPlayCameraCue.Label?, in view: MLNMapView) {
+            let now = Date()
+            if cameraLabelWritten {
+                guard CarPlayCameraCue.shouldRefreshLabel(shown: shownCameraLabel, new: label,
+                                                          sinceLast: now.timeIntervalSince(cameraLabelAt))
+                else { return }
+            } else if label == nil {
+                // Источник после загрузки стиля и так пуст.
+                cameraLabelWritten = true
+                return
+            }
+            guard let source = view.style?.source(withIdentifier: "camera-label") as? MLNShapeSource else { return }
+            var points: [MLNPointFeature] = []
+            if let label {
+                let point = MLNPointFeature()
+                point.coordinate = label.coordinate
+                point.attributes = ["text": label.text]
+                points.append(point)
+            }
+            source.shape = MLNShapeCollectionFeature(shapes: points)
+            shownCameraLabel = label
+            cameraLabelWritten = true
+            cameraLabelAt = now
+        }
+
         private func updateMarks(_ model: EngineMapView, in view: MLNMapView) {
             let key = [model.destination?.latitude ?? .nan, model.destination?.longitude ?? .nan,
                        model.pressedPoint?.latitude ?? .nan, model.pressedPoint?.longitude ?? .nan,
@@ -1473,8 +1535,7 @@ struct EngineMapView: UIViewRepresentable {
 
         // MARK: - Стрелка
 
-        private var lastFollowInterval: CFTimeInterval?
-        /// Где стрелка нарисована сейчас (середина хода), а не куда едет.
+        /// Где стрелка нарисована сейчас (оценка на последнем кадре).
         private var displayedPosition: CLLocationCoordinate2D?
         /// Стрелка «я» — обычный вид поверх карты, а не символ в источнике.
         ///
@@ -1507,6 +1568,15 @@ struct EngineMapView: UIViewRepresentable {
         /// в замере 19.10, perf_audit_2026-10-19.md).
         private func layoutPositionView(in view: MLNMapView) {
             guard let coordinate = displayedPosition else { return }
+            #if DEBUG
+            if MarkerLagLog.enabled {
+                let now = CACurrentMediaTime()
+                if now - lastMarkerLog >= 0.2 {
+                    lastMarkerLog = now
+                    Log.location.notice("МЕТКА знак \(Date().timeIntervalSince1970, format: .fixed(precision: 3), privacy: .public) \(coordinate.latitude, format: .fixed(precision: 7), privacy: .public) \(coordinate.longitude, format: .fixed(precision: 7), privacy: .public) \(view.centerCoordinate.latitude, format: .fixed(precision: 7), privacy: .public) \(view.centerCoordinate.longitude, format: .fixed(precision: 7), privacy: .public)")
+                }
+            }
+            #endif
             let marker = positionView ?? makePositionView(in: view)
             let point = view.convert(coordinate, toPointTo: view)
             let angle = (positionHeading - view.direction) * .pi / 180
@@ -1522,6 +1592,9 @@ struct EngineMapView: UIViewRepresentable {
             marker.layer.transform = Self.cursorTransform(angle: angle, pitchDegrees: pitch)
             CATransaction.commit()
         }
+        #if DEBUG
+        private var lastMarkerLog: CFTimeInterval = 0
+        #endif
         /// Что стрелка показывает сейчас (точка и угол) — для пропуска повторов.
         private var shownPosition: (point: CGPoint, angle: Double)?
         /// Наклон, под который посажена стрелка (целые градусы).
@@ -1563,43 +1636,55 @@ struct EngineMapView: UIViewRepresentable {
             return marker
         }
 
-        private func startPositionGlide(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D,
-                                        duration: CFTimeInterval, in view: MLNMapView) {
-            glideFrom = from
-            glideTo = to
-            glideStart = CACurrentMediaTime()
-            glideDuration = duration
-            if glideLink == nil {
-                // Такт — от экрана, на котором карта. В машине это экран
-                // магнитолы, а экран телефона спит в кармане: связка с ним
-                // не тикала, и стрелка стояла, пока камера уезжала.
-                let link = view.window?.screen.displayLink(withTarget: self,
-                                                           selector: #selector(stepPositionGlide))
-                    ?? CADisplayLink(target: self, selector: #selector(stepPositionGlide))
-                // Та же частота, что у карты: ход стрелки не должен будить
-                // экран чаще, чем рисует сам движок (нагрев, батарея).
-                let fps = max(15, (lastFPS ?? 0) > 0 ? (lastFPS ?? 0) : AppConfig.engineFollowFPS)
-                link.preferredFrameRateRange = CAFrameRateRange(minimum: 10, maximum: Float(fps),
-                                                                preferred: Float(fps))
-                link.add(to: .main, forMode: .common)
-                glideLink = link
+        /// Фикс для предсказателя: свой, если LocationService дал его для ЭТОЙ
+        /// точки; иначе (выбор места, грубая точка, нет поездки) — точка без
+        /// скорости: значок туда доедет поправкой, но вперёд не уедет.
+        static func markerFix(_ model: EngineMapView) -> MarkerPredictor.Fix {
+            if let motion = model.markerMotion,
+               motion.coordinate.latitude == model.coordinate.latitude,
+               motion.coordinate.longitude == model.coordinate.longitude {
+                return motion
             }
+            return MarkerPredictor.Fix(coordinate: model.coordinate, courseDegrees: model.courseDegrees,
+                                       speedMps: 0, time: 0)
         }
 
-        @objc private func stepPositionGlide() {
-            guard let view, let from = glideFrom, let to = glideTo else { return stopPositionGlide() }
-            let t = glideDuration > 0 ? min(1, (CACurrentMediaTime() - glideStart) / glideDuration) : 1
-            setPosition(CLLocationCoordinate2D(latitude: from.latitude + (to.latitude - from.latitude) * t,
-                                               longitude: from.longitude + (to.longitude - from.longitude) * t),
-                        in: view)
-            if t >= 1 { stopPositionGlide() }
+        /// Кадр значка: оценка на сейчас; по линии маршрута — и её курс.
+        private func stepMarker(at wall: TimeInterval, in view: MLNMapView) {
+            guard let pose = predictor.pose(at: wall) else { return }
+            if pose.courseDegrees >= 0 {
+                positionHeading = EngineMapPresentation.heading(pose.courseDegrees, near: positionHeading)
+            }
+            setPosition(pose.coordinate, in: view)
         }
 
-        func stopPositionGlide() {
-            glideLink?.invalidate()
-            glideLink = nil
-            glideFrom = nil
-            glideTo = nil
+        private func startMarkerLink(in view: MLNMapView) {
+            guard markerLink == nil else { return }
+            // Такт — от экрана, на котором карта. В машине это экран
+            // магнитолы, а экран телефона спит в кармане: связка с ним
+            // не тикала, и стрелка стояла, пока камера уезжала.
+            let link = view.window?.screen.displayLink(withTarget: self, selector: #selector(markerFrame))
+                ?? CADisplayLink(target: self, selector: #selector(markerFrame))
+            // Та же частота, что у карты: ход стрелки не должен будить
+            // экран чаще, чем рисует сам движок (нагрев, батарея).
+            let fps = max(15, (lastFPS ?? 0) > 0 ? (lastFPS ?? 0) : AppConfig.engineFollowFPS)
+            link.preferredFrameRateRange = CAFrameRateRange(minimum: 10, maximum: Float(fps),
+                                                            preferred: Float(fps))
+            link.add(to: .main, forMode: .common)
+            markerLink = link
+        }
+
+        @objc private func markerFrame() {
+            guard let view else { return stopMarkerLink() }
+            let wall = Date().timeIntervalSinceReferenceDate
+            stepMarker(at: wall, in: view)
+            // Встали, горизонт исчерпан, поправка догашена — такт до фикса не нужен.
+            if !predictor.isMoving(at: wall) { stopMarkerLink() }
+        }
+
+        func stopMarkerLink() {
+            markerLink?.invalidate()
+            markerLink = nil
         }
 
         /// 0 — частота по умолчанию (движок сам выбирает, плавно для жестов).

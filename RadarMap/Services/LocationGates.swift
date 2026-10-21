@@ -386,6 +386,18 @@ nonisolated enum LocationGates {
         if routeRemaining > -AppConfig.routePassedToleranceMeters { return (max(0, routeRemaining), true) }
         return isFilteringActive(situation) && !announced ? (straight, false) : nil
     }
+
+    /// Кандидат в ближайшие: камера, расстояние (по маршруту или по прямой) и
+    /// признак «на маршруте» для гейта.
+    typealias Candidate = (camera: Camera, distance: CLLocationDistance, onRoute: Bool)
+
+    /// Камера ПРЕДУПРЕЖДЕНИЯ: первая по расстоянию, которую гейты признали
+    /// нашей. Ниже порога скорости гейты воздержались — тогда это просто
+    /// ближайшая (неизвестность в пользу предупреждения). Показ может держать
+    /// другую (`NearestDisplayHold`), этот выбор — никогда.
+    static func nearestOursIndex(_ candidates: [Candidate], in situation: Situation) -> Int? {
+        candidates.firstIndex { isOnOurRoad($0.camera, in: situation, isOnRoute: $0.onRoute) }
+    }
 }
 
 /// Входы в геозоны до загрузки базы камер (сценарий S3, 20.10): по одному на

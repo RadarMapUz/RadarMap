@@ -1883,6 +1883,38 @@
         }
       }
     },
+    "RadarMap: камеры на карте": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RadarMap: камеры на карте"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RadarMap: xaritadagi kameralar"
+          }
+        }
+      }
+    },
+    "RadarMap: предупреждаю о камерах": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RadarMap: предупреждаю о камерах"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RadarMap: kameralar haqida ogohlantiraman"
+          }
+        }
+      }
+    },
     "~%@": {
       "localizations": {
         "ru": {
@@ -5994,6 +6026,22 @@
         }
       }
     },
+    "Завершить маршрут": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завершить маршрут"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrutni yakunlash"
+          }
+        }
+      }
+    },
     "Завершить маршрут?": {
       "localizations": {
         "ru": {
@@ -7409,6 +7457,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kamera endi yoʻq"
+          }
+        }
+      }
+    },
+    "Камеры впереди": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камеры впереди"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldindagi kameralar"
           }
         }
       }
@@ -13129,6 +13193,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Telefon choʻntakda, ilova yigʻilgan boʻlsa ham kameralar haqida ogohlantiramiz."
+          }
+        }
+      }
+    },
+    "Предупреждаю о камерах": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Предупреждаю о камерах"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralar haqida ogohlantiraman"
           }
         }
       }
@@ -30161,6 +30241,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "butun probegga, elektr bilan birga"
+          }
+        }
+      }
+    },
+    "развернитесь": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "развернитесь"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "orqaga buriling"
+          }
+        }
+      }
+    },
+    "Почему в CarPlay «arrival» и «km» не по-русски?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Почему в CarPlay «arrival» и «km» не по-русски?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nega CarPlayʼda «arrival» va «km» oʻzbekcha emas?"
+          }
+        }
+      }
+    },
+    "Время прибытия и километры в карточке CarPlay печатает сама система — на языке iPhone (Настройки → Основные → Язык и регион), а не на языке RadarMap. Подсказки, баннеры и голос RadarMap — на языке приложения.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Время прибытия и километры в карточке CarPlay печатает сама система — на языке iPhone (Настройки → Основные → Язык и регион), а не на языке RadarMap. Подсказки, баннеры и голос RadarMap — на языке приложения."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CarPlay kartochkasidagi yetib borish vaqti va kilometrlarni tizimning oʻzi chiqaradi — iPhone tilida (Sozlamalar → Asosiy → Til va mintaqa), RadarMap tilida emas. RadarMap maslahatlari, bannerlari va ovozi — ilova tilida."
           }
         }
       }

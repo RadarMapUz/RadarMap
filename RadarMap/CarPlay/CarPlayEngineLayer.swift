@@ -24,8 +24,9 @@ import SwiftUI
 struct CarPlayEngineLayer: View {
     @Environment(AppEnvironment.self) private var env
     let model: CarPlayMapModel
-    /// Плитка приборной панели: без дока внизу, «я» — по своей доле высоты.
-    var compact = false
+    /// Где стоит карта: экран машины, плитка главного экрана или приборка
+    /// (CarPlaySurface — чем они различаются).
+    var surface: CarPlaySurface = .car
 
     var body: some View {
         // Без своей позиции карты нет: центр «где-то в Ташкенте» выдал бы
@@ -40,6 +41,17 @@ struct CarPlayEngineLayer: View {
         } else {
             Theme.background.ignoresSafeArea()
         }
+    }
+
+    /// Подпись — у камеры ДЛЯ ПОКАЗА (displayNearestCamera, удержание на
+    /// пороге скорости — не мигает в пробке) и только когда это та же камера,
+    /// о которой тревога: иначе цифра встала бы у боковой камеры.
+    private func cameraLabel(_ cue: CarPlayCameraCue.Cue) -> CarPlayCameraCue.Label? {
+        guard cue.distanceLabel, let camera = env.location.displayNearestCamera,
+              camera.id == cue.mapAlertID,
+              let distance = env.location.displayDistanceToNearest else { return nil }
+        return CarPlayCameraCue.Label(id: camera.id, latitude: camera.lat, longitude: camera.lon,
+                                      text: Formatting.distance(distance))
     }
 
     private func map(me: CLLocationCoordinate2D, size: CGSize, safe: EdgeInsets) -> some View {
@@ -61,9 +73,11 @@ struct CarPlayEngineLayer: View {
         // 12.10). Без курса карта держит прежний поворот, которого мы не
         // знаем, — тогда камера обязана влезть в любую сторону.
         let bearing = model.mapDirection ?? (env.location.displayCourse >= 0 ? env.location.displayCourse : nil)
-        let keep = env.location.nearestCamera.map {
-            DriveCamera.Keep.offset(from: me, to: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
-                                    bearing: bearing)
+        // Своя камера («без голоса») — не цель: водитель её знает, и ради неё
+        // кадр уходил в район (снимок 63, 21.10).
+        let keep = env.location.displayNearestCamera.flatMap {
+            DriveCamera.keep(camera: $0.id, at: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
+                             familiar: env.location.familiarCameraIDs, from: me, bearing: bearing)
         }
         let width = Double(size.width + safe.leading + safe.trailing)
         // Верх окна машины — бар с кнопками, низ — док HUD, справа — кнопки
@@ -71,7 +85,14 @@ struct CarPlayEngineLayer: View {
         // карты лежат внутри безопасной зоны: до 10.7 «в кадре» считалось
         // по 12 точкам снизу и без кнопок, и камера впереди вставала ровно под
         // капсулу «до камеры».
-        let clear = compact ? DriveCamera.Clear(width: width)
+        // Приборка: края окна кластера закрывают стрелки приборов машины —
+        // это его safe area; камера впереди держится внутри неё.
+        let clear = surface == .dashboard ? DriveCamera.Clear(width: width)
+            : surface == .cluster
+            ? DriveCamera.Clear(top: Double(safe.top) / max(1, height),
+                                bottom: Double(safe.bottom) / max(1, height),
+                                width: width,
+                                side: Double(max(safe.leading, safe.trailing)) + AppConfig.engineKeepSidePoints)
             : DriveCamera.Clear(top: Double(safe.top) / max(1, height),
                                 bottom: Double(safe.bottom + 12 + AppConfig.carPlayDockHeight) / max(1, height),
                                 width: width,
@@ -81,10 +102,11 @@ struct CarPlayEngineLayer: View {
         // (аудит 18.10, «при езде нормального вида нет»).
         let target = DriveCamera.target(
             speedKmh: env.location.speedKmh, maneuverDistance: maneuverDistance,
-            pitchAllowed: env.thermal.mode == .full, screen: .car, keep: keep,
+            pitchAllowed: surface.pitchAllowed(performance: env.thermal.mode), screen: .car, keep: keep,
             viewHeight: height, latitude: me.latitude, clear: clear,
-            carY: { compact ? AppConfig.carPlayDashboardMeY : Self.meY(size: size, safe: safe, share: $0) })
+            carY: { surface.fixedMeY ?? Self.meY(size: size, safe: safe, share: $0) })
         let frame = model.cameraSmoother.step(toward: target, at: Date())
+        let cue = CarPlayCameraCue.current(env.location)
         let offlineFiles: OfflineFiles? = env.network.isMapOnline
             ? nil : env.offlineMaps.offlineFiles(at: me)
         return EngineMapView(
@@ -93,11 +115,10 @@ struct CarPlayEngineLayer: View {
             // «+/−» сдвигают масштаб на ступень за нажатие поверх динамики.
             spanMeters: DriveCamera.span(zoom: frame.zoom + model.zoomBias, viewHeight: height,
                                          latitude: me.latitude),
-            anchorY: compact ? AppConfig.carPlayDashboardMeY
-                : Self.meY(size: size, safe: safe, share: frame.carShare),
+            anchorY: surface.fixedMeY ?? Self.meY(size: size, safe: safe, share: frame.carShare),
             pitchDegrees: frame.pitchDegrees,
             daylight: model.isDaylight,
-            houses: env.settings.mapHouses,
+            houses: surface.houses(setting: env.settings.mapHouses),
             cameras: [],
             cameraRevision: env.cameras.revision,
             limitRevision: env.speedLimits.indexRevision * 2 + (env.settings.speedLimitsEnabled ? 1 : 0),
@@ -105,14 +126,17 @@ struct CarPlayEngineLayer: View {
             // Лимит под значком камеры не рисуется: он один — у скорости
             // («в одном месте со скоростью хватит» — владелец, 12.10).
             limitProvider: nil,
-            alertCameraID: env.location.isApproachingCamera ? env.location.nearestCamera?.id : nil,
+            // Тревожный облик и подпись «400 м» — по CarPlayCameraCue: своя
+            // камера остаётся значком с галочкой, без тревоги и цифры.
+            alertCameraID: cue.mapAlertID,
             // Вариант B: цвет типа — только у камер на нашем пути.
             pathCameraIDs: CameraMarkerLook.pathIDs(
                 route: env.route.camerasOnRoute.map { (id: $0.id, along: $0.distanceAlong) },
                 progress: env.route.isActive ? env.route.progressAlong : nil,
                 passedTolerance: AppConfig.routePassedToleranceMeters,
-                nearest: env.location.nearestCamera?.id),
+                nearest: env.location.displayNearestCamera?.id),
             familiarCameraIDs: env.location.familiarCameraIDs,
+            cameraLabel: cameraLabel(cue),
             route: env.route.routeCoordinates,
             routeObject: env.route.polyline,
             routeProgress: env.route.progressAlong,
@@ -131,13 +155,18 @@ struct CarPlayEngineLayer: View {
             // Режим «в поездке» всегда: без кафе, номеров домов и подписей
             // дорожек — экран машины читают боковым зрением.
             driving: true,
+            // Приборка — малая частота кадров всегда (CarPlaySurface.lowFrameRate):
+            // тот же режим, что под полноэкранной тревогой.
+            covered: surface.lowFrameRate,
             cruise: env.location.isCruising,
             // На ходу — только дорога; встали — окрестность возвращается.
-            declutter: model.declutter.update(speedKmh: env.location.speedKmh, at: Date()),
-            // Плитка — только смотреть: случайный жест снимал слежение, а
-            // вернуть его на плитке нечем.
-            interactive: !compact,
-            healthTag: compact ? "плитка" : "машина",
+            // На приборке — только дорога всегда.
+            declutter: surface.alwaysDeclutter
+                || model.declutter.update(speedKmh: env.location.speedKmh, at: Date()),
+            // Плитка и приборка — только смотреть: случайный жест снимал
+            // слежение, а вернуть его там нечем.
+            interactive: surface.interactive,
+            healthTag: surface.healthTag,
             trafficEdges: env.traffic.isShown ? env.traffic.snapshot?.edges ?? [] : [],
             trafficRevision: env.traffic.revision * 2 + (env.traffic.isShown ? 1 : 0),
             trafficSnapshot: env.traffic.isShown ? env.traffic.snapshot : nil,
@@ -154,7 +183,9 @@ struct CarPlayEngineLayer: View {
             // голос, и значок должен стоять там, где о нём сказали.
             roadEvents: env.mobile.roadEvents,
             onHeading: { model.mapDirection = $0 },
-            onBrowse: { model.mapStartedBrowsing() })
+            onBrowse: { model.mapStartedBrowsing() },
+            // Значок и камера — по оценке «где машина сейчас» (MarkerPredictor).
+            markerMotion: env.location.markerMotion)
     }
 
     /// Новая карта (вернулись из музыки, из схемы) стартует со слежения —

@@ -107,6 +107,7 @@ nonisolated enum EngineMapStyle {
                 "road-events": ["type": "geojson", "data": emptyCollection],
                 "cng-status": ["type": "geojson", "data": emptyCollection],
                 "hotspots": ["type": "geojson", "data": emptyCollection],
+                "camera-label": ["type": "geojson", "data": emptyCollection],
             ],
             "layers": layers(ground: ground, casing: casing, label: label,
                              halo: halo,
@@ -128,6 +129,7 @@ nonisolated enum EngineMapStyle {
                 "road-events": ["type": "geojson", "data": emptyCollection],
                 "cng-status": ["type": "geojson", "data": emptyCollection],
                 "hotspots": ["type": "geojson", "data": emptyCollection],
+                "camera-label": ["type": "geojson", "data": emptyCollection],
             ]
             let all = style["layers"] as? [[String: Any]] ?? []
             style["layers"] = all.filter {
@@ -465,7 +467,9 @@ nonisolated enum EngineMapStyle {
                                         12, ["case", calm, 3, 4],
                                         15, ["case", calm, 7, 10],
                                         17, ["case", calm, 9, 13]],
-                      "circle-color": ["coalesce", ["get", "color"], "#D93025"],
+                      // Без цвета у точки — нейтральный серый, не красный:
+                      // красный значит «камера на пути» (25.F, снимок 63).
+                      "circle-color": ["coalesce", ["get", "color"], "#6B6B70"],
                       // Спокойная камера на виде района — без белого кольца и
                       // полупрозрачная (25.D, аудит 21.10): с кольцом 1,8 она
                       // весила, как камера на пути. Не скрыта — правило
@@ -508,6 +512,23 @@ nonisolated enum EngineMapStyle {
                                        "path", ["literal", [11, -11]],
                                        ["literal", [9, -9]]],
                        "symbol-sort-key": ["coalesce", ["get", "sort"], 0]],
+        ])
+        // Расстояние до камеры, о которой идёт тревога («400 м»), — у её
+        // значка, в машине (CarPlayCameraCue, 25.F): камера ушла из дока,
+        // и цифра живёт там, куда водитель и так смотрит. Одна точка в своём
+        // источнике: переписывать раз в секунду весь источник камер значило
+        // бы расставлять заново все символы. Вне раскладки — подпись не
+        // вытесняет ничего и не вытесняется ничем.
+        out.append([
+            "id": "camera-label", "type": "symbol", "source": "camera-label",
+            "layout": ["text-field": ["get", "text"],
+                       "text-font": ["Noto Sans Bold"],
+                       "text-size": 15,
+                       "text-anchor": "top",
+                       "text-offset": [0, 1.3],
+                       "text-allow-overlap": true, "text-ignore-placement": true,
+                       "text-pitch-alignment": "viewport", "text-rotation-alignment": "viewport"],
+            "paint": ["text-color": label, "text-halo-color": halo, "text-halo-width": 2.2],
         ])
         // Лимит под значком камеры убран (владелец, 12.10): цифра «60» у
         // каждой камеры дублировала знак у скорости и загромождала карту.

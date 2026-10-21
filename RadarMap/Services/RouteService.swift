@@ -371,7 +371,25 @@ final class RouteService {
         // прошлым поездкам (призрак): сами улучшаются прибытие в панели,
         // CarPlay и «Поделиться прибытием».
         if let personal = personalRemaining?() { return personal }
-        return engineRemaining
+        // Последние 1–2 км — не оптимистичнее нашей средней скорости
+        // (ArrivalTail): «0,7 км, прибытие сейчас» на 10 км/ч — снимок 63.
+        return ArrivalTail.remaining(engine: engineRemaining, remainingMeters: remainingDistance,
+                                     paceMps: pace.average(now: Date()))
+    }
+
+    /// Средняя скорость за последние ~2 минуты — для прибытия на последних
+    /// километрах. Не наблюдается: остаток пересчитывается на каждом фиксе и
+    /// так (прогресс), а лишняя запись в каждый тик будила бы всех зрителей.
+    @ObservationIgnored private var pace = ArrivalTail.Pace()
+
+    /// Отметить скорость фикса (каждый фикс, и стоя: стоянка у светофора —
+    /// часть средней). Без маршрута не копим.
+    func notePace(speedKmh: Double, at time: Date = Date()) {
+        guard isActive else {
+            if !pace.samples.isEmpty { pace.reset() }
+            return
+        }
+        pace.add(speedKmh: speedKmh, at: time)
     }
 
     /// Остаток по оценке самого маршрута (движок + пробки) — для сравнения с
@@ -1195,9 +1213,12 @@ final class RouteService {
             var stopAlong: CLLocationDistance?
             for (legIndex, leg) in route.legs.enumerated() {
                 let isLast = legIndex == route.legs.count - 1
+                var currentName: String?
                 for step in leg.steps {
                     let built = maneuverStep(step, at: along, language: language,
-                                             stopName: isLast ? nil : stopName)
+                                             stopName: isLast ? nil : stopName,
+                                             currentName: currentName)
+                    currentName = step.name
                     probes.add(step, at: along, built: built, index: steps.count)
                     if let built { steps.append(built) }
                     notices += laneNotices(step, at: along, isManeuver: built != nil)
@@ -1259,10 +1280,14 @@ final class RouteService {
     /// к нему (StreetName), и ту же фразу произносит голос (onManeuver).
     /// `stopName` — прибытие этого шага не к цели, а к остановке по пути:
     /// «заезд: АЗС Лукойл» вместо «вы прибыли».
+    /// `currentName` — улица, по которой едем К манёвру (имя предыдущего
+    /// шага OSRM): разворот на ней же — «развернитесь», а не «разворот на
+    /// улицу Беруни», когда мы и так на Беруни (снимок 63, 21.10).
     nonisolated static func maneuverStep(_ step: OSRMResponse.Step,
                                          at along: CLLocationDistance,
                                          language: String,
-                                         stopName: String? = nil) -> RouteStep? {
+                                         stopName: String? = nil,
+                                         currentName: String? = nil) -> RouteStep? {
         let m = step.maneuver
         var text: String?
         var icon = "arrow.up"
@@ -1324,9 +1349,14 @@ final class RouteService {
             break   // depart, new name и прочее не озвучиваем
         }
 
+        // Разворот на той же улице: улицу не называем — водитель на ней и
+        // стоит, «на улицу Беруни» звучит как поворот куда-то ещё.
+        let uturnInPlace = m.modifier == "uturn" && ["turn", "continue", "end of road"].contains(m.type)
+            && sameStreet(step.name, currentName)
+        if uturnInPlace { text = String(localized: "развернитесь") }
         guard var result = text else { return nil }
         let phrase = result
-        if !step.name.isEmpty, m.type != "arrive" {
+        if !step.name.isEmpty, m.type != "arrive", !uturnInPlace {
             // «на улицу Беруни», а не «на Beruniy shoh ko'chasi»: фраза просит
             // винительный падеж.
             let street = StreetName.display(step.name, language: language,
@@ -1348,6 +1378,15 @@ final class RouteService {
                          shortText: result == phrase ? nil : phrase,
                          voiceAction: voiceAction,
                          edge: LaneAdvice.edge(osrmType: m.type, modifier: m.modifier))
+    }
+
+    /// Одна ли это улица: имена OSRM сравниваются без регистра и крайних
+    /// пробелов. Пустое имя — не улица: «развернитесь» без доказательства
+    /// не говорим (тогда фраза прежняя).
+    nonisolated static func sameStreet(_ name: String, _ other: String?) -> Bool {
+        let a = name.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !a.isEmpty, let other else { return false }
+        return a == other.trimmingCharacters(in: .whitespaces).lowercased()
     }
 
     /// Полосы на подходе к манёвру.

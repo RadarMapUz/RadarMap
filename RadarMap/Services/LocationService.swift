@@ -131,6 +131,28 @@ final class LocationService: NSObject {
     /// про неё, как только поедем (пока она ещё впереди и в радиусе).
     @ObservationIgnored var postponedVoice: Int?
     var distanceToNearest: CLLocationDistance? { didSet { refreshApproachFlags() } }
+
+    /// Камера, которую показ держит ВМЕСТО камеры предупреждения (25.I): ниже
+    /// порога гейтов недолго — последняя «наша впереди», а не боковая.
+    /// nil почти всегда — тогда показ и есть `nearestCamera`. Пишется только
+    /// на тиках удержания.
+    struct HeldNearest: Equatable {
+        let camera: Camera
+        let distance: CLLocationDistance
+    }
+    var heldNearest: HeldNearest?
+    @ObservationIgnored var nearestDisplayHold = NearestDisplayHold()
+
+    /// Ближайшая камера ДЛЯ ПОКАЗА: HUD, чип, часы, Live Activity, кадр и
+    /// маркер карты. Не мигает на пороге 10 км/ч в пробке (NearestDisplayHold).
+    /// Тревога, уровни, голос, баннеры и полноэкранное предупреждение читают
+    /// `nearestCamera`/`distanceToNearest` — их выбор удержание не трогает.
+    var displayNearestCamera: Camera? { heldNearest?.camera ?? nearestCamera }
+    /// Расстояние до `displayNearestCamera` — так же, как у предупреждения:
+    /// по маршруту или по прямой.
+    var displayDistanceToNearest: CLLocationDistance? {
+        heldNearest.map(\.distance) ?? distanceToNearest
+    }
     /// false = пользователь дал только «приблизительную» геолокацию — оповещения ненадёжны.
     var hasFullAccuracy = true
     /// Режим энергосбережения iOS: снижаем точность GPS (голос о камерах — как всегда).
@@ -404,9 +426,9 @@ final class LocationService: NSObject {
 
     /// Растёт на каждое обновление локации — карта в режиме следования подписывается на это.
     var locationTick = 0
-    /// Сглаживание спидометра: по времени, с мгновенным откликом на настоящий
-    /// перепад (чистая структура, покрыта SpeedSmootherTests).
-    @ObservationIgnored var speedSmoother = SpeedSmoother()
+    /// Цифра спидометра: стоянка, сглаживание по времени и молчание GPS в
+    /// одном порядке (чистая структура, покрыта SpeedometerTests).
+    @ObservationIgnored var speedometer = Speedometer()
     /// Прижим картинки к оси дороги (чистая структура, RoadSnapperTests).
     @ObservationIgnored var roadSnapper = RoadSnapper()
     /// Координата и курс ДЛЯ КАРТИНКИ: прижаты к оси дороги, когда мы на ней
@@ -416,6 +438,11 @@ final class LocationService: NSObject {
     /// предупреждать», нельзя (см. RoadSnapper).
     var displayCoordinate: CLLocationCoordinate2D?
     var displayCourse: CLLocationDirection = -1
+    /// Последний фикс для значка «я» между фиксами (MarkerPredictor): точка и
+    /// курс — те же displayCoordinate/displayCourse, плюс скорость, время
+    /// фикса и линия маршрута вперёд. Пишется раз на фикс, в том же тике,
+    /// что и displayCoordinate, — лишней перерисовки нет. Только картинка.
+    var markerMotion: MarkerPredictor.Fix?
     /// Когда машина в последний раз реально двигалась (для тира «стоянка»).
     @ObservationIgnored var lastMovementAt = Date()
     /// Последняя точка, по которой считали прогресс маршрута (гейт стоянки).
@@ -445,8 +472,9 @@ final class LocationService: NSObject {
 
     @ObservationIgnored var speedDecayTask: Task<Void, Never>?
     /// Стоянка: скорость 0 и неподвижная стрелка, пока приёмник гуляет на
-    /// месте (Standstill). Только скорость и картинка — гейты по сырому фиксу.
-    @ObservationIgnored var standstill = Standstill()
+    /// месте (Standstill внутри Speedometer). Только скорость и картинка —
+    /// гейты по сырому фиксу.
+    var standstill: Standstill { speedometer.standstill }
     /// Что рисовать на стоянке: отображаемая точка (уже на оси дороги или
     /// маршрута) и курс в момент остановки.
     @ObservationIgnored var frozenDisplay: (coordinate: CLLocationCoordinate2D, course: Double)?
@@ -473,7 +501,7 @@ final class LocationService: NSObject {
     @ObservationIgnored var bearingSmoother = AngleSmoother()
     var relativeBearingToNearest: Double?
 
-    @ObservationIgnored var nearestBuffer: [(camera: Camera, distance: CLLocationDistance, onRoute: Bool)] = []
+    @ObservationIgnored var nearestBuffer: [LocationGates.Candidate] = []
     /// Ближайшая выбрана по остатку маршрута (а не по прямой): фраза «по
     /// маршруту» и «прямо по ходу» — только тогда. Проеханная камера маршрута,
     /// снова впереди по прямой после разворота, — уже не «по маршруту».

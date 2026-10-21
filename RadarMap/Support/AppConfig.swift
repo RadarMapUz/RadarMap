@@ -323,6 +323,14 @@ nonisolated enum AppConfig {
 
     /// Минимальная скорость, при которой GPS-курс достоверен и включается фильтр направления.
     static let directionalMinSpeedKmh: Double = 10
+    /// Ближайшая камера ДЛЯ ПОКАЗА ниже этого порога (NearestDisplayHold,
+    /// 25.I): последняя «наша впереди» держится столько секунд с последнего
+    /// тика с работающими гейтами. Пробка и светофор — короче; дольше стоим —
+    /// прежнее «ближайшая любая». Предупреждение этим не управляется.
+    static let nearestDisplayHoldSeconds: TimeInterval = 60
+    /// …и пока до неё не дальше этого: удержание мостит секунды у порога, а
+    /// не тащит камеру через полгорода.
+    static let nearestDisplayHoldMaxMeters: CLLocationDistance = 1000
     /// Половина сектора «прямо»: камера в ±этого от курса — впереди, не «сбоку».
     /// Широкая (координаты камер в базе смещены вбок от полосы на десятки метров).
     static let directionAheadDeadZone: Double = 40
@@ -760,6 +768,29 @@ nonisolated enum AppConfig {
     /// остановки больше max(standstillExitMeters, точность фикса).
     nonisolated static let standstillExitKmh = 6.0
     nonisolated static let standstillExitMeters: CLLocationDistance = 15
+    /// Доплеровский шум на месте (25.C, снимок CarPlay 21.10: стоит у
+    /// стоп-линии — «3 км/ч»). В городском каньоне приёмник стоя показывает
+    /// и 4–7 км/ч, а прежний вход требовал КАЖДЫЙ фикс ниже 3,5 км/ч две
+    /// секунды подряд — один фикс в 4 км/ч обнулял отсчёт, и стоянка не
+    /// наступала вовсе. Ниже этого порога фикс может быть шумом, и решает
+    /// положение: за `standstillEnterSeconds` точка не ушла дальше
+    /// `standstillNoiseNetMeters` и прошла меньше `standstillNoiseNetShare`
+    /// пути, который обещал доплер. Ползком 5 км/ч за две секунды машина
+    /// проходит 2,8 м ровно туда, куда обещал доплер, — это не шум.
+    nonisolated static let standstillNoiseMaxKmh = 8.0
+    nonisolated static let standstillNoiseNetMeters: CLLocationDistance = 3
+    nonisolated static let standstillNoiseNetShare = 0.4
+    /// Доплер сам говорит «может быть и ноль» (скорость не больше своей
+    /// погрешности speedAccuracy) или CoreMotion видит стоянку — тогда
+    /// хватает того, что точка почти на месте: за две секунды не дальше этого.
+    nonisolated static let standstillNoiseStillMeters: CLLocationDistance = 1.5
+    /// Тронулись по ОДНОМУ фиксу: скорость не ниже `standstillExitKmh` и не
+    /// меньше стольких своих погрешностей — число на экране через секунду, а
+    /// не через два фикса (25.C). Через секунду после трогания (2 м/с²) это
+    /// 7 км/ч при погрешности на ходу 1–2 км/ч; шум стоя с погрешностью
+    /// 3–4 км/ч до трёх её величин не дотягивает. Без speedAccuracy —
+    /// прежние два фикса.
+    nonisolated static let standstillExitSigmas = 3.0
 
     // MARK: - Пробки (TrafficProbes, TrafficService, server/traffic_build.py)
 
@@ -1428,6 +1459,17 @@ nonisolated enum AppConfig {
     /// фикс не попал в малый радиус, а маршрут выполнен.
     static let arrivalPassedRemainingMeters: CLLocationDistance = 80
     static let arrivalPassedRadiusMeters: CLLocationDistance = 250
+    /// Прибытие на последних километрах (ArrivalTail, 25.F): ближе
+    /// `arrivalTailFromMeters` остаток времени не меньше остатка по средней
+    /// скорости за `arrivalTailPaceWindowSeconds`; вес поправки растёт до 1 к
+    /// `arrivalTailFullMeters`. Средняя — не меньше `arrivalTailPaceFloorKmh`
+    /// (две минуты пробки не превращают 1,5 км в час) и только после
+    /// `arrivalTailPaceMinSeconds` наблюдения.
+    nonisolated static let arrivalTailFromMeters: Double = 2000
+    nonisolated static let arrivalTailFullMeters: Double = 1000
+    nonisolated static let arrivalTailPaceWindowSeconds: TimeInterval = 120
+    nonisolated static let arrivalTailPaceMinSeconds: TimeInterval = 45
+    nonisolated static let arrivalTailPaceFloorKmh: Double = 12
     /// Поездку закончили у цели (не доехав до радиуса) — маршрут убираем,
     /// если до цели или по линии осталось меньше этого.
     static let arrivalOnTripEndMeters: CLLocationDistance = 400
@@ -1654,6 +1696,13 @@ nonisolated enum AppConfig {
     /// Предел значка плитки сетки до iOS 26 (с 26 — из
     /// CPGridTemplate.maximumGridButtonImageSize, там те же 40×40).
     static let carPlayGridImageMaxPoints: CGFloat = 40
+    /// Диаметр картинки «Радар!» на кнопке карты (25.H3). Предела у
+    /// `CPMapButton.image` в SDK нет; круг кнопки рисует система, и SF-значки
+    /// соседних кнопок в 24 pt занимают его середину. 40 — потолок картинок,
+    /// который CarPlay называет для плиток сетки: жёлтый диск почти во весь
+    /// круг, слово «Радар!» около 9 pt (в 36 выходило 7,7). Круглая форма не
+    /// даёт углам вылезти, если машина не ужмёт картинку сама.
+    static let carPlayReportButtonPoints: CGFloat = 40
     /// Выбор маршрута в машине (CarPlayTripPreview): показывать, пока скорость
     /// ниже этой; тронулись не медленнее `…AutoStartKmh` на `…AutoStartSeconds`
     /// — выбор принят сам.
@@ -1672,9 +1721,12 @@ nonisolated enum AppConfig {
     static let carPlayDestinationOfferWindow: TimeInterval = 180
     static let carPlayDestinationOfferSeconds: TimeInterval = 12
     /// Метаданные ведения для приборки и проекции на стекло. Поля все на
-    /// месте (тип перекрёстка, угол, состояние); выключено, пока не проверено
-    /// на дисплее «приборка» в CarPlay Simulator — в 2.2.4 без полей карточка
-    /// манёвра приходила пустой.
+    /// месте (тип манёвра и перекрёстка, сторона движения, угол съезда,
+    /// состояние, CPLaneGuidance — CarPlayGuidanceTests); выключено, пока не
+    /// проверено на дисплее «приборка» в CarPlay Simulator. И это не только
+    /// проверка: с метаданными ряд полос на экране машины не уходит (приборка
+    /// прочла бы его вторым поворотом), полосы остаются лишь в приборке —
+    /// решение владельца (25.H2).
     static let carPlayNavigationMetadata = false
     /// Состояние манёвра: «выполняй» ближе 50 м, «готовься» ближе 400 м,
     /// «начальный» — первые 5 с нового манёвра.
@@ -1873,6 +1925,10 @@ nonisolated enum AppConfig {
     static let carPlaySymbolScale: CGFloat = 3
     /// «Я» в плитке приборной панели: дока там нет, только маленький прибор.
     static let carPlayDashboardMeY = 0.62
+    /// «Я» в окне приборки (25.H2): ниже середины — впереди дороги больше,
+    /// чем позади; окно кластера низкое и широкое, а сверху его часто
+    /// подрезают стрелки приборов машины (safe area окна).
+    static let carPlayClusterMeY = 0.66
     /// Оценки манёвра и поездки уходят в машину сообщениями: не реже раза в
     /// столько секунд (на стоянке цифра всё равно должна жить) и не чаще, чем
     /// сменится видимое число — шаг в метрах вблизи, 5 % вдали.
@@ -1885,9 +1941,47 @@ nonisolated enum AppConfig {
     /// Расстояние в баннере камеры переписывается не чаще этого: каждое
     /// обновление — сообщение в машину, а цифра меняется на каждом фиксе.
     static let carPlayCameraBannerUpdateSeconds: TimeInterval = 1
+    /// Подпись «400 м» у значка камеры на карте машины (CarPlayCameraCue):
+    /// цифра переписывается не чаще раза в столько секунд — каждая запись в
+    /// источник стоит движку расстановки символов.
+    static let carPlayCameraLabelUpdateSeconds: TimeInterval = 1
     /// Сколько баннер камеры переживает мигание тревоги у той же камеры
     /// (шум курса/точности), прежде чем сняться.
     static let carPlayCameraBannerGraceSeconds: TimeInterval = 2
+
+    // MARK: - CarPlay на iOS 27 (25.H1)
+
+    /// Полоса приближения в картинке баннера камеры — ступенями: картинка —
+    /// растр, и каждая перерисовка уходит в машину целиком. Десять ступеней —
+    /// шаг 40 м при радиусе 400 м: глазу полоса движется, сообщений за
+    /// подъезд не больше десяти.
+    static let carPlayBannerProximitySteps = 10
+    /// Желаемый размер картинки баннера (знак + полоса), pt. Вписывается в
+    /// `CPNavigationAlert.maximumAlertImageSize` — тот известен только во
+    /// время работы. Высота — как у значка манёвра: знак читается с места
+    /// водителя, а полоса остаётся полосой, а не кнопкой.
+    static let carPlayBannerAlertImageSize = CGSize(width: 220, height: 40)
+    /// Желаемый размер аватара баннера (значок типа камеры), pt; вписывается
+    /// в `CPNavigationAlert.maximumAvatarImageSize`.
+    static let carPlayBannerAvatarSize = CGSize(width: 40, height: 40)
+    /// Знак ограничения в тексте манёвра: вложение не больше 64×25 pt
+    /// (CPManeuver.h) — круг в высоту строки.
+    static let carPlayManeuverLimitSignPoints: CGFloat = 25
+    /// Пробы лимита после манёвра, метры за точкой поворота по маршруту: обе
+    /// должны дать одно число. Ближняя у самого перекрёстка могла лечь на
+    /// поперечную улицу, дальняя — уже точно на новой дороге.
+    static let carPlayManeuverLimitProbesAfter: [Double] = [50, 120]
+    /// Проба лимита ДО манёвра — столько метров перед ним по маршруту.
+    static let carPlayManeuverLimitProbeBefore: Double = 40
+    /// Камер в панели «…» плашки прибытия: ближайшие по маршруту. Больше
+    /// пяти за рулём не читают, а панель на 800×480 начинает прокручиваться.
+    static let carPlayOptionsPanelCameras = 5
+    /// Открытая панель «…» переписывает расстояния не чаще этого: каждое
+    /// обновление — сообщение в машину, а цифры меняются на каждом фиксе.
+    static let carPlayOptionsPanelRefreshSeconds: TimeInterval = 3
+    /// Значок типа камеры в строке панели «…», pt: диск маркера, мельче
+    /// предела строки списка, чтобы читался значком, а не плиткой.
+    static let carPlayOptionsPanelIconPoints: CGFloat = 24
 
     // MARK: - Дороги и карта на движке
 
@@ -2052,6 +2146,73 @@ nonisolated enum AppConfig {
     /// едет — остаток секунды стоит» (поле 12.10: «отстаёт и не плавно»;
     /// фиксы — раз в секунду, когда на карту смотрят, см. GPSTiers.request).
     static let engineCameraDuration = 1.25
+
+    // MARK: - Камера поездки без «дыхания» (DriveCamera, 25.A)
+    //
+    // Владелец, 21.10: «карта в CarPlay то уменьшается, то увеличивается».
+    // Замер на синтетических поездках (docs/drive_camera_2026-10-21.md): цель
+    // прыгала до z10,6–13 из-за камеры, которую только что проехали (на
+    // экране машины позади «я» до дока 50 точек — чтобы уложить туда камеру в
+    // 50 м, нужен вид области), и до z15 на 10 км/ч из-за камеры в 400 м.
+
+    /// Удерживаемая камера не уводит кадр мельче этого масштаба: до
+    /// `driveKeepTownKmh` — городской предел, к `driveKeepRoadKmh` — трассовый.
+    /// Дальше камеру видно, когда до неё доедем, — лучше так, чем район.
+    static let driveKeepMinZoomTown = 15.5
+    static let driveKeepMinZoomRoad = 15.0
+    static let driveKeepTownKmh = 30.0
+    static let driveKeepRoadKmh = 60.0
+    /// Быстрее этого камера ПОЗАДИ или в стороне (уже проехали, а «ближайшей»
+    /// она остаётся ещё 60 м по маршруту или пока гейты выключены) в кадре не
+    /// удерживается.
+    static let driveKeepBehindMaxKmh = 5.0
+    /// На ходу держится только камера в этом конусе вперёд (± градусов от хода).
+    static let driveKeepMovingConeDegrees = 45.0
+    /// Скорость смены масштаба, уровней в секунду: отъезд — не больше уровня
+    /// за 8 с, приближение быстрее.
+    static let driveZoomOutLevelsPerSecond = 1.0 / 8
+    static let driveZoomInLevelsPerSecond = 0.4
+    /// Гистерезис цели: смена направления (приближались — отъезжаем и
+    /// наоборот) — только если цель ушла дальше этого, уровней…
+    static let driveZoomInDeadband = 0.3
+    static let driveZoomOutDeadband = 0.15
+    /// …и держится там столько секунд: приближение ждёт дольше — оно
+    /// для красоты, отъезд — для обзора.
+    static let driveZoomInDwell: TimeInterval = 3
+    static let driveZoomOutConfirm: TimeInterval = 0.75
+    /// Направление масштаба меняется не чаще раза за столько секунд.
+    static let driveZoomReversalLock: TimeInterval = 8
+
+    // MARK: - Значок «я» между фиксами (MarkerPredictor, 25.B)
+
+    /// Дальше этого от времени фикса значок не угадывает: стрелка шла к
+    /// ПОСЛЕДНЕМУ фиксу за интервал между фиксами и всегда была на фикс
+    /// позади (замер 21.10: 12 м на 50 км/ч, «машина опаздывает»).
+    static let markerMaxLeadSeconds: Double = 1.5
+    /// Без линии маршрута и в повороте (курс крутится быстрее
+    /// markerTurnRateDegrees в секунду) — только эта доля: по прямой от курса
+    /// в повороте значок уезжал бы с дороги.
+    static let markerTurnLeadSeconds: Double = 0.5
+    static let markerTurnRateDegrees: Double = 15
+    /// Излом линии маршрута круче этого — поворот: значок ждёт у него фикса,
+    /// а не проскакивает за угол.
+    static let markerPathTurnDegrees: Double = 35
+    /// Сколько линии маршрута вперёд отдавать значку (130 км/ч × 1,5 с ≈ 54 м).
+    static let markerPathMeters: Double = 80
+    /// Ниже — стоим: значок вперёд не едет.
+    static let markerMovingMps: Double = 0.5
+    /// Догон (значок позади или в стороне от новой оценки): постоянная
+    /// времени экспоненты.
+    static let markerCatchUpSeconds: Double = 0.4
+    /// Значок впереди новой оценки не дальше этого — поправка без шага
+    /// назад: значок просто едет медленнее (markerAbsorbShare скорости),
+    /// пока оценка его не догонит.
+    static let markerHoldAheadMeters: Double = 4
+    static let markerAbsorbShare: Double = 0.5
+    /// Впереди дальше (или стоим) — короткий доезд назад за это время.
+    static let markerBackGlideSeconds: Double = 0.5
+    /// Скачок дальше — ставим сразу (выезд из тоннеля, первый фикс).
+    static let markerJumpMeters: Double = 100
     /// Как часто карта с меткой пишет строку здоровья в журнал (EngineMapView.healthTag).
     static let engineHealthLogSeconds: CFTimeInterval = 10
 

@@ -43,8 +43,14 @@ nonisolated struct SpeedSmoother {
     /// «ползу». Тот же порог, что был в LocationService.
     private static func floored(_ kmh: Double) -> Double { kmh < 1 ? 0 : kmh }
 
-    mutating func update(rawKmh: Double, at now: Date) -> Double {
+    /// `speedAccuracyKmh` — погрешность доплера (< 0 — неизвестна). Медленнее
+    /// порога шума и не больше своей погрешности — измерение не отличает
+    /// скорость от нуля, и на экран идёт ноль, а не «3–5 км/ч» стоя (25.C).
+    /// Ползком 5 км/ч с обычной погрешностью 1–2 км/ч это не задевает.
+    mutating func update(rawKmh: Double, speedAccuracyKmh: Double = -1, at now: Date) -> Double {
         defer { lastAt = now }
+        let rawKmh = rawKmh < AppConfig.standstillNoiseMaxKmh
+            && Standstill.isZeroish(rawKmh: rawKmh, speedAccuracyKmh: speedAccuracyKmh) ? 0 : rawKmh
         guard let previous = value, let lastAt,
               now.timeIntervalSince(lastAt) < Self.staleAfterSeconds else {
             let fresh = Self.floored(rawKmh)
@@ -96,9 +102,49 @@ nonisolated enum SpeedBound {
     /// оповещения, и камера звучала дважды (ревью S8).
     static let noFilterHoldSeconds: TimeInterval = 8
 
+    /// Низкая скорость: ниже неё молчание GPS дольше `lowSilenceSeconds`
+    /// означает стоянку, а не «ехали, но фикс потерялся» (25.C). Порог ниже
+    /// всего, что слушает скорость в конвейере оповещений: радиус на такой
+    /// скорости — базовый, направленные гейты включаются с 10 км/ч только
+    /// на фиксе, голос — с 20; ноль вместо 12 их не трогает.
+    static let lowKmh: Double = 15
+    /// Без фильтра расстояния фиксы идут раз в секунду и стоя: два-три
+    /// пропущенных на низкой скорости — машина стоит (или приёмник ослеп —
+    /// тогда держать скорость ползания тем более незачем).
+    static let lowSilenceSeconds: TimeInterval = 2.5
+    /// С фильтром: на скорости v фикс приходит раз в distanceFilter / v.
+    /// Молчание дольше полутора таких интервалов — средняя скорость упала
+    /// ниже двух третей, а на низкой скорости это торможение до нуля.
+    static let lowSilenceSlack: Double = 1.5
+
+    /// `secondsSinceSpeed` — с последнего фикса С ДОПЛЕРОМ (nil — тот же, что
+    /// `secondsSinceFix`): фиксы без скорости (Wi-Fi стоя, iOS отдаёт −1)
+    /// раньше перезапускали отсчёт, и цифра ползания висела, пока они идут.
+    /// Но только пока точка стоит: `movedSinceSpeed` больше
+    /// max(`standstillExitMeters`, `accuracy`) — едем, просто без доплера.
+    /// `motionStationary` — CoreMotion уверен, что стоим (если слежение уже
+    /// идёт): на низкой скорости это ноль сразу после обычного интервала.
     static func capped(_ kmh: Double, distanceFilter: Double,
-                       secondsSinceFix: TimeInterval) -> Double {
-        guard kmh > 0, secondsSinceFix > graceSeconds else { return kmh }
+                       secondsSinceFix: TimeInterval,
+                       secondsSinceSpeed: TimeInterval? = nil,
+                       movedSinceSpeed: Double = 0, accuracy: Double = 0,
+                       motionStationary: Bool = false) -> Double {
+        guard kmh > 0 else { return kmh }
+        if kmh < lowKmh {
+            let still = movedSinceSpeed <= max(AppConfig.standstillExitMeters, accuracy)
+            let quiet = still ? max(secondsSinceFix, secondsSinceSpeed ?? secondsSinceFix) : secondsSinceFix
+            if motionStationary, quiet > graceSeconds { return 0 }
+            // Без фильтра фиксы обязаны идти и стоя; ниже порога шума цифра
+            // и так могла быть шумом — при любом фильтре молчание дольше
+            // `lowSilenceSeconds` значит ноль (пропуск фиксов на стоянке).
+            if distanceFilter <= 0 || kmh < AppConfig.standstillNoiseMaxKmh {
+                if quiet >= lowSilenceSeconds { return 0 }
+            } else if quiet >= max(lowSilenceSeconds,
+                                   distanceFilter / (kmh / 3.6) * lowSilenceSlack) {
+                return 0
+            }
+        }
+        guard secondsSinceFix > graceSeconds else { return kmh }
         guard distanceFilter > 0 else { return secondsSinceFix >= noFilterHoldSeconds ? 0 : kmh }
         let bound = distanceFilter / secondsSinceFix * 3.6
         let value = min(kmh, bound)

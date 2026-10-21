@@ -21,6 +21,10 @@ final class EnergyIconsTests: XCTestCase {
             + [SettingsItem.vehicle.symbol, "function", "list.bullet.clipboard", "gauge.with.dots.needle.33percent",
                "wrench.and.screwdriver.fill", "sun.max.fill", "road.lanes", "snowflake", "bolt.fill",
                "exclamationmark.circle", "checkmark.circle.fill", "circle", "chevron.down", "info.circle"]
+            // Журнал заправок и зарядок (21.6).
+            + JournalKind.allCases.map { JournalText.symbol($0) }
+            + [JournalEntryRequest.Mode.fill, .charge].map { JournalText.actionSymbol($0) }
+            + ["list.bullet.rectangle", "plus", "trash", "chevron.right"]
     }
 
     func testEverySymbolExists() {

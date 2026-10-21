@@ -29052,6 +29052,846 @@
           }
         }
       }
+    },
+    "Зарядка дома": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зарядка дома"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyda quvvatlash"
+          }
+        }
+      }
+    },
+    "Зарядка на станции": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зарядка на станции"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stansiyada quvvatlash"
+          }
+        }
+      }
+    },
+    "На станции": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На станции"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stansiyada"
+          }
+        }
+      }
+    },
+    "Заправился": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заправился"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoqilgʻi quydim"
+          }
+        }
+      }
+    },
+    "Зарядился": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зарядился"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quvvatladim"
+          }
+        }
+      }
+    },
+    "Заправка": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заправка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoqilgʻi quyish"
+          }
+        }
+      }
+    },
+    "До полного бака": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "До полного бака"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toʻliq bakkacha"
+          }
+        }
+      }
+    },
+    "Зарядил до 100 %": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зарядил до 100 %"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "100 % gacha quvvatladim"
+          }
+        }
+      }
+    },
+    "Потрачено %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Потрачено %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sarflandi: %@"
+          }
+        }
+      }
+    },
+    "по факту %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "по факту %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "amalda %@"
+          }
+        }
+      }
+    },
+    "по расчёту ≈ %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "по расчёту ≈ %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hisob boʻyicha ≈ %@"
+          }
+        }
+      }
+    },
+    "до полного": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "до полного"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "toʻliq"
+          }
+        }
+      }
+    },
+    "Выходит %@ — похоже на опечатку в сумме или количестве.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выходит %@ — похоже на опечатку в сумме или количестве."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ chiqyapti — summa yoki miqdorda xato boʻlsa kerak."
+          }
+        }
+      }
+    },
+    "Столько в машину не помещается — проверьте количество.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Столько в машину не помещается — проверьте количество."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashinaga buncha sigʻmaydi — miqdorni tekshiring."
+          }
+        }
+      }
+    },
+    "Пробег не сходится с соседней записью: там %@.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пробег не сходится с соседней записью: там %@."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Probeg qoʻshni yozuvga mos emas: unda %@."
+          }
+        }
+      }
+    },
+    "Удалить запись?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить запись?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yozuv oʻchirilsinmi?"
+          }
+        }
+      }
+    },
+    "Сохранить так?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранить так?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shunday saqlansinmi?"
+          }
+        }
+      }
+    },
+    "Исправить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Исправить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tuzatish"
+          }
+        }
+      }
+    },
+    "Обновить цену": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновить цену"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Narxni yangilash"
+          }
+        }
+      }
+    },
+    "Поставить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поставить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qoʻyish"
+          }
+        }
+      }
+    },
+    "Оставить прежнюю": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оставить прежнюю"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avvalgisini qoldirish"
+          }
+        }
+      }
+    },
+    "Не ставить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не ставить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qoʻymaslik"
+          }
+        }
+      }
+    },
+    "Когда": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Когда"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qachon"
+          }
+        }
+      }
+    },
+    "Количество, %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Количество, %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Miqdor, %@"
+          }
+        }
+      }
+    },
+    "Цена": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цена"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Narx"
+          }
+        }
+      }
+    },
+    "Сколько": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сколько"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qancha"
+          }
+        }
+      }
+    },
+    "Пробег с панели, км": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пробег с панели, км"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paneldagi probeg, km"
+          }
+        }
+      }
+    },
+    "по желанию": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "по желанию"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ixtiyoriy"
+          }
+        }
+      }
+    },
+    "Пробег и «до полного» — для реального расхода: он считается между двумя полными заправками с пробегом.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пробег и «до полного» — для реального расхода: он считается между двумя полными заправками с пробегом."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Probeg va «toʻliq» — haqiqiy sarf uchun: u probeg yozilgan ikki toʻliq quyish oraligʻida hisoblanadi."
+          }
+        }
+      }
+    },
+    "Обновить цену в расчёте?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновить цену в расчёте?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hisobdagi narx yangilansinmi?"
+          }
+        }
+      }
+    },
+    "Поставить цену в расчёт?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поставить цену в расчёт?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Narx hisobga qoʻyilsinmi?"
+          }
+        }
+      }
+    },
+    "Вы заплатили %@. По этой цене будут считаться расходы поездок.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вы заплатили %@. По этой цене будут считаться расходы поездок."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Siz %@ toʻladingiz. Safar xarajatlari shu narxda hisoblanadi."
+          }
+        }
+      }
+    },
+    "Вы заплатили %1$@, в расчёте — %2$@.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вы заплатили %1$@, в расчёте — %2$@."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Siz %1$@ toʻladingiz, hisobda — %2$@."
+          }
+        }
+      }
+    },
+    "Впишите заправку или зарядку — «Итоги» покажут реальные траты, а не оценку. Всё остаётся на телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Впишите заправку или зарядку — «Итоги» покажут реальные траты, а не оценку. Всё остаётся на телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoqilgʻi quyish yoki quvvatlashni yozing — «Natijalar» taxminni emas, haqiqiy xarajatni koʻrsatadi. Hammasi telefonda qoladi."
+          }
+        }
+      }
+    },
+    "Журнал заправок": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Журнал заправок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoqilgʻi quyish jurnali"
+          }
+        }
+      }
+    },
+    "последние %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "последние %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oxirgi %@"
+          }
+        }
+      }
+    },
+    "Расход по факту": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расход по факту"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Amaldagi sarf"
+          }
+        }
+      }
+    },
+    "Между двумя заправками «до полного» с пробегом с панели: всё залитое между ними ушло на эти километры.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Между двумя заправками «до полного» с пробегом с панели: всё залитое между ними ушло на эти километры."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paneldagi probeg yozilgan ikki «toʻliq» quyish oraligʻida: ular orasida quyilgan hammasi shu kilometrlarga ketgan."
+          }
+        }
+      }
+    },
+    "Изменить запись": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменить запись"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yozuvni oʻzgartirish"
+          }
+        }
+      }
+    },
+    "Записать заправку или зарядку": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Записать заправку или зарядку"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoqilgʻi quyish yoki quvvatlashni yozish"
+          }
+        }
+      }
+    },
+    "Заправки и зарядки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заправки и зарядки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoqilgʻi quyish va quvvatlash"
+          }
+        }
+      }
+    },
+    "С журналом «Итоги» показывают реальные траты, а расчёт — второй строкой.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "С журналом «Итоги» показывают реальные траты, а расчёт — второй строкой."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jurnal bilan «Natijalar» haqiqiy xarajatni koʻrsatadi, hisob esa ikkinchi qatorda."
+          }
+        }
+      }
+    },
+    "Открыть журнал заправок": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть журнал заправок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoqilgʻi quyish jurnalini ochish"
+          }
+        }
+      }
+    },
+    "Журнал заправок и зарядок": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Журнал заправок и зарядок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoqilgʻi quyish va quvvatlash jurnali"
+          }
+        }
+      }
+    },
+    "Журнал заправок и зарядок — таблица energy_journal.csv.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Журнал заправок и зарядок — таблица energy_journal.csv."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoqilgʻi quyish va quvvatlash jurnali — energy_journal.csv jadvali."
+          }
+        }
+      }
+    },
+    "%lld заправок": {
+      "localizations": {
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld заправка"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld заправки"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld заправок"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld заправки"
+                }
+              }
+            }
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ta yoqilgʻi quyish"
+          }
+        }
+      }
+    },
+    "%lld зарядок": {
+      "localizations": {
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld зарядка"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld зарядки"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld зарядок"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld зарядки"
+                }
+              }
+            }
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ta quvvatlash"
+          }
+        }
+      }
+    },
+    "%lld записей": {
+      "localizations": {
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld запись"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld записи"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld записей"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld записи"
+                }
+              }
+            }
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ta yozuv"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

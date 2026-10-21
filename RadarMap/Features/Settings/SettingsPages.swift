@@ -245,18 +245,13 @@ struct TripSettingsPage: View {
             }
 
             Section {
-                Picker("Машина", selection: $settings.vehicleEnergy) {
-                    ForEach(VehicleEnergy.allCases) { Text($0.title).tag($0) }
-                }
+                // Машина, расход и цены переехали в раздел верхнего уровня
+                // (21.10); ссылка здесь — на релиз, чтобы привычный путь вёл туда.
                 NavigationLink {
-                    FuelSettingsPage()
+                    EnergySettingsPage()
                 } label: {
-                    LabeledContent("Расход и цены") {
-                        if let cost = settings.fuelCost(meters: 10_000) {
-                            Text(String(format: String(localized: "%@ за 10 км"), Formatting.money(cost)))
-                        } else {
-                            Text("не заданы")
-                        }
+                    LabeledContent("Машина и расходы") {
+                        Text(EnergyText.shortTitle(settings.vehicleEnergy))
                     }
                 }
                 NavigationLink {
@@ -268,7 +263,7 @@ struct TripSettingsPage: View {
                     }
                 }
             } footer: {
-                Text("В «Куда» в CarPlay — «АЗС», «Зарядка» или обе: в машине на них одна плитка. Расход и цены — для стоимости поездок.")
+                Text("Тип машины, расход и цены — теперь в разделе «Машина и расходы» в начале настроек.")
             }
 
             FineCheckSection()

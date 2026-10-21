@@ -372,6 +372,9 @@ struct TripStatsSheet: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
                     if args.contains("-showMonth") { period = .month }
                     if args.contains("-openFirstTrip") { selectedRecord = env.trip.history.first }
+                    if args.contains("-openLongestTrip") {
+                        selectedRecord = env.trip.history.max { $0.distanceMeters < $1.distanceMeters }
+                    }
                     if args.contains("-showRatingInfo") { showRatingInfo = true }
                     if args.contains("-showSavingsInfo") { showFinesInfo = true }
                     if args.contains("-showFines") { showFines = true }

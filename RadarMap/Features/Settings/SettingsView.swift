@@ -20,7 +20,7 @@ struct SettingsView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     @State private var showFeedback = false
-    /// DEBUG `-settingsPage <alerts|speed|trip|history|route|map|places|learning|battery|privacy|database|backup|language|fuel|maintenance|help>`:
+    /// DEBUG `-settingsPage <alerts|speed|trip|history|route|map|places|learning|battery|privacy|database|backup|language|energy|maintenance|help>`:
     /// открыть страницу раздела сразу — на снимок без касаний.
     @State private var path = NavigationPath()
 
@@ -43,6 +43,10 @@ struct SettingsView: View {
                         SpeedSettingsPage()
                     }
                     link(.trip, value: settings.tripStartMode.title) { TripSettingsPage() }
+                    // Раздел верхнего уровня с 21.10: «Расход и цены» в глубине
+                    // «Поездки» было не найти. Без значения справа: длинное
+                    // название с ним ломалось на две строки уже на 6,1".
+                    link(.vehicle) { EnergySettingsPage() }
                     link(.route) { RouteSettingsPage() }
                 }
 
@@ -153,7 +157,7 @@ struct SettingsView: View {
         case "database": DatabaseSettingsPage()
         case "backup": BackupSettingsPage()
         case "language": LanguageSettingsPage()
-        case "fuel": FuelSettingsPage()
+        case "energy", "fuel": EnergySettingsPage()
         case "maintenance": MaintenancePage()
         case "family": FamilyShareSettingsPage()
         case "fines": Form { FineCheckSection() }.settingsPage("Штрафы")
@@ -189,7 +193,7 @@ struct SettingsView: View {
 /// разбросанных по строкам `Label(systemImage:)` — цвета разделов не
 /// повторяются у соседей и не спорят с цветами камер.
 enum SettingsItem {
-    case alerts, speed, trip, route
+    case alerts, speed, trip, vehicle, route
     case map, offline, places
     case learning, battery, privacy
     case database, backup, language
@@ -200,6 +204,7 @@ enum SettingsItem {
         case .alerts:   return "Оповещения и звук"
         case .speed:    return "Скорость"
         case .trip:     return "Поездка"
+        case .vehicle:  return "Машина и расходы"
         case .route:    return "Маршрут"
         case .map:      return "Карта"
         case .offline:  return "Офлайн-карты"
@@ -224,6 +229,7 @@ enum SettingsItem {
         case .alerts:   return "bell.badge.fill"
         case .speed:    return "gauge.with.dots.needle.67percent"
         case .trip:     return "car.fill"
+        case .vehicle:  return "fuelpump.fill"
         case .route:    return "arrow.triangle.turn.up.right.diamond.fill"
         case .map:      return "map.fill"
         case .offline:  return "arrow.down.circle.fill"
@@ -250,6 +256,7 @@ enum SettingsItem {
         case .alerts:   return Color(uiColor: .systemRed)
         case .speed:    return Color(uiColor: .systemOrange)
         case .trip:     return Color(uiColor: .systemGreen)
+        case .vehicle:  return Color(uiColor: .systemCyan)
         case .route:    return Color(uiColor: .systemBlue)
         case .map:      return Color(uiColor: .systemTeal)
         case .offline:  return Color(uiColor: .systemIndigo)

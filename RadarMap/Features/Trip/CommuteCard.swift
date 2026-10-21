@@ -18,13 +18,14 @@ struct CommuteCard: View {
     let summary: Commute.Summary
     /// Стрелка «подробнее» — только там, где карточка ведёт дальше (Итоги).
     var showsChevron = true
-    /// Сумов на метр пути (FuelCost); nil — расход и цена не заданы.
-    var fuelCostPerMeter: Double? = nil
+    /// Дорога этого направления за 30 дней в сумах (EnergySplit — по
+    /// поездкам, с зарядом дня); nil — суммы нет.
+    var monthlyCost: Double? = nil
     /// «Обычно ~35 мин (по водителям)» (8.8.16) — пока своего «обычно» нет.
     var crowdUsual: TimeInterval? = nil
 
     var body: some View {
-        let monthly = FuelCost.monthly(trips: summary.trips, costPerMeter: fuelCostPerMeter, now: Date())
+        let monthly = monthlyCost
         VStack(alignment: .leading, spacing: 12) {
             header
             // Пилюля — рядом с цифрой, пока влезает; иначе строкой ниже.
@@ -73,8 +74,8 @@ struct CommuteCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let monthly {
-                // «В месяц ~420 000 сум» (12б.3): та же дорога, тот же расход.
-                Label(String(format: String(localized: "Топливо в месяц ~%@"), Formatting.money(monthly)),
+                // «В месяц ≈ 46 000 сум» (12б.3, 21.4): те же поездки, тот же расчёт.
+                Label(String(format: String(localized: "Расходы в месяц ≈ %@"), Formatting.money(monthly)),
                       systemImage: "fuelpump")
                     .font(.rounded(13))
                     .foregroundStyle(Theme.textSecondary)
@@ -112,7 +113,7 @@ struct CommuteCard: View {
         }
         if let week = summary.week, week.isNoticeable { parts.append(Self.weekLine(week, spoken: true)) }
         if let monthlyFuel {
-            parts.append(String(format: String(localized: "Топливо в месяц около %@"), Formatting.money(monthlyFuel)))
+            parts.append(String(format: String(localized: "Расходы в месяц около %@"), Formatting.money(monthlyFuel)))
         }
         if let best = summary.best { parts.append(CommuteAdvice.line(best, spoken: true)) }
         return parts.joined(separator: ". ")

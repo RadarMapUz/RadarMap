@@ -98,7 +98,7 @@ struct WorkShiftsCard: View {
         return real
     }
 
-    /// «212 км · рейсов 18 · превышений 3 · штрафы ~450 000 сум · топливо ~120 000 сум».
+    /// «212 км · рейсов 18 · превышений 3 · штрафы ~450 000 сум · расходы ≈ 120 000 сум».
     private func details(_ shift: WorkShift) -> String {
         var parts = [Formatting.distance(shift.distanceMeters),
                      String(format: String(localized: "рейсов: %lld"), shift.trips)]
@@ -107,8 +107,8 @@ struct WorkShiftsCard: View {
         if shift.fineRisk > 0 {
             parts.append(String(format: String(localized: "штрафы ~%@"), Formatting.money(shift.fineRisk)))
         }
-        if let fuel = env.settings.fuelCost(meters: shift.distanceMeters) {
-            parts.append(String(format: String(localized: "топливо ~%@"), Formatting.money(fuel)))
+        if let cost = shiftCost(shift) {
+            parts.append(String(format: String(localized: "расходы ≈ %@"), Formatting.money(cost)))
         }
         return parts.joined(separator: " · ")
     }
@@ -129,9 +129,15 @@ struct WorkShiftsCard: View {
         if shift.fineRisk > 0 {
             parts.append(String(format: String(localized: "штрафы около %@"), Formatting.money(shift.fineRisk)))
         }
-        if let fuel = env.settings.fuelCost(meters: shift.distanceMeters) {
-            parts.append(String(format: String(localized: "топливо около %@"), Formatting.money(fuel)))
+        if let cost = shiftCost(shift) {
+            parts.append(String(format: String(localized: "расходы около %@"), Formatting.money(cost)))
         }
         return parts.joined(separator: ", ")
+    }
+
+    /// Расходы смены (21.4): рейсы смены из общего расчёта — с зарядом дня,
+    /// как такси и считает топливо на смену. nil — суммы нет.
+    private func shiftCost(_ shift: WorkShift) -> Double? {
+        env.energyLedger.use(from: shift.start, through: shift.end, workOnly: true).cost.map(FuelCost.rounded)
     }
 }

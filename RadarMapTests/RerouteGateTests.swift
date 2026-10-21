@@ -117,4 +117,24 @@ final class RerouteGateTests: XCTestCase {
         gate.resetTicks()
         XCTAssertEqual(gate.driftTicks, 0)
     }
+
+    /// Порог устойчивого съезда растёт с погрешностью: на фиксах 60 м между
+    /// домами снос 55 м при верном курсе — не съезд. Хороший фикс — прежние 50 м.
+    func testDriftLimitGrowsWithFixAccuracy() {
+        XCTAssertEqual(RerouteGate.driftLimit(accuracy: 5), AppConfig.rerouteDriftMeters)
+        XCTAssertEqual(RerouteGate.driftLimit(accuracy: 10), AppConfig.rerouteDriftMeters)
+        XCTAssertEqual(RerouteGate.driftLimit(accuracy: 60),
+                       AppConfig.rerouteDriftMeters + RoadCorridor.accuracyAllowance(60))
+        XCTAssertGreaterThan(RerouteGate.driftLimit(accuracy: -1), RerouteGate.driftLimit(accuracy: 60) - 0.001,
+                             "неизвестная точность — как худшая принятая")
+        XCTAssertEqual(RerouteGate.driftLimit(accuracy: nil), AppConfig.rerouteDriftMeters)
+
+        // Снос 70 м четыре фикса подряд на фиксах 60 м — не перестроение.
+        var gate = RerouteGate()
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let drift = RerouteGate.driftLimit(accuracy: 60)
+        for tick in 0..<6 {
+            XCTAssertFalse(gate.note(deviation: 70, now: now.addingTimeInterval(Double(tick)), drift: drift))
+        }
+    }
 }

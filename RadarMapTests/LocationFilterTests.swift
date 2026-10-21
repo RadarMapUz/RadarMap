@@ -198,6 +198,96 @@ final class LocationFilterTests: XCTestCase {
         XCTAssertEqual(last, -1)
     }
 
+    // MARK: - Курс по земле только между годными фиксами (14.13)
+
+    /// Едем `speed` м/с на 200°, фикс раз в секунду с точностью `accuracy`
+    /// (сырого курса нет, как в симуляторе) — курсы, которые отдал фильтр.
+    private func groundCourses(speed: Double, accuracy: Double, count: Int = 7) -> [CLLocationDirection] {
+        var filter = LocationFilter()
+        return (0..<count).map { step in
+            let t = Double(step)
+            return accepted(filter.accept(
+                fix(moved(speed * t, bearing: 200), accuracy: accuracy, speed: speed,
+                    course: 200, courseAccuracy: -1, at: t),
+                now: now.addingTimeInterval(t)))?.course ?? -2
+        }
+    }
+
+    /// Фиксы уровня Wi-Fi (60 м): сдвиг в 30 м между ними — меньше их
+    /// собственной погрешности, «курс» по ним — шум, а гейты ему верили и
+    /// глушили камеру на нашей дороге по оси. Курса нет — гейты молчат.
+    func testWiFiQualityFixesGiveNoGroundCourse() {
+        var filter = LocationFilter()
+        _ = filter.accept(fix(base, accuracy: 60, courseAccuracy: -1), now: now)
+        let result = accepted(filter.accept(
+            fix(moved(30, bearing: 180), accuracy: 60, course: -1, courseAccuracy: -1, at: 2),
+            now: now.addingTimeInterval(2)))
+        XCTAssertEqual(result?.course, -1, "курс по шуму — не курс")
+        // И на скорости, где сдвиг за пять секунд вдвое больше погрешности
+        // каждого: фикс хуже порога доказательством не бывает.
+        XCTAssertEqual(groundCourses(speed: 25, accuracy: 60).filter { $0 >= 0 }, [])
+        XCTAssertEqual(groundCourses(speed: 11.1, accuracy: AppConfig.courseProofMaxAccuracyMeters + 1)
+            .filter { $0 >= 0 }, [])
+    }
+
+    /// Годный фикс после плохого: плохой — не опора. Опора — прошлый годный.
+    /// Плохой фикс сам курса не получает, даже между двумя годными.
+    func testPoorFixIsNeverAnAnchor() {
+        var filter = LocationFilter()
+        // 40 км/ч на 200°, годный GPS.
+        for step in 0..<3 {
+            let t = Double(step)
+            _ = filter.accept(fix(moved(11.1 * t, bearing: 200), course: -1, courseAccuracy: -1, at: t),
+                              now: now.addingTimeInterval(t))
+        }
+        // Wi-Fi-фикс в 40 м вбок от дороги.
+        let aside = GeoMath.destination(from: moved(33.3, bearing: 200), bearing: 290, distanceMeters: 40)
+        let poor = accepted(filter.accept(fix(aside, accuracy: 60, course: -1, courseAccuracy: -1, at: 3),
+                                          now: now.addingTimeInterval(3)))
+        XCTAssertEqual(poor?.course, -1, "плохой фикс курса не получает")
+        let back = accepted(filter.accept(fix(moved(44.4, bearing: 200), course: -1, courseAccuracy: -1, at: 4),
+                                          now: now.addingTimeInterval(4)))
+        XCTAssertEqual(back?.course ?? -1, 200, accuracy: 1,
+                       "курс — от прошлого годного, а не от плохого в 40 м вбок")
+    }
+
+    /// Сдвиг меньше суммарной погрешности двух фиксов — курса нет: на
+    /// фиксах в 20 м на 40 км/ч опора нужна в 40 м, то есть за 4 секунды,
+    /// а не за две, как на хорошем GPS.
+    func testStepGrowsWithTheFixesOwnAccuracy() {
+        let courses = groundCourses(speed: 11.1, accuracy: 20)
+        XCTAssertEqual(Array(courses.prefix(4)), [-1, -1, -1, -1], "\(courses)")
+        for course in courses.dropFirst(4) {
+            XCTAssertEqual(course, 200, accuracy: 1, "с опорой в 44 м курс есть: \(courses)")
+        }
+        // Два фикса, ушедшие на всю погрешность поперёк пути в разные
+        // стороны, не разворачивают курс за порог гейта оси.
+        let worstTurn = atan(1 / AppConfig.derivedCourseAccuracyFactor) * 180 / .pi
+        XCTAssertLessThan(worstTurn, AppConfig.cameraAxisMaxAngle)
+    }
+
+    /// Хороший GPS на городских 30–40 км/ч — как в 13.3: курс со второго-
+    /// третьего фикса и дальше на каждом. Симулятор отдаёт 5 м, телефон под
+    /// открытым небом — 3–10 м.
+    func testGoodFixesKeepTheCityCourse() {
+        for (speed, accuracy, warmUp) in [(8.33, 5.0, 2), (11.1, 5.0, 2), (11.1, 10.0, 2), (8.33, 10.0, 3)] {
+            let courses = groundCourses(speed: speed, accuracy: accuracy)
+            XCTAssertEqual(Array(courses.prefix(warmUp)), Array(repeating: -1, count: warmUp),
+                           "\(speed) м/с, \(accuracy) м: \(courses)")
+            for course in courses.dropFirst(warmUp) {
+                XCTAssertEqual(course, 200, accuracy: 1, "\(speed) м/с, \(accuracy) м: \(courses)")
+            }
+        }
+    }
+
+    /// Сырой курс, в котором система сама уверена (доплер), — по-прежнему
+    /// курс и на плохой координате: каньон портит позицию, а не скорость.
+    func testConfidentRawCourseSurvivesAPoorPosition() {
+        var filter = LocationFilter()
+        let result = accepted(filter.accept(fix(base, accuracy: 50, course: 137, courseAccuracy: 8), now: now))
+        XCTAssertEqual(result?.course ?? -1, 137, accuracy: 0.001)
+    }
+
     // MARK: - Повторный фикс на ходу (прогон 20.10)
 
     /// iOS после перенастройки точности отдаёт тот же фикс ещё раз через

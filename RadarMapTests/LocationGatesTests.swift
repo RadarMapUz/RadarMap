@@ -174,6 +174,70 @@ final class LocationGatesTests: XCTestCase {
         XCTAssertFalse(LocationGates.isOnOurRoad(proven, in: situation(), isOnRoute: false))
     }
 
+    // MARK: - Непроверенная позиция (needsReview, 14.13)
+
+    /// Камера с непроверенной позицией (снап не нашёл её дорогу по имени)
+    /// прямо по курсу на нашей дороге, а профиль ей снап дал поперечной
+    /// улицы: ось и кусок дороги поперёк нас. Такая ось — не доказательство:
+    /// предупреждаем. Та же геометрия у проверенной камеры — по-прежнему
+    /// поперечная улица.
+    func testNeedsReviewCrossAxisDoesNotMute() {
+        let doubtful = camera(ahead: 300, roadBearing: 90, axis: 90, needsReview: true)
+        XCTAssertTrue(LocationGates.isOnOurRoad(doubtful, in: situation(), isOnRoute: false))
+        XCTAssertEqual(LocationGates.verdict(doubtful, in: situation(), isOnRoute: false), .ours)
+        let bare = camera(ahead: 100, roadBearing: nil, axis: 90, needsReview: true)
+        XCTAssertTrue(LocationGates.isOnOurRoad(bare, in: situation(), isOnRoute: false),
+                      "одна ось без куска дороги — тоже не доказательство")
+        let checked = camera(ahead: 300, roadBearing: 90, axis: 90)
+        XCTAssertEqual(LocationGates.verdict(checked, in: situation(), isOnRoute: false), .provenAxis)
+    }
+
+    /// Направление и «вне её проезжей части» при поделённых сторонах — тоже
+    /// профиль, снятый в непроверенной точке: стороны не доказаны, камера не
+    /// глушится, решает щедрый коридор.
+    func testNeedsReviewNeverProvesDirectionOrCarriageway() {
+        let oncoming = camera(ahead: 300, roadBearing: 0, dir: 180, twin: true, needsReview: true)
+        XCTAssertFalse(oncoming.profileMayMute)
+        XCTAssertFalse(oncoming.sidesAreProven)
+        XCTAssertFalse(oncoming.allowsDirectionGate)
+        XCTAssertNil(oncoming.markerDirection, "клин на маркере — только там, где гейт вправе молчать")
+        XCTAssertEqual(LocationGates.verdict(oncoming, in: situation(), isOnRoute: false), .ours)
+        let aside = camera(ahead: 300, east: 60, roadBearing: 0, roadHalf: 350, twin: true, needsReview: true)
+        XCTAssertTrue(LocationGates.isOnOurRoad(aside, in: situation(), isOnRoute: false))
+        // Контроль: проверенные — по-прежнему доказанная тишина.
+        XCTAssertEqual(LocationGates.verdict(camera(ahead: 300, roadBearing: 0, dir: 180, twin: true),
+                                             in: situation(), isOnRoute: false), .provenDirection)
+        XCTAssertEqual(LocationGates.verdict(camera(ahead: 300, east: 60, roadBearing: 0, roadHalf: 350,
+                                                    twin: true),
+                                             in: situation(), isOnRoute: false), .provenOffCarriageway)
+    }
+
+    /// Коридор для непроверенной позиции — трассовый и в городе: камера в
+    /// 70 м вбок на 300 м впереди (городской коридор там 52 м) — наша, если
+    /// позиция не проверена, и нет, если проверена.
+    func testNeedsReviewGetsTheGenerousCorridor() {
+        let doubtful = camera(ahead: 300, east: 70, roadBearing: nil, cls: nil, needsReview: true)
+        XCTAssertEqual(LocationGates.verdict(doubtful, in: situation(), isOnRoute: false), .ours)
+        let checked = camera(ahead: 300, east: 70, roadBearing: nil, cls: nil)
+        XCTAssertEqual(LocationGates.verdict(checked, in: situation(), isOnRoute: false), .outsideCorridor)
+        // Позади — и для неё позади: «щедрый» не значит «всегда».
+        let behind = camera(ahead: -300, roadBearing: nil, cls: nil, needsReview: true)
+        XCTAssertFalse(LocationGates.isOnOurRoad(behind, in: situation(), isOnRoute: false))
+    }
+
+    /// Новый подъезд после разворота: «своя дорога» камеры с непроверенной
+    /// позицией — не её профиль (он может быть поперечной улицы), а линия, по
+    /// которой мы мимо неё проехали.
+    func testNeedsReviewReapproachUsesThePassLine() {
+        let doubtful = camera(ahead: 300, roadBearing: 90, axis: 90, needsReview: true)
+        XCTAssertNil(PassGeometry.ownRoadOffset(camera: doubtful, at: me))
+        let passLine = AlertEngine.PassLine(lat: doubtful.lat, lon: doubtful.lon, course: 0, distance: 5)
+        XCTAssertTrue(LocationGates.isReapproach(doubtful, in: situation(), passLine: passLine),
+                      "едем по той же линии, что проезжали, — подъезд новый")
+        let checked = camera(ahead: 300, roadBearing: 90, axis: 90)
+        XCTAssertNotNil(PassGeometry.ownRoadOffset(camera: checked, at: me))
+    }
+
     // MARK: - Кусок дороги решает в обе стороны
 
     /// Мы на проезжей части камеры, камера впереди — наша.

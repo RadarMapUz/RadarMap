@@ -205,7 +205,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         observeRoadWeather()
         observeTripSaved()
         startFreezeWatch(scene: scene)
-        Log.carplay.notice("CarPlay подключён, сцена \(Self.stateName(scene), privacy: .public)")
+        Log.carplay.notice("CarPlay подключён, сцена \(Self.stateName(scene), privacy: .public), метаданные приборки \(self.env.settings.carPlayNavigationMetadata ? "вкл" : "выкл", privacy: .public)")
         // Без анимации: анимированная установка корня у сцены в фоне
         // теряется (так же лечили пропажу кнопок в CoMaps).
         setRoot(template, on: interfaceController)

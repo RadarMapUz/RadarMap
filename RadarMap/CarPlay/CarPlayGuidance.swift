@@ -233,6 +233,16 @@ final class CarPlayGuidance {
     private let cameraBanner = CarPlayCameraBanner()
     /// Когда показан текущий манёвр — для состояния «начальный».
     private var maneuverShownAt = Date.distantPast
+    /// Метаданные для приборки и HUD (настройка «Манёвры на приборке и HUD»,
+    /// 26.4) — ровно то, что ответили системе для ТЕКУЩЕЙ сессии. Система
+    /// спрашивает `mapTemplateShouldProvideNavigationMetadata` только внутри
+    /// `startNavigationSession` (дизассемблер CarPlay.framework, iOS 26.2:
+    /// единственный вызов — в `-[CPMapTemplate startNavigationSessionForTrip:]`,
+    /// ответ уходит в `setSendsNavigationMetadata:` сессии и поездки), так что
+    /// карточка и состояние манёвра читают этот снимок, а не живую
+    /// настройку: иначе после переключения ряд полос ушёл бы в сессию,
+    /// которая шлёт метаданные (25.H2).
+    private(set) var sessionMetadata = AppConfig.carPlayNavigationMetadata
     private var sentManeuverState: CPManeuverState?
     /// Ведение на паузе: «Перестраиваю маршрут» (.rerouting) или «Нет сигнала
     /// GPS» (.locating, iOS 27) — CarPlayGuidancePause. Плашка «Нет сигнала
@@ -463,8 +473,14 @@ final class CarPlayGuidance {
         if NavigationFlow.carGuides(phase: phase, choosing: model.isPreviewing),
            let destination = route.destinationCoordinate {
             let cancelledHere = cancelledDestination.map { Self.same($0, destination) } ?? false
+            let metadataChanged = Self.metadataNeedsNewSession(
+                hasSession: session != nil, sessionMetadata: sessionMetadata,
+                wanted: env.settings.carPlayNavigationMetadata)
+            if metadataChanged {
+                Log.carplay.notice("метаданные приборки переключены (\(self.env.settings.carPlayNavigationMetadata ? "вкл" : "выкл", privacy: .public)) — сессия заново")
+            }
             if !cancelledHere, mayStartSession || session != nil,
-               session == nil || tripDestination.map({ !Self.same($0, destination) }) ?? true {
+               session == nil || metadataChanged || tripDestination.map({ !Self.same($0, destination) }) ?? true {
                 cancelledDestination = nil
                 start(on: template, to: destination)
             }
@@ -558,6 +574,10 @@ final class CarPlayGuidance {
         let trip = Self.makeTrip(origin: origin, destination: target, choices: [choice])
         self.trip = trip
         tripDestination = destination
+        // Ответ на mapTemplateShouldProvideNavigationMetadata — система
+        // спросит его прямо внутри startNavigationSession (делегат сцены
+        // отдаёт `sessionMetadata`).
+        sessionMetadata = env.settings.carPlayNavigationMetadata
         let started = template.startNavigationSession(for: trip)
         // Пока манёвра нет — «загружаю», а не пустая карточка (Руководство
         // CarPlay, стр. 47): снимает паузу первый же upcomingManeuvers.
@@ -572,7 +592,7 @@ final class CarPlayGuidance {
         sentStepDistance = nil
         sentTripDistance = nil
         model.hasSystemGuidance = true
-        Log.carplay.notice("CarPlay: навигационная сессия начата")
+        Log.carplay.notice("CarPlay: навигационная сессия начата, метаданные приборки \(self.sessionMetadata ? "вкл" : "выкл", privacy: .public)")
     }
 
     private func updateManeuver() {
@@ -593,7 +613,7 @@ final class CarPlayGuidance {
             return
         }
         let card = Self.card(for: step, carDark: model.carIsDark ?? !model.isDaylight,
-                             limitSign: limitSign(for: step))
+                             metadata: sessionMetadata, limitSign: limitSign(for: step))
         let next = card.maneuver
         maneuverShownAt = Date()
         sentManeuverState = nil
@@ -628,6 +648,15 @@ final class CarPlayGuidance {
         // выключены, так что приборка его вторым поворотом не прочтёт.
         session.add(upcoming)
         session.upcomingManeuvers = upcoming
+    }
+
+    /// Настройка «Манёвры на приборке и HUD» сменилась при живой сессии —
+    /// нужна новая: система спрашивает о метаданных только при её начале, и
+    /// иначе переключатель подействовал бы лишь на следующем маршруте.
+    /// Без сессии — ничего: новая и так спросит.
+    nonisolated static func metadataNeedsNewSession(hasSession: Bool, sessionMetadata: Bool,
+                                                    wanted: Bool) -> Bool {
+        hasSession && sessionMetadata != wanted
     }
 
     // MARK: - Карточка манёвра
@@ -673,7 +702,7 @@ final class CarPlayGuidance {
     /// встаёт знаком в конец фразы (`attributedInstructionVariants`), раньше —
     /// не показывается.
     static func card(for step: RouteStep, carDark: Bool,
-                     metadata: Bool = AppConfig.carPlayNavigationMetadata,
+                     metadata: Bool,
                      limitSign: Int? = nil) -> Card {
         let next = CPManeuver()
         next.instructionVariants = CarPlayGuidanceMapping.instructionVariants(
@@ -708,8 +737,9 @@ final class CarPlayGuidance {
         let lanes = CarPlayGuidanceMapping.lanes(step.lanes, kind: step.kind)
         // Ряд полос на экране машины — вторым «манёвром» из одной картинки
         // (Руководство CarPlay, стр. 48; стиль — mapTemplate(_:displayStyleFor:)).
-        // CPLaneGuidance уходит только в метаданные для приборки, а они
-        // выключены: до 18.10 полос в машине не было нигде (аудит, п. 5).
+        // CPLaneGuidance уходит только в метаданные для приборки, а они по
+        // умолчанию выключены (настройка «Манёвры на приборке и HUD», 26.4):
+        // до 18.10 полос в машине не было нигде (аудит, п. 5).
         let row = metadata || !CarPlayGuidanceMapping.isUseful(lanes)
             ? nil : laneRow(step.lanes, kind: step.kind)
         return Card(maneuver: next, laneRow: row, lanes: lanes)
@@ -790,7 +820,7 @@ final class CarPlayGuidance {
     private func updateEstimates(on template: CPMapTemplate) {
         let route = env.route
         let now = Date()
-        if let session, maneuver != nil, maneuverStep != nil, AppConfig.carPlayNavigationMetadata {
+        if let session, maneuver != nil, maneuverStep != nil, sessionMetadata {
             let state = CarPlayGuidanceMapping.maneuverState(distance: route.nextStepDistance,
                                                              sinceShown: now.timeIntervalSince(maneuverShownAt))
             if state != sentManeuverState {

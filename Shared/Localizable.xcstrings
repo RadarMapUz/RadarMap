@@ -8182,6 +8182,22 @@
         }
       }
     },
+    "Манёвры на приборке и HUD": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Манёвры на приборке и HUD"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manevrlar asboblar panelida va HUD ekranida"
+          }
+        }
+      }
+    },
     "Маршрут": {
       "localizations": {
         "ru": {
@@ -8418,6 +8434,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mashina · %@"
+          }
+        }
+      }
+    },
+    "Машина покажет стрелку и расстояние на приборке или проекции, если умеет; ряд полос на экране CarPlay при этом не показывается.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Машина покажет стрелку и расстояние на приборке или проекции, если умеет; ряд полос на экране CarPlay при этом не показывается."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina qoʻllab-quvvatlasa, asboblar panelida yoki proyeksiyada yoʻnalish koʻrsatkichi va masofani koʻrsatadi; bunda CarPlay ekranida yoʻl qatorlari koʻrsatilmaydi."
           }
         }
       }

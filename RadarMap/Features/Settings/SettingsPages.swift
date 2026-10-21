@@ -227,6 +227,18 @@ struct TripSettingsPage: View {
             FineCheckSection()
 
             Section {
+                NavigationLink {
+                    TripHistorySettingsPage()
+                } label: {
+                    LabeledContent("История поездок") {
+                        Text(Formatting.decimal(Double(env.trip.storedTripCount), digits: 0))
+                    }
+                }
+            } footer: {
+                Text("Выгрузить все поездки одним архивом или стереть историю.")
+            }
+
+            Section {
                 Toggle("Подробный трек для регистратора", isOn: $settings.recordTimedTrack)
                     .onChange(of: settings.recordTimedTrack) { _, on in
                         env.trip.recordsTimedTrack = on

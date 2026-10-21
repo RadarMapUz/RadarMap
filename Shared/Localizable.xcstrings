@@ -1915,6 +1915,38 @@
         }
       }
     },
+    "Архив ZIP: таблица trips.csv — строка на поездку — и треки GPX тех поездок, у которых трек ещё хранится. Дом и работа в нём не подписаны.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Архив ZIP: таблица trips.csv — строка на поездку — и треки GPX тех поездок, у которых трек ещё хранится. Дом и работа в нём не подписаны."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ZIP arxiv: trips.csv jadvali — har bir safar uchun bir qator — va treki hali saqlanayotgan safarlarning GPX treklari. Uy va ish unda belgilanmagan."
+          }
+        }
+      }
+    },
+    "Архив не собрался — попробуйте ещё раз": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Архив не собрался — попробуйте ещё раз"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arxiv yigʻilmadi — yana urinib koʻring"
+          }
+        }
+      }
+    },
     "Архив поездок": {
       "localizations": {
         "ru": {
@@ -3425,6 +3457,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld ta oʻtishingiz boʻyicha xulosa: bu tomonga har safar tezlikni pasaytirasiz, qarama-qarshi tomonga — yoʻq. Bu kuzatuv, reyestr maʼlumoti emas: kamera haqida ikkala tomonga ham ogohlantirishda davom etamiz."
+          }
+        }
+      }
+    },
+    "Выгрузить все поездки одним архивом или стереть историю.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выгрузить все поездки одним архивом или стереть историю."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Barcha safarlarni bitta arxivda yuklab olish yoki tarixni oʻchirish."
           }
         }
       }
@@ -5460,6 +5508,22 @@
         }
       }
     },
+    "История поездок": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "История поездок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarlar tarixi"
+          }
+        }
+      }
+    },
     "История поездок хранится только на этом телефоне и никуда не отправляется. Копия — единственный способ перенести её на новый телефон или вернуть после сброса.": {
       "extractionState": "manual",
       "localizations": {
@@ -5489,6 +5553,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Safarlar tarixi, uy va ish joyi faqat shu iPhoneʼda saqlanadi. Serverga faqat marshrut soʻrovi, sizning belgilaringiz va tirbandlik uchun shaxssiz yoʻl boʻlaklari yuboriladi — ularni Sozlamalarda oʻchirish mumkin."
+          }
+        }
+      }
+    },
+    "История удалена": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "История удалена"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarix oʻchirildi"
           }
         }
       }
@@ -9803,6 +9883,22 @@
         }
       }
     },
+    "Поездки и всё, что из них посчитано. Настройки остаются.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездки и всё, что из них посчитано. Настройки остаются."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarlar va ulardan hisoblangan hamma narsa. Sozlamalar qoladi."
+          }
+        }
+      }
+    },
     "Поездку домой приложение узнаёт по вашему распорядку, как подсказку «Домой»: в магазин и к друзьям ссылка молчит.": {
       "localizations": {
         "ru": {
@@ -9815,6 +9911,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Uyga safarni ilova kun tartibingizdan biladi, «Uyga» maslahati kabi: doʻkonga va doʻstlarga borganda havola jim."
+          }
+        }
+      }
+    },
+    "Поездок на телефоне": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездок на телефоне"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefondagi safarlar"
           }
         }
       }
@@ -11769,6 +11881,22 @@
         }
       }
     },
+    "С телефона сотрутся: все поездки с треками и проездами камер; итоги по дням и «За всё время»; подробные треки регистратора; дорога на работу и журнал смен; выученные Дом и Работа и знакомые камеры; цифры виджета. Останутся: настройки, расход и цены топлива, места, заданные вручную, добавленные вами камеры и копии в «Файлах». Вернуть удалённое нельзя.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "С телефона сотрутся: все поездки с треками и проездами камер; итоги по дням и «За всё время»; подробные треки регистратора; дорога на работу и журнал смен; выученные Дом и Работа и знакомые камеры; цифры виджета. Останутся: настройки, расход и цены топлива, места, заданные вручную, добавленные вами камеры и копии в «Файлах». Вернуть удалённое нельзя."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefondan oʻchiriladi: barcha safarlar — treklari va kameralardan oʻtishlari bilan; kunlik natijalar va «Butun vaqt uchun»; videoregistrator uchun batafsil treklar; ishga yoʻl va smenalar jurnali; oʻrganilgan Uy va Ish hamda tanish kameralar; vidjet raqamlari. Qoladi: sozlamalar, yoqilgʻi sarfi va narxlari, qoʻlda belgilangan joylar, siz qoʻshgan kameralar va «Fayllar»dagi nusxalar. Oʻchirilganni qaytarib boʻlmaydi."
+          }
+        }
+      }
+    },
     "Сам понимает город или трассу. В городе — коротко, на трассе — полной фразой, о своих камерах — только вибрация, при превышении — громко.": {
       "localizations": {
         "ru": {
@@ -13439,6 +13567,38 @@
         }
       }
     },
+    "Удалить всю историю": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить всю историю"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Butun tarixni oʻchirish"
+          }
+        }
+      }
+    },
+    "Удалить всю историю?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить всю историю?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Butun tarixni oʻchirasizmi?"
+          }
+        }
+      }
+    },
     "Удалить запись": {
       "localizations": {
         "ru": {
@@ -14135,6 +14295,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tezlikni oshirish jarimalari — MJtK 128-3-modda"
+          }
+        }
+      }
+    },
+    "Экспорт всех поездок": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Экспорт всех поездок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Barcha safarlarni eksport qilish"
           }
         }
       }
@@ -20181,22 +20357,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Barcha safarlarni oʻchirish"
-          }
-        }
-      }
-    },
-    "История, рейтинг и итоги за все периоды сотрутся с телефона. Вернуть их будет нельзя.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "История, рейтинг и итоги за все периоды сотрутся с телефона. Вернуть их будет нельзя."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Barcha davrlar uchun tarix, reyting va natijalar telefondan oʻchib ketadi. Ularni qaytarib boʻlmaydi."
           }
         }
       }

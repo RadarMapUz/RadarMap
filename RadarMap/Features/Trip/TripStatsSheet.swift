@@ -271,10 +271,13 @@ struct TripStatsSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .confirmationDialog("Удалить все поездки?", isPresented: $confirmsClear,
                                 titleVisibility: .visible) {
-                Button("Удалить все поездки", role: .destructive) { trip.clearHistory() }
+                // То же удаление, что в Настройки → Поездка → «История
+                // поездок»: с производным (дорога, смены, места, виджет) и
+                // тем же перечнем в подтверждении (15.3).
+                Button("Удалить все поездки", role: .destructive) { env.deleteAllHistory() }
                 Button("Отмена", role: .cancel) {}
             } message: {
-                Text("История, рейтинг и итоги за все периоды сотрутся с телефона. Вернуть их будет нельзя.")
+                Text(AppEnvironment.erasureMessage)
             }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }

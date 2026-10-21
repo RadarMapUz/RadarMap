@@ -912,6 +912,14 @@ final class AppEnvironment {
         if display != workShifts { workShifts = display }
     }
 
+    /// «Удалить всю историю» (15.3): журнал закрытых смен копит рейсы 90
+    /// дней отдельно от истории — без этого смены пережили бы удаление.
+    func clearWorkShifts() {
+        workShiftLog = []
+        Storage.remove(.workShiftLog)
+        if !workShifts.isEmpty { workShifts = [] }
+    }
+
     private static func loadShiftLog() -> [WorkShift] {
         guard let data = Storage.data(.workShiftLog) else { return [] }
         do {

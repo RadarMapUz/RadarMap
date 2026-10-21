@@ -4,7 +4,8 @@ scrypt и его цена, лимиты (в счёт — только приня
 поток «геопозиция → тип → API», метан на точке АГНКС из файла заведений
 (ключ станции — как у телефона), испытательный срок через настоящий API
 (свой повтор не подтверждает, другой человек — подтверждает), и главное —
-Telegram-id нет ни в базе бота, ни в базе отметок. Без сети.
+Telegram-id нет ни в базе бота, ни в базе отметок. Близкие (22.3): /start
+f_<адрес> и /stop уходят в подписки, остальное — как было. Без сети.
 
 Запуск: python3 server/test_telegram_bot.py
 """
@@ -25,6 +26,7 @@ from http.server import ThreadingHTTPServer
 
 import api
 import build_roads
+import family_notify
 import telegram_bot as bot
 
 USER = 987654321
@@ -622,6 +624,102 @@ class ApiIntegrationTest(unittest.TestCase):
         b.db.close()
         with open(path, "rb") as handle:
             self.assertNotIn(str(USER).encode(), handle.read())
+
+
+class FamilyRoutingTest(unittest.TestCase):
+    """22.3: команды близких — до разбора отметок; геопозиция, кнопки и
+    приветствие работают как раньше. Логика подписок — test_family_notify."""
+
+    ADDRESS = api.eta_address("family-routing-test-key-0001")
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.path = os.path.join(self.dir, "family.db")
+        family_notify.init_db(self.path)
+        self.sent = []
+        self.family = family_notify.FamilyCommands(family_notify.connect(self.path), SALT,
+                                                   kdf=lambda password, salt: bot._kdf(password, salt))
+        self.bot = self.make(self.family)
+
+    def tearDown(self):
+        self.family.conn.close()
+
+    def make(self, family):
+        return bot.Bot(SALT, bot.open_db(":memory:"), send=lambda m, p: self.sent.append(p),
+                       api_post=lambda path, body, ip: (500, {}), now=lambda: NOW, family=family)
+
+    def message(self, text, lang="ru", target=None, user=USER):
+        (target or self.bot).handle({"message": {"chat": {"id": user}, "from": {"id": user, "language_code": lang},
+                                                 "text": text}})
+        return self.sent[-1]["text"]
+
+    def test_deep_link_subscribes_and_stop_unsubscribes(self):
+        self.assertEqual(self.message(f"/start f_{self.ADDRESS}"), family_notify.REPLIES["ru"]["subscribed"])
+        self.assertEqual(self.message(f"/start f_{self.ADDRESS}", lang="uz", user=OTHER),
+                         family_notify.REPLIES["uz"]["subscribed"])
+        self.assertEqual(self.message("/stop"), family_notify.REPLIES["ru"]["stopped"])
+        conn = sqlite3.connect(self.path)
+        try:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM family_subs").fetchone()[0], 1)
+            dump = "\n".join(conn.iterdump())
+        finally:
+            conn.close()
+        self.assertNotIn(str(OTHER), dump, "номер чата в подписке — только зашифрованным")
+
+    def test_bad_family_link_is_answered_not_greeted(self):
+        self.assertEqual(self.message("/start f_broken"), family_notify.REPLIES["ru"]["bad_link"])
+
+    def test_other_text_still_gets_the_greeting(self):
+        for text in ("/start", "привет", "/start ref42"):
+            self.assertEqual(self.message(text), bot.TEXTS["start"], text)
+
+    def test_without_family_the_link_gets_the_greeting(self):
+        self.assertEqual(self.message(f"/start f_{self.ADDRESS}", target=self.make(None)), bot.TEXTS["start"])
+
+    def test_location_flow_is_untouched(self):
+        self.bot.handle({"message": {"chat": {"id": 1}, "from": {"id": USER},
+                                     "location": {"latitude": 41.31, "longitude": 69.28}}})
+        self.assertEqual(self.sent[-1]["text"], bot.TEXTS["pick"])
+        self.assertIn("reply_markup", self.sent[-1])
+
+    def test_one_kdf_per_family_command(self):
+        calls = []
+        real = bot._kdf
+        bot._kdf = lambda password, salt: (calls.append(1), real(password, salt))[1]
+        try:
+            for text in (f"/start f_{self.ADDRESS}", "/stop"):
+                calls.clear()
+                self.message(text)
+                self.assertEqual(len(calls), 1, text)
+        finally:
+            bot._kdf = real
+
+    def test_start_family_wires_commands_and_one_courier_thread(self):
+        started = []
+        logs = []
+        saved_thread, saved_log = bot.threading.Thread, bot.log
+
+        class FakeThread:
+            def __init__(self, target, name, daemon):
+                started.append((name, daemon, target.__self__.path))
+
+            def start(self):
+                pass
+        bot.threading.Thread, bot.log = FakeThread, logs.append
+        try:
+            commands = bot.start_family({"salt": SALT, "username": "RadarMapBot"}, send=None, path=self.path)
+            self.assertIsInstance(commands, family_notify.FamilyCommands)
+            self.assertEqual(started, [("family-courier", True, self.path)])
+            self.assertEqual(logs, [])
+            commands.conn.close()
+            bot.start_family({"salt": SALT}, send=None, path=self.path).conn.close()
+            self.assertTrue(any("username" in line for line in logs), "без username — запись в журнал")
+            logs.clear()
+            self.assertIsNone(bot.start_family({"salt": SALT, "username": "RadarMapBot"}, send=None,
+                                               path=os.path.join(self.dir, "нет", "family.db")))
+            self.assertTrue(logs, "база не открылась — бот живёт без подписок и говорит об этом")
+        finally:
+            bot.threading.Thread, bot.log = saved_thread, saved_log
 
 
 class UnitFileTest(unittest.TestCase):

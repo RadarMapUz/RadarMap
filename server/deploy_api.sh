@@ -25,6 +25,10 @@ API=/opt/radarmap/api/api.py
 ADMIN=/opt/radarmap/api/admin.py
 AUTH=/opt/radarmap/api/admin_auth.py
 NOTIFY=/opt/radarmap/api/notify.py
+# Близкие в Telegram (22.3): api.py импортирует модуль на старте (хук
+# eta_put) и без него не поднимется. Тот же файл возит deploy_bot.sh —
+# порядок выкладки: сначала этот скрипт, потом бот.
+FAMILY=/opt/radarmap/api/family_notify.py
 # Конструктор карты: магнит с хранилищем правок и очередь изменений OSM.
 # Панель импортирует оба на старте и без них не поднимется.
 EDITS=/opt/radarmap/api/map_edits.py
@@ -54,6 +58,7 @@ fi
 "${SCP[@]}" "$DIR/admin_auth.py" "$HOST:$AUTH.new"
 # Уведомления в Telegram: api.py импортирует модуль на старте и без него не поднимется.
 "${SCP[@]}" "$DIR/notify.py" "$HOST:$NOTIFY.new"
+"${SCP[@]}" "$DIR/family_notify.py" "$HOST:$FAMILY.new"
 "${SCP[@]}" "$DIR/map_edits.py" "$HOST:$EDITS.new"
 "${SCP[@]}" "$DIR/osm_queue.py" "$HOST:$QUEUE.new"
 "${SCP[@]}" "$DIR/status.py" "$HOST:$STATUS.new"
@@ -92,7 +97,7 @@ echo "→ Проверка синтаксиса, подмена, рестарт�
 # панели и уронил её в цикл перезапуска.
 "${SSH[@]}" "$HOST" "
   set -e
-  files=\"$ADMIN.new $AUTH.new $NOTIFY.new $EDITS.new $QUEUE.new $STATUS.new\"
+  files=\"$ADMIN.new $AUTH.new $NOTIFY.new $FAMILY.new $EDITS.new $QUEUE.new $STATUS.new\"
   [ '$ONLY' = 'panel' ] || files=\"$API.new \$files\"
   for f in \$files; do
     if python3 -c \"import ast, sys; ast.parse(open(sys.argv[1]).read())\" \"\$f\"; then
@@ -108,6 +113,7 @@ echo "→ Проверка синтаксиса, подмена, рестарт�
   mv $ADMIN.new $ADMIN
   mv $AUTH.new $AUTH
   mv $NOTIFY.new $NOTIFY
+  mv $FAMILY.new $FAMILY
   mv $EDITS.new $EDITS
   mv $QUEUE.new $QUEUE
   mv $STATUS.new $STATUS

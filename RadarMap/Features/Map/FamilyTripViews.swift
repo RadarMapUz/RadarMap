@@ -60,7 +60,8 @@ struct FamilyLiveChip: View {
         return Self.showsDemo ? ["Мама", "Dilnoza opa"] : []
     }
 
-    /// Скриншот-хук `-demoFamilyLive` (DEBUG): капсула без поездки и ссылки.
+    /// Скриншот-хук `-demoFamilyLive` (DEBUG): имена в капсуле без живой
+    /// ссылки. Сама капсула — только в поездке (`radarmap://start-trip`).
     static var showsDemo: Bool {
         #if DEBUG
         ProcessInfo.processInfo.arguments.contains("-demoFamilyLive")
@@ -77,7 +78,7 @@ struct FamilyNoticeChip: View {
     @Environment(AppEnvironment.self) private var env
 
     var body: some View {
-        if let text = env.family.notice ?? Self.demoText {
+        if let text = env.family.notice ?? (env.location.isTripActive ? Self.demoText : nil) {
             HStack(spacing: 8) {
                 Image(systemName: "house.fill")
                     .font(.rounded(12, .bold))
@@ -98,7 +99,8 @@ struct FamilyNoticeChip: View {
         }
     }
 
-    /// Скриншот-хук `-demoFamilyNotice` (DEBUG).
+    /// Скриншот-хук `-demoFamilyNotice` (DEBUG) — как и настоящая строка,
+    /// только в поездке.
     private static var demoText: String? {
         #if DEBUG
         ProcessInfo.processInfo.arguments.contains("-demoFamilyNotice")

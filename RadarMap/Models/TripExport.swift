@@ -5,6 +5,8 @@
 //  «Экспорт всех поездок» (15.3): архив ZIP — trips.csv, одна строка на
 //  поездку (начало, конец, км, время в движении, балл, проезды камер, риск
 //  штрафов, рейс), и GPX каждой поездки, у которой трек ещё хранится.
+//  С 21.6 — и energy_journal.csv, журнал заправок и зарядок, если он не пуст:
+//  «Скачать мои данные» обещает всё, что человек вписал сам.
 //
 //  Ни Дома, ни Работы в выгрузке нет: файл уходит туда, куда его отправит
 //  человек, и подпись «→ Дом» в каждой строке превратила бы таблицу в адрес.
@@ -64,6 +66,42 @@ nonisolated enum TripExport {
         return rows.joined(separator: "\r\n") + "\r\n"
     }
 
+    // MARK: - Журнал заправок и зарядок (21.6)
+
+    static let journalFile = "energy_journal.csv"
+    static let journalHeader = ["date", "kind", "quantity", "unit", "amount_uzs", "price_per_unit_uzs",
+                                "odometer_km", "full"]
+
+    /// Единица — латиницей: таблицу открывают где угодно, а «кВт·ч» в
+    /// чужой кодировке превращается в кракозябры.
+    static func unit(_ fuel: Fuel) -> String {
+        switch fuel {
+        case .petrol, .propane: return "l"
+        case .methane: return "m3"
+        case .electricity: return "kWh"
+        }
+    }
+
+    /// Журнал от старых к новым; вид — как в файле журнала (petrol,
+    /// homeCharge…), числа — с точкой.
+    static func journalCSV(_ entries: [JournalEntry], timeZone: TimeZone) -> String {
+        let stamp = formatter("yyyy-MM-dd HH:mm", timeZone: timeZone)
+        var rows = [line(journalHeader)]
+        for entry in entries.sorted(by: { $0.date < $1.date }) {
+            rows.append(line([
+                stamp.string(from: entry.date),
+                entry.kind.rawValue,
+                String(format: "%.2f", entry.quantity),
+                unit(entry.kind.fuel),
+                String(format: "%.0f", entry.amount),
+                entry.unitPrice.map { String(format: "%.0f", $0) } ?? "",
+                entry.odometerKm.map { String(format: "%.0f", $0) } ?? "",
+                entry.isFull ? "1" : "0",
+            ]))
+        }
+        return rows.joined(separator: "\r\n") + "\r\n"
+    }
+
     // MARK: - Имена файлов
 
     /// Папка и архив: «RadarMap-trips-2026-10-20». Латиницей: имя вложения
@@ -112,7 +150,8 @@ nonisolated enum TripExport {
     static let workPrefix = "RadarMap-export-"
 
     @concurrent
-    static func makeArchive(_ records: [TripRecord], now: Date, timeZone: TimeZone,
+    static func makeArchive(_ records: [TripRecord], journal: [JournalEntry] = [], now: Date,
+                            timeZone: TimeZone,
                             root: URL = FileManager.default.temporaryDirectory) async throws -> Archive {
         cleanUpStale(in: root)
         let fm = FileManager.default
@@ -130,6 +169,10 @@ nonisolated enum TripExport {
             let names = gpxNames(for: records.filter { tracks[$0.id] != nil }, timeZone: timeZone)
             try csv(records, gpxNames: names, timeZone: timeZone)
                 .write(to: folder.appendingPathComponent("trips.csv"), atomically: true, encoding: .utf8)
+            if !journal.isEmpty {
+                try journalCSV(journal, timeZone: timeZone)
+                    .write(to: folder.appendingPathComponent(journalFile), atomically: true, encoding: .utf8)
+            }
             for (id, name) in names {
                 guard let trip = tracks[id] else { continue }
                 try TimedTrack.gpx(trips: [trip])

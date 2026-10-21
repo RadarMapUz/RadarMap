@@ -33,6 +33,7 @@ hide и retype остаются жить в overrides.json — они не пр�
 Тесты логики (без данных и сети): python3 test_resnap_moved.py
 """
 import argparse
+import base64
 import csv
 import json
 import sys
@@ -53,7 +54,12 @@ def load_overrides(path):
         return data["items"]
     payload = data.get("payload")
     if isinstance(payload, str):
-        payload = json.loads(payload)
+        # publish_overrides.sh кладёт payload в base64 (подписаны байты, не
+        # JSON-текст); старые ручные снимки могли держать голый JSON.
+        try:
+            payload = json.loads(base64.b64decode(payload, validate=True))
+        except ValueError:
+            payload = json.loads(payload)
     if isinstance(payload, dict) and "items" in payload:
         return payload["items"]
     raise SystemExit(f"не разобрать формат {path}: нет items")

@@ -2281,11 +2281,27 @@ nonisolated enum AppConfig {
     /// Журнал закрытых смен — столько дней.
     static let workShiftLogDays: Double = 90
 
-    // MARK: - Близкие видят прибытие (FamilyLink, 12б.6)
+    // MARK: - Близкие видят прибытие (FamilyShare, 12б.6, 22.1)
+    //
+    // Принудительной смены ссылки раз в 30 дней больше нет (решение 21.10):
+    // сервер держит только время прибытия в памяти, пока идёт поездка, а
+    // писать может только телефон. «Сменить ссылку» — по человеку.
 
-    /// Токен семейной ссылки живёт столько дней: долгоживущий идентификатор
-    /// человека на сервере не копится, новую ссылку водитель пересылает сам.
-    static let familyLinkRotationDays: Double = 30
+    /// Сколько близких: мама, жена, пара детей — больше похоже на рассылку,
+    /// а у каждого своя ссылка и свой запрос на каждое обновление.
+    nonisolated static let familyMaxRecipients = 5
+    /// Имя водителя для близких — столько знаков (тот же предел на сервере,
+    /// ETA_NAME_MAX).
+    nonisolated static let familyDriverNameMax = 32
+    /// «У Дома»: цель маршрута — Дом и «дома» в конце поездки. 200 м — двор и
+    /// парковка у подъезда; дальше — уже соседний квартал, и «дома в 18:47»
+    /// было бы неправдой.
+    nonisolated static let familyHomeRadiusMeters: CLLocationDistance = 200
+    /// Автостоп не у дома — ждём склейки столько: TripMerge склеивает заезд
+    /// по пути до часа стоянки (tripMergeMaxStopSeconds). Дольше — «не в пути».
+    nonisolated static let familyHoldSeconds: TimeInterval = tripMergeMaxStopSeconds
+    /// Строка «Мама увидит, что вы едете домой» висит столько секунд.
+    static let familyNoticeSeconds: Double = 6
 
     // MARK: - Маршрут без сети (OfflineRouteGraph, 12б.10)
 

@@ -71,7 +71,9 @@ enum Storage {
         case parkedCar              // «Где машина»: точка конца поездки (ParkedCar, JSON)
         case cngAskedAt             // метан: о какой станции и когда спрашивали (JSON, 3 ч)
         case workShiftLog           // журнал закрытых смен таксиста (WorkShift, JSON, 90 дней)
-        case familyLink             // семейная ссылка прибытия (FamilyLink, JSON с ключом записи; меняется раз в 30 дней)
+        case familyLink             // семейная ссылка до 22.1 (FamilyLink, JSON) — только для переноса в familyCircle
+        case familyCircle           // близкие, видящие прибытие (FamilyCircle, JSON с ключами записи)
+        case familyNoticeShownAt    // когда показали «Мама увидит, что вы едете домой» (раз в день)
         case maintenanceBook        // обслуживание машины: пробег и пункты (MaintenanceBook, JSON)
         case maintenanceReminders   // журнал напоминаний об обслуживании: id → момент показа (JSON)
     }

@@ -235,6 +235,8 @@ final class AppEnvironment {
         updateThemeClock()
         if active {
             mobile.startPolling()
+            // Ожидание склейки у близких могло выйти, пока приложение спало.
+            family.update()
             Task { await offlineRoutes.refreshIfDue() }
             Task { await laneOverlay.refreshIfDue() }
         } else if !isCarPlayConnected, !mobile.isTripActive {
@@ -349,14 +351,14 @@ final class AppEnvironment {
             if active { self.tryStartCommuteGhost() } else { self.commuteLive.stop() }
             if active {
                 self.family.tripStarted()
+                // Склейку (TripMerge) startTrip решает после этого колбэка —
+                // решение близких ждёт конца хода: магазин по пути не должен
+                // начать у мамы поездку заново.
+                Task { @MainActor [weak self] in self?.family.update() }
             } else {
-                // Дома — «дома в 18:42», иначе — «сейчас не в пути».
-                let home = self.commuteEnds?.home
-                let here = self.location.currentCoordinate
-                let nearHome = home.flatMap { home in here.map { here in
-                    GeoMath.fastDistance(here.latitude, here.longitude, home.latitude, home.longitude)
-                        <= AppConfig.commutePlaceRadiusMeters } } ?? false
-                self.family.tripEnded(nearHome: nearHome)
+                // Дома — «дома в 18:47»; «Стоп» и пассажир — «сейчас не в
+                // пути»; автостоп в другом месте — ждём склейки (22.4).
+                self.familyTripEnded()
             }
             // Едем — сегодняшнего «пора выезжать» нет (и показанное — снять);
             // кончили поездку — план заново (машину переставили во дворе —
@@ -445,10 +447,8 @@ final class AppEnvironment {
                     self.commuteLive.note(coordinate, accuracy: location.horizontalAccuracy,
                                           at: location.lastFixTime)
                 }
-                // Близкие видят прибытие — только по дороге домой (12б.6).
-                self.family.update(isTripActive: true, ghost: self.commuteLive.display.map {
-                    ($0.direction == .toHome, $0.arrival)
-                })
+                // Близкие видят прибытие (12б.6, 22.1): кому и что — FamilyShare.
+                self.family.update()
             }
             if let traffic, let route, route.isActive { route.refreshTrafficDelay(revision: traffic.revision) }
             // «Впереди пробка» — только без маршрута: с маршрутом пробки уже в
@@ -479,6 +479,8 @@ final class AppEnvironment {
         etaShare.route = route
         etaShare.allowedByConfig = { [weak config] in config?.current.isEtaShareEnabled ?? true }
         family.allowedByConfig = { [weak config] in config?.current.isEtaShareEnabled ?? true }
+        family.context = { [weak self] in self?.familyContext() }
+        family.telegramBot = { [weak etaShare] in etaShare?.telegramBot }
         // Маршрут без сети (12б.10): свой граф трасс, а связь вернулась —
         // приблизительный маршрут молча заменяется серверным.
         offlineRoutes.network = network

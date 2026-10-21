@@ -2,147 +2,198 @@
 //  FamilyShareSettingsPage.swift
 //  RadarMap
 //
-//  Настройки → Поездка → «Близкие видят прибытие» (12б.6): кому, отправить
-//  ссылку, выключить, удалить. Ссылку отправляет сам водитель — один раз и
-//  ещё раз после смены токена (раз в 30 дней).
+//  Настройки → Поездка → «Близкие видят прибытие» (12б.6, 22.1): список
+//  близких со статусом и режимом, «Добавить близкого», имя водителя для них,
+//  «Пауза до завтра». Ссылку отправляет сам водитель — со страницы человека
+//  (FamilyRecipientPage).
 //
 
 import SwiftUI
 
 struct FamilyShareSettingsPage: View {
     @Environment(AppEnvironment.self) private var env
-    @State private var name = ""
-    @State private var sharePayload: ActivityTextPayload?
-    @State private var serverUnavailable = false
+    @State private var adding = false
+    @State private var newName = ""
+    /// Только что добавленный — сразу на его страницу: там «Отправить ссылку».
+    @State private var opened: UUID?
 
     var body: some View {
         let family = env.family
+        let circle = family.circle
+        let paused = circle.isPaused(now: Date())
         Form {
-            if let link = family.link {
-                Section {
-                    TextField("Кому, например «Мама»", text: Binding(
-                        get: { link.name }, set: { family.rename($0) }))
-                    // Лист «Поделиться» с ответом, а не ShareLink с жестом
-                    // поверх: двойное касание VoiceOver нажимает кнопку, но не
-                    // жест — ссылка у незрячего водителя навсегда оставалась
-                    // «не отправленной». Заодно «отправлено» — только когда
-                    // её правда отправили, а не открыли лист и закрыли.
-                    // Сервер без страницы (не выложен) — ссылку не отдаём:
-                    // близкий открыл бы ошибку.
-                    Button {
-                        Task {
-                            guard await env.etaShare.ensureServerSupport() else {
-                                serverUnavailable = true
-                                return
-                            }
-                            sharePayload = ActivityTextPayload(text: String(
-                                format: String(localized: "Здесь видно, когда я буду дома: %@"),
-                                link.url(base: AppConfig.syncBaseURL).absoluteString))
-                        }
-                    } label: {
-                        Label(link.needsResend ? "Отправить новую ссылку" : "Отправить ссылку",
-                              systemImage: "square.and.arrow.up")
-                    }
-                    if link.needsResend {
-                        Text("Ссылка обновилась — старая больше не показывает поездки. Отправьте новую.")
-                            .font(.footnote)
-                            .foregroundStyle(Theme.warning)
-                    }
-                    Toggle("Показывать поездки домой", isOn: Binding(
-                        get: { link.enabled }, set: { family.setEnabled($0) }))
-                    Button("Удалить ссылку", role: .destructive) { family.remove() }
-                } footer: {
-                    Text("Видно только время прибытия домой и «в пути / дома» — без карты и адреса.")
+            Section {
+                if circle.recipients.isEmpty {
+                    Text("Добавьте того, кто ждёт вас дома: по ссылке он увидит, когда вы будете, — и не будет звонить за рулём.")
+                        .font(.rounded(15))
+                        .foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-            } else {
-                Section {
-                    TextField("Кому, например «Мама»", text: $name)
-                    Button("Создать ссылку") {
-                        family.create(name: name.isEmpty ? String(localized: "Близкий") : name)
+                ForEach(circle.recipients) { recipient in
+                    NavigationLink {
+                        FamilyRecipientPage(id: recipient.id)
+                    } label: {
+                        FamilyRecipientRow(recipient: recipient, isLive: family.liveIDs.contains(recipient.id),
+                                           isPaused: paused)
                     }
-                } footer: {
-                    Text("Одна постоянная ссылка: по дороге домой близкий видит, когда вы будете, в остальное время — «сейчас не в пути».")
+                    .swipeActions {
+                        Button("Убрать", role: .destructive) { family.remove(recipient.id) }
+                    }
+                    // Свайп VoiceOver не делает — то же действием ротора.
+                    .accessibilityAction(named: Text("Убрать")) { family.remove(recipient.id) }
+                }
+                if circle.canAdd {
+                    Button {
+                        newName = ""
+                        adding = true
+                    } label: {
+                        Label("Добавить близкого", systemImage: "person.badge.plus")
+                    }
+                }
+            } header: {
+                Text("Кто видит")
+            } footer: {
+                if circle.canAdd {
+                    Text("У каждого своя ссылка: убрали одного — остальные работают.")
+                } else {
+                    Text("Уже пятеро — больше нельзя.")
                 }
             }
+
+            Section {
+                TextField("Водитель", text: Binding(get: { circle.driverName },
+                                                    set: { family.setDriverName($0) }))
+                    .textInputAutocapitalization(.words)
+                    .accessibilityLabel(Text("Как вас назовут близким"))
+            } header: {
+                Text("Как вас назовут близким")
+            } footer: {
+                Text("На странице и в сообщениях: «Зафар едет домой». Пусто — «Водитель».")
+            }
+
+            if !circle.recipients.isEmpty {
+                Section {
+                    if paused {
+                        Button("Снять паузу") { family.resumeSharing() }
+                    } else {
+                        Button("Пауза до завтра") { family.pauseUntilTomorrow() }
+                    }
+                } footer: {
+                    if paused {
+                        Text("До завтра поездок не видит никто.")
+                    } else {
+                        Text("Сегодня — никому, с завтрашнего дня — как обычно.")
+                    }
+                }
+            }
+
             Section {
                 SettingsExplainer([
-                    "Поездку домой приложение узнаёт по вашему распорядку, как подсказку «Домой»: в магазин и к друзьям ссылка молчит.",
-                    "На сервер уходят только время прибытия и «в пути / дома» — ни точки, ни маршрута, ни телефона. Хранится в памяти сервера и гаснет само.",
-                    "Раз в 30 дней ссылка меняется: так у сервера не копится постоянный идентификатор. Новую нужно отправить ещё раз.",
-                    "В поездке — «Сейчас видят: Мама» и пауза одним касанием.",
+                    "«Когда еду домой» — поездку домой приложение узнаёт по цели маршрута, по вашему распорядку (как подсказку «Домой») или по кнопке «Еду домой» в поездке. В смене таксиста — по цели и кнопке.",
+                    "Близкий видит только время и «в пути / задерживается / дома» — ни карты, ни точки, ни маршрута, ни скорости.",
+                    "На сервер уходят время, статус и ваше имя для близких. Хранятся в памяти сервера, пока идёт поездка, и гаснут сами.",
+                    "Ссылка постоянная. Ушла не тому — «Сменить ссылку» у этого человека: остальные не заметят.",
+                    "В поездке — «Видят: Мама» и пауза одним касанием. «Я пассажир» — не видит никто.",
                 ])
             }
         }
         .settingsPage("Близкие видят прибытие")
-        // «Отправлено» — только по ответу листа: тап по ShareLink снимал
-        // «отправьте новую» и тогда, когда лист закрыли, ничего не отправив, —
-        // а старая ссылка после смены токена уже не показывает поездки (ревью 14.1).
-        .sheet(item: $sharePayload) { payload in
-            ActivityTextSheet(text: payload.text) { sent in
-                if sent { family.markSent() }
-            }
-            .presentationDetents([.medium, .large])
-        }
-        .alert("Ссылка пока не работает", isPresented: $serverUnavailable) {
-            Button("Понятно", role: .cancel) {}
+        .navigationDestination(item: $opened) { FamilyRecipientPage(id: $0) }
+        .alert("Кто ждёт вас дома?", isPresented: $adding) {
+            TextField("Например, «Мама»", text: $newName)
+            Button("Добавить") { opened = family.add(name: newName) }
+            Button("Отмена", role: .cancel) {}
         } message: {
-            Text("Сервер ещё не обновлён — близкий открыл бы ошибку. Попробуйте позже.")
+            Text("Имя видно только вам.")
         }
+        #if DEBUG
+        .onAppear {
+            family.showDemoLive()
+            // Скриншот-хук `-familyOpenFirst N`: сразу страница N-го близкого.
+            let args = ProcessInfo.processInfo.arguments
+            if let i = args.firstIndex(of: "-familyOpenFirst"), opened == nil {
+                let n = i + 1 < args.count ? Int(args[i + 1]) ?? 0 : 0
+                opened = circle.recipients.indices.contains(n) ? circle.recipients[n].id : nil
+            }
+        }
+        #endif
+    }
+
+    /// Справа в «Поездке»: кто видит, «пауза до завтра», «выключено» или «нет».
+    static func summary(_ circle: FamilyCircle, now: Date = Date()) -> String {
+        guard !circle.recipients.isEmpty else { return String(localized: "нет") }
+        if circle.isPaused(now: now) { return String(localized: "пауза до завтра") }
+        let names = circle.recipients.filter(\.enabled).map(\.name)
+        return names.isEmpty ? String(localized: "выключено") : names.joined(separator: ", ")
     }
 }
 
-/// «Сейчас видят: Мама» с паузой — в поездке, пока ссылка живая.
-struct FamilyLiveChip: View {
-    @Environment(AppEnvironment.self) private var env
+/// Строка близкого: смайлик (или первая буква), имя, режим и что сейчас.
+struct FamilyRecipientRow: View {
+    let recipient: FamilyRecipient
+    let isLive: Bool
+    let isPaused: Bool
 
     var body: some View {
-        if let name = liveName {
-            HStack(spacing: 8) {
-                Image(systemName: "eye.fill")
-                    .font(.rounded(12, .bold))
-                    .foregroundStyle(Theme.accent)
-                    .accessibilityHidden(true)
-                Text(String(format: String(localized: "Сейчас видят: %@"), name))
-                    .font(.rounded(13, .semibold))
+        HStack(spacing: 12) {
+            FamilyAvatar(recipient: recipient)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(recipient.name)
+                    .font(.rounded(16, .semibold))
                     .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(1)
-                Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    env.family.pause()
-                } label: {
-                    Image(systemName: "pause.fill")
-                        .font(.rounded(12, .bold))
-                        .foregroundStyle(Theme.textSecondary)
-                        .frame(width: 28, height: 28)
-                        .background(Theme.background, in: Circle())
-                        // Кружок 28 pt, мишень 44 (правило 22): пауза — это
-                        // касание на ходу, промах — второй взгляд на экран.
-                        .tapTarget()
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text("Пауза на эту поездку"))
+                Text(statusText)
+                    .font(.rounded(13))
+                    .foregroundStyle(statusTint)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            // Высоту капсулы задаёт мишень паузы (44), поэтому сверху и
-            // снизу — без отступов, а справа кружок отстоит на поля мишени.
-            .padding(.leading, 12)
-            .liftedBackground(Theme.surface, in: Capsule())
-            .overlay(Capsule().strokeBorder(Theme.edgePanel, lineWidth: 1))
-            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
+        .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
     }
 
-    /// Кому видна поездка; nil — чипа нет.
-    private var liveName: String? {
-        if env.family.isLive, let link = env.family.link { return link.name }
-        return Self.showsDemo ? "Dilnoza opa" : nil
+    private var statusText: String {
+        let mode = recipient.mode.title
+        if !recipient.enabled { return String(localized: "Выключено") }
+        if recipient.linkSentAt == nil { return String(localized: "Ссылка ещё не отправлена") }
+        if isPaused { return String(format: String(localized: "%@ · пауза до завтра"), mode) }
+        if isLive { return String(format: String(localized: "%@ · видит сейчас"), mode) }
+        return mode
     }
 
-    /// Скриншот-хук `-demoFamilyLive` (DEBUG): чип без поездки и живой ссылки.
-    static var showsDemo: Bool {
-        #if DEBUG
-        ProcessInfo.processInfo.arguments.contains("-demoFamilyLive")
-        #else
-        false
-        #endif
+    private var statusTint: Color {
+        if recipient.enabled, recipient.linkSentAt == nil { return Theme.warning }
+        if recipient.enabled, isLive, !isPaused { return Theme.success }
+        return Theme.textSecondary
+    }
+}
+
+/// Кружок со смайликом близкого; без смайлика — первая буква имени.
+struct FamilyAvatar: View {
+    let recipient: FamilyRecipient
+    var size: CGFloat = 40
+
+    var body: some View {
+        ZStack {
+            Circle().fill(Theme.accent.opacity(0.14))
+            if recipient.emoji.isEmpty {
+                Text(verbatim: String(recipient.name.prefix(1)).uppercased())
+                    .font(.rounded(size * 0.45, .bold))
+                    .foregroundStyle(Theme.accent)
+            } else {
+                Text(verbatim: recipient.emoji)
+                    .font(.system(size: size * 0.55))
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+}
+
+extension FamilyRecipient.Mode {
+    var title: String {
+        switch self {
+        case .home: String(localized: "Когда еду домой")
+        case .everyTrip: String(localized: "Каждая поездка")
+        }
     }
 }

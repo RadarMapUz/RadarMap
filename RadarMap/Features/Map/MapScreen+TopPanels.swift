@@ -116,6 +116,8 @@ extension MapScreen {
             if let hint = activeHint {
                 HintChip(text: hint.text)
             }
+            // «Мама увидит, что вы едете домой» — раз в день (22.1).
+            FamilyNoticeChip()
             if showBatterySaverHint {
                 HintChip(text: String(localized: "Батарея садится — погасите экран, о камерах скажу голосом"),
                          tint: Theme.success)

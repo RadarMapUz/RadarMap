@@ -85,15 +85,17 @@ nonisolated struct APIClient {
         return (data, (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "ETag"))
     }
 
-    /// Только код ответа и тип содержимого — есть ли адрес на сервере вообще
-    /// (новая функция при старом сервере). nil — сети нет.
-    func probe(_ path: String) async -> (status: Int, contentType: String?)? {
+    /// Только код ответа, тип содержимого и, по просьбе, один заголовок —
+    /// есть ли адрес на сервере вообще (новая функция при старом сервере) и
+    /// что он о себе говорит (X-Eta-Bot, 22.1). nil — сети нет.
+    func probe(_ path: String, header: String? = nil) async -> (status: Int, contentType: String?, header: String?)? {
         var req = request(path)
         req.cachePolicy = .reloadIgnoringLocalCacheData
         // Сбой сети уже записан в журнал в transport; здесь он значит «не знаем».
         guard let (_, response) = try? await transport(req),
               let http = response as? HTTPURLResponse else { return nil }
-        return (http.statusCode, http.value(forHTTPHeaderField: "Content-Type"))
+        return (http.statusCode, http.value(forHTTPHeaderField: "Content-Type"),
+                header.flatMap { http.value(forHTTPHeaderField: $0) })
     }
 
     /// GET сырых данных (файлы базы) с проверкой статуса.

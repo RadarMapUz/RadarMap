@@ -426,6 +426,10 @@ final class LocationService: NSObject {
     @ObservationIgnored var arrivalWatch: ArrivalFinish.Arrival?
     /// Проверка без фикса: на стоянке их нет (distanceFilter).
     @ObservationIgnored var arrivalRecheck: Task<Void, Never>?
+    /// Как кончилась последняя поездка — ставится до `onTripStateChanged(false)`:
+    /// близким (22.1) мало «поездки нет» — им нужно «у цели», «рукой» или
+    /// «автостоп» (магазин по пути склеится, «Стоп» — нет).
+    @ObservationIgnored var lastTripEnd: (kind: NavigationFlow.TripEnd, atDestination: Bool) = (.manual, false)
 
     /// Единственная точка входа фиксов: сначала гейт качества, потом обработка.
     /// Отброшенный фикс не двигает ни трек, ни алерты, ни спидометр.

@@ -223,12 +223,12 @@ struct TripSettingsPage: View {
                     FamilyShareSettingsPage()
                 } label: {
                     LabeledContent("Близкие видят прибытие") {
-                        Text(env.family.link.map { $0.enabled ? $0.name : String(localized: "выключено") }
-                             ?? String(localized: "нет"))
+                        Text(FamilyShareSettingsPage.summary(env.family.circle))
+                            .lineLimit(1)
                     }
                 }
             } footer: {
-                Text("Время прибытия домой — одной постоянной ссылкой.")
+                Text("Время прибытия — тем, кто ждёт: у каждого своя ссылка.")
             }
 
             Section {

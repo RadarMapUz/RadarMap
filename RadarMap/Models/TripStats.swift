@@ -187,6 +187,9 @@ final class TripStats {
     /// Запись, которую продолжаем (склейка): по ней финиш вносит в «за всё
     /// время» только прибавку, а «я пассажир» возвращает её как была.
     @ObservationIgnored private var resumedFrom: TripRecord?
+    /// Идущая поездка — продолжение прошлой записи (склейка): близким статус
+    /// не начинают заново (FamilyShare.resumesHeld, 22.4).
+    var isContinuation: Bool { resumedFrom != nil }
     /// Последний финиш продолжил прежнюю запись (склейка) — для счётчиков
     /// статистики: поездка та же, км — прибавка.
     @ObservationIgnored private(set) var lastFinishWasContinuation = false

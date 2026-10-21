@@ -819,6 +819,9 @@ nonisolated enum AppConfig {
     /// направлением (иначе встречная полоса проспекта красила бы нашу).
     nonisolated static let trafficMatchMeters: CLLocationDistance = 18
     nonisolated static let trafficMatchDegrees: Double = 35
+    /// Пробка на линии маршрута (RouteTraffic): участок короче этого не
+    /// перекрашивает линию — одиночное ребро на перекрёстке мигало бы пятном.
+    nonisolated static let routeTrafficMinMeters: CLLocationDistance = 40
     /// Задержку пробками на остатке маршрута пересчитываем раз на столько
     /// метров (и на каждом новом наборе пробок), а не на каждом фиксе.
     static let routeTrafficRecomputeMeters: CLLocationDistance = 300
@@ -1909,6 +1912,12 @@ nonisolated enum AppConfig {
     /// плоской таблице DriveCamera — наклон 0. 58°, а не 60: у 60 движка
     /// (его предел) верх длинного экрана телефона уходит к горизонту.
     static let engineMapPitchDegrees: Double = 58
+    /// Значок «я» под наклоном (EngineMapView.cursorTransform): какую долю
+    /// наклона карты он перенимает (весь — значок сплющивается в блин),
+    /// глубина перспективы в точках и на сколько крупнее при полном наклоне.
+    static let engineCursorTiltShare = 0.45
+    static let engineCursorPerspectivePoints = 420.0
+    static let engineCursorPitchGrow = 0.12
     /// Наклон обзора города вне поездки — прежние 45°: вид района под
     /// крутым наклоном прячет половину города за горизонтом.
     static let engineOverviewPitchDegrees: Double = 45

@@ -101,6 +101,7 @@ nonisolated enum EngineMapStyle {
                 "traveled": ["type": "geojson", "data": emptyCollection],
                 "maneuver": ["type": "geojson", "data": emptyCollection],
                 "traffic": ["type": "geojson", "data": emptyCollection],
+                "route-traffic": ["type": "geojson", "data": emptyCollection],
                 "position": ["type": "geojson", "data": emptyCollection],
                 "marks": ["type": "geojson", "data": emptyCollection],
                 "road-events": ["type": "geojson", "data": emptyCollection],
@@ -121,6 +122,7 @@ nonisolated enum EngineMapStyle {
                 "traveled": ["type": "geojson", "data": emptyCollection],
                 "maneuver": ["type": "geojson", "data": emptyCollection],
                 "traffic": ["type": "geojson", "data": emptyCollection],
+                "route-traffic": ["type": "geojson", "data": emptyCollection],
                 "position": ["type": "geojson", "data": emptyCollection],
                 "marks": ["type": "geojson", "data": emptyCollection],
                 "road-events": ["type": "geojson", "data": emptyCollection],
@@ -164,9 +166,22 @@ nonisolated enum EngineMapStyle {
                 12, stop(12), 15, stop(15), 18, stop(18), 20, stop(20)]
     }
 
-    private static func routeWidth(extra: Double) -> [Any] {
+    /// Ширина линии маршрута, точки: тело `body`, плюс `extra` (кайма).
+    ///
+    /// Нижняя граница — 6 точек на ЛЮБОМ масштабе (25.D, 21.10): прежние
+    /// 2,5–3 на z11–14 в машине на отъезде линию почти теряли, а у Яндекса в
+    /// той же машине линия — главный предмет кадра. Вблизи (z17–19) — 9–13:
+    /// шире полосы, но уже проезжей части.
+    private static func routeWidth(extra: Double, share: Double = 1) -> [Any] {
         ["interpolate", ["linear"], ["zoom"],
-         11, 2.5 + extra, 14, 3 + extra, 16, 4.5 + extra, 19, 7 + extra]
+         11, 6 * share + extra, 15, 6.5 * share + extra, 17, 9 * share + extra,
+         19, 13 * share + extra, 20, 15 * share + extra]
+    }
+
+    /// Стрелка направления вдоль линии маршрута (EngineMapView.routeArrowIcon):
+    /// белый шеврон с каймой линии — своей у каждой темы.
+    static func routeArrowImage(daylight: Bool) -> String {
+        daylight ? "radar-route-arrow-d" : "radar-route-arrow-n"
     }
 
     private static func layers(ground: String, casing: String, label: String,
@@ -298,53 +313,87 @@ nonisolated enum EngineMapStyle {
         return out
     }
 
-    /// Маршрут: пройденное, кайма, линия, манёвр. Цвета — Theme.route и
-    /// Theme.routeCasing строкой (стиль движка — JSON, Color сюда не пройдёт).
-    /// Общие для обоих стилей — в
-    /// новом (EngineModernStyle) ложатся над основой и под подписями.
+    /// Маршрут (25.D, «линия красивее», 21.10): пройденное бледнее, кайма,
+    /// тело, пробки НА линии, манёвр, светлая середина и стрелки направления.
+    /// Цвета — числа `RouteColors` (те же, что у `Theme.route…`), строкой:
+    /// стиль движка — JSON. Общие для обоих стилей — в новом
+    /// (EngineModernStyle) ложатся над основой и под подписями; дома в
+    /// объёме нарисованы раньше и линию не закрывают.
     static func routeLayers(daylight: Bool) -> [[String: Any]] {
+        func colour(_ pair: RouteColors.Pair) -> String { RouteColors.pick(pair, daylight: daylight) }
+        let round: [String: Any] = ["line-cap": "round", "line-join": "round"]
         var out: [[String: Any]] = []
-        out.append([
-            "id": "route-traveled", "type": "line", "source": "traveled",
-            "layout": ["line-cap": "round", "line-join": "round"],
-            "paint": ["line-color": daylight ? "#9aa6b8" : "#4a5568",
-                      "line-width": routeWidth(extra: 0), "line-opacity": 0.75],
-        ])
-        // Маршрут — под подписями и над дорогой.
-        out.append([
-            "id": "route-case", "type": "line", "source": "route",
-            "layout": ["line-cap": "round", "line-join": "round"],
-            "paint": ["line-color": daylight ? "#ffffff" : "#0e1a33", "line-width": routeWidth(extra: 2)],
-        ])
-        out.append([
-            "id": "route", "type": "line", "source": "route",
-            "layout": ["line-cap": "round", "line-join": "round"],
-            "paint": ["line-color": daylight ? "#2a6ff0" : "#5b9bff", "line-width": routeWidth(extra: 0)],
-        ])
-        // Пробки — НАД линией маршрута и чуть уже неё: на маршруте линия
-        // красится по пробкам с синей каймой (как в навигаторах), на
-        // остальных дорогах видны тонкие цветные линии. Под манёвром: его
-        // подсветка важнее цвета участка.
+        // Пробки по городу — ПОД линией маршрута: на самом маршруте пробку
+        // показывает его собственный цвет (route-traffic), а тонкая нитка
+        // рядом с ним только двоила бы её. На остальных дорогах видны тонкие
+        // цветные линии, каждое направление — справа по ходу (движение
+        // правостороннее): у двусторонней улицы видны обе стороны.
         out.append([
             "id": "traffic", "type": "line", "source": "traffic",
-            "layout": ["line-cap": "round", "line-join": "round"],
+            "layout": round,
             "paint": ["line-color": ["match", ["get", "level"],
-                                     3, daylight ? "#D93025" : "#FF5A4E",
-                                     2, daylight ? "#E8A100" : "#FFB020",
-                                     daylight ? "#2BA84A" : "#3CC46B"],
+                                     3, colour(RouteColors.jam),
+                                     2, colour(RouteColors.slow),
+                                     colour(RouteColors.free)],
                       "line-width": ["interpolate", ["linear"], ["zoom"],
                                      11, 1.2, 14, 2, 16, 3, 19, 5],
-                      // Каждое направление — справа по ходу (движение
-                      // правостороннее): у двусторонней улицы видны обе
-                      // стороны, а не та, что легла сверху.
                       "line-offset": ["interpolate", ["linear"], ["zoom"],
                                       11, 0.9, 14, 1.3, 16, 1.8, 19, 2.8],
                       "line-opacity": ["match", ["get", "level"], 1, 0.7, 0.95]],
         ])
+        // Пройденное — той же ширины, без каймы и бледное: уже не решение.
+        out.append([
+            "id": "route-traveled", "type": "line", "source": "traveled",
+            "layout": round,
+            "paint": ["line-color": colour(RouteColors.traveled),
+                      "line-width": routeWidth(extra: 0), "line-opacity": 0.85],
+        ])
+        out.append([
+            "id": "route-case", "type": "line", "source": "route",
+            "layout": round,
+            "paint": ["line-color": colour(RouteColors.casing), "line-width": routeWidth(extra: 3)],
+        ])
+        out.append([
+            "id": "route", "type": "line", "source": "route",
+            "layout": round,
+            "paint": ["line-color": colour(RouteColors.body), "line-width": routeWidth(extra: 0)],
+        ])
+        // Пробка на нашей стороне — цветом самой линии (RouteTraffic: место и
+        // направление, как у времени в пути). Свободно — линия синяя.
+        out.append([
+            "id": "route-traffic", "type": "line", "source": "route-traffic",
+            "layout": round,
+            "paint": ["line-color": ["match", ["get", "level"], 3, colour(RouteColors.jam),
+                                     colour(RouteColors.slow)],
+                      "line-width": routeWidth(extra: 0)],
+        ])
         out.append([
             "id": "route-maneuver", "type": "line", "source": "maneuver",
-            "layout": ["line-cap": "round", "line-join": "round"],
+            "layout": round,
             "paint": ["line-color": daylight ? "#123a8f" : "#d6e6ff", "line-width": routeWidth(extra: 1)],
+        ])
+        // Светлая середина — белым поверх любого цвета линии (синего, янтаря,
+        // красного): объём ленты, а не второй цвет.
+        out.append([
+            "id": "route-core", "type": "line", "source": "route",
+            "layout": round,
+            "paint": ["line-color": RouteColors.core(daylight: daylight),
+                      "line-width": routeWidth(extra: 0, share: 0.34)],
+        ])
+        // Стрелки направления вдоль линии. Вне раскладки (ignore-placement):
+        // стрелка не вытесняет ни подпись, ни камеру — камеры нарисованы
+        // позже и лежат сверху.
+        out.append([
+            "id": "route-arrows", "type": "symbol", "source": "route", "minzoom": 13,
+            "layout": ["symbol-placement": "line",
+                       "symbol-spacing": ["interpolate", ["linear"], ["zoom"], 13, 70, 17, 110, 19, 160],
+                       "icon-image": routeArrowImage(daylight: daylight),
+                       // Картинка 14×12 pt; высота стрелки — ~0,8 тела линии.
+                       "icon-size": ["interpolate", ["linear"], ["zoom"],
+                                     13, 0.42, 15, 0.45, 17, 0.6, 19, 0.87, 20, 1.0],
+                       "icon-rotation-alignment": "map", "icon-pitch-alignment": "map",
+                       "icon-allow-overlap": true, "icon-ignore-placement": true,
+                       "icon-padding": 0],
         ])
         return out
     }
@@ -417,8 +466,12 @@ nonisolated enum EngineMapStyle {
                                         15, ["case", calm, 7, 10],
                                         17, ["case", calm, 9, 13]],
                       "circle-color": ["coalesce", ["get", "color"], "#D93025"],
-                      "circle-opacity": ["case", ["get", "unconfirmed"], 0.55, calm, 0.85, 1],
-                      "circle-stroke-width": ["case", ["get", "alert"], 3, 1.8],
+                      // Спокойная камера на виде района — без белого кольца и
+                      // полупрозрачная (25.D, аудит 21.10): с кольцом 1,8 она
+                      // весила, как камера на пути. Не скрыта — правило
+                      // «камера не исчезает»; на пути и тревога — как были.
+                      "circle-opacity": ["case", ["get", "unconfirmed"], 0.55, calm, 0.6, 1],
+                      "circle-stroke-width": ["case", ["get", "alert"], 3, calm, 0, 1.8],
                       "circle-stroke-color": "#FFFFFF"],
         ])
         // Камера рисуется ВСЕГДА. Раньше значок участвовал в раскладке

@@ -119,6 +119,22 @@ class StyleTests(unittest.TestCase):
             self.assertLess(ids.index("radar-roads"), ids.index("building-3d"))
             self.assertLess(ids.index("radar-arrows"), ids.index("building-3d"))
 
+    def test_buildings_rise_for_the_drive_and_go_flat_when_hot(self):
+        # 25.D: объём с z16 (в пути под наклоном), по высоте из тайла, без неё
+        # — 10 м; плоский слой — запасной для горячего телефона, по умолчанию
+        # выключен (его включает приложение, гася объём).
+        layers = {layer["id"]: layer for layer in self.style["layers"]}
+        if "building-3d" not in layers:
+            return
+        height = layers["building-3d"]["paint"]["fill-extrusion-height"]
+        self.assertEqual(height[:5], ["interpolate", ["linear"], ["zoom"], 15, 0])
+        self.assertEqual(height[5], 16)
+        self.assertEqual(height[6], ["coalesce", ["get", "render_height"], 10])
+        flat = layers["building-flat"]
+        self.assertEqual(flat["type"], "fill")
+        self.assertEqual(flat["layout"]["visibility"], "none")
+        self.assertEqual(flat["paint"]["fill-color"], layers["building-3d"]["paint"]["fill-extrusion-color"])
+
     def test_ground_paint_lies_under_bridges(self):
         ids = [layer["id"] for layer in self.style["layers"]]
         deck = ids.index("radar-bridge")

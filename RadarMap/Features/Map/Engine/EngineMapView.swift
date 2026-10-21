@@ -110,6 +110,9 @@ struct EngineMapView: UIViewRepresentable {
     /// смене `trafficRevision` — раз в пару минут, а не на тике.
     var trafficEdges: [TrafficEdge] = []
     var trafficRevision: Int = 0
+    /// Тот же набор пробок с сеткой поиска — для цвета САМОЙ линии маршрута
+    /// (RouteTraffic, 25.D). nil — линия одного цвета (Theme.route).
+    var trafficSnapshot: TrafficSnapshot?
     /// Язык подписей новой карты («ru» / «uz»). Меняется только с языком
     /// приложения, а тот применяется после перезапуска — перезагрузка стиля
     /// ради него не нужна.
@@ -454,6 +457,27 @@ struct EngineMapView: UIViewRepresentable {
             }
         }
 
+        /// Стрелка направления вдоль линии маршрута: шеврон носом вправо
+        /// (движок сам кладёт ось картинки вдоль линии), белый с каймой цвета
+        /// каймы линии — читается и на синем теле, и на янтаре/красном пробки,
+        /// и на светлой середине. 14×12 pt; размер по масштабу — в стиле.
+        static func routeArrowIcon(rim: UInt32) -> UIImage {
+            UIGraphicsImageRenderer(size: CGSize(width: 14, height: 12)).image { _ in
+                let chevron = UIBezierPath()
+                chevron.move(to: CGPoint(x: 4, y: 2.2))
+                chevron.addLine(to: CGPoint(x: 10.2, y: 6))
+                chevron.addLine(to: CGPoint(x: 4, y: 9.8))
+                chevron.lineCapStyle = .round
+                chevron.lineJoinStyle = .round
+                chevron.lineWidth = 4.4
+                Theme.rgb(rim).setStroke()
+                chevron.stroke()
+                chevron.lineWidth = 2.4
+                Theme.rgb(RouteColors.arrow).setStroke()
+                chevron.stroke()
+            }
+        }
+
         /// Значок светофора: капсула 10×20 pt, графит с белой кромкой, три точки.
         static func trafficLightIcon() -> UIImage {
             UIGraphicsImageRenderer(size: CGSize(width: 10, height: 20)).image { _ in
@@ -589,9 +613,15 @@ struct EngineMapView: UIViewRepresentable {
                 }
             }
             style.setImage(parked, forName: "radar-parked")
+            // Стрелки вдоль линии маршрута: обе темы — имя выбирает стиль.
+            for daylight in [true, false] {
+                style.setImage(Self.routeArrowIcon(rim: daylight ? RouteColors.casing.day : RouteColors.casing.night),
+                               forName: EngineMapStyle.routeArrowImage(daylight: daylight))
+            }
             for place in EnginePlaceIcons.all { style.setImage(place.image, forName: place.name) }
             let names = ["radar-signal", EngineModernStyle.trafficLightImage, "radar-stop", "radar-flag",
-                         "radar-pin", "radar-parked", "radar-closure", "radar-roadwork"]
+                         "radar-pin", "radar-parked", "radar-closure", "radar-roadwork",
+                         EngineMapStyle.routeArrowImage(daylight: true), EngineMapStyle.routeArrowImage(daylight: false)]
                 + EnginePlaceIcons.all.map(\.name)
                 + Self.cameraImageNames
             for name in names { Self.iconCache[name] = style.image(forName: name) }
@@ -617,7 +647,9 @@ struct EngineMapView: UIViewRepresentable {
             lastCameras = nil
             routeInitialized = false
             lineKeys = [:]
+            routeTrafficKey = []
             hiddenLayers = nil
+            hotShown = nil
             modernDrivingLayerIDs = nil
             lastTrafficRevision = -1
             // Источники нового стиля пусты: флаг цели, машина, треноги и
@@ -992,8 +1024,10 @@ struct EngineMapView: UIViewRepresentable {
             updateTraffic(model, in: view)
             let newRoute = !routeInitialized || lastRouteObject !== model.routeObject
             if newRoute || lastManeuverAlong != model.maneuverAlong
+                || lastRouteTrafficRevision != model.trafficRevision
                 || abs(model.routeProgress - lastProgress) >= AppConfig.engineRouteProgressStep {
-                if newRoute { routeIndex = nil; lineKeys = [:] }
+                lastRouteTrafficRevision = model.trafficRevision
+                if newRoute { routeIndex = nil; lineKeys = [:]; routeTrafficKey = [] }
                 routeInitialized = true
                 lastRouteObject = model.routeObject
                 lastProgress = model.routeProgress
@@ -1003,13 +1037,15 @@ struct EngineMapView: UIViewRepresentable {
                 let generation = routeGeneration, index = routeIndex
                 routeTask = Task { [weak self, weak view] in
                     let frame = await EngineMapPresentation.prepareRoute(model.route, index: index,
-                        progress: model.routeProgress, maneuver: model.maneuverAlong)
+                        progress: model.routeProgress, maneuver: model.maneuverAlong,
+                        traffic: model.trafficSnapshot)
                     guard !Task.isCancelled, let self, let view,
                           self.routeGeneration == generation, self.styleReady else { return }
                     self.routeIndex = frame.index
                     self.setLine(frame.traveled, source: "traveled", in: view)
                     self.setLine(frame.remaining, source: "route", in: view)
                     self.setLine(frame.maneuver, source: "maneuver", in: view)
+                    self.setRouteTraffic(frame.traffic, in: view)
                 }
             }
         }
@@ -1020,8 +1056,14 @@ struct EngineMapView: UIViewRepresentable {
         /// Видимость слоя, а не новый стиль: перезагрузка стиля — сама по
         /// себе пик, и она сбросила бы тайлы ровно тогда, когда процессор уже
         /// режут (аудит 11.10).
+        /// С 21.10 (25.D) — и объёмные дома: под наклоном они главный
+        /// украшатель кадра, но горячий телефон и так идёт плоско, а объём —
+        /// лишний проход глубины. Вместо них — плоские (`hotShownLayers`).
         static let hotHiddenLayers = ["radar-tree-3d", "radar-barrier-3d", "radar-tree-shadow",
-                                      "building-ground-shadow"]
+                                      "building-ground-shadow", "building-3d"]
+        /// Видны ТОЛЬКО на горячем телефоне: плоские дома вместо объёмных —
+        /// город не пустеет (в стиле выключены, make_style «building-flat»).
+        static let hotShownLayers = ["building-flat"]
         /// На ходу (DrivingDeclutter) — всё, что не дорога: подземные
         /// пешеходные переходы и тротуары (широкие фиолетовые полосы поперёк
         /// проспекта — «убери тоннели», 12.10), наложение тоннелей, деревья и
@@ -1043,6 +1085,8 @@ struct EngineMapView: UIViewRepresentable {
             "waterway-name",
         ]
         private var hiddenLayers: Set<String>?
+        /// Плоские дома горячего телефона показаны (nil — после загрузки стиля).
+        private var hotShown: Bool?
         /// Слои нового стиля, гасимые в поездке, — один раз на загрузку
         /// стиля. До 19.10 `style.layers.map(\.identifier)` по сотням
         /// ObjC-слоёв шёл дважды на КАЖДЫЙ фикс поездки (в машине — всегда),
@@ -1068,12 +1112,17 @@ struct EngineMapView: UIViewRepresentable {
             if model.driving, modernLoaded {
                 wanted.formUnion(drivingLayerIDs(style))
             }
-            if wanted != hiddenLayers {
+            let hot = model.performance != .full
+            if wanted != hiddenLayers || hot != hotShown {
                 hiddenLayers = wanted
+                hotShown = hot
                 let managed = Set(Self.hotHiddenLayers).union(Self.drivingHiddenLayers)
                     .union(drivingLayerIDs(style))
                 for id in managed {
                     style.layer(withIdentifier: id)?.isVisible = !wanted.contains(id)
+                }
+                for id in Self.hotShownLayers {
+                    style.layer(withIdentifier: id)?.isVisible = hot
                 }
             }
             if modernLoaded, lastDriving != model.driving {
@@ -1140,6 +1189,30 @@ struct EngineMapView: UIViewRepresentable {
         }
 
         private var lastTrafficRevision = -1
+        /// Набор пробок, по которому последний раз красилась линия маршрута.
+        private var lastRouteTrafficRevision = -1
+        /// Что лежит в источнике пробок на линии: уровни и концы кусков.
+        private var routeTrafficKey: [Double] = []
+
+        /// Пробки на линии маршрута — только на изменение кусков: запись в
+        /// источник будит перетайливание слоя (аудит 11.10).
+        private func setRouteTraffic(_ pieces: [RouteTraffic.Piece], in view: MLNMapView) {
+            guard let source = view.style?.source(withIdentifier: "route-traffic") as? MLNShapeSource else { return }
+            let key = pieces.flatMap { piece -> [Double] in
+                guard let first = piece.coordinates.first, let last = piece.coordinates.last else { return [] }
+                return [Double(piece.level), Double(piece.coordinates.count),
+                        first.latitude, first.longitude, last.latitude, last.longitude]
+            }
+            guard key != routeTrafficKey else { return }
+            routeTrafficKey = key
+            let lines = pieces.map { piece -> MLNPolylineFeature in
+                var coordinates = piece.coordinates
+                let line = MLNPolylineFeature(coordinates: &coordinates, count: UInt(coordinates.count))
+                line.attributes = ["level": piece.level]
+                return line
+            }
+            source.shape = lines.isEmpty ? nil : MLNShapeCollectionFeature(shapes: lines)
+        }
 
         /// Пробки — только на новом наборе: тысяча рёбер по городу в источник
         /// раз в две минуты, а не на каждом фиксе.
@@ -1437,18 +1510,41 @@ struct EngineMapView: UIViewRepresentable {
             let marker = positionView ?? makePositionView(in: view)
             let point = view.convert(coordinate, toPointTo: view)
             let angle = (positionHeading - view.direction) * .pi / 180
+            let pitch = (current?.pitchDegrees ?? 0).rounded()
             if let shown = shownPosition,
                abs(shown.point.x - point.x) < 0.25, abs(shown.point.y - point.y) < 0.25,
-               abs(shown.angle - angle) < 0.0035 { return }
+               abs(shown.angle - angle) < 0.0035, shownPitch == pitch { return }
             shownPosition = (point, angle)
+            shownPitch = pitch
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             marker.layer.position = point
-            marker.layer.setAffineTransform(CGAffineTransform(rotationAngle: angle))
+            marker.layer.transform = Self.cursorTransform(angle: angle, pitchDegrees: pitch)
             CATransaction.commit()
         }
         /// Что стрелка показывает сейчас (точка и угол) — для пропуска повторов.
         private var shownPosition: (point: CGPoint, angle: Double)?
+        /// Наклон, под который посажена стрелка (целые градусы).
+        private var shownPitch: Double?
+
+        /// Посадка значка «я» на наклонную карту (25.D): курс в плоскости
+        /// карты, затем наклон к горизонту — ДОЛЯ наклона карты, чтобы значок
+        /// лёг на дорогу, но не сплющился в блин, — с лёгкой перспективой и
+        /// чуть крупнее (как машина у Яндекса под наклоном). Сверху — прежний
+        /// плоский поворот. Тень — в самом значке (MeCursor), без сдвига.
+        static func cursorTransform(angle: Double, pitchDegrees: Double) -> CATransform3D {
+            let pitch = min(max(0, pitchDegrees), AppConfig.engineMapPitchDegrees)
+            guard pitch >= 1 else { return CATransform3DMakeRotation(angle, 0, 0, 1) }
+            let share = pitch / AppConfig.engineMapPitchDegrees
+            var transform = CATransform3DIdentity
+            transform.m34 = -1 / AppConfig.engineCursorPerspectivePoints
+            let grow = 1 + AppConfig.engineCursorPitchGrow * share
+            transform = CATransform3DScale(transform, grow, grow, 1)
+            // CATransform3DRotate применяет поворот ПЕРЕД уже собранным:
+            // итог — курс, затем наклон, затем масштаб и перспектива.
+            transform = CATransform3DRotate(transform, pitch * AppConfig.engineCursorTiltShare * .pi / 180, 1, 0, 0)
+            return CATransform3DRotate(transform, angle, 0, 0, 1)
+        }
 
         private func makePositionView(in view: MLNMapView) -> UIImageView {
             let marker = UIImageView()
@@ -1458,6 +1554,7 @@ struct EngineMapView: UIViewRepresentable {
             view.addSubview(marker)
             positionView = marker
             shownPosition = nil   // новый вид — поставить заново, а не «уже стоит»
+            shownPitch = nil
             installCursor(current?.cursorStyle ?? lastCursor ?? .arrow)
             return marker
         }

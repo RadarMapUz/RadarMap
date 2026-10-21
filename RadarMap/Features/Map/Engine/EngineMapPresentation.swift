@@ -48,10 +48,16 @@ nonisolated enum EngineMapPresentation {
         let traveled: [CLLocationCoordinate2D]
         let remaining: [CLLocationCoordinate2D]
         let maneuver: [CLLocationCoordinate2D]
+        /// Пробки на остатке линии (RouteTraffic): пусто — данных нет или
+        /// впереди свободно.
+        var traffic: [RouteTraffic.Piece] = []
     }
 
+    /// `traffic` — набор пробок (TrafficSnapshot): с ним остаток линии
+    /// красится по пробкам на нашей стороне; nil — линия одного цвета.
     @concurrent static func prepareRoute(_ coordinates: [CLLocationCoordinate2D],
-                                         index: RouteIndex?, progress: Double, maneuver: Double?) async -> RouteFrame {
+                                         index: RouteIndex?, progress: Double, maneuver: Double?,
+                                         traffic: TrafficSnapshot? = nil) async -> RouteFrame {
         let log = OSLog(subsystem: "uz.radarmap", category: "MapPerformance")
         os_signpost(.begin, log: log, name: "Route preparation")
         defer { os_signpost(.end, log: log, name: "Route preparation") }
@@ -62,8 +68,10 @@ nonisolated enum EngineMapPresentation {
             turn = indexed.slice(from: max(along, maneuver - AppConfig.engineManeuverHighlightMeters),
                                  to: maneuver + AppConfig.engineManeuverHighlightMeters)
         } else { turn = [] }
+        let remaining = indexed.slice(from: along, to: indexed.length)
         return RouteFrame(index: indexed, traveled: indexed.slice(from: 0, to: along),
-                          remaining: indexed.slice(from: along, to: indexed.length), maneuver: turn)
+                          remaining: remaining, maneuver: turn,
+                          traffic: traffic.map { RouteTraffic.pieces(along: remaining, snapshot: $0) } ?? [])
     }
 
     /// Запас области уменьшает частоту перестановки символов при скролле.

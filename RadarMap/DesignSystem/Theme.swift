@@ -101,12 +101,24 @@ enum Theme {
     static let dangerFill = adaptive(0xC62828, 0xD0362C)
     static let successFill = adaptive(0x177A41, 0x1A7F45)
 
-    /// Линия маршрута — одна на движке, карте Apple и схеме. Движок берёт
-    /// её же hex строкой (EngineMapStyle.routeLayers): правя здесь, правь там.
-    /// nonisolated — это же тело ленты маршрута в MapPalette (nonisolated).
-    nonisolated static let route = adaptive(0x2A6FF0, 0x5B9BFF)
-    /// Кайма линии: белая днём (как у Amap), тёмно-синяя ночью.
-    static let routeCasing = adaptive(0xFFFFFF, 0x0E1A33)
+    /// Линия маршрута — одна на движке (телефон и машина) и на картинках
+    /// «Итогов». Числа — в `RouteColors`: стиль движка — JSON и берёт их
+    /// строкой оттуда же, второго списка цветов нет.
+    /// Ночью с 21.10 чуть светлее (#5B9BFF → #66A3FF): на графите магистрали
+    /// линия держала 2,8:1 — ниже 3:1, которые нужны линии на дороге.
+    nonisolated static let route = adaptive(RouteColors.body.day, RouteColors.body.night)
+    /// Кайма линии: тёмно-синяя днём (с 21.10; белая сливалась со светло-
+    /// серым полотном — 1,4–2,1:1) и тёмно-синяя ночью.
+    static let routeCasing = adaptive(RouteColors.casing.day, RouteColors.casing.night)
+    /// Пройденная часть маршрута — бледнее: она уже не решение, а память.
+    static let routeTraveled = adaptive(RouteColors.traveled.day, RouteColors.traveled.night)
+    /// Светлая середина линии — белым поверх тела (и поверх цвета пробки).
+    static let routeCore = adaptive(0xFFFFFF, 0xFFFFFF,
+                                    lightAlpha: RouteColors.coreAlpha.day,
+                                    darkAlpha: RouteColors.coreAlpha.night)
+    /// Пробка и «медленно» на линии маршрута (те же, что слой пробок).
+    static let routeSlow = adaptive(RouteColors.slow.day, RouteColors.slow.night)
+    static let routeJam = adaptive(RouteColors.jam.day, RouteColors.jam.night)
 
     /// Цвета знаков-иконок (`IconBadge`) — по СМЫСЛУ цифры рядом. Глаз ищет
     /// «время» и «деньги» по цвету раньше, чем прочтёт подпись, поэтому смысл
@@ -531,3 +543,33 @@ extension CameraType {
         }
     }
 }
+
+/// Цвета линии маршрута ЧИСЛАМИ: из них строятся и токены `Theme.route…`
+/// (SwiftUI), и строки стиля движка (EngineMapStyle.routeLayers) — один
+/// источник на оба мира. Каждая пара — день/ночь; проверены PaletteTests
+/// (контраст с полотном дороги обеих тем, пробка ≠ маршрут).
+nonisolated enum RouteColors {
+    typealias Pair = (day: UInt32, night: UInt32)
+    static let body: Pair = (0x2A6FF0, 0x66A3FF)
+    static let casing: Pair = (0x1E4FB8, 0x0E1A33)
+    static let traveled: Pair = (0x9AA6B8, 0x4A5568)
+    /// Светлая середина: белый с этой непрозрачностью поверх тела.
+    static let coreAlpha: (day: Double, night: Double) = (0.38, 0.32)
+    /// Стрелки направления вдоль линии: белая заливка с каймой линии.
+    static let arrow: UInt32 = 0xFFFFFF
+    /// Пробки: свободно / медленно / стоим.
+    static let free: Pair = (0x2BA84A, 0x3CC46B)
+    static let slow: Pair = (0xE8A100, 0xFFB020)
+    static let jam: Pair = (0xD93025, 0xFF5A4E)
+
+    static func pick(_ pair: Pair, daylight: Bool) -> String { hex(daylight ? pair.day : pair.night) }
+
+    /// «#rrggbb» — язык стиля движка.
+    static func hex(_ value: UInt32) -> String { String(format: "#%06x", value & 0xFFFFFF) }
+
+    /// «rgba(255,255,255,a)» — светлая середина для стиля движка.
+    static func core(daylight: Bool) -> String {
+        "rgba(255,255,255,\(daylight ? coreAlpha.day : coreAlpha.night))"
+    }
+}
+

@@ -8187,6 +8187,20 @@
    "type": "line"
   },
   {
+   "id": "building-flat",
+   "layout": {
+    "visibility": "none"
+   },
+   "minzoom": 14,
+   "paint": {
+    "fill-color": "#e6dcd7",
+    "fill-outline-color": "#d3c6c0"
+   },
+   "source": "openmaptiles",
+   "source-layer": "building",
+   "type": "fill"
+  },
+  {
    "filter": [
     "==",
     [
@@ -11946,12 +11960,24 @@
    "minzoom": 14,
    "paint": {
     "fill-extrusion-base": [
-     "coalesce",
+     "interpolate",
      [
-      "get",
-      "render_min_height"
+      "linear"
      ],
-     0
+     [
+      "zoom"
+     ],
+     15,
+     0,
+     16,
+     [
+      "coalesce",
+      [
+       "get",
+       "render_min_height"
+      ],
+      0
+     ]
     ],
     "fill-extrusion-color": "#e6dcd7",
     "fill-extrusion-height": [
@@ -11962,16 +11988,16 @@
      [
       "zoom"
      ],
-     14,
+     15,
      0,
-     15.5,
+     16,
      [
       "coalesce",
       [
        "get",
        "render_height"
       ],
-      8
+      10
      ]
     ],
     "fill-extrusion-opacity": 1.0,

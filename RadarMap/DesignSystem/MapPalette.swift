@@ -353,21 +353,6 @@ nonisolated enum MapPalette {
                  : Color.white.opacity(0.16)
     }
 
-    // MARK: - Маршрут
-
-    /// Лента маршрута в три слоя: тёмная кайма отделяет её от полотна,
-    /// цветное тело — это «куда я еду», светлая жила внутри даёт объём.
-    /// Ровно те же три слоя, что у карты машины (см. CarPlayMapView).
-    static let routeCasing = Color(red: 0.03, green: 0.07, blue: 0.18)
-    /// Один синий маршрут на всех картах (Theme.route). Был зелёный
-    /// `success` — «в лимите» и «твой путь» красились одним цветом.
-    static let routeBody = Theme.route
-    static let routeCore = Color.white.opacity(0.26)
-
-    /// Пройденное гасим: оно уже не решение, а память.
-    static var routePassed: Color {
-        daylight ? Color.black.opacity(0.18) : Color.white.opacity(0.22)
-    }
 
     // MARK: - Манёвр
 

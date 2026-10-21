@@ -9,6 +9,7 @@
 //  DriveCameraTests и 25.A) — кроме того, что узел «ползком» его не сдвинул.
 //
 
+import QuartzCore
 import XCTest
 @testable import RadarMap
 
@@ -25,7 +26,7 @@ final class DrivePitchTests: XCTestCase {
 
     func testStandingAndCrawlingAreTopDown() {
         for screen in [Cam.Screen.phone, .car] {
-            for kmh in [0.0, 2, 4, 6] {
+            for kmh in [0.0, 2, 4, 5] {
                 XCTAssertEqual(frame(kmh, screen: screen).pitchDegrees, 0, "\(screen) \(kmh) км/ч")
             }
         }
@@ -83,12 +84,12 @@ final class DrivePitchTests: XCTestCase {
     }
 
     func testCrawlKnotDoesNotMoveZoomOrCar() {
-        // Узел 6 км/ч добавлен ради наклона: остальные столбцы на нём лежат
+        // Узлы 5 и 10 км/ч добавлены ради наклона: остальные столбцы на нём лежат
         // на прямой 0…15, и масштаб, обзор и место машины не меняются.
         for screen in [Cam.Screen.phone, .car] {
             let a = Cam.profile(speedKmh: 0, pitchAllowed: true, screen: screen)
             let b = Cam.profile(speedKmh: 15, pitchAllowed: true, screen: screen)
-            for kmh in [3.0, 6, 9, 12] {
+            for kmh in [3.0, 5, 7.5, 10, 12] {
                 let p = Cam.profile(speedKmh: kmh, pitchAllowed: true, screen: screen)
                 let t = kmh / 15
                 XCTAssertEqual(p.lookaheadSeconds, a.lookaheadSeconds + (b.lookaheadSeconds - a.lookaheadSeconds) * t,
@@ -98,5 +99,33 @@ final class DrivePitchTests: XCTestCase {
                 XCTAssertEqual(p.carShare, a.carShare + (b.carShare - a.carShare) * t, accuracy: 1e-9)
             }
         }
+    }
+}
+
+/// Значок «я» под наклоном (25.D): сверху — прежний плоский поворот; под
+/// наклоном — ложится на дорогу долей наклона, с перспективой, чуть крупнее.
+final class CursorTiltTests: XCTestCase {
+
+    @MainActor func testTopDownIsThePlainRotation() {
+        let t = EngineMapView.Coordinator.cursorTransform(angle: 0.7, pitchDegrees: 0)
+        XCTAssertTrue(CATransform3DEqualToTransform(t, CATransform3DMakeRotation(0.7, 0, 0, 1)))
+    }
+
+    @MainActor func testPitchedCursorLeansBackWithPerspective() {
+        let t = EngineMapView.Coordinator.cursorTransform(angle: 0, pitchDegrees: AppConfig.engineMapPitchDegrees)
+        XCTAssertLessThan(t.m34, 0, "перспектива есть")
+        // Нос (верх значка) уходит вдаль: точка (0, -10) после преобразования ближе к центру.
+        let w = -10 * t.m24 + t.m44
+        let y = (-10 * t.m22 + t.m42) / w
+        XCTAssertGreaterThan(y, -10 * (1 + AppConfig.engineCursorPitchGrow), "нос не вырос")
+        XCTAssertLessThan(abs(y), 10 * (1 + AppConfig.engineCursorPitchGrow))
+        // Не блин: высота значка — не меньше 80 % (наклон — доля, а не весь).
+        XCTAssertGreaterThan(abs(y) / 10, 0.8)
+    }
+
+    func testTiltIsAShareNotTheWholePitch() {
+        XCTAssertGreaterThan(AppConfig.engineCursorTiltShare, 0)
+        XCTAssertLessThanOrEqual(AppConfig.engineCursorTiltShare, 0.6)
+        XCTAssertLessThanOrEqual(AppConfig.engineCursorPitchGrow, 0.2)
     }
 }

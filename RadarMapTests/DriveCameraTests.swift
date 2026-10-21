@@ -55,7 +55,7 @@ final class DriveCameraTests: XCTestCase {
     func testStandingIsTopDown() {
         // С 21.10 (25.D) сверху — только стоя и ползком; город уже с 10 км/ч
         // под наклоном (DrivePitchTests).
-        for kmh in [0.0, 3, 6] {
+        for kmh in [0.0, 3, 5] {
             XCTAssertEqual(frame(kmh, height: 382).pitchDegrees, 0, "\(kmh) км/ч — сверху")
         }
     }
@@ -254,7 +254,8 @@ final class DriveCameraTests: XCTestCase {
         for height in carHeights {
             for kmh in [0.0, 5, 10, 15] {
                 let f = carFrame(kmh, height: height)
-                XCTAssertEqual(f.pitchDegrees, 0, "\(kmh) км/ч — сверху")
+                // Сверху — стоя и ползком; с 10 км/ч уже наклон (25.D, 21.10).
+                if kmh <= 5 { XCTAssertEqual(f.pitchDegrees, 0, "\(kmh) км/ч — сверху") }
                 XCTAssertGreaterThanOrEqual(f.zoom, Cam.laneZoom, "\(kmh) км/ч, \(height) pt — полосы")
                 XCTAssertGreaterThanOrEqual(ahead(f, height: height), Cam.carMinLookaheadMeters * 0.99,
                                             "перекрёсток впереди целиком")

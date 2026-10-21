@@ -282,3 +282,79 @@ final class PaletteTests: XCTestCase {
         }
     }
 }
+
+// MARK: - Линия маршрута «богаче» (25.D, 21.10)
+
+extension PaletteTests {
+
+    /// Полотно дороги новой карты — server/omt/make_style.py PALETTES
+    /// (road, road_trunk, road_tertiary, minor) и фон, по темам.
+    private func asphalt(_ theme: String) -> [Color] {
+        let hex: [UInt32] = theme == "днём"
+            ? [0xB4BCCB, 0xAAB3C4, 0xC3CAD6, 0xD5DAE2, 0xF5F4F1]
+            : [0x424955, 0x4A5260, 0x3B414C, 0x3A404A, 0x0F1216]
+        return hex.map { Color(uiColor: Theme.rgb($0)) }
+    }
+
+    /// Линия отделяется от полотна телом или каймой — не ниже 3:1 (линия —
+    /// графический объект, WCAG 1.4.11). Белая кайма днём держала 1,4–2,1:1
+    /// и линия на светлом проспекте читалась «синей ниткой».
+    func testRouteStandsOutOnTheAsphalt() {
+        inBothThemes { theme in
+            for road in asphalt(theme) {
+                let best = max(contrast(Theme.route, road), contrast(Theme.routeCasing, road))
+                XCTAssertGreaterThanOrEqual(best, 3, "линия маршрута на полотне \(theme)")
+            }
+        }
+    }
+
+    /// Пройденное — бледнее и заметно другим цветом: не путается с «впереди».
+    func testTraveledIsPalerThanTheRouteAhead() {
+        inBothThemes { theme in
+            XCTAssertGreaterThanOrEqual(deltaE(Theme.routeTraveled, Theme.route), 25, "пройденное \(theme)")
+        }
+    }
+
+    /// Пробка и «медленно» на линии — не синий маршрут и не одно и то же;
+    /// и отличимы от каймы линии, внутри которой лежат.
+    func testTrafficOnTheRouteIsItsOwnColour() {
+        inBothThemes { theme in
+            XCTAssertGreaterThanOrEqual(deltaE(Theme.routeJam, Theme.route), 40, "пробка ≠ маршрут \(theme)")
+            XCTAssertGreaterThanOrEqual(deltaE(Theme.routeSlow, Theme.route), 40, "медленно ≠ маршрут \(theme)")
+            XCTAssertGreaterThanOrEqual(deltaE(Theme.routeSlow, Theme.routeJam), 25, "медленно ≠ пробка \(theme)")
+            // Внутри каймы цвет пробки читается оттенком, а не яркостью.
+            XCTAssertGreaterThanOrEqual(deltaE(Theme.routeJam, Theme.routeCasing), 40, "пробка на кайме \(theme)")
+            XCTAssertGreaterThanOrEqual(deltaE(Theme.routeSlow, Theme.routeCasing), 40, "медленно на кайме \(theme)")
+        }
+    }
+
+    /// Стрелка направления — белый шеврон с каймой линии: держится на любом
+    /// цвете под ним, потому что контраст несёт её собственный край.
+    func testRouteArrowCarriesItsOwnEdge() {
+        let arrow = Color(uiColor: Theme.rgb(RouteColors.arrow))
+        inBothThemes { theme in
+            XCTAssertGreaterThanOrEqual(contrast(arrow, Theme.routeCasing), 4.5, "стрелка на своей кайме \(theme)")
+        }
+    }
+
+    /// Светлая середина — не белая полоса: доля белого умеренная в обеих темах.
+    func testRouteCoreIsAHighlightNotAStripe() {
+        for alpha in [RouteColors.coreAlpha.day, RouteColors.coreAlpha.night] {
+            XCTAssertGreaterThan(alpha, 0.15)
+            XCTAssertLessThan(alpha, 0.5)
+        }
+    }
+
+    /// Стиль движка берёт те же числа, что токены, — второго списка цветов нет.
+    func testEngineHexMatchesTheTokens() {
+        XCTAssertEqual(RouteColors.hex(0x2A6FF0), "#2a6ff0")
+        inBothThemes { theme in
+            let day = theme == "днём"
+            let (r, g, b) = components(Theme.route)
+            let value = RouteColors.hex(day ? RouteColors.body.day : RouteColors.body.night)
+            let expected = String(format: "#%02x%02x%02x", Int((r * 255).rounded()),
+                                  Int((g * 255).rounded()), Int((b * 255).rounded()))
+            XCTAssertEqual(value, expected, "маршрут \(theme)")
+        }
+    }
+}

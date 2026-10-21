@@ -119,6 +119,7 @@ struct EngineBaseLayer: View {
                             && map.declutter.update(speedKmh: env.location.speedKmh, at: Date()),
                         trafficEdges: env.traffic.isShown ? env.traffic.snapshot?.edges ?? [] : [],
                         trafficRevision: env.traffic.revision * 2 + (env.traffic.isShown ? 1 : 0),
+                        trafficSnapshot: env.traffic.isShown ? env.traffic.snapshot : nil,
                         labelLanguage: env.settings.appLanguage.mapCode,
                         cursorStyle: env.settings.cursorStyle,
                         overviewCommand: map.overviewCommand,

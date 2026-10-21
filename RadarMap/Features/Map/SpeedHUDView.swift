@@ -61,8 +61,8 @@ struct SpeedHUDView: View {
                         .padding(.horizontal, 4)
                 }
 
-                nearestBlock(camera: location.nearestCamera,
-                             distance: location.distanceToNearest)
+                nearestBlock(camera: location.displayNearestCamera,
+                             distance: location.displayDistanceToNearest)
             }
             .padding(.horizontal, secondary ? 12 : 18)
             .padding(.vertical, secondary ? 8 : 12)
@@ -109,8 +109,8 @@ struct SpeedHUDView: View {
         }
         if env.location.isSignalStale {
             parts.append(String(localized: "Нет сигнала GPS"))
-        } else if let camera = env.location.nearestCamera,
-                  let distance = env.location.distanceToNearest {
+        } else if let camera = env.location.displayNearestCamera,
+                  let distance = env.location.displayDistanceToNearest {
             parts.append("\(camera.kind.displayName) — \(Formatting.distance(distance))")
             if env.location.isPositionCoarse {
                 parts.append(String(localized: "уточняем положение"))

@@ -20,7 +20,7 @@ actually reached TestFlight carried 38, 44 and 46 while the repo read 11–15 �
 Xcode's «Manage Version and Build Number» assigns its own number at upload. The
 cost is real: a crash arriving from «build 46» could not be mapped to a commit,
 which is exactly what makes MetricKit triage slow. The repo was moved to 47 to
-catch up (2.2.23 = build 118 on 20.10.2026, `testflight/2.2.23`; 2.2.24 = build 119 on 21.10.2026, `testflight/2.2.24`; 2.2.25 = build 120 on 21.10.2026, `testflight/2.2.25`; 2.2.26 = build 121, `testflight/2.2.26`; 2.2.27 = build 122 on 21.10.2026, `testflight/2.2.27` — still without the watch complication); keep bumping it here and leave that checkbox off, so a field build
+catch up (2.2.23 = build 118 on 20.10.2026, `testflight/2.2.23`; 2.2.24 = build 119 on 21.10.2026, `testflight/2.2.24`; 2.2.25 = build 120 on 21.10.2026, `testflight/2.2.25`; 2.2.26 = build 121, `testflight/2.2.26`; 2.2.27 = build 122 on 21.10.2026, `testflight/2.2.27` — still without the watch complication; 2.2.28 = build 123 on 21.10.2026, `testflight/2.2.28` — stages 25–26, still without the watch complication); keep bumping it here and leave that checkbox off, so a field build
 names a commit. Field build numbers live in the diagnostics themselves —
 `crashDiagnostics[].diagnosticMetaData.appBuildVersion` (plus `appVersion` and
 `isTestFlightApp`) in the `metrics` table on the VPS.

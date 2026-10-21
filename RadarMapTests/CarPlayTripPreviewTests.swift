@@ -51,6 +51,28 @@ final class CarPlayTripPreviewTests: XCTestCase {
         XCTAssertEqual(text.summary.last, calm.etaText, "самый короткий вариант — время")
     }
 
+    func testMyRoadSaysHowYouUsuallyDriveAndShowsOwnTime() {
+        // «Моя дорога» (24.4): в машине тот же ярлык, что на телефоне, и время
+        // по своим поездкам (39 мин обычно + 4 мин пробок сверх обычного).
+        let fast = variant(id: 0, minutes: 35, km: 12, labels: [.fastest], traffic: 300)
+        var mine = variant(id: 1, minutes: 36, km: 13, labels: [.myRoad, .familiar], traffic: 600)
+        mine.assessment.myRoad = RouteChoice.Personal(direction: .toHome, trips: 14, seconds: 43 * 60,
+                                                      jamSeconds: 4 * 60)
+        XCTAssertEqual(mine.expectedTime, 43 * 60)
+        XCTAssertEqual(mine.shownTrafficDelay, 4 * 60, "пробки — сверх своего обычного, не по линии")
+        let text = CarPlayTripPreview.text(for: mine, among: [fast, mine])
+        XCTAssertTrue(text.summary[0].hasPrefix(RoutePanel.title(.myRoad, mine)), text.summary[0])
+        XCTAssertTrue(text.summary[0].contains(mine.etaText))
+        let reason = RoutePanel.reason(mine, among: [fast, mine]) ?? ""
+        XCTAssertTrue(reason.contains(RoutePanel.myRoadReason(mine.assessment.myRoad!)), reason)
+        XCTAssertTrue(reason.contains(Formatting.unbreakable(Formatting.duration(39 * 60))), reason)
+        XCTAssertFalse(reason.contains(String(format: String(localized: "поездок этим путём: %lld"), 0)),
+                       "«Знакомый» рядом со своей дорогой не повторяется")
+        // Своё время без пробок сверх обычного — не «без пробок»: обычные в нём есть.
+        mine.assessment.myRoad = RouteChoice.Personal(direction: .toHome, trips: 14, seconds: 39 * 60)
+        XCTAssertNil(mine.trafficNote)
+    }
+
     func testFactsCarryCamerasAndTraffic() {
         let jam = variant(id: 0, minutes: 25, km: 12, cameras: 2, traffic: 420)
         let text = CarPlayTripPreview.text(for: jam, among: [jam])

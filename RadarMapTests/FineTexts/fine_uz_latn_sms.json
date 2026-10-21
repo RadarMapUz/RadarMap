@@ -1,0 +1,14 @@
+{
+  "fine": true,
+  "date": "2026-10-05",
+  "time": "08:12",
+  "due": "2026-11-04",
+  "amount": 412000,
+  "speed": 92,
+  "limit": 70,
+  "resolution": "QR 7741203",
+  "place": "Toshkent sh., Chilonzor tumani, Bunyodkor ko‘chasida",
+  "unsure": [
+    "place"
+  ]
+}

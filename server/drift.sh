@@ -23,6 +23,7 @@ api.py                        /opt/radarmap/api/api.py
 admin.py                      /opt/radarmap/api/admin.py
 admin_auth.py                 /opt/radarmap/api/admin_auth.py
 notify.py                     /opt/radarmap/api/notify.py
+family_notify.py              /opt/radarmap/api/family_notify.py
 map_edits.py                  /opt/radarmap/api/map_edits.py
 osm_queue.py                  /opt/radarmap/api/osm_queue.py
 status.py                     /opt/radarmap/api/status.py

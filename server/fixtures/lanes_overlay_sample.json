@@ -1,0 +1,12 @@
+{"v": 1, "generated": 1792560000,
+ "junctions": [
+  {"id": "tash-0001", "lat": 41.31102, "lon": 69.27951, "bearing": 352, "tolerance": 30,
+   "lanes": ["left", "left;straight", "straight", "straight", "straight;right"],
+   "src": "survey", "checked": "2026-10-21"},
+  {"id": "tash-0002", "lat": 41.32417, "lon": 69.28833, "bearing": 85, "tolerance": 30,
+   "lanes": ["uturn;left", "straight", "straight;right"],
+   "src": "dashcam", "checked": "2026-10-20"},
+  {"id": "tash-0003", "lat": 41.29988, "lon": 69.24071, "bearing": 180, "tolerance": 25,
+   "lanes": ["left", "straight", "right"],
+   "src": "osm", "checked": "2026-10-19"}
+ ]}

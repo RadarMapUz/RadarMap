@@ -27,8 +27,6 @@ struct CarPlayEngineLayer: View {
     /// Где стоит карта: экран машины, плитка главного экрана или приборка
     /// (CarPlaySurface — чем они различаются).
     var surface: CarPlaySurface = .car
-    /// Плитка и приборка: без дока внизу, «я» — по своей доле высоты.
-    private var compact: Bool { surface != .car }
 
     var body: some View {
         // Без своей позиции карты нет: центр «где-то в Ташкенте» выдал бы
@@ -87,7 +85,14 @@ struct CarPlayEngineLayer: View {
         // карты лежат внутри безопасной зоны: до 10.7 «в кадре» считалось
         // по 12 точкам снизу и без кнопок, и камера впереди вставала ровно под
         // капсулу «до камеры».
-        let clear = compact ? DriveCamera.Clear(width: width)
+        // Приборка: края окна кластера закрывают стрелки приборов машины —
+        // это его safe area; камера впереди держится внутри неё.
+        let clear = surface == .dashboard ? DriveCamera.Clear(width: width)
+            : surface == .cluster
+            ? DriveCamera.Clear(top: Double(safe.top) / max(1, height),
+                                bottom: Double(safe.bottom) / max(1, height),
+                                width: width,
+                                side: Double(max(safe.leading, safe.trailing)) + AppConfig.engineKeepSidePoints)
             : DriveCamera.Clear(top: Double(safe.top) / max(1, height),
                                 bottom: Double(safe.bottom + 12 + AppConfig.carPlayDockHeight) / max(1, height),
                                 width: width,

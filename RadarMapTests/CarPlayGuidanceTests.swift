@@ -188,6 +188,87 @@ final class CarPlayGuidanceTests: XCTestCase {
                        "у самого поворота — «выполняй», даже если манёвр новый")
     }
 
+    // MARK: - Метаданные включены (25.H2): что уходит в машину
+
+    /// С метаданными в списке манёвров — один манёвр, без ряда полос: машина
+    /// с приборкой прочла бы картинку полос вторым поворотом. Без метаданных
+    /// ряд идёт вторым — на экране машины полосы есть только так.
+    func testMetadataSendsOneManeuverAndLanesOnlyAsLaneGuidance() throws {
+        let lanes = [LaneHint(arrows: [.left], isValid: true), LaneHint(arrows: [.straight], isValid: false),
+                     LaneHint(arrows: [.straight], isValid: false)]
+        let step = RouteStep(distanceAlong: 800, text: "поверните налево на улицу Лабзак",
+                             icon: "arrow.turn.up.left", kind: .left, lanes: lanes,
+                             shortText: "поверните налево", edge: .left, approachLanes: 3)
+        let withMetadata = CarPlayGuidance.card(for: step, carDark: true, metadata: true)
+        XCTAssertEqual(withMetadata.upcoming.count, 1)
+        XCTAssertFalse(withMetadata.upcoming.contains(where: CarPlayGuidance.isLaneRow))
+        // Полосы при этом не теряются: они уходят метаданными.
+        let guidance = try XCTUnwrap(CarPlayGuidance.laneGuidance(
+            withMetadata.lanes, instructions: withMetadata.maneuver.instructionVariants))
+        XCTAssertEqual(guidance.lanes.count, 3)
+        XCTAssertFalse(guidance.instructionVariants.isEmpty, "«You must provide at least one variant»")
+
+        let without = CarPlayGuidance.card(for: step, carDark: true, metadata: false)
+        XCTAssertEqual(without.upcoming.count, 2)
+        XCTAssertTrue(without.upcoming[0] === without.maneuver, "первым — сам поворот")
+        XCTAssertTrue(CarPlayGuidance.isLaneRow(without.upcoming[1]))
+    }
+
+    /// Флаг по умолчанию и карточка согласованы: какой бы ни был флаг,
+    /// ряд полос и метаданные вместе не уходят никогда.
+    func testDefaultCardNeverSendsLaneRowTogetherWithMetadata() {
+        let lanes = [LaneHint(arrows: [.right], isValid: true), LaneHint(arrows: [.straight], isValid: false)]
+        let step = RouteStep(distanceAlong: 500, text: "поверните направо", icon: "arrow.turn.up.right",
+                             kind: .right, lanes: lanes)
+        let card = CarPlayGuidance.card(for: step, carDark: false)
+        XCTAssertEqual(card.laneRow == nil, AppConfig.carPlayNavigationMetadata)
+    }
+
+    /// Поля, которые читает приборка, заданы у каждого типа манёвра по
+    /// заголовкам CarPlay (CPManeuver.h, iOS 17.4): тип манёвра, тип
+    /// перекрёстка, сторона движения, угол съезда — у поворотов.
+    func testEveryManeuverCarriesTheMetadataFields() {
+        for kind in ManeuverKind.allCases {
+            let step = RouteStep(distanceAlong: 300, text: "манёвр", icon: "arrow.up", kind: kind)
+            let maneuver = CarPlayGuidance.card(for: step, carDark: true, metadata: true).maneuver
+            XCTAssertEqual(maneuver.maneuverType, CarPlayGuidanceMapping.maneuverType(kind), "\(kind)")
+            XCTAssertEqual(maneuver.junctionType, kind == .roundabout ? .roundabout : .intersection, "\(kind)")
+            XCTAssertEqual(maneuver.trafficSide, .right, "правостороннее движение: \(kind)")
+            XCTAssertFalse(maneuver.instructionVariants.isEmpty, "\(kind)")
+            XCTAssertNotNil(maneuver.symbolImage, "\(kind)")
+            if let angle = CarPlayGuidanceMapping.exitAngle(kind) {
+                XCTAssertEqual(maneuver.junctionExitAngle?.converted(to: .degrees).value ?? .nan, angle,
+                               accuracy: 0.001, "\(kind)")
+                XCTAssertTrue((-180...180).contains(angle), "\(kind)")
+            } else {
+                XCTAssertNil(maneuver.junctionExitAngle, "у \(kind) угла съезда нет — и не выдумываем")
+            }
+            XCTAssertNil(maneuver.linkedLaneGuidance, "без полос — без связанной подсказки: \(kind)")
+        }
+    }
+
+    /// CPLane: подсвеченный угол не входит в `angles` (CPLane.h), неподходящая
+    /// полоса — без подсветки; выбирать нечего — подсказки нет.
+    func testLaneGuidanceFollowsCPLaneRules() throws {
+        let lanes = CarPlayGuidanceMapping.lanes(
+            [LaneHint(arrows: [.left, .straight], isValid: true), LaneHint(arrows: [.straight], isValid: false)],
+            kind: .left)
+        let guidance = try XCTUnwrap(CarPlayGuidance.laneGuidance(lanes, instructions: ["Налево"]))
+        let first = guidance.lanes[0], second = guidance.lanes[1]
+        let highlighted = try XCTUnwrap(first.highlightedAngle?.converted(to: .degrees).value)
+        XCTAssertEqual(highlighted, CarPlayGuidanceMapping.laneAngle(.left))
+        XCTAssertFalse(first.angles.map { $0.converted(to: .degrees).value }.contains(highlighted))
+        XCTAssertEqual(first.status, .preferred)
+        XCTAssertNil(second.highlightedAngle)
+        XCTAssertEqual(second.status, .notGood)
+        XCTAssertEqual(guidance.instructionVariants, ["Налево"])
+
+        let allGood = CarPlayGuidanceMapping.lanes(
+            [LaneHint(arrows: [.left], isValid: true), LaneHint(arrows: [.left], isValid: true)], kind: .left)
+        XCTAssertNil(CarPlayGuidance.laneGuidance(allGood, instructions: ["Налево"]), "все полосы годятся")
+        XCTAssertNil(CarPlayGuidance.laneGuidance(lanes, instructions: []), "без фразы машина отвергнет")
+    }
+
     // MARK: - Значок манёвра
 
     func testManeuverSymbolIsARealImageTheManeuverKeeps() {

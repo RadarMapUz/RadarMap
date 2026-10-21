@@ -5,13 +5,18 @@
 //  «Обслуживание» в «Итогах» (18.2): только когда что-то «скоро», «пора» или
 //  просрочено — строка на пункт, самое срочное первым. Нет срочного — нет
 //  карточки: «всё в порядке» каждый раз — шум, который учит не смотреть.
-//  Тап — страница обслуживания.
+//  Тап — страница обслуживания. Не больше трёх строк и «ещё N»: карточка стоит
+//  над периодом, и пять просроченных пунктов уводили сами Итоги за экран.
 //
 
 import SwiftUI
 
 struct MaintenanceCard: View {
     let states: [Maintenance.State]
+
+    /// Самые срочные — первыми (так их отдаёт модель), не больше трёх.
+    private var shown: [Maintenance.State] { Array(states.prefix(AppConfig.maintenanceCardMaxRows)) }
+    private var hidden: Int { max(0, states.count - AppConfig.maintenanceCardMaxRows) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -22,9 +27,17 @@ struct MaintenanceCard: View {
                     .accessibilityHidden(true)
             }
             VStack(spacing: 0) {
-                ForEach(Array(states.enumerated()), id: \.element.id) { index, state in
+                ForEach(Array(shown.enumerated()), id: \.element.id) { index, state in
                     if index > 0 { Divider().overlay(Theme.stroke) }
                     row(state)
+                }
+                if hidden > 0 {
+                    Divider().overlay(Theme.stroke)
+                    Text(String(format: String(localized: "Ещё %lld — на странице обслуживания"), hidden))
+                        .font(.rounded(13, .medium))
+                        .foregroundStyle(Theme.accent)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 10)
                 }
             }
             .statCard(padding: 14, radius: Theme.cornerMedium)

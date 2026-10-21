@@ -5017,6 +5017,22 @@
         }
       }
     },
+    "Ещё %lld — на странице обслуживания": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ещё %lld — на странице обслуживания"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yana %lld ta — texnik xizmat sahifasida"
+          }
+        }
+      }
+    },
     "Ещё на месте?": {
       "extractionState": "manual",
       "localizations": {

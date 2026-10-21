@@ -2053,6 +2053,42 @@ nonisolated enum AppConfig {
     /// едет — остаток секунды стоит» (поле 12.10: «отстаёт и не плавно»;
     /// фиксы — раз в секунду, когда на карту смотрят, см. GPSTiers.request).
     static let engineCameraDuration = 1.25
+
+    // MARK: - Камера поездки без «дыхания» (DriveCamera, 25.A)
+    //
+    // Владелец, 21.10: «карта в CarPlay то уменьшается, то увеличивается».
+    // Замер на синтетических поездках (docs/drive_camera_2026-10-21.md): цель
+    // прыгала до z10,6–13 из-за камеры, которую только что проехали (на
+    // экране машины позади «я» до дока 50 точек — чтобы уложить туда камеру в
+    // 50 м, нужен вид области), и до z15 на 10 км/ч из-за камеры в 400 м.
+
+    /// Удерживаемая камера не уводит кадр мельче этого масштаба: до
+    /// `driveKeepTownKmh` — городской предел, к `driveKeepRoadKmh` — трассовый.
+    /// Дальше камеру видно, когда до неё доедем, — лучше так, чем район.
+    static let driveKeepMinZoomTown = 15.5
+    static let driveKeepMinZoomRoad = 15.0
+    static let driveKeepTownKmh = 30.0
+    static let driveKeepRoadKmh = 60.0
+    /// Быстрее этого камера ПОЗАДИ или в стороне (уже проехали, а «ближайшей»
+    /// она остаётся ещё 60 м по маршруту или пока гейты выключены) в кадре не
+    /// удерживается.
+    static let driveKeepBehindMaxKmh = 5.0
+    /// На ходу держится только камера в этом конусе вперёд (± градусов от хода).
+    static let driveKeepMovingConeDegrees = 45.0
+    /// Скорость смены масштаба, уровней в секунду: отъезд — не больше уровня
+    /// за 8 с, приближение быстрее.
+    static let driveZoomOutLevelsPerSecond = 1.0 / 8
+    static let driveZoomInLevelsPerSecond = 0.4
+    /// Гистерезис цели: смена направления (приближались — отъезжаем и
+    /// наоборот) — только если цель ушла дальше этого, уровней…
+    static let driveZoomInDeadband = 0.3
+    static let driveZoomOutDeadband = 0.15
+    /// …и держится там столько секунд: приближение ждёт дольше — оно
+    /// для красоты, отъезд — для обзора.
+    static let driveZoomInDwell: TimeInterval = 3
+    static let driveZoomOutConfirm: TimeInterval = 0.75
+    /// Направление масштаба меняется не чаще раза за столько секунд.
+    static let driveZoomReversalLock: TimeInterval = 8
     /// Как часто карта с меткой пишет строку здоровья в журнал (EngineMapView.healthTag).
     static let engineHealthLogSeconds: CFTimeInterval = 10
 

@@ -128,13 +128,19 @@ final class DriveCameraTests: XCTestCase {
     private func ahead(_ d: Double) -> Cam.Keep { Cam.Keep(forward: d, right: 0) }
 
     func testKeptObjectStaysInFrameOnTheSmallTile() {
-        // Плитка главного экрана машины (374 pt): камера в 130–480 м впереди
+        // Плитка главного экрана машины (374 pt): камера в 130–250 м впереди
         // обязана быть видна, даже стоя (carplay12: «радары не показывает»).
-        for d in [130.0, 250, 480] {
+        for d in [130.0, 250] {
             let f = Cam.target(speedKmh: 0, maneuverDistance: nil, pitchAllowed: true, maxPitch: maxPitch,
                                keep: ahead(d), viewHeight: 374, latitude: tashkent, carY: { _ in 0.62 })
             XCTAssertGreaterThanOrEqual(ahead(f, height: 374, carY: 0.62), d, "камера в \(d) м")
         }
+        // Камера в 480 м стоя — уже нет (25.A, 21.10): ради неё кадр уходил в
+        // район (z14,7 на плитке), а в городе кадр не мельче z15,5 — камеру
+        // видно, когда до неё ~290 м. Предел, а не прежний отъезд.
+        let far480 = Cam.target(speedKmh: 0, maneuverDistance: nil, pitchAllowed: true, maxPitch: maxPitch,
+                                keep: ahead(480), viewHeight: 374, latitude: tashkent, carY: { _ in 0.62 })
+        XCTAssertEqual(far480.zoom, AppConfig.driveKeepMinZoomTown, accuracy: 1e-9)
         // Дальняя камера вид не трогает.
         let far = Cam.target(speedKmh: 0, maneuverDistance: nil, pitchAllowed: true, maxPitch: maxPitch,
                              keep: ahead(2_000), viewHeight: 374, latitude: tashkent, carY: { _ in 0.62 })
@@ -348,8 +354,11 @@ final class DriveCameraTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(f.pitchDegrees, previous.pitchDegrees)
             XCTAssertLessThanOrEqual(f.pitchDegrees, goal.pitchDegrees)
             if second == 1 {
-                XCTAssertLessThan(f.zoom, 17.8, "движется сразу")
-                XCTAssertGreaterThan(f.zoom, 17.4, "но не прыжком")
+                // 25.A: отъезд не быстрее уровня за 8 с (было «за секунду
+                // ниже 17,8» — экспонента τ 2 с, которая и повторяла скачки цели).
+                XCTAssertLessThan(f.zoom, 18, "движется сразу")
+                XCTAssertGreaterThanOrEqual(f.zoom, 18 - AppConfig.driveZoomOutLevelsPerSecond - 0.011,
+                                            "но не быстрее предела отъезда")
             }
             previous = f
         }

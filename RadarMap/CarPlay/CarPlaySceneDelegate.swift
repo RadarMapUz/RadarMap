@@ -73,6 +73,17 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Навигационная сессия CarPlay: манёвр, время в пути, полосы, камеры
     /// поверх чужого приложения.
     lazy var guidance = CarPlayGuidance(model: model)
+    /// Панель «…» плашки прибытия (iOS 27, 25.H1): камеры впереди, звук,
+    /// «Завершить маршрут».
+    lazy var optionsPanel: CarPlayOptionsPanel = {
+        let panel = CarPlayOptionsPanel()
+        panel.onToggleSound = { [weak self] in self?.toggleSoundFromPanel() }
+        panel.onEndRoute = { [weak self] in
+            guard let self, env.route.isActive else { return }
+            env.route.clear()
+        }
+        return panel
+    }()
     /// Поиск адреса в машине: тот же порядок источников, что на телефоне.
     lazy var search: CarPlaySearch = {
         let search = CarPlaySearch { [weak self] place in self?.pickFromSearch(place) }
@@ -226,6 +237,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         stopPanHold()
         isPanning = false
         guidance.detach()
+        optionsPanel.reset()
         guidanceAttached = false
         guidanceAttachedInBackground = false
         session += 1   // гасим подписки syncTemplate этой сессии

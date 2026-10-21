@@ -85,6 +85,9 @@ final class CarPlayMapModel {
     /// Манёвр показывает сама машина (навигационная сессия): свой баннер
     /// манёвра тогда не рисуем — два одинаковых поворота на одном экране.
     var hasSystemGuidance = false
+    /// Ведение на паузе «Нет сигнала GPS» (iOS 27, CarPlayGuidancePause): о
+    /// потере сигнала говорит карточка системы, своя плашка молчит.
+    var isLocatingPaused = false
     /// Экран машины показывает нас. В фоне (на экране другое приложение или
     /// приборная панель) карта на движке выгружается: картинку никто не видит,
     /// а рисует и греется телефон. Ставит делегат сцены — по настоящему
@@ -257,7 +260,8 @@ struct CarPlayMapScreen: View {
                 // (ведение или выбор) читает сам HUD: тело с картой маршрут не
                 // читает.
                 CarPlayOverlay(showsManeuver: !model.hasSystemGuidance && !model.isPreviewing,
-                               buttonInsets: model.mapButtonInsets)
+                               buttonInsets: model.mapButtonInsets,
+                               systemLocating: model.isLocatingPaused)
             }
 
             // «Радар ещё стоял?» после реального проезда: наблюдение — в

@@ -523,7 +523,32 @@ extension CarPlaySceneDelegate {
 
     /// Баннер уточнения — ответ на касание водителя (`.request`): камера
     /// впереди его вытеснит, и тогда остаётся «радар», а голос итог уже сказал.
+    ///
+    /// iOS 27 (25.H1): все типы кнопками в самом баннере — «Тренога», «Пост»,
+    /// «ДТП» (и «Отменить», если влезает), без сетки; крестик и молчание
+    /// оставляют «радар», как плашка на телефоне. Кнопок меньше, чем типов, —
+    /// и раньше iOS 27 — прежний путь: «Тренога» и «Другое» с сеткой.
     func showRefineBanner(offer: ReportGuard.Sent) {
+        if #available(iOS 27.0, *), let actions = CarPlayRefineChoice.actions(
+            maximum: CPNavigationAlert.maximumActionsCount,
+            cancellable: env.mobile.cancellableReportID() != nil) {
+            let banner = CPNavigationAlert(
+                titleVariants: [String(localized: "Радар отмечен — что это было?"),
+                                String(localized: "Радар отмечен")],
+                subtitleVariants: [],
+                avatarImage: CarPlayBannerArt.avatar(ReportKind.radar.cameraType,
+                                                     size: CarPlayCameraBannerLook.fit(
+                                                        AppConfig.carPlayBannerAvatarSize,
+                                                        into: CPNavigationAlert.maximumAvatarImageSize)),
+                alert: nil,
+                actions: actions.map { refineAction($0, offer: offer) },
+                duration: AppConfig.reportRefineSeconds)
+            banner.showsCloseButton = true
+            if banners?.show(banner, kind: .request) != true {
+                Log.carplay.notice("уточнение отметки не показано: экран занят")
+            }
+            return
+        }
         let banner = CPNavigationAlert(
             titleVariants: [String(localized: "Радар отмечен — что это было?"),
                             String(localized: "Радар отмечен")],
@@ -538,6 +563,21 @@ extension CarPlaySceneDelegate {
             duration: AppConfig.reportRefineSeconds)
         if banners?.show(banner, kind: .request) != true {
             Log.carplay.notice("уточнение отметки не показано: экран занят")
+        }
+    }
+
+    /// Кнопка уточнения в баннере iOS 27: тип — тот же amend, что у сетки;
+    /// «Отменить» — отзыв своей отметки.
+    private func refineAction(_ action: CarPlayRefineChoice.Action, offer: ReportGuard.Sent) -> CPAlertAction {
+        switch action {
+        case .kind(let kind):
+            return CPAlertAction(title: kind.title, style: .default) { [weak self] _ in
+                self?.refineReport(to: kind, offer: offer)
+            }
+        case .cancelOwn:
+            return CPAlertAction(title: String(localized: "Отменить"), style: .destructive) { [weak self] _ in
+                self?.cancelOwnReport()
+            }
         }
     }
 

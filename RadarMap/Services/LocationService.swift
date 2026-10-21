@@ -438,6 +438,11 @@ final class LocationService: NSObject {
     /// предупреждать», нельзя (см. RoadSnapper).
     var displayCoordinate: CLLocationCoordinate2D?
     var displayCourse: CLLocationDirection = -1
+    /// Последний фикс для значка «я» между фиксами (MarkerPredictor): точка и
+    /// курс — те же displayCoordinate/displayCourse, плюс скорость, время
+    /// фикса и линия маршрута вперёд. Пишется раз на фикс, в том же тике,
+    /// что и displayCoordinate, — лишней перерисовки нет. Только картинка.
+    var markerMotion: MarkerPredictor.Fix?
     /// Когда машина в последний раз реально двигалась (для тира «стоянка»).
     @ObservationIgnored var lastMovementAt = Date()
     /// Последняя точка, по которой считали прогресс маршрута (гейт стоянки).

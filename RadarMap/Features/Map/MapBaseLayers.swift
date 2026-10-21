@@ -135,7 +135,8 @@ struct EngineBaseLayer: View {
                         onSelectCamera: onSelectCamera,
                         onLongPress: onLongPress,
                         onRegion: { map.updateVisible(for: $0) },
-                        showsPosition: known != nil)
+                        showsPosition: known != nil,
+                        markerMotion: env.location.markerMotion)
                     if browsing {
                         VStack {
                             Spacer()

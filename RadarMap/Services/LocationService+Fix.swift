@@ -82,6 +82,12 @@ extension LocationService {
             // Время точки трека — время ФИКСА: после фоновой паузы iOS отдаёт
             // фиксы пачкой, и часы обработки дали бы им одно время.
             lastFixTime = min(fix.timestamp, Date())
+            #if DEBUG
+            // Замер лага значка (25.B): истинная точка — сам фикс со своим временем.
+            if MarkerLagLog.enabled {
+                Log.location.notice("МЕТКА фикс \(fix.timestamp.timeIntervalSince1970, format: .fixed(precision: 3), privacy: .public) \(Date().timeIntervalSince1970, format: .fixed(precision: 3), privacy: .public) \(fix.lat, format: .fixed(precision: 7), privacy: .public) \(fix.lon, format: .fixed(precision: 7), privacy: .public) \(fix.speed, format: .fixed(precision: 2), privacy: .public)")
+            }
+            #endif
             horizontalAccuracy = good.accuracy
             isFixSimulated = fix.isSimulated
             handleLocation(coordinate: CLLocationCoordinate2D(latitude: good.lat,
@@ -420,14 +426,27 @@ extension LocationService {
             // проезжей части, и машина на карте едет по своей стороне
             // проспекта, а не рядом с линией (поездка 07.10.2026). Только
             // картинка, как и прижим к оси выше.
+            var markerPath: [CLLocationCoordinate2D] = []
             if route?.isActive == true, let snap = route?.displaySnap {
                 displayCoordinate = snap.coordinate
                 displayCourse = snap.course
+                markerPath = route?.pathAhead(from: snap.coordinate,
+                                              meters: AppConfig.markerPathMeters) ?? []
             }
             // Стоим — стрелка стоит там, где остановилась, и смотрит, куда
             // ехала: «после остановки куда-то назад уходил» — это блуждание
             // приёмника на месте, а не движение (владелец, 12.10).
             freezeDisplayIfStopped(shownBefore: shownBefore, courseBefore: courseBefore)
+            // Значок между фиксами (MarkerPredictor) — отсюда только ВЫХОД:
+            // всё выше уже решено по сырому фиксу, и обратно в оповещения,
+            // проезды, трек и спидометр угаданная точка не попадает никогда.
+            if let shown = displayCoordinate {
+                markerMotion = MarkerPredictor.Fix(
+                    coordinate: shown, courseDegrees: displayCourse,
+                    speedMps: standstill.isStopped ? 0 : (speed >= 0 ? speed : speedKmh / 3.6),
+                    time: lastFixTime.timeIntervalSinceReferenceDate,
+                    path: standstill.isStopped ? [] : markerPath)
+            }
             tuneAdaptiveAccuracy()
             refreshCruise()
             // Умный режим: детектор города/трассы (дёшево — пара сравнений).

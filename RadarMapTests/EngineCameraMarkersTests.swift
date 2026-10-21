@@ -237,7 +237,8 @@ struct EngineCameraMarkersTests {
     @Test("Камеры в каждом стиле поездки — над всей основой и без разрыва по зуму")
     func cameraLayersOnTop() throws {
         // Над камерами — только то, что рисуется поверх них намеренно.
-        let overCameras: Set<String> = ["cameras", "marks", "position"]
+        // «camera-label» — расстояние у алерт-камеры в машине (25.F).
+        let overCameras: Set<String> = ["cameras", "camera-label", "marks", "position"]
         for (name, layers) in try drivingStyles() {
             let ids = layers.compactMap { $0["id"] as? String }
             let dot = try #require(ids.firstIndex(of: "camera-dot"), "\(name): нет camera-dot")

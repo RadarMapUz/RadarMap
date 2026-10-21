@@ -30,6 +30,38 @@ final class ManeuverTests: XCTestCase {
             at: 500, language: "ru")
     }
 
+    // MARK: - Разворот на той же улице (25.F, снимок 63)
+
+    private func uturn(_ type: String = "turn", name: String, current: String?) -> RouteStep? {
+        RouteService.maneuverStep(
+            RouteService.OSRMResponse.Step(
+                distance: 100, name: name,
+                maneuver: RouteService.OSRMResponse.Maneuver(type: type, modifier: "uturn", exit: nil)),
+            at: 500, language: "ru", currentName: current)
+    }
+
+    func testUturnOnTheSameStreetDoesNotNameIt() throws {
+        let same = try XCTUnwrap(uturn(name: "Beruniy shoh ko'chasi", current: "Beruniy shoh ko'chasi"))
+        XCTAssertEqual(same.text, String(localized: "развернитесь"))
+        XCTAssertNil(same.shortText, "улицы нет — короткого варианта тоже")
+        XCTAssertEqual(same.kind, .uturn)
+        XCTAssertEqual(same.icon, "arrow.uturn.left")
+        // Регистр и крайние пробелы — та же улица.
+        XCTAssertEqual(uturn("continue", name: "Beruniy shoh ko'chasi ", current: "beruniy shoh ko'chasi")?.text,
+                       String(localized: "развернитесь"))
+    }
+
+    func testUturnOntoAnotherStreetStillNamesIt() throws {
+        let other = try XCTUnwrap(uturn(name: "Beruniy shoh ko'chasi", current: "Farobiy ko'chasi"))
+        XCTAssertTrue(other.text.hasPrefix(String(localized: "разворот")))
+        XCTAssertNotEqual(other.text, String(localized: "разворот"), "другая улица — называем её")
+        // Улица, с которой едем, неизвестна — фраза прежняя, без догадок.
+        XCTAssertNotEqual(uturn(name: "Beruniy shoh ko'chasi", current: nil)?.text,
+                          String(localized: "развернитесь"))
+        XCTAssertNotEqual(uturn(name: "", current: "")?.text, String(localized: "развернитесь"),
+                          "пустое имя — не доказательство той же улицы")
+    }
+
     private func lane(_ indications: [String], valid: Bool)
         -> RouteService.OSRMResponse.Lane {
         RouteService.OSRMResponse.Lane(valid: valid, indications: indications)

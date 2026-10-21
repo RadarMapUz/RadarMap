@@ -30164,6 +30164,54 @@
           }
         }
       }
+    },
+    "развернитесь": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "развернитесь"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "orqaga buriling"
+          }
+        }
+      }
+    },
+    "Почему в CarPlay «arrival» и «km» не по-русски?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Почему в CarPlay «arrival» и «km» не по-русски?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nega CarPlayʼda «arrival» va «km» oʻzbekcha emas?"
+          }
+        }
+      }
+    },
+    "Время прибытия и километры в карточке CarPlay печатает сама система — на языке iPhone (Настройки → Основные → Язык и регион), а не на языке RadarMap. Подсказки, баннеры и голос RadarMap — на языке приложения.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Время прибытия и километры в карточке CarPlay печатает сама система — на языке iPhone (Настройки → Основные → Язык и регион), а не на языке RadarMap. Подсказки, баннеры и голос RadarMap — на языке приложения."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CarPlay kartochkasidagi yetib borish vaqti va kilometrlarni tizimning oʻzi chiqaradi — iPhone tilida (Sozlamalar → Asosiy → Til va mintaqa), RadarMap tilida emas. RadarMap maslahatlari, bannerlari va ovozi — ilova tilida."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

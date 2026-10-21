@@ -1456,6 +1456,17 @@ nonisolated enum AppConfig {
     /// фикс не попал в малый радиус, а маршрут выполнен.
     static let arrivalPassedRemainingMeters: CLLocationDistance = 80
     static let arrivalPassedRadiusMeters: CLLocationDistance = 250
+    /// Прибытие на последних километрах (ArrivalTail, 25.F): ближе
+    /// `arrivalTailFromMeters` остаток времени не меньше остатка по средней
+    /// скорости за `arrivalTailPaceWindowSeconds`; вес поправки растёт до 1 к
+    /// `arrivalTailFullMeters`. Средняя — не меньше `arrivalTailPaceFloorKmh`
+    /// (две минуты пробки не превращают 1,5 км в час) и только после
+    /// `arrivalTailPaceMinSeconds` наблюдения.
+    nonisolated static let arrivalTailFromMeters: Double = 2000
+    nonisolated static let arrivalTailFullMeters: Double = 1000
+    nonisolated static let arrivalTailPaceWindowSeconds: TimeInterval = 120
+    nonisolated static let arrivalTailPaceMinSeconds: TimeInterval = 45
+    nonisolated static let arrivalTailPaceFloorKmh: Double = 12
     /// Поездку закончили у цели (не доехав до радиуса) — маршрут убираем,
     /// если до цели или по линии осталось меньше этого.
     static let arrivalOnTripEndMeters: CLLocationDistance = 400
@@ -1920,6 +1931,10 @@ nonisolated enum AppConfig {
     /// Расстояние в баннере камеры переписывается не чаще этого: каждое
     /// обновление — сообщение в машину, а цифра меняется на каждом фиксе.
     static let carPlayCameraBannerUpdateSeconds: TimeInterval = 1
+    /// Подпись «400 м» у значка камеры на карте машины (CarPlayCameraCue):
+    /// цифра переписывается не чаще раза в столько секунд — каждая запись в
+    /// источник стоит движку расстановки символов.
+    static let carPlayCameraLabelUpdateSeconds: TimeInterval = 1
     /// Сколько баннер камеры переживает мигание тревоги у той же камеры
     /// (шум курса/точности), прежде чем сняться.
     static let carPlayCameraBannerGraceSeconds: TimeInterval = 2

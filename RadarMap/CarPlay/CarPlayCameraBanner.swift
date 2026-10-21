@@ -60,6 +60,16 @@ nonisolated enum CarPlayCameraBannerText {
     }
 }
 
+extension CarPlayCameraCue {
+    /// Решение по живому состоянию — одно для карты, баннера и оценок поездки.
+    @MainActor
+    static func current(_ location: LocationService) -> Cue {
+        let id = location.nearestCamera?.id
+        return decide(cameraID: id, approaching: location.isApproachingCamera,
+                      familiar: id.map { location.familiarCameraIDs.contains($0) } ?? false)
+    }
+}
+
 /// Баннер камеры одного подключения. Зовётся на каждом пересчёте ведения.
 @MainActor
 final class CarPlayCameraBanner {
@@ -87,7 +97,10 @@ final class CarPlayCameraBanner {
 
     func update(banners: CarPlayBanners, onScreen: Bool, onDark: Bool) {
         let location = env.location
-        guard location.isApproachingCamera, let camera = location.nearestCamera,
+        // Тревога гейтов (в радиусе = уровень ≥ 1, скорость от
+        // directionalMinSpeedKmh) — баннер; своя камера — без баннера: голос о
+        // ней молчит, и на карте у неё галочка (CarPlayCameraCue).
+        guard CarPlayCameraCue.current(location).banner, let camera = location.nearestCamera,
               let distance = location.distanceToNearest else {
             // Проехали или тревога снята: баннер уходит, следующий подъезд —
             // заново, в том числе к той же камере. Короткое мигание тревоги

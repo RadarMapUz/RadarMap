@@ -47,6 +47,11 @@
   * Свою отметку бот-пользователь не подтверждает: повтор от того же
     человека — то же устройство и тот же адрес, API считает это одним
     голосом (confirmed_independently).
+  * Исключение — близкие (22.3, family_notify.py): чтобы написать близкому,
+    нужен номер его чата. В подписке он ЗАШИФРОВАН ключом из семейной
+    ссылки, которого на сервере нет (его приносит телефон водителя с каждым
+    обновлением); для /stop и капа на чат — scrypt-хэш номера с той же
+    солью. Открытым номер лежит только в очереди сообщений — до 10 минут.
 
 ПОЧЕМУ SCRYPT, А НЕ SHA256 (аудит 14.3, N6)
   Соль лежит в конфиге на том же VPS. Взломавший сервер получает и соль, и
@@ -88,11 +93,22 @@
   Счётчики суток — в bot.db по хэшу, без id; время последних созданных
   отметок (для интервала) — только в памяти, по хэшу, не дольше 10 минут.
 
+БЛИЗКИЕ В TELEGRAM (22.3)
+  /start f_<адрес семейной ссылки> — подписка: бот пишет «едет домой —
+  будет примерно в 18:40», «задерживается», «дома»; /stop — снять все
+  подписки этого чата. Решает и кладёт сообщения в очередь api.py
+  (family_notify.on_update), отправляет — поток Courier этого процесса,
+  чтобы долгий getUpdates (30 с) не держал «едет домой». Логика, тексты и
+  сроки — family_notify.py; база — family.db рядом с bot.db.
+
 КОНФИГ: /opt/radarmap/telegram_bot.conf (создаёт владелец, в git не лежит):
     token=<токен бота>
     salt=<длинная случайная строка, например `openssl rand -hex 32`>
+    username=<имя бота без @>   (ссылка t.me/<имя>?start=f_… на странице близкого;
+                                 читать — family_notify.read_username, только этот ключ)
     venues_dir=/opt/radarmap/www/roads   (необязательно; это значение по умолчанию)
-Нет конфига — выход 0 с сообщением.
+Нет конфига — выход 0 с сообщением. Соль не менять: от неё и хэши
+подписок близких — со сменой их /stop перестанет находить.
 
 ЗАПУСК: long polling (getUpdates), без вебхука и открытых портов —
 systemd-юнит radarmap-bot.service. Тесты без сети: test_telegram_bot.py.
@@ -103,9 +119,12 @@ import math
 import os
 import sqlite3
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
+
+import family_notify
 
 DEFAULT_CONFIG = "/opt/radarmap/telegram_bot.conf"
 DEFAULT_DB = "/opt/radarmap/api/bot.db"
@@ -428,7 +447,7 @@ def chunks(items, size):
 class Bot:
     """Логика без сети: `send` и `api_post` подменяются в тестах."""
 
-    def __init__(self, salt, db, send, api_post, now=time.time, venues=None):
+    def __init__(self, salt, db, send, api_post, now=time.time, venues=None, family=None):
         self.salt = salt
         self.db = db
         self.send = send            # (method, payload) -> dict
@@ -436,6 +455,9 @@ class Bot:
         self.now = now
         # Нет источника заведений — метан не принимаем (fail closed).
         self.venues = venues
+        # Подписки близких (family_notify.FamilyCommands); None — выключены,
+        # и /start f_… получает обычное приветствие.
+        self.family = family
         # Точки, ждущие типа: ключ — хэш человека (не id), значение — (lat, lon, ts).
         self.pending = {}
         # Созданные отметки для копии интервала API: хэш → категория →
@@ -453,6 +475,12 @@ class Bot:
         user = (message.get("from") or {}).get("id")
         if chat is None or user is None:
             return
+        text = message.get("text")
+        if self.family is not None and isinstance(text, str):
+            reply = self.family.command(text, chat, (message.get("from") or {}).get("language_code"), now)
+            if reply is not None:
+                self.send("sendMessage", {"chat_id": chat, "text": reply})
+                return
         location = message.get("location")
         if location:
             who = user_hash(self.salt, user, now)
@@ -592,6 +620,24 @@ def api_post(path, body, pseudo_ip):
         return 0, {}
 
 
+def start_family(config, send, path=None):
+    """Подписки близких и поток доставки. Не открылась база — без них:
+    отметки водителей важнее, бот поднимается всё равно."""
+    path = path or family_notify.DB_PATH
+    if family_notify.clean_username(config.get("username")) is None:
+        log("в конфиге нет username — страница близкого не покажет ссылку на бота")
+    try:
+        family_notify.init_db(path)
+        commands = family_notify.FamilyCommands(family_notify.connect(path), config["salt"],
+                                                kdf=lambda password, salt: _kdf(password, salt))
+    except sqlite3.Error as error:
+        log(f"близкие: база не открылась — {type(error).__name__}; подписки выключены")
+        return None
+    courier = family_notify.Courier(send, path=path)
+    threading.Thread(target=courier.run, name="family-courier", daemon=True).start()
+    return commands
+
+
 def main():
     config = read_config(os.environ.get("RADARMAP_BOT_CONFIG", DEFAULT_CONFIG))
     if config is None:
@@ -603,10 +649,11 @@ def main():
         print("telegram_bot: в этом Python нет hashlib.scrypt (нужен OpenSSL ≥ 1.1) — бот не запущен")
         return 0
     token = config["token"]
+    send = lambda method, payload: telegram(token, method, payload, timeout=15)
     venues = CngVenues(config.get("venues_dir") or DEFAULT_VENUES_DIR)
     bot = Bot(config["salt"], open_db(os.environ.get("RADARMAP_BOT_DB", DEFAULT_DB)),
-              send=lambda method, payload: telegram(token, method, payload, timeout=15),
-              api_post=api_post, venues=venues)
+              send=send, api_post=api_post, venues=venues,
+              family=start_family(config, send))
     offset = 0
     pruned_at = 0.0
     while True:

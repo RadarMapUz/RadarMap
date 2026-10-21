@@ -31,6 +31,7 @@ postgres (и в Docker `medicalnode_db_1`), minio, wg-easy, xray, openvpn. Outli
 | Дороги, публикация | `publish_roads.sh --auto` на маке владельца, launchd вс 10:00 — ворота, подпись, выкладка |
 | Дороги, откат | `bash server/rollback_roads.sh` — вернуть прошлый набор из `roads_prev` |
 | Логи | `/var/log/radarmap-{backup,status,roads}.log` (ротация еженедельно), `journalctl -u radarmap-api` |
+| Telegram-бот | `radarmap-bot.service` (long polling, портов нет): отметки водителей и близкие; конфиг `/opt/radarmap/telegram_bot.conf`, базы `bot.db` и `family.db` рядом с `reports.db` |
 
 ## Панель модератора
 
@@ -103,6 +104,36 @@ https://data.egov.uz/apiData/MainData/GetByFile?id=62735473d44f5eea297cef3d&file
    смотреть глазами по `snap_moves.geojson` на geojson.io, и до тех пор старые
    камеры не трогать;
 3. `deploy_db.sh <версия>` — подпись ключом владельца.
+
+## Близкие в Telegram — включить
+
+Близкий открывает `t.me/<бот>?start=f_<адрес семейной ссылки>` и подписывается;
+бот пишет «🚗 едет домой — будет примерно в 18:40», «⏱ задерживается», «🏠 дома».
+Решение и очередь — в `api.py` (хук `/api/eta` → `family_notify.py`), отправка —
+отдельный поток бота. Сроки и что хранится — `RETENTION.md` (`family_*`).
+
+1. В `/opt/radarmap/telegram_bot.conf` дописать `username=<имя бота без @>` —
+   то же, что у @BotFather. По нему страница близкого строит ссылку на бота;
+   без него бот при старте пишет в журнал «в конфиге нет username». `salt` **не
+   менять**: от неё хэши подписок, со сменой `/stop` их не найдёт.
+2. Выкладка — строго в этом порядке:
+
+   ```bash
+   bash server/deploy_api.sh   # api.py + family_notify.py: хук кладёт сообщения в очередь
+   bash server/deploy_bot.sh   # бот: /start f_…, /stop, поток доставки; создаёт family.db
+   ```
+
+   Пока бот не поднялся, `family.db` нет — `api.py` молча ничего не делает.
+3. Проверить: `journalctl -u radarmap-bot -n 20` — нет «база не открылась» и
+   «нет username»; `ls -l /opt/radarmap/api/family.db` — файл есть. С телефона:
+   отправить близкому ссылку → «Старт» в Telegram → «Готово: сообщим…»;
+   поездка домой → «едет домой»; `/stop` → «подписка снята».
+4. По желанию, @BotFather → `/setcommands`: `stop - Отписаться от сообщений о поездках`.
+
+Журнал — строки «близкие: …», без номеров чатов и имён: «чат закрыт (403) —
+подписка снята», «не доставлено за 4 попытки», «за час отправлено N».
+Шлёт лишнее — `systemctl stop radarmap-bot` (заодно встанут отметки через
+бота): очередь сама устареет за 10 минут, подписки останутся до починки.
 
 ## Когда сломалось
 

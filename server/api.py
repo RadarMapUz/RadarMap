@@ -70,6 +70,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import family_notify
 import notify
 
 DB_PATH = "/opt/radarmap/api/reports.db"
@@ -994,7 +995,9 @@ def eta_put(token, item, now):
     держать её запертой стоило бы пару десятков адресов в сутки. Живая ссылка
     обновляется не реже раза в 10 минут и, вытесненная потопом, возвращается
     сама со следующим обновлением; вытеснить её навсегда — значит писать
-    больше ETA_MAX_LINKS новых ссылок за каждый её интервал."""
+    больше ETA_MAX_LINKS новых ссылок за каждый её интервал.
+
+    Принятая запись уходит близким в Telegram (22.3) — см. хук ниже."""
     with _eta_lock:
         for key in [k for k, v in _eta_links.items() if _eta_expired(v, now)]:
             del _eta_links[key]
@@ -1006,7 +1009,13 @@ def eta_put(token, item, now):
             del _eta_links[oldest]
         eta_carry(current, item)
         _eta_links[token] = item
-        return True
+    # --- Близкие в Telegram (22.3): хук -------------------------------------
+    # Вне блокировки ссылок: решение «едет домой / задерживается / дома» и
+    # очередь сообщений в family.db (family_notify.py). В Telegram отсюда не
+    # ходим — шлёт бот своим потоком; хук ничего не бросает, и его сбой не
+    # стоит телефону ответа. Подписаться можно только на ссылку с ключом.
+    family_notify.on_update(token, item, now)
+    return True
 
 
 def eta_get(token, now):
@@ -1419,6 +1428,9 @@ class Handler(BaseHTTPRequestHandler):
                     enforce_retention(conn, now)
                 except sqlite3.Error as error:
                     sys.stderr.write(f"сроки хранения: проход не удался — {error}\n")
+                # Подписки близких (family.db) — свой файл и своя чистка; её же
+                # ведёт поток очереди бота, здесь — на случай, если бот стоит.
+                family_notify.sweep_file(now)
             # confirmed — по разным устройству И адресу (см.
             # confirmed_independently): клиент рисует неподтверждённые
             # полупрозрачными и говорит «возможно, радар», а не «радар».
@@ -2262,4 +2274,5 @@ if __name__ == "__main__":
         sys.stderr.write(f"сроки хранения: проход при старте не удался — {_error}\n")
     finally:
         _conn.close()
+    family_notify.sweep_file(time.time())
     BoundedHTTPServer(("127.0.0.1", 8091), Handler).serve_forever()

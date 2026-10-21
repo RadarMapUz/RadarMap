@@ -593,7 +593,7 @@ final class PerformanceBudgetTests: XCTestCase {
         for _ in 0..<5 { pieces += RouteTraffic.pieces(along: route, snapshot: snapshot).count }
         let total = clock.now - start
         XCTAssertGreaterThan(pieces, 0)
-        // 5 пересчётов 30 км — меньше полсекунды на симуляторе (замер ~0,1 с).
+        // 5 пересчётов 30 км — меньше полсекунды на симуляторе (замер 21.10 — 0,065 с).
         XCTAssertLessThan(total, .milliseconds(500), "пробки на линии деградировали: \(total)")
     }
 }

@@ -84,8 +84,12 @@ struct EnergyJournalPage: View {
         if !latest.isEmpty {
             Section {
                 ForEach(latest, id: \.fuel) { measured in
+                    // Бензин машины с батареей — на весь пробег вместе с
+                    // электрическими км, не расход двигателя (ревью 21.6).
+                    let mixed = measured.fuel == .petrol && env.settings.vehicleEnergy.plugs
                     LabeledContent {
-                        Text(EnergyText.per100Short(measured.per100, measured.fuel))
+                        Text(mixed ? JournalText.perTrip100(measured.per100)
+                                   : EnergyText.per100Short(measured.per100, measured.fuel))
                             .foregroundStyle(Theme.textPrimary)
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
@@ -93,6 +97,12 @@ struct EnergyJournalPage: View {
                             Text(String(format: String(localized: "последние %@"), EnergyText.km(measured.km)))
                                 .font(.rounded(13))
                                 .foregroundStyle(Theme.textSecondary)
+                            if mixed {
+                                Text(JournalText.wholeTripNote)
+                                    .font(.rounded(13))
+                                    .foregroundStyle(Theme.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                     }
                 }

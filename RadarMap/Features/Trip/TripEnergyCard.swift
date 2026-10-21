@@ -184,7 +184,7 @@ struct PeriodEnergyRow: View {
     static func lines(_ use: EnergySplit.Use, model: EnergySplit.Model, current: Bool,
                       journal: EnergyJournal.Period? = nil) -> Lines {
         if let journal, !journal.isEmpty {
-            return journalLines(journal, use: use, current: current)
+            return journalLines(journal, use: use, model: model, current: current)
         }
         let share = model.usesBattery ? use.electricShare : nil
         // Доля — неразрывно: «41 % на / электричестве» на двух строках
@@ -222,13 +222,20 @@ struct PeriodEnergyRow: View {
     /// сверху теперь реальные деньги. Счёт — своей строкой: в заголовке
     /// «· 2» оставалось в конце строки, а «заправки» уезжали на следующую.
     private static func journalLines(_ journal: EnergyJournal.Period, use: EnergySplit.Use,
-                                     current: Bool) -> Lines {
+                                     model: EnergySplit.Model, current: Bool) -> Lines {
         var estimate: String?
         if let cost = use.cost {
             estimate = JournalText.estimate(cost)
             if current { estimate? += " · " + Formatting.unbreakable(String(localized: "по нынешней цене")) }
         }
         return Lines(title: JournalText.spent(journal.spending), detail: JournalText.counts(journal.spending),
-                     estimate: estimate, measured: JournalText.measured(journal.measured))
+                     estimate: estimate, measured: JournalText.measured(journal.measured, mixedPetrol: hasPlug(model)))
+    }
+
+    /// Машина с розеткой — и та, у которой запас ещё не указан (`needsRange`
+    /// бывает только у гибрида с розеткой): её бензин тоже на весь путь.
+    private static func hasPlug(_ model: EnergySplit.Model) -> Bool {
+        if case .needsRange = model.kind { return true }
+        return model.usesBattery
     }
 }

@@ -327,6 +327,36 @@ final class EnergyJournalTests: XCTestCase {
         XCTAssertTrue(PeriodEnergyRow.isWorthShowing(EnergySplit.Use(), model: model, journal: journal))
     }
 
+    /// Гибрид с розеткой: бензин по факту — на весь путь вместе с
+    /// электрическими км, и подпись говорит это словами, а не «л/100 км»,
+    /// который читается как расход двигателя (ревью 21.6).
+    @MainActor
+    func testHybridPetrolIsPerWholeTrip() {
+        let entries = [fill(3, 30, 390_000, km: 10_000, full: true), fill(17, 27, 351_000, km: 10_600, full: true),
+                       JournalEntry(date: date(5), kind: .homeCharge, quantity: 16, amount: 16_000,
+                                    odometerKm: 10_100, full: true),
+                       JournalEntry(date: date(9), kind: .homeCharge, quantity: 17, amount: 17_000,
+                                    odometerKm: 10_220, full: true)]
+        let journal = EnergyJournal.period(entries, in: DateInterval(start: date(1, 0), end: date(1, 0, month: 11)))
+        var profile = FuelProfile()
+        profile.evPassportKm = 120
+        let hybrid = EnergySplit.model(profile: profile, energy: .hybrid)
+        let petrolOnly = EnergySplit.model(profile: profile, energy: .fuel)
+        let mixed = try! XCTUnwrap(PeriodEnergyRow.lines(EnergySplit.Use(), model: hybrid, current: false,
+                                                         journal: journal).measured)
+        XCTAssertTrue(mixed.contains(JournalText.perTrip100(4.5)), mixed)
+        XCTAssertFalse(mixed.contains(EnergyText.per100Short(4.5, .petrol)), mixed)
+        XCTAssertTrue(mixed.contains(EnergyText.per100Short(17.0 / 120 * 100, .electricity)),
+                      "электричество — как было")
+        // Гибрид с розеткой без запаса хода — тот же бензин на весь путь.
+        let noRange = EnergySplit.model(profile: FuelProfile(), energy: .hybrid)
+        XCTAssertTrue(PeriodEnergyRow.lines(EnergySplit.Use(), model: noRange, current: false, journal: journal)
+            .measured?.contains(JournalText.perTrip100(4.5)) == true)
+        let plain = try! XCTUnwrap(PeriodEnergyRow.lines(EnergySplit.Use(), model: petrolOnly, current: false,
+                                                         journal: journal).measured)
+        XCTAssertTrue(plain.contains(EnergyText.per100Short(4.5, .petrol)), plain)
+    }
+
     // MARK: - Месяцы журнала
 
     /// Полночь первого числа — уже новый месяц; новые сверху.

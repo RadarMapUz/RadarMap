@@ -29892,6 +29892,38 @@
           }
         }
       }
+    },
+    "%@ на 100 км пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ на 100 км пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "100 km yoʻlga %@"
+          }
+        }
+      }
+    },
+    "на весь пробег, вместе с электричеством": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "на весь пробег, вместе с электричеством"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "butun probegga, elektr bilan birga"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

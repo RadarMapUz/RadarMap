@@ -94,11 +94,26 @@ enum JournalText {
     }
 
     /// «5,8 л/100 км · 16 кВт·ч/100 км» — расход по факту, топливо за топливом.
-    static func measured(_ measured: [EnergyJournal.Measured]) -> String? {
+    /// `mixedPetrol` — машина с батареей и бензином: литры делятся на весь
+    /// пробег вместе с электрическими км, и «4,5 л/100 км» читалось бы как
+    /// расход двигателя. Тогда — «4,5 л на 100 км пути» (ревью 21.6).
+    static func measured(_ measured: [EnergyJournal.Measured], mixedPetrol: Bool = false) -> String? {
         guard !measured.isEmpty else { return nil }
-        let values = measured.map { EnergyText.per100Short($0.per100, $0.fuel) }.joined(separator: " · ")
+        let values = measured.map { item -> String in
+            guard mixedPetrol, item.fuel == .petrol else { return EnergyText.per100Short(item.per100, item.fuel) }
+            return perTrip100(item.per100)
+        }.joined(separator: " · ")
         return String(format: String(localized: "по факту %@"), values)
     }
+
+    /// «4,5 л на 100 км пути» — бензин гибрида с розеткой на весь пробег.
+    static func perTrip100(_ litres: Double) -> String {
+        Formatting.unbreakable(String(format: String(localized: "%@ на 100 км пути"),
+                                      EnergyText.amount(litres, .petrol)))
+    }
+
+    /// Подпись под бензином в журнале у машины с батареей.
+    static var wholeTripNote: String { String(localized: "на весь пробег, вместе с электричеством") }
 
     /// «по расчёту ≈ 380 000 сум» — оценка вторым планом.
     static func estimate(_ cost: Double) -> String {

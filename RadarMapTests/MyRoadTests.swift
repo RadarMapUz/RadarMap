@@ -246,6 +246,67 @@ final class MyRoadTests: XCTestCase {
         XCTAssertNil(MyRoad.slotToFree(times: [1500, 1700]), "место есть — никого не вытесняем")
     }
 
+    // MARK: - Перестроение (ревью 24.4)
+
+    /// Своя дорога: 4 км на восток, 4 км на север. Опорные точки — на 2000
+    /// (середина первой прямой), 4060 (после поворота) и 6000 м.
+    private func commutePlan() -> MyRoad.Plan {
+        plan(path([(0, 0), (4000, 0), (4000, 4000)]))
+    }
+
+    func testCommutePlanViaLayout() {
+        XCTAssertEqual(commutePlan().via.map { Int($0.along.rounded()) }, [2000, 4060, 6000])
+    }
+
+    func testRerouteDropsViaPointsBehind() throws {
+        let rest = try XCTUnwrap(MyRoad.remaining(commutePlan(), from: point(3000), course: 90))
+        XCTAssertEqual(rest.via.count, 2, "точка на 2000 м пройдена")
+        XCTAssertEqual(rest.via.map { Int($0.along.rounded()) }, [1060, 3000], "отсчёт — от машины")
+        XCTAssertEqual(rest.fromAlong, 3000, accuracy: 5)
+        XCTAssertEqual(rest.lineLength, 5000, accuracy: 20)
+    }
+
+    func testNearestViaTooCloseIsSkipped() throws {
+        // До точки после поворота ~120 м — на неё без петли не вырулить.
+        let rest = try XCTUnwrap(MyRoad.remaining(commutePlan(), from: point(3900), course: 90))
+        XCTAssertEqual(rest.via.map { Int($0.along.rounded()) }, [2100])
+    }
+
+    func testNearestViaBehindByCourseIsSkipped() throws {
+        // Ушли на квартал к северу и едем на запад: ближайшая точка впереди по
+        // линии — у нас за спиной.
+        let rest = try XCTUnwrap(MyRoad.remaining(commutePlan(), from: point(3500, 300), course: 270))
+        XCTAssertEqual(rest.via.count, 1)
+        XCTAssertEqual(rest.startOffset, 300, accuracy: 2)
+        // Без курса (стоим) — точку не выбрасываем.
+        XCTAssertEqual(MyRoad.remaining(commutePlan(), from: point(3500, 300))?.via.count, 2)
+    }
+
+    func testWentSidewaysAndBackFollowsOwnLineAgain() throws {
+        // Объехали квартал: машина в 400 м к северу от своей линии.
+        let rest = try XCTUnwrap(MyRoad.remaining(commutePlan(), from: point(2500, 400), course: 90))
+        XCTAssertEqual(rest.via.count, 2)
+        // Маршрут через оставшиеся точки возвращается на свою линию — принят.
+        let back = path([(2500, 400), (2800, 400), (2800, 0), (4000, 0), (4000, 4000)])
+        XCTAssertTrue(MyRoad.accepts(distance: length(back), path: back, plan: rest))
+        // Маршрут движка той дорогой, на которую жаловались, — не своя дорога.
+        let engine = path([(2500, 400), (2500, 4000), (4000, 4000)])
+        XCTAssertFalse(MyRoad.accepts(distance: length(engine), path: engine, plan: rest))
+        // Петля у опорной точки и при перестроении отбраковывается.
+        let looped = path([(2500, 400), (2800, 400), (2800, 0), (4000, 0), (4000, 900), (4015, 900),
+                           (4015, 0), (4000, 0), (4000, 4000)])
+        XCTAssertFalse(MyRoad.accepts(distance: length(looped), path: looped, plan: rest))
+    }
+
+    func testNoViaLeftMeansEngine() {
+        XCTAssertNil(MyRoad.remaining(commutePlan(), from: point(4000, 3000), course: 0),
+                     "последняя точка пройдена — ведёт движок")
+    }
+
+    func testFarFromOwnLineMeansEngine() {
+        XCTAssertNil(MyRoad.remaining(commutePlan(), from: point(2000, 1500), course: 90))
+    }
+
     // MARK: - Запрос
 
     func testRequestKeepsViaPointsPassThroughAndDirected() {

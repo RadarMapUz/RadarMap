@@ -95,7 +95,7 @@ extension TripStatsSheet {
         VStack(spacing: 10) {
             ForEach(env.commute) { commute in
                 Button { commuteDetail = commute } label: {
-                    CommuteCard(summary: commute, fuelCostPerMeter: env.settings.fuelCostPerMeter,
+                    CommuteCard(summary: commute, monthlyCost: env.energyLedger.monthly(commute.trips, now: Date()),
                                 crowdUsual: env.crowdUsual(commute.direction))
                 }
                 .buttonStyle(PressableStyle())

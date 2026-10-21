@@ -12,43 +12,27 @@ import CoreLocation
 
 extension TripStatsSheet {
 
-    // MARK: - Топливо за период (12б.3)
+    // MARK: - Расходы за период (12б.3, 21.4)
 
-    /// Сколько стоила дорога за период — рядом с деньгами штрафов. Только
-    /// когда расход и цена заданы; период, начавшийся до последней правки
-    /// цены, посчитан по нынешней — подпись говорит об этом.
+    /// Сколько стоила дорога за период — рядом с деньгами штрафов: сумма,
+    /// доля на электричестве и «на бензине вышло бы». Дни — те же, что у
+    /// сводки периода (`TripDayBook.days`); период, начавшийся до последней
+    /// правки цены, посчитан по нынешней — подпись говорит об этом. Тап —
+    /// «Машина и расходы»: там видно, откуда цифры, и их можно поправить.
     @ViewBuilder
     func fuelRow(summary: PeriodSummary) -> some View {
-        if summary.distance > 0, let cost = env.settings.fuelCost(meters: summary.distance) {
-            let start = period.interval(containing: anchor).start
-            let current = FuelCost.isAtCurrentPrice(endedAt: start, profile: env.settings.fuelProfile)
-            HStack(spacing: 12) {
-                IconBadge(symbol: "fuelpump.fill", tint: Theme.Icon.money, size: 30)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(String(format: String(localized: "Топливо ~%@"), Formatting.money(cost)))
-                        .font(.rounded(15, .semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                    Text(current
-                         ? String(format: String(localized: "%@ · по нынешней цене"), Formatting.distance(summary.distance))
-                         : Formatting.distance(summary.distance))
-                        .font(.rounded(12))
-                        .foregroundStyle(Theme.textTertiary)
-                }
-                Spacer(minLength: 0)
+        let interval = period.interval(containing: anchor)
+        let ledger = env.energyLedger
+        let use = ledger.use(of: TripDayBook.days(env.trip.days, in: interval))
+        if summary.distance > 0, PeriodEnergyRow.isWorthShowing(use, model: ledger.model) {
+            let current = FuelCost.isAtCurrentPrice(endedAt: interval.start, profile: env.settings.fuelProfile)
+            NavigationLink {
+                EnergySettingsPage()
+            } label: {
+                PeriodEnergyRow(use: use, model: ledger.model, atCurrentPrice: current && use.cost != nil)
             }
-            .statCard(padding: 14, radius: Theme.cornerMedium)
-            // Голосом — словами: «Топливо около 41 000 сум, 68,7 километра»,
-            // а не «тильда 41 000, 68,7 км».
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text(Self.spokenFuel(cost: cost, meters: summary.distance, current: current)))
+            .buttonStyle(PressableStyle())
         }
-    }
-
-    static func spokenFuel(cost: Double, meters: Double, current: Bool) -> String {
-        var parts = [String(format: String(localized: "Топливо около %@"), Formatting.money(cost)),
-                     SpokenUnits.distance(meters)]
-        if current { parts.append(String(localized: "по нынешней цене")) }
-        return parts.joined(separator: ", ")
     }
 
     // MARK: - Зона риска (тап — карта с фокусом на камере)

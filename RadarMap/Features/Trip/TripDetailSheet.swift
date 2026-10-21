@@ -288,6 +288,11 @@ struct TripDetailContent: View {
                     .entrance(1, appeared)
                 metricsCard
                     .entrance(2, appeared)
+                // Во что обошлась дорога (21.4): электричество и бензин по
+                // дням, «как посчитано» — раскрывается.
+                TripEnergyCard(record: record)
+                    .entrance(2, appeared)
+                    .id("energy")
                 // Порядок (6.5): метрики → скорость → камеры → остановки.
                 // «Повторить маршрут» — в шапке: жёлтая кнопка в самом низу
                 // длинного экрана была и главной, и самой далёкой.
@@ -305,9 +310,12 @@ struct TripDetailContent: View {
             #if DEBUG
             .onAppear {
                 // Скриншот-автоматизация: прокрутить к графику скорости.
-                guard ProcessInfo.processInfo.arguments.contains("-scrollChart") else { return }
+                let args = ProcessInfo.processInfo.arguments
+                // `-scrollEnergy` — к стоимости поездки (21.4).
+                let target = args.contains("-scrollEnergy") ? "energy" : "chart"
+                guard args.contains("-scrollChart") || args.contains("-scrollEnergy") else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    withMotion { proxy.scrollTo("chart", anchor: .top) }
+                    withMotion { proxy.scrollTo(target, anchor: .top) }
                 }
             }
             #endif
@@ -635,16 +643,8 @@ struct TripDetailContent: View {
             .init(value: "\(Int(record.averageSpeedKmh))", label: String(localized: "средняя, км/ч"),
                   icon: "gauge.with.dots.needle.33percent"),
         ]
-        // Стоимость топлива (12б.3) — только когда расход и цена заданы.
-        // Задним числом цена не хранится: поездка до последней правки цены
-        // посчитана по нынешней, и подпись говорит об этом.
-        if let cost = env.settings.fuelCost(meters: record.distanceMeters) {
-            let current = FuelCost.isAtCurrentPrice(endedAt: record.endedAt, profile: env.settings.fuelProfile)
-            items.append(.init(value: Formatting.money(cost),
-                               label: current ? String(localized: "топливо, по нынешней цене")
-                                              : String(localized: "топливо"),
-                               icon: "fuelpump"))
-        }
+        // Стоимость дороги — отдельной карточкой ниже (TripEnergyCard, 21.4):
+        // в плитку не помещалось «27 км на электричестве · ≈ 4,3 кВт·ч».
         // Цена поездки в заряде — цифрой, а не верой (есть не у всех записей).
         if let drop = record.batteryDropPercent {
             items.append(.init(value: "−\(drop) %", label: String(localized: "заряда за поездку"),

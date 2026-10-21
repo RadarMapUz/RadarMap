@@ -37,6 +37,13 @@ extension MapScreen {
                 FineDemo.seed(env)
             }
         }
+        // Машина и расходы (21.10): гибрид владельца, пустой или старый профиль.
+        if args.contains("-demoEnergy") || args.contains("-demoEnergyLegacy") || args.contains("-demoEnergyBlank") {
+            Task {
+                while !env.trip.isLoaded { await Task.pause(seconds: 0.2) }
+                EnergyDemo.seed(env, args: args)
+            }
+        }
         // С паузой: настоящие пробки приходят уже после загрузки карты, и
         // слой обязан перерисоваться на новом наборе, а не только на старте.
         if args.contains("-demoTraffic") {

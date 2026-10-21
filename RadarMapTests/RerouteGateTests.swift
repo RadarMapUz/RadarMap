@@ -71,4 +71,50 @@ final class RerouteGateTests: XCTestCase {
         gate.noteSuccess()
         XCTAssertEqual(gate.failures, 0)
     }
+
+    // MARK: - Устойчивый съезд (снимок CarPlay 21.10, 08:28)
+
+    private func runDrift(_ gate: inout RerouteGate, _ deviations: [Double]) -> [Int] {
+        deviations.enumerated().compactMap { index, deviation in
+            gate.note(deviation: deviation, now: t0.addingTimeInterval(Double(index)),
+                      drift: AppConfig.rerouteDriftMeters) ? index : nil
+        }
+    }
+
+    /// Свернул мимо: отклонения из прогона в симуляторе (поворот направо
+    /// вместо прямо, 31 км/ч). Проекция цепляется за попутный кусок маршрута
+    /// впереди, и отклонение пляшет вокруг 150 м — три фикса подряд за ним
+    /// не набирались, перестроение ждало 15 с. Устойчивые 50+ м — съезд.
+    func testTurnOffWithDancingDeviationRebuildsEarly() {
+        let recorded: [Double] = [0, 8, 12, 55, 56, 82, 122, 126, 72, 155, 133, 106, 96, 118, 152, 214, 167]
+        var old = RerouteGate()
+        XCTAssertEqual(run(&old, recorded), [16], "без правила — только на шестнадцатом фиксе")
+        var gate = RerouteGate()
+        XCTAssertEqual(runDrift(&gate, recorded), [6],
+                       "четвёртый фикс подряд дальше \(AppConfig.rerouteDriftMeters) м")
+    }
+
+    /// Дублёр проспекта (15–40 м от оси) и шум — не съезд, сколько ни едь.
+    func testServiceRoadAndNoiseDoNotRebuild() {
+        var gate = RerouteGate()
+        XCTAssertEqual(runDrift(&gate, Array(repeating: 40, count: 60)), [])
+        var noisy = RerouteGate()
+        let spikes = (0..<40).map { $0 % AppConfig.rerouteDriftTicks == 0 ? 10.0 : 90.0 }
+        XCTAssertEqual(runDrift(&noisy, spikes), [], "выброс короче \(AppConfig.rerouteDriftTicks) фиксов")
+        XCTAssertEqual(noisy.driftTicks, AppConfig.rerouteDriftTicks - 1)
+    }
+
+    /// Устойчивый съезд подчиняется той же паузе после перестроения.
+    func testDriftRespectsTheCooldown() {
+        var gate = RerouteGate()
+        let ticks = AppConfig.rerouteDriftTicks
+        XCTAssertEqual(runDrift(&gate, Array(repeating: 80, count: ticks)), [ticks - 1])
+        let after = (0..<10).compactMap { index -> Int? in
+            gate.note(deviation: 80, now: t0.addingTimeInterval(Double(ticks + index)),
+                      drift: AppConfig.rerouteDriftMeters) ? index : nil
+        }
+        XCTAssertEqual(after, [], "в паузе \(AppConfig.rerouteCooldownSeconds) с — не перестраиваем")
+        gate.resetTicks()
+        XCTAssertEqual(gate.driftTicks, 0)
+    }
 }

@@ -137,7 +137,28 @@ nonisolated enum EngineMapPresentation {
         let throughTurn = split(coordinates, at: distance + AppConfig.engineManeuverHighlightMeters).traveled
         return split(throughTurn, at: max(progress, distance - AppConfig.engineManeuverHighlightMeters)).remaining
     }
-    /// Короткий путь через север: 359° → 1° не должен делать полный оборот.
+    /// Поворот КАМЕРЫ движка: курс, а без курса — текущий поворот карты, всегда
+    /// в [0, 360).
+    ///
+    /// MapLibre молча выбрасывает отрицательный курс камеры (MLNMapView,
+    /// `cameraOptionsObjectForAnimatingToCamera`: `if (camera.heading >= 0)
+    /// options.bearing = …`), а кратчайший путь через север выбирает сам. До
+    /// 21.10 камере шёл развёрнутый `heading(_:near:)`: поворот налево через
+    /// север давал, например, −92° (карта на 2°, курс 270°), движок его не
+    /// применял, и карта застывала в прежнем повороте — пока курс не вернётся
+    /// в правую половину. Стрелку «я» крутим мы сами, она показывала настоящий
+    /// курс: машина вставала боком к дорогам, а центр кадра, вынесенный
+    /// вперёд по курсу, уезжал вбок (снимок CarPlay 21.10, 08:28).
+    static func cameraHeading(_ course: Double, current: Double) -> Double {
+        let value = course.isFinite && course >= 0 ? course : current
+        guard value.isFinite else { return 0 }
+        let wrapped = value.truncatingRemainder(dividingBy: 360)
+        return wrapped < 0 ? wrapped + 360 : wrapped
+    }
+
+    /// Поворот СТРЕЛКИ «я» — её крутим сами, поэтому развёрнутый угол здесь
+    /// годится. Короткий путь через север: 359° → 1° не должен делать полный
+    /// оборот. Камере движка — только `cameraHeading`.
     static func heading(_ target: Double, near previous: Double) -> Double {
         guard target.isFinite, target >= 0 else { return previous }
         let delta = (target - previous).truncatingRemainder(dividingBy: 360)

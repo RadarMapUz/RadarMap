@@ -871,8 +871,10 @@ struct EngineMapView: UIViewRepresentable {
             // курсу: та же картинка, обычной арифметикой — с перспективой
             // (DriveCamera.centreAhead): формула вида сверху на наклоне ставила
             // машину заметно выше задуманного места.
+            // Только [0, 360): отрицательный курс движок молча не применяет,
+            // и карта застывала после поворота налево через север (21.10).
             let heading = model.northUp ? 0
-                : EngineMapPresentation.heading(model.courseDegrees, near: view.direction)
+                : EngineMapPresentation.cameraHeading(model.courseDegrees, current: view.direction)
             let ahead = DriveCamera.centreAhead(spanMeters: model.spanMeters, anchorY: model.anchorY,
                                                 pitchDegrees: model.pitchDegrees)
             let centre = GeoMath.destination(from: model.lookAt ?? model.coordinate,

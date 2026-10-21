@@ -373,4 +373,39 @@ final class DriveCameraTests: XCTestCase {
         let goal = Cam.Frame(zoom: 16.5, pitchDegrees: 45, carShare: 0.75)
         XCTAssertEqual(smoother.step(toward: goal, at: t0 + 60), goal)
     }
+
+    // MARK: - Поворот карты (снимок CarPlay 21.10, 08:28)
+
+    /// MapLibre молча выбрасывает отрицательный курс камеры. Карта шла на 2°
+    /// (на север по маршруту), машина повернула налево на запад: развёрнутый
+    /// «кратчайший» угол давал −90°, движок его не применял, и карта стояла
+    /// на севере, пока стрелка «я» смотрела влево (прогон: курс 321°, карта
+    /// 30° — тридцать секунд). Камере — только [0, 360).
+    func testCameraHeadingAfterALeftTurnThroughNorthIsNeverNegative() {
+        XCTAssertEqual(EngineMapPresentation.heading(270, near: 2), -90,
+                       "развёрнутый угол — для стрелки, камере такой нельзя")
+        XCTAssertEqual(EngineMapPresentation.cameraHeading(270, current: 2), 270)
+        XCTAssertEqual(EngineMapPresentation.cameraHeading(321, current: 30), 321)
+        // После перестроения «назад» карта стояла на 90°, а машина ехала на 271°.
+        XCTAssertEqual(EngineMapPresentation.cameraHeading(271, current: 90), 271)
+        XCTAssertEqual(EngineMapPresentation.cameraHeading(1, current: 359), 1)
+        for current in stride(from: -720.0, through: 720, by: 37) {
+            for course in stride(from: 0.0, through: 359.5, by: 13.5) {
+                let heading = EngineMapPresentation.cameraHeading(course, current: current)
+                XCTAssertGreaterThanOrEqual(heading, 0, "карта \(current)°, курс \(course)°")
+                XCTAssertLessThan(heading, 360)
+                XCTAssertEqual(heading, course, accuracy: 1e-9)
+            }
+        }
+    }
+
+    /// Без курса карта держит свой поворот — тоже в [0, 360).
+    func testCameraHeadingWithoutCourseKeepsTheMapTurn() {
+        XCTAssertEqual(EngineMapPresentation.cameraHeading(-1, current: 123), 123)
+        XCTAssertEqual(EngineMapPresentation.cameraHeading(.nan, current: 123), 123)
+        XCTAssertEqual(EngineMapPresentation.cameraHeading(-1, current: -30), 330)
+        XCTAssertEqual(EngineMapPresentation.cameraHeading(-1, current: 725), 5)
+        XCTAssertEqual(EngineMapPresentation.cameraHeading(720.5, current: 0), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(EngineMapPresentation.cameraHeading(-1, current: .nan), 0)
+    }
 }

@@ -56,7 +56,9 @@ struct EngineMapView: UIViewRepresentable {
     var cameras: [Camera]
     var cameraRevision: Int = 0
     var limitRevision: Int = 0
-    var cameraProvider: ((MKCoordinateRegion) -> [Camera])?
+    /// Камеры области и бюджет выборки: при переполнении — ближайшие к
+    /// центру области (CameraRepository.cameras(in:limit:)).
+    var cameraProvider: ((MKCoordinateRegion, Int) -> [Camera])?
     var limitProvider: ((Camera) -> Int?)?
     var alertCameraID: Int?
     /// Камеры на нашем пути (CameraMarkerLook): только у них цвет типа.
@@ -271,7 +273,7 @@ struct EngineMapView: UIViewRepresentable {
         private var glideTo: CLLocationCoordinate2D?
         private var glideStart: CFTimeInterval = 0
         private var glideDuration: CFTimeInterval = 0
-        private var cameraRegion: MKCoordinateRegion?
+        private var cameraWindow: EngineMapPresentation.CameraWindow?
         private var cachedCameras: [Camera] = []
         private var cachedLimits: [Int: Int] = [:]
         private var cameraRevision = -1
@@ -470,14 +472,25 @@ struct EngineMapView: UIViewRepresentable {
             }
         }
 
+        /// Типы, чьи значки кладутся в стиль: по одному на символ CameraType.
+        static let markerKinds: [CameraType] = [.stationaryCamera, .stationaryRadar,
+            .intelligentRadar, .mobileRadar, .tripod, .dpsPost, .accident, .other("")]
+
+        /// Имена картинок камер в стиле — всё, что может назвать точка камеры
+        /// (cameraAttributes → CameraMarkerLook.icon/badge). Имени, которого
+        /// нет в стиле, движок не рисует вовсе — молча (EngineCameraMarkersTests).
+        static var cameraImageNames: [String] {
+            markerKinds.flatMap { kind in markerLooks.map { kind.symbolName + $0.suffix } }
+                + [CameraMarkerLook.ghostBadge, CameraMarkerLook.ownBadge]
+        }
+
         private func installCameraIcons(in style: MLNStyle) {
             installCursor(current?.cursorStyle ?? .arrow)
             if !Self.iconCache.isEmpty {
                 for (name, image) in Self.iconCache { style.setImage(image, forName: name) }
                 return
             }
-            let kinds: [CameraType] = [.stationaryCamera, .stationaryRadar,
-                .intelligentRadar, .mobileRadar, .tripod, .dpsPost, .accident, .other("")]
+            let kinds = Self.markerKinds
             // Вариант B «Спокойная карта» (владелец, 12.10; CameraMarkerLook):
             // цвет типа — только у камер на нашем пути и у тревоги, остальные
             // — графитовый круг поменьше, тип читается по глифу. Цвет
@@ -486,8 +499,11 @@ struct EngineMapView: UIViewRepresentable {
             for kind in kinds {
                 for look in Self.markerLooks {
                     let configuration = UIImage.SymbolConfiguration(pointSize: look.glyph, weight: .semibold)
-                    guard let glyph = UIImage(systemName: kind.symbolName, withConfiguration: configuration)
-                    else { continue }
+                    guard let glyph = UIImage(systemName: kind.symbolName, withConfiguration: configuration) else {
+                        // Без картинки движок не рисует камеры этого типа вовсе.
+                        Log.network.error("MapLibre: нет символа \(kind.symbolName, privacy: .public) — значки камер этого типа не встанут")
+                        continue
+                    }
                     let side = look.side
                     let bitmap = UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in
                         let disc = CGRect(x: 1, y: 1, width: side - 2, height: side - 2)
@@ -576,9 +592,9 @@ struct EngineMapView: UIViewRepresentable {
             style.setImage(parked, forName: "radar-parked")
             for place in EnginePlaceIcons.all { style.setImage(place.image, forName: place.name) }
             let names = ["radar-signal", EngineModernStyle.trafficLightImage, "radar-stop", "radar-flag",
-                         "radar-pin", "radar-parked", "radar-closure", "radar-roadwork", CameraMarkerLook.ghostBadge, CameraMarkerLook.ownBadge]
+                         "radar-pin", "radar-parked", "radar-closure", "radar-roadwork"]
                 + EnginePlaceIcons.all.map(\.name)
-                + kinds.flatMap { kind in Self.markerLooks.map { kind.symbolName + $0.suffix } }
+                + Self.cameraImageNames
             for name in names { Self.iconCache[name] = style.image(forName: name) }
         }
 
@@ -589,7 +605,7 @@ struct EngineMapView: UIViewRepresentable {
         func releaseMemory() {
             cachedCameras = []
             cachedLimits = [:]
-            cameraRegion = nil          // следующий кадр соберёт выборку заново
+            cameraWindow = nil          // следующий кадр соберёт выборку заново
             themeLayers = []            // перечитается из EngineMapStyle при смене темы
             routeIndex = nil            // соберётся из маршрута на следующем тике
             // Корзины индекса выпуска поднимутся с диска, не с сети.
@@ -614,7 +630,7 @@ struct EngineMapView: UIViewRepresentable {
             lastCngKey = -1
             cngImageNames = []
             lastPosition = nil
-            cameraRegion = nil
+            cameraWindow = nil
             style.layer(withIdentifier: "houses")?.isVisible = current?.houses ?? false
             styleReady = true
             // Последняя модель — заново, даже если ждущей нет. Стиль грузится
@@ -1328,15 +1344,21 @@ struct EngineMapView: UIViewRepresentable {
 
         private func updateCameras(_ model: EngineMapView, in view: MLNMapView) {
             let region = Self.region(of: view)
-            let refresh = cameraRegion.map { !EngineMapPresentation.contains($0, region) } ?? true
-            if refresh || cameraRevision != model.cameraRevision || limitRevision != model.limitRevision {
+            // Урезанная бюджетом выборка (обзор маршрута, первый кадр карты —
+            // вид всего мира) повторяется на любом сдвиге вида, а не только на
+            // выходе из области: см. EngineMapPresentation.CameraWindow (20.1).
+            if EngineMapPresentation.needsCameraQuery(cameraWindow, view: region)
+                || cameraRevision != model.cameraRevision || limitRevision != model.limitRevision {
                 os_signpost(.event, log: performanceLog, name: "Camera viewport query")
                 let padded = EngineMapPresentation.padded(region)
-                cachedCameras = model.cameraProvider?(padded) ?? model.cameras
+                let limit = AppConfig.engineCameraViewportLimit
+                cachedCameras = model.cameraProvider?(padded, limit) ?? model.cameras
                 cachedLimits = Dictionary(uniqueKeysWithValues: cachedCameras.compactMap { camera in
                     (model.limitProvider?(camera) ?? model.cameraLimits[camera.id]).map { (camera.id, $0) }
                 })
-                cameraRegion = padded
+                // Без поставщика список камер один на любой вид — он полон.
+                cameraWindow = EngineMapPresentation.CameraWindow(
+                    view: region, found: model.cameraProvider == nil ? 0 : cachedCameras.count, limit: limit)
                 cameraRevision = model.cameraRevision
                 limitRevision = model.limitRevision
             }

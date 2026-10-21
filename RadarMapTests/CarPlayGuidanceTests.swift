@@ -177,7 +177,10 @@ final class CarPlayGuidanceTests: XCTestCase {
         let lanes = [LaneHint(arrows: [.straight], isValid: false), LaneHint(arrows: [.right], isValid: true)]
         let row = try XCTUnwrap(CarPlayGuidance.laneRow(lanes, kind: .right))
         XCTAssertTrue(CarPlayGuidance.isLaneRow(row))
-        XCTAssertEqual(row.instructionVariants, [])
+        // Текст не показывается (.symbolOnly), но вариант обязан быть: «You
+        // must provide at least one variant» — с пустым машина вправе
+        // выбросить манёвр (до 21.10 владелец полос в машине не видел).
+        XCTAssertEqual(row.instructionVariants, [String(localized: "Из правого ряда")])
         XCTAssertNotNil(row.symbolImage)
         XCTAssertFalse(CarPlayGuidance.isLaneRow(CPManeuver()), "обычный манёвр — не ряд полос")
     }
@@ -185,6 +188,50 @@ final class CarPlayGuidanceTests: XCTestCase {
     func testNoLanesNoRow() {
         XCTAssertNil(CarPlayGuidance.laneImage([], kind: .right))
         XCTAssertNil(CarPlayGuidance.laneRow([], kind: .right))
+    }
+
+    // MARK: - Карточка манёвра (20.3: вместо мини-карты — с какого края)
+
+    private func leftTurn(lanes: [LaneHint] = [], approach: Int? = nil) -> RouteStep {
+        RouteStep(distanceAlong: 800, text: "поверните налево на улицу Лабзак", icon: "arrow.turn.up.left",
+                  kind: .left, lanes: lanes, shortText: "поверните налево", edge: .left,
+                  approachLanes: approach)
+    }
+
+    /// Мини-карты развязки нет: владелец, 21.10 — «мини-карту убери».
+    func testCardHasNoJunctionImage() {
+        for step in [leftTurn(), leftTurn(approach: 3),
+                     leftTurn(lanes: [LaneHint(arrows: [.left], isValid: true),
+                                      LaneHint(arrows: [.straight], isValid: false)])] {
+            let card = CarPlayGuidance.card(for: step, carDark: true, metadata: false)
+            XCTAssertNil(card.maneuver.junctionImage)
+            XCTAssertNil(card.maneuver.dashboardJunctionImage)
+            XCTAssertNotNil(card.maneuver.symbolImage, "стрелка манёвра на месте")
+        }
+    }
+
+    func testLaneRowGoesSecondWhenOSRMKnowsTheLanes() throws {
+        let lanes = [LaneHint(arrows: [.left], isValid: true), LaneHint(arrows: [.straight], isValid: false),
+                     LaneHint(arrows: [.straight], isValid: false)]
+        let card = CarPlayGuidance.card(for: leftTurn(lanes: lanes, approach: 3), carDark: true, metadata: false)
+        let row = try XCTUnwrap(card.laneRow)
+        XCTAssertTrue(CarPlayGuidance.isLaneRow(row))
+        XCTAssertEqual(card.maneuver.instructionVariants.first, "Поверните налево на улицу Лабзак",
+                       "ряд показывают стрелки — в тексте края нет")
+        XCTAssertNil(CarPlayGuidance.card(for: leftTurn(lanes: lanes), carDark: true, metadata: true).laneRow,
+                     "с метаданными ряд не шлём: приборка прочла бы его вторым поворотом")
+    }
+
+    func testEdgeGoesIntoTheTextWithoutLaneData() {
+        let card = CarPlayGuidance.card(for: leftTurn(approach: 2), carDark: false, metadata: false)
+        XCTAssertNil(card.laneRow, "полосы по догадке не рисуем")
+        let edge = String(localized: "левый ряд")
+        XCTAssertEqual(card.maneuver.instructionVariants,
+                       ["Поверните налево на улицу Лабзак, " + edge, "Поверните налево, " + edge, "Поверните налево"])
+        XCTAssertEqual(card.maneuver.dashboardInstructionVariants, card.maneuver.instructionVariants)
+        // Однополосный подъезд — края нет, фраза прежняя.
+        XCTAssertEqual(CarPlayGuidance.card(for: leftTurn(approach: 1), carDark: false, metadata: false)
+            .maneuver.instructionVariants, ["Поверните налево на улицу Лабзак", "Поверните налево"])
     }
 
     /// Средняя яркость непрозрачных пикселей картинки (0 — чёрный, 1 — белый).

@@ -5,7 +5,9 @@
 (только новое впереди, «ещё стоит?» один раз → /api/vote kind=pass),
 перевалы (сообщение на появление и уход опасности), город (только
 подтверждённое, тихие часы, потолок в час), /my, /stats только владельцу,
-отмена отметки 2 минуты, пульт features.bot, сроки bot.db — и главное:
+отмена отметки 2 минуты, пульт features.bot, решения модератора поверх
+базы камер (23.9: подпись, массовое скрытие, дальний перенос — как в
+приложении), сроки bot.db — и главное:
 ни геопозиции, ни Telegram-id в журнале и в bot.db. Без сети: Telegram и API
 подменены.
 
@@ -15,10 +17,12 @@ import contextlib
 import hashlib
 import io
 import json
+import math
 import os
 import re
 import shutil
 import sqlite3
+import subprocess
 import tempfile
 import time
 import unittest
@@ -28,6 +32,7 @@ import bot_near
 import bot_subs
 import bot_texts
 import family_notify
+import status
 import telegram_bot as bot
 import telegram_publish
 from test_telegram_bot import CNG_POINT, SALT, USER, OTHER, offset, write_venues
@@ -120,13 +125,15 @@ class Stand(unittest.TestCase):
         self.config = {}
         self.pult = None
         self.family = None
+        self.camera_db_args = {}
         self.bot = self.make()
 
     def make(self):
         tick = lambda: self.clock[0]
         self.venues = bot.CngVenues(self.roads, logger=lambda text: None, clock=tick)
         self.sources = bot_near.Sources(api_get=self.api.get,
-                                        cameras=bot_near.CameraDb(self.cameras_path, clock=tick),
+                                        cameras=bot_near.CameraDb(self.cameras_path, clock=tick,
+                                                                          **self.camera_db_args),
                                         venues=self.venues, addresses=bot_near.Addresses(self.roads),
                                         weather_path=self.weather_path, clock=tick, wall=tick)
         return bot.Bot(SALT, bot.open_db(self.db_path), send=lambda m, p: self.sent.append((m, p)),
@@ -939,6 +946,258 @@ class PultTest(Stand):
     def test_pusher_is_silent_when_off(self):
         pusher = bot_subs.Pusher(self.db_path, bot_subs.box_key(SALT), self.sources, now=lambda: NOW)
         self.assertEqual(pusher.step(enabled=False), {"pass": 0, "city": 0})
+
+
+# --- решения модератора поверх базы камер (23.9) ------------------------------------------
+
+#: База в 40 камер: 5 % — два скрытия, третье делает файл «массовым».
+BASE_COUNT = 40
+
+
+class OverridesTest(Stand):
+    """overrides.json — как CameraOverrideEngine приложения: подписанный
+    применяется, неподписанный — нет; массовое скрытие отвергается целиком,
+    дальний перенос и перенос за границу отбрасываются, камера остаётся."""
+
+    def setUp(self):
+        super().setUp()
+        with open(self.cameras_path, encoding="utf-8") as handle:
+            rows = json.load(handle)
+        rows[0].update({"axis": 12, "dir": 30, "road": [1, 2, 3, 4], "twin": 777, "cls": "primary"})
+        rows[1]["violations"] = ["Скорость"]
+        # Добивка базы — далеко от человека (Навои), в «что рядом» не попадает.
+        rows += [{"id": 600 + i, "lat": 40.1, "lon": 65.0 + i * 0.01, "type": "Стационар камера"}
+                 for i in range(BASE_COUNT - len(rows))]
+        with open(self.cameras_path, "w", encoding="utf-8") as handle:
+            json.dump(rows, handle, ensure_ascii=False)
+        self.overrides_path = os.path.join(self.dir, "overrides.json")
+        self.verified = []
+        self.verdict = True
+
+    def verify(self, data, sig):
+        self.verified.append(data)
+        return self.verdict
+
+    def publish(self, items, version=1, sig="c2ln", raw=None):
+        import base64
+        payload = raw if raw is not None else json.dumps(
+            {"version": version, "updatedAt": "2026-10-21", "items": items}).encode()
+        with open(self.overrides_path, "w") as handle:
+            json.dump({"payload": base64.b64encode(payload).decode(), "sig": sig}, handle)
+
+    def db(self, verify=None):
+        return bot_near.CameraDb(self.cameras_path, overrides_path=self.overrides_path,
+                                 verify=verify or self.verify, clock=lambda: self.clock[0])
+
+    def ids_near(self, db, point=HOME, meters=5000):
+        return [camera["id"] for _, camera in db.around(point[0], point[1], meters)]
+
+    def camera(self, db, cid):
+        found = [camera for _, camera in db.around(HOME[0], HOME[1], 30000) if camera["id"] == cid]
+        return found[0] if found else None
+
+    def test_signed_file_is_applied(self):
+        self.publish([{"id": 501, "op": "hide"},
+                      {"id": 502, "op": "move", "lat": at(east=2200)[0], "lon": at(east=2200)[1]},
+                      {"id": 503, "op": "retype", "type": "Стационар радар"}])
+        db = self.db()
+        self.assertEqual(self.ids_near(db), [502], "скрытой нет, перенесённая — на новой точке")
+        distance, moved = db.around(HOME[0], HOME[1], 5000)[0]
+        self.assertAlmostEqual(distance, 2200, delta=5)
+        self.assertEqual(moved["location"], "Bunyodkor", "перенос не трогает остальное")
+        self.assertEqual(self.camera(db, 503)["type"], "Стационар радар")
+        self.assertEqual(db.applied, {"hidden": 1, "moved": 1, "retyped": 1, "rejected": 0})
+
+    def test_card_and_live_follow_the_moderator(self):
+        self.publish([{"id": 501, "op": "hide"}])
+        self.camera_db_args = {"overrides_path": self.overrides_path, "verify": self.verify}
+        self.bot = self.make()
+        text = self.location()["text"]
+        self.assertIn("📷 Стационарных камер: 1, ближайшая — 2,5 км", text)
+        self.assertNotIn("Amir Temur", text, "скрытой камеры нет в «что рядом»")
+        self.clock[0] = NOW + 30
+        self.location(user=OTHER, live=3600)
+        self.clock[0] = NOW + 40
+        self.live_edit(at(north=-600), user=OTHER)
+        self.clock[0] = NOW + 100
+        self.live_edit(at(north=-400), user=OTHER)
+        self.assertNotIn("Amir Temur", self.last()["text"], "и в трансляции её нет")
+
+    def test_unsigned_or_broken_file_changes_nothing(self):
+        items = [{"id": 501, "op": "hide"}]
+        base = sorted(self.ids_near(bot_near.CameraDb(self.cameras_path)))
+        for verdict in (False, None):            # не сошлась / проверить нечем
+            self.verdict = verdict
+            self.publish(items)
+            self.assertEqual(sorted(self.ids_near(self.db())), base, verdict)
+        self.verdict = True
+        broken = [dict(sig=None), dict(sig=""), dict(raw=b"{not json"),
+                  dict(raw=json.dumps({"version": 1, "items": [{"id": 501, "op": "delete"}]}).encode()),
+                  dict(raw=json.dumps({"version": 1, "items": [{"op": "hide"}]}).encode()),
+                  dict(raw=json.dumps({"version": "1", "items": items}).encode()),
+                  dict(raw=json.dumps({"version": 1, "items": [
+                      {"id": 501, "op": "hide"}, {"id": 502, "op": "move", "lat": "41.3", "lon": 69.2}]}).encode())]
+        for kind in broken:
+            self.publish(items, **kind)
+            self.assertEqual(sorted(self.ids_near(self.db())), base, kind)
+        with open(self.overrides_path, "w") as handle:
+            handle.write("{битый")
+        self.assertEqual(sorted(self.ids_near(self.db())), base)
+        os.remove(self.overrides_path)
+        self.assertEqual(sorted(self.ids_near(self.db())), base, "нет файла — нет решений")
+
+    def test_mass_hide_is_rejected_whole(self):
+        far = [{"id": 600 + i, "op": "hide"} for i in range(2)]
+        self.publish(far + [{"id": 501, "op": "hide"}])        # 3 из 40 > 5 %
+        db = self.db()
+        self.assertIn(501, self.ids_near(db), "файл отвергнут целиком — и эта строка тоже")
+        self.assertEqual(db.applied["hidden"], 0)
+        self.publish(far[:1] + [{"id": 501, "op": "hide"}])    # 2 из 40 = 5 % — можно
+        self.clock[0] += 61
+        self.assertNotIn(501, self.ids_near(db))
+        self.assertFalse(bot_near.overrides_sane([], 0), "базы нет — решениям не верим")
+
+    def test_far_or_foreign_move_is_dropped_and_the_camera_stays(self):
+        self.publish([
+            {"id": 501, "op": "move", "lat": at(north=600, east=501)[0], "lon": at(north=600, east=501)[1]},
+            {"id": 502, "op": "move", "lat": 47.5, "lon": 69.2},
+            {"id": 503, "op": "move"},
+            {"id": 600, "op": "move", "lat": 40.1, "lon": 65.0 + 499 / (111_320.0 * math.cos(math.radians(40.1)))},
+        ])
+        db = self.db()
+        self.assertEqual(self.ids_near(db), [501, 502], "камеры на старых местах")
+        self.assertEqual(self.camera(db, 501)["lat"], at(north=600)[0])
+        self.assertEqual(db.applied, {"hidden": 0, "moved": 1, "retyped": 0, "rejected": 3},
+                         "499 м — перенос, 501 м, вне Узбекистана и без точки — нет")
+
+    def test_move_drops_the_road_profile(self):
+        self.publish([{"id": 501, "op": "move", "lat": at(north=650)[0], "lon": at(north=650)[1]}])
+        moved = self.camera(self.db(), 501)
+        for key in ("axis", "dir", "road", "twin", "cls"):
+            self.assertNotIn(key, moved, "профиль мерили у старой точки")
+        self.assertEqual(moved["type"], "Стационар радар")
+
+    def test_retype(self):
+        self.publish([{"id": 502, "op": "retype", "type": "Стационар радар"},
+                      {"id": 501, "op": "retype", "type": ""}])
+        db = self.db()
+        self.assertEqual(self.camera(db, 502)["type"], "Стационар радар")
+        self.assertNotIn("violations", self.camera(db, 502), "нарушения выводятся из типа заново")
+        self.assertEqual(self.camera(db, 501)["type"], "Стационар радар", "пустой тип — правка отброшена")
+        self.assertEqual(db.applied["rejected"], 1)
+
+    def test_last_line_for_an_id_wins(self):
+        self.publish([{"id": 501, "op": "hide"}, {"id": 501, "op": "retype", "type": "Стационар камера"}])
+        self.assertEqual(self.camera(self.db(), 501)["type"], "Стационар камера")
+
+    def test_cache_by_mtime_and_one_verification_per_change(self):
+        self.publish([{"id": 501, "op": "hide"}])
+        db = self.db()
+        self.assertNotIn(501, self.ids_near(db))
+        self.clock[0] += 61
+        self.ids_near(db)
+        self.assertEqual(len(self.verified), 1, "файл не менялся — openssl не зовём")
+        self.publish([], version=2)
+        self.clock[0] += 10
+        self.assertNotIn(501, self.ids_near(db), "чаще раза в минуту не проверяем")
+        self.clock[0] += 61
+        self.assertIn(501, self.ids_near(db), "решение снято — камера вернулась")
+        self.assertEqual(len(self.verified), 2)
+        os.remove(self.overrides_path)
+        self.publish([{"id": 502, "op": "hide"}])
+        os.utime(self.overrides_path, ns=(1, 1))
+        self.clock[0] += 61
+        self.assertNotIn(502, self.ids_near(db), "смена mtime — перечитали")
+
+    def test_logs_counts_never_coordinates(self):
+        self.publish([{"id": 502, "op": "move", "lat": at(east=2200)[0], "lon": at(east=2200)[1]}])
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.ids_near(self.db())
+            self.verdict = False
+            self.ids_near(self.db())
+        self.assertIn("перенесено 1", err.getvalue())
+        self.assertIn("подпись не подтверждена", err.getvalue())
+        self.assertNotRegex(err.getvalue(), r"\d+\.\d{3,}", "в журнале нет координат")
+
+    def test_real_ed25519_signature(self):
+        """Настоящая подпись: свой ключ — применяется, ключ владельца (рабочий
+        проверщик по умолчанию) к чужой подписи — нет."""
+        work = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, work, True)
+        key, data = os.path.join(work, "key.pem"), os.path.join(work, "payload")
+        payload = json.dumps({"version": 3, "items": [{"id": 501, "op": "hide"}]}).encode()
+        with open(data, "wb") as handle:
+            handle.write(payload)
+        try:
+            subprocess.run(["openssl", "genpkey", "-algorithm", "ed25519", "-out", key],
+                           check=True, capture_output=True)
+            sig = subprocess.run(["openssl", "pkeyutl", "-sign", "-inkey", key, "-rawin", "-in", data],
+                                 check=True, capture_output=True).stdout
+            der = subprocess.run(["openssl", "pkey", "-in", key, "-pubout", "-outform", "DER"],
+                                 check=True, capture_output=True).stdout
+        except (OSError, subprocess.CalledProcessError):
+            self.skipTest("openssl без Ed25519")
+        import base64
+        public = base64.b64encode(der[-32:]).decode()
+        self.publish(None, raw=payload, sig=base64.b64encode(sig).decode())
+        if status.verify_ed25519(payload, base64.b64encode(sig).decode(), public) is None:
+            self.skipTest("openssl без -rawin")
+        own = self.db(verify=lambda d, s: status.verify_ed25519(d, s, public))
+        self.assertNotIn(501, self.ids_near(own), "своя подпись — решение применено")
+        owner = bot_near.CameraDb(self.cameras_path, overrides_path=self.overrides_path)
+        self.assertIn(501, self.ids_near(owner), "ключ владельца чужую подпись не принимает")
+        self.publish(None, raw=payload + b" ", sig=base64.b64encode(sig).decode())
+        self.clock[0] += 61
+        self.assertIn(501, self.ids_near(own), "байт поменяли — подпись не сходится")
+
+    def test_wired_in_the_bot(self):
+        _, sources, _ = bot.build_sources({"webroot": self.dir})
+        self.assertEqual(sources.cameras.overrides_path, os.path.join(self.dir, "overrides.json"))
+        self.assertIsNone(sources.cameras.verify, "проверщик — рабочий, с ключом владельца")
+
+
+class OverridesContractTest(unittest.TestCase):
+    """Пороги — те же числа, что у приложения и у панели модератора."""
+
+    def read(self, *parts):
+        with open(os.path.join(HERE, "..", "RadarMap", *parts), encoding="utf-8") as handle:
+            return handle.read()
+
+    def test_thresholds_match_app_config(self):
+        config = self.read("Support", "AppConfig.swift")
+        share = re.search(r"static let overrideMaxHiddenShare = ([\d.]+)", config)
+        move = re.search(r"static let overrideMaxMoveMeters: CLLocationDistance = ([\d.]+)", config)
+        lat = re.search(r"static let uzLatRange: ClosedRange<Double> = ([\d.]+)\.\.\.([\d.]+)", config)
+        lon = re.search(r"static let uzLonRange: ClosedRange<Double> = ([\d.]+)\.\.\.([\d.]+)", config)
+        self.assertEqual(float(share.group(1)), bot_near.OVERRIDE_MAX_HIDDEN_SHARE)
+        self.assertEqual(float(move.group(1)), bot_near.OVERRIDE_MAX_MOVE_METERS)
+        self.assertEqual((float(lat.group(1)), float(lat.group(2))), bot_near.UZ_LAT_RANGE)
+        self.assertEqual((float(lon.group(1)), float(lon.group(2))), bot_near.UZ_LON_RANGE)
+        with open(os.path.join(HERE, "admin.py"), encoding="utf-8") as handle:
+            admin_move = re.search(r"^MAX_MOVE_METERS = (\d+)", handle.read(), re.M)
+        self.assertEqual(float(admin_move.group(1)), bot_near.OVERRIDE_MAX_MOVE_METERS, "панель режет там же")
+
+    def test_engine_matches_the_app(self):
+        engine = self.read("Models", "CameraOverride.swift")
+        for op in bot_near.OVERRIDE_OPS:
+            self.assertRegex(engine, rf"case {op}\b")
+        self.assertIn("GeoMath.fastDistance(camera.lat, camera.lon, lat, lon)", engine,
+                      "расстояние переноса — от точки базы, формулой fastDistance")
+        geo = self.read("Support", "GeoMath.swift")
+        self.assertIn("let dLat = (bLat - aLat) * 111_320", geo)
+        self.assertIn("let dLon = (bLon - aLon) * 111_320 * cos(aLat * .pi / 180)", geo)
+        self.assertEqual(bot_near.M_PER_DEG, 111_320.0)
+        camera = self.read("Models", "Camera.swift")
+        moved = re.search(r"func moved\(lat: Double, lon: Double\) -> Camera \{(.*?)\n    \}", camera, re.S).group(1)
+        for key in bot_near.PROFILE_KEYS:
+            self.assertNotIn(f"{key}:", moved, f"перенос в приложении снимает {key} — и бот тоже")
+
+    def test_signed_envelope_is_the_one_publish_writes(self):
+        with open(os.path.join(HERE, "publish_overrides.sh"), encoding="utf-8") as handle:
+            script = handle.read()
+        self.assertIn('{"payload": "%s", "sig": "%s"}', script)
+        self.assertIn("-rawin -in \"$WORK/overrides.payload\"", script, "подписаны точные байты payload")
 
 
 # --- сроки и приватность -------------------------------------------------------------------------

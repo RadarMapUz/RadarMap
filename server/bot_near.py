@@ -217,7 +217,10 @@ def signed_payload(path, verify):
     with open(path, "rb") as handle:
         envelope = json.loads(handle.read())
     payload = base64.b64decode(envelope["payload"], validate=True)
-    return payload if verify(payload, envelope["sig"]) is True else None
+    sig = envelope["sig"]
+    if not isinstance(sig, str) or not sig:
+        return None                  # подписи нет — нечего и проверять
+    return payload if verify(payload, sig) is True else None
 
 
 # --- решения модератора (overrides.json) ----------------------------------------------

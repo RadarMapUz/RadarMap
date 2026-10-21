@@ -573,4 +573,27 @@ final class PerformanceBudgetTests: XCTestCase {
         XCTAssertGreaterThan(attached.stats.overlay, 0)
         XCTAssertLessThan(attachTime, .milliseconds(10), "слой к маршруту в 330 точек: \(attachTime)")
     }
+
+    /// Пробки на линии маршрута (25.D): остаток маршрута в 30 км по городу с
+    /// тысячей рёбер — пересчёт идёт на каждые 30 м прогресса (вне главного
+    /// потока), и он обязан оставаться миллисекундами, а не сотнями.
+    func testRouteTrafficBudget() {
+        let route = (0..<3_000).map { i in
+            CLLocationCoordinate2D(latitude: 41.25 + Double(i) * 0.00009,
+                                   longitude: 69.20 + Double(i % 200) * 0.00002)
+        }
+        let edges = (0..<1_000).map { i -> TrafficEdge in
+            let a = route[(i * 3) % (route.count - 1)], b = route[(i * 3) % (route.count - 1) + 1]
+            return TrafficEdge(a: a, b: b, level: 1 + i % 3, kmh: 15, modelKmh: 50)
+        }
+        let snapshot = TrafficSnapshot(generated: Date(), edges: edges)
+        let clock = ContinuousClock()
+        let start = clock.now
+        var pieces = 0
+        for _ in 0..<5 { pieces += RouteTraffic.pieces(along: route, snapshot: snapshot).count }
+        let total = clock.now - start
+        XCTAssertGreaterThan(pieces, 0)
+        // 5 пересчётов 30 км — меньше полсекунды на симуляторе (замер ~0,1 с).
+        XCTAssertLessThan(total, .milliseconds(500), "пробки на линии деградировали: \(total)")
+    }
 }

@@ -57,13 +57,15 @@ PALETTES = {
         "far_primary": "#ffe08a", "far_primary_edge": "#e2bd5a",
         "far_secondary": "#fff1bd", "far_secondary_edge": "#e0cf96",
         "far_tertiary": "#ffffff", "far_tertiary_edge": "#d3cfc6",
-        "median": "#dfe5d6", "concrete": "#d5d9e0", "zebra_base": "#f2cf3b", "paint": "#ffffff", "building": "#e6dcd7", "building_wall": "#d3c6c0", "landuse": "#f1eeea",
+        "median": "#dfe5d6", "concrete": "#d5d9e0", "zebra_base": "#f2cf3b", "paint": "#ffffff", "building": "#dfe1e8", "building_wall": "#c9ccd6", "landuse": "#f1eeea",
         "boundary": "#c9c2d6", "building_shadow": "rgba(90,95,110,0.22)",
         "underpass": "#b9a8e8", "underpass_edge": "#8f7cc9",
         "footbridge": "#ffffff", "footbridge_edge": "#a9b0bc", "steps": "#c7cbd3",
-        # Свет для 3D: мягкий, тёплый, сбоку-сверху — стены светлые, с тенью,
-        # а не плоские серые плиты (06.10.2026).
-        "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.3,
+        # Свет для 3D: мягкий, сбоку-сверху — стены светлые, с тенью, а не
+        # плоские серые плиты (06.10.2026). Дома с 21.10 (25.D) холоднее и
+        # чуть темнее фона (#dfe1e8, было тёплое #e6dcd7 — сливалось с землёй),
+        # свет 0,35: под наклоном стена отделяется от крыши.
+        "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.35,
                   "position": [1.3, 200, 35]},
         # Кайма НАШИХ лент — нейтральная: жёлтая у каждой ленты давала «нитки»
         # внутри асфальта там, где две ленты лежат рядом (Фурката, 28.09.2026).

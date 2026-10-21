@@ -1651,6 +1651,13 @@ nonisolated enum AppConfig {
     /// Предел значка плитки сетки до iOS 26 (с 26 — из
     /// CPGridTemplate.maximumGridButtonImageSize, там те же 40×40).
     static let carPlayGridImageMaxPoints: CGFloat = 40
+    /// Диаметр картинки «Радар!» на кнопке карты (25.H3). Предела у
+    /// `CPMapButton.image` в SDK нет; круг кнопки рисует система, и SF-значки
+    /// соседних кнопок в 24 pt занимают его середину. 40 — потолок картинок,
+    /// который CarPlay называет для плиток сетки: жёлтый диск почти во весь
+    /// круг, слово «Радар!» около 9 pt (в 36 выходило 7,7). Круглая форма не
+    /// даёт углам вылезти, если машина не ужмёт картинку сама.
+    static let carPlayReportButtonPoints: CGFloat = 40
     /// Выбор маршрута в машине (CarPlayTripPreview): показывать, пока скорость
     /// ниже этой; тронулись не медленнее `…AutoStartKmh` на `…AutoStartSeconds`
     /// — выбор принят сам.

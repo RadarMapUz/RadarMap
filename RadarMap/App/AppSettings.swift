@@ -672,6 +672,12 @@ final class AppSettings {
     /// ради слоя, который отвечает на вопрос последних двухсот метров. За
     /// рулём этот вопрос задают раз в поездку, а платят за него всю дорогу.
     /// Кто ищет подъезд — включит.
+    ///
+    /// С 21.10 (25.D) — ВКЛЮЧЕНЫ, если водитель сам их не выключал. Расчёт
+    /// выше — про дома своей схемы (отдельный набор файлов), а схема убрана
+    /// 11.10: на новой карте дома лежат в том же тайле OpenMapTiles, что и
+    /// дороги, и тумблер трафика не экономит. Зато под наклоном в пути они и
+    /// есть «богатый» кадр («у Яндекса дома объёмом», владелец, 21.10).
     var mapHouses: Bool { didSet { store.set(mapHouses, forKey: Keys.mapHouses) } }
     /// Тротуары. Тот же закон и та же причина, только дешевле: их 3 439 в
     /// одном центре против 8 455 дорог, и объясняют они, где кончается
@@ -885,10 +891,10 @@ final class AppSettings {
         licensePlate = store.string(forKey: Keys.licensePlate) ?? ""
         parkedCarHint = store.bool(forKey: Keys.parkedCarHint)
         mapPlaces = store.bool(forKey: Keys.mapPlaces)
-        // Дома и тротуары — единственные слои схемы БЕЗ значения по умолчанию
-        // в register: `bool(forKey:)` даёт false там, где ключа ещё нет, и это
-        // ровно тот ответ, который нужен. Кто их включит — включит осознанно.
-        mapHouses = store.bool(forKey: Keys.mapHouses)
+        // Тротуары — БЕЗ значения по умолчанию: `bool(forKey:)` даёт false там,
+        // где ключа ещё нет. Дома с 21.10 — включены, пока водитель сам их не
+        // выключил (явное «нет» сохранено и уважается).
+        mapHouses = store.object(forKey: Keys.mapHouses) as? Bool ?? true
         mapSidewalks = store.bool(forKey: Keys.mapSidewalks)
         mapModernStyle = store.bool(forKey: Keys.mapModernStyle)
         map3D = store.bool(forKey: Keys.map3D)

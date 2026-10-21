@@ -57,13 +57,15 @@ PALETTES = {
         "far_primary": "#ffe08a", "far_primary_edge": "#e2bd5a",
         "far_secondary": "#fff1bd", "far_secondary_edge": "#e0cf96",
         "far_tertiary": "#ffffff", "far_tertiary_edge": "#d3cfc6",
-        "median": "#dfe5d6", "concrete": "#d5d9e0", "zebra_base": "#f2cf3b", "paint": "#ffffff", "building": "#e6dcd7", "building_wall": "#d3c6c0", "landuse": "#f1eeea",
+        "median": "#dfe5d6", "concrete": "#d5d9e0", "zebra_base": "#f2cf3b", "paint": "#ffffff", "building": "#dfe1e8", "building_wall": "#c9ccd6", "landuse": "#f1eeea",
         "boundary": "#c9c2d6", "building_shadow": "rgba(90,95,110,0.22)",
         "underpass": "#b9a8e8", "underpass_edge": "#8f7cc9",
         "footbridge": "#ffffff", "footbridge_edge": "#a9b0bc", "steps": "#c7cbd3",
-        # Свет для 3D: мягкий, тёплый, сбоку-сверху — стены светлые, с тенью,
-        # а не плоские серые плиты (06.10.2026).
-        "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.3,
+        # Свет для 3D: мягкий, сбоку-сверху — стены светлые, с тенью, а не
+        # плоские серые плиты (06.10.2026). Дома с 21.10 (25.D) холоднее и
+        # чуть темнее фона (#dfe1e8, было тёплое #e6dcd7 — сливалось с землёй),
+        # свет 0,35: под наклоном стена отделяется от крыши.
+        "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.35,
                   "position": [1.3, 200, 35]},
         # Кайма НАШИХ лент — нейтральная: жёлтая у каждой ленты давала «нитки»
         # внутри асфальта там, где две ленты лежат рядом (Фурката, 28.09.2026).
@@ -94,11 +96,14 @@ PALETTES = {
         "far_primary": "#6b5f45", "far_primary_edge": "#4a4232",
         "far_secondary": "#55524a", "far_secondary_edge": "#3c3a35",
         "far_tertiary": "#474c55", "far_tertiary_edge": "#30343b",
-        "median": "#1c2a22", "concrete": "#3a414c", "zebra_base": "#8c7a2c", "paint": "#d9dee6", "building": "#1d2026", "building_wall": "#16181d", "landuse": "#13171d",
+        "median": "#1c2a22", "concrete": "#3a414c", "zebra_base": "#8c7a2c", "paint": "#d9dee6", "building": "#2a2f38", "building_wall": "#16181d", "landuse": "#13171d",
         "boundary": "#3a3f4c", "building_shadow": "rgba(0,0,0,0.45)",
         "underpass": "#5b4f8a", "underpass_edge": "#7d6fb8",
         "footbridge": "#3a404b", "footbridge_edge": "#596170", "steps": "#2a2f37",
-        "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.18,
+        # Ночью дома — графитовые объёмы светлее фона (#2a2f38, было
+        # #1d2026 — под наклоном 25.D дома сливались с землёй), но темнее
+        # любой улицы: дорога остаётся главным (test_roads_are_lighter…).
+        "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.22,
                   "position": [1.3, 200, 35]},
         "casing": "#2b3039",
         "kerb": "#8c7033", "trees": "trees-dark", "asphalt": "asphalt-dark", "gutter": "#2f343c",
@@ -870,13 +875,28 @@ def build(base, theme="light", mode="full", tileset=None):
                                             "line-translate": [3, 4], "line-translate-anchor": "viewport",
                                             "line-opacity": ["interpolate", ["linear"], ["zoom"], 15, 0, 16, 1]}})
         first_symbol += 1
+        # Плоские дома — только на горячем телефоне: там приложение гасит
+        # объём (EngineMapView.hotHiddenLayers) и включает этот слой, чтобы
+        # город не опустел. По умолчанию выключен — объёмный рисует то же.
+        out.insert(first_symbol, {"id": "building-flat", "type": "fill", "source": "openmaptiles",
+                                  "source-layer": "building", "minzoom": 14,
+                                  "layout": {"visibility": "none"},
+                                  "paint": {"fill-color": p["building"],
+                                            "fill-outline-color": p["building_wall"]}})
+        first_symbol += 1
+        # Объём (25.D, «у Яндекса дома объёмом под наклоном»): высота из
+        # тайла (render_height OpenMapTiles: height, иначе этажи × 3,66, иначе
+        # 5 м); без неё — 10 м, средний дом Ташкента. Дома «вырастают» с z15
+        # до z16 — на виде района кубики шумят, а в пути (z16–18, наклон)
+        # стоят в полный рост.
         out.insert(first_symbol, {"id": "building-3d", "type": "fill-extrusion", "source": "openmaptiles",
                                   "source-layer": "building", "minzoom": 14,
                                   "paint": {"fill-extrusion-color": p["building"],
                                             "fill-extrusion-vertical-gradient": True,
-                                            "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 14, 0, 15.5,
-                                                                      ["coalesce", ["get", "render_height"], 8]],
-                                            "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
+                                            "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 15, 0, 16,
+                                                                      ["coalesce", ["get", "render_height"], 10]],
+                                            "fill-extrusion-base": ["interpolate", ["linear"], ["zoom"], 15, 0, 16,
+                                                                    ["coalesce", ["get", "render_min_height"], 0]],
                                             # Непрозрачные: сквозь 0,92 на крышах
                                             # проступал узор крон газона под домом.
                                             "fill-extrusion-opacity": 1.0}})

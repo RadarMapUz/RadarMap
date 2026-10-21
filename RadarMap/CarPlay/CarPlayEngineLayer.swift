@@ -169,6 +169,7 @@ struct CarPlayEngineLayer: View {
             healthTag: surface.healthTag,
             trafficEdges: env.traffic.isShown ? env.traffic.snapshot?.edges ?? [] : [],
             trafficRevision: env.traffic.revision * 2 + (env.traffic.isShown ? 1 : 0),
+            trafficSnapshot: env.traffic.isShown ? env.traffic.snapshot : nil,
             labelLanguage: env.settings.appLanguage.mapCode,
             cursorStyle: env.settings.cursorStyle,
             // Выбор маршрута: линия целиком, слева — место под карточку

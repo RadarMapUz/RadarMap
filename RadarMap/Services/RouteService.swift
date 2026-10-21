@@ -603,9 +603,11 @@ final class RouteService {
                                               allowFullScan: rerouteGate.offRouteTicks % 3 == 0,
                                               course: course)
         progressAlong = along
-        displaySnap = deviation <= AppConfig.routeSnapMeters
-            ? Self.pointAndCourse(along: along, pts: variant.points, cum: selectedCumulative)
-            : nil
+        displaySnap = Self.displaySnap(
+            deviation: deviation,
+            on: deviation <= AppConfig.routeSnapMeters
+                ? Self.pointAndCourse(along: along, pts: variant.points, cum: selectedCumulative) : nil,
+            course: course)
 
         // Прибытие: у самой цели ИЛИ проехали финиш по маршруту (парковка чуть в стороне,
         // GPS-точка не попала в малый радиус — маршрут всё равно выполнен).
@@ -646,7 +648,8 @@ final class RouteService {
         // остатку до камер дальше линии всё равно не верим).
         let rerouteLimit = variant.isOffline ? AppConfig.offlineRouteRerouteMeters
                                              : AppConfig.rerouteDeviationMeters
-        guard rerouteGate.note(deviation: deviation, now: Date(), limit: rerouteLimit),
+        guard rerouteGate.note(deviation: deviation, now: Date(), limit: rerouteLimit,
+                               drift: variant.isOffline ? nil : AppConfig.rerouteDriftMeters),
               isRoutingEnabled else { return }
 
         isRebuilding = true
@@ -662,7 +665,10 @@ final class RouteService {
             // Перестраиваем без альтернатив — быстрее, и в движении выбор не нужен.
             let built: [BuiltVariant]
             do {
-                built = try await calculate(from: coordinate, via: via, to: destination, alternatives: false)
+                // Курс — чтобы новый маршрут шёл туда, куда машина едет, а не
+                // начинался с разворота за спиной (см. rerouteBearingRangeDegrees).
+                built = try await calculate(from: coordinate, via: via, to: destination, alternatives: false,
+                                            heading: course >= 0 ? course : nil)
             } catch {
                 rerouteGate.noteFailure()
                 Log.route.error("перестроение маршрута не удалось (\(self.rerouteGate.failures, privacy: .public)-й раз): \(error.localizedDescription, privacy: .public) — остаёмся на старой линии")
@@ -781,16 +787,28 @@ final class RouteService {
     /// Выбранный маршрут построен без сети — сеть вернулась, пора заменить.
     var isOfflineRoute: Bool { selected?.isOffline ?? false }
 
+    /// `heading` — курс машины на ходу (перестроение): OSRM начнёт маршрут в
+    /// эту сторону. Попутной дороги рядом нет (NoSegment) или сервер
+    /// отказал — повтор без курса: маршрут с разворотом лучше, чем никакого.
     private func calculate(from source: CLLocationCoordinate2D,
                            via stop: Stop?,
                            to destination: CLLocationCoordinate2D,
-                           alternatives: Bool) async throws -> [BuiltVariant] {
+                           alternatives: Bool,
+                           heading: CLLocationDirection? = nil) async throws -> [BuiltVariant] {
         // Сбой Apple-роутинга — штатный путь: ниже падаем на собственный OSRM.
         // С остановкой — сразу OSRM: промежуточных точек MKDirections не знает.
         if stop == nil,
            let apple = try? await appleRoute(from: source, to: destination, alternatives: alternatives),
            !apple.isEmpty { return apple }
         do {
+            if let heading {
+                do {
+                    return try await osrmRoute(from: source, via: stop, to: destination,
+                                               alternatives: alternatives, heading: heading)
+                } catch {
+                    Log.route.notice("маршрут по курсу не построен — повтор без курса: \(error.localizedDescription, privacy: .public)")
+                }
+            }
             return try await osrmRoute(from: source, via: stop, to: destination, alternatives: alternatives)
         } catch {
             // Ни Apple, ни свой сервер — на трассе без связи. Последнее средство —
@@ -882,20 +900,18 @@ final class RouteService {
     private func osrmRoute(from source: CLLocationCoordinate2D,
                            via stop: Stop?,
                            to destination: CLLocationCoordinate2D,
-                           alternatives: Bool) async throws -> [BuiltVariant] {
-        let path = ([source] + (stop.map { [$0.coordinate] } ?? []) + [destination])
+                           alternatives: Bool,
+                           heading: CLLocationDirection? = nil) async throws -> [BuiltVariant] {
+        let waypoints = [source] + (stop.map { [$0.coordinate] } ?? []) + [destination]
+        let path = waypoints
             .map { String(format: "%.6f,%.6f", $0.longitude, $0.latitude) }
             .joined(separator: ";")
         var components = URLComponents(url: AppConfig.osrmBaseURL
             .appendingPathComponent("route/v1/driving")
             .appendingPathComponent(path),
             resolvingAgainstBaseURL: false)!
-        components.queryItems = [
-            URLQueryItem(name: "overview", value: "full"),
-            URLQueryItem(name: "geometries", value: "geojson"),
-            URLQueryItem(name: "alternatives", value: alternatives ? "true" : "false"),
-            URLQueryItem(name: "steps", value: "true"),
-        ]
+        components.queryItems = Self.osrmQueryItems(alternatives: alternatives, heading: heading,
+                                                    waypoints: waypoints.count)
 
         // Сторонний OSRM, не наш бэкенд — единственное осознанное исключение из
         // правила «сеть только через APIClient» (свой формат URL и ошибок).
@@ -1486,6 +1502,45 @@ final class RouteService {
         let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
         let course = (atan2(y, x) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
         return (point.coordinate, course)
+    }
+
+    /// Стрелка на линии маршрута: точка `on` (nil — дальше `routeSnapMeters`),
+    /// только пока наш курс с линией согласен (`routeSnapMaxCourseDegrees`).
+    /// Курс неизвестен (`-1`) — согласие не проверяем: стоим или едем без
+    /// доказанного курса, и линия — лучшее, что есть.
+    nonisolated static func displaySnap(deviation: CLLocationDistance,
+                                        on snap: (coordinate: CLLocationCoordinate2D, course: CLLocationDirection)?,
+                                        course: CLLocationDirection)
+    -> (coordinate: CLLocationCoordinate2D, course: CLLocationDirection)? {
+        guard deviation <= AppConfig.routeSnapMeters, let snap else { return nil }
+        if course >= 0, course.isFinite,
+           GeoMath.angleDifference(course, snap.course) > AppConfig.routeSnapMaxCourseDegrees {
+            return nil
+        }
+        return snap
+    }
+
+    /// Параметры запроса OSRM. С курсом (перестроение на ходу) — `bearings`
+    /// и `radiuses` для первой точки: маршрут начинается туда, куда машина
+    /// едет, по дороге не дальше `rerouteBearingRadiusMeters`; остальным
+    /// точкам — без ограничений.
+    nonisolated static func osrmQueryItems(alternatives: Bool, heading: CLLocationDirection?,
+                                           waypoints: Int) -> [URLQueryItem] {
+        var items = [
+            URLQueryItem(name: "overview", value: "full"),
+            URLQueryItem(name: "geometries", value: "geojson"),
+            URLQueryItem(name: "alternatives", value: alternatives ? "true" : "false"),
+            URLQueryItem(name: "steps", value: "true"),
+        ]
+        if let heading, heading.isFinite, heading >= 0, waypoints >= 2 {
+            let degrees = Int(heading.rounded()) % 360
+            let rest = Array(repeating: "", count: waypoints - 1)
+            items.append(URLQueryItem(name: "bearings", value: (
+                ["\(degrees),\(AppConfig.rerouteBearingRangeDegrees)"] + rest).joined(separator: ";")))
+            items.append(URLQueryItem(name: "radiuses", value: (
+                ["\(AppConfig.rerouteBearingRadiusMeters)"] + rest.map { _ in "unlimited" }).joined(separator: ";")))
+        }
+        return items
     }
 
     nonisolated static func cumulative(of pts: [MKMapPoint]) -> [CLLocationDistance] {

@@ -242,4 +242,47 @@ final class RouteGeometryTests: XCTestCase {
         XCTAssertNil(RouteService.ahead(points, cumulative: cumulative, after: cumulative.last! + 10,
                                         from: car, meters: 600), "маршрут кончился")
     }
+
+    // MARK: - Стрелка на линии и перестроение по курсу (снимок CarPlay 21.10)
+
+    /// Стрелка садится на линию маршрута, только пока курс с ней согласен.
+    /// Перестроение дало маршрут «назад» (линия на восток, машина — на
+    /// запад): стрелка на линии смотрела назад, и карта разворачивалась на
+    /// 180° на три фикса. Свернул мимо под прямым углом — тоже не на линии.
+    func testRouteSnapRequiresAgreeingCourse() {
+        let point = CLLocationCoordinate2D(latitude: 41.305, longitude: 69.245)
+        let snap = (coordinate: point, course: 96.0)
+        XCTAssertNotNil(RouteService.displaySnap(deviation: 8, on: snap, course: 100), "едем по линии")
+        XCTAssertNotNil(RouteService.displaySnap(deviation: 8, on: snap, course: -1),
+                        "курс неизвестен — линия лучше, чем ничего")
+        XCTAssertNil(RouteService.displaySnap(deviation: 8, on: snap, course: 270), "маршрут «назад»")
+        XCTAssertNil(RouteService.displaySnap(deviation: 12, on: (point, 142), course: 233),
+                     "свернул мимо под прямым углом (прогон: 142° против 233°)")
+        XCTAssertNotNil(RouteService.displaySnap(deviation: 12, on: (point, 142), course: 190),
+                        "запаздывание курса в повороте по маршруту — ещё на линии")
+        XCTAssertNil(RouteService.displaySnap(deviation: 30, on: snap, course: 96), "дальше 25 м")
+        XCTAssertNil(RouteService.displaySnap(deviation: 8, on: nil, course: 96))
+        // Через север: 355° и 10° — одно направление.
+        XCTAssertNotNil(RouteService.displaySnap(deviation: 5, on: (point, 355), course: 10))
+    }
+
+    /// Перестроение на ходу просит OSRM начать маршрут по курсу машины; без
+    /// курса запрос прежний.
+    func testRerouteAsksOSRMToStartAlongOurCourse() {
+        func value(_ items: [URLQueryItem], _ name: String) -> String? {
+            items.first { $0.name == name }?.value
+        }
+        let plain = RouteService.osrmQueryItems(alternatives: false, heading: nil, waypoints: 2)
+        XCTAssertNil(value(plain, "bearings"))
+        XCTAssertNil(value(plain, "radiuses"))
+        XCTAssertEqual(value(plain, "steps"), "true")
+        let range = AppConfig.rerouteBearingRangeDegrees, radius = AppConfig.rerouteBearingRadiusMeters
+        let west = RouteService.osrmQueryItems(alternatives: false, heading: 270.4, waypoints: 2)
+        XCTAssertEqual(value(west, "bearings"), "270,\(range);")
+        XCTAssertEqual(value(west, "radiuses"), "\(radius);unlimited")
+        let viaStop = RouteService.osrmQueryItems(alternatives: false, heading: 359.7, waypoints: 3)
+        XCTAssertEqual(value(viaStop, "bearings"), "0,\(range);;", "360° — это 0°, остановке курса нет")
+        XCTAssertEqual(value(viaStop, "radiuses"), "\(radius);unlimited;unlimited")
+        XCTAssertNil(value(RouteService.osrmQueryItems(alternatives: false, heading: -1, waypoints: 2), "bearings"))
+    }
 }

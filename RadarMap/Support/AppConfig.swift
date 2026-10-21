@@ -2030,6 +2030,37 @@ nonisolated enum AppConfig {
     /// едет — остаток секунды стоит» (поле 12.10: «отстаёт и не плавно»;
     /// фиксы — раз в секунду, когда на карту смотрят, см. GPSTiers.request).
     static let engineCameraDuration = 1.25
+
+    // MARK: - Значок «я» между фиксами (MarkerPredictor, 25.B)
+
+    /// Дальше этого от времени фикса значок не угадывает: стрелка шла к
+    /// ПОСЛЕДНЕМУ фиксу за интервал между фиксами и всегда была на фикс
+    /// позади (замер 21.10: 12 м на 50 км/ч, «машина опаздывает»).
+    static let markerMaxLeadSeconds: Double = 1.5
+    /// Без линии маршрута и в повороте (курс крутится быстрее
+    /// markerTurnRateDegrees в секунду) — только эта доля: по прямой от курса
+    /// в повороте значок уезжал бы с дороги.
+    static let markerTurnLeadSeconds: Double = 0.5
+    static let markerTurnRateDegrees: Double = 15
+    /// Излом линии маршрута круче этого — поворот: значок ждёт у него фикса,
+    /// а не проскакивает за угол.
+    static let markerPathTurnDegrees: Double = 35
+    /// Сколько линии маршрута вперёд отдавать значку (130 км/ч × 1,5 с ≈ 54 м).
+    static let markerPathMeters: Double = 80
+    /// Ниже — стоим: значок вперёд не едет.
+    static let markerMovingMps: Double = 0.5
+    /// Догон (значок позади или в стороне от новой оценки): постоянная
+    /// времени экспоненты.
+    static let markerCatchUpSeconds: Double = 0.4
+    /// Значок впереди новой оценки не дальше этого — поправка без шага
+    /// назад: значок просто едет медленнее (markerAbsorbShare скорости),
+    /// пока оценка его не догонит.
+    static let markerHoldAheadMeters: Double = 4
+    static let markerAbsorbShare: Double = 0.5
+    /// Впереди дальше (или стоим) — короткий доезд назад за это время.
+    static let markerBackGlideSeconds: Double = 0.5
+    /// Скачок дальше — ставим сразу (выезд из тоннеля, первый фикс).
+    static let markerJumpMeters: Double = 100
     /// Как часто карта с меткой пишет строку здоровья в журнал (EngineMapView.healthTag).
     static let engineHealthLogSeconds: CFTimeInterval = 10
 

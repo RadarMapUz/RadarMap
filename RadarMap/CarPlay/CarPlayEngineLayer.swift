@@ -153,7 +153,9 @@ struct CarPlayEngineLayer: View {
             // голос, и значок должен стоять там, где о нём сказали.
             roadEvents: env.mobile.roadEvents,
             onHeading: { model.mapDirection = $0 },
-            onBrowse: { model.mapStartedBrowsing() })
+            onBrowse: { model.mapStartedBrowsing() },
+            // Значок и камера — по оценке «где машина сейчас» (MarkerPredictor).
+            markerMotion: env.location.markerMotion)
     }
 
     /// Новая карта (вернулись из музыки, из схемы) стартует со слежения —

@@ -86,9 +86,13 @@ extension LocationService {
             isFixSimulated = fix.isSimulated
             handleLocation(coordinate: CLLocationCoordinate2D(latitude: good.lat,
                                                               longitude: good.lon),
-                           speed: good.speed ?? -1, course: good.course)
+                           speed: good.speed ?? -1, speedAccuracy: good.speedAccuracy,
+                           course: good.course)
             armStaleWatchdog()
-            armSpeedDecay()
+            // Фикс без доплера цикл затухания не перезапускает: иначе фиксы
+            // без скорости (Wi-Fi стоя) раз в секунду отменяли его раньше
+            // первой проверки, и цифра ползания висела, пока они идут (25.C).
+            if good.speed != nil || speedDecayTask == nil { armSpeedDecay() }
         }
     }
 
@@ -164,41 +168,68 @@ extension LocationService {
     /// тем, что опровергает молчание GPS (SpeedBound), пока не станет нулём.
     /// Цикл живёт, только пока цифра ненулевая и фиксов нет, — на ходу его
     /// каждый фикс перезапускает, на стоянке он гаснет за несколько секунд.
+    /// Новых пробуждений нет: тот же секундный цикл, что и до 25.C, и только
+    /// пока цифра не ноль; CoreMotion — только если он уже следит (MotionService).
     func armSpeedDecay() {
         speedDecayTask?.cancel()
+        speedDecayTask = nil
         guard speedKmh > 0 else { return }
-        let fixAt = Date()
         speedDecayTask = Task { [weak self] in
             while !Task.isCancelled {
                 // Ошибка sleep — только отмена задачи; что делать после неё, решает проверка ниже.
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled, let self else { return }
-                let capped = SpeedBound.capped(self.speedKmh, distanceFilter: self.manager.distanceFilter,
-                                               secondsSinceFix: Date().timeIntervalSince(fixAt))
-                // Пишем только заметное изменение: speedKmh наблюдаемый.
-                if abs(capped - self.speedKmh) >= 0.5 {
+                let capped = self.speedometer.silence(
+                    at: Date(), distanceFilter: self.manager.distanceFilter,
+                    accuracy: self.horizontalAccuracy,
+                    motionStationary: self.motion?.isStationary == true,
+                    here: self.displayCoordinate ?? self.currentCoordinate)
+                // Пишем только заметное изменение (и всегда — ноль): speedKmh наблюдаемый.
+                if abs(capped - self.speedKmh) >= 0.5 || (capped == 0 && self.speedKmh != 0) {
                     self.speedKmh = capped
                     // Флаг — следом за цифрой. Раньше он пересчитывался только
                     // на принятом фиксе со скоростью, а в помещении таких нет:
                     // спидометр гас до 0, а «Похоже, вы едете» висело до
                     // следующей поездки (телефон владельца, 11.10).
                     self.refreshDrivingFlag()
+                    self.pushWatch()
                 }
-                if self.speedKmh == 0 {
-                    self.speedSmoother.reset()
-                    // Скорость погасла без фиксов — стоим: следующий фикс-шум
-                    // стрелку не сдвинет (Standstill).
-                    self.standstill.stopIfIdle(at: self.displayCoordinate ?? self.currentCoordinate)
+                if capped == 0 {
+                    // Скорость погасла без фиксов — стоим (Speedometer поставил
+                    // стоянку): следующий фикс-шум стрелку не сдвинет.
                     // Встали, а фиксов больше нет (distanceFilter): метан у
                     // АГНКС узнаёт о стоянке отсюда, иначе телефон в кармане
                     // у колонки не дождался бы вопроса никогда (ревью 12б.4).
                     if let here = self.displayCoordinate ?? self.currentCoordinate {
                         self.onStoppedWithoutFix?(here)
                     }
+                    self.speedDecayTask = nil   // цикл кончился — следующий фикс заведёт новый
                     return
                 }
             }
         }
+    }
+
+    /// Часы: только в поездке. Вне её HUD часов рисует «нет поездки» без
+    /// цифр, а меняющаяся скорость пробивала дедуп и будила BT-радио ради
+    /// данных, которые часы не показывают. Переход в «нет поездки» шлёт
+    /// endTrip явными нулями. Зовётся на фиксе и на затухании скорости без
+    /// фиксов: стоя у камеры в кармане (фильтр расстояния) часы иначе
+    /// держали скорость торможения до следующего фикса (25.C). Без изменений
+    /// — no-op (дедуп в WatchBridgeService).
+    func pushWatch() {
+        guard isTripActive else { return }
+        watchBridge?.update(isTripActive: true, speedKmh: speedKmh,
+                            cameraTitle: nearestCamera?.displayTitle,
+                            cameraSymbol: nearestCamera?.kind.symbolName,
+                            cameraID: nearestCamera?.id,
+                            distanceMeters: distanceToNearest,
+                            alertLevel: alertLevel,
+                            limitKmh: speedLimits?.currentLimit,
+                            // Устойчивое: мгновенный флаг щёлкает от шума
+                            // GPS у самого лимита и будил бы радио часов
+                            // раз в секунду (ревью 9.3).
+                            isOverspeeding: speedLimits?.isOverspeedingSustained ?? false)
     }
 
     func freezeDisplayIfStopped(shownBefore: CLLocationCoordinate2D?, courseBefore: CLLocationDirection) {
@@ -223,38 +254,38 @@ extension LocationService {
         if driving != isProbablyDriving { isProbablyDriving = driving }
     }
 
-    func handleLocation(coordinate: CLLocationCoordinate2D, speed: CLLocationSpeed, course: CLLocationDirection) {
+    func handleLocation(coordinate: CLLocationCoordinate2D, speed: CLLocationSpeed,
+                        speedAccuracy: Double = -1, course: CLLocationDirection) {
         // Главный горячий путь приложения: всё, что происходит на GPS-точке, —
         // на главном акторе, раз в секунду, всю поездку. В Instruments это один
         // интервал `handleLocation`; если он вырастет, вырастет и нагрев.
         Perf.measure(Perf.Name.handleLocation) {
             MainWork.during(MainWork.Name.gpsTick) {
-                handleLocationBody(coordinate: coordinate, speed: speed, course: course)
+                handleLocationBody(coordinate: coordinate, speed: speed,
+                                   speedAccuracy: speedAccuracy, course: course)
             }
         }
     }
 
     func handleLocationBody(coordinate: CLLocationCoordinate2D, speed: CLLocationSpeed,
-                                    course: CLLocationDirection) {
+                            speedAccuracy: Double = -1, course: CLLocationDirection) {
         currentCoordinate = coordinate
         let shownBefore = displayCoordinate
         let courseBefore = displayCourse
-        standstill.update(coordinate, rawKmh: speed >= 0 ? speed * 3.6 : -1,
-                          accuracy: horizontalAccuracy, course: course, at: Date())
-        // Спидометр: сглаживание по ВРЕМЕНИ и мгновенный отклик на настоящий
-        // перепад (SpeedSmoother — прежние константные веса на редких тиках
+        // Спидометр (Speedometer): сглаживание по ВРЕМЕНИ и мгновенный отклик
+        // на настоящий перепад (прежние константные веса на редких тиках
         // адаптивного GPS растягивали хвост торможения на 5+ секунд).
         // speed < 0 — фикс без скорости (туннель, плохая геометрия спутников): держим
         // прошлое значение, нулём считать нельзя — PassTracking берёт МИНИМУМ по зоне
         // проезда, и один такой фикс занизил бы записанную скорость у камеры.
-        // На стоянке — ровно ноль: доплеровский шум приёмника на месте (2–7 км/ч)
-        // не скорость (Standstill).
-        if standstill.isStopped {
-            speedSmoother.reset()
-            if speedKmh != 0 { speedKmh = 0 }
-            refreshDrivingFlag()
-        } else if speed >= 0 {
-            speedKmh = speedSmoother.update(rawKmh: speed * 3.6, at: Date())
+        // На стоянке — ровно ноль: доплеровский шум приёмника на месте (2–8 км/ч)
+        // не скорость (Standstill, вход и по шуму — 25.C).
+        let shown = speedometer.fix(coordinate, rawKmh: speed >= 0 ? speed * 3.6 : -1,
+                                    speedAccuracyKmh: speedAccuracy >= 0 ? speedAccuracy * 3.6 : -1,
+                                    accuracy: horizontalAccuracy, course: course,
+                                    motionStationary: motion?.isStationary == true, at: Date())
+        if standstill.isStopped || speed >= 0 {
+            if speedKmh != shown { speedKmh = shown }
             refreshDrivingFlag()
         }
         if speedKmh >= AppConfig.movementSeenSpeedKmh { lastMovementAt = Date() }
@@ -406,23 +437,7 @@ extension LocationService {
         }
         // Live Activity — только в поездке (условие внутри).
         refreshLiveActivity()
-        // Часы: только в поездке. Вне её HUD часов рисует «нет поездки» без
-        // цифр, а меняющаяся скорость пробивала дедуп и будила BT-радио ради
-        // данных, которые часы не показывают. Переход в «нет поездки» шлёт
-        // endTrip явными нулями.
-        if isTripActive {
-            watchBridge?.update(isTripActive: true, speedKmh: speedKmh,
-                                cameraTitle: nearestCamera?.displayTitle,
-                                cameraSymbol: nearestCamera?.kind.symbolName,
-                                cameraID: nearestCamera?.id,
-                                distanceMeters: distanceToNearest,
-                                alertLevel: alertLevel,
-                                limitKmh: speedLimits?.currentLimit,
-                                // Устойчивое: мгновенный флаг щёлкает от шума
-                                // GPS у самого лимита и будил бы радио часов
-                                // раз в секунду (ревью 9.3).
-                                isOverspeeding: speedLimits?.isOverspeedingSustained ?? false)
-        }
+        pushWatch()
         // Приехали к цели — стоим у неё достаточно, и поездка закроется сама
         // (ArrivalFinish). Последним в тике: закрытая посреди тика поездка
         // оставила бы его хвост работать по уже закрытой.
@@ -455,6 +470,7 @@ extension LocationService {
             manager.stopUpdatingLocation()
             staleWatchdogTask?.cancel()
             speedDecayTask?.cancel()
+            speedDecayTask = nil
             isSignalStale = true
             if speedKmh != 0 { speedKmh = 0 }
             refreshDrivingFlag()

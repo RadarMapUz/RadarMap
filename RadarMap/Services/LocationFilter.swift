@@ -92,6 +92,10 @@ nonisolated struct LocationFilter {
         /// Погрешность координаты: геометрические проверки обязаны смягчаться
         /// на плохом фиксе, иначе отбросят камеру на нашей же дороге.
         let accuracy: Double
+        /// Погрешность доверенной скорости, м/с; < 0 — неизвестна или скорости
+        /// нет. Спидометру: доплер не больше своей погрешности — не отличим
+        /// от нуля (шум стоя, Standstill, 25.C).
+        var speedAccuracy: Double = -1
     }
 
     enum Outcome: Equatable {
@@ -127,7 +131,8 @@ nonisolated struct LocationFilter {
         lastAccepted = (fix.lat, fix.lon, fix.timestamp)
         remember(fix)
         return .accepted(Accepted(lat: fix.lat, lon: fix.lon, course: course.value,
-                                  speed: speed, accuracy: fix.horizontalAccuracy))
+                                  speed: speed, accuracy: fix.horizontalAccuracy,
+                                  speedAccuracy: speed == nil ? -1 : fix.speedAccuracy))
     }
 
     /// Смена режима GPS/новая поездка: прошлая точка больше не опора для курса.

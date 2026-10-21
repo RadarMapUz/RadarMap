@@ -404,9 +404,9 @@ final class LocationService: NSObject {
 
     /// Растёт на каждое обновление локации — карта в режиме следования подписывается на это.
     var locationTick = 0
-    /// Сглаживание спидометра: по времени, с мгновенным откликом на настоящий
-    /// перепад (чистая структура, покрыта SpeedSmootherTests).
-    @ObservationIgnored var speedSmoother = SpeedSmoother()
+    /// Цифра спидометра: стоянка, сглаживание по времени и молчание GPS в
+    /// одном порядке (чистая структура, покрыта SpeedometerTests).
+    @ObservationIgnored var speedometer = Speedometer()
     /// Прижим картинки к оси дороги (чистая структура, RoadSnapperTests).
     @ObservationIgnored var roadSnapper = RoadSnapper()
     /// Координата и курс ДЛЯ КАРТИНКИ: прижаты к оси дороги, когда мы на ней
@@ -445,8 +445,9 @@ final class LocationService: NSObject {
 
     @ObservationIgnored var speedDecayTask: Task<Void, Never>?
     /// Стоянка: скорость 0 и неподвижная стрелка, пока приёмник гуляет на
-    /// месте (Standstill). Только скорость и картинка — гейты по сырому фиксу.
-    @ObservationIgnored var standstill = Standstill()
+    /// месте (Standstill внутри Speedometer). Только скорость и картинка —
+    /// гейты по сырому фиксу.
+    var standstill: Standstill { speedometer.standstill }
     /// Что рисовать на стоянке: отображаемая точка (уже на оси дороги или
     /// маршрута) и курс в момент остановки.
     @ObservationIgnored var frozenDisplay: (coordinate: CLLocationCoordinate2D, course: Double)?

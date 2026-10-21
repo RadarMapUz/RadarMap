@@ -116,9 +116,8 @@ extension LocationService {
             manager.pausesLocationUpdatesAutomatically = true
             isSignalStale = false   // без непрерывного GPS «нет сигнала» не про нас
             locationFilter.reset()
-            speedSmoother.reset()
             roadSnapper.reset()
-            standstill.reset()
+            speedometer.reset()
             frozenDisplay = nil
             displayCoordinate = nil
             displayCourse = -1

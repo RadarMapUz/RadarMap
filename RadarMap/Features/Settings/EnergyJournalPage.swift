@@ -41,10 +41,18 @@ struct EnergyJournalPage: View {
                             }
                     }
                 } header: {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(verbatim: JournalText.month(month.start))
-                        Spacer(minLength: 8)
-                        Text(verbatim: Formatting.money(month.amount))
+                    // Сумма месяца не ломается: не влезает рядом — уходит
+                    // под месяц (крупный шрифт: «811 100 / soʻm»).
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(verbatim: JournalText.month(month.start))
+                            Spacer(minLength: 8)
+                            Text(verbatim: Formatting.money(month.amount)).fixedSize()
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(verbatim: JournalText.month(month.start))
+                            Text(verbatim: Formatting.money(month.amount))
+                        }
                     }
                 }
             }

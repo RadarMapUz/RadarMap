@@ -154,6 +154,44 @@ nonisolated enum MyRoad {
         return rest
     }
 
+    // MARK: - Перестроение
+
+    /// Своя дорога для перестроения (ревью 24.4): ушли с маршрута, выбранного
+    /// как «Моя дорога», — новый маршрут ведёт через ОСТАВШИЕСЯ впереди
+    /// опорные точки той же линии, а не движком, который и вёл бы по дороге,
+    /// на которую жаловались. Пройденные по проекции точки отброшены;
+    /// ближайшая впереди — тоже, если до неё меньше `myRoadRerouteSkipMeters`
+    /// (на неё уже не успеть вырулить без петли) или она позади по курсу.
+    /// nil — точек не осталось или машина ушла от линии дальше
+    /// `myRoadStartMeters`: тогда перестраивает движок.
+    static func remaining(_ plan: Plan, from position: CLLocationCoordinate2D,
+                          course: CLLocationDirection = -1) -> Plan? {
+        guard plan.line.count >= 2 else { return nil }
+        let frame = CommuteProfile.Frame(latitude: plan.line[0].latitude)
+        let xy = plan.line.map { frame.xy($0.latitude, $0.longitude) }
+        let car = frame.xy(position.latitude, position.longitude)
+        let here = project(car, onto: xy)
+        guard here.offset <= AppConfig.myRoadStartMeters else { return nil }
+        var ahead = plan.via.filter { $0.along > here.along }
+        if let first = ahead.first {
+            let toVia = frame.xy(first.latitude, first.longitude) - car
+            let close = simd_length(toVia) < AppConfig.myRoadRerouteSkipMeters
+            var behind = false
+            if course >= 0, course.isFinite, simd_length(toVia) > 0 {
+                let diff = abs((Double(bearing(toVia)) - course + 540).truncatingRemainder(dividingBy: 360) - 180)
+                behind = diff > AppConfig.myRoadRerouteBehindDegrees
+            }
+            if close || behind { ahead.removeFirst() }
+        }
+        guard !ahead.isEmpty else { return nil }
+        let rest = tail(of: xy, from: here)
+        return Plan(direction: plan.direction, variant: plan.variant, fromAlong: plan.fromAlong + here.along,
+                    startOffset: here.offset, line: rest.map(frame.coordinate),
+                    lineLength: CommuteProfile.Geometry.length(rest),
+                    via: ahead.map { Via(latitude: $0.latitude, longitude: $0.longitude,
+                                         bearing: $0.bearing, along: $0.along - here.along) })
+    }
+
     // MARK: - Опорные точки
 
     /// Опорные точки на линии (в метрах плоской проекции), по ходу движения.

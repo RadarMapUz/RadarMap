@@ -208,6 +208,10 @@ final class RouteService {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: myRoadPlan,
                                                "RouteService.myRoadPlan") }
     }
+    /// План своей дороги, по которому построен её вариант (24.4): по нему
+    /// перестроение ведёт через оставшиеся опорные точки. Действует, пока
+    /// выбран вариант с ярлыком «Моя дорога».
+    @ObservationIgnored private var myRoadInUse: MyRoad.Plan?
     /// Язык названий улиц в манёврах (`AppLanguage.mapCode`). Спрашиваем в
     /// момент построения: OSRM отдаёт имя узбекской латиницей, и в русской
     /// версии его надо переписать (см. StreetName). nil — как в русской.
@@ -508,6 +512,7 @@ final class RouteService {
             // после успеха: не построилось — прежняя линия (через остановку)
             // остаётся, и перестроение по ней обязано помнить заезд.
             stop = nil
+            myRoadInUse = merged.index == nil ? nil : plan
             await apply(merged.variants, name: name, destination: destination,
                         cameras: cameras, gen: gen, history: personalHistory?(),
                         myRoad: merged.index.flatMap { index in plan.map { (index, $0) } })
@@ -601,6 +606,7 @@ final class RouteService {
         destinationName = ""
         destinationCoordinate = nil
         stop = nil
+        myRoadInUse = nil
         errorMessage = nil
         selectedCumulative = []
         rerouteGate.reset()
@@ -742,6 +748,9 @@ final class RouteService {
         let name = destinationName
         let gen = generation
         let via = stop   // ещё не заехали — объезд всё равно через остановку
+        // Ехали своей дорогой — и перестраиваемся ею (24.4).
+        let ownPlan = via == nil && variant.assessment.myRoad != nil
+            ? myRoadInUse.flatMap { MyRoad.remaining($0, from: coordinate, course: course) } : nil
         Task {
             defer {
                 isRebuilding = false
@@ -749,11 +758,17 @@ final class RouteService {
             }
             // Перестраиваем без альтернатив — быстрее, и в движении выбор не нужен.
             let built: [BuiltVariant]
+            let heading = course >= 0 ? course : nil
+            let own = await rerouteMyRoad(ownPlan, from: coordinate, to: destination, heading: heading)
             do {
                 // Курс — чтобы новый маршрут шёл туда, куда машина едет, а не
                 // начинался с разворота за спиной (см. rerouteBearingRangeDegrees).
-                built = try await calculate(from: coordinate, via: via, to: destination, alternatives: false,
-                                            heading: course >= 0 ? course : nil)
+                if let own {
+                    built = [own]
+                } else {
+                    built = try await calculate(from: coordinate, via: via, to: destination, alternatives: false,
+                                                heading: heading)
+                }
             } catch {
                 rerouteGate.noteFailure()
                 Log.route.error("перестроение маршрута не удалось (\(self.rerouteGate.failures, privacy: .public)-й раз): \(error.localizedDescription, privacy: .public) — остаёмся на старой линии")
@@ -761,8 +776,10 @@ final class RouteService {
             }
             guard gen == generation else { return }   // маршрут успели сбросить/заменить
             rerouteGate.noteSuccess()
+            myRoadInUse = own == nil ? nil : ownPlan
             await apply(built, name: name, destination: destination,
-                        cameras: cameras, gen: gen, history: nil)
+                        cameras: cameras, gen: gen, history: nil,
+                        myRoad: own == nil ? nil : ownPlan.map { (0, $0) })
             onRerouted?()
         }
     }
@@ -1056,6 +1073,24 @@ final class RouteService {
             Log.route.notice("своя дорога не построена (\(plan.via.count, privacy: .public) точек): \(error.localizedDescription, privacy: .public)")
             return nil
         }
+    }
+
+    /// Перестроение своей дорогой: маршрут через оставшиеся опорные точки,
+    /// если он прошёл ту же отбраковку петли, что и при выборе. nil — точек
+    /// нет, сервер отказал или вышла петля: перестраивает движок.
+    private func rerouteMyRoad(_ plan: MyRoad.Plan?, from source: CLLocationCoordinate2D,
+                               to destination: CLLocationCoordinate2D,
+                               heading: CLLocationDirection?) async -> BuiltVariant? {
+        guard let plan, let mine = await myRoadRoute(plan, from: source, to: destination, heading: heading)
+        else { return nil }
+        let path = mine.points.map(\.coordinate)
+        let distance = mine.distance
+        guard await offMain({ MyRoad.accepts(distance: distance, path: path, plan: plan) }) else {
+            Log.route.notice("перестроение своей дорогой отброшено: \(Int(distance), privacy: .public) м против \(Int(plan.lineLength + plan.startOffset), privacy: .public) м — ведёт движок")
+            return nil
+        }
+        Log.route.notice("перестроение своей дорогой: точек \(plan.via.count, privacy: .public)")
+        return mine
     }
 
     /// Варианты движка вместе со своей дорогой: вариант движка, который и
@@ -1428,9 +1463,10 @@ final class RouteService {
         let traffic = trafficSnapshot?()
         let events = roadEvents?() ?? []
         let eventsNow = Date()
-        // Своя дорога — только при выборе (история есть): после перестроения
-        // и без «Учитывать мои поездки» ярлыков нет вовсе.
-        let mine = history == nil ? nil : myRoad.flatMap { inputs.indices.contains($0.index) ? $0 : nil }
+        // Своя дорога — только когда её план передан: при выборе вариантов
+        // (если «Учитывать мои поездки» включено) и при перестроении своей
+        // дорогой — там ярлык и время по своей истории сохраняются.
+        let mine = myRoad.flatMap { inputs.indices.contains($0.index) ? $0 : nil }
 
         // Там же — выбор варианта по своим поездкам: сравнение с сотней
         // треков стоит десятки миллисекунд, главному потоку они не нужны.

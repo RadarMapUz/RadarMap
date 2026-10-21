@@ -1488,6 +1488,11 @@ nonisolated enum AppConfig {
     nonisolated static let myRoadMaxVariants = 3
     /// Подъезд от старта к своей линии — медленным ходом (двор, парковка).
     nonisolated static let myRoadApproachSpeedMps: Double = 5
+    /// Перестроение своей дорогой: ближайшая опорная точка ближе этого — уже
+    /// не цель (на неё не вырулить без петли), берём следующую.
+    nonisolated static let myRoadRerouteSkipMeters: CLLocationDistance = 300
+    /// …или она позади по курсу больше чем на столько градусов.
+    nonisolated static let myRoadRerouteBehindDegrees: Double = 100
 
     // MARK: - Итоги: разбор периода
 

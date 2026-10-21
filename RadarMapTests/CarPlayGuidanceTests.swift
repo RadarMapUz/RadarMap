@@ -296,6 +296,57 @@ final class CarPlayGuidanceTests: XCTestCase {
             .maneuver.instructionVariants, ["Поверните налево на улицу Лабзак", "Поверните налево"])
     }
 
+    // MARK: - Синяя карточка и стрелка под её фон (25.F, снимки 63–64)
+
+    /// Карточка синяя на каждом манёвре (не только у шаблона): цвет манёвра
+    /// старше цвета шаблона, и CarPlay его ПРИНЯЛ — синий светлее 7:1 он
+    /// заменяет системным, отсюда чёрная карточка в машине 21.10.
+    func testCardIsBlueOnEveryManeuver() throws {
+        let lanes = [LaneHint(arrows: [.left], isValid: true), LaneHint(arrows: [.straight], isValid: false)]
+        for dark in [false, true] {
+            let card = CarPlayGuidance.card(for: leftTurn(lanes: lanes, approach: 2), carDark: dark, metadata: false)
+            // Читаем НАЗАД из манёвра: сеттер CarPlay подменяет цвет,
+            // который не прошёл проверку контраста, системным белым/чёрным.
+            let color = try XCTUnwrap(card.maneuver.cardBackgroundColor)
+            XCTAssertEqual(CarPlayGuidance.hex(color, dark: false), "#124EC4", "CarPlay принял синий днём")
+            XCTAssertEqual(CarPlayGuidance.hex(color, dark: true), "#124EC4", "CarPlay принял синий ночью")
+            let row = try XCTUnwrap(card.laneRow)
+            XCTAssertEqual(row.cardBackgroundColor.map { CarPlayGuidance.hex($0, dark: dark) },
+                           CarPlayGuidance.hex(CarPlayGuidance.cardColor, dark: dark), "ряд полос — на том же синем")
+        }
+    }
+
+    /// Замер 21.10: CarPlay принимает фон карточки только при контрасте с
+    /// белым от 7:1 — `accentFill` (5,4:1) он молча меняет на системный,
+    /// отсюда чёрная карточка в машине. Тест держит обе стороны порога.
+    func testCarPlayRejectsTheLighterBlueAndKeepsOurs() {
+        let rejected = CPManeuver()
+        rejected.cardBackgroundColor = Theme.accentFillUIColor
+        XCTAssertNotEqual(rejected.cardBackgroundColor.map { CarPlayGuidance.hex($0, dark: false) }, "#2563D9",
+                          "если CarPlay начнёт принимать accentFill — можно вернуть общий синий")
+        let template = CPMapTemplate()
+        template.guidanceBackgroundColor = CarPlayGuidance.cardColor
+        XCTAssertEqual(CarPlayGuidance.hex(template.guidanceBackgroundColor, dark: true), "#124EC4")
+    }
+
+    /// Стрелка — под фактический фон: на синем белая в обеих темах, на
+    /// светлом фоне — чёрная (днём на светлой карточке белая пропала бы).
+    func testArrowColourFollowsTheCardBackground() {
+        let blue = CarPlayGuidance.cardColor
+        XCTAssertTrue(CarPlayGuidance.whiteArrow(on: blue, dark: false))
+        XCTAssertTrue(CarPlayGuidance.whiteArrow(on: blue, dark: true))
+        XCTAssertFalse(CarPlayGuidance.whiteArrow(on: .white, dark: false))
+        XCTAssertFalse(CarPlayGuidance.whiteArrow(on: UIColor(white: 0.92, alpha: 1), dark: false))
+        XCTAssertTrue(CarPlayGuidance.whiteArrow(on: .black, dark: true))
+        // Динамический фон «светлый днём, тёмный ночью» — стрелка меняется с темой.
+        let system = UIColor { $0.userInterfaceStyle == .dark ? .black : .white }
+        XCTAssertFalse(CarPlayGuidance.whiteArrow(on: system, dark: false))
+        XCTAssertTrue(CarPlayGuidance.whiteArrow(on: system, dark: true))
+        // И сама картинка карточки — белая на синем днём (раньше жёстко onDark).
+        let card = CarPlayGuidance.card(for: leftTurn(), carDark: false, metadata: false)
+        XCTAssertGreaterThan(Self.inkBrightness(card.maneuver.symbolImage) ?? 0, 0.9)
+    }
+
     /// Средняя яркость непрозрачных пикселей картинки (0 — чёрный, 1 — белый).
     private static func inkBrightness(_ image: UIImage?) -> Double? {
         guard let cg = image?.cgImage else { return nil }

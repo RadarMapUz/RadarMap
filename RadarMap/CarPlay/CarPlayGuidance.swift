@@ -225,6 +225,8 @@ final class CarPlayGuidance {
     private var sentStepTime = Date.distantPast
     private var sentTripDistance: Double?
     private var sentTripTime = Date.distantPast
+    /// Строка «📷 400 м» в оценках поездки (iOS 27), что ушла последней.
+    private var sentCameraDetail: String?
     /// Баннеры поверх карты — общая очередь подключения (CarPlayBanners).
     private weak var banners: CarPlayBanners?
     /// Камера впереди — системным баннером, на нашем экране тоже.
@@ -336,13 +338,59 @@ final class CarPlayGuidance {
 
     /// Карточка манёвра — синяя, как на телефоне (`Theme.accentFill`,
     /// вариант А «Синий навигатор»), днём и ночью: один цвет «куда я еду» на
-    /// обоих экранах. Стрелка на ней — белая, и это не выбор CarPlay, а наш
-    /// битмап (`symbol(onDark: true)`): с 2.2.15 в машину уезжает одна
-    /// картинка того цвета, что нарисован, поэтому чёрной стрелки на синем
-    /// быть не может. Системный текст карточки CarPlay красит сам по
-    /// светлоте фона — на синем 0x2563D9 он белый.
+    /// обоих экранах.
+    ///
+    /// До 21.10 карточка в машине была чёрной (снимки владельца 63–64), хотя
+    /// шаблону ставился синий `accentFill`. Причина — проверка контраста
+    /// (CPMapTemplate.h: «если цвет не проходит, берётся системный»), и она
+    /// строже, чем казалось: замер 21.10 — сеттеры CPManeuver и CPMapTemplate
+    /// принимают фон только при контрасте с белым от 7:1, а у `accentFill`
+    /// 5,4:1. Теперь — свой, более тёмный синий (`carPlayCardFillUIColor`,
+    /// 7,2:1, один на обе темы), и стоит ещё и на каждом манёвре
+    /// (`CPManeuver.cardBackgroundColor`, iOS 15.4 — он старше цвета шаблона).
     func applyTheme(daylight: Bool) {
-        template?.guidanceBackgroundColor = daylight ? Theme.rgb(0x2563D9) : Theme.rgb(0x2A62D6)
+        template?.guidanceBackgroundColor = Self.cardColor
+    }
+
+    /// Фон карточки манёвра: синий `Theme.carPlayCardFillUIColor` с
+    /// контрастом к белому от 7:1 — иначе CarPlay подменяет
+    /// его системным (замер 21.10, CarPlayGuidanceTests).
+    static var cardColor: UIColor { Theme.carPlayCardFillUIColor }
+
+    /// Белая ли стрелка на фоне `card` в теме машины `dark`: фон берётся в
+    /// той же теме, в какой его нарисует машина, и стрелка — того цвета
+    /// (белый или чёрный), что даёт больший контраст. На синей карточке —
+    /// белая в обеих темах; окажись фон светлым (системный днём) — чёрная, а
+    /// не белая на белом.
+    static func whiteArrow(on card: UIColor, dark: Bool) -> Bool {
+        let luminance = relativeLuminance(card, dark: dark)
+        // Контраст с белым (1.05 / (L + 0.05)) против контраста с чёрным
+        // ((L + 0.05) / 0.05) — WCAG, тот же, что в PaletteTests.
+        return 1.05 / (luminance + 0.05) >= (luminance + 0.05) / 0.05
+    }
+
+    /// Цвет фона так, как его разрешит машина в своей теме, — «#2563D9».
+    /// Для журнала: что именно ушло в машину.
+    static func hex(_ color: UIColor, dark: Bool) -> String {
+        let (r, g, b) = components(color, dark: dark)
+        return String(format: "#%02X%02X%02X", Int((r * 255).rounded()), Int((g * 255).rounded()),
+                      Int((b * 255).rounded()))
+    }
+
+    private static func components(_ color: UIColor, dark: Bool) -> (CGFloat, CGFloat, CGFloat) {
+        let resolved = color.resolvedColor(with: UITraitCollection(userInterfaceStyle: dark ? .dark : .light))
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        resolved.getRed(&r, green: &g, blue: &b, alpha: &a)
+        return (r, g, b)
+    }
+
+    private static func relativeLuminance(_ color: UIColor, dark: Bool) -> Double {
+        let (r, g, b) = components(color, dark: dark)
+        func channel(_ c: CGFloat) -> Double {
+            let v = Double(min(1, max(0, c)))
+            return v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
     }
 
     // MARK: - Наблюдение
@@ -538,7 +586,10 @@ final class CarPlayGuidance {
                                                            remainingTime: env.route.remainingTime))
         let laneRow = card.laneRow
         // Улика на случай пустой карточки: что именно ушло в машину.
-        Log.carplay.notice("манёвр в машину: вариантов \(next.instructionVariants.count, privacy: .public), первый \(next.instructionVariants.first?.count ?? 0, privacy: .public) симв., стрелка \(next.symbolImage != nil, privacy: .public), полосы \(laneRow != nil, privacy: .public), край \(step.laneEdge?.rawValue ?? "-", privacy: .public), \(Int(distance), privacy: .public) м")
+        let carDark = model.carIsDark ?? !model.isDaylight
+        let background = next.cardBackgroundColor.map { Self.hex($0, dark: carDark) } ?? "системный"
+        let arrow = Self.whiteArrow(on: Self.cardColor, dark: carDark) ? "белая" : "чёрная"
+        Log.carplay.notice("манёвр в машину: вариантов \(next.instructionVariants.count, privacy: .public), первый \(next.instructionVariants.first?.count ?? 0, privacy: .public) симв., стрелка \(next.symbolImage != nil, privacy: .public) (\(arrow, privacy: .public)), фон карточки \(background, privacy: .public) (\(carDark ? "тёмная" : "светлая", privacy: .public) машина), полосы \(laneRow != nil, privacy: .public), край \(step.laneEdge?.rawValue ?? "-", privacy: .public), \(Int(distance), privacy: .public) м")
         maneuver = next
         upcoming = [next] + (laneRow.map { [$0] } ?? [])
         // Каждый манёвр, попадающий в upcomingManeuvers, сначала регистрируется
@@ -573,12 +624,15 @@ final class CarPlayGuidance {
             text: step.text, shortText: step.shortText, advice: step.laneAdvice)
         // Плитка главного экрана — та же фраза явно, а не через запасной путь.
         next.dashboardInstructionVariants = next.instructionVariants
-        // Цвет стрелки — под фон НАШЕЙ карточки (guidanceBackgroundColor —
-        // синяя всегда, значит стрелка белая): до машины доезжает одна
-        // картинка, та, что создана. Баннеры поверх чужого приложения и
-        // плитка панели рисуются в теме МАШИНЫ — им свой цвет.
+        // Фон карточки — на самом манёвре: он старше цвета шаблона, и только
+        // так карточка синяя, а не системная чёрная (снимки 63–64, 21.10).
+        next.cardBackgroundColor = cardColor
+        // Цвет стрелки — под фактический фон карточки в теме машины: до
+        // машины доезжает одна картинка, та, что создана. Баннеры поверх
+        // чужого приложения и плитка панели рисуются в теме МАШИНЫ без нашей
+        // карточки — им свой цвет.
         let symbolName = step.kind?.isDrawable == false ? "flag.checkered" : step.icon
-        next.symbolImage = symbol(symbolName, pointSize: 34, onDark: true)
+        next.symbolImage = symbol(symbolName, pointSize: 34, onDark: whiteArrow(on: cardColor, dark: carDark))
         next.notificationSymbolImage = symbol(symbolName, pointSize: 34, onDark: carDark)
         next.dashboardSymbolImage = symbol(symbolName, pointSize: 34, onDark: carDark)
         // Схемы развязки (junctionImage) больше нет (21.10, владелец: «мини-
@@ -621,6 +675,8 @@ final class CarPlayGuidance {
         guard let image = laneImage(hints, kind: kind) else { return nil }
         let row = CPManeuver()
         row.symbolImage = image
+        // Тот же синий фон, что у манёвра: ряд белых стрелок рисуется на нём.
+        row.cardBackgroundColor = cardColor
         row.instructionVariants = [LaneAdvice.phrase(hints) ?? String(localized: "Ряд полос")]
         row.userInfo = laneRowTag
         return row
@@ -684,11 +740,18 @@ final class CarPlayGuidance {
         }
         if let trip {
             let distance = route.remainingDistance
-            if CarPlayGuidanceMapping.shouldUpdate(previous: sentTripDistance, current: distance,
-                                                   elapsed: now.timeIntervalSince(sentTripTime)) {
+            // Камера впереди — строкой в оценках поездки (CPRouteDetail, iOS
+            // 27): своя камера и «нет тревоги» — без строки (CarPlayCameraCue).
+            let camera = Self.cameraDetail()
+            let cameraChanged = camera != sentCameraDetail
+                && now.timeIntervalSince(sentTripTime) >= AppConfig.carPlayCameraLabelUpdateSeconds
+            if cameraChanged || CarPlayGuidanceMapping.shouldUpdate(previous: sentTripDistance, current: distance,
+                                                                    elapsed: now.timeIntervalSince(sentTripTime)) {
                 sentTripDistance = distance
                 sentTripTime = now
-                template.updateEstimates(Self.tripEstimates(meters: distance, seconds: route.remainingTime),
+                sentCameraDetail = camera
+                template.updateEstimates(Self.tripEstimates(meters: distance, seconds: route.remainingTime,
+                                                            camera: camera),
                                          for: trip)
             }
         }
@@ -714,9 +777,28 @@ final class CarPlayGuidance {
 
     /// Оценки всей поездки — панель прибытия и выбор маршрута: всегда
     /// километры (CarPlayGuidanceMapping.tripDistance — почему).
-    static func tripEstimates(meters: Double, seconds: Double) -> CPTravelEstimates {
-        CPTravelEstimates(distanceRemaining: CarPlayGuidanceMapping.tripDistance(meters: meters),
-                          timeRemaining: max(0, seconds))
+    ///
+    /// `camera` — «400 м» до камеры впереди: на iOS 27 уходит строкой
+    /// `CPRouteDetail` со значком камеры (система решает, показать ли её — по
+    /// месту); раньше iOS 27 не уходит никуда.
+    static func tripEstimates(meters: Double, seconds: Double, camera: String? = nil) -> CPTravelEstimates {
+        let distance = CarPlayGuidanceMapping.tripDistance(meters: meters)
+        if #available(iOS 27.0, *), let camera {
+            let detail = CPRouteDetail(symbolName: "camera.fill", value: camera)
+            // Цвет значка — только динамический (CPRouteDetail.h): красный камеры.
+            detail.symbolTintColor = Theme.adaptiveUIColor(0xC62828, 0xFF7A70)
+            return CPTravelEstimates(distanceRemaining: distance, distanceRemainingToDisplay: distance,
+                                     timeRemaining: max(0, seconds), routeDetails: [detail])
+        }
+        return CPTravelEstimates(distanceRemaining: distance, timeRemaining: max(0, seconds))
+    }
+
+    /// Расстояние до камеры для оценок поездки или nil (CarPlayCameraCue).
+    private static func cameraDetail() -> String? {
+        let location = AppEnvironment.shared.location
+        guard CarPlayCameraCue.current(location).distanceLabel,
+              let distance = location.distanceToNearest else { return nil }
+        return Formatting.distance(distance)
     }
 
     /// Значок для карточки CarPlay: белый на тёмном фоне, чёрный на светлом.

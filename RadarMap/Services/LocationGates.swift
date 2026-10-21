@@ -219,8 +219,12 @@ nonisolated enum LocationGates {
     /// курс и точность приходят с одного принятого фикса), так что это
     /// правило на случай, а не на каждый день.
     static func fixAccuracy(_ situation: Situation) -> CLLocationAccuracy {
-        situation.horizontalAccuracy > 0 ? situation.horizontalAccuracy
-                                         : AppConfig.maxHorizontalAccuracyMeters
+        accuracyOrPoorest(situation.horizontalAccuracy)
+    }
+
+    /// Та же замена для любой точки (и для точки сближения у линии проезда).
+    static func accuracyOrPoorest(_ accuracy: CLLocationAccuracy) -> CLLocationAccuracy {
+        accuracy > 0 ? accuracy : AppConfig.maxHorizontalAccuracyMeters
     }
 
     /// Камера впереди по курсу (с тем же запасом «немного позади», что у
@@ -261,16 +265,44 @@ nonisolated enum LocationGates {
     /// куска и оси (треноги, свои) и у камеры с непроверенной позицией (её
     /// кусок бывает поперечной улицы, 14.13) своя дорога — та, по которой мы
     /// мимо неё проехали: прямая через точку сближения по нашему курсу там.
+    ///
+    /// Погрешность фикса (14.15) — по правилу коридора (14.14): сверх
+    /// `corridorAccuracyBaselineMeters` предел своей дороги шире на
+    /// `corridorAccuracyFactor` метров на метр. Смещение меряется от НАШЕЙ
+    /// точки, и её погрешность ложится на него один к одному: после
+    /// разворота в каньоне (доплеровский курс уверенный, гейты работают)
+    /// встречная проезжая часть в 12 м плюс точка, уехавшая на свои 50 м, —
+    /// это 62 м при пределе 50, и серия не забывалась: камера, снимающая обе
+    /// стороны, молчала весь обратный подъезд. У линии проезда ошибается и
+    /// вторая точка — точка сближения, снятая своим фиксом, — и запас нужен
+    /// на обе. Почему не «на плохом фиксе доказательства нет — перевзводить»:
+    /// тогда решал бы один `isOnOurRoad`, а на таком фиксе это коридор от
+    /// НАШЕГО курса, расширенный на ту же погрешность, — с параллельной улицы
+    /// в 120 м камеру в 400 м впереди он уже видит своей. Своя дорога
+    /// меряется от дороги камеры (или линии проезда), и с запасом её предел
+    /// остаётся конечным: на худшем принятом фиксе (65 м) — плюс 55 м от её
+    /// дороги (плюс ещё 55 у линии проезда, если и сближение было на
+    /// худшем), так что улица в 200 м своей не становится ни на каком фиксе.
+    /// На хорошем GPS (до 10 м) — ровно прежний предел, и клевер без второго
+    /// «первого» не тронут; на плохом петля клевера может перевзвести камеру —
+    /// лишнее предупреждение, цена правила асимметрии.
     static func isReapproach(_ camera: Camera, in situation: Situation,
                              passLine: AlertEngine.PassLine?) -> Bool {
         guard situation.speedKmh >= AppConfig.voiceMinSpeedKmh,
               isClearlyAhead(camera, in: situation),
               isOnOurRoad(camera, in: situation, isOnRoute: false) else { return false }
-        let offset = PassGeometry.ownRoadOffset(camera: camera, at: situation.coordinate)
-            ?? passLine.map { PassGeometry.lineOffset(situation.coordinate, through: $0.coordinate,
-                                                      bearing: $0.course) }
-        guard let offset else { return true }
-        return offset <= PassGeometry.reapproachLimit(for: camera)
+        var slack = RoadCorridor.accuracyAllowance(fixAccuracy(situation))
+        let offset: Double
+        if let own = PassGeometry.ownRoadOffset(camera: camera, at: situation.coordinate) {
+            offset = own
+        } else if let passLine {
+            offset = PassGeometry.lineOffset(situation.coordinate, through: passLine.coordinate,
+                                             bearing: passLine.course)
+            slack += RoadCorridor.accuracyAllowance(accuracyOrPoorest(passLine.accuracy))
+        } else {
+            return true
+        }
+        return offset <= PassGeometry.reapproachLimit(for: camera) + slack
     }
 
     /// Остаток по маршруту до камеры маршрута — или nil, когда прогрессу по

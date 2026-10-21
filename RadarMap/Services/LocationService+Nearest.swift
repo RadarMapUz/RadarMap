@@ -189,7 +189,8 @@ extension LocationService {
                                                  AppConfig.alertTraverseMeters)
                 if atTraverse {
                     alertEngine.noteApproach(camera.id, distance: straight, at: coordinate,
-                                             course: situation.course)
+                                             course: situation.course,
+                                             accuracy: situation.horizontalAccuracy)
                 }
                 let behind = LocationGates.isClearlyBehind(camera, in: situation)
                 // Камера явно позади — её баннер «Камера через …» уже неправда.

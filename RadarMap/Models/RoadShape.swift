@@ -475,6 +475,8 @@ nonisolated enum PassGeometry {
 
     /// Предел «своей дороги» для нового подъезда: ширина дороги камеры с
     /// запасом; камере с недоказанными сторонами — и дальняя проезжая часть.
+    /// Рассчитан на хороший GPS: запас на погрешность фикса сверх 10 м
+    /// прибавляет `LocationGates.isReapproach` (14.15).
     static func reapproachLimit(for camera: Camera) -> Double {
         camera.sidesAreProven ? offRoadLimit(for: camera)
                               : max(offRoadLimit(for: camera), AppConfig.reapproachUnprovenMeters)

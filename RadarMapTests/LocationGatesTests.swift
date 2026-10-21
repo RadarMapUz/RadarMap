@@ -231,7 +231,8 @@ final class LocationGatesTests: XCTestCase {
     func testNeedsReviewReapproachUsesThePassLine() {
         let doubtful = camera(ahead: 300, roadBearing: 90, axis: 90, needsReview: true)
         XCTAssertNil(PassGeometry.ownRoadOffset(camera: doubtful, at: me))
-        let passLine = AlertEngine.PassLine(lat: doubtful.lat, lon: doubtful.lon, course: 0, distance: 5)
+        let passLine = AlertEngine.PassLine(lat: doubtful.lat, lon: doubtful.lon, course: 0, distance: 5,
+                                              accuracy: 5)
         XCTAssertTrue(LocationGates.isReapproach(doubtful, in: situation(), passLine: passLine),
                       "едем по той же линии, что проезжали, — подъезд новый")
         let checked = camera(ahead: 300, roadBearing: 90, axis: 90)
@@ -349,6 +350,98 @@ final class LocationGatesTests: XCTestCase {
                           .provenOffCarriageway)
         let own = camera(ahead: 120, east: 40, roadBearing: 0, roadHalf: 30, dir: 0, twin: true)
         XCTAssertEqual(LocationGates.verdict(own, in: situation(accuracy: -1), isOnRoute: false), .ours)
+    }
+
+    // MARK: - Новый подъезд на плохом фиксе (14.15)
+
+    /// Линия проезда через камеру по курсу `course`; точка сближения — в
+    /// `west` м к западу от камеры (сдвинутый фикс), снятая с точностью `accuracy`.
+    private func passLine(through camera: Camera, west: Double = 0, course: Double = 0,
+                          accuracy: Double) -> AlertEngine.PassLine {
+        let at = GeoMath.destination(from: camera.coordinate, bearing: 270, distanceMeters: west)
+        return AlertEngine.PassLine(lat: at.latitude, lon: at.longitude, course: course, distance: 5,
+                                    accuracy: accuracy)
+    }
+
+    /// После разворота едем обратно к проеханной камере по встречной
+    /// проезжей части (12 м от её дороги; на неразделённой — соседняя полоса,
+    /// 4 м), а фикс уехал от её дороги на свою погрешность. Своя дорога
+    /// мерится от НАШЕЙ точки: 12 + 50 = 62 м при пределе 50 — до 14.15
+    /// «чужая дорога», серия не забывалась, и камера молчала весь обратный
+    /// подъезд. Теперь предел шире на погрешность сверх 10 м, как коридор.
+    /// У треноги своя дорога — линия проезда, и сближение было на таком же
+    /// фиксе, сдвинутом в другую сторону: ошибается и сама линия — запас на
+    /// обе точки (с одной только нашей 12 + 2·35 = 82 м не влезали бы в 75).
+    func testPoorFixUTurnBackPastTheSameCameraRearms() {
+        for accuracy in [35.0, 50, AppConfig.maxHorizontalAccuracyMeters] {
+            let poor = situation(accuracy: accuracy)
+            let snapped = camera(ahead: 300, east: -(12 + accuracy), roadBearing: 0, axis: 0, split: true)
+            let undivided = camera(ahead: 300, east: -(4 + accuracy), roadBearing: 0, axis: 0, split: false)
+            XCTAssertFalse(snapped.sidesAreProven)
+            XCTAssertTrue(undivided.sidesAreProven)
+            let tripod = camera(ahead: 300, east: -(12 + accuracy), roadBearing: nil, cls: nil, type: "Тренога")
+            let line = passLine(through: tripod, west: accuracy, accuracy: accuracy)
+            let cases: [(Camera, AlertEngine.PassLine?, String)] = [
+                (snapped, nil, "снап"), (undivided, nil, "неразделённая"), (tripod, line, "тренога"),
+            ]
+            for (own, passLine, label) in cases {
+                XCTAssertTrue(LocationGates.isReapproach(own, in: poor, passLine: passLine),
+                              "\(label), точность и сдвиг \(Int(accuracy)) м")
+            }
+        }
+        // Неизвестная точность (≤ 0) — как худшая принятая.
+        let snapped = camera(ahead: 300, east: -62, roadBearing: 0, axis: 0, split: true)
+        XCTAssertTrue(LocationGates.isReapproach(snapped, in: situation(accuracy: -1), passLine: nil))
+        // Хороший фикс в той же геометрии: 62 м при точности 5 м — другая дорога.
+        XCTAssertFalse(LocationGates.isReapproach(snapped, in: situation(accuracy: 5), passLine: nil))
+    }
+
+    /// На хорошем GPS (до базы 10 м включительно) предел своей дороги —
+    /// ровно прежний: у предела — новый подъезд, чуть за ним — нет (дублёр,
+    /// петля клевера). Камера в 500 м впереди: коридор там шире предела, и
+    /// решает именно своя дорога.
+    func testGoodFixReapproachLimitIsUnchanged() {
+        for accuracy in [5.0, AppConfig.corridorAccuracyBaselineMeters] {
+            let good = situation(accuracy: accuracy)
+            for split in [true, false] {
+                let limit = PassGeometry.reapproachLimit(for: camera(ahead: 500, roadBearing: 0, axis: 0, split: split))
+                let near = camera(ahead: 500, east: -(limit - 1), roadBearing: 0, axis: 0, split: split)
+                let far = camera(ahead: 500, east: -(limit + 1), roadBearing: 0, axis: 0, split: split)
+                let label = "split \(split), предел \(Int(limit)), точность \(Int(accuracy))"
+                XCTAssertTrue(LocationGates.isOnOurRoad(far, in: good, isOnRoute: false), "коридор пропускает — \(label)")
+                XCTAssertTrue(LocationGates.isReapproach(near, in: good, passLine: nil), label)
+                XCTAssertFalse(LocationGates.isReapproach(far, in: good, passLine: nil), label)
+            }
+            let tripodNear = camera(ahead: 500, east: -49, roadBearing: nil, cls: nil, type: "Тренога")
+            let tripodFar = camera(ahead: 500, east: -51, roadBearing: nil, cls: nil, type: "Тренога")
+            XCTAssertEqual(PassGeometry.reapproachLimit(for: tripodFar), AppConfig.reapproachUnprovenMeters)
+            XCTAssertTrue(LocationGates.isReapproach(tripodNear, in: good,
+                                                     passLine: passLine(through: tripodNear, accuracy: accuracy)))
+            XCTAssertFalse(LocationGates.isReapproach(tripodFar, in: good,
+                                                      passLine: passLine(through: tripodFar, accuracy: accuracy)))
+        }
+    }
+
+    /// Плохой фикс чужую дорогу своей не делает. Мы на дороге в 200 м от
+    /// дороги камеры, и курс смотрит прямо на камеру (дорога сходится к её
+    /// перекрёстку под 27°: гейт оси пропускает, коридор тоже — решает своя
+    /// дорога). На худшем принятом фиксе предел шире на 55 м, у линии
+    /// проезда — на 110, если и сближение было на худшем: до 200 м далеко.
+    func testPoorFixDoesNotRearmFromAnotherRoad() {
+        let snapped = camera(ahead: 400, east: -200, roadBearing: 0, axis: 0, split: true)
+        let tripod = camera(ahead: 400, east: -200, roadBearing: nil, cls: nil, type: "Тренога")
+        let line = passLine(through: tripod, accuracy: AppConfig.maxHorizontalAccuracyMeters)
+        let cases: [(Camera, AlertEngine.PassLine?, String)] = [(snapped, nil, "снап"), (tripod, line, "тренога")]
+        let course = GeoMath.bearing(from: me, to: snapped.coordinate)
+        for accuracy in [5.0, 35, AppConfig.maxHorizontalAccuracyMeters, -1] {
+            let s = situation(course: course, accuracy: accuracy)
+            for (other, passLine, label) in cases {
+                let text = "\(label), точность \(Int(accuracy))"
+                XCTAssertTrue(LocationGates.isClearlyAhead(other, in: s), text)
+                XCTAssertTrue(LocationGates.isOnOurRoad(other, in: s, isOnRoute: false), "решает своя дорога — \(text)")
+                XCTAssertFalse(LocationGates.isReapproach(other, in: s, passLine: passLine), text)
+            }
+        }
     }
 
     // MARK: - Коридор: старая база и внезапные точки

@@ -45,8 +45,9 @@ struct MapScreen: View {
     /// «Батарея садится — погасите экран»: поездка началась, заряд тает, а
     /// зарядки нет.
     @State var showBatterySaverHint = false
-    /// Быстрые тумблеры оповещений (тап по HUD).
-    @State var showQuickToggles = false
+    /// Открытое меню на карте: «Карта» (слои) или «Оповещения» (тап по HUD).
+    /// Одно на экран, переходы — MapPopover.next (MapScreen+Popovers).
+    @State var popover: MapPopover?
     /// Итог только что завершённой поездки («Поездка сохранена») и деталка из него.
     @State var tripEndRecord: TripRecord?
     @State var tripEndDetail: TripRecord?
@@ -127,6 +128,12 @@ struct MapScreen: View {
                 // Следование за GPS: единственный подписчик locationTick.
                 LocationFollowDriver(map: map, drivesAppleCamera: false)
             }
+        }
+        // Меню на карте — над всеми панелями, но под предупреждением о
+        // камере и ошибкой загрузки (оверлеи ниже): касание мимо меню
+        // закрывает его и не доходит ни до карты, ни до кнопок (20.10).
+        .overlayPreferenceValue(MapPopoverAnchors.self) { anchors in
+            popoverLayer(anchors)
         }
         .task {
             map.configure(env.cameras, speedLimits: env.speedLimits, thermal: env.thermal,
@@ -312,11 +319,20 @@ struct MapScreen: View {
         .onChange(of: env.location.nearestCamera?.id) { _, _ in
             dismissedApproachID = nil   // новая ближайшая камера — снова показываем предупреждение
         }
+        // Меню не переживает лист, старт и конец поездки и уход в фон
+        // (MapPopover.Event): после них его никто не ждёт.
+        .onChange(of: isSheetShown) { _, shown in
+            if shown { send(.sheetOpened) }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { send(.background) }
+        }
         // Проезд чужой передвижной отметки отслеживает MobileCameraService на
         // каждом фиксе (LocationService.onAcceptedFix) — не вью: вью без
         // экрана не живёт, а onChange(locationTick) прямо здесь делал бы весь
         // body зависимым от тика.
         .onChange(of: env.location.isTripActive) { _, active in
+            send(.tripStateChanged)
             // Карта сама встаёт «по ходу движения» на старте и возвращается на
             // север после — но только если человек не выбирал ориентацию сам.
             // Раньше выбор терялся дважды за поездку, молча и поверх нажатой

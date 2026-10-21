@@ -17,10 +17,31 @@
 //  Свёрнутая кнопка показывает ВЫБРАННУЮ подложку, а не абстрактные «слои»:
 //  состояние читается, не открывая панель.
 //
+//  С 20.10 кнопка и панель — две вью. Панель рисует слой меню над всем
+//  экраном (MapScreen+Popovers): только оттуда касание мимо неё закрывает
+//  её, не задевая карту и кнопки под пальцем. Кнопка отдаёт слою свою рамку
+//  (MapPopoverAnchors), и панель встаёт там же, где стояла, — сбоку от неё.
+//
 
 import SwiftUI
 
-struct MapLayersControl: View {
+/// Кнопка слоёв в колонке: открывает и закрывает панель «Карта».
+struct MapLayersButton: View {
+    let isOpen: Bool
+    let action: () -> Void
+
+    var body: some View {
+        CircleControl(systemName: "square.3.layers.3d",
+                      tint: isOpen ? Theme.accent : Theme.textPrimary,
+                      accessibilityLabel: "Слои карты",
+                      action: action)
+            .accessibilityAddTraits(isOpen ? .isSelected : [])
+            .anchorPreference(key: MapPopoverAnchors.self, value: .bounds) { [.layers: $0] }
+    }
+}
+
+/// Панель «Карта»: слои и кнопки масштаба.
+struct MapLayersPanel: View {
     /// Пробки от водителей (TrafficService) — первым: это то, что смотрят
     /// перед выездом.
     @Binding var traffic: Bool
@@ -36,9 +57,8 @@ struct MapLayersControl: View {
     /// Сколько панели можно занять по высоте — до нижних панелей экрана.
     /// Не влезает — листается, а не уезжает под них.
     var maxPanelHeight: CGFloat = .infinity
+    let onClose: () -> Void
 
-    @State private var isExpanded = false
-    @State private var collapseTask: Task<Void, Never>?
     /// Настоящая высота содержимого панели — мерится внутри ScrollView.
     @State private var contentHeight: CGFloat = 0
     /// Ширина по самой длинной подписи («Piyodalar yo‘lagi» и крупный
@@ -46,27 +66,6 @@ struct MapLayersControl: View {
     @State private var contentWidth: CGFloat = 0
 
     var body: some View {
-        // Панель открывается СБОКУ от кнопки, поверх карты, и в вёрстке
-        // колонки не участвует. Раньше она вставала в колонку над кнопкой —
-        // 208×~350 pt — и сталкивала вниз все кнопки под собой, на маленьком
-        // iPhone за край экрана и под нижние панели.
-        CircleControl(systemName: "square.3.layers.3d",
-                      tint: isExpanded ? Theme.accent : Theme.textPrimary,
-                      accessibilityLabel: "Слои карты") {
-            isExpanded.toggle()
-            postpone()
-        }
-        .overlay(alignment: .topTrailing) {
-            if isExpanded {
-                panel
-                    .offset(x: -(Theme.controlSize + 10))
-            }
-        }
-        .motionAnimation(.spring(duration: 0.32, bounce: 0.16), value: isExpanded)
-        .onDisappear { collapseTask?.cancel() }
-    }
-
-    private var panel: some View {
         ScrollView {
             panelContent
                 .onGeometryChange(for: CGSize.self) { $0.size } action: {
@@ -83,28 +82,29 @@ struct MapLayersControl: View {
                           in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
             .strokeBorder(Theme.edgePanel, lineWidth: 1))
-        .transition(.scale(scale: 0.86, anchor: .topTrailing).combined(with: .opacity))
+        // Таймер простоя — от любого переключения внутри (MapPopoverCard).
+        .mapPopoverCard(activity: [traffic, places, houses, sidewalks, zoomButtons], onClose: onClose)
     }
 
     private var panelContent: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Карта")
-                .font(.rounded(11, .semibold))
-                .foregroundStyle(Theme.textTertiary)
-                .padding(.bottom, 2)
-            toggle("Пробки", "car.2.fill", isOn: $traffic)
+        VStack(alignment: .leading, spacing: 2) {
+            MapPopoverHeader(title: "Карта", onClose: onClose)
+            toggle("Пробки", Icon.trafficLayer, isOn: $traffic)
             // «Места» прячут кафе и банки, заправки и парковки остаются всегда.
             toggle("Места", Icon.placesLayer, isOn: $places)
             toggle("Дома", Icon.buildingsLayer, isOn: $houses)
-            toggle("Тротуары", "figure.walk", isOn: $sidewalks)
+            toggle("Тротуары", Icon.sidewalksLayer, isOn: $sidewalks)
             Text("Кнопки")
                 .font(.rounded(11, .semibold))
                 .foregroundStyle(Theme.textTertiary)
                 .padding(.top, 8)
                 .padding(.bottom, 2)
-            toggle("Масштаб", "plus.magnifyingglass", isOn: $zoomButtons)
+                .accessibilityAddTraits(.isHeader)
+            toggle("Масштаб", Icon.zoomButtons, isOn: $zoomButtons)
         }
-        .padding(12)
+        .padding(.leading, 12)
+        .padding(.trailing, 6)
+        .padding(.vertical, 8)
         .frame(minWidth: Self.minWidth, alignment: .leading)
         // Идеальная ширина, а не предложенная ScrollView: иначе панель
         // измеряла бы саму себя.
@@ -119,20 +119,21 @@ struct MapLayersControl: View {
         Button {
             isOn.wrappedValue.toggle()
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            postpone()
         } label: {
-            HStack(spacing: 9) {
-                Image(systemName: icon)
-                    .font(.rounded(12, .semibold))
-                    .foregroundStyle(isOn.wrappedValue ? Theme.accent : Theme.textTertiary)
-                    .frame(width: 26)
+            HStack(spacing: 10) {
+                // Значок — на кружке, как тумблеры «Оповещений»: включённый
+                // слой — синий кружок с белым значком, выключенный — серый.
+                // До 20.10 это был голый значок в 12 pt, и человечек
+                // «Тротуаров» рядом с домами читался пятном.
+                MapPopoverGlyph(systemName: icon, isOn: isOn.wrappedValue)
                 Text(title)
-                    .font(.rounded(13, .medium))
+                    .font(.rounded(14, .medium))
                     .foregroundStyle(Theme.textPrimary)
                 Spacer(minLength: 10)
                 Image(systemName: isOn.wrappedValue ? "checkmark.circle.fill" : "circle")
-                    .font(.rounded(14))
+                    .font(.rounded(18))
                     .foregroundStyle(isOn.wrappedValue ? Theme.accent : Theme.textTertiary)
+                    .frame(width: 44)
             }
             .frame(minHeight: Theme.controlSize)
             .contentShape(Rectangle())
@@ -142,17 +143,5 @@ struct MapLayersControl: View {
         // и включённый слой не отличался от выключенного (4.6).
         .accessibilityAddTraits(isOn.wrappedValue ? .isSelected : [])
         .accessibilityValue(isOn.wrappedValue ? Text("включено") : Text("выключено"))
-    }
-
-    /// Панель закрывается сама: открытой она занимает четверть экрана, а
-    /// водитель, отвлёкшийся после нажатия, закрывать её не станет.
-    private func postpone() {
-        collapseTask?.cancel()
-        guard isExpanded else { return }
-        collapseTask = Task {
-            await Task.pause(seconds: 6)
-            guard !Task.isCancelled else { return }
-            isExpanded = false
-        }
     }
 }

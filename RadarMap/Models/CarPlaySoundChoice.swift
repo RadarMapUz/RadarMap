@@ -97,12 +97,12 @@ enum CarPlaySoundChoice: CaseIterable, Hashable {
 
     /// Глиф кнопки бара: по нему видно состояние не читая — промах слепого
     /// тапа не должен глушить камеры незаметно.
+    /// Те же значки, что у шкалы голоса и тумблера сигнала на телефоне
+    /// (VoiceMode.symbol, Icon.alertSignal): один выбор — один значок везде.
     var symbol: String {
         switch self {
-        case .all: return "speaker.wave.3.fill"
-        case .smart: return "speaker.wave.1.fill"
-        case .beepOnly: return "bell.fill"
-        case .silent: return "speaker.slash.fill"
+        case .all, .smart, .silent: return voiceMode.symbol
+        case .beepOnly: return Icon.alertSignal
         }
     }
 }

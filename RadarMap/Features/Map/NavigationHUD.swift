@@ -103,10 +103,11 @@ struct TripCameraChip: View {
         return HStack(spacing: 8) {
             if location.isSignalStale {
                 // Фиксов нет: старое расстояние как живое — враньё водителю.
-                Image(systemName: "location.slash.fill")
+                Image(systemName: location.isAuthorized ? Icon.noGPSSignal : Icon.noLocationAccess)
                     .font(.rounded(13, .semibold))
                     .foregroundStyle(Theme.warning)
                     .frame(width: 28, height: 28)
+                    .background(Theme.warning.opacity(0.18), in: Circle())
                 Text(location.isAuthorized ? "Нет сигнала GPS" : "Нет доступа к геопозиции")
                     .font(.rounded(14, .semibold))
                     .foregroundStyle(Theme.textPrimary)

@@ -123,11 +123,16 @@ enum VoiceMode: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Шкала «молча → умно → обо всех» — громкостью динамика, как в списке
+    /// звука CarPlay (CarPlaySoundChoice): одна шкала — одни значки на
+    /// телефоне и в машине. До 20.10 «Умно» было волшебной палочкой (она
+    /// значит «авто» в других настройках и ничего не говорит о голосе), а
+    /// «Обо всех» — тем же динамиком, что тумблер «Звук» в той же карточке.
     var symbol: String {
         switch self {
         case .off:    return "speaker.slash.fill"
-        case .smart:  return "wand.and.stars"
-        case .always: return "speaker.wave.2.fill"
+        case .smart:  return "speaker.wave.1.fill"
+        case .always: return "speaker.wave.3.fill"
         }
     }
 }

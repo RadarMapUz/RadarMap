@@ -44,7 +44,7 @@ struct CarPlayStatusChips: View {
         if !env.location.isAuthorized {
             // Коротко и действием: за рулём читают глиф и два-три слова,
             // длинная фраза на узком экране обрезалась на самом важном.
-            result.append(CarPlayChip(id: "auth", symbol: "location.slash.fill",
+            result.append(CarPlayChip(id: "auth", symbol: Icon.noLocationAccess,
                                       tint: Theme.danger,
                                       text: String(localized: "Разрешите геопозицию на телефоне")))
         } else if !env.location.isAlwaysAuthorized {

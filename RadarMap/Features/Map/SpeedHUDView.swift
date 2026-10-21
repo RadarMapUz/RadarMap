@@ -165,11 +165,17 @@ struct SpeedHUDView: View {
     private func nearestBlock(camera: Camera?, distance: Double?) -> some View {
         if env.location.isSignalStale {
             // Фиксов нет: показывать старое расстояние как живое — врать водителю.
-            HStack(spacing: 10) {
-                Image(systemName: "location.slash.fill")
+            HStack(spacing: 12) {
+                // Антенна без сигнала — в кружке на месте значка камеры, как
+                // клетка статуса в CarPlay. Перечёркнутая стрелка геопозиции
+                // здесь читалась как перечёркнутый самолёт (владелец, 21.10);
+                // её место — нет ДОСТУПА к геопозиции, другая причина.
+                Image(systemName: env.location.isAuthorized ? Icon.noGPSSignal : Icon.noLocationAccess)
                     .font(.rounded(16, .semibold))
                     .foregroundStyle(Theme.warning)
                     .symbolEffect(.pulse, options: .repeating, isActive: true)
+                    .frame(width: 38, height: 38)
+                    .background(Theme.warning.opacity(0.18), in: Circle())
                 VStack(alignment: .leading, spacing: 1) {
                     // Без доступа к геопозиции — не «спутники»: причина другая.
                     // Причину и кнопку уже показывает баннер над картой — здесь

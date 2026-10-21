@@ -94,6 +94,68 @@ final class CarPlayGuidanceTests: XCTestCase {
         XCTAssertEqual(CarPlayGuidanceMapping.distance(meters: -5).value, 0, accuracy: 0.001)
     }
 
+    /// «08:29 ETA 1 min 780 meter» под карточкой «120 m» (поездка 21.10):
+    /// панель прибытия печатает единицу коротким стилем `string(from: unit)`,
+    /// и метры там — слово. Остаток поездки — всегда километры, с десятой.
+    func testTripDistanceIsAlwaysKilometres() {
+        let near = CarPlayGuidanceMapping.tripDistance(meters: 780)
+        XCTAssertEqual(near.unit, UnitLength.kilometers)
+        XCTAssertEqual(near.value, 0.8, accuracy: 0.0001, "780 м — «0,8 км»")
+        XCTAssertEqual(CarPlayGuidanceMapping.tripDistance(meters: 1_740).value, 1.7, accuracy: 0.0001)
+        XCTAssertEqual(CarPlayGuidanceMapping.tripDistance(meters: 12_834).value, 12.8, accuracy: 0.0001)
+        XCTAssertEqual(CarPlayGuidanceMapping.tripDistance(meters: 154_300).value, 154, accuracy: 0.0001,
+                       "дальше сотни — целые, как печатает сама система")
+        XCTAssertEqual(CarPlayGuidanceMapping.tripDistance(meters: 30).value, 0.1, accuracy: 0.0001,
+                       "30 м до цели — не «0 км»: ещё не приехали")
+        XCTAssertEqual(CarPlayGuidanceMapping.tripDistance(meters: 0).value, 0, accuracy: 0.0001)
+        XCTAssertEqual(CarPlayGuidanceMapping.tripDistance(meters: -5).value, 0, accuracy: 0.0001)
+        for meters in [1.0, 40, 780, 999, 1_000, 12_834, 154_300] {
+            XCTAssertEqual(CarPlayGuidanceMapping.tripDistance(meters: meters).unit, UnitLength.kilometers,
+                           "\(meters) м")
+        }
+    }
+
+    /// Карточка манёвра и панель прибытия от километра показывают одно и то же
+    /// число: «1,2 km» на повороте и «1,2 km» до цели, если поворот — последний.
+    func testManeuverAndTripAgreeFromOneKilometre() {
+        for meters in [1_000.0, 1_249, 8_460, 99_960, 154_300] {
+            let maneuver = CarPlayGuidanceMapping.distance(meters: meters)
+            let trip = CarPlayGuidanceMapping.tripDistance(meters: meters)
+            XCTAssertEqual(maneuver.unit, trip.unit, "\(meters) м")
+            XCTAssertEqual(maneuver.value, trip.value, accuracy: 0.0001, "\(meters) м")
+        }
+        XCTAssertEqual(CarPlayGuidanceMapping.distance(meters: 120).unit, UnitLength.meters,
+                       "карточка манёвра ближе километра — метры: средний стиль печатает «120 m»")
+    }
+
+    /// Как CarPlay печатает каждую из двух строк (CarPlaySupport, iOS 26.2):
+    /// панель прибытия — единица `string(from: unit)` коротким стилем, карточка
+    /// манёвра — `string(from: measurement)` средним. В языках, на которых
+    /// стоят телефоны наших водителей, обе единицы обязаны быть короткими —
+    /// длинное слово («meter», «metr») и есть тот дефект.
+    func testUnitsPrintShortInTheLanguagesOfOurPhones() {
+        let locales = ["en_US", "en_GB", "ru_RU", "ru_UZ", "uz_Latn_UZ", "uz_Cyrl_UZ", "kk_KZ"]
+        let tripUnit = MeasurementFormatter()
+        tripUnit.unitStyle = .short
+        tripUnit.unitOptions = .providedUnit
+        let maneuverText = MeasurementFormatter()
+        maneuverText.unitStyle = .medium
+        maneuverText.unitOptions = .providedUnit
+        for identifier in locales {
+            tripUnit.locale = Locale(identifier: identifier)
+            maneuverText.locale = Locale(identifier: identifier)
+            for meters in [30.0, 780, 12_834] {
+                let unit = tripUnit.string(from: CarPlayGuidanceMapping.tripDistance(meters: meters).unit)
+                XCTAssertLessThanOrEqual(unit.count, 3, "\(identifier): панель прибытия «\(unit)»")
+            }
+            for meters in [120.0, 780, 12_834] {
+                let text = maneuverText.string(from: CarPlayGuidanceMapping.distance(meters: meters))
+                let unit = text.filter { $0.isLetter }
+                XCTAssertLessThanOrEqual(unit.count, 2, "\(identifier): карточка манёвра «\(text)»")
+            }
+        }
+    }
+
     /// Варианты фразы — от полной к короткой, с заглавной, без повторов.
     func testInstructionVariantsGoFromLongToShort() {
         let variants = CarPlayGuidanceMapping.instructionVariants(

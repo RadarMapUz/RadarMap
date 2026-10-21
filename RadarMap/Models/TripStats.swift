@@ -338,7 +338,9 @@ final class TripStats {
 
     func noteDropped(_ reason: String) { onTripDropped?(reason) }
 
-    func finish(endedManually: Bool = true, batteryPercent: Int? = nil, work: Bool = false) {
+    /// `atDestination` — поездку закрыло прибытие к цели маршрута (ArrivalFinish).
+    func finish(endedManually: Bool = true, batteryPercent: Int? = nil, work: Bool = false,
+                atDestination: Bool = false) {
         finishedDuration = durationSeconds
         // Поездка завершена штатно — страховочный слепок больше не нужен.
         defer { startedAt = nil; startBatteryPercent = nil; resumedFrom = nil; removeCheckpoint() }
@@ -385,7 +387,8 @@ final class TripStats {
             // то же правило, что у слепка живой поездки).
             startLat: startPoint?.lat,
             startLon: startPoint?.lon,
-            work: work ? true : nil
+            work: work ? true : nil,
+            endedAtDestination: atDestination ? true : nil
         )
         history.insert(record, at: 0)
         applyRetention()

@@ -43,6 +43,9 @@ final class MotionService {
     /// проехала сотни метров, — и склейке после магазина это надо знать (S19).
     @ObservationIgnored private(set) var drivingSince: Date?
     @ObservationIgnored private var pendingSince: Date?
+    /// Поездку закрыло прибытие к цели, а CoreMotion всё ещё видит «в машине,
+    /// стоим»: следующий старт — только по настоящему движению (ArrivalFinish).
+    @ObservationIgnored private var needsMovementToStart = false
 
     /// Колбэки — вешает AppEnvironment/RootView (старт/стоп поездки).
     @ObservationIgnored var onDrivingStart: (() -> Void)? {
@@ -85,8 +88,33 @@ final class MotionService {
         settings.tripStartMode.usesMotion ? start() : stop()
     }
 
+    /// Поездку закрыли у цели, пока CoreMotion считает, что мы едем (стоим с
+    /// мотором — automotive + stationary). Без сброса `isDriving` так и
+    /// остался бы true, и поехав дальше (высадили пассажира, ждали у подъезда)
+    /// водитель не получил бы автостарта вовсе. Сброс без условия поднял бы
+    /// поездку тут же, по следующему сэмплу «в машине, стоим», — поэтому
+    /// новый старт ждёт движения. Вышел из машины (любой сэмпл не «в машине»)
+    /// — условие снимается: дальше обычные правила.
+    func rearmAfterArrival() {
+        stopTask?.cancel(); stopTask = nil
+        startTask?.cancel(); startTask = nil
+        isDriving = false
+        drivingSince = nil
+        pendingSince = nil
+        needsMovementToStart = true
+    }
+
+    /// Считается ли сэмпл ездой. После закрытия у цели (`needsMovement`) —
+    /// только движущийся: «в машине, стоим» там — та же стоянка.
+    nonisolated static func countsAsDriving(automotive: Bool, stationary: Bool,
+                                            lowConfidence: Bool, needsMovement: Bool) -> Bool {
+        guard automotive, !lowConfidence else { return false }
+        return !(needsMovement && stationary)
+    }
+
     private func beginDriving() {
         guard !isDriving else { return }
+        needsMovementToStart = false
         isDriving = true
         drivingSince = pendingSince ?? Date()
         pendingSince = nil
@@ -95,7 +123,12 @@ final class MotionService {
 
     private func handle(_ activity: CMMotionActivity) {
         isStationary = activity.stationary && activity.confidence != .low
-        let drivingNow = activity.automotive && activity.confidence != .low
+        // Вышли из машины — закрытие у цели больше не держит старт.
+        if !activity.automotive { needsMovementToStart = false }
+        let drivingNow = Self.countsAsDriving(automotive: activity.automotive,
+                                              stationary: activity.stationary,
+                                              lowConfidence: activity.confidence == .low,
+                                              needsMovement: needsMovementToStart)
 
         if drivingNow {
             stopTask?.cancel(); stopTask = nil

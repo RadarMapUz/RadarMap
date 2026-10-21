@@ -420,6 +420,12 @@ final class LocationService: NSObject {
     @ObservationIgnored var lastMovementAt = Date()
     /// Последняя точка, по которой считали прогресс маршрута (гейт стоянки).
     @ObservationIgnored var lastRouteProgressCoordinate: CLLocationCoordinate2D?
+    /// Прибытие к цели, после которого поездка закроется сама на стоянке
+    /// (ArrivalFinish). Своя копия: карточку «Вы на месте» закрывают крестиком
+    /// и таймером, а следить надо дальше.
+    @ObservationIgnored var arrivalWatch: ArrivalFinish.Arrival?
+    /// Проверка без фикса: на стоянке их нет (distanceFilter).
+    @ObservationIgnored var arrivalRecheck: Task<Void, Never>?
 
     /// Единственная точка входа фиксов: сначала гейт качества, потом обработка.
     /// Отброшенный фикс не двигает ни трек, ни алерты, ни спидометр.

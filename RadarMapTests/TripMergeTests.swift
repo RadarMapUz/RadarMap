@@ -19,11 +19,13 @@ final class TripMergeTests: XCTestCase {
                          crossesDay: Bool = false,
                          stops: Int = 0,
                          previous: TimeInterval = 30 * 60,
-                         lateStart: TimeInterval = 0) -> TripMerge.Context {
+                         lateStart: TimeInterval = 0,
+                         atDestination: Bool = false) -> TripMerge.Context {
         TripMerge.Context(stopDuration: stop, metersFromPreviousEnd: meters,
                           endedManually: manual, stopNearSavedPlace: nearSaved,
                           crossesDay: crossesDay, existingStops: stops,
-                          previousDuration: previous, lateStartSeconds: lateStart)
+                          previousDuration: previous, lateStartSeconds: lateStart,
+                          stopAtDestination: atDestination)
     }
 
     // MARK: - Склеиваем
@@ -55,6 +57,24 @@ final class TripMergeTests: XCTestCase {
     func testVeryShortStopNearHomeIsStillMerged() {
         // Забрал человека у дома и поехал дальше: короткая пауза сильнее места.
         XCTAssertTrue(TripMerge.shouldMerge(context(stop: 3 * 60, nearSaved: true)))
+    }
+
+    /// Поездку закрыло прибытие к цели маршрута (ArrivalFinish, 21.10) — это
+    /// автоматика, а не кнопка: ждали пассажира у подъезда пару минут и
+    /// поехали дальше — та же поездка, как после любого автостопа.
+    func testShortStopAfterArrivalFinishIsMerged() {
+        XCTAssertTrue(TripMerge.shouldMerge(context(stop: 2 * 60, atDestination: true)))
+        XCTAssertTrue(TripMerge.shouldMerge(context(stop: 12 * 60, atDestination: true)),
+                      "магазин-цель на десять минут — заезд, как и без маршрута")
+    }
+
+    /// Но цель маршрута — место, куда ехали, а не «случайное по пути»: в серой
+    /// зоне она весит как Дом и Работа — полчаса у цели значит «приехали».
+    func testLongStopAtRouteDestinationIsNewTrip() {
+        XCTAssertFalse(TripMerge.shouldMerge(context(stop: 35 * 60, atDestination: true)),
+                       "полчаса у цели маршрута — приехали, дальше новая поездка")
+        XCTAssertTrue(TripMerge.shouldMerge(context(stop: 35 * 60)),
+                      "без цели — по-прежнему обед по пути")
     }
 
     /// Ровно тот кейс, ради которого окно расширили с 10 минут до часа.
@@ -435,6 +455,35 @@ final class TripMergeTests: XCTestCase {
         let secondStart = try XCTUnwrap(second.startCoordinate, "вторая нога потеряла старт")
         XCTAssertEqual(secondStart.latitude, stop.lat, accuracy: 1e-9, "вторая нога — с точки разреза")
         XCTAssertEqual(secondStart.longitude, stop.lon, accuracy: 1e-9)
+    }
+
+    /// «Кончилась у цели» — свойство финиша: склейка берёт его у второй ноги,
+    /// разделение отдаёт только поздней половине (у первой финиш — разрез).
+    func testArrivalEndBelongsToTheFinish() throws {
+        let previous = record(start: base, minutes: 30, km: 6, from: origin)
+        var next = record(start: base.addingTimeInterval(40 * 60), minutes: 15, km: 4,
+                          from: previous.endCoordinate!)
+        next.endedAtDestination = true
+        let whole = TripMerge.merged(previous: previous, next: next)
+        XCTAssertEqual(whole.endedAtDestination, true)
+        var arrivedFirst = previous
+        arrivedFirst.endedAtDestination = true
+        var unflagged = next
+        unflagged.endedAtDestination = nil
+        XCTAssertNil(TripMerge.merged(previous: arrivedFirst, next: unflagged).endedAtDestination,
+                     "финиш склейки — финиш второй ноги: у цели кончилась первая")
+
+        let stop = try XCTUnwrap(whole.stops?.first)
+        let legs = TripHistory.split(whole, at: stop)
+        XCTAssertEqual(legs.count, 2)
+        XCTAssertEqual(legs[0].endedAtDestination, true, "поздняя половина кончилась у цели")
+        XCTAssertNil(legs[1].endedAtDestination, "ранняя кончилась на разрезе")
+
+        // Поле переживает запись на диск; у старых записей его нет — nil.
+        let decoded = try JSONDecoder().decode(TripRecord.self, from: JSONEncoder().encode(whole))
+        XCTAssertEqual(decoded.endedAtDestination, true)
+        let legacy = try JSONDecoder().decode(TripRecord.self, from: JSONEncoder().encode(previous))
+        XCTAssertNil(legacy.endedAtDestination)
     }
 
     /// Ретро-чистки истории правят проезды и балл — точку старта они стирать

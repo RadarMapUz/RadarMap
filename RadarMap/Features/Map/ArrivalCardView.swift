@@ -78,6 +78,18 @@ struct ArrivalCardView: View {
                     env.location.endTrip()
                     onDismiss()
                 }
+                // Кнопка — чтобы закрыть сразу, а не потому, что иначе поездка
+                // не кончится: на стоянке у цели она закроется сама
+                // (ArrivalFinish). 21.10 карточка молчала об этом, и поездку
+                // закрыли рукой. В «Ручном» следить некому — и подписи нет.
+                if env.location.arrivalWatch != nil {
+                    Text("Завершится сама, когда машина встанет")
+                        .font(.rounded(12, .medium))
+                        .foregroundStyle(Theme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, -6)
+                }
             }
         }
         .padding(16)

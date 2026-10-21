@@ -86,6 +86,8 @@ extension LocationService {
     func setCarPlayConnected(_ connected: Bool) {
         isCarPlayConnected = connected
         applyLocationMode()
+        // Отключили у цели — заглушили машину: поездка закроется (ArrivalFinish).
+        if !connected { noteCarPlayDisconnectedForArrival() }
     }
 
     /// Настройки сменили GPS-политику (например, тумблер адаптивности) — применить сразу,

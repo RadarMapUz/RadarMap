@@ -565,7 +565,9 @@ nonisolated enum TripHistory {
             startLat: start?.latitude, startLon: start?.longitude,
             // Половины рейса — рейсы (12б.9): без пометки разделённый рейс
             // выпадал из «Смен» и учился как своя поездка (ревью 14.1).
-            work: record.work)
+            work: record.work,
+            // У цели кончилась только поздняя половина.
+            endedAtDestination: to == record.endedAt ? record.endedAtDestination : nil)
     }
 
     private static func polylineLength(_ points: [TrackPoint]) -> Double {

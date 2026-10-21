@@ -421,6 +421,10 @@ extension LocationService {
                                 // раз в секунду (ревью 9.3).
                                 isOverspeeding: speedLimits?.isOverspeedingSustained ?? false)
         }
+        // Приехали к цели — стоим у неё достаточно, и поездка закроется сама
+        // (ArrivalFinish). Последним в тике: закрытая посреди тика поездка
+        // оставила бы его хвост работать по уже закрытой.
+        if arrivalWatch != nil { checkArrivalFinish() }
     }
 
     func handleAuthChange(_ status: CLAuthorizationStatus) {

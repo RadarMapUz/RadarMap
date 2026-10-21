@@ -42,9 +42,13 @@ struct CarPlayEngineLayer: View {
         }
     }
 
+    /// Подпись — у камеры ДЛЯ ПОКАЗА (displayNearestCamera, удержание на
+    /// пороге скорости — не мигает в пробке) и только когда это та же камера,
+    /// о которой тревога: иначе цифра встала бы у боковой камеры.
     private func cameraLabel(_ cue: CarPlayCameraCue.Cue) -> CarPlayCameraCue.Label? {
-        guard cue.distanceLabel, let camera = env.location.nearestCamera,
-              let distance = env.location.distanceToNearest else { return nil }
+        guard cue.distanceLabel, let camera = env.location.displayNearestCamera,
+              camera.id == cue.mapAlertID,
+              let distance = env.location.displayDistanceToNearest else { return nil }
         return CarPlayCameraCue.Label(id: camera.id, latitude: camera.lat, longitude: camera.lon,
                                       text: Formatting.distance(distance))
     }

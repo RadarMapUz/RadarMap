@@ -185,8 +185,10 @@ extension LocationService {
             // новым. Только по годному фиксу — грубая точка из seedContext
             // «проезжать» камеры не вправе. Сказано о единицах камер.
             if announced, newFix, !isPositionCoarse {
-                let atTraverse = straight <= max(PassGeometry.traverseLimit(for: camera),
-                                                 AppConfig.alertTraverseMeters)
+                // Траверз оповещения — свой, шире записи и с погрешностью
+                // фикса (14.16); `atCamera` выше — траверз записи и охвата.
+                let atTraverse = straight <= LocationGates.alertTraverseLimit(
+                    for: camera, accuracy: situation.horizontalAccuracy)
                 if atTraverse {
                     alertEngine.noteApproach(camera.id, distance: straight, at: coordinate,
                                              course: situation.course,

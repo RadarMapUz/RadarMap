@@ -375,7 +375,9 @@ nonisolated enum AppConfig {
     /// С 14.15 по тому же правилу шире и предел «своей дороги» нового
     /// подъезда после разворота (`reapproachUnprovenMeters` и ширина дороги
     /// камеры, LocationGates.isReapproach) — смещение и там меряется от
-    /// нашей точки.
+    /// нашей точки. С 14.16 — и траверз оповещения (`alertTraverseMeters`):
+    /// без него проезд по дальней проезжей части на плохом фиксе не
+    /// закрывал серию, и до нового подъезда дело не доходило.
     nonisolated static let corridorAccuracyFactor: Double = 1
     /// Немного «позади» тоже считаем своей камерой: на самом траверзе продольная
     /// составляющая шумит вокруг нуля, и предупреждение не должно гаснуть.
@@ -536,6 +538,10 @@ nonisolated enum AppConfig {
     nonisolated static let alertPassedAheadMeters: CLLocationDistance = 40
     /// «Были у камеры» для нового подъезда — шире записи проезда (40 м):
     /// проезд по дальней проезжей части широкого проспекта тоже «был».
+    /// Это порог на хорошем GPS; на фиксе хуже 10 м он шире на погрешность
+    /// (`corridorAccuracyFactor`, 14.16), не больше чем до 145 м
+    /// (LocationGates.alertTraverseLimit). Только у оповещения: запись
+    /// проезда и охват (`passTraverseMaxMeters`) погрешностью не расширяются.
     nonisolated static let alertTraverseMeters: CLLocationDistance = 90
     /// Ступени тревоги — доли радиуса (AlertEngine.level): ближе 0,6 —
     /// вторая, ближе 0,3 — третья.

@@ -530,6 +530,27 @@ class LiveTest(Stand):
         self.live_edit(at(north=200), live=900, date=NOW + 60)
         self.assertEqual(self.bot.live, {}, "после срока трансляции правки не оживляют её")
 
+    def test_stop_is_not_undone_by_the_same_live_location(self):
+        self.location(live=3600, date=NOW)
+        self.text("/stop")
+        sent = len(self.messages())
+        self.clock[0] = NOW + 30
+        self.live_edit(at(north=100), date=NOW)
+        self.assertEqual(self.bot.live, {})
+        self.assertEqual(len(self.messages()), sent, "правки остановленной трансляции молчат")
+        self.clock[0] = NOW + 60
+        self.location(live=600, date=NOW + 60)
+        self.assertEqual(len(self.bot.live), 1, "новая трансляция — снова работает")
+
+    def test_mark_during_live_uses_the_current_point(self):
+        self.start()
+        self.clock[0] = NOW + 30
+        self.live_edit(at(north=800))
+        self.tap("mark")
+        self.tap("post")
+        body = self.api.posted[-1][1]
+        self.assertEqual((body["lat"], body["lon"]), at(north=800))
+
     def test_one_kdf_per_live_edit(self):
         self.start()
         calls = []
@@ -547,7 +568,8 @@ class LiveTest(Stand):
 
 def pass_point(pid, group, hazards=(), until=None, t=None, name=("Перевал Камчик", "Qamchiq dovoni")):
     return {"id": pid, "group": group, "kind": "pass", "road": "A373", "lat": 41.1, "lon": 70.5, "r": 5000,
-            "name": {"ru": name[0], "uz": name[1]}, "where": {"ru": "x", "uz": "x"},
+            "name": {"ru": name[0], "uz": name[1]},
+            "where": {"ru": "На перевале " + name[0].split()[-1], "uz": name[1].replace(" dovoni", " dovonida")},
             "hazards": [{"k": k, "from": NOW, "to": until or NOW + 3600} for k in hazards],
             "until": until, "t": t, "vis": None}
 
@@ -580,15 +602,20 @@ class PerevalTest(Stand):
         self.assertIn("свежих данных нет", self.text("/pereval")["text"])
 
     def test_subscription_alerts_on_appear_and_on_clear_once(self):
-        self.tap("ps:kamchik")
-        self.assertIn("Готово: напишу", self.last()["text"])
+        self.assertEqual(self.tap("ps:kamchik")["text"],
+                         "Готово: напишу, когда на перевале Камчик появится опасность, и когда она уйдёт. "
+                         "Подписки — /my\nПеревал Камчик: сейчас спокойно, −2 °C")
+        self.assertTrue(self.tap("ps:kamchik", user=OTHER, lang="uz")["text"].startswith(
+            "Tayyor: Qamchiq dovonida xavf paydo boʻlganda"))
         pusher = bot_subs.Pusher(self.db_path, bot_subs.box_key(SALT), self.sources, now=lambda: self.clock[0])
         outbox = lambda: [r[0] for r in sqlite3.connect(self.db_path).execute(
             "SELECT text FROM bot_outbox ORDER BY id")]
         self.assertEqual(pusher.pass_step(NOW), 0, "первое наблюдение — только запомнить")
         self.hazard()
-        self.assertEqual(pusher.pass_step(NOW + 300), 1)
-        self.assertEqual(outbox(), ["⚠️ Перевал Камчик: гололёд, туман до 15:00, −4 °C. Осторожно на подъёме."])
+        self.assertEqual(pusher.pass_step(NOW + 300), 2, "обоим подписчикам, каждому на своём языке")
+        self.assertEqual(outbox(), ["⚠️ Перевал Камчик: гололёд, туман до 15:00, −4 °C. Осторожно на подъёме.",
+                                    "⚠️ Qamchiq dovoni: 15:00 gacha yaxmalak, tuman, −4 °C. "
+                                    "Koʻtarilishda ehtiyot boʻling."])
         self.assertEqual(pusher.pass_step(NOW + 600), 0, "та же опасность — молчим")
         self.calm()
         self.assertEqual(pusher.pass_step(NOW + 900), 0, "ушла только что — ждём, не перебрасываемся")
@@ -596,8 +623,9 @@ class PerevalTest(Stand):
         self.assertEqual(pusher.pass_step(NOW + 1200), 0, "вернулась до срока — это та же опасность")
         self.calm()
         pusher.pass_step(NOW + 1500)
-        self.assertEqual(pusher.pass_step(NOW + 1500 + bot_subs.PASS_CLEAR_HOLD), 1)
-        self.assertEqual(outbox()[-1], "✅ Перевал Камчик: опасность ушла, −2 °C.")
+        self.assertEqual(pusher.pass_step(NOW + 1500 + bot_subs.PASS_CLEAR_HOLD), 2)
+        self.assertEqual(outbox()[-2:], ["✅ Перевал Камчик: опасность ушла, −2 °C.",
+                                         "✅ Qamchiq dovoni: xavf ketdi, −2 °C."])
         self.calm(generated=NOW - 5 * 3600)
         self.assertEqual(pusher.pass_step(NOW + 9000), 0, "нет свежих данных — не повод писать")
 
@@ -744,7 +772,7 @@ class MyTest(Stand):
         self.tap("ct:0")
         reply = self.text("/my")
         self.assertEqual(reply["text"].split("\n"), ["Ваши подписки:", "👨‍👩‍👧 Близкий водитель — с 15.01",
-                                                     "⛰ Перевал «Камчик»", "🏙 Город: Ташкент"])
+                                                     "⛰ Перевал Камчик", "🏙 Город: Ташкент"])
         buttons = self.buttons(reply)
         self.assertEqual([b.split(":")[1] for b in buttons], ["f", "b", "b"])
         self.assertEqual(self.tap(buttons[1])["text"], bot_texts.TEXTS["ru"]["removed"])
@@ -925,7 +953,7 @@ class RetentionTest(Stand):
         self.assertEqual(done["subs"], 1)
         self.assertEqual(done["prefs"], 1, "язык старше 30 дней — прочь")
         rows = conn.execute("SELECT sub, chat_id, text FROM bot_outbox").fetchall()
-        self.assertEqual(rows, [(0, USER, "«Qamchiq» obunasi tugadi: 55 kun buyruqlaringiz boʻlmadi. "
+        self.assertEqual(rows, [(0, USER, "«Qamchiq dovoni» obunasi tugadi: 55 kun buyruqlaringiz boʻlmadi. "
                                           "Uzaytirish — /pereval")])
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM bot_subs").fetchone()[0], 0)
         conn.close()

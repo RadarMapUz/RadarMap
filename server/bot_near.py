@@ -537,6 +537,7 @@ class LiveSession:
     def __init__(self, now, live_period, own=()):
         period = live_period if _number(live_period) and live_period > 0 else LIVE_MAX_SECONDS
         self.until = now + min(float(period), LIVE_MAX_SECONDS)
+        self.started = None         # дата сообщения трансляции у Telegram — её «имя»
         self.anchor = None
         self.course = None
         self.last_sent = now        # карточка «что рядом» ушла в момент начала
@@ -627,7 +628,9 @@ def pass_status(weather, now):
             continue
         group = point.get("group") or point.get("id")
         name = point.get("name") if isinstance(point.get("name"), dict) else {}
-        item = groups.setdefault(group, {"name": name, "hazards": [], "until": None, "t": None, "stale": stale})
+        where = point.get("where") if isinstance(point.get("where"), dict) else {}
+        item = groups.setdefault(group, {"name": name, "where": where, "hazards": [], "until": None,
+                                         "t": None, "stale": stale})
         for hazard in point.get("hazards") or ():
             kind = hazard.get("k") if isinstance(hazard, dict) else None
             if kind in HAZARD_ORDER and kind not in item["hazards"]:

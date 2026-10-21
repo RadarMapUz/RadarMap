@@ -8,10 +8,31 @@
 подтверждение независимым водителем).
 
 КАК ЭТО РАБОТАЕТ
-  * человек шлёт геопозицию («Отправить местоположение» в Telegram);
-  * бот отвечает кнопками: радар, тренога, пост, ДТП, перекрыто, метан;
-  * «метан» — второй ряд: газ есть / нет / очередь; уходит в POST /api/cng;
-  * точка без типа живёт 10 минут в памяти и забывается.
+  * человек шлёт геопозицию (постоянная кнопка «📍 Отправить геопозицию»);
+  * сначала польза (план 23, docs/plan_bot_2026-10-21.md): ОДНО сообщение
+    «что рядом» — живые отметки в 5 км, стационарные камеры, перекрытия,
+    ближайший метан (bot_near.py), кнопки «Отметить, что видите» и
+    «Дальше — 15 км»; не чаще раза в 20 с на человека;
+  * «Отметить» — кнопки: радар, тренога, пост, ДТП, перекрыто, метан
+    (`/report` — сразу они); «метан» — второй ряд: газ есть / нет /
+    очередь; уходит в POST /api/cng. Созданную отметку 2 минуты можно
+    отменить кнопкой (POST /api/report/cancel, устройство то же);
+  * точка без типа живёт 10 минут в памяти и забывается;
+  * трансляция геопозиции — раз в минуту только новое впереди по ходу и
+    «ещё стоит?» после проезда чужой отметки (→ /api/vote kind=pass);
+  * /metan, /pereval, /city, /my, /lang, /help, /privacy, /app, /stop;
+    /stats — только владельцу (owner_hash в конфиге);
+  * подписки на перевалы и город и их рассылка — bot_subs.py (bot.db),
+    доставка — family_notify.Courier в своём потоке;
+  * тексты — bot_texts.py, русский и узбекский: /lang, иначе язык Telegram;
+  * имя, описания и меню команд бот выставляет сам при запуске, если они
+    изменились (ensure_profile); аватар — только в @BotFather;
+  * пульт features.bot = false (подписанный config.json) выключает всё,
+    кроме отметок, близких и /my, /stop.
+
+ГЕОПОЗИЦИЯ «ЧТО РЯДОМ» не пишется ни в базу, ни в журнал: она нужна для
+одного ответа (и ждёт выбора типа в памяти до 10 минут, как прежде).
+Трансляция держит последнюю точку в памяти до своего конца.
 
 МЕТАН — НА ТОЧКЕ ЗАПРАВКИ, А НЕ НА ТОЧКЕ ЧЕЛОВЕКА (аудит 14.3, N3)
   Станцию сервер узнаёт по координате, округлённой до 1e-4° (api.py
@@ -107,6 +128,12 @@
     username=<имя бота без @>   (ссылка t.me/<имя>?start=f_… на странице близкого;
                                  читать — family_notify.read_username, только этот ключ)
     venues_dir=/opt/radarmap/www/roads   (необязательно; это значение по умолчанию)
+    app_url=<ссылка App Store>  (необязательно; нет — /app: «скоро в App Store»)
+    owner_hash=<hex>            (необязательно; /stats. Открытого id владельца в
+                                 конфиге нет: `echo <id> | python3 telegram_bot.py
+                                 --owner-hash` печатает строку, см. RUNBOOK.md)
+    webroot, cameras_path, weather_path, pult_path, reports_db — необязательно,
+    по умолчанию — пути сервера (/opt/radarmap/www/…, /opt/radarmap/api/reports.db).
 Нет конфига — выход 0 с сообщением. Соль не менять: от неё и хэши
 подписок близких — со сменой их /stop перестанет находить.
 
@@ -534,6 +561,9 @@ class Bot:
         self.data_at = {}
         # Трансляции: хэш → bot_near.LiveSession. Только память.
         self.live = {}
+        # Остановленные /stop трансляции: хэш → (время начала той трансляции,
+        # её конец). Её правки идут и дальше — они не должны её оживить.
+        self.stopped = {}
         # Счётчики с запуска для /stats — только числа.
         self.stats = {"near": 0, "metan": 0, "live": 0, "votes": 0, "cancelled": 0}
         self._memo = {}
@@ -595,6 +625,7 @@ class Bot:
         self.anchors = {k: v for k, v in self.anchors.items() if now - v[1] < PENDING_TTL}
         self.data_at = {k: v for k, v in self.data_at.items() if now - v < NEAR_GAP}
         self.live = {k: v for k, v in self.live.items() if v.alive(now)}
+        self.stopped = {k: v for k, v in self.stopped.items() if now < v[1]}
         self._prune_recent(now)
 
     def _prune_recent(self, now):
@@ -655,8 +686,8 @@ class Bot:
         who = self._who(user, now)
         lang = self._lang(who, code)
         if word in ("/near", "/report", "/metan") or text.strip() in METAN_LABELS:
-            return self._ask_or_answer("metan" if word != "/near" and word != "/report" else word[1:],
-                                       chat, who, lang, now)
+            intent = {"/near": "near", "/report": "report"}.get(word, "metan")
+            return self._ask_or_answer(intent, chat, who, lang, now)
         if word == "/help":
             return self._say(chat, lang, "help", reply_keyboard(lang))
         if word == "/privacy":
@@ -709,6 +740,7 @@ class Bot:
         lang = self._lang(who, code)
         point = (float(location["latitude"]), float(location["longitude"]))
         self.pending[who] = (point[0], point[1], now)
+        self.anchors.pop(who, None)          # станция из прошлого /metan — не для новой точки
         intent = self.intents.pop(who, (None, 0))[0]
         if not self._extras() or intent == "report":
             return self._say(chat, lang, "pick", kinds_keyboard(lang))
@@ -754,7 +786,9 @@ class Bot:
     def _live_start(self, message, location, chat, who, lang, point, now):
         until = self._live_until(message, location, now)
         session = bot_near.LiveSession(now, (until or now) - now, own=self._own_ids(who))
+        session.started = message.get("date")
         session.move(point)
+        self.stopped.pop(who, None)
         self.live[who] = session          # одна трансляция на человека: новая заменяет старую
         self.stats["live"] += 1
         self._say(chat, lang, "live_on")
@@ -775,10 +809,14 @@ class Bot:
             # Трансляцию остановили (правка без live_period) или срок вышел.
             self.live.pop(who, None)
             return
+        if who in self.stopped and self.stopped[who][0] == message.get("date"):
+            return                          # остановлена /stop — её правки молчат
         if not self._extras():
             return
         lang = self._lang(who, sender.get("language_code"))
         point = (float(location["latitude"]), float(location["longitude"]))
+        # «Отметить, что видите» во время трансляции — в той точке, где человек сейчас.
+        self.pending[who] = (point[0], point[1], now)
         if session is None:
             # Бот перезапускался посреди трансляции — начинаем заново.
             return self._live_start(message, location, chat, who, lang, point, now)
@@ -845,7 +883,10 @@ class Bot:
         except sqlite3.Error as error:
             log(f"/stop не выполнен — {type(error).__name__}")
             return self._say(chat, lang, "unknown_busy")
-        stopped_live = self.live.pop(who, None) is not None
+        session = self.live.pop(who, None)
+        stopped_live = session is not None
+        if stopped_live:
+            self.stopped[who] = (session.started, session.until)
         self.intents.pop(who, None)
         parts = []
         if removed or not stopped_live:
@@ -1062,7 +1103,7 @@ class Bot:
         name = bot_subs.target_name("pass", rest, lang, statuses)
         if not self._subscribe("pass", rest, chat, lang, now):
             return self._say(chat, lang, "unknown_busy")
-        text = bot_texts.text(lang, "pass_subscribed", name=name)
+        text = bot_texts.text(lang, "pass_subscribed", where=bot_subs.target_where(rest, lang, statuses))
         if item is not None:
             text += "\n" + bot_texts.text(lang, "pereval_line", name=name, what=bot_near.pass_what(lang, item))
         self._post(chat, text)

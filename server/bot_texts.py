@@ -224,8 +224,8 @@ TEXTS = {
         "pereval_stale": "свежих данных нет",
         "pereval_down": "Данные о погоде на перевалах сейчас недоступны.",
         "btn_pass_sub": "🔔 Предупреждать: {name}",
-        "pass_subscribed": ("Готово: напишу, когда на перевале «{name}» появится опасность, и когда "
-                            "она уйдёт. Подписки — /my"),
+        "pass_subscribed": ("Готово: напишу, когда {where} появится опасность, и когда она уйдёт. "
+                            "Подписки — /my"),
         "pass_alert": "⚠️ {name}: {what}. Осторожно на подъёме.",
         "pass_clear": "✅ {name}: опасность ушла{temp}.",
         # --- город (23.6) ---
@@ -239,7 +239,7 @@ TEXTS = {
         "my_head": "Ваши подписки:",
         "my_none": "Подписок нет.",
         "my_family": "👨‍👩‍👧 Близкий водитель — с {date}",
-        "my_pass": "⛰ Перевал «{name}»",
+        "my_pass": "⛰ {name}",
         "my_city": "🏙 Город: {city}",
         "btn_remove": "Убрать: {what}",
         "btn_family": "близкий с {date}",
@@ -355,7 +355,7 @@ TEXTS = {
         "pereval_stale": "yangi maʼlumot yoʻq",
         "pereval_down": "Dovonlardagi ob-havo maʼlumotlari hozir mavjud emas.",
         "btn_pass_sub": "🔔 Ogohlantirish: {name}",
-        "pass_subscribed": ("Tayyor: «{name}» dovonida xavf paydo boʻlganda va u ketganda yozaman. "
+        "pass_subscribed": ("Tayyor: {where} xavf paydo boʻlganda va u ketganda yozaman. "
                             "Obunalar — /my"),
         "pass_alert": "⚠️ {name}: {what}. Koʻtarilishda ehtiyot boʻling.",
         "pass_clear": "✅ {name}: xavf ketdi{temp}.",
@@ -368,7 +368,7 @@ TEXTS = {
         "my_head": "Obunalaringiz:",
         "my_none": "Obunalar yoʻq.",
         "my_family": "👨‍👩‍👧 Yaqin haydovchi — {date} dan",
-        "my_pass": "⛰ «{name}» dovoni",
+        "my_pass": "⛰ {name}",
         "my_city": "🏙 Shahar: {city}",
         "btn_remove": "Olib tashlash: {what}",
         "btn_family": "{date} dagi yaqin",

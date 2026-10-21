@@ -235,8 +235,18 @@ def sweep(conn, now, key):
     return done
 
 
-PASS_NAMES = {"kamchik": {"ru": "Камчик", "uz": "Qamchiq"},
-              "takhtakaracha": {"ru": "Тахтакарача", "uz": "Taxtaqoracha"}}
+#: Перевалы, если файла погоды нет (названия — как в road_weather_points.json).
+PASS_NAMES = {"kamchik": {"ru": "Перевал Камчик", "uz": "Qamchiq dovoni"},
+              "takhtakaracha": {"ru": "Перевал Тахтакарача", "uz": "Taxtaqoracha dovoni"}}
+PASS_WHERE = {"kamchik": {"ru": "На перевале Камчик", "uz": "Qamchiq dovonida"},
+              "takhtakaracha": {"ru": "На перевале Тахтакарача", "uz": "Taxtaqoracha dovonida"}}
+
+
+def target_where(target, lang, statuses):
+    """«на перевале Камчик» / «Qamchiq dovonida» — для фразы посреди строки."""
+    item = statuses.get(target) or {}
+    where = (item.get("where") or {}).get(lang) or PASS_WHERE.get(target, {}).get(lang) or target
+    return where[:1].lower() + where[1:] if lang == "ru" else where
 
 
 def target_name(kind, target, lang, statuses):
@@ -329,7 +339,7 @@ class Pusher:
                         kind = "pass_clear"
                 if kind is None:
                     continue
-                subs = conn.execute("SELECT id, box, lang FROM bot_subs WHERE kind = 'pass' AND target = ?",
+                subs = conn.execute("SELECT id, box, lang FROM bot_subs WHERE kind = 'pass' AND target = ? ORDER BY id",
                                     (group,)).fetchall()
                 for sid, box, lang in subs:
                     name = bot_near.pass_name(lang, item, group)
@@ -367,7 +377,7 @@ class Pusher:
             return 0                # утром уйдёт то, что ещё стоит
         conn = self._db()
         subs = conn.execute("SELECT id, target, box, lang, quota_start, quota_used FROM bot_subs "
-                            "WHERE kind = 'city'").fetchall()
+                            "WHERE kind = 'city' ORDER BY id").fetchall()
         if not subs:
             return 0
         reports = self._confirmed(now)

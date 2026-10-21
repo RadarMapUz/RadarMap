@@ -24,12 +24,18 @@ Endpoints:
   POST /api/traffic        {v: 1, pieces: [{p: [[lat, lon, t, kmh], ...]}]} -> {"ok": true, "accepted": N}
                            (куски следа для пробок: без устройства, без поездки, время —
                             только относительное внутри куска; см. «Пробки» ниже)
-  POST /api/eta            {key [, token], eta, left_m, status: "driving"|"arrived"|"ended"}
+  POST /api/eta            {key [, token], [eta], left_m, status: "driving"|"arrived"|"ended"
+                            [, name] [, home]}
                            -> {"ok": true}; key — ключ записи, адрес страницы — его хэш
                            (старые сборки шлют один token — он же адрес; см. «Поделиться
-                           прибытием» ниже)
-  GET  /api/eta/<token>    -> HTML «будет примерно в 18:40»; заголовок X-Eta-Version: 2
-  GET  /api/eta/f/<token>  -> то же для постоянной семейной ссылки: вне поездки «сейчас не в пути»
+                           прибытием» ниже). Без eta «в пути» — время неизвестно («едет
+                           домой»); name — как водитель назвал себя близким (≤ 32 знаков,
+                           только в памяти, пока живёт запись); home — поездка домой
+  GET  /api/eta/<token>    -> HTML «будет примерно в 18:40»; заголовок X-Eta-Version: 3
+                           (и X-Eta-Bot: имя бота, если он настроен)
+  GET  /api/eta/f/<token>  -> страница близкого (22.2): «в пути — будет в 18:40»,
+                           «задерживается», «почти дома», «дома в 18:47», «сейчас не в пути»
+  GET  /api/eta/icon.png   -> значок для «На экран „Домой“»
 
 Правила передвижных радаров (жизненный цикл доверия):
   * новая отметка — на испытательном сроке (радар/тренога 75 мин, пост 2 ч):
@@ -881,7 +887,11 @@ ETA_ARRIVED_TTL = 30 * 60
 ETA_MAX_LINKS = 5000
 ETA_UPDATES_PER_IP_DAY = 2000
 ETA_HORIZON = 48 * 3600
-ETA_PROTOCOL = 2
+# 3 — eta в «в пути» необязателен, имя водителя и «домой» (22.1), страница
+# близкого со статусами (22.2), X-Eta-Bot.
+ETA_PROTOCOL = 3
+# Имя водителя для близких — столько знаков, не больше.
+ETA_NAME_MAX = 32
 _ETA_TOKEN = re.compile(r"^[A-Za-z0-9_-]{22,64}$")         # адрес страницы (GET)
 _ETA_LEGACY_TOKEN = re.compile(r"^[A-Za-z0-9_-]{22,42}$")  # голый token старых сборок
 _ETA_KEY = re.compile(r"^[A-Za-z0-9_-]{22,64}$")           # ключ записи
@@ -896,10 +906,25 @@ def eta_address(key):
     return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
 
 
+def clean_eta_name(value):
+    """Как водитель назвал себя близким («Зафар»): строка без управляющих
+    символов и переводов строки, не длиннее ETA_NAME_MAX. Иное — без имени, а
+    не 400: испорченное имя не должно стоить водителю обновления поездки."""
+    if not isinstance(value, str):
+        return None
+    name = " ".join("".join(ch if ch.isprintable() else " " for ch in value).split())
+    return name[:ETA_NAME_MAX] or None
+
+
 def clean_eta(data, now):
-    """(адрес, запись) или None. Берутся только ключ и четыре поля — всё
-    остальное, что пришло (координаты, имя, устройство), не сохраняется вовсе.
-    Сам ключ не сохраняется тоже: запись лежит по его хэшу, с меткой keyed."""
+    """(адрес, запись) или None. Берутся только ключ, четыре поля, имя
+    водителя и «домой» — всё остальное, что пришло (координаты, цель,
+    устройство), не сохраняется вовсе. Сам ключ не сохраняется тоже: запись
+    лежит по его хэшу, с меткой keyed.
+
+    eta в «в пути» можно не слать (22.1): маршрута нет, призрак дороги не
+    знает — близкий видит «едет домой», а не выдуманное время. Старые сборки
+    шлют eta всегда, им ничего не меняется."""
     if not isinstance(data, dict):
         return None
     key = data.get("key")
@@ -923,14 +948,39 @@ def clean_eta(data, now):
         return None
     eta = data.get("eta")
     left = data.get("left_m", 0)
-    if not isinstance(eta, (int, float)) or isinstance(eta, bool) or not math.isfinite(eta):
+    if eta is None:
+        # «дома» и «не в пути» без времени — значит, сейчас.
+        eta = None if status == "driving" else now
+    elif not isinstance(eta, (int, float)) or isinstance(eta, bool) or not math.isfinite(eta):
+        return None
+    elif not now - 3600 <= eta <= now + ETA_HORIZON:
         return None
     if not isinstance(left, (int, float)) or isinstance(left, bool) or not math.isfinite(left):
         return None
-    if not (now - 3600 <= eta <= now + ETA_HORIZON) or not (0 <= left <= 2_000_000):
+    if not 0 <= left <= 2_000_000:
         return None
-    return address, {"eta": float(eta), "left_m": int(left), "status": status,
-                     "updated": now, "keyed": keyed}
+    item = {"eta": None if eta is None else float(eta), "left_m": int(left), "status": status,
+            "updated": now, "keyed": keyed}
+    name = clean_eta_name(data.get("name"))
+    if name:
+        item["name"] = name
+    if isinstance(data.get("home"), bool):
+        item["home"] = data["home"]
+    return address, item
+
+
+def eta_carry(current, item):
+    """Что новая запись берёт у прежней: первое обещанное время этой поездки
+    (first_eta) — по нему страница и сообщения видят «задерживается». Новая
+    поездка (до неё «дома», «не в пути» или ничего) и смена «домой / не
+    домой» начинают с нуля; пока времени не было, первым станет первое
+    пришедшее."""
+    if item["status"] != "driving":
+        return
+    first = None
+    if current is not None and current["status"] == "driving" and current.get("home") == item.get("home"):
+        first = current.get("first_eta")
+    item["first_eta"] = first if first is not None else item["eta"]
 
 
 def eta_put(token, item, now):
@@ -954,6 +1004,7 @@ def eta_put(token, item, now):
         if current is None and len(_eta_links) >= ETA_MAX_LINKS:
             oldest = min(_eta_links, key=lambda k: _eta_links[k]["updated"])
             del _eta_links[oldest]
+        eta_carry(current, item)
         _eta_links[token] = item
         return True
 
@@ -972,22 +1023,20 @@ def _eta_expired(item, now):
     return now - item["updated"] > ttl
 
 
-def eta_page(item, now, uz=False, family=False):
+def _eta_clock(ts):
+    return time.strftime("%H:%M", time.gmtime(ts + 5 * 3600))   # Узбекистан — UTC+5 круглый год
+
+
+def eta_page(item, now, uz=False, family=False, bot=None, address=None):
     """Страница для знакомого: время прибытия по Ташкенту, сколько осталось,
     когда обновлено. Без скриптов и внешних ресурсов; обновляется сама.
 
-    family — постоянная семейная ссылка (12б.6): она живёт месяц, а поездка
-    домой — полчаса, поэтому «нет данных» здесь не ошибка, а «сейчас не в
-    пути»; страница обновляется и тогда — следующая поездка домой появится
-    на ней сама."""
-    def clock(ts):
-        return time.strftime("%H:%M", time.gmtime(ts + 5 * 3600))   # Узбекистан — UTC+5 круглый год
-    if family and (item is None or item["status"] == "ended"):
-        title = "Hozir yoʻlda emas" if uz else "Сейчас не в пути"
-        line = ("Uyga yoʻlga chiqqanda vaqt shu yerda chiqadi." if uz
-                else "Когда поедет домой, время прибытия появится здесь.")
-        sub = ""
-    elif item is None:
+    family — постоянная семейная ссылка (12б.6, 22.2): своя страница,
+    family_page; здесь — разовая «Поделиться прибытием»."""
+    if family:
+        return family_page(item, now, uz=uz, bot=bot, address=address)
+    clock = _eta_clock
+    if item is None:
         title = "Havola eskirgan" if uz else "Ссылка устарела"
         line = ("Safar tugagan yoki yangilanmayapti." if uz
                 else "Поездка закончилась или больше не обновляется.")
@@ -997,34 +1046,28 @@ def eta_page(item, now, uz=False, family=False):
         line = ("Haydovchi ulashishni to‘xtatdi." if uz
                 else "Водитель перестал делиться временем прибытия.")
         sub = ""
-    elif item["status"] == "arrived" and family:
-        title = "Uyda" if uz else "Дома"
-        line = (f"{clock(item['updated'])} da yetib keldi" if uz
-                else f"Приехал(а) в {clock(item['updated'])}")
-        sub = ""
     elif item["status"] == "arrived":
         title = "Yetib keldi" if uz else "На месте"
         line = (f"{clock(item['updated'])} da yetib keldi" if uz
                 else f"На месте с {clock(item['updated'])}")
         sub = ""
     else:
-        minutes = max(0, round((item["eta"] - now) / 60))
-        title = (f"Taxminan {clock(item['eta'])} da" if uz
-                 else f"Будет примерно в {clock(item['eta'])}")
-        line = (f"{minutes} daqiqadan keyin" if uz else f"через {minutes} мин")
-        km = item["left_m"] / 1000
-        if km >= 0.1:
-            line += (f" · {km:.1f} km qoldi" if uz else f" · осталось {km:.1f} км".replace(".", ","))
         ago = max(0, round((now - item["updated"]) / 60))
         sub = (f"Yangilandi: {ago} daqiqa oldin" if uz else f"Обновлено {ago} мин назад")
-    # Живая поездка — раз в 30 с; семейная вне поездки — раз в минуту (ждёт
-    # следующей поездки домой); устаревшая разовая — не обновляется.
-    if item is not None and item["status"] == "driving":
-        seconds = 30
-    elif family:
-        seconds = 60
-    else:
-        seconds = 0
+        if item["eta"] is None:
+            # Время неизвестно (22.1) — без выдуманной цифры.
+            title = "Yoʻlda" if uz else "В пути"
+            line = "Yetib kelish vaqti hozircha nomaʼlum." if uz else "Время прибытия пока неизвестно."
+        else:
+            minutes = max(0, round((item["eta"] - now) / 60))
+            title = (f"Taxminan {clock(item['eta'])} da" if uz
+                     else f"Будет примерно в {clock(item['eta'])}")
+            line = (f"{minutes} daqiqadan keyin" if uz else f"через {minutes} мин")
+            km = item["left_m"] / 1000
+            if km >= 0.1:
+                line += (f" · {km:.1f} km qoldi" if uz else f" · осталось {km:.1f} км".replace(".", ","))
+    # Живая поездка — раз в 30 с; устаревшая разовая — не обновляется.
+    seconds = 30 if item is not None and item["status"] == "driving" else 0
     refresh = f'<meta http-equiv="refresh" content="{seconds}">' if seconds else ""
     return f"""<!doctype html><html lang="{'uz' if uz else 'ru'}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">{refresh}<title>RadarMap</title>
@@ -1036,6 +1079,213 @@ p{{margin:4px 0;color:#4a5260}}small{{color:#8a929c}}
 @media(prefers-color-scheme:dark){{body{{background:#14181f;color:#eef1f5}}main{{background:#1e232a}}p{{color:#b8c0cc}}}}
 </style></head><body><main><h1>{title}</h1><p>{line}</p><p><small>{sub}</small></p>
 <p><small>RadarMap</small></p></main></body></html>"""
+
+
+# --- Страница близкого (22.2) ---------------------------------------------
+#
+# Что видит мама по постоянной ссылке: только статус и время — ни карты, ни
+# точки, ни маршрута, ни скорости. «Задерживается» — по сдвигу от первого
+# обещанного времени этой поездки (first_eta, eta_carry), «почти дома» — за
+# три минуты, «обновлено N с назад» считает сервер по updated: телефон без
+# сети не выдумывает время, а страница честно показывает, сколько ему лет.
+# Скриптов нет (CSP), обновляется meta refresh; значок для «На экран
+# „Домой“» — свой, с этого же сервера.
+
+ETA_DELAY_SECONDS = 5 * 60       # позже первого обещания на столько — «задерживается»
+ETA_ALMOST_SECONDS = 3 * 60      # до прибытия меньше — «почти дома»
+# Обновление старше — «давно нет обновлений»: телефон шлёт, когда время
+# сдвинулось на 2 мин, и не реже раза в 10 мин (EtaShare.shouldSend), так
+# что 12 минут тишины — уже не «едет ровно», а «пропала связь».
+ETA_STALE_SECONDS = 12 * 60
+_ETA_BOT_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]{3,31}$")
+# Конфиг бота (22.3): отсюда берётся только строка username= — ни токен, ни
+# соль в память API не попадают. Перечитывается раз в 5 минут.
+ETA_BOT_CONFIG = os.environ.get("RADARMAP_BOT_CONFIG", "/opt/radarmap/telegram_bot.conf")
+ETA_BOT_RECHECK = 300
+_eta_bot = {"checked": None, "username": None}
+_eta_bot_lock = threading.Lock()
+
+
+def eta_bot_username(now):
+    """Имя Telegram-бота для подсказки «Получать сообщения в Telegram» или
+    None: нет файла, нет строки username=, имя не по правилам Telegram."""
+    with _eta_bot_lock:
+        if _eta_bot["checked"] is not None and now - _eta_bot["checked"] < ETA_BOT_RECHECK:
+            return _eta_bot["username"]
+        username = None
+        try:
+            with open(ETA_BOT_CONFIG, encoding="utf-8") as handle:
+                for line in handle:
+                    key, sep, value = line.partition("=")
+                    if sep and key.strip() == "username":
+                        candidate = value.strip().lstrip("@")
+                        username = candidate if _ETA_BOT_NAME.fullmatch(candidate) else None
+        except OSError:
+            username = None    # бота нет — подсказки нет, это не ошибка
+        _eta_bot.update(checked=now, username=username)
+        return username
+
+
+def _esc(text):
+    return (text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace('"', "&quot;").replace("'", "&#39;"))
+
+
+def family_state(item, now):
+    """Что показать близкому — одно слово-состояние для страницы (и для тех,
+    кто захочет то же самое в сообщении): idle, arrived, unknown, almost,
+    delayed, driving. Чистая функция — проверяется тестом."""
+    if item is None or item["status"] == "ended":
+        return "idle"
+    if item["status"] == "arrived":
+        return "arrived"
+    if item["eta"] is None:
+        return "unknown"
+    if item["eta"] - now <= ETA_ALMOST_SECONDS:
+        return "almost"
+    first = item.get("first_eta")
+    if first is not None and item["eta"] - first >= ETA_DELAY_SECONDS:
+        return "delayed"
+    return "driving"
+
+
+def family_age(item, now, uz=False):
+    """«обновлено 20 с назад» / «обновлено 8 мин назад»."""
+    ago = max(0, int(now - item["updated"]))
+    if ago < 60:
+        return f"{ago} soniya oldin yangilandi" if uz else f"обновлено {ago} с назад"
+    minutes = ago // 60
+    return f"{minutes} daqiqa oldin yangilandi" if uz else f"обновлено {minutes} мин назад"
+
+
+def family_page(item, now, uz=False, bot=None, address=None):
+    state = family_state(item, now)
+    home = True if item is None else item.get("home", True)   # старые сборки — всегда домой
+    clock = _eta_clock
+    big = word = line = sub = ""
+    if state == "idle":
+        word = "Hozir yoʻlda emas" if uz else "Сейчас не в пути"
+        sub = ("Yoʻlga chiqqanda yetib kelish vaqti shu yerda chiqadi." if uz
+               else "Когда будет в пути, время прибытия появится здесь.")
+    elif state == "arrived":
+        at = clock(item["updated"])
+        big = at
+        if home:
+            line = f"Uyda — {at} da yetib keldi" if uz else f"Дома в {at}"
+        else:
+            line = f"Yetib keldi — {at} da" if uz else f"На месте в {at}"
+    elif state == "unknown":
+        word = ("Uyga ketmoqda" if uz else "Едет домой") if home else ("Yoʻlda" if uz else "В пути")
+        sub = ("Yetib kelish vaqti hozircha nomaʼlum." if uz
+               else "Время прибытия пока неизвестно.")
+    else:
+        at = clock(item["eta"])
+        minutes = max(0, round((item["eta"] - now) / 60))
+        big = at
+        if state == "almost":
+            line = ("Deyarli uyda" if uz else "Почти дома") if home else (
+                "Manzilga yaqin" if uz else "Почти на месте")
+        elif state == "delayed":
+            line = f"Kechikmoqda — taxminan {at} da" if uz else f"Задерживается — около {at}"
+        elif home:
+            line = f"Yoʻlda — {at} da uyda boʻladi" if uz else f"В пути — будет в {at}"
+        else:
+            line = f"Yoʻlda — taxminan {at} da yetib boradi" if uz else f"В пути — прибытие около {at}"
+        sub = f"{minutes} daqiqadan keyin" if uz else f"через {minutes} мин"
+    age = stale = ""
+    if state in ("driving", "delayed", "almost", "unknown"):
+        age = family_age(item, now, uz)
+        if now - item["updated"] > ETA_STALE_SECONDS:
+            stale = ("Anchadan beri yangilanmadi — telefon internetsiz boʻlishi mumkin." if uz
+                     else "Давно нет обновлений — возможно, телефон без сети.")
+    name = item.get("name") if item else None
+    tone = {"arrived": "ok", "delayed": "late", "almost": "ok"}.get(state, "")
+    parts = []
+    if name:
+        parts.append(f'<p class="who">{_esc(name)}</p>')
+    if big:
+        parts.append(f'<p class="big">{big}</p><h1 class="{tone}">{line}</h1>')
+    else:
+        parts.append(f'<h1 class="word">{word}</h1>')
+    if sub:
+        parts.append(f"<p>{sub}</p>")
+    if age:
+        parts.append(f'<p class="age">{age}</p>')
+    if stale:
+        parts.append(f'<p class="stale">{stale}</p>')
+    if bot and address and _ETA_TOKEN.fullmatch(address):
+        link = f"https://t.me/{bot}?start=f_{address}"
+        parts.append(f'<a class="tg" href="{link}">{"Xabarlarni Telegramda olish" if uz else "Получать сообщения в Telegram"}</a>'
+                     f'<p class="note">{"Yoʻlga chiqqanda, kechikkanda va uyga yetganda xabar beradi." if uz else "Напишет, когда выедет, задержится и будет дома."}</p>')
+    parts.append(f'<p class="note">{"Sahifani bosh ekranga qoʻshing: «Ulashish» → «Bosh ekranga»." if uz else "Чтобы открывать одним касанием: «Поделиться» → «На экран „Домой“»."}</p>')
+    # Едет — раз в 30 с; вне поездки — раз в минуту: следующая поездка
+    # появится на странице сама.
+    seconds = 30 if state in ("driving", "delayed", "almost", "unknown") else 60
+    title = _esc(name) + " — RadarMap" if name else "RadarMap"
+    return f"""<!doctype html><html lang="{'uz' if uz else 'ru'}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="{seconds}">
+<meta name="color-scheme" content="light dark"><meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="{_esc(name) if name else "RadarMap"}">
+<link rel="apple-touch-icon" href="../icon.png"><title>{title}</title>
+<style>body{{margin:0;font:17px -apple-system,system-ui,sans-serif;background:#f4f6f9;color:#14181f;
+display:flex;min-height:100vh;align-items:center;justify-content:center}}
+main{{background:#fff;border-radius:24px;padding:28px 22px;max-width:380px;width:calc(100% - 32px);
+box-sizing:border-box;box-shadow:0 6px 24px rgba(0,0,0,.08);text-align:center}}
+.who{{font-size:17px;font-weight:600;color:#4a5260;margin:0 0 4px}}
+.big{{font-size:64px;font-weight:800;letter-spacing:-1px;margin:0;line-height:1.1;font-variant-numeric:tabular-nums}}
+h1{{font-size:22px;margin:6px 0 8px}}h1.word{{font-size:28px;margin:4px 0 10px}}
+h1.ok{{color:#1a7f37}}h1.late{{color:#b35900}}
+p{{margin:4px 0;color:#4a5260;overflow-wrap:anywhere}}.age{{color:#6b7380;font-size:15px}}
+.stale{{color:#b35900;font-size:15px;margin-top:8px}}
+.tg{{display:block;margin:20px 0 6px;padding:13px 16px;border-radius:14px;background:#2a8bd8;color:#fff;
+font-weight:600;text-decoration:none}}
+.note{{color:#6b7380;font-size:14px;margin-top:12px}}
+@media(prefers-color-scheme:dark){{body{{background:#14181f;color:#eef1f5}}main{{background:#1e232a}}
+p,.who{{color:#b8c0cc}}.age,.note{{color:#9aa3ae}}h1.ok{{color:#4ac26b}}h1.late,.stale{{color:#f0a23b}}}}
+</style></head><body><main>{"".join(parts)}</main></body></html>"""
+
+
+# Значок «На экран „Домой“»: синий квадрат с белым домиком, 180×180 — iOS
+# скругляет углы сама. Рисуется один раз на процесс, без файлов и пакетов.
+# Страница ссылается на него относительно (../icon.png): она живёт и под
+# /radarmap/api/eta/f/… (домен), и под /api/eta/f/… (старый адрес :8090).
+_eta_icon = None
+
+
+def eta_icon_png(size=180):
+    global _eta_icon
+    if _eta_icon is not None:
+        return _eta_icon
+    import struct
+    import zlib
+
+    def inside(x, y):
+        """Домик в долях стороны: крыша, стены, дверь — вырезом."""
+        roof = 0.20 <= y <= 0.50 and abs(x - 0.5) <= (y - 0.20) / 0.30 * 0.32
+        walls = 0.30 <= x <= 0.70 and 0.47 <= y <= 0.78
+        door = 0.45 <= x <= 0.55 and 0.60 <= y <= 0.78
+        return (roof or walls) and not door
+
+    rows = bytearray()
+    top, bottom = (0x3A, 0x8D, 0xF0), (0x1C, 0x5F, 0xD0)
+    for py in range(size):
+        rows.append(0)
+        t = py / (size - 1)
+        bg = tuple(round(a + (b - a) * t) for a, b in zip(top, bottom))
+        for px in range(size):
+            hits = sum(inside((px + dx) / size, (py + dy) / size)
+                       for dx in (0.25, 0.75) for dy in (0.25, 0.75))
+            mix = hits / 4
+            rows.extend(round(c + (255 - c) * mix) for c in bg)
+
+    def chunk(kind, data):
+        return (struct.pack(">I", len(data)) + kind + data
+                + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF))
+
+    _eta_icon = (b"\x89PNG\r\n\x1a\n"
+                 + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0))
+                 + chunk(b"IDAT", zlib.compress(bytes(rows), 9)) + chunk(b"IEND", b""))
+    return _eta_icon
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1110,6 +1360,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?", 1)[0].rstrip("/")   # /api/mobile/?x — тот же эндпоинт
+        if path == "/api/eta/icon.png":
+            return self._eta_icon()
         if path.startswith("/api/eta/f/"):
             return self._eta_page(path[len("/api/eta/f/"):], family=True)
         if path.startswith("/api/eta/"):
@@ -1262,17 +1514,34 @@ class Handler(BaseHTTPRequestHandler):
         valid = bool(_ETA_TOKEN.match(token or ""))
         item = eta_get(token, now) if valid else None
         uz = (self.headers.get("Accept-Language", "") or "").lower().startswith("uz")
-        body = eta_page(item, now, uz=uz, family=family and valid).encode()
+        bot = eta_bot_username(now)
+        body = eta_page(item, now, uz=uz, family=family and valid, bot=bot,
+                        address=token if valid else None).encode()
         # Семейная ссылка вне поездки — не ошибка, а «сейчас не в пути».
         self.send_response(200 if item or (family and valid) else 404)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
-        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
+        # Картинки — только свой значок «На экран „Домой“» (22.2); скриптов нет.
+        self.send_header("Content-Security-Policy",
+                         "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Robots-Tag", "noindex")
         # Снаружи видно, понимает ли сервер ключ записи (проверка выкладки).
         self.send_header("X-Eta-Version", str(ETA_PROTOCOL))
+        # Имя бота — телефону для строки «Сообщения в Telegram» в тексте
+        # ссылки: он узнаёт его тем же пробником, что и «сервер умеет ссылки».
+        if bot:
+            self.send_header("X-Eta-Bot", bot)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _eta_icon(self):
+        body = eta_icon_png()
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "public, max-age=604800")
         self.end_headers()
         self.wfile.write(body)
 

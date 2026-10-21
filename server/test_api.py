@@ -57,6 +57,10 @@ class ServerTestBase(unittest.TestCase):
         cls.traffic_tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         api.TRAFFIC_DB_PATH = cls.traffic_tmp.name
         api.init_traffic_db()
+        # Конфиг бота (имя для подсказки Telegram на странице близкого) —
+        # несуществующий файл: тесты не читают ничего из /opt/radarmap.
+        api.ETA_BOT_CONFIG = os.path.join(tempfile.gettempdir(), "radarmap-no-bot-%d.conf" % os.getpid())
+        api._eta_bot.update(checked=None, username=None)
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), api.Handler)
         cls.port = cls.server.server_address[1]
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
@@ -1738,11 +1742,13 @@ class EtaShareTest(ServerTestBase):
         self.assertNotIn("<script", html)
 
     def test_stores_only_four_numbers(self):
-        """Четыре числа и метка «создано ключом или token» (14.12) — и всё."""
-        self.post(lat=41.31, lon=69.28, name="Дом", device="abc", dest="Мустакиллик 5")
+        """Четыре числа, метка «создано ключом или token» (14.12) и первое
+        обещанное время поездки (22.2, «задерживается») — и всё. Имя водителя
+        для близких (22.1) — отдельным тестом в FamilyPageTest."""
+        self.post(lat=41.31, lon=69.28, place="Дом", device="abc", dest="Мустакиллик 5")
         with api._eta_lock:
             stored = dict(api._eta_links)
-        self.assertEqual(set(stored[self.TOKEN]), {"eta", "left_m", "status", "updated", "keyed"})
+        self.assertEqual(set(stored[self.TOKEN]), {"eta", "left_m", "status", "updated", "keyed", "first_eta"})
         self.assertFalse(stored[self.TOKEN]["keyed"])
         raw = json.dumps(stored, ensure_ascii=False)
         for leak in ("41.31", "69.28", "Дом", "abc", "Мустакиллик"):
@@ -1797,8 +1803,8 @@ class EtaShareTest(ServerTestBase):
         _call(self.port, "POST", "/api/eta", {"token": self.TOKEN, "eta": time.time() + 1200,
                                                "left_m": 0, "status": "driving"})
         status, _, body = _get_raw(self.port, "/api/eta/f/" + self.TOKEN)
-        self.assertIn("Будет примерно в", body.decode())
-        self.assertNotIn("осталось", body.decode(), "без остатка пути, если его не прислали")
+        self.assertIn("В пути — будет в", body.decode())
+        self.assertNotIn("осталось", body.decode(), "без остатка пути: близкому — только время")
         _call(self.port, "POST", "/api/eta", {"token": self.TOKEN, "eta": time.time(),
                                                "left_m": 0, "status": "arrived"})
         self.assertIn("Дома", _get_raw(self.port, "/api/eta/f/" + self.TOKEN)[2].decode())
@@ -1848,7 +1854,7 @@ class EtaWriteKeyTest(ServerTestBase):
         status, headers, html = self.page()
         self.assertEqual(status, 200)
         self.assertIn("Будет примерно в", html)
-        self.assertEqual(headers.get("X-Eta-Version"), "2")
+        self.assertEqual(headers.get("X-Eta-Version"), "3")
         self.assertEqual(self.post(key=self.KEY, status="arrived", left_m=0)[0], 200)
         self.assertIn("На месте с", self.page()[2])
         with api._eta_lock:
@@ -1882,7 +1888,7 @@ class EtaWriteKeyTest(ServerTestBase):
         self.post(key=self.ADDRESS, token=self.ADDRESS, status="arrived", left_m=0)
         status, _, html = self.page(family=True)
         self.assertEqual(status, 200)
-        self.assertIn("Будет примерно в", html, "читатель подменил «в пути» на «дома»")
+        self.assertIn("В пути — будет в", html, "читатель подменил «в пути» на «дома»")
         self.assertNotIn("Дома", html)
 
     def test_token_never_overwrites_an_entry_created_by_key(self):
@@ -1908,7 +1914,7 @@ class EtaWriteKeyTest(ServerTestBase):
             self.assertEqual(self.post(token=legacy, status=status_name, left_m=0)[0], 200)
             self.assertIn(expected, self.page(legacy)[2])
         self.assertEqual(self.post(token=legacy, eta=time.time() + 1200)[0], 200)
-        self.assertIn("Будет примерно в", self.page(legacy, family=True)[2])
+        self.assertIn("В пути — будет в", self.page(legacy, family=True)[2])
 
     def test_rejects_bad_keys(self):
         for key in ("short", "x" * 65, "../../etc/passwd" + "x" * 20, "ключ" * 8, 123, True,
@@ -1939,8 +1945,281 @@ class EtaWriteKeyTest(ServerTestBase):
         телефона («A» × 22) отвечают версией."""
         for path in ("/api/eta/" + "A" * 22, "/api/eta/f/" + "A" * 22, "/api/eta/f/short"):
             _, headers, _ = _get_raw(self.port, path)
-            self.assertEqual(headers.get("X-Eta-Version"), "2", path)
+            self.assertEqual(headers.get("X-Eta-Version"), "3", path)
 
+
+
+class FamilyPageTest(ServerTestBase):
+    """Страница близкого (22.2) и что телефон шлёт для неё (22.1): статус и
+    время — ни точки, ни маршрута; «задерживается», «почти дома», «дома в»,
+    «едет домой» без выдуманного времени, возраст обновления, подсказка
+    Telegram — только когда бот настроен. Края 22.4 — здесь же."""
+
+    KEY = "Zq3xV7kP2mN8rT4wY6bH1c"
+    ADDRESS = "823EP9H7rh1PuBrW-GnHMvJAZH189cTt_vOc6Giih3A"
+
+    def setUp(self):
+        super().setUp()
+        with api._eta_lock:
+            api._eta_links.clear()
+        self.bot_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.bot_dir, True)
+        self.saved_config = api.ETA_BOT_CONFIG
+        self.addCleanup(self.restore_bot)
+
+    def restore_bot(self):
+        api.ETA_BOT_CONFIG = self.saved_config
+        api._eta_bot.update(checked=None, username=None)
+
+    def bot_config(self, text):
+        path = os.path.join(self.bot_dir, "telegram_bot.conf")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        api.ETA_BOT_CONFIG = path
+        api._eta_bot.update(checked=None, username=None)
+
+    def post(self, **fields):
+        payload = {"key": self.KEY, "eta": time.time() + 25 * 60, "left_m": 0, "status": "driving"}
+        payload.update(fields)
+        payload = {k: v for k, v in payload.items() if v is not None}
+        return _call(self.port, "POST", "/api/eta", payload)
+
+    def page(self, lang=None):
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}/api/eta/f/{self.ADDRESS}")
+        if lang:
+            req.add_header("Accept-Language", lang)
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status, dict(resp.headers), resp.read().decode()
+
+    def age(self, seconds):
+        with api._eta_lock:
+            api._eta_links[self.ADDRESS]["updated"] -= seconds
+
+    @staticmethod
+    def clock(ts):
+        return time.strftime("%H:%M", time.gmtime(ts + 5 * 3600))
+
+    # --- 22.1: что принимает сервер ---
+
+    def test_driving_without_eta_says_heading_home(self):
+        """Маршрута нет, призрак не знает — телефон шлёт «в пути» без eta, и
+        близкий видит «едет домой», а не выдуманное время."""
+        status, _ = _call(self.port, "POST", "/api/eta", {"key": self.KEY, "left_m": 0, "status": "driving"})
+        self.assertEqual(status, 200)
+        _, _, html = self.page()
+        self.assertIn("Едет домой", html)
+        self.assertIn("Время прибытия пока неизвестно", html)
+        self.assertNotRegex(html, r"\b\d\d:\d\d\b", "ни одной выдуманной цифры времени")
+        self.assertIn("обновлено", html)
+        _, _, one_off = _get_raw(self.port, "/api/eta/" + self.ADDRESS)
+        self.assertIn("В пути", one_off.decode(), "разовая страница тоже не падает без времени")
+        self.assertEqual(self.post(eta=None, status="arrived")[0], 200, "«дома» без времени — сейчас")
+        self.assertIn("Дома в", self.page()[2])
+
+    def test_eta_still_validated_when_present(self):
+        for eta in ("soon", True, time.time() + 10 * 86400, float("nan")):
+            body = {"key": self.KEY, "eta": eta, "left_m": 0, "status": "driving"}
+            data = json.dumps(body).replace("NaN", "1e999").encode() if eta != eta else None
+            status = (_post_raw(self.port, "/api/eta", data) if data
+                      else _call(self.port, "POST", "/api/eta", body)[0])
+            self.assertEqual(status, 400, repr(eta))
+
+    def test_driver_name_is_kept_cleaned_and_escaped(self):
+        self.assertEqual(self.post(name="  Зафар\n<script>x</script> " + "я" * 40)[0], 200)
+        with api._eta_lock:
+            name = api._eta_links[self.ADDRESS]["name"]
+        self.assertLessEqual(len(name), api.ETA_NAME_MAX)
+        self.assertTrue(name.startswith("Зафар <script>"), "перевод строки — пробел, края обрезаны")
+        _, headers, html = self.page()
+        self.assertNotIn("<script", html)
+        self.assertIn("Зафар &lt;script&gt;", html)
+        self.assertNotIn("script-src", headers.get("Content-Security-Policy", ""))
+        self.assertEqual(self.post(name=12345)[0], 200, "не строка — без имени, но поездка идёт")
+        with api._eta_lock:
+            self.assertNotIn("name", api._eta_links[self.ADDRESS])
+        self.assertEqual(self.post(name="\u200b\n\t")[0], 200)
+        with api._eta_lock:
+            self.assertNotIn("name", api._eta_links[self.ADDRESS], "пустое имя не хранится")
+
+    def test_name_shown_but_never_a_position(self):
+        """Что бы ни прислали рядом (координаты, цель, скорость), на странице
+        и в памяти — только статус, время и имя."""
+        self.post(name="Зафар", lat=41.31177, lon=69.27911, dest="Чиланзар 9", kmh=87.4321,
+                  route=[[41.29133, 69.21177]])
+        _, _, html = self.page()
+        self.assertIn("Зафар", html)
+        with api._eta_lock:
+            raw = json.dumps(api._eta_links, ensure_ascii=False)
+        # Значения с точкой и редкими цифрами: в отметках времени они не
+        # встретятся случайно (голое «63» встречалось).
+        for leak in ("41.31177", "69.27911", "Чиланзар", "87.4321", "41.29133", "69.21177"):
+            self.assertNotIn(leak, html)
+            self.assertNotIn(leak, raw)
+        for field in ('"lat"', '"lon"', '"dest"', '"kmh"', '"route"'):
+            self.assertNotIn(field, raw)
+
+    # --- 22.2: статусы страницы ---
+
+    def test_on_the_way_then_delayed_after_five_minutes(self):
+        first = time.time() + 25 * 60
+        self.post(eta=first)
+        _, _, html = self.page()
+        self.assertIn(f"В пути — будет в {self.clock(first)}", html)
+        self.assertIn(f'<p class="big">{self.clock(first)}</p>', html, "время — крупно")
+        self.post(eta=first + 4 * 60)
+        self.assertIn("В пути — будет в", self.page()[2], "4 минуты — ещё не задержка")
+        later = first + 6 * 60
+        self.post(eta=later)
+        _, _, html = self.page()
+        self.assertIn(f"Задерживается — около {self.clock(later)}", html)
+        self.post(eta=first + 60)
+        self.assertIn("В пути — будет в", self.page()[2], "пробка рассосалась — уже не задерживается")
+
+    def test_new_trip_starts_without_old_delay(self):
+        first = time.time() + 25 * 60
+        self.post(eta=first)
+        self.post(eta=first + 20 * 60)
+        self.post(status="arrived", eta=None)
+        self.post(eta=time.time() + 40 * 60)
+        self.assertIn("В пути — будет в", self.page()[2], "задержка прошлой поездки не переходит в новую")
+
+    def test_first_promise_arrives_late(self):
+        """Сначала времени не было («едет домой»), потом появилось — первым
+        обещанием считается оно, а не «нет времени»."""
+        self.post(eta=None)
+        eta = time.time() + 30 * 60
+        self.post(eta=eta)
+        _, _, html = self.page()
+        self.assertIn("В пути — будет в", html)
+        with api._eta_lock:
+            entry = api._eta_links[self.ADDRESS]
+            self.assertEqual(entry["first_eta"], entry["eta"])
+
+    def test_almost_home_and_home_at(self):
+        self.post(eta=time.time() + 2 * 60)
+        self.assertIn("Почти дома", self.page()[2])
+        self.post(status="arrived", eta=time.time())
+        _, _, html = self.page()
+        self.assertIn(f"Дома в {self.clock(time.time())}", html)
+        self.assertNotIn("обновлено", html, "дома — возраст обновления не нужен")
+
+    def test_not_a_trip_home(self):
+        """«Каждая поездка» (22.1): не домой — «в пути, прибытие около», без
+        «будет дома»; без времени — просто «в пути»."""
+        self.post(home=False)
+        _, _, html = self.page()
+        self.assertIn("В пути — прибытие около", html)
+        self.assertNotIn("Едет домой", html)
+        self.post(home=False, eta=None)
+        _, _, html = self.page()
+        self.assertIn("<h1 class=\"word\">В пути</h1>", html)
+        self.post(home=False, eta=time.time() + 60)
+        self.assertIn("Почти на месте", self.page()[2])
+        self.post(home=True)
+        self.assertIn("В пути — будет в", self.page()[2])
+
+    def test_ended_and_unknown_say_not_on_the_way(self):
+        self.assertIn("Сейчас не в пути", self.page()[2])
+        self.post()
+        self.post(status="ended", eta=None)
+        _, _, html = self.page()
+        self.assertIn("Сейчас не в пути", html)
+        self.assertIn('content="60"', html, "вне поездки страница ждёт следующую сама")
+
+    def test_uzbek_family_page(self):
+        self.post(name="Zafar")
+        _, _, html = self.page("uz-UZ,uz;q=0.9")
+        self.assertIn('lang="uz"', html)
+        self.assertIn("Yoʻlda — ", html)
+        self.assertIn("soniya oldin yangilandi", html)
+        self.post(status="arrived", eta=None)
+        self.assertIn("Uyda — ", self.page("uz")[2])
+
+    # --- 22.4: края ---
+
+    def test_no_network_shows_the_age_not_a_made_up_time(self):
+        """Телефон без сети: страница не двигает время сама и честно говорит,
+        сколько лет последнему обновлению."""
+        self.post()
+        self.age(20)
+        self.assertRegex(self.page()[2], r"обновлено 2\d с назад")
+        self.age(8 * 60)
+        _, _, html = self.page()
+        self.assertIn("обновлено 8 мин назад", html)
+        self.assertNotIn("Давно нет обновлений", html, "8 мин — телефон ещё мог просто ехать ровно")
+        self.age(5 * 60)
+        _, _, html = self.page()
+        self.assertIn("обновлено 13 мин назад", html)
+        self.assertIn("Давно нет обновлений — возможно, телефон без сети.", html)
+
+    def test_app_deleted_link_goes_quiet_by_itself(self):
+        """Водитель удалил приложение посреди поездки: через 2 часа без
+        обновлений — «сейчас не в пути», без «в пути» навсегда."""
+        self.post()
+        self.age(api.ETA_TTL + 1)
+        status, _, html = self.page()
+        self.assertEqual(status, 200)
+        self.assertIn("Сейчас не в пути", html)
+
+    def test_shop_on_the_way_keeps_the_trip_continuous(self):
+        """Магазин по дороге домой (TripMerge): телефон не шлёт «не в пути» на
+        стоянке, а после неё — то же «в пути» с более поздним временем.
+        Страница не начинает заново: это задержка той же поездки."""
+        first = time.time() + 20 * 60
+        self.post(eta=first)
+        self.age(18 * 60)            # 18 минут в магазине — без обновлений
+        self.assertIn("В пути — будет в", self.page()[2])
+        self.post(eta=first + 15 * 60)
+        self.assertIn("Задерживается — около", self.page()[2])
+
+    # --- подсказка Telegram, значок, заголовки ---
+
+    def test_telegram_hint_only_when_the_bot_is_configured(self):
+        self.post()
+        _, headers, html = self.page()
+        self.assertNotIn("t.me", html)
+        self.assertNotIn("X-Eta-Bot", headers)
+        self.bot_config("token=123:SECRET-TOKEN\nsalt=pepper-salt\nusername=@RadarMapUzBot\n")
+        _, headers, html = self.page()
+        self.assertIn(f'href="https://t.me/RadarMapUzBot?start=f_{self.ADDRESS}"', html)
+        self.assertIn("Получать сообщения в Telegram", html)
+        self.assertEqual(headers.get("X-Eta-Bot"), "RadarMapUzBot")
+        for secret in ("SECRET-TOKEN", "pepper-salt"):
+            self.assertNotIn(secret, html)
+            self.assertNotIn(secret, json.dumps(headers))
+        _, probe_headers, _ = _get_raw(self.port, "/api/eta/" + "A" * 22)
+        self.assertEqual(probe_headers.get("X-Eta-Bot"), "RadarMapUzBot", "пробник телефона узнаёт имя бота")
+        for bad in ("username=bad name\n", "username=\n", "username=<b>x</b>\n", "token=1\n"):
+            self.bot_config(bad)
+            _, headers, html = self.page()
+            self.assertNotIn("t.me", html, bad)
+            self.assertNotIn("X-Eta-Bot", headers, bad)
+
+    def test_home_screen_icon_and_note(self):
+        self.post()
+        _, headers, html = self.page()
+        self.assertIn('rel="apple-touch-icon" href="../icon.png"', html)
+        self.assertIn("На экран „Домой“", html)
+        self.assertIn("img-src 'self'", headers.get("Content-Security-Policy", ""))
+        self.assertNotIn("<script", html)
+        status, icon_headers, body = _get_raw(self.port, "/api/eta/icon.png")
+        self.assertEqual(status, 200)
+        self.assertEqual(icon_headers.get("Content-Type"), "image/png")
+        self.assertTrue(body.startswith(b"\x89PNG\r\n\x1a\n"))
+
+    def test_family_state_is_a_pure_decision(self):
+        now = 1_800_000_000
+        item = {"eta": now + 1500, "first_eta": now + 1500, "status": "driving", "updated": now}
+        self.assertEqual(api.family_state(None, now), "idle")
+        self.assertEqual(api.family_state(dict(item, status="ended"), now), "idle")
+        self.assertEqual(api.family_state(dict(item, status="arrived"), now), "arrived")
+        self.assertEqual(api.family_state(dict(item, eta=None), now), "unknown")
+        self.assertEqual(api.family_state(item, now), "driving")
+        self.assertEqual(api.family_state(dict(item, eta=now + 1500 + 299), now), "driving")
+        self.assertEqual(api.family_state(dict(item, eta=now + 1500 + 300), now), "delayed")
+        self.assertEqual(api.family_state(dict(item, eta=now + 180), now), "almost")
+        self.assertEqual(api.family_state(dict(item, eta=now + 180, first_eta=now), now), "almost",
+                         "почти дома важнее задержки")
 
 
 def _post_raw(port, path, body):

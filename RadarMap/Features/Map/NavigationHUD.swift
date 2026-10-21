@@ -83,8 +83,8 @@ struct TripCameraChip: View {
 
     var body: some View {
         let location = env.location
-        let camera = location.nearestCamera
-        let distance = camera == nil ? nil : location.distanceToNearest
+        let camera = location.displayNearestCamera
+        let distance = camera == nil ? nil : location.displayDistanceToNearest
         let shown = TripScreenLayout.showsCameraChip(distance: distance,
                                                      isAlerting: location.alertLevel >= 1,
                                                      isSignalStale: location.isSignalStale)

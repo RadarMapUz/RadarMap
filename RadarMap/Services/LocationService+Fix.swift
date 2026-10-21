@@ -220,10 +220,12 @@ extension LocationService {
     func pushWatch() {
         guard isTripActive else { return }
         watchBridge?.update(isTripActive: true, speedKmh: speedKmh,
-                            cameraTitle: nearestCamera?.displayTitle,
-                            cameraSymbol: nearestCamera?.kind.symbolName,
-                            cameraID: nearestCamera?.id,
-                            distanceMeters: distanceToNearest,
+                            // Камера — для показа (25.I), уровень и
+                            // хаптика часов — тревоги.
+                            cameraTitle: displayNearestCamera?.displayTitle,
+                            cameraSymbol: displayNearestCamera?.kind.symbolName,
+                            cameraID: displayNearestCamera?.id,
+                            distanceMeters: displayDistanceToNearest,
                             alertLevel: alertLevel,
                             limitKmh: speedLimits?.currentLimit,
                             // Устойчивое: мгновенный флаг щёлкает от шума

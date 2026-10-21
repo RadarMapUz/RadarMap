@@ -63,7 +63,7 @@ struct CarPlayEngineLayer: View {
         let bearing = model.mapDirection ?? (env.location.displayCourse >= 0 ? env.location.displayCourse : nil)
         // Своя камера («без голоса») — не цель: водитель её знает, и ради неё
         // кадр уходил в район (снимок 63, 21.10).
-        let keep = env.location.nearestCamera.flatMap {
+        let keep = env.location.displayNearestCamera.flatMap {
             DriveCamera.keep(camera: $0.id, at: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
                              familiar: env.location.familiarCameraIDs, from: me, bearing: bearing)
         }
@@ -113,7 +113,7 @@ struct CarPlayEngineLayer: View {
                 route: env.route.camerasOnRoute.map { (id: $0.id, along: $0.distanceAlong) },
                 progress: env.route.isActive ? env.route.progressAlong : nil,
                 passedTolerance: AppConfig.routePassedToleranceMeters,
-                nearest: env.location.nearestCamera?.id),
+                nearest: env.location.displayNearestCamera?.id),
             familiarCameraIDs: env.location.familiarCameraIDs,
             route: env.route.routeCoordinates,
             routeObject: env.route.polyline,

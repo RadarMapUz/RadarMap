@@ -267,8 +267,8 @@ private struct CarPlayDashboardGauge: View {
             if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
                 SpeedLimitSign(limit: limit, diameter: 32, isAssumed: env.speedLimits.isCurrentLimitAssumed)
             }
-            if let camera = env.location.nearestCamera,
-               let distance = env.location.distanceToNearest,
+            if let camera = env.location.displayNearestCamera,
+               let distance = env.location.displayDistanceToNearest,
                distance <= AppConfig.carPlayNearestCameraMeters {
                 HStack(spacing: 4) {
                     Image(systemName: camera.kind.symbolName)

@@ -44,7 +44,7 @@ extension FinesScreen {
                         }
                     }
                     Spacer(minLength: 8)
-                    Text(fine.amount.map(FineFormat.money) ?? String(localized: "сумма не указана"))
+                    Text(fine.amount.map { FineFormat.money($0) } ?? String(localized: "сумма не указана"))
                         .font(.rounded(fine.amount == nil ? 12 : 15, .bold))
                         .foregroundStyle(fine.amount == nil ? Theme.textTertiary : Theme.textPrimary)
                         .multilineTextAlignment(.trailing)

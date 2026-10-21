@@ -349,7 +349,7 @@ struct PassDetailView: View {
                                 : Theme.danger,
                             title: fineTitle,
                             // Внесённое постановление — его сумма, а не оценка.
-                            value: pass.fineAmount.map(FineFormat.money) ?? Formatting.money(fine))
+                            value: pass.fineAmount.map { FineFormat.money($0) } ?? Formatting.money(fine))
                     if pass.fineReceiptID != nil {
                         // Сверен с постановлением (этап 17): судьбу правит
                         // экран «Штрафы» — там же сумма, срок и оплата.

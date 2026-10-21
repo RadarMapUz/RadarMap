@@ -395,8 +395,9 @@ nonisolated enum PassGeometry {
     /// - профилю нельзя доверить «не наша» (`profileMayMute`): у снапа на
     ///   тротуар, проезд или жилую зону ось чужая — радар трассы, севший на
     ///   поперечный проезд, иначе не писался бы никогда (3135, 3136 на D006);
-    /// - позиция камеры не проверена (`needsReview`): снап не нашёл её дорогу
-    ///   по имени, и ось может быть осью поперечной улицы;
+    ///   и у камеры с непроверенной позицией (`needsReview`, входит туда же):
+    ///   снап не нашёл её дорогу по имени, и ось может быть осью поперечной
+    ///   улицы;
     /// - оси нет вовсе (свои точки, краудсорс).
     ///
     /// Ось — с куска дороги у ТЕКУЩЕЙ точки, как у гейта оси: на кривой одна
@@ -405,7 +406,7 @@ nonisolated enum PassGeometry {
                               course: CLLocationDirection,
                               accuracy: CLLocationAccuracy) -> Double? {
         guard course >= 0, accuracy <= AppConfig.courseProofMaxAccuracyMeters,
-              camera.profileMayMute, camera.needsReview != true,
+              camera.profileMayMute,
               let axis = RoadShape(camera: camera)?.axis(near: coordinate)
                 ?? camera.axis.map(Double.init) else { return nil }
         return GeoMath.axisDifference(course: course, axis: axis)
@@ -443,8 +444,15 @@ nonisolated enum PassGeometry {
     /// развязки курс на одну-три точки смотрит прямо на камеру — так
     /// проеханная камера «подъезжалась» заново с петли (ревью S4, третий
     /// круг). nil — нет ни доверенного куска, ни оси.
+    ///
+    /// У камеры с непроверенной позицией (`needsReview`) своей дороги мы не
+    /// знаем (14.13): её кусок и ось сняты у ближайшей к неточной точке
+    /// дороги, а это бывает поперечная улица — после разворота на нашей
+    /// дороге такой «кусок» не пускал новый подъезд, и камера молчала. Тогда
+    /// своя дорога — линия, по которой мы мимо неё проехали
+    /// (`LocationGates.isReapproach`).
     static func ownRoadOffset(camera: Camera, at coordinate: CLLocationCoordinate2D) -> Double? {
-        guard camera.hasTrustedRoadProfile else { return nil }
+        guard camera.hasTrustedRoadProfile, camera.needsReview != true else { return nil }
         if let shape = RoadShape(camera: camera) {
             if let lateral = shape.lateralOffset(from: coordinate) { return lateral }
             if let extended = shape.extendedEndOffset(from: coordinate) { return extended }

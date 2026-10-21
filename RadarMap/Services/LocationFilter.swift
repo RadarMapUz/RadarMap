@@ -13,10 +13,10 @@
 //  считаются от курса, поэтому недостоверный курс опаснее отсутствующего: он
 //  ЗАГЛУШИТ настоящую камеру. Поэтому сырой курс берётся только когда система
 //  сама в нём уверена (courseAccuracy), иначе считаем курс по земле — от
-//  последнего принятого фикса, отстоящего не меньше чем на
-//  `derivedCourseMinMeters` и не старше `derivedCourseMaxSeconds`, — а если и
-//  это невозможно, отдаём −1: направленные фильтры при этом отключаются и
-//  лучше предупредить лишний раз.
+//  последнего годного фикса, отстоящего не меньше чем на шаг (от
+//  `derivedCourseMinMeters`, см. ниже) и не старше `derivedCourseMaxSeconds`,
+//  — а если и это невозможно, отдаём −1: направленные фильтры при этом
+//  отключаются и лучше предупредить лишний раз.
 //
 //  Опора — не обязательно СОСЕДНИЙ фикс. Пока курс по земле считался только
 //  по двум соседним, при фиксах раз в секунду он появлялся лишь быстрее
@@ -24,6 +24,19 @@
 //  курс хуже всего (каньоны), а параллельных улиц больше всего, — курса не
 //  было вовсе, и гейты молчали всю дорогу. В симуляторе (courseAccuracy там
 //  всегда −1) на 40 км/ч гейты не включались ни разу (прогон 13.3, 20.10).
+//
+//  Курс по земле — только между ГОДНЫМИ фиксами (14.13). Фиксы уровня
+//  Wi-Fi (точность 30–65 м — фильтр их пропускает, позиция района годится)
+//  прыгают на десятки метров, и «сдвиг в 12 м» между ними — шум, а не путь:
+//  курс выходил поперёк дороги на каждом фиксе, гейт оси ему верил и глушил
+//  камеру на нашей же дороге весь подъезд. Поэтому ни текущий фикс, ни опора
+//  не бывают хуже `courseProofMaxAccuracyMeters` (тот же порог, что у
+//  доказательств записи проезда и охвата, 14.10: курс, который ничего не
+//  доказывает там, не вправе глушить и здесь), а сдвиг обязан превышать
+//  сумму их погрешностей (`derivedCourseAccuracyFactor`). На хорошем GPS
+//  (5–6 м) шаг остаётся прежним — 12 м. Сырой курс с уверенной оценкой
+//  системы этим не ограничен: он доплеровский, и в каньоне портится позиция,
+//  а не скорость.
 //
 //  Одно исключение — повторный фикс на ходу: курс секунду назад был
 //  доверенный, машина едет, а фикс пришёл через миллисекунды или сдвинулся
@@ -87,10 +100,11 @@ nonisolated struct LocationFilter {
     }
 
     private var lastAccepted: (lat: Double, lon: Double, at: Date)?
-    /// Недавние принятые фиксы — опоры для курса по земле, новые в конце.
+    /// Недавние ГОДНЫЕ фиксы — опоры для курса по земле, новые в конце.
     /// Хранятся не дольше `derivedCourseMaxSeconds` и не больше
     /// `derivedCourseAnchorLimit` штук: дальше опора уже ничего не значит.
-    private var recent: [(lat: Double, lon: Double, at: Date)] = []
+    /// Фикс хуже `courseProofMaxAccuracyMeters` опорой не бывает.
+    private var recent: [(lat: Double, lon: Double, at: Date, accuracy: Double)] = []
     /// Последний доверенный курс — держим его на повторном фиксе на ходу.
     private var lastCourse: (course: CLLocationDirection, at: Date)?
 
@@ -125,7 +139,8 @@ nonisolated struct LocationFilter {
 
     private mutating func remember(_ fix: Fix) {
         recent.removeAll { fix.timestamp.timeIntervalSince($0.at) > AppConfig.derivedCourseMaxSeconds }
-        recent.append((fix.lat, fix.lon, fix.timestamp))
+        guard fix.horizontalAccuracy <= AppConfig.courseProofMaxAccuracyMeters else { return }
+        recent.append((fix.lat, fix.lon, fix.timestamp, fix.horizontalAccuracy))
         if recent.count > AppConfig.derivedCourseAnchorLimit {
             recent.removeFirst(recent.count - AppConfig.derivedCourseAnchorLimit)
         }
@@ -158,16 +173,19 @@ nonisolated struct LocationFilter {
         // Курс по земле: на малой скорости и при плохой геометрии спутников он
         // надёжнее сырого. Нужен заметный сдвиг, иначе считаем шум. Опора —
         // САМЫЙ СВЕЖИЙ фикс, от которого сдвиг уже заметный: на 40 км/ч это
-        // позапрошлый (22 м), на 60 — прошлый, как и раньше.
-        for anchor in recent.reversed() {
-            let dt = fix.timestamp.timeIntervalSince(anchor.at)
-            guard dt <= AppConfig.derivedCourseMaxSeconds else { break }
-            guard dt > 0 else { continue }
-            let moved = GeoMath.fastDistance(anchor.lat, anchor.lon, fix.lat, fix.lon)
-            if moved >= AppConfig.derivedCourseMinMeters {
-                return (GeoMath.bearing(
-                    from: CLLocationCoordinate2D(latitude: anchor.lat, longitude: anchor.lon),
-                    to: CLLocationCoordinate2D(latitude: fix.lat, longitude: fix.lon)), true)
+        // позапрошлый (22 м), на 60 — прошлый, как и раньше. Только между
+        // годными фиксами (см. шапку): плохой фикс курса по земле не получает.
+        if fix.horizontalAccuracy <= AppConfig.courseProofMaxAccuracyMeters {
+            for anchor in recent.reversed() {
+                let dt = fix.timestamp.timeIntervalSince(anchor.at)
+                guard dt <= AppConfig.derivedCourseMaxSeconds else { break }
+                guard dt > 0 else { continue }
+                let moved = GeoMath.fastDistance(anchor.lat, anchor.lon, fix.lat, fix.lon)
+                if moved >= Self.derivedCourseStep(anchor.accuracy, fix.horizontalAccuracy) {
+                    return (GeoMath.bearing(
+                        from: CLLocationCoordinate2D(latitude: anchor.lat, longitude: anchor.lon),
+                        to: CLLocationCoordinate2D(latitude: fix.lat, longitude: fix.lon)), true)
+                }
             }
         }
         // Повторный фикс на ходу (см. шапку): курс недавний, едем — держим.
@@ -182,6 +200,16 @@ nonisolated struct LocationFilter {
             return (held.course, false)
         }
         return (-1, false)   // курса нет — ось и коридор обязаны молчать
+    }
+
+    /// Сдвиг, с которого курс по земле — путь, а не шум двух координат: не
+    /// меньше `derivedCourseMinMeters` и не меньше суммы погрешностей опоры и
+    /// фикса (с множителем `derivedCourseAccuracyFactor`). Сдвинься оба фикса
+    /// на всю свою погрешность поперёк пути в разные стороны — курс уйдёт не
+    /// больше чем на 45°, меньше порога гейта оси (`cameraAxisMaxAngle`).
+    private static func derivedCourseStep(_ anchorAccuracy: Double, _ fixAccuracy: Double) -> Double {
+        max(AppConfig.derivedCourseMinMeters,
+            AppConfig.derivedCourseAccuracyFactor * (anchorAccuracy + fixAccuracy))
     }
 
     /// Повтор прошлого фикса, а не новое измерение: пришёл почти сразу или

@@ -578,10 +578,11 @@ final class ScenarioDriveTests: XCTestCase {
     /// своя камера звучит, проезда мимо камеры соседней улицы нет.
     ///
     /// НЕ гарантировано и вынесено владельцу (план 12в, «Ждёт владельца»):
-    /// курс по земле между такими точками иногда не считается (сдвиг меньше
-    /// 12 м), курс на тик «неизвестен», гейты выключаются — и по правилу
-    /// «неизвестно — предупреждать» звучит камера соседней улицы, даже в
-    /// 300 м. Заглушить такой тик — риск задержать настоящую камеру.
+    /// с 14.13 курса по земле между такими точками нет вовсе (фикс хуже
+    /// `courseProofMaxAccuracyMeters` — шум, а не путь), гейты выключены весь
+    /// участок — и по правилу «неизвестно — предупреждать» может прозвучать
+    /// камера соседней улицы, даже в 300 м. До 14.13 тот же шум на части тиков
+    /// глушил по оси и СВОЮ камеру (`testWiFiZigzagPastAnOwnRoadCameraWarns`).
     private func noisyFixes(lateralNoise: Double, accuracy: Double) -> [LocationFilter.Fix] {
         let clean = fixes(from: (0, 0), legs: [Leg(x: 2000, y: 0, speed: 12)])
         // Первые 300 м — нормальный GPS (скорость и курс есть), дальше каньон.
@@ -612,6 +613,64 @@ final class ScenarioDriveTests: XCTestCase {
         XCTAssertNotNil(drive.passes[2], "проезд своей записан")
     }
 
+    /// 14.13: участок с фиксами уровня Wi-Fi (60 м), которые прыгают через
+    /// дорогу то влево, то вправо на 30 м, — худший случай того же каньона.
+    /// Курс «по земле» между такими точками смотрел поперёк дороги на каждом
+    /// фиксе, гейт оси верил ему, и камера на нашей же дороге молчала весь
+    /// подъезд и траверз. Теперь курса на таких фиксах нет, гейты молчат,
+    /// камера звучит — и заранее, на подъезде.
+    func testWiFiZigzagPastAnOwnRoadCameraWarns() {
+        let clean = fixes(from: (0, 0), legs: [Leg(x: 2000, y: 0, speed: 12)])
+        let goodPrefix = 25
+        let track = clean.enumerated().map { index, fix -> LocationFilter.Fix in
+            guard index >= goodPrefix else { return fix }
+            let p = xy(fix.lat, fix.lon)
+            let q = point(p.x, index.isMultiple(of: 2) ? 30 : -30)
+            return LocationFilter.Fix(lat: q.lat, lon: q.lon, horizontalAccuracy: 60,
+                                      speed: -1, speedAccuracy: -1, course: -1, courseAccuracy: -1,
+                                      timestamp: fix.timestamp)
+        }
+        var drive = Drive()
+        drive.run(track, cameras: [snappedCamera(2, x: 1600, y: 0, axis: 90)], xy: xy)
+        XCTAssertEqual(drive.rejected, 0)
+        XCTAssertEqual(drive.firstAlerts[2], 1, "своя камера звучит и на фиксах уровня Wi-Fi")
+        XCTAssertLessThanOrEqual(drive.firstAlertPoints[2]?.first?.x ?? .infinity, 1600 - 200,
+                                 "заранее, а не у самой камеры")
+    }
+
+    /// Тот же каньон на фиксах в 20 м (лучше порога, хуже нормы): шаг курса
+    /// по земле растёт с погрешностью, курс между ними — не шум, гейты
+    /// работают, камера соседней улицы в 300 м вбок не звучит, своя — да.
+    func testMediocreFixesKeepTheGatesOn() {
+        let track = fixes(from: (0, 0), legs: [Leg(x: 2000, y: 0, speed: 12)]).map { fix in
+            LocationFilter.Fix(lat: fix.lat, lon: fix.lon, horizontalAccuracy: 20,
+                               speed: fix.speed, speedAccuracy: fix.speedAccuracy, course: -1,
+                               courseAccuracy: -1, timestamp: fix.timestamp)
+        }
+        var drive = Drive()
+        drive.run(track, cameras: [camera(1, x: 1000, y: 300), snappedCamera(2, x: 1600, y: 0, axis: 90)],
+                  xy: xy)
+        XCTAssertNil(drive.firstAlerts[1], "параллельная улица в 300 м — не наша")
+        XCTAssertEqual(drive.firstAlerts[2], 1)
+    }
+
+    /// 14.13: камера с непроверенной позицией стоит на нашей дороге, а снап
+    /// посадил её на поперечную улицу (ось и кусок дороги поперёк нас). Ось
+    /// такой камеры не доказательство — предупреждаем; проверенная камера с
+    /// той же геометрией — по-прежнему поперечная улица, верная тишина.
+    func testNeedsReviewCameraWithACrossStreetSnapWarns() {
+        let route = fixes(from: (0, 0), legs: [Leg(x: 0, y: 1600, speed: 14)])
+        let doubtful = profiledCamera(5, x: 8, y: 1000, axis: 90, half: 40, needsReview: true)
+        var drive = Drive()
+        drive.run(route, cameras: [doubtful], xy: xy)
+        XCTAssertEqual(drive.firstAlerts[5], 1, "позиция не проверена — ось поперечной улицы не доказательство")
+        XCTAssertLessThanOrEqual(drive.firstAlertPoints[5]?.first?.y ?? .infinity, 1000 - 200)
+
+        var checked = Drive()
+        checked.run(route, cameras: [profiledCamera(5, x: 8, y: 1000, axis: 90, half: 40)], xy: xy)
+        XCTAssertNil(checked.firstAlerts[5], "проверенная поперечная — верная тишина, как в 14.10")
+    }
+
     /// Хуже 65 м — фикс в оповещения не идёт вовсе.
     func testWorseThanTheLimitIsRejected() {
         var drive = Drive()
@@ -626,13 +685,13 @@ final class ScenarioDriveTests: XCTestCase {
     /// Камера со снапом по оси `axis` и куском дороги ±`half` м; `dir` и
     /// `twin` — как в базе у парных камер разделённой дороги.
     private func profiledCamera(_ id: Int, x: Double, y: Double, axis: Double, half: Double = 100,
-                                dir: Int? = nil, twin: Bool? = nil) -> Camera {
+                                dir: Int? = nil, twin: Bool? = nil, needsReview: Bool = false) -> Camera {
         let p = point(x, y)
         let rad = axis * .pi / 180
         let dLat = Int((half * cos(rad) / 111_320 * 1e6).rounded())
         let dLon = Int((half * sin(rad) / kx * 1e6).rounded())
         return Camera(id: id, region: "Т", city: "", location: "к", lat: p.lat, lon: p.lon,
-                      type: "Стационар камера", violations: [], needsReview: false, axis: Int(axis),
+                      type: "Стационар камера", violations: [], needsReview: needsReview, axis: Int(axis),
                       dir: dir, lanes: 3, cls: "primary", road: [-dLat, -dLon, 0, 0, dLat, dLon],
                       split: true, twin: twin)
     }

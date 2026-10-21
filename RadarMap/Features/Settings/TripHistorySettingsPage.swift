@@ -6,6 +6,9 @@
 //  архивом и стереть всё одним действием. Здесь же встанут «Хранить
 //  историю» (15.2) и iCloud (15.4).
 //
+//  Подтверждение удаления — EraseHistorySheet (15.6), тот же лист, что
+//  у «Очистить историю» в «Итогах».
+//
 //  Выгрузка — архив во временной папке: он живёт ровно до закрытия окна
 //  «Поделиться», дальше в нём вся история человека, лежащая без дела.
 //
@@ -68,17 +71,6 @@ struct TripHistorySettingsPage: View {
                         .foregroundStyle(Theme.danger)
                 }
                 .disabled(!ready)
-                // На кнопке, а не на форме: в iOS 26 подтверждение — облачко
-                // у источника, и с формы оно указывало в пустоту под ней.
-                .confirmationDialog("Удалить всю историю?", isPresented: $confirmsErase, titleVisibility: .visible) {
-                    Button("Удалить всю историю", role: .destructive) {
-                        env.deleteAllHistory()
-                        erased = true
-                    }
-                    Button("Отмена", role: .cancel) {}
-                } message: {
-                    Text(AppEnvironment.erasureMessage)
-                }
             } footer: {
                 if erased {
                     Label("История удалена", systemImage: "checkmark.circle.fill")
@@ -92,6 +84,11 @@ struct TripHistorySettingsPage: View {
         .sheet(item: $share, onDismiss: removeExport) { payload in
             ActivityFileSheet(url: payload.url)
                 .presentationDetents([.medium, .large])
+        }
+        // Списки «Удалится» / «Останется» листом (15.6): системное
+        // подтверждение с тем же перечнем было узким облачком-абзацем.
+        .sheet(isPresented: $confirmsErase) {
+            EraseHistorySheet { erased = true }
         }
         #if DEBUG
         // Снимки без касаний: `-settingsPage history -confirmErase` —

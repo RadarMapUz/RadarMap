@@ -280,6 +280,8 @@ struct EngineMapView: UIViewRepresentable {
         /// (часы CACurrentMediaTime): камера едет до ожидаемого следующего.
         private var fixArrival: CFTimeInterval = 0
         private var fixGap: CFTimeInterval = AppConfig.engineCameraDuration
+        /// Курс модели, по которому стрелка повёрнута на последнем фиксе.
+        private var lastMarkerCourse: Double?
         private var cameraWindow: EngineMapPresentation.CameraWindow?
         private var cachedCameras: [Camera] = []
         private var cachedLimits: [Int: Int] = [:]
@@ -994,9 +996,13 @@ struct EngineMapView: UIViewRepresentable {
                 Log.network.info("MapLibre: камера установлена, zoom \(view.zoomLevel, privacy: .public)")
             }
             cameraPlaced = true
-            let rotation = EngineMapPresentation.heading(model.courseDegrees, near: positionHeading)
-            if fixChanged || rotation != positionHeading {
-                positionHeading = rotation
+            // Курс модели — на фиксе; между фиксами по линии маршрута значок
+            // крутит сам (stepMarker). Сравнение с прошлым курсом МОДЕЛИ, а не
+            // с нарисованным: иначе каждое обновление SwiftUI между фиксами
+            // возвращало бы поворот к курсу фикса, и стрелка дрожала бы.
+            if fixChanged || model.courseDegrees != lastMarkerCourse {
+                lastMarkerCourse = model.courseDegrees
+                positionHeading = EngineMapPresentation.heading(model.courseDegrees, near: positionHeading)
                 stepMarker(at: wall, in: view)
                 if !reduceMotion, predictor.isMoving(at: wall) {
                     startMarkerLink(in: view)

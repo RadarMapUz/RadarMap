@@ -81,9 +81,13 @@ final class RouteService {
         }
     }
 
-    private enum RouteError: Error {
+    nonisolated enum RouteError: Error {
         case noRoute          // оба движка не нашли путь между точками
         case serverUnreachable
+        /// Запрос к OSRM не дошёл (таймаут, нет связи) — наружу уходит как
+        /// `serverUnreachable`; отдельно — чтобы не повторять его без курса
+        /// (`retriesWithoutHeading`).
+        case noConnection
     }
 
     /// Кумулятивная длина считается по ВЫБРАННОЙ линии: смена набора или
@@ -446,7 +450,11 @@ final class RouteService {
         errorMessage = String(localized: "Не видим вашего положения — заезд остался")
     }
 
+    /// `heading` — курс машины, если она едет (`LocationService.routeHeading`,
+    /// правило — `requestHeading`): маршрут начнётся туда, куда она едет, а не
+    /// с разворота за спиной (20.9). Стоя — nil: поехать можно в любую сторону.
     func build(from source: CLLocationCoordinate2D,
+               heading: CLLocationDirection?,
                to destination: CLLocationCoordinate2D,
                name: String, cameras: [Camera],
                alternatives: Bool = true) async {
@@ -467,7 +475,7 @@ final class RouteService {
         lastArrival = nil   // новый маршрут — карточка прошлого прибытия неактуальна
         do {
             let built = try await calculate(from: source, via: nil, to: destination,
-                                            alternatives: alternatives)
+                                            alternatives: alternatives, heading: heading)
             guard gen == generation else { return }   // пока считали — маршрут сбросили/заменили
             // Новая цель — остановка прежнего маршрута не её. Забываем ТОЛЬКО
             // после успеха: не построилось — прежняя линия (через остановку)
@@ -488,7 +496,8 @@ final class RouteService {
     /// не знает, а сравнивать варианты заезда незачем — точку человек уже
     /// выбрал сам. Не вышло — старый маршрут остаётся как был, с сообщением.
     func addStop(_ coordinate: CLLocationCoordinate2D, name: String,
-                 from source: CLLocationCoordinate2D, cameras: [Camera]) async {
+                 from source: CLLocationCoordinate2D, heading: CLLocationDirection?,
+                 cameras: [Camera]) async {
         errorMessage = nil   // прежняя ошибка — не причина этого отказа
         guard isActive, let destination = destinationCoordinate else {
             // Маршрут успел закончиться (приехали, сбросили), пока выбирали место.
@@ -508,7 +517,7 @@ final class RouteService {
         let newStop = Stop(coordinate: coordinate, name: name)
         do {
             let built = try await calculate(from: source, via: newStop, to: destination,
-                                            alternatives: false)
+                                            alternatives: false, heading: heading)
             guard gen == generation else { return }
             stop = newStop
             await apply(built, name: destinationName, destination: destination,
@@ -523,7 +532,8 @@ final class RouteService {
     /// Убрать заезд, оставив цель (5.13): раньше передумавший заезжать на
     /// АЗС сбрасывал весь маршрут и искал адрес заново. Не вышло — заезд и
     /// линия остаются, как были, с сообщением.
-    func removeStop(from source: CLLocationCoordinate2D, cameras: [Camera]) async {
+    func removeStop(from source: CLLocationCoordinate2D, heading: CLLocationDirection?,
+                    cameras: [Camera]) async {
         errorMessage = nil
         guard isActive, stop != nil, let destination = destinationCoordinate else { return }
         guard isRoutingEnabled else {
@@ -537,7 +547,7 @@ final class RouteService {
         let destinationName = self.destinationName
         do {
             let built = try await calculate(from: source, via: nil, to: destination,
-                                            alternatives: false)
+                                            alternatives: false, heading: heading)
             guard gen == generation else { return }
             stop = nil
             await apply(built, name: destinationName, destination: destination,
@@ -676,18 +686,28 @@ final class RouteService {
                         speedKmh: speedKmh, cameraHolds: cameraHolds)
 
         // Отклонение → перестроение (с защитой от шума GPS и кулдауном).
-        isOffRoute = deviation > AppConfig.rerouteDeviationMeters
         // Пульт выключил маршруты (OSRM лёг) — не перестраиваем: каждая
         // попытка шла в Apple и OSRM, пока владелец гасил именно это (S24).
         // Подтверждение шумом, кулдаун и бэкофф — RerouteGate. Маршрут без
         // сети приблизителен на длину своих прямых подъездов — и съездом
-        // считается только уход дальше их (isOffRoute выше остаётся по 150 м:
+        // считается только уход дальше их (isOffRoute ниже остаётся по 150 м:
         // остатку до камер дальше линии всё равно не верим).
+        // Ход навстречу линии (20.9) — по ветке, которую выбрала проекция
+        // (`segmentHint` после project — её сегмент): на обратной ветке
+        // маршрута-петли курс попутен, и правило молчит.
         let rerouteLimit = variant.isOffline ? AppConfig.offlineRouteRerouteMeters
                                              : AppConfig.rerouteDeviationMeters
-        guard rerouteGate.note(deviation: deviation, now: Date(), limit: rerouteLimit,
-                               drift: variant.isOffline ? nil : RerouteGate.driftLimit(accuracy: accuracy)),
-              isRoutingEnabled else { return }
+        let rebuild = rerouteGate.note(
+            deviation: deviation, now: Date(), limit: rerouteLimit,
+            drift: variant.isOffline ? nil : RerouteGate.driftLimit(accuracy: accuracy),
+            heading: variant.isOffline ? nil : Self.routeHeading(along: along, segment: segmentHint,
+                                                                 pts: variant.points,
+                                                                 course: course, speedKmh: speedKmh))
+        // Едем навстречу линии — остаток «по маршруту» до камер значит не
+        // больше, чем после съезда: камеры за спиной заслоняли бы настоящую
+        // впереди (S7). Пока перестраиваемся, его и так не берут.
+        isOffRoute = deviation > AppConfig.rerouteDeviationMeters || rerouteGate.isWrongWay
+        guard rebuild, isRoutingEnabled else { return }
 
         isRebuilding = true
         isRerouting = true
@@ -872,9 +892,16 @@ final class RouteService {
     /// Выбранный маршрут построен без сети — сеть вернулась, пора заменить.
     var isOfflineRoute: Bool { selected?.isOffline ?? false }
 
-    /// `heading` — курс машины на ходу (перестроение): OSRM начнёт маршрут в
-    /// эту сторону. Попутной дороги рядом нет (NoSegment) или сервер
-    /// отказал — повтор без курса: маршрут с разворотом лучше, чем никакого.
+    /// `heading` — курс машины на ходу (перестроение, с 20.9 и первый
+    /// маршрут на ходу): OSRM начнёт маршрут в эту сторону. Попутной дороги
+    /// рядом нет (NoSegment) или сервер отказал — повтор без курса: маршрут с
+    /// разворотом лучше, чем никакого. Запрос не дошёл вовсе — без повтора:
+    /// он ждал бы второй таймаут, и «Нет связи» приходило бы через 24 с.
+    ///
+    /// MKDirections курса не принимает: у `MKDirections.Request` есть только
+    /// точки, вид транспорта, время и альтернативы. Внутри Узбекистана он не
+    /// строит вовсе, и маршрут с курсом идёт через OSRM; там, где Apple
+    /// строит (за границей), курс не учитывается.
     private func calculate(from source: CLLocationCoordinate2D,
                            via stop: Stop?,
                            to destination: CLLocationCoordinate2D,
@@ -890,7 +917,7 @@ final class RouteService {
                 do {
                     return try await osrmRoute(from: source, via: stop, to: destination,
                                                alternatives: alternatives, heading: heading)
-                } catch {
+                } catch let error where Self.retriesWithoutHeading(after: error) {
                     Log.route.notice("маршрут по курсу не построен — повтор без курса: \(error.localizedDescription, privacy: .public)")
                 }
             }
@@ -900,6 +927,7 @@ final class RouteService {
             // свой граф трасс: приблизительный маршрут лучше, чем никакого
             // (12б.10). С остановкой — нет: заезд по пути без сети не считаем.
             guard stop == nil, let path = await offlinePath?(source, destination), path.points.count >= 2 else {
+                if error as? RouteError == .noConnection { throw RouteError.serverUnreachable }
                 throw error
             }
             // Сервер только что не ответил — повтор замены не раньше своего срока.
@@ -915,7 +943,8 @@ final class RouteService {
     /// Сеть вернулась, а маршрут построен без неё — молча заменить серверным
     /// той же цели (без альтернатив: человек уже едет). Не вышло — остаётся
     /// приблизительный.
-    func replaceOfflineRoute(from coordinate: CLLocationCoordinate2D?, cameras: [Camera]) {
+    func replaceOfflineRoute(from coordinate: CLLocationCoordinate2D?, heading: CLLocationDirection?,
+                             cameras: [Camera]) {
         guard isOfflineRoute, !isRebuilding, let coordinate, let destination = destinationCoordinate else { return }
         offlineReplaceAttemptAt = Date()
         isRebuilding = true
@@ -925,7 +954,8 @@ final class RouteService {
             defer { isRebuilding = false }
             let built: [BuiltVariant]
             do {
-                built = try await calculate(from: coordinate, via: nil, to: destination, alternatives: false)
+                built = try await calculate(from: coordinate, via: nil, to: destination, alternatives: false,
+                                            heading: heading)
             } catch {
                 Log.route.notice("серверный маршрут вместо офлайнового не построен: \(error.localizedDescription, privacy: .public)")
                 return
@@ -945,11 +975,11 @@ final class RouteService {
     /// NetworkMonitor.onOnline тогда не придёт никогда — приблизительный
     /// маршрут без манёвров оставался до конца поездки (ревью 14.2). Зовётся
     /// на уже проснувшемся радио, не чаще `offlineRouteRetrySeconds`.
-    func retryOfflineRouteIfDue(from coordinate: CLLocationCoordinate2D?, cameras: [Camera],
-                                now: Date = Date()) {
+    func retryOfflineRouteIfDue(from coordinate: CLLocationCoordinate2D?, heading: CLLocationDirection?,
+                                cameras: [Camera], now: Date = Date()) {
         guard isOfflineRoute,
               now.timeIntervalSince(offlineReplaceAttemptAt) >= AppConfig.offlineRouteRetrySeconds else { return }
-        replaceOfflineRoute(from: coordinate, cameras: cameras)
+        replaceOfflineRoute(from: coordinate, heading: heading, cameras: cameras)
     }
 
     private func appleRoute(from source: CLLocationCoordinate2D,
@@ -1007,7 +1037,7 @@ final class RouteService {
             request.cachePolicy = .reloadIgnoringLocalCacheData
             (data, response) = try await URLSession.shared.data(for: request)
         } catch {
-            throw RouteError.serverUnreachable
+            throw RouteError.noConnection
         }
         // 5xx/4xx без валидного тела — это «сервер недоступен», а не «маршрута нет»:
         // пользователь должен видеть проблему сети, а не думать, что дороги не существует.
@@ -1739,6 +1769,49 @@ final class RouteService {
         return items
     }
 
+    /// Курс для маршрута, построенного сейчас (20.9): только на ходу (не
+    /// медленнее `directionalMinSpeedKmh`) и с достоверным курсом (`course`
+    /// ≥ 0 — его выдаёт LocationFilter). Стоя — nil: водитель может поехать в
+    /// любую сторону, и маршрут с разворотом там честен; курс, выдержанный у
+    /// светофора, его бы отнял.
+    nonisolated static func requestHeading(course: CLLocationDirection,
+                                           speedKmh: Double) -> CLLocationDirection? {
+        guard course >= 0, course.isFinite, speedKmh >= AppConfig.directionalMinSpeedKmh else { return nil }
+        return course
+    }
+
+    /// Повторять ли запрос по курсу без курса. Сервер ответил отказом —
+    /// да (NoSegment: попутной дороги в радиусе нет); запрос не дошёл — нет:
+    /// второй ждал бы тот же таймаут.
+    nonisolated static func retriesWithoutHeading(after error: Error) -> Bool {
+        error as? RouteError != .noConnection
+    }
+
+    /// Ход по линии для RerouteGate (20.9): курс ветки, которую выбрала
+    /// проекция (`segment` — её сегмент), против нашего курса.
+    nonisolated static func routeHeading(along: CLLocationDistance, segment: Int, pts: [MKMapPoint],
+                                         course: CLLocationDirection,
+                                         speedKmh: Double) -> RerouteGate.Heading {
+        RerouteGate.Heading(along: along,
+                            against: RerouteGate.isAgainst(course: course, speedKmh: speedKmh,
+                                                           routeCourse: segmentCourse(pts, at: segment)))
+    }
+
+    /// Направление сегмента `index` (0–360°) — по сетке MKMapPoint, как у
+    /// штрафа встречным сегментам: Меркатор углы сохраняет. Сегмент нулевой
+    /// длины (повтор точки) направления не имеет — берём соседний.
+    nonisolated static func segmentCourse(_ pts: [MKMapPoint], at index: Int) -> CLLocationDirection? {
+        guard index >= 0, index + 1 < pts.count else { return nil }
+        if let course = mercatorBearing(pts[index], pts[index + 1]) { return course }
+        for i in (index + 1)..<(pts.count - 1) {
+            if let course = mercatorBearing(pts[i], pts[i + 1]) { return course }
+        }
+        for i in stride(from: index - 1, through: 0, by: -1) {
+            if let course = mercatorBearing(pts[i], pts[i + 1]) { return course }
+        }
+        return nil
+    }
+
     nonisolated static func cumulative(of pts: [MKMapPoint]) -> [CLLocationDistance] {
         guard !pts.isEmpty else { return [] }
         var cum = [CLLocationDistance](repeating: 0, count: pts.count)
@@ -1785,10 +1858,17 @@ final class RouteService {
         // вершинах: у полилинии OSRM их плотность на прямой и в повороте
         // отличается на порядок, и «сорок вершин» означало то сто метров, то
         // три километра (docs/plan_algorithms.md, А1).
+        // Назад — от начала сегмента подсказки, вперёд — от его КОНЦА (20.9):
+        // машина где-то на нём, и окно вперёд обязано начинаться за ней.
+        // От начала сегмент длиннее окна (прямая трассы, 400+ м между
+        // узлами) не пускал в окно следующий: за его концом отклонение росло
+        // до 200 м, пока не включится полный перебор, — и снос 20.6 (50 м
+        // четыре фикса) перестраивал маршрут посреди ровной трассы.
         let anchor = cum[min(max(hint, 0), n - 1)]
+        let anchorEnd = cum[min(max(hint, 0) + 1, n - 1)]
         let lo = max(0, lowerBound(cum, anchor - AppConfig.routeProjectBackMeters) - 1)
         let hi = min(n - 1, max(lo + 1,
-                                lowerBound(cum, anchor + AppConfig.routeProjectAheadMeters)))
+                                lowerBound(cum, anchorEnd + AppConfig.routeProjectAheadMeters)))
         var (index, t, deviation) = scan(lo..<hi)
         // Далеко от окна — полный перебор: так маршрут ловится заново после
         // объезда. Курс участвует и здесь, иначе перебор сам и притягивал бы
@@ -1820,13 +1900,18 @@ final class RouteService {
     nonisolated private static func wrongWayPenalty(from a: MKMapPoint, to b: MKMapPoint,
                                                     course: CLLocationDirection)
     -> CLLocationDistance {
-        guard course >= 0 else { return 0 }
-        let dx = b.x - a.x, dy = b.y - a.y
-        guard dx != 0 || dy != 0 else { return 0 }
-        let bearing = (atan2(dx, -dy) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
+        guard course >= 0, let bearing = mercatorBearing(a, b) else { return 0 }
         var diff = abs(bearing - course).truncatingRemainder(dividingBy: 360)
         if diff > 180 { diff = 360 - diff }
         return diff > 90 ? AppConfig.routeWrongWayPenaltyMeters : 0
+    }
+
+    /// Направление A→B по сетке MKMapPoint (0–360°, север — минус y); nil —
+    /// точки совпали.
+    nonisolated private static func mercatorBearing(_ a: MKMapPoint, _ b: MKMapPoint) -> CLLocationDirection? {
+        let dx = b.x - a.x, dy = b.y - a.y
+        guard dx != 0 || dy != 0 else { return nil }
+        return (atan2(dx, -dy) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
     }
 
     /// Ближайшая точка на сегменте AB к точке P + параметр t (0…1).

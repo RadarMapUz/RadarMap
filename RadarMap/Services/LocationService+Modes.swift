@@ -32,6 +32,15 @@ extension LocationService {
         await awaitPosition(timeout: timeout, precise: true)
     }
 
+    /// Курс, с которым строить маршрут от точки выше (20.9): только на ходу и
+    /// с достоверным курсом (`RouteService.requestHeading`), иначе nil.
+    /// Первый маршрут на ходу без курса OSRM начинал куда ему короче — часто
+    /// с разворота за спиной машины. Скорость без фиксов гаснет сама
+    /// (`armSpeedDecay`), так что курс пропавшего сигнала сюда не доживёт.
+    var routeHeading: CLLocationDirection? {
+        RouteService.requestHeading(course: currentCourse, speedKmh: speedKmh)
+    }
+
     /// Координата для интентов (холодный старт из Siri: bootstrap не выполнялся,
     /// currentCoordinate пуст) — просим одноразовый фикс и ждём его до `timeout`.
     func awaitCoordinate(timeout: TimeInterval = 5) async -> CLLocationCoordinate2D? {

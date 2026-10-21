@@ -188,7 +188,8 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
                 env.alerts.speak(String(localized: "Не вижу точного положения — маршрут пока не построить"))
                 return
             }
-            await env.route.build(from: from, to: place.coordinate, name: place.title,
+            await env.route.build(from: from, heading: env.location.routeHeading,
+                                  to: place.coordinate, name: place.title,
                                   cameras: env.cameras.cameras, alternatives: false)
             if remember { env.settings.addRecent(title: place.title, lat: place.lat, lon: place.lon) }
             if !env.location.isTripActive { env.location.startTrip() }

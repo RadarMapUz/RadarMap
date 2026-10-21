@@ -222,6 +222,7 @@ final class AppEnvironment {
             // пропадала и onOnline не придёт (ревью 14.2). Свой срок — внутри.
             if let self, self.network.isOnline {
                 self.route.retryOfflineRouteIfDue(from: self.location.currentCoordinate,
+                                                  heading: self.location.routeHeading,
                                                   cameras: self.cameras.cameras)
             }
         }
@@ -497,7 +498,9 @@ final class AppEnvironment {
         route.laneOverlay = { [weak laneOverlay] in laneOverlay?.current() }
         network.onOnline = { [weak self] in
             guard let self else { return }
-            self.route.replaceOfflineRoute(from: self.location.currentCoordinate, cameras: self.cameras.cameras)
+            self.route.replaceOfflineRoute(from: self.location.currentCoordinate,
+                                           heading: self.location.routeHeading,
+                                           cameras: self.cameras.cameras)
             Task { await self.offlineRoutes.refreshIfDue() }
             Task { await self.laneOverlay.refreshIfDue() }
         }

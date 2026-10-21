@@ -42,6 +42,9 @@ nonisolated enum TripMerge {
         /// CoreMotion знает её начало): за это время машина честно уехала от
         /// точки финиша дальше 400 м (S19, 20.10). 0 — не знаем.
         var lateStartSeconds: TimeInterval = 0
+        /// Прошлую поездку закрыло прибытие к цели маршрута (ArrivalFinish):
+        /// стояли у места, куда ехали, — оно весит как Дом и Работа.
+        var stopAtDestination: Bool = false
     }
 
     /// Продолжать прошлую поездку вместо новой записи?
@@ -65,8 +68,12 @@ nonisolated enum TripMerge {
         if context.stopDuration <= AppConfig.tripMergeShortStopSeconds { return true }
         if context.stopDuration > AppConfig.tripMergeMaxStopSeconds { return false }
         // Серая зона (15–60 мин): решает место. Случайная точка по пути — дело в
-        // пути, поездка продолжается. Дом или работа — приехали.
-        return !context.stopNearSavedPlace
+        // пути, поездка продолжается. Дом, работа или цель маршрута — приехали:
+        // цель водитель выбрал сам, это не «случайное место по пути». Закрыла
+        // такую поездку автоматика, а не кнопка, поэтому короткая пауза выше
+        // склеивает и её: полторы минуты у подъезда в ожидании пассажира —
+        // ещё та же поездка.
+        return !(context.stopNearSavedPlace || context.stopAtDestination)
     }
 
     /// Стояли ли у одного из сохранённых мест.
@@ -174,7 +181,9 @@ nonisolated enum TripMerge {
             // Рейс в склейке — склейка рейс (12б.9): иначе она выпадала из
             // «Смен» и шла в выученные Дом/Работу с адресом пассажира на конце
             // (ревью 14.1). Смешанная — тоже рейс: адрес пассажира учить нельзя.
-            work: previous.work == true || next.work == true ? true : nil)
+            work: previous.work == true || next.work == true ? true : nil,
+            // Финиш склейки — финиш второй ноги.
+            endedAtDestination: next.endedAtDestination)
     }
 
     /// Сумма дельт заряда — только когда известны обе ноги: «−2 %» за поездку,

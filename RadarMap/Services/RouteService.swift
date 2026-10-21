@@ -126,6 +126,9 @@ final class RouteService {
     struct ArrivalSummary: Equatable {
         let name: String
         let at: Date
+        /// Точка цели: маршрут к этому моменту уже снят, а поездке надо
+        /// знать, стоим ли мы у цели (ArrivalFinish).
+        var destination: ArrivalFinish.Point? = nil
     }
     private(set) var lastArrival: ArrivalSummary?
     func dismissArrival() { lastArrival = nil }
@@ -556,7 +559,10 @@ final class RouteService {
     }
 
     private func arrive() {
-        lastArrival = ArrivalSummary(name: destinationName, at: Date())
+        lastArrival = ArrivalSummary(name: destinationName, at: Date(),
+                                     destination: destinationCoordinate.map {
+                                         ArrivalFinish.Point(lat: $0.latitude, lon: $0.longitude)
+                                     })
         clear()
         onArrived?()
     }

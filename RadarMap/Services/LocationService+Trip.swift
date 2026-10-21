@@ -106,7 +106,8 @@ extension LocationService {
             crossesDay: !Calendar.current.isDate(previous.endedAt, inSameDayAs: now),
             existingStops: previous.stops?.count ?? 0,
             previousDuration: previous.duration,
-            lateStartSeconds: lateStart)
+            lateStartSeconds: lateStart,
+            stopAtDestination: previous.endedAtDestination == true)
         guard TripMerge.shouldMerge(context) else { return false }
         trip.resume(previous, stoppedUntil: now, batteryPercent: batteryPercent)
         return true
@@ -153,9 +154,11 @@ extension LocationService {
 
     /// Завершить поездку: сохранить итоги и вернуться к батареесберегающему фону.
     /// `asPassenger` — «я в такси»: короткий кусок не пишем в историю вовсе.
-    /// `auto` — автостоп по CoreMotion (а не кнопка): только такую поездку можно
-    /// потом продолжить как заезд по пути.
-    func endTrip(asPassenger: Bool = false, auto: Bool = false) {
+    /// `auto` — автостоп по CoreMotion или у цели (а не кнопка): только такую
+    /// поездку можно потом продолжить как заезд по пути.
+    /// `atDestination` — закрыло прибытие к цели маршрута (ArrivalFinish).
+    func endTrip(asPassenger: Bool = false, auto: Bool = false, atDestination: Bool = false) {
+        stopArrivalWatch()   // любой конец поездки — следить за прибытием незачем
         isTripActive = false
         onTripStateChanged?(false)
         UIApplication.shared.isIdleTimerDisabled = false
@@ -187,7 +190,7 @@ extension LocationService {
             trip.discardAsPassenger()
         } else {
             trip.finish(endedManually: !auto, batteryPercent: batteryPercent,
-                        work: settings.workDriverMode)
+                        work: settings.workDriverMode, atDestination: atDestination)
             parkCar()
             // Автостоп с телефоном в кармане: короткие итоги на локскрин —
             // цифры дошли до человека, даже если он не откроет приложение.

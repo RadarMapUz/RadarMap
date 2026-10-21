@@ -5754,6 +5754,22 @@
         }
       }
     },
+    "Завершится сама, когда машина встанет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Завершится сама, когда машина встанет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina toʻxtagach, safar oʻzi yakunlanadi"
+          }
+        }
+      }
+    },
     "Завершить": {
       "localizations": {
         "ru": {

@@ -661,7 +661,11 @@ final class AppEnvironment {
             guard settings.voiceEnabled else { return }
             alerts?.speak(offer.spoken, event: offer.voiceEvent)
         }
-        route.onArrived = { [weak alerts] in
+        route.onArrived = { [weak alerts, weak location, weak route] in
+            // Поездка закроется сама, когда встанем у цели или заглушим
+            // машину (ArrivalFinish) — до 21.10 она шла дальше, пока не
+            // нажмут «Завершить поездку».
+            location?.watchArrival(route?.lastArrival)
             guard settings.voiceEnabled else { return }
             alerts?.speak(String(localized: "Вы прибыли"))
         }

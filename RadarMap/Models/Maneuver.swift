@@ -177,4 +177,8 @@ nonisolated struct RouteStep: Equatable, Sendable {
     /// длинной фразой «…на улицу Амира Темура» узкая карточка оставалась без
     /// текста вовсе (CarPlay Simulator, 11.10). nil — улицы во фразе нет.
     var shortText: String? = nil
+    /// Команда типом — для записанного голоса (этап 16). nil — фразу
+    /// говорит только синтезатор: в ней улица, остановка, или её построил
+    /// MKDirections готовой строкой.
+    var voiceAction: VoiceEvent.Action? = nil
 }

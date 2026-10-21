@@ -505,6 +505,30 @@ final class AppSettings {
     /// не «упрощённая линия для итогов», а точная история передвижений.
     var recordTimedTrack: Bool { didSet { store.set(recordTimedTrack, forKey: Keys.timedTrack) } }
     var turnByTurnVoice: Bool { didSet { store.set(turnByTurnVoice, forKey: Keys.turnByTurn) } }
+    /// Чей голос читает фразы (этап 16). nil — человек не выбирал: тогда
+    /// записанный, если пакет для языка есть (`VoiceSource.effective`).
+    var voiceSourceChoice: VoiceSource? {
+        didSet {
+            if let voiceSourceChoice {
+                store.set(voiceSourceChoice.rawValue, forKey: Keys.voiceSource)
+            } else {
+                store.removeObject(forKey: Keys.voiceSource)
+            }
+        }
+    }
+    #if DEBUG
+    /// Отладка: пакет-заглушка (синтезатор macOS) вместо записи диктора —
+    /// чтобы склейка, задержка и подмена проверялись до студии.
+    var placeholderVoice: Bool { didSet { store.set(placeholderVoice, forKey: Keys.placeholderVoice) } }
+    #endif
+    /// Можно ли звучать заглушкой. В выпуске — никогда.
+    var placeholderVoiceAllowed: Bool {
+        #if DEBUG
+        placeholderVoice || ProcessInfo.processInfo.arguments.contains("-voicePlaceholder")
+        #else
+        false
+        #endif
+    }
     var speedLimitsEnabled: Bool { didSet { store.set(speedLimitsEnabled, forKey: Keys.speedLimits) } }
     var overspeedTolerance: Double { didSet { store.set(overspeedTolerance, forKey: Keys.overspeed) } }
     var adaptiveGPS: Bool { didSet { store.set(adaptiveGPS, forKey: Keys.adaptive) } }
@@ -713,6 +737,8 @@ final class AppSettings {
         static let personalRoutes = "personalRoutes"
         static let timedTrack = "recordTimedTrack"
         static let turnByTurn = "turnByTurnVoice"
+        static let voiceSource = "voiceSource"
+        static let placeholderVoice = "placeholderVoice"
         static let speedLimits = "speedLimitsEnabled"
         static let overspeed = "overspeedTolerance"
         static let adaptive = "adaptiveGPS"
@@ -826,6 +852,10 @@ final class AppSettings {
         personalRoutes = store.bool(forKey: Keys.personalRoutes)
         recordTimedTrack = store.bool(forKey: Keys.timedTrack)
         turnByTurnVoice = store.bool(forKey: Keys.turnByTurn)
+        voiceSourceChoice = VoiceSource(rawValue: store.string(forKey: Keys.voiceSource) ?? "")
+        #if DEBUG
+        placeholderVoice = store.bool(forKey: Keys.placeholderVoice)
+        #endif
         speedLimitsEnabled = store.bool(forKey: Keys.speedLimits)
         overspeedTolerance = store.double(forKey: Keys.overspeed)
         adaptiveGPS = store.bool(forKey: Keys.adaptive)

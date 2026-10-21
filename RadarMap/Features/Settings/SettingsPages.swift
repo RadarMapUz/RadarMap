@@ -79,11 +79,34 @@ struct AlertSettingsPage: View {
                 Picker("Голос о превышении", selection: $settings.overspeedVoice) {
                     ForEach(OverspeedVoice.allCases) { Text($0.title).tag($0) }
                 }
+                // Записанный голос (этап 16): строка есть, только когда для
+                // языка приложения в сборке есть пакет диктора.
+                if env.alerts.recorded.isAvailable {
+                    Picker("Голос оповещений", selection: Binding(
+                        get: { VoiceSource.effective(choice: settings.voiceSourceChoice, packAvailable: true) },
+                        set: { settings.voiceSourceChoice = $0 })) {
+                        ForEach(VoiceSource.allCases) { Text($0.title).tag($0) }
+                    }
+                }
+                #if DEBUG
+                // Ключ запуска -voicePlaceholder включает заглушку и без
+                // переключателя — показываем то, что действует на деле.
+                Toggle(isOn: Binding(
+                    get: { settings.placeholderVoiceAllowed },
+                    set: {
+                        settings.placeholderVoice = $0
+                        env.alerts.recorded.reload()
+                    })) {
+                    Text(verbatim: "Заглушка записанного голоса (отладка)")
+                }
+                #endif
                 SettingsExplainer([
                     "«Авто» различает город и трассу: в городе короткая фраза, на трассе полная, при превышении — громче и с лимитом.",
                     "О камерах, которые вы каждый день проезжаете спокойно, приложение молчит и только отмечает вибрацией. Подъедете с превышением — заговорит.",
                     "«Голос о превышении» — про фразу без камеры. В режиме «У камер» она звучит, только когда камера впереди по вашей дороге; в остальное время превышение видно цветом скорости.",
-                ])
+                ] + (env.alerts.recorded.isAvailable ? [
+                    "«Записанный голос» — фразы, записанные диктором. Фразу, которой в записи нет (например, с названием улицы), целиком прочтёт системный голос.",
+                ] : []))
             } header: {
                 Text("Голос")
             } footer: {

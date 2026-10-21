@@ -105,6 +105,29 @@ nonisolated enum JSONFile {
 
     private static let writer = DispatchQueue(label: "uz.radarmap.json-writer", qos: .utility)
 
+    /// Произвольная работа с файлами в той же очереди — ПОСЛЕ всех записей,
+    /// поставленных раньше. История по месяцам (TripStore) пишет несколько
+    /// файлов одним шагом (месяцы, потом индекс) и читает месяц, который
+    /// мог только что уйти в запись: чтение мимо очереди увидело бы старый
+    /// файл, и следующая запись вернула бы стёртое.
+    static func enqueue(wait: Bool, _ work: @escaping @Sendable () -> Void) {
+        if wait { writer.sync(execute: work) } else { writer.async(execute: work) }
+    }
+
+    /// То же с ответом — из async-кода, не занимая поток пула ожиданием.
+    static func ordered<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
+        await withCheckedContinuation { continuation in
+            writer.async { continuation.resume(returning: work()) }
+        }
+    }
+
+    /// Синхронно, с главного потока — только для редкого пути, где ответ
+    /// нужен прямо сейчас (подхват месяца перед записью, TripStats.persist).
+    /// Из самой очереди не звать: это взаимная блокировка.
+    static func orderedSync<T>(_ work: () -> T) -> T {
+        writer.sync(execute: work)
+    }
+
     /// Удалить файл в той же очереди, что и saveOrdered, — ПОСЛЕ всех записей,
     /// поставленных раньше: «сначала записать то, во что файл вошёл, потом его
     /// удалить» без ожидания записи на главном потоке (ревью S9).

@@ -3,14 +3,15 @@
 //  RadarMap
 //
 //  Данные поездки: проезд камеры, запись завершённой поездки, точка трека.
-//  Чистые Codable-структуры без логики — формат хранения trips.json.
+//  Чистые Codable-структуры без логики — формат хранения истории
+//  (Documents/trips/<гггг-ММ>.json, см. TripStore; до 15.1 — trips.json).
 //
 
 import Foundation
 import CoreLocation
 
 /// Факт прохождения камеры: скорость зафиксирована в точке максимального сближения.
-nonisolated struct PassedCamera: Codable, Identifiable {
+nonisolated struct PassedCamera: Codable, Identifiable, Equatable {
     let id: UUID
     let cameraID: Int
     let typeRaw: String
@@ -111,7 +112,7 @@ nonisolated struct PassedCamera: Codable, Identifiable {
 /// Остановка внутри склеенной поездки: заехал в магазин, на заправку, за человеком.
 /// Из «в пути» и средней скорости исключается — иначе сорок минут в «Корзинке»
 /// обнуляют цифры всей поездки.
-nonisolated struct TripStop: Codable, Identifiable {
+nonisolated struct TripStop: Codable, Identifiable, Equatable {
     let id: UUID
     let lat: Double
     let lon: Double
@@ -129,7 +130,10 @@ nonisolated struct TripStop: Codable, Identifiable {
 /// Одна завершённая поездка.
 /// `nonisolated` — чистая арифметика над историей (`TripHistory`, `PeriodSummary`,
 /// `DrivingScore`) считается вне main.
-nonisolated struct TripRecord: Codable, Identifiable {
+/// `Equatable` — запись истории по месяцам (TripStore) переписывает только
+/// месяцы, содержимое которых изменилось: сравнение массивов записей дёшево,
+/// у неизменённых записей треки и проезды — те же буферы.
+nonisolated struct TripRecord: Codable, Identifiable, Equatable {
     let id: Double
     let startedAt: Date
     let endedAt: Date

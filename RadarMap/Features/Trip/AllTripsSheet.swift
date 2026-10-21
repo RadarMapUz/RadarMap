@@ -81,6 +81,15 @@ struct AllTripsSheet: View {
                         }
                         .statCard(padding: 0, radius: Theme.cornerMedium)
                     }
+                    // Месяцы, не прочитанные на старте (история по месяцам,
+                    // 15.1), — по прокрутке: список дошёл до конца — читаем
+                    // следующий месяц вне main. Не прочёлся — не крутимся.
+                    if !env.trip.olderMonths.isEmpty {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .task(id: env.trip.olderMonths.first) { await env.trip.loadOlderMonth() }
+                    }
                 }
                 .padding(20)
             }

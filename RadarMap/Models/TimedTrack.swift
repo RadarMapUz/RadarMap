@@ -200,7 +200,9 @@ nonisolated enum TimedTrackStore {
         return write(TimedTrack.gpx(trips: trips), name: "RadarMap-все-поездки-\(stamp(Date())).gpx")
     }
 
-    private static func trip(of record: TripRecord) -> TimedTrack.Trip {
+    /// Поездка для GPX: подробный трек со временем, если он ещё лежит, иначе
+    /// упрощённый без времени; опоры — проезды камер. Её же берёт экспорт.
+    static func trip(of record: TripRecord) -> TimedTrack.Trip {
         let timed = load(tripID: record.id)
         let points: [(lat: Double, lon: Double, time: Date?, speedKmh: Double)] =
             timed.map { $0.map { ($0.lat, $0.lon, $0.time, $0.speedKmh) } }

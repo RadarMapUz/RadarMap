@@ -32,8 +32,13 @@ struct BackupSection: View {
         Section {
             Group {
                 Button {
-                    document = BackupDocument(backup: env.makeBackup())
-                    exporting = true
+                    Task {
+                        // Месяцы, не прочитанные на старте (TripStore), — в
+                        // копию тоже: копия обещает всю историю.
+                        await env.trip.loadAllMonths()
+                        document = BackupDocument(backup: env.makeBackup())
+                        exporting = true
+                    }
                 } label: {
                     row(title: String(localized: "Сохранить копию"), symbol: "square.and.arrow.up")
                 }
@@ -119,11 +124,16 @@ struct BackupSection: View {
                 failure = String(localized: "В копии нет данных")
                 return
             }
-            let added = env.restore(from: backup)
-            report = added.trips > 0 || added.days > 0
-                ? String(format: String(localized: "Добавлено поездок: %1$lld, дней: %2$lld"),
-                         added.trips, added.days)
-                : String(localized: "Всё из копии уже есть на телефоне")
+            Task {
+                // Слияние идёт по всей истории: месяц, не прочитанный на
+                // старте, иначе считался бы «добавленным» из копии.
+                await env.trip.loadAllMonths()
+                let added = env.restore(from: backup)
+                report = added.trips > 0 || added.days > 0
+                    ? String(format: String(localized: "Добавлено поездок: %1$lld, дней: %2$lld"),
+                             added.trips, added.days)
+                    : String(localized: "Всё из копии уже есть на телефоне")
+            }
         } catch {
             Log.app.error("копия не прочиталась: \(error.localizedDescription, privacy: .public)")
             failure = String(localized: "Файл не читается")

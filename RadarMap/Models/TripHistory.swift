@@ -18,21 +18,58 @@ nonisolated enum TripHistory {
 
     // MARK: - Чистка хранилища
 
+    /// Сроки хранения — параметром, а не числами внутри чистки (15.1): срок
+    /// станет настройкой «Хранить историю» (15.2), и это должно быть заменой
+    /// одной строки `current`, а не переписыванием чистки. Числа `current` —
+    /// те же, что жили в pruned с самого начала.
+    struct Retention: Equatable, Sendable {
+        /// Запись старше стольких дней удаляется (кроме `keepLast` новейших);
+        /// nil — по возрасту не удаляется.
+        var recordDays: Int?
+        /// Столько новейших поездок не трогают ни срок, ни вырезка трека:
+        /// список последних поездок не пустеет у того, кто ездит раз в месяц.
+        var keepLast: Int
+        /// Потолок числа записей; nil — без потолка.
+        var maxRecords: Int?
+        /// Трек старше стольких дней вырезается, цифры остаются; nil — живёт
+        /// вместе с записью.
+        var trackDays: Int?
+
+        static let current = Retention(recordDays: 30, keepLast: visibleHistory,
+                                       maxRecords: maxHistory, trackDays: 7)
+
+        func recordCutoff(now: Date) -> Date? {
+            recordDays.map { now.addingTimeInterval(-Double($0) * 86400) }
+        }
+
+        func trackCutoff(now: Date) -> Date? {
+            trackDays.map { now.addingTimeInterval(-Double($0) * 86400) }
+        }
+    }
+
     /// Трек — самая тяжёлая часть записи (до 400 точек). Держим его у последних
     /// `visibleHistory` поездок И у всего, что попадает в недельный отчёт: карта
     /// недели обязана рисовать все треки за 7 дней, а не только семь последних
     /// поездок — иначе в активную неделю отчёт молча врёт. Дальше трек
     /// выбрасываем (цифры остаются), а старше 30 дней удаляем совсем:
     /// пожизненные счётчики давно в lifetime.
-    static func pruned(_ history: [TripRecord], now: Date = Date()) -> [TripRecord] {
-        let monthAgo = now.addingTimeInterval(-30 * 86400)
-        let weekAgo = now.addingTimeInterval(-7 * 86400)
+    ///
+    /// `offset` — сколько записей НОВЕЕ этого куска уже оставлено (история
+    /// по месяцам, 15.1): месяц, который не читался на старте, чистится
+    /// отдельно, и его позиции в общей истории начинаются не с нуля. Чистка
+    /// кусками от новых к старым с таким сдвигом даёт ровно то же, что чистка
+    /// всей истории разом (проверено тестом).
+    static func pruned(_ history: [TripRecord], retention: Retention = .current,
+                       now: Date = Date(), offset: Int = 0) -> [TripRecord] {
+        let recordCutoff = retention.recordCutoff(now: now)
+        let trackCutoff = retention.trackCutoff(now: now)
         var result: [TripRecord] = []
-        result.reserveCapacity(min(history.count, maxHistory))
+        result.reserveCapacity(min(history.count, retention.maxRecords ?? history.count))
         for (index, record) in history.enumerated() {
-            guard index < visibleHistory || record.startedAt > monthAgo else { continue }
-            guard result.count < maxHistory else { break }
-            if index < visibleHistory || record.startedAt > weekAgo {
+            let protected = offset + index < retention.keepLast
+            guard protected || recordCutoff.map({ record.startedAt > $0 }) ?? true else { continue }
+            if let cap = retention.maxRecords, offset + result.count >= cap { break }
+            if protected || trackCutoff.map({ record.startedAt > $0 }) ?? true {
                 result.append(record)
             } else {
                 var slim = record

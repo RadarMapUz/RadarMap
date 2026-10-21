@@ -136,8 +136,8 @@ nonisolated enum QuietAlertGate {
     // MARK: - CoreMotion
 
     /// Сводка сэмплов CoreMotion: последний уверенный сэмпл — состояние «сейчас»
-    /// (сэмпл длится до следующего). Машина в окне `quietAlertMotionWindowSeconds`
-    /// перед последним сэмплом «стоим» — это светофор, а не диван.
+    /// (сэмпл длится до следующего). Машина, кончившаяся в окне
+    /// `quietAlertMotionWindowSeconds`, перед «стоим» — это светофор, а не диван.
     static func motion(from samples: [MotionSample], now: Date) -> Motion {
         let confident = samples.filter { $0.confident && $0.start <= now }
             .sorted { $0.start < $1.start }
@@ -145,8 +145,12 @@ nonisolated enum QuietAlertGate {
         if latest.automotive { return .automotive }
         if latest.walking || latest.running || latest.cycling { return .onFoot }
         if latest.stationary {
+            // Сэмпл «в машине» длился до начала следующего — по его КОНЦУ
+            // и судим: машина могла ехать полчаса и встать минуту назад.
             let since = now.addingTimeInterval(-AppConfig.quietAlertMotionWindowSeconds)
-            let recentCar = confident.contains { $0.automotive && $0.start >= since }
+            let recentCar = zip(confident, confident.dropFirst()).contains { sample, next in
+                sample.automotive && next.start >= since
+            }
             return recentCar ? .automotive : .stationary
         }
         return .unknown

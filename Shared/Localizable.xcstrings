@@ -24153,22 +24153,6 @@
         }
       }
     },
-    "«Авто» — всегда сама. «Ручной» — только кнопкой, слежение за движением выключено совсем.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Авто» — всегда сама. «Ручной» — только кнопкой, слежение за движением выключено совсем."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Avto» — doim oʻzi. «Qoʻlda» — faqat tugma bilan, harakatni kuzatish butunlay oʻchiriladi."
-          }
-        }
-      }
-    },
     "Заезд по пути — магазин, заправка — новой поездкой не становится: это остановка внутри той же.": {
       "localizations": {
         "ru": {
@@ -30289,6 +30273,246 @@
           "stringUnit": {
             "state": "translated",
             "value": "CarPlay kartochkasidagi yetib borish vaqti va kilometrlarni tizimning oʻzi chiqaradi — iPhone tilida (Sozlamalar → Asosiy → Til va mintaqa), RadarMap tilida emas. RadarMap maslahatlari, bannerlari va ovozi — ilova tilida."
+          }
+        }
+      }
+    },
+    "Только в машине": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только в машине"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faqat mashinada"
+          }
+        }
+      }
+    },
+    "«Только в машине» — поездка начинается при подключении к CarPlay или к магнитоле, выбранной ниже, и заканчивается при отключении. В такси не пишется.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Только в машине» — поездка начинается при подключении к CarPlay или к магнитоле, выбранной ниже, и заканчивается при отключении. В такси не пишется."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Faqat mashinada» — safar CarPlay yoki quyida tanlangan magnitolaga ulanganda boshlanadi va uzilganda tugaydi. Taksida yozilmaydi."
+          }
+        }
+      }
+    },
+    "«Авто» — сама, как только тронулись; если магнитола выбрана ниже, а её нет — сначала спросит. «Ручной» — только кнопкой, слежение за движением выключено совсем.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Авто» — сама, как только тронулись; если магнитола выбрана ниже, а её нет — сначала спросит. «Ручной» — только кнопкой, слежение за движением выключено совсем."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Avto» — joydan qoʻzgʻalishingiz bilan oʻzi boshlanadi; magnitola quyida tanlangan boʻlsa-yu, u ulanmagan boʻlsa — avval soʻraydi. «Qoʻlda» — faqat tugma bilan, harakatni kuzatish butunlay oʻchiriladi."
+          }
+        }
+      }
+    },
+    "Уведомления о камерах без поездки приходят, только когда понятно, что вы едете на машине: дома, на стоянке и пешком — тишина.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Уведомления о камерах без поездки приходят, только когда понятно, что вы едете на машине: дома, на стоянке и пешком — тишина."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarsiz kamera bildirishnomalari faqat mashinada ketayotganingiz aniq boʻlganda keladi: uyda, toʻxtash joyida va piyoda — jimlik."
+          }
+        }
+      }
+    },
+    "Начинать поездку только в машине?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Начинать поездку только в машине?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarni faqat mashinada boshlaymizmi?"
+          }
+        }
+      }
+    },
+    "Вы уже подключали CarPlay. Поездка начнётся, когда телефон подключится к машине, и закончится, когда отключится. Такси и автобус не запишутся, а уведомления о камерах вне машины не придут.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вы уже подключали CarPlay. Поездка начнётся, когда телефон подключится к машине, и закончится, когда отключится. Такси и автобус не запишутся, а уведомления о камерах вне машины не придут."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Siz avval CarPlay ulagansiz. Safar telefon mashinaga ulanganda boshlanadi va uzilganda tugaydi. Taksi va avtobus yozilmaydi, mashinadan tashqarida kamera bildirishnomalari kelmaydi."
+          }
+        }
+      }
+    },
+    "Включить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Включить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoqish"
+          }
+        }
+      }
+    },
+    "всегда": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "всегда"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "doim"
+          }
+        }
+      }
+    },
+    "Похоже на наушники — с ними поездка начнётся и в такси": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Похоже на наушники — с ними поездка начнётся и в такси"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quloqchinga oʻxshaydi — u bilan safar taksida ham boshlanadi"
+          }
+        }
+      }
+    },
+    "Сядьте в машину, подключите телефон к магнитоле по Bluetooth — она появится здесь.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сядьте в машину, подключите телефон к магнитоле по Bluetooth — она появится здесь."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashinaga oʻtiring va telefonni magnitolaga Bluetooth orqali ulang — u shu yerda paydo boʻladi."
+          }
+        }
+      }
+    },
+    "CarPlay будит приложение сам — поездка начинается сразу при подключении.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CarPlay будит приложение сам — поездка начинается сразу при подключении."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CarPlay ilovani oʻzi uygʻotadi — safar ulanishi bilan darhol boshlanadi."
+          }
+        }
+      }
+    },
+    "Bluetooth приложение не будит: iOS сообщает о магнитоле, только когда приложение уже проснулось. Обычно это первые полкилометра пути — первая камера у дома может прийти уведомлением, а не голосом.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bluetooth приложение не будит: iOS сообщает о магнитоле, только когда приложение уже проснулось. Обычно это первые полкилометра пути — первая камера у дома может прийти уведомлением, а не голосом."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bluetooth ilovani uygʻotmaydi: iOS magnitola haqida faqat ilova uygʻongandan keyin xabar beradi. Odatda bu yoʻlning birinchi yarim kilometri — uy yonidagi birinchi kamera ovoz bilan emas, bildirishnoma bilan kelishi mumkin."
+          }
+        }
+      }
+    },
+    "Отключились — поездка закончится через две минуты. Заправка и магазин по пути останутся одной поездкой.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отключились — поездка закончится через две минуты. Заправка и магазин по пути останутся одной поездкой."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uzilganingizdan ikki daqiqa oʻtib safar tugaydi. Yoʻldagi yoqilgʻi quyish va doʻkon bitta safar boʻlib qoladi."
+          }
+        }
+      }
+    },
+    "Моя машина": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Моя машина"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mening mashinam"
+          }
+        }
+      }
+    },
+    "Поездка начинается при подключении к этим устройствам.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездка начинается при подключении к этим устройствам."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar shu qurilmalarga ulanganda boshlanadi."
           }
         }
       }

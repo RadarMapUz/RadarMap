@@ -111,6 +111,10 @@ final class QuietAlertGateTests: XCTestCase {
         let samples = [QuietAlertGate.MotionSample(start: now.addingTimeInterval(-600), automotive: true),
                        QuietAlertGate.MotionSample(start: now.addingTimeInterval(-40), stationary: true)]
         XCTAssertEqual(QuietAlertGate.motion(from: samples, now: now), .automotive)
+        let parkedLongAgo = [QuietAlertGate.MotionSample(start: now.addingTimeInterval(-3600), automotive: true),
+                             QuietAlertGate.MotionSample(start: now.addingTimeInterval(-1800), stationary: true)]
+        XCTAssertEqual(QuietAlertGate.motion(from: parkedLongAgo, now: now), .stationary,
+                       "приехали полчаса назад — это уже стоянка")
     }
 
     // MARK: - Пешком

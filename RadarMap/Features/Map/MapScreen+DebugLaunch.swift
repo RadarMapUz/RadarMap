@@ -185,10 +185,26 @@ extension MapScreen {
                 }
             }
         }
-        if args.contains("-quickToggles") {
+        // Меню на карте (20.10): `-openQuickToggles` (старое имя `-quickToggles`)
+        // и `-openLayers`. Закрываются сами через mapPopoverIdleSeconds — снимок
+        // делать раньше.
+        if args.contains("-quickToggles") || args.contains("-openQuickToggles") {
             Task {
                 await Task.pause(seconds: 2)
-                withMotion { showQuickToggles = true }
+                send(.toggle(.quickToggles))
+            }
+        }
+        if args.contains("-openLayers") {
+            Task {
+                await Task.pause(seconds: 2)
+                send(.toggle(.layers))
+            }
+        }
+        // «Нет сигнала GPS» на снимок: фиксы в симуляторе не перестают идти сами.
+        if args.contains("-demoNoSignal") {
+            Task {
+                await Task.pause(seconds: 3)
+                env.location.isSignalStale = true
             }
         }
         if args.contains("-askDriver") {

@@ -213,7 +213,7 @@ struct CarPlayOverlay: View {
     @ViewBuilder
     private var cameraCell: some View {
         if env.location.isSignalStale {
-            statusCell(symbol: "location.slash.fill", tint: Theme.warning,
+            statusCell(symbol: Icon.noGPSSignal, tint: Theme.warning,
                        title: String(localized: "Нет сигнала GPS"))
         } else if let camera = env.location.nearestCamera,
                   let distance = env.location.distanceToNearest,

@@ -18,24 +18,14 @@ struct QuickTogglesBar: View {
     var body: some View {
         @Bindable var settings = env.settings
         VStack(spacing: 12) {
-            HStack {
-                Text("Оповещения")
-                    .font(.rounded(13, .semibold))
-                    .foregroundStyle(Theme.textSecondary)
-                Spacer()
-                Button(action: onClose) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.rounded(18))
-                        .foregroundStyle(Theme.textTertiary)
-                        .tapTarget()
-                }
-                .accessibilityLabel(Text("Закрыть"))
-            }
+            MapPopoverHeader(title: "Оповещения", onClose: onClose)
 
+            // «Звук» — сигнал у камеры (писк), голос — шкалой ниже. Колокол,
+            // а не динамик: динамиками нарисована шкала голоса, и два
+            // одинаковых динамика в одной карточке читались как одно и то же.
             HStack(spacing: 10) {
-                toggle("Звук", "speaker.wave.2.fill", isOn: $settings.soundEnabled)
-                toggle("Вибро", "iphone.gen3.radiowaves.left.and.right",
-                       isOn: $settings.hapticsEnabled)
+                toggle("Звук", Icon.alertSignal, isOn: $settings.soundEnabled)
+                toggle("Вибро", Icon.vibration, isOn: $settings.hapticsEnabled)
             }
 
             // Голос — одна шкала «молча → умно → обо всех». Переключают её
@@ -47,6 +37,7 @@ struct QuickTogglesBar: View {
                     }
                 }
             }
+            .fixedSize(horizontal: false, vertical: true)
             // Пояснение — абзац для чтения: на ходу его не читают, а панель
             // от него на треть выше (5.5). Стоя — показываем.
             if showsDetail {
@@ -80,7 +71,17 @@ struct QuickTogglesBar: View {
         // пересчитывает размытие каждый её кадр (правило 13.10, 4.2).
         .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous).strokeBorder(Theme.edgePanel, lineWidth: 1))
-        .transition(.move(edge: .top).combined(with: .opacity))
+        // Таймер простоя — от любого переключения внутри (MapPopoverCard).
+        .mapPopoverCard(activity: Activity(sound: settings.soundEnabled, haptics: settings.hapticsEnabled,
+                                           voice: settings.voiceMode),
+                        onClose: onClose)
+    }
+
+    /// То, что меняют касания внутри карточки: сменилось — отсчёт простоя заново.
+    private struct Activity: Equatable {
+        let sound: Bool
+        let haptics: Bool
+        let voice: VoiceMode
     }
 
     private func toggle(_ title: LocalizedStringKey, _ icon: String,
@@ -90,14 +91,9 @@ struct QuickTogglesBar: View {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
         } label: {
             VStack(spacing: 5) {
-                Image(systemName: icon)
-                    .font(.rounded(17, .semibold))
-                    // Белое на accentFill (палитра А, PaletteTests): тёмный
-                    // фон поверх светлого ночного accent читался хуже (4.4).
-                    .foregroundStyle(isOn.wrappedValue ? Theme.onAccentFill : Theme.textTertiary)
-                    .frame(width: 44, height: 44)
-                    .background(isOn.wrappedValue ? AnyShapeStyle(Theme.accentFill)
-                                                  : AnyShapeStyle(Theme.background), in: Circle())
+                // Тот же кружок, что у слоёв «Карты» (MapPopoverGlyph): белое
+                // на accentFill — включено (палитра А, PaletteTests, 4.4).
+                MapPopoverGlyph(systemName: icon, isOn: isOn.wrappedValue, size: 44, glyph: 19)
                 Text(title)
                     .font(.rounded(11, .medium))
                     .foregroundStyle(isOn.wrappedValue ? Theme.textPrimary : Theme.textTertiary)
@@ -116,15 +112,29 @@ struct QuickTogglesBar: View {
     private func voiceChip(_ mode: VoiceMode, selected: Bool,
                            action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: mode.symbol).font(.rounded(11, .semibold))
-                Text(mode.title).font(.rounded(12, .semibold))
+            // Строкой, пока влезает; не влезает (uz крупным шрифтом на SE —
+            // «Barchasi haqida» рвалось посреди слова) — значок над подписью,
+            // а подпись переносится по словам.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 5) {
+                    Image(systemName: mode.symbol).font(.rounded(11, .semibold))
+                    Text(mode.title).font(.rounded(12, .semibold)).lineLimit(1)
+                }
+                VStack(spacing: 2) {
+                    Image(systemName: mode.symbol).font(.rounded(11, .semibold))
+                    Text(mode.title).font(.rounded(12, .semibold))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 6)
             }
             .foregroundStyle(selected ? Theme.onAccentFill : Theme.textSecondary)
             .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, minHeight: Theme.controlSize)
+            // Высота ряда — по самому высокому чипу: перенёсся один — растут все.
+            .frame(maxWidth: .infinity, minHeight: Theme.controlSize, maxHeight: .infinity)
             .background(selected ? AnyShapeStyle(Theme.accentFill)
-                                 : AnyShapeStyle(Theme.background), in: Capsule())
+                                 : AnyShapeStyle(Theme.background),
+                        in: RoundedRectangle(cornerRadius: Theme.controlSize / 2, style: .continuous))
         }
         .buttonStyle(PressableStyle())
         // Выбранный режим виден только цветом — VoiceOver должен его слышать.

@@ -85,14 +85,14 @@ extension MapScreen {
         // после старта поездки; пробки и места жили в отдельной панели,
         // которой в поездке не бывало вовсе. Теперь это одна панель; в
         // поездке та же панель — подменю «…» (mapLayersMenu).
-        MapLayersControl(traffic: setting(\.trafficShown),
-                         places: setting(\.mapPlaces),
-                         houses: setting(\.mapHouses),
-                         sidewalks: setting(\.mapSidewalks),
-                         zoomButtons: setting(\.mapZoomButtons),
-                         maxPanelHeight: columnSlots.map {
-                             CGFloat($0) * AppConfig.mapColumnSlotHeight - AppConfig.mapColumnSpacing
-                         } ?? .infinity)
+        //
+        // Сама панель «Карта» — в слое меню над экраном (MapScreen+Popovers):
+        // касание мимо неё закрывает её, не задевая карту. Ушла кнопка
+        // (старт поездки, прибытие, режим добавления камеры) — уходит и панель.
+        MapLayersButton(isOpen: popover == .layers) {
+            send(.toggle(.layers))
+        }
+        .onDisappear { send(.dismissed(.layers)) }
         // Вид карты, как у навигаторов: 2D/3D, «моё местоположение»
         // (1-й тап — к машине, 2-й — по ходу движения), компас — только
         // когда карта повёрнута, звук.
@@ -168,12 +168,12 @@ extension MapScreen {
         }
     }
 
-    /// Слои подменю: те же переключатели, что в панели MapLayersControl, и
-    /// по тем же правилам — пробки только у Apple, застройка только у нашей карты.
+    /// Слои подменю: те же переключатели и те же значки, что в панели
+    /// MapLayersPanel.
     var mapLayersMenu: some View {
         Menu {
             Toggle(isOn: setting(\.trafficShown)) {
-                Label("Пробки", systemImage: "car.2.fill")
+                Label("Пробки", systemImage: Icon.trafficLayer)
             }
             Toggle(isOn: setting(\.mapPlaces)) {
                 Label("Места", systemImage: Icon.placesLayer)
@@ -182,7 +182,7 @@ extension MapScreen {
                 Label("Дома", systemImage: Icon.buildingsLayer)
             }
             Toggle(isOn: setting(\.mapSidewalks)) {
-                Label("Тротуары", systemImage: "figure.walk")
+                Label("Тротуары", systemImage: Icon.sidewalksLayer)
             }
         } label: {
             Label("Слои карты", systemImage: "square.3.layers.3d")

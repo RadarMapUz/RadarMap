@@ -125,27 +125,20 @@ extension MapScreen {
             if env.location.isPassengerSession {
                 passengerChip
             }
-            // Быстрые тумблеры — ПОСЛЕДНИМИ в стопке, и это не про красоту.
-            //
-            // Раскрывались они между HUD и манёвром, то есть сдвигали баннер
-            // манёвра вниз на свою высоту — треть экрана. Главный элемент
-            // навигации уезжал из-под взгляда ровно в тот момент, когда
-            // водитель тянется к экрану заглушить голос; вернуть его на место
-            // мог только повторный тап. Панель открывают осознанно и закрывают
-            // сразу, а поворот на перекрёстке ждать не умеет — поэтому растёт
-            // она вниз, поверх карты, и ничто над ней не двигается
-            // (plan_app_ui.md, У11).
-            if showQuickToggles {
-                QuickTogglesBar {
-                    withMotion(Motion.standard) { showQuickToggles = false }
-                }
-            }
+            // Быстрых тумблеров («Оповещения») здесь больше нет — они в слое
+            // меню над экраном (MapScreen+Popovers), и встают под этой
+            // стопкой по её рамке. Правило прежнее (plan_app_ui.md, У11):
+            // ничто над ними не двигается, манёвр остаётся под взглядом.
+            // Теперь не двигается и то, что ПОД ними: колонка кнопок и сама
+            // карта (кромка панелей для «я» их больше не считает).
         }
     }
 
     var topLayer: some View {
         VStack(spacing: 10) {
             topPanels
+                // Рамка стопки — меню «Оповещения» встаёт под ней (20.10).
+                .anchorPreference(key: MapPopoverAnchors.self, value: .bounds) { [.quickToggles: $0] }
                 // Кромка панелей — схеме.
                 //
                 // Схема лежит во весь экран, а видно из неё столько, сколько
@@ -198,7 +191,7 @@ extension MapScreen {
 
     func toggleQuickToggles() {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        withMotion(Motion.standard) { showQuickToggles.toggle() }
+        send(.toggle(.quickToggles))
     }
 
     /// Баннер пассажирского режима: молчание — осознанное, выход — один тап.

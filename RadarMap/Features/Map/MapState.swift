@@ -39,6 +39,25 @@ final class MapState {
     var isAddingCamera = false
     /// Точка долгого тапа: маркер + бар действий «Маршрут сюда / Радар / Своя камера».
     var pressedPoint: MapPoint?
+    /// Карточка «Карта по пути» (19.3): её высота (меряет скрытая копия —
+    /// решают «поместится ли», ещё не показав её), стоит ли она на экране
+    /// (тогда нижний бар уступает ей место) и просвет колонки справа до
+    /// нижних панелей. Здесь, а не в теле MapScreen: кромки панелей меняются
+    /// по пикселю на каждой анимации, и читает их только карточка.
+    var corridorCardHeight: CGFloat?
+    var corridorCardShown = false
+    private(set) var columnRoom: CGFloat?
+    var actionBarHeight: CGFloat = 0
+
+    /// Записать просвет, только если он заметно сменился: читатели будятся
+    /// на каждую запись, а кромки дрожат на долю пункта.
+    func setColumnRoom(_ room: CGFloat?) {
+        switch (room, columnRoom) {
+        case let (new?, old?) where abs(new - old) <= 0.5: return
+        case (nil, nil): return
+        default: columnRoom = room
+        }
+    }
     /// Команда движку «в точку»: счётчик и цель (крестик постановки камеры
     /// встаёт на точку долгого тапа).
     private(set) var centerCommand = 0

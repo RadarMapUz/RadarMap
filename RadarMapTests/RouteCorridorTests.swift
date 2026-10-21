@@ -137,6 +137,43 @@ final class RouteCorridorTests: XCTestCase {
                        "всё скачано — не о чем спрашивать")
     }
 
+    func testCardNeverPushesTheFixedButtonsUnder() {
+        // SE, обычный шрифт, покой с маршрутом: просвет 242 pt — четыре места.
+        // Карточка в 120 pt одна не встаёт (останется два места)…
+        XCTAssertFalse(CorridorOfferPlacement.fits(room: 242, cardHeight: 120, shown: false))
+        // …а на месте бара в 70 pt — встаёт: колонке остаются три обязательных.
+        XCTAssertTrue(CorridorOfferPlacement.fits(room: 242, cardHeight: 120, shown: false, freed: 70))
+        // SE, крупный шрифт: просвет 182, карточка 150, бар 97 — не встаёт и
+        // на месте бара: ждёт «Поехали».
+        XCTAssertFalse(CorridorOfferPlacement.fits(room: 182, cardHeight: 150, shown: false, freed: 97))
+        // Поездка: строка поездки низкая, просвет 420 — встаёт.
+        XCTAssertTrue(CorridorOfferPlacement.fits(room: 420, cardHeight: 150, shown: false))
+        // Уже на экране: просвет мерен с ней — держится, пока обязательным хватает.
+        XCTAssertTrue(CorridorOfferPlacement.fits(room: 160, cardHeight: 150, shown: true))
+        XCTAssertFalse(CorridorOfferPlacement.fits(room: 140, cardHeight: 150, shown: true),
+                       "выросла панель маршрута — карточка уступает кнопкам")
+        XCTAssertFalse(CorridorOfferPlacement.fits(room: nil, cardHeight: 150, shown: false), "не измерено — ждём кадр")
+        XCTAssertFalse(CorridorOfferPlacement.fits(room: 600, cardHeight: nil, shown: false))
+    }
+
+    func testStandingUpNeverMeansLeavingNextFrame() {
+        // Решение «встать» по спрятанной обязано выдержать пересчёт просвета
+        // уже с карточкой (и без бара): иначе карточка мигала бы туда-обратно.
+        for room in stride(from: CGFloat(100), through: 700, by: 3.5) {
+            for height in stride(from: CGFloat(40), through: 260, by: 7) {
+                for freed in [CGFloat(0), 70, 97] {
+                    guard CorridorOfferPlacement.fits(room: room, cardHeight: height, shown: false,
+                                                      freed: freed) else { continue }
+                    let spacing = AppConfig.bottomStackSpacing
+                    // Мерка после кадра может разойтись на долю пункта.
+                    let after = room - height - spacing + (freed > 0 ? freed + spacing : 0) - 0.5
+                    XCTAssertTrue(CorridorOfferPlacement.fits(room: after, cardHeight: height, shown: true),
+                                  "просвет \(room), карточка \(height), бар \(freed)")
+                }
+            }
+        }
+    }
+
     func testRouteKeyIsTheDestination() {
         let a = RouteCorridor.routeKey(destination: .init(latitude: 39.65421, longitude: 66.95973))
         let b = RouteCorridor.routeKey(destination: .init(latitude: 39.65438, longitude: 66.95961))

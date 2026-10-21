@@ -105,6 +105,12 @@ extension MapScreen {
                             withMotion(Motion.standard) { tripEndRecord = nil }
                         })
                 }
+                // «Карта по пути без интернета» — длинный маршрут (19.3): над
+                // панелью маршрута до «Поехали» и над строкой поездки, пока
+                // стоим. Одно место в стопке на обе фазы — карточка не
+                // пересоздаётся на «Поехали».
+                CorridorOfferGate(yields: tripEndRecord != nil || arrivalShown,
+                                  freesActionBar: mode.showsActionBar, map: map)
                 if arrivalShown, let arrival = env.route.lastArrival {
                     // «Вы на месте» — НА МЕСТЕ панели поездки, а не поверх
                     // экрана: у карточки своя «Завершить поездку», и второй
@@ -122,7 +128,8 @@ extension MapScreen {
                         onShowCameras: { showRouteCameras = true },
                         onTripToggle: { toggleTrip() },
                         onRemoveStop: { removeStop() },
-                        onShareArrival: { shareArrival() }
+                        onShareArrival: { shareArrival() },
+                        onShowAlongRoute: { showAlongRoute = true }
                     )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else {
@@ -189,8 +196,14 @@ extension MapScreen {
                         EmptyView()
                     }
                 }
-                if mode.showsActionBar {
+                // Карточка «Карта по пути» на экране — бар уступает ей место до
+                // ответа: на SE иначе ей негде встать, не загнав обязательные
+                // кнопки колонки под себя (CorridorOfferPlacement).
+                if mode.showsActionBar, !map.corridorCardShown {
                     actionBar
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                            if abs(height - map.actionBarHeight) > 0.5 { map.actionBarHeight = height }
+                        }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
@@ -213,6 +226,12 @@ extension MapScreen {
                 )
             }
         }
+        // Коридор длинного маршрута считается, пока экран на виду: новая
+        // линия или Wi-Fi вместо сотовой — пересчёт (RouteCorridorService).
+        .task(id: corridorPrepareKey) { await env.corridor.prepare(route: env.route) }
+        // «Тронулись» — вопрос о карте по пути закрыт; там же скрытая копия
+        // карточки меряет её высоту. Фоном: места в стопке не занимает.
+        .background { CorridorOfferBackstage(map: map) }
     }
 
     var bottomLayer: some View {

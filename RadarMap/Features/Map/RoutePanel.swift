@@ -18,6 +18,8 @@ struct RoutePanel: View {
     /// «Поделиться прибытием» до старта — пока человек ещё стоит и может
     /// выбрать, кому написать (5.13).
     var onShareArrival: (() -> Void)?
+    /// «По пути» (19.3): заправки, гостиницы, кафе впереди — лист со списком.
+    var onShowAlongRoute: (() -> Void)?
 
     var body: some View {
         let route = env.route
@@ -125,6 +127,19 @@ struct RoutePanel: View {
                             }
                             .buttonStyle(PressableStyle())
                             .accessibilityLabel(Text("Поделиться прибытием"))
+                        }
+                        if let onShowAlongRoute {
+                            // Значком, как «Поделиться»: подписью ряд с камерами
+                            // не помещался на SE.
+                            Button(action: onShowAlongRoute) {
+                                Image(systemName: AlongRouteText.symbol(env.settings.vehicleEnergy))
+                                    .font(.rounded(16, .semibold))
+                                    .foregroundStyle(Theme.accent)
+                                    .frame(width: Theme.controlSize, height: Theme.controlSize)
+                                    .background(Theme.accent.opacity(0.12), in: Circle())
+                            }
+                            .buttonStyle(PressableStyle())
+                            .accessibilityLabel(Text("По пути: заправки, гостиницы, кафе"))
                         }
                     }
 

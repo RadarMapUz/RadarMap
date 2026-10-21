@@ -37,6 +37,7 @@ struct CommuteAccuracyCard: View {
                 .foregroundStyle(Theme.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .statCard()
         .accessibilityElement(children: .combine)
     }

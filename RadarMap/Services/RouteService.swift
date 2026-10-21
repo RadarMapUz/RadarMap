@@ -48,12 +48,16 @@ final class RouteService {
         let distance: CLLocationDistance
         let travelTime: TimeInterval
         let cameras: [RouteCamera]
-        let steps: [RouteStep]
+        /// `var`: слой полос (20.8), приехавший после построения, прикладывается
+        /// к уже построенному варианту (`laneOverlayChanged`).
+        var steps: [RouteStep]
         /// Чем вариант хорош на фоне остальных (RouteChoice). У единственного
         /// варианта и после перестроения — пусто: сравнивать не с чем.
         var assessment: RouteChoice.Assessment = .none
-        /// Ограничения полос на проездах прямо (только OSRM).
+        /// Ограничения полос на проездах прямо (OSRM и слой полос).
         var laneNotices: [LaneNotice] = []
+        /// Где спросить слой полос: манёвры и проезды без полос OSRM (только OSRM).
+        var laneProbes: [LaneProbe] = []
         /// Где по линии остановка по пути (конец первого плеча). nil — без заезда.
         var stopAlong: CLLocationDistance?
         /// Построен на телефоне по своему графу трасс без сети (12б.10):
@@ -199,6 +203,14 @@ final class RouteService {
     @ObservationIgnored var approachRoads: ((CLLocationCoordinate2D, CLLocationDistance) -> [RoadLine])? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: approachRoads,
                                                "RouteService.approachRoads") }
+    }
+    /// Слой полос (20.8) — ряды там, где OSRM молчит. nil — слоя нет: не
+    /// скачан, не прошёл проверку, выключен пультом. Ставит AppEnvironment
+    /// (LaneOverlayService); первый вызов поднимает слой с диска, и он
+    /// приезжает позже — через `laneOverlayChanged`.
+    @ObservationIgnored var laneOverlay: (() -> LaneOverlay?)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: laneOverlay,
+                                               "RouteService.laneOverlay") }
     }
 
     /// Тип впервые произнесённого манёвра — для суточного счётчика. Отдельно
@@ -838,6 +850,7 @@ final class RouteService {
         let travelTime: TimeInterval
         let steps: [RouteStep]
         var laneNotices: [LaneNotice] = []
+        var laneProbes: [LaneProbe] = []
         var stopAlong: CLLocationDistance?
         var offline = false
     }
@@ -1019,11 +1032,13 @@ final class RouteService {
         }
         let variants = routes.prefix(3).compactMap { route -> BuiltVariant? in
             guard route.geometry.coordinates.count >= 2 else { return nil }
-            let points = route.geometry.coordinates.map {
-                MKMapPoint(CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]))
+            let path = route.geometry.coordinates.map {
+                CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0])
             }
+            let points = path.map(MKMapPoint.init)
             var steps: [RouteStep] = []
             var notices: [LaneNotice] = []
+            var probes = LaneProbeCollector(path: path)
             var along: CLLocationDistance = 0
             var stopAlong: CLLocationDistance?
             for (legIndex, leg) in route.legs.enumerated() {
@@ -1031,6 +1046,7 @@ final class RouteService {
                 for step in leg.steps {
                     let built = maneuverStep(step, at: along, language: language,
                                              stopName: isLast ? nil : stopName)
+                    probes.add(step, at: along, built: built, index: steps.count)
                     if let built { steps.append(built) }
                     notices += laneNotices(step, at: along, isManeuver: built != nil)
                     along += step.distance
@@ -1039,7 +1055,7 @@ final class RouteService {
             }
             return BuiltVariant(points: points, distance: route.distance,
                                 travelTime: route.duration, steps: steps, laneNotices: notices,
-                                stopAlong: stopAlong)
+                                laneProbes: probes.probes, stopAlong: stopAlong)
         }
         return variants.isEmpty ? nil : variants
     }
@@ -1232,6 +1248,56 @@ final class RouteService {
         return hints.count == lanes.count ? hints : []
     }
 
+    /// Где спросить слой полос (20.8): манёвры без полос OSRM и перекрёстки,
+    /// которые маршрут проезжает прямо, тоже без них. Собирается при разборе
+    /// — точки манёвров и перекрёстков есть только в ответе OSRM, — а сам слой
+    /// прикладывается позже (`apply`, `laneOverlayChanged`): он может приехать
+    /// и после построения.
+    ///
+    /// Кольцо и финиш не спрашиваем: ряд на кольце зависит от съезда, а не от
+    /// стрелок подхода. Курс въезда — по линии маршрута (RoutePathCursor);
+    /// точка без курса (старт маршрута, не у линии) — не спрашиваем: без
+    /// курса встречный подход того же перекрёстка неотличим от нашего.
+    nonisolated struct LaneProbeCollector {
+        private var cursor: RoutePathCursor
+        private(set) var probes: [LaneProbe] = []
+
+        init(path: [CLLocationCoordinate2D]) {
+            cursor = RoutePathCursor(path: path)
+        }
+
+        /// Шаг OSRM по порядку. `built` — манёвр, который из него вышел
+        /// (nil — шаг не озвучивается), `index` — его место в `steps`.
+        mutating func add(_ step: OSRMResponse.Step, at along: CLLocationDistance,
+                          built: RouteStep?, index: Int) {
+            if let built, built.lanes.isEmpty, let kind = built.kind,
+               kind != .roundabout, kind != .arrive,
+               let location = step.maneuver.location, location.count == 2 {
+                probe(.step(index), lat: location[1], lon: location[0], along: along, maneuver: kind)
+            }
+            guard let intersections = step.intersections,
+                  let start = step.maneuver.location, start.count == 2 else { return }
+            for (position, intersection) in intersections.enumerated() {
+                // Первый перекрёсток шага-манёвра — сам манёвр (выше).
+                if position == 0, built != nil { continue }
+                // Полосы OSRM есть (даже «подходят все») — OSRM главнее.
+                guard intersection.lanes?.isEmpty ?? true,
+                      let point = intersection.location, point.count == 2 else { continue }
+                // Положение — как у ограничений OSRM (laneNotices): от начала шага по прямой.
+                let offset = min(step.distance, GeoMath.fastDistance(start[1], start[0], point[1], point[0]))
+                probe(.passage(along + offset), lat: point[1], lon: point[0], along: along + offset, maneuver: nil)
+            }
+        }
+
+        private mutating func probe(_ target: LaneProbe.Target, lat: Double, lon: Double,
+                                    along: CLLocationDistance, maneuver: ManeuverKind?) {
+            let point = CLLocationCoordinate2D(latitude: lat, longitude: lon)
+            guard let bearing = cursor.approachBearing(to: point, estimatedAlong: along) else { return }
+            probes.append(LaneProbe(target: target, latitude: lat, longitude: lon,
+                                    approachBearing: bearing, maneuver: maneuver))
+        }
+    }
+
     // MARK: - Применение результата
 
     private func apply(_ built: [BuiltVariant], name: String,
@@ -1278,21 +1344,36 @@ final class RouteService {
         // await состояние перепроверяется, а не досчитывается по памяти.
         guard gen == generation else { return }
 
+        // Слой полос — здесь, на главном, а не в фоне вместе с камерами: так
+        // берётся слой, действующий СЕЙЧАС (приехавший за время подсчёта не
+        // теряется), а стоит это микросекунды на точку (PerformanceBudgetTests).
+        let overlay = laneOverlay?()
+        var laneStats: [LaneOverlay.Stats] = []
         variants = inputs.enumerated().map { index, variant in
-            Variant(id: index,
-                    points: variant.points,
-                    polyline: MKPolyline(points: variant.points, count: variant.points.count),
-                    distance: variant.distance,
-                    travelTime: variant.travelTime,
-                    cameras: variantCameras[index],
-                    steps: variant.steps,
-                    assessment: verdict.assessments[index],
-                    laneNotices: variant.laneNotices,
-                    stopAlong: variant.stopAlong,
-                    isOffline: variant.offline,
-                    trafficDelay: trafficDelays[index])
+            let lanes = LaneOverlay.attach(steps: variant.steps, notices: variant.laneNotices,
+                                           probes: variant.laneProbes, overlay: overlay)
+            laneStats.append(lanes.stats)
+            return Variant(id: index,
+                           points: variant.points,
+                           polyline: MKPolyline(points: variant.points, count: variant.points.count),
+                           distance: variant.distance,
+                           travelTime: variant.travelTime,
+                           cameras: variantCameras[index],
+                           steps: lanes.steps,
+                           assessment: verdict.assessments[index],
+                           laneNotices: lanes.notices,
+                           laneProbes: variant.laneProbes,
+                           stopAlong: variant.stopAlong,
+                           isOffline: variant.offline,
+                           trafficDelay: trafficDelays[index])
         }
         selectedID = verdict.recommended
+        // Одна строка на маршрут — для разбора реальной поездки: сколько
+        // рядов дал OSRM, сколько слой и где остался только край.
+        if laneStats.indices.contains(selectedID) {
+            let line = Self.laneLogLine(laneStats[selectedID], overlay: overlay)
+            Log.route.notice("\(line, privacy: .public)")
+        }
         destinationName = name
         destinationCoordinate = destination
         errorMessage = nil
@@ -1303,6 +1384,48 @@ final class RouteService {
         // вместо поворота (CarPlay Simulator, 11.10), а телефон — пустую
         // карточку манёвра. Без голоса: озвучка — дело живого прогресса.
         if let variant = selected { updateManeuvers(variant: variant, along: 0, announce: false) }
+    }
+
+    // MARK: - Слой полос (20.8)
+
+    /// Слой приехал, сменился или снят пультом — приложить к уже построенному
+    /// маршруту сразу, а не со следующим перестроением. Перестроения может не
+    /// быть до самого финиша, а первый маршрут после запуска строится раньше,
+    /// чем слой поднимается с диска, — и молчал бы на всех поворотах поездки.
+    /// Дёшево: точки спроса собраны при разборе, на каждую — поиск по сетке.
+    /// Идущее построение не мешает: `apply` возьмёт действующий слой сам.
+    func laneOverlayChanged() {
+        guard isActive else { return }
+        let overlay = laneOverlay?()
+        var changed = false
+        var stats: LaneOverlay.Stats?
+        let updated = variants.map { variant -> Variant in
+            let lanes = LaneOverlay.attach(steps: variant.steps, notices: variant.laneNotices,
+                                           probes: variant.laneProbes, overlay: overlay)
+            if variant.id == selectedID { stats = lanes.stats }
+            guard lanes.steps != variant.steps || lanes.notices != variant.laneNotices else { return variant }
+            changed = true
+            var copy = variant
+            copy.steps = lanes.steps
+            copy.laneNotices = lanes.notices
+            return copy
+        }
+        // Присваиваем только смену: варианты наблюдаемы.
+        guard changed else { return }
+        variants = updated
+        if let stats {
+            let line = Self.laneLogLine(stats, overlay: overlay)
+            Log.route.notice("\(line, privacy: .public) — слой обновился")
+        }
+        // Ряд ближайшего манёвра — сразу, без голоса: озвучка — дело живого прогресса.
+        if !isProgressFrozen, let variant = selected {
+            updateManeuvers(variant: variant, along: progressAlong, announce: false)
+        }
+    }
+
+    /// «полосы: OSRM 3, слой 5, край 9 (проезды: OSRM 1, слой 2), слой: 1200 подходов».
+    nonisolated static func laneLogLine(_ stats: LaneOverlay.Stats, overlay: LaneOverlay?) -> String {
+        stats.logLine + (overlay.map { ", слой: \($0.count) подходов" } ?? ", слоя нет")
     }
 
     // MARK: - Объезд пробки (DetourAdvisor)

@@ -510,4 +510,67 @@ final class PerformanceBudgetTests: XCTestCase {
         }
         XCTAssertLessThan(clock.now - began, .milliseconds(100), "призрак дорожает на фикс")
     }
+
+    // MARK: - Слой полос (20.8)
+
+    /// Слой на пределе контракта — 50 000 подходов — и маршрут в 30 манёвров:
+    /// поиск подхода на каждый шаг обязан стоить микросекунды (сетка, а не
+    /// перебор), иначе приложение слоя к маршруту на главном потоке стало бы
+    /// заметным. Плюс сборка сетки на 50 000 — она идёт при каждом подъёме
+    /// слоя с диска.
+    func testLaneOverlayLookupBudget() {
+        // Подходы сеткой по Ташкенту плотнее реального: ~1,3 на ячейку поиска.
+        let arrows: [[LaneArrow]] = [[.left], [.left, .straight], [.straight], [.straight, .right]]
+        var junctions: [LaneOverlay.Junction] = []
+        junctions.reserveCapacity(AppConfig.laneOverlayMaxJunctions)
+        for i in 0..<AppConfig.laneOverlayMaxJunctions {
+            let row = i / 224, column = i % 224
+            junctions.append(LaneOverlay.Junction(id: "j\(i)", latitude: 41.2 + Double(row) * 0.0009,
+                                                  longitude: 69.1 + Double(column) * 0.0009,
+                                                  bearing: Double((i * 90) % 360), tolerance: 30, lanes: arrows))
+        }
+        let clock = ContinuousClock()
+        let built = clock.now
+        let overlay = LaneOverlay(junctions: junctions)
+        let buildTime = clock.now - built
+        XCTAssertLessThan(buildTime, .seconds(1), "сетка слоя на 50 000 подходов: \(buildTime)")
+
+        // 30 манёвров маршрута — у подходов (с курсом) и между ними.
+        let probes: [LaneProbe] = (0..<30).map { k in
+            let junction = junctions[(k * 1_663) % junctions.count]
+            let offset = k.isMultiple(of: 2) ? 0.00005 : 0.0004
+            return LaneProbe(target: .step(k), latitude: junction.latitude + offset,
+                             longitude: junction.longitude, approachBearing: junction.bearing,
+                             maneuver: k.isMultiple(of: 3) ? .right : .left)
+        }
+        var found = 0
+        var worst: Duration = .zero
+        var total: Duration = .zero
+        for _ in 0..<100 {
+            for probe in probes {
+                let began = clock.now
+                if overlay.lanes(at: probe.coordinate, approachBearing: probe.approachBearing,
+                                 maneuver: probe.maneuver) != nil { found += 1 }
+                let spent = clock.now - began
+                total += spent
+                worst = max(worst, spent)
+            }
+        }
+        XCTAssertGreaterThan(found, 0, "подходы рядом с точками обязаны находиться")
+        XCTAssertLessThan(total / 3_000, .microseconds(100), "поиск подхода в среднем: \(total / 3_000)")
+        XCTAssertLessThan(worst, .milliseconds(1), "худший поиск подхода: \(worst)")
+
+        // Приложение слоя к маршруту целиком: 30 манёвров + 300 проездов.
+        let steps = (0..<30).map { RouteStep(distanceAlong: Double($0) * 500, text: "", icon: "arrow.up", kind: .left) }
+        let passages = (0..<300).map { k -> LaneProbe in
+            let junction = junctions[(k * 151) % junctions.count]
+            return LaneProbe(target: .passage(Double(k) * 50), latitude: junction.latitude,
+                             longitude: junction.longitude, approachBearing: junction.bearing, maneuver: nil)
+        }
+        let attachedAt = clock.now
+        let attached = LaneOverlay.attach(steps: steps, notices: [], probes: probes + passages, overlay: overlay)
+        let attachTime = clock.now - attachedAt
+        XCTAssertGreaterThan(attached.stats.overlay, 0)
+        XCTAssertLessThan(attachTime, .milliseconds(10), "слой к маршруту в 330 точек: \(attachTime)")
+    }
 }

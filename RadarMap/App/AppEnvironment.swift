@@ -84,6 +84,8 @@ final class AppEnvironment {
     let family = FamilyShareService()
     /// Граф трасс для маршрута без сети (12б.10).
     let offlineRoutes = OfflineRouteService()
+    /// Слой полос (20.8): подписанные ряды полос там, где OSRM молчит.
+    let laneOverlay = LaneOverlayService()
     /// Коридор длинного маршрута (19.3): карта и граф по пути, «По пути».
     let corridor = RouteCorridorService()
     /// Горячие точки треног: подписанный список мест, где водители отмечали
@@ -233,6 +235,7 @@ final class AppEnvironment {
         if active {
             mobile.startPolling()
             Task { await offlineRoutes.refreshIfDue() }
+            Task { await laneOverlay.refreshIfDue() }
         } else if !isCarPlayConnected, !mobile.isTripActive {
             // Экран погас, но человек едет — опрос продолжается: это и есть
             // единственный момент, когда чужая отметка чего-то стоит.
@@ -485,10 +488,18 @@ final class AppEnvironment {
         corridor.graph = offlineRoutes
         corridor.roads = roads
         corridor.network = network
+        // Слой полос (20.8): пульт (`features.laneOverlay`) и сеть; маршрут
+        // спрашивает слой при построении и прикладывает заново, когда тот
+        // приехал или снят.
+        laneOverlay.network = network
+        laneOverlay.allowedByConfig = { [weak config] in config?.current.isLaneOverlayEnabled ?? true }
+        laneOverlay.onChange = { [weak route] in route?.laneOverlayChanged() }
+        route.laneOverlay = { [weak laneOverlay] in laneOverlay?.current() }
         network.onOnline = { [weak self] in
             guard let self else { return }
             self.route.replaceOfflineRoute(from: self.location.currentCoordinate, cameras: self.cameras.cameras)
             Task { await self.offlineRoutes.refreshIfDue() }
+            Task { await self.laneOverlay.refreshIfDue() }
         }
         traffic.isOnline = { [weak network] in network?.isOnline ?? false }
         // Погода на перевалах: пульт (`features.roadWeather`) и сеть.
@@ -842,6 +853,9 @@ final class AppEnvironment {
         Task { await feedback.flushPending() }
         speedLimits.start()   // база лимитов: локально сразу, сервер раз в неделю
         roads.start()         // дорожные тайлы: индекс локально сразу, сервер раз в неделю
+        // Слой полос: индекс раз в неделю (и из машины — телефонной сцены
+        // может не быть вовсе); в память — первым маршрутом.
+        Task { await laneOverlay.refreshIfDue() }
         // Горячие точки треног: кэш поднят в init, с сервера — раз в неделю.
         // Настройка выключена — не тянем вовсе и чистим то, что уже лежит.
         if settings.tripodHints {

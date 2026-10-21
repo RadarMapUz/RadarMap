@@ -85,6 +85,8 @@ struct TripStatsSheet: View {
     @Namespace var periodPill
     /// Открытая «Дорога на работу/домой».
     @State var commuteDetail: Commute.Summary?
+    /// «Заправился» / «Зарядился» из строки расходов (21.6).
+    @State var journalRequest: JournalEntryRequest?
 
     /// Сводка, выводы, напоминание о штрафах и поездки периода — посчитанные
     /// вне main на смену периода или данных (ItogiScreen, 6.4).
@@ -421,6 +423,10 @@ struct TripStatsSheet: View {
             FinesSheet(period: period, anchor: anchor, periodRisk: current.summary.fineRisk)
         }
         .sheet(isPresented: $showReceivedFines) { FinesScreen() }
+        .sheet(item: $journalRequest) { request in
+            JournalEntrySheet(request: request,
+                              kinds: request.mode == .charge ? env.journalChargeKinds : env.journalFillKinds)
+        }
         .sheet(item: $selectedBadge) { badge in AchievementInfoSheet(badge: badge) }
         .sheet(item: $commuteDetail) { commute in
             CommuteDetailSheet(summary: commute)

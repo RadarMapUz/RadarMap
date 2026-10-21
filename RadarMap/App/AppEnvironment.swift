@@ -108,6 +108,9 @@ final class AppEnvironment {
     let maintenance: MaintenanceService
     /// Пришедшие штрафы (этап 17): только на телефоне; сверка и сроки — AppEnvironment+Fines.
     let fines = FineStore()
+    /// Журнал заправок и зарядок (21.6): только на телефоне; цена профиля и
+    /// правдоподобие — AppEnvironment+EnergyJournal.
+    let energyJournal = EnergyJournalStore()
 
     /// CarPlay подключён. Наблюдаемый флаг для интерфейса телефона: пока едет
     /// машина, телефонная карта уступает место дешёвому экрану передачи —
@@ -699,9 +702,27 @@ final class AppEnvironment {
         }
         // Выбор варианта по своим поездкам: история читается в момент
         // построения маршрута, а не копится заранее.
-        route.personalHistory = { [weak trip] in
+        route.personalHistory = { [weak trip, weak self] in
             guard settings.personalRoutes, let trip else { return nil }
-            return RouteChoice.history(from: trip.history, now: Date())
+            // Линии своего пути дом↔работа (45 дней) — «Знакомый» видит месяц,
+            // а не неделю треков (24.4).
+            let profile = settings.commuteLearning && self?.commuteProfiles.isLoaded == true
+                ? self?.commuteProfiles.book : nil
+            return RouteChoice.history(from: trip.history, profile: profile, now: Date())
+        }
+        // «Моя дорога» (24.4): цель — дом или работа, и путь туда наезжен.
+        // Выключается тем же «Учитывать мои поездки» и обучением дороги.
+        route.myRoadPlan = { [weak self] source, destination in
+            guard let self, settings.personalRoutes, settings.commuteLearning,
+                  !settings.workDriverMode, self.commuteProfiles.isLoaded,
+                  let ends = self.commuteEnds,
+                  let direction = MyRoad.direction(destination: destination, home: ends.home, work: ends.work)
+            else { return nil }
+            var plan = MyRoad.plan(variants: self.commuteProfiles.book[direction], direction: direction,
+                                   source: source, destination: destination, home: ends.home, work: ends.work)
+            // Та же поправка журнала, что у призрака в пути (24.2).
+            plan?.bias = CommuteAccuracy.biasFactor(self.commuteProfiles.accuracy, direction: direction)
+            return plan
         }
         // Имена улиц в манёврах — на языке приложения (баннер и голос).
         route.streetNameLanguage = { settings.appLanguage.mapCode }
@@ -808,6 +829,7 @@ final class AppEnvironment {
     func reloadProtectedStores() {
         trip.retryLoadNow()
         maintenance.reloadIfNeeded()
+        energyJournal.reloadIfNeeded()
         trip.retryLegacyLifetime()
         commuteProfiles.retryLoadNow()
         cameras.reloadUserDataIfNeeded()

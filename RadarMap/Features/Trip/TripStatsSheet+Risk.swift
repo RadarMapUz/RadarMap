@@ -19,19 +19,29 @@ extension TripStatsSheet {
     /// сводки периода (`TripDayBook.days`); период, начавшийся до последней
     /// правки цены, посчитан по нынешней — подпись говорит об этом. Тап —
     /// «Машина и расходы»: там видно, откуда цифры, и их можно поправить.
+    ///
+    /// С журналом заправок (21.6) сверху — реальные деньги периода, оценка —
+    /// второй строкой, тап ведёт в журнал. Кнопка «+» рядом — записать
+    /// заправку или зарядку, не уходя из «Итогов».
     @ViewBuilder
     func fuelRow(summary: PeriodSummary) -> some View {
         let interval = period.interval(containing: anchor)
         let ledger = env.energyLedger
         let use = ledger.use(of: TripDayBook.days(env.trip.days, in: interval))
-        if summary.distance > 0, PeriodEnergyRow.isWorthShowing(use, model: ledger.model) {
+        let journal = env.journalPeriod(interval)
+        if summary.distance > 0, PeriodEnergyRow.isWorthShowing(use, model: ledger.model, journal: journal) {
             let current = FuelCost.isAtCurrentPrice(endedAt: interval.start, profile: env.settings.fuelProfile)
-            NavigationLink {
-                EnergySettingsPage()
-            } label: {
-                PeriodEnergyRow(use: use, model: ledger.model, atCurrentPrice: current && use.cost != nil)
+            HStack(spacing: 8) {
+                NavigationLink {
+                    if journal.isEmpty { EnergySettingsPage() } else { EnergyJournalPage() }
+                } label: {
+                    PeriodEnergyRow(use: use, model: ledger.model, atCurrentPrice: current && use.cost != nil,
+                                    journal: journal)
+                }
+                .buttonStyle(PressableStyle())
+                JournalAddButton { journalRequest = $0 }
             }
-            .buttonStyle(PressableStyle())
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 

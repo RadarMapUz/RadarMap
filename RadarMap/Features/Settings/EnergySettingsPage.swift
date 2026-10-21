@@ -33,6 +33,8 @@ struct EnergySettingsPage: View {
     @State private var editing: EnergyPart?
     /// «Пройти по шагам» из сводки — мастер поверх готового профиля.
     @State private var wizard = false
+    /// «Заправился» / «Зарядился» — лист записи журнала (21.6).
+    @State private var journalRequest: JournalEntryRequest?
 
     var body: some View {
         let settings = env.settings
@@ -52,11 +54,21 @@ struct EnergySettingsPage: View {
         .sheet(item: $editing) { part in
             EnergyEditSheet(part: part)
         }
+        .sheet(item: $journalRequest) { request in
+            JournalEntrySheet(request: request,
+                              kinds: request.mode == .charge ? env.journalChargeKinds : env.journalFillKinds)
+        }
         .onAppear {
             env.usage.noteScreen("energy")
             #if DEBUG
             let args = ProcessInfo.processInfo.arguments
             if args.contains("-energyWizard") { wizard = true }
+            if let demo = JournalDemo.request(args, env: env) {
+                Task {
+                    await Task.pause(seconds: 0.9)
+                    journalRequest = demo
+                }
+            }
             if let i = args.firstIndex(of: "-energyEdit"), i + 1 < args.count {
                 Task {
                     await Task.pause(seconds: 0.8)
@@ -108,6 +120,7 @@ struct EnergySettingsPage: View {
             } header: {
                 Text("Сколько стоит дорога")
             }
+            journalSection
             Section {
                 machineRows(energy: energy, profile: profile)
             } header: {
@@ -173,6 +186,28 @@ struct EnergySettingsPage: View {
         }
         #endif
         }
+    }
+
+    /// Журнал заправок и зарядок (21.6): записать в одно касание и открыть список.
+    private var journalSection: some View {
+        let count = env.energyJournal.entries.count
+        return Section {
+            JournalActionRows { journalRequest = $0 }
+            NavigationLink {
+                EnergyJournalPage()
+            } label: {
+                LabeledContent {
+                    if count > 0 { Text(String(localized: "\(count) записей")) }
+                } label: {
+                    Label("Журнал заправок", systemImage: "list.bullet.rectangle")
+                }
+            }
+        } header: {
+            Text("Заправки и зарядки")
+        } footer: {
+            Text("С журналом «Итоги» показывают реальные траты, а расчёт — второй строкой.")
+        }
+        .id("journal")
     }
 
     private func typeRow(_ energy: VehicleEnergy) -> some View {

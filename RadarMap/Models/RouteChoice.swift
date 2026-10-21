@@ -6,12 +6,14 @@
 //
 //  Движок отдаёт два-три варианта, и раньше они различались только числами:
 //  «24 мин · 11 км · 📷 5». Выбирать по трём числам на ходу никто не станет,
-//  поэтому у каждого варианта теперь есть ярлык — «Знакомый», «Быстрый»,
+//  поэтому у каждого варианта теперь есть ярлык — «Моя дорога» (24.4: домой
+//  и на работу своим путём, MyRoad), «Знакомый», «Быстрый»,
 //  «Меньше камер», «Без ваших превышений», «Проще», «Короткий» — и
 //  объяснение, откуда он взялся.
 //
 //  Всё считается на телефоне, из того, что уже лежит в истории поездок:
-//  треки (для «Знакомого») и проезды камер (для «Без ваших превышений»).
+//  треки и линии своего пути дом↔работа за 45 дней (для «Знакомого») и
+//  проезды камер (для «Без ваших превышений»).
 //  На сервер не уходит ничего — ни треки, ни выбор. И решение — правила, а
 //  не обученная модель: ярлык обязан объясняться одной фразой («вы ездили
 //  так 12 раз»), иначе ему не верят, а правило проверяется тестом.
@@ -32,6 +34,10 @@ nonisolated enum RouteChoice {
         /// «На пути перекрытие» (12б.5) — не достоинство, а предупреждение,
         /// поэтому первым: в узкой плашке виден именно он.
         case blocked
+        /// «Моя дорога» (24.4): домой или на работу тем путём, которым
+        /// водитель ездит сам (линия CommuteProfile). Выше «Знакомого»: это
+        /// не «ездили похоже», а именно его ежедневный путь.
+        case myRoad
         case familiar
         case fastest
         case fewerCameras
@@ -51,6 +57,26 @@ nonisolated enum RouteChoice {
         let hardManeuvers: Int?
         /// Подтверждённых перекрытий на пути в нашу сторону (RoadEventRules).
         var closures: Int = 0
+        /// Вариант — своя дорога домой или на работу (MyRoad); nil — нет.
+        var personal: Personal? = nil
+    }
+
+    /// Своя дорога (24.4): куда, сколько поездок этим путём и время по ним.
+    struct Personal: Equatable, Sendable {
+        let direction: Commute.Direction
+        let trips: Int
+        /// Время по своим поездкам в этот час с пробками сверх обычного (с);
+        /// nil — у часа мало поездок, сравниваем по времени движка.
+        let seconds: TimeInterval?
+        /// Пробки толпы сверх своего обычного, с.
+        var jamSeconds: TimeInterval = 0
+    }
+
+    /// Линия своего пути из профиля дороги (CommuteProfile): одна на
+    /// вариант, весом в число поездок, не попавших в треки истории.
+    struct WeightedLine: Sendable {
+        let line: [CLLocationCoordinate2D]
+        let trips: Int
     }
 
     /// Что выбор знает о водителе.
@@ -59,6 +85,9 @@ nonisolated enum RouteChoice {
         var tracks: [[Double]]
         /// Камеры, у которых водитель превышал (по той же мерке, что CameraFamiliarity).
         var overspeedCameraIDs: Set<Int>
+        /// Свои пути дом↔работа за 45 дней (24.4): треки живут неделю, и
+        /// «Знакомый» по ним одним видел ~5 поездок вместо месяца.
+        var commuteLines: [WeightedLine] = []
     }
 
     struct Assessment: Equatable, Sendable {
@@ -71,6 +100,8 @@ nonisolated enum RouteChoice {
         var overspeedCameras = 0
         var hardManeuvers: Int?
         var closures = 0
+        /// Своя дорога (24.4) — с временем по своим поездкам.
+        var myRoad: Personal?
 
         static let none = Assessment()
     }
@@ -89,14 +120,19 @@ nonisolated enum RouteChoice {
             return Verdict(assessments: inputs.map { input in
                 var single = Assessment.none
                 single.closures = input.closures
-                if input.closures > 0 { single.labels = [.blocked] }
+                single.myRoad = input.personal
+                single.labels = [input.closures > 0 ? Label.blocked : nil,
+                                 input.personal != nil ? Label.myRoad : nil].compactMap { $0 }
                 return single
             }, recommended: 0)
         }
         var result = inputs.map { Assessment(hardManeuvers: $0.hardManeuvers, closures: $0.closures) }
 
         if let history {
-            let familiarity = familiarity(of: inputs.map(\.path), tracks: history.tracks)
+            let lines = history.commuteLines.filter { $0.trips > 0 && $0.line.count >= 2 }
+            let familiarity = familiarity(of: inputs.map(\.path),
+                                          tracks: history.tracks + lines.map(flatTrack),
+                                          weights: history.tracks.map { _ in 1 } + lines.map(\.trips))
             for index in inputs.indices {
                 result[index].familiarShare = familiarity[index].share
                 result[index].familiarTrips = familiarity[index].trips
@@ -112,6 +148,12 @@ nonisolated enum RouteChoice {
         labels[fastest].insert(.fastest)
         for index in inputs.indices where inputs[index].closures > 0 {
             labels[index].insert(.blocked)
+        }
+        // Своя дорога — одна: её строит сам выбор (MyRoad), а не движок.
+        let mine = inputs.firstIndex { $0.personal != nil }
+        if let mine {
+            labels[mine].insert(.myRoad)
+            result[mine].myRoad = inputs[mine].personal
         }
 
         // Знакомый: заметно знакомее всех остальных и проезжен не раз.
@@ -159,12 +201,15 @@ nonisolated enum RouteChoice {
             result[index].labels = Label.allCases.filter(labels[index].contains)
         }
 
-        // Первым предлагаем знакомый, если привычка стоит недорого; иначе быстрый.
+        // Первым — своя дорога, если по сегодняшнему прогнозу она не дольше
+        // быстрого (с пробками) больше допуска; затем знакомый на тех же
+        // условиях; иначе быстрый.
         var recommended = fastest
-        if let familiar = labels.firstIndex(where: { $0.contains(.familiar) }) {
-            let extra = inputs[familiar].travelTime - base.travelTime
-            if extra <= max(AppConfig.routeFamiliarMaxExtraSeconds,
-                            base.travelTime * AppConfig.routeFamiliarMaxExtraShare) {
+        if let mine, isAffordable(time: inputs[mine].personal?.seconds ?? inputs[mine].travelTime,
+                                  against: base.travelTime) {
+            recommended = mine
+        } else if let familiar = labels.firstIndex(where: { $0.contains(.familiar) }) {
+            if isAffordable(time: inputs[familiar].travelTime, against: base.travelTime) {
                 recommended = familiar
             }
         }
@@ -176,6 +221,13 @@ nonisolated enum RouteChoice {
             recommended = clean
         }
         return Verdict(assessments: result, recommended: recommended)
+    }
+
+    /// Привычка стоит недорого: дольше быстрого не больше чем на
+    /// max(3 мин, 10 %). `fastest` — время быстрого с пробками.
+    static func isAffordable(time: TimeInterval, against fastest: TimeInterval) -> Bool {
+        time - fastest <= max(AppConfig.routeFamiliarMaxExtraSeconds,
+                              fastest * AppConfig.routeFamiliarMaxExtraShare)
     }
 
     /// Индекс единственного минимума; при ничьей — nil (ярлык «меньше» у
@@ -206,7 +258,7 @@ nonisolated enum RouteChoice {
 
     /// Что выбор берёт из истории: последние поездки за окно — их треки и
     /// камеры, где было превышение. `now` параметром — воспроизводимо в тестах.
-    static func history(from records: [TripRecord], now: Date,
+    static func history(from records: [TripRecord], profile: CommuteProfile.Book? = nil, now: Date,
                         windowDays: Int = AppConfig.routeFamiliarWindowDays,
                         maxTrips: Int = AppConfig.routeFamiliarMaxTrips) -> History {
         let since = now.addingTimeInterval(-Double(windowDays) * 86400)
@@ -223,7 +275,26 @@ nonisolated enum RouteChoice {
                 }
             }
         }
-        return History(tracks: tracks, overspeedCameraIDs: overspeed)
+        return History(tracks: tracks, overspeedCameraIDs: overspeed,
+                       commuteLines: commuteLines(profile, since: since,
+                                                  tracked: Set(recent.filter { ($0.track?.count ?? 0) >= 6 }.map(\.id))))
+    }
+
+    /// Линии профиля дороги весом в поездки за окно. Поездка, чей трек уже
+    /// есть в истории, не считается второй раз — её строка из веса вычтена.
+    static func commuteLines(_ profile: CommuteProfile.Book?, since: Date,
+                             tracked: Set<Double>) -> [WeightedLine] {
+        guard let profile else { return [] }
+        return (profile.toWork + profile.toHome).compactMap { variant in
+            let trips = variant.rows.filter { $0.departure >= since && !tracked.contains($0.tripID) }.count
+            let line = variant.coordinates
+            return trips > 0 && line.count >= 2 ? WeightedLine(line: line, trips: trips) : nil
+        }
+    }
+
+    /// Линия в формате трека истории (тройки lat, lon, скорость).
+    static func flatTrack(_ line: WeightedLine) -> [Double] {
+        line.line.flatMap { [$0.latitude, $0.longitude, 0] }
     }
 
     // MARK: - Знакомость
@@ -241,7 +312,7 @@ nonisolated enum RouteChoice {
     /// Обратный индекс «клетка → точки путей» делает проверку одним поиском
     /// на точку трека, а не перебором всех путей.
     static func familiarity(of paths: [[CLLocationCoordinate2D]],
-                            tracks: [[Double]]) -> [Familiarity] {
+                            tracks: [[Double]], weights: [Int]? = nil) -> [Familiarity] {
         guard let reference = paths.first(where: { !$0.isEmpty })?.first else {
             return paths.map { _ in Familiarity(share: 0, trips: 0) }
         }
@@ -267,8 +338,10 @@ nonisolated enum RouteChoice {
         // упрощён, и на прямой трассе между его точками бывают километры.
         let maxGap = 10_000.0
 
-        for track in tracks {
+        for (number, track) in tracks.enumerated() {
             guard track.count >= 6 else { continue }
+            // Линия профиля — это сразу несколько поездок одним путём.
+            let weight = weights.map { number < $0.count ? max(1, $0[number]) : 1 } ?? 1
             var hit = samples.map { Array(repeating: false, count: $0.count) }
             var touched = false
             var previous: CLLocationCoordinate2D?
@@ -297,7 +370,7 @@ nonisolated enum RouteChoice {
                     covered[p][s] = true
                 }
                 if Double(count) / Double(samples[p].count) >= AppConfig.routeFamiliarTripShare {
-                    trips[p] += 1
+                    trips[p] += weight
                 }
             }
         }

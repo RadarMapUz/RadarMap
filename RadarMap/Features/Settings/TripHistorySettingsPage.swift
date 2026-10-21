@@ -32,7 +32,8 @@ struct TripHistorySettingsPage: View {
         // Пока история не прочитана (сразу после разблокировки), выгрузка
         // вышла бы пустой, а удаление — мимо диска (ревью S9).
         let ready = trip.isLoaded && trip.isLifetimeTrusted
-        let canExport = ready && !exporting && trip.storedTripCount > 0
+        let journal = env.energyJournal.entries.count
+        let canExport = ready && !exporting && (trip.storedTripCount > 0 || journal > 0)
         Form {
             Section {
                 LabeledContent("Поездок на телефоне") {
@@ -53,6 +54,9 @@ struct TripHistorySettingsPage: View {
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Архив ZIP: таблица trips.csv — строка на поездку — и треки GPX тех поездок, у которых трек ещё хранится. Дом и работа в них не подписаны. Отдельно — commute_forecast.csv, точность прогноза дороги на работу: по нему поездки дом↔работа узнаются.")
+                    if journal > 0 {
+                        Text("Журнал заправок и зарядок — таблица energy_journal.csv.")
+                    }
                     if exportFailed {
                         Label("Архив не собрался — попробуйте ещё раз", systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(Theme.warning)
@@ -113,8 +117,8 @@ struct TripHistorySettingsPage: View {
             do {
                 let archive = try await TripExport.makeArchive(env.trip.history,
                                                                forecasts: env.commuteProfiles.accuracy,
-                                                               now: Date(),
-                                                               timeZone: .current)
+                                                               journal: env.energyJournal.entries,
+                                                               now: Date(), timeZone: .current)
                 exportFolder = archive.folder
                 share = ShareFilePayload(url: archive.file)
             } catch {

@@ -44,6 +44,8 @@ extension MapScreen {
                 EnergyDemo.seed(env, args: args)
             }
         }
+        // Журнал заправок и зарядок (21.6) — в памяти, диск не трогаем.
+        if args.contains("-demoJournal") { JournalDemo.seed(env) }
         // С паузой: настоящие пробки приходят уже после загрузки карты, и
         // слой обязан перерисоваться на новом наборе, а не только на старте.
         if args.contains("-demoTraffic") {
@@ -305,6 +307,15 @@ extension MapScreen {
                     await Task.pause(seconds: 1.5)
                     showAlongRoute = true
                 }
+            }
+        }
+        // «Моя дорога» (24.4): выбор вариантов домой без сети.
+        if args.contains("-demoMyRoad") {
+            Task {
+                // Холодный старт после загрузки симулятора: на 2 с маршрут
+                // ложился раньше готовности экрана и не рисовался.
+                await Task.pause(seconds: 4)
+                if let rect = await MyRoadDemo.seed(env) { map.showRouteOverview(rect: rect) }
             }
         }
         if args.contains("-demoRoute") {

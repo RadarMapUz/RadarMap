@@ -199,4 +199,112 @@ final class RouteChoiceTests: XCTestCase {
         XCTAssertEqual(history.overspeedCameraIDs, [1], "61 при лимите 60 — в допуске; старое — вне окна")
         XCTAssertEqual(history.tracks.count, 2)
     }
+
+    // MARK: - Моя дорога (24.4)
+
+    private func personal(minutes: Double?, jam: Double = 0) -> RouteChoice.Personal {
+        RouteChoice.Personal(direction: .toHome, trips: 12, seconds: minutes.map { $0 * 60 }, jamSeconds: jam)
+    }
+
+    func testMyRoadLeadsTheLabelsAndIsChosen() {
+        var mine = input(line(5000, north: 300), minutes: 11)
+        mine.personal = personal(minutes: 12)
+        let verdict = RouteChoice.decide([input(line(5000), minutes: 10), mine], history: nil)
+        XCTAssertEqual(verdict.assessments[1].labels.first, .myRoad)
+        XCTAssertEqual(verdict.assessments[1].myRoad, personal(minutes: 12))
+        XCTAssertEqual(verdict.recommended, 1, "+2 мин своей дорогой — выбираем её")
+    }
+
+    func testMyRoadOutranksFamiliarAndFastestInItsChip() {
+        let history = RouteChoice.History(tracks: Array(repeating: track(5000, north: 300), count: 4),
+                                          overspeedCameraIDs: [])
+        var mine = input(line(5000, north: 300), minutes: 9)
+        mine.personal = personal(minutes: 9)
+        let verdict = RouteChoice.decide([input(line(5000), minutes: 10), mine], history: history)
+        XCTAssertEqual(verdict.assessments[1].labels.prefix(2), [.myRoad, .familiar])
+        XCTAssertTrue(verdict.assessments[1].labels.contains(.fastest))
+    }
+
+    func testMyRoadIsComparedWithTheFastestInTraffic() {
+        // Быстрый по движку — 30 мин, сегодня с пробками 40; своя дорога по
+        // своей истории — 42. Против голых 30 это +12 (не выбрали бы), против
+        // 40 с пробками — +2, в пределах max(3 мин, 10 %).
+        var mine = input(line(5000, north: 300), minutes: 45)
+        mine.personal = personal(minutes: 42)
+        let jammed = RouteChoice.decide([input(line(5000), minutes: 40), mine], history: nil)
+        XCTAssertEqual(jammed.recommended, 1)
+        let free = RouteChoice.decide([input(line(5000), minutes: 30), mine], history: nil)
+        XCTAssertEqual(free.recommended, 0, "своя дорога на 12 мин дольше быстрого — решать человеку")
+        XCTAssertTrue(free.assessments[1].labels.contains(.myRoad), "ярлык остаётся — выбор за водителем")
+    }
+
+    func testMyRoadWithoutOwnTimeUsesEngineTime() {
+        var mine = input(line(5000, north: 300), minutes: 11)
+        mine.personal = personal(minutes: nil)
+        XCTAssertEqual(RouteChoice.decide([input(line(5000), minutes: 10), mine], history: nil).recommended, 1)
+        mine = input(line(5000, north: 300), minutes: 20)
+        mine.personal = personal(minutes: nil)
+        XCTAssertEqual(RouteChoice.decide([input(line(5000), minutes: 10), mine], history: nil).recommended, 0)
+    }
+
+    func testClosureOnMyRoadStillDefersToACleanVariant() {
+        var mine = input(line(5000, north: 300), minutes: 10)
+        mine.personal = personal(minutes: 10)
+        mine.closures = 1
+        let verdict = RouteChoice.decide([input(line(5000), minutes: 11), mine], history: nil)
+        XCTAssertEqual(verdict.assessments[1].labels.prefix(2), [.blocked, .myRoad])
+        XCTAssertEqual(verdict.recommended, 0, "перекрытие важнее привычки")
+    }
+
+    func testSingleVariantOnMyRoadKeepsItsLabel() {
+        var mine = input(line(5000), minutes: 10)
+        mine.personal = personal(minutes: 11)
+        let verdict = RouteChoice.decide([mine], history: nil)
+        XCTAssertEqual(verdict.assessments[0].labels, [.myRoad])
+        XCTAssertEqual(verdict.assessments[0].myRoad?.trips, 12)
+    }
+
+    // MARK: - «Знакомый» по профилю дороги (24.4)
+
+    func testFamiliarCountsCommuteProfileLines() {
+        // Треков за неделю нет вовсе — а своя линия за полтора месяца проезжена 6 раз.
+        let profileLine = RouteChoice.WeightedLine(line: line(5000, north: 300), trips: 6)
+        let history = RouteChoice.History(tracks: [], overspeedCameraIDs: [], commuteLines: [profileLine])
+        let verdict = RouteChoice.decide([input(line(5000), minutes: 10),
+                                          input(line(5000, north: 300), minutes: 11)], history: history)
+        XCTAssertTrue(verdict.assessments[1].labels.contains(.familiar))
+        XCTAssertEqual(verdict.assessments[1].familiarTrips, 6)
+        XCTAssertEqual(verdict.recommended, 1)
+    }
+
+    func testHistoryCountsProfileTripsOnceAlongsideTracks() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        func row(_ id: Double, daysAgo: Double) -> CommuteProfile.Row {
+            CommuteProfile.Row(tripID: id, departure: now.addingTimeInterval(-daysAgo * 86400),
+                               weekend: false, arrivalMinute: 0, seconds: [20])
+        }
+        // Поездка 2 дня назад — и трек в истории, и строка профиля: считается раз.
+        let recent = now.addingTimeInterval(-2 * 86400)
+        var trip = TripRecord(id: recent.timeIntervalSince1970, startedAt: recent,
+                              endedAt: recent.addingTimeInterval(1200), distanceMeters: 5000,
+                              maxSpeedKmh: 60, passed: [])
+        trip.track = track(5000, north: 300)
+        var packed: [Int32] = []
+        for c in line(5000, north: 300) {
+            packed.append(Int32((c.latitude * 1e5).rounded()))
+            packed.append(Int32((c.longitude * 1e5).rounded()))
+        }
+        var book = CommuteProfile.Book()
+        book.toHome = [CommuteProfile.Variant(id: UUID(), line: packed, ends: [5000], limitKmh: [],
+                                              rows: [row(recent.timeIntervalSince1970, daysAgo: 2),
+                                                     row(1, daysAgo: 10), row(2, daysAgo: 20), row(3, daysAgo: 40)],
+                                              lastUsed: now)]
+        let history = RouteChoice.history(from: [trip], profile: book, now: now)
+        XCTAssertEqual(history.tracks.count, 1)
+        XCTAssertEqual(history.commuteLines.map(\.trips), [3], "строка поездки с треком не считается второй раз")
+        let verdict = RouteChoice.decide([input(line(5000), minutes: 10),
+                                          input(line(5000, north: 300), minutes: 11)], history: history)
+        XCTAssertEqual(verdict.assessments[1].familiarTrips, 4)
+        XCTAssertNil(RouteChoice.history(from: [trip], profile: nil, now: now).commuteLines.first)
+    }
 }

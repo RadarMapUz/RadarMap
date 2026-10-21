@@ -388,7 +388,7 @@ final class TripStats {
             work: work ? true : nil
         )
         history.insert(record, at: 0)
-        history = TripHistory.pruned(history)
+        applyRetention()
         // До чтения истории (старт до разблокировки): её вклад в «за всё
         // время» ляжет поверх прочитанного при загрузке.
         if !isLoaded { windowRecordIDs.insert(record.id) }
@@ -455,7 +455,7 @@ final class TripStats {
         let legs = TripHistory.split(original, at: stop)
         guard legs.count == 2 else { return }
         history.replaceSubrange(index...index, with: legs)
-        history = TripHistory.pruned(history)
+        applyRetention()
         // В цифрах дня та же поездка, но двумя записями: снимаем исходную,
         // кладём обе ноги — иначе «поездок» в отчёте разойдётся со списком.
         days = TripDayBook.replaced([original], with: legs, in: days)
@@ -600,16 +600,28 @@ final class TripStats {
     /// убрать статистику, а не спрятать список при живых цифрах в отчёте. И
     /// «за всё время», охват предупреждений и посекундные треки: диалог
     /// обещает «итоги за все периоды сотрутся», а они оставались (S10, 20.10).
+    /// Месяцы — все, и непрочитанные тоже, с индексом и отложенными копиями
+    /// (15.3); производное (дорога, смены, места, виджет) стирает
+    /// AppEnvironment.deleteAllHistory.
     func clearHistory() {
         // До чтения в памяти только поездки окна: «очистка» их и вернула бы
         // весь диск поверх при загрузке (ревью S9, третий круг).
         guard editAllowed("очистка истории"), lifetimeEditAllowed("очистка истории") else { return }
+        storeGeneration &+= 1
+        monthWork?.cancel()
+        monthWork = nil
         history = []
         days = []
         lastFinishedRaw = nil
         lifetime = LifetimeStats()
         alertRecall = AlertRecall.Tally()
-        persist()
+        // Памяти не о чем помнить: месяц новой поездки проверится по диску —
+        // уже после удаления, той же очередью (adoptMonths).
+        written = [:]
+        monthIndex = [:]
+        olderMonths = []
+        let paths = Self.storePaths
+        JSONFile.enqueue(wait: mustWriteSynchronously()) { TripStore.removeAll(paths: paths) }
         persistDays()
         persistLifetime()
         // Старые ключи — тоже: иначе стёртое вернулось бы через перенос.
@@ -617,6 +629,170 @@ final class TripStats {
         Storage.remove(.alertRecallTotal)
         Task.detached(priority: .utility) { TimedTrackStore.removeAll() }
         onRecordsErased?(nil)
+    }
+
+    // MARK: - Месяцы, не прочитанные на старте
+
+    /// Чистка по сроку: история в памяти — сразу, непрочитанные месяцы —
+    /// следом, по одному (их правда на диске).
+    private func applyRetention() {
+        history = TripHistory.pruned(history, retention: retention)
+        sweepOlderMonths()
+    }
+
+    /// Работа с месяцами — по одной, за предыдущей; поколение сверяется
+    /// после каждого ожидания (стёрли историю — результат не применяем).
+    private func enqueueMonthWork(_ work: @escaping @MainActor (TripStats) async -> Void) {
+        let previous = monthWork
+        monthWork = Task { [weak self] in
+            await previous?.value
+            guard let self, !Task.isCancelled else { return }
+            await work(self)
+        }
+    }
+
+    @concurrent private nonisolated static func readMonth(_ month: TripStore.Month) async -> TripStore.MonthRead {
+        let paths = storePaths
+        return await JSONFile.ordered { TripStore.readMonth(month, paths: paths) }
+    }
+
+    /// Следующий (более ранний) месяц — в память: «Архив поездок» листается
+    /// вглубь. Ничего не делает, если всё уже прочитано.
+    func loadOlderMonth() async {
+        enqueueMonthWork { stats in await stats.adoptOlderMonth() }
+        let work = monthWork
+        await work?.value
+    }
+
+    /// Вся история — в память (копия, восстановление, экспорт).
+    func loadAllMonths() async {
+        while isLoaded, !olderMonths.isEmpty {
+            let before = olderMonths.count
+            await loadOlderMonth()
+            guard olderMonths.count < before else { return }
+        }
+    }
+
+    private func adoptOlderMonth() async {
+        guard isLoaded, let month = olderMonths.first else { return }
+        let generation = storeGeneration
+        let read = await Self.readMonth(month)
+        // Пока читали, месяц могли подхватить (persist) или историю стереть.
+        guard generation == storeGeneration, written[month] == nil else { return }
+        let url = Self.storePaths.shard(month)
+        switch read {
+        case .missing:
+            written[month] = []
+            monthIndex[month] = nil
+        case .loaded(let records, let dropped):
+            if dropped > 0, !setAside(.copy, url) { return }
+            written[month] = dropped > 0 ? [] : records
+            monthIndex[month] = TripStore.entry(month, records: records)
+            history = TripStore.merging(history, with: records)
+            if dropped > 0 { persist() }
+        case .corrupt:
+            guard setAside(.move, url) else { return }
+            written[month] = []
+            monthIndex[month] = nil
+        case .unreadable:
+            Log.trips.notice("месяц \(month.key, privacy: .public) не читается — позже")
+            return
+        }
+        olderMonths.removeAll { $0 == month }
+    }
+
+    /// Строки индекса непрочитанных месяцев, которым нельзя верить (вылет
+    /// между записью месяца и индекса, файл без строки): перечитать фоном и
+    /// записать индекс заново. В память месяцы не идут.
+    private func verifyOlderMonths(_ months: Set<TripStore.Month>) {
+        guard !months.isEmpty else { return }
+        enqueueMonthWork { stats in
+            let generation = stats.storeGeneration
+            var changed = false
+            for month in months.sorted(by: >) {
+                let read = await Self.readMonth(month)
+                guard generation == stats.storeGeneration else { return }
+                guard stats.written[month] == nil else { continue }
+                switch read {
+                case .loaded(let records, _):
+                    stats.monthIndex[month] = TripStore.entry(month, records: records)
+                case .missing:
+                    stats.monthIndex[month] = nil
+                    stats.olderMonths.removeAll { $0 == month }
+                case .corrupt, .unreadable:
+                    continue   // разберётся чтение по запросу: отложит или повторит
+                }
+                changed = true
+            }
+            if changed { stats.enqueueStoreWrite(TripStore.WritePlan(index: stats.monthIndex)) }
+        }
+    }
+
+    /// Срок хранения для непрочитанных месяцев — тем же правилом, что для
+    /// памяти: месяц целиком старше срока удаляется по строке индекса, не
+    /// читаясь; задетый частично читается, чистится TripHistory.pruned со
+    /// сдвигом (сколько записей новее него остаётся) и переписывается.
+    private func sweepOlderMonths() {
+        guard isLoaded, !olderMonths.isEmpty else { return }
+        enqueueMonthWork { stats in
+            let generation = stats.storeGeneration
+            let now = Date()
+            let retention = stats.retention
+            // Сдвиг ниже верен, только если всё в памяти новее непрочитанного.
+            // Иначе (подхвачен давний месяц — слепок, копия) чистка ждёт: лишнее
+            // хранение безопаснее, чем удаление по неверному сдвигу.
+            guard let newestOlder = stats.olderMonths.first,
+                  TripStore.grouped(stats.history).keys.allSatisfy({ $0 > newestOlder }) else { return }
+            // Непрочитанные месяцы всегда старше всех прочитанных (читаются от
+            // новых к старым), поэтому сдвиг первого — вся история в памяти.
+            var offset = TripHistory.pruned(stats.history, retention: retention, now: now).count
+            var plan = TripStore.WritePlan()
+            months: for month in stats.olderMonths {
+                guard generation == stats.storeGeneration else { return }
+                guard stats.written[month] == nil else { continue }
+                guard let entry = stats.monthIndex[month] else {
+                    // Строки нет — число записей неизвестно, дальше сдвиг не
+                    // посчитать. Чистка подождёт сверки индекса.
+                    break months
+                }
+                switch TripStore.sweepAction(entry, offset: offset, retention: retention, now: now) {
+                case .keep:
+                    offset += entry.count
+                case .delete:
+                    plan.removals.insert(month)
+                    stats.monthIndex[month] = nil
+                case .rewrite:
+                    let read = await Self.readMonth(month)
+                    guard generation == stats.storeGeneration, stats.written[month] == nil,
+                          case .loaded(let records, let dropped) = read, dropped == 0 else {
+                        // Месяц подхватили, стёрли или он битый — его разберёт
+                        // чтение по запросу; сдвиг дальше неизвестен.
+                        break months
+                    }
+                    let kept = TripHistory.pruned(records, retention: retention, now: now, offset: offset)
+                    offset += kept.count
+                    if kept.isEmpty {
+                        plan.removals.insert(month)
+                        stats.monthIndex[month] = nil
+                    } else if kept != records {
+                        plan.shards[month] = kept
+                        stats.monthIndex[month] = TripStore.entry(month, records: kept)
+                    }
+                    continue
+                }
+            }
+            guard generation == stats.storeGeneration else { return }
+            // Месяц, подхваченный записью, пока чистка ждала чтения соседа,
+            // теперь в памяти: его правда там, удалять или переписывать его
+            // по старому решению — стереть подхваченное.
+            plan.removals = plan.removals.filter { stats.written[$0] == nil }
+            plan.shards = plan.shards.filter { stats.written[$0.key] == nil }
+            guard !plan.isEmpty else { return }
+            stats.olderMonths.removeAll { plan.removals.contains($0) }
+            plan.index = stats.monthIndex
+            stats.enqueueStoreWrite(plan)
+            Log.trips.info("чистка по сроку: месяцев удалено \(plan.removals.count, privacy: .public), переписано \(plan.shards.count, privacy: .public)")
+        }
     }
 
     // MARK: - Сводки
@@ -963,9 +1139,31 @@ final class TripStats {
 
     // MARK: - Хранение
 
-    private var storeURL: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("trips.json")
+    /// История по месяцам (15.1, TripStore): Documents/trips/<гггг-ММ>.json.
+    nonisolated private static var storePaths: TripStore.Paths { TripStore.Paths(documents: documents) }
+
+    /// Срок хранения — параметром (15.2 сделает его настройкой).
+    @ObservationIgnored var retention = TripHistory.Retention.current
+    /// Что лежит на диске для месяцев, которые в памяти целиком: прочитанных
+    /// и заведомо пустых. Месяца здесь нет — правда о нём только на диске, и
+    /// писать его из памяти нельзя (стёрли бы непрочитанное). Месяц уходит в
+    /// запись, только если память с этим разошлась.
+    @ObservationIgnored private var written: [TripStore.Month: [TripRecord]] = [:]
+    /// Строки индекса по всем известным месяцам.
+    @ObservationIgnored private var monthIndex: [TripStore.Month: TripStore.Entry] = [:]
+    /// Месяцы на диске, которых нет в памяти, — от новых к старым; читаются
+    /// по запросу (loadOlderMonth).
+    private(set) var olderMonths: [TripStore.Month] = []
+    /// Растёт при «удалить всю историю»: фоновая работа с месяцами, начатая
+    /// раньше, свой результат уже не применяет (правило 12).
+    @ObservationIgnored private var storeGeneration = 0
+    /// Работа с непрочитанными месяцами — строго по одной (сверка индекса,
+    /// чистка по сроку, чтение по запросу).
+    @ObservationIgnored private var monthWork: Task<Void, Never>?
+
+    /// Сколько поездок хранится: в памяти и в непрочитанных месяцах.
+    var storedTripCount: Int {
+        history.count + olderMonths.reduce(0) { $0 + (monthIndex[$1]?.count ?? 0) }
     }
     /// «За всё время» и охват — файлом рядом с историей (ревью S9, третий
     /// круг). До 20.10 они жили в UserDefaults, а процесс, поднятый до первой
@@ -1085,16 +1283,26 @@ final class TripStats {
                                                "TripStats.onLoadBlocked") }
     }
 
-    /// Разбор трёх файлов вне main — поэлементно, с честным ответом на «не
-    /// читается» (сценарий S9, 20.10): см. JSONFile.LoadResult.
+    /// Разбор файлов вне main — поэлементно, с честным ответом на «не
+    /// читается» (сценарий S9, 20.10): см. JSONFile.LoadResult. История — по
+    /// месяцам (TripStore): только окно запуска, перенос trips.json — здесь же.
     @concurrent private nonisolated static func decodeStore(
-        trips: URL, days: URL, lifetime: URL, session: URL
-    ) async -> (trips: JSONFile.LoadResult<LossyArray<TripRecord>>, days: JSONFile.LoadResult<LossyArray<TripDay>>,
+        trips: TripStore.Paths, allMonths: Bool, minRecords: Int, now: Date, days: URL, lifetime: URL, session: URL
+    ) async -> (trips: TripStore.LaunchResult, days: JSONFile.LoadResult<LossyArray<TripDay>>,
                 lifetime: JSONFile.LoadResult<LifetimeFile>, session: JSONFile.LoadResult<LifetimeSession>) {
-        (JSONFile.loadChecked(LossyArray<TripRecord>.self, from: trips, log: Log.trips),
+        (TripStore.readLaunch(paths: trips, now: now, windowDays: AppConfig.tripHistoryLaunchDays,
+                              minRecords: minRecords, all: allMonths),
          JSONFile.loadChecked(LossyArray<TripDay>.self, from: days, log: Log.trips),
          JSONFile.loadChecked(LifetimeFile.self, from: lifetime, log: Log.trips),
          JSONFile.loadChecked(LifetimeSession.self, from: session, log: Log.trips))
+    }
+
+    /// Разовые чистки истории ещё не прошли — им нужна вся история, а не
+    /// окно запуска: чистка по окну поставила бы флаг и навсегда оставила
+    /// старые месяцы нечищеными.
+    private static var cleanupsPending: Bool {
+        [Storage.Key.passGeoCleanup2, .passCrowdCleanup1, .passLabelsNormalized1,
+         .passDuplicateCleanup1, .passLimitFloor1, .passAxisCleanup1].contains { !Storage.bool($0) }
     }
 
     /// Разобрать ответ чтения: прочитанное, что сделать с файлом, и можно ли
@@ -1138,9 +1346,11 @@ final class TripStats {
         guard !isLoaded, !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
-        let result = await Self.decodeStore(trips: storeURL, days: daysURL, lifetime: lifetimeURL,
-                                            session: sessionURL)
-        let tripsRead = Self.accept(result.trips)
+        let result = await Self.decodeStore(trips: Self.storePaths, allMonths: Self.cleanupsPending,
+                                            minRecords: retention.keepLast, now: Date(),
+                                            days: daysURL, lifetime: lifetimeURL, session: sessionURL)
+        var launch: TripStore.Launch?
+        if case .ready(let value) = result.trips { launch = value }
         let daysRead = Self.accept(result.days)
         var lifetimeAside = Aside.none, sessionAside = Aside.none
         var lifetimeReadable = true
@@ -1160,16 +1370,23 @@ final class TripStats {
         // разблокировка зовёт retryLoadNow сразу); поездки, закончившиеся за
         // это время, встанут впереди прочитанного. Битое откладываем только
         // ПОСЛЕ этой проверки — и не вышло отложить — тоже «не читается».
-        guard tripsRead.readable, daysRead.readable, lifetimeReadable,
-              setAside(tripsRead.aside, storeURL), setAside(daysRead.aside, daysURL),
+        guard let launch, daysRead.readable, lifetimeReadable,
+              setAsideMonths(launch), setAside(daysRead.aside, daysURL),
               setAside(lifetimeAside, lifetimeURL), setAside(sessionAside, sessionURL) else {
             scheduleRetry()
             return
         }
         retryTask?.cancel()
         retryTask = nil
-        let decoded = (trips: tripsRead.values, days: daysRead.values)
-        let rewrite = tripsRead.aside != .none || daysRead.aside != .none
+        let decoded = (trips: launch.records, days: daysRead.values)
+        // Месяц с битыми записями перепишется сам (в written он пустой), дни — здесь.
+        let rewrite = !launch.lossy.isEmpty || daysRead.aside != .none
+        written = launch.written
+        monthIndex = launch.entries
+        olderMonths = launch.older
+        if let migrated = launch.migrated {
+            Log.trips.notice("trips.json перенесён по месяцам: \(migrated, privacy: .public) поездок")
+        }
         #if DEBUG
         // После чтения, а не до: демо сеется, пока файл читается.
         if demoReplacesDisk {
@@ -1226,12 +1443,16 @@ final class TripStats {
         pendingRecall = AlertRecall.Tally()
         windowRecordIDs = []
         isLoaded = true
+        var indexWritten = false
         if !window.isEmpty || rewrite {
             // Битые записи отложены копией — переписать файл без них, иначе
             // копия откладывалась бы на каждом запуске.
-            persist()
+            indexWritten = persist()
             persistDays()
         }
+        // Индекс разошёлся с месяцами (вылет между файлом месяца и индексом,
+        // перенос) — переписать по прочитанному; persist мог уже это сделать.
+        if launch.indexStale, !indexWritten { enqueueStoreWrite(TripStore.WritePlan(index: monthIndex)) }
         if base.trusted, previousSession != nil {
             // Журнал прошлого недоверенного процесса уже внутри (или в
             // истории, если счётчики пересобраны): сначала файл счётчиков, с
@@ -1250,6 +1471,15 @@ final class TripStats {
         }
         finishLoading()
         onHistoryLoaded?()
+        verifyOlderMonths(launch.unknown)
+    }
+
+    /// Отложить битые месяцы: целиком нечитаемый — переносом, с битыми
+    /// записями — копией (месяц перепишется без них).
+    private func setAsideMonths(_ launch: TripStore.Launch) -> Bool {
+        let paths = Self.storePaths
+        return launch.corrupt.allSatisfy { setAside(.move, paths.shard($0)) }
+            && launch.lossy.allSatisfy { setAside(.copy, paths.shard($0)) }
     }
 
     private func scheduleRetry() {
@@ -1754,7 +1984,7 @@ final class TripStats {
         // По времени, а не первой: впереди могут быть поездки новее.
         let index = history.firstIndex { $0.startedAt < record.startedAt } ?? history.endIndex
         history.insert(record, at: index)
-        history = TripHistory.pruned(history)
+        applyRetention()
         days = TripDayBook.folded(record, into: days)
         let passes = record.passed.map { DrivingScore.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) }
         if let baseDistance = snapshot.baseDistance, let basePassCount = snapshot.basePassCount {
@@ -1858,14 +2088,77 @@ final class TripStats {
         alertRecall = next.alertRecall
         if isLoaded, !isLifetimeTrusted { session.ops.append(op) }
     }
-    private func persist() {
+    /// Записать месяцы, разошедшиеся с диском, и индекс — одним шагом
+    /// очереди записи (месяцы, потом индекс). true — шаг поставлен.
+    @discardableResult
+    private func persist() -> Bool {
         // См. isLoaded: пока история не приехала с диска, в файле лежит
         // правда, а в памяти — пусто; запись в этом окне была бы потерей.
         guard isLoaded else {
             Log.trips.notice("история не записана: ещё не прочитана")
-            return
+            return false
         }
-        JSONFile.saveOrdered(history, to: storeURL, log: Log.trips, wait: mustWriteSynchronously())
+        var grouped = TripStore.grouped(history)
+        // Запись в месяц, которого нет в памяти (слепок давней поездки, нога
+        // разделения за полночь первого числа, копия): сначала подхватить
+        // его с диска — запись из памяти стёрла бы непрочитанное.
+        let foreign = Set(grouped.keys.filter { written[$0] == nil })
+        if !foreign.isEmpty, adoptMonths(foreign) { grouped = TripStore.grouped(history) }
+        var plan = TripStore.WritePlan()
+        for month in Set(grouped.keys).union(written.keys) {
+            // Не подхвачен (не читается) — не трогать: записи ждут в памяти.
+            guard let before = written[month] else { continue }
+            let records = grouped[month] ?? []
+            guard records != before else { continue }
+            written[month] = records
+            if records.isEmpty {
+                plan.removals.insert(month)
+                monthIndex[month] = nil
+            } else {
+                plan.shards[month] = records
+                monthIndex[month] = TripStore.entry(month, records: records)
+            }
+        }
+        guard !plan.isEmpty else { return false }
+        plan.index = monthIndex
+        enqueueStoreWrite(plan)
+        return true
+    }
+
+    private func enqueueStoreWrite(_ plan: TripStore.WritePlan) {
+        let paths = Self.storePaths
+        JSONFile.enqueue(wait: mustWriteSynchronously()) { TripStore.perform(plan, paths: paths) }
+    }
+
+    /// Подхватить с диска месяцы, которых нет в памяти, — синхронно, после
+    /// уже поставленных записей. Редкий путь, поэтому в журнал. true —
+    /// история пополнилась записями с диска.
+    private func adoptMonths(_ months: Set<TripStore.Month>) -> Bool {
+        let paths = Self.storePaths
+        var adopted: [TripRecord] = []
+        for month in months.sorted(by: >) {
+            switch JSONFile.orderedSync({ TripStore.readMonth(month, paths: paths) }) {
+            case .missing:
+                written[month] = []
+            case .loaded(let records, let dropped):
+                if dropped > 0, !setAside(.copy, paths.shard(month)) { continue }
+                written[month] = dropped > 0 ? [] : records
+                monthIndex[month] = TripStore.entry(month, records: records)
+                adopted += records
+                Log.trips.notice("месяц \(month.key, privacy: .public) подхвачен с диска перед записью: \(records.count, privacy: .public) поездок")
+            case .corrupt:
+                guard setAside(.move, paths.shard(month)) else { continue }
+                written[month] = []
+                monthIndex[month] = nil
+            case .unreadable:
+                Log.trips.error("месяц \(month.key, privacy: .public) не читается — запись в него отложена")
+                continue
+            }
+            olderMonths.removeAll { $0 == month }
+        }
+        guard !adopted.isEmpty else { return false }
+        history = TripStore.merging(history, with: adopted)
+        return true
     }
 
     /// Ждать ли записи на диск прямо в вызове. На переднем плане — нет:

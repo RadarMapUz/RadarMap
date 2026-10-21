@@ -407,6 +407,65 @@ final class PerformanceBudgetTests: XCTestCase {
         XCTAssertLessThan(elapsed, .milliseconds(500), "50 чекпоинтов часового трека: \(elapsed)")
     }
 
+    // MARK: - История по месяцам (15.1)
+
+    /// Запуск читает индекс и месяцы окна, а не всю историю: два тяжёлых
+    /// месяца (по 120 поездок с треком в 400 точек и шестью проездами) плюс
+    /// год лёгких месяцев позади. Бюджет — на чтение окна; год позади на
+    /// старте не читается вовсе (иначе запуск рос бы вместе с историей).
+    func testHistoryLaunchBudget() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HistoryLaunch-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let paths = TripStore.Paths(documents: dir)
+        let now = Date(timeIntervalSince1970: 1_793_448_000)   // 31.10.2026
+        func trip(_ start: Date, heavy: Bool) -> TripRecord {
+            var track: [Double]?
+            if heavy {
+                var points: [Double] = []
+                points.reserveCapacity(1200)
+                for step in 0..<400 {
+                    let k = Double(step)
+                    points.append(41.30 + k * 0.0003)
+                    points.append(69.20 + k * 0.0004)
+                    points.append(40 + Double(step % 30))
+                }
+                track = points
+            }
+            let passes = heavy ? (0..<6).map { index in
+                PassedCamera(id: UUID(), cameraID: index, typeRaw: "Стационар радар", location: "Улица \(index)",
+                             speedKmh: 58, date: start.addingTimeInterval(Double(index) * 60),
+                             lat: 41.3, lon: 69.2, limitKmh: 60)
+            } : []
+            return TripRecord(id: start.timeIntervalSince1970, startedAt: start,
+                              endedAt: start.addingTimeInterval(1500), distanceMeters: 12_000,
+                              maxSpeedKmh: 80, passed: passes, endLat: 41.33, endLon: 69.3,
+                              track: track, score: 92, startLat: 41.3, startLon: 69.2)
+        }
+        // Сентябрь и октябрь — по 120 тяжёлых поездок; август пуст; дальше
+        // двенадцать месяцев по 60 лёгких.
+        let heavy = (0..<240).map { trip(now.addingTimeInterval(-Double($0) * 0.25 * 86_400 - 3600), heavy: true) }
+        let light = (0..<720).map { trip(now.addingTimeInterval(-Double(92 + $0 / 2) * 86_400), heavy: false) }
+        var plan = TripStore.WritePlan()
+        for (month, records) in TripStore.grouped(heavy + light) {
+            plan.shards[month] = records
+            plan.index[month] = TripStore.entry(month, records: records)
+        }
+        TripStore.perform(plan, paths: paths)
+
+        let clock = ContinuousClock()
+        let start = clock.now
+        let result = TripStore.readLaunch(paths: paths, now: now, windowDays: AppConfig.tripHistoryLaunchDays,
+                                          minRecords: TripHistory.Retention.current.keepLast, all: false)
+        let elapsed = clock.now - start
+        guard case .ready(let launch) = result else { return XCTFail("история не прочиталась") }
+        XCTAssertEqual(launch.records.count, heavy.count, "в памяти — только окно")
+        XCTAssertGreaterThanOrEqual(launch.older.count, 12, "год позади остаётся на диске")
+        XCTAssertTrue(launch.unknown.isEmpty)
+        XCTAssertLessThan(elapsed, .seconds(1), "запуск истории: индекс + два месяца — \(elapsed)")
+    }
+
     // MARK: - Призрак дороги на работу
 
     /// Фикс призрака — проекция в окне линии и O(1) прогноз: 2000 фиксов

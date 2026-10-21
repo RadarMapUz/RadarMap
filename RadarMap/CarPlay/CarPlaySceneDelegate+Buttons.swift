@@ -56,14 +56,15 @@ extension CarPlaySceneDelegate {
                                                                 reportButton]
                 }
             }
-            // В осмотре система показывает не больше двух кнопок карты и
-            // прячет лишние с конца — оставляем ровно зум.
-            let buttons = [following, panning]
+            // Набор — по состоянию (CarPlayMapButtons): в поездке первой
+            // стоит «Радар!», в осмотре — ровно зум (система показывает там
+            // не больше двух и прячет лишние с конца).
+            let buttons = CarPlayMapButtons.layout(tripActive: tripActive, following: following,
+                                                   panning: panning, previewing: previewing)
             if buttons != sentMapButtons {
                 sentMapButtons = buttons
-                mapTemplate.mapButtons = panning
-                    ? [zoomInButton, zoomOutButton]
-                    : [zoomInButton, zoomOutButton, panButton, recenterButton]
+                Log.carplay.notice("кнопки карты: \(String(describing: buttons), privacy: .public)")
+                mapTemplate.mapButtons = buttons.map(mapButton)
             }
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
@@ -85,8 +86,9 @@ extension CarPlaySceneDelegate {
     /// Значки — голые глифы, без своей подложки: капсулу рисует система, и
     /// ▶ в круге, ромб и пузырь внутри неё читались тяжёлыми чёрными кляксами
     /// разной формы («иконки красиво нужно», владелец, 12.10). И те же, что
-    /// на телефоне: ▶ / ■ — «Начать поездку» и «Стоп», ⚠ — «Радар!», динамик —
-    /// звук. Один глиф на одно действие на обоих экранах.
+    /// на телефоне: ▶ / ■ — «Начать поездку» и «Стоп», динамик — звук. Один
+    /// глиф на одно действие на обоих экранах. Исключение — «Радар!»: она в
+    /// баре словом (`reportButton`, 25.H3).
     func barButton(symbol: String, title: String,
                            handler: @escaping (CPBarButton) -> Void) -> CPBarButton {
         if let image = buttonImage(symbol) {
@@ -227,35 +229,53 @@ extension CarPlaySceneDelegate {
         }
     }
 
-    /// Отметить засаду прямо на ходу — иконкой, чтобы бар не распухал.
-    /// Одно касание — сразу радар; тип уточняет баннер (10.2, `quickRadar`).
+    /// Отметить засаду прямо на ходу. Одно касание — сразу радар; тип
+    /// уточняет баннер (10.2, `quickRadar`); двойное касание и повтор с того
+    /// же места отсекает ReportGuard внутри.
     ///
-    /// Треугольник, как у жёлтой «Радар!» на телефоне и у команды Siri:
-    /// водитель учит один значок, а не два. Речевой пузырь (до 12.10) был
-    /// единственным местом с другим глифом — и читался как «сообщения».
-    ///
-    /// Фолбэк — заголовком, а не пустой картинкой: `?? UIImage()` давал бы
-    /// нажимаемую кнопку-невидимку в баре.
+    /// Словом «Радар!», а не значком (25.H3). Значок волн
+    /// (`Icon.reportRadar`) без подписи в машине читался как AirPlay или
+    /// «вещание» (владелец 21.10), а текст в баре CarPlay — штатный вид
+    /// кнопки (`CPBarButton(title:)`, рядом со значками бара допустим). Слово то же,
+    /// что на жёлтой кнопке телефона и на кнопке карты в поездке.
     var reportButton: CPBarButton {
-        guard let image = buttonImage(Icon.reportRadar) else {
-            return CPBarButton(title: String(localized: "Радар")) { [weak self] _ in
-                self?.quickRadar()
-            }
-        }
-        return CPBarButton(image: image) { [weak self] _ in
+        CPBarButton(title: String(localized: "Радар!")) { [weak self] _ in
             self?.quickRadar()
         }
     }
 
     // MARK: - Кнопки карты
 
+    func mapButton(_ kind: CarPlayMapButtons.Kind) -> CPMapButton {
+        switch kind {
+        case .report: reportMapButton
+        case .zoomIn: zoomInButton
+        case .zoomOut: zoomOutButton
+        case .pan: panButton
+        case .recenter(let following): recenterButton(following: following)
+        }
+    }
+
+    /// «Радар!» кнопкой карты в поездке (25.H3): крупная круглая цель у края,
+    /// куда рука идёт вслепую, — бар для этого мелок. Картинка — жёлтый диск
+    /// со словом (`CarPlayReportImage`), в масштабе экрана машины. Действие —
+    /// то же, что у бара: `quickRadar`, защита от дублей — ReportGuard.
+    var reportMapButton: CPMapButton {
+        let button = CPMapButton { [weak self] _ in self?.quickRadar() }
+        let title = String(localized: "Радар!")
+        let scale = interfaceController?.carTraitCollection.displayScale ?? 2
+        button.image = CarPlayReportImage.render(title: title, scale: scale)
+        button.focusedImage = CarPlayReportImage.render(title: title, scale: scale, focused: true)
+        return button
+    }
+
     /// «К себе». Значок показывает СОСТОЯНИЕ, а не только действие: залитый —
     /// карта едет за машиной, контурный — водитель отпанорамировал в сторону и
     /// карта стоит. Раньше значок был один на оба случая, и единственный способ
     /// понять, следит ли карта, был подождать и посмотреть, уехала ли метка.
-    var recenterButton: CPMapButton {
+    func recenterButton(following: Bool) -> CPMapButton {
         let button = CPMapButton { [model] _ in model.recenter() }
-        button.image = buttonImage(model.isFollowing ? "location.fill" : "location")
+        button.image = buttonImage(following ? "location.fill" : "location")
         return button
     }
 

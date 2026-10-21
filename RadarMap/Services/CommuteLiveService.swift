@@ -176,7 +176,10 @@ final class CommuteLiveService {
             lastForecast = nil
             return
         }
-        guard let forecast = output.forecast else { return }
+        guard let forecast = output.forecast else {
+            recorder?.notePosition(along: output.alongMeters, length: output.lengthMeters, now: now)
+            return
+        }
         lastForecast = (forecast.remaining, now, session.active ?? -1)
         recorder?.note(arrival: forecast.arrival, along: output.alongMeters, length: output.lengthMeters,
                        early: output.early, now: now)

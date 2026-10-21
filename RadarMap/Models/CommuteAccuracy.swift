@@ -89,7 +89,15 @@ nonisolated enum CommuteAccuracy {
             if start == nil { start = point }
             if !early, confirmed == nil { confirmed = point }
             if length > 0, along >= length / 2, middle == nil { middle = point }
-            if reachedEnd == nil, length - along <= AppConfig.commuteAccuracyEndMeters { reachedEnd = now }
+            notePosition(along: along, length: length, now: now)
+        }
+
+        /// Каждый фикс на линии (не только пересчёт раз в участок или 30 с):
+        /// «доехали» — первый фикс у конца линии, а не пересчёт после него.
+        mutating func notePosition(along: Double, length: Double, now: Date) {
+            guard start != nil, reachedEnd == nil, length > 0,
+                  length - along <= AppConfig.commuteAccuracyEndMeters else { return }
+            reachedEnd = now
         }
 
         /// Прогноз спрятан «другой дорогой».
@@ -118,8 +126,9 @@ nonisolated enum CommuteAccuracy {
     /// `commuteAccuracyMaxEntries` — вон. Новые первыми.
     static func appended(_ journal: [Entry], _ entry: Entry, now: Date) -> [Entry] {
         let oldest = now.addingTimeInterval(-AppConfig.commuteAccuracyKeepDays * 86_400)
-        let kept = journal.filter { $0.tripID != entry.tripID && $0.departure >= oldest }
-        return Array(([entry] + kept).sorted { $0.departure > $1.departure }
+        let kept = journal.filter { $0.tripID != entry.tripID }
+        return Array(([entry] + kept).filter { $0.departure >= oldest }
+            .sorted { $0.departure > $1.departure }
             .prefix(AppConfig.commuteAccuracyMaxEntries))
     }
 

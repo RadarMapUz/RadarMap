@@ -124,12 +124,14 @@ nonisolated enum CommuteGhost {
     /// поездках, берёт темп соседей (секунд на метр по всей базе) — дыра в
     /// одной строке не должна делать прогноз невозможным.
     ///
-    /// `weights` — веса строк (Selection; nil — все по 1). `calibrate` —
-    /// привести сумму медиан к медиане целых поездок (24.2: светофоры), `bias`
+    /// `weights` — веса строк (Selection; nil — все по 1), `offsets` — их
+    /// выезд против сегодняшнего. `calibrate` — привести сумму медиан к
+    /// медиане целых поездок (24.2: светофоры) и учесть наклон по выезду; `bias`
     /// — сдвиг из журнала точности; оба до пола лимита, чтобы поправка вниз
     /// не сделала призрака быстрее разрешённого.
     static func baseline(ends rawEnds: [Float], limitKmh: [UInt8], rows: [CommuteProfile.Row],
-                         weights: [Double]? = nil, calibrate: Bool = false, bias: Double = 1,
+                         weights: [Double]? = nil, offsets: [Double] = [],
+                         calibrate: Bool = false, bias: Double = 1,
                          decayMeters: Double = AppConfig.commuteGhostDecayMeters) -> Baseline? {
         let ends = rawEnds.map(Double.init)
         guard !ends.isEmpty, !rows.isEmpty else { return nil }
@@ -172,6 +174,7 @@ nonisolated enum CommuteGhost {
         var scale = 1.0, spread = 0.0
         if calibrate {
             scale = calibration(rows: rows, weights: w, median: median)
+                * departureTrend(rows: rows, weights: w, offsets: offsets, median: median)
             spread = totalSpread(rows: rows, weights: w, median: median)
         }
         scale *= min(max(bias, AppConfig.commuteAccuracyBiasMin), AppConfig.commuteAccuracyBiasMax)

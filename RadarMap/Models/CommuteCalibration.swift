@@ -16,7 +16,7 @@
 //     новая модель.
 //  2. Ступени ±60/±120 мин смешивали выезд 7:40 и 8:30 — в восемь утра
 //     полчаса это другая дорога. Строки теперь взвешиваются по близости
-//     выезда (ядро Гаусса ~20 мин); ступени остаются запасным путём, когда в
+//     выезда (ядро Гаусса ~20 мин и наклон внутри него); ступени остаются запасным путём, когда в
 //     ядро легло меньше `commuteGhostKernelMinMass` «поездок».
 //
 //  Поправка остаточного сдвига из журнала точности (CommuteAccuracy) — третий
@@ -38,6 +38,9 @@ nonisolated extension CommuteGhost {
         let rows: [CommuteProfile.Row]
         let weights: [Double]
         let tier: RowTier
+        /// Выезд строки минус сегодняшний, мин (−720…720): для наклона «раньше
+        /// выехал — быстрее доехал» внутри ядра. Пусто — у ступеней.
+        var offsets: [Double] = []
         /// Сумма весов — сколько «поездок» на самом деле легло в выборку.
         var mass: Double { weights.reduce(0, +) }
     }
@@ -62,23 +65,31 @@ nonisolated extension CommuteGhost {
         }
         var picked: [CommuteProfile.Row] = []
         var weights: [Double] = []
+        var offsets: [Double] = []
         var sameDay: [Int] = []
         for row in sameClass {
-            let m = CommuteProfile.minuteOfDay(row.departure, calendar: calendar)
-            let d = abs(m - minute)
-            let w = kernelWeight(minutesApart: min(d, 1440 - d))
+            var d = CommuteProfile.minuteOfDay(row.departure, calendar: calendar) - minute
+            if d > 720 { d -= 1440 } else if d < -720 { d += 1440 }
+            let w = kernelWeight(minutesApart: abs(d))
             guard w >= AppConfig.commuteGhostKernelMinWeight else { continue }
             if calendar.component(.weekday, from: row.departure) == weekday { sameDay.append(picked.count) }
             picked.append(row)
             weights.append(w)
+            offsets.append(Double(d))
         }
         if picked.count >= minRows, weights.reduce(0, +) >= AppConfig.commuteGhostKernelMinMass {
-            // Понедельник утром не вторник: в будни свой день весит вдвое, но
-            // только когда таких строк рядом хватает — одна поездка не «обычно».
-            if sameDay.reduce(0, { $0 + weights[$1] }) >= AppConfig.commuteGhostWeekdayMinMass {
-                for i in sameDay { weights[i] *= AppConfig.commuteGhostWeekdayBoost }
+            // Понедельник утром не вторник: когда своего дня рядом хватает на
+            // «обычно», он получает `commuteGhostWeekdayShare` всего веса, а
+            // остальные дни — остаток (сглаживают, но не решают). Мало своего
+            // дня — все дни на равных: одна поездка не «обычно».
+            let same = sameDay.reduce(0) { $0 + weights[$1] }
+            let other = weights.reduce(0, +) - same
+            if same >= AppConfig.commuteGhostWeekdayMinMass, other > 0 {
+                let share = AppConfig.commuteGhostWeekdayShare
+                let boost = max(1, share / (1 - share) * other / same)
+                for i in sameDay { weights[i] *= boost }
             }
-            return Selection(rows: picked, weights: weights, tier: .hour)
+            return Selection(rows: picked, weights: weights, tier: .hour, offsets: offsets)
         }
         guard let tiered = selectRowsTiered(rows, weekend: weekend, departureMinute: minute,
                                             calendar: calendar, minRows: minRows) else { return nil }
@@ -155,11 +166,46 @@ nonisolated extension CommuteGhost {
         return spread.isFinite ? max(0, spread) : 0
     }
 
-    /// База по выборке: веса, поправка на светофоры и сдвиг журнала — одним
-    /// вызовом для призрака и «сейчас ~44 мин».
+    // MARK: - Наклон по выезду
+
+    /// «Выехал раньше — доехал быстрее» внутри ядра: строки ядра лежат не
+    /// симметрично вокруг сегодняшнего выезда (у края часа пик — почти все с
+    /// одной стороны), и взвешенная медиана тянет прогноз к их середине. По
+    /// тем же строкам — взвешенная прямая «отношение строки ↔ разница
+    /// выездов», и база сдвигается на её значение в нуле против центра
+    /// строк. Мало строк или выезды почти одни и те же — 1; не больше
+    /// ±`commuteGhostTrendMaxShare`: это поправка края, а не новая модель.
+    /// На синтетике 7:25–8:35 (20 историй): ошибка у краёв ~70 с → ~40 с.
+    static func departureTrend(rows: [CommuteProfile.Row], weights: [Double], offsets: [Double],
+                               median: [Double]) -> Double {
+        guard offsets.count == rows.count, rows.count >= AppConfig.commuteGhostTrendMinRows else { return 1 }
+        var points: [(x: Double, y: Double, w: Double)] = []
+        for (r, row) in rows.enumerated() {
+            var own = 0.0, usual = 0.0
+            for j in 0..<min(row.seconds.count, median.count) where row.seconds[j] != CommuteProfile.Row.noData {
+                own += Double(row.seconds[j])
+                usual += median[j]
+            }
+            guard usual > 0, r < weights.count else { continue }
+            points.append((offsets[r], own / usual, weights[r]))
+        }
+        let total = points.reduce(0) { $0 + $1.w }
+        guard points.count >= AppConfig.commuteGhostTrendMinRows, total > 0 else { return 1 }
+        let x = points.reduce(0) { $0 + $1.w * $1.x } / total
+        let y = points.reduce(0) { $0 + $1.w * $1.y } / total
+        let variance = points.reduce(0) { $0 + $1.w * ($1.x - x) * ($1.x - x) } / total
+        guard variance >= AppConfig.commuteGhostTrendMinVariance, y > 0 else { return 1 }
+        let slope = points.reduce(0) { $0 + $1.w * ($1.x - x) * ($1.y - y) } / total / variance
+        let factor = 1 + slope * (0 - x) / y
+        let limit = AppConfig.commuteGhostTrendMaxShare
+        return factor.isFinite ? min(max(factor, 1 - limit), 1 + limit) : 1
+    }
+
+    /// База по выборке: веса, поправка на светофоры, наклон по выезду и сдвиг
+    /// журнала — одним вызовом для призрака и «сейчас ~44 мин».
     static func calibratedBaseline(_ variant: CommuteProfile.Variant, selection: Selection,
                                    bias: Double = 1) -> Baseline? {
         baseline(ends: variant.ends, limitKmh: variant.limitKmh, rows: selection.rows,
-                 weights: selection.weights, calibrate: true, bias: bias)
+                 weights: selection.weights, offsets: selection.offsets, calibrate: true, bias: bias)
     }
 }

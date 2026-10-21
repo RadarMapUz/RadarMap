@@ -218,9 +218,17 @@ enum TripStartMode: String, CaseIterable, Identifiable {
 }
 
 /// Чем машина заправляется: какие плитки «в дороге» показывать в «Куда»
-/// (сетка CarPlay — восемь мест, и «Зарядка» бензиновой машине — шум).
+/// (сетка CarPlay — восемь мест, и «Зарядка» бензиновой машине — шум) и как
+/// считать расходы (EnergySplit).
+///
+/// «Гибрид» до 21.10 был один и считался «бензин + электричество». Это два
+/// разных мира: гибрид без розетки (Prius, Camry Hybrid) ездит только на
+/// бензине, гибрид с розеткой (BYD DM-i, Li Auto) — на электричестве, пока
+/// есть заряд. Сырое значение `hybrid` осталось за гибридом С розеткой —
+/// так прежние настройки работают как раньше, пока водитель не ответит на
+/// вопрос «заряжается ли от розетки» (`FuelProfile.hybridPlugConfirmed`).
 enum VehicleEnergy: String, CaseIterable, Identifiable {
-    case fuel, cng, lpg, electric, hybrid
+    case fuel, cng, lpg, hev, hybrid, electric
 
     var id: String { rawValue }
 
@@ -229,16 +237,18 @@ enum VehicleEnergy: String, CaseIterable, Identifiable {
         case .fuel:     return String(localized: "Бензин")
         case .cng:      return String(localized: "Метан")
         case .lpg:      return String(localized: "Пропан")
+        case .hev:      return String(localized: "Гибрид без розетки")
+        case .hybrid:   return String(localized: "Гибрид с розеткой")
         case .electric: return String(localized: "Электромобиль")
-        case .hybrid:   return String(localized: "Гибрид")
         }
     }
 
     /// Плитки заведений в «Куда», по порядку. Машина на газу ищет сначала
     /// свой газ, а бензин — запасом: АГНКС меньше, и очередь на ней — быль.
+    /// Гибриду без розетки зарядка не нужна вовсе.
     var stops: [Venue.Kind] {
         switch self {
-        case .fuel:     return [.fuel]
+        case .fuel, .hev: return [.fuel]
         case .cng:      return [.cng, .fuel]
         case .lpg:      return [.lpg, .fuel]
         case .electric: return [.charging]
@@ -480,11 +490,12 @@ final class AppSettings {
         didSet { store.set(tripStartMode.rawValue, forKey: Keys.tripStartMode) }
     }
     var alertVolume: Double { didSet { store.set(alertVolume, forKey: Keys.volume) } }
-    /// Чем заправляется машина — плитки «АЗС» / «Зарядка» в «Куда».
+    /// Чем заправляется машина — плитки «АЗС» / «Зарядка» в «Куда» и расчёт
+    /// расходов (EnergySplit). Выбор — через `chooseVehicle` (AppSettings+Energy).
     var vehicleEnergy: VehicleEnergy {
         didSet { store.set(vehicleEnergy.rawValue, forKey: Keys.vehicleEnergy) }
     }
-    /// Расход и цены топлива (FuelCost, 12б.3): только на телефоне.
+    /// Машина, расход и цены (FuelCost, 12б.3; 21.10): только на телефоне.
     var fuelProfile: FuelProfile { didSet { saveFuelProfile() } }
     var homePlace: SavedPlace? { didSet { save(homePlace, forKey: Keys.home) } }
     var workPlace: SavedPlace? { didSet { save(workPlace, forKey: Keys.work) } }
@@ -1036,12 +1047,3 @@ final class AppSettings {
     }
 }
 
-extension AppSettings {
-    /// Сумов на метр пути по нынешней «Машине»; nil — расход или цена не заданы.
-    var fuelCostPerMeter: Double? { FuelCost.costPerMeter(profile: fuelProfile, energy: vehicleEnergy) }
-
-    /// Стоимость пути в сумах, nil — профиль не готов.
-    func fuelCost(meters: Double) -> Double? {
-        FuelCost.cost(meters: meters, profile: fuelProfile, energy: vehicleEnergy)
-    }
-}

@@ -2,21 +2,27 @@
 //  FuelCost.swift
 //  RadarMap
 //
-//  Сколько стоит дорога (план 19.10, 12б.3). Расход и цену знает только
-//  водитель: цен по умолчанию нет — они меняются, и подставленная «средняя
-//  по Ташкенту» через месяц соврала бы в каждой поездке. Через 60 дней
-//  после последней правки цены приложение просит её обновить.
+//  Что водитель сказал о своей машине (план 19.10, 12б.3; 21.10 — «Машина
+//  и расходы»). Расход и цену знает только водитель: цен по умолчанию нет —
+//  они меняются, и подставленная «средняя по Ташкенту» через месяц соврала
+//  бы в каждой поездке. Через 60 дней после последней правки цены
+//  приложение просит её обновить.
 //
-//  Вид топлива — из настройки «Машина» (VehicleEnergy), которая уже решает
-//  плитки «АЗС/Метан/Зарядка» в CarPlay: машина на метане ездит на метане и
-//  иногда на бензине, гибрид с розеткой — на бензине и иногда от сети.
-//  Второе топливо — долей пробега (0…1).
+//  Спрашиваем то, что человек знает: запас хода по паспорту и цикл, «заряжаю
+//  каждую ночь», «дома свет по … сум», цифру с панели машины. Технические
+//  кВт·ч на 100 км считаем сами (EnergySplit).
+//
+//  Профиль лежит у пользователей на диске с 12б.3: все поля, появившиеся
+//  21.10, — опциональные (правило 18), прежние не переименованы. Старая
+//  цена электричества — это цена ДОМА, старый расход электричества — цифра,
+//  которую водитель ввёл сам (как с панели), старая доля второго топлива —
+//  для метана/пропана и запасной путь гибрида с розеткой без запаса хода.
 //
 //  Задним числом стоимость не хранится: старая поездка считается по
 //  нынешней цене и помечается «по нынешней цене» — честнее, чем делать
 //  вид, что мы знаем, сколько стоил литр в прошлом месяце.
 //
-//  Чистая логика — FuelCostTests.
+//  Чистая логика — FuelCostTests, EnergySplitTests.
 //
 
 import Foundation
@@ -48,74 +54,157 @@ nonisolated enum Fuel: String, Codable, CodingKeyRepresentable, CaseIterable, Se
 nonisolated struct FuelRate: Codable, Equatable, Sendable {
     /// Единиц на 100 км; 0 — не задан.
     var per100Km: Double = 0
-    /// Сумов за единицу; 0 — не задана.
+    /// Сумов за единицу; 0 — не задана. У электричества — цена ДОМА.
     var price: Double = 0
+}
 
-    var isSet: Bool { per100Km > 0 && price > 0 }
-    /// Сумов на метр пути.
-    var costPerMeter: Double { per100Km / 100_000 * price }
+/// По какому циклу измерен паспортный запас хода. Реальный запас в городе —
+/// паспортный × коэффициент цикла (AppConfig): CLTC обещает больше всех.
+nonisolated enum RangeCycle: String, Codable, CaseIterable, Sendable {
+    case cltc, nedc, wltp
+
+    /// Название цикла — латинское сокращение, одно на всех языках.
+    var title: String {
+        switch self {
+        case .cltc: return "CLTC"
+        case .nedc: return "NEDC"
+        case .wltp: return "WLTP"
+        }
+    }
+
+    var factor: Double {
+        switch self {
+        case .cltc: return AppConfig.energyCycleFactorCLTC
+        case .nedc: return AppConfig.energyCycleFactorNEDC
+        case .wltp: return AppConfig.energyCycleFactorWLTP
+        }
+    }
+}
+
+/// Как часто гибрид с розеткой встаёт на зарядку.
+nonisolated enum ChargeSchedule: String, Codable, CaseIterable, Sendable {
+    case nightly, everyOtherDay, weekly, rarely
+
+    /// Через сколько дней заряд снова полный; nil — почти не заряжают, и
+    /// пробег на электричестве — постоянной долей (`FuelProfile.secondShare`).
+    var everyDays: Int? {
+        switch self {
+        case .nightly: return 1
+        case .everyOtherDay: return 2
+        case .weekly: return 7
+        case .rarely: return nil
+        }
+    }
+}
+
+/// Где заряжают — от этого цена: дома свет в разы дешевле станции.
+nonisolated enum ChargePlace: String, Codable, CaseIterable, Sendable {
+    case home, station, both
 }
 
 /// Всё, что водитель сказал о расходе. По виду топлива — свой расход и цена:
 /// поменял «Машину» с метана на бензин — прежние цифры метана не пропали.
 nonisolated struct FuelProfile: Codable, Equatable, Sendable {
     var rates: [Fuel: FuelRate] = [:]
-    /// Доля пробега на втором топливе (0…1).
+    /// Доля пробега на втором топливе (0…1): бензин у машины на газу; у
+    /// гибрида с розеткой — доля на электричестве, когда заряжают «почти
+    /// никогда» или запас хода ещё не указан (так считалось до 21.10).
     var secondShare: Double = 0
     /// Когда последний раз правили цену — от него «обновите цены».
     var pricesUpdatedAt: Date?
 
+    // MARK: 21.10 — гибрид с розеткой и электромобиль (всё опционально)
+
+    /// Запас на электричестве по паспорту, км.
+    var evPassportKm: Double?
+    /// Цикл паспорта; nil — CLTC (у китайских машин, а их здесь большинство).
+    var evCycle: RangeCycle?
+    /// Реальный запас, поправленный водителем или «Сверить с машиной».
+    /// nil — паспортный × коэффициент цикла.
+    var evRealKm: Double?
+    /// Ёмкость батареи, кВт·ч — из документов; необязательно.
+    var batteryKWh: Double?
+    var chargeSchedule: ChargeSchedule?
+    var chargePlace: ChargePlace?
+    /// Доля зарядки дома при «и там и там» (0…1).
+    var homeChargeShare: Double?
+    /// Цена на зарядной станции, сум/кВт·ч (дома — `rates[.electricity].price`).
+    var stationPrice: Double?
+    /// Ответ на «ваш гибрид заряжается от розетки?» уже есть (или тип выбран
+    /// в новом мастере) — вопрос больше не задаём.
+    var hybridPlugConfirmed: Bool?
+    /// Мастер пройден или пропущен — дальше сводка, а не мастер.
+    var setupDone: Bool?
+
     func rate(_ fuel: Fuel) -> FuelRate { rates[fuel] ?? FuelRate() }
+
+    /// Реальный запас в городе, км; nil — не указан.
+    var realRangeKm: Double? {
+        if let evRealKm, evRealKm > 0 { return evRealKm }
+        guard let evPassportKm, evPassportKm > 0 else { return nil }
+        return evPassportKm * (evCycle ?? .cltc).factor
+    }
+
+    /// Расход электричества, кВт·ч на 100 км, и оценка ли это. Цифра с
+    /// панели (введённая водителем) — первая; затем — из ёмкости и реального
+    /// запаса; без обоих — типичный, с подписью «оценка».
+    var kWhPer100: (value: Double, isEstimate: Bool) {
+        let entered = rate(.electricity).per100Km
+        if entered > 0 { return (entered, false) }
+        if let batteryKWh, batteryKWh > 0, let range = realRangeKm, range > 0 {
+            return (batteryKWh * AppConfig.energyUsableBatteryShare / range * 100, false)
+        }
+        return (AppConfig.energyDefaultKWhPer100, true)
+    }
+
+    /// Сумов за кВт·ч по месту зарядки; nil — нужной цены нет.
+    var electricityPrice: Double? {
+        let home = rate(.electricity).price
+        let station = stationPrice ?? 0
+        switch chargePlace ?? .home {
+        case .home: return home > 0 ? home : nil
+        case .station: return station > 0 ? station : nil
+        case .both:
+            guard home > 0, station > 0 else { return nil }
+            let share = min(1, max(0, homeChargeShare ?? AppConfig.energyHomeChargeShareDefault))
+            return home * share + station * (1 - share)
+        }
+    }
+
+    /// Профиль пуст: ни одного числа — первый вход, место мастеру.
+    var isBlank: Bool {
+        rates.values.allSatisfy { $0.per100Km <= 0 && $0.price <= 0 }
+            && evPassportKm == nil && evRealKm == nil && batteryKWh == nil && stationPrice == nil
+    }
 }
 
 extension VehicleEnergy {
     /// Основное и второе топливо машины.
     nonisolated var fuels: (primary: Fuel, second: Fuel?) {
         switch self {
-        case .fuel: return (.petrol, nil)
+        case .fuel, .hev: return (.petrol, nil)
         case .cng: return (.methane, .petrol)
         case .lpg: return (.propane, .petrol)
         case .electric: return (.electricity, nil)
         case .hybrid: return (.petrol, .electricity)
         }
     }
+
+    /// Нужна ли машине розетка: запас хода, зарядка, кВт·ч.
+    nonisolated var plugs: Bool {
+        switch self {
+        case .hybrid, .electric: return true
+        default: return false
+        }
+    }
 }
 
 nonisolated enum FuelCost {
-    /// Сумов на метр пути; nil — расход или цена основного топлива не заданы
-    /// (или второго, если на нём есть доля пробега).
-    static func costPerMeter(profile: FuelProfile, energy: VehicleEnergy) -> Double? {
-        let (primary, second) = energy.fuels
-        let main = profile.rate(primary)
-        guard main.isSet else { return nil }
-        guard let second, profile.secondShare > 0 else { return main.costPerMeter }
-        let other = profile.rate(second)
-        guard other.isSet else { return nil }
-        let share = min(1, max(0, profile.secondShare))
-        return main.costPerMeter * (1 - share) + other.costPerMeter * share
-    }
-
-    /// Стоимость пути в сумах, округлённая для глаз; nil — профиль не готов.
-    static func cost(meters: Double, profile: FuelProfile, energy: VehicleEnergy) -> Double? {
-        guard let perMeter = costPerMeter(profile: profile, energy: energy) else { return nil }
-        return rounded(max(0, meters) * perMeter)
-    }
-
     /// До 100 сумов на малых суммах, до 1 000 — от 10 000: «12 300 сум» за
     /// поездку и «420 000 сум» за месяц, без ложной точности до сума.
     static func rounded(_ sum: Double) -> Double {
         let step = sum >= 10_000 ? 1_000.0 : 100.0
         return (sum / step).rounded() * step
-    }
-
-    /// Дорога на работу в месяц: сумма поездок этого направления за 30 дней
-    /// окна. nil — профиль не готов или поездок за 30 дней нет.
-    static func monthly(trips: [Commute.Trip], costPerMeter: Double?, now: Date) -> Double? {
-        guard let costPerMeter else { return nil }
-        let since = now.addingTimeInterval(-30 * 86_400)
-        let meters = trips.filter { $0.departure >= since }.reduce(0) { $0 + $1.distanceMeters }
-        guard meters > 0 else { return nil }
-        return rounded(meters * costPerMeter)
     }
 
     /// Пора ли просить обновить цену: с последней правки прошло 60 дней.

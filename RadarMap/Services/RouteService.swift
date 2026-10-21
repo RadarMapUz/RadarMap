@@ -1732,6 +1732,29 @@ final class RouteService {
         detourCounter += 1
         detourOffer = DetourOffer(id: detourCounter, saving: 8 * 60, via: "Шота Руставели", waitingSince: Date())
     }
+
+    /// Скриншот-хук `-demoMyRoad` (24.4): варианты движка и своя дорога без
+    /// сети — пути подставные, а выбор, ярлыки и время по своим поездкам
+    /// идут настоящим путём (`merge` → `apply`).
+    func seedDemoMyRoad(name: String, destination: CLLocationCoordinate2D,
+                        engine: [(path: [CLLocationCoordinate2D], seconds: TimeInterval)],
+                        mine: (path: [CLLocationCoordinate2D], seconds: TimeInterval),
+                        plan: MyRoad.Plan, cameras: [Camera]) async {
+        func built(_ path: [CLLocationCoordinate2D], _ seconds: TimeInterval) -> BuiltVariant {
+            let points = path.map(MKMapPoint.init)
+            let length = zip(points, points.dropFirst()).reduce(0) { $0 + $1.0.distance(to: $1.1) }
+            let arrive = RouteStep(distanceAlong: length, text: String(localized: "Вы на месте"),
+                                   icon: "flag.checkered", kind: .arrive)
+            return BuiltVariant(points: points, distance: length, travelTime: seconds, steps: [arrive])
+        }
+        generation += 1
+        let gen = generation
+        let merged = Self.merge(engine.map { built($0.path, $0.seconds) }, mine: built(mine.path, mine.seconds),
+                                plan: plan)
+        await apply(merged.variants, name: name, destination: destination, cameras: cameras, gen: gen,
+                    history: personalHistory?() ?? RouteChoice.History(tracks: [], overspeedCameraIDs: []),
+                    myRoad: merged.index.map { ($0, plan) })
+    }
     #endif
 
     private func resetDetour() {

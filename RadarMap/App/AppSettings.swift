@@ -577,6 +577,12 @@ final class AppSettings {
     var trafficContribution: Bool {
         didSet { store.set(!trafficContribution, forKey: Keys.trafficContributionOff) }
     }
+    /// Напоминания об обслуживании машины (18.3). Включены: напоминать есть о
+    /// чём, только когда водитель сам ввёл пробег или даты. Хранится
+    /// выключение — без регистрации умолчания.
+    var maintenanceReminders: Bool {
+        didSet { store.set(!maintenanceReminders, forKey: Keys.maintenanceRemindersOff) }
+    }
 
     /// Профиль оповещений. Записывает нижележащие `voiceMode`/`alertMode`,
     /// поэтому остальной код о нём знать не обязан (см. AlertProfile).
@@ -732,6 +738,7 @@ final class AppSettings {
         static let usageStats = "usageStatsDisabled"
         static let trafficHidden = "trafficHidden"
         static let trafficContributionOff = "trafficContributionOff"
+        static let maintenanceRemindersOff = "maintenanceRemindersOff"
         static let alertProfile = "alertProfile"
     }
 
@@ -842,6 +849,7 @@ final class AppSettings {
         usageStatsEnabled = !store.bool(forKey: Keys.usageStats)
         trafficShown = !store.bool(forKey: Keys.trafficHidden)
         trafficContribution = !store.bool(forKey: Keys.trafficContributionOff)
+        maintenanceReminders = !store.bool(forKey: Keys.maintenanceRemindersOff)
         // Переезд со старой версии: профиля ещё нет — выводим его из того, что
         // человек уже выбрал, чтобы ни одна привычка не сменилась молча.
         let storedProfile = AlertProfile(rawValue: store.string(forKey: Keys.alertProfile) ?? "")

@@ -220,6 +220,14 @@ struct TripSettingsPage: View {
                         }
                     }
                 }
+                NavigationLink {
+                    MaintenancePage()
+                } label: {
+                    LabeledContent("Обслуживание") {
+                        Text(MaintenanceText.summary(env.maintenance.states(),
+                                                     hasOdometer: env.maintenance.odometerKm != nil))
+                    }
+                }
             } footer: {
                 Text("В «Куда» в CarPlay — «АЗС», «Зарядка» или обе: в машине на них одна плитка. Расход и цены — для стоимости поездок.")
             }

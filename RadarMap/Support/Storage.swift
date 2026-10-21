@@ -70,6 +70,8 @@ enum Storage {
         case cngAskedAt             // метан: о какой станции и когда спрашивали (JSON, 3 ч)
         case workShiftLog           // журнал закрытых смен таксиста (WorkShift, JSON, 90 дней)
         case familyLink             // семейная ссылка прибытия (FamilyLink, JSON; токен меняется раз в 30 дней)
+        case maintenanceBook        // обслуживание машины: пробег и пункты (MaintenanceBook, JSON)
+        case maintenanceReminders   // журнал напоминаний об обслуживании: id → момент показа (JSON)
     }
 
     private static var defaults: UserDefaults { .standard }

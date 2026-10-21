@@ -204,6 +204,8 @@ struct RootView: View {
                 Task {
                     await env.notifications.refreshStatus()
                     env.refreshDepartureReminders()
+                    // Обслуживание: даты наступают и без поездок.
+                    env.refreshMaintenanceReminders(moment: .opened)
                 }
             case .background:
                 env.location.setForeground(false)   // в поездке непрерывный GPS продолжит работать

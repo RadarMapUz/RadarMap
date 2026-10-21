@@ -97,6 +97,8 @@ final class AppEnvironment {
     /// «Обычно по водителям» (8.8.16): файлы traffic/typical по запросу — для
     /// дороги на работу, пока своих поездок меньше трёх.
     let typicalTraffic = TypicalTrafficService()
+    /// Обслуживание машины (18): пробег, масло, документы — только на телефоне.
+    let maintenance: MaintenanceService
 
     /// CarPlay подключён. Наблюдаемый флаг для интерфейса телефона: пока едет
     /// машина, телефонная карта уступает место дешёвому экрану передачи —
@@ -246,6 +248,7 @@ final class AppEnvironment {
         self.notifications = notifications
         self.alerts = alerts
         self.trip = trip
+        self.maintenance = MaintenanceService(trip: trip, settings: settings)
         self.speedLimits = SpeedLimitService(settings: settings)
         self.location = LocationService(
             repository: cameras,
@@ -342,6 +345,8 @@ final class AppEnvironment {
             // кончили поездку — план заново (машину переставили во дворе —
             // напоминание вернётся).
             self.refreshDepartureReminders(tripEdge: true)
+            // Обслуживание: в поездке поставленное снять, после — машина стоит.
+            self.refreshMaintenanceReminders(moment: .parked)
             self.refreshTrafficWanted()
             if !active, !self.isPhoneSceneActive, !self.isCarPlayConnected {
                 self.mobile.stopPolling()
@@ -352,6 +357,9 @@ final class AppEnvironment {
         // водитель — запоминаем магнитолу машины, чтобы не переспрашивать.
         notifications.onPassengerConfirmed = { [weak location] in location?.markPassenger() }
         notifications.onDriverConfirmed = { [weak location] in location?.confirmDriver() }
+        // Обслуживание: правка на экране — пересчёт напоминаний; то, что
+        // человек только что правил, он уже видел.
+        maintenance.onEdited = { [weak self] seen in self?.maintenanceEdited(seen) }
 
         // Одноразовая ретро-чистка «мостовых» проездов: оси дорог появились в
         // базе v8 — старые «проезды» поперёк оси (мост над камерой) выкидываем.
@@ -547,6 +555,8 @@ final class AppEnvironment {
             self?.commuteProfiles.retryLoadNow()
             self?.refreshLearnedPlaces()
             self?.refreshWidgetSnapshot()
+            // Пробег обслуживания считается по дням поездок — теперь он верный.
+            self?.refreshMaintenanceReminders(moment: .opened)
             // «Свои камеры» считаются ПО ИСТОРИИ, а bootstrap() успевает
             // раньше, чем она приедет с диска: список выходил пустым, и до
             // первой поездки на карте не было ни одной зелёной галочки, а
@@ -595,6 +605,8 @@ final class AppEnvironment {
             // Свежая поездка меняет распорядок — подсказка «Домой» обязана
             // знать о новом доме сразу, а не со следующего запуска.
             self?.refreshLearnedPlaces()
+            // Пробег вырос на эту поездку — пороги обслуживания по нему.
+            self?.refreshMaintenanceReminders(moment: .parked)
             guard let notifications else { return }
             // Тот же расчёт, что на экране Итогов: пуш и экран не имеют права
             // разойтись в цифрах (раньше здесь смешивались окна 7 и 30 дней).
@@ -735,6 +747,7 @@ final class AppEnvironment {
     /// через паузу повтора (ревью S9, третий круг).
     func reloadProtectedStores() {
         trip.retryLoadNow()
+        maintenance.reloadIfNeeded()
         trip.retryLegacyLifetime()
         commuteProfiles.retryLoadNow()
         cameras.reloadUserDataIfNeeded()

@@ -135,6 +135,21 @@ struct TripStatsSheet: View {
                             .entrance(0, appeared)
                     }
 
+                    // Обслуживание (18.2) — только когда что-то скоро или пора:
+                    // это дело, а не статистика, поэтому выше периода.
+                    let maintenance = env.maintenance.attention()
+                    if !maintenance.isEmpty {
+                        NavigationLink {
+                            MaintenancePage()
+                        } label: {
+                            MaintenanceCard(states: maintenance)
+                        }
+                        .buttonStyle(PressableStyle())
+                        .accessibilityHint(Text("Открыть обслуживание"))
+                        .entrance(0, appeared)
+                        .id("maintenance")
+                    }
+
                     // Пикер и стрелки — одна визуальная группа и ЛИПКАЯ:
                     // прокрутив до списка поездок, человек переставал видеть,
                     // за какое окно эти цифры, и «3–9 августа» приходилось

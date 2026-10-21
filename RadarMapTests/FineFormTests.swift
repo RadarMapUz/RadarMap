@@ -26,7 +26,8 @@ final class FineFormTests: XCTestCase {
         form.apply(draft, calendar: calendar)
         XCTAssertEqual(form.day, calendar.date(from: DateComponents(year: 2026, month: 10, day: 14)))
         XCTAssertFalse(form.timeKnown)
-        XCTAssertEqual(form.amount, "340000")
+        XCTAssertEqual(form.amount, FineForm.grouped(340_000))
+        XCTAssertEqual(FineForm.integer(form.amount), 340_000)
         XCTAssertEqual(form.resolution, "вписано руками")
         XCTAssertEqual(form.speed, "")
         XCTAssertEqual(form.unsure, [.date])
@@ -96,5 +97,16 @@ final class FineFormTests: XCTestCase {
         XCTAssertEqual(edited.amount, 440_000)
         XCTAssertEqual(edited.violationAt, original.violationAt)
         XCTAssertEqual(edited.sourceKind, .pasted)
+    }
+
+    /// Сумма с разделителями разрядов — сверять с постановлением глазами;
+    /// разбор при этом берёт только цифры.
+    func testAmountIsGroupedAndStillParses() {
+        let grouped = FineForm.groupedDigits("2200000")
+        XCTAssertNotEqual(grouped, "2200000", "разряды разделены")
+        XCTAssertEqual(FineForm.integer(grouped), 2_200_000)
+        XCTAssertEqual(FineForm.groupedDigits(grouped), grouped, "повторная группировка ничего не меняет")
+        XCTAssertEqual(FineForm.groupedDigits(""), "")
+        XCTAssertEqual(FineForm.groupedDigits("сум"), "")
     }
 }

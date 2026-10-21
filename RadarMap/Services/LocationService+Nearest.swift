@@ -40,15 +40,18 @@ extension LocationService {
         return AlertEngine.level(distance: d, radius: radius)
     }
 
-    /// Текущее состояние для Live Activity.
+    /// Текущее состояние для Live Activity. Камера — для ПОКАЗА (25.I: не
+    /// мигает в пробке), уровень — тревоги.
     var activityState: CameraActivityAttributes.ContentState {
         let now = Date()
         let ghost = activityGhost?()
+        let camera = displayNearestCamera
+        let distance = displayDistanceToNearest
         return CameraActivityAttributes.ContentState(
-            nearestTitle: nearestCamera?.displayTitle,
-            nearestSymbol: nearestCamera?.kind.symbolName ?? "checkmark.shield.fill",
-            distanceMeters: distanceToNearest,
-            arrivesAt: LiveActivityService.arrival(distance: distanceToNearest, speedKmh: speedKmh, now: now),
+            nearestTitle: camera?.displayTitle,
+            nearestSymbol: camera?.kind.symbolName ?? "checkmark.shield.fill",
+            distanceMeters: distance,
+            arrivesAt: LiveActivityService.arrival(distance: distance, speedKmh: speedKmh, now: now),
             since: now,
             etaClock: ghost?.clock,
             etaCaption: ghost?.caption,
@@ -136,6 +139,10 @@ extension LocationService {
         if distanceToNearest != nil { distanceToNearest = nil }
         nearestViaRoute = false
         if !clusteredCameras.isEmpty { clusteredCameras = [] }
+        // Показа без камеры предупреждения не бывает: окно пусто или гейты
+        // на ходу не нашли нашей — держать нечего (25.I).
+        nearestDisplayHold = NearestDisplayHold()
+        if heldNearest != nil { heldNearest = nil }
     }
 
     /// `fromFix` — вызов с настоящего фикса GPS (handleLocation). Учёт
@@ -230,9 +237,15 @@ extension LocationService {
         candidates.sort { $0.distance < $1.distance }
         // В движении HUD показывает ближайшую камеру НА НАШЕЙ ДОРОГЕ впереди;
         // камеры позади и с соседних улиц не пугают зря.
-        guard let index = candidates.firstIndex(where: {
-            LocationGates.isOnOurRoad($0.camera, in: situation, isOnRoute: $0.onRoute)
-        }) else { clearNearest(); return }
+        guard let index = LocationGates.nearestOursIndex(candidates, in: situation)
+        else { clearNearest(); return }
+        // Показ (25.I): ниже порога гейтов недолго держим прежнюю «нашу
+        // впереди». Индекс предупреждения — только вход, выбор ниже — его.
+        let shown = nearestDisplayHold.update(candidates: candidates, alertIndex: index,
+                                              situation: situation, now: Date())
+        let held = shown.map { HeldNearest(camera: candidates[$0].camera,
+                                           distance: candidates[$0].distance) }
+        if heldNearest != held { heldNearest = held }
         let found = candidates[index]
         nearestViaRoute = found.onRoute
         // Камера чаще всего ТА ЖЕ, что тик назад: перезапись тем же значением

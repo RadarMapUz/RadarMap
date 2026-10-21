@@ -68,9 +68,11 @@ struct CarPlayEngineLayer: View {
         // 12.10). Без курса карта держит прежний поворот, которого мы не
         // знаем, — тогда камера обязана влезть в любую сторону.
         let bearing = model.mapDirection ?? (env.location.displayCourse >= 0 ? env.location.displayCourse : nil)
-        let keep = env.location.nearestCamera.map {
-            DriveCamera.Keep.offset(from: me, to: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
-                                    bearing: bearing)
+        // Своя камера («без голоса») — не цель: водитель её знает, и ради неё
+        // кадр уходил в район (снимок 63, 21.10).
+        let keep = env.location.displayNearestCamera.flatMap {
+            DriveCamera.keep(camera: $0.id, at: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
+                             familiar: env.location.familiarCameraIDs, from: me, bearing: bearing)
         }
         let width = Double(size.width + safe.leading + safe.trailing)
         // Верх окна машины — бар с кнопками, низ — док HUD, справа — кнопки
@@ -121,7 +123,7 @@ struct CarPlayEngineLayer: View {
                 route: env.route.camerasOnRoute.map { (id: $0.id, along: $0.distanceAlong) },
                 progress: env.route.isActive ? env.route.progressAlong : nil,
                 passedTolerance: AppConfig.routePassedToleranceMeters,
-                nearest: env.location.nearestCamera?.id),
+                nearest: env.location.displayNearestCamera?.id),
             familiarCameraIDs: env.location.familiarCameraIDs,
             cameraLabel: cameraLabel(cue),
             route: env.route.routeCoordinates,

@@ -184,7 +184,7 @@ private struct HandoffCamera: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        if let camera = env.location.nearestCamera, let distance = env.location.distanceToNearest,
+        if let camera = env.location.displayNearestCamera, let distance = env.location.displayDistanceToNearest,
            distance <= AppConfig.carPlayNearestCameraMeters {
             row(symbol: camera.kind.symbolName,
                 tint: env.location.isApproachingCamera ? Theme.danger : Theme.Types.camera) {

@@ -44,8 +44,8 @@ struct EngineBaseLayer: View {
         let me = known ?? AppConfig.mapFallbackCenter
         do {
             let insets = state.insets
-            let distance = env.location.nearestCamera != nil
-                ? env.location.distanceToNearest : nil
+            let distance = env.location.displayNearestCamera != nil
+                ? env.location.displayDistanceToNearest : nil
             let maneuverDistance = env.route.nextStep.map { _ in env.route.nextStepDistance }
             // Размер берётся у КОНТЕЙНЕРА, а не у UIScreen.main.
             //
@@ -84,13 +84,13 @@ struct EngineBaseLayer: View {
                         // (владелец, 12.10); заодно нет сотни запросов лимитов
                         // на главном потоке при выезде за край области.
                         limitProvider: nil,
-                        alertCameraID: inRange ? env.location.nearestCamera?.id : nil,
+                        alertCameraID: inRange ? env.location.displayNearestCamera?.id : nil,
                         // Вариант B: цвет типа — только у камер на нашем пути.
                         pathCameraIDs: CameraMarkerLook.pathIDs(
                             route: env.route.camerasOnRoute.map { (id: $0.id, along: $0.distanceAlong) },
                             progress: env.route.isActive ? env.route.progressAlong : nil,
                             passedTolerance: AppConfig.routePassedToleranceMeters,
-                            nearest: env.location.nearestCamera?.id),
+                            nearest: env.location.displayNearestCamera?.id),
                         familiarCameraIDs: env.location.familiarCameraIDs,
                         route: env.route.routeCoordinates,
                         routeObject: env.route.polyline,
@@ -201,9 +201,10 @@ struct EngineBaseLayer: View {
         // Поворот — тот, что у карты: север, курс или последний (движок).
         let bearing: Double = map.orientation == .following ? 0
             : (env.location.displayCourse >= 0 ? env.location.displayCourse : map.displayedDirection)
-        let keep = env.location.nearestCamera.map {
-            DriveCamera.Keep.offset(from: me, to: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
-                                    bearing: bearing)
+        // Своя камера («без голоса») — не цель (снимок 63, 21.10).
+        let keep = env.location.displayNearestCamera.flatMap {
+            DriveCamera.keep(camera: $0.id, at: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
+                             familiar: env.location.familiarCameraIDs, from: me, bearing: bearing)
         }
         let clear = DriveCamera.Clear(top: insets.safeTop, bottom: insets.safeBottom,
                                       width: Double(size.width), side: AppConfig.engineKeepSidePoints)

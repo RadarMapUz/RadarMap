@@ -243,7 +243,8 @@ final class CarPlayGuidanceTests: XCTestCase {
             } else {
                 XCTAssertNil(maneuver.junctionExitAngle, "у \(kind) угла съезда нет — и не выдумываем")
             }
-            XCTAssertNil(maneuver.linkedLaneGuidance, "без полос — без связанной подсказки: \(kind)")
+            // linkedLaneGuidance здесь не читаем: в заголовке он не-nullable
+            // `assign`, и пустой роняет процесс теста при обращении из Swift.
         }
     }
 

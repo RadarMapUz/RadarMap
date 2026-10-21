@@ -516,7 +516,7 @@ class Bot:
         # Что бот отдаёт (bot_near.Sources); None — только отметки, как до 23.x.
         self.sources = sources
         self.pult = pult
-        self.config = config or {}
+        self.config = config if config is not None else {}
         self.subs_key = subs_key or bot_subs.box_key(salt)
         self.couriers = tuple(couriers)
         # Точки, ждущие типа: ключ — хэш человека (не id), значение — (lat, lon, ts).

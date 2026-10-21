@@ -51,13 +51,11 @@ PROFILE = {
     "uz": {
         "name": "RadarMap: yaqindagi radarlar",
         "short": ("Oʻzbekistondagi radarlar, uch oyoqlar va postlar — haydovchilardan. "
-                  "Joylashuvni yuboring — yaqinda nima borligini koʻrsatamiz."),
+                  "Joylashuvni yuboring — yaqinini koʻrsatamiz."),
         "description": (
-            "Oʻzbekistondagi radarlar, uch oyoq kameralar va YPX postlari — ularni haydovchilarning "
-            "oʻzlari belgilaydi.\n\n"
-            "📍 Joylashuvni yuboring — yaqinda nima borligini koʻrsataman: haydovchilar belgilari, "
-            "statsionar kameralar, yopiq yoʻllar va metan.\n"
-            "📡 Joylashuvni translyatsiya qiling — har daqiqada oldinda yangi nima borligini yuboraman.\n"
+            "Oʻzbekistondagi radarlar, uch oyoq kameralar va YPX postlari — haydovchilar belgilaydi.\n\n"
+            "📍 Joylashuvni yuboring — yaqinini koʻrsataman: belgilar, kameralar, yopiq yoʻllar, metan.\n"
+            "📡 Joylashuv translyatsiyasi — har daqiqada oldindagi yangiliklar.\n"
             "⛽ /metan — yaqindagi AGTKSlarda gaz bormi.\n"
             "⛰ /pereval — Qamchiq va Taxtaqoracha dovonlarida ob-havo.\n"
             "🏙 /city — shahringizdagi tasdiqlangan uch oyoqlar va postlar.\n\n"

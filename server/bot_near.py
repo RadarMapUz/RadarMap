@@ -131,7 +131,8 @@ def fmt_distance(meters, lang):
     if step < 1000:
         return f"{step} {m}"
     if meters < 9950:
-        return f"{meters / 1000.0:.1f}".replace(".", ",") + f" {km}"
+        value = f"{meters / 1000.0:.1f}"
+        return (value[:-2] if value.endswith(".0") else value.replace(".", ",")) + f" {km}"
     return f"{int(round(meters / 1000.0))} {km}"
 
 

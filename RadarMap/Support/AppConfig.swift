@@ -2270,6 +2270,46 @@ nonisolated enum AppConfig {
     /// Индекс графа перепроверяется не чаще (файл меняется раз в месяц).
     static let offlineGraphIndexInterval: TimeInterval = 7 * 86_400
 
+    // MARK: - Слой полос (LaneOverlay, 20.8; docs/lanes_overlay_contract.md)
+
+    /// Подписанный индекс слоя и каталог его файлов (относительно syncBaseURL).
+    static let laneOverlayIndexPath = "lanes/lanes_index.json"
+    static let laneOverlayDirectory = "lanes"
+    /// Потолки контракта: файл данных (проверка индекса) и подходов в нём.
+    static let laneOverlayMaxBytes = 8 * 1_048_576
+    static let laneOverlayMaxJunctions = 50_000
+    /// Полос в подходе: больше восьми в одну сторону не бывает — это ошибка.
+    static let laneOverlayMaxLanes = 8
+    /// Допуск курса подхода, °: по умолчанию и потолок. Шире 45° подход
+    /// начинает ловить поперечную улицу того же перекрёстка.
+    static let laneOverlayDefaultTolerance = 30.0
+    static let laneOverlayMaxTolerance = 45.0
+    /// Подход ищется в стольких метрах от точки манёвра.
+    static let laneOverlayMatchMeters = 25.0
+    /// Ячейка сетки поиска, °. Обязана быть шире `laneOverlayMatchMeters` по
+    /// обеим осям на всей широте страны: 0.001° долготы на 46° с. ш. — 77 м,
+    /// и девяти ячеек вокруг точки хватает с запасом.
+    static let laneOverlayGridDegrees = 0.001
+    /// Индекс перепроверяется раз в неделю: слой меняется редко…
+    static let laneOverlayIndexInterval: TimeInterval = 7 * 86_400
+    /// …а пока его на сервере нет (404) — раз в сутки: опубликованный слой
+    /// должен доехать до телефонов за день. Запрос — сотня байт ответа.
+    static let laneOverlayMissingRecheckSeconds: TimeInterval = 86_400
+    /// Сеть не ответила — повтор не раньше (дата проверки при этом не
+    /// двигается: неделя без слоя из-за одного туннеля — слишком дорого).
+    static let laneOverlayRetrySeconds: TimeInterval = 3_600
+    /// Курс въезда в перекрёсток — по линии маршрута за столько метров до
+    /// точки манёвра (полоса разгона и карман уже не сбивают направление).
+    static let laneApproachBearingMeters = 30.0
+    /// До точки по маршруту меньше этого — подъезда нет (маршрут начался у
+    /// самого перекрёстка), курс не считаем.
+    static let laneApproachMinMeters = 10.0
+    /// Точка манёвра или перекрёстка должна лежать у самой линии маршрута…
+    static let laneProbeOnPathMeters = 15.0
+    /// …и ищется вперёд по линии в окне «разница оценок + столько метров»:
+    /// расстояния OSRM и наши расходятся на длинном маршруте.
+    static let laneProbeSearchMeters = 300.0
+
     // MARK: - Записанный голос (этап 16)
 
     /// Пауза на месте запятой между записанными отрывками, с. Короче

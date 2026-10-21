@@ -146,6 +146,20 @@ to the build's own values, never the received ones (ARCHITECTURE.md rule 19).
   never saw an index; flip it to `false` once the owner has published.
   Published by `server/publish_limits.sh` (after each monthly limits cron —
   `/status` shows «ждёт подписи» until then).
+- **`lanes/lanes_index.json`** — the lane overlay (20.8, contract
+  `docs/lanes_overlay_contract.md`; `LanesManifest` / `LaneOverlay` /
+  `LaneOverlayTrust`, `LaneOverlayService`): lane rows for maneuvers and
+  straight-through junctions where OSRM has no `turn:lanes`. Same shape as
+  the route graph — signed index, sha+size-checked `lanes.<sha16>.json`,
+  both re-verified on every disk load; weekly (daily while the server answers
+  404), first file over any connection, updates not over cellular, an older
+  signed version is a rollback and is refused. Loaded into memory lazily by
+  the first route. `RouteService` collects `LaneProbe`s while parsing OSRM
+  (approach bearing from the route line over the last 30 m) and
+  `LaneOverlay.attach` fills only steps/junctions without OSRM lanes —
+  OSRM always wins; a row with no lane fitting the maneuver is dropped (edge
+  advice stays). Re-attached on overlay arrival/removal; one log line per
+  route «полосы: OSRM N, слой M, край K (…)». Kill switch `features.laneOverlay`.
 
 ### Other services
 - `RemoteSyncService` — daily OTA check of the camera DB against the server `version.json` (version + sha + signature), plus the `overrides.json` fetch on its own 3 h cadence.

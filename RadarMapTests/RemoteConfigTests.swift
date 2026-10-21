@@ -31,6 +31,19 @@ final class RemoteConfigTests: XCTestCase {
         XCTAssertTrue(config.areMetricsEnabled)
     }
 
+    /// Слой полос (20.8): флаг в пульте разбирается, а его отсутствие —
+    /// «включено», как у остальных: старый пульт не вправе выключить новое.
+    func testLaneOverlayFlagDecodes() throws {
+        func decode(_ json: String) throws -> RemoteConfig {
+            try JSONDecoder().decode(RemoteConfig.self, from: Data(json.utf8))
+        }
+        XCTAssertFalse(try decode(#"{"features":{"laneOverlay":false}}"#).isLaneOverlayEnabled)
+        XCTAssertTrue(try decode(#"{"features":{"laneOverlay":true}}"#).isLaneOverlayEnabled)
+        XCTAssertTrue(try decode(#"{"features":{"routing":false}}"#).isLaneOverlayEnabled)
+        XCTAssertTrue(try decode("{}").isLaneOverlayEnabled)
+        XCTAssertTrue(RemoteConfig.default.isLaneOverlayEnabled)
+    }
+
     // MARK: - Зажим значений
 
     func testPollIntervalOutOfRangeFallsBackToBuild() {

@@ -46,6 +46,8 @@ enum Storage {
         case dbReleaseSignedSeen        // увидели подписанную версию базы камер — неподписанная больше не берётся (S18)
         case roadsIndexLastCheck    // дата последней проверки индекса дорожных тайлов
         case hotspotsLastCheck      // дата последней проверки горячих точек треног
+        case laneOverlayLastCheck   // дата последнего ответа сервера по индексу слоя полос (20.8)
+        case laneOverlayVersion     // версия последнего применённого подписанного индекса слоя полос (откат не берём)
         case hasCompletedOnboarding // онбординг пройден (@AppStorage)
         case whatsNewEdition        // какой выпуск «Что нового» уже показан (WhatsNew.edition)
         case reviewAskedVersion     // версия, в которой уже просили оценку App Store

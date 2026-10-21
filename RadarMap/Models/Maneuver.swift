@@ -148,6 +148,13 @@ nonisolated struct LaneHint: Equatable, Sendable {
     }
 }
 
+/// Откуда ряд полос: от OSRM (`turn:lanes` в OSM) или из нашего слоя полос
+/// (LaneOverlay, 20.8). Показываются одинаково; различие — для журнала и для
+/// того, чтобы слой можно было снять или заменить, не трогая ряды OSRM.
+nonisolated enum LaneSource: String, Equatable, Sendable {
+    case osrm, overlay
+}
+
 /// Ограничение полос на перекрёстке, который маршрут проезжает ПРЯМО: «крайний
 /// правый — только направо». Манёвра здесь нет, и раньше такие ряды
 /// выбрасывались, а водитель в правом ряду узнавал о нём у самой стоп-линии.
@@ -155,6 +162,8 @@ nonisolated struct LaneNotice: Equatable, Sendable {
     /// Где перекрёсток, метры от старта.
     let distanceAlong: CLLocationDistance
     let lanes: [LaneHint]
+    /// Откуда ряд.
+    var source: LaneSource = .osrm
 }
 
 /// Манёвр на маршруте («через 300 м — направо»).
@@ -187,8 +196,11 @@ nonisolated struct RouteStep: Equatable, Sendable {
     /// Полос в нашу сторону на подъезде — по своей сети дорог, когда манёвр
     /// стал ближайшим (RouteService). nil — ещё не знаем.
     var approachLanes: Int? = nil
+    /// Откуда `lanes`: OSRM или слой полос. При пустом ряде смысла не имеет.
+    var laneSource: LaneSource = .osrm
 
-    /// В какой ряд встать: полосы OSRM, иначе край при многополосном подъезде.
+    /// В какой ряд встать: полосы (OSRM или слой), иначе край при
+    /// многополосном подъезде.
     var laneAdvice: LaneAdvice.Advice? {
         LaneAdvice.advice(lanes: lanes, edge: edge, lanesPerDirection: approachLanes)
     }

@@ -1883,6 +1883,38 @@
         }
       }
     },
+    "RadarMap: камеры на карте": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RadarMap: камеры на карте"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RadarMap: xaritadagi kameralar"
+          }
+        }
+      }
+    },
+    "RadarMap: предупреждаю о камерах": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RadarMap: предупреждаю о камерах"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RadarMap: kameralar haqida ogohlantiraman"
+          }
+        }
+      }
+    },
     "~%@": {
       "localizations": {
         "ru": {
@@ -13129,6 +13161,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Telefon choʻntakda, ilova yigʻilgan boʻlsa ham kameralar haqida ogohlantiramiz."
+          }
+        }
+      }
+    },
+    "Предупреждаю о камерах": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Предупреждаю о камерах"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralar haqida ogohlantiraman"
           }
         }
       }

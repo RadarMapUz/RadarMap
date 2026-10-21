@@ -24,8 +24,11 @@ import SwiftUI
 struct CarPlayEngineLayer: View {
     @Environment(AppEnvironment.self) private var env
     let model: CarPlayMapModel
-    /// Плитка приборной панели: без дока внизу, «я» — по своей доле высоты.
-    var compact = false
+    /// Где стоит карта: экран машины, плитка главного экрана или приборка
+    /// (CarPlaySurface — чем они различаются).
+    var surface: CarPlaySurface = .car
+    /// Плитка и приборка: без дока внизу, «я» — по своей доле высоты.
+    private var compact: Bool { surface != .car }
 
     var body: some View {
         // Без своей позиции карты нет: центр «где-то в Ташкенте» выдал бы
@@ -94,9 +97,9 @@ struct CarPlayEngineLayer: View {
         // (аудит 18.10, «при езде нормального вида нет»).
         let target = DriveCamera.target(
             speedKmh: env.location.speedKmh, maneuverDistance: maneuverDistance,
-            pitchAllowed: env.thermal.mode == .full, screen: .car, keep: keep,
+            pitchAllowed: surface.pitchAllowed(performance: env.thermal.mode), screen: .car, keep: keep,
             viewHeight: height, latitude: me.latitude, clear: clear,
-            carY: { compact ? AppConfig.carPlayDashboardMeY : Self.meY(size: size, safe: safe, share: $0) })
+            carY: { surface.fixedMeY ?? Self.meY(size: size, safe: safe, share: $0) })
         let frame = model.cameraSmoother.step(toward: target, at: Date())
         let cue = CarPlayCameraCue.current(env.location)
         let offlineFiles: OfflineFiles? = env.network.isMapOnline
@@ -107,11 +110,10 @@ struct CarPlayEngineLayer: View {
             // «+/−» сдвигают масштаб на ступень за нажатие поверх динамики.
             spanMeters: DriveCamera.span(zoom: frame.zoom + model.zoomBias, viewHeight: height,
                                          latitude: me.latitude),
-            anchorY: compact ? AppConfig.carPlayDashboardMeY
-                : Self.meY(size: size, safe: safe, share: frame.carShare),
+            anchorY: surface.fixedMeY ?? Self.meY(size: size, safe: safe, share: frame.carShare),
             pitchDegrees: frame.pitchDegrees,
             daylight: model.isDaylight,
-            houses: env.settings.mapHouses,
+            houses: surface.houses(setting: env.settings.mapHouses),
             cameras: [],
             cameraRevision: env.cameras.revision,
             limitRevision: env.speedLimits.indexRevision * 2 + (env.settings.speedLimitsEnabled ? 1 : 0),
@@ -148,13 +150,18 @@ struct CarPlayEngineLayer: View {
             // Режим «в поездке» всегда: без кафе, номеров домов и подписей
             // дорожек — экран машины читают боковым зрением.
             driving: true,
+            // Приборка — малая частота кадров всегда (CarPlaySurface.lowFrameRate):
+            // тот же режим, что под полноэкранной тревогой.
+            covered: surface.lowFrameRate,
             cruise: env.location.isCruising,
             // На ходу — только дорога; встали — окрестность возвращается.
-            declutter: model.declutter.update(speedKmh: env.location.speedKmh, at: Date()),
-            // Плитка — только смотреть: случайный жест снимал слежение, а
-            // вернуть его на плитке нечем.
-            interactive: !compact,
-            healthTag: compact ? "плитка" : "машина",
+            // На приборке — только дорога всегда.
+            declutter: surface.alwaysDeclutter
+                || model.declutter.update(speedKmh: env.location.speedKmh, at: Date()),
+            // Плитка и приборка — только смотреть: случайный жест снимал
+            // слежение, а вернуть его там нечем.
+            interactive: surface.interactive,
+            healthTag: surface.healthTag,
             trafficEdges: env.traffic.isShown ? env.traffic.snapshot?.edges ?? [] : [],
             trafficRevision: env.traffic.revision * 2 + (env.traffic.isShown ? 1 : 0),
             labelLanguage: env.settings.appLanguage.mapCode,

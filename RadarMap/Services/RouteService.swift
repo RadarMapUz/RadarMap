@@ -185,7 +185,9 @@ final class RouteService {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: streetNameLanguage,
                                                "RouteService.streetNameLanguage") }
     }
-    @ObservationIgnored var onManeuver: ((String) -> Void)? {
+    /// Фраза манёвра и она же событием для записанного голоса (этап 16);
+    /// событие nil — фраза с улицей, её говорит только синтезатор.
+    @ObservationIgnored var onManeuver: ((String, VoiceEvent?) -> Void)? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onManeuver,
                                                "RouteService.onManeuver") }
     }
@@ -696,17 +698,21 @@ final class RouteService {
                                earlyCall: step.kind?.deservesEarlyCall ?? true) {
         case 0?:
             announcedStage[index] = 0
-            onManeuver?(step.text)
+            onManeuver?(step.text, step.voiceEvent(meters: nil))
         case 1?:
             announcedStage[index] = 1
+            let meters = Int((distance / 50).rounded() * 50)
             onManeuver?(Self.withLanes(String(format: String(localized: "Через %lld метров — %@"),
-                                              Int((distance / 50).rounded() * 50), step.text),
-                                       step.lanes))
+                                              meters, step.text),
+                                       step.lanes),
+                        step.voiceEvent(meters: meters))
         case 2?:
             announcedStage[index] = 2
+            let meters = Int((distance / 100).rounded() * 100)
             onManeuver?(Self.withLanes(String(format: String(localized: "Через %lld метров — %@"),
-                                              Int((distance / 100).rounded() * 100), step.text),
-                                       step.lanes))
+                                              meters, step.text),
+                                       step.lanes),
+                        step.voiceEvent(meters: meters))
         default:
             break
         }
@@ -1093,9 +1099,14 @@ final class RouteService {
         let kind: ManeuverKind = m.type == "arrive" ? .arrive
             : m.type == "roundabout" || m.type == "rotary" ? .roundabout
             : ManeuverKind.fromOSRM(modifier: m.modifier)
+        // Тип команды для записанного голоса — только у фразы без имени
+        // собственного: улицу и название остановки диктор не записывал.
+        let voiceAction = result == phrase && stopName == nil
+            ? VoiceEvent.Action(osrmType: m.type, modifier: m.modifier, exit: m.exit) : nil
         return RouteStep(distanceAlong: along, text: result, icon: icon,
                          kind: kind, lanes: lanes(of: step),
-                         shortText: result == phrase ? nil : phrase)
+                         shortText: result == phrase ? nil : phrase,
+                         voiceAction: voiceAction)
     }
 
     /// Полосы на подходе к манёвру.

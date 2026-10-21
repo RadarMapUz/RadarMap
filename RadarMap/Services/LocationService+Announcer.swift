@@ -166,11 +166,18 @@ extension LocationService {
         if voicedInGroup.remove(camera.id) != nil { return }
         let group = clusteredCameras
         voicedInGroup.formUnion(group.map(\.id))
+        // Та же фраза событием — для записанного голоса (этап 16); говорит
+        // ли запись или синтезатор, решает AlertPlayer, момент тот же.
         alerts.speak(announcement(for: camera, distance: distance,
                                   urgent: policy.voice == .urgent,
                                   speaksLimit: policy.speaksLimit,
                                   brief: policy.isBrief,
-                                  groupCount: group.count))
+                                  groupCount: group.count),
+                     event: announcementEvent(for: camera, distance: distance,
+                                              urgent: policy.voice == .urgent,
+                                              speaksLimit: policy.speaksLimit,
+                                              brief: policy.isBrief,
+                                              groupCount: group.count))
         // Считаем ТОЛЬКО здесь: это единственное место, где фраза о камере
         // действительно уходит в синтезатор. Считать раньше — считать
         // намерения, а их у нас и так девятнадцать на поездку.

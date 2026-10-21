@@ -430,7 +430,7 @@ final class AppEnvironment {
             if let traffic, let location, let route, location.isTripActive, !route.isActive,
                settings.voiceEnabled,
                let jam = traffic.jamToAnnounce(position: coordinate, course: location.currentCourse) {
-                alerts?.speak(jam.spoken)
+                alerts?.speak(jam.spoken, event: jam.voiceEvent)
             }
         }
         route.roadEvents = { [weak mobile] in mobile?.roadEvents ?? [] }
@@ -625,7 +625,7 @@ final class AppEnvironment {
         }
         route.onDetourOffer = { [weak alerts] offer in
             guard settings.voiceEnabled else { return }
-            alerts?.speak(offer.spoken)
+            alerts?.speak(offer.spoken, event: offer.voiceEvent)
         }
         route.onArrived = { [weak alerts] in
             guard settings.voiceEnabled else { return }
@@ -639,15 +639,15 @@ final class AppEnvironment {
         }
         // Имена улиц в манёврах — на языке приложения (баннер и голос).
         route.streetNameLanguage = { settings.appLanguage.mapCode }
-        route.onManeuver = { [weak alerts] text in
+        route.onManeuver = { [weak alerts] text, event in
             guard settings.turnByTurnVoice else { return }
-            alerts?.speak(text)
+            alerts?.speak(text, event: event)
         }
         speedLimits.onOverspeed = { [weak alerts] in
             alerts?.speak(String(localized: "Превышение скорости"))
         }
         speedLimits.onLimitAhead = { [weak alerts] notice in
-            alerts?.speak(notice.spoken)
+            alerts?.speak(notice.spoken, event: notice.voiceEvent)
         }
         // Тема интерфейса — до первого кадра: днём приложение не должно
         // мигнуть тёмным при запуске.

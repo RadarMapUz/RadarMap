@@ -215,7 +215,7 @@ enum TripStartMode: String, CaseIterable, Identifiable {
         switch self {
         case .auto:    return "bolt.fill"
         case .smart:   return "wand.and.stars"
-        case .carOnly: return "carplay"
+        case .carOnly: return "car.fill"
         case .manual:  return "hand.tap.fill"
         }
     }

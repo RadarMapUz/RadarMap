@@ -20,6 +20,13 @@ extension AppEnvironment {
         carLink.onChange = { [weak self] linked, was in
             self?.carLinkChanged(linked: linked, was: was)
         }
+        #if DEBUG
+        // Снимок настроек режима: «Только в машине» с выбранной магнитолой.
+        if ProcessInfo.processInfo.arguments.contains("-carOnlyDemo") {
+            settings.tripStartMode = .carOnly
+            settings.carDevices = [CarAudioDevice(uid: "demo-car", name: "BYD Song Plus")]
+        }
+        #endif
         carLink.refresh(reason: "запуск")
     }
 

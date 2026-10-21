@@ -18,7 +18,7 @@ struct CarOnlyOfferSection: View {
         if env.offersCarOnlyMode {
             Section {
                 VStack(alignment: .leading, spacing: 12) {
-                    Label("Начинать поездку только в машине?", systemImage: "carplay")
+                    Label("Начинать поездку только в машине?", systemImage: "car.fill")
                         .font(.rounded(17, .semibold))
                         .foregroundStyle(Theme.textPrimary)
                     Text("Вы уже подключали CarPlay. Поездка начнётся, когда телефон подключится к машине, и закончится, когда отключится. Такси и автобус не запишутся, а уведомления о камерах вне машины не придут.")
@@ -47,7 +47,7 @@ struct CarLinkDevicesSection: View {
             LabeledContent {
                 Text("всегда")
             } label: {
-                Label("CarPlay", systemImage: "carplay")
+                row(Text(verbatim: "CarPlay"), symbol: "car.fill")
             }
             ForEach(chosen) { device in
                 LabeledContent {
@@ -61,7 +61,7 @@ struct CarLinkDevicesSection: View {
                     .tapTarget()
                     .accessibilityLabel(Text("Убрать"))
                 } label: {
-                    Label(device.name, systemImage: "car.fill")
+                    row(Text(verbatim: device.name), symbol: "car.side.fill")
                 }
             }
             ForEach(connected, id: \.uid) { port in
@@ -69,18 +69,21 @@ struct CarLinkDevicesSection: View {
                     settings.carDevices.append(CarAudioDevice(uid: port.uid, name: port.name))
                     env.carLink.chosenChanged()
                 } label: {
-                    LabeledContent {
-                        Image(systemName: "plus.circle.fill").foregroundStyle(Theme.accent)
-                    } label: {
+                    HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Label(port.name, systemImage: "dot.radiowaves.left.and.right")
+                            row(Text(verbatim: port.name),
+                                symbol: CarLink.looksLikeHeadphones(port.name)
+                                    ? "headphones" : "dot.radiowaves.left.and.right")
                                 .foregroundStyle(Theme.textPrimary)
                             if CarLink.looksLikeHeadphones(port.name) {
                                 Text("Похоже на наушники — с ними поездка начнётся и в такси")
                                     .font(.footnote)
                                     .foregroundStyle(Theme.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
+                        Spacer(minLength: 0)
+                        Image(systemName: "plus.circle.fill").foregroundStyle(Theme.accent)
                     }
                 }
             }
@@ -101,5 +104,16 @@ struct CarLinkDevicesSection: View {
             Text("Поездка начинается при подключении к этим устройствам.")
         }
         .onAppear { env.carLink.refresh(reason: "настройки") }
+    }
+
+    /// Строка «значок + имя» в одну линию (Label внутри LabeledContent
+    /// ставил значок над текстом).
+    private func row(_ title: Text, symbol: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .foregroundStyle(Theme.accent)
+                .frame(width: 28)
+            title
+        }
     }
 }

@@ -63,6 +63,7 @@ extension LocationService {
         }
         if !auto { isPassengerSession = false }  // ручной старт — точно за рулём
         tripFromCarLink = byCarLink || (carLinked?() ?? false)
+        Log.trips.notice("поездка начата: \(byCarLink ? "машина подключена" : (auto ? "движение" : "вручную"), privacy: .public)")
         isTripActive = true
         onTripStateChanged?(true)
         // Человек в машине — точка парковки больше не нужна (и при склейке).

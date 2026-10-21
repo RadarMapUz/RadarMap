@@ -20,7 +20,7 @@ struct SettingsView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     @State private var showFeedback = false
-    /// DEBUG `-settingsPage <alerts|speed|trip|route|map|places|learning|battery|privacy|database|backup|language|help>`:
+    /// DEBUG `-settingsPage <alerts|speed|trip|route|map|places|learning|battery|privacy|database|backup|language|fuel|maintenance|help>`:
     /// открыть страницу раздела сразу — на снимок без касаний.
     @State private var path = NavigationPath()
 
@@ -153,6 +153,7 @@ struct SettingsView: View {
         case "backup": BackupSettingsPage()
         case "language": LanguageSettingsPage()
         case "fuel": FuelSettingsPage()
+        case "maintenance": MaintenancePage()
         case "family": FamilyShareSettingsPage()
         case "fines": Form { FineCheckSection() }.settingsPage("Штрафы")
         default: HelpSettingsPage()

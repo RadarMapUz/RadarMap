@@ -26,6 +26,9 @@ extension MapScreen {
             env.trip.seedDemoHistory(scale: args.contains("-demoBigNumbers") ? 20 : 1)
         }
         if args.contains("-demoMergePair") { env.trip.seedDemoMergePair() }
+        // Обслуживание во всех состояниях (18.2): `-demoMaintenance` вместе с
+        // `-showStats` (карточка в Итогах) или `-showSettings -settingsPage maintenance`.
+        if args.contains("-demoMaintenance") { env.maintenance.seedDemo() }
         // С паузой: настоящие пробки приходят уже после загрузки карты, и
         // слой обязан перерисоваться на новом наборе, а не только на старте.
         if args.contains("-demoTraffic") {

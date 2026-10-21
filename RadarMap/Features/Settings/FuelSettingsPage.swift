@@ -11,8 +11,6 @@ import SwiftUI
 
 struct FuelSettingsPage: View {
     @Environment(AppEnvironment.self) private var env
-    @Environment(\.dynamicTypeSize) private var typeSize
-
     var body: some View {
         let settings = env.settings
         let fuels = settings.vehicleEnergy.fuels
@@ -72,7 +70,7 @@ struct FuelSettingsPage: View {
     private func rateSection(_ fuel: Fuel) -> some View {
         let settings = env.settings
         return Section {
-            fieldRow(String(format: String(localized: "Расход, %@ на 100 км"), fuel.unit)) {
+            FieldRow(String(format: String(localized: "Расход, %@ на 100 км"), fuel.unit)) {
                 // Пусто, а не «0»: ноль читался как заданный расход.
                 NumberField(placeholder: fuel == .electricity ? "15" : "9", decimals: true,
                             value: settings.fuelProfile.rate(fuel).per100Km) { value in
@@ -85,7 +83,7 @@ struct FuelSettingsPage: View {
                 // «м³» голосом не читается.
                 .accessibilityLabel(Text(fuel.spokenRateLabel))
             }
-            fieldRow(String(format: String(localized: "Цена за %@, сум"), fuel.unit)) {
+            FieldRow(String(format: String(localized: "Цена за %@, сум"), fuel.unit)) {
                 NumberField(placeholder: "—", decimals: false,
                             value: settings.fuelProfile.rate(fuel).price) { value in
                     var rate = settings.fuelProfile.rate(fuel)
@@ -101,16 +99,26 @@ struct FuelSettingsPage: View {
             Text(fuel.title)
         }
     }
+}
 
-    /// Подпись и поле. Своя строка, а не LabeledContent: на крупном (не
-    /// специальном) шрифте поле забирало полстроки, и «Sarf, 100 km ga m³»
-    /// обрезалось до «Sarf, 100 km g…» — пропадала единица, ради которой
-    /// подпись; разрешить перенос LabeledContent не дал — вторая строка
-    /// срезалась высотой строки (снимки 14.6). Здесь подпись переносится, а
-    /// на специальных размерах поле уходит под неё, как у системных строк.
-    /// Голосом подпись читает само поле — текст слева VoiceOver пропускает.
-    @ViewBuilder
-    private func fieldRow<Field: View>(_ label: String, @ViewBuilder field: () -> Field) -> some View {
+/// Подпись и поле. Своя строка, а не LabeledContent: на крупном (не
+/// специальном) шрифте поле забирало полстроки, и «Sarf, 100 km ga m³»
+/// обрезалось до «Sarf, 100 km g…» — пропадала единица, ради которой
+/// подпись; разрешить перенос LabeledContent не дал — вторая строка
+/// срезалась высотой строки (снимки 14.6). Здесь подпись переносится, а
+/// на специальных размерах поле уходит под неё, как у системных строк.
+/// Голосом подпись читает само поле — текст слева VoiceOver пропускает.
+struct FieldRow<Field: View>: View {
+    let label: String
+    @ViewBuilder let field: () -> Field
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    init(_ label: String, @ViewBuilder field: @escaping () -> Field) {
+        self.label = label
+        self.field = field
+    }
+
+    var body: some View {
         let text = Text(label)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityHidden(true)
@@ -152,12 +160,34 @@ private extension Fuel {
 /// кнопки «Ввод» нет — введённая цена молча пропадала. Здесь разбор на
 /// каждом нажатии; запятая и точка — обе десятичные, пробелы разрядов
 /// пропускаются. Вид — по языку приложения («5 500», не «5,500»).
-private struct NumberField: View {
+///
+/// Два вида: «пусто = 0» (расход, цена) и «пусто ≠ 0» (`optional`, интервалы
+/// обслуживания: пусто — как по умолчанию, ноль — не учитывать).
+struct NumberField: View {
     let placeholder: String
     let decimals: Bool
-    let value: Double
-    let onChange: (Double) -> Void
+    private let value: Double?
+    /// Ноль показывается пустым полем (расход, цена).
+    private let zeroIsEmpty: Bool
+    private let onChange: (Double?) -> Void
     @State private var text = ""
+
+    init(placeholder: String, decimals: Bool, value: Double, onChange: @escaping (Double) -> Void) {
+        self.placeholder = placeholder
+        self.decimals = decimals
+        self.value = value
+        zeroIsEmpty = true
+        self.onChange = { onChange($0 ?? 0) }
+    }
+
+    init(placeholder: String, decimals: Bool, optional value: Double?,
+         onChange: @escaping (Double?) -> Void) {
+        self.placeholder = placeholder
+        self.decimals = decimals
+        self.value = value
+        zeroIsEmpty = false
+        self.onChange = onChange
+    }
 
     var body: some View {
         TextField(placeholder, text: $text)
@@ -166,9 +196,9 @@ private struct NumberField: View {
             // Подпись слева переносится и берёт ширину первой — полю
             // оставлен минимум под «12 500».
             .frame(minWidth: 80)
-            .onAppear { text = Self.display(value, decimals: decimals) }
+            .onAppear { text = Self.display(value, decimals: decimals, zeroIsEmpty: zeroIsEmpty) }
             .onChange(of: text) { _, newText in
-                onChange(Self.parse(newText) ?? 0)
+                onChange(Self.parse(newText))
             }
     }
 
@@ -177,8 +207,8 @@ private struct NumberField: View {
         return Double(cleaned)
     }
 
-    static func display(_ value: Double, decimals: Bool) -> String {
-        guard value > 0 else { return "" }
+    static func display(_ value: Double?, decimals: Bool, zeroIsEmpty: Bool = true) -> String {
+        guard let value, value > 0 || (!zeroIsEmpty && value == 0) else { return "" }
         return value.formatted(.number.precision(.fractionLength(0...(decimals ? 1 : 0)))
             .grouping(decimals ? .never : .automatic)
             .locale(Formatting.numberLocale))

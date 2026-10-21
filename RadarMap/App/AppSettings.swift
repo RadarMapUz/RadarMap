@@ -577,6 +577,12 @@ final class AppSettings {
     var trafficContribution: Bool {
         didSet { store.set(!trafficContribution, forKey: Keys.trafficContributionOff) }
     }
+    /// Напоминания об обслуживании машины (18.3). Включены: напоминать есть о
+    /// чём, только когда водитель сам ввёл пробег или даты. Хранится
+    /// выключение — без регистрации умолчания.
+    var maintenanceReminders: Bool {
+        didSet { store.set(!maintenanceReminders, forKey: Keys.maintenanceRemindersOff) }
+    }
 
     /// Погода на перевалах (19.2): голос и баннер «На перевале Камчик туман».
     /// Хранится инвертированно, как пробки: включено по умолчанию и после
@@ -740,6 +746,7 @@ final class AppSettings {
         static let trafficHidden = "trafficHidden"
         static let trafficContributionOff = "trafficContributionOff"
         static let roadWeatherOff = "roadWeatherOff"
+        static let maintenanceRemindersOff = "maintenanceRemindersOff"
         static let alertProfile = "alertProfile"
     }
 
@@ -851,6 +858,7 @@ final class AppSettings {
         trafficShown = !store.bool(forKey: Keys.trafficHidden)
         trafficContribution = !store.bool(forKey: Keys.trafficContributionOff)
         roadWeatherAlerts = !store.bool(forKey: Keys.roadWeatherOff)
+        maintenanceReminders = !store.bool(forKey: Keys.maintenanceRemindersOff)
         // Переезд со старой версии: профиля ещё нет — выводим его из того, что
         // человек уже выбрал, чтобы ни одна привычка не сменилась молча.
         let storedProfile = AlertProfile(rawValue: store.string(forKey: Keys.alertProfile) ?? "")

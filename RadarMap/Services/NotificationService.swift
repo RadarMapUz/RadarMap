@@ -304,6 +304,54 @@ final class NotificationService: NSObject {
         center.removeDeliveredNotifications(withIdentifiers: [today])
     }
 
+    // MARK: - Обслуживание машины (18.3)
+
+    /// Одно напоминание: id из плана (MaintenanceReminders), текст готов.
+    struct MaintenanceNote {
+        let id: String
+        let fire: Date
+        let title: String
+        let body: String
+    }
+
+    /// Снять отменённые и поставить новые. Тот же id заменяет поставленное —
+    /// повтор не плодит копий. Без звука: это не срочно, а человек мог
+    /// только что выйти из машины. `outdated` — показанные о прошлом цикле
+    /// (масло уже заменили): из Центра уведомлений их убрать.
+    func scheduleMaintenance(_ notes: [MaintenanceNote], cancel: [String], outdated: [String] = []) {
+        let center = UNUserNotificationCenter.current()
+        if !cancel.isEmpty { center.removePendingNotificationRequests(withIdentifiers: cancel) }
+        if !outdated.isEmpty { center.removeDeliveredNotifications(withIdentifiers: outdated) }
+        for note in notes {
+            let content = UNMutableNotificationContent()
+            content.title = note.title
+            content.body = note.body
+            content.sound = nil
+            content.threadIdentifier = "maintenance"
+            // Тап — в «Итоги»: карточка «Обслуживание» там первой.
+            content.userInfo = ["deeplink": "\(DeepLink.scheme)://stats"]
+            let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second],
+                                                        from: note.fire)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: parts, repeats: false)
+            center.add(UNNotificationRequest(identifier: note.id, content: content, trigger: trigger)) { error in
+                if let error {
+                    Log.app.error("напоминание об обслуживании не поставлено: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+        }
+    }
+
+    /// Снять все поставленные напоминания об обслуживании — без журнала:
+    /// поездка началась, а план считать ещё не из чего.
+    func cancelPendingMaintenance() {
+        Task {
+            let center = UNUserNotificationCenter.current()
+            let ids = await center.pendingNotificationRequests().map(\.identifier)
+                .filter { $0.hasPrefix(MaintenanceReminders.idPrefix) }
+            if !ids.isEmpty { center.removePendingNotificationRequests(withIdentifiers: ids) }
+        }
+    }
+
     /// Разрешение на уведомления — с ответом: напоминание, которое некуда
     /// показать, не должно стоять включённым.
     func requestAuthorizationResult() async -> Bool {
@@ -399,7 +447,7 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         let id = response.notification.request.identifier
         // Итоги поездки: тап → диплинк тем же путём, что и виджеты (onOpenURL).
         // open() очередится системой и доедет до сцены даже при холодном старте.
-        if id == Self.tripSummaryID,
+        if id == Self.tripSummaryID || id.hasPrefix(MaintenanceReminders.idPrefix),
            let link = response.notification.request.content.userInfo["deeplink"] as? String,
            let url = URL(string: link) {
             await MainActor.run { UIApplication.shared.open(url) }

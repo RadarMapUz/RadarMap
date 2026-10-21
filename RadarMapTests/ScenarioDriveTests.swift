@@ -66,6 +66,9 @@ final class ScenarioDriveTests: XCTestCase {
         private(set) var firstAlerts: [Int: Int] = [:]
         /// Где прозвучало каждое «первое» (x, y в метрах).
         private(set) var firstAlertPoints: [Int: [(x: Double, y: Double)]] = [:]
+        /// Ближайшая «наша» на каждом принятом фиксе (x фикса в метрах, id
+        /// или nil): непрерывность предупреждения на подъезде (14.14).
+        private(set) var nearestTrace: [(x: Double, id: Int?)] = []
         private(set) var rejected = 0
         /// Учёт проездов — как в сервисе: на каждом принятом фиксе, с той же
         /// проверкой «доказанно не на дороге камеры» в точке траверза.
@@ -148,6 +151,7 @@ final class ScenarioDriveTests: XCTestCase {
                 let found = candidates.first(where: {
                     LocationGates.isOnOurRoad($0.camera, in: situation, isOnRoute: $0.onRoute)
                 })
+                nearestTrace.append((xy(good.lat, good.lon).x, found?.camera.id))
                 let radius = AlertEngine.effectiveRadius(speedKmh: speedKmh, baseRadius: AppConfig.alertRadius,
                                                          context: context)
                 for pass in passTracking.update(nearest: found?.camera, nearestDistance: found?.distance,
@@ -669,6 +673,55 @@ final class ScenarioDriveTests: XCTestCase {
         var checked = Drive()
         checked.run(route, cameras: [profiledCamera(5, x: 8, y: 1000, axis: 90, half: 40)], xy: xy)
         XCTAssertNil(checked.firstAlerts[5], "проверенная поперечная — верная тишина, как в 14.10")
+    }
+
+    /// Каньон, где портится позиция, а не скорость: после 300 м нормального
+    /// GPS фиксы точностью `accuracy` уезжают на `bias` м вбок (на север) и
+    /// держатся там — отражение от стены сдвигает точку в одну сторону, а не
+    /// разбрасывает вокруг. Скорость и курс доплеровские, уверенные
+    /// (courseAccuracy 5°): LocationFilter им верит, гейты работают.
+    private func shiftedFixes(by bias: Double, accuracy: Double) -> [LocationFilter.Fix] {
+        fixes(from: (0, 0), legs: [Leg(x: 2000, y: 0, speed: 12)]).enumerated().map { index, fix in
+            guard index >= 25 else { return fix }
+            let p = xy(fix.lat, fix.lon)
+            let q = point(p.x, p.y + bias)
+            return LocationFilter.Fix(lat: q.lat, lon: q.lon, horizontalAccuracy: accuracy,
+                                      speed: fix.speed, speedAccuracy: fix.speedAccuracy, course: fix.course,
+                                      courseAccuracy: fix.courseAccuracy, timestamp: fix.timestamp)
+        }
+    }
+
+    /// 14.14: участок фиксов в 35–60 м, сдвинутых вбок на свою погрешность,
+    /// с уверенным курсом — мимо камеры на нашей дороге. Коридор мерился от
+    /// линии курса через сдвинутую точку и погрешности не знал: своя камера
+    /// выпадала из ближней зоны (у доказанных сторон коридор 18 м, у прочих
+    /// 30) — HUD и эскалация пропадали на сотни метров подъезда, а при сдвиге
+    /// 60 м камера с доказанными сторонами не звучала заранее вовсе: первое
+    /// оповещение — в 100 м, когда до нас дотянулся её кусок дороги. Теперь
+    /// допуск растёт с погрешностью фикса: заранее и до самой камеры. Улица
+    /// в 250 м вбок — по-прежнему чужая.
+    func testPoorPositionWithAConfidentCoursePastAnOwnCamera() {
+        let own: [Camera] = [
+            profiledCamera(1, x: 1600, y: 0, axis: 90, dir: 90, twin: true),   // стороны доказаны
+            snappedCamera(1, x: 1600, y: 0, axis: 90),                         // может снимать обе
+            camera(1, x: 1600, y: 0),                                          // без профиля
+        ]
+        let parallel = camera(9, x: 1000, y: 250)
+        for accuracy in [35.0, 50, 60] {
+            for target in own {
+                let label = "точность и сдвиг \(Int(accuracy)) м, \(target.cls ?? "без профиля"), "
+                    + "стороны \(target.sidesAreProven ? "доказаны" : "нет")"
+                var drive = Drive()
+                drive.run(shiftedFixes(by: accuracy, accuracy: accuracy), cameras: [target, parallel], xy: xy)
+                XCTAssertEqual(drive.rejected, 0, label)
+                XCTAssertEqual(drive.firstAlerts[1], 1, label)
+                let first = drive.firstAlertPoints[1]?.first?.x ?? .infinity
+                XCTAssertLessThanOrEqual(first, 1600 - 300, "заранее — \(label)")
+                let gaps = drive.nearestTrace.filter { $0.x >= first && $0.x <= 1600 - 30 && $0.id != 1 }
+                XCTAssertEqual(gaps.map { Int($0.x) }, [], "весь подъезд своя камера на экране — \(label)")
+                XCTAssertNil(drive.firstAlerts[9], "улица в 250 м вбок — не наша: \(label)")
+            }
+        }
     }
 
     /// Хуже 65 м — фикс в оповещения не идёт вовсе.

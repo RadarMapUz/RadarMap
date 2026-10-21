@@ -168,4 +168,82 @@ final class RoadCorridorTests: XCTestCase {
                        "камера в 170 м вбок за километр — это встречное шоссе")
     }
 
+    // MARK: - Погрешность фикса (14.14)
+
+    /// Коридор мерится от линии курса через НАШУ точку: фикс в 40 м вбок с
+    /// уверенным доплеровским курсом — это камера своей дороги в 40 м от
+    /// линии. Своя камера, сдвинутая на погрешность фикса, остаётся нашей на
+    /// любом удалении, в городе и на трассе, и при узкой известной ширине.
+    func testOwnCameraShiftedByTheFixErrorStaysOurs() {
+        let corridors: [(AlertPolicy.Context, CLLocationDistance?)] = [
+            (.city, nil), (.city, AppConfig.corridorMinNearMeters), (.highway, nil)]
+        for accuracy in [25.0, 40, 50, AppConfig.maxHorizontalAccuracyMeters] {
+            for along in [20.0, 100, 150, 300, 600, 1000] {
+                let shifted = RoadCorridor.Fix(along: along, across: accuracy)
+                for (context, nearWidth) in corridors {
+                    XCTAssertTrue(RoadCorridor.contains(shifted, context: context, nearWidth: nearWidth,
+                                                        accuracy: accuracy),
+                                  "точность \(Int(accuracy)), \(Int(along)) м впереди, \(context), \(nearWidth ?? 0)")
+                }
+                if along <= AppConfig.corridorNearFieldMeters {
+                    XCTAssertFalse(RoadCorridor.contains(shifted, context: .city,
+                                                         nearWidth: AppConfig.corridorMinNearMeters),
+                                   "без погрешности тот же сдвиг в ближней зоне узкого коридора — не наша")
+                }
+            }
+        }
+    }
+
+    /// На хорошем GPS (до базы — 10 м) коридор ровно прежний: и в ближней
+    /// зоне, и за ней, и у потолка. Без параметра — тоже прежний (подсказкам,
+    /// которые при сомнении молчат, расширение не нужно).
+    func testGoodFixLeavesTheCorridorUnchanged() {
+        for along in [-20.0, 0, 100, 150, 151, 300, 700, 3000] {
+            for context in [AlertPolicy.Context.city, .highway] {
+                for nearWidth in [nil, 18, 200] as [CLLocationDistance?] {
+                    let plain = RoadCorridor.allowedAcross(along: along, context: context, nearWidth: nearWidth)
+                    for accuracy in [-1.0, 0, 5, AppConfig.corridorAccuracyBaselineMeters] {
+                        XCTAssertEqual(RoadCorridor.allowedAcross(along: along, context: context,
+                                                                  nearWidth: nearWidth, accuracy: accuracy),
+                                       plain, accuracy: 1e-9)
+                    }
+                }
+            }
+        }
+        XCTAssertEqual(RoadCorridor.allowedAcross(along: 100, context: .city), AppConfig.corridorCityMeters)
+    }
+
+    /// Плохой фикс расширяет коридор ровно на погрешность сверх базы — и
+    /// поверх потолка: потолок про изгиб дороги, а не про нашу точку.
+    func testPoorFixWidensByItsErrorAboveTheCeilingToo() {
+        let extra = 40 - AppConfig.corridorAccuracyBaselineMeters
+        XCTAssertEqual(RoadCorridor.allowedAcross(along: 100, context: .city, accuracy: 40),
+                       AppConfig.corridorCityMeters + extra, accuracy: 1e-9)
+        XCTAssertEqual(RoadCorridor.allowedAcross(along: 1047, context: .highway, accuracy: 40),
+                       AppConfig.corridorHighwayMaxMeters + extra, accuracy: 1e-9)
+        XCTAssertEqual(RoadCorridor.accuracyAllowance(40), extra * AppConfig.corridorAccuracyFactor, accuracy: 1e-9)
+    }
+
+    /// Расширение ограничено: в городе даже на худшем принятом фиксе
+    /// (`maxHorizontalAccuracyMeters`) улица в 150 м вбок — не наша ни на
+    /// каком удалении; параллельная в 120 м на хорошем фиксе — тем более.
+    func testParallelStreetStaysOutOnAnyAcceptedFix() {
+        for along in stride(from: 0.0, through: 3000, by: 50) {
+            XCTAssertFalse(RoadCorridor.contains(RoadCorridor.Fix(along: along, across: 150), context: .city,
+                                                 accuracy: AppConfig.maxHorizontalAccuracyMeters),
+                           "\(Int(along)) м впереди")
+            XCTAssertFalse(RoadCorridor.contains(RoadCorridor.Fix(along: along, across: 120), context: .city,
+                                                 accuracy: 5),
+                           "хороший фикс: \(Int(along)) м впереди")
+        }
+        XCTAssertFalse(RoadCorridor.contains(RoadCorridor.Fix(along: 200, across: 120), context: .city,
+                                             accuracy: 40))
+    }
+
+    /// Погрешность не трогает продольную сторону: камера позади остаётся
+    /// позади на любом фиксе.
+    func testPoorFixDoesNotBringACameraBack() {
+        XCTAssertFalse(RoadCorridor.contains(RoadCorridor.Fix(along: -120, across: 5), context: .city,
+                                             accuracy: AppConfig.maxHorizontalAccuracyMeters))
+    }
 }

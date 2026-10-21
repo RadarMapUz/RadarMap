@@ -274,6 +274,83 @@ final class LocationGatesTests: XCTestCase {
                                                 isOnRoute: false))
     }
 
+    // MARK: - Погрешность фикса (14.14)
+
+    /// Фикс в 40 м вбок от своей дороги: каньон испортил позицию, а
+    /// доплеровский курс уверенный, и LocationFilter ему верит — гейты
+    /// работают. Камера своей дороги впереди в ближней зоне, её кусок до нас
+    /// не дотягивается — решает коридор, а он мерится от линии курса через
+    /// НАШУ точку: на 40 м вбок узкий коридор доказанных сторон (18 м) и
+    /// городской (30 м) выталкивали свою камеру. Допуск растёт с погрешностью
+    /// фикса — камера наша. На хорошем фиксе та же геометрия — по-прежнему
+    /// чужая проезжая часть: 40 м вбок при точности 5 м — не погрешность.
+    func testPoorFixSidewaysKeepsTheOwnCamera() {
+        let proven = camera(ahead: 120, east: 40, roadBearing: 0, roadHalf: 30, dir: 0, twin: true)
+        XCTAssertTrue(proven.sidesAreProven)
+        let unproven = camera(ahead: 120, east: 40, roadBearing: 0, roadHalf: 30, split: true)
+        let bare = camera(ahead: 120, east: 40, roadBearing: nil, cls: nil)
+        for own in [proven, unproven, bare] {
+            XCTAssertEqual(LocationGates.verdict(own, in: situation(accuracy: 40), isOnRoute: false), .ours,
+                           "точность 40 м, сдвиг 40 м: \(own.cls ?? "без профиля"), стороны \(own.sidesAreProven)")
+            XCTAssertEqual(LocationGates.verdict(own, in: situation(accuracy: 5), isOnRoute: false),
+                           .outsideCorridor, "хороший фикс — без изменений")
+        }
+        // Трасса — так же, у неё коридор шире.
+        XCTAssertEqual(LocationGates.verdict(camera(ahead: 120, east: 70, roadBearing: nil, cls: nil),
+                                             in: situation(accuracy: 40, context: .highway), isOnRoute: false),
+                       .ours)
+    }
+
+    /// «Вне её проезжей части» — доказательство, и на нём камера с
+    /// поделёнными сторонами молчит. Фикс хуже `courseProofMaxAccuracyMeters`
+    /// его не даёт: боковое отклонение от куска дороги меряется от точки,
+    /// которая сама может стоять на соседней проезжей части. До порога
+    /// включительно доказательство прежнее; хуже — решает коридор (тоже
+    /// расширенный погрешностью), и вердикт — эвристика, а не «доказано».
+    func testPoorFixProvesNothingOffTheCarriageway() {
+        let aside = camera(ahead: 300, east: 60, roadBearing: 0, roadHalf: 350, twin: true)
+        XCTAssertEqual(LocationGates.verdict(aside, in: situation(accuracy: 5), isOnRoute: false),
+                       .provenOffCarriageway)
+        XCTAssertEqual(LocationGates.verdict(aside, in: situation(
+            accuracy: AppConfig.courseProofMaxAccuracyMeters), isOnRoute: false), .provenOffCarriageway,
+                       "на пороге доказательство ещё в силе")
+        let justWorse = LocationGates.verdict(aside, in: situation(
+            accuracy: AppConfig.courseProofMaxAccuracyMeters + 1), isOnRoute: false)
+        XCTAssertEqual(justWorse.provenNotOurs, false, "хуже порога — не доказательство: \(justWorse)")
+        XCTAssertEqual(LocationGates.verdict(aside, in: situation(accuracy: 40), isOnRoute: false), .ours,
+                       "на 300 м коридор с погрешностью 40 м её принимает")
+        // Направление и ось — от курса, а не от точки: доплеровскому курсу на
+        // плохой позиции гейты верят (14.13), их доказательства не тронуты.
+        XCTAssertEqual(LocationGates.verdict(camera(ahead: 300, roadBearing: 0, dir: 180, twin: true),
+                                             in: situation(accuracy: 50), isOnRoute: false), .provenDirection)
+        XCTAssertEqual(LocationGates.verdict(camera(ahead: 100, roadBearing: nil, axis: 90),
+                                             in: situation(accuracy: 50), isOnRoute: false), .provenAxis)
+    }
+
+    /// Расширение ограничено: параллельная улица в 120 м вбок вне коридора
+    /// и на хорошем фиксе, и на плохом — 40 м погрешности не делают её нашей.
+    func testParallelStreetStaysOutsideOnAnyFix() {
+        let bare = camera(ahead: 200, east: 120, roadBearing: nil, cls: nil)
+        let proven = camera(ahead: 200, east: 120, roadBearing: 0, roadHalf: 30, dir: 0, twin: true)
+        for parallel in [bare, proven] {
+            for accuracy in [5.0, 25, 40] {
+                XCTAssertEqual(LocationGates.verdict(parallel, in: situation(accuracy: accuracy), isOnRoute: false),
+                               .outsideCorridor, "точность \(Int(accuracy)) м")
+            }
+        }
+    }
+
+    /// Точность неизвестна (≤ 0) — фильтр такой фикс не пропускает, и с
+    /// курсом гейты его не видят; но если увидят — неизвестность в пользу
+    /// предупреждения: как худший принятый фикс, без доказательства по точке.
+    func testUnknownAccuracyIsTreatedAsThePoorest() {
+        let aside = camera(ahead: 300, east: 60, roadBearing: 0, roadHalf: 350, twin: true)
+        XCTAssertNotEqual(LocationGates.verdict(aside, in: situation(accuracy: -1), isOnRoute: false),
+                          .provenOffCarriageway)
+        let own = camera(ahead: 120, east: 40, roadBearing: 0, roadHalf: 30, dir: 0, twin: true)
+        XCTAssertEqual(LocationGates.verdict(own, in: situation(accuracy: -1), isOnRoute: false), .ours)
+    }
+
     // MARK: - Коридор: старая база и внезапные точки
 
     /// Камера без профиля дороги прямо по курсу — коридор принимает.

@@ -19,6 +19,14 @@
 //  полезна: по мере приближения допуск сужается, и камера с параллельной улицы
 //  сама выпадает из коридора до того, как эскалация дойдёт до крика.
 //
+//  Коридор мерится от линии курса через НАШУ точку, и погрешность этой точки
+//  ложится на боковое отклонение один к одному: фикс в 40 м вбок — это
+//  линия курса в 40 м от дороги. Ширины ниже рассчитаны на отличный GPS;
+//  сверх него допуск растёт с погрешностью фикса (`accuracy`, 14.14). В
+//  каньоне портится позиция, а доплеровский курс остаётся уверенным, и
+//  гейты работают — раньше узкий ближний коридор выталкивал свою камеру на
+//  весь подъезд.
+//
 //  Чистая геометрия без состояния и без CLLocationManager — покрыта тестами
 //  (RoadCorridorTests).
 //
@@ -50,9 +58,30 @@ nonisolated struct RoadCorridor {
     /// `nearWidth` — ширина ближней зоны: если про дорогу камеры известны полосы
     /// и класс, берём её оттуда (жилая улица — 7 м, четырёхполосный проспект —
     /// 22 м) вместо одной константы на весь город.
+    /// `accuracy` — погрешность нашего фикса, метры (см. `accuracyAllowance`);
+    /// 0 — коридор как на отличном GPS. По умолчанию 0: подсказки, которые
+    /// при сомнении молчат (треноги, события, погода), им не расширяются.
     static func allowedAcross(along: CLLocationDistance,
                               context: AlertPolicy.Context,
-                              nearWidth: CLLocationDistance? = nil) -> CLLocationDistance {
+                              nearWidth: CLLocationDistance? = nil,
+                              accuracy: CLLocationAccuracy = 0) -> CLLocationDistance {
+        roadAcross(along: along, context: context, nearWidth: nearWidth)
+            + accuracyAllowance(accuracy)
+    }
+
+    /// Запас на погрешность НАШЕЙ точки (14.14): сверх
+    /// `corridorAccuracyBaselineMeters` — `corridorAccuracyFactor` метров на
+    /// метр. Поверх потолка: потолок — про изгиб дороги впереди, а не про то,
+    /// где стоим мы сами. ≤ базы (и неизвестная, ≤ 0) — ноль: неизвестную
+    /// гейты сами считают худшей принятой (LocationGates).
+    static func accuracyAllowance(_ accuracy: CLLocationAccuracy) -> CLLocationDistance {
+        AppConfig.corridorAccuracyFactor * max(0, accuracy - AppConfig.corridorAccuracyBaselineMeters)
+    }
+
+    /// Ширина по дороге: ближняя зона, конус дальше, потолок.
+    private static func roadAcross(along: CLLocationDistance,
+                                   context: AlertPolicy.Context,
+                                   nearWidth: CLLocationDistance?) -> CLLocationDistance {
         let base = nearWidth ?? (context == .highway
             ? AppConfig.corridorHighwayMeters
             : AppConfig.corridorCityMeters)
@@ -70,10 +99,11 @@ nonisolated struct RoadCorridor {
 
     /// Камера лежит на нашей дороге впереди?
     static func contains(_ fix: Fix, context: AlertPolicy.Context,
-                         nearWidth: CLLocationDistance? = nil) -> Bool {
+                         nearWidth: CLLocationDistance? = nil,
+                         accuracy: CLLocationAccuracy = 0) -> Bool {
         guard fix.along >= -AppConfig.corridorBehindToleranceMeters else { return false }
         return fix.across <= allowedAcross(along: fix.along, context: context,
-                                           nearWidth: nearWidth)
+                                           nearWidth: nearWidth, accuracy: accuracy)
     }
 
     /// Полная проверка одной камеры от точки и курса — то, что вызывает LocationService.
@@ -81,8 +111,9 @@ nonisolated struct RoadCorridor {
                          from coordinate: CLLocationCoordinate2D,
                          course: CLLocationDegrees,
                          context: AlertPolicy.Context,
-                         nearWidth: CLLocationDistance? = nil) -> Bool {
+                         nearWidth: CLLocationDistance? = nil,
+                         accuracy: CLLocationAccuracy = 0) -> Bool {
         contains(fix(from: coordinate, course: course, to: camera), context: context,
-                 nearWidth: nearWidth)
+                 nearWidth: nearWidth, accuracy: accuracy)
     }
 }

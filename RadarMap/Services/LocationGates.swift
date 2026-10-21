@@ -37,7 +37,9 @@ nonisolated enum LocationGates {
         /// Курс, которому МОЖНО верить (см. LocationFilter). `-1` — курса нет.
         let course: CLLocationDirection
         let speedKmh: Double
-        /// Погрешность фикса: на плохом GPS допуск расширяется, а не сужается.
+        /// Погрешность фикса: на плохом GPS допуск расширяется, а не сужается
+        /// (кусок дороги и коридор, 14.14), и доказательства по месту нет.
+        /// ≤ 0 — неизвестна: считаем худшей принятой (`fixAccuracy`).
         let horizontalAccuracy: CLLocationAccuracy
         /// Город или трасса — от этого зависит ширина коридора.
         let context: AlertPolicy.Context
@@ -118,6 +120,7 @@ nonisolated enum LocationGates {
 
         let coordinate = situation.coordinate
         let shape = RoadShape(camera: camera)
+        let accuracy = fixAccuracy(situation)
 
         // 2. НАПРАВЛЕНИЕ проезжей части — самый однозначный признак, но применять
         // его можно не везде: часть камер снимает И обратную сторону дороги, и
@@ -155,7 +158,7 @@ nonisolated enum LocationGates {
         if let shape, let lateral = shape.lateralOffset(from: coordinate) {
             var allowed = RoadGeometry.halfWidth(lanes: camera.lanes,
                                                  roadClass: camera.roadClass)
-                + max(AppConfig.roadShapeMinToleranceMeters, situation.horizontalAccuracy)
+                + max(AppConfig.roadShapeMinToleranceMeters, accuracy)
             // Камера может снимать обе стороны разделённой дороги — тогда «своей»
             // для неё считается и обратная проезжая часть. В OSM каждая сторона
             // отдельная линия, и без этого запаса мы едем в 10–40 м от её куска
@@ -164,7 +167,21 @@ nonisolated enum LocationGates {
             if lateral <= allowed { return isAhead(camera, in: situation) ? .ours : .behind }
             // Мы не на дороге камеры — но глушить вправе только там, где стороны
             // доказанно поделены. Иначе решает коридор.
-            if camera.sidesAreProven { return .provenOffCarriageway }
+            //
+            // И только по годному фиксу (14.14): «не на её проезжей части» —
+            // это различение проезжих частей, а они в 10–40 м друг от друга
+            // (`dividedRoadSpanMeters`). Фикс хуже `courseProofMaxAccuracyMeters`
+            // сам может стоять на соседней, и расширить допуск на его
+            // погрешность мало: погрешность — радиус, а не граница, и в
+            // каньоне точка держится сдвинутой в одну сторону, — каждый тик
+            // такой «точности сверх заявленной» глушил бы камеру весь подъезд.
+            // Порог тот же, что у остальных доказательств (запись проезда,
+            // охват, курс по земле): охват такие вердикты и так не считал.
+            // Хуже порога решает коридор — эвристика, расширенная той же
+            // погрешностью: параллельная улица в сотне метров остаётся чужой.
+            if camera.sidesAreProven, accuracy <= AppConfig.courseProofMaxAccuracyMeters {
+                return .provenOffCarriageway
+            }
         }
 
         // 4. Коридор — эвристика для всего остального: куска дороги нет (старая
@@ -188,9 +205,22 @@ nonisolated enum LocationGates {
             ? max(AppConfig.corridorMinNearMeters,
                   RoadGeometry.halfWidth(lanes: camera.lanes, roadClass: camera.roadClass))
             : nil
+        // Коридор мерится от линии курса через НАШУ точку: на плохом фиксе он
+        // шире на её погрешность (14.14) — иначе уверенный доплеровский курс
+        // на точке в 40 м вбок выталкивал свою камеру из ближней зоны.
         return RoadCorridor.contains(camera: camera.coordinate, from: coordinate,
                                      course: situation.course, context: context,
-                                     nearWidth: nearWidth) ? .ours : .outsideCorridor
+                                     nearWidth: nearWidth, accuracy: accuracy) ? .ours : .outsideCorridor
+    }
+
+    /// Погрешность фикса для гейтов. Неизвестная (≤ 0) — как худшая, какую
+    /// пропускает LocationFilter: неизвестность — в пользу предупреждения.
+    /// С курсом такой фикс до гейтов не доходит (фильтр его отбрасывает, а
+    /// курс и точность приходят с одного принятого фикса), так что это
+    /// правило на случай, а не на каждый день.
+    static func fixAccuracy(_ situation: Situation) -> CLLocationAccuracy {
+        situation.horizontalAccuracy > 0 ? situation.horizontalAccuracy
+                                         : AppConfig.maxHorizontalAccuracyMeters
     }
 
     /// Камера впереди по курсу (с тем же запасом «немного позади», что у

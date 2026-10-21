@@ -295,6 +295,37 @@ final class EnergyJournalTests: XCTestCase {
         XCTAssertGreaterThan(names.count, 1)
     }
 
+    // MARK: - Строка «Итогов»
+
+    /// Без записей строка та же, что без журнала; с записями — сверху
+    /// реальные деньги, расчёт вторым планом, «вышло бы» не сравнивает оценки.
+    @MainActor
+    func testItogiRowHonesty() {
+        var profile = FuelProfile()
+        profile.rates[.petrol] = FuelRate(per100Km: 6, price: 13_000)
+        let model = EnergySplit.model(profile: profile, energy: .fuel)
+        var use = EnergySplit.Use()
+        use.meters[.petrol] = 100_000
+        use.amount[.petrol] = 6
+        use.money = 78_000
+        let plain = PeriodEnergyRow.lines(use, model: model, current: false)
+        let empty = EnergyJournal.period([], in: DateInterval(start: date(1), end: date(31)))
+        XCTAssertEqual(PeriodEnergyRow.lines(use, model: model, current: false, journal: empty), plain)
+        XCTAssertEqual(PeriodEnergyRow.isWorthShowing(use, model: model, journal: empty),
+                       PeriodEnergyRow.isWorthShowing(use, model: model))
+
+        let entries = [fill(3, 30, 390_000, km: 10_000, full: true), fill(17, 40, 520_000, km: 10_600, full: true)]
+        let journal = EnergyJournal.period(entries, in: DateInterval(start: date(1, 0), end: date(1, 0, month: 11)))
+        let lines = PeriodEnergyRow.lines(use, model: model, current: false, journal: journal)
+        XCTAssertTrue(lines.title.hasPrefix(JournalText.spent(journal.spending)))
+        XCTAssertEqual(lines.detail, JournalText.estimate(78_000))
+        XCTAssertNil(lines.allPetrol)
+        XCTAssertEqual(lines.measured, JournalText.measured(journal.measured))
+        XCTAssertNotNil(lines.measured)
+        // Записи есть, а поездок с ценой нет — строка всё равно нужна.
+        XCTAssertTrue(PeriodEnergyRow.isWorthShowing(EnergySplit.Use(), model: model, journal: journal))
+    }
+
     // MARK: - Месяцы журнала
 
     /// Полночь первого числа — уже новый месяц; новые сверху.

@@ -558,17 +558,7 @@ final class CarPlayGuidance {
         let next = card.maneuver
         maneuverShownAt = Date()
         sentManeuverState = nil
-        let lanes = card.lanes
-        if CarPlayGuidanceMapping.isUseful(lanes) {
-            let guidance = CPLaneGuidance()
-            guidance.lanes = lanes.map { lane in
-                let angles = lane.angles.map { Measurement(value: $0, unit: UnitAngle.degrees) }
-                guard let highlighted = lane.highlighted else { return CPLane(angles: angles) }
-                return CPLane(angles: angles,
-                              highlightedAngle: Measurement(value: highlighted, unit: UnitAngle.degrees),
-                              isPreferred: true)
-            }
-            guidance.instructionVariants = next.instructionVariants
+        if let guidance = Self.laneGuidance(card.lanes, instructions: next.instructionVariants) {
             laneGuidances.append(guidance)
             session.add([guidance])
             next.linkedLaneGuidance = guidance
@@ -591,7 +581,7 @@ final class CarPlayGuidance {
         let arrow = Self.whiteArrow(on: Self.cardColor, dark: carDark) ? "белая" : "чёрная"
         Log.carplay.notice("манёвр в машину: вариантов \(next.instructionVariants.count, privacy: .public), первый \(next.instructionVariants.first?.count ?? 0, privacy: .public) симв., стрелка \(next.symbolImage != nil, privacy: .public) (\(arrow, privacy: .public)), фон карточки \(background, privacy: .public) (\(carDark ? "тёмная" : "светлая", privacy: .public) машина), полосы \(laneRow != nil, privacy: .public), край \(step.laneEdge?.rawValue ?? "-", privacy: .public), \(Int(distance), privacy: .public) м")
         maneuver = next
-        upcoming = [next] + (laneRow.map { [$0] } ?? [])
+        upcoming = card.upcoming
         // Каждый манёвр, попадающий в upcomingManeuvers, сначала регистрируется
         // в сессии — ряд полос тоже: заголовок требует этого для ВСЕХ
         // элементов списка (CPNavigationSession.h, iOS 17.4+), а машина вправе
@@ -612,6 +602,28 @@ final class CarPlayGuidance {
         let laneRow: CPManeuver?
         /// Полосы для CPLaneGuidance (метаданные приборки).
         let lanes: [CarPlayGuidanceMapping.Lane]
+
+        /// Что уходит в `upcomingManeuvers`: манёвр и ряд полос под ним. С
+        /// метаданными ряда нет (`card(metadata:)`) — в списке один манёвр,
+        /// и приборка не прочтёт картинку полос вторым поворотом.
+        var upcoming: [CPManeuver] { [maneuver] + (laneRow.map { [$0] } ?? []) }
+    }
+
+    /// Полосы для метаданных приборки (CPLaneGuidance), nil — выбирать
+    /// нечего. Подсвеченный угол не входит в `angles` (CPLane.h), фраза — та
+    /// же, что у манёвра: «You must provide at least one variant».
+    static func laneGuidance(_ lanes: [CarPlayGuidanceMapping.Lane], instructions: [String]) -> CPLaneGuidance? {
+        guard CarPlayGuidanceMapping.isUseful(lanes), !instructions.isEmpty else { return nil }
+        let guidance = CPLaneGuidance()
+        guidance.lanes = lanes.map { lane in
+            let angles = lane.angles.map { Measurement(value: $0, unit: UnitAngle.degrees) }
+            guard let highlighted = lane.highlighted else { return CPLane(angles: angles) }
+            return CPLane(angles: angles,
+                          highlightedAngle: Measurement(value: highlighted, unit: UnitAngle.degrees),
+                          isPreferred: true)
+        }
+        guidance.instructionVariants = instructions
+        return guidance
     }
 
     /// `carDark` — тема МАШИНЫ: в ней рисуются баннер поверх чужого

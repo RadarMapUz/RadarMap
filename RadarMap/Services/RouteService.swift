@@ -68,16 +68,27 @@ final class RouteService {
         /// только при свежем наборе).
         var trafficDelay: TimeInterval?
 
-        /// Время в пути с пробками — его и показываем, и сравниваем.
-        var expectedTime: TimeInterval { travelTime + (trafficDelay ?? 0) }
+        /// Время в пути с пробками — его и показываем, и сравниваем. У своей
+        /// дороги (24.4) — по своим поездкам в этот час, если их хватает.
+        var expectedTime: TimeInterval { assessment.myRoad?.seconds ?? travelTime + (trafficDelay ?? 0) }
         var etaText: String { Formatting.duration(expectedTime) }
         var distanceText: String { Formatting.distance(distance) }
-        /// «+12 мин из-за пробок» / «без пробок»; nil — данных нет.
+        /// Задержка пробками, которую показываем: у своей дороги со своим
+        /// временем — только пробки сверх своего обычного (обычная пробка
+        /// этого часа уже в нём), иначе — по пробкам на линии.
+        var shownTrafficDelay: TimeInterval? {
+            guard let mine = assessment.myRoad, mine.seconds != nil else { return trafficDelay }
+            return mine.jamSeconds
+        }
+        /// «+12 мин из-за пробок» / «без пробок»; nil — данных нет. У своей
+        /// дороги «без пробок» не говорим: в её «обычно» пробки этого часа есть.
         var trafficNote: String? {
-            guard let trafficDelay else { return nil }
-            if trafficDelay < 60 { return String(localized: "без пробок") }
+            guard let delay = shownTrafficDelay else { return nil }
+            if delay < 60 {
+                return assessment.myRoad?.seconds != nil ? nil : String(localized: "без пробок")
+            }
             return String(format: String(localized: "+%@ из-за пробок"),
-                          Formatting.unbreakable(Formatting.duration(trafficDelay)))
+                          Formatting.unbreakable(Formatting.duration(delay)))
         }
     }
 
@@ -189,6 +200,18 @@ final class RouteService {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: personalHistory,
                                                "RouteService.personalHistory") }
     }
+    /// Своя дорога к цели (24.4, MyRoad): план из профиля дороги дом↔работа,
+    /// если цель — дом или работа и путь туда наезжен. nil — выключено
+    /// («Учитывать мои поездки», «Время дороги на работу») или своей дороги нет.
+    @ObservationIgnored var myRoadPlan: ((_ source: CLLocationCoordinate2D,
+                                          _ destination: CLLocationCoordinate2D) -> MyRoad.Plan?)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: myRoadPlan,
+                                               "RouteService.myRoadPlan") }
+    }
+    /// План своей дороги, по которому построен её вариант (24.4): по нему
+    /// перестроение ведёт через оставшиеся опорные точки. Действует, пока
+    /// выбран вариант с ярлыком «Моя дорога».
+    @ObservationIgnored private var myRoadInUse: MyRoad.Plan?
     /// Язык названий улиц в манёврах (`AppLanguage.mapCode`). Спрашиваем в
     /// момент построения: OSRM отдаёт имя узбекской латиницей, и в русской
     /// версии его надо переписать (см. StreetName). nil — как в русской.
@@ -287,7 +310,7 @@ final class RouteService {
     var distanceText: String { selected?.distanceText ?? "" }
     var etaText: String { selected?.etaText ?? "" }
     var trafficNote: String? { selected?.trafficNote }
-    var trafficDelay: TimeInterval? { selected?.trafficDelay }
+    var trafficDelay: TimeInterval? { selected?.shownTrafficDelay }
 
     // MARK: - Индекс камер маршрута
 
@@ -473,16 +496,26 @@ final class RouteService {
         resetDetour()
 
         lastArrival = nil   // новый маршрут — карточка прошлого прибытия неактуальна
+        // Своя дорога (24.4) — только при выборе из вариантов: запрос через
+        // её опорные точки идёт рядом с обычным, а не после него.
+        let plan = alternatives ? myRoadPlan?(source, destination) : nil
         do {
-            let built = try await calculate(from: source, via: nil, to: destination,
-                                            alternatives: alternatives, heading: heading)
+            async let engine = calculate(from: source, via: nil, to: destination,
+                                         alternatives: alternatives, heading: heading)
+            async let ownRoute = myRoadRoute(plan, from: source, to: destination, heading: heading)
+            let built = try await engine
+            let mine = await ownRoute
             guard gen == generation else { return }   // пока считали — маршрут сбросили/заменили
+            let merged = await offMain { Self.merge(built, mine: mine, plan: plan) }
+            guard gen == generation else { return }
             // Новая цель — остановка прежнего маршрута не её. Забываем ТОЛЬКО
             // после успеха: не построилось — прежняя линия (через остановку)
             // остаётся, и перестроение по ней обязано помнить заезд.
             stop = nil
-            await apply(built, name: name, destination: destination,
-                        cameras: cameras, gen: gen, history: personalHistory?())
+            myRoadInUse = merged.index == nil ? nil : plan
+            await apply(merged.variants, name: name, destination: destination,
+                        cameras: cameras, gen: gen, history: personalHistory?(),
+                        myRoad: merged.index.flatMap { index in plan.map { (index, $0) } })
         } catch RouteError.serverUnreachable {
             errorMessage = String(localized: "Нет связи с сервером маршрутов — проверьте интернет")
         } catch {
@@ -573,6 +606,7 @@ final class RouteService {
         destinationName = ""
         destinationCoordinate = nil
         stop = nil
+        myRoadInUse = nil
         errorMessage = nil
         selectedCumulative = []
         rerouteGate.reset()
@@ -714,6 +748,9 @@ final class RouteService {
         let name = destinationName
         let gen = generation
         let via = stop   // ещё не заехали — объезд всё равно через остановку
+        // Ехали своей дорогой — и перестраиваемся ею (24.4).
+        let ownPlan = via == nil && variant.assessment.myRoad != nil
+            ? myRoadInUse.flatMap { MyRoad.remaining($0, from: coordinate, course: course) } : nil
         Task {
             defer {
                 isRebuilding = false
@@ -721,11 +758,17 @@ final class RouteService {
             }
             // Перестраиваем без альтернатив — быстрее, и в движении выбор не нужен.
             let built: [BuiltVariant]
+            let heading = course >= 0 ? course : nil
+            let own = await rerouteMyRoad(ownPlan, from: coordinate, to: destination, heading: heading)
             do {
                 // Курс — чтобы новый маршрут шёл туда, куда машина едет, а не
                 // начинался с разворота за спиной (см. rerouteBearingRangeDegrees).
-                built = try await calculate(from: coordinate, via: via, to: destination, alternatives: false,
-                                            heading: course >= 0 ? course : nil)
+                if let own {
+                    built = [own]
+                } else {
+                    built = try await calculate(from: coordinate, via: via, to: destination, alternatives: false,
+                                                heading: heading)
+                }
             } catch {
                 rerouteGate.noteFailure()
                 Log.route.error("перестроение маршрута не удалось (\(self.rerouteGate.failures, privacy: .public)-й раз): \(error.localizedDescription, privacy: .public) — остаёмся на старой линии")
@@ -733,8 +776,10 @@ final class RouteService {
             }
             guard gen == generation else { return }   // маршрут успели сбросить/заменить
             rerouteGate.noteSuccess()
+            myRoadInUse = own == nil ? nil : ownPlan
             await apply(built, name: name, destination: destination,
-                        cameras: cameras, gen: gen, history: nil)
+                        cameras: cameras, gen: gen, history: nil,
+                        myRoad: own == nil ? nil : ownPlan.map { (0, $0) })
             onRerouted?()
         }
     }
@@ -1012,12 +1057,72 @@ final class RouteService {
         }
     }
 
+    // MARK: - Своя дорога (24.4)
+
+    /// Своя дорога через опорные точки линии (MyRoad). Тот же свой сервер
+    /// маршрутов, что и всегда, без альтернатив. Не вышло — nil и строка в
+    /// журнал: варианты движка остаются, просто без своей дороги.
+    private func myRoadRoute(_ plan: MyRoad.Plan?, from source: CLLocationCoordinate2D,
+                             to destination: CLLocationCoordinate2D,
+                             heading: CLLocationDirection?) async -> BuiltVariant? {
+        guard let plan, !plan.via.isEmpty, isRoutingEnabled else { return nil }
+        do {
+            return try await osrmRoute(from: source, via: nil, to: destination, alternatives: false,
+                                       heading: heading, pass: plan.via).first
+        } catch {
+            Log.route.notice("своя дорога не построена (\(plan.via.count, privacy: .public) точек): \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    /// Перестроение своей дорогой: маршрут через оставшиеся опорные точки,
+    /// если он прошёл ту же отбраковку петли, что и при выборе. nil — точек
+    /// нет, сервер отказал или вышла петля: перестраивает движок.
+    private func rerouteMyRoad(_ plan: MyRoad.Plan?, from source: CLLocationCoordinate2D,
+                               to destination: CLLocationCoordinate2D,
+                               heading: CLLocationDirection?) async -> BuiltVariant? {
+        guard let plan, let mine = await myRoadRoute(plan, from: source, to: destination, heading: heading)
+        else { return nil }
+        let path = mine.points.map(\.coordinate)
+        let distance = mine.distance
+        guard await offMain({ MyRoad.accepts(distance: distance, path: path, plan: plan) }) else {
+            Log.route.notice("перестроение своей дорогой отброшено: \(Int(distance), privacy: .public) м против \(Int(plan.lineLength + plan.startOffset), privacy: .public) м — ведёт движок")
+            return nil
+        }
+        Log.route.notice("перестроение своей дорогой: точек \(plan.via.count, privacy: .public)")
+        return mine
+    }
+
+    /// Варианты движка вместе со своей дорогой: вариант движка, который и
+    /// так идёт своим путём, помечается сам; иначе маршрут через опорные
+    /// точки — если он та же дорога, а не петля, — встаёт на место самого
+    /// долгого. Без сети (свой граф трасс) — без своей дороги: там нет и
+    /// выбора вариантов.
+    nonisolated private static func merge(_ built: [BuiltVariant], mine: BuiltVariant?,
+                                          plan: MyRoad.Plan?) -> (variants: [BuiltVariant], index: Int?) {
+        guard let plan, !built.contains(where: \.offline) else { return (built, nil) }
+        if let match = MyRoad.matching(built.map { $0.points.map(\.coordinate) }, plan: plan) {
+            Log.route.notice("своя дорога: вариант движка \(match, privacy: .public) уже по ней")
+            return (built, match)
+        }
+        guard let mine else { return (built, nil) }
+        guard MyRoad.accepts(distance: mine.distance, path: mine.points.map(\.coordinate), plan: plan) else {
+            Log.route.notice("своя дорога отброшена: \(Int(mine.distance), privacy: .public) м против линии \(Int(plan.lineLength + plan.startOffset), privacy: .public) м")
+            return (built, nil)
+        }
+        var variants = built
+        if let drop = MyRoad.slotToFree(times: variants.map(\.travelTime)) { variants.remove(at: drop) }
+        variants.append(mine)
+        return (variants, variants.count - 1)
+    }
+
     private func osrmRoute(from source: CLLocationCoordinate2D,
                            via stop: Stop?,
                            to destination: CLLocationCoordinate2D,
                            alternatives: Bool,
-                           heading: CLLocationDirection? = nil) async throws -> [BuiltVariant] {
-        let waypoints = [source] + (stop.map { [$0.coordinate] } ?? []) + [destination]
+                           heading: CLLocationDirection? = nil,
+                           pass: [MyRoad.Via] = []) async throws -> [BuiltVariant] {
+        let waypoints = [source] + (stop.map { [$0.coordinate] } ?? []) + pass.map(\.coordinate) + [destination]
         let path = waypoints
             .map { String(format: "%.6f,%.6f", $0.longitude, $0.latitude) }
             .joined(separator: ";")
@@ -1025,8 +1130,9 @@ final class RouteService {
             .appendingPathComponent("route/v1/driving")
             .appendingPathComponent(path),
             resolvingAgainstBaseURL: false)!
-        components.queryItems = Self.osrmQueryItems(alternatives: alternatives, heading: heading,
-                                                    waypoints: waypoints.count)
+        components.queryItems = pass.isEmpty
+            ? Self.osrmQueryItems(alternatives: alternatives, heading: heading, waypoints: waypoints.count)
+            : Self.osrmQueryItems(heading: heading, via: pass)
 
         // Сторонний OSRM, не наш бэкенд — единственное осознанное исключение из
         // правила «сеть только через APIClient» (свой формат URL и ошибок).
@@ -1348,7 +1454,8 @@ final class RouteService {
 
     private func apply(_ built: [BuiltVariant], name: String,
                        destination: CLLocationCoordinate2D, cameras: [Camera],
-                       gen: Int, history: RouteChoice.History?) async {
+                       gen: Int, history: RouteChoice.History?,
+                       myRoad: (index: Int, plan: MyRoad.Plan)? = nil) async {
         // Камеры по коридору каждого варианта считаем ВНЕ главного потока —
         // длинные маршруты не должны дёргать UI даже на старых устройствах.
         let inputs = built.filter { $0.points.count >= 2 }
@@ -1356,6 +1463,10 @@ final class RouteService {
         let traffic = trafficSnapshot?()
         let events = roadEvents?() ?? []
         let eventsNow = Date()
+        // Своя дорога — только когда её план передан: при выборе вариантов
+        // (если «Учитывать мои поездки» включено) и при перестроении своей
+        // дорогой — там ярлык и время по своей истории сохраняются.
+        let mine = myRoad.flatMap { inputs.indices.contains($0.index) ? $0 : nil }
 
         // Там же — выбор варианта по своим поездкам: сравнение с сотней
         // треков стоит десятки миллисекунд, главному потоку они не нужны.
@@ -1370,6 +1481,12 @@ final class RouteService {
             // Пробки — к каждому варианту: «Быстрый» выбирается по времени
             // с пробками, а не по пустым дорогам графа.
             let delays = inputs.map { variant in traffic?.delay(along: variant.points.map(\.coordinate)) }
+            // Своя дорога — со временем по своим поездкам этого часа (24.4).
+            let personal = mine.map { mine -> RouteChoice.Personal in
+                let estimate = MyRoad.estimate(mine.plan, now: eventsNow, snapshot: traffic)
+                return RouteChoice.Personal(direction: mine.plan.direction, trips: mine.plan.trips,
+                                            seconds: estimate?.seconds, jamSeconds: estimate?.jamSeconds ?? 0)
+            }
             let choice = RouteChoice.decide(inputs.indices.map { index in
                 RouteChoice.Input(path: inputs[index].points.map(\.coordinate),
                                   distance: inputs[index].distance,
@@ -1377,7 +1494,8 @@ final class RouteService {
                                   cameraIDs: found[index].map(\.camera.id),
                                   hardManeuvers: RouteChoice.hardManeuvers(inputs[index].steps),
                                   closures: RoadEventRules.closures(on: inputs[index].points.map(\.coordinate),
-                                                                    events: events, now: eventsNow))
+                                                                    events: events, now: eventsNow),
+                                  personal: index == mine?.index ? personal : nil)
             }, history: history)
             return (found, choice, delays)
         }
@@ -1650,6 +1768,29 @@ final class RouteService {
         detourCounter += 1
         detourOffer = DetourOffer(id: detourCounter, saving: 8 * 60, via: "Шота Руставели", waitingSince: Date())
     }
+
+    /// Скриншот-хук `-demoMyRoad` (24.4): варианты движка и своя дорога без
+    /// сети — пути подставные, а выбор, ярлыки и время по своим поездкам
+    /// идут настоящим путём (`merge` → `apply`).
+    func seedDemoMyRoad(name: String, destination: CLLocationCoordinate2D,
+                        engine: [(path: [CLLocationCoordinate2D], seconds: TimeInterval)],
+                        mine: (path: [CLLocationCoordinate2D], seconds: TimeInterval),
+                        plan: MyRoad.Plan, cameras: [Camera]) async {
+        func built(_ path: [CLLocationCoordinate2D], _ seconds: TimeInterval) -> BuiltVariant {
+            let points = path.map(MKMapPoint.init)
+            let length = zip(points, points.dropFirst()).reduce(0) { $0 + $1.0.distance(to: $1.1) }
+            let arrive = RouteStep(distanceAlong: length, text: String(localized: "Вы на месте"),
+                                   icon: "flag.checkered", kind: .arrive)
+            return BuiltVariant(points: points, distance: length, travelTime: seconds, steps: [arrive])
+        }
+        generation += 1
+        let gen = generation
+        let merged = Self.merge(engine.map { built($0.path, $0.seconds) }, mine: built(mine.path, mine.seconds),
+                                plan: plan)
+        await apply(merged.variants, name: name, destination: destination, cameras: cameras, gen: gen,
+                    history: personalHistory?() ?? RouteChoice.History(tracks: [], overspeedCameraIDs: []),
+                    myRoad: merged.index.map { ($0, plan) })
+    }
     #endif
 
     private func resetDetour() {
@@ -1767,6 +1908,32 @@ final class RouteService {
                 ["\(AppConfig.rerouteBearingRadiusMeters)"] + rest.map { _ in "unlimited" }).joined(separator: ";")))
         }
         return items
+    }
+
+    /// Параметры запроса своей дороги (24.4): опорные точки — проходные
+    /// (`waypoints` — только старт и цель: одно плечо, без «прибытия» у
+    /// каждой точки), с курсом линии и радиусом поиска дороги — точка берёт
+    /// свою проезжую часть, а не встречную; разворот у точки запрещён
+    /// (`continue_straight`).
+    nonisolated static func osrmQueryItems(heading: CLLocationDirection?, via: [MyRoad.Via]) -> [URLQueryItem] {
+        let count = via.count + 2
+        var bearings = [""], radiuses = ["unlimited"]
+        if let heading, heading.isFinite, heading >= 0 {
+            bearings = ["\(Int(heading.rounded()) % 360),\(AppConfig.rerouteBearingRangeDegrees)"]
+            radiuses = ["\(AppConfig.rerouteBearingRadiusMeters)"]
+        }
+        bearings += via.map { "\($0.bearing),\(AppConfig.myRoadViaBearingRange)" } + [""]
+        radiuses += via.map { _ in "\(AppConfig.myRoadViaRadiusMeters)" } + ["unlimited"]
+        return [
+            URLQueryItem(name: "overview", value: "full"),
+            URLQueryItem(name: "geometries", value: "geojson"),
+            URLQueryItem(name: "alternatives", value: "false"),
+            URLQueryItem(name: "steps", value: "true"),
+            URLQueryItem(name: "continue_straight", value: "true"),
+            URLQueryItem(name: "waypoints", value: "0;\(count - 1)"),
+            URLQueryItem(name: "bearings", value: bearings.joined(separator: ";")),
+            URLQueryItem(name: "radiuses", value: radiuses.joined(separator: ";")),
+        ]
     }
 
     /// Курс для маршрута, построенного сейчас (20.9): только на ходу (не

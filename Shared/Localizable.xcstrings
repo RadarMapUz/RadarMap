@@ -8438,22 +8438,6 @@
         }
       }
     },
-    "Метки «Знакомый» и «Спокойнее» на вариантах маршрута.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Метки «Знакомый» и «Спокойнее» на вариантах маршрута."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Marshrut variantlarida «Tanish» va «Tinchroq» belgilari."
-          }
-        }
-      }
-    },
     "Мои данные": {
       "extractionState": "manual",
       "localizations": {
@@ -22761,6 +22745,134 @@
         }
       }
     },
+    "Моя дорога": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Моя дорога"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mening yoʻlim"
+          }
+        }
+      }
+    },
+    "так вы ездите домой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "так вы ездите домой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "uyga shu yoʻldan qaytasiz"
+          }
+        }
+      }
+    },
+    "так вы ездите на работу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "так вы ездите на работу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ishga shu yoʻldan borasiz"
+          }
+        }
+      }
+    },
+    "так вы ездите домой — обычно %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "так вы ездите домой — обычно %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "uyga shu yoʻldan qaytasiz — odatda %@"
+          }
+        }
+      }
+    },
+    "так вы ездите на работу — обычно %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "так вы ездите на работу — обычно %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ishga shu yoʻldan borasiz — odatda %@"
+          }
+        }
+      }
+    },
+    "«Моя дорога» — домой и на работу тем путём, которым вы ездите каждый день, даже если сервер предложил другой. Время — по вашим поездкам в этот час.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Моя дорога» — домой и на работу тем путём, которым вы ездите каждый день, даже если сервер предложил другой. Время — по вашим поездкам в этот час."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Mening yoʻlim» — uyga va ishga har kuni yuradigan yoʻlingizdan, server boshqasini taklif qilgan boʻlsa ham. Vaqt — shu soatdagi safarlaringiz boʻyicha."
+          }
+        }
+      }
+    },
+    "Моя дорога и знакомый предлагаются первыми, если они ненамного дольше быстрого с учётом пробок.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Моя дорога и знакомый предлагаются первыми, если они ненамного дольше быстрого с учётом пробок."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mening yoʻlim va tanish yoʻl, agar tirbandlikni hisobga olganda tez yoʻldan ancha uzoq boʻlmasa, birinchi taklif qilinadi."
+          }
+        }
+      }
+    },
+    "Метки «Моя дорога», «Знакомый» и «Спокойнее» на вариантах маршрута.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Метки «Моя дорога», «Знакомый» и «Спокойнее» на вариантах маршрута."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrut variantlarida «Mening yoʻlim», «Tanish» va «Tinchroq» belgilari."
+          }
+        }
+      }
+    },
     "Быстрый": {
       "localizations": {
         "ru": {
@@ -22981,22 +23093,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Variantlar safarlaringiz bilan solishtiriladi: «Tanish» — siz yurgan yoʻl, «Xotirjamroq» — avval tezlikni oshirgan kameralaringizsiz."
-          }
-        }
-      }
-    },
-    "Знакомый предлагается первым, если он ненамного дольше быстрого.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Знакомый предлагается первым, если он ненамного дольше быстрого."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tanish yoʻl, agar tez yoʻldan ancha uzoq boʻlmasa, birinchi taklif qilinadi."
           }
         }
       }

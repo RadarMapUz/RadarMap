@@ -306,6 +306,15 @@ extension MapScreen {
                 }
             }
         }
+        // «Моя дорога» (24.4): выбор вариантов домой без сети.
+        if args.contains("-demoMyRoad") {
+            Task {
+                // Холодный старт после загрузки симулятора: на 2 с маршрут
+                // ложился раньше готовности экрана и не рисовался.
+                await Task.pause(seconds: 4)
+                if let rect = await MyRoadDemo.seed(env) { map.showRouteOverview(rect: rect) }
+            }
+        }
         if args.contains("-demoRoute") {
             Task {
                 await Task.pause(seconds: 2)

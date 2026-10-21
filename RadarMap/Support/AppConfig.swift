@@ -1438,6 +1438,62 @@ nonisolated enum AppConfig {
     /// «Проще» — минимум на столько сложных манёвров меньше быстрого.
     static let routeSimplerMinDelta = 2
 
+    // MARK: - «Моя дорога» (MyRoad, 24.4)
+
+    /// Цель — дом или работа, если ближе этого к сохранённому или выученному
+    /// месту: адрес из поиска ложится на здание, а не на парковку у подъезда.
+    nonisolated static let myRoadPlaceMeters: CLLocationDistance = 300
+    /// Сколько поездок этим путём нужно, чтобы назвать его «моей дорогой» —
+    /// столько же, сколько призраку для «обычно».
+    nonisolated static let myRoadMinRows = 3
+    /// Старт дальше этого от линии своего пути — уже не своя дорога (поехали
+    /// домой не с работы). Как радиус старта у призрака.
+    nonisolated static let myRoadStartMeters: CLLocationDistance = 1000
+    /// Остаток своей линии короче — строить свою дорогу незачем: на паре
+    /// километров вариантам движка не из чего расходиться.
+    nonisolated static let myRoadMinLineMeters: CLLocationDistance = 1500
+    /// Линия упрощается перед выбором опорных точек: зигзаг GPS в 10–15 м —
+    /// не поворот.
+    nonisolated static let myRoadViaSimplifyMeters: Double = 20
+    /// Поворот линии от стольких градусов — место для опорной точки.
+    nonisolated static let myRoadViaTurnDegrees: Double = 30
+    /// Опорная точка — на столько дальше вершины поворота: вершина — это
+    /// перекрёсток, и точка на нём легла бы на поперечную улицу.
+    nonisolated static let myRoadViaAfterTurnMeters: Double = 60
+    /// Отрезок после поворота короче — короткий хвост (съезд, развязка), точку
+    /// на нём не ставим.
+    nonisolated static let myRoadViaMinLegMeters: Double = 120
+    /// Прямая длиннее — точка посередине, чтобы движок не ушёл на параллельную.
+    nonisolated static let myRoadViaStraightMeters: Double = 900
+    /// Опорные точки не ближе друг к другу.
+    nonisolated static let myRoadViaSpacingMeters: Double = 400
+    /// И не ближе к старту и к концу линии: у старта точка заставила бы
+    /// развернуться, у конца — объехать квартал.
+    nonisolated static let myRoadViaEdgeMeters: Double = 300
+    /// Не больше стольких точек: каждая — ограничение, и лишние делают
+    /// маршрут хуже, а не точнее.
+    nonisolated static let myRoadViaMax = 8
+    /// Ни одной опорной точки ближе к дому и к работе (24.4, приватность).
+    nonisolated static let myRoadPrivacyMeters: CLLocationDistance = 300
+    /// Точка ищет дорогу не дальше этого (OSRM `radiuses`): линия упрощена,
+    /// но не на 50 м; дальше — уже другая улица.
+    nonisolated static let myRoadViaRadiusMeters = 50
+    /// Допуск курса дороги у опорной точки (OSRM `bearings`).
+    nonisolated static let myRoadViaBearingRange = 45
+    /// Маршрут через опорные точки длиннее линии своего пути на эту долю —
+    /// петля или разворот у точки, а не своя дорога.
+    nonisolated static let myRoadMaxExtraShare = 0.15
+    /// Вариантов на выбор не больше: своя дорога встаёт на место самого
+    /// долгого варианта движка, плашек остаётся три.
+    nonisolated static let myRoadMaxVariants = 3
+    /// Подъезд от старта к своей линии — медленным ходом (двор, парковка).
+    nonisolated static let myRoadApproachSpeedMps: Double = 5
+    /// Перестроение своей дорогой: ближайшая опорная точка ближе этого — уже
+    /// не цель (на неё не вырулить без петли), берём следующую.
+    nonisolated static let myRoadRerouteSkipMeters: CLLocationDistance = 300
+    /// …или она позади по курсу больше чем на столько градусов.
+    nonisolated static let myRoadRerouteBehindDegrees: Double = 100
+
     // MARK: - Итоги: разбор периода
 
     /// На сколько должна измениться частота превышений на 100 км, чтобы назвать

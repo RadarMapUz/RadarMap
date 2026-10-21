@@ -688,9 +688,24 @@ final class AppEnvironment {
         }
         // Выбор варианта по своим поездкам: история читается в момент
         // построения маршрута, а не копится заранее.
-        route.personalHistory = { [weak trip] in
+        route.personalHistory = { [weak trip, weak self] in
             guard settings.personalRoutes, let trip else { return nil }
-            return RouteChoice.history(from: trip.history, now: Date())
+            // Линии своего пути дом↔работа (45 дней) — «Знакомый» видит месяц,
+            // а не неделю треков (24.4).
+            let profile = settings.commuteLearning && self?.commuteProfiles.isLoaded == true
+                ? self?.commuteProfiles.book : nil
+            return RouteChoice.history(from: trip.history, profile: profile, now: Date())
+        }
+        // «Моя дорога» (24.4): цель — дом или работа, и путь туда наезжен.
+        // Выключается тем же «Учитывать мои поездки» и обучением дороги.
+        route.myRoadPlan = { [weak self] source, destination in
+            guard let self, settings.personalRoutes, settings.commuteLearning,
+                  !settings.workDriverMode, self.commuteProfiles.isLoaded,
+                  let ends = self.commuteEnds,
+                  let direction = MyRoad.direction(destination: destination, home: ends.home, work: ends.work)
+            else { return nil }
+            return MyRoad.plan(variants: self.commuteProfiles.book[direction], direction: direction,
+                               source: source, destination: destination, home: ends.home, work: ends.work)
         }
         // Имена улиц в манёврах — на языке приложения (баннер и голос).
         route.streetNameLanguage = { settings.appLanguage.mapCode }

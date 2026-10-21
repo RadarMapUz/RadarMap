@@ -187,8 +187,8 @@ struct RoutePanel: View {
                 Text(variant.etaText)
                     .font(.rounded(15, .bold))
                     .foregroundStyle(isSelected ? Theme.onAccentFill
-                                     : (variant.trafficDelay ?? 0) >= AppConfig.routeTrafficNoticeSeconds
-                                        ? Self.trafficTint(variant.trafficDelay ?? 0) : Theme.textPrimary)
+                                     : (variant.shownTrafficDelay ?? 0) >= AppConfig.routeTrafficNoticeSeconds
+                                        ? Self.trafficTint(variant.shownTrafficDelay ?? 0) : Theme.textPrimary)
                 HStack(spacing: 4) {
                     Text(variant.distanceText)
                     Image(systemName: Icon.cameras).font(.rounded(9))
@@ -223,6 +223,7 @@ struct RoutePanel: View {
     static func title(_ label: RouteChoice.Label, _ variant: RouteService.Variant) -> String {
         switch label {
         case .blocked:         return String(localized: "Перекрытие")
+        case .myRoad:          return String(localized: "Моя дорога")
         case .familiar:        return String(localized: "Знакомый")
         case .fastest:         return String(localized: "Быстрый")
         case .fewerCameras:    return variant.cameras.isEmpty
@@ -236,11 +237,18 @@ struct RoutePanel: View {
     /// Почему вариант такой — одной строкой под плашками. Числа рядом с
     /// ярлыком: «Знакомый» без «поездок этим путём: 12» — просто слово.
     static func reason(_ variant: RouteService.Variant, among all: [RouteService.Variant]) -> String? {
-        guard let fastest = all.min(by: { $0.travelTime < $1.travelTime }) else { return nil }
+        // Быстрый — тот, кого так назвал выбор (по времени с пробками); его
+        // нет — меньшее время с пробками.
+        guard let fastest = all.first(where: { $0.assessment.labels.contains(.fastest) })
+                ?? all.min(by: { $0.expectedTime < $1.expectedTime }) else { return nil }
         let a = variant.assessment
         var parts: [String] = []
         for label in a.labels {
             switch label {
+            case .myRoad:
+                if let mine = a.myRoad { parts.append(myRoadReason(mine)) }
+            case .familiar where a.myRoad != nil:
+                break   // своя дорога и так знакома — второе слово лишнее
             case .blocked:
                 parts.append(a.closures == 1
                              ? String(localized: "на пути перекрытие — отметка водителей")
@@ -266,13 +274,27 @@ struct RoutePanel: View {
                 break
             }
         }
-        let extra = variant.travelTime - fastest.travelTime
+        let extra = variant.expectedTime - fastest.expectedTime
         if variant.id != fastest.id, extra >= 60 {
             parts.append(String(format: String(localized: "+%@ к быстрому"), Formatting.duration(extra)))
         }
         guard !parts.isEmpty else { return nil }
         let head = a.labels.first.map { title($0, variant) }
         return ([head].compactMap { $0 } + parts).joined(separator: " · ")
+    }
+
+    /// «Так вы ездите домой — обычно 39 мин»: время по своим поездкам этого
+    /// часа без сегодняшних пробок (они — отдельной строкой в карточке).
+    /// Своих поездок в этот час мало — без минут, только откуда ярлык.
+    static func myRoadReason(_ mine: RouteChoice.Personal) -> String {
+        guard let seconds = mine.seconds else {
+            return mine.direction == .toHome ? String(localized: "так вы ездите домой")
+                                             : String(localized: "так вы ездите на работу")
+        }
+        let usual = Formatting.unbreakable(Formatting.duration(max(0, seconds - mine.jamSeconds)))
+        return mine.direction == .toHome
+            ? String(format: String(localized: "так вы ездите домой — обычно %@"), usual)
+            : String(format: String(localized: "так вы ездите на работу — обычно %@"), usual)
     }
 
     // MARK: - Камеры

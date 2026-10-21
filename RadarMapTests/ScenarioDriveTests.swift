@@ -117,7 +117,8 @@ final class ScenarioDriveTests: XCTestCase {
                         let atTraverse = straight <= max(PassGeometry.traverseLimit(for: camera),
                                                          AppConfig.alertTraverseMeters)
                         if atTraverse {
-                            engine.noteApproach(camera.id, distance: straight, at: here, course: situation.course)
+                            engine.noteApproach(camera.id, distance: straight, at: here, course: situation.course,
+                                                accuracy: situation.horizontalAccuracy)
                         }
                         engine.noteGeometry(camera.id, atTraverse: atTraverse,
                                             behind: LocationGates.isClearlyBehind(camera, in: situation),
@@ -515,6 +516,93 @@ final class ScenarioDriveTests: XCTestCase {
         var drive = Drive()
         drive.run(route, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
         XCTAssertEqual(drive.firstAlerts[1], 1, "\(drive.firstAlertPoints[1] ?? [])")
+    }
+
+    // MARK: - 14.15: разворот на плохом GPS
+
+    /// Разворот у камеры: на север по x = 0 мимо камеры в (0, 0), разворот в
+    /// 300 м за ней на встречную проезжую часть (x = 12) — пять секунд стоим,
+    /// пропуская встречных, — и обратно на юг. Фиксы пути туда сдвинуты на
+    /// `there` м по x, обратно — на `back`, точность — модуль сдвига (при нуле
+    /// — хорошие 6 м); на развороте сдвиг меняется плавно — каньон не
+    /// перепрыгивает улицу за секунду. Скорость и курс доплеровские,
+    /// уверенные: LocationFilter им верит, гейты работают (как в 14.14).
+    private func uTurnFixes(there: Double, back: Double,
+                            uTurnTo returnX: Double = 12) -> [LocationFilter.Fix] {
+        let legs = [Leg(x: 0, y: 300, speed: 13.9),
+                    Leg(x: returnX, y: 300, speed: 5, stopSeconds: 5),
+                    Leg(x: returnX, y: -900, speed: 13.9)]
+        let thereCount = fixes(from: (0, -900), legs: [legs[0]]).count
+        let turnCount = fixes(from: (0, 300), legs: [legs[1]]).count
+        return fixes(from: (0, -900), legs: legs).enumerated().map { index, fix in
+            let shift: Double
+            let accuracy: Double
+            if index < thereCount {
+                (shift, accuracy) = (there, max(6, abs(there)))
+            } else if index < thereCount + turnCount {
+                let share = Double(index - thereCount + 1) / Double(turnCount + 1)
+                (shift, accuracy) = (there + (back - there) * share, max(6, abs(there), abs(back)))
+            } else {
+                (shift, accuracy) = (back, max(6, abs(back)))
+            }
+            let p = xy(fix.lat, fix.lon)
+            let q = point(p.x + shift, p.y)
+            return LocationFilter.Fix(lat: q.lat, lon: q.lon, horizontalAccuracy: accuracy,
+                                      speed: fix.speed, speedAccuracy: fix.speedAccuracy, course: fix.course,
+                                      courseAccuracy: fix.courseAccuracy, timestamp: fix.timestamp)
+        }
+    }
+
+    /// 14.15: проехали камеру, развернулись и едем обратно мимо неё — а GPS
+    /// плохой (35–60 м), и точка уехала от её дороги на свою погрешность.
+    /// Новый подъезд проверялся по «своей дороге» камеры без поправки на
+    /// погрешность: встречная проезжая часть (12 м) плюс сдвиг 50 м — «чужая
+    /// дорога», серия не забывалась, и камера, снимающая обе стороны, молчала
+    /// весь обратный подъезд. Три профиля: снап (своя дорога — её кусок и
+    /// ось), тренога и камера с непроверенной позицией (своя дорога — линия,
+    /// по которой мы мимо неё проехали). Путь туда — хороший GPS или такой же
+    /// плохой, но сдвинутый в другую сторону: тогда ошибается и сама линия
+    /// проезда, и допуск нужен на обе точки.
+    func testUTurnOnPoorGPSWarnsAgain() {
+        let targets: [Camera] = [
+            snappedCamera(1, x: 0, y: 0, axis: 0),
+            camera(1, x: 0, y: 0, type: "Тренога"),
+            profiledCamera(1, x: 0, y: 0, axis: 0, needsReview: true),
+        ]
+        for accuracy in [35.0, 50, 60] {
+            for there in [0, -accuracy] {
+                for target in targets {
+                    let label = "точность \(Int(accuracy)) м, туда сдвиг \(Int(there)), "
+                        + "\(target.type), needsReview \(target.needsReview == true)"
+                    var drive = Drive()
+                    drive.run(uTurnFixes(there: there, back: accuracy), cameras: [target], xy: xy)
+                    XCTAssertEqual(drive.rejected, 0, label)
+                    XCTAssertEqual(drive.firstAlerts[1], 2, "туда и после разворота обратно — \(label)")
+                    XCTAssertGreaterThanOrEqual(drive.firstAlertPoints[1]?.dropFirst().first?.y ?? -.infinity, 150,
+                                                "обратно — заранее, а не у самой камеры: \(label)")
+                }
+            }
+        }
+    }
+
+    /// Та же поездка, но «обратно» — по параллельной улице в 200 м, на плохом
+    /// GPS со сдвигом к дороге камеры (худший случай): поправка на
+    /// погрешность чужую улицу своей не делает — второго «первого» нет.
+    func testPoorGPSOnAStreetTwoHundredMetresAwayDoesNotRearm() {
+        let targets: [Camera] = [
+            snappedCamera(1, x: 0, y: 0, axis: 0),
+            camera(1, x: 0, y: 0, type: "Тренога"),
+            profiledCamera(1, x: 0, y: 0, axis: 0, needsReview: true),
+        ]
+        for accuracy in [35.0, 50, 60] {
+            for target in targets {
+                var drive = Drive()
+                drive.run(uTurnFixes(there: -accuracy, back: -accuracy, uTurnTo: 200), cameras: [target], xy: xy)
+                XCTAssertEqual(drive.rejected, 0)
+                XCTAssertEqual(drive.firstAlerts[1], 1,
+                               "точность \(Int(accuracy)) м, \(target.type): \(drive.firstAlertPoints[1] ?? [])")
+            }
+        }
     }
 
     // MARK: - S7: съехали с маршрута без сети

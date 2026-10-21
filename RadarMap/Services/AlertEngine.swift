@@ -52,6 +52,10 @@ nonisolated struct AlertEngine {
         let lon: Double
         let course: Double
         let distance: Double
+        /// Погрешность фикса, на котором снята точка сближения: на плохом GPS
+        /// сама линия проезда сдвинута, и запас «своей дороги» нужен и на
+        /// неё (LocationGates.isReapproach, 14.15). ≤ 0 — неизвестна, как худшая.
+        let accuracy: CLLocationAccuracy
         var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: lat, longitude: lon) }
     }
     private var behindStreak: [Int: Int] = [:]
@@ -149,11 +153,12 @@ nonisolated struct AlertEngine {
     /// Сближение с камерой, о которой сказали: ближайшая точка с курсом
     /// запоминается — по ней потом узнаётся «та же дорога».
     mutating func noteApproach(_ cameraID: Int, distance: CLLocationDistance,
-                               at coordinate: CLLocationCoordinate2D, course: Double) {
+                               at coordinate: CLLocationCoordinate2D, course: Double,
+                               accuracy: CLLocationAccuracy) {
         guard isAnnounced(cameraID), course >= 0 else { return }
         if let line = passLines[cameraID], line.distance <= distance { return }
         passLines[cameraID] = PassLine(lat: coordinate.latitude, lon: coordinate.longitude,
-                                       course: course, distance: distance)
+                                       course: course, distance: distance, accuracy: accuracy)
     }
 
     func passLine(_ cameraID: Int) -> PassLine? { passLines[cameraID] }

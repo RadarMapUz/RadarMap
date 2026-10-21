@@ -25,6 +25,8 @@ nonisolated enum DriveCameraSim {
     struct Point: Sendable {
         var along: Double
         var lateral: Double
+        /// Своя камера (CameraFamiliarity, «без голоса»).
+        var familiar = false
     }
 
     /// Поездка: ключевые точки скорости (секунда, км/ч) — линейно между ними.
@@ -132,7 +134,15 @@ nonisolated enum DriveCameraSim {
                   Point(along: 650, lateral: 0)],
         route: false)
 
-    static let trips = [city, uTurn, standstill]
+    /// Тот же разворот, но камера в 403 м — своя, как на снимке 63.
+    static let uTurnFamiliar: Trip = {
+        var trip = uTurn
+        trip.name = "разворот, своя камера"
+        trip.cameras[0].familiar = true
+        return trip
+    }()
+
+    static let trips = [city, uTurn, uTurnFamiliar, standstill]
 
     // MARK: - Прогон
 
@@ -168,8 +178,9 @@ nonisolated enum DriveCameraSim {
         while t <= trip.duration + 1e-9 {
             let kmh = trip.speed(at: t)
             let maneuver = trip.route ? trip.maneuvers.first(where: { $0 > s }).map { $0 - s } : nil
-            let keep = nearest(trip, along: s, kmh: kmh).map {
-                DriveCamera.Keep(forward: $0.along - s, right: $0.lateral)
+            // Своя камера остаётся «ближайшей» (HUD, голос), но в кадре не держится.
+            let keep = nearest(trip, along: s, kmh: kmh).flatMap {
+                $0.familiar ? nil : DriveCamera.Keep(forward: $0.along - s, right: $0.lateral)
             }
             let target = DriveCamera.target(speedKmh: kmh, maneuverDistance: maneuver,
                                             pitchAllowed: pitchAllowed, maxPitch: maxPitch,
@@ -197,14 +208,17 @@ nonisolated enum DriveCameraSim {
         var reversals: Int
         /// Самый короткий промежуток между сменами направления, с.
         var shortestReversalGap: Double
-        /// Самый быстрый отъезд и приближение, уровней в секунду.
+        /// Самый быстрый отъезд и приближение за секунду, уровней.
         var fastestOut, fastestIn: Double
+        /// Отсчётов, где манёвр ближе `DriveCamera.maneuverCloseMeters`, а в
+        /// кадре его нет (до нижней кромки верхней панели).
+        var turnMissed: Int
     }
 
     /// Шаг меньше этого — стоим (округление сглаживания 0,01).
     static let moveEpsilon = 0.005
 
-    static func metrics(_ samples: [Sample]) -> Metrics {
+    static func metrics(_ samples: [Sample], on screen: Screen) -> Metrics {
         let zooms = samples.map(\.frame.zoom), targets = samples.map(\.target.zoom)
         func swing(_ values: [Double]) -> Double {
             var worst = 0.0
@@ -219,11 +233,15 @@ nonisolated enum DriveCameraSim {
         var reversals = 0, gap = Double.infinity, fastestOut = 0.0, fastestIn = 0.0
         var direction = 0
         var lastChange: Double?
+        var start = 0
+        for end in samples.indices {
+            while samples[end].t - samples[start].t > 1 { start += 1 }
+            guard samples[end].t - samples[start].t >= 1 - 1e-9 else { continue }
+            let dz = samples[end].frame.zoom - samples[start].frame.zoom
+            if dz < 0 { fastestOut = max(fastestOut, -dz) } else { fastestIn = max(fastestIn, dz) }
+        }
         for (a, b) in zip(samples, samples.dropFirst()) {
             let dz = b.frame.zoom - a.frame.zoom
-            let dt = b.t - a.t
-            guard dt > 0 else { continue }
-            if dz < 0 { fastestOut = max(fastestOut, -dz / dt) } else { fastestIn = max(fastestIn, dz / dt) }
             guard abs(dz) > moveEpsilon else { continue }
             let now = dz > 0 ? 1 : -1
             if direction != 0, now != direction {
@@ -233,9 +251,15 @@ nonisolated enum DriveCameraSim {
             }
             direction = now
         }
+        let turnMissed = samples.filter { x in
+            guard let d = x.maneuver, d <= DriveCamera.maneuverCloseMeters else { return false }
+            return DriveCamera.visibleAhead(zoom: x.frame.zoom, pitchDegrees: x.frame.pitchDegrees,
+                                            viewHeight: screen.height, carY: screen.carY(x.frame.carShare),
+                                            latitude: latitude, clearTop: screen.clear.top) < d
+        }.count
         return Metrics(minZoom: zooms.min() ?? 0, maxZoom: zooms.max() ?? 0,
                        swingPerMinute: swing(zooms), targetSwingPerMinute: swing(targets),
                        reversals: reversals, shortestReversalGap: gap,
-                       fastestOut: fastestOut, fastestIn: fastestIn)
+                       fastestOut: fastestOut, fastestIn: fastestIn, turnMissed: turnMissed)
     }
 }

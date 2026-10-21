@@ -278,9 +278,17 @@ nonisolated enum DriveCamera {
         // котором она в кадре, и порог полос ей уступает — в приложении о
         // камерах камера на карте важнее разметки. Развилка при этом тоже в
         // кадре: из двух потолков берётся меньший.
-        if let keep, keep.distance.isFinite, keep.distance <= keepAheadMaxMeters {
-            let cap = maxZoom(keeping: keep, pitchDegrees: pitch, viewHeight: viewHeight,
-                              carY: y, latitude: latitude, clear: clear)
+        //
+        // Два предела (21.10, «то уменьшается, то увеличивается»): камера
+        // позади или в стороне на ходу не держится вовсе — её проехали, а
+        // «ближайшей» она остаётся ещё 60 м по маршруту (на экране машины до
+        // дока позади «я» 50 точек, и ради неё кадр уходил до z10,6); и потолок не мельче
+        // `keepMinZoom` — камера в 400 м на 10 км/ч уводила кадр в район (z15).
+        if let keep, keep.distance.isFinite, keep.distance <= keepAheadMaxMeters,
+           !isPassed(keep, speedKmh: speedKmh) {
+            let cap = max(keepMinZoom(speedKmh: speedKmh),
+                          maxZoom(keeping: keep, pitchDegrees: pitch, viewHeight: viewHeight,
+                                  carY: y, latitude: latitude, clear: clear))
             zoom = min(zoom, cap)
             minZoom = min(minZoom, cap)
         }
@@ -288,6 +296,38 @@ nonisolated enum DriveCamera {
         let maxZoom = max(profile.maxZoom, minZoom)
         return Frame(zoom: min(maxZoom, max(minZoom, zoom)),
                      pitchDegrees: pitch, carShare: profile.carShare)
+    }
+
+    /// Мельче этого масштаба удерживаемая камера кадр не уводит: в городе —
+    /// городской предел, на скорости — трассовый (AppConfig.driveKeep…).
+    static func keepMinZoom(speedKmh: Double) -> Double {
+        let v = speedKmh.isFinite ? speedKmh : 0
+        let t = min(1, max(0, (v - AppConfig.driveKeepTownKmh)
+                           / (AppConfig.driveKeepRoadKmh - AppConfig.driveKeepTownKmh)))
+        return AppConfig.driveKeepMinZoomTown
+            + (AppConfig.driveKeepMinZoomRoad - AppConfig.driveKeepMinZoomTown) * t
+    }
+
+    /// Машина едет, а камера позади (её уже проехали) или далеко в стороне
+    /// от хода — вне конуса `driveKeepMovingConeDegrees`. Медленнее 10 км/ч
+    /// гейты направления выключены, и «ближайшей» становится камера соседней
+    /// улицы в 140 м сбоку; на 10 км/ч — снова наша впереди: кадр прыгал
+    /// между ними на каждом пороге (замер 21.10). Стоя держим любую — курса
+    /// нет, и камера «136 м» сбоку обязана быть видна (12.10).
+    static func isPassed(_ keep: Keep, speedKmh: Double) -> Bool {
+        guard !keep.anyDirection, speedKmh > AppConfig.driveKeepBehindMaxKmh else { return false }
+        let cone = tan(AppConfig.driveKeepMovingConeDegrees * .pi / 180)
+        return keep.forward < 0 || abs(keep.right) > keep.forward * cone
+    }
+
+    /// Что держать в кадре: ближайшую камеру — кроме своей. Своя камера
+    /// (CameraFamiliarity, «без голоса») знакома водителю, о ней молчит голос,
+    /// и тянуть ради неё кадр в район незачем (снимок 63, 21.10: своя камера в
+    /// 403 м на 10 км/ч уводила карту машины к z15).
+    static func keep(camera id: Int, at point: CLLocationCoordinate2D, familiar: Set<Int>,
+                     from car: CLLocationCoordinate2D, bearing: Double?) -> Keep? {
+        guard !familiar.contains(id) else { return nil }
+        return Keep.offset(from: car, to: point, bearing: bearing)
     }
 
     /// 0 на `from`, 1 на `to` и ближе (from > to), линейно между.
@@ -418,28 +458,63 @@ nonisolated enum DriveCamera {
     /// ступенями. Ступени прежней камеры (охват по 30 м) на скорости у
     /// границы ступени «дышали» — то ближе, то дальше на каждом фиксе, — а
     /// после манёвра вид отпрыгивал назад одним рывком.
+    ///
+    /// Масштаб, кроме того, идёт через гистерезис (21.10, «то уменьшается, то
+    /// увеличивается»): экспонента гладила переход, но повторяла каждый скачок
+    /// цели — разгон и остановка в пробке, смена ближайшей камеры у порога
+    /// 10 км/ч, поворот. Теперь:
+    /// - продолжать в ту же сторону можно сразу; сменить направление — только
+    ///   когда цель ушла за полосу гистерезиса и держится там (приближение
+    ///   ждёт `driveZoomInDwell`, отъезд — `driveZoomOutConfirm`), и не
+    ///   раньше `driveZoomReversalLock` после прошлой смены (обходного пути для
+    ///   «срочного» отъезда нет: отъезд и так не быстрее уровня за 8 с, а
+    ///   обход ломал ровность на каждой камере сбоку стоя — замер 21.10);
+    /// - пока смена не разрешена, кадр не продолжает идти «не туда», а стоит;
+    /// - скорость: отъезд не быстрее `driveZoomOutLevelsPerSecond`,
+    ///   приближение не быстрее `driveZoomInLevelsPerSecond`.
+    /// Наклон и место машины — прежняя экспонента (наклон — по таблице 25.D).
     struct Smoother: Sendable {
         private(set) var frame: Frame?
         private var time: Date?
+        /// Куда сейчас идёт масштаб (уже принятое решение).
+        private var goal = 0.0
+        /// Масштаб без округления: округлённый шаг на частых вызовах (кадр
+        /// SwiftUI, а не фикс) был бы нулём, и кадр стоял бы.
+        private var exact = 0.0
+        /// Последнее направление хода масштаба: +1 приближение, −1 отъезд, 0 — ещё не было.
+        private var direction = 0
+        /// Когда это направление началось.
+        private var directionSince: Date?
+        /// Цель за полосой гистерезиса в обратную сторону: с какого момента и
+        /// самое осторожное её значение за это время.
+        private var pendingSince: Date?
+        private var pendingZoom = 0.0
 
         /// Постоянная времени, с.
         static let tau = 2.0
         /// После паузы дольше этого — сразу к цели (вернулись к карте).
         static let maxGap = 5.0
+        /// Ближе этого к цели — уже у цели (шаг округления ×2).
+        static let snap = 0.02
 
         mutating func step(toward target: Frame, at now: Date) -> Frame {
             defer { time = now }
-            guard var current = frame, let last = time else {
-                frame = target
-                return target
-            }
+            guard var current = frame, let last = time else { return jump(to: target, at: now) }
             let dt = now.timeIntervalSince(last)
-            guard dt >= 0, dt <= Self.maxGap else {
-                frame = target
-                return target
-            }
+            guard dt >= 0, dt <= Self.maxGap else { return jump(to: target, at: now) }
             let k = 1 - exp(-dt / Self.tau)
-            current.zoom = approach(current.zoom, target.zoom, k, snap: 0.02, step: 0.01)
+            decide(target.zoom, from: exact, at: now)
+            let zoom = glide(exact, toward: goal, k: k, dt: dt)
+            if abs(zoom - exact) > 1e-9 {
+                let moved = zoom > exact ? 1 : -1
+                if moved != direction {
+                    direction = moved
+                    directionSince = now
+                }
+            }
+            exact = zoom
+            // Движку — с шагом 0,01: не новая анимация на каждую тысячную.
+            current.zoom = zoom == goal ? zoom : (zoom / 0.01).rounded() * 0.01
             current.pitchDegrees = approach(current.pitchDegrees, target.pitchDegrees, k, snap: 0.5, step: 0.5)
             current.carShare = approach(current.carShare, target.carShare, k, snap: 0.004, step: 0.002)
             frame = current
@@ -447,8 +522,61 @@ nonisolated enum DriveCamera {
         }
 
         mutating func reset() {
-            frame = nil
-            time = nil
+            self = Smoother()
+        }
+
+        private mutating func jump(to target: Frame, at now: Date) -> Frame {
+            self = Smoother()
+            frame = target
+            goal = target.zoom
+            exact = target.zoom
+            return target
+        }
+
+        /// Решение о цели масштаба: та же сторона — сразу, обратная — через
+        /// гистерезис, выдержку и запрет частой смены.
+        private mutating func decide(_ wanted: Double, from zoom: Double, at now: Date) {
+            guard wanted != zoom else {
+                goal = wanted
+                pendingSince = nil
+                return
+            }
+            let wantsIn = wanted > zoom
+            if direction == 0 || direction == (wantsIn ? 1 : -1) {
+                // Та же сторона (или первый ход) — без задержек.
+                goal = wanted
+                pendingSince = nil
+                return
+            }
+            // Обратная сторона: пока не разрешено — стоим, а не идём «не туда».
+            goal = zoom
+            let band = wantsIn ? AppConfig.driveZoomInDeadband : AppConfig.driveZoomOutDeadband
+            guard abs(wanted - zoom) > band else {
+                pendingSince = nil
+                return
+            }
+            if let since = pendingSince {
+                // Принимаем самое осторожное значение за выдержку.
+                pendingZoom = wantsIn ? min(pendingZoom, wanted) : max(pendingZoom, wanted)
+                let hold = wantsIn ? AppConfig.driveZoomInDwell : AppConfig.driveZoomOutConfirm
+                let unlocked = directionSince.map { now.timeIntervalSince($0) >= AppConfig.driveZoomReversalLock } ?? true
+                if now.timeIntervalSince(since) >= hold, unlocked {
+                    goal = pendingZoom
+                    pendingSince = nil
+                }
+            } else {
+                pendingSince = now
+                pendingZoom = wanted
+            }
+        }
+
+        /// Ход масштаба к цели: экспонента, но не быстрее предела стороны.
+        private func glide(_ value: Double, toward target: Double, k: Double, dt: Double) -> Double {
+            let delta = (target - value) * k
+            let limited = min(AppConfig.driveZoomInLevelsPerSecond * dt,
+                              max(-AppConfig.driveZoomOutLevelsPerSecond * dt, delta))
+            let next = value + limited
+            return abs(target - next) < Self.snap ? target : next
         }
 
         /// Шаг к цели, округлённый: движок не получает новую анимацию на

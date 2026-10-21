@@ -2,6 +2,7 @@
 """Тесты resnap_moved: точка модератора неприкосновенна, профиль снимается
 заново у новой точки, протухший twin не переживает переезд партнёра.
 Без данных и сети — дорога синтетическая, во временном файле."""
+import base64
 import json
 import os
 import sys
@@ -88,6 +89,29 @@ class ResnapTests(unittest.TestCase):
         self.assertNotIn("twin", by_id[2],
                          "бывший партнёр: пары больше нет — глушить по "
                          "направлению из-за протухшей метки нельзя")
+
+
+class LoadOverridesTests(unittest.TestCase):
+    """Формат файла — тот, что пишет publish_overrides.sh: payload в base64."""
+
+    def _write(self, data):
+        f = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8")
+        json.dump(data, f)
+        f.close()
+        self.addCleanup(os.unlink, f.name)
+        return f.name
+
+    def test_signed_envelope_with_base64_payload(self):
+        items = [{"id": 7, "op": "move", "lat": 41.3, "lon": 69.2}]
+        raw = json.dumps({"version": 3, "items": items}).encode()
+        path = self._write({"payload": base64.b64encode(raw).decode(), "sig": "x"})
+        self.assertEqual(rm.load_overrides(path), items)
+
+    def test_bare_snapshot_and_plain_json_payload(self):
+        items = [{"id": 1, "op": "hide"}]
+        self.assertEqual(rm.load_overrides(self._write({"items": items})), items)
+        path = self._write({"payload": json.dumps({"items": items}), "sig": "x"})
+        self.assertEqual(rm.load_overrides(path), items)
 
 
 if __name__ == "__main__":

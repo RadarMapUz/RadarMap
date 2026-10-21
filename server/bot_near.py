@@ -8,7 +8,10 @@
     (перекрытия, ремонт) того же API на 127.0.0.1:8091;
   * метан — GET /api/cng (статус станции) + АГНКС из файлов заведений
     (telegram_bot.CngVenues — те же файлы, что качают телефоны);
-  * стационарные камеры — cameras.json из webroot (его раздаёт deploy_db.sh);
+  * стационарные камеры — cameras.json из webroot (его раздаёт deploy_db.sh)
+    с решениями модератора поверх — подписанный overrides.json
+    (publish_overrides.sh), по тем же правилам, что CameraOverrideEngine
+    приложения: скрытая камера не показывается, перенесённая — на новой точке;
   * улица — адресные клетки road2_*_a.json (telegram_publish.nearest_in_cell);
   * перевалы — weather/roads.json (build_road_weather.py);
   * пульт — config.json из webroot, ключ features.bot.
@@ -74,6 +77,21 @@ HAZARD_ORDER = ("ice", "snow", "fog", "wind")
 #: Пульт перечитывается не чаще.
 PULT_RECHECK = 300.0
 
+#: Решения модератора (overrides.json) — те же пороги, что у приложения
+#: (AppConfig.overrideMaxHiddenShare, overrideMaxMoveMeters, uzLatRange,
+#: uzLonRange; тест сверяет). Файл, скрывающий больше этой доли базы, —
+#: вероятнее опечатка в SQL, чем решение: не верим ему целиком.
+OVERRIDE_MAX_HIDDEN_SHARE = 0.05
+#: Поправка снапа — десятки метров; дальше — перепутанная камера или запятая.
+OVERRIDE_MAX_MOVE_METERS = 500.0
+UZ_LAT_RANGE = (37.0, 46.0)
+UZ_LON_RANGE = (55.0, 74.0)
+OVERRIDE_OPS = ("hide", "move", "retype")
+#: Дорожный профиль камеры: снап мерил его у СТАРОЙ точки, а `road` хранится
+#: дельтами от камеры и уехал бы вместе с ней — перенос его снимает
+#: (Camera.moved в приложении).
+PROFILE_KEYS = ("axis", "dir", "lanes", "cls", "bridge", "road", "split", "twin")
+
 M_PER_DEG = 111_320.0
 
 
@@ -90,6 +108,14 @@ def haversine(lat1, lon1, lat2, lon2):
     dp, dl = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
     a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
     return 2 * r * math.asin(math.sqrt(a))
+
+
+def fast_distance(lat1, lon1, lat2, lon2):
+    """Равнопромежуточное приближение — формула GeoMath.fastDistance
+    приложения: граница переноса в 500 м должна резать там же, где на телефоне."""
+    dlat = (lat2 - lat1) * M_PER_DEG
+    dlon = (lon2 - lon1) * M_PER_DEG * math.cos(math.radians(lat1))
+    return math.sqrt(dlat * dlat + dlon * dlon)
 
 
 def bearing(lat1, lon1, lat2, lon2):
@@ -169,6 +195,119 @@ def _number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
+# --- подписанные файлы webroot -----------------------------------------------------
+
+def default_verifier():
+    """Тот же openssl-проверщик Ed25519, что у пульта состояния (status.py),
+    с ключом AppConfig.otaPublicKeyB64. Нет модуля — проверить нечем (None):
+    это не «подпись верна», и решения, требующие подписи, не применяются."""
+    try:
+        import status
+    except ImportError:
+        return lambda data, sig: None
+    return status.verify_ed25519
+
+
+def signed_payload(path, verify):
+    """Байты полезной нагрузки конверта {payload, sig} (SignedPayload
+    приложения: base64 ТОЧНЫХ подписанных байтов) или None, если подпись не
+    подтверждена — не сошлась или проверить нечем. Порядок один: подпись ДО
+    разбора JSON. Нет файла, битый конверт — исключение (OSError, ValueError,
+    KeyError, TypeError): что это значит, решает вызывающий."""
+    with open(path, "rb") as handle:
+        envelope = json.loads(handle.read())
+    payload = base64.b64decode(envelope["payload"], validate=True)
+    sig = envelope["sig"]
+    if not isinstance(sig, str) or not sig:
+        return None                  # подписи нет — нечего и проверять
+    return payload if verify(payload, sig) is True else None
+
+
+# --- решения модератора (overrides.json) ----------------------------------------------
+
+def parse_overrides(payload):
+    """items снимка CameraOverrides или None — файл не по контракту.
+    Строго, как Codable приложения: одна кривая строка (нет id, неизвестная
+    операция, координата строкой) — и не разбирается весь файл, решений нет."""
+    try:
+        data = json.loads(payload)
+    except ValueError:
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("version"), int) \
+            or isinstance(data.get("version"), bool) or not isinstance(data.get("items"), list):
+        return None
+    items = []
+    for item in data["items"]:
+        if not isinstance(item, dict) or not isinstance(item.get("id"), int) or isinstance(item["id"], bool) \
+                or item.get("op") not in OVERRIDE_OPS:
+            return None
+        for key in ("lat", "lon"):
+            value = item.get(key)
+            if value is not None and not (isinstance(value, (int, float)) and not isinstance(value, bool)):
+                return None
+        if item.get("type") is not None and not isinstance(item["type"], str):
+            return None
+        items.append(item)
+    return items
+
+
+def overrides_sane(items, base_count):
+    """CameraOverrideEngine.isSane: скрытий не больше доли базы. Предохранитель
+    от опечатки в админке, не от злоумышленника (от него — подпись)."""
+    if base_count <= 0:
+        return False
+    hides = sum(1 for item in items if item["op"] == "hide")
+    return hides <= base_count * OVERRIDE_MAX_HIDDEN_SHARE
+
+
+def _plausible_move(camera, lat, lon):
+    if not (_number(lat) and _number(lon)):
+        return False
+    if not (UZ_LAT_RANGE[0] <= lat <= UZ_LAT_RANGE[1] and UZ_LON_RANGE[0] <= lon <= UZ_LON_RANGE[1]):
+        return False
+    return fast_distance(camera["lat"], camera["lon"], lat, lon) <= OVERRIDE_MAX_MOVE_METERS
+
+
+def apply_overrides(rows, items):
+    """CameraOverrideEngine.apply: (новый список, счёт {hidden, moved,
+    retyped, rejected}). Сомнительная правка (перенос дальше предела или вне
+    Узбекистана, смена на пустой тип) отбрасывается — камера остаётся как в
+    базе: лишнее предупреждение дешевле молчания. Последняя строка для id
+    побеждает. Строки базы не меняются — правленая камера копируется."""
+    counts = {"hidden": 0, "moved": 0, "retyped": 0, "rejected": 0}
+    if not items:
+        return list(rows), counts
+    by_id = {item["id"]: item for item in items}
+    out = []
+    for camera in rows:
+        item = by_id.get(camera.get("id"))
+        if item is None:
+            out.append(camera)
+        elif item["op"] == "hide":
+            counts["hidden"] += 1
+        elif item["op"] == "move":
+            lat, lon = item.get("lat"), item.get("lon")
+            if not _plausible_move(camera, lat, lon):
+                counts["rejected"] += 1
+                out.append(camera)
+                continue
+            moved = {key: value for key, value in camera.items() if key not in PROFILE_KEYS}
+            moved["lat"], moved["lon"] = float(lat), float(lon)
+            out.append(moved)
+            counts["moved"] += 1
+        else:
+            if not item.get("type"):
+                counts["rejected"] += 1
+                out.append(camera)
+                continue
+            # Нарушения в приложении выводятся из типа заново — старые не тянем.
+            retyped = {key: value for key, value in camera.items() if key != "violations"}
+            retyped["type"] = item["type"]
+            out.append(retyped)
+            counts["retyped"] += 1
+    return out, counts
+
+
 # --- источники ------------------------------------------------------------------
 
 class DataCache:
@@ -208,27 +347,97 @@ class DataCache:
 
 
 class CameraDb:
-    """Стационарные камеры из cameras.json webroot. Читается целиком при
-    смене mtime/размера (проверка не чаще раза в минуту), в памяти — сетка
-    0,05° (~5,5 км), как CameraStore приложения: поиск не перебирает 3500."""
+    """Стационарные камеры из cameras.json webroot с решениями модератора
+    поверх (overrides.json, если путь задан). Оба файла перечитываются при
+    смене mtime/размера любого из них (проверка не чаще раза в минуту; openssl
+    — только на смене), в памяти — сетка 0,05° (~5,5 км), как CameraStore
+    приложения: поиск не перебирает 3500.
+
+    Решения — как у приложения (CameraOverrideEngine): только из файла с
+    верной подписью Ed25519 ключом владельца. Нет файла, подпись не сошлась
+    или проверить нечем, JSON не по контракту, скрыто больше доли базы — нет
+    решений вовсе, камеры как в базе: эта сторона предупреждает больше, а
+    скрытие камеры — единственное, что производит молчание там, где она стоит."""
 
     CELL = 0.05
 
-    def __init__(self, path, clock=time.monotonic):
+    def __init__(self, path, overrides_path=None, verify=None, clock=time.monotonic):
         self.path = path
+        self.overrides_path = overrides_path
+        self.verify = verify
         self.clock = clock
         self._stamp = None
         self._checked = None
         self._grid = None
         self._failed = False
+        #: Что сделали решения при последней загрузке — для журнала и тестов.
+        self.applied = {"hidden": 0, "moved": 0, "retyped": 0, "rejected": 0}
 
     def _cell(self, lat, lon):
         return int(math.floor(lat / self.CELL)), int(math.floor(lon / self.CELL))
+
+    def _overrides_stamp(self):
+        if not self.overrides_path:
+            return None
+        try:
+            info = os.stat(self.overrides_path)
+        except OSError:
+            return None              # не опубликован — решений нет, это не сбой
+        return info.st_mtime_ns, info.st_size
+
+    def _decisions(self, base_count):
+        """Проверенные items или [] — с причиной в журнале (без координат)."""
+        try:
+            payload = signed_payload(self.overrides_path, self.verify or default_verifier())
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            log(f"решения модератора: файл не читается ({type(error).__name__}) — камеры как в базе")
+            return []
+        if payload is None:
+            log("решения модератора: подпись не подтверждена — камеры как в базе")
+            return []
+        items = parse_overrides(payload)
+        if items is None:
+            log("решения модератора: файл не по контракту — камеры как в базе")
+            return []
+        if not overrides_sane(items, base_count):
+            log("решения модератора: скрывают больше доли базы — файл отвергнут целиком")
+            return []
+        return items
 
     def _load(self):
         now = self.clock()
         if self._checked is not None and now - self._checked < 60.0 and self._grid is not None:
             return self._grid
+        self._checked = now
+        try:
+            info = os.stat(self.path)
+            ov_stamp = self._overrides_stamp()
+            stamp = ((info.st_mtime_ns, info.st_size), ov_stamp)
+            if stamp != self._stamp or self._grid is None:
+                with open(self.path, "rb") as handle:
+                    rows = json.loads(handle.read())
+                if isinstance(rows, dict):
+                    rows = rows.get("cameras")
+                if not isinstance(rows, list):
+                    raise ValueError("не список камер")
+                rows = [row for row in rows
+                        if isinstance(row, dict) and _number(row.get("lat")) and _number(row.get("lon"))]
+                items = self._decisions(len(rows)) if ov_stamp is not None else []
+                rows, counts = apply_overrides(rows, items)
+                if items:
+                    log("решения модератора: скрыто {hidden}, перенесено {moved}, "
+                        "сменён тип {retyped}, отброшено {rejected}".format(**counts))
+                grid = {}
+                for row in rows:
+                    grid.setdefault(self._cell(row["lat"], row["lon"]), []).append(row)
+                self._grid, self._stamp, self.applied = grid, stamp, counts
+                self._failed = False
+        except (OSError, ValueError) as error:
+            if not self._failed:
+                log(f"база камер не читается — {type(error).__name__}")
+            self._failed = True
+            self._grid = None
+        return self._grid
         self._checked = now
         try:
             info = os.stat(self.path)
@@ -317,15 +526,6 @@ class Pult:
         self._stamp = None
         self._enabled = True
 
-    def _verifier(self):
-        if self.verify is not None:
-            return self.verify
-        try:
-            import status        # тот же openssl-проверщик, что у пульта состояния
-        except ImportError:
-            return lambda data, sig: None
-        return status.verify_ed25519
-
     def enabled(self):
         now = self.clock()
         if self._checked is not None and now - self._checked < PULT_RECHECK:
@@ -336,11 +536,8 @@ class Pult:
             stamp = (info.st_mtime_ns, info.st_size)
             if stamp == self._stamp:
                 return self._enabled
-            with open(self.path, "rb") as handle:
-                envelope = json.loads(handle.read())
-            payload = base64.b64decode(envelope["payload"])
-            verdict = self._verifier()(payload, envelope["sig"])
-            config = json.loads(payload) if verdict is True else {}
+            payload = signed_payload(self.path, self.verify or default_verifier())
+            config = json.loads(payload) if payload is not None else {}
             features = config.get("features") if isinstance(config, dict) else None
             value = features.get("bot") if isinstance(features, dict) else None
             self._enabled = value is not False

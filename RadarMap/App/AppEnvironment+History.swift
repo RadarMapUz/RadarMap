@@ -19,7 +19,8 @@ extension AppEnvironment {
     /// время» с охватом предупреждений, подробные треки регистратора (всё —
     /// TripStats.clearHistory), журнал и профиль дороги на работу (через
     /// onRecordsErased), журнал смен, выученные Дом и Работу, знакомые камеры
-    /// (умная тишина), точку «Где машина», недавние места и цифры виджета.
+    /// (умная тишина), точку «Где машина», недавние места, журнал заправок и
+    /// зарядок (21.6: даты и пробег с панели — та же история) и цифры виджета.
     /// Настройки, топливо, заданные вручную места, добавленные и скрытые
     /// камеры, внесённые штрафы остаются. Лист подтверждения перечисляет
     /// `erasedLines` и `keptLines` — они обязаны говорить ровно это.
@@ -38,6 +39,7 @@ extension AppEnvironment {
         // «Недавние» пропадают, не дожидаясь перезапуска.
         location.forgetParkedCar()
         settings.recentPlaces = []
+        energyJournal.eraseAll()
         // Из пустой истории — пусто; следом дорога на работу и смены.
         refreshLearnedPlaces()
         location.refreshFamiliarCameras()
@@ -69,6 +71,8 @@ extension AppEnvironment {
                      text: String(localized: "Где оставили машину")),
          ErasureLine(symbol: "clock.arrow.circlepath",
                      text: String(localized: "Недавние места")),
+         ErasureLine(symbol: "list.bullet.rectangle",
+                     text: String(localized: "Журнал заправок и зарядок")),
          ErasureLine(symbol: "square.grid.2x2.fill",
                      text: String(localized: "Цифры виджета"))]
     }

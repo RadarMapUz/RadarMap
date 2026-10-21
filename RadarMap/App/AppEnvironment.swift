@@ -108,6 +108,9 @@ final class AppEnvironment {
     let maintenance: MaintenanceService
     /// Пришедшие штрафы (этап 17): только на телефоне; сверка и сроки — AppEnvironment+Fines.
     let fines = FineStore()
+    /// Журнал заправок и зарядок (21.6): только на телефоне; цена профиля и
+    /// правдоподобие — AppEnvironment+EnergyJournal.
+    let energyJournal = EnergyJournalStore()
 
     /// CarPlay подключён. Наблюдаемый флаг для интерфейса телефона: пока едет
     /// машина, телефонная карта уступает место дешёвому экрану передачи —
@@ -797,6 +800,7 @@ final class AppEnvironment {
     func reloadProtectedStores() {
         trip.retryLoadNow()
         maintenance.reloadIfNeeded()
+        energyJournal.reloadIfNeeded()
         trip.retryLegacyLifetime()
         commuteProfiles.retryLoadNow()
         cameras.reloadUserDataIfNeeded()

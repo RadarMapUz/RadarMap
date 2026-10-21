@@ -125,9 +125,12 @@ struct PeriodEnergyRow: View {
     let use: EnergySplit.Use
     let model: EnergySplit.Model
     let atCurrentPrice: Bool
+    /// Журнал заправок за период (21.6): есть записи — сверху реальные
+    /// деньги, расчёт — второй строкой. nil или пусто — как было.
+    var journal: EnergyJournal.Period? = nil
 
     var body: some View {
-        let lines = Self.lines(use, model: model, current: atCurrentPrice)
+        let lines = Self.lines(use, model: model, current: atCurrentPrice, journal: journal)
         HStack(spacing: 12) {
             IconBadge(symbol: model.usesBattery ? "bolt.fill" : "fuelpump.fill", tint: Theme.Icon.money, size: 30)
             VStack(alignment: .leading, spacing: 2) {
@@ -139,8 +142,8 @@ struct PeriodEnergyRow: View {
                     .font(.rounded(12))
                     .foregroundStyle(Theme.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
-                if let petrol = lines.allPetrol {
-                    Text(petrol)
+                ForEach([lines.estimate, lines.allPetrol, lines.measured].compactMap { $0 }, id: \.self) { extra in
+                    Text(extra)
                         .font(.rounded(12))
                         .foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -155,12 +158,15 @@ struct PeriodEnergyRow: View {
         .statCard(padding: 14, radius: Theme.cornerMedium)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: EnergyText.spoken(
-            [lines.title, lines.detail, lines.allPetrol].compactMap { $0 }.joined(separator: ". "))))
-        .accessibilityHint(Text("Открыть «Машина и расходы»"))
+            [lines.title, lines.detail, lines.estimate, lines.allPetrol, lines.measured].compactMap { $0 }.joined(separator: ". "))))
+        .accessibilityHint(journal?.isEmpty == false ? Text("Открыть журнал заправок")
+                                                     : Text("Открыть «Машина и расходы»"))
     }
 
-    /// Показывать ли строку: сумма есть или у машины с батареей есть доля.
-    static func isWorthShowing(_ use: EnergySplit.Use, model: EnergySplit.Model) -> Bool {
+    /// Показывать ли строку: записи журнала, сумма или у машины с батареей есть доля.
+    static func isWorthShowing(_ use: EnergySplit.Use, model: EnergySplit.Model,
+                               journal: EnergyJournal.Period? = nil) -> Bool {
+        if let journal, !journal.isEmpty { return true }
         guard use.totalMeters > 0 else { return false }
         return use.cost != nil || (model.usesBattery && use.electricShare != nil)
     }
@@ -169,9 +175,17 @@ struct PeriodEnergyRow: View {
         var title: String
         var detail: String
         var allPetrol: String?
+        /// «по расчёту ≈ …» — оценка под реальными деньгами журнала.
+        var estimate: String?
+        /// «по факту 5,8 л/100 км» — только из журнала, только «бак к баку».
+        var measured: String?
     }
 
-    static func lines(_ use: EnergySplit.Use, model: EnergySplit.Model, current: Bool) -> Lines {
+    static func lines(_ use: EnergySplit.Use, model: EnergySplit.Model, current: Bool,
+                      journal: EnergyJournal.Period? = nil) -> Lines {
+        if let journal, !journal.isEmpty {
+            return journalLines(journal, use: use, model: model, current: current)
+        }
         let share = model.usesBattery ? use.electricShare : nil
         // Доля — неразрывно: «41 % на / электричестве» на двух строках
         // разрывало мысль (снимок 21.10).
@@ -200,5 +214,28 @@ struct PeriodEnergyRow: View {
                                Formatting.money(FuelCost.rounded(petrol)))
         }
         return Lines(title: title, detail: detail, allPetrol: allPetrol)
+    }
+
+    /// По журналу: «Потрачено 412 000 сум», под ним «3 заправки, 9 зарядок»,
+    /// «по расчёту ≈ …» (оценка вторым планом) и расход по факту, если он
+    /// есть. «На бензине вышло бы» здесь нет: это сравнение двух оценок, а
+    /// сверху теперь реальные деньги. Счёт — своей строкой: в заголовке
+    /// «· 2» оставалось в конце строки, а «заправки» уезжали на следующую.
+    private static func journalLines(_ journal: EnergyJournal.Period, use: EnergySplit.Use,
+                                     model: EnergySplit.Model, current: Bool) -> Lines {
+        var estimate: String?
+        if let cost = use.cost {
+            estimate = JournalText.estimate(cost)
+            if current { estimate? += " · " + Formatting.unbreakable(String(localized: "по нынешней цене")) }
+        }
+        return Lines(title: JournalText.spent(journal.spending), detail: JournalText.counts(journal.spending),
+                     estimate: estimate, measured: JournalText.measured(journal.measured, mixedPetrol: hasPlug(model)))
+    }
+
+    /// Машина с розеткой — и та, у которой запас ещё не указан (`needsRange`
+    /// бывает только у гибрида с розеткой): её бензин тоже на весь путь.
+    private static func hasPlug(_ model: EnergySplit.Model) -> Bool {
+        if case .needsRange = model.kind { return true }
+        return model.usesBattery
     }
 }

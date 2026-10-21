@@ -44,6 +44,8 @@ extension MapScreen {
                 EnergyDemo.seed(env, args: args)
             }
         }
+        // Журнал заправок и зарядок (21.6) — в памяти, диск не трогаем.
+        if args.contains("-demoJournal") { JournalDemo.seed(env) }
         // С паузой: настоящие пробки приходят уже после загрузки карты, и
         // слой обязан перерисоваться на новом наборе, а не только на старте.
         if args.contains("-demoTraffic") {

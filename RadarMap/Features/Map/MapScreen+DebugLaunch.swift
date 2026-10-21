@@ -101,6 +101,9 @@ extension MapScreen {
                 if args.contains("-ghostDrill") {
                     env.commuteProfiles.seedDrill(home: TripStats.demoHome, work: TripStats.demoWork)
                 }
+                // Журнал точности прибытия (24.1): строка «прогноз ошибался в
+                // среднем на N мин» в «Дороге на работу».
+                if args.contains("-demoForecastLog") { env.commuteProfiles.seedAccuracyDemo() }
             }
         }
         // Демо-история двухнедельной давности: проверка «в этом периоде поездок нет».

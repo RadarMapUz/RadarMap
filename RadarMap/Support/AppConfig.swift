@@ -941,6 +941,53 @@ nonisolated enum AppConfig {
     /// дом и работа), если поездка началась раньше — запуск Siri, фон.
     nonisolated static let commuteGhostStartWaitSeconds: TimeInterval = 180
 
+    // MARK: Точность прибытия (этап 24: «дал 8:25, приехал 8:38»)
+    /// Ядро выезда: строка, выехавшая на 20 мин раньше, весит 0,6; на 40 —
+    /// 0,14. Ступени ±60/±120 смешивали 7:40 и 8:30 — в восемь утра это
+    /// разные дороги (на синтетике 12 км: прогноз одинаковый, истина —
+    /// 26 и 32 мин).
+    nonisolated static let commuteGhostKernelMinutes: Double = 20
+    /// Строка с весом меньше — не в выборке (дальше ~50 мин от выезда).
+    nonisolated static let commuteGhostKernelMinWeight = 0.05
+    /// Сумма весов, без которой ядро не «обычно» — тогда прежние ступени.
+    nonisolated static let commuteGhostKernelMinMass = 3.0
+    /// Тот же день недели весит вдвое, если таких строк рядом на две поездки.
+    nonisolated static let commuteGhostWeekdayMinMass = 2.0
+    nonisolated static let commuteGhostWeekdayBoost = 2.0
+    /// Поправка на светофоры: сумма медиан участков → медиана целых поездок.
+    /// Границы — чтобы одна странная неделя не переписала модель: ниже 0,9
+    /// целые поездки не бывают (медиана суммы ≥ суммы медиан почти всегда),
+    /// выше 1,4 — это уже не светофоры, а другая дорога.
+    nonisolated static let commuteCalibrationMin = 0.9
+    nonisolated static let commuteCalibrationMax = 1.4
+    /// Сдвиг журнала точности: только с пяти поездок направления, по
+    /// последним десяти, половиной найденного и в узких границах — поправка
+    /// медленная, чтобы неделя ремонта не учила призрака навсегда.
+    nonisolated static let commuteAccuracyMinTrips = 5
+    nonisolated static let commuteAccuracyBiasWindow = 10
+    nonisolated static let commuteAccuracyBiasGain = 0.5
+    nonisolated static let commuteAccuracyBiasMin = 0.92
+    nonisolated static let commuteAccuracyBiasMax = 1.12
+    /// Прогноз короче — в сдвиг не идёт: у финиша доля шума велика.
+    nonisolated static let commuteAccuracyMinRemainingSeconds: TimeInterval = 300
+    /// Журнал: столько поездок и столько дней (на телефоне, вне копии).
+    nonisolated static let commuteAccuracyMaxEntries = 60
+    nonisolated static let commuteAccuracyKeepDays: Double = 60
+    /// «Ошибался в среднем на N мин» — по последним стольким поездкам направления.
+    nonisolated static let commuteAccuracyStatsTrips = 20
+    /// Доехали: до конца линии ближе этого — время прибытия для журнала.
+    nonisolated static let commuteAccuracyEndMeters: Double = 150
+    /// Ранний прогноз (24.3): с 300 м по линии, если въехали на неё у её
+    /// начала (выехали от дома, а не пересекли путь на перекрёстке). Гейт
+    /// «уехал с пути» остаётся; голос — по-прежнему с 1,5 км.
+    nonisolated static let commuteGhostEarlyAlongMeters: Double = 300
+    nonisolated static let commuteGhostEarlyJoinMeters: Double = 300
+    /// Пробка толпы впереди — хуже своей медианы на четверть (а не хуже q75):
+    /// при широком своём разбросе q75 съедал настоящие пробки.
+    nonisolated static let commuteCrowdOverMedian = 1.25
+    /// «Прибытие сдвинулось» голосом — от стольких минут против сказанного.
+    nonisolated static let commuteShiftAnnounceMinutes = 5
+
     // MARK: «Где ушло время» (CommuteLoss, 8.8.8)
     /// Отрезок называется, если потерял против медианы хотя бы минуту: десять
     /// секунд у светофора — не место, где «ушло время».

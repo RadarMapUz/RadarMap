@@ -44,6 +44,12 @@ nonisolated enum CommuteGhost {
         let spreadSquared: [Double]
         /// Сколько поездок легло в базу.
         let rows: Int
+        /// Множитель базы (24.2): поправка на светофоры × сдвиг журнала; 1 —
+        /// без калибровки (CommuteLoss: участки против участков).
+        var scale: Double = 1
+        /// Разброс целых поездок, доля обычного времени (σ отношений): вилка
+        /// раннего прогноза (24.3).
+        var spread: Double = 0
 
         /// Обычное время всего пути.
         var total: Double { suffix.first ?? 0 }
@@ -117,7 +123,13 @@ nonisolated enum CommuteGhost {
     /// База по строкам варианта. Участок, который измерен меньше чем в двух
     /// поездках, берёт темп соседей (секунд на метр по всей базе) — дыра в
     /// одной строке не должна делать прогноз невозможным.
+    ///
+    /// `weights` — веса строк (Selection; nil — все по 1). `calibrate` —
+    /// привести сумму медиан к медиане целых поездок (24.2: светофоры), `bias`
+    /// — сдвиг из журнала точности; оба до пола лимита, чтобы поправка вниз
+    /// не сделала призрака быстрее разрешённого.
     static func baseline(ends rawEnds: [Float], limitKmh: [UInt8], rows: [CommuteProfile.Row],
+                         weights: [Double]? = nil, calibrate: Bool = false, bias: Double = 1,
                          decayMeters: Double = AppConfig.commuteGhostDecayMeters) -> Baseline? {
         let ends = rawEnds.map(Double.init)
         guard !ends.isEmpty, !rows.isEmpty else { return nil }
@@ -125,27 +137,50 @@ nonisolated enum CommuteGhost {
         var median = [Double](repeating: .nan, count: n)
         var q25 = median, q75 = median
         var measuredSeconds = 0.0, measuredMeters = 0.0
+        // Равные веса (ступени) — прежний квантиль без весов: точка в точку.
+        let w = weights ?? []
+        let weighted = w.count == rows.count && Set(w).count > 1
         for j in 0..<n {
-            let values = rows.compactMap { row -> Double? in
-                guard j < row.seconds.count, row.seconds[j] != CommuteProfile.Row.noData else { return nil }
-                return Double(row.seconds[j])
-            }.sorted()
-            guard values.count >= 2 else { continue }
-            median[j] = quantile(values, 0.5)
-            q25[j] = quantile(values, 0.25)
-            q75[j] = quantile(values, 0.75)
+            var pairs: [(value: Double, weight: Double)] = []
+            for (r, row) in rows.enumerated()
+            where j < row.seconds.count && row.seconds[j] != CommuteProfile.Row.noData {
+                pairs.append((Double(row.seconds[j]), weighted ? w[r] : 1))
+            }
+            guard pairs.count >= 2 else { continue }
+            if weighted {
+                median[j] = weightedQuantile(pairs, 0.5)
+                q25[j] = weightedQuantile(pairs, 0.25)
+                q75[j] = weightedQuantile(pairs, 0.75)
+            } else {
+                let values = pairs.map(\.value).sorted()
+                median[j] = quantile(values, 0.5)
+                q25[j] = quantile(values, 0.25)
+                q75[j] = quantile(values, 0.75)
+            }
             let len = ends[j] - (j == 0 ? 0 : ends[j - 1])
             measuredSeconds += median[j]
             measuredMeters += len
         }
         guard measuredMeters > 0 else { return nil }
         let pace = measuredSeconds / measuredMeters
+        for j in 0..<n where median[j].isNaN {
+            let len = ends[j] - (j == 0 ? 0 : ends[j - 1])
+            median[j] = len * pace
+            q25[j] = median[j]
+            q75[j] = median[j]
+        }
+        var scale = 1.0, spread = 0.0
+        if calibrate {
+            scale = calibration(rows: rows, weights: w, median: median)
+            spread = totalSpread(rows: rows, weights: w, median: median)
+        }
+        scale *= min(max(bias, AppConfig.commuteAccuracyBiasMin), AppConfig.commuteAccuracyBiasMax)
         for j in 0..<n {
             let len = ends[j] - (j == 0 ? 0 : ends[j - 1])
-            if median[j].isNaN {
-                median[j] = len * pace
-                q25[j] = median[j]
-                q75[j] = median[j]
+            if scale != 1 {
+                median[j] *= scale
+                q25[j] *= scale
+                q75[j] *= scale
             }
             // Призрак не быстрее лимита: участок нельзя «обычно» проезжать
             // быстрее, чем разрешено (пол — проезд ровно на лимите).
@@ -158,16 +193,17 @@ nonisolated enum CommuteGhost {
         }
         var suffix = [Double](repeating: 0, count: n + 1)
         var decayed = [Double](repeating: 0, count: n + 1)
-        var spread = [Double](repeating: 0, count: n + 1)
+        var spreadSquared = [Double](repeating: 0, count: n + 1)
         for j in stride(from: n - 1, through: 0, by: -1) {
             let b = j == 0 ? 0 : ends[j - 1]
             let s = (q75[j] - q25[j]) / 1.35
             suffix[j] = suffix[j + 1] + median[j]
             decayed[j] = decayed[j + 1] + median[j] * exp(-b / decayMeters)
-            spread[j] = spread[j + 1] + s * s
+            spreadSquared[j] = spreadSquared[j + 1] + s * s
         }
         return Baseline(ends: ends, median: median, q25: q25, q75: q75,
-                        suffix: suffix, decayed: decayed, spreadSquared: spread, rows: rows.count)
+                        suffix: suffix, decayed: decayed, spreadSquared: spreadSquared, rows: rows.count,
+                        scale: scale, spread: spread)
     }
 
     static func quantile(_ sorted: [Double], _ q: Double) -> Double {
@@ -205,17 +241,24 @@ nonisolated enum CommuteGhost {
 
     /// Одно слово к «+6 мин»: пробка (на пройденных участках и рёбра
     /// `now.json`, и сам проезд были хуже обычного разброса — `jamSeconds`
-    /// сверх медианы) или стояли (одна стоянка от 3 мин). Обе видны —
-    /// побеждает та, что стоила больше секунд. Причины не видно — слова нет:
-    /// догадка, проданная как факт, хуже молчания.
-    enum Reason: String, Equatable, Sendable { case jam, stood }
+    /// сверх медианы), пробка впереди (24.3: рёбра `now.json` дальше по
+    /// линии — `jamAhead` сверх своей медианы) или стояли (одна стоянка от
+    /// 3 мин). Видно несколько — побеждает та, что стоила больше секунд.
+    /// Причины не видно — слова нет: догадка, проданная как факт, хуже молчания.
+    enum Reason: String, Equatable, Sendable { case jam, stood, jamAhead }
 
-    static func reason(delta: TimeInterval, jamSeconds: TimeInterval, longestStand: TimeInterval) -> Reason? {
+    static func reason(delta: TimeInterval, jamSeconds: TimeInterval, longestStand: TimeInterval,
+                       jamAhead: TimeInterval = 0) -> Reason? {
         guard delta >= 60 else { return nil }
-        let jam = jamSeconds >= AppConfig.commuteJamReasonSeconds ? jamSeconds : 0
-        let stood = longestStand >= AppConfig.commuteLongStandSeconds ? longestStand : 0
-        guard jam > 0 || stood > 0 else { return nil }
-        return jam >= stood ? .jam : .stood
+        let floor = AppConfig.commuteJamReasonSeconds
+        let candidates: [(Reason, TimeInterval)] = [
+            (.jam, jamSeconds >= floor ? jamSeconds : 0),
+            (.jamAhead, jamAhead >= floor ? jamAhead : 0),
+            (.stood, longestStand >= AppConfig.commuteLongStandSeconds ? longestStand : 0),
+        ]
+        // При равенстве — порядок списка: пройденная пробка, впереди, стояли.
+        guard let best = candidates.max(by: { $0.1 < $1.1 }), best.1 > 0 else { return nil }
+        return candidates.first { $0.1 == best.1 }?.0
     }
 
     // MARK: - Прогноз

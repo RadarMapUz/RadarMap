@@ -40,6 +40,9 @@ struct CommuteDetailSheet: View {
                                 monthlyCost: env.energyLedger.monthly(summary.trips, now: Date()),
                                 crowdUsual: env.crowdUsual(summary.direction))
                     chartCard
+                    if let accuracy = env.commuteProfiles.accuracyStats(summary.direction) {
+                        CommuteAccuracyCard(stats: accuracy)
+                    }
                     lossCard
                     tripsCard
                     Text("Считается на телефоне по вашим поездкам между домом и работой. Наружу эти данные не уходят.")

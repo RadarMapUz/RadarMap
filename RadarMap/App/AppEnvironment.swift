@@ -539,12 +539,23 @@ final class AppEnvironment {
         // Поездка дом↔работа — строкой в профиль участков (будущий «призрак»).
         // Направление — тем же правилом, что «Дорога на работу» в Итогах.
         trip.onTrackFinished = { [weak self] record, track, times in
+            guard let self else { return }
             // Рабочий рейс — не дорога на работу (12б.9).
-            guard let self, self.settings.commuteLearning, record.work != true, let ends = self.commuteEnds,
+            guard self.settings.commuteLearning, record.work != true, let ends = self.commuteEnds,
                   let direction = Commute.trips(history: [record], home: ends.home,
-                                                work: ends.work).first?.direction else { return }
+                                                work: ends.work).first?.direction else {
+                // Склейка продолжила поездку не туда (магазин → не работа):
+                // прежняя запись журнала про неё больше не правда.
+                self.commuteProfiles.recordAccuracy(nil, tripID: record.id)
+                return
+            }
             self.commuteProfiles.ingest(record: record, track: track, times: times,
                                         direction: direction, limits: self.speedLimits.limitIndex)
+            // Журнал точности (24.1): что призрак сказал и когда доехали.
+            let stops = (record.stops ?? []).map { $0.from...max($0.from, $0.to) }
+            let entry = self.commuteLive.finishAccuracy(tripID: record.id, departure: record.startedAt,
+                                                        endedAt: record.endedAt, stops: stops)
+            self.commuteProfiles.recordAccuracy(entry?.direction == direction ? entry : nil, tripID: record.id)
         }
         // Стёртые человеком поездки забываются и в журнале, и в профиле.
         trip.onRecordsErased = { [weak self] ids in
@@ -1048,8 +1059,10 @@ final class AppEnvironment {
         let generation = departureEstimatesGeneration
         let book = commuteProfiles.book
         let snapshot = shown ? traffic.snapshot : nil
+        let accuracy = commuteProfiles.accuracy
         Task {
-            let next = await Self.departureEstimates(book: book, snapshot: snapshot, now: now)
+            let next = await Self.departureEstimates(book: book, snapshot: snapshot,
+                                                     accuracy: accuracy, now: now)
             guard generation == departureEstimatesGeneration, settings.commuteLearning else { return }
             departureEstimatesAt = now
             if next != departureEstimates { departureEstimates = next }
@@ -1067,11 +1080,14 @@ final class AppEnvironment {
 
     @concurrent
     private static func departureEstimates(book: CommuteProfile.Book, snapshot: TrafficSnapshot?,
+                                           accuracy: [CommuteAccuracy.Entry],
                                            now: Date) async -> [Commute.Direction: CommuteEstimate.Estimate] {
         var result: [Commute.Direction: CommuteEstimate.Estimate] = [:]
         for direction in Commute.Direction.allCases {
-            result[direction] = CommuteEstimate.beforeDeparture(variants: book[direction], now: now,
-                                                                snapshot: snapshot)
+            // Та же поправка журнала, что у призрака в пути (24.2).
+            result[direction] = CommuteEstimate.beforeDeparture(
+                variants: book[direction], now: now, snapshot: snapshot,
+                bias: CommuteAccuracy.biasFactor(accuracy, direction: direction))
         }
         return result
     }
@@ -1079,11 +1095,14 @@ final class AppEnvironment {
     /// Голос призрака — ниже камеры и манёвра; с маршрутом время прибытия
     /// говорит навигация, а не призрак. Фраза засчитывается только сказанной
     /// (`true`): под оповещением о камере она ждёт следующего пересчёта, а
-    /// не теряется.
+    /// не теряется. «Камера занята» — то же правило, что у событий дороги и
+    /// погоды: оповещение идёт, о камере вот-вот скажут или до её радиуса
+    /// меньше восьми секунд пути (синтезатор ставит фразы в очередь, и
+    /// камера ждала бы конца «Прибытие сдвинулось…», 24.3).
     private func wireCommuteVoice() {
         commuteLive.onAnnounce = { [weak self] phrase in
             guard let self, self.settings.voiceEnabled else { return true }
-            guard self.location.alertLevel == 0, !self.route.isActive else { return false }
+            guard !self.location.isCameraBusyForRoadNotes, !self.route.isActive else { return false }
             self.alerts.speak(phrase)
             return true
         }
@@ -1126,7 +1145,8 @@ final class AppEnvironment {
         commuteLive.start(direction: direction, variants: commuteProfiles.book[direction],
                           departure: startedAt,
                           deadline: target?.deadline(forDeparture: Date()),
-                          workday: target?.applies(on: startedAt) ?? false)
+                          workday: target?.applies(on: startedAt) ?? false,
+                          bias: CommuteAccuracy.biasFactor(commuteProfiles.accuracy, direction: direction))
     }
 
     /// Включили или выключили «Выезжайте раньше» — в настройках или из
@@ -1400,7 +1420,8 @@ final class AppEnvironment {
         if commute.isEmpty { refreshCommute() }
         await traffic.refresh()
         let now = Date()
-        let next = await Self.departureEstimates(book: commuteProfiles.book, snapshot: traffic.snapshot, now: now)
+        let next = await Self.departureEstimates(book: commuteProfiles.book, snapshot: traffic.snapshot,
+                                                 accuracy: commuteProfiles.accuracy, now: now)
         departureEstimatesAt = now
         if next != departureEstimates { departureEstimates = next }
         refreshCommuteWidget(now: now)

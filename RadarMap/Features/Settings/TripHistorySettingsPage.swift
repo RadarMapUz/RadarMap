@@ -52,7 +52,7 @@ struct TripHistorySettingsPage: View {
                 .disabled(!canExport)
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Архив ZIP: таблица trips.csv — строка на поездку — и треки GPX тех поездок, у которых трек ещё хранится. Дом и работа в нём не подписаны.")
+                    Text("Архив ZIP: таблица trips.csv — строка на поездку — и треки GPX тех поездок, у которых трек ещё хранится. Дом и работа в них не подписаны. Отдельно — commute_forecast.csv, точность прогноза дороги на работу: по нему поездки дом↔работа узнаются.")
                     if exportFailed {
                         Label("Архив не собрался — попробуйте ещё раз", systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(Theme.warning)
@@ -111,7 +111,9 @@ struct TripHistorySettingsPage: View {
             // Месяцы, не прочитанные на старте, — тоже: выгрузка обещает всё.
             await env.trip.loadAllMonths()
             do {
-                let archive = try await TripExport.makeArchive(env.trip.history, now: Date(),
+                let archive = try await TripExport.makeArchive(env.trip.history,
+                                                               forecasts: env.commuteProfiles.accuracy,
+                                                               now: Date(),
                                                                timeZone: .current)
                 exportFolder = archive.folder
                 share = ShareFilePayload(url: archive.file)

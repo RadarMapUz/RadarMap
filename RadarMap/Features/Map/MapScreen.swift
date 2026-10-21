@@ -163,7 +163,13 @@ struct MapScreen: View {
                         CommuteGhost.TargetSlack(state: .raw(minutes: Double($0)), minutes: $0,
                                                  deadline: arrival.addingTimeInterval(Double($0) * 60))
                     }
-                    env.commuteLive.showDemo(direction: .toWork, arrival: arrival, deltaMinutes: 4, slack: slack)
+                    // `shift` — «+6 мин · пробка впереди» и фраза голосом (24.3);
+                    // `early` — ранний прогноз с вилкой «± 3 мин».
+                    env.commuteLive.showDemo(direction: .toWork, arrival: arrival,
+                                             deltaMinutes: mode == "shift" ? 6 : mode == "early" ? 0 : 4,
+                                             slack: slack, reason: mode == "shift" ? .jamAhead : nil,
+                                             spreadMinutes: mode == "early" ? 3 : nil,
+                                             speaksShift: mode == "shift")
                 }
             }
             // Скриншот-хук: `-whatsNew` — показать «Что нового» снова.

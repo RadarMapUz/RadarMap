@@ -41,6 +41,15 @@ nonisolated struct CommuteLiveSession: Sendable {
         var hasLead = false
         /// Почему дольше (8.8.12) — одним словом, и только когда причина видна.
         var reason: CommuteGhost.Reason?
+        /// Ранний прогноз (24.3): ведущий ещё не прошёл 1,5 км — показать с
+        /// вилкой, голосом не говорить.
+        var early = false
+        /// Пройдено и всего по линии ведущего, м — для журнала точности (24.1).
+        var alongMeters: Double = 0
+        var lengthMeters: Double = 0
+        /// Честная вилка прогноза, с: разброс участков или целых поездок (что
+        /// шире) на остаток пути.
+        var spread: Double = 0
     }
 
     /// Вариант пути с базой, индексом линии и сегодняшним проездом по ней.
@@ -116,16 +125,18 @@ nonisolated struct CommuteLiveSession: Sendable {
 
     /// nil — призрака нет: ни у одного варианта направления нет трёх
     /// подходящих поездок (выходной, непривычный час, мало истории).
+    /// `bias` — сдвиг из журнала точности (CommuteAccuracy.biasFactor, 24.2).
     init?(variants: [CommuteProfile.Variant], weekend: Bool, departure: Date,
-          calendar: Calendar = .current) {
-        let minute = CommuteProfile.minuteOfDay(departure, calendar: calendar)
+          bias: Double = 1, calendar: Calendar = .current) {
         var built: [Candidate] = []
         var lat0: Double?
         for variant in variants {
-            guard let rows = CommuteGhost.selectRows(variant.rows, weekend: weekend,
-                                                     departureMinute: minute, calendar: calendar),
-                  let base = CommuteGhost.baseline(ends: variant.ends, limitKmh: variant.limitKmh,
-                                                   rows: rows),
+            // Выборка по близости выезда и база, приведённая к целым поездкам
+            // (24.2): иначе 7:40 и 8:30 давали один прогноз, и он был
+            // оптимистичнее каждой настоящей поездки на сумму красных.
+            guard let selection = CommuteGhost.select(variant.rows, weekend: weekend,
+                                                      departure: departure, calendar: calendar),
+                  let base = CommuteGhost.calibratedBaseline(variant, selection: selection, bias: bias),
                   let first = variant.coordinates.first else { continue }
             if lat0 == nil { lat0 = first.latitude }
             let frame = CommuteProfile.Frame(latitude: lat0!)
@@ -174,22 +185,44 @@ nonisolated struct CommuteLiveSession: Sendable {
         }
         let c = candidates[index]
         let remainingMeters = max(0, c.base.length - c.floor)
+        let early = !CommuteGhost.isConfirmed(along: c.floor)
         let due = index != previous || crossed.contains(index) || crowdChanged || lastForecastAt.map {
             now.timeIntervalSince($0) >= AppConfig.commuteGhostRecomputeSeconds
         } ?? true
         guard due, let joined = c.joined else {
-            return Output(forecast: nil, isOff: false, remainingMeters: remainingMeters, hasLead: true)
+            return Output(forecast: nil, isOff: false, remainingMeters: remainingMeters, hasLead: true,
+                          early: early, alongMeters: c.floor, lengthMeters: c.base.length)
         }
         lastForecastAt = now
         crowdChanged = false
         // «В пути» — как если бы ехали от начала линии: сегодня с точки входа
         // плюс обычное время до неё.
         let elapsed = now.timeIntervalSince(joined.at) + c.base.total - c.base.usualRemaining(at: joined.along)
-        let forecast = CommuteGhost.forecast(c.base, along: c.floor, elapsed: elapsed, rho: c.rho, now: now,
-                                             jamAhead: jamAhead(c, now: now))
+        let ahead = jamAhead(c, now: now)
+        let forecast = CommuteGhost.forecast(c.base, along: c.floor, elapsed: elapsed,
+                                             rho: Self.standingPace(c, now: now), now: now, jamAhead: ahead)
         return Output(forecast: forecast, isOff: false, remainingMeters: remainingMeters, hasLead: true,
                       reason: CommuteGhost.reason(delta: forecast.delta, jamSeconds: c.jamSeconds,
-                                                  longestStand: longestStand))
+                                                  longestStand: longestStand, jamAhead: ahead),
+                      early: early, alongMeters: c.floor, lengthMeters: c.base.length,
+                      spread: max(forecast.sigma, c.base.spread * forecast.remaining))
+    }
+
+    /// Темп с учётом участка, на котором стоим (24.3): участок не пройден, а
+    /// времени на нём уже больше его медианы — это нижняя граница его
+    /// сегодняшнего времени, и она входит в темп сразу, а не после пересечения
+    /// границы. Раньше стоянка в пробке двигала прибытие только на своё время
+    /// (минута стоим — минута позже), а остаток пробки впереди темп узнавал
+    /// лишь на следующем участке. Не запоминается: на пересечении темп
+    /// посчитается по настоящему времени участка.
+    private static func standingPace(_ c: Candidate, now: Date) -> Double {
+        let base = c.base
+        let k = base.locate(c.floor).segment
+        guard k > 0, let entered = c.crossTimes[k - 1] else { return c.rho }
+        let inSegment = now.timeIntervalSince(entered)
+        guard inSegment > base.median[k] else { return c.rho }
+        return CommuteGhost.pace(live: c.live + [(inSegment, base.median[k], base.length(of: k))],
+                                 previous: c.rho)
     }
 
     /// Варианты, по которым идёт построенный маршрут (8.8.11): не меньше
@@ -214,9 +247,10 @@ nonisolated struct CommuteLiveSession: Sendable {
     /// Пробки сверх обычного на участках впереди (8.8.10): по каждому участку
     /// — то, на что пробка по `now.json` хуже того, что уже несёт сегодняшний
     /// темп ρ (он затухает с расстоянием). Так пробка в 300 м впереди
-    /// учитывается сразу, а одна и та же пробка не считается дважды. Участок
-    /// не хуже q75 водителя — обычная пробка этого часа, она в медиане. Файл
-    /// старше 10 мин — ноль.
+    /// учитывается сразу, а одна и та же пробка не считается дважды. Порог —
+    /// своя медиана плюс четверть (24.3), а не q75: при широком своём разбросе
+    /// q75 пропускал настоящие пробки, а медиана уже откалибрована к целым
+    /// поездкам (обычные красные в ней есть). Файл старше 10 мин — ноль.
     private func jamAhead(_ c: Candidate, now: Date) -> Double {
         guard let crowd = c.crowd, let generated = crowdGenerated,
               now.timeIntervalSince(generated) <= AppConfig.trafficStaleSeconds else { return 0 }
@@ -225,7 +259,7 @@ nonisolated struct CommuteLiveSession: Sendable {
         let a = min(max(0, c.floor), base.length)
         var extra = 0.0
         for j in (k + 1)..<min(crowd.count, base.median.count) where j > k {
-            guard let time = crowd[j], time > base.q75[j] else { continue }
+            guard let time = crowd[j], time > base.median[j] * AppConfig.commuteCrowdOverMedian else { continue }
             let rhoExcess = max(0, (c.rho - 1) * base.median[j]
                                 * exp(-(base.start(of: j) - a) / AppConfig.commuteGhostDecayMeters))
             extra += max(0, time - base.median[j] - rhoExcess)
@@ -268,8 +302,8 @@ nonisolated struct CommuteLiveSession: Sendable {
                     let live = t.timeIntervalSince(previous)
                     // Пробка на пройденном участке — и по файлу, и по своему
                     // проезду хуже обычного разброса (8.8.12).
-                    if let crowd = c.crowd, j < crowd.count, let jam = crowd[j], jam > base.q75[j],
-                       live > base.q75[j] {
+                    if let crowd = c.crowd, j < crowd.count, let jam = crowd[j],
+                       jam > base.median[j] * AppConfig.commuteCrowdOverMedian, live > base.q75[j] {
                         c.jamSeconds += live - base.median[j]
                     }
                     c.live.append((live, base.median[j], base.length(of: j)))
@@ -285,14 +319,21 @@ nonisolated struct CommuteLiveSession: Sendable {
         return crossed
     }
 
-    /// Ведущий: на линии и прошёл 1,5 км по ней. Прежний остаётся, пока другой
+    /// Может вести: на линии и прошёл 1,5 км по ней — или (24.3) уже 300 м,
+    /// если въехал на линию у её начала: выехали от дома этой дорогой, а не
+    /// пересекли её на перекрёстке. Гейт «уехал с пути» (Track) — тот же.
+    private static func isEligible(_ c: Candidate) -> Bool {
+        guard !c.track.isOff, let joined = c.joined else { return false }
+        if CommuteGhost.isConfirmed(along: c.floor) { return true }
+        return c.floor >= AppConfig.commuteGhostEarlyAlongMeters
+            && joined.along <= AppConfig.commuteGhostEarlyJoinMeters
+    }
+
+    /// Ведущий: на линии и прошёл 1,5 км по ней (рано — см. isEligible). Прежний остаётся, пока другой
     /// не ближе к машине на `commuteGhostSwitchMeters`; при равенстве — тот,
     /// где больше поездок (обычнее).
     private static func lead(_ candidates: [Candidate], previous: Int?) -> Int? {
-        let eligible = candidates.indices.filter {
-            !candidates[$0].track.isOff && candidates[$0].joined != nil
-                && CommuteGhost.isConfirmed(along: candidates[$0].floor)
-        }
+        let eligible = candidates.indices.filter { Self.isEligible(candidates[$0]) }
         guard let best = eligible.min(by: { a, b in
             let (ea, eb) = (candidates[a].offsetEMA ?? .infinity, candidates[b].offsetEMA ?? .infinity)
             return ea != eb ? ea < eb : candidates[a].base.rows > candidates[b].base.rows

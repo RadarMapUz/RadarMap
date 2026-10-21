@@ -61,6 +61,10 @@ nonisolated struct RemoteConfig: Codable, Equatable, Sendable {
         /// Погода на перевалах (19.2): загрузка, голос и баннер — рубильник на
         /// случай, если с прогнозом что-то не так. Нет поля — включено.
         var roadWeather: Bool?
+        /// Слой полос (20.8): загрузка и ряды на манёврах без полос OSRM —
+        /// рубильник на случай, если в наборе окажется ошибка. Нет поля —
+        /// включено. Камеры не трогает (правило 20): это подсказка о ряде.
+        var laneOverlay: Bool?
     }
 
     /// Значения сборки: то, к чему мы возвращаемся всегда, когда пульту нельзя верить.
@@ -74,6 +78,7 @@ nonisolated struct RemoteConfig: Codable, Equatable, Sendable {
     var isTrafficEnabled: Bool { features?.traffic ?? true }
     var isEtaShareEnabled: Bool { features?.etaShare ?? true }
     var isRoadWeatherEnabled: Bool { features?.roadWeather ?? true }
+    var isLaneOverlayEnabled: Bool { features?.laneOverlay ?? true }
 
     /// Интервал опроса с зажимом в разумные границы: присланные 0 или 86400 —
     /// это не «настройка», а испорченный файл.

@@ -160,6 +160,7 @@ extension LocationService {
     func endTrip(asPassenger: Bool = false, auto: Bool = false, atDestination: Bool = false) {
         stopArrivalWatch()   // любой конец поездки — следить за прибытием незачем
         isTripActive = false
+        lastTripEnd = (asPassenger ? .passenger : (auto ? .auto : .manual), atDestination)
         onTripStateChanged?(false)
         UIApplication.shared.isIdleTimerDisabled = false
         // Всю поездку геозоны не перерегистрировались (retile их пропускает —
@@ -208,8 +209,7 @@ extension LocationService {
         // «Стоп» рукой — конец и маршрута (NavigationFlow): иначе стоп на
         // одном экране оставлял ведение на другом (12.10, машина вела после
         // «Поездка завершена»). Автостоп и «я пассажир» маршрут оставляют.
-        let end: NavigationFlow.TripEnd = asPassenger ? .passenger : (auto ? .auto : .manual)
-        if !NavigationFlow.keepsRoute(after: end), let route, route.isActive {
+        if !NavigationFlow.keepsRoute(after: lastTripEnd.kind), let route, route.isActive {
             route.clear()
         }
         applyLocationMode()

@@ -119,6 +119,16 @@ extension MapScreen {
                 Label("Поделиться прибытием", systemImage: "square.and.arrow.up")
             }
         }
+        // «Еду домой» — одно касание (22.1): близкие в режиме «Когда еду
+        // домой» видят поездку, и в смене таксиста, где призрака нет.
+        if FamilyShare.offersGoingHome(env.family.circle, isTripActive: env.location.isTripActive,
+                                       isPassenger: env.location.isPassengerSession,
+                                       pausedThisTrip: env.family.pausedThisTrip,
+                                       headingHome: env.family.isHeadingHome, now: Date()) {
+            Button { env.family.goingHome() } label: {
+                Label("Еду домой", systemImage: "house.fill")
+            }
+        }
         Button { map.showNearbySheet = true } label: {
             Label("Рядом", systemImage: "list.bullet")
         }

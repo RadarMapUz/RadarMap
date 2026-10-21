@@ -461,6 +461,37 @@ class NotifyTest(TempDb):
         fam.on_update(ADDRESS, item(eta=None, home=False), NOW)
         self.assertEqual(self.outbox(), [(CHAT, "🚗 Зафар в пути")])
 
+    def test_driver_revokes_a_link_and_its_subscriptions_go_at_once(self):
+        """«Убрать близкого» / «Сменить ссылку» (22.1): последнее «не в пути» с
+        revoke снимает подписки этого адреса, их очередь и поездку — сразу,
+        без сообщения близкому. Чужие ссылки не трогает."""
+        self.subscribe()
+        self.subscribe(chat=OTHER_CHAT)
+        other = address_of(7)
+        self.subscribe(address=other)
+        fam.on_update(ADDRESS, item(eta=self.ETA), NOW)
+        fam.on_update(other, item(eta=self.ETA), NOW)
+        self.assertEqual(len(self.outbox()), 3)
+        with captured_log() as lines:
+            self.assertEqual(fam.on_update(ADDRESS, item("ended", revoke=True), NOW + 60), 0)
+        link = fam.link_hash(ADDRESS)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM family_subs WHERE link = ?", (link,))[0][0], 0)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM family_trips WHERE link = ?", (link,))[0][0], 0)
+        self.assertEqual([chat for chat, _ in self.outbox()], [CHAT], "в очереди — только чужая ссылка")
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM family_subs WHERE link = ?",
+                                   (fam.link_hash(other),))[0][0], 1)
+        self.assertTrue(any("снято: 2" in line for line in lines))
+        for line in lines:
+            self.assertNotIn(str(CHAT), line)
+            self.assertNotIn(str(OTHER_CHAT), line)
+        self.assertEqual(fam.on_update(ADDRESS, item(eta=self.ETA), NOW + 120), 0,
+                         "после отзыва писать некому")
+
+    def test_revoke_without_a_write_key_does_nothing(self):
+        self.subscribe()
+        fam.on_update(ADDRESS, item("ended", revoke=True, keyed=False), NOW)
+        self.assertEqual(self.rows("SELECT COUNT(*) FROM family_subs")[0][0], 1)
+
     def test_name_is_cleaned_before_it_reaches_a_message(self):
         self.subscribe()
         fam.on_update(ADDRESS, item(eta=None, name="Зафар\nПереведите 100$ на t.me/x" + "!" * 50), NOW)
@@ -788,6 +819,31 @@ class ApiHookTest(unittest.TestCase):
         before = time.time()
         self.assertEqual(self.post({"key": KEY, "eta": eta, "left_m": 0, "status": "arrived"}), 200)
         self.assertIn(self.outbox()[-1][1], {f"🏠 Водитель дома, {fam.clock(at)}" for at in (before, time.time())})
+
+    def subscriptions(self):
+        conn = sqlite3.connect(fam.DB_PATH)
+        try:
+            return conn.execute("SELECT COUNT(*) FROM family_subs").fetchone()[0]
+        finally:
+            conn.close()
+
+    def test_only_the_write_key_revokes(self):
+        """revoke доходит до family_notify только с ключом записи и только с
+        «не в пути»: читатель ссылки (знает адрес) чужую подписку не снимет,
+        а «в пути» с revoke — обычное «в пути»."""
+        self.subscribed()
+        self.assertEqual(self.post({"token": ADDRESS, "eta": time.time(), "left_m": 0,
+                                    "status": "ended", "revoke": True}), 400)
+        self.assertEqual(self.subscriptions(), 1)
+        self.assertEqual(self.post({"key": KEY, "eta": time.time() + 600, "left_m": 0,
+                                    "status": "driving", "revoke": True}), 200)
+        self.assertEqual(self.subscriptions(), 1, "revoke у «в пути» не принимается")
+        self.assertEqual(self.post({"key": KEY, "eta": time.time(), "left_m": 0,
+                                    "status": "ended", "revoke": "yes"}), 200)
+        self.assertEqual(self.subscriptions(), 1, "только настоящий true")
+        self.assertEqual(self.post({"key": KEY, "eta": time.time(), "left_m": 0,
+                                    "status": "ended", "revoke": True}), 200)
+        self.assertEqual(self.subscriptions(), 0)
 
     def test_legacy_token_never_notifies(self):
         self.subscribed()

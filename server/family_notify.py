@@ -49,7 +49,11 @@
   водитель назвал себя для близких, до NAME_MAX знаков, только для текста
   (нет — «Водитель» / «Haydovchi»); home — необязательно: false значит
   поездка не домой (режим «Каждая поездка»), и тексты говорят «в пути» /
-  «на месте» вместо «домой» / «дома». Нет поля — поездка домой.
+  «на месте» вместо «домой» / «дома». Нет поля — поездка домой; revoke —
+  водитель убрал близкого или сменил ему ссылку (22.1): последнее «не в
+  пути» по старому адресу снимает его подписки, очередь и поездку сразу
+  (revoke_link). api.clean_eta пропускает его только с ключом записи и
+  только вместе с «не в пути».
 
 ПРИВАТНОСТЬ
   * в подписке — sha256 адреса, scrypt-хэш номера чата (для /stop и капа на
@@ -497,12 +501,30 @@ def on_update(address, item, now):
         log(f"база не открылась — {type(error).__name__}")
         return 0
     try:
+        if item.get("revoke") is True:
+            revoke_link(conn, address)
+            return 0
         return queue_notices(conn, address, item, now)
     except Exception as error:      # хук не роняет POST /api/eta ни при каком сбое
         log(f"обновление не разобрано — {type(error).__name__}")
         return 0
     finally:
         conn.close()
+
+
+def revoke_link(conn, address):
+    """Водитель убрал близкого или сменил ему ссылку (22.1): подписки этого
+    адреса, их очередь и поездка — сразу, а не через KEEP_DAYS без поездок.
+    Близкому ничего не пишем — его убрали. Сколько подписок снято."""
+    link = link_hash(address)
+    with transaction(conn):
+        subs = [(sid,) for (sid,) in conn.execute("SELECT id FROM family_subs WHERE link = ?", (link,))]
+        conn.executemany("DELETE FROM family_outbox WHERE sub = ?", subs)
+        conn.execute("DELETE FROM family_subs WHERE link = ?", (link,))
+        conn.execute("DELETE FROM family_trips WHERE link = ?", (link,))
+    if subs:
+        log(f"ссылку отозвал водитель — подписок снято: {len(subs)}")
+    return len(subs)
 
 
 def queue_notices(conn, address, item, now):

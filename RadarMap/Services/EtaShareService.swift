@@ -37,6 +37,10 @@ final class EtaShareService {
     /// Сервер показывает страницы ссылок: nil — ещё не спрашивали.
     @ObservationIgnored private(set) var serverSupport: Bool?
     @ObservationIgnored private var lastProbe: Date?
+    /// Имя Telegram-бота, которое назвал сервер (X-Eta-Bot, 22.1): строка
+    /// «Сообщения в Telegram» в тексте семейной ссылки. nil — бота нет или
+    /// сервер старше.
+    @ObservationIgnored private(set) var telegramBot: String?
 
     /// Спросить сервер, если пора, — перед тем как отдать ссылку. Ссылку,
     /// которая откроется ошибкой, водитель не должен отправлять никому.
@@ -45,7 +49,7 @@ final class EtaShareService {
             return serverSupport == true
         }
         lastProbe = now
-        guard let answer = await api.probe("api/eta/" + EtaShare.probeToken),
+        guard let answer = await api.probe("api/eta/" + EtaShare.probeToken, header: "X-Eta-Bot"),
               let support = EtaShare.linkSupport(status: answer.status, contentType: answer.contentType) else {
             // Не знаем — следующее нажатие спросит снова, без паузы.
             lastProbe = nil
@@ -55,6 +59,7 @@ final class EtaShareService {
             Log.network.error("прибытие: сервер не показывает ссылки (HTTP \(answer.status, privacy: .public)) — отправляем время без ссылки")
         }
         serverSupport = support
+        telegramBot = support ? FamilyShare.validBot(answer.header) : nil
         return support
     }
 

@@ -2560,8 +2560,10 @@ nonisolated enum AppConfig {
 
     // MARK: - Поездки в iCloud (CloudSync, 27.F)
 
-    /// Контейнер CloudKit — тот же, что в RadarMap.entitlements и
-    /// RadarMapCarPlay.entitlements (тест сверяет). Другой id в
+    /// Контейнер CloudKit. В .entitlements его кладёт Xcode, когда владелец
+    /// включает capability iCloud (до этого ключей нет — Xcode Cloud иначе не
+    /// подпишет сборку); тест сверяет, что id там совпадает с этим. Без прав
+    /// CloudKit не создаётся вовсе (EntitlementProbe): другой или чужой id в
     /// CKContainer(identifier:) уронил бы приложение исключением.
     static let cloudContainerID = "iCloud.uz.radarmap.ios"
     /// Потолок одной записи после сжатия. У CloudKit — 1 МБ на запись без

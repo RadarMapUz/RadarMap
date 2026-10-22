@@ -804,23 +804,50 @@ final class CloudSettingsSyncTests: XCTestCase {
 
 final class EntitlementProbeTests: XCTestCase {
 
-    /// Контейнер в коде, в обоих файлах прав и в собранной сборке — один и тот
-    /// же: другой id в CKContainer(identifier:) уронил бы приложение.
-    func testContainerMatchesEntitlementFiles() throws {
+    /// Права iCloud появляются в .entitlements, только когда владелец включил
+    /// capability (Xcode → Signing & Capabilities → + iCloud): иначе Xcode
+    /// Cloud не подпишет сборку. Поэтому условно: ключи есть — одинаковые в
+    /// обоих файлах и с AppConfig; нет — их нет нигде (половина прав хуже, чем
+    /// ничего).
+    func testEntitlementFilesAgreeWhenICloudIsEnabled() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        var states: [Bool] = []
         for name in ["RadarMap.entitlements", "RadarMapCarPlay.entitlements"] {
             let data = try Data(contentsOf: root.appendingPathComponent("RadarMap").appendingPathComponent(name))
             let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
-            XCTAssertEqual(plist[EntitlementProbe.containersKey] as? [String], [AppConfig.cloudContainerID], name)
+            let containers = plist[EntitlementProbe.containersKey] as? [String]
+            states.append(containers != nil)
+            guard let containers else {
+                XCTAssertNil(plist[EntitlementProbe.servicesKey], name)
+                continue
+            }
+            XCTAssertEqual(containers, [AppConfig.cloudContainerID], name)
             XCTAssertEqual(plist[EntitlementProbe.servicesKey] as? [String], ["CloudKit"], name)
             XCTAssertNotNil(plist["com.apple.developer.ubiquity-kvstore-identifier"], name)
         }
+        XCTAssertEqual(Set(states).count, 1, "iCloud включён в одном файле прав и выключен в другом")
     }
 
-    /// Симулятор: права в секции __TEXT,__entitlements исполняемого файла.
-    func testRunningBuildDeclaresTheContainer() throws {
+    /// Собранная сборка: контейнер в правах — тот же, что в AppConfig; нет
+    /// его — CloudKit не создаётся вовсе (иначе CKContainer уронил бы процесс).
+    func testRunningBuildEitherDeclaresTheContainerOrSkipsCloudKit() throws {
         let containers = try XCTUnwrap(EntitlementProbe.cloudKitContainers(), "права сборки не прочитаны")
-        XCTAssertTrue(containers.contains(AppConfig.cloudContainerID))
+        if containers.isEmpty {
+            XCTAssertNil(CloudKitTransport.make(), "без прав — без CKContainer")
+        } else {
+            XCTAssertEqual(containers, [AppConfig.cloudContainerID])
+        }
+    }
+
+    /// Хранилище настроек iCloud без права KVS: ничего не синхронизирует и
+    /// не падает (мост настроек работает и в такой сборке).
+    func testKeyValueStoreWithoutEntitlementDoesNotCrash() {
+        let store = NSUbiquitousKeyValueStore.default
+        let key = CloudSettingsSync.prefix + "test.probe"
+        store.set(true, forKey: key)
+        _ = store.object(forKey: key)
+        store.removeObject(forKey: key)
+        _ = store.synchronize()
     }
 
     /// Устройство: права в блобе подписи (SuperBlob, big-endian) — собранный

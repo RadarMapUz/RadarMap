@@ -30,6 +30,22 @@ nonisolated enum OverspeedThreshold {
                    max(0, FineSchedule.toleranceKmh - AppConfig.cameraOverspeedWarnMarginKmh))
     }
 
+    /// Скорость, выше которой — превышение: лимит плюс порог. Одна функция
+    /// для `SpeedLimitService.isOverspeeding` и всего, что по нему красится.
+    static func line(limitKmh: Int, cameraAhead: Bool, userTolerance: Double) -> Double {
+        Double(limitKmh) + kmh(cameraAhead: cameraAhead, userTolerance: userTolerance)
+    }
+
+    /// Краснеет ли живая скорость и знак лимита рядом с ней — телефон, док
+    /// CarPlay, плитка приборки: ОДНО правило, превышение выше порога
+    /// (`isOverspeeding`). До 22.10 цифра в доке CarPlay красилась по шкале
+    /// штрафа (`Theme.speedLevel`), а знак рядом — по порогу: 64 в зоне 60
+    /// при допуске 5 давали красный знак у белой цифры (отчёт качества, п. 11).
+    /// Без показанного лимита сравнивать не с чем — не краснеет ничего.
+    static func showsOverspeed(limitShown: Int?, isOverspeeding: Bool) -> Bool {
+        limitShown != nil && isOverspeeding
+    }
+
     /// Штраф на этой скорости уже заработан — «поздно», а не «осторожно».
     static func isFineEarned(speedKmh: Double, limitKmh: Int) -> Bool {
         speedKmh - Double(limitKmh) > FineSchedule.toleranceKmh

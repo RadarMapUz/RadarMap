@@ -386,26 +386,3 @@ struct SettingsExplainer: View {
         .tint(Theme.accent)
     }
 }
-
-/// Сноска раздела настроек: несколько коротких мыслей вместо одного абзаца.
-///
-/// Три сноски этого экрана были по 927, 891 и 815 символов — примерно по
-/// полтораста слов сплошняком, кеглем 12. Текст в них честный и заслуженный,
-/// но в такой подаче его не читают: глаз видит серый прямоугольник и
-/// проматывает. Разбиение на мысли ничего не сокращает — оно делает абзац
-/// сканируемым, а это и есть разница между «написано» и «прочитано».
-struct SettingsFootnote: View {
-    private let lines: [LocalizedStringKey]
-
-    init(_ lines: [LocalizedStringKey]) { self.lines = lines }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                Text(line)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}

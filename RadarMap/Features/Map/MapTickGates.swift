@@ -284,31 +284,13 @@ struct GhostLatePlaque: View {
 struct LocationFollowDriver: View {
     @Environment(AppEnvironment.self) private var env
     let map: MapState
-    /// Камера карты Apple на экране. Когда подложка — движок, у него своё
-    /// ведение; follow здесь двигал невидимую карту Apple и пересобирал её
-    /// аннотации каждый тик (docs/perf_audit_2026-10-07.md).
-    var drivesAppleCamera = true
-
     var body: some View {
         Color.clear
             .allowsHitTesting(false)
             .onChange(of: env.location.locationTick) { _, _ in
-                // Прогресс маршрута (прибытие/манёвры) тикает в LocationService —
-                // здесь только следование карты за курсом. Вне поездки поворот
-                // по компасу телефона делает сам MapKit (.userLocation
-                // followsHeading), догонять его тиками не нужно.
-                if drivesAppleCamera, map.orientation == .heading, env.location.isTripActive {
-                    // Прижатые к дороге координата и курс: камера карты ведёт
-                    // по полотну, а не по гуляющему вбок GPS. Скорость — для
-                    // автозума (стоишь — ближе, летишь — шире).
-                    map.follow(coordinate: env.location.displayCoordinate
-                                   ?? env.location.currentCoordinate,
-                               course: env.location.displayCourse >= 0
-                                   ? env.location.displayCourse
-                                   : env.location.currentCourse,
-                               speedKmh: env.location.speedKmh,
-                               pitched: map.prefers3D)
-                }
+                // Прогресс маршрута (прибытие/манёвры) тикает в LocationService,
+                // ведение камеры — у движка (EngineMapView); здесь только первый
+                // фикс и точка отсчёта важности маркеров.
                 if let coordinate = env.location.currentCoordinate {
                     map.snapToUserOnce(coordinate)   // первый фикс после запуска → окрестности
                     // Точка отсчёта важности маркеров: сама себя троттлит.

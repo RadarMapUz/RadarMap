@@ -126,7 +126,7 @@ struct MapScreen: View {
                 OverspeedVignetteGate()
 
                 // Следование за GPS: единственный подписчик locationTick.
-                LocationFollowDriver(map: map, drivesAppleCamera: false)
+                LocationFollowDriver(map: map)
             }
         }
         // Меню на карте — над всеми панелями, но под предупреждением о
@@ -388,18 +388,6 @@ struct MapScreen: View {
     func applySketchInsets() {
         frame.setPanelEdges(top: topPanelEdge,
                             bottom: MapFrameState.bottomEdge(panel: bottomPanelEdge, overlay: alertCardEdge))
-    }
-
-    /// Подложка экрана: своя схема или карта Apple.
-    ///
-    /// Есть ли в сборке движок. Пакета может не быть — тогда его нет и в
-    /// списке подложек, а не «есть, но молча не работает».
-    static var engineAvailable: Bool {
-        #if canImport(MapLibre)
-        return true
-        #else
-        return false
-        #endif
     }
 
     /// Подложка. Сам этот кусок body НЕ читает ничего, что пишется на тике:

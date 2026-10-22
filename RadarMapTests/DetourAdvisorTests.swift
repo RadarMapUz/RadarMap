@@ -116,6 +116,80 @@ final class DetourAdvisorTests: XCTestCase {
         XCTAssertEqual(watch.update(speedKmh: 45, at: t0 + 125), 0, "поехали по-настоящему")
     }
 
+    // MARK: - Синтетический затор в формате now.json (27.E)
+
+    /// now.json, как его пишет traffic_build.py (`[ulat, ulon, vlat, vlon,
+    /// level, kmh, model_kmh]`): на нашей улице (69.240) к северу 41.305 →
+    /// 41.335 — пробка 8 км/ч против 50 по графу, ребро по ~111 м. Рядом —
+    /// шум, который объезд звать не должен: та же пробка на встречной полосе и
+    /// свободное ребро на соседней улице.
+    private func nowJSON(generated: Date, jamLevel: Int = 3, southbound: Bool = false) -> Data {
+        var edges: [String] = []
+        var lat = 41.305
+        while lat < 41.3349 {
+            let (a, b) = southbound ? (lat + 0.001, lat) : (lat, lat + 0.001)
+            edges.append(String(format: "[%.5f,69.24000,%.5f,69.24000,%d,8,50]", a, b, jamLevel))
+            lat += 0.001
+        }
+        if !southbound {
+            edges.append("[41.33500,69.24000,41.30500,69.24000,3,4,50]")   // встречная полоса
+        }
+        edges.append("[41.31000,69.25000,41.31100,69.25000,1,48,50]")      // объезд свободен
+        let body = "{\"v\":1,\"generated\":\(Int(generated.timeIntervalSince1970)),\"edges\":[\(edges.joined(separator: ","))]}"
+        return Data(body.utf8)
+    }
+
+    /// Вариант, который уходит с затора на 41.302 и возвращается на него с
+    /// 41.310 по 41.330: «объезд» через ту же пробку.
+    private var throughTheJam: [CLLocationCoordinate2D] {
+        [c(41.300, 69.240), c(41.302, 69.240), c(41.302, 69.250), c(41.310, 69.250), c(41.310, 69.240),
+         c(41.330, 69.240), c(41.330, 69.250), c(41.338, 69.250), c(41.338, 69.240), c(41.340, 69.240)]
+    }
+
+    func testSyntheticJamFromNowJSONOffersTheRealDetour() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let snapshot = try XCTUnwrap(TrafficSnapshot.decode(nowJSON(generated: now.addingTimeInterval(-90))))
+        XCTAssertTrue(snapshot.isFresh(now: now))
+        // Задержка на нашем пути — только от нашей полосы: ~3,3 км по 8 км/ч
+        // против 50 — около 21 минуты.
+        let delayAhead = snapshot.delay(along: current)
+        XCTAssertEqual(delayAhead, 3_340 / (8 / 3.6) - 3_340 / (50 / 3.6), accuracy: 60)
+        XCTAssertTrue(Advisor.shouldSearch(remainingDistance: 4_400, delayAhead: delayAhead, crawl: 0,
+                                           sinceLastSearch: nil, sinceDecline: nil, offersOnRoute: 0))
+        // Варианты оценены той же меркой, что в RouteService.considerDetour:
+        // время OSRM + пробки по тому же снимку.
+        let currentRemaining = 6 * 60 + delayAhead
+        let candidates = [(throughTheJam, 10.0 * 60), (around, 8.0 * 60)].map { points, osrm in
+            Advisor.Candidate(points: points, expectedTime: osrm + snapshot.delay(along: points), steps: [])
+        }
+        XCTAssertGreaterThan(candidates[0].expectedTime, 10 * 60 + 600, "через ту же пробку — с её задержкой")
+        XCTAssertEqual(candidates[1].expectedTime, 8 * 60, accuracy: 1, "объезд свободен: свободное ребро ETA не трогает")
+        let offer = try XCTUnwrap(Advisor.decide(currentRemaining: currentRemaining, current: current,
+                                                 candidates: candidates))
+        XCTAssertEqual(offer.index, 1, "предложен объезд, а не вариант через ту же пробку")
+        XCTAssertEqual(offer.saving, currentRemaining - 8 * 60 - AppConfig.detourSwitchCostSeconds, accuracy: 1)
+    }
+
+    func testOncomingOrStaleOrSlowOnlyJamDoesNotTrigger() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        // Пробка только на встречной полосе — не наша.
+        let oncoming = try XCTUnwrap(TrafficSnapshot.decode(nowJSON(generated: now, southbound: true)))
+        XCTAssertEqual(oncoming.delay(along: current), 0)
+        XCTAssertFalse(Advisor.shouldSearch(remainingDistance: 4_400, delayAhead: oncoming.delay(along: current),
+                                            crawl: 0, sinceLastSearch: nil, sinceDecline: nil, offersOnRoute: 0))
+        // Снимок старше 10 минут — RouteService.considerDetour объезд не ищет.
+        let stale = try XCTUnwrap(TrafficSnapshot.decode(nowJSON(generated: now.addingTimeInterval(-11 * 60))))
+        XCTAssertFalse(stale.isFresh(now: now))
+        // «Медленно» на 8 из 50 — уровень 2 тоже задержка (сервер так не
+        // пишет, но формат допускает): поиск зовёт задержка, а не цвет.
+        let slow = try XCTUnwrap(TrafficSnapshot.decode(nowJSON(generated: now, jamLevel: 2)))
+        XCTAssertEqual(slow.delay(along: current), stale.delay(along: current), accuracy: 1)
+        // Свободный уровень с той же скоростью — не задержка (данные сервера
+        // главнее арифметики телефона).
+        let free = try XCTUnwrap(TrafficSnapshot.decode(nowJSON(generated: now, jamLevel: 1)))
+        XCTAssertEqual(free.delay(along: current), 0)
+    }
+
     // MARK: - Время на ответ (сценарий D1, 20.10)
 
     /// Предложение, которого никто не видел (баннер в машине ждёт за камерой

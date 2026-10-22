@@ -47,6 +47,7 @@ struct EngineBaseLayer: View {
             let distance = env.location.displayNearestCamera != nil
                 ? env.location.displayDistanceToNearest : nil
             let maneuverDistance = env.route.nextStep.map { _ in env.route.nextStepDistance }
+            let cameraLine = env.cameraOnLine
             // Размер берётся у КОНТЕЙНЕРА, а не у UIScreen.main.
             //
             // UIScreen.main объявлен устаревшим и вдобавок отвечает неверно
@@ -85,12 +86,10 @@ struct EngineBaseLayer: View {
                         // на главном потоке при выезде за край области.
                         limitProvider: nil,
                         alertCameraID: inRange ? env.location.displayNearestCamera?.id : nil,
-                        // Вариант B: цвет типа — только у камер на нашем пути.
-                        pathCameraIDs: CameraMarkerLook.pathIDs(
-                            route: env.route.camerasOnRoute.map { (id: $0.id, along: $0.distanceAlong) },
-                            progress: env.route.isActive ? env.route.progressAlong : nil,
-                            passedTolerance: AppConfig.routePassedToleranceMeters,
-                            nearest: env.location.displayNearestCamera?.id),
+                        // Вариант B: цвет типа — только у камер на нашем пути;
+                        // они же — на линии маршрута (27.B, CameraOnLine).
+                        pathCameraIDs: cameraLine.pathIDs,
+                        cameraPoints: cameraLine.points,
                         familiarCameraIDs: env.location.familiarCameraIDs,
                         route: env.route.routeCoordinates,
                         routeObject: env.route.polyline,

@@ -1363,6 +1363,22 @@
         }
       }
     },
+    "+%@ — обычно в этот час": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+%@ — обычно в этот час"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "odatda shu soatda +%@"
+          }
+        }
+      }
+    },
     "+%lld км/ч": {
       "localizations": {
         "ru": {
@@ -3512,6 +3528,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Oldinda yoʻl yopiq"
+          }
+        }
+      }
+    },
+    "Впереди пробка: +%@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Впереди пробка: +%@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldinda tirbandlik: +%@"
           }
         }
       }
@@ -9111,22 +9143,6 @@
         }
       }
     },
-    "Настройки → О приложении → Мои данные → «Сохранить копию», затем на новом телефоне — «Восстановить из файла». История хранится только на телефоне, на сервер мы её не отправляем.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Настройки → О приложении → Мои данные → «Сохранить копию», затем на новом телефоне — «Восстановить из файла». История хранится только на телефоне, на сервер мы её не отправляем."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sozlamalar → Ilova haqida → Mening maʼlumotlarim → «Nusxani saqlash», soʻng yangi telefonda — «Fayldan tiklash». Tarix faqat telefonda saqlanadi, biz uni serverga yubormaymiz."
-          }
-        }
-      }
-    },
     "Начать": {
       "localizations": {
         "ru": {
@@ -10258,6 +10274,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "OK"
+          }
+        }
+      }
+    },
+    "около %1$@, через %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "около %1$@, через %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "taxminan %1$@, %2$@ dan keyin"
           }
         }
       }
@@ -17734,22 +17766,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ibora 20–40 km oldin — marshrut boʻyicha yoki trassada harakat yoʻnalishida — eshitiladi va hech qachon kamera haqidagi ogohlantirishni boʻlmaydi."
-          }
-        }
-      }
-    },
-    "Хранятся последние %lld поездок. Итоги за месяцы считаются по дневным сводкам — они не удаляются.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Хранятся последние %lld поездок. Итоги за месяцы считаются по дневным сводкам — они не удаляются."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Oxirgi %lld ta safar saqlanadi. Oylik natijalar kunlik hisobotlar boʻyicha hisoblanadi — ular oʻchirilmaydi."
           }
         }
       }
@@ -30561,6 +30577,566 @@
           "stringUnit": {
             "state": "translated",
             "value": "Safar faqat mashinada boshlanishi mumkin — Sozlamalar → Safar"
+          }
+        }
+      }
+    },
+    "Только на iPhone": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только на iPhone"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faqat iPhoneʼda"
+          }
+        }
+      }
+    },
+    "В iCloud": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В iCloud"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloudʼda"
+          }
+        }
+      }
+    },
+    "Хранить поездки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Хранить поездки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarlarni saqlash"
+          }
+        }
+      }
+    },
+    "Сохранить сейчас": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранить сейчас"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hozir saqlash"
+          }
+        }
+      }
+    },
+    "Поездки с треками, места, журнал заправок, штрафы и профиль машины шифруются ключом вашего Apple ID. Ни мы, ни наш сервер их не видим.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездки с треками, места, журнал заправок, штрафы и профиль машины шифруются ключом вашего Apple ID. Ни мы, ни наш сервер их не видим."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Treklari bilan safarlar, joylar, yoqilgʻi jurnali, jarimalar va mashina profili Apple ID kalitingiz bilan shifrlanadi. Ularni na biz, na serverimiz koʻradi."
+          }
+        }
+      }
+    },
+    "Новый iPhone с тем же Apple ID получит историю сам — она сложится с тем, что уже есть на телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новый iPhone с тем же Apple ID получит историю сам — она сложится с тем, что уже есть на телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xuddi shu Apple ID bilan yangi iPhone tarixni oʻzi oladi — u telefonda bor maʼlumotlar bilan qoʻshiladi."
+          }
+        }
+      }
+    },
+    "В поездке iCloud молчит: связь нужна предупреждениям о камерах. Сохранение — после остановки.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В поездке iCloud молчит: связь нужна предупреждениям о камерах. Сохранение — после остановки."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar paytida iCloud jim turadi: aloqa kamera ogohlantirishlari uchun kerak. Saqlash — toʻxtagandan keyin."
+          }
+        }
+      }
+    },
+    "Близкие переносятся без ссылок: на новом телефоне ссылку им нужно отправить заново.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Близкие переносятся без ссылок: на новом телефоне ссылку им нужно отправить заново."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yaqinlar havolasiz koʻchiriladi: yangi telefonda ularga havolani qaytadan yuborish kerak."
+          }
+        }
+      }
+    },
+    "«Удалить всю историю» стирает и копию в iCloud.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Удалить всю историю» стирает и копию в iCloud."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Butun tarixni oʻchirish» iCloudʼdagi nusxani ham oʻchiradi."
+          }
+        }
+      }
+    },
+    "В iCloud история переживёт смену телефона. Настройки приложения — тоже.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В iCloud история переживёт смену телефона. Настройки приложения — тоже."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloudʼda tarix telefon almashtirilganda ham saqlanib qoladi. Ilova sozlamalari ham."
+          }
+        }
+      }
+    },
+    "Перестать хранить в iCloud?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перестать хранить в iCloud?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloudʼda saqlashni toʻxtatasizmi?"
+          }
+        }
+      }
+    },
+    "Оставить копию в iCloud": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оставить копию в iCloud"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nusxani iCloudʼda qoldirish"
+          }
+        }
+      }
+    },
+    "Удалить копию из iCloud": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить копию из iCloud"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nusxani iCloudʼdan oʻchirish"
+          }
+        }
+      }
+    },
+    "На iPhone всё останется как есть.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На iPhone всё останется как есть."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iPhoneʼda hammasi oʻz holicha qoladi."
+          }
+        }
+      }
+    },
+    "Поездки хранятся только на этом iPhone": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездки хранятся только на этом iPhone"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarlar faqat shu iPhoneʼda saqlanadi"
+          }
+        }
+      }
+    },
+    "Проверяем iCloud…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проверяем iCloud…"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud tekshirilmoqda…"
+          }
+        }
+      }
+    },
+    "iCloud выключен. Войдите в Apple ID и включите iCloud для RadarMap в Настройках iPhone — пока поездки хранятся на телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud выключен. Войдите в Apple ID и включите iCloud для RadarMap в Настройках iPhone — пока поездки хранятся на телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud oʻchirilgan. Apple IDʼga kiring va iPhone Sozlamalarida RadarMap uchun iCloudʼni yoqing — hozircha safarlar telefonda saqlanadi."
+          }
+        }
+      }
+    },
+    "iCloud ограничен на этом iPhone (Экранное время или профиль) — поездки хранятся на телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud ограничен на этом iPhone (Экранное время или профиль) — поездки хранятся на телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu iPhoneʼda iCloud cheklangan (Ekran vaqti yoki profil) — safarlar telefonda saqlanadi."
+          }
+        }
+      }
+    },
+    "iCloud временно недоступен — повторим позже.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud временно недоступен — повторим позже."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud vaqtincha mavjud emas — keyinroq qayta urinamiz."
+          }
+        }
+      }
+    },
+    "В этой версии iCloud ещё не подключён — поездки хранятся на телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В этой версии iCloud ещё не подключён — поездки хранятся на телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ilovaning bu versiyasida iCloud hali ulanmagan — safarlar telefonda saqlanadi."
+          }
+        }
+      }
+    },
+    "Идёт поездка — сохраним после остановки.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Идёт поездка — сохраним после остановки."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar davom etmoqda — toʻxtagandan keyin saqlaymiz."
+          }
+        }
+      }
+    },
+    "Сохраняем в iCloud… отправлено: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохраняем в iCloud… отправлено: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloudʼga saqlanmoqda… yuborildi: %lld"
+          }
+        }
+      }
+    },
+    "Сохраняем в iCloud…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохраняем в iCloud…"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloudʼga saqlanmoqda…"
+          }
+        }
+      }
+    },
+    "В iCloud:": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В iCloud:"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloudʼda:"
+          }
+        }
+      }
+    },
+    "Нет сети. Ждут отправки: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет сети. Ждут отправки: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarmoq yoʻq. Yuborishni kutmoqda: %lld"
+          }
+        }
+      }
+    },
+    "Нет сети — сохраним, когда появится.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет сети — сохраним, когда появится."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarmoq yoʻq — paydo boʻlganda saqlaymiz."
+          }
+        }
+      }
+    },
+    "В iCloud закончилось место — освободите хранилище в Настройках iPhone.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В iCloud закончилось место — освободите хранилище в Настройках iPhone."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloudʼda joy tugadi — iPhone Sozlamalarida xotirani boʻshating."
+          }
+        }
+      }
+    },
+    "Копию в iCloud удалили на другом устройстве, хранение выключено. Включите снова, чтобы сохранить поездки этого iPhone.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Копию в iCloud удалили на другом устройстве, хранение выключено. Включите снова, чтобы сохранить поездки этого iPhone."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloudʼdagi nusxa boshqa qurilmada oʻchirildi, saqlash oʻchirildi. Bu iPhone safarlarini saqlash uchun qayta yoqing."
+          }
+        }
+      }
+    },
+    "Не удалось сохранить в iCloud — повторим позже.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось сохранить в iCloud — повторим позже."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloudʼga saqlab boʻlmadi — keyinroq qayta urinamiz."
+          }
+        }
+      }
+    },
+    "Сохранять поездки в iCloud?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранять поездки в iCloud?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarlarni iCloudʼda saqlaysizmi?"
+          }
+        }
+      }
+    },
+    "Чтобы не потерять историю при смене телефона. Поездки шифруются ключом вашего Apple ID — нам они не видны.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Чтобы не потерять историю при смене телефона. Поездки шифруются ключом вашего Apple ID — нам они не видны."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefon almashtirilganda tarix yoʻqolmasligi uchun. Safarlar Apple ID kalitingiz bilan shifrlanadi — biz ularni koʻrmaymiz."
+          }
+        }
+      }
+    },
+    "Сохранять в iCloud": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранять в iCloud"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloudʼda saqlash"
+          }
+        }
+      }
+    },
+    "Копия истории в iCloud": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Копия истории в iCloud"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloudʼdagi tarix nusxasi"
+          }
+        }
+      }
+    },
+    "Поездки хранятся на телефоне без срока, треки — неделю. Итоги за месяцы считаются по дневным сводкам.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездки хранятся на телефоне без срока, треки — неделю. Итоги за месяцы считаются по дневным сводкам."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarlar telefonda muddatsiz saqlanadi, treklar — bir hafta. Oylar boʻyicha yakunlar kunlik xulosalardan hisoblanadi."
+          }
+        }
+      }
+    },
+    "Включите Настройки → Поездка → История поездок → «Хранить поездки: в iCloud» — на новом iPhone с тем же Apple ID история появится сама. Без iCloud — Настройки → О приложении → Мои данные → «Сохранить копию», затем на новом телефоне «Восстановить из файла». На наш сервер история не уходит ни так, ни так.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Включите Настройки → Поездка → История поездок → «Хранить поездки: в iCloud» — на новом iPhone с тем же Apple ID история появится сама. Без iCloud — Настройки → О приложении → Мои данные → «Сохранить копию», затем на новом телефоне «Восстановить из файла». На наш сервер история не уходит ни так, ни так."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sozlamalar → Safar → Safarlar tarixi → «Safarlarni saqlash: iCloudʼda» ni yoqing — xuddi shu Apple ID bilan yangi iPhoneʼda tarix oʻzi paydo boʻladi. iCloudsiz — Sozlamalar → Ilova haqida → Mening maʼlumotlarim → «Nusxani saqlash», soʻng yangi telefonda «Fayldan tiklash». Tarix bizning serverimizga hech qachon yuborilmaydi."
           }
         }
       }

@@ -278,10 +278,9 @@ final class LocationService: NSObject {
     @ObservationIgnored var contextDetector = AlertPolicy.Detector()
     /// Камер в радиусе 3 км — сигнал плотности для детектора (пересчёт на ретайле).
     @ObservationIgnored var cameraDensity3km = 0
-    /// «Свои» камеры: проезжаем регулярно и спокойно — в городе они молчат
+    /// «Свои» камеры: проезжаем регулярно и спокойно — голос о них молчит
     /// (см. CameraFamiliarity). Пересчитывается на старте поездки: история за
     /// 30 дней меняется медленно, а на тике это была бы лишняя работа.
-    /// «Свои» камеры: проезжаем регулярно и спокойно — голос о них молчит.
     /// Наблюдаемое намеренно: маркер на карте и HUD показывают спокойное
     /// состояние, иначе тишина выглядит поломкой, а не заботой.
     var familiarCameraIDs: Set<Int> = []
@@ -438,6 +437,11 @@ final class LocationService: NSObject {
     /// предупреждать», нельзя (см. RoadSnapper).
     var displayCoordinate: CLLocationCoordinate2D?
     var displayCourse: CLLocationDirection = -1
+    /// Курс оси дороги под прижатой точкой (RoadSnapper), пока прижим держит и
+    /// курс дороги совпал с нашим; nil — прижима нет. Пишется только на смене
+    /// отрезка. Только картинка: камера на оси нашей дороги без маршрута
+    /// (CameraOnLine.roadSpot, 27.B).
+    var displayRoadBearing: Double?
     /// Последний фикс для значка «я» между фиксами (MarkerPredictor): точка и
     /// курс — те же displayCoordinate/displayCourse, плюс скорость, время
     /// фикса и линия маршрута вперёд. Пишется раз на фикс, в том же тике,
@@ -518,6 +522,8 @@ final class LocationService: NSObject {
 
     /// Своя машина подключена (CarLinkService) — ставит AppEnvironment.
     @ObservationIgnored var carLinked: (() -> Bool)?
+    /// Поколение чтения аудио-портов для автостарта: решает последнее.
+    @ObservationIgnored var autoStartRead = 0
     /// Пробуждение тихого фона (фикс, геозона): AppEnvironment перечитывает
     /// аудио-маршрут — Bluetooth машины сам приложение не будит.
     @ObservationIgnored var onQuietWake: (() -> Void)? {

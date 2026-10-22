@@ -47,6 +47,9 @@ nonisolated enum Perf {
         static let cameraLayer: StaticString = "cameraLayer"
         static let ratingScreen: StaticString = "ratingScreen"
         static let mapBody: StaticString = "mapBody"
+        /// Тактильный сигнал оповещения: без синхронного запуска движка
+        /// должен укладываться в доли миллисекунды (отчёт качества 22.10, п. 1).
+        static let haptic: StaticString = "haptic"
     }
 
     /// Замерить участок. В релизе — прямой вызов `body` без единой обёртки.

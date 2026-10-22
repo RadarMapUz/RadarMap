@@ -48,4 +48,21 @@ final class OverspeedThresholdTests: XCTestCase {
         XCTAssertEqual(OverspeedThreshold.kmh(cameraAhead: true, userTolerance: 0), 0)
         XCTAssertEqual(OverspeedThreshold.kmh(cameraAhead: true, userTolerance: 1), 1)
     }
+
+    /// Живая скорость и знак лимита краснеют по одному правилу (док CarPlay,
+    /// 22.10): 64 в зоне 60 при допуске 5 — не превышение ни для цифры, ни
+    /// для знака; 66 — превышение для обоих.
+    func testSpeedDigitAndSignShareOneRule() {
+        let line = OverspeedThreshold.line(limitKmh: 60, cameraAhead: false, userTolerance: 5)
+        XCTAssertEqual(line, 65)
+        for (speed, expected) in [(64.0, false), (65.0, false), (66.0, true)] {
+            let over = speed > line
+            XCTAssertEqual(OverspeedThreshold.showsOverspeed(limitShown: 60, isOverspeeding: over), expected,
+                           "\(speed) в зоне 60")
+        }
+        XCTAssertEqual(OverspeedThreshold.line(limitKmh: 60, cameraAhead: true, userTolerance: 5), 63,
+                       "у камеры порог жёстче — и цифра краснеет раньше вместе со знаком")
+        XCTAssertFalse(OverspeedThreshold.showsOverspeed(limitShown: nil, isOverspeeding: true),
+                       "лимит не показан — сравнивать не с чем")
+    }
 }

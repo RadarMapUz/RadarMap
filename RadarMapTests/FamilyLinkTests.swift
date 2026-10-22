@@ -63,6 +63,29 @@ final class FamilyLinkTests: XCTestCase {
                                        headingHome: true, now: later).isEmpty, "выключатель")
     }
 
+    func testBrokenRecipientDoesNotEmptyCircle() throws {
+        // Один нечитаемый близкий (поле другого типа, обрезанная запись) —
+        // остальные на месте: раньше круг читался целиком или никак, и первая
+        // правка затирала сохранённое вместе с ключами выданных ссылок.
+        let mother = sent("Мама"), wife = sent("Дилноза")
+        let encoded = try JSONEncoder().encode(FamilyCircle(recipients: [mother, wife], driverName: "Зафар"))
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        var list = try XCTUnwrap(json["recipients"] as? [Any])
+        list.insert(["name": 42, "mode": "никогда"], at: 1)
+        list.append("мусор")
+        json["recipients"] = list
+        let data = try JSONSerialization.data(withJSONObject: json)
+        let circle = try JSONDecoder().decode(FamilyCircle.self, from: data)
+        XCTAssertEqual(circle.recipients, [mother, wife], "битые выпали, целые — в прежнем порядке")
+        XCTAssertEqual(circle.driverName, "Зафар", "общие настройки не теряются")
+    }
+
+    func testCircleRoundTripsAndOldFileWithoutRecipientsReads() throws {
+        let circle = FamilyCircle(recipients: [sent("Мама")], driverName: "Я", pausedUntil: now)
+        XCTAssertEqual(try JSONDecoder().decode(FamilyCircle.self, from: JSONEncoder().encode(circle)), circle)
+        XCTAssertEqual(try JSONDecoder().decode(FamilyCircle.self, from: Data("{}".utf8)), FamilyCircle())
+    }
+
     func testAtMostFiveRecipients() {
         var circle = FamilyCircle()
         for index in 0..<AppConfig.familyMaxRecipients {

@@ -52,6 +52,20 @@ nonisolated enum EnergyCheck {
         var allMatch: Bool
     }
 
+    /// Дни окна «последние N дней» — вход сверки (EnergySplit). Жил в
+    /// `EnergyCheckView` и считался в `body` на каждое нажатие клавиши.
+    static func window(tripDays: [TripDay], history: [TripRecord], last count: Int,
+                       now: Date = Date(), calendar: Calendar = .current) -> [EnergySplit.Day] {
+        let today = calendar.startOfDay(for: now)
+        guard count > 0,
+              let start = calendar.date(byAdding: .day, value: -(count - 1), to: today),
+              let end = calendar.date(byAdding: .day, value: 1, to: today) else { return [] }
+        let interval = DateInterval(start: start, end: end)
+        let records = history.filter { $0.startedAt >= start && $0.startedAt < end }
+        return EnergySplit.days(tripDays: TripDayBook.days(tripDays, in: interval), records: records,
+                                calendar: calendar)
+    }
+
     static func compare(panel: Panel, days: [EnergySplit.Day], profile: FuelProfile,
                         energy: VehicleEnergy, calendar: Calendar = .current) -> Result {
         let model = EnergySplit.model(profile: profile, energy: energy)

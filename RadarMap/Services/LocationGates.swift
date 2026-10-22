@@ -116,6 +116,9 @@ nonisolated enum LocationGates {
         // никакая геометрия этого не отменяет: координата в реестре бывает
         // смещена вбок от полосы. Раньше проверка стояла ПОСЛЕ геометрии, и та
         // успевала заглушить камеру на собственном маршруте пользователя.
+        // Исключение одно (27.J): доказанно встречная камера коридора сюда
+        // приходит уже с isOnRoute = false (routeRemaining, RouteCamera.
+        // countsAsOurs) — её судят шаги ниже, как любую камеру вне маршрута.
         if isOnRoute { return .ours }
 
         let coordinate = situation.coordinate
@@ -362,11 +365,18 @@ nonisolated enum LocationGates {
     /// звучала вовсе (ревью 14.2). Прямая короче дороги — предупреждение
     /// раньше, не позже.
     ///
+    /// Доказанно встречная камера коридора (27.J, `RouteCameraDirection`) —
+    /// тоже не маршрутная: «маршрут сильнее геометрии» про неё не говорит,
+    /// её судят обычные гейты по живому фиксу, как любую камеру вне маршрута.
+    ///
     /// - Parameter cameraAlong: где камера на линии маршрута; nil — камера
     ///   не на маршруте.
-    static func routeRemaining(cameraAlong: CLLocationDistance?, progressAlong: CLLocationDistance,
+    /// - Parameter provenOncoming: камера коридора доказанно встречная для
+    ///   линии маршрута (близнец, направление против курса линии).
+    static func routeRemaining(cameraAlong: CLLocationDistance?, provenOncoming: Bool = false,
+                               progressAlong: CLLocationDistance,
                                isOffRoute: Bool, isProgressFrozen: Bool) -> CLLocationDistance? {
-        guard let cameraAlong, !isOffRoute, !isProgressFrozen else { return nil }
+        guard let cameraAlong, !provenOncoming, !isOffRoute, !isProgressFrozen else { return nil }
         return cameraAlong - progressAlong
     }
 

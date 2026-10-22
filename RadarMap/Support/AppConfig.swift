@@ -82,6 +82,19 @@ nonisolated enum AppConfig {
     /// с полной точностью, как и раньше.
     nonisolated static let gpsStandstillNearCameraMeters: CLLocationDistance = 150
 
+    /// Тактильный движок прогревается заранее — на подъезде к камере, когда
+    /// до неё не дальше радиуса оповещения × это число (HapticGate). Запуск
+    /// CoreHaptics стоит ~90 мс, и платить их на первом оповещении значило
+    /// задержать голос о камере (отчёт качества 22.10, п. 1).
+    nonisolated static let hapticWarmRadiusFactor = 1.5
+    /// Не чаще раза в столько секунд пробуем снова запустить движок, который
+    /// не запустился (фоновое пробуждение: в фоне CoreHaptics отказывает, и
+    /// без паузы каждый фикс подъезда просил бы старт заново).
+    nonisolated static let hapticEngineRetrySeconds: TimeInterval = 10
+    /// Запасной системный отклик готовим (`prepare`) не чаще раза в столько
+    /// секунд: подготовка держит Taptic Engine в готовности пару секунд.
+    nonisolated static let hapticFallbackPrepareSeconds: TimeInterval = 2
+
     // MARK: - Умный режим оповещений (город/трасса) — пороги детектора.
     // nonisolated: читаются из чистого AlertPolicy (и его тестов) без прыжка на main.
 
@@ -240,10 +253,6 @@ nonisolated enum AppConfig {
     /// кластеризуется целиком (CameraMapContent), и ни одна камера не пропадает:
     /// раньше лишние молча отбрасывались и карта выглядела «недогруженной».
     static let maxVisibleAnnotations = 220
-
-    /// Средний зум (шире этого по широте): камеры рисуются маленькими точками,
-    /// полноразмерный пин — только у ближайшей и выбранной. Карта не превращается в кашу.
-    static let dotModeSpanDegrees = 0.035
 
     /// Во сколько раз расширяем видимую область при подгрузке аннотаций.
     /// Буфер держит точки уже отрисованными за краями экрана → панорамирование без «подпрыгивания».
@@ -850,6 +859,16 @@ nonisolated enum AppConfig {
     /// направлением (иначе встречная полоса проспекта красила бы нашу).
     nonisolated static let trafficMatchMeters: CLLocationDistance = 18
     nonisolated static let trafficMatchDegrees: Double = 35
+    /// Уровень ребра по отношению скорости к скорости графа — зеркало
+    /// JAM_RATIO / SLOW_RATIO сервера (traffic_build.py): ниже первого —
+    /// пробка, ниже второго — медленно. Телефон считает уровень сам только
+    /// для файлов «обычно» (там его нет), now.json несёт уровень сервера.
+    nonisolated static let trafficJamRatio = 0.35
+    nonisolated static let trafficSlowRatio = 0.6
+    /// Живым пробкам верим на столько вперёд по времени пути: дальше по
+    /// маршруту (и для выезда позже) — обычная скорость этого часа
+    /// (TrafficForecast). Пробка из now.json через полчаса уже другая, с.
+    nonisolated static let trafficLiveHorizonSeconds: TimeInterval = 30 * 60
     /// Пробка на линии маршрута (RouteTraffic): участок короче этого не
     /// перекрашивает линию — одиночное ребро на перекрёстке мигало бы пятном.
     nonisolated static let routeTrafficMinMeters: CLLocationDistance = 40
@@ -1096,6 +1115,12 @@ nonisolated enum AppConfig {
     static let typicalTrafficRefreshSeconds: TimeInterval = 6 * 3600
     /// После ошибки сети — повтор не раньше этого, с.
     static let typicalTrafficRetrySeconds: TimeInterval = 15 * 60
+    /// Файлов «обычно» в памяти не больше этого: час выезда и следующие часы
+    /// маршрута плюс дорога на работу — город целиком тысячи рёбер на файл.
+    static let typicalTrafficCacheLimit = 4
+    /// Прогноз по часу (TrafficForecast) спрашивает файлы не дальше этого
+    /// времени пути: междугородний маршрут на 9 часов не тянет 10 файлов, с.
+    nonisolated static let typicalTrafficMaxSpanSeconds: TimeInterval = 3 * 3600
     /// Оценка до выезда пересчитывается со сменой этой «четверти часа» (и
     /// сразу — на новых пробках или профиле), с.
     nonisolated static let commuteEstimateSlotSeconds: TimeInterval = 15 * 60
@@ -1689,11 +1714,29 @@ nonisolated enum AppConfig {
     /// Это не косметика: пересчёт на каждый GPS-тик перерисовывал бы всю карту
     /// раз в секунду (та же ошибка, что чинили в Итогах).
     static let mapFocusStepMeters: CLLocationDistance = 300
-    /// Прозрачность фоновых камер.
-    static let mapBackgroundCameraOpacity = 0.45
-    /// Угол сектора направления у маркера: узкий клин читается как «смотрит
-    /// туда», широкий — как «светит во все стороны».
-    static let mapDirectionConeDegrees = 66.0
+
+    // MARK: - Камера на линии маршрута (CameraOnLine, 27.B)
+
+    /// Дальше этого от линии маршрута камеру на линию не переносим: она
+    /// остаётся на своей координате (цвет «на пути» при этом сохраняется).
+    /// Покрывает разделённый проспект — координата снята на ось СВОЕЙ проезжей
+    /// части, а линия OSRM идёт по нашей, в 10–40 м вбок (снимок 22.10,
+    /// Нурафшон обводная); дублёр за сквером остаётся там, где стоит.
+    nonisolated static let cameraOnLineMaxMeters: CLLocationDistance = 45
+    /// Около вершины линии (ближе этого) курс маршрута берём с обоих отрезков:
+    /// камера у поворота «не наша» только если не сходится ни с одним.
+    nonisolated static let cameraOnLineVertexMeters: CLLocationDistance = 15
+    /// Курс линии маршрута надёжен, если отрезок под камерой (и у вершины —
+    /// соседний) не короче этого: огрызки OSRM на перекрёстке дают случайный
+    /// азимут. Без надёжного курса встречную не доказать (RouteCameraDirection, 27.J).
+    nonisolated static let routeHeadingReliableMeters: CLLocationDistance = 5
+    /// Без маршрута — перенос на ось нашей дороги (прижим RoadSnapper) не
+    /// дальше этого впереди: ось — прямая по отрезку под машиной, и на
+    /// пологой кривой она уходит с дороги.
+    nonisolated static let cameraOnRoadMaxAheadMeters: CLLocationDistance = 300
+    /// …и только если дорога камеры у её точки идёт почти так же, как наша
+    /// под машиной (кривая между нами — значит прямая уже врёт).
+    nonisolated static let cameraOnRoadMaxAxisDegrees = 6.0
 
     // MARK: - CarPlay
 
@@ -2550,6 +2593,17 @@ nonisolated enum AppConfig {
     static let energyHighwayKmh = 80.0
     /// Во сколько раз трасса быстрее тратит заряд на километр.
     static let energyHighwayFactor = 1.3
+    /// Трасса заметна в пометках расчёта («с трассой», «по трассе тратится
+    /// быстрее», «трасса не учтена») от стольких метров: меньше — съезд на
+    /// развязке, о нём писать нечего. Одно число на формулу, пометки и
+    /// примеры мастера — раньше 500 жило в четырёх местах двух файлов.
+    static let energyHighwayNoteMinMeters: CLLocationDistance = 500
+    /// Сверке с панелью машины нужен хоть километр поездок за период: меньше —
+    /// «сверять не с чем», а не «не сходится».
+    static let energyCheckMinMeters: CLLocationDistance = 1_000
+    /// Сверка пересчитывается не на каждую цифру, а после паузы ввода: у
+    /// гибрида это до ~42 полных разборов месяца (отчёт качества 22.10, п. 4).
+    static let energyCheckDebounceSeconds: Double = 0.3
     /// Доля зарядки дома при «и там и там», пока водитель её не сдвинул:
     /// обычно заряжают дома, станция — запасом.
     static let energyHomeChargeShareDefault = 0.7
@@ -2594,6 +2648,44 @@ nonisolated enum AppConfig {
     /// Разница с ценой профиля меньше этой доли — округление на колонке,
     /// не новая цена; не спрашиваем.
     static let journalPriceChangeShare = 0.02
+
+    // MARK: - Поездки в iCloud (CloudSync, 27.F)
+
+    /// Контейнер CloudKit. В .entitlements его кладёт Xcode, когда владелец
+    /// включает capability iCloud (до этого ключей нет — Xcode Cloud иначе не
+    /// подпишет сборку); тест сверяет, что id там совпадает с этим. Без прав
+    /// CloudKit не создаётся вовсе (EntitlementProbe): другой или чужой id в
+    /// CKContainer(identifier:) уронил бы приложение исключением.
+    static let cloudContainerID = "iCloud.uz.radarmap.ios"
+    /// Потолок одной записи после сжатия. У CloudKit — 1 МБ на запись без
+    /// файлов; запас — на служебные поля. Поездка со сжатым треком — 3–15 КБ.
+    static let cloudRecordMaxBytes = 900_000
+    /// Записей в одной отправке и байт в ней: у CloudKit — 400 записей и
+    /// около 2 МБ на запрос; меньше — меньше теряется при обрыве сети.
+    static let cloudSaveBatch = 100
+    static let cloudSaveBatchBytes = 1_500_000
+    /// Записей на страницу получения: восстановление на новом телефоне идёт
+    /// страницами, и каждая применяется и запоминается сама по себе.
+    static let cloudFetchLimit = 200
+    /// После конца поездки — подождать: остановка у магазина часто
+    /// продолжается той же поездкой (TripMerge), а запись склейки всё равно
+    /// перепишет только что отправленное.
+    static let cloudAfterTripDelay: TimeInterval = 180
+    /// После открытия приложения — не в первые секунды: старт и карта важнее.
+    static let cloudLaunchDelay: TimeInterval = 15
+    /// Правка штрафа, журнала, места — отправить не сразу, а пачкой.
+    static let cloudChangeDebounce: TimeInterval = 30
+    /// Не вышло (нет сети, iCloud занят) — следующая попытка не раньше.
+    static let cloudRetryDelay: TimeInterval = 15 * 60
+    /// Вся история сверяется с диском раз в столько — страховка от правки,
+    /// которую проход не увидел (вылет между записью и журналом).
+    static let cloudFullScanInterval: TimeInterval = 7 * 86_400
+    /// Пауза между месяцами первой выгрузки: телефон не греется и не держит
+    /// радио непрерывно ради истории, которой не к спеху.
+    static let cloudScanPause: Double = 1.5
+    /// Предложение «Сохранять поездки в iCloud?» — не раньше, чем поездок
+    /// столько: на пустой истории терять нечего, и вопрос — шум.
+    static let cloudOfferMinTrips = 3
 
     // MARK: - Обслуживание машины (Maintenance, 18)
     //
@@ -2710,6 +2802,12 @@ nonisolated enum AppConfig {
     /// Баннер в машине, вернувшийся после камеры с остатком меньше этого, не
     /// показывается: мелькнувший баннер за рулём хуже никакого.
     static let carPlayRoadWeatherMinSeconds: TimeInterval = 3
+    /// «Впереди пробка: +6 мин» в машине (27.E): столько висит баннер — голос
+    /// говорит одну фразу, а глазам на дорогу нужно пару взглядов, с.
+    static let carPlayJamBannerSeconds: TimeInterval = 12
+    /// Вернувшийся после камеры баннер пробки с остатком меньше этого не
+    /// показывается (как у погоды на перевале), с.
+    nonisolated static let carPlayJamMinSeconds: TimeInterval = 3
 
     // MARK: - Метан на АГНКС (CngRules, 12б.4)
 
@@ -2766,6 +2864,14 @@ nonisolated enum AppConfig {
     nonisolated static let familyHoldSeconds: TimeInterval = tripMergeMaxStopSeconds
     /// Строка «Мама увидит, что вы едете домой» висит столько секунд.
     static let familyNoticeSeconds: Double = 6
+    /// «В пути» не дошло — пауза перед повтором этому близкому, дальше вдвое
+    /// после каждой новой неудачи до `familyRetryMaxSeconds`. Без паузы
+    /// повтор шёл на КАЖДОМ фиксе: без сети на трассе — запрос в секунду на
+    /// человека всю поездку, а на стабильные 4xx (старый сервер, правка nginx)
+    /// — настоящий HTTPS раз в секунду. 15 с — заметно короче десяти минут
+    /// живости ссылки, близкие не увидят «давно не обновлялось».
+    nonisolated static let familyRetrySeconds: TimeInterval = 15
+    nonisolated static let familyRetryMaxSeconds: TimeInterval = 120
 
     // MARK: - Маршрут без сети (OfflineRouteGraph, 12б.10)
 

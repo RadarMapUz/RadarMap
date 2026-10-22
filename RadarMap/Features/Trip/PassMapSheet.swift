@@ -233,7 +233,7 @@ struct PassDetailView: View {
                         .font(.rounded(19, .bold))
                         .foregroundStyle(Theme.textPrimary)
                         .lineLimit(2)
-                    Text("\(pass.kind.displayName) · \(pass.date.formatted(date: .abbreviated, time: .shortened))")
+                    Text("\(pass.kind.displayName) · \(Formatting.dateAndClock(pass.date))")
                         .font(.rounded(12))
                         .foregroundStyle(Theme.textTertiary)
                 }

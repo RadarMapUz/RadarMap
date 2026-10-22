@@ -35,32 +35,59 @@ extension LocationService {
             Log.trips.notice("startTrip при идущей поездке — игнорирую (auto: \(auto, privacy: .public))")
             return
         }
+        guard auto else {
+            refreshFamiliarCameras()   // «свои» камеры считаем один раз на поездку
+            return beginTrip(auto: false, byCarLink: byCarLink, askAfterStart: false)
+        }
+        // Старт от CoreMotion: «своя ли машина» решают выходы аудио, а
+        // `currentRoute` — поход к mediaserverd. Читаем его вне главного
+        // потока (правило 21; отчёт качества 22.10, п. 6) и решаем по свежему
+        // снимку — тому же, что читался здесь синхронно: кэш CarLinkService
+        // в приостановленном процессе мог пропустить подключение магнитолы.
+        autoStartRead &+= 1
+        let generation = autoStartRead
+        Task { [weak self] in
+            let ports = await CarLinkService.readPorts()
+            // Поколение (правило 12): решает только последнее чтение.
+            guard let self, generation == self.autoStartRead else { return }
+            self.decideAutoStart(ports: ports, byCarLink: byCarLink)
+        }
+    }
+
+    /// Автостарт по движению с прочитанными портами аудио.
+    private func decideAutoStart(ports: [CarLink.Port], byCarLink: Bool) {
+        // За время чтения поездку могли начать (кнопка, машина) — не трогаем.
+        guard isAuthorized, !isTripActive else { return }
         refreshFamiliarCameras()   // «свои» камеры считаем один раз на поездку
         // Старт от CoreMotion: писать молча, писать и спросить, только
         // спросить или ничего — решает чистый CarLink.autoStart (26.3).
         var askAfterStart = false
-        if auto {
-            switch CarLink.autoStart(mode: settings.tripStartMode, recognized: isDriverRecognized,
-                                     passenger: isPassengerSession,
-                                     ownCarConfigured: !settings.carDevices.isEmpty) {
-            case .ignore:
-                return   // пассажир уже сказал своё слово, или режим не от движения
-            case .askOnly:
-                // Четвёртый исход «поездки нет»: она и не начиналась. Машина
-                // незнакомая («Умный»; «Авто», когда своя машина выбрана в
-                // настройках и её нет — такси), вопрос задан — но если на него
-                // не ответить, записи не будет вовсе, и без журнала это
-                // неотличимо от потери (docs/plan_drive_complaints.md, Ж4).
-                Log.trips.notice("автостарт отклонён: машина не своя (\(self.settings.tripStartMode.rawValue, privacy: .public)) — ждём ответа «вы за рулём?»")
-                trip.noteDropped("notDriver")
-                notifier.askDriverCheck()
-                return
-            case .startAndAsk:
-                askAfterStart = true
-            case .start:
-                break
-            }
+        switch CarLink.autoStart(mode: settings.tripStartMode,
+                                 recognized: isDriverRecognized(ports: ports),
+                                 passenger: isPassengerSession,
+                                 ownCarConfigured: !settings.carDevices.isEmpty) {
+        case .ignore:
+            return   // пассажир уже сказал своё слово, или режим не от движения
+        case .askOnly:
+            // Четвёртый исход «поездки нет»: она и не начиналась. Машина
+            // незнакомая («Умный»; «Авто», когда своя машина выбрана в
+            // настройках и её нет — такси), вопрос задан — но если на него
+            // не ответить, записи не будет вовсе, и без журнала это
+            // неотличимо от потери (docs/plan_drive_complaints.md, Ж4).
+            Log.trips.notice("автостарт отклонён: машина не своя (\(self.settings.tripStartMode.rawValue, privacy: .public)) — ждём ответа «вы за рулём?»")
+            trip.noteDropped("notDriver")
+            notifier.askDriverCheck()
+            return
+        case .startAndAsk:
+            askAfterStart = true
+        case .start:
+            break
         }
+        beginTrip(auto: true, byCarLink: byCarLink, askAfterStart: askAfterStart)
+    }
+
+    /// Сам старт поездки — решение уже принято.
+    private func beginTrip(auto: Bool, byCarLink: Bool, askAfterStart: Bool) {
         if !auto { isPassengerSession = false }  // ручной старт — точно за рулём
         tripFromCarLink = byCarLink || (carLinked?() ?? false)
         Log.trips.notice("поездка начата: \(byCarLink ? "машина подключена" : (auto ? "движение" : "вручную"), privacy: .public)")
@@ -94,6 +121,7 @@ extension LocationService {
         }
         applyLocationMode()
         liveActivity?.startIfNeeded(state: activityState)
+        alerts.warmHaptics()   // асинхронно: первый сигнал поездки не ждёт движок
         if askAfterStart { notifier.askDriverCheck() }
     }
 
@@ -132,11 +160,10 @@ extension LocationService {
 
     /// Своя машина: CarPlay, выбранное в настройках устройство или знакомая
     /// по «Я за рулём» магнитола — но не наушники (CarLink.isRecognized, 26.3).
-    var isDriverRecognized: Bool {
+    /// Порты читает вызывающий — вне главного потока (`CarLinkService.readPorts`).
+    func isDriverRecognized(ports: [CarLink.Port]) -> Bool {
         if isCarPlayConnected { return true }
-        return CarLink.isRecognized(
-            ports: CarLinkService.ports(of: AVAudioSession.sharedInstance().currentRoute),
-            chosen: settings.carDevices, known: settings.knownCarAudio)
+        return CarLink.isRecognized(ports: ports, chosen: settings.carDevices, known: settings.knownCarAudio)
     }
 
     /// «Я за рулём» (кнопка или тап по вопросу): запоминаем магнитолу этой машины —
@@ -145,16 +172,27 @@ extension LocationService {
     func confirmDriver() {
         notifier.clearDriverCheck()
         isPassengerSession = false
-        // Наушники не запоминаем: «Я за рулём» в AirPods делало каждое такси
-        // в тех же AirPods «своей машиной» — поездка писалась молча (26.3).
-        for output in AVAudioSession.sharedInstance().currentRoute.outputs
-        where (output.portType == .bluetoothA2DP || output.portType == .bluetoothHFP)
-            && !CarLink.looksLikeHeadphones(output.portName) {
-            if !settings.knownCarAudio.contains(output.portName) {
-                settings.knownCarAudio.append(output.portName)
+        // Ручной старт магнитолу не спрашивает — поездка сразу, а имена
+        // выходов аудио дочитываются вне главного потока (правило 21).
+        if !isTripActive { startTrip() }
+        Task { [weak self] in
+            let names = await Self.carAudioNames()
+            guard let self else { return }
+            for name in names where !self.settings.knownCarAudio.contains(name) {
+                self.settings.knownCarAudio.append(name)
             }
         }
-        if !isTripActive { startTrip() }
+    }
+
+    /// Bluetooth-выходы аудио сейчас — кандидаты в «знакомую магнитолу».
+    /// Наушники не запоминаем: «Я за рулём» в AirPods делало каждое такси
+    /// в тех же AirPods «своей машиной» — поездка писалась молча (26.3).
+    @concurrent
+    nonisolated static func carAudioNames() async -> [String] {
+        AVAudioSession.sharedInstance().currentRoute.outputs
+            .filter { ($0.portType == .bluetoothA2DP || $0.portType == .bluetoothHFP)
+                && !CarLink.looksLikeHeadphones($0.portName) }
+            .map(\.portName)
     }
 
     /// «Я пассажир»: свернуть поездку без следа в истории и молчать до конца езды.

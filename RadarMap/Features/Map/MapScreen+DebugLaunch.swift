@@ -321,7 +321,13 @@ extension MapScreen {
         if args.contains("-demoRoute") {
             Task {
                 await Task.pause(seconds: 2)
-                buildRoute(to: CLLocationCoordinate2D(latitude: 41.3260, longitude: 69.2810),
+                // `-demoRouteTo lat,lon` — своя цель (снимки 27.B: камеры
+                // на линии по Нурафшон обводной).
+                let custom = args.firstIndex(of: "-demoRouteTo")
+                    .flatMap { args.dropFirst($0 + 1).first }
+                    .map { $0.split(separator: ",").compactMap { Double($0) } }
+                    .flatMap { $0.count == 2 ? CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1]) : nil }
+                buildRoute(to: custom ?? CLLocationCoordinate2D(latitude: 41.3260, longitude: 69.2810),
                            name: "Демо-маршрут")
                 if args.contains("-driveDemo") {
                     await Task.pause(seconds: 3)

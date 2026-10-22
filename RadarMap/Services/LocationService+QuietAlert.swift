@@ -107,18 +107,24 @@ extension LocationService {
 /// окончание не забывалось и срок не убивал процесс.
 @MainActor
 enum BackgroundTime {
-    static func begin(_ name: String) -> UIBackgroundTaskIdentifier {
-        var id = UIBackgroundTaskIdentifier.invalid
-        id = UIApplication.shared.beginBackgroundTask(withName: name) {
-            // Срок вышел — отдаём время, иначе система убьёт процесс.
-            UIApplication.shared.endBackgroundTask(id)
-            id = .invalid
-        }
-        return id
+    /// Ручка задачи — ссылкой: срок и `end` видят одно значение, и второе
+    /// завершение уже снятой задачи («no background task exists») не случается.
+    final class Token {
+        fileprivate var id = UIBackgroundTaskIdentifier.invalid
     }
 
-    static func end(_ id: UIBackgroundTaskIdentifier) {
-        guard id != .invalid else { return }
-        UIApplication.shared.endBackgroundTask(id)
+    static func begin(_ name: String) -> Token {
+        let token = Token()
+        token.id = UIApplication.shared.beginBackgroundTask(withName: name) {
+            // Срок вышел — отдаём время, иначе система убьёт процесс.
+            end(token)
+        }
+        return token
+    }
+
+    static func end(_ token: Token) {
+        guard token.id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(token.id)
+        token.id = .invalid
     }
 }

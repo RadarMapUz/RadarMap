@@ -232,7 +232,7 @@ final class HistoryPruneTests: XCTestCase {
         history.append(record(daysAgo: 35))
         history.append(record(daysAgo: 40))
 
-        let pruned = TripHistory.pruned(history)
+        let pruned = TripHistory.pruned(history, retention: .legacy)
 
         // Старше 30 дней — удалены (кроме случаев в первой семёрке).
         XCTAssertEqual(pruned.count, 10)
@@ -248,9 +248,21 @@ final class HistoryPruneTests: XCTestCase {
     func testPruneKeepsRecentSevenEvenIfOld() {
         // Все поездки древние — но первые 7 остаются целиком (список не пустеет).
         let history = (0..<9).map { record(daysAgo: Double(40 + $0)) }
-        let pruned = TripHistory.pruned(history)
+        let pruned = TripHistory.pruned(history, retention: .legacy)
         XCTAssertEqual(pruned.count, 7)
         XCTAssertNotNil(pruned[0].track)
+    }
+
+    /// 27.F: свои поездки не стираются ни сроком, ни потолком — только трек
+    /// старше недели вырезается, цифры остаются.
+    func testOwnTripsAreKeptForever() {
+        var history = (0..<10).map { record(daysAgo: Double($0)) }
+        history += (0..<60).map { record(daysAgo: Double(35 + $0 * 10)) }
+        let pruned = TripHistory.pruned(history)
+        XCTAssertEqual(pruned.count, history.count, "ни одной своей поездки не выброшено")
+        for i in 0..<7 { XCTAssertNotNil(pruned[i].track) }
+        XCTAssertTrue(pruned.suffix(60).allSatisfy { $0.track == nil && $0.score == 90 },
+                      "старше недели — без трека, но с цифрами")
     }
 }
 

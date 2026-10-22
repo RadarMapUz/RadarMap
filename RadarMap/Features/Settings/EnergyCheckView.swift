@@ -16,14 +16,31 @@ struct EnergyCheckView: View {
     @State private var share: Double?
     @State private var kWh: Double?
     @State private var litres: Double?
-    @State private var applied: Set<String> = []
+    /// Принятые поправки — строкой «Поправлено». Своим списком: после
+    /// `apply` поправка выпадает из сверки, и метка у неё не показывалась
+    /// никогда (отчёт качества 22.10, п. 4).
+    @State private var applied: [EnergyCheck.Suggestion] = []
+    /// Окно дней — пересчёт только при смене периода или данных поездок.
+    @State private var window: [EnergySplit.Day] = []
+    @State private var result: EnergyCheck.Result?
+
+    /// Всё, от чего зависит сверка: меняется — пересчёт (после паузы ввода).
+    private struct Inputs: Equatable {
+        var window: [EnergySplit.Day]
+        var panel: EnergyCheck.Panel
+        var profile: FuelProfile
+        var energy: VehicleEnergy
+    }
+
+    private struct WindowKey: Equatable {
+        var days: Int
+        var revision: Int
+    }
 
     var body: some View {
         let settings = env.settings
         let energy = settings.vehicleEnergy
-        let window = Self.days(env.trip.days, history: env.trip.history, last: days)
         let panel = EnergyCheck.Panel(electricShare: share.map { $0 / 100 }, kWhPer100: kWh, litresPer100: litres)
-        let result = EnergyCheck.compare(panel: panel, days: window, profile: settings.fuelProfile, energy: energy)
         VStack(alignment: .leading, spacing: 18) {
             Text("Средние из бортового компьютера за тот же период. Заполните, что знаете, — остальное можно оставить пустым.")
                 .font(.rounded(15))
@@ -47,32 +64,41 @@ struct EnergyCheckView: View {
                 field(String(localized: "Бензин"), unit: EnergyText.unit(.per100(.petrol)),
                       decimals: true, value: litres) { litres = $0 }
             }
-            estimateCard(result.estimate, energy: energy)
-            if result.estimate.meters < 1_000 {
-                Label("За этот период поездок нет — сверять не с чем.", systemImage: "info.circle")
-                    .font(.rounded(14))
-                    .foregroundStyle(Theme.textSecondary)
-            } else if result.allMatch {
-                Label("Сходится — расчёт близок к машине.", systemImage: "checkmark.circle.fill")
-                    .font(.rounded(15, .semibold))
-                    .foregroundStyle(Theme.success)
-            }
-            ForEach(Array(result.suggestions.enumerated()), id: \.offset) { _, suggestion in
-                suggestionRow(suggestion)
+            if let result {
+                estimateCard(result.estimate, energy: energy)
+                if result.estimate.meters < AppConfig.energyCheckMinMeters {
+                    Label("За этот период поездок нет — сверять не с чем.", systemImage: "info.circle")
+                        .font(.rounded(14))
+                        .foregroundStyle(Theme.textSecondary)
+                } else if result.allMatch, applied.isEmpty {
+                    Label("Сходится — расчёт близок к машине.", systemImage: "checkmark.circle.fill")
+                        .font(.rounded(15, .semibold))
+                        .foregroundStyle(Theme.success)
+                }
+                ForEach(Array(applied.enumerated()), id: \.offset) { _, suggestion in
+                    suggestionRow(suggestion, done: true)
+                }
+                ForEach(Array(result.suggestions.enumerated()), id: \.offset) { _, suggestion in
+                    suggestionRow(suggestion, done: false)
+                }
             }
         }
-    }
-
-    /// Дни окна «последние N дней» — в расчёт EnergySplit.
-    static func days(_ tripDays: [TripDay], history: [TripRecord], last count: Int,
-                     now: Date = Date(), calendar: Calendar = .current) -> [EnergySplit.Day] {
-        let today = calendar.startOfDay(for: now)
-        guard let start = calendar.date(byAdding: .day, value: -(count - 1), to: today),
-              let end = calendar.date(byAdding: .day, value: 1, to: today) else { return [] }
-        let interval = DateInterval(start: start, end: end)
-        let records = history.filter { $0.startedAt >= start && $0.startedAt < end }
-        return EnergySplit.days(tripDays: TripDayBook.days(tripDays, in: interval), records: records,
-                                calendar: calendar)
+        // Окно дней — по периоду и ревизии данных поездок, не по вводу.
+        .task(id: WindowKey(days: days, revision: env.trip.dataRevision)) {
+            window = EnergyCheck.window(tripDays: env.trip.days, history: env.trip.history, last: days)
+        }
+        // Сверка — вне body и вне главного потока; ввод цифр — после паузы.
+        .task(id: Inputs(window: window, panel: panel, profile: settings.fuelProfile, energy: energy)) {
+            if result != nil { await Task.pause(seconds: AppConfig.energyCheckDebounceSeconds) }
+            guard !Task.isCancelled else { return }
+            let window = window, profile = settings.fuelProfile
+            let computed = await offMain {
+                EnergyCheck.compare(panel: panel, days: window, profile: profile, energy: energy)
+            }
+            guard !Task.isCancelled else { return }
+            result = computed
+        }
+        .onChange(of: days) { applied = [] }
     }
 
     private func field(_ title: String, unit: String, decimals: Bool, value: Double?,
@@ -124,10 +150,8 @@ struct EnergyCheckView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func suggestionRow(_ suggestion: EnergyCheck.Suggestion) -> some View {
-        let key = String(describing: suggestion)
-        let done = applied.contains(key)
-        return HStack(spacing: 12) {
+    private func suggestionRow(_ suggestion: EnergyCheck.Suggestion, done: Bool) -> some View {
+        HStack(spacing: 12) {
             Text(Self.text(suggestion))
                 .font(.rounded(15))
                 .foregroundStyle(Theme.textPrimary)
@@ -140,7 +164,7 @@ struct EnergyCheckView: View {
             } else {
                 Button("Поправить") {
                     env.settings.fuelProfile = EnergyCheck.apply(suggestion, to: env.settings.fuelProfile)
-                    applied.insert(key)
+                    applied.append(suggestion)
                 }
                 .font(.rounded(15, .semibold))
                 .tapTarget()

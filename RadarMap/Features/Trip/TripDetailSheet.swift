@@ -60,7 +60,7 @@ struct PassRow: View {
                     .font(.rounded(14, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
-                Text(pass.date.formatted(date: .omitted, time: .shortened))
+                Text(Formatting.clock(pass.date))
                     .font(.rounded(11))
                     .foregroundStyle(Theme.textTertiary)
             }
@@ -732,7 +732,7 @@ struct TripShareCard: View {
     var format: ShareFormat = .feed
 
     var body: some View {
-        ShareCardShell(subtitle: record.startedAt.formatted(date: .abbreviated, time: .shortened),
+        ShareCardShell(subtitle: Formatting.dateAndClock(record.startedAt),
                        format: format) {
             Group {
                 if let mapImage {
@@ -842,9 +842,13 @@ struct TripShareCard: View {
                 .foregroundStyle(.white.opacity(0.75))
         }
         .frame(width: 64, height: 64)
-        .background(tint.opacity(0.92), in: Circle())
+        // Тень — на круге-фоне, не на составной вью: иначе свой ореол у каждой
+        // подписи («92», «рейтинг») — правило «тени на форме фона».
+        .background {
+            Circle().fill(tint.opacity(0.92))
+                .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+        }
         .overlay(Circle().stroke(.white.opacity(0.25), lineWidth: 1.5))
-        .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
         .padding(12)
     }
 }

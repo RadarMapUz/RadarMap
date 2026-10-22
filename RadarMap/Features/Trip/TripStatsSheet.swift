@@ -154,6 +154,13 @@ struct TripStatsSheet: View {
                         .id("maintenance")
                     }
 
+                    // «Сохранять поездки в iCloud?» (27.F) — один раз, пока
+                    // человек не ответил; молча не включается.
+                    if !active, env.cloud.shouldOffer(storedTrips: trip.storedTripCount) {
+                        CloudOfferCard()
+                            .entrance(0, appeared)
+                    }
+
                     // Пикер и стрелки — одна визуальная группа и ЛИПКАЯ:
                     // прокрутив до списка поездок, человек переставал видеть,
                     // за какое окно эти цифры, и «3–9 августа» приходилось

@@ -110,7 +110,9 @@ extension VoiceEvent {
     }
 }
 
-extension VoiceEvent.Action {
+/// Чистое сопоставление строк OSRM — без изоляции: его зовёт разбор
+/// маршрута вне главного актора (`RouteService`, nonisolated).
+nonisolated extension VoiceEvent.Action {
     /// То же решение, что `RouteService.maneuverStep`, — типом. nil — шаг,
     /// который не озвучивается (или озвучивается не этим словарём).
     init?(osrmType type: String, modifier: String?, exit: Int?) {

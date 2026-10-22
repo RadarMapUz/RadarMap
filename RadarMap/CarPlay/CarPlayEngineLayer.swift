@@ -178,9 +178,10 @@ struct CarPlayEngineLayer: View {
             // вариантов, справа — под кнопки карты.
             overviewCommand: model.overviewCommand,
             // Сверху, снизу и справа — с запасом на полподписи «24 мин»
-            // варианта (27.D): подпись встаёт у края кадра и срезалась.
+            // варианта (27.D): подпись встаёт у края кадра и срезалась; снизу
+            // ещё и док скорости.
             overviewPadding: UIEdgeInsets(top: safe.top + 40, left: size.width * 0.45,
-                                          bottom: safe.bottom + 40,
+                                          bottom: safe.bottom + 40 + AppConfig.carPlayDockHeight,
                                           right: model.mapButtonInsets.trailing + 60),
             // Выбор маршрута в машине (CPTripPreview): другие варианты —
             // бледной линией под выбранным, с временем, как на телефоне (27.D).

@@ -196,11 +196,13 @@ final class EngineRouteVariants {
             NSExpression(forConstantValue: Theme.rgb(body))
     }
 
-    /// Ширина другого варианта — ~0,75 выбранной (EngineMapStyle.routeWidth):
-    /// главный предмет — выбранный, но и в другой можно попасть пальцем.
+    /// Ширина другого варианта — ~0,6 выбранной (EngineMapStyle.routeWidth):
+    /// главный предмет — выбранный (ночью светлый серо-синий вариант при
+    /// равной ширине спорил с ним — снимок CarPlay 27.D); попасть пальцем
+    /// помогает не ширина, а порог касания 22 pt и подпись.
     private static func width(extra: Double) -> NSExpression {
-        let stops: [NSNumber: NSNumber] = [11: NSNumber(value: 4.5 + extra), 15: NSNumber(value: 5.5 + extra),
-                                           17: NSNumber(value: 8 + extra), 19: NSNumber(value: 12 + extra)]
+        let stops: [NSNumber: NSNumber] = [11: NSNumber(value: 3.5 + extra), 15: NSNumber(value: 4.5 + extra),
+                                           17: NSNumber(value: 7 + extra), 19: NSNumber(value: 10 + extra)]
         return NSExpression(format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
                             stops)
     }

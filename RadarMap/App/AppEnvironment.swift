@@ -1456,10 +1456,16 @@ final class AppEnvironment {
         }
         guard settings.commuteLearning, commuteProfiles.isLoaded, trip.isLoaded else { return }
         if commute.isEmpty { refreshCommute() }
+        // Поколение (правило 12): пока ждали пробки и считали, обучение могли
+        // выключить (resetDepartureEstimates) или пересчитать свежее
+        // (refreshDepartureEstimates) — тогда этот результат опоздал.
+        departureEstimatesGeneration &+= 1
+        let generation = departureEstimatesGeneration
         await traffic.refresh()
         let now = Date()
         let next = await Self.departureEstimates(book: commuteProfiles.book, snapshot: traffic.snapshot,
                                                  accuracy: commuteProfiles.accuracy, now: now)
+        guard generation == departureEstimatesGeneration, settings.commuteLearning else { return }
         departureEstimatesAt = now
         if next != departureEstimates { departureEstimates = next }
         refreshCommuteWidget(now: now)

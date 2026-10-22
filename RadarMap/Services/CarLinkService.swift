@@ -39,6 +39,8 @@ final class CarLinkService {
     private(set) var ports: [CarLink.Port] = []
     @ObservationIgnored private var isCarPlayConnected = false
     @ObservationIgnored private var lastRefresh: Date?
+    /// Последнее заказанное чтение маршрута: применяется только оно.
+    @ObservationIgnored private var refreshGeneration = 0
     @ObservationIgnored private var observer: NSObjectProtocol?
 
     /// Подключение изменилось: (сейчас, было). Вешает AppEnvironment.
@@ -77,9 +79,16 @@ final class CarLinkService {
     /// пересчитать подключение.
     func refresh(reason: String) {
         lastRefresh = Date()
+        // Поколение (правило 12): чтения идут вне main и могут вернуться в
+        // обратном порядке — отключение машины даёт и setCarPlay(false), и
+        // routeChange. Старый снимок с портом машины, применённый после
+        // нового, оставил бы «подключена» до следующей смены маршрута.
+        refreshGeneration &+= 1
+        let generation = refreshGeneration
         Task { [weak self] in
             let ports = await Self.readPorts()
-            self?.apply(ports: ports, reason: reason)
+            guard let self, generation == self.refreshGeneration else { return }
+            self.apply(ports: ports, reason: reason)
         }
     }
 

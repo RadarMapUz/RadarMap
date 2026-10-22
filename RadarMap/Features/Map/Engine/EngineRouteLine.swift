@@ -279,7 +279,15 @@ final class EngineRouteLine {
         guard let window else { return }
         let key = PaintKey(window: window, drawEnd: farStart, maneuver: maneuver,
                            traffic: trafficGeneration, colours: colours)
-        guard key != paintKey || abs(cut - paintedCut) >= AppConfig.routeCutRepaintMeters else { return }
+        // Шаг перекраски — несколько точек экрана в метрах этого масштаба:
+        // срез под значком (корпус — десятки точек), и смена краски чаще,
+        // чем видно глазу, — только работа движку (три слоя пересобирают
+        // свои отрисовки на каждой смене).
+        let step = min(AppConfig.routeCutRepaintMaxMeters,
+                       max(AppConfig.routeCutRepaintMeters,
+                           view.metersPerPoint(atLatitude: view.centerCoordinate.latitude)
+                               * AppConfig.routeCutRepaintPoints))
+        guard key != paintKey || abs(cut - paintedCut) >= step else { return }
         paintKey = key
         paintedCut = cut
         applyPaint(RouteCut.paint(window: window, cut: cut, drawEnd: farStart, traffic: traffic,

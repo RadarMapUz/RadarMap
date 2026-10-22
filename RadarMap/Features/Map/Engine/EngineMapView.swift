@@ -1606,6 +1606,14 @@ struct EngineMapView: UIViewRepresentable {
             guard let view else { return stopMarkerLink() }
             let wall = Date().timeIntervalSinceReferenceDate
             stepMarker(at: wall, in: view)
+            #if DEBUG
+            // Замер плавности (27.A): каждый кадр — значок, граница линии, камера.
+            if MarkerLagLog.enabled, let shown = displayedPosition {
+                let cut = routeLine.paintedCutCoordinate ?? shown
+                let centre = view.centerCoordinate
+                Log.location.notice("МЕТКА кадр \(Date().timeIntervalSince1970, format: .fixed(precision: 3), privacy: .public) \(shown.latitude, format: .fixed(precision: 7), privacy: .public) \(shown.longitude, format: .fixed(precision: 7), privacy: .public) \(cut.latitude, format: .fixed(precision: 7), privacy: .public) \(cut.longitude, format: .fixed(precision: 7), privacy: .public) \(centre.latitude, format: .fixed(precision: 7), privacy: .public) \(centre.longitude, format: .fixed(precision: 7), privacy: .public)")
+            }
+            #endif
             // Встали, горизонт исчерпан, поправка догашена — такт до фикса не нужен.
             if !predictor.isMoving(at: wall) { stopMarkerLink() }
         }

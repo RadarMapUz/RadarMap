@@ -44,7 +44,10 @@ enum CarPlayTripPreview {
         return ChoiceText(
             summary: [head.map { "\($0) · \(eta)" }, eta].compactMap { $0 },
             additional: [reason.map { "\($0) · \(facts)" }, facts, short].compactMap { $0 },
-            selection: [[head, eta, variant.distanceText].compactMap { $0 }.joined(separator: " · "), eta])
+            // Выбранный вариант на карточке машины — то же, что карточка
+            // телефона (27.D): ярлык, время, путь, камеры; короче — без камер.
+            selection: [[head, eta, variant.distanceText, cameras].compactMap { $0 }.joined(separator: " · "),
+                        [head, eta, variant.distanceText].compactMap { $0 }.joined(separator: " · "), eta])
     }
 
     /// Цвет оставшегося времени по пробкам (CPTimeRemainingColor).

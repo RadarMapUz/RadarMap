@@ -58,6 +58,10 @@ final class EngineRouteVariants {
     private var lines: [(id: Int, coordinates: [CLLocationCoordinate2D])] = []
     private var selected: Int?
     private var imageNames: Set<String> = []
+    /// Где стоит подпись каждого варианта (для касания без пальца в DEBUG).
+    private var labelPoints: [Int: CLLocationCoordinate2D] = [:]
+
+    func labelCoordinate(of id: Int) -> CLLocationCoordinate2D? { labelPoints[id] }
 
     /// Новый стиль: источники и слои пусты, ставятся заново.
     func styleLoaded() {
@@ -99,6 +103,7 @@ final class EngineRouteVariants {
         // Подписи — у каждого варианта, в месте, где он отдельно от других.
         let mapLines = lines.map { $0.coordinates.map { MKMapPoint($0) } }
         var labels: [MLNPointFeature] = []
+        labelPoints = [:]
         var names: Set<String> = []
         for (index, variant) in shown.enumerated() {
             guard let point = RoutePreview.labelPoint(of: index, lines: mapLines) else { continue }
@@ -110,6 +115,7 @@ final class EngineRouteVariants {
             names.insert(name)
             let feature = MLNPointFeature()
             feature.coordinate = point.coordinate
+            labelPoints[variant.id] = point.coordinate
             feature.attributes = ["id": variant.id, "img": name, "rank": isSelected ? 1 : 0]
             labels.append(feature)
         }

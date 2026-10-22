@@ -177,9 +177,11 @@ struct CarPlayEngineLayer: View {
             // Выбор маршрута: линия целиком, слева — место под карточку
             // вариантов, справа — под кнопки карты.
             overviewCommand: model.overviewCommand,
-            overviewPadding: UIEdgeInsets(top: safe.top + 30, left: size.width * 0.45,
-                                          bottom: safe.bottom + 30,
-                                          right: model.mapButtonInsets.trailing + 30),
+            // Сверху, снизу и справа — с запасом на полподписи «24 мин»
+            // варианта (27.D): подпись встаёт у края кадра и срезалась.
+            overviewPadding: UIEdgeInsets(top: safe.top + 40, left: size.width * 0.45,
+                                          bottom: safe.bottom + 40,
+                                          right: model.mapButtonInsets.trailing + 60),
             // Выбор маршрута в машине (CPTripPreview): другие варианты —
             // бледной линией под выбранным, с временем, как на телефоне (27.D).
             // Касаний в окне машины нет — выбирает список шаблона.

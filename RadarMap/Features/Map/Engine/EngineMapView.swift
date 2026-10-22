@@ -223,6 +223,12 @@ struct EngineMapView: UIViewRepresentable {
         hold.minimumPressDuration = AppConfig.mapLongPressSeconds
         view.addGestureRecognizer(hold)
         context.coordinator.view = view
+        #if DEBUG
+        // Касание без пальца для снимков 27.D: `-tapVariant <id>` — по подписи
+        // варианта, `-tapMapAt x,y` — в точку вида; через `-tapAfter N` секунд.
+        // Идёт тем же путём, что настоящее касание (handleTap).
+        if interactive { context.coordinator.scheduleDebugTap() }
+        #endif
         view.onLayout = { [weak coordinator = context.coordinator] view in
             guard let coordinator, let model = coordinator.current else { return }
             coordinator.lastCameraModel = nil
@@ -720,8 +726,13 @@ struct EngineMapView: UIViewRepresentable {
         fileprivate var current: EngineMapView?
 
         @objc func selectCamera(_ gesture: UITapGestureRecognizer) {
-            guard gesture.state == .ended, let view, let current else { return }
-            let point = gesture.location(in: view)
+            guard gesture.state == .ended, let view else { return }
+            handleTap(at: gesture.location(in: view))
+        }
+
+        /// Касание карты: камера под пальцем, иначе вариант маршрута (27.D).
+        func handleTap(at point: CGPoint) {
+            guard let view, let current else { return }
             let rect = CGRect(x: point.x - 22, y: point.y - 22, width: 44, height: 44)
             let features = view.visibleFeatures(in: rect, styleLayerIdentifiers: ["camera-dot", "camera-icons"])
             let ids = Set(features.compactMap { ($0.attribute(forKey: "id") as? NSNumber)?.intValue })
@@ -1564,6 +1575,26 @@ struct EngineMapView: UIViewRepresentable {
         }
 
         /// Рамка маршрута для «Весь маршрут»; nil — линии нет.
+        #if DEBUG
+        func scheduleDebugTap() {
+            let args = ProcessInfo.processInfo.arguments
+            func value(_ key: String) -> String? { args.firstIndex(of: key).flatMap { args.dropFirst($0 + 1).first } }
+            let variant = value("-tapVariant").flatMap(Int.init)
+            let at = value("-tapMapAt")?.split(separator: ",").compactMap { Double($0) }
+            guard variant != nil || at?.count == 2 else { return }
+            let delay = value("-tapAfter").flatMap(Double.init) ?? 12
+            Task { @MainActor [weak self] in
+                await Task.pause(seconds: delay)
+                guard let self, let view = self.view else { return }
+                if let at, at.count == 2 {
+                    self.handleTap(at: CGPoint(x: at[0], y: at[1]))
+                } else if let variant, let coordinate = self.routeVariants.labelCoordinate(of: variant) {
+                    self.handleTap(at: view.convert(coordinate, toPointTo: view))
+                }
+            }
+        }
+        #endif
+
         /// Кадр «весь маршрут» (27.D): все варианты (иначе линия маршрута)
         /// между панелями — RoutePreview.fit, север вверху, без наклона, одним
         /// плавным ходом. До 27.D карта сперва рывком ложилась плашмя, а

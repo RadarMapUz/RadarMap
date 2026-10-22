@@ -1747,9 +1747,12 @@ nonisolated enum AppConfig {
     static let routeVariantTapMarginPoints: CGFloat = 6
     /// Кадр «весь маршрут»: поле слева, колонка кнопок справа (44 pt + край),
     /// зазор до панелей и его минимум, если места мало; меньше `MinFree`
-    /// свободной высоты линии не оставляем — тогда ужимаются панели.
-    static let routeOverviewSidePoints: Double = 16
-    static let routeOverviewColumnPoints: Double = 64
+    /// свободной высоты линии не оставляем — тогда ужимаются панели. Поля
+    /// сбоку — с запасом на полподписи «24 мин» (~35 pt): подпись встаёт там,
+    /// где вариант дальше всего от других, то есть часто у края кадра, и при
+    /// 16/64 pt уходила под край экрана и под кнопку звука (снимок 27.D).
+    static let routeOverviewSidePoints: Double = 40
+    static let routeOverviewColumnPoints: Double = 84
     static let routeOverviewMarginPoints: Double = 28
     static let routeOverviewMinMarginPoints: Double = 8
     static let routeOverviewMinFreePoints: Double = 160

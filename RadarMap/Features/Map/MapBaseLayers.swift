@@ -159,7 +159,10 @@ struct EngineBaseLayer: View {
                         onRegion: { map.updateVisible(for: $0) },
                         showsPosition: known != nil,
                         markerMotion: env.location.markerMotion)
-                    if browsing {
+                    // Не в обзоре маршрута до старта: там карта отодвинута
+                    // нарочно, «к себе» есть в колонке, а капсула вставала
+                    // поверх линии или пряталась под карточками (27.D).
+                    if browsing, !(env.route.isActive && !env.location.isTripActive) {
                         VStack {
                             Spacer()
                             Button {

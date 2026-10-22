@@ -316,6 +316,13 @@ extension MapScreen {
                 // ложился раньше готовности экрана и не рисовался.
                 await Task.pause(seconds: 4)
                 if let rect = await MyRoadDemo.seed(env) { map.showRouteOverview(rect: rect) }
+                // «Поехали» без касания через `-driveAfter N` секунд (снимки
+                // входа в ведение, 27.D).
+                if let idx = args.firstIndex(of: "-driveAfter"),
+                   let seconds = args.dropFirst(idx + 1).first.flatMap(Double.init) {
+                    await Task.pause(seconds: seconds)
+                    if env.route.isActive { env.location.startTrip() }
+                }
             }
         }
         if args.contains("-demoRoute") {

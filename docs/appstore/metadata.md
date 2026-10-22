@@ -35,7 +35,7 @@ App Store Connect, идут в том же порядке, что и там.
 
 - ru (148): `Предупредит о камере заранее — голосом и на экране. Свой навигатор по Узбекистану, «Моя дорога» домой, пробки от водителей, итоги поездок и расходы.`
 - en (156): `Hear about every speed camera in time, by voice and on screen. Own navigation for Uzbekistan, your usual road home, live traffic from drivers, trip reports.`
-- uz (136): `Kameradan oldindan ogohlantiradi — ovoz va ekranda. O‘zbekiston bo‘ylab navigator, uyga «Mening yo‘lim», tirbandlik va safar natijalari.`
+- uz (136): `Kameradan oldindan ogohlantiradi — ovoz va ekranda. Oʻzbekiston boʻylab navigator, uyga «Mening yoʻlim», tirbandlik va safar natijalari.`
 
 ## 3. Ключевые слова (100)
 
@@ -155,23 +155,53 @@ Maps, routing and speed limits © OpenStreetMap contributors. Cameras: Open Data
 RadarMap helps you keep to speed limits; always follow traffic rules and road signs.
 ```
 
-### uz (сайт; ≈1 180 символов)
+### uz — латиница (сайт  Telegram; ≈3 115 символов)
 
 ```
-RadarMap — O‘zbekiston videokuzatuv kameralari xaritasi va haydovchining ovozli yordamchisi. IIV ochiq ma’lumotlaridagi (data.egov.uz) 3 400 dan ortiq statsionar kamera va radar telefoningizda saqlanadi — ogohlantirish internetsiz ham ishlaydi.
+RadarMap — Oʻzbekiston videokuzatuv kameralari xaritasi va haydovchining ovozli yordamchisi. IIV ochiq maʼlumotlaridagi (data.egov.uz portali) 3 400 dan ortiq statsionar kamera va radar telefonda saqlanadi, shuning uchun ogohlantirishlar internetsiz ham ishlaydi.
 
-• Ogohlantirish masofasi tezligingizga qarab: trassada oldinroq, shaharda qisqa va xotirjam.
-• Faqat sizning bo‘lagingiz va yo‘nalishingizdagi kameralar.
-• Ilova yopiq va ekran o‘chiq bo‘lsa ham ishlaydi, musiqa va boshqa navigator bilan birga.
-• O‘zbekiston yo‘llari bo‘ylab o‘z marshrut tizimi, ovozli ko‘rsatmalar, kameralar soni bilan marshrut variantlari.
-• «Mening yo‘lim» — uyga yoki ishga o‘zingiz qatnaydigan yo‘l, odatdagi vaqtingiz bilan.
-• Haydovchilar ma’lumotlari bo‘yicha tirbandlik va aylanib o‘tish taklifi.
-• «Radar!» tugmasi — trenoga yoki postni bir bosishda belgilang.
-• Safar natijalari: har bir kameradagi tezlik, reyting, BHM bo‘yicha jarimalar, yoqilg‘i xarajatlari.
-• Yaqinlaringiz yetib kelish vaqtini havola yoki Telegram orqali ko‘radi — koordinatasiz.
-• CarPlay, Apple Watch, vidjetlar. Interfeys — rus va o‘zbek tillarida.
+OʻZ VAQTIDA OGOHLANTIRADI
+• Masofa tezligingizga qarab hisoblanadi: trassada ogohlantirish oldinroq, shaharda qisqaroq va xotirjamroq keladi.
+• Faqat sizning boʻlagingiz va yoʻnalishingizdagi kameralar — parallel koʻchalar va yoʻl ayrilishlarida ortiqcha signal yoʻq.
+• Ilova yigʻilgan va ekran oʻchiq boʻlsa ham ishlaydi, musiqa va boshqa navigator bilan birga.
+• Safar oʻzi boshlanadi: harakat boʻyicha yoki faqat telefon mashinaga ulanganda (CarPlay yoki tanlangan Bluetooth).
+• Har kuni xotirjam oʻtadigan kameralaringizni ilova belgi bilan ajratadi va ovoz chiqarib aytmaydi.
 
-Ro‘yxatdan o‘tish, reklama va kuzatuv yo‘q. Safarlar telefoningizda qoladi.
+OʻZBEKISTON BOʻYLAB NAVIGATOR
+• Oʻzbekiston yoʻllari boʻyicha oʻz marshrut tizimi, ovozli koʻrsatmalar, yoʻldan chiqsangiz marshrut qayta quriladi.
+• Har birida kameralar soni koʻrsatilgan marshrut variantlari: «Tez», «Kamera kamroq», «Tanish».
+• «Mening yoʻlim» — uyga yoki ishga oʻzingiz qatnaydigan yoʻl, odatdagi vaqtingiz bilan.
+• Boʻlaklar boʻyicha maslahatlar va joriy yoʻldagi tezlik cheklovi.
+• Tirbandliklar — RadarMap haydovchilarining anonim maʼlumotlari asosida; oldinda tiqilinch boʻlsa, aylanib oʻtish taklif qilinadi.
+
+HAYDOVCHILAR BIR-BIRIGA YORDAM BERADI
+• «Radar!» tugmasi — uch oyoq kamera yoki postni qaramasdan bir bosishda belgilang.
+• Tasdiqlanmagan belgi punktir bilan, boshqa haydovchi tasdiqlagani — yaxlit koʻrsatiladi. Eskirganlari oʻzi yoʻqoladi.
+• Uch oyoq kamera tez-tez qoʻyiladigan joylar xaritada belgilangan.
+
+SAFAR NATIJALARI
+• Har bir kameradagi tezlik, safarlar va kameralar boʻyicha tahlil bilan haydash reytingi.
+• Amaldagi BHM shkalasi boʻyicha jarimalar — qancha toʻlamay qolganingiz.
+• Ishga va uyga yoʻl: odatda qancha vaqt ketadi, qachon chiqqan maʼqul, aniq yetib kelish vaqti.
+• Yoqilgʻi va quvvatlash xarajatlari, yoqilgʻi quyish jurnali, «bakdan bakkacha» sarf.
+
+YAQINLARINGIZ YETIB KELISHINGIZNI KOʻRADI
+• Onangiz yoki turmush oʻrtogʻingiz havola yoki Telegram orqali «uyga ketyapti, taxminan 18:40 da yetib keladi» xabarini oladi — faqat vaqt, koordinatasiz.
+• Bir bosishda pauza, «Men yoʻlovchiman» — hech narsa yuborilmaydi.
+
+YANA
+• CarPlay: mashina ekranida oʻz xaritasi, manevrlar, kameralar va boʻlaklar.
+• Apple Watch: kameraga yaqinlashganda tezlik va tebranish.
+• Vidjetlar, Live Activity, Siri buyruqlari, «Mashina qayerda».
+• Interfeys rus va oʻzbek tillarida, ilova ichida almashtiriladi.
+• Internetsiz ishlash uchun shahar xaritasi.
+
+MAXFIYLIK
+Roʻyxatdan oʻtish, reklama va kuzatuv yoʻq. Safarlar, treklar, uy va ish joylari telefonda saqlanadi va serverga yuborilmaydi. Nima yuborilishi — maxfiylik siyosatida toʻliq roʻyxat.
+
+Xaritalar, marshrutlar va tezlik cheklovlari — © OpenStreetMap ishtirokchilari. Kameralar — Oʻzbekiston Respublikasi Ochiq maʼlumotlar portali (CC BY-SA 4.0).
+
+RadarMap tezlik cheklovlariga rioya qilishga yordam beradi; yoʻl harakati qoidalari va yoʻl belgilariga amal qiling.
 ```
 
 ## 5. «Что нового» (4000) — первый публичный выпуск 2.2.30

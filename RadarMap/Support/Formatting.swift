@@ -21,7 +21,8 @@ enum Formatting {
     static func dayTitle(_ day: Date, calendar: Calendar = .current) -> String {
         if calendar.isDateInToday(day) { return String(localized: "Сегодня") }
         if calendar.isDateInYesterday(day) { return String(localized: "Вчера") }
-        return day.formatted(.dateTime.day().month(.wide))
+        // Месяц — на языке приложения, не системы (правило 7, NumberFormat).
+        return day.formatted(.dateTime.day().month(.wide).locale(numberLocale))
     }
 
     /// Заголовок поездки: «Сегодня, 11:39», «Вчера, 16:23», «11 октября, 11:39»;
@@ -31,7 +32,7 @@ enum Formatting {
         let time = date.formatted(date: .omitted, time: .shortened)
         let day = calendar.isDate(date, equalTo: now, toGranularity: .year)
             ? dayTitle(date, calendar: calendar)
-            : date.formatted(.dateTime.day().month(.wide).year())
+            : date.formatted(.dateTime.day().month(.wide).year().locale(numberLocale))
         return "\(day), \(time)"
     }
 

@@ -193,7 +193,10 @@ struct CommuteCard: View {
         if calendar.isDateInToday(date) || calendar.isDateInYesterday(date) {
             return Formatting.dayTitle(date, calendar: calendar)
         }
-        return date.formatted(.dateTime.weekday(spoken ? .wide : .abbreviated).day().month(.wide))
+        // Названия дня и месяца — на языке приложения (правило 7): при английском
+        // языке системы было бы «Fri, 9 October» посреди русского текста.
+        return date.formatted(.dateTime.weekday(spoken ? .wide : .abbreviated).day().month(.wide)
+            .locale(Formatting.numberLocale))
     }
 }
 

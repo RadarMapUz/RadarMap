@@ -3,10 +3,13 @@
 //  RadarMapTests
 //
 //  Наклон камеры поездки (25.D, 21.10): «у Яндекса богато под наклоном».
-//  Сверху — только стоя и ползком и близко у развилки; в городе на 10–40
-//  км/ч — наклон; потолок — AppConfig.engineMapPitchDegrees, а горячий
-//  телефон — плоско, как раньше. Масштаб здесь не проверяется (его ведёт
-//  DriveCameraTests и 25.A) — кроме того, что узел «ползком» его не сдвинул.
+//  Стоя и ползком (0–10 км/ч) — лёгкий наклон 35° (27.L, 22.10: «наклон в
+//  CarPlay есть, а на телефоне нет» — до него стоя было строго сверху); вид
+//  сверху (≤ 20°) — только вплотную у развилки; в городе на 15–40 км/ч и
+//  дальше — таблица 25.D до AppConfig.engineMapPitchDegrees; горячий телефон
+//  и приборка — плоско, как раньше. Переходы — без скачка и без «поклонов» у
+//  светофора. Масштаб здесь не проверяется (его ведёт DriveCameraTests и
+//  25.A) — кроме того, что узел «ползком» его не сдвинул.
 //
 
 import QuartzCore
@@ -24,10 +27,38 @@ final class DrivePitchTests: XCTestCase {
                    viewHeight: screen == .car ? 382 : 760, latitude: tashkent, carY: { _ in 0.7 })
     }
 
-    func testStandingAndCrawlingAreTopDown() {
+    func testStandingAndCrawlingAreSlightlyPitched() {
+        // Прежний тест закреплял «сверху ≤ 5 км/ч» (25.D). С 27.L стоя — не
+        // чертёж: лёгкий наклон, одинаковый в узлах 0, 5 и 10 км/ч на обоих
+        // экранах, в пределах 30–38° (перекрёсток впереди ещё крупный).
+        XCTAssertGreaterThanOrEqual(Cam.standingPitch, 30)
+        XCTAssertLessThanOrEqual(Cam.standingPitch, 38)
         for screen in [Cam.Screen.phone, .car] {
-            for kmh in [0.0, 2, 4, 5] {
-                XCTAssertEqual(frame(kmh, screen: screen).pitchDegrees, 0, "\(screen) \(kmh) км/ч")
+            for kmh in [0.0, 2, 4, 5, 7.5, 10] {
+                XCTAssertEqual(frame(kmh, screen: screen).pitchDegrees, Cam.standingPitch,
+                               "\(screen) \(kmh) км/ч")
+                XCTAssertEqual(Cam.profile(speedKmh: kmh, pitchAllowed: true, screen: screen).pitchDegrees,
+                               Cam.standingPitch, "\(screen) \(kmh) км/ч, узел таблицы")
+            }
+        }
+    }
+
+    func testPhoneAndCarAgreeStanding() {
+        // Жалоба 22.10 — расхождение экранов: стоя они одинаковы.
+        for kmh in [0.0, 5, 10] {
+            XCTAssertEqual(frame(kmh, screen: .phone).pitchDegrees, frame(kmh, screen: .car).pitchDegrees)
+        }
+    }
+
+    func testPitchIsContinuousInSpeed() {
+        // Ни одного скачка по скорости: прежний 0 → 30° между 5 и 10 км/ч
+        // давал 6°/км/ч — шум GPS на светофоре «кланял» карту.
+        for screen in [Cam.Screen.phone, .car] {
+            var previous = frame(0, screen: screen).pitchDegrees
+            for kmh in stride(from: 0.5, through: 130, by: 0.5) {
+                let pitch = frame(kmh, screen: screen).pitchDegrees
+                XCTAssertLessThanOrEqual(abs(pitch - previous), 1.0 + 1e-9, "\(screen) \(kmh) км/ч")
+                previous = pitch
             }
         }
     }
@@ -64,10 +95,99 @@ final class DrivePitchTests: XCTestCase {
     }
 
     func testHotPhoneStaysFlat() {
-        // Откат: горячий телефон (thermal ≠ .full) — плоская таблица, как до 25.D.
+        // Откат: горячий телефон (thermal ≠ .full) — плоская таблица, как до
+        // 25.D, и стоя тоже (наклон стоя 27.L — только у холодного).
         for screen in [Cam.Screen.phone, .car] {
+            for mode in [PerformanceMode.reduced, .minimal] {
+                XCTAssertFalse(CarPlaySurface.car.pitchAllowed(performance: mode))
+                XCTAssertEqual(frame(0, screen: screen, pitch: CarPlaySurface.car.pitchAllowed(performance: mode))
+                    .pitchDegrees, 0)
+            }
             for kmh in stride(from: 0.0, through: 130, by: 10) {
                 XCTAssertEqual(frame(kmh, screen: screen, pitch: false).pitchDegrees, 0)
+            }
+        }
+    }
+
+    func testTopDownOnlyRightAtTheManeuver() {
+        // Стоя у светофора: развилка далеко — наклон стоя; вплотную (80 м и
+        // ближе) — вид развилки сверху; между — плавный спуск, не ступень.
+        for screen in [Cam.Screen.phone, .car] {
+            XCTAssertEqual(frame(0, turn: 400, screen: screen).pitchDegrees, Cam.standingPitch, "\(screen)")
+            XCTAssertEqual(frame(0, turn: 140, screen: screen).pitchDegrees, Cam.standingPitch, "\(screen)")
+            for d in [0.0, 30, 60, 80] {
+                XCTAssertLessThanOrEqual(frame(0, turn: d, screen: screen).pitchDegrees,
+                                         Cam.maneuverPitch + 1e-9, "\(screen) стоя, \(d) м")
+            }
+            var previous = Cam.maneuverPitch
+            for d in stride(from: 80.0, through: 140, by: 1) {
+                let pitch = frame(0, turn: d, screen: screen).pitchDegrees
+                XCTAssertGreaterThanOrEqual(pitch, previous - 1e-9, "\(screen) \(d) м")
+                XCTAssertLessThanOrEqual(pitch - previous, 0.5, "\(screen) \(d) м — спуск, а не ступень")
+                previous = pitch
+            }
+        }
+    }
+
+    func testPositionNoiseAtTheLightDoesNotRockTheView() {
+        // Стоим в 80–130 м до поворота, позиция дрожит ±5 м: наклон гуляет
+        // не больше ±2° (до 27.L спуск 35 → 20° занимал 10 м — вся разница).
+        for screen in [Cam.Screen.phone, .car] {
+            for d in stride(from: 85.0, through: 125, by: 5) {
+                let a = frame(0, turn: d - 5, screen: screen).pitchDegrees
+                let b = frame(0, turn: d + 5, screen: screen).pitchDegrees
+                XCTAssertLessThanOrEqual(abs(a - b), 4, "\(screen) \(d) м ±5")
+            }
+        }
+    }
+
+    func testStopAndGoDoesNotNodTheMap() {
+        // Светофор и пробка: скорость скачет 5 ↔ 12 км/ч каждую секунду.
+        // Через Smoother кадр стоит в узкой полосе, без рывков.
+        for screen in [Cam.Screen.phone, .car] {
+            var smoother = Cam.Smoother()
+            let t0 = Date(timeIntervalSince1970: 10_000)
+            var shown: [Double] = []
+            for i in 0...60 {
+                let kmh = i % 2 == 0 ? 5.0 : 12
+                let f = smoother.step(toward: frame(kmh, screen: screen), at: t0.addingTimeInterval(Double(i)))
+                if i >= 10 { shown.append(f.pitchDegrees) }
+            }
+            let range = (shown.max() ?? 0) - (shown.min() ?? 0)
+            XCTAssertLessThanOrEqual(range, 1.5, "\(screen): наклон гуляет на \(range)°")
+            for (a, b) in zip(shown, shown.dropFirst()) {
+                XCTAssertLessThanOrEqual(abs(a - b), 1.0, "\(screen) рывок")
+            }
+        }
+    }
+
+    func testMovingOffGlidesIntoThePitch() {
+        // Трогаемся: 0 → 40 км/ч за 10 с. Наклон растёт ровно, без скачка у
+        // 5 км/ч (прежняя ступень сверху → 30°) и без перелёта.
+        for screen in [Cam.Screen.phone, .car] {
+            var smoother = Cam.Smoother()
+            let t0 = Date(timeIntervalSince1970: 20_000)
+            var previous = smoother.step(toward: frame(0, screen: screen), at: t0).pitchDegrees
+            XCTAssertEqual(previous, Cam.standingPitch)
+            let goal = frame(40, screen: screen).pitchDegrees
+            for i in 1...100 {
+                let t = Double(i) * 0.25
+                let kmh = min(40, t * 4)
+                let f = smoother.step(toward: frame(kmh, screen: screen), at: t0.addingTimeInterval(t))
+                XCTAssertGreaterThanOrEqual(f.pitchDegrees, previous - 1e-9, "\(screen) \(t) с")
+                XCTAssertLessThanOrEqual(f.pitchDegrees - previous, 1.5, "\(screen) \(t) с — рывок")
+                XCTAssertLessThanOrEqual(f.pitchDegrees, goal + 1e-9, "\(screen) перелёт")
+                previous = f.pitchDegrees
+            }
+        }
+    }
+
+    func testClusterStaysFlat() {
+        // Приборка (CarPlaySurface.cluster) — плоско при любом нагреве.
+        for mode in [PerformanceMode.full, .reduced, .minimal] {
+            let allowed = CarPlaySurface.cluster.pitchAllowed(performance: mode)
+            for kmh in [0.0, 5, 10, 40] {
+                XCTAssertEqual(frame(kmh, screen: .car, pitch: allowed).pitchDegrees, 0, "\(mode) \(kmh)")
             }
         }
     }

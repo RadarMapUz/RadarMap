@@ -110,16 +110,26 @@ nonisolated enum DriveCamera {
     /// (make_style.LANE_MARKINGS_FROM).
     static let laneZoom = 17.0
 
+    /// Наклон стоя и ползком (до 10 км/ч), градусы — см. `pitched` (27.L).
+    static let standingPitch = 35.0
+
     private struct Knot {
         let kmh, pitch, seconds, minZoom, maxZoom, share: Double
     }
 
-    /// С наклоном. Стоя и ползком (до 5 км/ч: стоянка, светофор, шум GPS на
-    /// месте) — строго сверху, полосы и перекрёсток (владелец, 12.10); уже с
-    /// 10 км/ч — наклон, как у Яндекса и Amap: дома в объёме и дорога
-    /// уходит вдаль («у Яндекса богато под наклоном», 21.10, план 25.D).
-    /// До 21.10 сверху было до 15 км/ч, и город на 10–40 км/ч выглядел
-    /// чертежом. В движок наклон идёт не круче `maxPitch`
+    /// С наклоном. Стоя и ползком (0–10 км/ч: стоянка, светофор, шум GPS на
+    /// месте) — лёгкий наклон `standingPitch` (35°, 27.L, 22.10): вид строго
+    /// сверху на стоянке читался чертежом, а машина в CarPlay — с наклоном,
+    /// и владелец видел на телефоне плоскую карту («наклон в CarPlay есть, а
+    /// на телефоне нет»). 35° — а не 50, как на ходу: перекрёсток впереди
+    /// остаётся крупным (стрелки полос в 60 м — z17,9 на телефоне, z17,06 в
+    /// машине 382 pt), а дорога уже уходит вдаль. Вид сверху (20°) — только
+    /// вплотную у манёвра (окно поворота ниже). Узлы 0, 5 и 10 км/ч — одно
+    /// значение: остановка у светофора (5 ↔ 12 км/ч) не «кланяется» туда-сюда,
+    /// подъём начинается после 10 км/ч и идёт к таблице 25.D (50–58°) — без
+    /// отдельного гистерезиса по скорости: полка шире шума скорости, а
+    /// остаток гладит Smoother. До 22.10 сверху было до 5 км/ч, до 21.10 —
+    /// до 15. В движок наклон идёт не круче `maxPitch`
     /// (AppConfig.engineMapPitchDegrees, 58°); горячий телефон — плоская
     /// таблица. Обзор при меньшем наклоне добирает масштаб. В городе порог
     /// масштаба — полосы; на трассе ниже: на прямой важнее видеть дальше, а
@@ -127,9 +137,9 @@ nonisolated enum DriveCamera {
     /// Узлы 5 и 10 км/ч лежат на прямой 0…15 по всем столбцам, кроме наклона, —
     /// масштаб, обзор и место машины от него не меняются (их ведёт 25.A).
     private static let pitched: [Knot] = [
-        Knot(kmh: 0, pitch: 0, seconds: 0, minZoom: 17.0, maxZoom: 18.0, share: 0.62),
-        Knot(kmh: 5, pitch: 0, seconds: 8.0 / 3, minZoom: 17.0, maxZoom: 18.0, share: 0.62),
-        Knot(kmh: 10, pitch: 30, seconds: 16.0 / 3, minZoom: 17.0, maxZoom: 18.0, share: 0.62),
+        Knot(kmh: 0, pitch: standingPitch, seconds: 0, minZoom: 17.0, maxZoom: 18.0, share: 0.62),
+        Knot(kmh: 5, pitch: standingPitch, seconds: 8.0 / 3, minZoom: 17.0, maxZoom: 18.0, share: 0.62),
+        Knot(kmh: 10, pitch: standingPitch, seconds: 16.0 / 3, minZoom: 17.0, maxZoom: 18.0, share: 0.62),
         Knot(kmh: 15, pitch: 40, seconds: 8, minZoom: 17.0, maxZoom: 18.0, share: 0.62),
         Knot(kmh: 30, pitch: 50, seconds: 9, minZoom: 17.0, maxZoom: 17.9, share: 0.66),
         Knot(kmh: 50, pitch: 54, seconds: 10, minZoom: 17.0, maxZoom: 17.7, share: 0.70),
@@ -150,16 +160,16 @@ nonisolated enum DriveCamera {
         Knot(kmh: 130, pitch: 0, seconds: 12, minZoom: 15.0, maxZoom: 16.8, share: 0.75),
     ]
 
-    /// Экран машины с наклоном. Стоя и ползком (до 5 км/ч) — сверху и на
-    /// полосах (z17, около 100 м вперёд); с 10 км/ч — наклон (25.D, как
-    /// у Яндекса в той же машине); с 30 км/ч впереди 20–25 секунд пути, как у
+    /// Экран машины с наклоном. Стоя и ползком (0–10 км/ч) — лёгкий наклон
+    /// `standingPitch` на полосах (z17,2, около 110 м вперёд; сверху — только у
+    /// манёвра, 27.L); дальше — наклон 25.D, как у Яндекса в той же машине; с 30 км/ч впереди 20–25 секунд пути, как у
     /// Apple и Яндекса на том же экране: на 40 км/ч — 261 м, на 60 — 408 м
     /// (382 pt, расчёт DriveCameraTests). Разметка полос с z17 на ходу в
     /// городе не видна — её возвращает подъезд к манёвру (порог z17.3).
     private static let carPitched: [Knot] = [
-        Knot(kmh: 0, pitch: 0, seconds: 0, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
-        Knot(kmh: 5, pitch: 0, seconds: 10.0 / 3, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
-        Knot(kmh: 10, pitch: 28, seconds: 20.0 / 3, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
+        Knot(kmh: 0, pitch: standingPitch, seconds: 0, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
+        Knot(kmh: 5, pitch: standingPitch, seconds: 10.0 / 3, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
+        Knot(kmh: 10, pitch: standingPitch, seconds: 20.0 / 3, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
         Knot(kmh: 15, pitch: 38, seconds: 10, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
         // Потолок 17,3, а не 17,4: под наклоном 25.D обзор добирается
         // ближе, кадр упирался в потолок, и размах в городе выходил за 1,8
@@ -202,6 +212,11 @@ nonisolated enum DriveCamera {
     /// Наклон уходит к виду развилки только на этой доле окна подъезда:
     /// раньше он съедал обзор, пока развилка ещё далеко.
     static let maneuverPitchShare = 0.6
+    /// Но не короче этого, метров (27.L): на малой скорости окно — 150 м, и
+    /// доля давала спуск наклона 35° → 20° на 90…80 м, десять метров. Стоя у
+    /// светофора в 85 м до поворота шум позиции ±5 м качал карту на всю
+    /// разницу; на 40 м спуска — меньше чем на 2°.
+    static let maneuverPitchRampMinMeters = 40.0
     /// Дальше этого «держать в кадре» не действует: плитка не отъезжает до
     /// масштаба района ради камеры в километре.
     static let keepAheadMaxMeters = 500.0
@@ -269,7 +284,9 @@ nonisolated enum DriveCamera {
             let window = min(maneuverWindowMax, max(maneuverWindowMin, mps * maneuverLeadSeconds))
             if d < window {
                 let w = ramp(d, from: window, to: maneuverCloseMeters)
-                let late = ramp(d, from: window * maneuverPitchShare, to: maneuverCloseMeters)
+                let late = ramp(d, from: max(window * maneuverPitchShare,
+                                             maneuverCloseMeters + maneuverPitchRampMinMeters),
+                                to: maneuverCloseMeters)
                 pitch += (min(pitch, maneuverPitch) - pitch) * late
                 minZoom += (max(minZoom, maneuverMinZoom) - minZoom) * w
                 lookahead = max(nearest, d + maneuverMarginMeters)
@@ -404,6 +421,21 @@ nonisolated enum DriveCamera {
             - groundOffset(spanMeters: span, share: carY - 0.5, pitchDegrees: pitchDegrees)
     }
 
+    /// В какой строке вида (доля высоты ниже центра; меньше нуля — выше)
+    /// лежит точка в `forward` метрах впереди машины (назад — меньше нуля),
+    /// машина — на `carY`. Обратная к `groundOffset`; на наклоне 0 — линейно.
+    static func rowShare(forward: Double, zoom: Double, pitchDegrees: Double, viewHeight: Double,
+                         carY: Double, latitude: Double) -> Double {
+        let span = span(zoom: zoom, viewHeight: viewHeight, latitude: latitude)
+        let half = tan(fieldOfView / 2)
+        let distance = span / 2 / half
+        let p = pitchDegrees * .pi / 180
+        // От центра к зрителю: машина ниже центра, точка — на `forward` дальше.
+        let toward = centreAhead(spanMeters: span, anchorY: carY, pitchDegrees: pitchDegrees) - forward
+        let below = atan((sin(p) - toward / distance) / cos(p))
+        return tan(p - below) / (2 * half)
+    }
+
     /// Метров на точку поперёк экрана в строке `share` ниже центра, к
     /// метрам на точку в центре: на наклоне ближние строки мельче.
     static func lateralScale(share: Double, pitchDegrees: Double) -> Double {
@@ -443,8 +475,28 @@ nonisolated enum DriveCamera {
         }
         if keep.forward >= 0 {
             limit(ahead, keep.forward)
-            // Впереди строка точки — между машиной и центром и выше: мерка центра.
-            limit(half(atShare: 0), abs(keep.right))
+            // Вбок — мерка строки самой точки, но не щедрее центра. Выше центра
+            // строки крупнее, и мерка центра там — запас; а между машиной и
+            // центром мельче: камера сбоку «136 м» стоя лежит в строке машины,
+            // и на наклоне стоя (27.L, 35°) мерка центра обещала на 10 % больше
+            // места, чем есть. Строка зависит от масштаба, масштаб — от
+            // строки: несколько шагов, каждый только ужимает (отдаление
+            // опускает точку к строке машины, где мельче).
+            let right = abs(keep.right)
+            if right > 0, usable > 0 {
+                var scale = 1.0
+                for _ in 0..<5 {
+                    let seen = perPoint * usable * scale
+                    guard seen > margin else { break }
+                    let zoom = reference - log2(right / (seen - margin))
+                    cap = min(cap, zoom)
+                    let row = rowShare(forward: keep.forward, zoom: zoom, pitchDegrees: pitchDegrees,
+                                       viewHeight: viewHeight, carY: carY, latitude: latitude)
+                    let next = min(1, lateralScale(share: row, pitchDegrees: pitchDegrees))
+                    guard next < scale - 1e-6 else { break }
+                    scale = next
+                }
+            }
         } else {
             limit(behind, -keep.forward)
             // Позади — самая мелкая строка, нижняя кромка.

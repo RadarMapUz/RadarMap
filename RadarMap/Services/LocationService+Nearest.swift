@@ -120,9 +120,10 @@ extension LocationService {
         relativeBearingToNearest = bearingSmoother.update(raw)
     }
 
-    /// Ближайшая камера лежит на активном маршруте (в его коридоре).
+    /// Ближайшая камера лежит на активном маршруте (в его коридоре) и маршрут
+    /// вправе назвать её нашей: доказанно встречная — нет (27.J).
     func isCameraOnRoute(_ camera: Camera) -> Bool {
-        route?.routeCamera(id: camera.id) != nil
+        route?.routeCamera(id: camera.id)?.countsAsOurs ?? false
     }
 
     /// Направление на ближайшую камеру для голоса/HUD (учитывает мёртвую зону и маршрут).
@@ -274,7 +275,9 @@ extension LocationService {
     /// (LocationGates.routeRemaining).
     func routeRemaining(to camera: Camera) -> CLLocationDistance? {
         guard let route, route.isActive else { return nil }
-        return LocationGates.routeRemaining(cameraAlong: route.routeCamera(id: camera.id)?.distanceAlong,
+        let routeCamera = route.routeCamera(id: camera.id)
+        return LocationGates.routeRemaining(cameraAlong: routeCamera?.distanceAlong,
+                                            provenOncoming: routeCamera?.provenOncoming ?? false,
                                             progressAlong: route.progressAlong,
                                             isOffRoute: route.isOffRoute,
                                             isProgressFrozen: route.isProgressFrozen)

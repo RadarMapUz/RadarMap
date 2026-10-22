@@ -161,10 +161,11 @@ final class CommuteLiveService {
     }
 
     func note(_ coordinate: CLLocationCoordinate2D, accuracy: Double, at now: Date) {
-        guard var session, let direction else { return }
-        let output = session.note(lat: coordinate.latitude, lon: coordinate.longitude,
-                                  accuracy: accuracy, at: now)
-        self.session = session
+        // На месте, а не копией: `guard var session` + запись обратно копировали
+        // буферы сессии (copy-on-write при живой второй ссылке) на каждом фиксе.
+        guard session != nil, let direction,
+              let output = session?.note(lat: coordinate.latitude, lon: coordinate.longitude,
+                                         accuracy: accuracy, at: now) else { return }
         if output.isOff || !output.hasLead {
             // «Сегодня другой дорогой» или ведущий сошёл, а другой путь ещё
             // не подтверждён: прогноз и голос молчат до возврата.
@@ -180,7 +181,7 @@ final class CommuteLiveService {
             recorder?.notePosition(along: output.alongMeters, length: output.lengthMeters, now: now)
             return
         }
-        lastForecast = (forecast.remaining, now, session.active ?? -1)
+        lastForecast = (forecast.remaining, now, session?.active ?? -1)
         recorder?.note(arrival: forecast.arrival, along: output.alongMeters, length: output.lengthMeters,
                        early: output.early, now: now)
         // Журнал прогноза (В5, 8.8.9): на каждом пересчёте — раз в участок

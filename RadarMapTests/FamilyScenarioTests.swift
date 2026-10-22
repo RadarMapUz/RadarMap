@@ -181,18 +181,43 @@ final class FamilyScenarioTests: XCTestCase {
                        [.drive(mother.id, arrival: at(100), home: true)], "новая поездка — без паузы")
     }
 
-    /// Без сети: «в пути» не дошло — следующий фикс пробует снова, а не ждёт
-    /// десять минут живости.
+    /// Без сети: «в пути» не дошло — повтор после короткой паузы, а не ждёт
+    /// десять минут живости — и не на каждом фиксе (запрос в секунду всю
+    /// поездку без сети).
     func testFailedSendIsRetried() {
         var trip = FamilyTrip()
         let circle = FamilyCircle(recipients: [mother])
         trip.tripStarted()
         XCTAssertEqual(trip.update(circle, context: homeward(0), now: at(0)).count, 1)
         XCTAssertEqual(trip.update(circle, context: homeward(0.1), now: at(0.1)), [], "ответ ещё не пришёл")
-        trip.failed(mother.id)
-        XCTAssertEqual(trip.update(circle, context: homeward(0.5), now: at(0.5)),
+        trip.failed(mother.id, now: at(0.1))
+        XCTAssertEqual(trip.update(circle, context: homeward(0.12), now: at(0.12)), [],
+                       "следующий фикс — ещё пауза, не новый запрос")
+        let retry = at(0.1).addingTimeInterval(AppConfig.familyRetrySeconds)
+        XCTAssertEqual(trip.update(circle, context: homeward(0.5), now: retry),
                        [.drive(mother.id, arrival: at(40), home: true)])
         XCTAssertTrue(trip.live.isEmpty, "не доставлено — капсулы «Видят» нет")
+    }
+
+    /// Неудачи подряд — пауза растёт вдвое до предела; доставка её сбрасывает.
+    func testRetryBacksOffAndResetsOnDelivery() {
+        XCTAssertEqual(FamilyTrip.retryDelay(afterFailures: 1), AppConfig.familyRetrySeconds)
+        XCTAssertEqual(FamilyTrip.retryDelay(afterFailures: 2), AppConfig.familyRetrySeconds * 2)
+        XCTAssertEqual(FamilyTrip.retryDelay(afterFailures: 50), AppConfig.familyRetryMaxSeconds)
+        var trip = FamilyTrip()
+        let circle = FamilyCircle(recipients: [mother])
+        trip.tripStarted()
+        var now = at(0)
+        for _ in 0..<3 {
+            XCTAssertEqual(trip.update(circle, context: homeward(0), now: now).count, 1)
+            trip.failed(mother.id, now: now)
+            now = trip.retryAt[mother.id]!
+        }
+        XCTAssertEqual(trip.failures[mother.id], 3)
+        XCTAssertEqual(trip.update(circle, context: homeward(0), now: now).count, 1)
+        trip.delivered(mother.id, arrival: at(40), home: true, at: now)
+        XCTAssertNil(trip.retryAt[mother.id], "дошло — пауз больше нет")
+        XCTAssertNil(trip.failures[mother.id])
     }
 
     /// Закрыли, пока ответ «в пути» шёл: ссылка не воскресает (правило 12).

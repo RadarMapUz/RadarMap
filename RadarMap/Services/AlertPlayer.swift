@@ -71,6 +71,12 @@ final class AlertPlayer: NSObject {
     /// Тактильный движок: «дорогой» отклик (мягкий на дальнем пороге → резкий у камеры).
     private var hapticEngine: CHHapticEngine?
     private let supportsHaptics = CHHapticEngine.capabilitiesForHardware().supportsHaptics
+    /// Чем трясти сейчас и когда запускать движок (чистое, HapticGateTests).
+    private var hapticGate = HapticGate(engine: .absent)
+    /// Запасной отклик — один на процесс и подготовленный заранее: новый
+    /// генератор без `prepare()` отвечает с задержкой и слабее.
+    private let fallbackHaptic = UIImpactFeedbackGenerator(style: .heavy)
+    private var fallbackPreparedAt = Date.distantPast
 
     init(settings: AppSettings) {
         self.settings = settings
@@ -122,44 +128,108 @@ final class AlertPlayer: NSObject {
         do {
             let engine = try CHHapticEngine()
             engine.isAutoShutdownEnabled = true   // сам гаснет в простое — экономит батарею
-            // Движок могут сбросить/остановить (звонок, фон) — поднимаем обратно.
-            engine.resetHandler = { [weak engine] in
-                do {
-                    try engine?.start()
-                } catch {
-                    // Не страшно: haptic(level:) ещё раз запустит движок перед узором.
-                    Log.alerts.notice("тактильный движок не поднялся после сброса: \(error.localizedDescription, privacy: .public)")
-                }
-            }
-            engine.stoppedHandler = { _ in }
-            // Без start(): haptic(level:) запускает движок сам перед каждым
-            // узором. Запуск здесь стоил запуску времени, а при фоновом
-            // пробуждении (геозона) бросал ошибку — движок обнулялся, и весь
-            // процесс до выгрузки жил на запасном системном отклике.
+            // Обработчики зовутся на внутренней очереди движка — состояние
+            // правим только на главном акторе. Замыкания строятся вне актора
+            // (`Self.engineHandlers`), иначе рантайм счёл бы их главными.
+            let (stopped, reset) = Self.engineHandlers(
+                stopped: { [weak self] idle in
+                    guard let self else { return }
+                    Task { @MainActor in self.engineStopped(idleTimeout: idle) }
+                },
+                reset: { [weak self] in
+                    guard let self else { return }
+                    Task { @MainActor in self.engineReset() }
+                })
+            engine.stoppedHandler = stopped
+            engine.resetHandler = reset
+            // Без запуска здесь: запуск стоил запуску времени, а при фоновом
+            // пробуждении (геозона) бросал ошибку. Движок запускается только
+            // асинхронно — на подъезде к камере (`warmHaptics`) и в начале
+            // поездки, — и никогда на пути самого сигнала.
             hapticEngine = engine
+            hapticGate = HapticGate(engine: .stopped)
         } catch {
-            Log.alerts.error("CHHapticEngine не запустился: \(error.localizedDescription, privacy: .public)")
+            Log.alerts.error("CHHapticEngine не создался: \(error.localizedDescription, privacy: .public)")
             hapticEngine = nil
         }
     }
 
-    /// Тактильный сигнал для уровня приближения: 1 — дальний порог (мягко),
-    /// 2 — средний (чётче), 3 — вплотную (резкий тройной). На симуляторе и
-    /// старом железе — откат на системный генератор.
-    func haptic(level: Int) {
+    private nonisolated static func engineHandlers(
+        stopped: @escaping @Sendable (Bool) -> Void,
+        reset: @escaping @Sendable () -> Void
+    ) -> (CHHapticEngine.StoppedHandler, CHHapticEngine.ResetHandler) {
+        ({ reason in stopped(reason == .idleTimeout) }, { reset() })
+    }
+
+    private func engineStopped(idleTimeout: Bool) {
+        hapticGate.stopped(idleTimeout: idleTimeout)
+    }
+
+    private func engineReset() {
+        // Сервер движка перезапустился: узоры не пересоздаём (CHHapticPattern
+        // переживает сброс), сам движок — запустить заново.
+        hapticGate.reset()
+        startEngineIfNeeded()
+    }
+
+    /// Прогреть отклик заранее: начало поездки, подъезд к камере
+    /// (`HapticGate.shouldWarm`). Дёшево на каждом фиксе — проверка состояния.
+    func warmHaptics() {
         guard settings.hapticsEnabled else { return }
+        if hapticGate.engine == .running { return }
+        startEngineIfNeeded()
+        // Пока движок не готов, сигнал уйдёт запасным откликом — пусть тот
+        // будет наготове.
+        let now = Date()
+        if now.timeIntervalSince(fallbackPreparedAt) >= AppConfig.hapticFallbackPrepareSeconds {
+            fallbackPreparedAt = now
+            fallbackHaptic.prepare()
+        }
+    }
+
+    /// Асинхронный запуск движка: главный поток не ждёт ни миллисекунды.
+    private func startEngineIfNeeded() {
+        guard let engine = hapticEngine else { return }
+        let now = Date()
+        guard hapticGate.shouldStart(now: now) else { return }
+        hapticGate.startRequested(at: now)
+        Task { @MainActor [weak self] in
+            do {
+                try await engine.start()
+                self?.hapticGate.startFinished(ok: true)
+            } catch {
+                // Не страшно: сигнал уйдёт системным откликом, повтор — позже.
+                Log.alerts.notice("тактильный движок не запустился: \(error.localizedDescription, privacy: .public)")
+                self?.hapticGate.startFinished(ok: false)
+            }
+        }
+    }
+
+    /// Тактильный сигнал для уровня приближения: 1 — дальний порог (мягко),
+    /// 2 — средний (чётче), 3 — вплотную (резкий тройной). Движок не готов
+    /// (не прогрелся, симулятор) — системный отклик немедленно: вибрация не
+    /// задерживает ни звук, ни голос (HapticGate).
+    func haptic(level: Int) {
         MainWork.note(MainWork.Name.haptic)
         defer { MainWork.note(MainWork.idle) }
-        guard supportsHaptics, let engine = hapticEngine else {
-            hapticFallback(level: level)
-            return
-        }
-        do {
-            try engine.start()   // мог авто-выключиться в простое
-            let player = try engine.makePlayer(with: hapticPattern(for: level))
-            try player.start(atTime: 0)
-        } catch {
-            hapticFallback(level: level)
+        Perf.measure(Perf.Name.haptic) {
+            switch hapticGate.feel(enabled: settings.hapticsEnabled) {
+            case .none:
+                return
+            case .system:
+                hapticFallback(level: level)
+                startEngineIfNeeded()   // к следующему уровню — уже узор
+            case .engine:
+                guard let engine = hapticEngine else { return hapticFallback(level: level) }
+                do {
+                    let player = try engine.makePlayer(with: hapticPattern(for: level))
+                    try player.start(atTime: CHHapticTimeImmediate)
+                } catch {
+                    hapticGate.playFailed()
+                    hapticFallback(level: level)
+                    startEngineIfNeeded()
+                }
+            }
         }
     }
 
@@ -182,9 +252,15 @@ final class AlertPlayer: NSObject {
         }
     }
 
+    /// Системный отклик той же лестницы: мягче на дальнем пороге, в полную
+    /// силу у камеры.
     private func hapticFallback(level: Int) {
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(level >= 2 ? .error : .warning)
+        let intensity: CGFloat = switch max(1, min(3, level)) {
+        case 1: 0.5
+        case 2: 0.75
+        default: 1.0
+        }
+        fallbackHaptic.impactOccurred(intensity: intensity)
     }
 
     /// `count` коротких сигналов подряд (эскалация: чем ближе, тем больше).
@@ -377,17 +453,22 @@ final class AlertPlayer: NSObject {
         let segments = self.segments
         let now = DispatchTime.now().uptimeNanoseconds
         let waitBeep = beepEndsAt > now ? beepEndsAt - now : 0
+        // Задачи на главном акторе берут `[self]` — копию слабой ссылки
+        // внешнего замыкания, а не саму изменяемую переменную: повторный
+        // захват слабого self из @Sendable-замыкания — предупреждение Swift 6
+        // (#SendableClosureCaptures).
+        let finished: @Sendable () -> Void = { [weak self] in
+            Task { @MainActor [self] in self?.recordedFinished(generation) }
+        }
         Self.audioQueue.asyncAfter(deadline: .now() + .nanoseconds(Int(waitBeep))) { [weak self] in
             let outcome: Result<SegmentPlayer.Started, any Error>
             do {
-                outcome = .success(try segments.play(ids, pack: pack, volume: volume) {
-                    Task { @MainActor [weak self] in self?.recordedFinished(generation) }
-                })
+                outcome = .success(try segments.play(ids, pack: pack, volume: volume, finished: finished))
             } catch {
                 outcome = .failure(error)
             }
             let started = DispatchTime.now().uptimeNanoseconds
-            Task { @MainActor [weak self] in
+            Task { @MainActor [self] in
                 guard let self else { return }
                 switch outcome {
                 case .success(let info):

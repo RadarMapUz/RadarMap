@@ -137,8 +137,9 @@ nonisolated enum StatsPeriod: String, CaseIterable, Identifiable {
 
     /// Человеческая подпись конкретного окна: «сегодня», «5–11 августа»,
     /// «август 2026». Без неё стрелки листания бессмысленны — непонятно, где ты.
+    /// Месяцы и дни недели — на языке приложения (`locale`), не системы.
     func rangeTitle(containing anchor: Date, calendar: Calendar = .current,
-                    now: Date = Date()) -> String {
+                    now: Date = Date(), locale: Locale = NumberFormat.locale) -> String {
         let interval = self.interval(containing: anchor, calendar: calendar)
         switch self {
         case .day:
@@ -147,18 +148,18 @@ nonisolated enum StatsPeriod: String, CaseIterable, Identifiable {
                calendar.isDate(anchor, inSameDayAs: yesterday) {
                 return String(localized: "Вчера")
             }
-            return anchor.formatted(.dateTime.weekday(.wide).day().month(.wide))
+            return anchor.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(locale))
         case .week:
             let last = interval.end.addingTimeInterval(-1)
             if calendar.isDate(interval.start, equalTo: last, toGranularity: .month) {
                 // «5–11 августа»: месяц называем один раз.
-                return "\(interval.start.formatted(.dateTime.day()))–"
-                    + last.formatted(.dateTime.day().month(.wide))
+                return "\(interval.start.formatted(.dateTime.day().locale(locale)))–"
+                    + last.formatted(.dateTime.day().month(.wide).locale(locale))
             }
-            return "\(interval.start.formatted(.dateTime.day().month(.abbreviated)))–"
-                + last.formatted(.dateTime.day().month(.abbreviated))
+            return "\(interval.start.formatted(.dateTime.day().month(.abbreviated).locale(locale)))–"
+                + last.formatted(.dateTime.day().month(.abbreviated).locale(locale))
         case .month:
-            return anchor.formatted(.dateTime.month(.wide).year())
+            return anchor.formatted(.dateTime.month(.wide).year().locale(locale))
         }
     }
 

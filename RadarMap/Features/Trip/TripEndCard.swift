@@ -227,7 +227,7 @@ struct TripEndCard: View {
                         .font(.rounded(15, .semibold))
                         .foregroundStyle(Theme.textPrimary)
                     Text(String(format: String(localized: "Объединить с поездкой в %@"),
-                                previous.startedAt.formatted(date: .omitted, time: .shortened)))
+                                Formatting.clock(previous.startedAt)))
                         .font(.rounded(11))
                         .foregroundStyle(Theme.textSecondary)
                 }

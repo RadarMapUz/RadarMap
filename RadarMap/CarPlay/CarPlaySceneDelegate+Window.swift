@@ -16,7 +16,11 @@ extension CarPlaySceneDelegate {
         freezeWatch = Task { @MainActor [weak self, weak scene] in
             while !Task.isCancelled {
                 await Task.pause(seconds: AppConfig.carPlayFreezeCheckSeconds)
-                guard let self, let scene, scene.activationState == .foregroundActive,
+                // Делегата или сцены больше нет — сторож кончился: уничтожение
+                // ручки Task его не отменяет, и `continue` будил бы процесс
+                // каждые carPlayFreezeCheckSeconds до его выгрузки.
+                guard let self, let scene else { return }
+                guard scene.activationState == .foregroundActive,
                       self.model.isOnScreen, self.host != nil else { continue }
                 let behind = self.env.location.locationTick - self.model.lastRenderedTick
                 let silence = Date().timeIntervalSince(self.model.lastHeartbeat)

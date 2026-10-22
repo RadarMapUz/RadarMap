@@ -40,6 +40,9 @@ extension AppEnvironment {
         location.forgetParkedCar()
         settings.recentPlaces = []
         energyJournal.eraseAll()
+        // Копия в iCloud — тоже (27.F): поездки и сводка сразу или при
+        // первой сети; журнал и недавние места уйдут надгробиями сверкой.
+        cloud.historyErased()
         // Из пустой истории — пусто; следом дорога на работу и смены.
         refreshLearnedPlaces()
         location.refreshFamiliarCameras()
@@ -75,6 +78,16 @@ extension AppEnvironment {
                      text: String(localized: "Журнал заправок и зарядок")),
          ErasureLine(symbol: "square.grid.2x2.fill",
                      text: String(localized: "Цифры виджета"))]
+    }
+
+    /// Строка про iCloud (27.F) — только когда копия там есть или может быть.
+    static var cloudErasedLine: ErasureLine {
+        ErasureLine(symbol: "icloud.slash", text: String(localized: "Копия истории в iCloud"))
+    }
+
+    /// Что сотрётся на самом деле — с копией в iCloud, если она есть.
+    var erasedLinesNow: [ErasureLine] {
+        cloud.isEnabled || cloud.mayHaveCloudCopy ? Self.erasedLines + [Self.cloudErasedLine] : Self.erasedLines
     }
 
     /// Что `deleteAllHistory` не трогает — то, что человек задал сам.

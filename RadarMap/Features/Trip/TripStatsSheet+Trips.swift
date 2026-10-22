@@ -95,8 +95,8 @@ extension TripStatsSheet {
                         .font(.rounded(14, .bold))
                         .foregroundStyle(Theme.textPrimary)
                     Text(String(format: String(localized: "%1$@ и %2$@ разделяет стоянка %3$@"),
-                                pair.previous.startedAt.formatted(date: .omitted, time: .shortened),
-                                pair.next.startedAt.formatted(date: .omitted, time: .shortened),
+                                Formatting.clock(pair.previous.startedAt),
+                                Formatting.clock(pair.next.startedAt),
                                 Formatting.duration(gap)))
                         .font(.rounded(15))
                         .foregroundStyle(Theme.textSecondary)

@@ -275,6 +275,7 @@ final class CarPlayGuidance {
     func attach(to template: CPMapTemplate, banners: CarPlayBanners) {
         self.template = template
         self.banners = banners
+        cameraBanner.prepare()
         generation &+= 1
         observe()
     }
@@ -305,15 +306,9 @@ final class CarPlayGuidance {
     /// перезапускаем — иначе шаблон и система дрались бы за экран до конца
     /// маршрута. Новый маршрут (другая цель) начнёт сессию заново.
     func systemCancelled() {
-        session = nil
-        trip = nil
-        maneuver = nil
-        upcoming = []
-        maneuverStep = nil
-        laneGuidances = []
-        pause = nil
+        // Сессию закрыла сама система — свои вызовы ей уже не нужны.
+        dropSession(.none)
         cancelledDestination = tripDestination
-        model.hasSystemGuidance = false
     }
     private var cancelledDestination: CLLocationCoordinate2D?
 
@@ -324,35 +319,19 @@ final class CarPlayGuidance {
     func restartSession(reason: String) {
         guard let session else { return refresh(reason: reason) }
         Log.carplay.notice("сессия заново: \(reason, privacy: .public)")
-        session.upcomingManeuvers = []
-        session.currentLaneGuidance = nil
-        session.cancelTrip()
-        self.session = nil
-        trip = nil
-        maneuver = nil
-        upcoming = []
-        maneuverStep = nil
-        laneGuidances = []
-        pause = nil
-        model.hasSystemGuidance = false
+        dropSession(.cancel, session)
         sync()
     }
 
     /// Машина отключилась: сессия уходит вместе с шаблоном, держать нечего.
     func detach() {
         generation &+= 1
-        session = nil
-        trip = nil
-        maneuver = nil
-        upcoming = []
-        maneuverStep = nil
-        laneGuidances = []
-        pause = nil
+        // Шаблон уходит вместе с машиной — говорить сессии нечего и некому.
+        dropSession(.none)
         template = nil
         banners = nil
         cameraBanner.reset()
         themed = nil
-        model.hasSystemGuidance = false
     }
 
     /// Карточка манёвра — синяя, как на телефоне (`Theme.accentFill`,
@@ -448,18 +427,7 @@ final class CarPlayGuidance {
         // устроен CarPlay: предпросмотр, затем startNavigationSession). Старое
         // ведение к прежней цели при этом заканчиваем: маршрут уже другой.
         if model.isPreviewing {
-            if let session {
-                session.cancelTrip()
-                session.upcomingManeuvers = []
-                self.session = nil
-                trip = nil
-                maneuver = nil
-                upcoming = []
-                maneuverStep = nil
-                laneGuidances = []
-                pause = nil
-                model.hasSystemGuidance = false
-            }
+            if let session { dropSession(.cancel, session) }
             updateCameraBanner()
             return
         }
@@ -492,24 +460,40 @@ final class CarPlayGuidance {
             // Маршрут снят или поездка кончилась: доехали — «завершить»,
             // иначе — «отменить».
             // Разница видна водителю: CarPlay по-разному прощается с поездкой.
-            if let arrival = route.lastArrival,
-               Date().timeIntervalSince(arrival.at) < AppConfig.carPlayArrivalFreshSeconds {
-                session.finishTrip()
-            } else {
-                session.cancelTrip()
+            let arrived = route.lastArrival
+                .map { Date().timeIntervalSince($0.at) < AppConfig.carPlayArrivalFreshSeconds } ?? false
+            dropSession(arrived ? .finish : .cancel, session)
+        }
+        updateCameraBanner()
+    }
+
+    /// Как попрощаться с сессией: доехали, отменили или сказать уже нечего
+    /// (сессию закрыла система, машина отключилась).
+    private enum SessionEnd { case finish, cancel, none }
+
+    /// Сбросить навигационную сессию — одно место вместо пяти копий
+    /// (отчёт качества 22.10, раздел 5, п. 3). Порядок прежний: сперва
+    /// попрощаться с поездкой, затем очистить её списки — потом забыть всё,
+    /// что держалось ради этой сессии. Ряды полос (`laneGuidances`) уходят
+    /// последними: манёвры держат их ссылкой `assign`.
+    private func dropSession(_ end: SessionEnd, _ session: CPNavigationSession? = nil) {
+        if let session {
+            switch end {
+            case .finish: session.finishTrip()
+            case .cancel: session.cancelTrip()
+            case .none: break
             }
             session.upcomingManeuvers = []
             session.currentLaneGuidance = nil
-            self.session = nil
-            trip = nil
-            maneuver = nil
-            upcoming = []
-            maneuverStep = nil
-            laneGuidances = []
-            pause = nil
-            model.hasSystemGuidance = false
         }
-        updateCameraBanner()
+        self.session = nil
+        trip = nil
+        maneuver = nil
+        upcoming = []
+        maneuverStep = nil
+        laneGuidances = []
+        pause = nil
+        model.hasSystemGuidance = false
     }
 
     // MARK: - Пауза
@@ -722,8 +706,10 @@ final class CarPlayGuidance {
         // карточки — им свой цвет.
         let symbolName = step.kind?.isDrawable == false ? "flag.checkered" : step.icon
         next.symbolImage = symbol(symbolName, pointSize: 34, onDark: whiteArrow(on: cardColor, dark: carDark))
-        next.notificationSymbolImage = symbol(symbolName, pointSize: 34, onDark: carDark)
-        next.dashboardSymbolImage = symbol(symbolName, pointSize: 34, onDark: carDark)
+        // Уведомление и плитка — в одной теме машины: одна картинка на обе.
+        let carThemed = symbol(symbolName, pointSize: 34, onDark: carDark)
+        next.notificationSymbolImage = carThemed
+        next.dashboardSymbolImage = carThemed
         // Схемы развязки (junctionImage) больше нет (21.10, владелец: «мини-
         // карту убери, там лучше — с какого края нужно повернуть»): грубая
         // схема узла занимала место, где система показывает второй манёвр, —

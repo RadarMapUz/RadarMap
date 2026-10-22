@@ -317,8 +317,11 @@ class TypicalTest(ProfileFixture, unittest.TestCase):
         edges = buckets[self.bucket()]
         self.assertGreater(len(edges), 5)
         for edge in edges:
-            self.assertEqual(len(edge), 5)
+            self.assertEqual(len(edge), 6)
             self.assertTrue(tb.PACE_MIN_KMH <= edge[4] <= tb.MAX_KMH)
+            # 27.E: скорость графа рядом с обычной — по ней телефон считает
+            # обычную пробку часа на любом маршруте.
+            self.assertTrue(5 < edge[5] < 130, edge)
 
     def test_weekdays_add_up_in_one_file(self):
         """Понедельник и среда в один час — один файл, порог по сумме
@@ -340,7 +343,7 @@ class TypicalTest(ProfileFixture, unittest.TestCase):
         self.assertEqual(body["bucket"], self.bucket())
         self.assertTrue(body["edges"])
         for edge in body["edges"]:
-            self.assertEqual(len(edge), 5)
+            self.assertEqual(len(edge), 6, "ulat, ulon, vlat, vlon, kmh, model_kmh")
             self.assertTrue(all(isinstance(x, (int, float)) for x in edge))
         self.assertEqual(self.read("off-03" if self.bucket() != "off-03" else "wd-03")["edges"], [])
         raw = open(os.path.join(self.out, f"{self.bucket()}.json"), encoding="utf-8").read()
@@ -386,6 +389,80 @@ class TypicalTest(ProfileFixture, unittest.TestCase):
 
 
 H = tb.PROFILE_HALF_LIFE
+
+
+class TypicalModelTest(ProfileFixture, unittest.TestCase):
+    """27.E: шестой столбец «обычно» — скорость графа; старое ребро без неё — 0."""
+
+    def test_slow_hour_is_slower_than_the_graph(self):
+        self.pieces(tb.TYPICAL_MIN_PIECES, slower=4)
+        edges = tb.typical_buckets(self.conn, self.now)[self.bucket()]
+        slow = [e for e in edges if e[4] < e[5] * tb.SLOW_RATIO]
+        self.assertTrue(slow, "след вчетверо медленнее — обычная пробка часа видна против графа")
+
+    def test_unknown_graph_speed_is_zero_not_a_guess(self):
+        self.pieces(tb.TYPICAL_MIN_PIECES)
+        self.conn.execute("DELETE FROM traffic_edges")
+        self.conn.commit()
+        edges = tb.typical_buckets(self.conn, self.now)[self.bucket()]
+        self.assertTrue(edges)
+        self.assertEqual({e[5] for e in edges}, {0.0})
+        body = tb.typical_payload(self.bucket(), edges, self.now)
+        self.assertEqual({row[5] for row in body["edges"]}, {0})
+
+    def test_rows_carry_osm_ids_for_the_speed_file(self):
+        self.pieces(tb.TYPICAL_MIN_PIECES)
+        rows = tb.typical_rows(self.conn, self.now)
+        self.assertTrue(rows)
+        for name, u, v, *_ in rows:
+            self.assertEqual(name, self.bucket())
+            self.assertIsInstance(u, int)
+            self.assertIsInstance(v, int)
+
+
+class DensityTest(ProfileFixture, unittest.TestCase):
+    """27.E: плотность по районам — только счётчики, то же правило публикации."""
+
+    def area(self, lat, lon):
+        return "Ташкент"
+
+    def test_empty_database_has_no_areas(self):
+        self.assertEqual(tb.density(self.conn, self.now, self.area), [])
+
+    def test_one_piece_is_seen_but_not_published(self):
+        self.pieces(1, shared=False)
+        [row] = tb.density(self.conn, self.now, self.area)
+        self.assertEqual(row["area"], "Ташкент")
+        self.assertEqual(row["pieces"], 1)
+        self.assertGreater(row["seen"], 5)
+        self.assertEqual(row["published"], 0, "один кусок — не подтверждение")
+
+    def test_published_matches_now_json(self):
+        self.pieces(2, slower=4)
+        [row] = tb.density(self.conn, self.now, self.area)
+        self.assertEqual(row["pieces"], 2)
+        self.assertEqual(row["published"], len(tb.aggregate(self.conn, self.now)))
+        self.assertGreater(row["slow"], 0)
+        self.assertLessEqual(row["published"], row["seen"])
+
+    def test_hour_window_and_typical_count(self):
+        self.pieces(tb.TYPICAL_MIN_PIECES)
+        [row] = tb.density(self.conn, self.now, self.area)
+        self.assertEqual(row["typical"], len(tb.typical_buckets(self.conn, self.now)[self.bucket()]))
+        later = self.now + tb.SAMPLE_KEEP + 1
+        tb.prune(self.conn, later)
+        rows = tb.density(self.conn, later, self.area)
+        self.assertTrue(all(r["pieces"] == 0 and r["published"] == 0 for r in rows),
+                        "сырые скорости живут час — старше не считаются")
+
+    def test_areas_are_split_and_carry_only_counts(self):
+        self.pieces(2)
+        rows = tb.density(self.conn, self.now, lambda lat, lon: "север" if lat > 41.32 else "юг")
+        self.assertEqual({r["area"] for r in rows} <= {"север", "юг"}, True)
+        for row in rows:
+            self.assertEqual(set(row), {"area", "pieces", "seen", "published", "slow", "typical"})
+            for key in ("pieces", "seen", "published", "slow", "typical"):
+                self.assertIsInstance(row[key], int)
 
 
 class AgingTest(ProfileFixture, unittest.TestCase):

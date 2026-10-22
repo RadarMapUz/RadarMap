@@ -99,6 +99,12 @@ extension LocationService {
     /// позади, на параллельных и перпендикулярных улицах не предупреждаем.
     func runAlertEngine() {
         guard let camera = nearestCamera, let distance = distanceToNearest else { return }
+        // Тактильный движок — заранее, на подъезде: его запуск стоит ~90 мс,
+        // и на первом оповещении их платил бы голос о камере (HapticGate).
+        // В фоне CoreHaptics не запускается — там и не просим.
+        if isForeground, HapticGate.shouldWarm(distance: distance, radius: effectiveAlertRadius) {
+            alerts.warmHaptics()
+        }
         guard let decision = alertEngine.evaluate(cameraID: camera.id, distance: distance,
                                                   radius: effectiveAlertRadius,
                                                   moving: isDirectionalFilteringActive) else { return }

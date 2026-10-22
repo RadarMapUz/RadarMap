@@ -81,6 +81,10 @@ enum Storage {
         case quietZones             // выученные Дом/Работа для тишины тихого фона ([[lat, lon]], JSON)
         case carPlaySeen            // CarPlay хоть раз подключался (предложение «Только в машине», 26.2)
         case carOnlyOfferAnswered   // на предложение «Только в машине» ответили (любой ответ)
+        case cloudSyncMode          // «Хранить поездки»: CloudSyncMode.rawValue (нет — ещё не решено, 27.F)
+        case cloudOfferAnswered     // на предложение «Сохранять поездки в iCloud?» ответили (любой ответ)
+        case cloudRemoteWiped       // копию в iCloud стёрли на другом устройстве — хранение выключено (строка в настройках)
+        case cloudSettingsPushed    // настройки, уже отправленные в iCloud (CloudSettingsSync, JSON) — с чем сверять свои
     }
 
     private static var defaults: UserDefaults { .standard }

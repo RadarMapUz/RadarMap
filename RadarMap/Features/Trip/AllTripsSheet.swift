@@ -145,8 +145,7 @@ struct AllTripsSheet: View {
     }
 
     private var retentionNote: some View {
-        Label(String(format: String(localized: "Хранятся последние %lld поездок. Итоги за месяцы считаются по дневным сводкам — они не удаляются."),
-                     TripHistory.maxHistory),
+        Label(String(localized: "Поездки хранятся на телефоне без срока, треки — неделю. Итоги за месяцы считаются по дневным сводкам."),
               systemImage: "internaldrive")
             .font(.rounded(11))
             .foregroundStyle(Theme.textTertiary)

@@ -63,6 +63,9 @@ struct EngineMapView: UIViewRepresentable {
     var alertCameraID: Int?
     /// Камеры на нашем пути (CameraMarkerLook): только у них цвет типа.
     var pathCameraIDs: Set<Int> = []
+    /// Камеры не на своей координате — на линии маршрута или на оси нашей
+    /// дороги (CameraOnLine, 27.B). Только картинка; подпись — там же.
+    var cameraPoints: [Int: CameraOnLine.Point] = [:]
     /// Свои камеры — голос о них молчит, на значке галочка.
     var familiarCameraIDs: Set<Int> = []
     /// Подпись «400 м» у значка алерт-камеры — только в машине
@@ -264,6 +267,7 @@ struct EngineMapView: UIViewRepresentable {
         private var lastLimits: [Int: Int] = [:]
         private var lastAlertID: Int?
         private var lastPathIDs: Set<Int> = []
+        private var lastCameraPoints: [Int: CameraOnLine.Point] = [:]
         private var lastFamiliarIDs: Set<Int> = []
         /// Тема, в которой собраны точки камер (графит спокойных — свой днём и ночью).
         private var camerasDaylight: Bool?
@@ -1500,16 +1504,19 @@ struct EngineMapView: UIViewRepresentable {
             }
             guard cachedCameras != lastCameras || model.alertCameraID != lastAlertID || cachedLimits != lastLimits
                     || model.pathCameraIDs != lastPathIDs || model.familiarCameraIDs != lastFamiliarIDs
+                    || model.cameraPoints != lastCameraPoints
                     || model.daylight != camerasDaylight else { return }
             lastCameras = cachedCameras
             lastAlertID = model.alertCameraID
             lastLimits = cachedLimits
             lastPathIDs = model.pathCameraIDs
+            lastCameraPoints = model.cameraPoints
             lastFamiliarIDs = model.familiarCameraIDs
             camerasDaylight = model.daylight
             let points = cachedCameras.map { camera in
                 let point = MLNPointFeature()
-                point.coordinate = camera.coordinate
+                // Камера на пути — на линии маршрута (27.B); остальные — где стоят.
+                point.coordinate = model.cameraPoints[camera.id]?.coordinate ?? camera.coordinate
                 point.attributes = Self.cameraAttributes(camera, alert: model.alertCameraID,
                                                          path: model.pathCameraIDs,
                                                          familiar: model.familiarCameraIDs,

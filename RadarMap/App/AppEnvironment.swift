@@ -113,11 +113,27 @@ final class AppEnvironment {
     /// Журнал заправок и зарядок (21.6): только на телефоне; цена профиля и
     /// правдоподобие — AppEnvironment+EnergyJournal.
     let energyJournal = EnergyJournalStore()
+    /// «Хранить поездки: только на iPhone / в iCloud» (27.F): приватная база
+    /// человека в его iCloud; нам не видна. Источники — AppEnvironment+Cloud.
+    let cloud = CloudSyncService()
 
     /// CarPlay подключён. Наблюдаемый флаг для интерфейса телефона: пока едет
     /// машина, телефонная карта уступает место дешёвому экрану передачи —
     /// рисовать MapKit на двух экранах разом значит греть телефон вдвое.
     private(set) var isCarPlayConnected = false
+    /// «Впереди пробка» для экрана машины (27.E): последняя объявленная пробка
+    /// без маршрута; CarPlay показывает её баннером, пока не истекла.
+    private(set) var jamNotice: JamAhead.Notice?
+    @ObservationIgnored private var jamNoticeCounter = 0
+
+    /// Пробку объявили (голосом или нет) — машине баннер; без машины не
+    /// пишем: наблюдать некому, а запись будила бы зрителей на каждой пробке.
+    func noteJamAhead(_ jam: JamAhead.Jam, now: Date = Date()) {
+        guard isCarPlayConnected else { return }
+        jamNoticeCounter += 1
+        jamNotice = JamAhead.Notice(id: jamNoticeCounter, jam: jam,
+                                    until: now.addingTimeInterval(AppConfig.carPlayJamBannerSeconds))
+    }
     /// Телефонная сцена активна (ставит RootView). Вместе с isCarPlayConnected
     /// отвечает на вопрос «смотрит ли кто-нибудь на экран»: опрос передвижных
     /// радаров жив, пока жив ХОТЬ ОДИН экран, — раньше он был привязан только
@@ -238,6 +254,7 @@ final class AppEnvironment {
     /// Ставит RootView по scenePhase телефона.
     func setPhoneSceneActive(_ active: Bool) {
         isPhoneSceneActive = active
+        if !active { cloud.sceneEnteredBackground() }
         refreshTrafficWanted()
         updateThemeClock()
         if active {
@@ -246,6 +263,7 @@ final class AppEnvironment {
             family.update()
             Task { await offlineRoutes.refreshIfDue() }
             Task { await laneOverlay.refreshIfDue() }
+            cloud.sceneBecameActive()
         } else if !isCarPlayConnected, !mobile.isTripActive {
             // Экран погас, но человек едет — опрос продолжается: это и есть
             // единственный момент, когда чужая отметка чего-то стоит.
@@ -353,6 +371,8 @@ final class AppEnvironment {
         location.onTripStateChanged = { [weak self] active in
             guard let self else { return }
             self.mobile.setTripActive(active)
+            // iCloud в поездке молчит; после — отправит с паузой.
+            self.cloud.tripStateChanged(active: active)
             if active { self.traffic.tripStarted() } else { self.traffic.tripEnded() }
             if active { self.roadWeather.tripStarted() } else { self.roadWeather.tripEnded() }
             self.commuteGhostPending = active
@@ -461,11 +481,13 @@ final class AppEnvironment {
             }
             if let traffic, let route, route.isActive { route.refreshTrafficDelay(revision: traffic.revision) }
             // «Впереди пробка» — только без маршрута: с маршрутом пробки уже в
-            // ETA и в предложении объезда. Одна фраза на пробку (JamAhead).
+            // ETA и в предложении объезда. Одна фраза на пробку (JamAhead) и,
+            // в машине, баннер (27.E) — он и при выключенном голосе.
             if let traffic, let location, let route, location.isTripActive, !route.isActive,
-               settings.voiceEnabled,
+               settings.voiceEnabled || self?.isCarPlayConnected == true,
                let jam = traffic.jamToAnnounce(position: coordinate, course: location.currentCourse) {
-                alerts?.speak(jam.spoken, event: jam.voiceEvent)
+                if settings.voiceEnabled { alerts?.speak(jam.spoken, event: jam.voiceEvent) }
+                self?.noteJamAhead(jam)
             }
         }
         route.roadEvents = { [weak mobile] in mobile?.roadEvents ?? [] }
@@ -522,6 +544,22 @@ final class AppEnvironment {
         // «Обычно по водителям» — под теми же выключателями, что пробки.
         typicalTraffic.isAllowed = { [weak traffic] in traffic?.isShown ?? false }
         typicalTraffic.isOnline = { [weak network] in network?.isOnline ?? false }
+        // Обычная пробка часа в ETA любого маршрута (27.E): маршрут берёт
+        // файлы из памяти и просит недостающие; пришли — досчитывает время.
+        route.typicalTraffic = { [weak typicalTraffic] bucket in typicalTraffic?.cached(bucket)?.snapshot }
+        route.prefetchTypical = { [weak typicalTraffic, weak route] buckets in
+            guard let typicalTraffic else { return }
+            // Досчитывать — только если что-то пришло или сменилось: часа,
+            // которого на сервере нет, маршрут просит на каждом пересчёте
+            // остатка, и «пришло то же» иначе гоняло бы пересчёт по кругу.
+            let ordered = buckets.sorted { $0.name < $1.name }
+            let before = ordered.map { typicalTraffic.cached($0)?.snapshot.generated }
+            Task {
+                _ = await typicalTraffic.files(for: buckets)
+                let after = ordered.map { typicalTraffic.cached($0)?.snapshot.generated }
+                if after != before { route?.typicalTrafficArrived() }
+            }
+        }
         #if canImport(MapLibre)
         // Сервер карты лёг при живой связи (S22): сторож тайлов сообщает, карта
         // уходит на скачанную область, плашка говорит правду. С областью
@@ -755,6 +793,7 @@ final class AppEnvironment {
         observeAppearanceSetting()
         observeCommuteSettings()
         wireNetworkRhythm()
+        wireCloud()
         startCoreServices()
     }
 
@@ -1456,10 +1495,16 @@ final class AppEnvironment {
         }
         guard settings.commuteLearning, commuteProfiles.isLoaded, trip.isLoaded else { return }
         if commute.isEmpty { refreshCommute() }
+        // Поколение (правило 12): пока ждали пробки и считали, обучение могли
+        // выключить (resetDepartureEstimates) или пересчитать свежее
+        // (refreshDepartureEstimates) — тогда этот результат опоздал.
+        departureEstimatesGeneration &+= 1
+        let generation = departureEstimatesGeneration
         await traffic.refresh()
         let now = Date()
         let next = await Self.departureEstimates(book: commuteProfiles.book, snapshot: traffic.snapshot,
                                                  accuracy: commuteProfiles.accuracy, now: now)
+        guard generation == departureEstimatesGeneration, settings.commuteLearning else { return }
         departureEstimatesAt = now
         if next != departureEstimates { departureEstimates = next }
         refreshCommuteWidget(now: now)

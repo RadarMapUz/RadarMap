@@ -259,7 +259,7 @@ private struct RadarCommuteView: View {
 
     private func jamText(_ jam: CommuteWidgetData.Jam) -> String {
         String(format: String(localized: "пробки +%1$@ · на %2$@"), minutes(jam.extraSeconds),
-               jam.at.formatted(date: .omitted, time: .shortened))
+               NumberFormat.clock(jam.at))
     }
 
     // MARK: Слова
@@ -274,7 +274,7 @@ private struct RadarCommuteView: View {
 
     private func clock(_ minute: Int) -> String {
         let date = Calendar.current.startOfDay(for: entry.date).addingTimeInterval(Double(minute) * 60)
-        return date.formatted(date: .omitted, time: .shortened)
+        return NumberFormat.clock(date)
     }
 
     private func hintText(_ hint: WidgetCommute.Hint) -> String {
@@ -308,7 +308,7 @@ private struct RadarCommuteView: View {
             if let jam = line.jam {
                 parts.append(String(format: String(localized: "пробки плюс %1$@, на %2$@"),
                                     spokenMinutes(jam.extraSeconds),
-                                    jam.at.formatted(date: .omitted, time: .shortened)))
+                                    NumberFormat.clock(jam.at)))
             }
             if let hint = line.hint, line.jam == nil || jamAndHint {
                 parts.append(spokenHint(hint))

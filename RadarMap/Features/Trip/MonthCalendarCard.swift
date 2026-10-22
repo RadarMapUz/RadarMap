@@ -117,7 +117,7 @@ struct MonthCalendarCard: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(Text(day.formatted(date: .abbreviated, time: .omitted)))
+            .accessibilityLabel(Text(Formatting.date(day, Date.FormatStyle(date: .abbreviated, time: .omitted))))
             .accessibilityValue(state.hasTrips
                 ? (state.hasOverspeed ? Text("превышения") : Text("чисто"))
                 : Text("без поездок"))

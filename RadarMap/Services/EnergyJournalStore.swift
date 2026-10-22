@@ -44,10 +44,6 @@ final class EnergyJournalStore {
         Task { await load() }
     }
 
-    func entry(_ id: UUID) -> JournalEntry? {
-        entries.first { $0.id == id }
-    }
-
     /// Новая запись или правка — по id.
     func upsert(_ entry: JournalEntry) {
         if let index = entries.firstIndex(where: { $0.id == entry.id }) {

@@ -35,7 +35,10 @@ traffic/now.json для телефонов.
   5. Раз в час — «обычно по водителям» (план 19.10, 8.8.16): traffic/typical/
      <класс дня>-<час>.json из traffic_profile, холодный старт «дороги на
      работу», пока у водителя нет трёх своих поездок:
-       {"v": 1, "bucket": "wd-08", "generated": t, "edges": [[ulat, ulon, vlat, vlon, kmh]]}
+       {"v": 1, "bucket": "wd-08", "generated": t, "edges": [[ulat, ulon, vlat, vlon, kmh, model_kmh]]}
+     model_kmh (27.E) — скорость графа на ребре, 0 — неизвестна: шестой
+     столбец добавлен к версии 1 (старые телефоны читают первые пять), по
+     нему ETA любого маршрута получает обычную пробку часа выезда.
      Класс дня — будни (wd, пн–пт) или выходные (off, сб–вс и праздники
      Узбекистана по ташкентской дате — тот же список, что UzHolidays на
      телефоне: кусок из Навруза во вторник ложится в off, как и запрос
@@ -466,8 +469,10 @@ def level(kmh, model_kmh):
     return 1
 
 
-def aggregate(conn, now):
-    """Рёбра для выхода: [(ulat, ulon, vlat, vlon, level, kmh, model_kmh)]."""
+def live_edges(conn, now):
+    """Подтверждённые рёбра окна now.json с id узлов OSM:
+    [(u, v, ulat, ulon, vlat, vlon, level, kmh, model_kmh)]. Одно правило для
+    now.json, файла скоростей OSRM (traffic_speeds.py) и плотности в панели."""
     rows = conn.execute("""SELECT s.u, s.v, s.kmh, s.weight, s.piece, s.passed, e.model_kmh,
                                   a.lat, a.lon, b.lat, b.lon
                            FROM traffic_samples s
@@ -484,16 +489,20 @@ def aggregate(conn, now):
         if passed:
             entry["pieces"].add(piece)
     out = []
-    for entry in grouped.values():
+    for (u, v), entry in grouped.items():
         if len(entry["pieces"]) < MIN_PIECES:
             continue
         kmh = weighted_median(entry["pairs"])
         lvl = level(kmh, entry["model"]) if kmh is not None else None
         if lvl is None:
             continue
-        alat, alon, blat, blon = entry["coords"]
-        out.append((alat, alon, blat, blon, lvl, kmh, entry["model"]))
-    return out
+        out.append((u, v) + entry["coords"] + (lvl, kmh, entry["model"]))
+    return sorted(out)
+
+
+def aggregate(conn, now):
+    """Рёбра для выхода: [(ulat, ulon, vlat, vlon, level, kmh, model_kmh)]."""
+    return [row[2:] for row in live_edges(conn, now)]
 
 
 def mark_shared(conn, now):
@@ -506,6 +515,64 @@ def mark_shared(conn, now):
                     ON CONFLICT(u, v) DO UPDATE SET seen = MAX(seen, excluded.seen)""",
                  (now, now - SAMPLE_WINDOW, MIN_PIECES))
     conn.commit()
+
+
+# --- Плотность данных (27.E) ----------------------------------------------------
+#
+# Слой пробок честен ребро за ребром (MIN_PIECES свидетелей за SAMPLE_WINDOW),
+# но «на карте нет красного» значит «свободно» только там, где ездят многие:
+# набор несёт одни медленные рёбра, и пустой город неотличим от свободного.
+# Панель (admin.py, «Пробки») показывает по городам, сколько данных пришло за
+# последний час, — по нему владелец решает, где пробкам уже можно верить
+# (подпись, реклама, MLD-маршруты), а где слой пока лишь отдельные отметки.
+#
+# CITY_READY_PIECES_PER_HOUR — порог «город готов»: 60 кусков по ~1 км в час —
+# это ~15 кусков в каждом 15-минутном окне, примерно три машины, всё время
+# едущие по городу. Меньше — подтверждённое ребро редкость (два куска на одном
+# ребре за 15 минут), и отсутствие пробки ничего не говорит. Порог — для
+# людей и решений, телефоны его не видят: слой и ETA по-прежнему решают
+# ребро за ребром, и ни одно ребро без двух свидетелей не публикуется.
+CITY_READY_PIECES_PER_HOUR = 60
+
+
+def density(conn, now, area_of):
+    """Плотность за последний час по районам: [{area, pieces, seen, published,
+    slow, typical}] по убыванию кусков. Только счётчики — ни кусков, ни
+    координат, ни времени отдельных проездов наружу не идёт.
+
+      pieces    — разных кусков, задевших район за SAMPLE_KEEP (сырые
+                  скорости живут ровно час, дольше не посчитать);
+      seen      — разных рёбер, на которые кусок лёг за этот час;
+      published — рёбер, которые сейчас в now.json (то же правило — live_edges);
+      slow      — из них медленно или пробка;
+      typical   — рёбер в файле «обычно» текущего класса дня и часа.
+
+    `area_of(lat, lon)` — имя района (город или «трасса»); ребро относится к
+    району своего начального узла, кусок — к каждому району, который задел.
+    """
+    areas = {}
+
+    def entry(lat, lon):
+        name = area_of(lat, lon)
+        return areas.setdefault(name, {"area": name, "pieces": set(), "seen": set(),
+                                       "published": 0, "slow": 0, "typical": 0})
+
+    for u, v, piece, lat, lon in conn.execute(
+            """SELECT s.u, s.v, s.piece, a.lat, a.lon FROM traffic_samples s
+               JOIN traffic_nodes a ON a.id = s.u WHERE s.ts >= ?""", (now - SAMPLE_KEEP,)):
+        item = entry(lat, lon)
+        item["pieces"].add(piece)
+        item["seen"].add((u, v))
+    for row in live_edges(conn, now):
+        item = entry(row[2], row[3])
+        item["published"] += 1
+        item["slow"] += row[6] >= 2
+    current = bucket_name(profile_slot(now))
+    for row in typical_rows(conn, now):
+        if row[0] == current:
+            entry(row[3], row[4])["typical"] += 1
+    out = [dict(item, pieces=len(item["pieces"]), seen=len(item["seen"])) for item in areas.values()]
+    return sorted(out, key=lambda item: (-item["pieces"], -item["published"], str(item["area"])))
 
 
 # --- «Обычно по водителям» (8.8.16) -------------------------------------------
@@ -527,31 +594,43 @@ def typical_due(conn, now):
     return row is None or now - row[0] >= TYPICAL_EVERY
 
 
-def typical_buckets(conn, now):
-    """{имя файла: [(ulat, ulon, vlat, vlon, kmh)]} — только рёбра с
-    TYPICAL_MIN_PIECES эффективными кусками в классе дня и часе и прошедшие
-    проверку «не один человек» за последние SHARED_TTL. Сложение и порог —
-    в SQLite: в Python приходят только публикуемые рёбра, а не весь профиль.
-    Отсортировано: одинаковые данные — одинаковый файл."""
+def typical_rows(conn, now):
+    """Публикуемые строки «обычно» с id узлов: [(файл, u, v, ulat, ulon, vlat,
+    vlon, kmh, model_kmh)] — только рёбра с TYPICAL_MIN_PIECES эффективными
+    кусками в классе дня и часе и прошедшие проверку «не один человек» за
+    последние SHARED_TTL. Сложение и порог — в SQLite: в Python приходят только
+    публикуемые рёбра, а не весь профиль. model_kmh — скорость графа (car.lua)
+    на ребре, 0 — неизвестна: по ней телефон считает, на сколько обычная
+    пробка этого часа удлиняет ЛЮБОЙ маршрут (27.E), а не только свою дорогу."""
     scale = decay_scale(profile_epoch(conn, now), now)
     # Класс дня — тем же bucket_name, что и везде: правило в одном месте.
     conn.create_function("bucket_name", 1, bucket_name)
     # Допуск 1e-9: пять кусков одного момента — пять, а не 4,999… от
     # сложения степеней.
-    rows = conn.execute("""SELECT bucket_name(p.how) AS bucket, SUM(p.pieces), SUM(p.sum_pace),
-                                  a.lat, a.lon, b.lat, b.lon
+    rows = conn.execute("""SELECT bucket_name(p.how) AS bucket, p.u, p.v, SUM(p.pieces), SUM(p.sum_pace),
+                                  a.lat, a.lon, b.lat, b.lon, COALESCE(MAX(e.model_kmh), 0)
                            FROM traffic_profile p
                            JOIN traffic_shared s ON s.u = p.u AND s.v = p.v
                            JOIN traffic_nodes a ON a.id = p.u
                            JOIN traffic_nodes b ON b.id = p.v
+                           LEFT JOIN traffic_edges e ON e.u = p.u AND e.v = p.v
                            WHERE p.pieces > 0 AND s.seen >= ?
                            GROUP BY p.u, p.v, bucket
                            HAVING SUM(p.pieces) >= ? AND SUM(p.sum_pace) > 0""",
                         (now - SHARED_TTL, TYPICAL_MIN_PIECES * scale * (1 - 1e-9)))
-    out = {}
-    for name, pieces, pace, alat, alon, blat, blon in rows:
+    out = []
+    for name, u, v, pieces, pace, alat, alon, blat, blon, model in rows:
         kmh = min(MAX_KMH, 3600.0 / (pace / pieces))
-        out.setdefault(name, []).append((alat, alon, blat, blon, kmh))
+        out.append((name, u, v, alat, alon, blat, blon, kmh, model or 0.0))
+    return sorted(out)
+
+
+def typical_buckets(conn, now):
+    """{имя файла: [(ulat, ulon, vlat, vlon, kmh, model_kmh)]} — строки
+    typical_rows по файлам. Отсортировано: одинаковые данные — одинаковый файл."""
+    out = {}
+    for name, _u, _v, alat, alon, blat, blon, kmh, model in typical_rows(conn, now):
+        out.setdefault(name, []).append((alat, alon, blat, blon, kmh, model))
     return {name: sorted(edges) for name, edges in out.items()}
 
 
@@ -585,8 +664,9 @@ def typical_payload(name, edges, now):
         "v": TYPICAL_VERSION,
         "bucket": name,
         "generated": int(now),
-        "edges": [[round(a, 5), round(b, 5), round(c, 5), round(d, 5), int(round(kmh))]
-                  for a, b, c, d, kmh in edges],
+        "edges": [[round(a, 5), round(b, 5), round(c, 5), round(d, 5), int(round(kmh)),
+                   int(round(model))]
+                  for a, b, c, d, kmh, model in edges],
     }
 
 

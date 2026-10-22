@@ -25,7 +25,7 @@ struct EraseHistorySheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
-                group("Удалится", AppEnvironment.erasedLines, tint: Theme.danger)
+                group("Удалится", env.erasedLinesNow, tint: Theme.danger)
                 group("Останется", AppEnvironment.keptLines, tint: Theme.success)
             }
             .padding(.horizontal, 16)

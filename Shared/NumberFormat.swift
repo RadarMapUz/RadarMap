@@ -28,6 +28,16 @@ nonisolated enum NumberFormat {
             .first { $0 == "ru" || $0 == "uz" } ?? "ru"
     }
 
+    /// Время на часах: «8:22» / «8:22 PM» — ЕДИНСТВЕННОЕ место, где дата
+    /// форматируется без языка приложения, и это решение, а не недосмотр:
+    /// 12/24 часа — настройка человека в iOS (регион), и навязать ему чужой
+    /// формат часов хуже, чем английское «PM» рядом с русским текстом.
+    /// Названия месяцев и дней недели — только через язык приложения
+    /// (`Formatting.date`), иначе при английской системе выходят английскими.
+    static func clock(_ date: Date, timeZone: TimeZone = .autoupdatingCurrent) -> String {
+        date.formatted(Date.FormatStyle(date: .omitted, time: .shortened, timeZone: timeZone))
+    }
+
     /// «1,3» — дробное с `digits` знаками, округление от нуля, без разрядов.
     static func decimal(_ value: Double, digits: Int = 1, locale: Locale = locale) -> String {
         value.formatted(.number.precision(.fractionLength(digits))

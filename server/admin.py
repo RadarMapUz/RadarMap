@@ -57,10 +57,24 @@ import admin_auth
 import map_edits
 import osm_queue
 
+# Пробки (27.E): плотность данных читается из traffic.db сборщика тем же
+# правилом публикации, что и now.json. Модули ставят deploy_traffic.sh и
+# deploy_bot.sh; без них панель поднимается, а экран «Пробки» говорит, чего
+# не хватает, — падение панели из-за чужого модуля хуже пустого экрана.
+try:
+    import traffic_build
+except ImportError:      # pragma: no cover — на сервере без сборщика пробок
+    traffic_build = None
+try:
+    import telegram_publish
+except ImportError:      # pragma: no cover
+    telegram_publish = None
+
 DB_PATH = os.environ.get("RADARMAP_DB", "/opt/radarmap/api/reports.db")
 CAMERAS_PATH = os.environ.get("RADARMAP_CAMERAS", "/opt/radarmap/www/cameras.json")
 # «Камеры, которых нет в базе» — файл build_camera_candidates.py. Лежит рядом
 # с панелью (review/), на сервер приезжает вместе с ней через deploy_api.sh.
+TRAFFIC_DB_PATH = os.environ.get("RADARMAP_TRAFFIC_DB", "/opt/radarmap/api/traffic.db")
 CANDIDATES_PATH = os.environ.get(
     "RADARMAP_CANDIDATES",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "review", "camera_candidates.json"))
@@ -373,8 +387,8 @@ TABS = (("/", "Сводка"), ("/map", "Карта"), ("/editor", "Констр
         ("/junctions", "Перекрёстки"),
         ("/changes", "Что изменилось"), ("/cameras", "Камеры"),
         ("/mobile", "Передвижные"), ("/feedback", "Обращения"),
-        ("/usage", "Люди"), ("/journal", "Журнал"), ("/status", "Пульт"),
-        ("/health", "Здоровье"))
+        ("/usage", "Люди"), ("/traffic", "Пробки"), ("/journal", "Журнал"),
+        ("/status", "Пульт"), ("/health", "Здоровье"))
 
 # Префикс, под которым панель видна снаружи: "/radarmap/admin" на общем домене
 # или пусто при доступе через SSH-туннель. Внутрь запросы приходят уже без
@@ -1643,6 +1657,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, self.usage_page(conn))
             if path == "/health":
                 return self._send(200, self.health_page(conn))
+            if path == "/traffic":
+                return self._send(200, traffic_page())
             if path == "/status":
                 return self._send(200, status_page())
             if path == "/junctions":
@@ -3314,6 +3330,7 @@ class Handler(BaseHTTPRequestHandler):
         except OSError:
             db_size = 0
         base = len(cameras())
+        traffic_url = esc(u("/traffic"))
         return page("/health", "Здоровье", f"""
 <h1>Здоровье за неделю</h1>
 <div class="card"><div class="row">
@@ -3331,6 +3348,8 @@ class Handler(BaseHTTPRequestHandler):
       "SELECT COUNT(*) FROM feedback WHERE received > ?", (now - 7 * DAY,))}</span>
 </div></div>
 <div class="card"><div class="muted">
+  <a href="{traffic_url}">{esc(traffic_summary(now))}</a></div></div>
+<div class="card"><div class="muted">
   База камер на сервере: {base} точек ·
   reports.db: {db_size:.1f} МБ ·
   правок принято: {count("SELECT COUNT(*) FROM overrides")}
@@ -3344,6 +3363,90 @@ class Handler(BaseHTTPRequestHandler):
              "SELECT at, camera_id, action, detail FROM moderation_log "
              "ORDER BY id DESC LIMIT 20"))
  or '<div class="empty">Решений ещё не принимали</div>'}""")
+
+
+# --- Пробки: плотность данных (27.E) ---------------------------------------
+#
+# Сколько кусков следа и рёбер пришло за последний час по городам и сколько из
+# них подтверждено для слоя. Только счётчики: в traffic.db нет ни устройств,
+# ни поездок, а панель не показывает ни координат рёбер, ни кусков.
+
+def traffic_area(lat, lon):
+    """Город ребра, а дальше CITY_RADIUS_KM от крупного — «трасса · город»:
+    километры в имени дробили бы трассу на десятки строк."""
+    if telegram_publish is None:
+        return f"{lat:.1f}, {lon:.1f}"
+    name, km = telegram_publish.nearest_city(lat, lon)
+    return name if km <= telegram_publish.CITY_RADIUS_KM else f"трасса · {name}"
+
+
+def traffic_density(now=None, path=None):
+    """(строки плотности, None) или (None, почему нет данных)."""
+    if traffic_build is None:
+        return None, "сборщик пробок (traffic_build.py) не установлен — deploy_traffic.sh"
+    path = path or TRAFFIC_DB_PATH
+    if not os.path.exists(path):
+        return None, "traffic.db ещё нет — сборщик не запускался"
+    now = now or time.time()
+    try:
+        # Только чтение: сборщик пишет сюда каждые 2 минуты.
+        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
+        try:
+            return traffic_build.density(conn, now, traffic_area), None
+        finally:
+            conn.close()
+    except sqlite3.Error as error:
+        return None, f"traffic.db не читается: {error}"
+
+
+def traffic_summary(now=None):
+    """Одна строка для «Здоровья»."""
+    rows, problem = traffic_density(now)
+    if rows is None:
+        return problem
+    pieces = sum(r["pieces"] for r in rows)
+    published = sum(r["published"] for r in rows)
+    ready = sum(1 for r in rows if r["pieces"] >= traffic_build.CITY_READY_PIECES_PER_HOUR)
+    return f"пробки за час: кусков {pieces}, рёбер в слое {published}, готовых городов {ready}"
+
+
+def traffic_page(now=None):
+    rows, problem = traffic_density(now)
+    if rows is None:
+        return page("/traffic", "Пробки", f'<div class="empty">{esc(problem)}</div>')
+    tb = traffic_build
+    ready_at = tb.CITY_READY_PIECES_PER_HOUR
+
+    def line(r):
+        coverage = f"{100 * r['published'] / r['seen']:.0f}%" if r["seen"] else "—"
+        tone = "ok" if r["pieces"] >= ready_at else ("warn" if r["pieces"] else "")
+        return (f'<div class="card"><div class="row"><b>{esc(r["area"])}</b>'
+                f'<span class="tag {tone}">кусков за час: {r["pieces"]} / {ready_at}</span>'
+                f'<span class="tag">рёбер видно: {r["seen"]}</span>'
+                f'<span class="tag">в слое сейчас: {r["published"]}</span>'
+                f'<span class="tag">медленно и пробка: {r["slow"]}</span>'
+                f'<span class="tag">«обычно» в этот час: {r["typical"]}</span>'
+                f'<span class="tag">покрытие: {coverage}</span></div></div>')
+
+    body = "".join(line(r) for r in rows) or '<div class="empty">За последний час данных нет</div>'
+    window = tb.SAMPLE_WINDOW // 60
+    return page("/traffic", "Пробки", f"""
+<h1>Пробки: данные за последний час</h1>
+{body}
+<div class="card"><div class="muted">
+  <b>В слое</b> — ребро, которое за {window} мин прошли насквозь не меньше
+  {tb.MIN_PIECES} разных кусков (now.json, правило сборщика); <b>покрытие</b> —
+  его доля среди рёбер, на которые лёг хоть один кусок. <b>«Обычно»</b> —
+  рёбра файла текущего часа: не меньше {tb.TYPICAL_MIN_PIECES} эффективных
+  кусков и двое водителей одновременно.</div>
+  <div class="muted" style="margin-top:6px"><b>Готов</b> — город, где за час
+  приходит не меньше {ready_at} кусков (~15 в каждом окне, около трёх машин
+  всё время в пути). Ниже порога пустая карта не значит «свободно»: набор
+  несёт только медленные рёбра. Порог — для решений (подпись «пробки»,
+  маршруты с пробками на MLD), телефоны его не видят: каждое ребро и так
+  публикуется только с двумя свидетелями.</div>
+  <div class="muted" style="margin-top:6px">Ни устройств, ни поездок, ни
+  координат здесь нет — только счётчики по городам.</div></div>""")
 
 
 # --- Пульт состояния ------------------------------------------------------

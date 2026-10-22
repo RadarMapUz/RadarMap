@@ -126,7 +126,7 @@ extension TripStatsSheet {
     /// Подпись выбранной поездки поверх карты — не занимает строку под ней.
     func tripChip(_ record: TripRecord) -> some View {
         HStack(spacing: 8) {
-            Text(record.startedAt.formatted(date: .omitted, time: .shortened))
+            Text(Formatting.clock(record.startedAt))
                 .font(.rounded(15, .bold))
                 .foregroundStyle(Theme.textPrimary)
             Text(Formatting.distance(record.distanceMeters))

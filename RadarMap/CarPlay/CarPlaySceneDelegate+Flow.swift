@@ -162,11 +162,31 @@ extension CarPlaySceneDelegate {
                                onDark: model.carIsDark ?? !model.isDaylight)
     }
 
+    /// Пробка впереди без маршрута (27.E): тот же JamAhead, что голос.
+    func observeJam() {
+        let session = session
+        withObservationTracking {
+            _ = env.jamNotice
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, self.session == session else { return }
+                self.syncJamBanner()
+                self.observeJam()
+            }
+        }
+    }
+
+    func syncJamBanner() {
+        guard let banners else { return }
+        jamBanner.sync(env.jamNotice, banners: banners, onDark: model.carIsDark ?? !model.isDaylight)
+    }
+
     // MARK: - Баннеры: что снято и что вернуть
 
-    /// Экран баннеров освободился — показать ждущих: объезд, погоду и вопрос.
+    /// Экран баннеров освободился — показать ждущих: объезд, пробку, погоду и вопрос.
     func bannersFreed() {
         syncDetourAlert()
+        syncJamBanner()
         syncRoadWeatherBanner()
         presentPendingConfirmIfNeeded()
     }
@@ -186,6 +206,7 @@ extension CarPlaySceneDelegate {
             confirmBannerID = nil
         }
         roadWeatherBanner.forget(alert)
+        jamBanner.forget(alert)
     }
 
     /// Поездка сохранилась — итог одной строкой, пока машина стоит и экран

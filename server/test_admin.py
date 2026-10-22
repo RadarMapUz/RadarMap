@@ -1667,6 +1667,92 @@ if __name__ == "__main__":
 
 
 
+class TrafficDensityTests(unittest.TestCase):
+    """«Пробки» (27.E): плотность данных по городам — только счётчики.
+
+    Стенд — тот же, что у AdminTest (сервер, база, вход), но без наследования
+    его тестов: иначе весь набор AdminTest прогонялся бы второй раз."""
+
+    login = AdminTest.login
+
+    @classmethod
+    def setUpClass(cls):
+        AdminTest.setUpClass.__func__(cls)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+
+    def setUp(self):
+        import test_traffic_build as fixture
+        import traffic_build
+        self.tb = traffic_build
+        self.fixture = fixture.FIXTURE
+        self.dir = tempfile.mkdtemp()
+        self.saved = admin.TRAFFIC_DB_PATH
+        admin.TRAFFIC_DB_PATH = os.path.join(self.dir, "traffic.db")
+        self.now = time.time()
+
+    def tearDown(self):
+        admin.TRAFFIC_DB_PATH = self.saved
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def fill(self, pieces):
+        conn = sqlite3.connect(admin.TRAFFIC_DB_PATH)
+        self.tb.schema(conn)
+        points = [[lat, lon, t * 4, kmh] for lat, lon, t, kmh in self.fixture["points"]]
+        for _ in range(pieces):
+            conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)",
+                         (self.now, json.dumps(points)))
+        conn.commit()
+        self.tb.process(conn, self.now, matcher=lambda pts: self.fixture["response"])
+        conn.close()
+
+    def test_without_a_database_the_page_says_so(self):
+        status, body = _get(self.port, "/traffic")
+        self.assertEqual(status, 200)
+        self.assertIn("traffic.db ещё нет", body)
+
+    def test_counts_by_city_and_threshold(self):
+        self.fill(2)
+        status, body = _get(self.port, "/traffic")
+        self.assertEqual(status, 200)
+        self.assertIn("Ташкент", body)
+        self.assertIn(f"кусков за час: 2 / {self.tb.CITY_READY_PIECES_PER_HOUR}", body)
+        published = len(self.tb.aggregate(sqlite3.connect(admin.TRAFFIC_DB_PATH), self.now))
+        self.assertIn(f"в слое сейчас: {published}", body)
+        self.assertIn(f"не меньше\n  {self.tb.MIN_PIECES} разных кусков", body)
+
+    def test_page_shows_no_ids_and_no_coordinates(self):
+        self.fill(2)
+        _, body = _get(self.port, "/traffic")
+        for u, v, *_ in self.tb.live_edges(sqlite3.connect(admin.TRAFFIC_DB_PATH), self.now):
+            self.assertNotIn(str(u), body)
+            self.assertNotIn(str(v), body)
+        for lat, lon, _t, _k in self.fixture["points"]:
+            self.assertNotIn(f"{lat:.3f}", body)
+            self.assertNotIn(f"{lon:.3f}", body)
+
+    def test_health_carries_one_line(self):
+        self.fill(1)
+        _, body = _get(self.port, "/health")
+        self.assertIn("пробки за час: кусков 1", body)
+        self.assertIn("/traffic", body)
+
+    def test_without_the_builder_the_panel_still_works(self):
+        saved, admin.traffic_build = admin.traffic_build, None
+        try:
+            status, body = _get(self.port, "/traffic")
+        finally:
+            admin.traffic_build = saved
+        self.assertEqual(status, 200)
+        self.assertIn("не установлен", body)
+
+    def test_highway_is_grouped_by_nearest_city(self):
+        self.assertEqual(admin.traffic_area(41.31, 69.28), "Ташкент")
+        self.assertEqual(admin.traffic_area(40.6, 68.2), "трасса · Гулистан")
+
+
 class JunctionWorklistPageTests(unittest.TestCase):
     """Очередь перекрёстков: ссылки на правку и честный прогресс."""
 

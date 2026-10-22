@@ -524,7 +524,7 @@ struct RatingDetailSheet: View {
     private func hotspotDetail(_ hotspot: RatingHotspot) -> String {
         let head = hotspot.times > 1
             ? String(format: String(localized: "проездов: %lld"), hotspot.times)
-            : hotspot.worstDate.formatted(.dateTime.day().month(.abbreviated).hour().minute())
+            : Formatting.dateAndClock(hotspot.worstDate, .dateTime.day().month(.abbreviated), separator: " ")
         guard let limit = hotspot.limitKmh else { return head }
         let speed = hotspot.times > 1
             ? String(format: String(localized: "до %1$lld при лимите %2$lld"),

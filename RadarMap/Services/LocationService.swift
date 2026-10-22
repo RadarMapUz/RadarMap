@@ -437,6 +437,11 @@ final class LocationService: NSObject {
     /// предупреждать», нельзя (см. RoadSnapper).
     var displayCoordinate: CLLocationCoordinate2D?
     var displayCourse: CLLocationDirection = -1
+    /// Курс оси дороги под прижатой точкой (RoadSnapper), пока прижим держит и
+    /// курс дороги совпал с нашим; nil — прижима нет. Пишется только на смене
+    /// отрезка. Только картинка: камера на оси нашей дороги без маршрута
+    /// (CameraOnLine.roadSpot, 27.B).
+    var displayRoadBearing: Double?
     /// Последний фикс для значка «я» между фиксами (MarkerPredictor): точка и
     /// курс — те же displayCoordinate/displayCourse, плюс скорость, время
     /// фикса и линия маршрута вперёд. Пишется раз на фикс, в том же тике,

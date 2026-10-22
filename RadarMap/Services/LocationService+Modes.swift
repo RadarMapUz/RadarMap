@@ -121,6 +121,7 @@ extension LocationService {
             frozenDisplay = nil
             displayCoordinate = nil
             displayCourse = -1
+            displayRoadBearing = nil
             markerMotion = nil
             // Вернулись в тихий фон — геозоны снова единственный способ узнать
             // о камере, и ставить их надо вокруг того места, где мы сейчас.

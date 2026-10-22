@@ -315,6 +315,53 @@ final class PerformanceBudgetTests: XCTestCase {
                           "600 проекций на 10k-маршрут: \(elapsed)")
     }
 
+    // MARK: - Камеры на линии маршрута (CameraOnLine, 27.B)
+
+    /// Точки камер на линии — раз на построение (вне главного потока), а на
+    /// кадре только отбор по прогрессу и одна проекция на ось дороги без
+    /// маршрута. Потолки ловят возврат проекции в кадр: 10 построений
+    /// маршрута Ташкент—Самарканд (10 тыс. точек, 120 камер) и 600 кадров.
+    func testCameraOnLineBudget() {
+        let pts = (0..<10_000).map {
+            MKMapPoint(CLLocationCoordinate2D(latitude: 41.30 + Double($0) * 0.00002,
+                                              longitude: 69.20 + Double($0) * 0.0001))
+        }
+        let cameras = (0..<120).map { i -> Camera in
+            let base = pts[i * 80].coordinate
+            return Camera(id: i, region: "", city: "", location: "К\(i)",
+                          lat: base.latitude + 0.0001, lon: base.longitude,
+                          type: "Стационар камера", violations: [], needsReview: nil,
+                          axis: 79, dir: i % 2 == 0 ? 79 : 259, lanes: 3, cls: "primary",
+                          split: true, twin: i % 4 == 1)
+        }
+        // `along` — как его отдаёт camerasAlong: метры по линии до точки камеры.
+        var cum = [Double](repeating: 0, count: pts.count)
+        for i in 1..<pts.count { cum[i] = cum[i - 1] + pts[i - 1].distance(to: pts[i]) }
+        let alongs = cameras.map { ($0, cum[$0.id * 80]) }
+        let clock = ContinuousClock()
+        var spots: [Int: CameraOnLine.Spot] = [:]
+        let built = clock.now
+        for _ in 0..<10 { spots = CameraOnLine.routeSpots(points: pts, cameras: alongs) }
+        let buildTime = clock.now - built
+        XCTAssertEqual(spots.count, 120)
+        XCTAssertLessThan(buildTime, .milliseconds(300), "10 построений точек камер: \(buildTime)")
+
+        let route = cameras.enumerated().map { (id: $0.element.id, along: Double($0.offset) * 800) }
+        let origin = CLLocationCoordinate2D(latitude: 41.30, longitude: 69.20)
+        var shown = 0
+        let frames = clock.now
+        for frame in 0..<600 {
+            let display = CameraOnLine.display(route: route, spots: spots, progress: Double(frame) * 100,
+                                               passedTolerance: 60, nearest: frame % 120,
+                                               nearestOnRoad: nil)
+            shown += display.points.count
+            _ = CameraOnLine.roadSpot(camera: cameras[frame % 120], origin: origin, bearing: 79)
+        }
+        let frameTime = clock.now - frames
+        XCTAssertGreaterThan(shown, 0)
+        XCTAssertLessThan(frameTime, .milliseconds(150), "600 кадров отбора камер на линии: \(frameTime)")
+    }
+
     /// Учёт проездов на каждом тике: подход к камере, зона измерения, траверз.
     func testPassTrackingBudget() {
         let origin = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)

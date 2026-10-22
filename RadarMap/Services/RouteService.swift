@@ -69,6 +69,10 @@ final class RouteService {
         var trafficDelay: TimeInterval?
         /// Откуда `trafficDelay`: живые пробки, обычные для часа или обе.
         var trafficSource: TrafficForecast.Source?
+        /// Где рисовать камеры маршрута — на его линии (CameraOnLine, 27.B).
+        /// ТОЛЬКО для карты: оповещения и проезды читают `cameras` с
+        /// настоящими координатами.
+        var cameraSpots: [Int: CameraOnLine.Spot] = [:]
 
         /// Время в пути с пробками — его и показываем, и сравниваем. У своей
         /// дороги (24.4) — по своим поездкам в этот час, если их хватает.
@@ -339,6 +343,8 @@ final class RouteService {
     @ObservationIgnored private var coordinatesCache:
         (polyline: MKPolyline, points: [CLLocationCoordinate2D])?
     var camerasOnRoute: [RouteCamera] { selected?.cameras ?? [] }
+    /// Точки камер маршрута на его линии — только для карты (27.B).
+    var cameraSpotsOnRoute: [Int: CameraOnLine.Spot] { selected?.cameraSpots ?? [:] }
     var distanceText: String { selected?.distanceText ?? "" }
     var etaText: String { selected?.etaText ?? "" }
     var trafficNote: String? { selected?.trafficNote }
@@ -1613,7 +1619,7 @@ final class RouteService {
 
         // Там же — выбор варианта по своим поездкам: сравнение с сотней
         // треков стоит десятки миллисекунд, главному потоку они не нужны.
-        let (variantCameras, verdict, trafficForecasts) = await offMain {
+        let (variantCameras, verdict, trafficForecasts, variantSpots) = await offMain {
             let found = inputs.map { variant -> [RouteCamera] in
                 var bbox = MKMapRect.null
                 for p in variant.points { bbox = bbox.union(MKMapRect(origin: p, size: MKMapSize())) }
@@ -1646,7 +1652,12 @@ final class RouteService {
                                                                     events: events, now: eventsNow),
                                   personal: index == mine?.index ? personal : nil)
             }, history: history)
-            return (found, choice, forecasts)
+            // Где рисовать камеры на линии — тем же проходом, раз на маршрут.
+            let spots = inputs.indices.map { index in
+                CameraOnLine.routeSpots(points: inputs[index].points,
+                                        cameras: found[index].map { ($0.camera, $0.distanceAlong) })
+            }
+            return (found, choice, forecasts, spots)
         }
 
         // Второй раз, и это не дублирование проверки у вызывающего: тот
@@ -1679,7 +1690,8 @@ final class RouteService {
                            stopAlong: variant.stopAlong,
                            isOffline: variant.offline,
                            trafficDelay: trafficForecasts[index]?.seconds,
-                           trafficSource: trafficForecasts[index]?.source)
+                           trafficSource: trafficForecasts[index]?.source,
+                           cameraSpots: variantSpots[index])
         }
         selectedID = verdict.recommended
         // Одна строка на маршрут — для разбора реальной поездки: сколько

@@ -275,6 +275,7 @@ final class CarPlayGuidance {
     func attach(to template: CPMapTemplate, banners: CarPlayBanners) {
         self.template = template
         self.banners = banners
+        cameraBanner.prepare()
         generation &+= 1
         observe()
     }

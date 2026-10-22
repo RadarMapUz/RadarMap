@@ -373,9 +373,8 @@ final class SpeedLimitService {
         // штрафного: камера фиксирует с +5, и предупреждение, приходящее ровно
         // на +5, приходит ВМЕСТЕ со штрафом. Смысл предупреждения в том, чтобы
         // успеть отпустить газ, а не узнать о случившемся.
-        let threshold = OverspeedThreshold.kmh(cameraAhead: cameraAhead,
-                                               userTolerance: settings.overspeedTolerance)
-        let line = Double(limit) + threshold
+        let line = OverspeedThreshold.line(limitKmh: limit, cameraAhead: cameraAhead,
+                                           userTolerance: settings.overspeedTolerance)
         let over = speedKmh > line
         if over != isOverspeeding { isOverspeeding = over }
         overspeedRun.note(kmh: speedKmh, over: over, at: now)

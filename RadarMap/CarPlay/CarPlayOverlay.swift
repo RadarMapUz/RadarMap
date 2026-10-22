@@ -164,8 +164,8 @@ struct CarPlayOverlay: View {
                 // и пересчитывалась над картой машины на каждом фиксе.
                 SpeedLimitSign(limit: limit, diameter: 42,
                                isAssumed: env.speedLimits.isCurrentLimitAssumed,
-                               glow: env.speedLimits.isOverspeeding ? Theme.danger.opacity(0.8) : .black.opacity(0.3),
-                               glowRadius: env.speedLimits.isOverspeeding ? 9 : 4)
+                               glow: isOver ? Theme.danger.opacity(0.8) : .black.opacity(0.3),
+                               glowRadius: isOver ? 9 : 4)
                     .offset(x: 16, y: -12)
                     .transition(.scale.combined(with: .opacity))
             }
@@ -227,7 +227,7 @@ struct CarPlayOverlay: View {
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
                 HStack(spacing: 6) {
-                    Text(verbatim: "\(env.route.arrivalDate.formatted(date: .omitted, time: .shortened)) · \(Formatting.distance(env.route.remainingDistance))")
+                    Text(verbatim: "\(Formatting.clock(env.route.arrivalDate)) · \(Formatting.distance(env.route.remainingDistance))")
                         .font(.rounded(13, .semibold).monospacedDigit())
                         .foregroundStyle(Theme.textSecondary)
                     if camerasAhead > 0 {
@@ -317,18 +317,15 @@ struct CarPlayOverlay: View {
 
     // MARK: - Цвета и мелочи
 
-    /// Цвет скорости: белый в рамках лимита, янтарный при превышении без штрафа,
-    /// красный — когда превышение уже стоит денег.
-    private var speedColor: Color {
-        guard env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit else {
-            return Theme.textPrimary
-        }
-        // Одно правило на всё приложение: одна ситуация — один цвет.
-        switch Theme.speedLevel(speedKmh: env.location.speedKmh, limitKmh: limit,
-                                tolerance: env.settings.overspeedTolerance) {
-        case .normal, .neutral: return Theme.textPrimary
-        case .attention:        return Theme.warning
-        case .alarm:            return Theme.danger
-        }
+    /// Превышение — то же правило, что у знака рядом, плитки и телефона
+    /// (`OverspeedThreshold.showsOverspeed`): до 22.10 цифра здесь красилась
+    /// по штрафной шкале, и при 64 в зоне 60 знак был красным, а цифра белой.
+    private var isOver: Bool {
+        OverspeedThreshold.showsOverspeed(
+            limitShown: env.settings.speedLimitsEnabled ? env.speedLimits.currentLimit : nil,
+            isOverspeeding: env.speedLimits.isOverspeeding)
     }
+
+    /// Цвет скорости: обычный в рамках лимита, красный при превышении.
+    private var speedColor: Color { isOver ? Theme.danger : Theme.textPrimary }
 }

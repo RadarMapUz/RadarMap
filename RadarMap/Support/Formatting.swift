@@ -29,7 +29,7 @@ enum Formatting {
     /// год — только если не текущий. Было «11 окт. 2026г., 11:39»: сокращение,
     /// слипшийся год и дата там, где человек думает «сегодня».
     static func tripTitle(_ date: Date, calendar: Calendar = .current, now: Date = .now) -> String {
-        let time = date.formatted(date: .omitted, time: .shortened)
+        let time = clock(date)
         let day = calendar.isDate(date, equalTo: now, toGranularity: .year)
             ? dayTitle(date, calendar: calendar)
             : date.formatted(.dateTime.day().month(.wide).year().locale(numberLocale))
@@ -97,12 +97,27 @@ enum Formatting {
         let day = calendar.startOfDay(for: Date())
         // В поясе того же календаря: полночь по UTC, отформатированная по
         // Ташкенту, дала бы «12:45» вместо «7:45».
-        return day.addingTimeInterval(Double(minuteOfDay) * 60)
-            .formatted(Date.FormatStyle(date: .omitted, time: .shortened, timeZone: calendar.timeZone))
+        return NumberFormat.clock(day.addingTimeInterval(Double(minuteOfDay) * 60), timeZone: calendar.timeZone)
     }
 
+    /// Время на часах — по региону телефона (12/24 ч), см. `NumberFormat.clock`.
     static func clock(_ date: Date) -> String {
-        date.formatted(date: .omitted, time: .shortened)
+        NumberFormat.clock(date)
+    }
+
+    /// Дата словами — на ЯЗЫКЕ приложения: месяцы и дни недели не выходят
+    /// английскими при английской системе (отчёт качества 22.10, п. 7).
+    static func date(_ date: Date, _ style: Date.FormatStyle) -> String {
+        date.formatted(style.locale(numberLocale))
+    }
+
+    /// «22 окт. 2026 г., 14:05»: дата на языке приложения, время — как
+    /// `clock` (12/24 ч по региону). Одной строкой `.formatted(date:time:)`
+    /// месяц брался из языка системы.
+    static func dateAndClock(_ date: Date,
+                             _ dateStyle: Date.FormatStyle = Date.FormatStyle(date: .abbreviated, time: .omitted),
+                             separator: String = ", ") -> String {
+        Self.date(date, dateStyle) + separator + clock(date)
     }
 
     /// Разница с обычным временем в пути словами: «на 12 мин дольше обычного»,

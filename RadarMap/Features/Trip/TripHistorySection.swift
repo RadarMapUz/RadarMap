@@ -75,7 +75,7 @@ struct TripHistorySection: View {
             HStack(spacing: 12) {
                 trackThumbnail(record)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(record.startedAt.formatted(date: .omitted, time: .shortened))
+                    Text(Formatting.clock(record.startedAt))
                         .font(.rounded(14, .semibold))
                         .foregroundStyle(Theme.textPrimary)
                     // Километры, время и камеры одной строкой: справа остаются

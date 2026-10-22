@@ -1066,7 +1066,7 @@ final class MobileCameraService {
 
     private static func expiryText(_ expires: TimeInterval) -> String {
         let date = Date(timeIntervalSince1970: expires)
-        return date.formatted(date: .omitted, time: .shortened)
+        return Formatting.clock(date)
     }
 }
 

@@ -41,6 +41,23 @@ final class EnergyCheckTests: XCTestCase {
         }
     }
 
+    /// Окно «последние N дней» — модель, а не тело экрана (отчёт качества
+    /// 22.10, п. 4): неделя берёт сегодня и шесть дней до, без завтра и без
+    /// восьмого дня назад.
+    func testWindowTakesTheLastNDaysOnly() {
+        let rows = [-7, -6, 0, 1].map { index -> TripDay in
+            var row = TripDay(day: day(index))
+            row.distanceMeters = 10_000
+            return row
+        }
+        let now = day(0).addingTimeInterval(12 * 3_600)
+        let week = EnergyCheck.window(tripDays: rows, history: [], last: 7, now: now, calendar: calendar)
+        XCTAssertEqual(week.map(\.day), [day(-6), day(0)])
+        XCTAssertEqual(EnergyCheck.window(tripDays: rows, history: [], last: 30, now: now, calendar: calendar)
+            .map(\.day), [day(-7), day(-6), day(0)])
+        XCTAssertTrue(EnergyCheck.window(tripDays: rows, history: [], last: 0, now: now, calendar: calendar).isEmpty)
+    }
+
     func testShareFromThePanelAdjustsTheRange() {
         // Панель: 95 % — значит, реальный запас ≈ 95 км, а не 90.
         let result = EnergyCheck.compare(panel: .init(electricShare: 0.95), days: month(), profile: owner(),

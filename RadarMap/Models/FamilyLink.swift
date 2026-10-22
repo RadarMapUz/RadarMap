@@ -20,6 +20,7 @@
 //
 
 import Foundation
+import os
 
 /// Один близкий: имя, смайлик, режим и своя ссылка.
 nonisolated struct FamilyRecipient: Codable, Equatable, Identifiable, Sendable {
@@ -148,7 +149,15 @@ nonisolated struct FamilyCircle: Codable, Equatable, Sendable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        recipients = try c.decodeIfPresent([FamilyRecipient].self, forKey: .recipients) ?? []
+        // Поштучно (отчёт качества 22.10, п. 5а): один нечитаемый близкий
+        // раньше обнулял весь круг — первая же правка затирала сохранённое,
+        // и отозвать выданные ссылки было уже нечем. Теперь пропадает только
+        // битая запись, остальные близкие на месте.
+        let lossy = try c.decodeIfPresent(LossyArray<FamilyRecipient>.self, forKey: .recipients)
+        recipients = lossy?.elements ?? []
+        if let lossy, lossy.dropped > 0 {
+            Log.app.error("близкие: не прочиталось \(lossy.dropped, privacy: .public), остальные целы: \(lossy.firstError ?? "", privacy: .public)")
+        }
         driverName = try c.decodeIfPresent(String.self, forKey: .driverName) ?? ""
         pausedUntil = try c.decodeIfPresent(Date.self, forKey: .pausedUntil)
     }

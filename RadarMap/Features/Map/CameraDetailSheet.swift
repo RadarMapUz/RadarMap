@@ -176,7 +176,7 @@ struct CameraDetailSheet: View {
                     // Старый сервер поля created не шлёт: там эпоха, и вместо
                     // возраста получилось бы «55 лет назад» — молчим.
                     if trust.created.timeIntervalSince1970 > 0 {
-                        Text(trust.created.formatted(.relative(presentation: .named)))
+                        Text(trust.created.formatted(Date.RelativeFormatStyle(presentation: .named, locale: Formatting.numberLocale)))
                             .font(.rounded(11))
                             .foregroundStyle(Theme.textTertiary)
                     }

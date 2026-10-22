@@ -67,7 +67,7 @@ final class EtaShareService {
     /// всё равно полезно, а мёртвая ссылка — нет.
     func messageWithoutLink() -> String? {
         guard isAvailable, let route else { return nil }
-        let clock = route.arrivalDate.formatted(date: .omitted, time: .shortened)
+        let clock = Formatting.clock(route.arrivalDate)
         return String(format: String(localized: "Буду примерно в %1$@ (через %2$@)."),
                       clock, Formatting.duration(route.remainingTime))
     }
@@ -78,7 +78,7 @@ final class EtaShareService {
         let write = self.write ?? .secret(EtaShare.makeToken())
         self.write = write
         let url = EtaShare.link(base: AppConfig.syncBaseURL, token: write.address)
-        let clock = route.arrivalDate.formatted(date: .omitted, time: .shortened)
+        let clock = Formatting.clock(route.arrivalDate)
         let message = String(format: String(localized: "Буду примерно в %1$@ (через %2$@). Следить: %3$@"),
                              clock, Formatting.duration(route.remainingTime), url.absoluteString)
         return (url, message)

@@ -108,4 +108,33 @@ final class FormattingTests: XCTestCase {
         XCTAssertFalse(today.contains("\(calendar.component(.year, from: now))"),
                        "текущий год в заголовке — шум")
     }
+
+    // MARK: - Даты на языке приложения (отчёт качества 22.10, п. 7)
+
+    /// Месяц и день недели — на языке приложения, не системы: при английской
+    /// системе «October» посреди русского текста.
+    func testDatesFollowTheAppLanguage() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Tashkent")!
+        let october = Date(timeIntervalSince1970: 1_792_000_000)   // октябрь 2026
+        let ru = StatsPeriod.month.rangeTitle(containing: october, calendar: calendar,
+                                              now: october, locale: Locale(identifier: "ru"))
+        let uz = StatsPeriod.month.rangeTitle(containing: october, calendar: calendar,
+                                              now: october, locale: Locale(identifier: "uz"))
+        XCTAssertTrue(ru.lowercased().contains("октябр"), ru)
+        XCTAssertNotEqual(ru, uz, "узбекский — своими словами")
+        XCTAssertFalse((ru + uz).contains("October"))
+        XCTAssertEqual(Formatting.date(october, .dateTime.month(.wide)),
+                       october.formatted(.dateTime.month(.wide).locale(NumberFormat.locale)))
+    }
+
+    /// Дата со временем: дата — языком приложения, время — `clock` (12/24 ч
+    /// по региону, единственное исключение из правила).
+    func testDateAndClockJoinsAppDateWithRegionalClock() {
+        let date = Date(timeIntervalSince1970: 1_792_000_000)
+        let text = Formatting.dateAndClock(date)
+        XCTAssertEqual(text, Formatting.date(date, Date.FormatStyle(date: .abbreviated, time: .omitted))
+                       + ", " + Formatting.clock(date))
+        XCTAssertEqual(Formatting.clock(date), NumberFormat.clock(date))
+    }
 }

@@ -7,11 +7,12 @@
 //  две минуты, а один-два файла по запросу, перепроверка с ETag не чаще
 //  `typicalTrafficRefreshSeconds`.
 //
-//  Просит их AppEnvironment и только тогда, когда они нужны: дом и работа
-//  известны, путь уже лёг в профиль, а своих поездок для «обычно» ещё меньше
-//  трёх. Серверу запрос говорит только час (файл общий для всех); линия
-//  пути, дом и работа остаются на телефоне — время по линии складывает
-//  TypicalTraffic.
+//  Просят их двое, и только тогда, когда они нужны: AppEnvironment для
+//  дороги на работу (дом и работа известны, путь уже лёг в профиль, а своих
+//  поездок для «обычно» ещё меньше трёх) и маршрут (27.E — обычная пробка
+//  часа в ETA любого маршрута, когда живых пробок нет или они далеко).
+//  Серверу запрос говорит только час (файл общий для всех); линия пути,
+//  маршрут, дом и работа остаются на телефоне.
 //
 //  Выключатели те же, что у пробок: «Пробки» в настройках и пульт
 //  (`features.traffic`) — `isAllowed`. Выключено — кэш забывается.
@@ -30,6 +31,8 @@ final class TypicalTrafficService {
         var etag: String?
         /// Когда спрашивали сервер (после ошибки — сдвинуто к скорому повтору).
         var checkedAt: Date
+        /// Когда файл последний раз просили — вытесняется давно не нужный.
+        var usedAt: Date = .distantPast
     }
 
     private var cache: [String: Entry] = [:]
@@ -42,6 +45,13 @@ final class TypicalTrafficService {
     var isOnline: () -> Bool = { true }
 
     private let api = APIClient()
+
+    /// Файл часа из памяти, без сети (маршрут считает ETA синхронно); nil —
+    /// не загружен или пробки выключены.
+    func cached(_ bucket: TypicalTraffic.Bucket) -> TypicalTraffic? {
+        guard isAllowed() else { return nil }
+        return cache[bucket.name]?.traffic
+    }
 
     /// Файлы этих часов — из памяти или с сервера; часа нет в ответе — данных
     /// нет (выключено, нет сети и кэша, файл пуст или чужого формата).
@@ -66,9 +76,16 @@ final class TypicalTrafficService {
             if !cache.isEmpty { cache = [:] }
             return
         }
-        // В памяти — только нужные часы: город целиком — тысячи рёбер на файл.
+        // В памяти — не больше `typicalTrafficCacheLimit` файлов: город
+        // целиком — тысячи рёбер на файл. Просят двое (дорога на работу и
+        // маршрут), поэтому вытесняется давно не нужный, а не «чужой»: иначе
+        // каждый выкидывал бы файлы другого, и тот качал бы их заново.
         let wanted = Set(buckets.map(\.name))
-        cache = cache.filter { wanted.contains($0.key) }
+        let stamp = Date()
+        for name in wanted { cache[name]?.usedAt = stamp }
+        let keep = Set(cache.sorted { ($0.value.usedAt, $0.key) > ($1.value.usedAt, $1.key) }
+            .prefix(max(AppConfig.typicalTrafficCacheLimit, wanted.count)).map(\.key))
+        cache = cache.filter { keep.contains($0.key) || wanted.contains($0.key) }
         for bucket in buckets.sorted(by: { $0.name < $1.name }) {
             let now = Date()
             if let at = cache[bucket.name]?.checkedAt,
@@ -76,6 +93,7 @@ final class TypicalTrafficService {
             guard isOnline() else { continue }
             var entry = cache[bucket.name] ?? Entry(traffic: nil, etag: nil, checkedAt: now)
             entry.checkedAt = now
+            entry.usedAt = now
             do {
                 if let fresh = try await Self.fetch(api: api, bucket: bucket, etag: entry.etag) {
                     entry.etag = fresh.etag

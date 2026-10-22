@@ -62,8 +62,12 @@ nonisolated struct TypicalTraffic: Sendable {
     }
 
     let bucket: Bucket
-    /// Рёбра файла: `kmh` (и `modelKmh`, то же число) — обычная скорость в
-    /// этот час; уровень пробки здесь не смысл, а заглушка.
+    /// Рёбра файла: `kmh` — обычная скорость в этот час, `modelKmh` —
+    /// скорость графа (шестой столбец, 27.E), а уровень посчитан по их
+    /// отношению теми же порогами, что у сервера: так «обычно» складывается
+    /// с любым маршрутом той же меркой, что живые пробки (TrafficForecast).
+    /// Старый файл без шестого столбца — `modelKmh` = `kmh`, уровень 1:
+    /// сравнивать не с чем, и задержки маршруту он не добавляет.
     let snapshot: TrafficSnapshot
 
     // MARK: - Час
@@ -85,7 +89,8 @@ nonisolated struct TypicalTraffic: Sendable {
 
     // MARK: - Разбор
 
-    /// Формат версии 1: `{"v":1,"bucket":"wd-08","generated":t,"edges":[[ulat,ulon,vlat,vlon,kmh]]}`.
+    /// Формат версии 1: `{"v":1,"bucket":"wd-08","generated":t,"edges":[[ulat,ulon,vlat,vlon,kmh,model_kmh]]}`
+    /// (model_kmh — с 27.E, 0 или нет — неизвестна).
     /// Другая версия, чужой час или не JSON — nil: догадка о формате хуже,
     /// чем честное «нет данных». Возраст не проверяется: файл переписывается
     /// только при смене рёбер, и тихий час (выходные, 3 ночи) законно стоит
@@ -99,9 +104,11 @@ nonisolated struct TypicalTraffic: Sendable {
               let raw = object["edges"] as? [[Double]] else { return nil }
         let edges = raw.compactMap { row -> TrafficEdge? in
             guard row.count >= 5, row[4] > 0, row[4] <= 200 else { return nil }
+            let model = row.count >= 6 && row[5] > 0 && row[5] <= 200 ? row[5] : row[4]
             return TrafficEdge(a: CLLocationCoordinate2D(latitude: row[0], longitude: row[1]),
                                b: CLLocationCoordinate2D(latitude: row[2], longitude: row[3]),
-                               level: 1, kmh: row[4], modelKmh: row[4])
+                               level: TrafficSnapshot.level(kmh: row[4], modelKmh: model),
+                               kmh: row[4], modelKmh: model)
         }
         return TypicalTraffic(bucket: expected,
                               snapshot: TrafficSnapshot(generated: Date(timeIntervalSince1970: generated),

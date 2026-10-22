@@ -1363,6 +1363,22 @@
         }
       }
     },
+    "+%@ — обычно в этот час": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+%@ — обычно в этот час"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "odatda shu soatda +%@"
+          }
+        }
+      }
+    },
     "+%lld км/ч": {
       "localizations": {
         "ru": {
@@ -3512,6 +3528,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Oldinda yoʻl yopiq"
+          }
+        }
+      }
+    },
+    "Впереди пробка: +%@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Впереди пробка: +%@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldinda tirbandlik: +%@"
           }
         }
       }
@@ -10258,6 +10290,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "OK"
+          }
+        }
+      }
+    },
+    "около %1$@, через %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "около %1$@, через %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "taxminan %1$@, %2$@ dan keyin"
           }
         }
       }

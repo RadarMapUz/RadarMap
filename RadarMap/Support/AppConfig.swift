@@ -850,6 +850,16 @@ nonisolated enum AppConfig {
     /// направлением (иначе встречная полоса проспекта красила бы нашу).
     nonisolated static let trafficMatchMeters: CLLocationDistance = 18
     nonisolated static let trafficMatchDegrees: Double = 35
+    /// Уровень ребра по отношению скорости к скорости графа — зеркало
+    /// JAM_RATIO / SLOW_RATIO сервера (traffic_build.py): ниже первого —
+    /// пробка, ниже второго — медленно. Телефон считает уровень сам только
+    /// для файлов «обычно» (там его нет), now.json несёт уровень сервера.
+    nonisolated static let trafficJamRatio = 0.35
+    nonisolated static let trafficSlowRatio = 0.6
+    /// Живым пробкам верим на столько вперёд по времени пути: дальше по
+    /// маршруту (и для выезда позже) — обычная скорость этого часа
+    /// (TrafficForecast). Пробка из now.json через полчаса уже другая, с.
+    nonisolated static let trafficLiveHorizonSeconds: TimeInterval = 30 * 60
     /// Пробка на линии маршрута (RouteTraffic): участок короче этого не
     /// перекрашивает линию — одиночное ребро на перекрёстке мигало бы пятном.
     nonisolated static let routeTrafficMinMeters: CLLocationDistance = 40
@@ -1096,6 +1106,12 @@ nonisolated enum AppConfig {
     static let typicalTrafficRefreshSeconds: TimeInterval = 6 * 3600
     /// После ошибки сети — повтор не раньше этого, с.
     static let typicalTrafficRetrySeconds: TimeInterval = 15 * 60
+    /// Файлов «обычно» в памяти не больше этого: час выезда и следующие часы
+    /// маршрута плюс дорога на работу — город целиком тысячи рёбер на файл.
+    static let typicalTrafficCacheLimit = 4
+    /// Прогноз по часу (TrafficForecast) спрашивает файлы не дальше этого
+    /// времени пути: междугородний маршрут на 9 часов не тянет 10 файлов, с.
+    nonisolated static let typicalTrafficMaxSpanSeconds: TimeInterval = 3 * 3600
     /// Оценка до выезда пересчитывается со сменой этой «четверти часа» (и
     /// сразу — на новых пробках или профиле), с.
     nonisolated static let commuteEstimateSlotSeconds: TimeInterval = 15 * 60
@@ -2673,6 +2689,12 @@ nonisolated enum AppConfig {
     /// Баннер в машине, вернувшийся после камеры с остатком меньше этого, не
     /// показывается: мелькнувший баннер за рулём хуже никакого.
     static let carPlayRoadWeatherMinSeconds: TimeInterval = 3
+    /// «Впереди пробка: +6 мин» в машине (27.E): столько висит баннер — голос
+    /// говорит одну фразу, а глазам на дорогу нужно пару взглядов, с.
+    static let carPlayJamBannerSeconds: TimeInterval = 12
+    /// Вернувшийся после камеры баннер пробки с остатком меньше этого не
+    /// показывается (как у погоды на перевале), с.
+    nonisolated static let carPlayJamMinSeconds: TimeInterval = 3
 
     // MARK: - Метан на АГНКС (CngRules, 12б.4)
 

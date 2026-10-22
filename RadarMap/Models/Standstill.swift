@@ -202,10 +202,6 @@ nonisolated struct Standstill: Sendable {
         stop(at: coordinate)
     }
 
-    mutating func reset() {
-        self = Standstill()
-    }
-
     private mutating func leave() {
         isStopped = false
         anchor = nil

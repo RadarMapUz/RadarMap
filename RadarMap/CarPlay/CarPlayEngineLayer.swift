@@ -46,11 +46,14 @@ struct CarPlayEngineLayer: View {
     /// Подпись — у камеры ДЛЯ ПОКАЗА (displayNearestCamera, удержание на
     /// пороге скорости — не мигает в пробке) и только когда это та же камера,
     /// о которой тревога: иначе цифра встала бы у боковой камеры.
-    private func cameraLabel(_ cue: CarPlayCameraCue.Cue) -> CarPlayCameraCue.Label? {
+    /// Стоит подпись там же, где нарисован значок: на линии маршрута, если
+    /// камера на пути (27.B, CameraOnLine), иначе на её координате.
+    private func cameraLabel(_ cue: CarPlayCameraCue.Cue, line: CameraOnLine.Display) -> CarPlayCameraCue.Label? {
         guard cue.distanceLabel, let camera = env.location.displayNearestCamera,
               camera.id == cue.mapAlertID,
               let distance = env.location.displayDistanceToNearest else { return nil }
-        return CarPlayCameraCue.Label(id: camera.id, latitude: camera.lat, longitude: camera.lon,
+        let at = line.coordinate(of: camera)
+        return CarPlayCameraCue.Label(id: camera.id, latitude: at.latitude, longitude: at.longitude,
                                       text: Formatting.distance(distance))
     }
 
@@ -107,6 +110,7 @@ struct CarPlayEngineLayer: View {
             carY: { surface.fixedMeY ?? Self.meY(size: size, safe: safe, share: $0) })
         let frame = model.cameraSmoother.step(toward: target, at: Date())
         let cue = CarPlayCameraCue.current(env.location)
+        let cameraLine = env.cameraOnLine
         let offlineFiles: OfflineFiles? = env.network.isMapOnline
             ? nil : env.offlineMaps.offlineFiles(at: me)
         return EngineMapView(
@@ -129,14 +133,12 @@ struct CarPlayEngineLayer: View {
             // Тревожный облик и подпись «400 м» — по CarPlayCameraCue: своя
             // камера остаётся значком с галочкой, без тревоги и цифры.
             alertCameraID: cue.mapAlertID,
-            // Вариант B: цвет типа — только у камер на нашем пути.
-            pathCameraIDs: CameraMarkerLook.pathIDs(
-                route: env.route.camerasOnRoute.map { (id: $0.id, along: $0.distanceAlong) },
-                progress: env.route.isActive ? env.route.progressAlong : nil,
-                passedTolerance: AppConfig.routePassedToleranceMeters,
-                nearest: env.location.displayNearestCamera?.id),
+            // Вариант B: цвет типа — только у камер на нашем пути; они же —
+            // на линии маршрута, и подпись «400 м» там же (27.B).
+            pathCameraIDs: cameraLine.pathIDs,
+            cameraPoints: cameraLine.points,
             familiarCameraIDs: env.location.familiarCameraIDs,
-            cameraLabel: cameraLabel(cue),
+            cameraLabel: cameraLabel(cue, line: cameraLine),
             route: env.route.routeCoordinates,
             routeObject: env.route.polyline,
             routeProgress: env.route.progressAlong,

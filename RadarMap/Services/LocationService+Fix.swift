@@ -401,6 +401,8 @@ extension LocationService {
             }
             let shownCourse = snapped?.courseDegrees ?? currentCourse
             if displayCourse != shownCourse { displayCourse = shownCourse }
+            let roadBearing = snapped?.courseDegrees
+            if displayRoadBearing != roadBearing { displayRoadBearing = roadBearing }
             // Стоянка: точка не сдвинулась — прогресс маршрута не мог
             // измениться, пересчёт (проекция, манёвры, префикс) пропускаем.
             // Порог накопительный от последней ОБРАБОТАННОЙ точки: ползание

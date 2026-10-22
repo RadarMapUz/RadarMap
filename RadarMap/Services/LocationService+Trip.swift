@@ -94,6 +94,7 @@ extension LocationService {
         }
         applyLocationMode()
         liveActivity?.startIfNeeded(state: activityState)
+        alerts.warmHaptics()   // асинхронно: первый сигнал поездки не ждёт движок
         if askAfterStart { notifier.askDriverCheck() }
     }
 

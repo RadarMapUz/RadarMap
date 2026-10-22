@@ -82,6 +82,19 @@ nonisolated enum AppConfig {
     /// с полной точностью, как и раньше.
     nonisolated static let gpsStandstillNearCameraMeters: CLLocationDistance = 150
 
+    /// Тактильный движок прогревается заранее — на подъезде к камере, когда
+    /// до неё не дальше радиуса оповещения × это число (HapticGate). Запуск
+    /// CoreHaptics стоит ~90 мс, и платить их на первом оповещении значило
+    /// задержать голос о камере (отчёт качества 22.10, п. 1).
+    nonisolated static let hapticWarmRadiusFactor = 1.5
+    /// Не чаще раза в столько секунд пробуем снова запустить движок, который
+    /// не запустился (фоновое пробуждение: в фоне CoreHaptics отказывает, и
+    /// без паузы каждый фикс подъезда просил бы старт заново).
+    nonisolated static let hapticEngineRetrySeconds: TimeInterval = 10
+    /// Запасной системный отклик готовим (`prepare`) не чаще раза в столько
+    /// секунд: подготовка держит Taptic Engine в готовности пару секунд.
+    nonisolated static let hapticFallbackPrepareSeconds: TimeInterval = 2
+
     // MARK: - Умный режим оповещений (город/трасса) — пороги детектора.
     // nonisolated: читаются из чистого AlertPolicy (и его тестов) без прыжка на main.
 

@@ -3,7 +3,8 @@
 //  RadarMapTests
 //
 //  Значок «я» между фиксами (25.B): прямая без лага, поворот без проскока,
-//  остановка без уезда, разворот, пропуск фиксов, поправка без шага назад —
+//  остановка без уезда, разворот, пропуск фиксов, поправка без шага назад
+//  (плавность на шуме — MarkerSmoothnessTests) —
 //  и граница применения: конвейер оповещений предсказание не читает.
 //
 
@@ -37,9 +38,11 @@ final class MarkerPredictorTests: XCTestCase {
         var p = MarkerPredictor()
         p.update(fix(0, 0, course: 0, speed: 14, time: 0), now: 0, immediate: true)
         XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 1)).coordinate).north, 14, accuracy: 0.1)
-        XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 1.5)).coordinate).north, 21, accuracy: 0.1)
-        // Фиксов нет — дальше 1,5 с вперёд не угадываем.
-        XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 4)).coordinate).north, 21, accuracy: 0.1)
+        let horizon = 14 * AppConfig.markerMaxLeadSeconds
+        XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: AppConfig.markerMaxLeadSeconds)).coordinate).north, horizon,
+                       accuracy: 0.1)
+        // Фиксов нет — дальше горизонта вперёд не угадываем.
+        XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 4)).coordinate).north, horizon, accuracy: 0.1)
         XCTAssertFalse(p.isMoving(at: 4), "горизонт исчерпан — такт кадров не нужен")
     }
 
@@ -153,8 +156,9 @@ final class MarkerPredictorTests: XCTestCase {
         XCTAssertFalse(p.isMoving(at: 0.1))
     }
 
-    /// Тормозили — значок чуть уехал вперёд; встали — короткий доезд назад
-    /// к точке остановки, и ни метра дальше неё.
+    /// Тормозили — значок чуть уехал вперёд; встали — значок тормозит без
+    /// скачка скорости (27.A: «не дёргаться») и плавно доезжает к точке
+    /// остановки, ни метра дальше неё, сменив направление не больше раза.
     func testStopAfterOvershootSettlesBackToFix() throws {
         var p = MarkerPredictor()
         p.update(fix(0, 0, course: 0, speed: 6, time: 0), now: 0, immediate: true)
@@ -163,14 +167,20 @@ final class MarkerPredictorTests: XCTestCase {
         XCTAssertEqual(p.settle, .glideBack)
         XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 1)).coordinate).north, ahead, accuracy: 0.01, "без скачка")
         var last = ahead
-        for step in 1...30 {
+        var lastStep = 6.0 / 60
+        var reversals = 0
+        for step in 1...(60 * 12) {
             let north = xy(try XCTUnwrap(p.pose(at: 1 + Double(step) / 60)).coordinate).north
-            XCTAssertLessThanOrEqual(north, last + 0.001)
+            XCTAssertLessThan(abs(north - last), 0.15, "кадр без рывка")
             XCTAssertGreaterThanOrEqual(north, 3 - 0.001, "назад дальше точки остановки — нельзя")
+            let move = north - last
+            if abs(move) > 1e-4, abs(lastStep) > 1e-4, (move > 0) != (lastStep > 0) { reversals += 1 }
+            if abs(move) > 1e-4 { lastStep = move }
             last = north
         }
-        XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 1.6)).coordinate).north, 3, accuracy: 0.01)
-        XCTAssertFalse(p.isMoving(at: 1.6))
+        XCTAssertLessThanOrEqual(reversals, 1, "туда-сюда")
+        XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 13)).coordinate).north, 3, accuracy: 0.05)
+        XCTAssertFalse(p.isMoving(at: 13))
     }
 
     // MARK: - Разворот
@@ -189,8 +199,12 @@ final class MarkerPredictorTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(south, lastSouth - 0.001, "по новому курсу — только вперёд")
             lastSouth = south
         }
-        XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 2.5)).coordinate).north, 2 - 4 * 1.5, accuracy: 0.3,
-                       "едем на юг, а не по старой линии на север")
+        // Разворот — смена направления скорости: значок разгоняется на юг
+        // с ограниченным ускорением, без прыжка; к 2,5 с он уже южнее точки
+        // фикса и догоняет машину.
+        let north = xy(try XCTUnwrap(p.pose(at: 2.5)).coordinate).north
+        XCTAssertLessThan(north, 0, "едем на юг, а не по старой линии на север")
+        XCTAssertGreaterThan(north, 2 - 4 * 1.5 - 0.5, "не обгоняет машину")
     }
 
     // MARK: - Пропуск фиксов и поправка
@@ -199,19 +213,26 @@ final class MarkerPredictorTests: XCTestCase {
         var p = MarkerPredictor()
         let v = 14.0
         p.update(fix(0, 0, course: 0, speed: v, time: 0), now: 0, immediate: true)
-        // Фиксов нет 3 с: значок встаёт на 1,5 с впереди и ждёт.
-        XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 2.9)).coordinate).north, 21, accuracy: 0.1)
+        // Фиксов нет 3 с: значок встаёт на горизонте впереди и ждёт.
+        let horizon = v * AppConfig.markerMaxLeadSeconds
+        XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 2.9)).coordinate).north, horizon, accuracy: 0.1)
         p.update(fix(0, 3 * v, course: 0, speed: v, time: 3), now: 3)
         XCTAssertEqual(p.settle, .catchUp)
-        var last = 21.0
-        for step in 0...60 {
+        var last = horizon
+        for step in 0...(30 * 5) {
             let t = 3 + Double(step) / 30
+            // Дальше фиксы снова раз в секунду.
+            if step > 0, step % 30 == 0 {
+                let second = 3 + Double(step / 30)
+                p.update(fix(0, second * v, course: 0, speed: v, time: second), now: t)
+            }
             let north = xy(try XCTUnwrap(p.pose(at: t)).coordinate).north
             XCTAssertGreaterThanOrEqual(north, last - 0.001, "догон — только вперёд")
+            XCTAssertLessThan(north - last, (v + AppConfig.markerMaxBoostShare * v + AppConfig.markerMaxBoostMps) / 30 + 0.05,
+                              "догон без рывка: не быстрее машины на markerMaxBoost")
             last = north
         }
-        XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 4.5)).coordinate).north, 4.5 * v, accuracy: 0.5,
-                       "за полторы секунды догнал")
+        XCTAssertEqual(last, 8 * v, accuracy: 1.5, "за пять секунд догнал")
     }
 
     /// Шум фикса вдоль дороги ±2 м на 50 км/ч: значок не шагает назад ни на кадре.
@@ -233,25 +254,6 @@ final class MarkerPredictorTests: XCTestCase {
         }
     }
 
-    /// Новый фикс сильно позади нарисованного (10 м): короткий доезд за
-    /// полсекунды, без телепорта — ни один кадр не прыгает больше чем на
-    /// пару метров.
-    func testLargeBackwardCorrectionIsShortGlide() throws {
-        var p = MarkerPredictor()
-        let v = 14.0
-        p.update(fix(0, 0, course: 0, speed: v, time: 0), now: 0, immediate: true)
-        let shown = xy(try XCTUnwrap(p.pose(at: 1)).coordinate).north   // 14
-        p.update(fix(0, 4, course: 0, speed: v, time: 1), now: 1)       // оценка 4 м — на 10 позади
-        XCTAssertEqual(p.settle, .glideBack)
-        var last = shown
-        for step in 1...30 {
-            let north = xy(try XCTUnwrap(p.pose(at: 1 + Double(step) / 60)).coordinate).north
-            XCTAssertLessThan(abs(north - last), 2, "кадр без рывка")
-            last = north
-        }
-        XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 1.5)).coordinate).north, 4 + v * 0.5, accuracy: 0.1)
-    }
-
     func testFarJumpIsPlacedImmediately() throws {
         var p = MarkerPredictor()
         p.update(fix(0, 0, course: 0, speed: 0, time: 0), now: 0, immediate: true)
@@ -266,7 +268,7 @@ final class MarkerPredictorTests: XCTestCase {
         let mid = xy(try XCTUnwrap(p.pose(at: 1.2)).coordinate)
         XCTAssertGreaterThan(mid.east, 0.5)
         XCTAssertEqual(mid.north, 0, accuracy: 0.01)
-        XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 4)).coordinate).east, 0, accuracy: 0.01)
+        XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 7)).coordinate).east, 0, accuracy: 0.05)
     }
 
     // MARK: - Граница: только картинка

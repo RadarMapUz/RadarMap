@@ -7,6 +7,10 @@
 //  перестроения; окно у машины; краска окна (до среза прозрачно, пробки и
 //  манёвр на своих местах); стрелки прячутся ровно за срезом.
 //
+//  Метры точек здесь — 111 320 м на градус (MarkerPredictor.moved), а линия
+//  меряет по MKMapPoint (геодезически, на 0,25 % короче по широте): отсюда
+//  допуски в метр-полтора на сотнях метров.
+//
 
 import CoreLocation
 import XCTest
@@ -54,12 +58,12 @@ final class RouteCutTests: XCTestCase {
     func testCutStopsAtTheBendUntilTheFixPassesIt() {
         var tracker = RouteCut.Tracker()
         XCTAssertEqual(corner.bends.count, 1)
-        XCTAssertEqual(corner.bends[0], 300, accuracy: 0.5)
+        XCTAssertEqual(corner.bends[0], 300, accuracy: 1)
         // Фикс за 5 м до угла; срезанный угол даёт точку у второй ветки (на 306 м
         // по линии) — граница ждёт у излома.
-        XCTAssertEqual(advance(&tracker, line: corner, at(4, 299), course: 45, fixAlong: 295), 300, accuracy: 0.5)
+        XCTAssertEqual(advance(&tracker, line: corner, at(4, 299), course: 45, fixAlong: 295), corner.bends[0], accuracy: 0.01)
         // Фикс прошёл угол — граница идёт дальше.
-        XCTAssertEqual(advance(&tracker, line: corner, at(12, 300), course: 90, fixAlong: 305), 312, accuracy: 0.5)
+        XCTAssertEqual(advance(&tracker, line: corner, at(12, 300), course: 90, fixAlong: 305), 312, accuracy: 1.5)
     }
 
     func testUTurnDoesNotJumpToTheReturnLeg() {
@@ -73,7 +77,7 @@ final class RouteCutTests: XCTestCase {
         XCTAssertLessThanOrEqual(cut, 200.01)
         XCTAssertGreaterThan(cut, 195)
         // Развернулись, фикс на обратной ветке (на 254 м линии) — граница за ним.
-        XCTAssertEqual(advance(&tracker, line: line, at(4, 150), course: 180, fixAlong: 250), 254, accuracy: 0.5)
+        XCTAssertEqual(advance(&tracker, line: line, at(4, 150), course: 180, fixAlong: 250), 254, accuracy: 1.5)
     }
 
     func testLeavingTheRouteFreezesTheCut() {
@@ -98,7 +102,7 @@ final class RouteCutTests: XCTestCase {
         var tracker = RouteCut.Tracker()
         advance(&tracker, line: straight, at(0, 100), fixAlong: 95)
         // Объезд по дублёру и возврат на линию на 700 м — прогресс фикса знает.
-        XCTAssertEqual(advance(&tracker, line: straight, at(0, 705), fixAlong: 700), 705, accuracy: 0.5)
+        XCTAssertEqual(advance(&tracker, line: straight, at(0, 705), fixAlong: 700), 705, accuracy: 2)
     }
 
     func testRerouteStartsTheCutAgain() {

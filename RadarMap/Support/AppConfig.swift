@@ -2238,7 +2238,10 @@ nonisolated enum AppConfig {
     /// Дальше этого от времени фикса значок не угадывает: стрелка шла к
     /// ПОСЛЕДНЕМУ фиксу за интервал между фиксами и всегда была на фикс
     /// позади (замер 21.10: 12 м на 50 км/ч, «машина опаздывает»).
-    static let markerMaxLeadSeconds: Double = 1.5
+    /// 2 с, а не 1,5 (27.A): фиксы приходят неровно (0,8–1,5 с) и с
+    /// задержкой ~0,5 с — на 1,5 с значок вставал перед самым фиксом и
+    /// трогался заново, рывком.
+    static let markerMaxLeadSeconds: Double = 2.0
     /// Без линии маршрута и в повороте (курс крутится быстрее
     /// markerTurnRateDegrees в секунду) — только эта доля: по прямой от курса
     /// в повороте значок уезжал бы с дороги.
@@ -2251,16 +2254,20 @@ nonisolated enum AppConfig {
     static let markerPathMeters: Double = 80
     /// Ниже — стоим: значок вперёд не едет.
     static let markerMovingMps: Double = 0.5
-    /// Догон (значок позади или в стороне от новой оценки): постоянная
-    /// времени экспоненты.
+    /// Поправка на фиксе (27.A): кривая гашения смещения — самая быстрая
+    /// (постоянная времени от markerCatchUpSeconds до markerMaxEaseSeconds),
+    /// при которой ускорение значка не больше markerMaxAccel, в движении он
+    /// не медленнее markerMinSpeedShare скорости (назад — никогда) и не
+    /// быстрее её на markerMaxBoostShare × скорость + markerMaxBoostMps.
+    /// До 22.10 впереди дальше 4 м значок за 0,5 с доезжал НАЗАД, а позади
+    /// догонял экспонентой 0,4 с со скачком скорости на каждом фиксе —
+    /// «туда-сюда дёргается» при шуме фиксов.
     static let markerCatchUpSeconds: Double = 0.4
-    /// Значок впереди новой оценки не дальше этого — поправка без шага
-    /// назад: значок просто едет медленнее (markerAbsorbShare скорости),
-    /// пока оценка его не догонит.
-    static let markerHoldAheadMeters: Double = 4
-    static let markerAbsorbShare: Double = 0.5
-    /// Впереди дальше (или стоим) — короткий доезд назад за это время.
-    static let markerBackGlideSeconds: Double = 0.5
+    static let markerMaxEaseSeconds: Double = 2.0
+    static let markerMaxAccel: Double = 6
+    static let markerMinSpeedShare: Double = 0.2
+    static let markerMaxBoostShare: Double = 0.6
+    static let markerMaxBoostMps: Double = 2
     /// Скачок дальше — ставим сразу (выезд из тоннеля, первый фикс).
     static let markerJumpMeters: Double = 100
     // MARK: - Срез линии маршрута под значком (RouteCut, 27.A)
@@ -2279,8 +2286,13 @@ nonisolated enum AppConfig {
     /// Запас к пределу «фикс + скорость × markerMaxLeadSeconds»: мягкая
     /// поправка значка может держать его на пару метров впереди оценки.
     static let routeCutLeadSlackMeters: Double = 5
-    /// Краска окна переписывается, когда срез сдвинулся хотя бы на столько.
+    /// Краска окна переписывается, когда срез сдвинулся на столько точек
+    /// экрана (в метрах масштаба), но не меньше и не больше пределов, м:
+    /// граница под корпусом значка (36 pt) — шаг в 3 pt не виден, а каждая
+    /// перекраска — пересборка отрисовок трёх слоёв в движке.
+    static let routeCutRepaintPoints: Double = 3
     static let routeCutRepaintMeters: Double = 0.3
+    static let routeCutRepaintMaxMeters: Double = 1.5
     /// Новое окно и новый остаток линии ждут своих тайлов не дольше: дальше
     /// считаем, что движок их показал (окно вне вида — тайлов нет вовсе).
     static let routeCutConfirmSeconds: CFTimeInterval = 0.6

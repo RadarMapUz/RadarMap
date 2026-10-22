@@ -7,8 +7,8 @@
 разделительные, площади перекрёстков, зебры, стрелки, светофоры (build_mvt.py).
 
 Две оси выбора:
-* тема — light (палитра снята со скриншота Яндекс.Карт 28.09.2026) или dark
-  (для езды ночью: светлая карта в тёмной кабине слепит);
+* тема — light (с 22.10.2026 «чистый день»: дороги цветом по классу, 27.C) или dark
+  («ночь-премиум»: для езды ночью — светлая карта в тёмной кабине слепит);
 * режим — full (как у Яндекса: дома, POI, подписи всего) или roads («только
   дорога», просьба владельца 28.09.2026: дорога красиво, остальное не нужно —
   вода и зелень остаются приглушёнными только для ориентира).
@@ -18,6 +18,7 @@
 разделительные. Две геометрии дороги на одном экране — пунктир мимо полотна.
 
     python3 server/omt/make_style.py https://soulmed.uz/radarmap [--theme dark] [--mode roads]
+    python3 server/omt/make_style.py --app   # ресурсы приложения
 """
 import copy
 import json
@@ -36,85 +37,109 @@ CLASS_M = {"motorway": 32, "trunk": 30, "primary": 24, "secondary-tertiary": 16,
            "motorway-link": 9, "minor": 9, "service-track": 5.5, "path": 1.8, "path-steps": 1.8}
 MAJOR = {"motorway", "trunk", "primary", "secondary-tertiary", "link", "motorway-link"}
 
+# Палитра — «Ночь-премиум + чистый день» (27.C, выбор владельца 22.10.2026
+# из пяти вариантов; прежняя — холодный серый асфальт днём и графит с
+# тёмно-серыми домами ночью, «мрачно»). Числа контраста и правила —
+# palette_check.py и test_palette_check.
+#
+# Иерархия дорог — ЦВЕТОМ на всех зумах, как у Яндекса, а не одним серым:
+# магистраль (road_trunk), проспект (road), второй класс (road_secondary),
+# третий (road_tertiary), прочие (minor). Днём магистраль абрикосовая,
+# проспект жёлтый, остальные белые с серой кромкой на тёплой земле; ночью
+# магистрали «подсвечены» светлым сланцем с золотой кромкой на глубоком
+# сине-графитовом, улицы — тёмно-синие.
+#
+# Конфликты решены явно: «медленно» (#e8a100) темнее и насыщеннее абрикоса
+# и жёлтого — пробка отделена светлотой (ΔE ≥ 36); линия маршрута лежит в
+# своей тёмной кайме (≥ 4,5:1 к любой дороге днём). Ночью светлота асфальта
+# держится вне полосы 0,083–0,133, где линия маршрута теряет 3:1 и телом, и
+# каймой; подсвеченные магистрали — не светлее 0,18, иначе белое имя улицы
+# на них падает ниже 4,5:1. Белая разметка на жёлтом проспекте — 1,3:1
+# (на сером было 1,9:1): цена цвета класса.
 PALETTES = {
     "light": {
-        "bg": "#f5f4f1", "park": "#cfe9b8", "wood": "#c3e3a6", "water": "#9fd2f5",
-        "road": "#b4bccb", "road_trunk": "#aab3c4", "road_tertiary": "#c3cad6",
+        "bg": "#efece5", "park": "#c0e5a5", "wood": "#b0dc92", "water": "#92cff4",
+        "road_trunk": "#ffcf9a", "road": "#ffe7a3", "road_secondary": "#ffffff", "road_tertiary": "#ffffff",
         "road_far": "#fff3c4", "edge": "#ecc44a",
-        # Мелкие улицы — тот же асфальт, светлее магистрали. Белыми они
-        # совпадали с пешеходными дорожками: двор читался тропинкой, а рядом с
-        # серыми магистралями кадр выглядел двумя разными картами (аудит
-        # 28.09.2026). Белое осталось только у дорожек — их с дорогой не спутать.
-        # Мелкие улицы — тот же асфальт, светлее магистрали: так у Яндекса
-        # вблизи (снимок Навои × Фурката, 07.10.2026) — проезды дворов серые,
-        # белые полосы рядом — тротуары. Белой улица остаётся только на
-        # обзоре (minor_far, линия основы до 15-го зума).
-        "minor": "#d5dae2", "minor_far": "#ffffff", "minor_edge": "#b4bbc6", "minor_edge_far": "#dcd9d2",
-        "path": "#ffffff", "path_edge": "#e3e1db",
+        # Двор — белый с серой кромкой (как у Яндекса); дорожка — тёплая
+        # бежевая, а не белая: с двором её не спутать (аудит 28.09.2026).
+        "minor": "#ffffff", "minor_far": "#ffffff", "minor_edge": "#c6c0b5", "minor_edge_far": "#d2cdc3",
+        "path": "#f3eee4", "path_edge": "#dcd5c7",
         # Обзор (до 15-го): иерархия цветом, а не одной жёлтой сеткой.
-        "far_motorway": "#ffb84d", "far_motorway_edge": "#e0952a",
-        "far_trunk": "#ffcb5c", "far_trunk_edge": "#dca53a",
-        "far_primary": "#ffe08a", "far_primary_edge": "#e2bd5a",
-        "far_secondary": "#fff1bd", "far_secondary_edge": "#e0cf96",
-        "far_tertiary": "#ffffff", "far_tertiary_edge": "#d3cfc6",
-        "median": "#dfe5d6", "concrete": "#d5d9e0", "zebra_base": "#f2cf3b", "paint": "#ffffff", "building": "#dfe1e8", "building_wall": "#c9ccd6", "landuse": "#f1eeea",
-        "boundary": "#c9c2d6", "building_shadow": "rgba(90,95,110,0.22)",
+        "far_motorway": "#ffaa50", "far_motorway_edge": "#df8a2c",
+        "far_trunk": "#ffbf6e", "far_trunk_edge": "#df9d48",
+        "far_primary": "#ffdc85", "far_primary_edge": "#e0bb60",
+        "far_secondary": "#ffffff", "far_secondary_edge": "#d6d1c7",
+        "far_tertiary": "#ffffff", "far_tertiary_edge": "#dbd6cd",
+        "median": "#dfe9d3", "concrete": "#e2ded6", "zebra_base": "#f2cf3b", "paint": "#ffffff",
+        # Дома светлее земли, но темнее белой улицы; стены темнее крыши —
+        # свет сбоку-сверху (06.10.2026), тёплый.
+        "building": "#f5f3ee", "building_wall": "#cbc4b8", "landuse": "#ebe8e0",
+        # Свой тон у вида землепользования (слой основы → цвет); жилое —
+        # земля (landuse-residential), прочее — landuse.
+        "landuse_kind": {"landuse-commercial": "#f9ede5", "landuse-industrial": "#eeecf2",
+                         "landuse-hospital": "#f8e9eb", "landuse-school": "#f8f2dc",
+                         "landuse-cemetery": "#e2e9dd"},
+        "boundary": "#cfc6d6", "building_shadow": "rgba(90,85,75,0.22)",
         "underpass": "#b9a8e8", "underpass_edge": "#8f7cc9",
-        "footbridge": "#ffffff", "footbridge_edge": "#a9b0bc", "steps": "#c7cbd3",
-        # Свет для 3D: мягкий, сбоку-сверху — стены светлые, с тенью, а не
-        # плоские серые плиты (06.10.2026). Дома с 21.10 (25.D) холоднее и
-        # чуть темнее фона (#dfe1e8, было тёплое #e6dcd7 — сливалось с землёй),
-        # свет 0,35: под наклоном стена отделяется от крыши.
-        "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.35,
+        "footbridge": "#ffffff", "footbridge_edge": "#b4ada1", "steps": "#d6cfc1",
+        "light": {"anchor": "viewport", "color": "#fff6ea", "intensity": 0.45,
                   "position": [1.3, 200, 35]},
         # Кайма НАШИХ лент — нейтральная: жёлтая у каждой ленты давала «нитки»
         # внутри асфальта там, где две ленты лежат рядом (Фурката, 28.09.2026).
-        "casing": "#aab2bf",
-        # Жёлтая кромка магистрали — как у Яндекса (снимок 05.10.2026).
-        "kerb": "#f0c93f", "trees": "trees", "asphalt": "asphalt", "gutter": "#9aa2af",
+        "casing": "#cdc8be",
+        # Кромка магистрали — своя, оранжевая; у проспекта и второго класса —
+        # золотая (как у Яндекса, снимок 05.10.2026).
+        "kerb": "#e3b54a", "kerb_trunk": "#e8a052", "trees": "trees", "asphalt": "asphalt", "gutter": "#cbbfa8",
         # Парковка — бледная площадка без жёлтой кромки: залитая асфальтом
         # проспекта и обведённая его кромкой, она читалась дорогой (Чорсу).
-        "parking": "#e3e6eb", "parking_edge": "#d0d5dd",
-        "sidewalk": "#ebe7e1", "sidewalk_edge": "#d6d0c7", "barrier": "#e9ebee",
+        "parking": "#ecebe6", "parking_edge": "#d9d5cc",
+        "sidewalk": "#f0ece4", "sidewalk_edge": "#ddd6ca", "barrier": "#efece6",
         # Мост: светлый край-ограждение и тень под пролётом; тоннель —
         # полупрозрачный асфальт с пунктирной кромкой (как у Яндекса).
-        "bridge_edge": "#ffffff", "bridge_shadow": "rgba(40,48,60,0.22)", "tunnel": "#c9ced8",
-        "tree_crown": "#a3d184", "tree_crown_low": "#7fb565", "tree_crown_high": "#c2e3a2", "tree_light": "#c4e4a8", "tree_trunk": "#9b8a76", "tree_edge": "#94c676",
+        "bridge_edge": "#ffffff", "bridge_shadow": "rgba(40,48,60,0.22)", "tunnel": "#dcd8d0",
+        "tree_crown": "#a0d47f", "tree_crown_low": "#7fbd62", "tree_crown_high": "#bfe5a2", "tree_light": "#c2e6a7", "tree_trunk": "#9b8a76", "tree_edge": "#8fca70",
         "tree_shadow": "rgba(60,100,40,0.28)",
-        "label": "#3f3f42", "street_label": "#363b43", "halo": "#ffffff", "oneway_opacity": 0.55, "housenumber": "#8a817b", "signal": "#3b3b3b", "signal_ring": "#f5d547",
+        "label": "#2f2c29", "street_label": "#2b2e33", "halo": "#ffffff", "oneway_opacity": 0.55, "housenumber": "#7a7166", "signal": "#3b3b3b", "signal_ring": "#f5d547",
     },
     "dark": {
-        "bg": "#0f1216", "park": "#16241b", "wood": "#14221a", "water": "#1b3348",
-        "road": "#424955", "road_trunk": "#4a5260", "road_tertiary": "#3b414c",
+        "bg": "#0f1420", "park": "#123426", "wood": "#103022", "water": "#143f7a",
+        # Подсвеченные магистрали (светлота 0,15–0,18) — над тёмно-синими
+        # улицами (≤ 0,083): дорога главного класса видна издалека.
+        "road_trunk": "#647090", "road": "#5f6b86", "road_secondary": "#46526b", "road_tertiary": "#36435f",
         "road_far": "#4b4536", "edge": "#b8923a",
-        # Ночью дорога СВЕТЛЕЕ застройки: двор #262b33 был темнее домов
-        # #2b3038 и пропадал, а кварталы выступали сильнее улиц (07.10.2026).
-        "minor": "#3a404a", "minor_far": "#3a404a", "minor_edge": "#2a2f37", "minor_edge_far": "#20242b",
-        "path": "#22272e", "path_edge": "#1d2127",
-        "far_motorway": "#9a7433", "far_motorway_edge": "#6e5222",
-        "far_trunk": "#87683a", "far_trunk_edge": "#5e4a2a",
-        "far_primary": "#6b5f45", "far_primary_edge": "#4a4232",
-        "far_secondary": "#55524a", "far_secondary_edge": "#3c3a35",
-        "far_tertiary": "#474c55", "far_tertiary_edge": "#30343b",
-        "median": "#1c2a22", "concrete": "#3a414c", "zebra_base": "#8c7a2c", "paint": "#d9dee6", "building": "#2a2f38", "building_wall": "#16181d", "landuse": "#13171d",
-        "boundary": "#3a3f4c", "building_shadow": "rgba(0,0,0,0.45)",
+        # Ночью улица СВЕТЛЕЕ домов: двор темнее домов пропадал, а кварталы
+        # выступали сильнее улиц (07.10.2026).
+        "minor": "#36435f", "minor_far": "#36435f", "minor_edge": "#202a40", "minor_edge_far": "#18203a",
+        "path": "#1c2538", "path_edge": "#172031",
+        "far_motorway": "#d08a3a", "far_motorway_edge": "#8f5d22",
+        "far_trunk": "#b47d3e", "far_trunk_edge": "#7c5429",
+        "far_primary": "#9a8550", "far_primary_edge": "#695a35",
+        "far_secondary": "#56688a", "far_secondary_edge": "#3a4862",
+        "far_tertiary": "#34405a", "far_tertiary_edge": "#232d44",
+        "median": "#132b22", "concrete": "#36425a", "zebra_base": "#8c7a2c", "paint": "#d9dee6",
+        # Дома — синие объёмы светлее земли и темнее любой улицы; холодный
+        # свет — крыша светлее стен.
+        "building": "#252f46", "building_wall": "#151c2e", "landuse": "#121826",
+        "landuse_kind": {"landuse-commercial": "#1d1a26", "landuse-industrial": "#171a28",
+                         "landuse-hospital": "#201a27", "landuse-school": "#1c1e2e",
+                         "landuse-cemetery": "#132222"},
+        "boundary": "#35405c", "building_shadow": "rgba(0,0,0,0.5)",
         "underpass": "#5b4f8a", "underpass_edge": "#7d6fb8",
-        "footbridge": "#3a404b", "footbridge_edge": "#596170", "steps": "#2a2f37",
-        # Ночью дома — графитовые объёмы светлее фона (#2a2f38, было
-        # #1d2026 — под наклоном 25.D дома сливались с землёй), но темнее
-        # любой улицы: дорога остаётся главным (test_roads_are_lighter…).
-        "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.22,
+        "footbridge": "#34405a", "footbridge_edge": "#525f78", "steps": "#232c42",
+        "light": {"anchor": "viewport", "color": "#b9cbff", "intensity": 0.42,
                   "position": [1.3, 200, 35]},
-        "casing": "#2b3039",
-        "kerb": "#8c7033", "trees": "trees-dark", "asphalt": "asphalt-dark", "gutter": "#2f343c",
-        "parking": "#2a2f37", "parking_edge": "#343a44",
-        "sidewalk": "#262a31", "sidewalk_edge": "#33383f", "barrier": "#4a515c",
-        "bridge_edge": "#69707c", "bridge_shadow": "rgba(0,0,0,0.45)", "tunnel": "#2a2f37",
-        "tree_crown": "#22402c", "tree_crown_low": "#18301f", "tree_crown_high": "#33593e", "tree_light": "#2e5238", "tree_trunk": "#3a332b", "tree_edge": "#2e5238",
+        "casing": "#202a40",
+        "kerb": "#e8c070", "kerb_trunk": "#ffd27a", "trees": "trees-dark", "asphalt": "asphalt-dark", "gutter": "#3a4258",
+        "parking": "#1f293e", "parking_edge": "#2a354d",
+        "sidewalk": "#1a2234", "sidewalk_edge": "#252f45", "barrier": "#46526c",
+        "bridge_edge": "#69707c", "bridge_shadow": "rgba(0,0,0,0.45)", "tunnel": "#212b40",
+        "tree_crown": "#1b4632", "tree_crown_low": "#123425", "tree_crown_high": "#2a5d45", "tree_light": "#28563f", "tree_trunk": "#3a332b", "tree_edge": "#28563f",
         "tree_shadow": "rgba(0,0,0,0.5)",
-        "label": "#c9ced6", "street_label": "#e4e8ee", "halo": "#0f1216", "oneway_opacity": 0.7, "housenumber": "#7d838d", "signal": "#101318", "signal_ring": "#f0c64a",
+        "label": "#cad4e6", "street_label": "#f4f7fb", "halo": "#0f1420", "oneway_opacity": 0.7, "housenumber": "#8f9bb2", "signal": "#101318", "signal_ring": "#f0c64a",
     },
 }
+
 
 # «Только дорога»: что из основы остаётся. Остальные исходные слои OSM Bright
 # (POI, дома, номера домов, аэродромы, границы, щиты, прочая застройка) — нет.
@@ -212,11 +237,10 @@ def street_halo(p):
     наклейкой поверх штрихов разметки и стрелок (снимок CarPlay 13.10.2026).
     Ореол цвета асфальта прячет разметку под буквами, и имя читается
     напечатанным на дороге, как у Яндекса. До нашего полотна (15-й) дорога
-    тонкая, имя лежит на фоне — ореол фоновый.
+    тонкая, имя лежит на фоне — ореол фоновый. Асфальт — по классу, как
+    само полотно (class_asphalt).
     """
-    asphalt = ["match", ["get", "class"], ["motorway", "trunk"], p["road_trunk"],
-               ["primary", "secondary"], p["road"], "tertiary", p["road_tertiary"], p["minor"]]
-    return ["interpolate", ["linear"], ["zoom"], 14.5, p["halo"], 15.5, asphalt, 16.5, p["road"]]
+    return ["interpolate", ["linear"], ["zoom"], 14.5, p["halo"], 15.5, class_asphalt(p, "class")]
 
 
 def poi_colour(p, theme):
@@ -331,7 +355,7 @@ def _road_kind(layer_id):
                  if layer_id.endswith(k) or layer_id.endswith(k + "-casing")), None)
 
 
-def _base_layer(layer, p, mode):
+def _base_layer(layer, p, mode, theme):
     """Слой OSM Bright, перекрашенный в палитру; None — слоя в этом режиме нет."""
     l = copy.deepcopy(layer)
     i = l["id"]
@@ -358,7 +382,7 @@ def _base_layer(layer, p, mode):
     elif l["type"] == "fill" and (i.startswith("landuse-") or i.startswith("landcover-")) and p["landuse"]:
         # Прочая застройка и покров (кладбища, больницы, школы, промзоны, песок):
         # в OSM Bright — пастель, на тёмной теме каждая горела пятном.
-        paint["fill-color"] = p["landuse"]
+        paint["fill-color"] = p["landuse_kind"].get(i, p["landuse"])
         paint.pop("fill-pattern", None)
     elif i in ("highway-area", "road_area_pier"):
         # Пешеходные площади и пирсы. В OSM Bright — светло-серая заливка, на
@@ -416,7 +440,8 @@ def _base_layer(layer, p, mode):
                 # Вдали — цвет класса (магистраль оранжевее, улица белее), вблизи —
                 # асфальт, на котором видна разметка. Как у Яндекса.
                 paint["line-color"] = ["interpolate", ["linear"], ["zoom"], 13, _far(p, "fill"),
-                                       14.5, _far(p, "fill"), 15.5, p["road"]] \
+                                       14.5, _far(p, "fill"),
+                                       15.5, class_asphalt(p, "class")] \
                     if major else ["interpolate", ["linear"], ["zoom"], 14.5, p["minor_far"], 15.5, p["minor"]]
             paint["line-width"] = class_width(metres, (2.0 if major else 1.4) if casing else 0.0,
                                               near_share=1.0 if casing else FALLBACK_SHARE)
@@ -470,10 +495,10 @@ def _base_layer(layer, p, mode):
         if "name:latin" in json.dumps(lay.get("text-field", "")):
             lay["text-field"] = NAME
         paint["text-halo-color"] = p["halo"]
-        if "text-color" in paint and mode == "full" and p is PALETTES["dark"]:
+        if "text-color" in paint and mode == "full" and theme == "dark":
             paint["text-color"] = p["label"]
         if src == "poi" and i.startswith("poi-level"):
-            paint["text-color"] = poi_colour(p, "light" if p is PALETTES["light"] else "dark")
+            paint["text-color"] = poi_colour(p, theme)
             paint["text-halo-width"] = 1.4
     return l
 
@@ -519,16 +544,22 @@ def _bridge_order(layers):
 
 
 def road_color(p):
-    """Асфальт по классу: магистраль темнее, проспект — основной тон,
-    улица третьего класса светлее, двор — светлый. Иерархия читается сразу,
-    а не только по ширине (06.10.2026)."""
-    # Один асфальт вблизи: двор, проезд парковки и площадь перекрёстка —
-    # тот же тон, что проспект. Светлые дворы рядом с тёмным узлом давали
-    # лоскутную карту (Кумарик, 07.10.2026); классы различает ширина.
-    return ["interpolate", ["linear"], ["zoom"], 15,
-            ["match", ["get", "cls"], [1, 2], p["road_trunk"], [3, 4], p["road"],
-             5, p["road_tertiary"], p["minor"]],
-            16.5, p["road"]]
+    """Асфальт нашего полотна — по классу на всех зумах (27.C): иерархия
+    читается цветом, а не только шириной."""
+    return class_asphalt(p)
+
+
+def class_asphalt(p, key="cls"):
+    """Магистраль, проспект, улица второго и третьего класса, прочие — каждая
+    своим тоном. До 27.C вблизи был один серый асфальт: светлые дворы рядом
+    с тёмным узлом давали лоскутную карту (Кумарик, 07.10.2026) — у белых
+    дворов теперь серая кромка, а площадь узла — тона проспекта.
+    key — свойство класса: cls (наш тайл, число) или class (основа, строка)."""
+    if key == "cls":
+        return ["match", ["get", "cls"], [1, 2], p["road_trunk"], 3, p["road"], 4, p["road_secondary"],
+                5, p["road_tertiary"], p["minor"]]
+    return ["match", ["get", "class"], ["motorway", "trunk"], p["road_trunk"], "primary", p["road"],
+            "secondary", p["road_secondary"], "tertiary", p["road_tertiary"], p["minor"]]
 
 
 def _our_layers(p):
@@ -622,7 +653,8 @@ def _layers_in_draw_order(p):
          "layout": {"line-cap": "round", "line-join": "round", "line-sort-key": ["-", 0, ["get", "cls"]]},
          # Кромка: у магистралей (trunk…secondary) — жёлтая, как у Яндекса;
          # у tertiary — нейтральная, у мелких — цвет края мелкой улицы.
-         "paint": {"line-color": ["case", ["<=", ["get", "cls"], 4], p["kerb"],
+         "paint": {"line-color": ["case", ["<=", ["get", "cls"], 2], p["kerb_trunk"],
+                                  ["<=", ["get", "cls"], 4], p["kerb"],
                                   ["<=", ["get", "cls"], 5], p["casing"], p["minor_edge"]],
                    "line-width": measured(ROAD_KERB_EXTRA_PX)}},
         {"id": "radar-roads", "type": "line", "source": "radar", "source-layer": "roads",
@@ -859,7 +891,7 @@ def build(base, theme="light", mode="full", tileset=None):
     }
     s["glyphs"] = base + "/glyphs/{fontstack}/{range}.pbf"
     s["sprite"] = base + "/sprite/sprite"
-    out = [l for l in (_base_layer(layer, p, mode) for layer in s["layers"]) if l is not None]
+    out = [l for l in (_base_layer(layer, p, mode, theme) for layer in s["layers"]) if l is not None]
     if mode == "full":
         first_symbol = next(k for k, l in enumerate(out) if l["type"] == "symbol")
         # Тень у подножия дома: мягкий тёмный контур, чуть сдвинутый от

@@ -158,8 +158,10 @@ class StyleTests(unittest.TestCase):
         light, dark = make_style.PALETTES["light"], make_style.PALETTES["dark"]
         for theme in (light, dark):
             self.assertNotEqual(theme["minor"], theme["path"])
-        low, high = sorted((lightness(light["road"]), lightness(light["bg"])))
-        self.assertTrue(low < lightness(light["minor"]) < high)
+        # С 27.C двор белый с серой кромкой, как у Яндекса, — а дорожка тёплая
+        # бежевая, не белая: с двором её не спутать.
+        self.assertGreater(lightness(light["minor"]), lightness(light["path"]) + 10)
+        self.assertLess(lightness(light["minor_edge"]), lightness(light["bg"]))
 
     def test_street_names_abbreviated_like_yandex(self):
         layers = {layer["id"]: layer for layer in self.style["layers"]}
@@ -180,7 +182,7 @@ class StyleTests(unittest.TestCase):
         for layer_id in ("highway-name-major", "highway-name-minor"):
             halo = layers[layer_id]["paint"]["text-halo-color"]
             self.assertEqual(halo[0], "interpolate", layer_id)
-            self.assertEqual(halo[-1], palette["road"], "вблизи — один асфальт, как у полотна")
+            self.assertEqual(halo[-1], make_style.class_asphalt(palette, "class"), "вблизи — асфальт класса")
             self.assertEqual(halo[4], palette["halo"], "до нашего полотна — фон")
 
     def test_waterway_in_a_pipe_is_not_labelled(self):
@@ -341,6 +343,7 @@ class AppResourceTests(unittest.TestCase):
             with open(path, encoding="utf-8") as handle:
                 self.assertEqual(handle.read(), text,
                                  f"{name} устарел: python3 server/omt/make_style.py --app")
+
 
     def test_app_tiles_come_from_the_release(self):
         style = make_style.build(make_style.APP_BASE, "light", "full", tileset=make_style.APP_TILESET)

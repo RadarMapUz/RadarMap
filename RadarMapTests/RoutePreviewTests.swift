@@ -173,6 +173,57 @@ final class RoutePreviewTests: XCTestCase {
         XCTAssertNil(RoutePreview.labelPoint(of: 3, lines: [a, b]))
     }
 
+    /// Значок камеры лежит над подписью: на месте лучшей точки стоит камера —
+    /// подпись отходит вдоль своей линии на порог, а не прячет цифру под
+    /// значком («26 мин» читалось как «6 мин», снимки App Store 22.10).
+    func testLabelStepsAwayFromACameraIcon() {
+        func line(_ xy: [(Double, Double)]) -> [MKMapPoint] { xy.map { MKMapPoint(x: $0.0, y: $0.1) } }
+        let a = line([(0, 0), (500, 0), (1000, 0)])
+        let b = line([(0, 0), (200, 0), (500, 400), (800, 0), (1000, 0)])
+        let free = try! XCTUnwrap(RoutePreview.labelPoint(of: 1, lines: [a, b]))
+        let label = try! XCTUnwrap(RoutePreview.labelPoint(of: 1, lines: [a, b], avoid: [free]))
+        let clearance = 1000 * AppConfig.routeVariantLabelCameraClearance
+        XCTAssertGreaterThanOrEqual(hypot(label.x - free.x, label.y - free.y), clearance,
+                                    "подпись ушла от значка на порог")
+        XCTAssertGreaterThan(label.y, 150, "и осталась на отходе варианта, а не на общей линии")
+        // Камера вдали от линий ничего не меняет.
+        let far = try! XCTUnwrap(RoutePreview.labelPoint(of: 1, lines: [a, b],
+                                                         avoid: [MKMapPoint(x: 5000, y: 5000)]))
+        XCTAssertEqual(far.x, free.x, accuracy: 0.001)
+        XCTAssertEqual(far.y, free.y, accuracy: 0.001)
+    }
+
+    /// Камеры на каждой точке-кандидате — подпись всё равно есть (прежний
+    /// выбор): спрятать время варианта хуже, чем положить его под значок.
+    func testLabelSurvivesCamerasEverywhere() {
+        func line(_ xy: [(Double, Double)]) -> [MKMapPoint] { xy.map { MKMapPoint(x: $0.0, y: $0.1) } }
+        let a = line([(0, 0), (500, 0), (1000, 0)])
+        let b = line([(0, 0), (200, 0), (500, 400), (800, 0), (1000, 0)])
+        let free = try! XCTUnwrap(RoutePreview.labelPoint(of: 1, lines: [a, b]))
+        let everywhere = RoutePreview.sampled(b, from: 0, to: 1, count: 400)
+        let label = try! XCTUnwrap(RoutePreview.labelPoint(of: 1, lines: [a, b], avoid: everywhere))
+        XCTAssertEqual(label.x, free.x, accuracy: 0.001)
+        XCTAssertEqual(label.y, free.y, accuracy: 0.001)
+    }
+
+    #if canImport(MapLibre)
+    /// Подпись «24 мин» встаёт под первую метку приложения — то есть над всеми
+    /// подписями основы (их раскладка идёт после и обходит подпись) и под
+    /// камерами. Якорь обязан быть нижним слоем меток, иначе какая-то метка
+    /// окажется под подписью.
+    func testVariantLabelsAnchorBelowEveryMarkerLayer() {
+        let markers = EngineMapStyle.markerLayers(label: "#000000", halo: "#ffffff").compactMap { $0["id"] as? String }
+        XCTAssertEqual(EngineRouteVariants.markerLayerIDs.first, markers.first,
+                       "якорь — самый нижний слой меток")
+        let cameraLayers = markers.filter { $0.hasPrefix("camera-") }
+        let anchorIndex = try! XCTUnwrap(markers.firstIndex(of: EngineRouteVariants.markerLayerIDs[0]))
+        for camera in cameraLayers {
+            XCTAssertGreaterThan(try! XCTUnwrap(markers.firstIndex(of: camera)), anchorIndex,
+                                 "\(camera) выше подписи варианта")
+        }
+    }
+    #endif
+
     func testThinningKeepsTheEnds() {
         let long = (0...999).map { MKMapPoint(x: Double($0), y: 0) }
         let thin = RoutePreview.thinned(long, limit: 10)

@@ -172,7 +172,13 @@ nonisolated enum RoutePreview {
     /// Точка подписи «24 мин» на линии варианта `index`: та, что дальше всего
     /// от остальных вариантов, в средней части линии (у старта и цели
     /// варианты сходятся, и подписи легли бы стопкой). Один вариант — середина.
-    static func labelPoint(of index: Int, lines: [[MKMapPoint]]) -> MKMapPoint? {
+    ///
+    /// `avoid` — где на карте стоят значки камер. Подпись лежит ПОД камерами
+    /// (камера на карте не пропадает никогда), поэтому значок на месте
+    /// подписи съедал её начало: «26 мин» читалось как «6 мин» (снимки
+    /// App Store, 22.10). Точки ближе `routeVariantLabelCameraClearance` доли
+    /// охвата линий к камере отбрасываются; если чистых нет — прежний выбор.
+    static func labelPoint(of index: Int, lines: [[MKMapPoint]], avoid: [MKMapPoint] = []) -> MKMapPoint? {
         guard lines.indices.contains(index) else { return nil }
         let own = lines[index]
         guard own.count >= 2 else { return own.first }
@@ -183,12 +189,39 @@ nonisolated enum RoutePreview {
             .map { thinned(lines[$0], limit: AppConfig.routeVariantLabelOtherPoints) }
             .filter { !$0.isEmpty }
         guard !others.isEmpty else { return sampled(own, from: 0.5, to: 0.5, count: 1).first }
-        var best = samples[samples.count / 2], bestGap = -1.0
-        for sample in samples {
+        let pool = clearOfCameras(samples, lines: lines, avoid: avoid)
+        var best = pool[pool.count / 2], bestGap = -1.0
+        for sample in pool {
             let gap = others.map { mapDistance(from: sample, to: $0) }.min() ?? 0
             if gap > bestGap { best = sample; bestGap = gap }
         }
         return best
+    }
+
+    /// Точки-кандидаты, у которых нет значка камеры ближе порога. Порог —
+    /// доля охвата всех линий: экран выбора вписывает линии в кадр, так что
+    /// доля охвата — это почти постоянная доля ширины экрана, и подпись в
+    /// ~70 pt одинаково далека от значка на маршруте в 3 км и в 30 км.
+    static func clearOfCameras(_ samples: [MKMapPoint], lines: [[MKMapPoint]],
+                               avoid: [MKMapPoint]) -> [MKMapPoint] {
+        guard !avoid.isEmpty, !samples.isEmpty else { return samples }
+        var box = MKMapRect.null
+        for point in lines.joined() { box = box.union(MKMapRect(origin: point, size: MKMapSize(width: 0, height: 0))) }
+        let clearance = max(box.width, box.height) * AppConfig.routeVariantLabelCameraClearance
+        guard clearance > 0 else { return samples }
+        let near = avoid.filter {
+            $0.x > box.minX - clearance && $0.x < box.maxX + clearance
+                && $0.y > box.minY - clearance && $0.y < box.maxY + clearance
+        }
+        // Сначала полный порог, потом половина (в плотном центре города
+        // камеры стоят через квартал), и только потом — как раньше.
+        for share in [1.0, 0.5] {
+            let free = samples.filter { sample in
+                !near.contains { hypot($0.x - sample.x, $0.y - sample.y) < clearance * share }
+            }
+            if !free.isEmpty { return free }
+        }
+        return samples
     }
 
     /// Точки вдоль ломаной на долях длины [from, to], равномерно по длине.

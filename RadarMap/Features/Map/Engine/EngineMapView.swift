@@ -1094,8 +1094,18 @@ struct EngineMapView: UIViewRepresentable {
             updateMarks(model, in: view)
             updateCameraLabel(model.cameraLabel, in: view)
             updateTraffic(model, in: view)
+            // Подписи «24 мин» сторонятся значков камер: значок лежит выше и
+            // съедал первую цифру (снимки App Store, 22.10).
+            var spots: [EngineRouteVariants.CameraSpot] = []
+            if model.variants.count > 1 {
+                spots = cachedCameras.map { camera -> EngineRouteVariants.CameraSpot in
+                    let drawn = model.cameraPoints[camera.id]
+                    return EngineRouteVariants.CameraSpot(latitude: drawn?.latitude ?? camera.coordinate.latitude,
+                                                          longitude: drawn?.longitude ?? camera.coordinate.longitude)
+                }
+            }
             routeVariants.update(model.variants, selected: model.selectedVariantID,
-                                 daylight: model.daylight, in: view)
+                                 daylight: model.daylight, avoid: spots, in: view)
             routeLine.update(model, in: view)
         }
 

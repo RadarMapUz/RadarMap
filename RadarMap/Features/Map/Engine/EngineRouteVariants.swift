@@ -11,7 +11,8 @@
 //  Слои ставятся в живой стиль при загрузке, а не в JSON стиля: это
 //  временная картинка экрана выбора, и шаблон выпуска о ней знать не должен.
 //  Стоит ниже «route-traveled»/«route-case» — выбранную ленту ничто не
-//  перекрывает; подписи — над стрелками маршрута, под камерами.
+//  перекрывает; подписи — над подписями основы (названия их обходят), под
+//  камерами и прочими метками приложения.
 //
 //  В ведении (поездка) вариантов нет: источник пуст, слои маршрута в ведении
 //  этот файл не трогает.
@@ -50,6 +51,14 @@ final class EngineRouteVariants {
         var variants: [RouteVariantLine]
         var selected: Int?
         var daylight: Bool
+        /// Значки камер, которых подпись сторонится (RoutePreview.clearOfCameras).
+        var avoid: [CameraSpot]
+    }
+
+    /// Где нарисован значок камеры — для подписи, а не для оповещения.
+    struct CameraSpot: Equatable {
+        let latitude: Double
+        let longitude: Double
     }
 
     private var installed = false
@@ -73,10 +82,12 @@ final class EngineRouteVariants {
     /// Показаны ли сейчас варианты (больше одного).
     var isShowing: Bool { lines.count > 1 }
 
-    func update(_ variants: [RouteVariantLine], selected: Int?, daylight: Bool, in view: MLNMapView) {
+    func update(_ variants: [RouteVariantLine], selected: Int?, daylight: Bool,
+                avoid: [CameraSpot] = [], in view: MLNMapView) {
         guard let style = view.style else { return }
         if !installed { install(in: style, daylight: daylight) }
-        let key = Key(variants: variants.count > 1 ? variants : [], selected: selected, daylight: daylight)
+        let key = Key(variants: variants.count > 1 ? variants : [], selected: selected, daylight: daylight,
+                      avoid: variants.count > 1 ? avoid : [])
         guard key != lastKey else { return }
         let themeChanged = lastKey?.daylight != daylight
         lastKey = key
@@ -102,11 +113,14 @@ final class EngineRouteVariants {
             others.isEmpty ? nil : MLNShapeCollectionFeature(shapes: others)
         // Подписи — у каждого варианта, в месте, где он отдельно от других.
         let mapLines = lines.map { $0.coordinates.map { MKMapPoint($0) } }
+        let cameraPoints = key.avoid.map {
+            MKMapPoint(CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude))
+        }
         var labels: [MLNPointFeature] = []
         labelPoints = [:]
         var names: Set<String> = []
         for (index, variant) in shown.enumerated() {
-            guard let point = RoutePreview.labelPoint(of: index, lines: mapLines) else { continue }
+            guard let point = RoutePreview.labelPoint(of: index, lines: mapLines, avoid: cameraPoints) else { continue }
             let isSelected = variant.id == selected
             let name = "radar-variant-\(variant.id)-\(isSelected ? 1 : 0)-\(daylight ? "d" : "n")-\(variant.eta)"
             if !imageNames.contains(name) {
@@ -171,20 +185,38 @@ final class EngineRouteVariants {
         if style.layer(withIdentifier: Self.labelLayer) == nil {
             let labels = MLNSymbolStyleLayer(identifier: Self.labelLayer, source: labelSource)
             labels.iconImageName = NSExpression(forKeyPath: "img")
-            // Подпись не вытесняет ни камеру, ни название улицы — и её ничто
-            // не прячет: время варианта — то, ради чего человек смотрит.
+            // Время варианта — то, ради чего человек смотрит: подпись ничто не
+            // прячет (allow-overlap), а названия основы её обходят — она
+            // занимает место в раскладке и стоит ВЫШЕ подписей основы, а
+            // раскладка идёт сверху вниз. До 22.10 подпись лежала под
+            // подписями основы с ignore-placement, и «Кызгалдак» печатался
+            // поверх «24 мин» (снимки App Store). Камеры и прочие метки
+            // приложения — выше подписи: камера на карте не пропадает никогда,
+            // а от значков подпись отходит сама (RoutePreview.clearOfCameras).
             labels.iconAllowsOverlap = NSExpression(forConstantValue: true)
-            labels.iconIgnoresPlacement = NSExpression(forConstantValue: true)
+            labels.iconIgnoresPlacement = NSExpression(forConstantValue: false)
             labels.symbolSortKey = NSExpression(forKeyPath: "rank")
-            if let arrows = style.layer(withIdentifier: "route-arrows") {
+            if let markers = Self.firstMarkerLayer(in: style) {
+                style.insertLayer(labels, below: markers)
+            } else if let arrows = style.layer(withIdentifier: "route-arrows") {
                 style.insertLayer(labels, above: arrows)
-            } else if let camera = style.layer(withIdentifier: "camera-dot") {
-                style.insertLayer(labels, below: camera)
             } else {
                 style.addLayer(labels)
             }
         }
         paint(style, daylight: daylight)
+    }
+
+    /// Нижний слой меток приложения (EngineMapStyle.markerLayers): над всеми
+    /// подписями основы и под камерами.
+    static let markerLayerIDs = ["hotspot-zone", "hotspot-edge", "cng-status", "road-events",
+                                 "camera-halo", "camera-dot"]
+
+    private static func firstMarkerLayer(in style: MLNStyle) -> MLNStyleLayer? {
+        for id in markerLayerIDs {
+            if let layer = style.layer(withIdentifier: id) { return layer }
+        }
+        return nil
     }
 
     private func paint(_ style: MLNStyle, daylight: Bool) {

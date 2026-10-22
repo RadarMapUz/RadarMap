@@ -147,21 +147,20 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
         guard let controller else { return }
         controller.shortcutButtons = PlaceSlot.allCases.compactMap { slot in
             guard let image = UIImage(systemName: slot.symbol) else { return nil }
-            // «обычно 39 мин» — медиана своих поездок туда (Commute), без сети:
-            // на главном экране машины это ответ на «сколько ехать» до касания.
-            let usual = env.commute
-                .first { $0.direction == (slot == .work ? .toWork : .toHome) }?.usual
-                .map { String(format: String(localized: "обычно %@"), Formatting.duration($0)) }
-            if let place = env.settings.place(for: slot) {
+            // Выбор «ручное → выученное» и «обычно 39 мин» — те же, что у
+            // «Куда» основного экрана (CarPlaySlotTarget).
+            let usual = CarPlaySlotTarget.usual(slot, commute: env.commute)
+            let target = CarPlaySlotTarget.resolve(slot, manual: env.settings.place(for: slot),
+                                                   learned: env.learnedPlaces)
+            switch target {
+            case .manual(let place)?:
                 return CPDashboardButton(titleVariants: [slot.name],
                                          subtitleVariants: [usual.map { "\(place.title) · \($0)" }, place.title]
                                             .compactMap { $0 },
                                          image: image) { [weak self] _ in
-                    self?.route(to: place)
+                    self?.route(to: place, remember: true)
                 }
-            }
-            if let learned = env.learnedPlaces.first(where: { $0.kind.rawValue == slot.rawValue }) {
-                let place = SavedPlace(title: slot.name, lat: learned.lat, lon: learned.lon)
+            case .learned(let place)?:
                 return CPDashboardButton(titleVariants: [slot.name],
                                          subtitleVariants: [usual, String(localized: "по вашим поездкам")]
                                             .compactMap { $0 },
@@ -169,31 +168,30 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
                     // Выученное в «недавние» не пишем (см. «Куда»).
                     self?.route(to: place, remember: false)
                 }
-            }
-            return CPDashboardButton(titleVariants: [slot.name], subtitleVariants: [slot.notSetTitle],
-                                     image: image) { _ in
-                CarPlaySceneDelegate.presentAssignWhenReady(slot)
+            case nil:
+                return CPDashboardButton(titleVariants: [slot.name], subtitleVariants: [slot.notSetTitle],
+                                         image: image) { _ in
+                    CarPlaySceneDelegate.presentAssignWhenReady(slot)
+                }
             }
         }
     }
 
-    private func route(to place: SavedPlace, remember: Bool = true) {
+    /// Построение и защита от двойного касания — общие с основным экраном
+    /// (CarPlayRouteRequest): два тапа «Дом» — один запрос OSRM.
+    private func route(to place: SavedPlace, remember: Bool) {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            guard let from = await env.location.awaitPreciseCoordinate() else {
+            switch await CarPlayRouteRequest.run(env: env, to: place, remember: remember) {
+            case .busy, .built:
+                break
+            case .noFix:
                 // Без точного фикса маршрута нет. Сказать — голосом: у плитки
                 // нет своих диалогов, а тап «Домой» без ответа читается как
                 // поломка (аудит CarPlay, 12.10).
                 Log.carplay.error("маршрут с приборной панели: нет точного фикса")
                 env.alerts.speak(String(localized: "Не вижу точного положения — маршрут пока не построить"))
-                return
-            }
-            await env.route.build(from: from, heading: env.location.routeHeading,
-                                  to: place.coordinate, name: place.title,
-                                  cameras: env.cameras.cameras, alternatives: false)
-            if remember { env.settings.addRecent(title: place.title, lat: place.lat, lon: place.lon) }
-            if !env.location.isTripActive { env.location.startTrip() }
-            if let error = env.route.errorMessage {
+            case .failed(let error):
                 Log.carplay.error("маршрут с приборной панели: \(error, privacy: .public)")
                 env.alerts.speak(String(localized: "Маршрут не построился"))
             }

@@ -270,9 +270,7 @@ extension CarPlaySceneDelegate {
     func placeButton(slot: PlaceSlot) -> CPGridButton {
         let place = slotPlace(slot)
         // «обычно 39 мин» — медиана своих поездок туда (Commute), без сети.
-        let usual = env.commute
-            .first { $0.direction == (slot == .work ? .toWork : .toHome) }?.usual
-            .map { String(format: String(localized: "обычно %@"), Formatting.duration($0)) }
+        let usual = CarPlaySlotTarget.usual(slot, commute: env.commute)
         let titles: [String]
         switch place {
         case .manual(let saved)?:
@@ -290,34 +288,14 @@ extension CarPlaySceneDelegate {
             // экрана: сценарий в машине обязан проходить без телефона
             // (Руководство CarPlay, стр. 5; аудит 18.10, п. 8).
             guard let place else { return presentAssign(slot) }
-            // Выученное место в «недавние» не пишем: оно двигается с привычками
-            // и забывается выключателем — а запись осталась бы вторым «Домом».
-            if case .learned = place {
-                route(to: place.saved, remember: false)
-            } else {
-                route(to: place.saved)
-            }
+            // Выученное место в «недавние» не пишем (CarPlaySlotTarget.remembers).
+            route(to: place.saved, remember: place.remembers)
         }
     }
 
     /// Куда ведёт слот: заданный руками адрес или выученное по поездкам место.
-    enum SlotPlace {
-        case manual(SavedPlace)
-        case learned(SavedPlace)
-
-        var saved: SavedPlace {
-            switch self {
-            case .manual(let place), .learned(let place): return place
-            }
-        }
-    }
-
-    func slotPlace(_ slot: PlaceSlot) -> SlotPlace? {
-        if let place = env.settings.place(for: slot) { return .manual(place) }
-        guard let learned = env.learnedPlaces.first(where: { $0.kind.rawValue == slot.rawValue }) else {
-            return nil
-        }
-        return .learned(SavedPlace(title: slot.name, lat: learned.lat, lon: learned.lon))
+    func slotPlace(_ slot: PlaceSlot) -> CarPlaySlotTarget? {
+        CarPlaySlotTarget.resolve(slot, manual: env.settings.place(for: slot), learned: env.learnedPlaces)
     }
 
     func gridButton(symbol: String, titles: [String],
@@ -333,43 +311,40 @@ extension CarPlaySceneDelegate {
     }
 
     /// Строим маршрут и сразу едем: за рулём выбирать из альтернатив некогда.
+    /// Само построение и защита от двойного касания — общие с плиткой
+    /// главного экрана (CarPlayRouteRequest).
     func route(to place: SavedPlace, allowPreview: Bool = true, remember: Bool = true) {
-        let key = "route:\(place.lat),\(place.lon)"
-        guard actionsInFlight.insert(key).inserted else {
-            return Log.carplay.notice("повторное касание — маршрут уже строится")
-        }
         Task { @MainActor [weak self] in
             guard let self else { return }
-            defer { self.actionsInFlight.remove(key) }
-            // Грубая точка фонового режима сюда не годится: маршрут от неё
-            // начинается за километры (plan_drive_complaints.md, Ж5).
-            guard let from = await env.location.awaitPreciseCoordinate() else {
+            var preview = false
+            let outcome = await CarPlayRouteRequest.run(
+                env: env, to: place, remember: remember,
+                prepare: {
+                    popToMap()
+                    // Выбор маршрута — только стоя (CarPlayTripPreview): на ходу
+                    // ведём рекомендованным, как раньше. Флаг — ДО построения: иначе
+                    // сессия навигации стартовала бы на первом варианте раньше выбора.
+                    preview = allowPreview && CarPlayTripPreview.shouldPreview(speedKmh: env.location.speedKmh)
+                    if previewTrip != nil { mapTemplate?.hideTripPreviews() }
+                    previewTrip = nil
+                    model.isPreviewing = preview
+                    return preview
+                },
+                startsTrip: {
+                    if preview, env.route.isActive, env.route.errorMessage == nil {
+                        showPreview(name: place.title, destination: place.coordinate)
+                        return false
+                    }
+                    if preview { endPreview(start: false, keepRoute: true, reason: "маршрут не построен") }
+                    return true
+                })
+            switch outcome {
+            case .busy, .built:
+                break
+            case .noFix:
                 showAlert(title: String(localized: "Ждём спутники"),
                           message: String(localized: "Положение ещё не определено — попробуйте через несколько секунд."))
-                return
-            }
-            popToMap()
-            // Выбор маршрута — только стоя (CarPlayTripPreview): на ходу
-            // ведём рекомендованным, как раньше. Флаг — ДО построения: иначе
-            // сессия навигации стартовала бы на первом варианте раньше выбора.
-            let preview = allowPreview && CarPlayTripPreview.shouldPreview(speedKmh: env.location.speedKmh)
-            if previewTrip != nil { mapTemplate?.hideTripPreviews() }
-            previewTrip = nil
-            model.isPreviewing = preview
-            // На ходу — по курсу (20.9); стоя (выбор варианта) курса нет.
-            await env.route.build(from: from, heading: env.location.routeHeading,
-                                  to: place.coordinate,
-                                  name: place.title, cameras: env.cameras.cameras,
-                                  alternatives: preview)
-            if remember { env.settings.addRecent(title: place.title, lat: place.lat, lon: place.lon) }
-            if preview, env.route.isActive, env.route.errorMessage == nil {
-                showPreview(name: place.title, destination: place.coordinate)
-                return
-            }
-            if preview { endPreview(start: false, keepRoute: true, reason: "маршрут не построен") }
-            // Едем уже с активной поездкой — не обнулять её накат.
-            if !env.location.isTripActive { env.location.startTrip() }
-            if let error = env.route.errorMessage {
+            case .failed(let error):
                 showAlert(title: String(localized: "Маршрут не построен"), message: error)
             }
         }

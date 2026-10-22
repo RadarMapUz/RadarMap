@@ -139,6 +139,11 @@ enum Theme {
     /// Пробка и «медленно» на линии маршрута (те же, что слой пробок).
     static let routeSlow = adaptive(RouteColors.slow.day, RouteColors.slow.night)
     static let routeJam = adaptive(RouteColors.jam.day, RouteColors.jam.night)
+    /// Другой вариант маршрута при выборе — бледнее выбранного (27.D): его
+    /// цвет и на карте, и полоской у карточки варианта.
+    static let routeAlternative = adaptive(RouteColors.alternative.day, RouteColors.alternative.night)
+    static let routeAlternativeCasing = adaptive(RouteColors.alternativeCasing.day,
+                                                 RouteColors.alternativeCasing.night)
 
     /// Цвета знаков-иконок (`IconBadge`) — по СМЫСЛУ цифры рядом. Глаз ищет
     /// «время» и «деньги» по цвету раньше, чем прочтёт подпись, поэтому смысл
@@ -581,6 +586,14 @@ nonisolated enum RouteColors {
     static let free: Pair = (0x2BA84A, 0x3CC46B)
     static let slow: Pair = (0xE8A100, 0xFFB020)
     static let jam: Pair = (0xD93025, 0xFF5A4E)
+    /// Другие варианты маршрута при выборе (27.D): тот же синий род, но
+    /// бледнее и без насыщенности — выбранный остаётся главным предметом
+    /// карты, а другой вариант всё равно читается на асфальте любого класса
+    /// (≥ 3:1 телом или каймой — PaletteTests, palette_check). Ночью тело
+    /// светлее выбранного, но серое: на освещённом графите тёмная линия
+    /// терялась бы (2,5:1), а отличает её от выбранной насыщенность и ширина.
+    static let alternative: Pair = (0x93B4EA, 0x98ACD2)
+    static let alternativeCasing: Pair = (0x46679F, 0x0E1A33)
 
     static func pick(_ pair: Pair, daylight: Bool) -> String { hex(daylight ? pair.day : pair.night) }
 

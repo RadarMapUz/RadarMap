@@ -311,6 +311,25 @@ extension PaletteTests {
         }
     }
 
+    /// Другой вариант маршрута при выборе (27.D): бледнее выбранного, но на
+    /// полотне любого класса читается (≥ 3:1 телом или каймой), отличим от
+    /// выбранного и при дейтеранопии и не похож ни на пробку, ни на пройденное.
+    func testAlternativeRouteIsPaleButReadable() {
+        inBothThemes { theme in
+            for road in asphalt(theme) {
+                let best = max(contrast(Theme.routeAlternative, road), contrast(Theme.routeAlternativeCasing, road))
+                XCTAssertGreaterThanOrEqual(best, 3, "другой вариант на полотне \(theme)")
+            }
+            XCTAssertGreaterThanOrEqual(deltaE(Theme.routeAlternative, Theme.route), 25, "вариант ≠ выбранный \(theme)")
+            XCTAssertGreaterThanOrEqual(deltaEDeutan(Theme.routeAlternative, Theme.route), 25,
+                                        "вариант ≠ выбранный, дейтеранопия \(theme)")
+            XCTAssertGreaterThanOrEqual(deltaE(Theme.routeAlternative, Theme.routeJam), 40, "вариант ≠ пробка \(theme)")
+            XCTAssertGreaterThanOrEqual(deltaE(Theme.routeAlternative, Theme.routeSlow), 40, "вариант ≠ медленно \(theme)")
+            XCTAssertGreaterThanOrEqual(deltaE(Theme.routeAlternative, Theme.routeTraveled), 15,
+                                        "вариант ≠ пройденное \(theme)")
+        }
+    }
+
     /// Пройденное — бледнее и заметно другим цветом: не путается с «впереди».
     func testTraveledIsPalerThanTheRouteAhead() {
         inBothThemes { theme in

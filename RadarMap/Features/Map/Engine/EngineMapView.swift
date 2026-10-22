@@ -132,6 +132,12 @@ struct EngineMapView: UIViewRepresentable {
     /// Поля вписывания: на телефоне — под панели сверху и снизу, в машине —
     /// слева под карточку выбора маршрута.
     var overviewPadding = UIEdgeInsets(top: 150, left: 40, bottom: 240, right: 90)
+    /// Варианты маршрута на экране выбора (27.D): не выбранные — бледной
+    /// линией под выбранной, у каждого — подпись времени; касание выбирает.
+    /// Пусто (в ведении, один вариант) — слоёв выбора не видно.
+    var variants: [RouteVariantLine] = []
+    var selectedVariantID: Int?
+    var onSelectVariant: (Int) -> Void = { _ in }
     /// Сдвиг карты командой, а не пальцем: в машине касания до вида не
     /// доходят, панораму присылает шаблон CarPlay (перетаскивание, стрелки
     /// крутилки). Сумма ВСЕХ сдвигов содержимого в точках экрана: карта берёт
@@ -322,6 +328,16 @@ struct EngineMapView: UIViewRepresentable {
         private var lastFPS: Int?
         private var lastZoomCommand = 0
         private var lastOverviewCommand = 0
+        /// Варианты маршрута на экране выбора (27.D).
+        private let routeVariants = EngineRouteVariants()
+        /// Кадр «весь маршрут» держится, пока человек не тронул карту: меняются
+        /// поля (карточка выбора выросла, строка «почему» в две строки), набор
+        /// вариантов или выбор — кадр плавно переезжает (RoutePreview.fit).
+        private var overviewHeld = false
+        private var overviewKey: [Double] = []
+        /// До какого момента идёт вход в ведение (CACurrentMediaTime): одна
+        /// плавная дуга от обзора к машине вместо двух рывков.
+        private var entryUntil: CFTimeInterval = 0
         private var lastPanTotal = CGSize.zero
         /// Первое применение модели запоминает счётчики, но не исполняет их:
         /// иначе повторный монтаж карты вписывал бы маршрут сам по старому нажатию.
@@ -334,6 +350,8 @@ struct EngineMapView: UIViewRepresentable {
                 browsing = true
                 current?.onBrowse()
             }
+            overviewHeld = false
+            entryUntil = 0
             current?.onGesture()
             return true
         }
@@ -660,6 +678,7 @@ struct EngineMapView: UIViewRepresentable {
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             Log.network.info("MapLibre: стиль загружен")
             installCameraIcons(in: style)
+            routeVariants.styleLoaded()
             lastCameras = nil
             routeInitialized = false
             lineKeys = [:]
@@ -711,7 +730,12 @@ struct EngineMapView: UIViewRepresentable {
                 let pb = view.convert(b.coordinate, toPointTo: view)
                 return hypot(pa.x - point.x, pa.y - point.y) < hypot(pb.x - point.x, pb.y - point.y)
             }
-            if let nearest { current.onSelectCamera(nearest) }
+            if let nearest {
+                current.onSelectCamera(nearest)
+            } else if let id = routeVariants.variant(at: point, in: view), id != current.selectedVariantID {
+                // Касание линии или подписи другого варианта — выбор (27.D).
+                current.onSelectVariant(id)
+            }
         }
 
         func loadStyle(_ model: EngineMapView, in view: MLNMapView) {
@@ -889,7 +913,13 @@ struct EngineMapView: UIViewRepresentable {
             logHealthIfDue(model, in: view)
             if lastRecenterToken != model.recenterToken {
                 lastRecenterToken = model.recenterToken
+                // Из обзора или осмотра — к машине одним плавным ходом
+                // (27.D): «Поехали», «Ко мне».
+                if browsing, cameraPlaced, !UIAccessibility.isReduceMotionEnabled {
+                    entryUntil = CACurrentMediaTime() + AppConfig.routeEntrySeconds
+                }
                 browsing = false
+                overviewHeld = false
                 lastCameraModel = nil
             }
 
@@ -948,7 +978,13 @@ struct EngineMapView: UIViewRepresentable {
             let sinceFollow = lastFollowTime.map { min(AppConfig.engineCameraDuration, max(0, followNow - $0)) }
                 ?? AppConfig.engineCameraDuration
             let untilFix = min(AppConfig.engineCameraDuration, max(0, fixArrival + fixGap - followNow))
-            let followDuration = cameraPlaced && !reduceMotion ? max(sinceFollow, untilFix) : 0
+            var followDuration = cameraPlaced && !reduceMotion ? max(sinceFollow, untilFix) : 0
+            // Вход в ведение: ход не короче остатка входа и с мягким концом —
+            // смена полей (панель выбора → панель поездки) и первый наклон
+            // DriveCamera продолжают ту же дугу, а не обрывают её коротким
+            // линейным шагом. Точка — оценка «где машина» на конец хода.
+            let entering = entryUntil > followNow
+            if entering { followDuration = max(followDuration, entryUntil - followNow) }
             let followPoint = predictor.pose(at: wall + followDuration)?.coordinate ?? model.coordinate
             let centre = GeoMath.destination(from: model.lookAt ?? followPoint,
                                               bearing: heading,
@@ -993,19 +1029,16 @@ struct EngineMapView: UIViewRepresentable {
             }
             if model.overviewCommand != lastOverviewCommand {
                 lastOverviewCommand = model.overviewCommand
-                if let bounds = Self.bounds(model.route) {
-                    browsing = true
-                    view.setCamera(MLNMapCamera(lookingAtCenter: view.centerCoordinate,
-                                                altitude: view.camera.altitude, pitch: 0,
-                                                heading: 0), animated: false)
-                    view.setVisibleCoordinateBounds(bounds, edgePadding: model.overviewPadding,
-                                                    animated: true, completionHandler: nil)
-                }
+                overviewHeld = true
+                overviewKey = []
+                entryUntil = 0
             }
+            if overviewHeld { fitOverview(model, in: view) }
             // «+ / −» на свободной карте приближают сам вид; при слежении масштаб
             // уже учтён в охвате (spanMeters).
             if model.zoomCommand != lastZoomCommand {
                 lastZoomCommand = model.zoomCommand
+                overviewHeld = false
                 if browsing {
                     view.setZoomLevel(min(19, max(5, view.zoomLevel + model.zoomDelta)), animated: true)
                 }
@@ -1016,6 +1049,7 @@ struct EngineMapView: UIViewRepresentable {
                 let step = CGSize(width: model.panTotal.width - lastPanTotal.width,
                                   height: model.panTotal.height - lastPanTotal.height)
                 lastPanTotal = model.panTotal
+                overviewHeld = false
                 if !browsing {
                     browsing = true
                     model.onBrowse()
@@ -1028,7 +1062,7 @@ struct EngineMapView: UIViewRepresentable {
                 lastFollowTime = followNow
                 os_signpost(.event, log: performanceLog, name: "Follow camera")
                 view.setCamera(camera, withDuration: followDuration,
-                           animationTimingFunction: CAMediaTimingFunction(name: .linear))
+                           animationTimingFunction: CAMediaTimingFunction(name: entering ? .easeOut : .linear))
                 lastCameraModel = model
                 followCount &+= 1
             }
@@ -1057,6 +1091,8 @@ struct EngineMapView: UIViewRepresentable {
             updateMarks(model, in: view)
             updateCameraLabel(model.cameraLabel, in: view)
             updateTraffic(model, in: view)
+            routeVariants.update(model.variants, selected: model.selectedVariantID,
+                                 daylight: model.daylight, in: view)
             let newRoute = !routeInitialized || lastRouteObject !== model.routeObject
             if newRoute || lastManeuverAlong != model.maneuverAlong
                 || lastRouteTrafficRevision != model.trafficRevision
@@ -1528,16 +1564,42 @@ struct EngineMapView: UIViewRepresentable {
         }
 
         /// Рамка маршрута для «Весь маршрут»; nil — линии нет.
-        static func bounds(_ route: [CLLocationCoordinate2D]) -> MLNCoordinateBounds? {
-            guard route.count >= 2 else { return nil }
-            var sw = route[0], ne = route[0]
-            for point in route {
-                sw.latitude = min(sw.latitude, point.latitude)
-                sw.longitude = min(sw.longitude, point.longitude)
-                ne.latitude = max(ne.latitude, point.latitude)
-                ne.longitude = max(ne.longitude, point.longitude)
+        /// Кадр «весь маршрут» (27.D): все варианты (иначе линия маршрута)
+        /// между панелями — RoutePreview.fit, север вверху, без наклона, одним
+        /// плавным ходом. До 27.D карта сперва рывком ложилась плашмя, а
+        /// вписывание шло с постоянными полями 150/240 pt — линия уходила под
+        /// карточку выбора. Повторяется, пока кадр держится, только на смене
+        /// входа: полей, вида, набора вариантов или выбора.
+        private func fitOverview(_ model: EngineMapView, in view: MLNMapView) {
+            var minX = Double.infinity, minY = Double.infinity, maxX = -Double.infinity, maxY = -Double.infinity
+            func add(_ rect: MKMapRect) {
+                minX = min(minX, rect.minX); minY = min(minY, rect.minY)
+                maxX = max(maxX, rect.maxX); maxY = max(maxY, rect.maxY)
             }
-            return MLNCoordinateBounds(sw: sw, ne: ne)
+            for variant in model.variants { add(variant.polyline.boundingMapRect) }
+            if minX > maxX, let line = model.routeObject { add(line.boundingMapRect) }
+            if minX > maxX {
+                for coordinate in model.route { add(MKMapRect(origin: MKMapPoint(coordinate), size: MKMapSize())) }
+            }
+            let size = view.bounds.size
+            guard minX <= maxX, size.width > 0, size.height > 0 else { return }
+            let rect = MKMapRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+            let pad = model.overviewPadding
+            let key = [rect.minX, rect.minY, rect.width, rect.height, Double(size.width), Double(size.height),
+                       Double(pad.top), Double(pad.left), Double(pad.bottom), Double(pad.right)].map { $0.rounded() }
+                + [Double(model.selectedVariantID ?? -1)]
+            guard key != overviewKey else { return }
+            overviewKey = key
+            let padding = RoutePreview.Padding(top: Double(pad.top), left: Double(pad.left),
+                                               bottom: Double(pad.bottom), right: Double(pad.right))
+            guard let fit = RoutePreview.fit(rect, width: Double(size.width), height: Double(size.height),
+                                             padding: padding) else { return }
+            browsing = true
+            let altitude = MLNAltitudeForZoomLevel(fit.zoom, 0, fit.center.latitude, size)
+            let camera = MLNMapCamera(lookingAtCenter: fit.center, altitude: altitude, pitch: 0, heading: 0)
+            view.setCamera(camera,
+                           withDuration: UIAccessibility.isReduceMotionEnabled ? 0 : AppConfig.routeOverviewSeconds,
+                           animationTimingFunction: CAMediaTimingFunction(name: .easeInEaseOut))
         }
 
         // MARK: - Стрелка

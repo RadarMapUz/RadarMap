@@ -20,6 +20,10 @@ struct RoutePanel: View {
     var onShareArrival: (() -> Void)?
     /// «По пути» (19.3): заправки, гостиницы, кафе впереди — лист со списком.
     var onShowAlongRoute: (() -> Void)?
+    /// Выбран вариант карточкой: хозяин экрана выбирает его и возвращает кадр
+    /// «весь маршрут» (27.D) — карточка говорит «покажи этот», и карту, которую
+    /// человек перед этим отодвинул, надо вернуть.
+    var onSelectVariant: ((Int) -> Void)?
 
     var body: some View {
         let route = env.route
@@ -34,7 +38,9 @@ struct RoutePanel: View {
                         .lineLimit(2)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 12).padding(.vertical, 6)
-                        .background(.ultraThinMaterial, in: Capsule())
+                        // Сплошная, как карточки: стекло над картой пропускало
+                        // подписи улиц сквозь строку (27.D).
+                        .liftedBackground(Theme.surface, in: Capsule())
                         .contentTransition(.opacity)
                 }
             }
@@ -158,64 +164,117 @@ struct RoutePanel: View {
     // MARK: - Варианты маршрута
 
     private var variantChips: some View {
-        // Строка ярлыка есть у всех плашек, если она есть хоть у одной, —
-        // иначе плашки разной высоты прыгают.
-        let labeled = env.route.variants.contains { !$0.assessment.labels.isEmpty }
+        // Строка ярлыка и строка пробок есть у всех карточек, если они есть
+        // хоть у одной, — иначе карточки разной высоты прыгают.
+        let variants = env.route.variants
+        let labeled = variants.contains { !$0.assessment.labels.isEmpty }
+        let traffic = variants.contains { Self.trafficLine($0) != nil }
         return HStack(spacing: 8) {
-            ForEach(env.route.variants) { variant in
-                variantChip(variant, labeled: labeled)
+            ForEach(variants) { variant in
+                variantChip(variant, labeled: labeled, traffic: traffic)
             }
         }
     }
 
-    private func variantChip(_ variant: RouteService.Variant, labeled: Bool) -> some View {
+    /// Карточка варианта (27.D — крупнее и яснее): ярлык, время с пробками
+    /// крупно, путь и камеры, задержка пробками; снизу полоска цвета его линии
+    /// на карте — по ней карточку и линию связывает глаз.
+    private func variantChip(_ variant: RouteService.Variant, labeled: Bool, traffic: Bool) -> some View {
         let isSelected = variant.id == env.route.selectedID
+        let delay = variant.shownTrafficDelay ?? 0
+        let line = Self.trafficLine(variant)
         return Button {
-            env.route.selectVariant(variant.id)
+            if let onSelectVariant {
+                onSelectVariant(variant.id)
+            } else {
+                env.route.selectVariant(variant.id)
+            }
             UISelectionFeedbackGenerator().selectionChanged()
         } label: {
-            VStack(spacing: 3) {
+            VStack(alignment: .leading, spacing: 3) {
                 if labeled {
                     Text(variant.assessment.labels.first.map { Self.title($0, variant) } ?? " ")
-                        .font(.rounded(11, .bold))
+                        .font(.rounded(12, .bold))
                         // «Перекрытие» — предупреждение, а не достоинство: янтарём.
                         .foregroundStyle(isSelected ? Theme.onAccentFill
                                          : variant.assessment.closures > 0 ? Theme.warning : Theme.accent)
                         .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                        .minimumScaleFactor(0.75)
                 }
                 Text(variant.etaText)
-                    .font(.rounded(15, .bold))
+                    .font(.rounded(21, .heavy))
                     .foregroundStyle(isSelected ? Theme.onAccentFill
-                                     : (variant.shownTrafficDelay ?? 0) >= AppConfig.routeTrafficNoticeSeconds
-                                        ? Self.trafficTint(variant.shownTrafficDelay ?? 0) : Theme.textPrimary)
+                                     : delay >= AppConfig.routeTrafficNoticeSeconds
+                                        ? Self.trafficTint(delay) : Theme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                 HStack(spacing: 4) {
                     Text(variant.distanceText)
-                    Image(systemName: Icon.cameras).font(.rounded(9))
+                    Image(systemName: Icon.cameras).font(.rounded(10, .semibold))
                     Text("\(variant.cameras.count)")
                 }
-                .font(.rounded(11, .medium))
+                .font(.rounded(12, .semibold))
                 .foregroundStyle(isSelected ? Theme.onAccentFillSecondary : Theme.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                if traffic {
+                    Label(line ?? " ", systemImage: "car.2.fill")
+                        .labelStyle(.titleAndIcon)
+                        .font(.rounded(11, .bold))
+                        .foregroundStyle(isSelected ? Theme.onAccentFillSecondary : Self.trafficTint(delay))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .opacity(line == nil ? 0 : 1)
+                }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(isSelected ? AnyShapeStyle(Theme.accentFill)
-                                   : AnyShapeStyle(.ultraThinMaterial),
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 11)
+            .padding(.top, 10)
+            .padding(.bottom, 13)
+            .background(isSelected ? Theme.accentFill : Theme.surface,
                         in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+            .overlay(alignment: .bottom) {
+                // Цвет линии этого варианта на карте. У выбранного линия того
+                // же синего, что заливка карточки, — полоска не нужна.
+                if !isSelected {
+                    Capsule()
+                        .fill(Theme.routeAlternative)
+                        .frame(height: 4)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 5)
+                }
+            }
             .overlay(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
                 .stroke(isSelected ? .clear : Theme.stroke, lineWidth: 1))
+            .background {
+                RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
+                    .fill(Theme.surface)
+                    .shadow(color: Theme.cardShadow, radius: 8, y: 2)
+            }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle())
+        .accessibilityElement(children: .combine)
         // Выбор закодирован только цветом — VoiceOver должен его слышать (4.6).
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
+    /// Строка пробок на карточке: «+7 мин», «без пробок»; данных нет — nil.
+    /// Короче строки карточки маршрута: на SE три карточки по 110 pt.
+    static func trafficLine(_ variant: RouteService.Variant) -> String? {
+        guard let delay = variant.shownTrafficDelay else { return nil }
+        if delay < 60 { return variant.trafficNote }
+        // Знак и число одинаковы в обоих языках; единица — из Formatting.
+        return "+" + Formatting.unbreakable(Formatting.duration(delay))
+    }
+
     /// Цвет пробки на маршруте: заметная задержка — янтарь, большая — красный,
-    /// без пробок — зелёный.
+    /// без пробок — зелёный. Пороги — общие с машиной (RoutePreview.trafficTone).
     static func trafficTint(_ delay: TimeInterval) -> Color {
-        if delay >= AppConfig.routeTrafficHeavySeconds { return Theme.danger }
-        if delay >= AppConfig.routeTrafficNoticeSeconds { return Theme.warning }
-        return Theme.success
+        switch RoutePreview.trafficTone(delay: delay) {
+        case .heavy:           return Theme.danger
+        case .slow:            return Theme.warning
+        case .free, .unknown:  return Theme.success
+        }
     }
 
     // MARK: - Ярлыки вариантов (RouteChoice)

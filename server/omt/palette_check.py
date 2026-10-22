@@ -17,8 +17,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import make_style  # noqa: E402
 
 # Поверх карты — из приложения (Theme.RouteColors, Theme.Types, MarkerLook).
-ROUTE = {"light": {"body": "#2a6ff0", "casing": "#1e4fb8"},
-         "dark": {"body": "#66a3ff", "casing": "#0e1a33"}}
+ROUTE = {"light": {"body": "#2a6ff0", "casing": "#1e4fb8",
+                   "alternative": "#93b4ea", "alternativeCasing": "#46679f"},
+         "dark": {"body": "#66a3ff", "casing": "#0e1a33",
+                  "alternative": "#98acd2", "alternativeCasing": "#0e1a33"}}
 TRAFFIC = {"light": {"free": "#2ba84a", "slow": "#e8a100", "jam": "#d93025"},
            "dark": {"free": "#3cc46b", "slow": "#ffb020", "jam": "#ff5a4e"}}
 CAMERA_TYPES = {"camera": "#d93025", "radar": "#f2b200", "intelligent": "#6a3fd6",
@@ -33,6 +35,7 @@ TEXT_MIN = 4.5          # подписи улиц и мест — текст (WC
 HOUSENUMBER_MIN = 3.0   # номер дома — второстепенная мелкая подпись на доме
 POI_MIN = 3.0           # цветные подписи мест — на фоновом ореоле
 GRAPHIC_MIN = 3.0       # линия маршрута, край маркера — графика (WCAG 1.4.11)
+ALT_ROUTE_DE_MIN = 25   # другой вариант при выборе — не путается с выбранным (27.D)
 CAMERA_DE_MIN = 30      # заливка камеры отличается от любой поверхности карты
 CAMERA_DEUTAN_MIN = 15  # … и при дейтеранопии
 TRAFFIC_DE_MIN = 30     # слой пробок читается на асфальте
@@ -121,6 +124,13 @@ def measure(theme, p=None):
                                                 for c in make_style.POI_COLOURS[theme].values()),
         "линия маршрута / асфальт и фон (мин)": min(max(contrast(route["body"], s), contrast(route["casing"], s))
                                                     for s in asphalt + [p["bg"]]),
+        # Другой вариант маршрута при выборе (27.D): бледнее, но на асфальте
+        # любого класса читается телом или каймой — и отличим от выбранного.
+        "другой вариант / асфальт и фон (мин)": min(max(contrast(route["alternative"], s),
+                                                       contrast(route["alternativeCasing"], s))
+                                                   for s in asphalt + [p["bg"]]),
+        "ΔE другой вариант / выбранный": delta_e(route["alternative"], route["body"]),
+        "ΔE другой вариант / выбранный, дейтеранопия": delta_e(route["alternative"], route["body"], True),
         # Маркер камеры виден, если отделяется от поверхности ЯРКОСТЬЮ
         # (заливка или белое кольцо ≥ 3:1) или ЦВЕТОМ — и при нормальном
         # зрении (ΔE ≥ 30), и при дейтеранопии (ΔE ≥ 15). Красная камера на
@@ -158,6 +168,9 @@ def measure(theme, p=None):
     need(m["номер дома / дом"] >= HOUSENUMBER_MIN, "номер дома < 3:1")
     need(m["подписи мест цветом / ореол (мин)"] >= POI_MIN, "цветная подпись места < 3:1")
     need(m["линия маршрута / асфальт и фон (мин)"] >= GRAPHIC_MIN, "линия маршрута на асфальте < 3:1")
+    need(m["другой вариант / асфальт и фон (мин)"] >= GRAPHIC_MIN, "другой вариант маршрута на асфальте < 3:1")
+    need(min(m["ΔE другой вариант / выбранный"], m["ΔE другой вариант / выбранный, дейтеранопия"])
+         >= ALT_ROUTE_DE_MIN, "другой вариант похож на выбранный")
     need(m["камера не видна (пар тип × поверхность)"] == 0, "маркер камеры сливается с поверхностью")
     need(m["спокойная камера / поверхности (мин)"] >= GRAPHIC_MIN, "спокойная камера < 3:1")
     need(m["ΔE пробки / асфальт (мин)"] >= TRAFFIC_DE_MIN, "пробка сливается с асфальтом")

@@ -180,6 +180,13 @@ struct CarPlayEngineLayer: View {
             overviewPadding: UIEdgeInsets(top: safe.top + 30, left: size.width * 0.45,
                                           bottom: safe.bottom + 30,
                                           right: model.mapButtonInsets.trailing + 30),
+            // Выбор маршрута в машине (CPTripPreview): другие варианты —
+            // бледной линией под выбранным, с временем, как на телефоне (27.D).
+            // Касаний в окне машины нет — выбирает список шаблона.
+            variants: model.isPreviewing && env.route.variants.count > 1 ? env.route.variants.map {
+                RouteVariantLine(id: $0.id, polyline: $0.polyline, eta: $0.etaText)
+            } : [],
+            selectedVariantID: model.isPreviewing ? env.route.selectedID : nil,
             panTotal: model.panTotal,
             // Перекрытия и ремонт (12б.5) — в машине тоже: о ремонте говорит
             // голос, и значок должен стоять там, где о нём сказали.

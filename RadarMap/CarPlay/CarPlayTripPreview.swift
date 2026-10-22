@@ -55,11 +55,14 @@ enum CarPlayTripPreview {
         case green, orange, red
     }
 
+    /// Тот же цвет, что у времени варианта на телефоне (RoutePreview.trafficTone).
     static func timeColor(trafficDelay: TimeInterval?) -> TimeColor {
-        guard let delay = trafficDelay else { return .standard }
-        if delay < AppConfig.carPlayTrafficGreenSeconds { return .green }
-        if delay < AppConfig.carPlayTrafficOrangeSeconds { return .orange }
-        return .red
+        switch RoutePreview.trafficTone(delay: trafficDelay) {
+        case .unknown: return .standard
+        case .free:    return .green
+        case .slow:    return .orange
+        case .heavy:   return .red
+        }
     }
 
     /// Показывать ли выбор: только пока машина стоит или ползёт.

@@ -45,6 +45,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     var confirmBannerID: Int?
     /// Погода на перевале впереди (19.2) — свой баннер в общей очереди.
     let roadWeatherBanner = CarPlayRoadWeatherBanner()
+    /// «Впереди пробка: +6 мин» (27.E) — баннером в общей очереди.
+    let jamBanner = CarPlayJamBanner()
     /// Вопрос, который истёк или закрыт без ответа: это «Пропустить», и
     /// второй раз о той же отметке не спрашиваем.
     var skippedConfirmID: Int?
@@ -203,6 +205,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         observePendingConfirm()
         observeDetour()
         observeRoadWeather()
+        observeJam()
         observeTripSaved()
         startFreezeWatch(scene: scene)
         Log.carplay.notice("CarPlay подключён, сцена \(Self.stateName(scene), privacy: .public), метаданные приборки \(self.env.settings.carPlayNavigationMetadata ? "вкл" : "выкл", privacy: .public)")
@@ -250,6 +253,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         detourAlert = nil
         detourAlertID = nil
         roadWeatherBanner.reset()
+        jamBanner.reset()
         // Глобальное состояние гасит только владелец экрана: запоздавший
         // didDisconnect старой сцены, пришедший после didConnect новой,
         // выключал бы непрерывный GPS и опрос отметок у ЖИВОЙ сессии.

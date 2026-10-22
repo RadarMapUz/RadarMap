@@ -101,8 +101,39 @@ nonisolated enum JamAhead {
     }
 }
 
+extension JamAhead {
+    /// Пробка впереди для экрана машины (27.E): тот же JamAhead, что голос,
+    /// баннером в общей очереди CarPlay (CarPlayBanners, ниже камеры и
+    /// объезда). Живёт `carPlayJamBannerSeconds`; вытесненная камерой
+    /// вернётся, пока не истекла, — закрытая водителем или истёкшая нет.
+    struct Notice: Equatable, Sendable {
+        let id: Int
+        let jam: Jam
+        let until: Date
+
+        /// Показывать ли сейчас: осталось меньше пары секунд — нет,
+        /// мелькнувший баннер за рулём хуже никакого (голос уже сказал).
+        func isShowable(now: Date) -> Bool {
+            until.timeIntervalSince(now) >= AppConfig.carPlayJamMinSeconds
+        }
+    }
+}
+
 /// Фраза — на главном потоке: Formatting знает язык приложения.
 extension JamAhead.Jam {
+    /// Баннер в машине: «Впереди пробка: +6 мин».
+    var bannerTitle: String {
+        String(format: String(localized: "Впереди пробка: +%@"),
+               Formatting.unbreakable(Formatting.duration(delay)))
+    }
+
+    /// «около 1,2 км, через 300 м».
+    var bannerSubtitle: String {
+        String(format: String(localized: "около %1$@, через %2$@"),
+               Formatting.distance((length / 100).rounded() * 100),
+               Formatting.distance((startsIn / 50).rounded() * 50))
+    }
+
     /// «Впереди пробка: около 1,2 км, плюс 6 мин».
     var spoken: String {
         String(format: String(localized: "Впереди пробка: около %1$@, плюс %2$@"),

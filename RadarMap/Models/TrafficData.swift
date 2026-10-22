@@ -94,13 +94,30 @@ nonisolated struct TrafficSnapshot: Sendable {
                 let t = (Double(s) + 0.5) / Double(steps)
                 let point = CLLocationCoordinate2D(latitude: p.latitude + (q.latitude - p.latitude) * t,
                                                    longitude: p.longitude + (q.longitude - p.longitude) * t)
-                guard let edge = matchingEdge(at: point, course: course), edge.level >= 2 else { continue }
-                let now = max(3, edge.kmh) / 3.6
-                let free = edge.modelKmh / 3.6
-                total += max(0, stepLength / now - stepLength / free)
+                total += stepDelay(at: point, course: course, length: stepLength)
             }
         }
         return total
+    }
+
+    /// Сколько секунд добавляет медленное ребро под шагом маршрута длиной
+    /// `length`; 0 — ребра нет или оно свободно. Одна мерка для живых пробок
+    /// (`delay`) и прогноза по часу (TrafficForecast).
+    func stepDelay(at point: CLLocationCoordinate2D, course: Double, length: Double) -> TimeInterval {
+        guard let edge = matchingEdge(at: point, course: course), edge.level >= 2, edge.modelKmh > 0 else { return 0 }
+        let now = max(3, edge.kmh) / 3.6
+        let free = edge.modelKmh / 3.6
+        return max(0, length / now - length / free)
+    }
+
+    /// Уровень по отношению скорости к скорости графа — те же пороги, что у
+    /// сервера (traffic_build.level): 1 свободно, 2 медленно, 3 пробка.
+    static func level(kmh: Double, modelKmh: Double) -> Int {
+        guard modelKmh > 0 else { return 1 }
+        let ratio = kmh / modelKmh
+        if ratio < AppConfig.trafficJamRatio { return 3 }
+        if ratio < AppConfig.trafficSlowRatio { return 2 }
+        return 1
     }
 
     /// Ребро под точкой маршрута: ближайшее в пределах trafficMatchMeters с

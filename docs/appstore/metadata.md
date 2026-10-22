@@ -155,7 +155,7 @@ Maps, routing and speed limits © OpenStreetMap contributors. Cameras: Open Data
 RadarMap helps you keep to speed limits; always follow traffic rules and road signs.
 ```
 
-### uz — латиница (сайт  Telegram; ≈3 115 символов)
+### uz — латиница (сайт, Telegram; ≈3 115 символов)
 
 ```
 RadarMap — Oʻzbekiston videokuzatuv kameralari xaritasi va haydovchining ovozli yordamchisi. IIV ochiq maʼlumotlaridagi (data.egov.uz portali) 3 400 dan ortiq statsionar kamera va radar telefonda saqlanadi, shuning uchun ogohlantirishlar internetsiz ham ishlaydi.

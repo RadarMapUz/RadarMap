@@ -161,6 +161,13 @@ struct RootView: View {
                     // состоянию; у предпросмотра сцены нет — он на экране сразу.
                     carPlayPreviewModel.isOnScreen = true
                     carPlayPreview = true
+                    // Выбор маршрута в машине без машины (снимки 27.D): кадр
+                    // «весь маршрут» и варианты, как под CPTripPreview.
+                    if ProcessInfo.processInfo.arguments.contains("-carplayOverview") {
+                        for _ in 0..<40 where env.route.variants.isEmpty { await Task.pause(seconds: 0.5) }
+                        carPlayPreviewModel.isPreviewing = true
+                        carPlayPreviewModel.showOverview()
+                    }
                 }
             }
             #endif

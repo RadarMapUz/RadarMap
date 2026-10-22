@@ -66,6 +66,8 @@ class AppColoursInSync(unittest.TestCase):
         for theme_name in ("light", "dark"):
             self.assertEqual(palette_check.ROUTE[theme_name]["body"], pair("body")[theme_name])
             self.assertEqual(palette_check.ROUTE[theme_name]["casing"], pair("casing")[theme_name])
+            for name in ("alternative", "alternativeCasing"):
+                self.assertEqual(palette_check.ROUTE[theme_name][name], pair(name)[theme_name], name)
             for state in ("free", "slow", "jam"):
                 self.assertEqual(palette_check.TRAFFIC[theme_name][state], pair(state)[theme_name], state)
 

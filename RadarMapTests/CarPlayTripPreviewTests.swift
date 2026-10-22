@@ -82,6 +82,21 @@ final class CarPlayTripPreviewTests: XCTestCase {
         XCTAssertTrue(text.additional.last?.contains(cameras) ?? false)
     }
 
+    /// Карточка выбранного варианта в машине говорит то же, что карточка
+    /// телефона (27.D): ярлык, время, путь, камеры — от длинной к короткой.
+    func testSelectionMatchesThePhoneCard() {
+        let fast = variant(id: 0, minutes: 25, km: 12, cameras: 3, labels: [.fastest])
+        let calm = variant(id: 1, minutes: 27, km: 13, cameras: 1, labels: [.fewerCameras])
+        let text = CarPlayTripPreview.text(for: fast, among: [fast, calm])
+        let full = text.selection[0]
+        for part in [RoutePanel.title(.fastest, fast), fast.etaText, fast.distanceText,
+                     String(format: String(localized: "камер: %lld"), 3)] {
+            XCTAssertTrue(full.contains(part), "\(part) в «\(full)»")
+        }
+        XCTAssertEqual(text.selection.last, fast.etaText)
+        XCTAssertGreaterThanOrEqual(text.selection[0].count, text.selection[1].count)
+    }
+
     func testTimeColorNeverClaimsFreeRoadWithoutData() {
         XCTAssertEqual(CarPlayTripPreview.timeColor(trafficDelay: nil), .standard)
         XCTAssertEqual(CarPlayTripPreview.timeColor(trafficDelay: 30), .green)

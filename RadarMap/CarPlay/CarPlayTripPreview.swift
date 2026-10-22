@@ -44,7 +44,10 @@ enum CarPlayTripPreview {
         return ChoiceText(
             summary: [head.map { "\($0) · \(eta)" }, eta].compactMap { $0 },
             additional: [reason.map { "\($0) · \(facts)" }, facts, short].compactMap { $0 },
-            selection: [[head, eta, variant.distanceText].compactMap { $0 }.joined(separator: " · "), eta])
+            // Выбранный вариант на карточке машины — то же, что карточка
+            // телефона (27.D): ярлык, время, путь, камеры; короче — без камер.
+            selection: [[head, eta, variant.distanceText, cameras].compactMap { $0 }.joined(separator: " · "),
+                        [head, eta, variant.distanceText].compactMap { $0 }.joined(separator: " · "), eta])
     }
 
     /// Цвет оставшегося времени по пробкам (CPTimeRemainingColor).
@@ -55,11 +58,14 @@ enum CarPlayTripPreview {
         case green, orange, red
     }
 
+    /// Тот же цвет, что у времени варианта на телефоне (RoutePreview.trafficTone).
     static func timeColor(trafficDelay: TimeInterval?) -> TimeColor {
-        guard let delay = trafficDelay else { return .standard }
-        if delay < AppConfig.carPlayTrafficGreenSeconds { return .green }
-        if delay < AppConfig.carPlayTrafficOrangeSeconds { return .orange }
-        return .red
+        switch RoutePreview.trafficTone(delay: trafficDelay) {
+        case .unknown: return .standard
+        case .free:    return .green
+        case .slow:    return .orange
+        case .heavy:   return .red
+        }
     }
 
     /// Показывать ли выбор: только пока машина стоит или ползёт.

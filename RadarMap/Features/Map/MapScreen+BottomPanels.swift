@@ -129,7 +129,11 @@ extension MapScreen {
                         onTripToggle: { toggleTrip() },
                         onRemoveStop: { removeStop() },
                         onShareArrival: { shareArrival() },
-                        onShowAlongRoute: { showAlongRoute = true }
+                        onShowAlongRoute: { showAlongRoute = true },
+                        onSelectVariant: { id in
+                            env.route.selectVariant(id)
+                            showVariantsOverview()
+                        }
                     )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else {
@@ -363,12 +367,16 @@ extension MapScreen {
                                   alternatives: env.settings.routeAlternatives)
             guard env.route.isActive else { return }
             env.settings.addRecent(title: name, lat: coordinate.latitude, lon: coordinate.longitude)
-            // Охватываем ВСЕ варианты, чтобы выбор был виден сразу.
-            var rect = MKMapRect.null
-            for variant in env.route.variants { rect = rect.union(variant.polyline.boundingMapRect) }
-            // Показываем маршрут целиком — это уже не слежение за точкой;
-            // общая команда видна и карте Apple, и движку.
-            map.showRouteOverview(rect: rect)
+            showVariantsOverview()
         }
+    }
+
+    /// Кадр «весь маршрут» по ВСЕМ вариантам, чтобы выбор был виден сразу.
+    /// Это уже не слежение за точкой: карта держит кадр (поля панелей,
+    /// смена выбора — плавно, 27.D), пока её не тронут.
+    func showVariantsOverview() {
+        var rect = MKMapRect.null
+        for variant in env.route.variants { rect = rect.union(variant.polyline.boundingMapRect) }
+        map.showRouteOverview(rect: rect)
     }
 }

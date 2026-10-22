@@ -1738,6 +1738,40 @@ nonisolated enum AppConfig {
     /// под машиной (кривая между нами — значит прямая уже врёт).
     nonisolated static let cameraOnRoadMaxAxisDegrees = 6.0
 
+    // MARK: - Выбор маршрута на карте (RoutePreview, 27.D)
+
+    /// Касание линии варианта: дальше этого от линии — мимо (половина мишени
+    /// пальца, 44 pt). Выбранный побеждает, если чужой ближе меньше чем на
+    /// `…MarginPoints`: на общем отрезке выбор не прыгает.
+    static let routeVariantTapPoints: CGFloat = 22
+    static let routeVariantTapMarginPoints: CGFloat = 6
+    /// Кадр «весь маршрут»: поле слева, колонка кнопок справа (44 pt + край),
+    /// зазор до панелей и его минимум, если места мало; меньше `MinFree`
+    /// свободной высоты линии не оставляем — тогда ужимаются панели. Поля
+    /// сбоку — с запасом на полподписи «24 мин» (~35 pt): подпись встаёт там,
+    /// где вариант дальше всего от других, то есть часто у края кадра, и при
+    /// 16/64 pt уходила под край экрана и под кнопку звука (снимок 27.D).
+    static let routeOverviewSidePoints: Double = 40
+    static let routeOverviewColumnPoints: Double = 84
+    static let routeOverviewMarginPoints: Double = 28
+    static let routeOverviewMinMarginPoints: Double = 8
+    static let routeOverviewMinFreePoints: Double = 160
+    /// Нижнюю панель ещё не измерили — считать, что она закрывает столько.
+    static let routeOverviewFallbackBottomShare: Double = 0.45
+    /// Масштаб кадра: не дальше страны и не ближе квартала (короткий маршрут
+    /// в два двора не вписывается в z19).
+    static let routeOverviewMinZoom: Double = 5
+    static let routeOverviewMaxZoom: Double = 16.5
+    /// Ход камеры к кадру и обратно к машине на «Поехали»: один плавный ход
+    /// вместо прежних двух рывков (наклон в ноль мгновенно, потом вписывание).
+    static let routeOverviewSeconds: Double = 0.8
+    static let routeEntrySeconds: Double = 1.4
+    /// Подпись «24 мин» на линии варианта: в средней части линии, по
+    /// стольким точкам, против чужих линий, прореженных до стольких точек.
+    nonisolated static let routeVariantLabelSpan: ClosedRange<Double> = 0.2...0.8
+    nonisolated static let routeVariantLabelSamples = 40
+    nonisolated static let routeVariantLabelOtherPoints = 400
+
     // MARK: - CarPlay
 
     /// До какого расстояния показывать ближайшую камеру в HUD машины.
@@ -1801,10 +1835,6 @@ nonisolated enum AppConfig {
     static let carPlayPreviewMaxKmh: Double = 10
     static let carPlayPreviewAutoStartKmh: Double = 15
     static let carPlayPreviewAutoStartSeconds: TimeInterval = 4
-    /// Цвет оставшегося времени: задержка пробками меньше двух минут —
-    /// зелёный, меньше десяти — оранжевый, больше — красный.
-    static let carPlayTrafficGreenSeconds: TimeInterval = 120
-    static let carPlayTrafficOrangeSeconds: TimeInterval = 600
     /// «Куда едем?» в машине: через сколько после показа карты предложить
     /// (первый точный фикс) и сколько держать баннер.
     static let carPlayDestinationOfferDelay: TimeInterval = 4

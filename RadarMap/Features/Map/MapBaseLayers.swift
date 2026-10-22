@@ -35,6 +35,18 @@ struct EngineBaseLayer: View {
     let map: MapState
     @State private var recenterToken = 0
     private var browsing: Bool { map.orientation == .free }
+    /// Экран выбора варианта: маршрут есть, вариантов больше одного, не едем.
+    private var choosing: Bool { env.route.variants.count > 1 && !env.location.isTripActive }
+
+    /// Поля кадра «весь маршрут» по измеренным панелям (MapFrameState): доли
+    /// высоты обратно в точки. Нижняя доля 0 — «ещё не мерили».
+    private func overviewPadding(size: CGSize, insets: MapViewport.Insets) -> UIEdgeInsets {
+        let height = Double(size.height)
+        let p = RoutePreview.padding(width: Double(size.width), height: height,
+                                     panelTop: insets.top * height,
+                                     panelBottom: insets.bottom > 0 ? height * (1 - insets.bottom) : 0)
+        return UIEdgeInsets(top: p.top, left: p.left, bottom: p.bottom, right: p.right)
+    }
 
     var body: some View {
         // Без геопозиции («Никогда», ещё нет фикса) карта — не пустая подложка,
@@ -122,6 +134,16 @@ struct EngineBaseLayer: View {
                         labelLanguage: env.settings.appLanguage.mapCode,
                         cursorStyle: env.settings.cursorStyle,
                         overviewCommand: map.overviewCommand,
+                        // Кадр «весь маршрут» — между НАСТОЯЩИМИ панелями (27.D).
+                        overviewPadding: overviewPadding(size: geo.size, insets: insets),
+                        variants: choosing ? env.route.variants.map {
+                            RouteVariantLine(id: $0.id, polyline: $0.polyline, eta: $0.etaText)
+                        } : [],
+                        selectedVariantID: choosing ? env.route.selectedID : nil,
+                        onSelectVariant: { id in
+                            env.route.selectVariant(id)
+                            UISelectionFeedbackGenerator().selectionChanged()
+                        },
                         destination: env.route.destinationCoordinate,
                         pressedPoint: map.pressedPoint?.coordinate,
                         roadEvents: env.mobile.roadEvents,
@@ -137,7 +159,10 @@ struct EngineBaseLayer: View {
                         onRegion: { map.updateVisible(for: $0) },
                         showsPosition: known != nil,
                         markerMotion: env.location.markerMotion)
-                    if browsing {
+                    // Не в обзоре маршрута до старта: там карта отодвинута
+                    // нарочно, «к себе» есть в колонке, а капсула вставала
+                    // поверх линии или пряталась под карточками (27.D).
+                    if browsing, !(env.route.isActive && !env.location.isTripActive) {
                         VStack {
                             Spacer()
                             Button {

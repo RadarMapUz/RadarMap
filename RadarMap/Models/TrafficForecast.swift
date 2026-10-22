@@ -84,6 +84,10 @@ nonisolated enum TrafficForecast {
         let pace = max(0, baseTime) / length          // с/м по графу
         let liveFresh = live.map { $0.isFresh(now: now) } ?? false
         let liveUntil = now.addingTimeInterval(AppConfig.trafficLiveHorizonSeconds)
+        // Запасной путь «файла часа нет — по живым» — только для поездки,
+        // которая начинается сейчас: к выезду завтра в 8:30 вечерняя пробка
+        // не относится ни ближней частью, ни дальней.
+        let liveFallback = liveFresh && departure <= liveUntil
 
         var files: [TypicalTraffic.Bucket: TrafficSnapshot?] = [:]
         var bucket: (until: Date, file: TrafficSnapshot?)?
@@ -121,7 +125,7 @@ nonisolated enum TrafficForecast {
                 } else if let file = typicalFile(at: moment) {
                     usedTypical = true
                     total += file.stepDelay(at: point, course: course, length: step)
-                } else if liveFresh, let live {
+                } else if liveFallback, let live {
                     // Файла часа нет — дальняя часть по живым, как до 27.E:
                     // пробка сорокаминутной давности ближе к правде, чем ничего.
                     usedLive = true

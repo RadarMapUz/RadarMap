@@ -80,7 +80,8 @@ final class TrafficForecastTests: XCTestCase {
         XCTAssertEqual(delay.source, .live)
         XCTAssertEqual(delay.seconds, live.delay(along: route), accuracy: 0.5,
                        "короткий маршрут целиком в горизонте — то же, что до 27.E")
-        XCTAssertEqual(delay.seconds, 1000 / (10 / 3.6) - 1000 / (60 / 3.6), accuracy: 2)
+        // ~1 км пробки: по шагу 25 м у каждого конца ловится соседнее ребро.
+        XCTAssertEqual(delay.seconds, 1000 / (10 / 3.6) - 1000 / (60 / 3.6), accuracy: 15)
     }
 
     func testFreshFreeLiveBeatsATypicalJam() throws {

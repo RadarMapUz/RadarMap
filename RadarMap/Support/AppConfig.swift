@@ -2729,6 +2729,14 @@ nonisolated enum AppConfig {
     nonisolated static let familyHoldSeconds: TimeInterval = tripMergeMaxStopSeconds
     /// Строка «Мама увидит, что вы едете домой» висит столько секунд.
     static let familyNoticeSeconds: Double = 6
+    /// «В пути» не дошло — пауза перед повтором этому близкому, дальше вдвое
+    /// после каждой новой неудачи до `familyRetryMaxSeconds`. Без паузы
+    /// повтор шёл на КАЖДОМ фиксе: без сети на трассе — запрос в секунду на
+    /// человека всю поездку, а на стабильные 4xx (старый сервер, правка nginx)
+    /// — настоящий HTTPS раз в секунду. 15 с — заметно короче десяти минут
+    /// живости ссылки, близкие не увидят «давно не обновлялось».
+    nonisolated static let familyRetrySeconds: TimeInterval = 15
+    nonisolated static let familyRetryMaxSeconds: TimeInterval = 120
 
     // MARK: - Маршрут без сети (OfflineRouteGraph, 12б.10)
 

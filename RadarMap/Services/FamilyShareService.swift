@@ -189,7 +189,7 @@ final class FamilyShareService {
         for action in actions {
             switch action {
             case let .drive(id, arrival, home):
-                guard let recipient = recipient(id) else { trip.failed(id); continue }
+                guard let recipient = recipient(id) else { trip.failed(id, now: Date()); continue }
                 sendDriving(recipient, arrival: arrival, home: home)
             case let .close(id, status, home):
                 guard let recipient = recipient(id) else { continue }
@@ -221,7 +221,7 @@ final class FamilyShareService {
             if delivered {
                 trip.delivered(id, arrival: arrival, home: home, at: Date())
             } else {
-                trip.failed(id)
+                trip.failed(id, now: Date())
             }
             publish()
             if delivered { considerNotice() }

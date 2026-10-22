@@ -37,7 +37,12 @@ final class RouteService {
     struct RouteCamera: Identifiable {
         let camera: Camera
         let distanceAlong: CLLocationDistance   // от старта по маршруту
+        /// Доказанно встречная для линии маршрута (RouteCameraDirection, 27.J):
+        /// в коридоре, но не наша — её судят обычные гейты по живому фиксу.
+        var provenOncoming = false
         var id: Int { camera.id }
+        /// Маршрут вправе назвать её нашей (шаг 1 гейтов).
+        var countsAsOurs: Bool { !provenOncoming }
     }
 
     /// Один вариант маршрута — в виде, не зависящем от движка.
@@ -828,9 +833,10 @@ final class RouteService {
             stop = nil
         }
 
-        // Следующая камера впереди по маршруту.
+        // Следующая камера впереди по маршруту. Доказанно встречная — не
+        // «следующая наша» (27.J).
         if let cam = variant.cameras.first(where: {
-            $0.distanceAlong > along - AppConfig.routeCameraBehindSlackMeters
+            $0.countsAsOurs && $0.distanceAlong > along - AppConfig.routeCameraBehindSlackMeters
         }) {
             nextCamera = cam
             nextCameraDistance = max(0, cam.distanceAlong - along)
@@ -1986,16 +1992,25 @@ final class RouteService {
             guard rect.contains(mp) else { continue }
             var bestMeters = Double.greatestFiniteMagnitude
             var bestAlong: CLLocationDistance = 0
+            var bestSegment = 0
+            var bestT = 0.0
             for i in 0..<(n - 1) {
                 let (closest, t) = closestPoint(mp, pts[i], pts[i + 1])
                 let d = mp.distance(to: closest)
                 if d < bestMeters {
                     bestMeters = d
                     bestAlong = cum[i] + t * pts[i].distance(to: pts[i + 1])
+                    bestSegment = i
+                    bestT = t
                 }
             }
             if bestMeters <= AppConfig.routeCorridorMeters {
-                result.append(RouteCamera(camera: camera, distanceAlong: bestAlong))
+                // Встречная при доказанно поделённых сторонах — в коридоре, но
+                // не наша (27.J); недоказанное — наше, как было.
+                let oncoming = RouteCameraDirection.isProvenOncoming(camera, on: pts,
+                                                                     segment: bestSegment, t: bestT)
+                result.append(RouteCamera(camera: camera, distanceAlong: bestAlong,
+                                          provenOncoming: oncoming))
             }
         }
         return result.sorted { $0.distanceAlong < $1.distanceAlong }

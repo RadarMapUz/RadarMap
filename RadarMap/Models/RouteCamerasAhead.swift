@@ -24,7 +24,8 @@ enum RouteCamerasAhead {
     static func list(_ cameras: [RouteService.RouteCamera], progress: CLLocationDistance,
                      limit: Int = .max) -> [Item] {
         cameras
-            .filter { $0.distanceAlong > progress }
+            // Доказанно встречная — не «впереди по маршруту» (27.J).
+            .filter { $0.countsAsOurs && $0.distanceAlong > progress }
             .sorted { $0.distanceAlong < $1.distanceAlong }
             .prefix(max(0, limit))
             .map { Item(camera: $0.camera, meters: $0.distanceAlong - progress) }

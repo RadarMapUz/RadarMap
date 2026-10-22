@@ -1859,7 +1859,7 @@
      14.5,
      "#ffffff",
      15.5,
-     "#dcdee2"
+     "#d4d7dd"
     ],
     "line-opacity": [
      "interpolate",
@@ -2183,7 +2183,7 @@
      14.5,
      "#ffffff",
      15.5,
-     "#dcdee2"
+     "#d4d7dd"
     ],
     "line-opacity": [
      "interpolate",
@@ -4861,7 +4861,7 @@
      14.5,
      "#ffffff",
      15.5,
-     "#dcdee2"
+     "#d4d7dd"
     ],
     "line-opacity": [
      "interpolate",
@@ -7103,7 +7103,7 @@
      14.5,
      "#ffffff",
      15.5,
-     "#dcdee2"
+     "#d4d7dd"
     ],
     "line-opacity": [
      "interpolate",
@@ -8193,8 +8193,8 @@
    },
    "minzoom": 14,
    "paint": {
-    "fill-color": "#e6dfd3",
-    "fill-outline-color": "#cec4b4"
+    "fill-color": "#e2d9cb",
+    "fill-outline-color": "#c8bca9"
    },
    "source": "openmaptiles",
    "source-layer": "building",
@@ -9281,7 +9281,7 @@
       "#c3c6ce",
       5,
       "#cdd0d6",
-      "#dcdee2"
+      "#d4d7dd"
      ],
      16.5,
      "#c3c6ce"
@@ -9421,7 +9421,7 @@
       "#c3c6ce",
       5,
       "#cdd0d6",
-      "#dcdee2"
+      "#d4d7dd"
      ],
      16.5,
      "#c3c6ce"
@@ -9750,7 +9750,7 @@
        "major"
       ],
       "#c3c6ce",
-      "#dcdee2"
+      "#d4d7dd"
      ],
      16.5,
      "#c3c6ce"
@@ -10813,7 +10813,7 @@
       "#c3c6ce",
       5,
       "#cdd0d6",
-      "#dcdee2"
+      "#d4d7dd"
      ],
      16.5,
      "#c3c6ce"
@@ -11979,7 +11979,7 @@
       0
      ]
     ],
-    "fill-extrusion-color": "#e6dfd3",
+    "fill-extrusion-color": "#e2d9cb",
     "fill-extrusion-height": [
      "interpolate",
      [
@@ -12335,7 +12335,7 @@
    "minzoom": 17,
    "paint": {
     "text-color": "#7a7066",
-    "text-halo-color": "#e6dfd3",
+    "text-halo-color": "#e2d9cb",
     "text-halo-width": 1
    },
    "source": "openmaptiles",
@@ -13784,7 +13784,7 @@
       "#c3c6ce",
       "tertiary",
       "#cdd0d6",
-      "#dcdee2"
+      "#d4d7dd"
      ],
      16.5,
      "#c3c6ce"
@@ -14611,7 +14611,7 @@
       "#c3c6ce",
       "tertiary",
       "#cdd0d6",
-      "#dcdee2"
+      "#d4d7dd"
      ],
      16.5,
      "#c3c6ce"
@@ -15431,7 +15431,7 @@
       "#c3c6ce",
       "tertiary",
       "#cdd0d6",
-      "#dcdee2"
+      "#d4d7dd"
      ],
      16.5,
      "#c3c6ce"

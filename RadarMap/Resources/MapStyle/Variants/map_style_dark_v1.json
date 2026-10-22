@@ -8193,8 +8193,8 @@
    },
    "minzoom": 14,
    "paint": {
-    "fill-color": "#222d42",
-    "fill-outline-color": "#161e2d"
+    "fill-color": "#26324a",
+    "fill-outline-color": "#182031"
    },
    "source": "openmaptiles",
    "source-layer": "building",
@@ -11979,7 +11979,7 @@
       0
      ]
     ],
-    "fill-extrusion-color": "#222d42",
+    "fill-extrusion-color": "#26324a",
     "fill-extrusion-height": [
      "interpolate",
      [
@@ -12335,7 +12335,7 @@
    "minzoom": 17,
    "paint": {
     "text-color": "#8a96ab",
-    "text-halo-color": "#222d42",
+    "text-halo-color": "#26324a",
     "text-halo-width": 1
    },
    "source": "openmaptiles",

@@ -121,6 +121,34 @@ final class FamilyShareService {
         circle.driverName = String(name.prefix(AppConfig.familyDriverNameMax))
     }
 
+    /// Близкие из iCloud (27.F). Ключи записи в iCloud не уходят, поэтому
+    /// знакомый близкий получает только имя, смайлик, режим и выключатель —
+    /// его ссылка на этом телефоне остаётся своей. Новый (восстановление на
+    /// другом телефоне) заводится со СВОЕЙ новой ссылкой, ещё не отправленной:
+    /// «Видят: Мама» не появится, пока ссылку не отправят заново. Удалённый на
+    /// другом телефоне — удаляется и здесь, с погашенной ссылкой.
+    func applyCloud(contacts: [CloudPayload.FamilyContact], removed: Set<UUID>, driverName: String?,
+                    now: Date = Date()) {
+        for contact in contacts where !removed.contains(contact.id) {
+            if recipient(contact.id) != nil {
+                edit(contact.id) {
+                    $0.name = contact.name
+                    $0.emoji = contact.emoji
+                    $0.mode = contact.mode
+                    $0.enabled = contact.enabled
+                }
+            } else if circle.canAdd {
+                var fresh = FamilyRecipient(name: contact.name, emoji: contact.emoji, mode: contact.mode,
+                                            now: now, id: contact.id)
+                fresh.enabled = contact.enabled
+                circle.recipients.append(fresh)
+            }
+        }
+        for id in removed { remove(id, now: now) }
+        if let driverName, driverName != circle.driverName { setDriverName(driverName) }
+        update(now: now)
+    }
+
     /// «Пауза до завтра» — для всех; идущая поездка гаснет сразу.
     func pauseUntilTomorrow(now: Date = Date()) {
         circle.pausedUntil = FamilyCircle.pauseEnd(now: now)

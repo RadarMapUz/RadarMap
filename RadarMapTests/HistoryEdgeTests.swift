@@ -40,7 +40,7 @@ final class HistoryEdgeTests: XCTestCase {
     /// трек — только у недели и у семи последних.
     func testHeavyHistoryHitsTheCeiling() {
         let history = (0..<84).map { record(daysAgo: Double($0) / 6) }
-        let pruned = TripHistory.pruned(history, now: now)
+        let pruned = TripHistory.pruned(history, retention: .legacy, now: now)
         XCTAssertEqual(pruned.count, TripHistory.maxHistory)
         XCTAssertTrue(pruned.allSatisfy { $0.startedAt > now.addingTimeInterval(-30 * 86_400) })
         let oldWithTrack = pruned.enumerated().filter { index, record in
@@ -57,7 +57,8 @@ final class HistoryEdgeTests: XCTestCase {
         let days = TripDayBook.rebuilt(from: history)
         let pruned = TripHistory.pruned(history, now: now)
         XCTAssertEqual(pruned.count, 2, "в первых семи — держим")
-        XCTAssertTrue(TripHistory.pruned((0..<10).map { record(daysAgo: Double($0) / 24) } + history, now: now)
+        XCTAssertTrue(TripHistory.pruned((0..<10).map { record(daysAgo: Double($0) / 24) } + history,
+                                         retention: .legacy, now: now)
             .allSatisfy { $0.startedAt > now.addingTimeInterval(-30 * 86_400) }, "за семью последними старше месяца — уходит")
         let all = TripDayBook.summary(days, in: DateInterval(start: now.addingTimeInterval(-50 * 86_400), end: now))
         XCTAssertEqual(all.trips, 2, "итоги дня переживают запись")

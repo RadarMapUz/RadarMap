@@ -2225,3 +2225,156 @@ final class TripStats {
     /// приложения (модель UIKit не импортирует).
     @ObservationIgnored var mustWriteSynchronously: () -> Bool = { true }
 }
+
+// MARK: - iCloud (27.F)
+//
+// Синхронизация (CloudSyncEngine) читает историю отсюда и кладёт пришедшее
+// сюда же — теми же дверями, что и всё остальное: дни правятся хирургически
+// (снять старую, положить новую), запись на диск — через persist, месяц,
+// которого нет в памяти, сначала читается с диска. «За всё время» пришедшие
+// поездки не трогают: оно сливается сводкой (максимум по полю, как у копии
+// в файл), иначе одна поездка посчиталась бы дважды.
+
+extension TripStats {
+    /// Месяцы, которые в памяти целиком (их правда — здесь): по месяцу —
+    /// записи. Месяца нет — он только на диске.
+    func cloudMonthsInMemory() -> [TripStore.Month: [TripRecord]] {
+        let grouped = TripStore.grouped(history)
+        var result: [TripStore.Month: [TripRecord]] = [:]
+        for month in written.keys { result[month] = grouped[month] ?? [] }
+        return result
+    }
+
+    /// Месяцы на диске — в той же очереди, что и запись; nil — папка не
+    /// перечисляется.
+    nonisolated static func cloudMonthsOnDisk() async -> [TripStore.Month]? {
+        let paths = storePaths
+        return await JSONFile.ordered { TripStore.listShards(paths).map { Array($0.keys) } }
+    }
+
+    /// Месяц с диска (без памяти); nil — не читается или битый: сверять по
+    /// нему нельзя.
+    nonisolated static func cloudReadMonth(_ month: TripStore.Month) async -> [TripRecord]? {
+        switch await readMonth(month) {
+        case .missing: return []
+        case .loaded(let records, _): return records
+        case .unreadable, .corrupt: return nil
+        }
+    }
+
+    /// Пришедшее из iCloud: записи — по id поверх своих, удалённые — прочь.
+    /// false — сейчас нельзя (история не прочитана, идёт поездка, месяц не
+    /// читается): синхронизация повторит позже. Работа с месяцами — в той же
+    /// очереди, что чистка и чтение по запросу.
+    func cloudApply(upserts: [TripRecord], removals: [Double: TripStore.Month]) async -> Bool {
+        let result = CloudApplyResult()
+        enqueueMonthWork { stats in
+            result.ok = await stats.cloudApplyNow(upserts: upserts, removals: removals)
+        }
+        let work = monthWork
+        await work?.value
+        return result.ok
+    }
+
+    private func cloudApplyNow(upserts: [TripRecord], removals: [Double: TripStore.Month]) async -> Bool {
+        // Идущая поездка (и её склейка с прошлой записью) — не трогать.
+        guard isLoaded, isLifetimeTrusted, startedAt == nil else { return false }
+        let generation = storeGeneration
+        let months = Set(upserts.map { TripStore.Month($0.startedAt) }).union(removals.values)
+        for month in months.sorted(by: >) where written[month] == nil {
+            guard await adoptCloudMonth(month), generation == storeGeneration else { return false }
+        }
+        guard isLoaded, startedAt == nil, generation == storeGeneration else { return false }
+        var index: [Double: Int] = [:]
+        for (position, record) in history.enumerated() { index[record.id] = position }
+        var updated = history
+        var fresh: [TripRecord] = []
+        var olds: [TripRecord] = [], news: [TripRecord] = []
+        for record in upserts where removals[record.id] == nil {
+            if let at = index[record.id] {
+                guard updated[at] != record else { continue }
+                olds.append(updated[at])
+                news.append(record)
+                updated[at] = record
+            } else if !fresh.contains(where: { $0.id == record.id }) {
+                fresh.append(record)
+            }
+        }
+        var removed: [TripRecord] = []
+        for id in removals.keys {
+            guard let at = index[id] else { continue }
+            removed.append(updated[at])
+        }
+        guard !olds.isEmpty || !fresh.isEmpty || !removed.isEmpty else { return true }
+        let removedIDs = Set(removed.map(\.id))
+        var nextDays = days
+        if !olds.isEmpty { nextDays = TripDayBook.replaced(olds, with: news, in: nextDays) }
+        for record in fresh { nextDays = TripDayBook.folded(record, into: nextDays) }
+        for record in removed { nextDays = TripDayBook.unfolded(record, from: nextDays) }
+        days = nextDays
+        history = TripStore.sortedNewestFirst(updated.filter { !removedIDs.contains($0.id) } + fresh)
+        if let raw = lastFinishedRaw, removedIDs.contains(raw.id) { lastFinishedRaw = nil }
+        applyRetention()
+        persist()
+        persistDays()
+        if !removedIDs.isEmpty {
+            for id in removedIDs {
+                Task.detached(priority: .utility) { TimedTrackStore.remove(tripID: id) }
+            }
+            onRecordsErased?(removedIDs)
+        }
+        Log.trips.info("из iCloud: новых \(fresh.count, privacy: .public), правок \(olds.count, privacy: .public), удалено \(removed.count, privacy: .public)")
+        return true
+    }
+
+    /// Месяц, которого нет в памяти, — с диска в память перед правкой.
+    private func adoptCloudMonth(_ month: TripStore.Month) async -> Bool {
+        let read = await Self.readMonth(month)
+        guard written[month] == nil else { return true }   // подхватили, пока читали
+        let url = Self.storePaths.shard(month)
+        switch read {
+        case .missing:
+            written[month] = []
+        case .loaded(let records, let dropped):
+            if dropped > 0, !setAside(.copy, url) { return false }
+            written[month] = dropped > 0 ? [] : records
+            monthIndex[month] = TripStore.entry(month, records: records)
+            history = TripStore.merging(history, with: records)
+        case .corrupt:
+            guard setAside(.move, url) else { return false }
+            written[month] = []
+            monthIndex[month] = nil
+        case .unreadable:
+            return false
+        }
+        olderMonths.removeAll { $0 == month }
+        return true
+    }
+
+    /// Сводка из iCloud: дни — по правилам копии (полнее строка, а день, чьи
+    /// поездки все здесь, — свёртка из них), «за всё время» — максимум.
+    func mergeCloudSummary(days remoteDays: [TripDay], lifetime remoteLifetime: LifetimeStats) -> Bool {
+        guard isLoaded, isLifetimeTrusted, startedAt == nil else { return false }
+        var incoming = TripBackup()
+        incoming.days = remoteDays
+        incoming.lifetime = remoteLifetime
+        let merged = TripBackupMerge.merge(incoming, history: history, days: days, lifetime: lifetime,
+                                           customCameras: [], hiddenCameraIDs: [])
+        if merged.days != days {
+            days = merged.days
+            persistDays()
+        }
+        if merged.lifetime != lifetime {
+            lifetime = merged.lifetime
+            persistLifetime()
+        }
+        return true
+    }
+}
+
+/// Ответ работы, поставленной в очередь месяцев.
+@MainActor
+private final class CloudApplyResult {
+    nonisolated deinit {}
+    var ok = false
+}

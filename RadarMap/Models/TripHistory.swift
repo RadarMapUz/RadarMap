@@ -13,7 +13,8 @@ import CoreLocation
 nonisolated enum TripHistory {
     /// Сколько поездок показывает список истории.
     static let visibleHistory = 7
-    /// Потолок хранилища: дальше даже «цифры для статистики» не копим.
+    /// Потолок хранилища до 27.F (Retention.legacy). Свои поездки теперь
+    /// хранятся без потолка.
     static let maxHistory = 50
 
     // MARK: - Чистка хранилища
@@ -35,8 +36,20 @@ nonisolated enum TripHistory {
         /// вместе с записью.
         var trackDays: Int?
 
-        static let current = Retention(recordDays: 30, keepLast: visibleHistory,
-                                       maxRecords: maxHistory, trackDays: 7)
+        /// Свои поездки (27.F): записи — без срока и без потолка, все
+        /// месяцы; они свои, и стирать их может только сам человек («Удалить
+        /// всю историю», удаление поездки). Вырезается только упрощённый
+        /// трек старше недели — тяжёлая часть, которую иначе читал бы каждый
+        /// запуск (окно запуска — 62 дня); цифры поездки остаются, а в
+        /// iCloud трек живёт дальше. Служебные журналы (дорога на работу,
+        /// смены, регистратор) чистятся своими сроками, как раньше.
+        static let current = Retention(recordDays: nil, keepLast: visibleHistory,
+                                       maxRecords: nil, trackDays: 7)
+
+        /// Сроки до 27.F — 30 дней и не больше 50 записей. Остались для
+        /// проверки механики чистки тестами (срок станет настройкой — 15.2).
+        static let legacy = Retention(recordDays: 30, keepLast: visibleHistory,
+                                      maxRecords: maxHistory, trackDays: 7)
 
         func recordCutoff(now: Date) -> Date? {
             recordDays.map { now.addingTimeInterval(-Double($0) * 86400) }

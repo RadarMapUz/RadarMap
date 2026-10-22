@@ -1097,3 +1097,107 @@ final class AppSettings {
     }
 }
 
+
+// MARK: - Настройки через iCloud (27.F)
+//
+// Белый список, а не чёрный: новая настройка по умолчанию остаётся на этом
+// телефоне, пока её не внесут сюда осознанно. Не едут: Bluetooth машины и
+// узнанное аудио (своё у каждого телефона), регистратор, госномер, источник
+// голоса (пакет скачан здесь), «Как начинать поездку» (держится за
+// Bluetooth и CoreMotion этого телефона), временное «до машины» CarPlay,
+// напоминания о выезде (разрешение на уведомления — у телефона). Места и
+// машина — не здесь: они в CloudKit, зашифрованными.
+
+extension AppSettings {
+    static let cloudSettingKinds: [String: CloudSettingsSync.Kind] = [
+        Keys.sound: .bool, Keys.voiceMode: .string, Keys.overspeedVoice: .string,
+        Keys.radius: .double, Keys.filter: .string, Keys.volume: .double,
+        Keys.alternatives: .bool, Keys.personalRoutes: .bool, Keys.turnByTurn: .bool,
+        Keys.speedLimits: .bool, Keys.overspeed: .double, Keys.nextCamera: .bool,
+        Keys.digest: .bool, Keys.language: .string, Keys.backgroundAlerts: .string,
+        Keys.haptics: .bool, Keys.mapAppearance: .string, Keys.keepScreenOn: .bool,
+        Keys.destinationHints: .bool, Keys.commuteLearningOff: .bool, Keys.smartSilence: .bool,
+        Keys.tripodHints: .bool, Keys.workDriverMode: .bool, Keys.parkedCarHint: .bool,
+        Keys.mapPlaces: .bool, Keys.mapHouses: .bool, Keys.mapSidewalks: .bool,
+        Keys.mapModernStyle: .bool, Keys.map3D: .bool, Keys.mapZoomButtons: .bool,
+        Keys.cursorStyle: .string, Keys.alertMode: .string, Keys.alertProfile: .string,
+        Keys.usageStats: .bool, Keys.trafficHidden: .bool, Keys.trafficContributionOff: .bool,
+        Keys.roadWeatherOff: .bool, Keys.maintenanceRemindersOff: .bool,
+    ]
+
+    /// Ключи, которые принадлежат этому телефону, — для теста: ни один не
+    /// может попасть в белый список.
+    static let deviceOnlySettingKeys: Set<String> = [
+        Keys.carDevices, Keys.knownCarAudio, Keys.licensePlate, Keys.timedTrack,
+        Keys.voiceSource, Keys.placeholderVoice, Keys.tripStartMode, Keys.voiceBeforeMute,
+        Keys.home, Keys.work, Keys.recents, Keys.favorites, Keys.fuelProfile, Keys.vehicleEnergy,
+        Keys.navigationMetadata, Keys.departureReminders, Keys.departureRemindersAsked,
+        Keys.workTarget, Keys.workTargetAsked, Keys.adaptive,
+    ]
+
+    /// Свои значения из белого списка (как они лежат в UserDefaults).
+    func cloudSettingsSnapshot() -> [String: CloudSettingValue] {
+        var result: [String: CloudSettingValue] = [:]
+        for (key, kind) in Self.cloudSettingKinds {
+            if let value = CloudSettingsSync.value(from: store.object(forKey: key), kind: kind) {
+                result[key] = value
+            }
+        }
+        return result
+    }
+
+    /// Пришедшие из iCloud: голос и режим — раньше профиля (профиль сверяется
+    /// по ним, как на исходном телефоне).
+    func applyCloudSettings(_ values: [String: CloudSettingValue]) {
+        let late: Set<String> = [Keys.alertProfile]
+        for key in values.keys.sorted(by: { (late.contains($0) ? 1 : 0, $0) < (late.contains($1) ? 1 : 0, $1) }) {
+            guard let value = values[key] else { continue }
+            applyCloudSetting(key, value)
+        }
+    }
+
+    private func applyCloudSetting(_ key: String, _ value: CloudSettingValue) {
+        switch (key, value) {
+        case (Keys.sound, .bool(let v)): soundEnabled = v
+        case (Keys.voiceMode, .string(let v)): if let mode = VoiceMode(rawValue: v) { voiceMode = mode }
+        case (Keys.overspeedVoice, .string(let v)): if let mode = OverspeedVoice(rawValue: v) { overspeedVoice = mode }
+        case (Keys.radius, .double(let v)): alertRadius = v
+        case (Keys.filter, .string(let v)): if let mode = CameraFilter(rawValue: v) { filter = mode }
+        case (Keys.volume, .double(let v)): alertVolume = v
+        case (Keys.alternatives, .bool(let v)): routeAlternatives = v
+        case (Keys.personalRoutes, .bool(let v)): personalRoutes = v
+        case (Keys.turnByTurn, .bool(let v)): turnByTurnVoice = v
+        case (Keys.speedLimits, .bool(let v)): speedLimitsEnabled = v
+        case (Keys.overspeed, .double(let v)): overspeedTolerance = v
+        case (Keys.nextCamera, .bool(let v)): showNextCamera = v
+        case (Keys.digest, .bool(let v)): weeklyDigest = v
+        case (Keys.language, .string(let v)): if let language = AppLanguage(rawValue: v) { appLanguage = language }
+        case (Keys.backgroundAlerts, .string(let v)): if let mode = BackgroundAlertMode(rawValue: v) { backgroundAlerts = mode }
+        case (Keys.haptics, .bool(let v)): hapticsEnabled = v
+        case (Keys.mapAppearance, .string(let v)): if let mode = MapAppearance(rawValue: v) { mapAppearance = mode }
+        case (Keys.keepScreenOn, .bool(let v)): keepScreenOn = v
+        case (Keys.destinationHints, .bool(let v)): destinationSuggestions = v
+        case (Keys.commuteLearningOff, .bool(let v)): commuteLearning = !v
+        case (Keys.smartSilence, .bool(let v)): smartSilence = v
+        case (Keys.tripodHints, .bool(let v)): tripodHints = v
+        case (Keys.workDriverMode, .bool(let v)): workDriverMode = v
+        case (Keys.parkedCarHint, .bool(let v)): parkedCarHint = v
+        case (Keys.mapPlaces, .bool(let v)): mapPlaces = v
+        case (Keys.mapHouses, .bool(let v)): mapHouses = v
+        case (Keys.mapSidewalks, .bool(let v)): mapSidewalks = v
+        case (Keys.mapModernStyle, .bool(let v)): mapModernStyle = v
+        case (Keys.map3D, .bool(let v)): map3D = v
+        case (Keys.mapZoomButtons, .bool(let v)): mapZoomButtons = v
+        case (Keys.cursorStyle, .string(let v)): cursorStyle = CursorStyle(stored: v)
+        case (Keys.alertMode, .string(let v)): if let mode = AlertMode(rawValue: v) { alertMode = mode }
+        case (Keys.alertProfile, .string(let v)): if let profile = AlertProfile(rawValue: v) { alertProfile = profile }
+        case (Keys.usageStats, .bool(let v)): usageStatsEnabled = !v
+        case (Keys.trafficHidden, .bool(let v)): trafficShown = !v
+        case (Keys.trafficContributionOff, .bool(let v)): trafficContribution = !v
+        case (Keys.roadWeatherOff, .bool(let v)): roadWeatherAlerts = !v
+        case (Keys.maintenanceRemindersOff, .bool(let v)): maintenanceReminders = !v
+        default:
+            Log.app.notice("настройка \(key, privacy: .public) из iCloud не применена: ключ или вид неизвестен")
+        }
+    }
+}

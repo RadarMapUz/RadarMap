@@ -3,8 +3,9 @@
 //  RadarMap
 //
 //  Настройки → Поездка → «История поездок» (15.3): выгрузить всё одним
-//  архивом и стереть всё одним действием. Здесь же встанут «Хранить
-//  историю» (15.2) и iCloud (15.4).
+//  архивом и стереть всё одним действием, и где их хранить — только на
+//  iPhone или в iCloud (27.F, CloudSyncSection). Здесь же встанет «Хранить
+//  историю» (15.2).
 //
 //  Подтверждение удаления — EraseHistorySheet (15.6), тот же лист, что
 //  у «Очистить историю» в «Итогах».
@@ -35,6 +36,10 @@ struct TripHistorySettingsPage: View {
         let journal = env.energyJournal.entries.count
         let canExport = ready && !exporting && (trip.storedTripCount > 0 || journal > 0)
         Form {
+            // Где хранить (27.F) — первым: это решение о тех же данных, что
+            // экспорт и удаление ниже.
+            CloudSyncSection()
+
             Section {
                 LabeledContent("Поездок на телефоне") {
                     Text(Formatting.decimal(Double(trip.storedTripCount), digits: 0))

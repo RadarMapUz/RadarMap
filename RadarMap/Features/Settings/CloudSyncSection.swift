@@ -24,6 +24,8 @@ struct CloudSyncSection: View {
                 Text("Хранить поездки")
             }
             .pickerStyle(.inline)
+            // Заголовок секции — то же «Хранить поездки»: строка-подпись дублировала бы его.
+            .labelsHidden()
             CloudStatusRow(status: cloud.status, remoteWiped: cloud.remoteWiped)
             if cloud.isEnabled {
                 Button {

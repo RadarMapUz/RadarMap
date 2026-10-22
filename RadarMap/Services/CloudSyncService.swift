@@ -381,7 +381,8 @@ final class CloudSyncService {
 
     #if DEBUG
     /// Снимки экрана: `-cloudOffer` — предложение в «Итогах»,
-    /// `-cloudDemo synced|offline|wiped|noAccount|build` — строка состояния.
+    /// `-cloudDemo synced|offline|wiped|noAccount|build` — строка состояния,
+    /// `-cloudEnable` — включить настоящее хранение в iCloud.
     func applyDemoArguments(_ arguments: [String]) {
         if arguments.contains("-cloudOffer") {
             mode = nil
@@ -389,6 +390,8 @@ final class CloudSyncService {
             Storage.remove(.cloudOfferAnswered)
             buildSupportsCloud = true
         }
+        // Настоящий путь (CloudKit по правам сборки) — включить как кнопкой.
+        if arguments.contains("-cloudEnable") { setMode(.iCloud) }
         guard let index = arguments.firstIndex(of: "-cloudDemo"), index + 1 < arguments.count else { return }
         makeTransport = { nil }
         mode = .iCloud

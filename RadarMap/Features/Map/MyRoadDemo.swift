@@ -13,6 +13,7 @@
 import CoreLocation
 import Foundation
 import MapKit
+import os
 
 enum MyRoadDemo {
     @MainActor
@@ -35,10 +36,18 @@ enum MyRoadDemo {
             }
             return out
         }
-        let fast = path([(0, 0), (dx, 0), (dx, dy)])
-        let south = path([(0, 0), (0, dy), (dx, dy)])
-        let mine = path([(0, 0), (dx * 0.35, 0), (dx * 0.35, dy * 0.5), (dx * 0.75, dy * 0.5),
+        var fast = path([(0, 0), (dx, 0), (dx, dy)])
+        var south = path([(0, 0), (0, dy), (dx, dy)])
+        var mine = path([(0, 0), (dx * 0.35, 0), (dx * 0.35, dy * 0.5), (dx * 0.75, dy * 0.5),
                          (dx * 0.75, dy), (dx, dy)])
+        // Снимки App Store: настоящие пути по дорогам из Documents/myroad_demo.json
+        // ({"fast": [[lat, lon], …], "alt": …, "mine": …} — ответы OSRM от работы
+        // до дома). Лесенка через кварталы на витрине выглядела подделкой.
+        if let real = realPaths() {
+            fast = real.fast
+            south = real.alt
+            mine = real.mine
+        }
 
         // Профиль дороги домой: шесть поездок в этот же час этого дня недели,
         // ~27 мин на весь путь.
@@ -69,6 +78,25 @@ enum MyRoadDemo {
         var rect = MKMapRect.null
         for variant in env.route.variants { rect = rect.union(variant.polyline.boundingMapRect) }
         return rect.isNull ? nil : rect
+    }
+
+    /// Пути из `Documents/myroad_demo.json`, если файл положили; иначе nil.
+    private static func realPaths() -> (fast: [CLLocationCoordinate2D], alt: [CLLocationCoordinate2D],
+                                        mine: [CLLocationCoordinate2D])? {
+        struct File: Decodable { let fast, alt, mine: [[Double]] }
+        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("myroad_demo.json")
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        do {
+            let file = try JSONDecoder().decode(File.self, from: Data(contentsOf: url))
+            func coords(_ raw: [[Double]]) -> [CLLocationCoordinate2D] {
+                raw.compactMap { $0.count == 2 ? CLLocationCoordinate2D(latitude: $0[0], longitude: $0[1]) : nil }
+            }
+            return (coords(file.fast), coords(file.alt), coords(file.mine))
+        } catch {
+            Log.app.error("myroad_demo.json не прочитан: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 }
 #endif

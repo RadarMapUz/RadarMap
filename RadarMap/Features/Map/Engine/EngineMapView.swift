@@ -337,6 +337,8 @@ struct EngineMapView: UIViewRepresentable {
         func mapView(_ mapView: MLNMapView, regionDidChangeAnimated animated: Bool) {
             layoutPositionView(in: mapView)
             if let current, styleReady { updateCameras(current, in: mapView) }
+            // Масштаб меняет видимый ранг стрелок — и порог фильтра за срезом.
+            if styleReady { routeLine.regionChanged(in: mapView) }
             current?.onHeading(mapView.direction)
             current?.onRegion(Self.region(of: mapView))
         }

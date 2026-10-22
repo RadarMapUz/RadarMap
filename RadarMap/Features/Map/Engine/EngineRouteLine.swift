@@ -155,10 +155,14 @@ final class EngineRouteLine {
             maneuver = nil
             trafficRevision = model.trafficRevision
             resetCut()
-            for name in ["traveled", "route", "maneuver", "route-traffic", EngineMapStyle.routeNearSource] {
-                setLine([], source: name, in: view)
+            // Прежний маршрут уходит целиком: источники с поколением
+            // (окно, остаток) ключей не ведут, поэтому — без сравнения.
+            lineKeys = [:]
+            for name in ["traveled", "route", "maneuver", "route-traffic", EngineMapStyle.routeNearSource,
+                         EngineMapStyle.routeArrowsSource] {
+                setShape(nil, source: name, in: view)
+                lineKeys[name] = [0]
             }
-            setShape(nil, source: EngineMapStyle.routeArrowsSource, in: view)
             applyPaint(.clear, in: view)
             guard model.route.count >= 2 else { return }
             prepare(model.route, snapshot: model.trafficSnapshot, reuse: nil, in: view)
@@ -232,6 +236,13 @@ final class EngineRouteLine {
         advanceHandoff(in: view)
         paint(cut: cut, in: view)
         updateArrows(cut: cut, in: view)
+    }
+
+    /// Вид устоялся (жест, вписывание, новый масштаб ведения): стоя
+    /// кадров среза нет, а ранг видимых стрелок мог смениться.
+    func regionChanged(in view: MLNMapView) {
+        guard line != nil else { return }
+        updateArrows(cut: tracker.cut, in: view)
     }
 
     private func advanceHandoff(in view: MLNMapView) {

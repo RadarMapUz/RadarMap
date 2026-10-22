@@ -596,4 +596,45 @@ final class PerformanceBudgetTests: XCTestCase {
         // 5 пересчётов 30 км — меньше полсекунды на симуляторе (замер 21.10 — 0,065 с).
         XCTAssertLessThan(total, .milliseconds(500), "пробки на линии деградировали: \(total)")
     }
+
+    /// Срез линии под значком (27.A): на КАЖДОМ кадре стрелки (до 30 в
+    /// секунду всю поездку) — проекция точки, краска окна с пробками и
+    /// манёвром, выражение line-gradient и порог стрелок. Обязан быть
+    /// микросекундами: десятки миллисекунд на кадр — это и есть «лагает».
+    func testRouteCutFrameBudget() {
+        let route = (0..<3_000).map { i in
+            CLLocationCoordinate2D(latitude: 41.25 + Double(i) * 0.00009,
+                                   longitude: 69.20 + Double(i % 200) * 0.00002)
+        }
+        let line = RouteCut.Line(route)
+        let arrows = RouteCut.arrows(line)
+        let traffic = (0..<40).map { i in
+            RouteTraffic.Piece(level: 2 + i % 2, coordinates: [], from: Double(i) * 700, to: Double(i) * 700 + 120)
+        }
+        let colours = RouteCut.Colours(daylight: true)
+        var tracker = RouteCut.Tracker()
+        var window: RouteCut.Window?
+        let clock = ContinuousClock()
+        let start = clock.now
+        var stops = 0
+        // 1 800 кадров — минута на 30 к/с, ~830 м пути.
+        for frame in 0..<1_800 {
+            let along = 100 + Double(frame) * 0.46
+            let point = line.pose(at: along).coordinate
+            let cut = tracker.advance(pose: point, course: -1, fixAlong: along - 3, speedMps: 14, line: line)
+            window = RouteCut.window(window, cut: cut, routeLength: line.length)
+            guard let window else { continue }
+            let paint = RouteCut.paint(window: window, cut: cut, drawEnd: window.end, traffic: traffic,
+                                       maneuver: (along + 50)...(along + 120), colours: colours)
+            for layer in [paint.casing, paint.body, paint.maneuver, paint.core] {
+                stops += RouteCut.gradient(layer).count
+            }
+            _ = RouteCut.arrowThreshold(arrows, cut: cut, minRank: 2)
+        }
+        let total = clock.now - start
+        XCTAssertGreaterThan(stops, 0)
+        XCTAssertGreaterThan(tracker.cut, 800)
+        // Минута кадров — меньше 0,3 с на симуляторе (≤ 0,17 мс на кадр).
+        XCTAssertLessThan(total, .milliseconds(300), "срез линии дорожает на кадр: \(total)")
+    }
 }

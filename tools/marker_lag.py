@@ -24,7 +24,9 @@
 — 0), наибольший сдвиг за кадр и наибольший «рывок» — изменение скорости
 между соседними окнами по 0,1 с, м/с². Поездка с шумом GPS (`-noisyDrive`)
 пишет «МЕТКА истина <t> <lat> <lon> <м/с>» — тогда истина берётся из них, а
-не из шумных фиксов.
+не из шумных фиксов. Последние два поля кадра — точка значка на экране (pt):
+при плавном ходе камеры и значка она почти стоит; её дрожь между кадрами —
+то, что глаз видит как «дёргается».
 """
 import math
 import statistics
@@ -47,7 +49,7 @@ def parse(path):
             elif parts[0] == "линия":
                 cuts.append(tuple(float(x) for x in parts[1:6]))
             elif parts[0] == "кадр":
-                frames.append(tuple(float(x) for x in parts[1:8]))
+                frames.append(tuple(float(x) for x in parts[1:10]))
             elif parts[0] == "истина":
                 truth.append((float(parts[1]), float(parts[1]), float(parts[2]), float(parts[3]), float(parts[4])))
     if truth:
@@ -167,6 +169,38 @@ def smoothness(fixes, frames, index):
     return backward, len(steps), max_step, jerk
 
 
+def screen(frames):
+    """Дрожь значка на экране: сдвиг за кадр (p95 и макс, pt) и рывок —
+    изменение скорости на экране между окнами 0,1 с, pt/с²."""
+    steps, speeds = [], []
+    rows = [f for f in frames if len(f) >= 9]
+    for f0, f1 in zip(rows, rows[1:]):
+        dt = f1[0] - f0[0]
+        if dt <= 0 or dt > 0.2:
+            continue
+        steps.append(math.hypot(f1[7] - f0[7], f1[8] - f0[8]))
+    if not steps:
+        return None
+    win, start, acc = [], None, (0.0, 0.0)
+    for f0, f1 in zip(rows, rows[1:]):
+        dt = f1[0] - f0[0]
+        if dt <= 0 or dt > 0.2:
+            start = None
+            continue
+        if start is None:
+            start, acc = f0[0], (0.0, 0.0)
+        acc = (acc[0] + f1[7] - f0[7], acc[1] + f1[8] - f0[8])
+        if f1[0] - start >= 0.1:
+            speeds.append((f1[0], acc[0] / (f1[0] - start), acc[1] / (f1[0] - start)))
+            start, acc = f1[0], (0.0, 0.0)
+    jerk = 0.0
+    for a, b in zip(speeds, speeds[1:]):
+        if 0 < b[0] - a[0] < 0.25:
+            jerk = max(jerk, math.hypot(b[1] - a[1], b[2] - a[2]) / (b[0] - a[0]))
+    steps.sort()
+    return steps[int(len(steps) * 0.95)], steps[-1], jerk
+
+
 def report(path, name, values):
     along = sorted(v for v, _ in values)
     speeds = [s for _, s in values]
@@ -194,6 +228,11 @@ def main():
                 back, total, step, jerk = smoothness(fixes, frames, index)
                 print(f"{path}: плавность, {name} — {total} кадров: назад {back}, "
                       f"скачок ≤ {step:.2f} м/кадр, рывок ≤ {jerk:.1f} м/с²")
+            on_screen = screen(frames)
+            if on_screen:
+                p95, top, jerk = on_screen
+                print(f"{path}: значок на экране — сдвиг за кадр p95 {p95:.2f} pt, макс {top:.1f} pt, "
+                      f"рывок ≤ {jerk:.0f} pt/с²")
 
 
 if __name__ == "__main__":

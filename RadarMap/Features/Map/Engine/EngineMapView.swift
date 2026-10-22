@@ -1618,7 +1618,7 @@ struct EngineMapView: UIViewRepresentable {
             if MarkerLagLog.enabled, let shown = displayedPosition {
                 let cut = routeLine.paintedCutCoordinate ?? shown
                 let centre = view.centerCoordinate
-                Log.location.notice("МЕТКА кадр \(Date().timeIntervalSince1970, format: .fixed(precision: 3), privacy: .public) \(shown.latitude, format: .fixed(precision: 7), privacy: .public) \(shown.longitude, format: .fixed(precision: 7), privacy: .public) \(cut.latitude, format: .fixed(precision: 7), privacy: .public) \(cut.longitude, format: .fixed(precision: 7), privacy: .public) \(centre.latitude, format: .fixed(precision: 7), privacy: .public) \(centre.longitude, format: .fixed(precision: 7), privacy: .public)")
+                Log.location.notice("МЕТКА кадр \(Date().timeIntervalSince1970, format: .fixed(precision: 3), privacy: .public) \(shown.latitude, format: .fixed(precision: 7), privacy: .public) \(shown.longitude, format: .fixed(precision: 7), privacy: .public) \(cut.latitude, format: .fixed(precision: 7), privacy: .public) \(cut.longitude, format: .fixed(precision: 7), privacy: .public) \(centre.latitude, format: .fixed(precision: 7), privacy: .public) \(centre.longitude, format: .fixed(precision: 7), privacy: .public) \(Double(view.convert(shown, toPointTo: view).x), format: .fixed(precision: 2), privacy: .public) \(Double(view.convert(shown, toPointTo: view).y), format: .fixed(precision: 2), privacy: .public)")
             }
             #endif
             // Встали, горизонт исчерпан, поправка догашена — такт до фикса не нужен.

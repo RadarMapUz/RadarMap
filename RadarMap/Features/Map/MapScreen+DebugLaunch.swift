@@ -319,10 +319,16 @@ extension MapScreen {
             }
         }
         if args.contains("-demoRoute") {
+            // -demoRouteTo lat,lon — своя точка назначения: одна и та же сцена
+            // для снимков вариантов палитры (27.C), а не только центр.
+            var destination = CLLocationCoordinate2D(latitude: 41.3260, longitude: 69.2810)
+            if let index = args.firstIndex(of: "-demoRouteTo"), index + 1 < args.count {
+                let parts = args[index + 1].split(separator: ",").compactMap { Double($0) }
+                if parts.count == 2 { destination = CLLocationCoordinate2D(latitude: parts[0], longitude: parts[1]) }
+            }
             Task {
                 await Task.pause(seconds: 2)
-                buildRoute(to: CLLocationCoordinate2D(latitude: 41.3260, longitude: 69.2810),
-                           name: "Демо-маршрут")
+                buildRoute(to: destination, name: "Демо-маршрут")
                 if args.contains("-driveDemo") {
                     await Task.pause(seconds: 3)
                     if env.route.isActive {

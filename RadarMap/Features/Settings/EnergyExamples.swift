@@ -51,7 +51,7 @@ struct EnergyExamples: View {
 
     private func longCaption(_ use: EnergySplit.Use, own: Bool) -> String {
         if use.beyondRangeTrips > 0 { return String(localized: "Длиннее реального запаса — нужна зарядка в пути") }
-        if use.highwayMeters >= 500 {
+        if use.highwayMeters >= AppConfig.energyHighwayNoteMinMeters {
             return String(format: String(localized: "По трассе заряд тратится в %@ раза быстрее"),
                           EnergyText.number(AppConfig.energyHighwayFactor))
         }

@@ -517,6 +517,8 @@ final class LocationService: NSObject {
 
     /// Своя машина подключена (CarLinkService) — ставит AppEnvironment.
     @ObservationIgnored var carLinked: (() -> Bool)?
+    /// Поколение чтения аудио-портов для автостарта: решает последнее.
+    @ObservationIgnored var autoStartRead = 0
     /// Пробуждение тихого фона (фикс, геозона): AppEnvironment перечитывает
     /// аудио-маршрут — Bluetooth машины сам приложение не будит.
     @ObservationIgnored var onQuietWake: (() -> Void)? {

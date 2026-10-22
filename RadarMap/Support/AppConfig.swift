@@ -2558,6 +2558,42 @@ nonisolated enum AppConfig {
     /// не новая цена; не спрашиваем.
     static let journalPriceChangeShare = 0.02
 
+    // MARK: - Поездки в iCloud (CloudSync, 27.F)
+
+    /// Контейнер CloudKit — тот же, что в RadarMap.entitlements и
+    /// RadarMapCarPlay.entitlements (тест сверяет). Другой id в
+    /// CKContainer(identifier:) уронил бы приложение исключением.
+    static let cloudContainerID = "iCloud.uz.radarmap.ios"
+    /// Потолок одной записи после сжатия. У CloudKit — 1 МБ на запись без
+    /// файлов; запас — на служебные поля. Поездка со сжатым треком — 3–15 КБ.
+    static let cloudRecordMaxBytes = 900_000
+    /// Записей в одной отправке и байт в ней: у CloudKit — 400 записей и
+    /// около 2 МБ на запрос; меньше — меньше теряется при обрыве сети.
+    static let cloudSaveBatch = 100
+    static let cloudSaveBatchBytes = 1_500_000
+    /// Записей на страницу получения: восстановление на новом телефоне идёт
+    /// страницами, и каждая применяется и запоминается сама по себе.
+    static let cloudFetchLimit = 200
+    /// После конца поездки — подождать: остановка у магазина часто
+    /// продолжается той же поездкой (TripMerge), а запись склейки всё равно
+    /// перепишет только что отправленное.
+    static let cloudAfterTripDelay: TimeInterval = 180
+    /// После открытия приложения — не в первые секунды: старт и карта важнее.
+    static let cloudLaunchDelay: TimeInterval = 15
+    /// Правка штрафа, журнала, места — отправить не сразу, а пачкой.
+    static let cloudChangeDebounce: TimeInterval = 30
+    /// Не вышло (нет сети, iCloud занят) — следующая попытка не раньше.
+    static let cloudRetryDelay: TimeInterval = 15 * 60
+    /// Вся история сверяется с диском раз в столько — страховка от правки,
+    /// которую проход не увидел (вылет между записью и журналом).
+    static let cloudFullScanInterval: TimeInterval = 7 * 86_400
+    /// Пауза между месяцами первой выгрузки: телефон не греется и не держит
+    /// радио непрерывно ради истории, которой не к спеху.
+    static let cloudScanPause: Double = 1.5
+    /// Предложение «Сохранять поездки в iCloud?» — не раньше, чем поездок
+    /// столько: на пустой истории терять нечего, и вопрос — шум.
+    static let cloudOfferMinTrips = 3
+
     // MARK: - Обслуживание машины (Maintenance, 18)
     //
     // Интервалы — стартовые: у каждой машины свой регламент, и водитель

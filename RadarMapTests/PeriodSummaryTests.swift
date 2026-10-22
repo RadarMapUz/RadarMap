@@ -270,7 +270,7 @@ final class PeriodSummaryTests: XCTestCase {
 
     func testPrunedDropsRecordsOlderThanMonth() {
         let history = (0..<10).map { i in record(daysAgo: 40 + Double(i), km: 10) }
-        let pruned = TripHistory.pruned(history, now: now)
+        let pruned = TripHistory.pruned(history, retention: .legacy, now: now)
         XCTAssertEqual(pruned.count, TripHistory.visibleHistory,
                        "старше 30 дней держим только видимый список")
     }

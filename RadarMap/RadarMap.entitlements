@@ -8,5 +8,20 @@
 	<array>
 		<string>group.uz.radarmap.ios</string>
 	</array>
+	<!-- iCloud (27.F): приватная база CloudKit человека для своих поездок и
+	     хранилище настроек. 👤 Владелец: Xcode → Signing & Capabilities → iCloud →
+	     CloudKit + Key-value storage, контейнер iCloud.uz.radarmap.ios (тот же id —
+	     AppConfig.cloudContainerID; тест сверяет). Без выданного контейнера код не
+	     падает: EntitlementProbe и ошибки CloudKit дают честное «недоступно». -->
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.uz.radarmap.ios</string>
+	</array>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
+	<key>com.apple.developer.ubiquity-kvstore-identifier</key>
+	<string>$(TeamIdentifierPrefix)$(CFBundleIdentifier)</string>
 </dict>
 </plist>

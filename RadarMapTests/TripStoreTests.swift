@@ -323,7 +323,7 @@ final class TripStoreTests: XCTestCase {
         let history = starts.map { record($0) }
         let year = TripHistory.Retention(recordDays: 365, keepLast: 7, maxRecords: nil, trackDays: 90)
         let tight = TripHistory.Retention(recordDays: 30, keepLast: 7, maxRecords: 12, trackDays: 7)
-        for retention in [TripHistory.Retention.current, year, tight] {
+        for retention in [TripHistory.Retention.current, .legacy, year, tight] {
             let whole = TripHistory.pruned(history, retention: retention, now: now)
             var chunked: [TripRecord] = []
             for month in TripStore.grouped(history).keys.sorted(by: >) {
@@ -343,7 +343,7 @@ final class TripStoreTests: XCTestCase {
             ([40, 45, 50], false), ([40, 45, 50], true), ([20, 25], true),
             ([5, 6], false), ([400, 410], false), ([300, 380], false), ([80, 100], true),
         ]
-        for retention in [TripHistory.Retention.current, year] {
+        for retention in [TripHistory.Retention.current, .legacy, year] {
             for (days, track) in cases {
                 let records = days.map { record(daysAgo($0), track: track) }
                 let entry = try XCTUnwrap(TripStore.entry(TripStore.Month(records[0].startedAt), records: records))

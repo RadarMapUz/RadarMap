@@ -31,4 +31,7 @@ nonisolated enum Log {
     /// в CarPlay-коде не было НИ ОДНОЙ строки лога — «в машине ничего не
     /// работает» было недиагностируемо по определению.
     static let carplay = Logger(subsystem: subsystem, category: "carplay")
+    /// Хранение своих данных в iCloud (27.F): проходы, ошибки CloudKit.
+    /// Содержимое записей сюда не пишется — только виды и числа.
+    static let cloud = Logger(subsystem: subsystem, category: "cloud")
 }

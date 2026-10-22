@@ -113,6 +113,9 @@ final class AppEnvironment {
     /// Журнал заправок и зарядок (21.6): только на телефоне; цена профиля и
     /// правдоподобие — AppEnvironment+EnergyJournal.
     let energyJournal = EnergyJournalStore()
+    /// «Хранить поездки: только на iPhone / в iCloud» (27.F): приватная база
+    /// человека в его iCloud; нам не видна. Источники — AppEnvironment+Cloud.
+    let cloud = CloudSyncService()
 
     /// CarPlay подключён. Наблюдаемый флаг для интерфейса телефона: пока едет
     /// машина, телефонная карта уступает место дешёвому экрану передачи —
@@ -238,6 +241,7 @@ final class AppEnvironment {
     /// Ставит RootView по scenePhase телефона.
     func setPhoneSceneActive(_ active: Bool) {
         isPhoneSceneActive = active
+        if !active { cloud.sceneEnteredBackground() }
         refreshTrafficWanted()
         updateThemeClock()
         if active {
@@ -246,6 +250,7 @@ final class AppEnvironment {
             family.update()
             Task { await offlineRoutes.refreshIfDue() }
             Task { await laneOverlay.refreshIfDue() }
+            cloud.sceneBecameActive()
         } else if !isCarPlayConnected, !mobile.isTripActive {
             // Экран погас, но человек едет — опрос продолжается: это и есть
             // единственный момент, когда чужая отметка чего-то стоит.
@@ -353,6 +358,8 @@ final class AppEnvironment {
         location.onTripStateChanged = { [weak self] active in
             guard let self else { return }
             self.mobile.setTripActive(active)
+            // iCloud в поездке молчит; после — отправит с паузой.
+            self.cloud.tripStateChanged(active: active)
             if active { self.traffic.tripStarted() } else { self.traffic.tripEnded() }
             if active { self.roadWeather.tripStarted() } else { self.roadWeather.tripEnded() }
             self.commuteGhostPending = active
@@ -755,6 +762,7 @@ final class AppEnvironment {
         observeAppearanceSetting()
         observeCommuteSettings()
         wireNetworkRhythm()
+        wireCloud()
         startCoreServices()
     }
 

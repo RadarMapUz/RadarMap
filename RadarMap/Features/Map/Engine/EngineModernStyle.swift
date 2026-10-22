@@ -207,20 +207,6 @@ nonisolated enum EngineModernStyle {
         }
     }
 
-    #if DEBUG
-    /// Вариант палитры для снимков (27.C, этап 1): `-mapPalette v1…v5`
-    /// берёт стиль из MapStyle/Variants (make_style.py --app). Ресурсы
-    /// вариантов есть только в DEBUG — Release их исключает
-    /// (EXCLUDED_SOURCE_FILE_NAMES), и без ключа карта та же, что у водителя.
-    /// Ключ — на весь процесс, поэтому в ключ кэша стилей он не входит.
-    static let paletteVariant: String? = {
-        let args = ProcessInfo.processInfo.arguments
-        guard let index = args.firstIndex(of: "-mapPalette"), index + 1 < args.count else { return nil }
-        let value = args[index + 1]
-        return ["v1", "v2", "v3", "v4", "v5"].contains(value) ? value : nil
-    }()
-    #endif
-
     /// Шаблон из бандла с подставленным адресом сервера и языком подписей.
     ///
     /// Подписи в стиле — одно имя: `coalesce(name:ru, name)` (make_style.NAME).
@@ -228,13 +214,9 @@ nonisolated enum EngineModernStyle {
     /// объекта остаётся местное `name`, а это в Узбекистане и есть узбекское.
     static func template(daylight: Bool, base: URL, language: String = "ru",
                          bundle: Bundle = .main) -> [String: Any]? {
-        var name = daylight ? lightResource : darkResource
-        #if DEBUG
-        if let variant = paletteVariant { name += "_" + variant }
-        #endif
+        let name = daylight ? lightResource : darkResource
         guard let url = bundle.url(forResource: name, withExtension: "json")
                 ?? bundle.url(forResource: name, withExtension: "json", subdirectory: "MapStyle")
-                ?? bundle.url(forResource: name, withExtension: "json", subdirectory: "MapStyle/Variants")
         else { return nil }
         let raw: String
         do {

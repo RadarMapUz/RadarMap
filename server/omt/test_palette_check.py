@@ -1,6 +1,6 @@
-"""Варианты палитры карты (27.C) — под замером, как PaletteTests приложения.
+"""Палитра карты (27.C) — под замером, как PaletteTests приложения.
 
-Каждый вариант обязан пройти правила плана: камеры заметнее всего, линия
+Палитра обязана пройти правила плана: камеры заметнее всего, линия
 маршрута держится на любом асфальте, пробка ≠ маршрут ≠ камера, зелень, вода
 и дома тише дорог, подписи читаются, при дейтеранопии ничего не сливается.
 Копия цветов приложения в palette_check сверяется с исходниками на Swift.
@@ -23,13 +23,19 @@ def _swift(path):
         return handle.read()
 
 
-class VariantRules(unittest.TestCase):
+class PaletteRules(unittest.TestCase):
 
-    def test_every_variant_passes_every_rule(self):
-        for variant in make_style.PALETTE_VARIANTS:
-            for theme in ("light", "dark"):
-                _, failures = palette_check.measure(theme, variant)
-                self.assertEqual(failures, [], f"{variant}/{theme}")
+    def test_palette_passes_every_rule(self):
+        for theme in ("light", "dark"):
+            _, failures = palette_check.measure(theme)
+            self.assertEqual(failures, [], theme)
+
+    def test_rules_catch_a_road_lost_in_the_ground(self):
+        # Двор цвета земли без кромки — нарушение, а не «все правила соблюдены».
+        p = dict(make_style.PALETTES["light"], minor=make_style.PALETTES["light"]["bg"],
+                 minor_edge=make_style.PALETTES["light"]["bg"])
+        _, failures = palette_check.measure("light", p)
+        self.assertIn("дом заметнее двора", failures)
 
     def test_formulas_match_known_values(self):
         # Чёрный на белом — 21:1, одинаковые цвета — 1:1 и ΔE 0.

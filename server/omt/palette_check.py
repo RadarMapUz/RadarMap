@@ -8,7 +8,7 @@
 её с Theme.swift и EngineMapView.swift, чтобы второй список не разошёлся с
 первым молча.
 
-    python3 server/omt/palette_check.py          # таблица: текущая и варианты
+    python3 server/omt/palette_check.py          # таблица чисел и нарушенные правила
 """
 import os
 import sys
@@ -88,7 +88,7 @@ def delta_e(a, b, deutan=False):
     return sum((p - q) ** 2 for p, q in zip(conv(a), conv(b))) ** 0.5
 
 
-ASPHALT_KEYS = ("road", "road_trunk", "road_tertiary", "minor")
+ASPHALT_KEYS = ("road", "road_trunk", "road_secondary", "road_tertiary", "minor")
 
 
 def _edge(fill, surface):
@@ -102,14 +102,14 @@ def _camera_visible(fill, surface):
         (by_light or delta_e(fill, surface, True) >= CAMERA_DEUTAN_MIN)
 
 
-def measure(theme, variant=None):
+def measure(theme, p=None):
     """Числа палитры: {имя: значение} и список нарушенных правил."""
-    p = make_style.palette(theme, variant)
+    p = p or make_style.PALETTES[theme]
     route, traffic, calm = ROUTE[theme], TRAFFIC[theme], CALM[theme]
-    asphalt = [p[k] for k in ASPHALT_KEYS] + ([p["road_secondary"]] if "road_secondary" in p else [])
+    asphalt = [p[k] for k in ASPHALT_KEYS]
     ground = [p["bg"], p["landuse"], p["building"], p["park"], p["wood"], p["water"],
-              *p.get("landuse_kind", {}).values()]
-    kerbs = [p["kerb"]] + ([p["kerb_trunk"]] if "kerb_trunk" in p else [])
+              *p["landuse_kind"].values()]
+    kerbs = [p["kerb"], p["kerb_trunk"]]
     surfaces = asphalt + ground
     m = {
         "подпись места / фон": contrast(p["label"], p["bg"]),
@@ -164,37 +164,28 @@ def measure(theme, variant=None):
     need(m["ΔE «медленно» / жёлтая кромка"] >= SLOW_KERB_DE_MIN, "«медленно» похоже на кромку")
     # Иерархия: дорога — главное на земле, дома, зелень и вода тише неё
     # (по яркости — её видно и при дальтонизме), камера заметнее всего.
-    if p.get("class_roads"):
-        # Дороги цветом (v4, v5): днём полотно почти той же светлоты, что
-        # земля, — его несёт цвет класса и кромка. Двор белый, его несёт
-        # серая кромка; зелень может быть сочнее (так просил владелец), но
-        # не больше чем в 1,25 раза ярче дороги по ΔE.
-        m["контраст кромки двора / фон"] = max(contrast(p["minor_edge"], p["bg"]), contrast(p["minor"], p["bg"]))
-        need(m["контраст кромки двора / фон"] > m["контраст дом / фон"], "дом заметнее двора")
-        need(m["ΔE дорога / фон"] > m["ΔE дом / фон"], "дом заметнее дороги")
-        for key in ("ΔE зелень / фон", "ΔE вода / фон"):
-            need(m[key] <= 1.25 * m["ΔE дорога / фон"], f"{key.split(' / ')[0].split()[-1]} заметнее дороги")
-    else:
-        road = m["контраст дорога / фон"]
-        need(m["контраст двор / фон"] > m["контраст дом / фон"], "дом заметнее двора")
-        for key in ("контраст дом / фон", "контраст зелень / фон", "контраст вода / фон"):
-            need(m[key] < road, f"{key.split(' / ')[0].split()[-1]} заметнее дороги")
+    # Дороги — цветом класса (27.C): днём полотно почти той же светлоты, что
+    # земля, — его несёт цвет и кромка. Двор белый, его несёт серая кромка
+    # (ночью — сам тёмно-синий асфальт); зелень может быть сочнее, но не
+    # больше чем в 1,25 раза ярче дороги по ΔE.
+    m["контраст двора / фон (кромка или полотно)"] = max(contrast(p["minor_edge"], p["bg"]),
+                                                       contrast(p["minor"], p["bg"]))
+    need(m["контраст двора / фон (кромка или полотно)"] > m["контраст дом / фон"], "дом заметнее двора")
+    need(m["ΔE дорога / фон"] > m["ΔE дом / фон"], "дом заметнее дороги")
+    for key in ("ΔE зелень / фон", "ΔE вода / фон"):
+        need(m[key] <= 1.25 * m["ΔE дорога / фон"], f"{key.split(' / ')[0].split()[-1]} заметнее дороги")
     for key in ("ΔE дорога / фон", "ΔE дом / фон", "ΔE зелень / фон", "ΔE вода / фон"):
         need(m[key] < m["ΔE камера (красная) / фон"], f"{key} ≥ камеры — камера не самая заметная")
     return m, failures
 
 
-def table(variants=(None, *make_style.PALETTE_VARIANTS)):
+def table():
     rows = []
     for theme in ("light", "dark"):
-        results = [measure(theme, v) for v in variants]
-        names = list(dict.fromkeys(n for r in results for n in r[0]))
-        head = ["день" if theme == "light" else "ночь"] + [v or "текущая" for v in variants]
-        rows.append(" | ".join(head))
-        for name in names:
-            rows.append(" | ".join([name] + [f"{r[0][name]:.2f}" if name in r[0] else "—" for r in results]))
-        for v, (_, failures) in zip(variants, results):
-            rows.append(f"  {v or 'текущая'}: " + ("все правила ✓" if not failures else "; ".join(failures)))
+        m, failures = measure(theme)
+        rows.append("день" if theme == "light" else "ночь")
+        rows += [f"  {name}: {value:.2f}" for name, value in m.items()]
+        rows.append("  " + ("все правила соблюдены" if not failures else "нарушено: " + "; ".join(failures)))
         rows.append("")
     return "\n".join(rows)
 

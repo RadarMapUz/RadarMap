@@ -341,8 +341,8 @@ final class CameraOnLineTests: XCTestCase {
             .compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" } ?? []
         XCTAssertFalse(files.isEmpty)
         let allowedRoute = ["var cameraSpots:", "var cameraSpotsOnRoute:", "cameraSpots: variantSpots",
-                            "let (variantCameras, verdict, trafficDelays, variantSpots)",
-                            "CameraOnLine.routeSpots(", "return (found, choice, delays, spots)"]
+                            "let (variantCameras, verdict, trafficForecasts, variantSpots)",
+                            "CameraOnLine.routeSpots(", "return (found, choice, forecasts, spots)"]
         for file in files {
             let text = try String(contentsOf: file, encoding: .utf8)
             for line in text.components(separatedBy: .newlines) {

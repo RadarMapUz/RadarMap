@@ -253,7 +253,128 @@ PALETTE_VARIANTS = {
             "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.24, "position": [1.3, 200, 35]},
         },
     },
+    # 4. «Премиум» (по v2, решение владельца 22.10 «покруче, чем Яндекс»):
+    # иерархия дорог ЦВЕТОМ на всех зумах — магистраль абрикосовая, проспект
+    # жёлтый, улица второго класса светло-жёлтая, остальные белые с тонкой
+    # серой кромкой; у каждого вида землепользования свой мягкий тон, зелень
+    # сочнее, вода ярче, дома с тёплым светом (крыша светлее стен). Ночью —
+    # те же классы приглушённым тёплым тоном на тёмно-синем.
+    # Конфликт с пробкой решён светлотой: «медленно» (#e8a100) темнее и
+    # насыщеннее абрикоса (ΔE 36) и жёлтого (ΔE 39); линия маршрута лежит в
+    # своей тёмно-синей кайме, она отделена от любого цвета дороги (≥ 4,5:1).
+    "v4": {
+        "title": "Премиум",
+        "light": {
+            "class_roads": True,
+            "bg": "#f4f1ea", "landuse": "#efebe3", "park": "#b6e297", "wood": "#a5d784", "water": "#86c8f4",
+            "landuse_kind": {"landuse-commercial": "#fbe2d2", "landuse-industrial": "#e7e2ee",
+                             "landuse-hospital": "#fbdfe3", "landuse-school": "#faefc6",
+                             "landuse-cemetery": "#d6e2cf"},
+            "building": "#ede6db", "building_wall": "#cdbfac", "building_shadow": "rgba(110,90,60,0.22)",
+            "road_trunk": "#ffbf80", "road": "#ffe08a", "road_secondary": "#fff1c4", "road_tertiary": "#ffffff",
+            "minor": "#ffffff", "minor_far": "#ffffff", "minor_edge": "#cfc9bf", "minor_edge_far": "#d8d1c4",
+            "path": "#efe5d3", "path_edge": "#ddd1bd", "steps": "#d8ccb8",
+            "casing": "#cbc4b8", "kerb": "#e0ad3c", "kerb_trunk": "#e3893a", "gutter": "#c7b08c",
+            "median": "#dbe8c9", "concrete": "#e2dbcf", "parking": "#ece8e1", "parking_edge": "#d8d1c5",
+            "sidewalk": "#efe8dc", "sidewalk_edge": "#dcd2c3", "barrier": "#efe9df", "tunnel": "#ddd6ca",
+            "footbridge": "#ffffff", "footbridge_edge": "#b5ab9c", "boundary": "#cdbfd6",
+            "far_motorway": "#ff9e3d", "far_motorway_edge": "#de7a18",
+            "far_trunk": "#ffb357", "far_trunk_edge": "#df9030",
+            "far_primary": "#ffd462", "far_primary_edge": "#dfb043",
+            "far_secondary": "#ffe9a3", "far_secondary_edge": "#dfca85",
+            "far_tertiary": "#ffffff", "far_tertiary_edge": "#d4cdc0",
+            "tree_crown": "#94cf72", "tree_crown_low": "#72b555", "tree_crown_high": "#b3e094",
+            "tree_light": "#b8e39a", "tree_edge": "#86c566",
+            "label": "#2e2a26", "street_label": "#2b2e33", "halo": "#ffffff", "housenumber": "#7a6d60",
+            "light": {"anchor": "viewport", "color": "#fff1dc", "intensity": 0.5, "position": [1.3, 200, 35]},
+        },
+        "dark": {
+            "class_roads": True,
+            "bg": "#121a2a", "landuse": "#151e2f", "park": "#163a2b", "wood": "#14352a", "water": "#17468a",
+            "landuse_kind": {"landuse-commercial": "#2a2232", "landuse-industrial": "#1f2236",
+                             "landuse-hospital": "#2d2132", "landuse-school": "#28281f",
+                             "landuse-cemetery": "#18292a"},
+            "building": "#27324a", "building_wall": "#19213a", "building_shadow": "rgba(0,0,0,0.45)",
+            "road_trunk": "#71421c", "road": "#5d4c1f", "road_secondary": "#514e40", "road_tertiary": "#37435b",
+            "minor": "#33405a", "minor_far": "#33405a", "minor_edge": "#26304a", "minor_edge_far": "#1c2438",
+            "path": "#212b3f", "path_edge": "#1b2436", "steps": "#283247",
+            "casing": "#26304a", "kerb": "#c0903c", "kerb_trunk": "#d9853a", "gutter": "#2a2a30",
+            "median": "#163028", "concrete": "#3a465c", "parking": "#232e44", "parking_edge": "#2f3a52",
+            "sidewalk": "#1e2739", "sidewalk_edge": "#2a3448", "barrier": "#4a5670", "tunnel": "#253046",
+            "footbridge": "#38445b", "footbridge_edge": "#56637a", "boundary": "#394562",
+            "far_motorway": "#b5742f", "far_motorway_edge": "#7a4c1c",
+            "far_trunk": "#9c6a32", "far_trunk_edge": "#6b4721",
+            "far_primary": "#8a7438", "far_primary_edge": "#5e4f26",
+            "far_secondary": "#5f5b47", "far_secondary_edge": "#423f31",
+            "far_tertiary": "#3f4b63", "far_tertiary_edge": "#28324a",
+            "tree_crown": "#1f4a35", "tree_crown_low": "#163828", "tree_crown_high": "#2f6249",
+            "tree_light": "#2c5a43", "tree_edge": "#2c5a43",
+            "label": "#c8d2e4", "street_label": "#eef2f8", "halo": "#121a2a", "housenumber": "#8c98ae",
+            "light": {"anchor": "viewport", "color": "#c9d7ff", "intensity": 0.36, "position": [1.3, 200, 35]},
+        },
+    },
+    # 5. «Ночь-премиум + чистый день»: день — как v4, но спокойнее (цвет
+    # только у магистрали и проспекта, улицы белые, землепользование едва
+    # тонированное); ночь — глубокий сине-графитовый, магистрали «подсвечены»
+    # (светлее остальных, тёплым тоном), кварталы контрастные.
+    "v5": {
+        "title": "Ночь-премиум + чистый день",
+        "light": {
+            "class_roads": True,
+            "bg": "#f6f5f1", "landuse": "#f1efea", "park": "#c0e5a5", "wood": "#b0dc92", "water": "#92cff4",
+            "landuse_kind": {"landuse-commercial": "#f9ede5", "landuse-industrial": "#eeecf2",
+                             "landuse-hospital": "#f8e9eb", "landuse-school": "#f8f2dc",
+                             "landuse-cemetery": "#e2e9dd"},
+            "building": "#ebe7e0", "building_wall": "#cdc6bb", "building_shadow": "rgba(90,85,75,0.20)",
+            "road_trunk": "#ffcf9a", "road": "#ffe7a3", "road_secondary": "#ffffff", "road_tertiary": "#ffffff",
+            "minor": "#ffffff", "minor_far": "#ffffff", "minor_edge": "#d0ccc4", "minor_edge_far": "#dbd7cf",
+            "path": "#eee8dc", "path_edge": "#dcd5c7", "steps": "#d6cfc1",
+            "casing": "#cdc8be", "kerb": "#e3b54a", "kerb_trunk": "#e8a052", "gutter": "#cbbfa8",
+            "median": "#dfe9d3", "concrete": "#e2ded6", "parking": "#ecebe6", "parking_edge": "#d9d5cc",
+            "sidewalk": "#f0ece4", "sidewalk_edge": "#ddd6ca", "barrier": "#efece6", "tunnel": "#dcd8d0",
+            "footbridge": "#ffffff", "footbridge_edge": "#b4ada1", "boundary": "#cfc6d6",
+            "far_motorway": "#ffaa50", "far_motorway_edge": "#df8a2c",
+            "far_trunk": "#ffbf6e", "far_trunk_edge": "#df9d48",
+            "far_primary": "#ffdc85", "far_primary_edge": "#e0bb60",
+            "far_secondary": "#ffffff", "far_secondary_edge": "#d6d1c7",
+            "far_tertiary": "#ffffff", "far_tertiary_edge": "#dbd6cd",
+            "tree_crown": "#a0d47f", "tree_crown_low": "#7fbd62", "tree_crown_high": "#bfe5a2",
+            "tree_light": "#c2e6a7", "tree_edge": "#8fca70",
+            "label": "#2f2c29", "street_label": "#2b2e33", "halo": "#ffffff", "housenumber": "#7a7166",
+            "light": {"anchor": "viewport", "color": "#fff6ea", "intensity": 0.45, "position": [1.3, 200, 35]},
+        },
+        "dark": {
+            "class_roads": True,
+            "bg": "#0f1420", "landuse": "#121826", "park": "#123426", "wood": "#103022", "water": "#143f7a",
+            "landuse_kind": {"landuse-commercial": "#1d1a26", "landuse-industrial": "#171a28",
+                             "landuse-hospital": "#201a27", "landuse-school": "#1e1f1a",
+                             "landuse-cemetery": "#132222"},
+            "building": "#252f46", "building_wall": "#151c2e", "building_shadow": "rgba(0,0,0,0.5)",
+            "road_trunk": "#9c652d", "road": "#866e33", "road_secondary": "#5a7297", "road_tertiary": "#2d3a54",
+            "minor": "#2d3a54", "minor_far": "#2d3a54", "minor_edge": "#202a40", "minor_edge_far": "#18203a",
+            "path": "#1c2538", "path_edge": "#172031", "steps": "#232c42",
+            "casing": "#202a40", "kerb": "#e0a948", "kerb_trunk": "#f0a04a", "gutter": "#262a33",
+            "median": "#132b22", "concrete": "#36425a", "parking": "#1f293e", "parking_edge": "#2a354d",
+            "sidewalk": "#1a2234", "sidewalk_edge": "#252f45", "barrier": "#46526c", "tunnel": "#212b40",
+            "footbridge": "#34405a", "footbridge_edge": "#525f78", "boundary": "#35405c",
+            "far_motorway": "#d08a3a", "far_motorway_edge": "#8f5d22",
+            "far_trunk": "#b47d3e", "far_trunk_edge": "#7c5429",
+            "far_primary": "#9a8550", "far_primary_edge": "#695a35",
+            "far_secondary": "#56688a", "far_secondary_edge": "#3a4862",
+            "far_tertiary": "#34405a", "far_tertiary_edge": "#232d44",
+            "tree_crown": "#1b4632", "tree_crown_low": "#123425", "tree_crown_high": "#2a5d45",
+            "tree_light": "#28563f", "tree_edge": "#28563f",
+            "label": "#cad4e6", "street_label": "#f4f7fb", "halo": "#0f1420", "housenumber": "#8f9bb2",
+            "light": {"anchor": "viewport", "color": "#b9cbff", "intensity": 0.42, "position": [1.3, 200, 35]},
+        },
+    },
 }
+
+
+# Ключи, которые есть только у вариантов: иерархия дорог цветом
+# (class_roads + road_secondary), свой тон у каждого вида землепользования
+# (landuse_kind: id слоя основы → цвет), отдельная кромка магистрали.
+OPTIONAL_KEYS = {"class_roads", "road_secondary", "landuse_kind", "kerb_trunk"}
 
 
 def palette(theme, variant=None):
@@ -365,6 +486,8 @@ def street_halo(p):
     напечатанным на дороге, как у Яндекса. До нашего полотна (15-й) дорога
     тонкая, имя лежит на фоне — ореол фоновый.
     """
+    if p.get("class_roads"):
+        return ["interpolate", ["linear"], ["zoom"], 14.5, p["halo"], 15.5, class_asphalt(p, "class")]
     asphalt = ["match", ["get", "class"], ["motorway", "trunk"], p["road_trunk"],
                ["primary", "secondary"], p["road"], "tertiary", p["road_tertiary"], p["minor"]]
     return ["interpolate", ["linear"], ["zoom"], 14.5, p["halo"], 15.5, asphalt, 16.5, p["road"]]
@@ -509,7 +632,7 @@ def _base_layer(layer, p, mode, theme):
     elif l["type"] == "fill" and (i.startswith("landuse-") or i.startswith("landcover-")) and p["landuse"]:
         # Прочая застройка и покров (кладбища, больницы, школы, промзоны, песок):
         # в OSM Bright — пастель, на тёмной теме каждая горела пятном.
-        paint["fill-color"] = p["landuse"]
+        paint["fill-color"] = p.get("landuse_kind", {}).get(i, p["landuse"])
         paint.pop("fill-pattern", None)
     elif i in ("highway-area", "road_area_pier"):
         # Пешеходные площади и пирсы. В OSM Bright — светло-серая заливка, на
@@ -567,7 +690,8 @@ def _base_layer(layer, p, mode, theme):
                 # Вдали — цвет класса (магистраль оранжевее, улица белее), вблизи —
                 # асфальт, на котором видна разметка. Как у Яндекса.
                 paint["line-color"] = ["interpolate", ["linear"], ["zoom"], 13, _far(p, "fill"),
-                                       14.5, _far(p, "fill"), 15.5, p["road"]] \
+                                       14.5, _far(p, "fill"),
+                                       15.5, class_asphalt(p, "class") if p.get("class_roads") else p["road"]] \
                     if major else ["interpolate", ["linear"], ["zoom"], 14.5, p["minor_far"], 15.5, p["minor"]]
             paint["line-width"] = class_width(metres, (2.0 if major else 1.4) if casing else 0.0,
                                               near_share=1.0 if casing else FALLBACK_SHARE)
@@ -676,10 +800,23 @@ def road_color(p):
     # Один асфальт вблизи: двор, проезд парковки и площадь перекрёстка —
     # тот же тон, что проспект. Светлые дворы рядом с тёмным узлом давали
     # лоскутную карту (Кумарик, 07.10.2026); классы различает ширина.
+    if p.get("class_roads"):
+        return class_asphalt(p)
     return ["interpolate", ["linear"], ["zoom"], 15,
             ["match", ["get", "cls"], [1, 2], p["road_trunk"], [3, 4], p["road"],
              5, p["road_tertiary"], p["minor"]],
             16.5, p["road"]]
+
+
+def class_asphalt(p, key="cls"):
+    """Иерархия цветом на всех зумах (варианты 27.C «Премиум»): магистраль,
+    проспект, улица второго класса — каждая своим тоном, а не одним серым.
+    key — свойство класса: cls (наш тайл, число) или class (основа, строка)."""
+    if key == "cls":
+        return ["match", ["get", "cls"], [1, 2], p["road_trunk"], 3, p["road"], 4, p["road_secondary"],
+                5, p["road_tertiary"], p["minor"]]
+    return ["match", ["get", "class"], ["motorway", "trunk"], p["road_trunk"], "primary", p["road"],
+            "secondary", p["road_secondary"], "tertiary", p["road_tertiary"], p["minor"]]
 
 
 def _our_layers(p):
@@ -773,7 +910,8 @@ def _layers_in_draw_order(p):
          "layout": {"line-cap": "round", "line-join": "round", "line-sort-key": ["-", 0, ["get", "cls"]]},
          # Кромка: у магистралей (trunk…secondary) — жёлтая, как у Яндекса;
          # у tertiary — нейтральная, у мелких — цвет края мелкой улицы.
-         "paint": {"line-color": ["case", ["<=", ["get", "cls"], 4], p["kerb"],
+         "paint": {"line-color": ["case", *((["<=", ["get", "cls"], 2], p["kerb_trunk"]) if "kerb_trunk" in p else ()),
+                                  ["<=", ["get", "cls"], 4], p["kerb"],
                                   ["<=", ["get", "cls"], 5], p["casing"], p["minor_edge"]],
                    "line-width": measured(ROAD_KERB_EXTRA_PX)}},
         {"id": "radar-roads", "type": "line", "source": "radar", "source-layer": "roads",

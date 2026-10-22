@@ -106,8 +106,10 @@ def measure(theme, variant=None):
     """Числа палитры: {имя: значение} и список нарушенных правил."""
     p = make_style.palette(theme, variant)
     route, traffic, calm = ROUTE[theme], TRAFFIC[theme], CALM[theme]
-    asphalt = [p[k] for k in ASPHALT_KEYS]
-    ground = [p["bg"], p["landuse"], p["building"], p["park"], p["wood"], p["water"]]
+    asphalt = [p[k] for k in ASPHALT_KEYS] + ([p["road_secondary"]] if "road_secondary" in p else [])
+    ground = [p["bg"], p["landuse"], p["building"], p["park"], p["wood"], p["water"],
+              *p.get("landuse_kind", {}).values()]
+    kerbs = [p["kerb"]] + ([p["kerb_trunk"]] if "kerb_trunk" in p else [])
     surfaces = asphalt + ground
     m = {
         "подпись места / фон": contrast(p["label"], p["bg"]),
@@ -132,7 +134,7 @@ def measure(theme, variant=None):
         "спокойная камера / поверхности (мин)": min(max(contrast(calm["fill"], s), contrast(calm["ring"], s))
                                                    for s in surfaces),
         "ΔE пробки / асфальт (мин)": min(delta_e(c, a) for c in traffic.values() for a in asphalt),
-        "ΔE «медленно» / жёлтая кромка": delta_e(traffic["slow"], p["kerb"]),
+        "ΔE «медленно» / жёлтая кромка": min(delta_e(traffic["slow"], k) for k in kerbs),
         "контраст дорога / фон": contrast(p["road"], p["bg"]),
         "контраст двор / фон": contrast(p["minor"], p["bg"]),
         "контраст дом / фон": contrast(p["building"], p["bg"]),
@@ -160,24 +162,35 @@ def measure(theme, variant=None):
     need(m["ΔE «медленно» / жёлтая кромка"] >= SLOW_KERB_DE_MIN, "«медленно» похоже на кромку")
     # Иерархия: дорога — главное на земле, дома, зелень и вода тише неё
     # (по яркости — её видно и при дальтонизме), камера заметнее всего.
-    road = m["контраст дорога / фон"]
-    need(m["контраст двор / фон"] > m["контраст дом / фон"], "дом заметнее двора")
-    for key in ("контраст дом / фон", "контраст зелень / фон", "контраст вода / фон"):
-        need(m[key] < road, f"{key.split(' / ')[0].split()[-1]} заметнее дороги")
+    if p.get("class_roads"):
+        # Дороги цветом (v4, v5): днём полотно почти той же светлоты, что
+        # земля, — его несёт цвет класса и кромка. Двор белый, его несёт
+        # серая кромка; зелень может быть сочнее (так просил владелец), но
+        # не больше чем в 1,25 раза ярче дороги по ΔE.
+        m["контраст кромки двора / фон"] = max(contrast(p["minor_edge"], p["bg"]), contrast(p["minor"], p["bg"]))
+        need(m["контраст кромки двора / фон"] > m["контраст дом / фон"], "дом заметнее двора")
+        need(m["ΔE дорога / фон"] > m["ΔE дом / фон"], "дом заметнее дороги")
+        for key in ("ΔE зелень / фон", "ΔE вода / фон"):
+            need(m[key] <= 1.25 * m["ΔE дорога / фон"], f"{key.split(' / ')[0].split()[-1]} заметнее дороги")
+    else:
+        road = m["контраст дорога / фон"]
+        need(m["контраст двор / фон"] > m["контраст дом / фон"], "дом заметнее двора")
+        for key in ("контраст дом / фон", "контраст зелень / фон", "контраст вода / фон"):
+            need(m[key] < road, f"{key.split(' / ')[0].split()[-1]} заметнее дороги")
     for key in ("ΔE дорога / фон", "ΔE дом / фон", "ΔE зелень / фон", "ΔE вода / фон"):
         need(m[key] < m["ΔE камера (красная) / фон"], f"{key} ≥ камеры — камера не самая заметная")
     return m, failures
 
 
-def table(variants=(None, "v1", "v2", "v3")):
+def table(variants=(None, *make_style.PALETTE_VARIANTS)):
     rows = []
     for theme in ("light", "dark"):
         results = [measure(theme, v) for v in variants]
-        names = list(results[0][0])
+        names = list(dict.fromkeys(n for r in results for n in r[0]))
         head = ["день" if theme == "light" else "ночь"] + [v or "текущая" for v in variants]
         rows.append(" | ".join(head))
         for name in names:
-            rows.append(" | ".join([name] + [f"{r[0][name]:.2f}" for r in results]))
+            rows.append(" | ".join([name] + [f"{r[0][name]:.2f}" if name in r[0] else "—" for r in results]))
         for v, (_, failures) in zip(variants, results):
             rows.append(f"  {v or 'текущая'}: " + ("все правила ✓" if not failures else "; ".join(failures)))
         rows.append("")

@@ -208,7 +208,7 @@ nonisolated enum EngineModernStyle {
     }
 
     #if DEBUG
-    /// Вариант палитры для снимков (27.C, этап 1): `-mapPalette v1|v2|v3`
+    /// Вариант палитры для снимков (27.C, этап 1): `-mapPalette v1…v5`
     /// берёт стиль из MapStyle/Variants (make_style.py --app). Ресурсы
     /// вариантов есть только в DEBUG — Release их исключает
     /// (EXCLUDED_SOURCE_FILE_NAMES), и без ключа карта та же, что у водителя.
@@ -217,7 +217,7 @@ nonisolated enum EngineModernStyle {
         let args = ProcessInfo.processInfo.arguments
         guard let index = args.firstIndex(of: "-mapPalette"), index + 1 < args.count else { return nil }
         let value = args[index + 1]
-        return ["v1", "v2", "v3"].contains(value) ? value : nil
+        return ["v1", "v2", "v3", "v4", "v5"].contains(value) ? value : nil
     }()
     #endif
 

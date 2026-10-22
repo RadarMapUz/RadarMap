@@ -159,6 +159,12 @@ class StyleTests(unittest.TestCase):
         light, dark = make_style.palette("light", self.variant), make_style.palette("dark", self.variant)
         for theme in (light, dark):
             self.assertNotEqual(theme["minor"], theme["path"])
+        if light.get("class_roads"):
+            # Дороги цветом (27.C «Премиум»): двор белый с серой кромкой, как у
+            # Яндекса на обзоре, — а дорожка тёплая бежевая, не белая.
+            self.assertGreater(lightness(light["minor"]), lightness(light["path"]) + 10)
+            self.assertLess(lightness(light["minor_edge"]), lightness(light["bg"]))
+            return
         low, high = sorted((lightness(light["road"]), lightness(light["bg"])))
         self.assertTrue(low < lightness(light["minor"]) < high)
 
@@ -181,7 +187,8 @@ class StyleTests(unittest.TestCase):
         for layer_id in ("highway-name-major", "highway-name-minor"):
             halo = layers[layer_id]["paint"]["text-halo-color"]
             self.assertEqual(halo[0], "interpolate", layer_id)
-            self.assertEqual(halo[-1], palette["road"], "вблизи — один асфальт, как у полотна")
+            near = make_style.class_asphalt(palette, "class") if palette.get("class_roads") else palette["road"]
+            self.assertEqual(halo[-1], near, "вблизи — асфальт, как у полотна")
             self.assertEqual(halo[4], palette["halo"], "до нашего полотна — фон")
 
     def test_waterway_in_a_pipe_is_not_labelled(self):
@@ -377,7 +384,10 @@ class PaletteTests(unittest.TestCase):
         for name, variant in make_style.PALETTE_VARIANTS.items():
             self.assertTrue(variant["title"], name)
             for theme in ("light", "dark"):
-                self.assertLessEqual(set(variant[theme]), set(make_style.PALETTES[theme]), f"{name}/{theme}")
+                self.assertLessEqual(set(variant[theme]), set(make_style.PALETTES[theme]) | make_style.OPTIONAL_KEYS,
+                                     f"{name}/{theme}")
+                if variant[theme].get("class_roads"):
+                    self.assertIn("road_secondary", variant[theme], f"{name}/{theme}")
 
     def test_default_palette_is_untouched_by_variants(self):
         self.assertIs(make_style.palette("light"), make_style.PALETTES["light"])

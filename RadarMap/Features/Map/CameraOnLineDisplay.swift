@@ -19,6 +19,15 @@ extension AppEnvironment {
     var cameraOnLine: CameraOnLine.Display {
         let nearest = location.displayNearestCamera
         let routeActive = route.isActive
+        #if DEBUG
+        // Снимки «до» (27.B): прежний выбор — все камеры коридора, на своих координатах.
+        if Self.cameraOnLineOff {
+            return CameraOnLine.Display(pathIDs: CameraMarkerLook.pathIDs(
+                route: route.camerasOnRoute.map { (id: $0.id, along: $0.distanceAlong) },
+                progress: routeActive ? route.progressAlong : nil,
+                passedTolerance: AppConfig.routePassedToleranceMeters, nearest: nearest?.id))
+        }
+        #endif
         var onRoad: CameraOnLine.Point?
         if !routeActive, let nearest, let origin = location.displayCoordinate,
            let bearing = location.displayRoadBearing {
@@ -31,4 +40,8 @@ extension AppEnvironment {
             passedTolerance: AppConfig.routePassedToleranceMeters,
             nearest: nearest?.id, nearestOnRoad: onRoad)
     }
+
+    #if DEBUG
+    private static let cameraOnLineOff = ProcessInfo.processInfo.arguments.contains("-cameraOnLineOff")
+    #endif
 }

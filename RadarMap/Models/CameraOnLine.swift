@@ -103,48 +103,69 @@ nonisolated enum CameraOnLine {
 
     // MARK: - Маршрут (раз на построение)
 
-    /// Точки камер маршрута на его линии. Проекция — тем же способом, что у
-    /// `RouteService.camerasAlong` (ближайшая точка ломаной в единицах карты).
-    static func routeSpots(points: [MKMapPoint], cameras: [Camera]) -> [Int: Spot] {
+    /// Точки камер маршрута на его линии. `along` — метры от старта, которые
+    /// уже нашёл `RouteService.camerasAlong` (ближайшая точка ломаной), и
+    /// кумулятив здесь той же меры (`MKMapPoint.distance`), так что точка —
+    /// ровно его проекция: O(n) на маршрут и O(log n) на камеру вместо
+    /// второго перебора всех отрезков.
+    static func routeSpots(points: [MKMapPoint], cameras: [(camera: Camera, along: Double)]) -> [Int: Spot] {
         guard points.count >= 2 else { return [:] }
+        var cum = [Double](repeating: 0, count: points.count)
+        for index in 1..<points.count { cum[index] = cum[index - 1] + points[index - 1].distance(to: points[index]) }
         var out: [Int: Spot] = [:]
         out.reserveCapacity(cameras.count)
-        for camera in cameras {
-            if let spot = spot(of: camera, on: points) { out[camera.id] = spot }
+        for item in cameras {
+            // Последний отрезок, чьё начало не дальше `along`.
+            var low = 0, high = points.count - 2
+            while low < high {
+                let middle = (low + high + 1) / 2
+                if cum[middle] <= item.along { low = middle } else { high = middle - 1 }
+            }
+            let length = cum[low + 1] - cum[low]
+            let t = length > 0 ? max(0, min(1, (item.along - cum[low]) / length)) : 0
+            out[item.camera.id] = spot(of: item.camera, on: points, segment: low, t: t)
         }
         return out
     }
 
+    /// Точка одной камеры перебором отрезков — когда `along` неизвестен.
     static func spot(of camera: Camera, on points: [MKMapPoint]) -> Spot? {
         guard points.count >= 2 else { return nil }
         let target = MKMapPoint(camera.coordinate)
-        var best = Double.greatestFiniteMagnitude
+        // Сравниваем квадраты в единицах карты (масштаб вокруг камеры
+        // постоянен): `distance` на каждый отрезок стоил бы корня и широты.
+        var best2 = Double.greatestFiniteMagnitude
         var bestIndex = 0
         var bestT = 0.0
-        var bestPoint = points[0]
         for index in 0..<(points.count - 1) {
             let a = points[index], b = points[index + 1]
             let dx = b.x - a.x, dy = b.y - a.y
             let len2 = dx * dx + dy * dy
             let t = len2 > 0 ? max(0, min(1, ((target.x - a.x) * dx + (target.y - a.y) * dy) / len2)) : 0
-            let closest = MKMapPoint(x: a.x + t * dx, y: a.y + t * dy)
-            let distance = target.distance(to: closest)
-            if distance < best {
-                best = distance; bestIndex = index; bestT = t; bestPoint = closest
-            }
+            let cx = a.x + t * dx - target.x, cy = a.y + t * dy - target.y
+            let d2 = cx * cx + cy * cy
+            if d2 < best2 { best2 = d2; bestIndex = index; bestT = t }
         }
-        let headings = routeHeadings(points: points, segment: bestIndex, t: bestT)
+        return spot(of: camera, on: points, segment: bestIndex, t: bestT)
+    }
+
+    /// Вердикт для точки проекции на отрезке `segment` в доле `t`.
+    static func spot(of camera: Camera, on points: [MKMapPoint], segment: Int, t: Double) -> Spot {
+        let a = points[segment], b = points[segment + 1]
+        let projected = MKMapPoint(x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y))
+        let offset = MKMapPoint(camera.coordinate).distance(to: projected)
+        let headings = routeHeadings(points: points, segment: segment, t: t)
         // Не наша — только если не сходится НИ С ОДНИМ курсом линии у этой
         // точки: у вершины (поворот) камера может стоять на любой из улиц.
         let verdict: Verdict
         if !headings.isEmpty, headings.allSatisfy({ provesNotOurs(camera, heading: $0) }) {
             verdict = .notOurs
-        } else if best <= AppConfig.cameraOnLineMaxMeters {
+        } else if offset <= AppConfig.cameraOnLineMaxMeters {
             verdict = .onLine
         } else {
             verdict = .beside
         }
-        return Spot(point: Point(bestPoint.coordinate), verdict: verdict)
+        return Spot(point: Point(projected.coordinate), verdict: verdict)
     }
 
     /// Курс линии у точки проекции: отрезок под ней, а у вершины (ближе

@@ -1544,7 +1544,8 @@ final class RouteService {
             }, history: history)
             // Где рисовать камеры на линии — тем же проходом, раз на маршрут.
             let spots = inputs.indices.map { index in
-                CameraOnLine.routeSpots(points: inputs[index].points, cameras: found[index].map(\.camera))
+                CameraOnLine.routeSpots(points: inputs[index].points,
+                                        cameras: found[index].map { ($0.camera, $0.distanceAlong) })
             }
             return (found, choice, delays, spots)
         }

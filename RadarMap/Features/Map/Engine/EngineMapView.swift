@@ -1075,6 +1075,9 @@ struct EngineMapView: UIViewRepresentable {
                     self.routeIndex = frame.index
                     self.setLine(frame.traveled, source: "traveled", in: view)
                     self.setLine(frame.remaining, source: "route", in: view)
+                    #if DEBUG
+                    self.debugLineCut = frame.remaining.first
+                    #endif
                     self.setLine(frame.maneuver, source: "maneuver", in: view)
                     self.setRouteTraffic(frame.traffic, in: view)
                 }
@@ -1574,6 +1577,9 @@ struct EngineMapView: UIViewRepresentable {
                 if now - lastMarkerLog >= 0.2 {
                     lastMarkerLog = now
                     Log.location.notice("МЕТКА знак \(Date().timeIntervalSince1970, format: .fixed(precision: 3), privacy: .public) \(coordinate.latitude, format: .fixed(precision: 7), privacy: .public) \(coordinate.longitude, format: .fixed(precision: 7), privacy: .public) \(view.centerCoordinate.latitude, format: .fixed(precision: 7), privacy: .public) \(view.centerCoordinate.longitude, format: .fixed(precision: 7), privacy: .public)")
+                    if let cut = debugLineCut {
+                        Log.location.notice("МЕТКА линия \(Date().timeIntervalSince1970, format: .fixed(precision: 3), privacy: .public) \(coordinate.latitude, format: .fixed(precision: 7), privacy: .public) \(coordinate.longitude, format: .fixed(precision: 7), privacy: .public) \(cut.latitude, format: .fixed(precision: 7), privacy: .public) \(cut.longitude, format: .fixed(precision: 7), privacy: .public)")
+                    }
                 }
             }
             #endif
@@ -1594,6 +1600,8 @@ struct EngineMapView: UIViewRepresentable {
         }
         #if DEBUG
         private var lastMarkerLog: CFTimeInterval = 0
+        /// Где начинается непройденная линия на экране — для замера 27.A.
+        private var debugLineCut: CLLocationCoordinate2D?
         #endif
         /// Что стрелка показывает сейчас (точка и угол) — для пропуска повторов.
         private var shownPosition: (point: CGPoint, angle: Double)?

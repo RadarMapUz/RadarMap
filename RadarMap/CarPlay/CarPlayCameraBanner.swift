@@ -237,18 +237,31 @@ final class CarPlayCameraBanner {
                                            radius: env.location.effectiveAlertRadius)
     }
 
+    /// Пределы картинок баннера — при подключении (CarPlayGuidance.attach), а
+    /// не лениво внутри первой тревоги: обращения к системе за пределами —
+    /// не на пути оповещения (правило 21).
+    func prepare() {
+        guard #available(iOS 27.0, *) else { return }
+        _ = bannerImageSizes()
+    }
+
+    @available(iOS 27.0, *)
+    private func bannerImageSizes() -> (avatar: CGSize, alert: CGSize) {
+        if let imageSizes { return imageSizes }
+        let sizes = (
+            avatar: CarPlayCameraBannerLook.fit(AppConfig.carPlayBannerAvatarSize,
+                                                into: CPNavigationAlert.maximumAvatarImageSize),
+            alert: CarPlayCameraBannerLook.fit(AppConfig.carPlayBannerAlertImageSize,
+                                               into: CPNavigationAlert.maximumAlertImageSize))
+        imageSizes = sizes
+        Log.carplay.notice("баннер камеры iOS 27: аватар \(Int(sizes.avatar.width), privacy: .public)×\(Int(sizes.avatar.height), privacy: .public), картинка \(Int(sizes.alert.width), privacy: .public)×\(Int(sizes.alert.height), privacy: .public) (предел \(Int(CPNavigationAlert.maximumAlertImageSize.width), privacy: .public)×\(Int(CPNavigationAlert.maximumAlertImageSize.height), privacy: .public)), кнопок до \(CPNavigationAlert.maximumActionsCount, privacy: .public)")
+        return sizes
+    }
+
     @available(iOS 27.0, *)
     private func images(for camera: Camera, art: CarPlayCameraBannerLook.Art,
                         onDark: Bool) -> (avatar: UIImage, alert: UIImage) {
-        let sizes = imageSizes ?? (
-            CarPlayCameraBannerLook.fit(AppConfig.carPlayBannerAvatarSize,
-                                        into: CPNavigationAlert.maximumAvatarImageSize),
-            CarPlayCameraBannerLook.fit(AppConfig.carPlayBannerAlertImageSize,
-                                        into: CPNavigationAlert.maximumAlertImageSize))
-        if imageSizes == nil {
-            imageSizes = sizes
-            Log.carplay.notice("баннер камеры iOS 27: аватар \(Int(sizes.avatar.width), privacy: .public)×\(Int(sizes.avatar.height), privacy: .public), картинка \(Int(sizes.alert.width), privacy: .public)×\(Int(sizes.alert.height), privacy: .public) (предел \(Int(CPNavigationAlert.maximumAlertImageSize.width), privacy: .public)×\(Int(CPNavigationAlert.maximumAlertImageSize.height), privacy: .public)), кнопок до \(CPNavigationAlert.maximumActionsCount, privacy: .public)")
-        }
+        let sizes = bannerImageSizes()
         return (CarPlayBannerArt.avatar(camera.kind, size: sizes.avatar),
                 CarPlayBannerArt.alertImage(art, type: camera.kind, size: sizes.alert, onDark: onDark))
     }

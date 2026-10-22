@@ -159,10 +159,13 @@ struct CarPlayOverlay: View {
             .overlay(Circle().stroke(speedColor == Theme.textPrimary ? Theme.stroke : speedColor,
                                      lineWidth: speedColor == Theme.textPrimary ? 1 : 3))
             if let limit {
+                // Свечение — параметром знака (тень на его круге), не `.shadow`
+                // снаружи: та размывала круг, кольцо и каждую цифру отдельно
+                // и пересчитывалась над картой машины на каждом фиксе.
                 SpeedLimitSign(limit: limit, diameter: 42,
-                               isAssumed: env.speedLimits.isCurrentLimitAssumed)
-                    .shadow(color: env.speedLimits.isOverspeeding ? Theme.danger.opacity(0.8) : .black.opacity(0.3),
-                            radius: env.speedLimits.isOverspeeding ? 9 : 4)
+                               isAssumed: env.speedLimits.isCurrentLimitAssumed,
+                               glow: env.speedLimits.isOverspeeding ? Theme.danger.opacity(0.8) : .black.opacity(0.3),
+                               glowRadius: env.speedLimits.isOverspeeding ? 9 : 4)
                     .offset(x: 16, y: -12)
                     .transition(.scale.combined(with: .opacity))
             }

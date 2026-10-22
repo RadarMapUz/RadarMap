@@ -842,9 +842,13 @@ struct TripShareCard: View {
                 .foregroundStyle(.white.opacity(0.75))
         }
         .frame(width: 64, height: 64)
-        .background(tint.opacity(0.92), in: Circle())
+        // Тень — на круге-фоне, не на составной вью: иначе свой ореол у каждой
+        // подписи («92», «рейтинг») — правило «тени на форме фона».
+        .background {
+            Circle().fill(tint.opacity(0.92))
+                .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+        }
         .overlay(Circle().stroke(.white.opacity(0.25), lineWidth: 1.5))
-        .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
         .padding(12)
     }
 }

@@ -35,6 +35,9 @@ nonisolated struct FamilyTrip: Equatable, Sendable {
     private(set) var sent: [UUID: FamilyShare.Sent] = [:]
     /// «В пути», ответ на которое ещё не пришёл.
     private(set) var inFlight: Set<UUID> = []
+    /// Не дошло: подряд неудач и когда пробовать снова — по близкому.
+    private(set) var failures: [UUID: Int] = [:]
+    private(set) var retryAt: [UUID: Date] = [:]
 
     /// Кому ссылка сейчас открыта: доставлено или в пути.
     var open: Set<UUID> { Set(sent.keys).union(inFlight) }
@@ -64,6 +67,7 @@ nonisolated struct FamilyTrip: Equatable, Sendable {
         guard !visible.isEmpty else { return actions }
         let arrival = FamilyShare.arrival(context, headingHome: headingHome, now: now)
         for recipient in visible where !inFlight.contains(recipient.id)
+            && retryAt[recipient.id].map({ now >= $0 }) ?? true
             && FamilyShare.shouldSend(last: sent[recipient.id], arrival: arrival, home: headingHome, now: now) {
             inFlight.insert(recipient.id)
             actions.append(.drive(recipient.id, arrival: arrival, home: headingHome))
@@ -75,11 +79,23 @@ nonisolated struct FamilyTrip: Equatable, Sendable {
     mutating func delivered(_ id: UUID, arrival: Date?, home: Bool, at: Date) {
         guard inFlight.remove(id) != nil else { return }   // закрыли, пока шёл ответ
         sent[id] = FamilyShare.Sent(arrival: arrival, home: home, at: at)
+        failures[id] = nil
+        retryAt[id] = nil
     }
 
-    /// «В пути» не дошло — следующий update попробует снова.
-    mutating func failed(_ id: UUID) {
-        inFlight.remove(id)
+    /// «В пути» не дошло — update попробует снова после паузы
+    /// (`familyRetrySeconds`, вдвое за каждую неудачу подряд).
+    mutating func failed(_ id: UUID, now: Date) {
+        guard inFlight.remove(id) != nil else { return }   // закрыли, пока шёл ответ
+        let count = (failures[id] ?? 0) + 1
+        failures[id] = count
+        retryAt[id] = now.addingTimeInterval(Self.retryDelay(afterFailures: count))
+    }
+
+    /// Пауза перед повтором после `count` неудач подряд.
+    static func retryDelay(afterFailures count: Int) -> TimeInterval {
+        let doubled = AppConfig.familyRetrySeconds * pow(2, Double(max(0, min(count, 8) - 1)))
+        return min(doubled, AppConfig.familyRetryMaxSeconds)
     }
 
     /// Пауза в один тап — на эту поездку, для всех.
@@ -103,6 +119,8 @@ nonisolated struct FamilyTrip: Equatable, Sendable {
         let home = sent[id]?.home ?? true
         sent[id] = nil
         inFlight.remove(id)
+        failures[id] = nil
+        retryAt[id] = nil
         return home
     }
 

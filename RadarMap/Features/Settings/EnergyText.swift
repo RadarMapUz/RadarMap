@@ -203,7 +203,7 @@ enum EnergyText {
             guard let per100 = model.per100[fuel] else { return nil }
             let distance = km(use.meters(fuel) / 1_000)
             let rate = per100Short(per100, fuel)
-            let highway = fuel == .electricity && use.highwayMeters >= 500
+            let highway = fuel == .electricity && use.highwayMeters >= AppConfig.energyHighwayNoteMinMeters
             let line: String
             if let price = model.price[fuel], let units = use.amount[fuel] {
                 line = String(format: String(localized: "%1$@ × %2$@ × %3$@ ≈ %4$@"),
@@ -219,11 +219,11 @@ enum EnergyText {
     /// Пометки под расчётом поездки или периода.
     static func notes(_ use: EnergySplit.Use, model: EnergySplit.Model) -> [String] {
         var notes: [String] = []
-        if use.highwayMeters >= 500 {
+        if use.highwayMeters >= AppConfig.energyHighwayNoteMinMeters {
             notes.append(String(format: String(localized: "По трассе %1$@ — заряд там тратится в %2$@ раза быстрее."),
                                 Formatting.distance(use.highwayMeters), number(AppConfig.energyHighwayFactor)))
         }
-        if use.noSpeedProfileMeters >= 500 {
+        if use.noSpeedProfileMeters >= AppConfig.energyHighwayNoteMinMeters {
             notes.append(String(localized: "Трасса не учтена: профиля скорости уже нет (он хранится неделю)."))
         }
         if use.beyondRangeTrips > 0 {

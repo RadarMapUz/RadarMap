@@ -48,7 +48,7 @@ struct EnergyCheckView: View {
                       decimals: true, value: litres) { litres = $0 }
             }
             estimateCard(result.estimate, energy: energy)
-            if result.estimate.meters < 1_000 {
+            if result.estimate.meters < AppConfig.energyCheckMinMeters {
                 Label("За этот период поездок нет — сверять не с чем.", systemImage: "info.circle")
                     .font(.rounded(14))
                     .foregroundStyle(Theme.textSecondary)

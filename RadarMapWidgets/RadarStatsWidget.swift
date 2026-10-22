@@ -219,7 +219,6 @@ private struct RadarStatsView: View {
         WidgetWeek.isCurrentWeek(snapshot.weekStart, now: entry.date)
     }
     private var state: WidgetState { WidgetWeek.state(snapshot) }
-    private var hasData: Bool { state == .few || state == .full }
     private var isStale: Bool { WidgetWeek.isStale(snapshot.updatedAt, now: entry.date) }
 
     /// Даты недели снимка: «19–25 окт.», через месяц — «28 сент. – 4 окт.»

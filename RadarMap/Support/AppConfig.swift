@@ -241,10 +241,6 @@ nonisolated enum AppConfig {
     /// раньше лишние молча отбрасывались и карта выглядела «недогруженной».
     static let maxVisibleAnnotations = 220
 
-    /// Средний зум (шире этого по широте): камеры рисуются маленькими точками,
-    /// полноразмерный пин — только у ближайшей и выбранной. Карта не превращается в кашу.
-    static let dotModeSpanDegrees = 0.035
-
     /// Во сколько раз расширяем видимую область при подгрузке аннотаций.
     /// Буфер держит точки уже отрисованными за краями экрана → панорамирование без «подпрыгивания».
     static let annotationBufferFactor = 1.8
@@ -1705,11 +1701,6 @@ nonisolated enum AppConfig {
     /// Это не косметика: пересчёт на каждый GPS-тик перерисовывал бы всю карту
     /// раз в секунду (та же ошибка, что чинили в Итогах).
     static let mapFocusStepMeters: CLLocationDistance = 300
-    /// Прозрачность фоновых камер.
-    static let mapBackgroundCameraOpacity = 0.45
-    /// Угол сектора направления у маркера: узкий клин читается как «смотрит
-    /// туда», широкий — как «светит во все стороны».
-    static let mapDirectionConeDegrees = 66.0
 
     // MARK: - CarPlay
 
@@ -2529,6 +2520,14 @@ nonisolated enum AppConfig {
     static let energyHighwayKmh = 80.0
     /// Во сколько раз трасса быстрее тратит заряд на километр.
     static let energyHighwayFactor = 1.3
+    /// Трасса заметна в пометках расчёта («с трассой», «по трассе тратится
+    /// быстрее», «трасса не учтена») от стольких метров: меньше — съезд на
+    /// развязке, о нём писать нечего. Одно число на формулу, пометки и
+    /// примеры мастера — раньше 500 жило в четырёх местах двух файлов.
+    static let energyHighwayNoteMinMeters: CLLocationDistance = 500
+    /// Сверке с панелью машины нужен хоть километр поездок за период: меньше —
+    /// «сверять не с чем», а не «не сходится».
+    static let energyCheckMinMeters: CLLocationDistance = 1_000
     /// Доля зарядки дома при «и там и там», пока водитель её не сдвинул:
     /// обычно заряжают дома, станция — запасом.
     static let energyHomeChargeShareDefault = 0.7
@@ -2751,6 +2750,14 @@ nonisolated enum AppConfig {
     nonisolated static let familyHoldSeconds: TimeInterval = tripMergeMaxStopSeconds
     /// Строка «Мама увидит, что вы едете домой» висит столько секунд.
     static let familyNoticeSeconds: Double = 6
+    /// «В пути» не дошло — пауза перед повтором этому близкому, дальше вдвое
+    /// после каждой новой неудачи до `familyRetryMaxSeconds`. Без паузы
+    /// повтор шёл на КАЖДОМ фиксе: без сети на трассе — запрос в секунду на
+    /// человека всю поездку, а на стабильные 4xx (старый сервер, правка nginx)
+    /// — настоящий HTTPS раз в секунду. 15 с — заметно короче десяти минут
+    /// живости ссылки, близкие не увидят «давно не обновлялось».
+    nonisolated static let familyRetrySeconds: TimeInterval = 15
+    nonisolated static let familyRetryMaxSeconds: TimeInterval = 120
 
     // MARK: - Маршрут без сети (OfflineRouteGraph, 12б.10)
 

@@ -416,7 +416,7 @@ final class VoiceComposerTests: XCTestCase {
 
     /// Только буквы и цифры, без регистра: апострофы оʻ/o'/o‘, знаки и
     /// пробелы в записи не слышны.
-    private static func normalized(_ text: String) -> String {
+    private nonisolated static func normalized(_ text: String) -> String {
         String(text.lowercased().unicodeScalars.filter { CharacterSet.letters.contains($0)
             || CharacterSet.decimalDigits.contains($0) }.map(Character.init))
             // ʻ и ʼ — «буквы-модификаторы» Юникода, CharacterSet.letters их пропускает.

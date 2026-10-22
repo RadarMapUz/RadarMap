@@ -275,6 +275,7 @@ final class CarPlayGuidance {
     func attach(to template: CPMapTemplate, banners: CarPlayBanners) {
         self.template = template
         self.banners = banners
+        cameraBanner.prepare()
         generation &+= 1
         observe()
     }
@@ -722,8 +723,10 @@ final class CarPlayGuidance {
         // карточки — им свой цвет.
         let symbolName = step.kind?.isDrawable == false ? "flag.checkered" : step.icon
         next.symbolImage = symbol(symbolName, pointSize: 34, onDark: whiteArrow(on: cardColor, dark: carDark))
-        next.notificationSymbolImage = symbol(symbolName, pointSize: 34, onDark: carDark)
-        next.dashboardSymbolImage = symbol(symbolName, pointSize: 34, onDark: carDark)
+        // Уведомление и плитка — в одной теме машины: одна картинка на обе.
+        let carThemed = symbol(symbolName, pointSize: 34, onDark: carDark)
+        next.notificationSymbolImage = carThemed
+        next.dashboardSymbolImage = carThemed
         // Схемы развязки (junctionImage) больше нет (21.10, владелец: «мини-
         // карту убери, там лучше — с какого края нужно повернуть»): грубая
         // схема узла занимала место, где система показывает второй манёвр, —

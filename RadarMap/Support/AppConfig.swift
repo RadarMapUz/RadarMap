@@ -2263,6 +2263,31 @@ nonisolated enum AppConfig {
     static let markerBackGlideSeconds: Double = 0.5
     /// Скачок дальше — ставим сразу (выезд из тоннеля, первый фикс).
     static let markerJumpMeters: Double = 100
+    // MARK: - Срез линии маршрута под значком (RouteCut, 27.A)
+
+    /// Окно линии у машины, м: краска движка (line-gradient) — 256 точек на
+    /// всю длину источника, и только на коротком окне граница пройденного
+    /// режется с точностью до метра (256 м → 1 м на точку краски).
+    static let routeCutWindowMeters: Double = 256
+    /// Окно переставляется вперёд, когда до его конца осталось меньше: запас
+    /// на пересборку тайлов окна (≤ секунды) даже на 130 км/ч.
+    static let routeCutWindowReserveMeters: Double = 110
+    /// Начало нового окна — чуть позади среза.
+    static let routeCutWindowBehindMeters: Double = 6
+    /// Значок дальше этого от линии — не на маршруте: срез стоит.
+    static let routeCutMaxDeviationMeters: Double = 25
+    /// Запас к пределу «фикс + скорость × markerMaxLeadSeconds»: мягкая
+    /// поправка значка может держать его на пару метров впереди оценки.
+    static let routeCutLeadSlackMeters: Double = 5
+    /// Краска окна переписывается, когда срез сдвинулся хотя бы на столько.
+    static let routeCutRepaintMeters: Double = 0.3
+    /// Новое окно и новый остаток линии ждут своих тайлов не дольше: дальше
+    /// считаем, что движок их показал (окно вне вида — тайлов нет вовсе).
+    static let routeCutConfirmSeconds: CFTimeInterval = 0.6
+    /// Стрелки направления — точками через столько метров; реже на обзоре
+    /// (ранг точки, RouteCut.arrowMinRank).
+    static let routeArrowSpacingMeters: Double = 15
+
     /// Как часто карта с меткой пишет строку здоровья в журнал (EngineMapView.healthTag).
     static let engineHealthLogSeconds: CFTimeInterval = 10
 

@@ -573,6 +573,8 @@ nonisolated enum RouteColors {
     static let body: Pair = (0x2A6FF0, 0x66A3FF)
     static let casing: Pair = (0x1E4FB8, 0x0E1A33)
     static let traveled: Pair = (0x9AA6B8, 0x4A5568)
+    /// Подсветка ближнего манёвра на линии.
+    static let maneuver: Pair = (0x123A8F, 0xD6E6FF)
     /// Светлая середина: белый с этой непрозрачностью поверх тела.
     static let coreAlpha: (day: Double, night: Double) = (0.38, 0.32)
     /// Стрелки направления вдоль линии: белая заливка с каймой линии.

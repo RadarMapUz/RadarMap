@@ -17,8 +17,9 @@ import Testing
 @Suite("Линия маршрута и спокойные камеры")
 struct EngineRouteStyleTests {
 
-    private let order = ["traffic", "route-traveled", "route-case", "route", "route-traffic",
-                         "route-maneuver", "route-core", "route-arrows"]
+    private let order = ["traffic", "route-traveled", "route-case", "route-near-case", "route", "route-near",
+                         "route-traffic", "route-maneuver", "route-near-maneuver", "route-core",
+                         "route-near-core", "route-arrows"]
 
     private func layers(daylight: Bool) -> [[String: Any]] {
         let text = EngineMapStyle.json(daylight: daylight, base: URL(string: "https://soulmed.uz/radarmap")!)
@@ -85,16 +86,40 @@ struct EngineRouteStyleTests {
         #expect(!text.contains(RouteColors.pick(RouteColors.free, daylight: daylight)))
     }
 
-    @Test("Стрелки — вдоль линии и вне раскладки: ничего не вытесняют")
+    @Test("Стрелки — точками на линии, вне раскладки; позади среза скрыты фильтром")
     func arrowsAlongTheLine() throws {
         let arrows = try #require(layer("route-arrows", layers(daylight: true)))
         let layout = try #require(arrows["layout"] as? [String: Any])
-        #expect(arrows["source"] as? String == "route", "стрелки только впереди, не на пройденном")
-        #expect(layout["symbol-placement"] as? String == "line")
+        #expect(arrows["source"] as? String == EngineMapStyle.routeArrowsSource)
+        #expect(layout["symbol-placement"] == nil, "точки с местом на линии, не раскладка по линии")
+        #expect(String(describing: arrows["filter"] ?? "").contains("a"), "фильтр по месту на линии")
         #expect(layout["icon-image"] as? String == EngineMapStyle.routeArrowImage(daylight: true))
         #expect(layout["icon-ignore-placement"] as? Bool == true)
         #expect(layout["icon-allow-overlap"] as? Bool == true)
         #expect(layout["icon-rotation-alignment"] as? String == "map")
+        #expect(String(describing: layout["icon-rotate"] ?? "").contains("b"))
+    }
+
+    @Test("Окно у машины: краска по line-progress на источнике с lineMetrics, ширина — как у пары", arguments: [true, false])
+    func nearWindowLayers(daylight: Bool) throws {
+        let text = EngineMapStyle.json(daylight: daylight, base: URL(string: "https://soulmed.uz/radarmap")!)
+        let object = try #require(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
+        let sources = try #require(object["sources"] as? [String: Any])
+        let near = try #require(sources[EngineMapStyle.routeNearSource] as? [String: Any])
+        #expect(near["lineMetrics"] as? Bool == true, "без lineMetrics движок не рисует line-gradient")
+        #expect(EngineModernStyle.liveSources.contains(EngineMapStyle.routeNearSource))
+        #expect(EngineModernStyle.liveSources.contains(EngineMapStyle.routeArrowsSource))
+        let all = layers(daylight: daylight)
+        let ids = EngineMapStyle.routeNearLayers
+        for (id, pair) in [(ids.casing, "route-case"), (ids.body, "route"), (ids.maneuver, "route-maneuver"),
+                           (ids.core, "route-core")] {
+            let paint = try #require(layer(id, all)?["paint"] as? [String: Any])
+            #expect(layer(id, all)?["source"] as? String == EngineMapStyle.routeNearSource)
+            #expect(String(describing: paint["line-gradient"] ?? "").contains("line-progress"))
+            let twin = layer(pair, all)?["paint"] as? [String: Any]
+            #expect(String(describing: paint["line-width"] ?? "") == String(describing: twin?["line-width"] ?? "-"),
+                    "\(id): ширина не как у \(pair) — стык окна и остатка был бы ступенькой")
+        }
     }
 
     @Test("Источник пробок на линии есть в обоих стилях")

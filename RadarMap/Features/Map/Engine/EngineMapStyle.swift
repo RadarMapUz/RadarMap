@@ -89,26 +89,12 @@ nonisolated enum EngineMapStyle {
         var style: [String: Any] = [
             "version": 8,
             "glyphs": glyphs,
-            "sources": [
+            "sources": ([
                 "far": ["type": "vector", "tiles": [tiles],
                         "minzoom": farZoom, "maxzoom": farZoom],
                 "near": ["type": "vector", "tiles": [tiles],
                          "minzoom": detailZoom, "maxzoom": detailZoom],
-                // Свои слои: камеры и маршрут. Пустые при сборке стиля —
-                // наполняются на тике, как и в самописной схеме.
-                "cameras": ["type": "geojson", "data": emptyCollection],
-                "route": ["type": "geojson", "data": emptyCollection],
-                "traveled": ["type": "geojson", "data": emptyCollection],
-                "maneuver": ["type": "geojson", "data": emptyCollection],
-                "traffic": ["type": "geojson", "data": emptyCollection],
-                "route-traffic": ["type": "geojson", "data": emptyCollection],
-                "position": ["type": "geojson", "data": emptyCollection],
-                "marks": ["type": "geojson", "data": emptyCollection],
-                "road-events": ["type": "geojson", "data": emptyCollection],
-                "cng-status": ["type": "geojson", "data": emptyCollection],
-                "hotspots": ["type": "geojson", "data": emptyCollection],
-                "camera-label": ["type": "geojson", "data": emptyCollection],
-            ],
+            ] as [String: [String: Any]]).merging(liveSources()) { _, own in own },
             "layers": layers(ground: ground, casing: casing, label: label,
                              halo: halo,
                              land: landColour, asphalt: asphaltColour,
@@ -117,20 +103,7 @@ nonisolated enum EngineMapStyle {
         // Do not let Native cache authentication failures while the signed
         // index is still loading. Local overlays work without vector sources.
         if !tilesReady {
-            style["sources"] = [
-                "cameras": ["type": "geojson", "data": emptyCollection],
-                "route": ["type": "geojson", "data": emptyCollection],
-                "traveled": ["type": "geojson", "data": emptyCollection],
-                "maneuver": ["type": "geojson", "data": emptyCollection],
-                "traffic": ["type": "geojson", "data": emptyCollection],
-                "route-traffic": ["type": "geojson", "data": emptyCollection],
-                "position": ["type": "geojson", "data": emptyCollection],
-                "marks": ["type": "geojson", "data": emptyCollection],
-                "road-events": ["type": "geojson", "data": emptyCollection],
-                "cng-status": ["type": "geojson", "data": emptyCollection],
-                "hotspots": ["type": "geojson", "data": emptyCollection],
-                "camera-label": ["type": "geojson", "data": emptyCollection],
-            ]
+            style["sources"] = liveSources()
             let all = style["layers"] as? [[String: Any]] ?? []
             style["layers"] = all.filter {
                 let source = $0["source"] as? String
@@ -150,6 +123,29 @@ nonisolated enum EngineMapStyle {
     private static let emptyCollection: [String: Any] = [
         "type": "FeatureCollection", "features": [],
     ]
+
+    /// Свои источники приложения: камеры, маршрут и прочее. Пустые при
+    /// сборке стиля — наполняются на тике. Один список на оба стиля
+    /// (EngineModernStyle.liveSources).
+    static func liveSources() -> [String: [String: Any]] {
+        var out: [String: [String: Any]] = [:]
+        for name in EngineModernStyle.liveSources {
+            var source: [String: Any] = ["type": "geojson", "data": emptyCollection]
+            // Окно линии у машины красится по line-progress (27.A): без
+            // lineMetrics движок line-gradient не рисует.
+            if name == routeNearSource { source["lineMetrics"] = true }
+            out[name] = source
+        }
+        return out
+    }
+
+    /// Окно линии маршрута у машины (RouteCut): срез краской каждый кадр.
+    static let routeNearSource = "route-near"
+    /// Стрелки направления — точками с местом на линии (RouteCut.arrows).
+    static let routeArrowsSource = "route-arrows"
+    /// Слои окна у машины: кайма, тело, манёвр, середина — режутся одинаково.
+    static let routeNearLayers = (casing: "route-near-case", body: "route-near",
+                                  maneuver: "route-near-maneuver", core: "route-near-core")
 
     /// Ширина линии в пикселях по НАСТОЯЩЕЙ ширине дороги из тайла.
     ///
@@ -344,22 +340,37 @@ nonisolated enum EngineMapStyle {
                       "line-opacity": ["match", ["get", "level"], 1, 0.7, 0.95]],
         ])
         // Пройденное — той же ширины, без каймы и бледное: уже не решение.
+        // Источник — ВЕСЬ маршрут, один раз на маршрут (27.A): граница
+        // пройденного — это срез окна у машины поверх, а не конец этой линии.
         out.append([
             "id": "route-traveled", "type": "line", "source": "traveled",
             "layout": round,
             "paint": ["line-color": colour(RouteColors.traveled),
                       "line-width": routeWidth(extra: 0), "line-opacity": 0.85],
         ])
+        // Каждая роль — парой: остаток линии за окном и окно у машины
+        // (RouteCut). Окно красится line-gradient: до среза под значком
+        // прозрачно — видно пройденное снизу, — дальше цвет. Пара стоит
+        // рядом, чтобы стык окна и остатка был одним слоем цвета.
+        let near = routeNearLayers
+        let nearSource = routeNearSource
+        func nearLayer(_ id: String, width: [Any]) -> [String: Any] {
+            ["id": id, "type": "line", "source": nearSource, "layout": round,
+             "paint": ["line-gradient": RouteCut.gradient(RouteCut.Paint.clear.body), "line-width": width]]
+        }
         out.append([
             "id": "route-case", "type": "line", "source": "route",
             "layout": round,
             "paint": ["line-color": colour(RouteColors.casing), "line-width": routeWidth(extra: 3)],
         ])
+        out.append(nearLayer(near.casing, width: routeWidth(extra: 3)))
         out.append([
             "id": "route", "type": "line", "source": "route",
             "layout": round,
             "paint": ["line-color": colour(RouteColors.body), "line-width": routeWidth(extra: 0)],
         ])
+        // В окне пробки — частью краски тела (те же уровни, та же мера места).
+        out.append(nearLayer(near.body, width: routeWidth(extra: 0)))
         // Пробка на нашей стороне — цветом самой линии (RouteTraffic: место и
         // направление, как у времени в пути). Свободно — линия синяя.
         out.append([
@@ -372,8 +383,9 @@ nonisolated enum EngineMapStyle {
         out.append([
             "id": "route-maneuver", "type": "line", "source": "maneuver",
             "layout": round,
-            "paint": ["line-color": daylight ? "#123a8f" : "#d6e6ff", "line-width": routeWidth(extra: 1)],
+            "paint": ["line-color": colour(RouteColors.maneuver), "line-width": routeWidth(extra: 1)],
         ])
+        out.append(nearLayer(near.maneuver, width: routeWidth(extra: 1)))
         // Светлая середина — белым поверх любого цвета линии (синего, янтаря,
         // красного): объём ленты, а не второй цвет.
         out.append([
@@ -382,20 +394,31 @@ nonisolated enum EngineMapStyle {
             "paint": ["line-color": RouteColors.core(daylight: daylight),
                       "line-width": routeWidth(extra: 0, share: 0.34)],
         ])
-        // Стрелки направления вдоль линии. Вне раскладки (ignore-placement):
-        // стрелка не вытесняет ни подпись, ни камеру — камеры нарисованы
-        // позже и лежат сверху.
+        out.append(nearLayer(near.core, width: routeWidth(extra: 0, share: 0.34)))
+        // Стрелки направления — точками с местом на линии (RouteCut.arrows):
+        // фильтр прячет всё позади среза, порог переходит, когда срез
+        // проходит стрелку, — она в этот момент под значком. Ранг редеет на
+        // обзоре (шаг как у прежнего symbol-spacing). Вне раскладки
+        // (ignore-placement): стрелка не вытесняет ни подпись, ни камеру —
+        // камеры нарисованы позже и лежат сверху.
+        var opacity: [Any] = ["step", ["zoom"],
+                              ["case", [">=", ["get", "r"], RouteCut.arrowMaxRank], 1, 0]]
+        for (k, zoom) in RouteCut.arrowRankZooms.enumerated() {
+            opacity += [zoom, ["case", [">=", ["get", "r"], RouteCut.arrowMaxRank - k - 1], 1, 0]]
+        }
         out.append([
-            "id": "route-arrows", "type": "symbol", "source": "route", "minzoom": 13,
-            "layout": ["symbol-placement": "line",
-                       "symbol-spacing": ["interpolate", ["linear"], ["zoom"], 13, 70, 17, 110, 19, 160],
-                       "icon-image": routeArrowImage(daylight: daylight),
+            "id": "route-arrows", "type": "symbol", "source": routeArrowsSource, "minzoom": 13,
+            "filter": [">=", ["get", "a"], 0],
+            "layout": ["icon-image": routeArrowImage(daylight: daylight),
                        // Картинка 16×14 pt, шеврон 9 pt — ~0,7 тела линии.
+                       // Шеврон в картинке смотрит вправо: поворот — курс − 90°.
+                       "icon-rotate": ["get", "b"],
                        "icon-size": ["interpolate", ["linear"], ["zoom"],
                                      13, 0.5, 15, 0.6, 17, 0.85, 19, 1.2, 20, 1.4],
                        "icon-rotation-alignment": "map", "icon-pitch-alignment": "map",
                        "icon-allow-overlap": true, "icon-ignore-placement": true,
                        "icon-padding": 0],
+            "paint": ["icon-opacity": opacity],
         ])
         return out
     }

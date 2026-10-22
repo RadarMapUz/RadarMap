@@ -234,8 +234,7 @@ struct EngineMapView: UIViewRepresentable {
     }
 
     static func dismantleUIView(_ view: MLNMapView, coordinator: Coordinator) {
-        coordinator.routeTask?.cancel()
-        coordinator.routeGeneration += 1
+        coordinator.routeLine.cancel()
         coordinator.stopMarkerLink()
         view.delegate = nil
         (view as? EngineNativeMapView)?.onLayout = nil
@@ -267,11 +266,8 @@ struct EngineMapView: UIViewRepresentable {
         private var lastFamiliarIDs: Set<Int> = []
         /// Тема, в которой собраны точки камер (графит спокойных — свой днём и ночью).
         private var camerasDaylight: Bool?
-        private var lastRouteObject: MKPolyline?
-        private var routeInitialized = false
-        private var routeIndex: EngineMapPresentation.RouteIndex?
-        fileprivate var routeTask: Task<Void, Never>?
-        fileprivate var routeGeneration = 0
+        /// Линия маршрута и срез пройденного под значком (27.A).
+        fileprivate let routeLine = EngineRouteLine()
         private var positionHeading = 0.0
         /// Значок между фиксами: где машина СЕЙЧАС (MarkerPredictor). До 21.10
         /// стрелка плыла к последнему фиксу за интервал между фиксами и всегда
@@ -300,8 +296,6 @@ struct EngineMapView: UIViewRepresentable {
         /// Какой значок сейчас лежит в стиле под именем "radar-user".
         private var lastCursor: CursorStyle?
         private let performanceLog = OSLog(subsystem: "uz.radarmap", category: "MapPerformance")
-        private var lastProgress = -Double.infinity
-        private var lastManeuverAlong: Double?
         fileprivate var lastCameraModel: EngineMapView?
         private var browsing = false
         private var lastRecenterToken = 0
@@ -648,7 +642,6 @@ struct EngineMapView: UIViewRepresentable {
             cachedLimits = [:]
             cameraWindow = nil          // следующий кадр соберёт выборку заново
             themeLayers = []            // перечитается из EngineMapStyle при смене темы
-            routeIndex = nil            // соберётся из маршрута на следующем тике
             // Корзины индекса выпуска поднимутся с диска, не с сети.
             Task { await TileReleaseStore.shared.releaseMemory() }
         }
@@ -657,9 +650,7 @@ struct EngineMapView: UIViewRepresentable {
             Log.network.info("MapLibre: стиль загружен")
             installCameraIcons(in: style)
             lastCameras = nil
-            routeInitialized = false
-            lineKeys = [:]
-            routeTrafficKey = []
+            routeLine.styleLoaded()
             hiddenLayers = nil
             hotShown = nil
             modernDrivingLayerIDs = nil
@@ -716,8 +707,7 @@ struct EngineMapView: UIViewRepresentable {
             current = model
             pending = model
             styleReady = false
-            routeTask?.cancel()
-            routeGeneration += 1
+            routeLine.cancel()
             lastDaylight = model.daylight
             lastHouses = model.houses
             lastPlaces = model.places
@@ -1053,35 +1043,7 @@ struct EngineMapView: UIViewRepresentable {
             updateMarks(model, in: view)
             updateCameraLabel(model.cameraLabel, in: view)
             updateTraffic(model, in: view)
-            let newRoute = !routeInitialized || lastRouteObject !== model.routeObject
-            if newRoute || lastManeuverAlong != model.maneuverAlong
-                || lastRouteTrafficRevision != model.trafficRevision
-                || abs(model.routeProgress - lastProgress) >= AppConfig.engineRouteProgressStep {
-                lastRouteTrafficRevision = model.trafficRevision
-                if newRoute { routeIndex = nil; lineKeys = [:]; routeTrafficKey = [] }
-                routeInitialized = true
-                lastRouteObject = model.routeObject
-                lastProgress = model.routeProgress
-                lastManeuverAlong = model.maneuverAlong
-                routeTask?.cancel()
-                routeGeneration += 1
-                let generation = routeGeneration, index = routeIndex
-                routeTask = Task { [weak self, weak view] in
-                    let frame = await EngineMapPresentation.prepareRoute(model.route, index: index,
-                        progress: model.routeProgress, maneuver: model.maneuverAlong,
-                        traffic: model.trafficSnapshot)
-                    guard !Task.isCancelled, let self, let view,
-                          self.routeGeneration == generation, self.styleReady else { return }
-                    self.routeIndex = frame.index
-                    self.setLine(frame.traveled, source: "traveled", in: view)
-                    self.setLine(frame.remaining, source: "route", in: view)
-                    #if DEBUG
-                    self.debugLineCut = frame.remaining.first
-                    #endif
-                    self.setLine(frame.maneuver, source: "maneuver", in: view)
-                    self.setRouteTraffic(frame.traffic, in: view)
-                }
-            }
+            routeLine.update(model, in: view)
         }
 
         /// Объёмные украшения и размытые тени — первое, что уходит на горячем
@@ -1223,31 +1185,6 @@ struct EngineMapView: UIViewRepresentable {
         }
 
         private var lastTrafficRevision = -1
-        /// Набор пробок, по которому последний раз красилась линия маршрута.
-        private var lastRouteTrafficRevision = -1
-        /// Что лежит в источнике пробок на линии: уровни и концы кусков.
-        private var routeTrafficKey: [Double] = []
-
-        /// Пробки на линии маршрута — только на изменение кусков: запись в
-        /// источник будит перетайливание слоя (аудит 11.10).
-        private func setRouteTraffic(_ pieces: [RouteTraffic.Piece], in view: MLNMapView) {
-            guard let source = view.style?.source(withIdentifier: "route-traffic") as? MLNShapeSource else { return }
-            let key = pieces.flatMap { piece -> [Double] in
-                guard let first = piece.coordinates.first, let last = piece.coordinates.last else { return [] }
-                return [Double(piece.level), Double(piece.coordinates.count),
-                        first.latitude, first.longitude, last.latitude, last.longitude]
-            }
-            guard key != routeTrafficKey else { return }
-            routeTrafficKey = key
-            let lines = pieces.map { piece -> MLNPolylineFeature in
-                var coordinates = piece.coordinates
-                let line = MLNPolylineFeature(coordinates: &coordinates, count: UInt(coordinates.count))
-                line.attributes = ["level": piece.level]
-                return line
-            }
-            source.shape = lines.isEmpty ? nil : MLNShapeCollectionFeature(shapes: lines)
-        }
-
         /// Пробки — только на новом наборе: тысяча рёбер по городу в источник
         /// раз в две минуты, а не на каждом фиксе.
         private func updateTraffic(_ model: EngineMapView, in view: MLNMapView) {
@@ -1265,27 +1202,6 @@ struct EngineMapView: UIViewRepresentable {
                 return line
             }
             source.shape = MLNShapeCollectionFeature(shapes: lines)
-        }
-
-        /// Что последним ушло в каждый источник линии: число точек и концы.
-        /// Пустой манёвр поверх пустого и тот же отрезок манёвра на каждом
-        /// шаге прогресса переписывались заново — с перетайливанием (аудит 11.10).
-        private var lineKeys: [String: [Double]] = [:]
-
-        private func setLine(_ coordinates: [CLLocationCoordinate2D], source name: String, in view: MLNMapView) {
-            guard let source = view.style?.source(withIdentifier: name) as? MLNShapeSource else { return }
-            let key: [Double] = coordinates.count < 2 ? [0] : [
-                Double(coordinates.count),
-                coordinates[0].latitude, coordinates[0].longitude,
-                coordinates[coordinates.count - 1].latitude, coordinates[coordinates.count - 1].longitude]
-            guard lineKeys[name] != key else { return }
-            lineKeys[name] = key
-            os_signpost(.begin, log: performanceLog, name: "Route source")
-            defer { os_signpost(.end, log: performanceLog, name: "Route source") }
-            if coordinates.count < 2 { source.shape = nil; return }
-            source.shape = coordinates.withUnsafeBufferPointer {
-                MLNPolylineFeature(coordinates: $0.baseAddress!, count: UInt($0.count))
-            }
         }
 
         /// Флаг цели, точка долгого тапа, зоны треног — только на изменение:
@@ -1577,7 +1493,7 @@ struct EngineMapView: UIViewRepresentable {
                 if now - lastMarkerLog >= 0.2 {
                     lastMarkerLog = now
                     Log.location.notice("МЕТКА знак \(Date().timeIntervalSince1970, format: .fixed(precision: 3), privacy: .public) \(coordinate.latitude, format: .fixed(precision: 7), privacy: .public) \(coordinate.longitude, format: .fixed(precision: 7), privacy: .public) \(view.centerCoordinate.latitude, format: .fixed(precision: 7), privacy: .public) \(view.centerCoordinate.longitude, format: .fixed(precision: 7), privacy: .public)")
-                    if let cut = debugLineCut {
+                    if let cut = routeLine.paintedCutCoordinate {
                         Log.location.notice("МЕТКА линия \(Date().timeIntervalSince1970, format: .fixed(precision: 3), privacy: .public) \(coordinate.latitude, format: .fixed(precision: 7), privacy: .public) \(coordinate.longitude, format: .fixed(precision: 7), privacy: .public) \(cut.latitude, format: .fixed(precision: 7), privacy: .public) \(cut.longitude, format: .fixed(precision: 7), privacy: .public)")
                     }
                 }
@@ -1600,8 +1516,6 @@ struct EngineMapView: UIViewRepresentable {
         }
         #if DEBUG
         private var lastMarkerLog: CFTimeInterval = 0
-        /// Где начинается непройденная линия на экране — для замера 27.A.
-        private var debugLineCut: CLLocationCoordinate2D?
         #endif
         /// Что стрелка показывает сейчас (точка и угол) — для пропуска повторов.
         private var shownPosition: (point: CGPoint, angle: Double)?
@@ -1664,6 +1578,10 @@ struct EngineMapView: UIViewRepresentable {
                 positionHeading = EngineMapPresentation.heading(pose.courseDegrees, near: positionHeading)
             }
             setPosition(pose.coordinate, in: view)
+            // Граница пройденного — под той же точкой и в тот же кадр (27.A).
+            routeLine.frame(pose: pose.coordinate,
+                            course: pose.courseDegrees >= 0 ? pose.courseDegrees : (current?.courseDegrees ?? -1),
+                            speedMps: fedFix?.speedMps ?? 0, in: view)
         }
 
         private func startMarkerLink(in view: MLNMapView) {

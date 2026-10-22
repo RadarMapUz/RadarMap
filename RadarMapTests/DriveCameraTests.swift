@@ -205,6 +205,42 @@ final class DriveCameraTests: XCTestCase {
         }
     }
 
+    func testKeptCameraBesideKeepsItsMarginUnderStandingPitch() {
+        // 27.L: стоя наклон 35°, а строка машины мельче центра на ~10 % —
+        // мерка центра ставила камеру сбоку «136 м» под кнопки, съедая запас
+        // значка. Точка обязана стоять с запасом `keepMarginPoints`. Дальше
+        // ~120 м сбоку кадр упирается в городской предел z15,5 (25.A: предел
+        // старше удержания) — там точка в кадре, но запас меньше; здесь —
+        // случаи до предела.
+        let carY = 0.72
+        for keep in [Cam.Keep(forward: 0, right: -110), Cam.Keep(forward: 20, right: 105),
+                     Cam.Keep(forward: 60, right: 95)] {
+            let f = Cam.target(speedKmh: 0, maneuverDistance: nil, pitchAllowed: true, maxPitch: maxPitch,
+                               keep: keep, viewHeight: 760, latitude: tashkent, clear: phone,
+                               carY: { _ in carY })
+            let row = Cam.rowShare(forward: keep.forward, zoom: f.zoom, pitchDegrees: f.pitchDegrees,
+                                   viewHeight: 760, carY: carY, latitude: tashkent)
+            let perPoint = Cam.metersPerPoint(zoom: f.zoom, latitude: tashkent)
+                * Cam.lateralScale(share: row, pitchDegrees: f.pitchDegrees)
+            XCTAssertGreaterThan(f.zoom, AppConfig.driveKeepMinZoomTown + 0.05, "не предел: \(keep)")
+            XCTAssertLessThanOrEqual(abs(keep.right) / perPoint, 402 / 2 - phone.side - Cam.keepMarginPoints + 1,
+                                     "камера \(keep)")
+        }
+    }
+
+    func testRowShareIsTheInverseOfTheGroundOffset() {
+        for pitch in [0.0, 35, 58] {
+            let span = Cam.span(zoom: 17.5, viewHeight: 760, latitude: tashkent)
+            for share in [-0.4, -0.1, 0, 0.2, 0.45] {
+                let toward = Cam.groundOffset(spanMeters: span, share: share, pitchDegrees: pitch)
+                let forward = Cam.centreAhead(spanMeters: span, anchorY: 0.72, pitchDegrees: pitch) - toward
+                XCTAssertEqual(Cam.rowShare(forward: forward, zoom: 17.5, pitchDegrees: pitch, viewHeight: 760,
+                                            carY: 0.72, latitude: tashkent), share, accuracy: 1e-9,
+                               "\(pitch)°, строка \(share)")
+            }
+        }
+    }
+
     func testUnknownDirectionFitsAnySide() {
         // Курса нет, поворот карты неизвестен — точка влезает в любую сторону.
         let d = 136.0

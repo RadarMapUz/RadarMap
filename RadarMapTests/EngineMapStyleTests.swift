@@ -119,7 +119,8 @@ struct EngineMapStyleTests {
         let json = EngineMapStyle.json(daylight: true, base: base, tilesReady: false)
         let object = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
         let sources = try #require(object["sources"] as? [String: Any])
-        #expect(Set(sources.keys) == Set(["cameras", "route", "position", "traveled", "maneuver", "traffic", "route-traffic", "marks", "road-events", "cng-status", "hotspots", "camera-label"]))
+        #expect(Set(sources.keys) == Set(["cameras", "route", "position", "traveled", "maneuver", "traffic", "route-traffic", "route-near", "route-arrows", "marks", "road-events", "cng-status", "hotspots",
+                                         "camera-label"]))
         for layer in layers(object) {
             if let source = layer["source"] as? String { #expect(sources[source] != nil) }
         }

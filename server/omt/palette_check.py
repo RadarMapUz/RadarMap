@@ -115,8 +115,10 @@ def measure(theme, variant=None):
         "подпись места / фон": contrast(p["label"], p["bg"]),
         "имя улицы / асфальт (мин)": min(contrast(p["street_label"], a) for a in asphalt),
         "номер дома / дом": contrast(p["housenumber"], p["building"]),
-        "подписи мест цветом / фон (мин)": min(contrast(c, p["bg"])
-                                              for c in make_style.POI_COLOURS[theme].values()),
+        # Цветная подпись места лежит на своём ореоле (text-halo, ширина 1,4):
+        # читается против ореола, а не против земли.
+        "подписи мест цветом / ореол (мин)": min(contrast(c, p["halo"])
+                                                for c in make_style.POI_COLOURS[theme].values()),
         "линия маршрута / асфальт и фон (мин)": min(max(contrast(route["body"], s), contrast(route["casing"], s))
                                                     for s in asphalt + [p["bg"]]),
         # Маркер камеры виден, если отделяется от поверхности ЯРКОСТЬЮ
@@ -154,7 +156,7 @@ def measure(theme, variant=None):
     need(m["подпись места / фон"] >= TEXT_MIN, "подпись места на фоне < 4,5:1")
     need(m["имя улицы / асфальт (мин)"] >= TEXT_MIN, "имя улицы на асфальте < 4,5:1")
     need(m["номер дома / дом"] >= HOUSENUMBER_MIN, "номер дома < 3:1")
-    need(m["подписи мест цветом / фон (мин)"] >= POI_MIN, "цветная подпись места < 3:1")
+    need(m["подписи мест цветом / ореол (мин)"] >= POI_MIN, "цветная подпись места < 3:1")
     need(m["линия маршрута / асфальт и фон (мин)"] >= GRAPHIC_MIN, "линия маршрута на асфальте < 3:1")
     need(m["камера не видна (пар тип × поверхность)"] == 0, "маркер камеры сливается с поверхностью")
     need(m["спокойная камера / поверхности (мин)"] >= GRAPHIC_MIN, "спокойная камера < 3:1")

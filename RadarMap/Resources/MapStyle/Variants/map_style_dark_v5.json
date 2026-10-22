@@ -1732,14 +1732,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "line-opacity": 1,
@@ -1875,9 +1875,9 @@
       "zoom"
      ],
      14.5,
-     "#2d3a54",
+     "#2b3650",
      15.5,
-     "#2d3a54"
+     "#2b3650"
     ],
     "line-opacity": [
      "interpolate",
@@ -2075,14 +2075,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "line-opacity": 1,
@@ -2217,9 +2217,9 @@
       "zoom"
      ],
      14.5,
-     "#2d3a54",
+     "#2b3650",
      15.5,
-     "#2d3a54"
+     "#2b3650"
     ],
     "line-opacity": [
      "interpolate",
@@ -2415,14 +2415,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "line-opacity": 1,
@@ -2607,14 +2607,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "line-opacity": 1,
@@ -2799,14 +2799,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "line-opacity": 1,
@@ -4639,14 +4639,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "line-opacity": 1,
@@ -4836,14 +4836,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "line-opacity": 1,
@@ -4985,9 +4985,9 @@
       "zoom"
      ],
      14.5,
-     "#2d3a54",
+     "#2b3650",
      15.5,
-     "#2d3a54"
+     "#2b3650"
     ],
     "line-opacity": [
      "interpolate",
@@ -5185,14 +5185,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "line-opacity": 1,
@@ -5383,14 +5383,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "line-opacity": 1,
@@ -5581,14 +5581,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "line-opacity": 1,
@@ -5780,14 +5780,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "line-opacity": 1,
@@ -6992,14 +6992,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "line-opacity": 1,
@@ -7186,14 +7186,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "line-opacity": 1,
@@ -7335,9 +7335,9 @@
       "zoom"
      ],
      14.5,
-     "#2d3a54",
+     "#2b3650",
      15.5,
-     "#2d3a54"
+     "#2b3650"
     ],
     "line-opacity": [
      "interpolate",
@@ -7533,14 +7533,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "line-opacity": 1,
@@ -7725,14 +7725,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "line-opacity": 1,
@@ -7916,14 +7916,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "line-opacity": 1,
@@ -9080,7 +9080,7 @@
    "id": "radar-median",
    "minzoom": 15.5,
    "paint": {
-    "fill-color": "#866e33",
+    "fill-color": "#5f6b86",
     "fill-outline-color": "#d9dee6"
    },
    "source": "radar",
@@ -9411,7 +9411,7 @@
       ],
       2
      ],
-     "#f0a04a",
+     "#ffd27a",
      [
       "<=",
       [
@@ -9420,7 +9420,7 @@
       ],
       4
      ],
-     "#e0a948",
+     "#e8c070",
      [
       "<=",
       [
@@ -9561,14 +9561,14 @@
       1,
       2
      ],
-     "#9c652d",
+     "#647090",
      3,
-     "#866e33",
+     "#5f6b86",
      4,
-     "#5a7297",
+     "#46526b",
      5,
-     "#2d3a54",
-     "#2d3a54"
+     "#2b3650",
+     "#2b3650"
     ],
     "line-width": [
      "interpolate",
@@ -9688,14 +9688,14 @@
       1,
       2
      ],
-     "#9c652d",
+     "#647090",
      3,
-     "#866e33",
+     "#5f6b86",
      4,
-     "#5a7297",
+     "#46526b",
      5,
-     "#2d3a54",
-     "#2d3a54"
+     "#2b3650",
+     "#2b3650"
     ],
     "line-width": [
      "interpolate",
@@ -9857,7 +9857,7 @@
       1.24780544
      ]
     ],
-    "line-color": "#262a33",
+    "line-color": "#3a4258",
     "line-gap-width": [
      "interpolate",
      [
@@ -10020,11 +10020,11 @@
        "get",
        "major"
       ],
-      "#866e33",
-      "#2d3a54"
+      "#5f6b86",
+      "#2b3650"
      ],
      16.5,
-     "#866e33"
+     "#5f6b86"
     ]
    },
    "source": "radar",
@@ -10057,7 +10057,7 @@
    },
    "minzoom": 15.5,
    "paint": {
-    "line-color": "#e0a948",
+    "line-color": "#e8c070",
     "line-width": [
      "interpolate",
      [
@@ -10152,7 +10152,7 @@
    "minzoom": 15,
    "paint": {
     "fill-antialias": false,
-    "fill-color": "#866e33"
+    "fill-color": "#5f6b86"
    },
    "source": "radar",
    "source-layer": "surface",
@@ -10190,7 +10190,7 @@
       "get",
       "major"
      ],
-     "#e0a948",
+     "#e8c070",
      "#202a40"
     ],
     "line-offset": 0.6,
@@ -10284,7 +10284,7 @@
    },
    "minzoom": 16,
    "paint": {
-    "line-color": "#e0a948",
+    "line-color": "#e8c070",
     "line-width": [
      "interpolate",
      [
@@ -11067,14 +11067,14 @@
       1,
       2
      ],
-     "#9c652d",
+     "#647090",
      3,
-     "#866e33",
+     "#5f6b86",
      4,
-     "#5a7297",
+     "#46526b",
      5,
-     "#2d3a54",
-     "#2d3a54"
+     "#2b3650",
+     "#2b3650"
     ],
     "line-width": [
      "interpolate",
@@ -14034,14 +14034,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "text-halo-width": 1.8
@@ -14858,14 +14858,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "text-halo-width": 1.8
@@ -15675,14 +15675,14 @@
        "motorway",
        "trunk"
       ],
-      "#9c652d",
+      "#647090",
       "primary",
-      "#866e33",
+      "#5f6b86",
       "secondary",
-      "#5a7297",
+      "#46526b",
       "tertiary",
-      "#2d3a54",
-      "#2d3a54"
+      "#2b3650",
+      "#2b3650"
      ]
     ],
     "text-halo-width": 1.8

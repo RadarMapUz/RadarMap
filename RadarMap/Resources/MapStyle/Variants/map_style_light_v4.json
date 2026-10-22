@@ -10,7 +10,7 @@
   {
    "id": "background",
    "paint": {
-    "background-color": "#f4f1ea"
+    "background-color": "#ece6da"
    },
    "type": "background"
   },
@@ -28,7 +28,7 @@
     "mapbox:group": "1444849388993.3071"
    },
    "paint": {
-    "fill-color": "#efebe3",
+    "fill-color": "#e8e2d5",
     "fill-opacity": {
      "base": 1,
      "stops": [
@@ -66,7 +66,7 @@
     "mapbox:group": "1444849388993.3071"
    },
    "paint": {
-    "fill-color": "#f4f1ea"
+    "fill-color": "#ece6da"
    },
    "source": "openmaptiles",
    "source-layer": "landuse",
@@ -192,7 +192,7 @@
     "mapbox:group": "1444849388993.3071"
    },
    "paint": {
-    "fill-color": "#f4f1ea"
+    "fill-color": "#ece6da"
    },
    "source": "openmaptiles",
    "source-layer": "landuse",
@@ -289,7 +289,7 @@
    },
    "minzoom": 14,
    "paint": {
-    "line-color": "#86c8f4",
+    "line-color": "#93cdf2",
     "line-dasharray": [
      2,
      4
@@ -337,7 +337,7 @@
     "mapbox:group": "1444849382550.77"
    },
    "paint": {
-    "line-color": "#86c8f4",
+    "line-color": "#93cdf2",
     "line-width": {
      "base": 1.3,
      "stops": [
@@ -381,7 +381,7 @@
     "mapbox:group": "1444849382550.77"
    },
    "paint": {
-    "line-color": "#86c8f4",
+    "line-color": "#93cdf2",
     "line-dasharray": [
      4,
      3
@@ -433,7 +433,7 @@
     "mapbox:group": "1444849382550.77"
    },
    "paint": {
-    "line-color": "#86c8f4",
+    "line-color": "#93cdf2",
     "line-width": {
      "base": 1.3,
      "stops": [
@@ -481,7 +481,7 @@
     "mapbox:group": "1444849382550.77"
    },
    "paint": {
-    "line-color": "#86c8f4",
+    "line-color": "#93cdf2",
     "line-dasharray": [
      4,
      3
@@ -532,7 +532,7 @@
     "mapbox:group": "1444849382550.77"
    },
    "paint": {
-    "line-color": "#86c8f4",
+    "line-color": "#93cdf2",
     "line-width": {
      "base": 1.2,
      "stops": [
@@ -579,7 +579,7 @@
     "mapbox:group": "1444849382550.77"
    },
    "paint": {
-    "line-color": "#86c8f4",
+    "line-color": "#93cdf2",
     "line-dasharray": [
      3,
      2.5
@@ -617,7 +617,7 @@
     "mapbox:group": "1444849382550.77"
    },
    "paint": {
-    "fill-color": "#86c8f4",
+    "fill-color": "#93cdf2",
     "fill-opacity": 1,
     "fill-translate": {
      "base": 1,
@@ -665,7 +665,7 @@
     "mapbox:group": "1444849382550.77"
    },
    "paint": {
-    "fill-color": "#86c8f4"
+    "fill-color": "#93cdf2"
    },
    "source": "openmaptiles",
    "source-layer": "water",
@@ -688,7 +688,7 @@
     "mapbox:group": "1444849382550.77"
    },
    "paint": {
-    "fill-color": "#86c8f4",
+    "fill-color": "#93cdf2",
     "fill-opacity": 0.7
    },
    "source": "openmaptiles",
@@ -709,7 +709,7 @@
     "mapbox:group": "1444849382550.77"
    },
    "paint": {
-    "fill-color": "#efebe3",
+    "fill-color": "#e8e2d5",
     "fill-opacity": {
      "base": 1,
      "stops": [
@@ -742,7 +742,7 @@
     "mapbox:group": "1444849382550.77"
    },
    "paint": {
-    "fill-color": "#efebe3",
+    "fill-color": "#e8e2d5",
     "fill-opacity": 1
    },
    "source": "openmaptiles",
@@ -825,9 +825,9 @@
       "zoom"
      ],
      13,
-     "#d8d1c4",
+     "#d0c8b9",
      15,
-     "#cfc9bf"
+     "#c4bcae"
     ],
     "line-dasharray": [
      0.5,
@@ -1072,9 +1072,9 @@
       "zoom"
      ],
      13,
-     "#d8d1c4",
+     "#d0c8b9",
      15,
-     "#cfc9bf"
+     "#c4bcae"
     ],
     "line-dasharray": [
      0.5,
@@ -3239,7 +3239,7 @@
    "metadata": {},
    "paint": {
     "fill-antialias": true,
-    "fill-color": "#efe5d3",
+    "fill-color": "#f2ead9",
     "fill-opacity": 0.6
    },
    "source": "openmaptiles",
@@ -3309,7 +3309,7 @@
    },
    "paint": {
     "fill-antialias": false,
-    "fill-color": "#efe5d3",
+    "fill-color": "#f2ead9",
     "fill-opacity": 0.6,
     "fill-outline-color": "#cfcdca"
    },
@@ -3774,9 +3774,9 @@
       "zoom"
      ],
      13,
-     "#d8d1c4",
+     "#d0c8b9",
      15,
-     "#cfc9bf"
+     "#c4bcae"
     ],
     "line-opacity": [
      "interpolate",
@@ -4376,7 +4376,7 @@
     "mapbox:group": "1444849345966.4436"
    },
    "paint": {
-    "line-color": "#efe5d3",
+    "line-color": "#f2ead9",
     "line-width": [
      "interpolate",
      [
@@ -6823,9 +6823,9 @@
       "zoom"
      ],
      13,
-     "#d8d1c4",
+     "#d0c8b9",
      15,
-     "#cfc9bf"
+     "#c4bcae"
     ],
     "line-opacity": [
      "interpolate",
@@ -8434,7 +8434,7 @@
      20,
      22
     ],
-    "line-color": "rgba(110,90,60,0.22)",
+    "line-color": "rgba(110,90,60,0.24)",
     "line-opacity": [
      "interpolate",
      [
@@ -8481,8 +8481,8 @@
    },
    "minzoom": 14,
    "paint": {
-    "fill-color": "#ede6db",
-    "fill-outline-color": "#cdbfac"
+    "fill-color": "#f3eee5",
+    "fill-outline-color": "#c9bba5"
    },
    "source": "openmaptiles",
    "source-layer": "building",
@@ -9430,7 +9430,7 @@
       5
      ],
      "#cbc4b8",
-     "#cfc9bf"
+     "#c4bcae"
     ],
     "line-width": [
      "interpolate",
@@ -12237,7 +12237,7 @@
       0
      ]
     ],
-    "fill-extrusion-color": "#ede6db",
+    "fill-extrusion-color": "#f3eee5",
     "fill-extrusion-height": [
      "interpolate",
      [
@@ -12593,7 +12593,7 @@
    "minzoom": 17,
    "paint": {
     "text-color": "#7a6d60",
-    "text-halo-color": "#ede6db",
+    "text-halo-color": "#f3eee5",
     "text-halo-width": 1
    },
    "source": "openmaptiles",

@@ -52,11 +52,12 @@ final class DriveCameraTests: XCTestCase {
 
     // MARK: - Обзор и наклон
 
-    func testStandingIsTopDown() {
-        // С 21.10 (25.D) сверху — только стоя и ползком; город уже с 10 км/ч
-        // под наклоном (DrivePitchTests).
-        for kmh in [0.0, 3, 5] {
-            XCTAssertEqual(frame(kmh, height: 382).pitchDegrees, 0, "\(kmh) км/ч — сверху")
+    func testStandingIsSlightlyPitched() {
+        // До 22.10 стоя и ползком (≤ 5 км/ч) было строго сверху — владелец
+        // видел плоский телефон рядом с наклонной машиной. С 27.L стоя —
+        // лёгкий наклон, сверху — только у манёвра (DrivePitchTests).
+        for kmh in [0.0, 3, 5, 10] {
+            XCTAssertEqual(frame(kmh, height: 382).pitchDegrees, Cam.standingPitch, "\(kmh) км/ч")
         }
     }
 
@@ -177,15 +178,18 @@ final class DriveCameraTests: XCTestCase {
     /// Телефон 402×760, HUD сверху, панель поездки снизу, кнопки справа.
     private let phone = Cam.Clear(top: 0.17, bottom: 0.12, width: 402, side: 60)
 
-    /// Точка (вперёд, вправо) в незакрытой части экрана при этом кадре — вид
-    /// сверху: стоя наклона нет, а наклонный случай проверяет «вперёд».
+    /// Точка (вперёд, вправо) в незакрытой части экрана при этом кадре — с
+    /// перспективой: стоя с 27.L наклон 35°, и строка точки и её мерка
+    /// поперёк — свои (`rowShare`, `lateralScale`); на наклоне 0 — прежний
+    /// вид сверху.
     private func isVisible(_ keep: Cam.Keep, in f: Cam.Frame, carY: Double = 0.72) -> Bool {
+        let row = Cam.rowShare(forward: keep.forward, zoom: f.zoom, pitchDegrees: f.pitchDegrees,
+                               viewHeight: 760, carY: carY, latitude: tashkent)
         let perPoint = Cam.metersPerPoint(zoom: f.zoom, latitude: tashkent)
-        let up = carY * 760 - phone.top * 760
-        let down = (1 - phone.bottom) * 760 - carY * 760
+            * Cam.lateralScale(share: row, pitchDegrees: f.pitchDegrees)
+        let y = 0.5 + row
         let side = 402 / 2 - phone.side
-        let x = keep.right / perPoint, y = keep.forward / perPoint
-        return abs(x) <= side && (y >= 0 ? y <= up : -y <= down)
+        return abs(keep.right / perPoint) <= side && y >= phone.top && y <= 1 - phone.bottom
     }
 
     func testKeptCameraBesideOrBehindIsInFrameToo() {
@@ -196,8 +200,44 @@ final class DriveCameraTests: XCTestCase {
             let f = Cam.target(speedKmh: 0, maneuverDistance: nil, pitchAllowed: true, maxPitch: maxPitch,
                                keep: keep, viewHeight: 760, latitude: tashkent, clear: phone,
                                carY: { _ in 0.72 })
-            XCTAssertEqual(f.pitchDegrees, 0, "стоя — сверху")
+            XCTAssertEqual(f.pitchDegrees, Cam.standingPitch, "стоя — лёгкий наклон (27.L)")
             XCTAssertTrue(isVisible(keep, in: f), "камера \(keep)")
+        }
+    }
+
+    func testKeptCameraBesideKeepsItsMarginUnderStandingPitch() {
+        // 27.L: стоя наклон 35°, а строка машины мельче центра на ~10 % —
+        // мерка центра ставила камеру сбоку «136 м» под кнопки, съедая запас
+        // значка. Точка обязана стоять с запасом `keepMarginPoints`. Дальше
+        // ~120 м сбоку кадр упирается в городской предел z15,5 (25.A: предел
+        // старше удержания) — там точка в кадре, но запас меньше; здесь —
+        // случаи до предела.
+        let carY = 0.72
+        for keep in [Cam.Keep(forward: 0, right: -110), Cam.Keep(forward: 20, right: 105),
+                     Cam.Keep(forward: 60, right: 95)] {
+            let f = Cam.target(speedKmh: 0, maneuverDistance: nil, pitchAllowed: true, maxPitch: maxPitch,
+                               keep: keep, viewHeight: 760, latitude: tashkent, clear: phone,
+                               carY: { _ in carY })
+            let row = Cam.rowShare(forward: keep.forward, zoom: f.zoom, pitchDegrees: f.pitchDegrees,
+                                   viewHeight: 760, carY: carY, latitude: tashkent)
+            let perPoint = Cam.metersPerPoint(zoom: f.zoom, latitude: tashkent)
+                * Cam.lateralScale(share: row, pitchDegrees: f.pitchDegrees)
+            XCTAssertGreaterThan(f.zoom, AppConfig.driveKeepMinZoomTown + 0.05, "не предел: \(keep)")
+            XCTAssertLessThanOrEqual(abs(keep.right) / perPoint, 402 / 2 - phone.side - Cam.keepMarginPoints + 1,
+                                     "камера \(keep)")
+        }
+    }
+
+    func testRowShareIsTheInverseOfTheGroundOffset() {
+        for pitch in [0.0, 35, 58] {
+            let span = Cam.span(zoom: 17.5, viewHeight: 760, latitude: tashkent)
+            for share in [-0.4, -0.1, 0, 0.2, 0.45] {
+                let toward = Cam.groundOffset(spanMeters: span, share: share, pitchDegrees: pitch)
+                let forward = Cam.centreAhead(spanMeters: span, anchorY: 0.72, pitchDegrees: pitch) - toward
+                XCTAssertEqual(Cam.rowShare(forward: forward, zoom: 17.5, pitchDegrees: pitch, viewHeight: 760,
+                                            carY: 0.72, latitude: tashkent), share, accuracy: 1e-9,
+                               "\(pitch)°, строка \(share)")
+            }
         }
     }
 
@@ -256,12 +296,13 @@ final class DriveCameraTests: XCTestCase {
         }
     }
 
-    func testCarStandingIsTopDownOnTheLanes() {
+    func testCarStandingIsOnTheLanes() {
         for height in carHeights {
             for kmh in [0.0, 5, 10, 15] {
                 let f = carFrame(kmh, height: height)
-                // Сверху — стоя и ползком; с 10 км/ч уже наклон (25.D, 21.10).
-                if kmh <= 5 { XCTAssertEqual(f.pitchDegrees, 0, "\(kmh) км/ч — сверху") }
+                // Стоя и ползком — лёгкий наклон, как на телефоне (27.L; до
+                // 22.10 здесь было «сверху ≤ 5 км/ч»), полосы и перекрёсток — те же.
+                if kmh <= 10 { XCTAssertEqual(f.pitchDegrees, Cam.standingPitch, "\(kmh) км/ч") }
                 XCTAssertGreaterThanOrEqual(f.zoom, Cam.laneZoom, "\(kmh) км/ч, \(height) pt — полосы")
                 XCTAssertGreaterThanOrEqual(ahead(f, height: height), Cam.carMinLookaheadMeters * 0.99,
                                             "перекрёсток впереди целиком")

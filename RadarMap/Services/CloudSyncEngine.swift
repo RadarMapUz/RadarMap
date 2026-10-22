@@ -122,6 +122,8 @@ final class CloudSyncEngine {
     var mayScan: () -> Bool = { true }
     /// Сколько отправлено за проход — для строки состояния.
     var onProgress: ((Int) -> Void)?
+    /// Пауза между месяцами первой выгрузки (тесты — ноль).
+    var scanPause = AppConfig.cloudScanPause
 
     init(transport: CloudTransport, sources: [CloudSource], ledger: CloudLedger,
          persist: @escaping (CloudLedger) -> Void) {
@@ -504,7 +506,7 @@ final class CloudSyncEngine {
             try await push(only: month)
             ledger.scanned[month] = now()
             commit()
-            await Task.pause(seconds: AppConfig.cloudScanPause)
+            if scanPause > 0 { await Task.pause(seconds: scanPause) }
         }
         ledger.fullScanAt = stamp
     }

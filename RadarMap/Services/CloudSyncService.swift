@@ -116,9 +116,11 @@ final class CloudSyncService {
         let loaded = await Self.readLedger()
         ledger = loaded ?? CloudLedger()
         refreshCounts()
-        if isEnabled { schedule(after: AppConfig.cloudLaunchDelay) }
-        // Удаление, не дошедшее до iCloud (не было сети), — довести.
-        if !isEnabled, ledger?.pendingWipe != nil { schedule(after: AppConfig.cloudLaunchDelay) }
+        // Удаление, не дошедшее до iCloud (не было сети), — довести; уже
+        // назначенный проход (включили, пока читался журнал) не переносим.
+        if scheduled == nil, isEnabled || ledger?.pendingWipe != nil {
+            schedule(after: AppConfig.cloudLaunchDelay)
+        }
     }
 
     @concurrent nonisolated private static func readLedger() async -> CloudLedger? {

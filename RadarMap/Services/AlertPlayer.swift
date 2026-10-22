@@ -377,7 +377,12 @@ final class AlertPlayer: NSObject {
         let segments = self.segments
         let now = DispatchTime.now().uptimeNanoseconds
         let waitBeep = beepEndsAt > now ? beepEndsAt - now : 0
-        Self.audioQueue.asyncAfter(deadline: .now() + .nanoseconds(Int(waitBeep))) { [weak self] in
+        // Без [weak self] снаружи: слабую ссылку берут сами задачи на главном
+        // акторе. Слабый self во внешнем @Sendable-замыкании — изменяемая
+        // переменная, и её повторный захват задачами — предупреждение
+        // Swift 6 (#SendableClosureCaptures). Удержание — до конца сигнала,
+        // а AlertPlayer живёт весь процесс.
+        Self.audioQueue.asyncAfter(deadline: .now() + .nanoseconds(Int(waitBeep))) {
             let outcome: Result<SegmentPlayer.Started, any Error>
             do {
                 outcome = .success(try segments.play(ids, pack: pack, volume: volume) {

@@ -17,7 +17,8 @@
 измеренному расстоянию осей, и из той же геометрии посчитаны разметка, зебры и
 разделительные. Две геометрии дороги на одном экране — пунктир мимо полотна.
 
-    python3 server/omt/make_style.py https://soulmed.uz/radarmap [--theme dark] [--mode roads]
+    python3 server/omt/make_style.py https://soulmed.uz/radarmap [--theme dark] [--mode roads] [--palette v1]
+    python3 server/omt/make_style.py --app   # ресурсы приложения (и DEBUG-варианты палитры)
 """
 import copy
 import json
@@ -115,6 +116,156 @@ PALETTES = {
         "label": "#c9ced6", "street_label": "#e4e8ee", "halo": "#0f1216", "oneway_opacity": 0.7, "housenumber": "#7d838d", "signal": "#101318", "signal_ring": "#f0c64a",
     },
 }
+
+# Варианты палитры (27.C, этап 1: «палитру поприятнее сделать карте»).
+# Правки ПОВЕРХ PALETTES — только цвета: слои, ширины и порядок те же, поэтому
+# сравнение честное. В приложение они попадают DEBUG-ресурсами
+# (MapStyle/Variants, ключ запуска -mapPalette v1|v2|v3), выбор — за
+# владельцем, внедрение выбранного — этап 2 (перенос в PALETTES, варианты
+# удаляются). Числа контраста — palette_check.py, правила — test_palette_check.
+PALETTE_VARIANTS = {
+    # 1. «Тёплый город»: днём — кремовая земля и песочные дома (тёплое, как
+    # солнечный Ташкент), асфальт нейтрально-серый — дорога не «грязная»;
+    # ночью — глубокая тёмно-синяя, а не графит: дома сине-серые, светлее
+    # земли, улицы — светлее домов, кромка магистрали золотая.
+    "v1": {
+        "title": "Тёплый город",
+        "light": {
+            "bg": "#f7f1e6", "landuse": "#f2ebdf", "park": "#d2e7b4", "wood": "#c4dfa0", "water": "#a3d1ee",
+            "building": "#ecdfcb", "building_wall": "#d6c3a6", "building_shadow": "rgba(120,90,50,0.20)",
+            "road": "#bcbec2", "road_trunk": "#b3b5ba", "road_tertiary": "#c8cacd", "minor": "#d8d9db",
+            "minor_far": "#ffffff", "minor_edge": "#c0bdb7", "minor_edge_far": "#e0d8ca",
+            "path": "#fffaf1", "path_edge": "#e6dccd", "steps": "#cfc7bb",
+            "casing": "#b0aca5", "kerb": "#ecc65a", "gutter": "#a19d97",
+            "median": "#e1e4cc", "concrete": "#dcd7ce", "parking": "#e9e3d8", "parking_edge": "#d7cfc2",
+            "sidewalk": "#efe8dc", "sidewalk_edge": "#dcd2c3", "barrier": "#efe9df", "tunnel": "#d3cec6",
+            "footbridge": "#fffaf2", "footbridge_edge": "#b2aa9e", "boundary": "#d2c4b4",
+            "label": "#4a4038", "street_label": "#36332f", "halo": "#fdf9f2", "housenumber": "#7f7064",
+            "light": {"anchor": "viewport", "color": "#fff3e0", "intensity": 0.38, "position": [1.3, 200, 35]},
+        },
+        "dark": {
+            "bg": "#121a29", "landuse": "#151e2e", "park": "#153029", "wood": "#132b24", "water": "#1b3d66",
+            "building": "#222d42", "building_wall": "#161e2d", "building_shadow": "rgba(0,0,0,0.45)",
+            "road": "#3c4a62", "road_trunk": "#405069", "road_tertiary": "#39465d", "minor": "#36425a",
+            "minor_far": "#36425a", "minor_edge": "#27314a", "minor_edge_far": "#1c2436",
+            "path": "#212b3e", "path_edge": "#1b2435", "steps": "#283247",
+            "casing": "#222b3d", "kerb": "#b08c44", "gutter": "#2b3447",
+            "median": "#17292a", "concrete": "#3a465c", "parking": "#232e44", "parking_edge": "#2f3a52",
+            "sidewalk": "#1e2739", "sidewalk_edge": "#2a3448", "barrier": "#4a5670", "tunnel": "#253046",
+            "footbridge": "#38445b", "footbridge_edge": "#56637a", "boundary": "#394562",
+            "far_tertiary": "#3f4b63", "far_tertiary_edge": "#28324a",
+            "far_secondary": "#4f5260", "far_secondary_edge": "#363a48",
+            "tree_crown": "#1e4132", "tree_crown_low": "#163126", "tree_crown_high": "#2d5a45",
+            "tree_light": "#2a5240", "tree_edge": "#2a5240",
+            "label": "#c4cee0", "street_label": "#e6edf8", "halo": "#121a29", "housenumber": "#8a96ab",
+            "light": {"anchor": "viewport", "color": "#dfe8ff", "intensity": 0.26, "position": [1.3, 200, 35]},
+        },
+    },
+    # 2. «Как Яндекс»: днём — светло-бежевые кварталы, сочные жёлтые
+    # магистрали на обзоре и жёлтая кромка вблизи, светло-серый асфальт;
+    # ночью — светлый сине-серый, как Яндекс в CarPlay (снимок 22.10): земля
+    # не чёрная, улицы заметно светлее кварталов, зелень и вода цветные.
+    "v2": {
+        "title": "Как Яндекс",
+        "light": {
+            "bg": "#f3eee4", "landuse": "#eee8dc", "park": "#c6e5aa", "wood": "#b6dc95", "water": "#a3d2f1",
+            "building": "#e6dfd3", "building_wall": "#cec4b4", "building_shadow": "rgba(110,95,70,0.20)",
+            "road": "#c3c6ce", "road_trunk": "#bbbec8", "road_tertiary": "#cdd0d6", "minor": "#dcdee2",
+            "minor_far": "#ffffff", "minor_edge": "#c4c2bc", "minor_edge_far": "#ddd6c9",
+            "path": "#ffffff", "path_edge": "#e2dbcf", "steps": "#cdc8be",
+            "casing": "#b3b4b8", "kerb": "#f3c623", "gutter": "#a5a7ad",
+            "median": "#dfe6cf", "concrete": "#d9d8d4", "parking": "#e7e4de", "parking_edge": "#d5d0c7",
+            "sidewalk": "#ece6db", "sidewalk_edge": "#d8cfc1", "barrier": "#ecebe7", "tunnel": "#d0d1d5",
+            "footbridge": "#ffffff", "footbridge_edge": "#aeaba5", "boundary": "#cdc1d2",
+            "far_motorway": "#ffa634", "far_motorway_edge": "#e2861a",
+            "far_trunk": "#ffbd47", "far_trunk_edge": "#e09c2a",
+            "far_primary": "#ffd768", "far_primary_edge": "#e2b84a",
+            "far_secondary": "#ffefb2", "far_secondary_edge": "#e3cd8b",
+            "far_tertiary": "#ffffff", "far_tertiary_edge": "#d6cfc2",
+            "label": "#3d3a36", "street_label": "#33363c", "halo": "#ffffff", "housenumber": "#7a7066",
+            "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.36, "position": [1.3, 200, 35]},
+        },
+        "dark": {
+            "bg": "#2b3242", "landuse": "#2e3546", "park": "#2b4a3a", "wood": "#284534", "water": "#1d3672",
+            "building": "#384054", "building_wall": "#2a3141", "building_shadow": "rgba(10,14,24,0.40)",
+            "road": "#686c74", "road_trunk": "#6c7078", "road_tertiary": "#666a72", "minor": "#656970",
+            "minor_far": "#656970", "minor_edge": "#4c5262", "minor_edge_far": "#3a4255",
+            "path": "#3a4256", "path_edge": "#33394b", "steps": "#434c60",
+            "casing": "#4b556b", "kerb": "#d2aa4e", "gutter": "#525c72",
+            "median": "#2d3f38", "concrete": "#5a647b", "parking": "#3b4458", "parking_edge": "#485267",
+            "sidewalk": "#353d4f", "sidewalk_edge": "#424b5e", "barrier": "#717c94", "tunnel": "#3e4759",
+            "footbridge": "#5a647b", "footbridge_edge": "#76819a", "boundary": "#4c5572",
+            "far_motorway": "#b98d40", "far_motorway_edge": "#80622a",
+            "far_trunk": "#a68048", "far_trunk_edge": "#735933",
+            "far_primary": "#857659", "far_primary_edge": "#5d533e",
+            "far_secondary": "#686c75", "far_secondary_edge": "#4b4f59",
+            "far_tertiary": "#5b657c", "far_tertiary_edge": "#424a5c",
+            "tree_crown": "#305a43", "tree_crown_low": "#264a36", "tree_crown_high": "#3f6e54",
+            "tree_light": "#3d6a51", "tree_edge": "#3d6a51", "tree_shadow": "rgba(0,0,0,0.35)",
+            "label": "#d6dce7", "street_label": "#ffffff", "halo": "#2b3242", "housenumber": "#a3acbe",
+            "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.24, "position": [1.3, 200, 35]},
+        },
+    },
+    # 3. «Чистый современный»: днём — нейтральный холодно-белый, мятная
+    # зелень, чистый серый асфальт без тёплых оттенков (как Apple Карты);
+    # ночью — угольный нейтральный с цветом по классу дороги: магистраль
+    # янтарная, проспект песочный (обзор и средний зум), кромка — золото.
+    "v3": {
+        "title": "Чистый современный",
+        "light": {
+            "bg": "#f5f6f8", "landuse": "#eff1f4", "park": "#cbebd2", "wood": "#bce4c5", "water": "#a6d9f7",
+            "building": "#e5e8ed", "building_wall": "#ccd1d9", "building_shadow": "rgba(60,70,90,0.18)",
+            "road": "#b8bdc6", "road_trunk": "#afb4be", "road_tertiary": "#c5c9d0", "minor": "#d8dbe0",
+            "minor_far": "#ffffff", "minor_edge": "#bec3cb", "minor_edge_far": "#dcdfe4",
+            "path": "#ffffff", "path_edge": "#e1e4e9", "steps": "#c8ccd3",
+            "casing": "#acb2bc", "kerb": "#efcb52", "gutter": "#9aa0aa",
+            "median": "#dde9de", "concrete": "#d6d9df", "parking": "#e5e8ec", "parking_edge": "#d1d5dc",
+            "sidewalk": "#eceef1", "sidewalk_edge": "#d7dbe1", "barrier": "#eaecef", "tunnel": "#cbcfd6",
+            "footbridge": "#ffffff", "footbridge_edge": "#a9afb9", "boundary": "#c8c6d8",
+            "far_motorway": "#ffb24d", "far_motorway_edge": "#df9230",
+            "far_trunk": "#ffc864", "far_trunk_edge": "#dca744",
+            "far_primary": "#ffe293", "far_primary_edge": "#e1c26a",
+            "far_secondary": "#ffffff", "far_secondary_edge": "#d2d6dd",
+            "far_tertiary": "#ffffff", "far_tertiary_edge": "#d9dce2",
+            "tree_crown": "#9fd6a4", "tree_crown_low": "#7fbe88", "tree_crown_high": "#bfe5c2",
+            "tree_light": "#c2e6c6", "tree_edge": "#8fcb96", "tree_shadow": "rgba(40,90,60,0.25)",
+            "label": "#30343a", "street_label": "#2a2e35", "halo": "#ffffff", "housenumber": "#737a85",
+            "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.36, "position": [1.3, 200, 35]},
+        },
+        "dark": {
+            "bg": "#1b1d22", "landuse": "#1e2126", "park": "#1a2e24", "wood": "#182a21", "water": "#173352",
+            "building": "#2c3038", "building_wall": "#202329", "building_shadow": "rgba(0,0,0,0.45)",
+            "road": "#4a4f58", "road_trunk": "#585040", "road_tertiary": "#454a52", "minor": "#41454d",
+            "minor_far": "#41454d", "minor_edge": "#30333a", "minor_edge_far": "#25282d",
+            "path": "#2a2d33", "path_edge": "#24272c", "steps": "#33363d",
+            "casing": "#303339", "kerb": "#c99b3d", "gutter": "#373a41",
+            "median": "#1f2d25", "concrete": "#464a52", "parking": "#30333a", "parking_edge": "#3b3f46",
+            "sidewalk": "#2b2e34", "sidewalk_edge": "#373a41", "barrier": "#575c65", "tunnel": "#30333a",
+            "footbridge": "#454951", "footbridge_edge": "#636872", "boundary": "#43465a",
+            "far_motorway": "#c48a35", "far_motorway_edge": "#8d6222",
+            "far_trunk": "#ad8043", "far_trunk_edge": "#7b5a2e",
+            "far_primary": "#8f7b54", "far_primary_edge": "#655638",
+            "far_secondary": "#5d5c59", "far_secondary_edge": "#43423f",
+            "far_tertiary": "#4b4f57", "far_tertiary_edge": "#34373d",
+            "tree_crown": "#244531", "tree_crown_low": "#1a3424", "tree_crown_high": "#335d42",
+            "tree_light": "#2f5640", "tree_edge": "#2f5640",
+            "label": "#cfd3d9", "street_label": "#eceef1", "halo": "#1b1d22", "housenumber": "#8b919b",
+            "light": {"anchor": "viewport", "color": "#ffffff", "intensity": 0.24, "position": [1.3, 200, 35]},
+        },
+    },
+}
+
+
+def palette(theme, variant=None):
+    """Палитра темы; variant — правки поверх неё из PALETTE_VARIANTS."""
+    if variant is None:
+        return PALETTES[theme]
+    if variant not in PALETTE_VARIANTS:
+        raise ValueError(f"вариант палитры {variant!r}")
+    p = dict(PALETTES[theme])
+    p.update(PALETTE_VARIANTS[variant][theme])
+    return p
+
 
 # «Только дорога»: что из основы остаётся. Остальные исходные слои OSM Bright
 # (POI, дома, номера домов, аэродромы, границы, щиты, прочая застройка) — нет.
@@ -331,7 +482,7 @@ def _road_kind(layer_id):
                  if layer_id.endswith(k) or layer_id.endswith(k + "-casing")), None)
 
 
-def _base_layer(layer, p, mode):
+def _base_layer(layer, p, mode, theme):
     """Слой OSM Bright, перекрашенный в палитру; None — слоя в этом режиме нет."""
     l = copy.deepcopy(layer)
     i = l["id"]
@@ -470,10 +621,10 @@ def _base_layer(layer, p, mode):
         if "name:latin" in json.dumps(lay.get("text-field", "")):
             lay["text-field"] = NAME
         paint["text-halo-color"] = p["halo"]
-        if "text-color" in paint and mode == "full" and p is PALETTES["dark"]:
+        if "text-color" in paint and mode == "full" and theme == "dark":
             paint["text-color"] = p["label"]
         if src == "poi" and i.startswith("poi-level"):
-            paint["text-color"] = poi_colour(p, "light" if p is PALETTES["light"] else "dark")
+            paint["text-color"] = poi_colour(p, theme)
             paint["text-halo-width"] = 1.4
     return l
 
@@ -840,12 +991,13 @@ APP_TILESET = "{{TILESET}}"
 APP_STYLE_DIR = os.path.join(HERE, "..", "..", "RadarMap", "Resources", "MapStyle")
 
 
-def build(base, theme="light", mode="full", tileset=None):
+def build(base, theme="light", mode="full", tileset=None, variant=None):
     """tileset — номер выпуска (или плейсхолдер): тайлы из /v/<N>/, а не из
-    старых адресов без версии."""
+    старых адресов без версии. variant — вариант палитры (PALETTE_VARIANTS),
+    None — палитра по умолчанию."""
     if theme not in PALETTES or mode not in ("full", "roads"):
         raise ValueError(f"тема {theme!r} / режим {mode!r}")
-    p = PALETTES[theme]
+    p = palette(theme, variant)
     base = base.rstrip("/")
     tiles_root = base if tileset is None else f"{base}/v/{tileset}"
     with open(os.path.join(HERE, "osm-bright.json")) as handle:
@@ -859,7 +1011,7 @@ def build(base, theme="light", mode="full", tileset=None):
     }
     s["glyphs"] = base + "/glyphs/{fontstack}/{range}.pbf"
     s["sprite"] = base + "/sprite/sprite"
-    out = [l for l in (_base_layer(layer, p, mode) for layer in s["layers"]) if l is not None]
+    out = [l for l in (_base_layer(layer, p, mode, theme) for layer in s["layers"]) if l is not None]
     if mode == "full":
         first_symbol = next(k for k, l in enumerate(out) if l["type"] == "symbol")
         # Тень у подножия дома: мягкий тёмный контур, чуть сдвинутый от
@@ -970,6 +1122,8 @@ def build(base, theme="light", mode="full", tileset=None):
     s["layers"] = out
     s["light"] = p["light"]
     s["name"] = f"RadarMap — {'светлая' if theme == 'light' else 'тёмная'}, {'полная' if mode == 'full' else 'только дорога'}"
+    if variant:
+        s["name"] += f", вариант «{PALETTE_VARIANTS[variant]['title']}»"
     return s
 
 
@@ -1006,27 +1160,44 @@ def _driver_pois(out, p, theme):
     out[last_poi + 1:last_poi + 1] = [fuel, parking]
 
 
+def _app_text(theme, variant=None):
+    return json.dumps(build(APP_BASE, theme, "full", tileset=APP_TILESET, variant=variant),
+                      ensure_ascii=False, sort_keys=True, indent=1) + "\n"
+
+
 def app_styles():
     """{имя файла: текст} — стили для бандла приложения, светлый и тёмный."""
-    return {f"map_style_{theme}.json": json.dumps(build(APP_BASE, theme, "full", tileset=APP_TILESET),
-                                                  ensure_ascii=False, sort_keys=True, indent=1) + "\n"
-            for theme in ("light", "dark")}
+    return {f"map_style_{theme}.json": _app_text(theme) for theme in ("light", "dark")}
+
+
+# Варианты палитры — в подпапке ресурсов; в Release их исключает
+# EXCLUDED_SOURCE_FILE_NAMES (map_style_*_v*.json), в бандл попадают только
+# в DEBUG — для снимков с ключом -mapPalette.
+APP_VARIANT_DIR = os.path.join(APP_STYLE_DIR, "Variants")
+
+
+def app_variant_styles():
+    """{имя файла: текст} — варианты палитры для DEBUG-сборки (27.C)."""
+    return {f"map_style_{theme}_{variant}.json": _app_text(theme, variant)
+            for variant in PALETTE_VARIANTS for theme in ("light", "dark")}
 
 
 def main(argv):
     if "--app" in argv:
         # python3 server/omt/make_style.py --app — перегенерировать ресурсы
         # приложения; test_make_style сверяет, что в репо лежит ровно это.
-        os.makedirs(APP_STYLE_DIR, exist_ok=True)
-        for name, text in app_styles().items():
-            with open(os.path.join(APP_STYLE_DIR, name), "w", encoding="utf-8") as handle:
-                handle.write(text)
-            print(f"{name}: {len(text) // 1024} КБ")
+        for folder, styles in ((APP_STYLE_DIR, app_styles()), (APP_VARIANT_DIR, app_variant_styles())):
+            os.makedirs(folder, exist_ok=True)
+            for name, text in styles.items():
+                with open(os.path.join(folder, name), "w", encoding="utf-8") as handle:
+                    handle.write(text)
+                print(f"{name}: {len(text) // 1024} КБ")
         return
     base = next((a for a in argv[1:] if not a.startswith("--")), "https://soulmed.uz/radarmap")
     theme = argv[argv.index("--theme") + 1] if "--theme" in argv else "light"
     mode = argv[argv.index("--mode") + 1] if "--mode" in argv else "full"
-    json.dump(build(base, theme, mode), sys.stdout, ensure_ascii=False, separators=(",", ":"))
+    variant = argv[argv.index("--palette") + 1] if "--palette" in argv else None
+    json.dump(build(base, theme, mode, variant=variant), sys.stdout, ensure_ascii=False, separators=(",", ":"))
 
 
 if __name__ == "__main__":

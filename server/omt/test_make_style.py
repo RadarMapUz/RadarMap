@@ -16,10 +16,11 @@ SHIPPED_FONTS = {"Noto Sans Regular", "Noto Sans Bold", "Noto Sans Italic"}
 class StyleTests(unittest.TestCase):
     """Проверки общие для всех тем и режимов: подкласс задаёт сочетание."""
     theme, mode = "light", "full"
+    variant = None      # вариант палитры 27.C: те же проверки и для него
 
     @classmethod
     def setUpClass(cls):
-        cls.style = make_style.build("https://soulmed.uz/radarmap", cls.theme, cls.mode)
+        cls.style = make_style.build("https://soulmed.uz/radarmap", cls.theme, cls.mode, variant=cls.variant)
 
     def test_every_paint_and_layout_key_belongs_to_its_layer_type(self):
         for layer in self.style["layers"]:
@@ -60,7 +61,7 @@ class StyleTests(unittest.TestCase):
         self.assertIn(layers["trees"]["paint"]["fill-pattern"], sprite)
         self.assertLess(ids.index("trees"), ids.index("radar-roads-case"), "деревья под дорогой")
         case = layers["radar-roads-case"]["paint"]["line-color"]
-        self.assertIn(make_style.PALETTES[self.theme]["kerb"], case)
+        self.assertIn(make_style.palette(self.theme, self.variant)["kerb"], case)
 
     def test_tunnels_under_ground_roads_bridges_with_shadow(self):
         ids = [l["id"] for l in self.style["layers"]]
@@ -155,7 +156,7 @@ class StyleTests(unittest.TestCase):
         def lightness(colour):
             colour = colour.lstrip("#")
             return sum(int(colour[i:i + 2], 16) for i in (0, 2, 4)) / 3
-        light, dark = make_style.PALETTES["light"], make_style.PALETTES["dark"]
+        light, dark = make_style.palette("light", self.variant), make_style.palette("dark", self.variant)
         for theme in (light, dark):
             self.assertNotEqual(theme["minor"], theme["path"])
         low, high = sorted((lightness(light["road"]), lightness(light["bg"])))
@@ -176,7 +177,7 @@ class StyleTests(unittest.TestCase):
         # Ореол цвета фона ночью лежал чёрной наклейкой поверх разметки
         # (снимок CarPlay 13.10.2026): вблизи ореол — цвет полотна.
         layers = {layer["id"]: layer for layer in self.style["layers"]}
-        palette = make_style.PALETTES[self.theme]
+        palette = make_style.palette(self.theme, self.variant)
         for layer_id in ("highway-name-major", "highway-name-minor"):
             halo = layers[layer_id]["paint"]["text-halo-color"]
             self.assertEqual(halo[0], "interpolate", layer_id)
@@ -211,7 +212,7 @@ class StyleTests(unittest.TestCase):
         def lightness(colour):
             colour = colour.lstrip("#")
             return sum(int(colour[i:i + 2], 16) for i in (0, 2, 4)) / 3
-        dark = make_style.PALETTES["dark"]
+        dark = make_style.palette("dark", self.variant)
         for key in ("minor", "road", "road_tertiary"):
             self.assertGreater(lightness(dark[key]), lightness(dark["building"]), key)
 
@@ -331,6 +332,13 @@ class DarkRoads(LightRoads):
     theme, mode = "dark", "roads"
 
 
+# Варианты палитры (27.C): каждый проходит все проверки своей темы.
+for _variant in make_style.PALETTE_VARIANTS:
+    for _base in (StyleTests, DarkFull):
+        _name = f"{'Light' if _base is StyleTests else 'Dark'}Variant{_variant.upper()}"
+        globals()[_name] = type(_name, (_base,), {"variant": _variant})
+
+
 class AppResourceTests(unittest.TestCase):
     """Стиль в бандле приложения обязан совпадать с генератором: забыть
     перегенерировать — красный тест, а не старая карта у водителя."""
@@ -339,6 +347,15 @@ class AppResourceTests(unittest.TestCase):
         for name, text in make_style.app_styles().items():
             path = os.path.join(make_style.APP_STYLE_DIR, name)
             with open(path, encoding="utf-8") as handle:
+                self.assertEqual(handle.read(), text,
+                                 f"{name} устарел: python3 server/omt/make_style.py --app")
+
+    def test_bundled_variants_match_the_generator(self):
+        expected = make_style.app_variant_styles()
+        self.assertEqual(sorted(os.listdir(make_style.APP_VARIANT_DIR)), sorted(expected),
+                         "лишний или пропавший вариант: python3 server/omt/make_style.py --app")
+        for name, text in expected.items():
+            with open(os.path.join(make_style.APP_VARIANT_DIR, name), encoding="utf-8") as handle:
                 self.assertEqual(handle.read(), text,
                                  f"{name} устарел: python3 server/omt/make_style.py --app")
 
@@ -354,6 +371,18 @@ class PaletteTests(unittest.TestCase):
     def test_themes_define_the_same_colours(self):
         light, dark = make_style.PALETTES["light"], make_style.PALETTES["dark"]
         self.assertEqual(set(light), set(dark))
+
+    def test_variants_change_only_known_colours(self):
+        # Вариант — правки поверх палитры: ни нового ключа, ни пропуска темы.
+        for name, variant in make_style.PALETTE_VARIANTS.items():
+            self.assertTrue(variant["title"], name)
+            for theme in ("light", "dark"):
+                self.assertLessEqual(set(variant[theme]), set(make_style.PALETTES[theme]), f"{name}/{theme}")
+
+    def test_default_palette_is_untouched_by_variants(self):
+        self.assertIs(make_style.palette("light"), make_style.PALETTES["light"])
+        with self.assertRaises(ValueError):
+            make_style.palette("light", "v9")
 
     def test_unknown_theme_is_refused(self):
         with self.assertRaises(ValueError):

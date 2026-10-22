@@ -377,22 +377,22 @@ final class AlertPlayer: NSObject {
         let segments = self.segments
         let now = DispatchTime.now().uptimeNanoseconds
         let waitBeep = beepEndsAt > now ? beepEndsAt - now : 0
-        // Без [weak self] снаружи: слабую ссылку берут сами задачи на главном
-        // акторе. Слабый self во внешнем @Sendable-замыкании — изменяемая
-        // переменная, и её повторный захват задачами — предупреждение
-        // Swift 6 (#SendableClosureCaptures). Удержание — до конца сигнала,
-        // а AlertPlayer живёт весь процесс.
-        Self.audioQueue.asyncAfter(deadline: .now() + .nanoseconds(Int(waitBeep))) {
+        // Задачи на главном акторе берут `[self]` — копию слабой ссылки
+        // внешнего замыкания, а не саму изменяемую переменную: повторный
+        // захват слабого self из @Sendable-замыкания — предупреждение Swift 6
+        // (#SendableClosureCaptures).
+        let finished: @Sendable () -> Void = { [weak self] in
+            Task { @MainActor [self] in self?.recordedFinished(generation) }
+        }
+        Self.audioQueue.asyncAfter(deadline: .now() + .nanoseconds(Int(waitBeep))) { [weak self] in
             let outcome: Result<SegmentPlayer.Started, any Error>
             do {
-                outcome = .success(try segments.play(ids, pack: pack, volume: volume) {
-                    Task { @MainActor [weak self] in self?.recordedFinished(generation) }
-                })
+                outcome = .success(try segments.play(ids, pack: pack, volume: volume, finished: finished))
             } catch {
                 outcome = .failure(error)
             }
             let started = DispatchTime.now().uptimeNanoseconds
-            Task { @MainActor [weak self] in
+            Task { @MainActor [self] in
                 guard let self else { return }
                 switch outcome {
                 case .success(let info):

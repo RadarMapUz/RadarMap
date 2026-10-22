@@ -836,7 +836,7 @@ struct DatabaseSettingsPage: View {
                 .disabled(env.sync.state == .checking || env.sync.state == .downloading)
             } footer: {
                 if let date = env.sync.lastCheckDate {
-                    Text("Последняя проверка: \(date.formatted(date: .abbreviated, time: .shortened))")
+                    Text("Последняя проверка: \(Formatting.dateAndClock(date))")
                 }
             }
         }

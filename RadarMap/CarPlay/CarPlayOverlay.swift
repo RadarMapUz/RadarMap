@@ -227,7 +227,7 @@ struct CarPlayOverlay: View {
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
                 HStack(spacing: 6) {
-                    Text(verbatim: "\(env.route.arrivalDate.formatted(date: .omitted, time: .shortened)) · \(Formatting.distance(env.route.remainingDistance))")
+                    Text(verbatim: "\(Formatting.clock(env.route.arrivalDate)) · \(Formatting.distance(env.route.remainingDistance))")
                         .font(.rounded(13, .semibold).monospacedDigit())
                         .foregroundStyle(Theme.textSecondary)
                     if camerasAhead > 0 {

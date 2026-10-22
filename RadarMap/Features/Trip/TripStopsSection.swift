@@ -108,8 +108,8 @@ struct TripStopsSection: View {
     }
 
     private func subtitle(for stop: TripStop) -> String {
-        let window = stop.from.formatted(date: .omitted, time: .shortened)
-            + " – " + stop.to.formatted(date: .omitted, time: .shortened)
+        let window = Formatting.clock(stop.from)
+            + " – " + Formatting.clock(stop.to)
         guard let place = titles[stop.id], !place.isEmpty else { return window }
         return "\(place) · \(window)"
     }

@@ -60,7 +60,7 @@ struct PassRow: View {
                     .font(.rounded(14, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
-                Text(pass.date.formatted(date: .omitted, time: .shortened))
+                Text(Formatting.clock(pass.date))
                     .font(.rounded(11))
                     .foregroundStyle(Theme.textTertiary)
             }
@@ -732,7 +732,7 @@ struct TripShareCard: View {
     var format: ShareFormat = .feed
 
     var body: some View {
-        ShareCardShell(subtitle: record.startedAt.formatted(date: .abbreviated, time: .shortened),
+        ShareCardShell(subtitle: Formatting.dateAndClock(record.startedAt),
                        format: format) {
             Group {
                 if let mapImage {

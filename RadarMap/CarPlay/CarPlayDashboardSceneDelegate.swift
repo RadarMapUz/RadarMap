@@ -288,7 +288,7 @@ private struct CarPlayDashboardGauge: View {
                     Text(Formatting.duration(env.route.remainingTime))
                         .font(.rounded(16, .heavy).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
-                    Text(env.route.arrivalDate.formatted(date: .omitted, time: .shortened))
+                    Text(Formatting.clock(env.route.arrivalDate))
                         .font(.rounded(11, .semibold).monospacedDigit())
                         .foregroundStyle(Theme.textSecondary)
                 }

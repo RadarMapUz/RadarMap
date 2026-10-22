@@ -43,35 +43,40 @@ nonisolated enum EngineMapPresentation {
         }
     }
 
-    struct RouteFrame: Sendable {
+    /// Всё, что строится один раз на маршрут (или на новый набор пробок) —
+    /// вне главного потока: индекс для нарезки, линия среза (RouteCut),
+    /// стрелки и пробки на линии с местом в метрах.
+    struct CutFrame: Sendable {
         let index: RouteIndex
-        let traveled: [CLLocationCoordinate2D]
-        let remaining: [CLLocationCoordinate2D]
-        let maneuver: [CLLocationCoordinate2D]
-        /// Пробки на остатке линии (RouteTraffic): пусто — данных нет или
-        /// впереди свободно.
-        var traffic: [RouteTraffic.Piece] = []
+        let line: RouteCut.Line
+        let arrows: [RouteCut.Arrow]
+        /// Пробки на линии (RouteTraffic): пусто — данных нет или свободно.
+        let traffic: [RouteTraffic.Piece]
     }
 
-    /// `traffic` — набор пробок (TrafficSnapshot): с ним остаток линии
-    /// красится по пробкам на нашей стороне; nil — линия одного цвета.
-    @concurrent static func prepareRoute(_ coordinates: [CLLocationCoordinate2D],
-                                         index: RouteIndex?, progress: Double, maneuver: Double?,
-                                         traffic: TrafficSnapshot? = nil) async -> RouteFrame {
+    /// `index`/`line` прошлого раза — тот же маршрут, новый набор пробок:
+    /// пересчитываются только пробки.
+    @concurrent static func prepareCut(_ coordinates: [CLLocationCoordinate2D],
+                                       reuse: (RouteIndex, RouteCut.Line, [RouteCut.Arrow])? = nil,
+                                       traffic: TrafficSnapshot? = nil) async -> CutFrame {
         let log = OSLog(subsystem: "uz.radarmap", category: "MapPerformance")
         os_signpost(.begin, log: log, name: "Route preparation")
         defer { os_signpost(.end, log: log, name: "Route preparation") }
-        let indexed = index ?? RouteIndex(coordinates)
-        let along = progress.isFinite ? max(0, min(indexed.length, progress)) : 0
-        let turn: [CLLocationCoordinate2D]
-        if let maneuver, maneuver >= along, maneuver - along <= AppConfig.engineManeuverApproachMeters {
-            turn = indexed.slice(from: max(along, maneuver - AppConfig.engineManeuverHighlightMeters),
-                                 to: maneuver + AppConfig.engineManeuverHighlightMeters)
-        } else { turn = [] }
-        let remaining = indexed.slice(from: along, to: indexed.length)
-        return RouteFrame(index: indexed, traveled: indexed.slice(from: 0, to: along),
-                          remaining: remaining, maneuver: turn,
-                          traffic: traffic.map { RouteTraffic.pieces(along: remaining, snapshot: $0) } ?? [])
+        let index = reuse?.0 ?? RouteIndex(coordinates)
+        let line = reuse?.1 ?? RouteCut.Line(coordinates)
+        let arrows = reuse?.2 ?? RouteCut.arrows(line)
+        let pieces = traffic.map {
+            RouteTraffic.pieces(along: coordinates, snapshot: $0, cumulative: line.cumulative)
+        } ?? []
+        return CutFrame(index: index, line: line, arrows: arrows, traffic: pieces)
+    }
+
+    /// Подсветка ближнего манёвра на линии, м от начала: ±engineManeuverHighlightMeters
+    /// у точки манёвра, пока он впереди фикса не дальше engineManeuverApproachMeters.
+    static func maneuverRange(at distance: Double?, progress: Double) -> ClosedRange<Double>? {
+        guard let distance, distance >= progress,
+              distance - progress <= AppConfig.engineManeuverApproachMeters else { return nil }
+        return max(0, distance - AppConfig.engineManeuverHighlightMeters)...(distance + AppConfig.engineManeuverHighlightMeters)
     }
 
     /// Запас области уменьшает частоту перестановки символов при скролле.

@@ -334,6 +334,8 @@ extension MapScreen {
                     if env.route.isActive {
                         env.location.startTrip()   // ориентацию поставит onChange
                     }
+                    // Поездка с шумом GPS и неровным интервалом (замер 27.A).
+                    if NoisyDriveDebug.enabled { Task { await NoisyDriveDebug.run(env: env) } }
                     // Автозавершение поездки через N секунд: на симуляторе нет
                     // CoreMotion (автостоп не сработает) и нет тапов — а для
                     // проверки Итогов/шеринга нужна завершённая запись в истории.

@@ -119,7 +119,8 @@ struct EngineMapStyleTests {
         let json = EngineMapStyle.json(daylight: true, base: base, tilesReady: false)
         let object = try #require(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
         let sources = try #require(object["sources"] as? [String: Any])
-        #expect(Set(sources.keys) == Set(["cameras", "route", "position", "traveled", "maneuver", "traffic", "route-traffic", "marks", "road-events", "cng-status", "hotspots", "camera-label"]))
+        #expect(Set(sources.keys) == Set(["cameras", "route", "position", "traveled", "maneuver", "traffic", "route-traffic", "route-near", "route-arrows", "marks", "road-events", "cng-status", "hotspots",
+                                         "camera-label"]))
         for layer in layers(object) {
             if let source = layer["source"] as? String { #expect(sources[source] != nil) }
         }
@@ -294,19 +295,21 @@ struct EngineMapStyleTests {
         #expect(EngineMapPresentation.RouteIndex([a, a]).slice(from: 0, to: 10).isEmpty)
     }
 
-    @Test("Фоновая геометрия сохраняет границы маршрута и манёвра")
+    @Test("Фоновая геометрия: индекс, линия среза, стрелки; манёвр — только впереди и близко")
     func preparedRoute() async {
         let points = [CLLocationCoordinate2D(latitude: 41.31, longitude: 69.28),
                       CLLocationCoordinate2D(latitude: 41.31, longitude: 69.30)]
-        let initial = await EngineMapPresentation.prepareRoute(points, index: nil, progress: 0, maneuver: nil)
-        #expect(initial.traveled.isEmpty)
-        #expect(initial.remaining.count == 2)
-        let moving = await EngineMapPresentation.prepareRoute(points, index: initial.index, progress: 250, maneuver: 300)
-        #expect(moving.maneuver.count == 2)
-        #expect(abs(MKMapPoint(moving.maneuver[0]).distance(to: MKMapPoint(moving.maneuver[1])) - 70) < 0.1)
-        let finished = await EngineMapPresentation.prepareRoute(points, index: initial.index, progress: 100_000, maneuver: nil)
-        #expect(finished.remaining.isEmpty)
-        #expect(finished.traveled.count == 2)
+        let frame = await EngineMapPresentation.prepareCut(points)
+        #expect(abs(frame.index.length - frame.line.length) < 0.01)
+        #expect(!frame.arrows.isEmpty)
+        #expect(frame.traffic.isEmpty)
+        let again = await EngineMapPresentation.prepareCut(points, reuse: (frame.index, frame.line, frame.arrows))
+        #expect(again.arrows == frame.arrows)
+        let range = EngineMapPresentation.maneuverRange(at: 300, progress: 250)
+        #expect(range.map { $0.upperBound - $0.lowerBound } == 70)
+        #expect(EngineMapPresentation.maneuverRange(at: 300, progress: 301) == nil)
+        #expect(EngineMapPresentation.maneuverRange(at: 900, progress: 0) == nil)
+        #expect(EngineMapPresentation.maneuverRange(at: nil, progress: 0) == nil)
     }
 
     @Test("Кэш области выдерживает небольшой сдвиг, обновляется при выходе и zoom out")

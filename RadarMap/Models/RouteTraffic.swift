@@ -25,6 +25,10 @@ nonisolated enum RouteTraffic {
     struct Piece: Equatable, Sendable {
         let level: Int
         var coordinates: [CLLocationCoordinate2D]
+        /// Где кусок лежит на линии: метры от её начала (27.A — краска
+        /// окна у машины берёт пробки по месту на линии, а не по точкам).
+        var from: Double = 0
+        var to: Double = 0
 
         static func == (l: Piece, r: Piece) -> Bool {
             l.level == r.level && l.coordinates.count == r.coordinates.count
@@ -36,9 +40,14 @@ nonisolated enum RouteTraffic {
 
     static let stepMeters = 25.0
 
+    /// `cumulative` — пройденное по линии до каждой точки (длины
+    /// EngineMapPresentation.RouteIndex): с ним `from`/`to` кусков — в той же
+    /// мере, что и срез линии у машины; без него — своя быстрая оценка.
     static func pieces(along route: [CLLocationCoordinate2D], snapshot: TrafficSnapshot,
-                       minMeters: Double = AppConfig.routeTrafficMinMeters) -> [Piece] {
+                       minMeters: Double = AppConfig.routeTrafficMinMeters,
+                       cumulative: [Double]? = nil) -> [Piece] {
         guard route.count >= 2, !snapshot.edges.isEmpty else { return [] }
+        let measured = cumulative.flatMap { $0.count == route.count ? $0 : nil }
         var out: [Piece] = []
         var current: Piece?
         var currentLength = 0.0
@@ -51,8 +60,12 @@ nonisolated enum RouteTraffic {
             currentLength = 0
         }
 
-        for (p, q) in zip(route, route.dropFirst()) {
+        var walked = 0.0
+        for (i, (p, q)) in zip(route, route.dropFirst()).enumerated() {
             let length = GeoMath.fastDistance(p.latitude, p.longitude, q.latitude, q.longitude)
+            let start = measured?[i] ?? walked
+            let span = measured.map { $0[i + 1] - $0[i] } ?? length
+            walked += length
             guard length > 0.5 else { continue }
             let course = GeoMath.bearing(from: p, to: q)
             let steps = max(1, Int((length / stepMeters).rounded(.up)))
@@ -66,8 +79,11 @@ nonisolated enum RouteTraffic {
                     .map(\.level).flatMap { $0 >= 2 ? $0 : nil }
                 if level != current?.level { close() }
                 guard let level else { continue }
-                if current == nil { current = Piece(level: level, coordinates: [at(t0)]) }
+                if current == nil {
+                    current = Piece(level: level, coordinates: [at(t0)], from: start + span * t0)
+                }
                 current?.coordinates.append(at(t1))
+                current?.to = start + span * t1
                 currentLength += length / Double(steps)
             }
         }

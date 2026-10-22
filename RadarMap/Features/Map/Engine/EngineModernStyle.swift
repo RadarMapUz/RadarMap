@@ -28,7 +28,9 @@ nonisolated enum EngineModernStyle {
     static let darkResource = "map_style_dark"
 
     /// Свои источники приложения — пустые при сборке, наполняются на тике.
-    static let liveSources = ["cameras", "route", "traveled", "maneuver", "traffic", "route-traffic", "position", "marks", "road-events", "cng-status", "hotspots", "camera-label"]
+    static let liveSources = ["cameras", "route", "traveled", "maneuver", "traffic", "route-traffic",
+                              "route-near", "route-arrows",
+                              "position", "marks", "road-events", "cng-status", "hotspots", "camera-label"]
 
     /// Готовые стили по набору входов. Сборка — это чтение и разбор 214 КБ
     /// шаблона, правка слоёв и сериализация обратно, и шла она на главном
@@ -88,8 +90,7 @@ nonisolated enum EngineModernStyle {
                 sources[name] = source
             }
         }
-        let empty: [String: Any] = ["type": "FeatureCollection", "features": [] as [Any]]
-        for name in liveSources { sources[name] = ["type": "geojson", "data": empty] }
+        for (name, source) in EngineMapStyle.liveSources() { sources[name] = source }
         style["sources"] = sources
 
         // Камеру ставит приложение. Положение из стиля при загрузке дёрнуло

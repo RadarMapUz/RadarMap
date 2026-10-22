@@ -332,7 +332,7 @@ final class FamilyShareService {
         var wife = FamilyRecipient(name: "Дилноза", emoji: "👩", now: now)
         wife.linkSentAt = now.addingTimeInterval(-2 * 86_400)
         let father = FamilyRecipient(name: "Папа", emoji: "👴", mode: .everyTrip, now: now)
-        return FamilyCircle(recipients: [mother, wife, father], driverName: "Зафар")
+        return FamilyCircle(recipients: [mother, wife, father], driverName: "Азиз")
     }
 
     /// Демо: первая — «видит сейчас».

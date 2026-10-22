@@ -1771,6 +1771,10 @@ nonisolated enum AppConfig {
     nonisolated static let routeVariantLabelSpan: ClosedRange<Double> = 0.2...0.8
     nonisolated static let routeVariantLabelSamples = 40
     nonisolated static let routeVariantLabelOtherPoints = 400
+    /// Подпись не ставится ближе этой доли охвата линий к значку камеры
+    /// (RoutePreview.clearOfCameras): ~8 % ширины кадра — полподписи
+    /// (~35 pt из 400) и значок камеры (~12 pt).
+    nonisolated static let routeVariantLabelCameraClearance = 0.08
 
     // MARK: - CarPlay
 

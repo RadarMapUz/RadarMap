@@ -8823,18 +8823,18 @@
         }
       }
     },
-    "На странице и в сообщениях: «Зафар едет домой». Пусто — «Водитель».": {
+    "На странице и в сообщениях: «Азиз едет домой». Пусто — «Водитель».": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "На странице и в сообщениях: «Зафар едет домой». Пусто — «Водитель»."
+            "value": "На странице и в сообщениях: «Азиз едет домой». Пусто — «Водитель»."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sahifada va xabarlarda: «Zafar uyga ketyapti». Boʻsh boʻlsa — «Haydovchi»."
+            "value": "Sahifada va xabarlarda: «Aziz uyga ketyapti». Boʻsh boʻlsa — «Haydovchi»."
           }
         }
       }

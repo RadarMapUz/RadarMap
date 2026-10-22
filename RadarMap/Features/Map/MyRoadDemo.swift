@@ -18,7 +18,10 @@ import os
 enum MyRoadDemo {
     @MainActor
     static func seed(_ env: AppEnvironment) async -> MKMapRect? {
-        let work = TripStats.demoWork, home = TripStats.demoHome
+        // Файл с путями задаёт и сами места: начало и конец «своей» линии.
+        let real = realPaths()
+        let work = real?.mine.first ?? TripStats.demoWork
+        let home = real?.mine.last ?? TripStats.demoHome
         let k = 111_320 * cos(work.latitude * .pi / 180)
         // Метры от работы: x — восток, y — север.
         func at(_ x: Double, _ y: Double) -> CLLocationCoordinate2D {
@@ -43,7 +46,7 @@ enum MyRoadDemo {
         // Снимки App Store: настоящие пути по дорогам из Documents/myroad_demo.json
         // ({"fast": [[lat, lon], …], "alt": …, "mine": …} — ответы OSRM от работы
         // до дома). Лесенка через кварталы на витрине выглядела подделкой.
-        if let real = realPaths() {
+        if let real {
             fast = real.fast
             south = real.alt
             mine = real.mine

@@ -109,7 +109,7 @@ extension MapScreen {
             // HUD сверху всегда компактный: в покое главное «куда поедем», а в
             // поездке без маршрута полноразмерная карточка занимала пятую часть
             // экрана ради двух чисел. В навигации его здесь нет вовсе.
-            if mode.speedPlacement == .top {
+            if mode.speedPlacement == .top, !Self.screenshotHidesIdleHUD {
                 hudGestures(SpeedHUDView(secondary: true))
             }
             // Разовые подсказки по жестам и экономии — по одной, не простынёй.
@@ -134,6 +134,18 @@ extension MapScreen {
             // Теперь не двигается и то, что ПОД ними: колонка кнопок и сама
             // карта (кромка панелей для «я» их больше не считает).
         }
+    }
+
+    /// DEBUG `-hideIdleHUD`: кадр выбора маршрута для App Store без карточки
+    /// «444 м до радара» — в покое ближайшая камера есть всегда (окно — 150
+    /// ближайших, без предела по расстоянию), и снять экран выбора без неё
+    /// иначе нельзя. В релизе всегда false.
+    static var screenshotHidesIdleHUD: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("-hideIdleHUD")
+        #else
+        false
+        #endif
     }
 
     var topLayer: some View {

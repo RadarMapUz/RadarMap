@@ -68,7 +68,7 @@ struct FamilyShareSettingsPage: View {
             } header: {
                 Text("Как вас назовут близким")
             } footer: {
-                Text("На странице и в сообщениях: «Зафар едет домой». Пусто — «Водитель».")
+                Text("На странице и в сообщениях: «Азиз едет домой». Пусто — «Водитель».")
             }
 
             if !circle.recipients.isEmpty {

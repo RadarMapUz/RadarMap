@@ -223,7 +223,7 @@ nonisolated struct MarkerPredictor {
     func pose(at now: TimeInterval) -> Pose? {
         guard fix != nil, let target = target(at: now) else { return nil }
         let t = max(0, now - correctionStart)
-        let a = along.isZero ? 0 : along.value(t)
+        let a = along.isZero ? 0 : along.value(alongTime(at: now, elapsed: t))
         let l = lateral.isZero ? 0 : lateral.value(t)
         guard a != 0 || l != 0 else { return target }
         let east = a * axis.east + l * axis.north
@@ -232,16 +232,31 @@ nonisolated struct MarkerPredictor {
                     courseDegrees: target.courseDegrees)
     }
 
+    /// Время продольной поправки. Значок впереди оценки гасит смещение,
+    /// замедляясь относительно неё; встанет оценка (горизонт, излом) —
+    /// должна встать и поправка, иначе значок поехал бы к стоящей оценке
+    /// НАЗАД. Поэтому «впереди в движении» поправка идёт по пути оценки
+    /// (пройденное / скорость), а не по часам.
+    private func alongTime(at now: TimeInterval, elapsed t: Double) -> Double {
+        guard settle == .absorb, let fix, fix.speedMps >= AppConfig.markerMovingMps else { return t }
+        return max(0, (progress(at: now) - progress(at: correctionStart)) / fix.speedMps)
+    }
+
     /// Значок ещё движется: оценка растёт (едем и горизонт не исчерпан) или
     /// не догашена поправка. false — такт кадров можно остановить до фикса.
     func isMoving(at now: TimeInterval) -> Bool {
         guard let fix else { return false }
         let t = max(0, now - correctionStart)
         let leadGrows = fix.speedMps >= AppConfig.markerMovingMps
-            && now - fix.time < leadLimit(fix)
+            && progress(at: now + 1.0 / 60) - progress(at: now) > 0.005
         if leadGrows { return true }
-        for ease in [along, lateral] where !ease.isZero {
-            if abs(ease.value(t)) > 0.05 || abs(ease.rate(t)) > 0.05 { return true }
+        let ta = alongTime(at: now, elapsed: t)
+        for (ease, time) in [(along, ta), (lateral, t)] where !ease.isZero {
+            if abs(ease.value(time)) > 0.05 || abs(ease.rate(time)) > 0.05 {
+                // Впереди стоящей оценки поправка ждёт её хода: такт не нужен.
+                if ease == along, settle == .absorb, !leadGrows { continue }
+                return true
+            }
         }
         return false
     }
@@ -252,9 +267,7 @@ nonisolated struct MarkerPredictor {
     func target(at now: TimeInterval) -> Pose? {
         guard let fix else { return nil }
         let start = Pose(coordinate: fix.coordinate, courseDegrees: -1)
-        guard fix.speedMps >= AppConfig.markerMovingMps else { return start }
-        let lead = min(max(0, now - fix.time), leadLimit(fix))
-        let distance = fix.speedMps * lead
+        let distance = progress(at: now)
         guard distance > 0 else { return start }
         if usesPath(fix) {
             return Self.walk(fix.path, meters: distance)
@@ -263,6 +276,23 @@ nonisolated struct MarkerPredictor {
         return Pose(coordinate: GeoMath.destination(from: fix.coordinate, bearing: fix.courseDegrees,
                                                     distanceMeters: distance),
                     courseDegrees: -1)
+    }
+
+    /// Сколько оценка прошла от фикса к `now`, м. У предела — горизонта
+    /// угадывания или излома линии — не обрывом, а мягко (27.A): за
+    /// markerSoftStopSeconds до предела оценка начинает тормозить и подходит
+    /// к нему без скачка скорости. Значок «ждёт у угла», но не встаёт как
+    /// вкопанный посреди кадра.
+    func progress(at now: TimeInterval) -> Double {
+        guard let fix, fix.speedMps >= AppConfig.markerMovingMps else { return 0 }
+        let v = fix.speedMps
+        let raw = v * max(0, now - fix.time)
+        var limit = v * leadLimit(fix)
+        if usesPath(fix) { limit = min(limit, Self.distanceToBend(fix.path)) }
+        guard limit > 0 else { return 0 }
+        let soft = min(limit / 2, v * AppConfig.markerSoftStopSeconds)
+        guard soft > 0, raw > limit - soft else { return min(raw, limit) }
+        return limit - soft * exp(-(raw - (limit - soft)) / soft)
     }
 
     private func leadLimit(_ fix: Fix) -> Double {
@@ -288,6 +318,25 @@ nonisolated struct MarkerPredictor {
             return GeoMath.bearing(from: path[i - 1], to: path[i])
         }
         return nil
+    }
+
+    /// Сколько можно пройти по линии до излома круче порога или до её конца.
+    static func distanceToBend(_ path: [CLLocationCoordinate2D]) -> Double {
+        var total = 0.0
+        var previousBearing: Double?
+        for i in 1..<path.count {
+            let a = path[i - 1], b = path[i]
+            let length = distance(a, b)
+            guard length >= minSegmentMeters else { continue }
+            let bearing = GeoMath.bearing(from: a, to: b)
+            if let previousBearing,
+               GeoMath.angleDifference(previousBearing, bearing) > AppConfig.markerPathTurnDegrees {
+                return total
+            }
+            total += length
+            previousBearing = bearing
+        }
+        return total
     }
 
     /// Пройти по линии `meters`, остановившись у излома круче порога или в конце.

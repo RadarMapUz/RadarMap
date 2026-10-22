@@ -39,8 +39,7 @@ final class MarkerPredictorTests: XCTestCase {
         p.update(fix(0, 0, course: 0, speed: 14, time: 0), now: 0, immediate: true)
         XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 1)).coordinate).north, 14, accuracy: 0.1)
         let horizon = 14 * AppConfig.markerMaxLeadSeconds
-        XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: AppConfig.markerMaxLeadSeconds)).coordinate).north, horizon,
-                       accuracy: 0.1)
+        XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 1.5)).coordinate).north, 21, accuracy: 0.05)
         // Фиксов нет — дальше горизонта вперёд не угадываем.
         XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 4)).coordinate).north, horizon, accuracy: 0.1)
         XCTAssertFalse(p.isMoving(at: 4), "горизонт исчерпан — такт кадров не нужен")
@@ -116,7 +115,9 @@ final class MarkerPredictorTests: XCTestCase {
         let path = [at(0, 0), at(0, 10), at(50, 10)]
         p.update(fix(0, 0, course: 0, speed: 14, time: 0, path: path), now: 0, immediate: true)
         let pose = try XCTUnwrap(p.pose(at: 1.5))
-        XCTAssertEqual(xy(pose.coordinate).north, 10, accuracy: 0.1)
+        // К углу — мягким торможением (27.A), не обрывом: подошёл вплотную.
+        XCTAssertEqual(xy(pose.coordinate).north, 10, accuracy: 0.3)
+        XCTAssertLessThanOrEqual(xy(pose.coordinate).north, 10.001)
         XCTAssertEqual(xy(pose.coordinate).east, 0, accuracy: 0.1, "за угол — только с фиксом")
         XCTAssertEqual(pose.courseDegrees, 0, accuracy: 0.5)
     }
@@ -145,6 +146,27 @@ final class MarkerPredictorTests: XCTestCase {
         let target = try XCTUnwrap(p.target(at: 3))
         XCTAssertEqual(MarkerPredictor.distance(target.coordinate, at(0, 8)), 8 * 0.5, accuracy: 0.1,
                        "в повороте по прямой от курса — не дальше полсекунды")
+    }
+
+    /// У угла и на горизонте оценка тормозит, а не встаёт в один кадр:
+    /// скорость значка падает плавно (без рывка в сотни м/с²).
+    func testSoftStopAtCornerAndHorizon() throws {
+        var p = MarkerPredictor()
+        let path = [at(0, 0), at(0, 30), at(50, 30)]
+        p.update(fix(0, 0, course: 0, speed: 14, time: 0, path: path), now: 0, immediate: true)
+        var lastNorth = 0.0, lastSpeed = 14.0, worst = 0.0
+        for k in 1...180 {
+            let t = Double(k) / 60
+            let north = xy(try XCTUnwrap(p.pose(at: t)).coordinate).north
+            let speed = (north - lastNorth) * 60
+            worst = max(worst, abs(speed - lastSpeed) * 60)
+            XCTAssertGreaterThanOrEqual(north, lastNorth - 1e-6)
+            XCTAssertLessThanOrEqual(north, 30.001, "за угол — только с фиксом")
+            lastNorth = north
+            lastSpeed = speed
+        }
+        XCTAssertLessThan(worst, 14 / AppConfig.markerSoftStopSeconds * 1.1,
+                          "торможение у угла — не быстрее скорость / markerSoftStopSeconds")
     }
 
     // MARK: - Остановка
@@ -215,10 +237,10 @@ final class MarkerPredictorTests: XCTestCase {
         p.update(fix(0, 0, course: 0, speed: v, time: 0), now: 0, immediate: true)
         // Фиксов нет 3 с: значок встаёт на горизонте впереди и ждёт.
         let horizon = v * AppConfig.markerMaxLeadSeconds
-        XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 2.9)).coordinate).north, horizon, accuracy: 0.1)
+        XCTAssertEqual(xy(try XCTUnwrap(p.pose(at: 2.9)).coordinate).north, horizon, accuracy: 0.3)
+        var last = xy(try XCTUnwrap(p.pose(at: 3)).coordinate).north
         p.update(fix(0, 3 * v, course: 0, speed: v, time: 3), now: 3)
         XCTAssertEqual(p.settle, .catchUp)
-        var last = horizon
         for step in 0...(30 * 5) {
             let t = 3 + Double(step) / 30
             // Дальше фиксы снова раз в секунду.

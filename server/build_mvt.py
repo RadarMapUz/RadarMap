@@ -155,17 +155,28 @@ def lane_arrows(code, flags, point, setback=None, carriageway=None, crowded=None
         # Под рядом нет ленты по ходу: точка села на поперечную улицу или в
         # узел. Стрелки встали бы поперёк чужого полотна — здесь ряда нет.
         if why is not None:
-            why.append("нет ленты по ходу")
+            why.append(("нет ленты по ходу", {}))
         return
     if found:
-        centre, width, oneway, marked = found
+        centre, width, oneway, marked = found[:4]
+        if len(found) > 4:
+            # Ряд — поперёк ОСИ ленты под ним, и стрелки смотрят вдоль неё.
+            # Азимут точки — с шагом 3° и по отрезку, на который села точка
+            # (часто соседний кусок): на Навои × Рашидов ряд стоял повёрнутым
+            # к пунктирам на 5° (23.10.2026).
+            bearing = found[4]
+            angle = math.radians(bearing)
+            fx, fy = math.sin(angle), math.cos(angle)
+            rx, ry = math.cos(angle), -math.sin(angle)
         # Линии полос на этой ленте делят её на `marked` полос. Ряд другой
         # длины встал бы стрелками на линии (снимок владельца 23.10.2026):
         # здесь ему не место — placed_arrows поищет место дальше по подходу,
         # где число полос совпадает, или не нарисует ряд вовсе.
         if marked and marked != used:
             if why is not None:
-                why.append("полос по разметке не столько, сколько в turn:lanes")
+                why.append(("полос по разметке не столько, сколько в turn:lanes",
+                            {"разметка": marked, "turn:lanes": used, "ширина": round(width, 1),
+                             "at": (round(centre[1], 5), round(centre[0], 5))}))
             return
     if width <= 0:
         return
@@ -176,7 +187,7 @@ def lane_arrows(code, flags, point, setback=None, carriageway=None, crowded=None
     lane = width / used
     if found and lane < MIN_MARKED_LANE_METERS:
         if why is not None:
-            why.append("полоса уже 2,2 м")
+            why.append(("полоса уже 2,2 м", {}))
         return
     axis = centre
     row = []
@@ -187,9 +198,9 @@ def lane_arrows(code, flags, point, setback=None, carriageway=None, crowded=None
         spot = (centre[0] + rx * across / kx, centre[1] + ry * across / 111_320)
         if crowded and crowded(spot, axis, bearing):
             if why is not None:
-                why.append("на чужой ленте")
+                why.append(("на чужой ленте", {}))
             return          # стрелка легла бы на чужую ленту — ищем место дальше
-        row.append((spot, {"turn": turn, "bearing": round(bearing), "lw": round(lane, 1),
+        row.append((spot, {"turn": turn, "bearing": round(bearing) % 360, "lw": round(lane, 1),
                            "li": index, "ln": used}))
     yield from row
 
@@ -203,6 +214,8 @@ ARROW_PULLBACK_MAX_METERS = 32.0
 
 
 ARROW_HALF_LENGTH_METERS = 2.5
+# Сколько рядов-конфликтов lanes ≠ turn:lanes печатать в лог сборки.
+ARROW_CONFLICTS_LOGGED = 20
 
 
 def _arrow_body(arrow, bearing):
@@ -301,7 +314,11 @@ def arrow_leaders(points):
                     dy = (q[2][0][1] - lat) * 111_320
                     along = dx * forward[0] + dy * forward[1]
                     lateral = abs(dx * forward[1] - dy * forward[0])
-                    if (1.0 < along <= ARROW_GROUP_METERS
+                    # Ряд позади другого на том же подходе — лишний; два ряда в
+                    # одном месте (два куска с turn:lanes у одной вершины) — тоже,
+                    # остаётся первый (Фурката × Ислама Каримова, 23.10.2026).
+                    same_spot = abs(along) <= 1.0 and j < i
+                    if ((same_spot or 1.0 < along <= ARROW_GROUP_METERS)
                             and lateral <= max(half, point_width(q[1]) / 2.0)):
                         behind = True
                         break
@@ -768,6 +785,30 @@ def _segment_m(p, a, b, kx):
     return math.hypot(ax + t * dx, ay + t * dy)
 
 
+# Ось ленты под рядом стрелок — хордой на столько метров назад и вперёд.
+AXIS_CHORD_METERS = 8.0
+
+
+def _walk_along(points, index, t, metres):
+    """Точка ломаной в metres от точки (отрезок index, доля t): вперёд (>0) или назад."""
+    a, b = points[index], points[index + 1]
+    here = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+    kx = 111_320 * math.cos(math.radians(here[1]))
+    step = 1 if metres > 0 else -1
+    left = abs(metres)
+    j = index + 1 if step > 0 else index
+    while 0 <= j < len(points):
+        nxt = points[j]
+        d = math.hypot((nxt[0] - here[0]) * kx, (nxt[1] - here[1]) * 111_320)
+        if d >= left and d > 0:
+            f = left / d
+            return (here[0] + (nxt[0] - here[0]) * f, here[1] + (nxt[1] - here[1]) * f)
+        left -= d
+        here = nxt
+        j += step
+    return here
+
+
 class OverlapIndex:
     """Оси лент по клеткам: лежит ли точка разметки на ЧУЖОЙ ленте того же уровня."""
 
@@ -807,12 +848,13 @@ class OverlapIndex:
             pad = (half + 2.0) / 111_320
             key = id(road)
             marked = marked_lanes(code, flags, 2.0 * half) if code <= 7 and not flags & FLAG_TUNNEL else 0
-            for a, b in zip(points, points[1:]):
+            for index, (a, b) in enumerate(zip(points, points[1:])):
                 x0, x1 = sorted((a[0], b[0]))
                 y0, y1 = sorted((a[1], b[1]))
                 # Один кортеж на отрезок, в клетки — ссылка на него: копия на
-                # каждую клетку держала страну в 30 ГБ (07.10.2026).
-                entry = (key, level, a, b, half, bool(flags & FLAG_ONEWAY), marked)
+                # каждую клетку держала страну в 30 ГБ (07.10.2026). Ломаная —
+                # тоже ссылкой: по ней carriageway берёт ось ленты хордой.
+                entry = (key, level, a, b, half, bool(flags & FLAG_ONEWAY), marked, points, index)
                 for gx in range(int((x0 - pad * 1.4) / self.CELL), int((x1 + pad * 1.4) / self.CELL) + 1):
                     for gy in range(int((y0 - pad) / self.CELL), int((y1 + pad) / self.CELL) + 1):
                         self._grid[(gx, gy)].append(entry)
@@ -822,7 +864,8 @@ class OverlapIndex:
         own_ends = self._ends.get(id(road), set())
         own_rank = self._rank.get(id(road))
         kx = 111_320 * math.cos(math.radians(point[1]))
-        for key, lvl, a, b, half, _oneway, _marked in self._grid.get((int(point[0] / self.CELL), int(point[1] / self.CELL)), ()):
+        for key, lvl, a, b, half, _oneway, _marked, _points, _index in self._grid.get(
+                (int(point[0] / self.CELL), int(point[1] / self.CELL)), ()):
             if key == id(road) or lvl != level:
                 continue
             shared = own_ends & self._ends.get(key, set())
@@ -838,7 +881,8 @@ class OverlapIndex:
         return False
 
     def carriageway(self, point, bearing):
-        """(точка на оси, ширина нарисованной ленты, односторонняя?, размечено полос) под точкой или None.
+        """(точка на оси, ширина нарисованной ленты, односторонняя?, размечено полос, азимут оси по ходу)
+        под точкой или None.
 
         Размечено полос — `marked_lanes` ленты: сколько полос между линиями
         разметки, 0 — линий нет.
@@ -852,7 +896,7 @@ class OverlapIndex:
         kx = 111_320 * math.cos(math.radians(point[1]))
         fx, fy = math.sin(math.radians(bearing)), math.cos(math.radians(bearing))
         best = None
-        for _key, level, a, b, half, oneway, marked in self._grid.get(
+        for _key, level, a, b, half, oneway, marked, points, index in self._grid.get(
                 (int(point[0] / self.CELL), int(point[1] / self.CELL)), ()):
             if level:
                 continue
@@ -871,7 +915,19 @@ class OverlapIndex:
             if lateral > half + CARRIAGEWAY_SLACK_METERS:
                 continue
             if best is None or lateral < best[0]:
-                best = (lateral, (point[0] + px / kx, point[1] + py / 111_320), 2.0 * half, oneway, marked)
+                # Ось ленты по ходу — хордой ±AXIS_CHORD_METERS по ломаной, а не
+                # одним отрезком: на изломе оси (вершина под рядом) направление
+                # отрезка скачет, и ряд встал бы повёрнутым к пунктиру.
+                # У двусторонней отрезок может идти навстречу.
+                sign = 1.0 if cos >= 0 else -1.0
+                back = _walk_along(points, index, t, -AXIS_CHORD_METERS)
+                ahead = _walk_along(points, index, t, AXIS_CHORD_METERS)
+                cx, cy = (ahead[0] - back[0]) * kx, (ahead[1] - back[1]) * 111_320
+                if cx == 0 and cy == 0:
+                    cx, cy = dx, dy
+                axis = math.degrees(math.atan2(sign * cx, sign * cy)) % 360
+                best = (lateral, (point[0] + px / kx, point[1] + py / 111_320), 2.0 * half, oneway, marked,
+                        axis)
         return None if best is None else best[1:]
 
     def crowded(self, point, axis, bearing):
@@ -885,7 +941,7 @@ class OverlapIndex:
         """
         kx = 111_320 * math.cos(math.radians(point[1]))
         fx, fy = math.sin(math.radians(bearing)), math.cos(math.radians(bearing))
-        for _key, level, a, b, half, _oneway, _marked in self._grid.get(
+        for _key, level, a, b, half, _oneway, _marked, _points, _index in self._grid.get(
                 (int(point[0] / self.CELL), int(point[1] / self.CELL)), ()):
             if level:
                 continue
@@ -933,6 +989,66 @@ class OverlapIndex:
         return out
 
 
+def marking_offsets(road, widths=None):
+    """[(смещение от оси вправо по ходу, м; осевая: 0 / CENTRE_*)] линий ленты и её ширина."""
+    code, flags = road[0], road[1]
+    lanes = lanes_of(flags)
+    confirmed = flags & FLAG_LANES_TAGGED and 2 <= lanes <= MAX_MARKED_LANES
+    # Угаданные полосы (lane_inference) — тоже пунктир (marked_lanes):
+    # 97,5 % угадано на спрятанных. Но не сплошная осевая: она запрещает
+    # поворот, и по догадке её не рисуем.
+    # Делим ту ширину, которой лента НАРИСОВАНА (свойство width тайла:
+    # ширина цепочки и сужение под разделительную), — ту же, что делит
+    # ряд стрелок (OverlapIndex.carriageway). Было min(своя по полосам,
+    # нарисованная): у куска уже своей цепочки линии собирались к оси, а
+    # стрелки делили всю ленту — и стрелки ложились на линии (снимок
+    # владельца 23.10.2026).
+    width = (widths.get(id(road)) if widths else None) or road_width_meters(code, lanes)
+    offsets = []
+    marked = marked_lanes(code, flags, width)
+    if flags & FLAG_ONEWAY:
+        if marked:
+            offsets = [(width * (lane / marked - .5), 0) for lane in range(1, marked)]
+    elif code <= CENTRE_MAX_CLASS and width >= CENTRE_MIN_WIDTH_METERS:
+        # Сплошная — только по ПОДТВЕРЖДЁННЫМ полосам: ширина без тега
+        # lanes — догадка по классу (у tertiary 14 м), и сплошная по
+        # догадке запрещала бы на карте поворот, разрешённый в жизни.
+        wide = confirmed and lanes >= 4 and width >= CENTRE_SOLID_WIDTH_METERS
+        centre = CENTRE_SOLID if wide else CENTRE_DASHED
+        offsets = [(0.0, centre)]
+        # Полосы по сторонам — только при чётном lanes: делим поровну, а
+        # нечётное число (средняя реверсивная?) не угадываем.
+        if marked:
+            offsets += [(width * (lane / (2 * marked) - .5), 0)
+                        for lane in range(1, 2 * marked) if lane != marked]
+    return offsets, width
+
+
+# Стык двух кусков одной ленты с разным числом полос (Навои: 4 → 5 полос при
+# одной ширине цепочки): линии каждого куска делят ленту по-своему и рвались
+# на стыке ступенькой вбок. Теперь переход — плавный и целиком на ДЛИННОМ из
+# двух кусков: его линии на этой длине сходятся к линиям соседа, а короткий
+# кусок (обычно подход к перекрёстку с рядом стрелок) держит своё деление —
+# стрелки остаются посередине своих полос. Лишняя линия широкого куска
+# просто начинается у стыка, как настоящая новая полоса.
+LANE_SHIFT_TAPER_METERS = 30.0
+LANE_SHIFT_STEP_METERS = 3.0
+LANE_SHIFT_MAX_TURN_DEGREES = 25.0
+LANE_SHIFT_MIN_METERS = 0.05
+
+
+def joint_offsets(ours, theirs):
+    """Куда у стыка сходится каждая из наших линий: к ближайшей линии соседа."""
+    if not theirs:
+        return [None] * len(ours)
+    return [min(theirs, key=lambda other: (abs(other - o), other)) for o in ours]
+
+
+def _polyline_m(points):
+    kx = 111_320 * math.cos(math.radians(points[0][1]))
+    return sum(math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320) for a, b in zip(points, points[1:]))
+
+
 def _markings(roads, widths=None, mask=None, overlap=None):
     """(линия, осевая: 0 / CENTRE_DASHED / CENTRE_SOLID) вне перекрёстков.
 
@@ -950,7 +1066,10 @@ def _markings(roads, widths=None, mask=None, overlap=None):
         code, flags, points = road[0], road[1], road[2]
         if len(points) < 2 or code > 7:
             continue
-        width = road_width_meters(code, lanes_of(flags))
+        # Ширина, которой лента нарисована: по ней строится и площадь узла.
+        # По тегу (уже нарисованной) разметка не доходила до края узла с
+        # запасом и заходила в него (dashes_in_junction 18 → 31, 23.10.2026).
+        width = (widths.get(id(road)) if widths else None) or road_width_meters(code, lanes_of(flags))
         name = (road[3] if len(road) > 3 else "") or ""
         for p in (points[0], points[-1]):
             node = nodes[key(p, flags)]
@@ -974,41 +1093,66 @@ def _markings(roads, widths=None, mask=None, overlap=None):
 
     # Сборка передаёт свой индекс: второй такой же по всей стране — гигабайты.
     overlap = overlap or OverlapIndex(roads, widths)
+    lines_of = {}
+    ends_at = defaultdict(list)
+    for road in roads:
+        code, flags, points = road[0], road[1], road[2]
+        if code > 7 or len(points) < 2 or flags & FLAG_TUNNEL:
+            continue
+        lines_of[id(road)] = marking_offsets(road, widths)
+        if lines_of[id(road)][0]:
+            ends_at[key(points[0], flags)].append((road, True))
+            ends_at[key(points[-1], flags)].append((road, False))
+
+    def heading(a, b):
+        kx = math.cos(math.radians(a[1]))
+        return math.degrees(math.atan2((b[0] - a[0]) * kx, b[1] - a[1])) % 360
+
+    def continuation(road, at_start):
+        """(смещения соседа в НАШЕЙ системе) — продолжение ленты в этом конце или None."""
+        points, flags = road[2], road[1]
+        node = points[0] if at_start else points[-1]
+        # Наш ход у стыка — «из узла внутрь нас» для начала, «в узел» для конца.
+        ours = heading(points[0], points[1]) if at_start else heading(points[-2], points[-1])
+        best = None
+        here = ends_at.get(key(node, flags), ())
+        # Только продолжение: в узле ровно два конца размеченных лент. Развилка
+        # (лента делится на две) — не смена числа полос, а два направления:
+        # сводить линии к одной из ветвей значило бы увести их с подхода, где
+        # стоят стрелки (Самарканд Дарвоза, 23.10.2026).
+        if len(here) != 2:
+            return None
+        for other, other_start in here:
+            if other is road:
+                continue
+            if flags & FLAG_ONEWAY and other_start == at_start:
+                continue            # односторонние ленты стыкуются конец к началу
+            pts = other[2]
+            theirs = heading(pts[0], pts[1]) if other_start else heading(pts[-2], pts[-1])
+            # Тот же ход, если стык «конец → начало»; встречный, если концы одноимённые.
+            same = other_start != at_start
+            turn = abs((theirs - ours + (0 if same else 180) + 180) % 360 - 180)
+            if turn > LANE_SHIFT_MAX_TURN_DEGREES:
+                continue
+            if best is None or turn < best[0]:
+                best = (turn, other, same)
+        if best is None:
+            return None
+        other = best[1]
+        # Переход — на длинном куске; короткий держит своё деление.
+        mine, theirs_len = _polyline_m(points), _polyline_m(other[2])
+        if (mine, tuple(points[0])) <= (theirs_len, tuple(other[2][0])):
+            return None
+        offsets = [o for o, _c in lines_of[id(other)][0]]
+        return offsets if best[2] else [-o for o in offsets]
+
     for road in roads:
         code, flags, points = road[0], road[1], road[2]
         # В тоннеле разметку не рисуем: он под землёй и показан полупрозрачным,
         # пунктир поверх читался бы наземной дорогой.
         if code > 7 or len(points) < 2 or flags & FLAG_TUNNEL:
             continue
-        lanes = lanes_of(flags)
-        confirmed = flags & FLAG_LANES_TAGGED and 2 <= lanes <= MAX_MARKED_LANES
-        # Угаданные полосы (lane_inference) — тоже пунктир (marked_lanes):
-        # 97,5 % угадано на спрятанных. Но не сплошная осевая: она запрещает
-        # поворот, и по догадке её не рисуем.
-        # Делим ту ширину, которой лента НАРИСОВАНА (свойство width тайла:
-        # ширина цепочки и сужение под разделительную), — ту же, что делит
-        # ряд стрелок (OverlapIndex.carriageway). Было min(своя по полосам,
-        # нарисованная): у куска уже своей цепочки линии собирались к оси, а
-        # стрелки делили всю ленту — и стрелки ложились на линии (снимок
-        # владельца 23.10.2026).
-        width = (widths.get(id(road)) if widths else None) or road_width_meters(code, lanes)
-        offsets = []
-        marked = marked_lanes(code, flags, width)
-        if flags & FLAG_ONEWAY:
-            if marked:
-                offsets = [(width * (lane / marked - .5), 0) for lane in range(1, marked)]
-        elif code <= CENTRE_MAX_CLASS and width >= CENTRE_MIN_WIDTH_METERS:
-            # Сплошная — только по ПОДТВЕРЖДЁННЫМ полосам: ширина без тега
-            # lanes — догадка по классу (у tertiary 14 м), и сплошная по
-            # догадке запрещала бы на карте поворот, разрешённый в жизни.
-            wide = confirmed and lanes >= 4 and width >= CENTRE_SOLID_WIDTH_METERS
-            centre = CENTRE_SOLID if wide else CENTRE_DASHED
-            offsets = [(0.0, centre)]
-            # Полосы по сторонам — только при чётном lanes: делим поровну, а
-            # нечётное число (средняя реверсивная?) не угадываем.
-            if marked:
-                offsets += [(width * (lane / (2 * marked) - .5), 0)
-                            for lane in range(1, 2 * marked) if lane != marked]
+        offsets, width = lines_of[id(road)]
         if not offsets:
             continue
         origin = points[0]
@@ -1026,14 +1170,42 @@ def _markings(roads, widths=None, mask=None, overlap=None):
             metric.reverse()
         if len(metric) < 2:
             continue
-        for offset, centre in offsets:
+        # Стыки с продолжением ленты, где линии делят ленту иначе: куда у
+        # стыка сходится каждая наша линия (осевая — с осевой, полосы — с полосами).
+        joints = []
+        for at_start, crossing in ((True, at_crossing[0]), (False, at_crossing[1])):
+            theirs = None if crossing else continuation(road, at_start)
+            if theirs is None:
+                joints.append(None)
+                continue
+            lane_ours = [o for o, c in offsets if not c]
+            lane_theirs = [o for o in theirs if abs(o) > 1e-9] if any(c for _o, c in offsets) else theirs
+            meet = dict(zip(lane_ours, joint_offsets(lane_ours, lane_theirs)))
+            targets = [0.0 if c else meet.get(o) for o, c in offsets]
+            joints.append(targets if any(t is not None and abs(t - o) > LANE_SHIFT_MIN_METERS
+                                         for t, (o, _c) in zip(targets, offsets)) else None)
+        total = sum(math.dist(a, b) for a, b in zip(metric, metric[1:]))
+        reach = min(LANE_SHIFT_TAPER_METERS, total / 2 if all(joints) else total)
+        if any(joints) and reach > 0:
+            metric = _densify_ends(metric, reach if joints[0] else 0.0, reach if joints[1] else 0.0,
+                                   LANE_SHIFT_STEP_METERS)
+        travelled = [0.0]
+        for a, b in zip(metric, metric[1:]):
+            travelled.append(travelled[-1] + math.dist(a, b))
+        total = travelled[-1]
+        for index, (offset, centre) in enumerate(offsets):
             line = []
             for i, p in enumerate(metric):
                 a, b = metric[max(0, i - 1)], metric[min(len(metric) - 1, i + 1)]
                 length = math.dist(a, b)
                 if length == 0:
                     continue
-                x, y = p[0] - (b[1] - a[1]) / length * offset, p[1] + (b[0] - a[0]) / length * offset
+                here = offset
+                for joint, distance in ((joints[0], travelled[i]), (joints[1], total - travelled[i])):
+                    if joint and joint[index] is not None and reach > 0 and distance < reach:
+                        f = 1.0 - distance / reach
+                        here += (joint[index] - offset) * f * f * (3.0 - 2.0 * f)
+                x, y = p[0] - (b[1] - a[1]) / length * here, p[1] + (b[0] - a[0]) / length * here
                 line.append((origin[0] + x / sx, origin[1] + y / sy))
             if len(line) < 2:
                 continue
@@ -1057,6 +1229,22 @@ def _markings(roads, widths=None, mask=None, overlap=None):
                 for piece in pieces:
                     for clean in overlap.clip(piece, road):
                         yield clean, kind, solid, on_bridge
+
+
+def _densify_ends(metric, head, tail, step):
+    """Ломаная (м) с вершинами через step у начала (на head м) и у конца (на tail м)."""
+    total = sum(math.dist(a, b) for a, b in zip(metric, metric[1:]))
+    out = [metric[0]]
+    walked = 0.0
+    for a, b in zip(metric, metric[1:]):
+        length = math.dist(a, b)
+        if length > 0:
+            near = walked < head or walked + length > total - tail
+            parts = max(1, int(math.ceil(length / step))) if near else 1
+            out.extend((a[0] + (b[0] - a[0]) * k / parts, a[1] + (b[1] - a[1]) * k / parts)
+                       for k in range(1, parts + 1))
+        walked += length
+    return out
 
 
 # Сплошная перед перекрёстком: столько метров до края узла.
@@ -2865,6 +3053,9 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         arrows_past_stop = 0
         # Почему ряд не встал: последняя причина из поисков места по подходу.
         arrows_skipped = Counter()
+        # Ряды, не вставшие из-за спора данных (lanes ≠ turn:lanes) — кандидаты
+        # на правку OSM: самые заметные (шире лента, больше полос) — в лог.
+        conflicts = []
         for line, kind in stop_lines.get(-1, ()):
             _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, line, {"kind": kind})
         for index, point in enumerate(points):
@@ -2895,7 +3086,10 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                 row = placed_arrows(code, flags, spot[0], arrow_setback(flags, spot[0], signals),
                                     mask, asphalt, overlap.carriageway, overlap.crowded, why)
             if not row:
-                arrows_skipped[why[-1] if why else "в узле или на зебре"] += 1
+                reason, detail = why[-1] if why else ("в узле или на зебре", {})
+                arrows_skipped[reason] += 1
+                if detail:
+                    conflicts.append(detail)
                 continue
             if row_past_stop(row, point_azimuth(flags), stops, crossings):
                 arrows_past_stop += 1
@@ -2907,6 +3101,11 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
             print(f"        рядов стрелок за стоп-линией (не рисуются): {arrows_past_stop}")
         for reason, count in sorted(arrows_skipped.items()):
             print(f"        рядов стрелок без места ({reason}): {count}")
+        conflicts.sort(key=lambda d: (-d["ширина"], -max(d["разметка"], d["turn:lanes"]), d["at"]))
+        for detail in conflicts[:ARROW_CONFLICTS_LOGGED]:
+            lat, lon = detail["at"]
+            print(f"          lanes ≠ turn:lanes  {lat},{lon}  разметка {detail['разметка']}, "
+                  f"turn:lanes {detail['turn:lanes']}, лента {detail['ширина']} м")
     finally:
         buckets.close()
 

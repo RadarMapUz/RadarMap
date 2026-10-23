@@ -270,8 +270,8 @@ def lane_index(roads, markings):
         half = float(props.get("width") or 0) / 2.0
         if half <= 0:
             continue
-        for a, b in zip(line, line[1:]):
-            road_index.add(a, b, (half, bool(props.get("oneway"))), pad_m=half + LANE_ROAD_SLACK_METERS)
+        for i, (a, b) in enumerate(zip(line, line[1:])):
+            road_index.add(a, b, (half, bool(props.get("oneway")), line, i), pad_m=half + LANE_ROAD_SLACK_METERS)
     for line, props in markings:
         if props.get("bridge"):
             continue
@@ -280,7 +280,28 @@ def lane_index(roads, markings):
     return road_index, line_index
 
 
-def arrow_in_lane(arrow, road_index, line_index):
+def row_centres(arrows):
+    """Центр ряда для каждой стрелки: ряд — стрелки с тем же азимутом и lw в пределах 12 м.
+
+    Ленту под рядом сборка выбирает по его центру (OverlapIndex.carriageway);
+    крайняя стрелка бывает ближе к оси соседней ленты (съезд вдоль подхода),
+    и проверка по одной стрелке выбрала бы не ту ленту.
+    """
+    cells = defaultdict(list)
+    for index, arrow in enumerate(arrows):
+        cells[(int(arrow[0] / 0.0002), int(arrow[1] / 0.0002))].append(index)
+    out = []
+    for arrow in arrows:
+        kx = LAT_M * math.cos(math.radians(arrow[1]))
+        cx, cy = int(arrow[0] / 0.0002), int(arrow[1] / 0.0002)
+        mates = [arrows[j] for gx in (-1, 0, 1) for gy in (-1, 0, 1) for j in cells.get((cx + gx, cy + gy), ())
+                 if arrows[j][2] == arrow[2] and arrows[j][3] == arrow[3]
+                 and math.hypot((arrows[j][0] - arrow[0]) * kx, (arrows[j][1] - arrow[1]) * LAT_M) <= 12.0]
+        out.append((sum(m[0] for m in mates) / len(mates), sum(m[1] for m in mates) / len(mates)))
+    return out
+
+
+def arrow_in_lane(arrow, road_index, line_index, centre=None):
     """Разбор одной стрелки: None — всё хорошо, иначе (вид брака, подробности).
 
     arrow — (lon, lat, азимут, lw). Виды брака:
@@ -294,23 +315,15 @@ def arrow_in_lane(arrow, road_index, line_index):
     p = (lon, lat)
     fx, fy = math.sin(math.radians(bearing)), math.cos(math.radians(bearing))
     rx, ry = fy, -fx                                   # вправо от хода
-    best = None
-    for a, b, (half, oneway) in road_index.near(p):
-        (ux, uy), length, _t, (px, py) = _local(p, a, b)
-        if length == 0:
-            continue
-        cos = ux * fx + uy * fy
-        if (cos if oneway else abs(cos)) < LANE_ROAD_COS:
-            continue
-        lateral = math.hypot(px, py)
-        if lateral > half + LANE_ROAD_SLACK_METERS:
-            continue
-        if best is None or lateral < best[0]:
-            # s — положение стрелки поперёк ленты, вправо от оси, м.
-            best = (lateral, -(px * rx + py * ry), half, oneway)
-    if best is None:
+    found = _ribbon_under(centre or p, bearing, road_index)
+    if found is None:
         return ("no_road", {})
-    _lateral, s, half, oneway = best
+    a, b, half, oneway = found[0], found[1], found[2], found[3]
+    (_u, _v), _length, _t, (px, py) = _local(p, a, b)
+    # Отрезок оси — бесконечной прямой: стрелка у конца отрезка меряется поперёк.
+    (ux, uy) = _u, _v
+    ax, ay = (a[0] - lon) * LAT_M * math.cos(math.radians(lat)), (a[1] - lat) * LAT_M
+    s = -((ax - (ax * ux + ay * uy) * ux) * rx + (ay - (ax * ux + ay * uy) * uy) * ry)
     low, high = (-half, half) if oneway else (0.0, half)
     if not low - 0.05 <= s <= high + 0.05:
         return ("off_road", {"s": round(s, 2), "half": round(half, 2)})
@@ -359,11 +372,126 @@ def arrow_in_lane(arrow, road_index, line_index):
     return ("off_road", {"s": round(s, 2), "half": round(half, 2)})
 
 
+# Ось ленты под стрелкой — хордой на столько метров назад и вперёд по ломаной:
+# направление одного отрезка тайла шумит от квантования координат (шаг ~0,3 м).
+ARROW_AXIS_CHORD_METERS = 8.0
+# Стрелка повёрнута относительно ленты больше этого — видно глазом рядом с
+# пунктиром (Навои × Рашидов, 5°, 23.10.2026).
+ARROW_ANGLE_LIMIT_DEGREES = 2.0
+
+
+def _along(line, i, t, metres):
+    """Точка на ломаной в metres от точки (отрезок i, доля t) — вперёд (>0) или назад."""
+    a, b = line[i], line[i + 1]
+    point = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+    kx = LAT_M * math.cos(math.radians(point[1]))
+    step = 1 if metres > 0 else -1
+    left = abs(metres)
+    j = i + 1 if step > 0 else i
+    while 0 <= j < len(line):
+        nxt = line[j]
+        d = math.hypot((nxt[0] - point[0]) * kx, (nxt[1] - point[1]) * LAT_M)
+        if d >= left and d > 0:
+            f = left / d
+            return (point[0] + (nxt[0] - point[0]) * f, point[1] + (nxt[1] - point[1]) * f)
+        left -= d
+        point = nxt
+        j += step
+    return point
+
+
+def _ribbon_under(p, bearing, road_index):
+    """(a, b, полуширина, односторонняя?, ломаная, номер отрезка, t, cos) ближайшей ленты по ходу."""
+    fx, fy = math.sin(math.radians(bearing)), math.cos(math.radians(bearing))
+    best = None
+    for a, b, (half, oneway, line, i) in road_index.near(p):
+        (ux, uy), length, t, (px, py) = _local(p, a, b)
+        if length == 0:
+            continue
+        cos = ux * fx + uy * fy
+        if (cos if oneway else abs(cos)) < LANE_ROAD_COS:
+            continue
+        lateral = math.hypot(px, py)
+        if lateral > half + LANE_ROAD_SLACK_METERS:
+            continue
+        if best is None or lateral < best[0]:
+            best = (lateral, (a, b, half, oneway, line, i, max(0.0, min(1.0, t)), cos))
+    return None if best is None else best[1]
+
+
+def arrow_axis_angle(arrow, road_index, centre=None):
+    """На сколько градусов стрелка повёрнута относительно оси своей ленты; None — ленты нет."""
+    lon, lat, bearing = arrow[0], arrow[1], arrow[2]
+    found = _ribbon_under(centre or (lon, lat), bearing, road_index)
+    if found is None:
+        return None
+    line, i, t, cos = found[4], found[5], found[6], found[7]
+    back = _along(line, i, t, -ARROW_AXIS_CHORD_METERS)
+    ahead = _along(line, i, t, ARROW_AXIS_CHORD_METERS)
+    kx = LAT_M * math.cos(math.radians(lat))
+    axis = math.degrees(math.atan2((ahead[0] - back[0]) * kx, (ahead[1] - back[1]) * LAT_M))
+    if cos < 0:
+        axis += 180
+    return abs((bearing - axis + 180) % 360 - 180)
+
+
+# Ступенька пунктира: линия кончается, а рядом начинается другая, сдвинутая
+# вбок на столько — на стыке кусков с разным числом полос (Навои, 4 → 5).
+JUMP_REACH_METERS = 3.0
+JUMP_MIN_METERS = 0.3
+JUMP_MAX_METERS = 2.5
+
+
+def marking_jumps(markings, examples=None):
+    """(ступенек на 100 км разметки, наибольший сдвиг, м) — концы линий, продолженные вбок."""
+    ends = SegmentIndex([])
+    grid = defaultdict(list)
+    total = 0.0
+    for index, (line, props) in enumerate(markings):
+        if len(line) < 2:
+            continue
+        kx = LAT_M * math.cos(math.radians(line[0][1]))
+        total += sum(math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * LAT_M) for a, b in zip(line, line[1:]))
+        for end, inner in ((line[0], line[1]), (line[-1], line[-2])):
+            dx, dy = (end[0] - inner[0]) * kx, (end[1] - inner[1]) * LAT_M
+            norm = math.hypot(dx, dy)
+            if norm == 0:
+                continue
+            grid[(int(end[0] / ends.CELL), int(end[1] / ends.CELL))].append(
+                (index, end, (dx / norm, dy / norm), bool(props.get("bridge"))))
+    jumps, worst = 0, 0.0
+    for cell, items in grid.items():
+        near = [item for gx in (-1, 0, 1) for gy in (-1, 0, 1) for item in grid.get((cell[0] + gx, cell[1] + gy), ())]
+        for index, end, (ux, uy), bridge in items:
+            kx = LAT_M * math.cos(math.radians(end[1]))
+            closest = None
+            for other, point, (vx, vy), other_bridge in near:
+                if other == index or bridge != other_bridge:
+                    continue
+                # Продолжение — встречные концы: наш смотрит туда, их — к нам.
+                if ux * vx + uy * vy > -LANE_LINE_COS:
+                    continue
+                dx, dy = (point[0] - end[0]) * kx, (point[1] - end[1]) * LAT_M
+                along = dx * ux + dy * uy
+                across = abs(dx * uy - dy * ux)
+                if abs(along) > JUMP_REACH_METERS or across > JUMP_MAX_METERS:
+                    continue
+                closest = across if closest is None else min(closest, across)
+            # Ступенька — продолжение есть только сдвинутое вбок; продолжение
+            # без сдвига (соседняя полоса рядом не в счёт) — линия цела.
+            if closest is not None and closest >= JUMP_MIN_METERS:
+                jumps += 1
+                worst = max(worst, closest)
+                if examples is not None:
+                    examples.append((round(end[1], 5), round(end[0], 5), round(closest, 2)))
+    return (100_000.0 * jumps / total if total else 0.0), round(worst, 2)
+
+
 def lane_arrow_defects(arrows, road_index, line_index, examples=None):
     """{вид брака: число} по всем стрелкам; examples — [(вид, lon, lat, подробности)]."""
     counts = defaultdict(int)
-    for arrow in arrows:
-        found = arrow_in_lane(arrow, road_index, line_index)
+    for arrow, centre in zip(arrows, row_centres(arrows)):
+        found = arrow_in_lane(arrow, road_index, line_index, centre)
         if found is None:
             continue
         kind, detail = found
@@ -387,7 +515,7 @@ def markings_off_road(markings, road_index, asphalt, examples=None):
             total += SAMPLE_STEP_METERS
             ok = asphalt is not None and asphalt.covers(q)
             if not ok:
-                for a, b, (half, _oneway) in road_index.near(q):
+                for a, b, (half, _oneway, _line, _i) in road_index.near(q):
                     if seg_distance_m(q, a, b) <= half - MARKING_EDGE_MARGIN_METERS:
                         ok = True
                         break
@@ -692,6 +820,13 @@ def measure(tiles_dir, islands_path=None, bbox=None):
     lane_counts = lane_arrow_defects(lane_arrows, road_index, line_index, lane_examples)
     off_road_examples = []
     marking_off = markings_off_road(marking_lines, road_index, open_areas, off_road_examples)
+    angles = [(arrow_axis_angle(arrow, road_index, centre), arrow)
+              for arrow, centre in zip(lane_arrows, row_centres(lane_arrows))]
+    angles = [(angle, arrow) for angle, arrow in angles if angle is not None]
+    tilted = sorted(((angle, arrow) for angle, arrow in angles if angle > ARROW_ANGLE_LIMIT_DEGREES),
+                    reverse=True)
+    jump_examples = []
+    jumps, jump_worst = marking_jumps(marking_lines, jump_examples)
 
     houses = []
     for set_name in ("h",):
@@ -754,6 +889,12 @@ def measure(tiles_dir, islands_path=None, bbox=None):
                                  / len(lane_arrows), 1) if lane_arrows else 0.0,
         "arrows_icon_size": round(1000 * lane_counts.get("icon_size", 0) / len(lane_arrows), 1) if lane_arrows else 0.0,
         "markings_off_road": round(marking_off, 1),
+        "arrows_angle_max": round(max((a for a, _ in angles), default=0.0), 1),
+        "arrows_tilted": round(1000 * len(tilted) / len(lane_arrows), 1) if lane_arrows else 0.0,
+        "marking_jumps": round(jumps, 1),
+        "_marking_jump_worst": jump_worst,
+        "_tilted_examples": [(round(a, 1), round(arrow[1], 5), round(arrow[0], 5)) for a, arrow in tilted[:30]],
+        "_jump_examples": sorted(jump_examples, key=lambda e: -e[2])[:30],
         "_lane_counts": lane_counts,
         "_lane_examples": lane_examples,
         "_marking_off_examples": off_road_examples,
@@ -780,7 +921,14 @@ UNITS = {
     "arrows_off_lane": "на 1000 стрелок не посередине полосы",
     "arrows_icon_size": "на 1000 стрелок значок не по полосе",
     "markings_off_road": "м разметки за кромкой на 1 км",
+    "arrows_angle_max": "° наибольший поворот стрелки к оси ленты",
+    "arrows_tilted": f"на 1000 стрелок повёрнуты больше {ARROW_ANGLE_LIMIT_DEGREES:g}°",
+    "marking_jumps": "ступенек пунктира на 100 км",
 }
+
+# Потолки, выше которых публикация останавливается независимо от прошлой
+# сборки (ворота «хуже, чем было» их не ловят, если было так же плохо).
+CEILINGS = {"arrows_angle_max": ARROW_ANGLE_LIMIT_DEGREES}
 
 
 # Площадь узла больше этого — раздут (крупнейшие настоящие узлы Ташкента
@@ -804,12 +952,15 @@ NOISE_FLOOR = {"houses_under_asphalt": 0.2, "islands_under_asphalt": 5.0, "arrow
                "dashes_in_junction": 10.0, "dashes_on_zebra": 2.0, "medians_on_asphalt": 2.0,
                "dashes_through_medians": 2.0, "zebra_overhang": 3.0, "zebra_duplicates": 2.0,
                "junction_spikes": 2.0, "island_slivers": 2.0, "junction_bloat": 2.0,
-               "arrows_off_lane": 5.0, "arrows_icon_size": 5.0, "markings_off_road": 2.0}
+               "arrows_off_lane": 5.0, "arrows_icon_size": 5.0, "markings_off_road": 2.0,
+               "arrows_tilted": 5.0, "marking_jumps": 5.0, "arrows_angle_max": ARROW_ANGLE_LIMIT_DEGREES}
 
 
 def compare(previous, current):
     """Причины остановить публикацию: метрики, ухудшившиеся заметно."""
-    reasons = []
+    reasons = [f"{key}: {current[key]} выше потолка {limit} ({UNITS[key]})"
+               for key, limit in CEILINGS.items()
+               if current.get(key) is not None and current[key] > limit]
     for key in UNITS:
         before, after = previous.get(key), current.get(key)
         if before is None or after is None:
@@ -842,6 +993,9 @@ def main():
     for kind, lat, lon, detail in result["_lane_examples"][:args.worst]:
         print(f"    {kind:10} {lat},{lon}  {detail}")
     print("  разметка за кромкой (точки):", result["_marking_off_examples"][:args.worst])
+    print("  повёрнутые стрелки (°, широта, долгота):", result["_tilted_examples"][:args.worst])
+    print("  ступеньки пунктира (широта, долгота, сдвиг м), худшая", result["_marking_jump_worst"], ":",
+          result["_jump_examples"][:args.worst])
     if args.json:
         with open(args.json, "w", encoding="utf-8") as handle:
             json.dump(result, handle, ensure_ascii=False, indent=1)

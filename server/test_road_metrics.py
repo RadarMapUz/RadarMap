@@ -131,6 +131,38 @@ class MarkingsOffRoadTests(unittest.TestCase):
                                1000.0, delta=30)
 
 
+class ArrowAngleTests(unittest.TestCase):
+    def setUp(self):
+        road = ([m(-60, 0), m(60, 0)], {"cls": 3, "width": 10.5, "oneway": True})
+        self.roads, _ = rm.lane_index([road], [])
+
+    def test_arrow_along_the_ribbon(self):
+        self.assertAlmostEqual(rm.arrow_axis_angle((*m(0, 0), 90), self.roads), 0.0, delta=0.1)
+
+    def test_tilted_arrow_is_measured(self):
+        self.assertAlmostEqual(rm.arrow_axis_angle((*m(0, 0), 95), self.roads), 5.0, delta=0.1)
+
+    def test_ceiling_stops_publish_even_if_it_was_as_bad(self):
+        self.assertTrue(rm.compare({"arrows_angle_max": 5.0}, {"arrows_angle_max": 5.0}))
+        self.assertFalse(rm.compare({"arrows_angle_max": 1.0}, {"arrows_angle_max": 1.5}))
+
+
+class MarkingJumpTests(unittest.TestCase):
+    def test_line_continued_sideways_is_a_jump(self):
+        lines = [([m(-50, 1.75), m(0, 1.75)], {}), ([m(0.5, 3.0), m(50, 3.0)], {})]
+        rate, worst = rm.marking_jumps(lines)
+        self.assertGreater(rate, 0)
+        self.assertAlmostEqual(worst, 1.25, delta=0.05)
+
+    def test_straight_continuation_is_not(self):
+        lines = [([m(-50, 1.75), m(0, 1.75)], {}), ([m(0.5, 1.75), m(50, 1.75)], {})]
+        self.assertEqual(rm.marking_jumps(lines), (0.0, 0.0))
+
+    def test_neighbouring_lanes_side_by_side_are_not(self):
+        lines = [([m(-50, 0), m(50, 0)], {}), ([m(-50, 3.5), m(50, 3.5)], {})]
+        self.assertEqual(rm.marking_jumps(lines)[0], 0.0)
+
+
 class CompareTests(unittest.TestCase):
     def test_worse_metric_stops_publish(self):
         reasons = rm.compare({"dashes_in_junction": 45.0}, {"dashes_in_junction": 80.0})

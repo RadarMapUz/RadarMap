@@ -453,7 +453,8 @@ class ArrowRowFitsDrawnRoadTests(unittest.TestCase):
         index = build_mvt.OverlapIndex([road], {id(road): 10.6})
         found = index.carriageway(metres(0, 2.0), 90)
         self.assertIsNotNone(found)
-        axis, width, oneway, marked = found
+        axis, width, oneway, marked, heading = found
+        self.assertAlmostEqual(heading, 90.0, delta=0.5, msg="азимут оси ленты по ходу")
         self.assertEqual(marked, 0, "полосы не размечены — линий нет")
         self.assertAlmostEqual(width, 10.6, places=3)
         self.assertTrue(oneway)
@@ -549,6 +550,19 @@ class ArrowRowPlacementTests(unittest.TestCase):
         two = (3, build_roads.FLAG_ONEWAY, [metres(0, 0), metres(60, 0)], "a")
         index = build_mvt.OverlapIndex([one, two], {id(one): 8.0, id(two): 8.0})
         self.assertFalse(index.crowded(metres(-1, 2.0), metres(-1, 0), 90))
+
+    def test_row_follows_the_ribbon_axis_not_the_point_bearing(self):
+        # Точка села с азимутом 90° (шаг 3°), а лента под рядом идёт на 93°:
+        # стрелки смотрят вдоль ленты, ряд — поперёк неё.
+        turns = build_roads.parse_turn_lanes("through|through")
+        carriageway = lambda centre, bearing: (centre, 7.0, True, 2, 93.0)
+        arrows = list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, self.point(turns, 8),
+                                            (LON, LAT), carriageway=carriageway))
+        self.assertTrue(all(p["bearing"] == 93 for _s, p in arrows))
+        (a, _), (b, _) = arrows
+        kx = sc.LAT_METERS * math.cos(math.radians(LAT))
+        row = math.degrees(math.atan2((b[0] - a[0]) * kx, (b[1] - a[1]) * sc.LAT_METERS)) % 360
+        self.assertAlmostEqual(abs((row - 93 + 180) % 360 - 180), 90.0, delta=0.5)
 
     def test_squeezed_lanes_get_no_row(self):
         turns = build_roads.parse_turn_lanes("left|through|through|through|right")

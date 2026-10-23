@@ -786,11 +786,6 @@ def _layers_in_draw_order(p):
         # краю. Крупные узлы с запасной оболочкой (610 из 2856 ≥ 300 м² в
         # Ташкенте, среди них Навои × Рашидов) кромки из тайла не имеют и
         # сливались с тротуаром.
-        {"id": "radar-junction-edge", "type": "line", "source": "radar", "source-layer": "surface",
-         "minzoom": OUR_ROADS_FROM,
-         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["in", ["get", "kind"], ["literal", [8, 10]]]],
-         "layout": {"line-join": "round"},
-         "paint": {"line-color": p["kerb"], "line-width": ROAD_KERB_EXTRA_PX}},
         {"id": "radar-roads-case", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["!", ["has", "tunnel"]], ["<=", ["get", "cls"], 7],
                                               ["!", ["has", "stub"]], ["!", ["has", "inner"]]],

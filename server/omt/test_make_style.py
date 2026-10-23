@@ -219,16 +219,13 @@ class StyleTests(unittest.TestCase):
             self.assertEqual(layers[layer_id]["paint"]["line-color"], palette["paint"], layer_id)
         self.assertEqual(layers["radar-parking-stall"]["paint"]["line-color"], palette["stall"])
 
-    def test_junction_has_an_edge_under_the_kerbs(self):
-        # Аудит 23.10, №1: крупный узел с запасной оболочкой без кромки
-        # сливался с тротуаром.
+    def test_junction_has_no_outline_layer(self):
+        # 23.10: обводка площадей узла (аудит, №1) лежала под заливкой, но
+        # узел склеен из многих кусков, и в волосяных швах между ними она
+        # проступала «паутиной» поперёк перекрёстка (снимки владельца,
+        # Дурмень йули × Зиёлилар, Муминова). Край узла — задача контура.
         ids = [layer["id"] for layer in self.style["layers"]]
-        layers = {layer["id"]: layer for layer in self.style["layers"]}
-        edge = layers["radar-junction-edge"]
-        self.assertLess(ids.index("radar-junction-edge"), ids.index("radar-roads-case"))
-        self.assertLess(ids.index("radar-junction-edge"), ids.index("radar-junction"))
-        self.assertEqual(edge["filter"], layers["radar-junction"]["filter"])
-        self.assertEqual(edge["paint"]["line-color"], make_style.PALETTES[self.theme]["kerb"])
+        self.assertNotIn("radar-junction-edge", ids)
 
     def test_bridge_deck_has_round_ends(self):
         # Аудит 23.10, №2: прямые торцы кусков настила давали поперечные швы.

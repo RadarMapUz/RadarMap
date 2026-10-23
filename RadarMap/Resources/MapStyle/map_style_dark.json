@@ -10319,6 +10319,48 @@
      [
       "geometry-type"
      ],
+     "LineString"
+    ],
+    [
+     "==",
+     [
+      "get",
+      "kind"
+     ],
+     16
+    ]
+   ],
+   "id": "radar-junction-kerb",
+   "layout": {
+    "line-cap": "butt",
+    "line-join": "round"
+   },
+   "minzoom": 15,
+   "paint": {
+    "line-color": [
+     "case",
+     [
+      "get",
+      "major"
+     ],
+     "#575c66",
+     "#25282e"
+    ],
+    "line-offset": 0.6,
+    "line-width": 1.2
+   },
+   "source": "radar",
+   "source-layer": "surface",
+   "type": "line"
+  },
+  {
+   "filter": [
+    "all",
+    [
+     "==",
+     [
+      "geometry-type"
+     ],
      "Polygon"
     ],
     [
@@ -10371,48 +10413,6 @@
    "source": "radar",
    "source-layer": "surface",
    "type": "fill"
-  },
-  {
-   "filter": [
-    "all",
-    [
-     "==",
-     [
-      "geometry-type"
-     ],
-     "LineString"
-    ],
-    [
-     "==",
-     [
-      "get",
-      "kind"
-     ],
-     16
-    ]
-   ],
-   "id": "radar-junction-kerb",
-   "layout": {
-    "line-cap": "butt",
-    "line-join": "round"
-   },
-   "minzoom": 15,
-   "paint": {
-    "line-color": [
-     "case",
-     [
-      "get",
-      "major"
-     ],
-     "#575c66",
-     "#25282e"
-    ],
-    "line-offset": 0.6,
-    "line-width": 1.2
-   },
-   "source": "radar",
-   "source-layer": "surface",
-   "type": "line"
   },
   {
    "filter": [

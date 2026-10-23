@@ -370,12 +370,46 @@ class BuildTests(unittest.TestCase):
         flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (3 << 4)
         road = self.road([(69.278, 41.311), (69.282, 41.311)], flags=flags)
         wide = list(build_mvt.lane_markings([road]))
-        narrow = list(build_mvt.lane_markings([road], {id(road): 6.0}))
+        narrow = list(build_mvt.lane_markings([road], {id(road): 7.5}))
         axis = road[2][0][1]
         wide_off = abs(wide[0][0][1] - axis) * 111_320
         narrow_off = abs(narrow[0][0][1] - axis) * 111_320
-        self.assertAlmostEqual(narrow_off, 1.0, delta=0.05, msg="полотно сужено до 6 м — пунктир в 1 м от оси")
+        self.assertAlmostEqual(narrow_off, 1.25, delta=0.05, msg="полотно сужено до 7,5 м — пунктир в 1,25 м от оси")
         self.assertGreater(wide_off, narrow_off)
+
+    def test_lane_lines_meet_at_a_joint_of_different_lane_counts(self):
+        # Навои: кусок в 4 полосы и следующий в 5 при одной ширине ленты —
+        # линии рвались ступенькой вбок. Теперь линии одного из кусков (более
+        # длинного; при равной длине — по координатам) плавно подходят к
+        # линиям соседа, и у стыка каждая начинается там, где кончается линия.
+        four = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (4 << 4)
+        five = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (5 << 4)
+        joint = (69.280, 41.311)
+        a = self.road([(69.278, 41.311), joint], flags=four)
+        b = self.road([joint, (69.282, 41.311)], flags=five)
+        widths = {id(a): 17.5, id(b): 17.5}
+        lines = list(build_mvt.lane_markings([a, b], widths))
+        ends = [line[-1] for line in lines if abs(line[-1][0] - joint[0]) < 1e-7]
+        starts = [line[0] for line in lines if abs(line[0][0] - joint[0]) < 1e-7]
+        self.assertEqual((len(ends), len(starts)), (3, 4))
+        for start in starts:
+            gap = min(abs(start[1] - end[1]) for end in ends) * 111_320
+            self.assertLess(gap, 0.05, "линия соседа начинается там, где кончается наша")
+        # Вдали от стыка — своё деление: четыре полосы по 4,375 м.
+        far = sorted(round((line[0][1] - joint[1]) * 111_320, 2) for line in lines
+                     if abs(line[0][0] - 69.278) < 1e-7)
+        self.assertEqual(far, [-4.38, 0.0, 4.38])
+        import road_metrics
+        self.assertEqual(road_metrics.marking_jumps([(line, {}) for line in lines])[0], 0.0)
+
+    def test_lanes_squeezed_below_a_lane_are_not_marked(self):
+        # Пять полос по тегу в ленте, сжатой до 4,5 м: линии через 0,9 м —
+        # штриховка, а не полосы (Ислама Каримова, 23.10.2026).
+        flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (5 << 4)
+        road = self.road([(69.278, 41.311), (69.282, 41.311)], flags=flags)
+        self.assertEqual(list(build_mvt.lane_markings([road], {id(road): 4.5})), [])
+        self.assertEqual(build_mvt.marked_lanes(3, flags, 4.5), 0)
+        self.assertEqual(build_mvt.marked_lanes(3, flags, 17.5), 5)
 
     def test_yard_entrance_does_not_break_the_dashes(self):
         # Беруни: двор через каждые 80 м рвал пунктир проспекта в обрывки.

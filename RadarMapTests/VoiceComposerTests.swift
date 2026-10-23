@@ -287,6 +287,9 @@ final class VoiceComposerTests: XCTestCase {
     private enum Coverage {
         /// Звучит — и собирается из отрывков целиком.
         case spoken(VoiceEvent)
+        /// Звучит, но голос называет иначе, чем экран: стационарные типы
+        /// по-узбекски одним словом (решение владельца 23.10, 28.M).
+        case voicedAs(VoiceEvent, String)
         /// Только на экране: голос этого не говорит.
         case displayOnly(String)
         /// Имя собственное (улица, остановка): фраза целиком синтезатором.
@@ -344,7 +347,7 @@ final class VoiceComposerTests: XCTestCase {
             "Из средних рядов": lane(.middleMany),
             "Из трёх левых рядов": lane(.leftThree),
             "Из трёх правых рядов": lane(.rightThree),
-            "Интеллектуальная камера + радар": .spoken(.cameraName(.intelligentRadar)),
+            "Интеллектуальная камера + радар": .voicedAs(.cameraName(.intelligentRadar), "Radar"),
             "Камера": .spoken(.camera(Call(kind: .stationaryCamera, form: .brief, meters: 300))),
             "Камеры впереди, %lld метров": .spoken(.camera(Call(kind: .stationaryCamera, form: .group, meters: 300))),
             "Маршрут не найден": routeError,
@@ -381,8 +384,8 @@ final class VoiceComposerTests: XCTestCase {
             "Сервер не отвечает": .spoken(.phrase(.serverDown)),
             "Сервер отклонил отметку": .spoken(.phrase(.reportRefused)),
             "Слишком часто, подождите минуту": .spoken(.phrase(.tooOften)),
-            "Стационарная камера": .spoken(.cameraName(.stationaryCamera)),
-            "Стационарный радар": .spoken(.cameraName(.stationaryRadar)),
+            "Стационарная камера": .voicedAs(.cameraName(.stationaryCamera), "Kamera"),
+            "Стационарный радар": .voicedAs(.cameraName(.stationaryRadar), "Radar"),
             "Странный ответ сервера": .spoken(.phrase(.badAnswer)),
             "Тип уточнён": .spoken(.phrase(.reportAmended)),
             "Тренога": .spoken(.cameraName(.tripod)),
@@ -465,6 +468,12 @@ final class VoiceComposerTests: XCTestCase {
     func testEverySpokenDocTemplateIsCoveredBySegments() throws {
         var spoken = 0
         for row in try Self.docTemplates() {
+            if case .voicedAs(let event, let voiced)? = Self.coverage[row.ru] {
+                spoken += 1
+                XCTAssertEqual(VoiceComposer.segments(for: event, in: .uz)
+                    .flatMap { VoiceScript.text(of: $0, language: .uz) }, voiced, row.ru)
+                continue
+            }
             guard case .spoken(let event)? = Self.coverage[row.ru] else { continue }
             spoken += 1
             guard let ids = VoiceComposer.segments(for: event, in: .uz),

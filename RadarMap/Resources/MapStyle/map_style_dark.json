@@ -9565,44 +9565,6 @@
    "filter": [
     "all",
     [
-     "==",
-     [
-      "geometry-type"
-     ],
-     "Polygon"
-    ],
-    [
-     "in",
-     [
-      "get",
-      "kind"
-     ],
-     [
-      "literal",
-      [
-       8,
-       10
-      ]
-     ]
-    ]
-   ],
-   "id": "radar-junction-edge",
-   "layout": {
-    "line-join": "round"
-   },
-   "minzoom": 15,
-   "paint": {
-    "line-color": "#575c66",
-    "line-width": 2.4
-   },
-   "source": "radar",
-   "source-layer": "surface",
-   "type": "line"
-  },
-  {
-   "filter": [
-    "all",
-    [
      "!",
      [
       "has",

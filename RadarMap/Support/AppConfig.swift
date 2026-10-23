@@ -1177,6 +1177,20 @@ nonisolated enum AppConfig {
     /// подвал страницы проекта (App Review ищет её в два касания, не в три).
     static let privacyPolicyURL = URL(string: "https://soulmed.uz/radarmap/privacy.html")!
 
+    // Атрибуция (28.F): адреса, на которые лицензии требуют сослаться.
+    // OpenMapTiles (схема тайлов, CC BY 4.0) и OSM (ODbL) — подпись «в углу
+    // карты» со ссылками; Open-Meteo (CC BY 4.0) — «Weather data by
+    // Open-Meteo.com» со ссылкой; стиль — производный от OSM Bright.
+    static let openMapTilesURL = URL(string: "https://openmaptiles.org/")!
+    static let osmCopyrightURL = URL(string: "https://www.openstreetmap.org/copyright")!
+    static let openMeteoURL = URL(string: "https://open-meteo.com/")!
+    static let osmBrightURL = URL(string: "https://github.com/openmaptiles/osm-bright-gl-style")!
+    static let mapLibreURL = URL(string: "https://github.com/maplibre/maplibre-native")!
+    static let notoFontsURL = URL(string: "https://github.com/openmaptiles/fonts")!
+    static let odblURL = URL(string: "https://opendatacommons.org/licenses/odbl/1-0/")!
+    static let ccBy4URL = URL(string: "https://creativecommons.org/licenses/by/4.0/")!
+    static let ccBySa4URL = URL(string: "https://creativecommons.org/licenses/by-sa/4.0/")!
+
     /// Правдоподобный диапазон дорожного лимита. Второй забор после подписи
     /// (LimitsTrust): подпись говорит, что файл собрал владелец, но не что OSM
     /// прав, — а на переходный период, пока подписанного индекса нет, это и
@@ -2177,6 +2191,15 @@ nonisolated enum AppConfig {
     /// Сколько секунд подпись «© OpenStreetMap» видна при показе карты:
     /// правила OSMF разрешают свернуть её «после пяти секунд».
     static let mapAttributionSeconds: TimeInterval = 5
+    /// На сколько «i» с подписью поднимается в навигации: там внизу слева
+    /// стоит круг скорости (TripSpeedCluster, 62 pt + 10 pt отступа стека
+    /// нижних панелей). «i» встаёт НАД ним — не ближе к пальцу, чем
+    /// спидометр, и не под ним, как стояла подпись до 28.F.
+    static let mapAttributionSpeedLift: CGFloat = 76
+    /// Строка лицензии не короче этого — оборвана по ширине и склеивается со
+    /// следующей (LicenseText.reflow). Оригиналы свёрстаны под 72–80 знаков;
+    /// строки короче 55 — копирайты и заголовки, их конец — конец мысли.
+    static let licenseReflowMinLine = 55
     static let engineManeuverApproachMeters = 600.0
     /// Ряд полос на трассе — раньше (LaneAdvice.showDistance): быстрее этой
     /// скорости ряд появляется за laneRowHighwayMeters, а не за 600 м.

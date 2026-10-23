@@ -161,11 +161,17 @@ struct EngineBaseLayer: View {
                         markerMotion: env.location.markerMotion)
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
-                // Подпись данных — над нижней панелью, пять секунд и тает.
+                // Подпись данных — над нижней панелью: «i» остаётся, текст
+                // тает через пять секунд. Мишень «i» 44 pt, круг 20 — поля
+                // считаны от круга: 12 pt от края, 8 pt над панелью; в
+                // навигации — над кругом скорости (28.F).
                 .overlay(alignment: .bottomLeading) {
                     MapAttribution()
-                        .padding(.leading, 12)
-                        .padding(.bottom, geo.size.height * insets.safeBottom + 8)
+                        .padding(.bottom, max(0, geo.size.height * insets.safeBottom - 4)
+                                 + MapAttributionPlacement.lift(
+                                    speedPlacement: MapMode.current(isTripActive: env.location.isTripActive,
+                                                                    hasRoute: env.route.isActive).speedPlacement,
+                                    isAddingCamera: map.isAddingCamera))
                 }
                 // Высоту сообщает сама карта: без неё поля панелей не
                 // посчитать, и «я» стоял бы под нижней панелью.

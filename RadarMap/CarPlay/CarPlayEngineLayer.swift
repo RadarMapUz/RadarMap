@@ -212,7 +212,7 @@ struct CarPlayEngineLayer: View {
     /// (MapAttribution). Нажать кнопку атрибуции в машине нельзя — поэтому
     /// текстом.
     private var attribution: some View {
-        MapAttribution()
+        MapAttribution(interactive: false)
             .padding(.trailing, 6)
             .padding(.bottom, 4)
     }

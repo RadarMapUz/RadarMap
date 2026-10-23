@@ -34,7 +34,6 @@ struct EngineBaseLayer: View {
     /// карту Apple и движок, чтобы кнопки на карте значили одно и то же.
     let map: MapState
     @State private var recenterToken = 0
-    private var browsing: Bool { map.orientation == .free }
     /// Экран выбора варианта: маршрут есть, вариантов больше одного, не едем.
     private var choosing: Bool { env.route.variants.count > 1 && !env.location.isTripActive }
 
@@ -159,28 +158,6 @@ struct EngineBaseLayer: View {
                         onRegion: { map.updateVisible(for: $0) },
                         showsPosition: known != nil,
                         markerMotion: env.location.markerMotion)
-                    // Не в обзоре маршрута до старта: там карта отодвинута
-                    // нарочно, «к себе» есть в колонке, а капсула вставала
-                    // поверх линии или пряталась под карточками (27.D).
-                    if browsing, !(env.route.isActive && !env.location.isTripActive) {
-                        VStack {
-                            Spacer()
-                            Button {
-                                map.cycleOrientation(coordinate: env.location.currentCoordinate,
-                                                     course: env.location.currentCourse,
-                                                     inTrip: env.location.isTripActive)
-                            } label: {
-                                // «Ко мне», а не «К машине»: с 12б.1 «Машина · 330 м» — это место
-                                // парковки, и две «машины» на экране путались (матрица 13.2).
-                                Label("Ко мне", systemImage: "location.fill")
-                                    .font(.rounded(14, .semibold))
-                                    .padding(.horizontal, 14).padding(.vertical, 10)
-                                    .liftedBackground(Theme.surface, in: Capsule())
-                            }
-                            .tapTarget()
-                            .padding(.bottom, geo.size.height * (1 - insets.meY) + 32)
-                        }
-                    }
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
                 // Подпись данных — над нижней панелью, пять секунд и тает.

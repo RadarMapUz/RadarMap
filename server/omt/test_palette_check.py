@@ -1,4 +1,4 @@
-"""Палитра карты (27.C) — под замером, как PaletteTests приложения.
+"""Палитра карты (27.C, с 28.A — «Б — Чистый») — под замером, как PaletteTests приложения.
 
 Палитра обязана пройти правила плана: камеры заметнее всего, линия
 маршрута держится на любом асфальте, пробка ≠ маршрут ≠ камера, зелень, вода
@@ -36,6 +36,33 @@ class PaletteRules(unittest.TestCase):
                  minor_edge=make_style.PALETTES["light"]["bg"])
         _, failures = palette_check.measure("light", p)
         self.assertIn("дом заметнее двора", failures)
+
+    def test_rules_catch_a_label_lost_on_the_trunk(self):
+        # Ночью магистраль светлая (0,14): тусклая подпись места на ней
+        # падает ниже 4,5:1 — это нарушение, а не «на ореоле прочтут».
+        p = dict(make_style.PALETTES["dark"], label="#c9ced6")
+        _, failures = palette_check.measure("dark", p)
+        self.assertIn("подпись места на асфальте < 4,5:1", failures)
+
+    def test_rules_catch_a_yellow_avenue(self):
+        # «Чистый»: тёплая только магистраль. Проспект цвета магистрали —
+        # иерархия классов пропала.
+        p = dict(make_style.PALETTES["light"], road=make_style.PALETTES["light"]["road_trunk"],
+                 far_primary=make_style.PALETTES["light"]["far_trunk"])
+        _, failures = palette_check.measure("light", p)
+        self.assertIn("магистраль не отличить от проспекта", failures)
+
+    def test_rules_catch_ground_lighter_than_the_street(self):
+        p = dict(make_style.PALETTES["light"], building="#ffffff")
+        _, failures = palette_check.measure("light", p)
+        self.assertIn("земля светлее улицы", failures)
+
+    def test_night_asphalt_keeps_out_of_the_route_dead_band(self):
+        # Светлота 0,083–0,133: линия маршрута не держит 3:1 ни телом, ни
+        # каймой (#5a606c со схемы владельца — 0,116).
+        p = dict(make_style.PALETTES["dark"], road_trunk="#5a606c")
+        _, failures = palette_check.measure("dark", p)
+        self.assertIn("линия маршрута на асфальте < 3:1", failures)
 
     def test_formulas_match_known_values(self):
         # Чёрный на белом — 21:1, одинаковые цвета — 1:1 и ΔE 0.
@@ -77,6 +104,24 @@ class AppColoursInSync(unittest.TestCase):
             found = re.search(rf"static let {name}\s*= Color\(uiColor: rgb\(0x([0-9A-Fa-f]{{6}})\)\)", theme)
             self.assertIsNotNone(found, name)
             self.assertEqual(hex_, "#" + found.group(1).lower(), name)
+
+    def test_asphalt_copy_in_palette_tests(self):
+        # PaletteTests.asphalt держит копию полотна по классам и фона.
+        tests = _swift("RadarMapTests/PaletteTests.swift")
+        found = re.search(r'theme == "днём"\s*\?\s*\[([^\]]+)\]\s*:\s*\[([^\]]+)\]', tests)
+        self.assertIsNotNone(found)
+        keys = palette_check.ASPHALT_KEYS + ("bg",)
+        for theme, group in (("light", 1), ("dark", 2)):
+            copy = ["#" + h.strip()[2:].lower() for h in found.group(group).split(",")]
+            self.assertEqual(copy, [make_style.PALETTES[theme][k] for k in keys], theme)
+
+    def test_camera_label_uses_the_map_label_and_halo(self):
+        style = _swift("RadarMap/Features/Map/Engine/EngineModernStyle.swift")
+        for name, key in (("labelHex", "label"), ("haloHex", "halo")):
+            found = re.search(rf'static let {name} = \(day: "(#[0-9a-f]{{6}})", night: "(#[0-9a-f]{{6}})"\)', style)
+            self.assertIsNotNone(found, name)
+            self.assertEqual(found.group(1), make_style.PALETTES["light"][key], name)
+            self.assertEqual(found.group(2), make_style.PALETTES["dark"][key], name)
 
     def test_calm_markers(self):
         view = _swift("RadarMap/Features/Map/Engine/EngineMapView.swift")

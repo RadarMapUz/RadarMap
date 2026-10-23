@@ -15,7 +15,7 @@
 | Стиль карты | [OSM Bright](https://github.com/openmaptiles/osm-bright-gl-style) © MapTiler.com & OpenMapTiles contributors, © Mapbox | код — BSD 3-Clause, оформление — CC BY 4.0 | `server/omt/osm-bright.json` → `make_style.py` → `RadarMap/Resources/MapStyle/*.json` (вшит) |
 | Значки POI (`*_11` в спрайте) | [Maki](https://github.com/mapbox/maki) (Mapbox) через спрайт OSM Bright | CC0 1.0 (упоминание не требуется, но указано) | `server/omt/sprite/base*.{json,png}`; стрелки полос, светофор, асфальт, деревья, штриховка — наши (`make_arrows.py`) |
 | Шрифты подписей (глифы) | Noto Sans Regular/Bold/Italic из [openmaptiles/fonts](https://github.com/openmaptiles/fonts) v2.0, Copyright 2012 Google Inc. | [SIL OFL 1.1](https://openfontlicense.org/) | `server/omt/build_omt.sh` → `glyphs/` на сервере (`glyph_subset.py` — подмножество для офлайна); текст OFL — в приложении |
-| Движок карты | [MapLibre Native](https://github.com/maplibre/maplibre-native) 6.29.0 (SPM `maplibre-gl-native-distribution`), © MapLibre contributors, © MapTiler.com, © Mapbox | BSD 2-Clause + уведомления вшитых библиотек (Boost, RapidJSON, Metal-cpp — Apache 2.0, FreeType — FTL, HarfBuzz, FastPFOR — Apache 2.0, …) | бинарь в приложении; тексты — `RadarMap/Resources/Licenses/` |
+| Движок карты | [MapLibre Native](https://github.com/maplibre/maplibre-native) 6.31.0 (SPM `maplibre-gl-native-distribution`), © MapLibre contributors, © MapTiler.com, © Mapbox | BSD 2-Clause + уведомления вшитых библиотек (Boost, RapidJSON, Metal-cpp — Apache 2.0, FreeType — FTL, HarfBuzz, FastPFOR — Apache 2.0, …) | бинарь в приложении; тексты — `RadarMap/Resources/Licenses/` |
 | Погода на перевалах и трассах (прогноз по часам: температура, осадки, снег, видимость, ветер) | [Open-Meteo.com](https://open-meteo.com/) — «Weather data by Open-Meteo.com» | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); бесплатный API — для некоммерческого использования | `weather/roads.json` (`build_road_weather.py`, точки — `road_weather_points.json`); подпись — «Источники данных» |
 
 ## Где это видно в приложении (28.F)
@@ -51,9 +51,9 @@
 - **BSD 2/3-Clause** (MapLibre Native, OSM Bright): бинарная поставка
   воспроизводит копирайт, условия и отказ от гарантий «в документации или
   других материалах» — это экран «Лицензии». Тексты:
-  `license-maplibre-native.txt` — LICENSE.md пакета SPM 6.29.0;
+  `license-maplibre-native.txt` — LICENSE.md пакета SPM 6.31.0 (тексты 6.29 и 6.31 совпадают байт в байт, проверено 23.10);
   `license-maplibre-native-ios.txt` — `platform/ios/LICENSE.md` тега
-  `ios-v6.29.0` (в xcframework этих уведомлений нет, но их требуют
+  `ios-v6.31.0` (в xcframework этих уведомлений нет, но их требуют
   BSD/MIT/Apache/FTL вшитых библиотек). **При обновлении MapLibre — заменить
   оба файла текстами новой версии.**
 - **OFL 1.1** (Noto Sans): копирайт и лицензия сопровождают шрифт; имя

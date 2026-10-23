@@ -16,9 +16,9 @@
 //
 //  Откуда тексты (обновлять вместе с пакетом MapLibre):
 //  * license-maplibre-native.txt — LICENSE.md пакета
-//    maplibre-gl-native-distribution 6.29.0 (как лежит в SourcePackages);
+//    maplibre-gl-native-distribution 6.31.0 (как лежит в SourcePackages);
 //  * license-maplibre-native-ios.txt — platform/ios/LICENSE.md тега
-//    ios-v6.29.0 репозитория maplibre-native: та же BSD плюс уведомления
+//    ios-v6.31.0 репозитория maplibre-native: та же BSD плюс уведомления
 //    вшитых в бинарь библиотек (Boost, RapidJSON, Metal-cpp, FreeType,
 //    HarfBuzz…). В самом xcframework их нет, а BSD/Apache/FTL требуют их
 //    в бинарной поставке;

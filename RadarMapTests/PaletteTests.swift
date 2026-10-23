@@ -289,13 +289,13 @@ extension PaletteTests {
 
     /// Полотно дороги новой карты — server/omt/make_style.py PALETTES
     /// (road, road_trunk, road_secondary, road_tertiary, minor) и фон, по
-    /// темам. С 27.C дороги цветом по классу: днём жёлтый проспект,
-    /// абрикосовая магистраль и белые улицы, ночью подсвеченный сланец
-    /// магистралей над тёмно-синими улицами.
+    /// темам; test_palette_check сверяет копию с генератором. С 28.A
+    /// («Чистый»): днём улицы и проспекты белые, тёплая только магистраль,
+    /// ночью нейтральный графит, светлее с каждым классом.
     private func asphalt(_ theme: String) -> [Color] {
         let hex: [UInt32] = theme == "днём"
-            ? [0xFFE7A3, 0xFFCF9A, 0xFFFFFF, 0xFFFFFF, 0xFFFFFF, 0xEFECE5]
-            : [0x5F6B86, 0x647090, 0x46526B, 0x36435F, 0x36435F, 0x0F1420]
+            ? [0xFFFFFF, 0xFFE2A8, 0xFFFFFF, 0xFFFFFF, 0xFFFFFF, 0xF2F3F5]
+            : [0x40454F, 0x626874, 0x383C45, 0x33373F, 0x30343C, 0x16181C]
         return hex.map { Color(uiColor: Theme.rgb($0)) }
     }
 

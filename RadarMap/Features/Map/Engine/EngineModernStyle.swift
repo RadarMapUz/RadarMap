@@ -130,12 +130,8 @@ nonisolated enum EngineModernStyle {
         } ?? layers.count
         layers.insert(contentsOf: EngineMapStyle.routeLayers(daylight: daylight), at: labels)
 
-        let was = MapPalette.daylight
-        MapPalette.daylight = daylight
-        let label = MapPalette.labelTone.hex
-        let halo = MapPalette.groundTone.hex
-        MapPalette.daylight = was
-        layers += EngineMapStyle.markerLayers(label: label, halo: halo)
+        layers += EngineMapStyle.markerLayers(label: daylight ? Self.labelHex.day : Self.labelHex.night,
+                                              halo: daylight ? Self.haloHex.day : Self.haloHex.night)
         style["layers"] = layers
 
         let data: Data
@@ -148,6 +144,14 @@ nonisolated enum EngineModernStyle {
         guard let text = String(data: data, encoding: .utf8) else { return nil }
         return text
     }
+
+    /// Подпись у камеры («400 м» в машине) — тоном подписей и ореолом самой
+    /// новой карты (make_style.PALETTES label/halo, «Б — Чистый», 28.A).
+    /// Тона схемы (MapPalette) сюда не подходят: её дневная земля — тёплый
+    /// серый, и ореол лежал бы серой заплаткой на светлой карте.
+    /// test_palette_check сверяет эти числа с генератором стиля.
+    static let labelHex = (day: "#2d3036", night: "#e6e9ee")
+    static let haloHex = (day: "#ffffff", night: "#16181c")
 
     static let trafficLightImage = "radar-traffic-light"
 

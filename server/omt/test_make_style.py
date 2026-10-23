@@ -52,7 +52,7 @@ class StyleTests(unittest.TestCase):
         for name in names:
             self.assertIn(name, sprite)
 
-    def test_trees_and_yellow_kerbs_like_yandex(self):
+    def test_trees_and_class_kerbs(self):
         import json as _json
         sprite = _json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sprite", "sprite.json")))
         layers = {l["id"]: l for l in self.style["layers"]}
@@ -61,6 +61,7 @@ class StyleTests(unittest.TestCase):
         self.assertLess(ids.index("trees"), ids.index("radar-roads-case"), "деревья под дорогой")
         case = layers["radar-roads-case"]["paint"]["line-color"]
         self.assertIn(make_style.PALETTES[self.theme]["kerb"], case)
+        self.assertIn(make_style.PALETTES[self.theme]["kerb_trunk"], case)
 
     def test_tunnels_under_ground_roads_bridges_with_shadow(self):
         ids = [l["id"] for l in self.style["layers"]]
@@ -158,8 +159,8 @@ class StyleTests(unittest.TestCase):
         light, dark = make_style.PALETTES["light"], make_style.PALETTES["dark"]
         for theme in (light, dark):
             self.assertNotEqual(theme["minor"], theme["path"])
-        # С 27.C двор белый с серой кромкой, как у Яндекса, — а дорожка тёплая
-        # бежевая, не белая: с двором её не спутать.
+        # Двор белый с серой кромкой (27.C, 28.A), а дорожка серее земли, не
+        # белая: с двором её не спутать.
         self.assertGreater(lightness(light["minor"]), lightness(light["path"]) + 10)
         self.assertLess(lightness(light["minor_edge"]), lightness(light["bg"]))
 

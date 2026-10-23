@@ -66,6 +66,9 @@ struct EngineMapView: UIViewRepresentable {
     /// Камеры не на своей координате — на линии маршрута или на оси нашей
     /// дороги (CameraOnLine, 27.B). Только картинка; подпись — там же.
     var cameraPoints: [Int: CameraOnLine.Point] = [:]
+    /// Зона камеры на асфальте (CameraZone, 28.B): участок её проезжей части
+    /// перед ней у камеры, к которой едем. nil — не рисуем. Только картинка.
+    var cameraZone: CameraZone.Band?
     /// Свои камеры — голос о них молчит, на значке галочка.
     var familiarCameraIDs: Set<Int> = []
     /// Подпись «400 м» у значка алерт-камеры — только в машине
@@ -288,6 +291,8 @@ struct EngineMapView: UIViewRepresentable {
         fileprivate let routeLine = EngineRouteLine()
         /// «Нужная полоса» на асфальте у манёвра (28.C).
         private let laneFocusLayers = EngineLaneFocus()
+        /// Зона камеры на асфальте (28.B).
+        private let cameraZone = EngineCameraZone()
         private var positionHeading = 0.0
         /// Значок между фиксами: где машина СЕЙЧАС (MarkerPredictor). До 21.10
         /// стрелка плыла к последнему фиксу за интервал между фиксами и всегда
@@ -687,6 +692,8 @@ struct EngineMapView: UIViewRepresentable {
             lastCameras = nil
             routeLine.styleLoaded()
             laneFocusLayers.styleLoaded()
+            cameraZone.styleLoaded()
+            EngineLaneArrowsOrder.raise(in: style)
             hiddenLayers = nil
             hotShown = nil
             modernDrivingLayerIDs = nil
@@ -1113,6 +1120,7 @@ struct EngineMapView: UIViewRepresentable {
                                  daylight: model.daylight, avoid: spots, in: view)
             routeLine.update(model, in: view)
             laneFocusLayers.update(model, in: view)
+            cameraZone.update(model.cameraZone, daylight: model.daylight, in: view)
         }
 
         /// Объёмные украшения и размытые тени — первое, что уходит на горячем

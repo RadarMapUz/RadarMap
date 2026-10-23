@@ -137,6 +137,7 @@ struct CarPlayEngineLayer: View {
             // на линии маршрута, и подпись «400 м» там же (27.B).
             pathCameraIDs: cameraLine.pathIDs,
             cameraPoints: cameraLine.points,
+            cameraZone: env.cameraZone(line: cameraLine),
             familiarCameraIDs: env.location.familiarCameraIDs,
             cameraLabel: cameraLabel(cue, line: cameraLine),
             route: env.route.routeCoordinates,

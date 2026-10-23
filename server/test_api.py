@@ -1786,6 +1786,39 @@ class EtaShareTest(ServerTestBase):
             html = resp.read().decode()
         self.assertIn("daqiqadan keyin", html)
 
+    def test_footer_offers_install_on_both_languages(self):
+        """28.J: внизу «Отправлено из RadarMap» и «Установить» — на ru и uz, на
+        разовой странице и на странице близкого. Подвал — только ссылка:
+        страница по-прежнему без скриптов, внешних ресурсов и счётчиков."""
+        self.post()
+        cases = (("ru", "Отправлено из RadarMap — антирадар и навигатор для Узбекистана", "Установить"),
+                 ("uz-UZ", "RadarMap orqali yuborildi — Oʻzbekiston uchun antiradar va navigator",
+                  "Oʻrnatish"))
+        for path in (f"/api/eta/{self.TOKEN}", f"/api/eta/f/{self.TOKEN}", "/api/eta/" + "A" * 26):
+            for lang, line, button in cases:
+                req = urllib.request.Request(f"http://127.0.0.1:{self.port}{path}",
+                                             headers={"Accept-Language": lang})
+                try:
+                    with urllib.request.urlopen(req, timeout=5) as resp:
+                        html, headers = resp.read().decode(), resp.headers
+                except urllib.error.HTTPError as err:      # устаревшая ссылка — 404, подвал тот же
+                    html, headers = err.read().decode(), err.headers
+                where = f"{path} {lang}"
+                self.assertIn(line, html, where)
+                self.assertIn(f'href="{api.ETA_INSTALL_URL}"', html, where)
+                self.assertIn(f">{button}</a>", html, where)
+                self.assertNotIn("<script", html.lower(), where)
+                self.assertNotIn("<img", html.lower(), where)
+                self.assertNotIn("<iframe", html.lower(), where)
+                # Единственный внешний адрес на странице — ссылка «Установить».
+                self.assertEqual(re.findall(r'https?://[^"\s<>]+', html), [api.ETA_INSTALL_URL], where)
+                self.assertNotIn("‘", html, "узбекский — с ʻ (U+02BB), не с кавычкой")
+                self.assertEqual(headers.get("Referrer-Policy"), "no-referrer", where)
+                self.assertIn("default-src 'none'", headers.get("Content-Security-Policy", ""), where)
+                self.assertEqual(headers.get("Cache-Control"), "no-store", where)
+                self.assertEqual(headers.get("X-Robots-Tag"), "noindex", where)
+        self.assertTrue(api.ETA_INSTALL_URL.startswith("https://"))
+
     def test_driver_can_stop_sharing(self):
         self.post()
         self.post(status="ended")

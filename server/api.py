@@ -1039,6 +1039,47 @@ def _eta_expired(item, now):
     return now - item["updated"] > ttl
 
 
+# --- «Отправлено из RadarMap» (28.J) ----------------------------------------
+#
+# Ссылку прибытия открывает тот, у кого приложения нет, — это единственное
+# место, где он его видит. Поэтому внизу одна спокойная строка и ссылка
+# «Установить»: без счётчиков, трекеров и внешних картинок (CSP страницы —
+# default-src 'none'), значок нарисован прямо в разметке. Referrer-Policy:
+# no-referrer — лендинг не узнаёт, с какой ссылки пришли (адрес — секрет).
+#
+# Куда ведёт «Установить» — ОДНО место: пока приложения нет в App Store,
+# это страница проекта; после публикации — ссылка App Store
+# (https://apps.apple.com/app/id…) или та же страница с плашкой Safari.
+ETA_INSTALL_URL = "https://soulmed.uz/radarmap/"
+
+# Значок — те же кольца радара, что у иконки приложения; цвет — currentColor,
+# поэтому он сам следует светлой и тёмной теме страницы.
+_ETA_MARK_SVG = ('<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" '
+                 'stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10" opacity=".45"/>'
+                 '<circle cx="12" cy="12" r="6" opacity=".7"/><circle cx="12" cy="12" r="2.2" '
+                 'fill="currentColor" stroke="none"/></svg>')
+
+# Стили подвала — общие для разовой страницы и страницы близкого.
+_ETA_FOOT_CSS = """.foot{margin-top:22px;padding-top:16px;border-top:1px solid rgba(127,137,150,.22);
+display:flex;flex-direction:column;align-items:center;gap:10px}
+.foot p{margin:0;font-size:14px;color:#6b7380;display:flex;gap:8px;align-items:flex-start;text-align:left}
+.foot svg{flex:none;margin-top:1px;color:#2a6fd8}
+.install{display:inline-block;padding:9px 18px;border-radius:12px;border:1px solid rgba(42,111,216,.45);
+color:#2a6fd8;font-size:15px;font-weight:600;text-decoration:none}
+@media(prefers-color-scheme:dark){.foot p{color:#9aa3ae}.foot svg,.install{color:#6ea8ff}
+.install{border-color:rgba(110,168,255,.45)}}"""
+
+
+def eta_footer(uz=False):
+    """Подвал страниц прибытия: кто прислал и где взять. Только ссылка —
+    ни скрипта, ни запроса наружу, пока человек сам не нажмёт."""
+    line = ("RadarMap orqali yuborildi — Oʻzbekiston uchun antiradar va navigator" if uz
+            else "Отправлено из RadarMap — антирадар и навигатор для Узбекистана")
+    button = "Oʻrnatish" if uz else "Установить"
+    return (f'<div class="foot"><p>{_ETA_MARK_SVG}<span>{line}</span></p>'
+            f'<a class="install" href="{ETA_INSTALL_URL}" rel="noopener noreferrer">{button}</a></div>')
+
+
 def _eta_clock(ts):
     return time.strftime("%H:%M", time.gmtime(ts + 5 * 3600))   # Узбекистан — UTC+5 круглый год
 
@@ -1059,7 +1100,7 @@ def eta_page(item, now, uz=False, family=False, bot=None, address=None):
         sub = ""
     elif item["status"] == "ended":
         title = "Kuzatish tugadi" if uz else "Поездка больше не отслеживается"
-        line = ("Haydovchi ulashishni to‘xtatdi." if uz
+        line = ("Haydovchi ulashishni toʻxtatdi." if uz
                 else "Водитель перестал делиться временем прибытия.")
         sub = ""
     elif item["status"] == "arrived":
@@ -1093,8 +1134,9 @@ main{{background:#fff;border-radius:20px;padding:28px 24px;max-width:360px;width
 box-shadow:0 6px 24px rgba(0,0,0,.08);text-align:center}}h1{{font-size:26px;margin:0 0 8px}}
 p{{margin:4px 0;color:#4a5260}}small{{color:#8a929c}}
 @media(prefers-color-scheme:dark){{body{{background:#14181f;color:#eef1f5}}main{{background:#1e232a}}p{{color:#b8c0cc}}}}
+{_ETA_FOOT_CSS}
 </style></head><body><main><h1>{title}</h1><p>{line}</p><p><small>{sub}</small></p>
-<p><small>RadarMap</small></p></main></body></html>"""
+{eta_footer(uz)}</main></body></html>"""
 
 
 # --- Страница близкого (22.2) ---------------------------------------------
@@ -1256,7 +1298,8 @@ font-weight:600;text-decoration:none}}
 .note{{color:#6b7380;font-size:14px;margin-top:12px}}
 @media(prefers-color-scheme:dark){{body{{background:#14181f;color:#eef1f5}}main{{background:#1e232a}}
 p,.who{{color:#b8c0cc}}.big{{color:#eef1f5}}.age,.note{{color:#9aa3ae}}h1.ok{{color:#4ac26b}}h1.late,.stale{{color:#f0a23b}}}}
-</style></head><body><main>{"".join(parts)}</main></body></html>"""
+{_ETA_FOOT_CSS}
+</style></head><body><main>{"".join(parts)}{eta_footer(uz)}</main></body></html>"""
 
 
 # Значок «На экран „Домой“»: синий квадрат с белым домиком, 180×180 — iOS

@@ -72,14 +72,16 @@ final class EtaShareService {
                       clock, Formatting.duration(route.remainingTime))
     }
 
-    /// Ссылка и текст для листа «Поделиться». Отправки ещё нет.
+    /// Ссылка и текст для листа «Поделиться». Отправки ещё нет. «через
+    /// RadarMap» (28.J) — одно слово бренда: адрес в ссылке говорит только
+    /// «soulmed.uz», а получатель должен понять, откуда время.
     func prepare() -> (url: URL, message: String)? {
         guard isAvailable, let route else { return nil }
         let write = self.write ?? .secret(EtaShare.makeToken())
         self.write = write
         let url = EtaShare.link(base: AppConfig.syncBaseURL, token: write.address)
         let clock = Formatting.clock(route.arrivalDate)
-        let message = String(format: String(localized: "Буду примерно в %1$@ (через %2$@). Следить: %3$@"),
+        let message = String(format: String(localized: "Буду примерно в %1$@ (через %2$@). Следить через RadarMap: %3$@"),
                              clock, Formatting.duration(route.remainingTime), url.absoluteString)
         return (url, message)
     }

@@ -877,6 +877,11 @@ final class TripStats {
     /// выглядит компактнее, чем в жизни: четырёхзначные километры и разделитель
     /// разрядов вылезали из плиток уже у реальных водителей, а на демо — нет.
     func seedDemoHistory(shiftDays: Double = 0, scale: Double = 1) {
+        // Демо на узбекском интерфейсе — латиницей: кириллица в uz-снимках
+        // App Store выглядела пропущенным переводом.
+        let uzbek = (Bundle.main.preferredLocalizations.first ?? "ru").hasPrefix("uz")
+        let demoPlaces = uzbek ? ["Yunusobod", "Chilonzor", "Mirzo Ulugʻbek"]
+                               : ["Юнусабад", "Чиланзар", "Мирзо-Улугбек"]
         let base = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)
         let now = Date().addingTimeInterval(-shiftDays * 86400)
 
@@ -897,7 +902,7 @@ final class TripStats {
                                              longitude: track[camIndex + 1])
             let pass = PassedCamera(id: UUID(), cameraID: 1000 + index,
                                     typeRaw: "Стационар радар",
-                                    location: ["Юнусабад", "Чиланзар", "Мирзо-Улугбек"][index % 3],
+                                    location: demoPlaces[index % 3],
                                     speedKmh: over ? 88 : 56,
                                     date: start.addingTimeInterval(400),
                                     lat: cam.latitude, lon: cam.longitude, limitKmh: 60)

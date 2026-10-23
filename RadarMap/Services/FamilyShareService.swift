@@ -327,12 +327,14 @@ final class FamilyShareService {
     #if DEBUG
     private static func demoCircle() -> FamilyCircle {
         let now = Date()
-        var mother = FamilyRecipient(name: "Мама", emoji: "👩‍🦳", now: now)
+        // На узбекском интерфейсе — узбекские имена латиницей (снимки App Store).
+        let uzbek = (Bundle.main.preferredLocalizations.first ?? "ru").hasPrefix("uz")
+        var mother = FamilyRecipient(name: uzbek ? "Oyim" : "Мама", emoji: "👩‍🦳", now: now)
         mother.linkSentAt = now.addingTimeInterval(-9 * 86_400)
-        var wife = FamilyRecipient(name: "Дилноза", emoji: "👩", now: now)
+        var wife = FamilyRecipient(name: uzbek ? "Dilnoza" : "Дилноза", emoji: "👩", now: now)
         wife.linkSentAt = now.addingTimeInterval(-2 * 86_400)
-        let father = FamilyRecipient(name: "Папа", emoji: "👴", mode: .everyTrip, now: now)
-        return FamilyCircle(recipients: [mother, wife, father], driverName: "Азиз")
+        let father = FamilyRecipient(name: uzbek ? "Dadam" : "Папа", emoji: "👴", mode: .everyTrip, now: now)
+        return FamilyCircle(recipients: [mother, wife, father], driverName: uzbek ? "Aziz" : "Азиз")
     }
 
     /// Демо: первая — «видит сейчас».

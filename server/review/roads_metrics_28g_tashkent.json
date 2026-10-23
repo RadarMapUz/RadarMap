@@ -17,7 +17,8 @@
  "arrows_angle_max": 0.7,
  "arrows_tilted": 0.0,
  "marking_jumps": 3.5,
- "junction_colour_mismatch": 4.83,
+ "junction_colour_mismatch": 1.38,
+ "junction_colour_blots": 1,
  "bridge_seams": 0.08,
  "zebra_steps": 2.76,
  "avenues_unmarked": 11.1,
@@ -31,5 +32,5 @@
   "junctions": 2270,
   "road_lines": 92606
  },
- "_note": "Вырезка Ташкента, генератор ветки plan/28g-roads (23.10.2026): ожидаемые метрики кандидата страны по рамке ворот. Опубликованная сборка 07.10: dashes_in_junction 18.1, arrows_off_lane 414, bridge_seams ~24, junction_colour_mismatch ~68, avenues_unmarked ~32."
+ "_note": "Вырезка Ташкента, генератор ветки plan/28g-roads (23.10.2026): ожидаемые метрики кандидата страны по рамке ворот. Опубликованная сборка 07.10: dashes_in_junction 18.1, arrows_off_lane 414, bridge_seams ~24, junction_colour_mismatch ~55, avenues_unmarked ~32."
 }

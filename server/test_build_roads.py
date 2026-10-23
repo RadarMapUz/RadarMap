@@ -2944,29 +2944,58 @@ class JunctionKerbTests(unittest.TestCase):
         self.assertTrue(kerbs)
         self.assertTrue(all(not flags & build_roads.FILLET_MAJOR for _k, flags, _l in kerbs))
 
-    def test_junction_carries_the_class_of_its_widest_road(self):
-        # Узел магистрали с двором — цвета магистрали (аудит 28.G, №3: белые
-        # заплатки цвета проспекта на магистрали у торцов эстакад).
+    def test_junction_of_one_class_carries_it_mixed_or_ramps_stay_neutral(self):
+        # Узел магистрали (торец эстакады) — цвета магистрали (аудит 28.G, №3).
+        legs = [self.leg(0, 14.0, code=2), self.leg(180, 14.0, code=2), self.leg(60, 7.0, code=1)]
+        rings = [f for f in self.made(legs) if f[0] == build_roads.AREA_JUNCTION]
+        self.assertTrue(rings and all(build_roads.junction_class(flags) == 1 for _k, flags, _r in rings))
+        self.assertTrue(all(not flags & build_roads.AREA_FLAG_STRIP for _k, flags, _r in rings))
+        self.assertTrue(all(build_roads.surface_gate(f) for f in rings))
+        # Магистраль с улицей — смешанный: нейтральный, без класса.
         legs = [self.leg(0, 14.0, code=2), self.leg(180, 14.0, code=2), self.leg(90, 8.0, code=6),
                 self.leg(270, 8.0, code=6)]
         rings = [f for f in self.made(legs) if f[0] == build_roads.AREA_JUNCTION]
-        self.assertTrue(rings)
-        self.assertTrue(all(build_roads.junction_class(flags) == 2 for _k, flags, _r in rings))
-        # Проспект со съездами магистрали: цвет — по широкой дороге, не по съезду.
-        legs = [self.leg(0, 15.0, code=4), self.leg(180, 15.0, code=4), self.leg(60, 7.0, code=2),
-                self.leg(250, 7.0, code=2)]
-        rings = [f for f in self.made(legs) if f[0] == build_roads.AREA_JUNCTION]
-        self.assertTrue(rings and all(build_roads.junction_class(flags) == 4 for _k, flags, _r in rings))
-        # Съезд магистрали шире ленты проспекта — узел всё равно цвета проспекта.
+        self.assertTrue(rings and all(build_roads.junction_class(flags) == 0 for _k, flags, _r in rings))
+        # Проспект со съездом магистрали: съезд не в счёт — цвета проспекта.
         kx = 111_320 * math.cos(math.radians(self.node[1]))
         ramp = build_roads.Leg(self.node, (self.node[0] + 60 / kx, self.node[1] + 30 / 111_320), 9.0, 2, True)
         legs = [self.leg(0, 7.0, code=4), self.leg(180, 7.0, code=4), self.leg(90, 7.0, code=4), ramp]
         rings = [f for f in self.made(legs) if f[0] == build_roads.AREA_JUNCTION]
         self.assertTrue(rings and all(build_roads.junction_class(flags) == 4 for _k, flags, _r in rings))
-        self.assertTrue(all(flags & build_roads.AREA_FLAG_CLOSED for _k, flags, _r in rings))
-        # Класс не задевает флаг перемычки и проходит ворота тайла.
-        self.assertTrue(all(not flags & build_roads.AREA_FLAG_STRIP for _k, flags, _r in rings))
-        self.assertTrue(all(build_roads.surface_gate(f) for f in rings))
+        # Узел одних съездов — нейтральный (пятна «2-я Паркентская»).
+        self.assertIsNone(build_roads.junction_colour_code([ramp, ramp]))
+
+    def test_cluster_colour_is_shared_and_remembered_for_its_gaps(self):
+        # Смешанный узел (магистраль × улица): нейтральный целиком, и
+        # перемычка между лентами рядом с ним тоже узнаёт «нейтральный».
+        legs = [self.leg(0, 14.0, code=2), self.leg(180, 14.0, code=2), self.leg(90, 8.0, code=4),
+                self.leg(270, 8.0, code=4)]
+        colours = build_roads.JunctionColours()
+        figures = list(build_roads.iter_junctions({build_roads._node_key(self.node): legs}, set(), colours))
+        rings = [f for f in figures if f[0] == build_roads.AREA_JUNCTION]
+        self.assertTrue(rings and all(build_roads.junction_class(flags) == 0 for _k, flags, _r in rings))
+        kx = 111_320 * math.cos(math.radians(self.node[1]))
+        self.assertEqual(colours.near((self.node[0] + 10 / kx, self.node[1])), (True, None))
+        self.assertEqual(colours.near((self.node[0] + 200 / kx, self.node[1])), (False, None))
+
+    def test_coloured_cluster_next_to_a_mixed_one_turns_neutral(self):
+        # Узел одних магистральных лент в 20 м от смешанного узла (магистраль ×
+        # улица) — часть того же перекрёстка: нейтральный, без пятна.
+        kx = 111_320 * math.cos(math.radians(self.node[1]))
+        mixed = [self.leg(0, 14.0, code=2), self.leg(180, 14.0, code=2), self.leg(90, 8.0, code=4),
+                 self.leg(270, 8.0, code=4)]
+        near = (self.node[0] + 60 / kx, self.node[1])
+        trunk = [build_roads.Leg(near, (near[0] + 60 / kx, near[1] + d / 111_320), 12.0, 2)
+                 for d in (-20, 0, 20)]
+        arms = {build_roads._node_key(self.node): mixed, build_roads._node_key(near): trunk}
+        build_roads_near = build_roads.JUNCTION_NEIGHBOUR_METERS
+        try:
+            build_roads.JUNCTION_NEIGHBOUR_METERS = 70.0
+            figures = list(build_roads.iter_junctions(arms, set()))
+        finally:
+            build_roads.JUNCTION_NEIGHBOUR_METERS = build_roads_near
+        rings = [f for f in figures if f[0] == build_roads.AREA_JUNCTION]
+        self.assertTrue(rings and all(build_roads.junction_class(flags) == 0 for _k, flags, _r in rings))
 
     def test_junction_class_round_trip(self):
         flags = build_roads.with_junction_class(build_roads.AREA_FLAG_CLOSED | build_roads.AREA_FLAG_STRIP, 4)

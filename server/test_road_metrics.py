@@ -173,7 +173,19 @@ class JunctionColourTests(unittest.TestCase):
         self.assertEqual(rm.junction_colour_mismatch([(self.ring, {"kind": 8, "cls": 2})], self.roads), 0.0)
 
     def test_unclassed_junction_on_a_trunk_is_a_patch(self):
-        self.assertEqual(rm.junction_colour_mismatch([(self.ring, {"kind": 8})], self.roads), 100.0)
+        trunk_only = [self.roads[0], ([m(0, -80), m(0, 80)], {"cls": 2, "width": 14.0})]
+        self.assertEqual(rm.junction_colour_mismatch([(self.ring, {"kind": 8})], trunk_only), 100.0)
+
+    def test_mixed_junction_is_not_judged(self):
+        self.assertEqual(rm.junction_colour_mismatch([(self.ring, {"kind": 8})], self.roads), 0.0)
+
+    def test_trunk_coloured_blot_on_white_streets(self):
+        white = [([m(-80, 0), m(80, 0)], {"cls": 4, "width": 14.0}),
+                 ([m(0, -80), m(0, 80)], {"cls": 4, "width": 14.0})]
+        examples = []
+        self.assertEqual(rm.junction_colour_blots([(self.ring, {"kind": 8, "cls": 2})], white, examples), 1)
+        self.assertEqual(len(examples), 1)
+        self.assertEqual(rm.junction_colour_blots([(self.ring, {"kind": 8, "cls": 4})], white), 0)
 
 
 class BridgeSeamTests(unittest.TestCase):

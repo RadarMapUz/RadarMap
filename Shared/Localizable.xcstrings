@@ -26441,12 +26441,12 @@
         }
       }
     },
-    "Буду примерно в %1$@ (через %2$@). Следить: %3$@": {
+    "Буду примерно в %1$@ (через %2$@). Следить через RadarMap: %3$@": {
       "localizations": {
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Taxminan %1$@ da yetib boraman (%2$@dan keyin). Kuzatish: %3$@"
+            "value": "Taxminan %1$@ da yetib boraman (%2$@dan keyin). RadarMap orqali kuzatish: %3$@"
           }
         }
       }

@@ -1173,6 +1173,12 @@ nonisolated enum AppConfig {
     /// гостиниц; лицензия CC BY-SA 4.0 требует ссылку на источник.
     static let openDataURL = URL(string: "https://data.egov.uz")!
     static let projectPageURL = URL(string: "https://soulmed.uz/radarmap/")!
+    /// Куда ведут QR и подпись «soulmed.uz/radarmap» на шеринг-карточках
+    /// (28.J): картинку видит тот, у кого приложения нет. Пока его нет в App
+    /// Store — страница проекта; ссылку App Store (или ту же страницу, на ней
+    /// плашка Safari «Открыть») подставить здесь, одним местом. Сервер держит
+    /// такую же константу для страницы прибытия — ETA_INSTALL_URL в api.py.
+    static let installPageURL = URL(string: "https://soulmed.uz/radarmap/")!
     /// Политика конфиденциальности — прямой ссылкой из Настроек, а не через
     /// подвал страницы проекта (App Review ищет её в два касания, не в три).
     static let privacyPolicyURL = URL(string: "https://soulmed.uz/radarmap/privacy.html")!

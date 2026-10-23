@@ -3,7 +3,8 @@
 //  RadarMap
 //
 //  Каркас шеринг-карточки: фирменная шапка RadarMap, центральный контент,
-//  футер. Заполняют TripShareCard (поездка), PeriodShareCard (период) и
+//  подвал с адресом и QR на установку (28.J: карточку видят те, у кого
+//  приложения нет, — это и есть дорога к нему). Заполняют TripShareCard (поездка), PeriodShareCard (период) и
 //  AchievementShareCard (достижение).
 //
 //  Два формата, потому что делятся по-разному: лента (4:5) и сторис (9:16).
@@ -11,6 +12,9 @@
 //  пришлось бы поддерживать две карточки на каждую тему и они бы разъехались.
 //
 
+import CoreImage
+import CoreImage.CIFilterBuiltins
+import os
 import SwiftUI
 
 /// Куда пойдёт картинка. Размеры — в точках рендера; ImageRenderer со scale 2
@@ -67,12 +71,9 @@ struct ShareCardShell<Content: View>: View {
 
             content
 
-            Text("Карта камер и навигатор Узбекистана")
-                .font(.system(size: 13, weight: .medium, design: .rounded))
-                .foregroundStyle(.white.opacity(0.4))
-                .padding(.vertical, 14)
+            ShareInstallFooter()
                 // В сторис нижняя треть перекрыта интерфейсом соцсети —
-                // поднимаем подпись, иначе она уедет под кнопку «Отправить».
+                // поднимаем подвал, иначе он уедет под кнопку «Отправить».
                 .padding(.bottom, format == .story ? 96 : 0)
         }
         .frame(width: format.size.width, height: format.size.height)
@@ -88,6 +89,90 @@ struct ShareCardShell<Content: View>: View {
         // окружения приложения (по умолчанию в светлой схеме), и адаптивные
         // токены Theme дали бы тёмный текст на тёмной карточке.
         .environment(\.colorScheme, .dark)
+    }
+}
+
+/// Подвал карточки: «RadarMap · soulmed.uz/radarmap», строка о продукте и QR
+/// на страницу установки. Тихий — данные карточки важнее; QR справа внизу,
+/// не шире ~13 % карточки, и в сторис он вместе с подвалом выше полосы
+/// интерфейса соцсети.
+struct ShareInstallFooter: View {
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                // Бренд и адрес не переводятся — это имя и домен.
+                Text(verbatim: "RadarMap · \(ShareInstallLink.caption)")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.62))
+                Text("Карта камер и навигатор Узбекистана")
+                    .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.4))
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            Spacer(minLength: 8)
+            ShareInstallQR()
+        }
+        .padding(.horizontal, 32)
+        .padding(.top, 12)
+        .padding(.bottom, 16)
+    }
+}
+
+/// QR на страницу установки. Тёмные модули на белой плитке, а не светлые на
+/// тёмной карточке: инвертированный код читает камера iPhone, но не каждый
+/// сканер на Android, а карточку открывают и там.
+struct ShareInstallQR: View {
+    /// 68 pt из 540 — 12,6 % ширины: читается с экрана телефона, не спорит
+    /// с данными.
+    static let side: CGFloat = 68
+
+    var body: some View {
+        Group {
+            if let image = ShareInstallLink.qr {
+                // Без сглаживания: модуль должен остаться квадратом с резкой
+                // границей, иначе масштаб ImageRenderer его размоет.
+                Image(decorative: image, scale: 1)
+                    .interpolation(.none)
+                    .resizable()
+                    .aspectRatio(1, contentMode: .fit)
+            }
+        }
+        // Поле вокруг кода — тихая зона: без неё сканер не находит углы.
+        .padding(5)
+        .frame(width: Self.side, height: Self.side)
+        .background(.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+/// Адрес установки для карточек: подпись и QR из одной константы
+/// (`AppConfig.installPageURL`).
+enum ShareInstallLink {
+    /// «soulmed.uz/radarmap» — адрес без схемы и хвостового «/».
+    static var caption: String { caption(for: AppConfig.installPageURL) }
+
+    nonisolated static func caption(for url: URL) -> String {
+        let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let host = url.host ?? url.absoluteString
+        return path.isEmpty ? host : host + "/" + path
+    }
+
+    /// Один раз на процесс: адрес вкомпилирован, код не меняется.
+    static let qr: CGImage? = qrImage(for: AppConfig.installPageURL.absoluteString)
+
+    /// QR по модулю на пиксель (масштабирует SwiftUI). Уровень M — 15 %
+    /// коррекции: хватает на сжатие соцсетью, а код остаётся крупным.
+    nonisolated static func qrImage(for text: String) -> CGImage? {
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(text.utf8)
+        filter.correctionLevel = "M"
+        guard let output = filter.outputImage,
+              let image = CIContext(options: [.useSoftwareRenderer: false])
+                .createCGImage(output, from: output.extent) else {
+            Log.app.error("QR для карточки не построен")
+            return nil
+        }
+        return image
     }
 }
 

@@ -56,10 +56,23 @@ bash server/publish_overrides.sh <n>   # решения модератора; --
 ```
 
 Номер версии базы: приложение качает, только если `version > своей`. Бандл
-сейчас **v12** (3511 камер). Публиковать новую версию без новых данных значит
+сейчас **v13** (3698 камер; прод на v12, пока не выполнен `deploy_db.sh 13`). Публиковать новую версию без новых данных значит
 заставить всех скачать тот же мегабайт заново.
 
 ### Пополнение базы камер из реестра МВД
+
+С v13 (23.10.2026) — `append_registry.py`: сопоставление по адресу, профиль
+новых по вырезке OSM вокруг них, twin только там, где пару дала новая камера,
+отчёты для модерации. Реестр — вывод `update_cameras.build(fetch())`:
+
+```bash
+python3 -I server/append_registry.py --base RadarMap/Resources/cameras.json \
+    --registry candidate.json --roads ~/RadarMapBuild/roads.geojsonl \
+    --report-new server/review/cameras_vN_new_<дата>.csv \
+    --report-gone server/review/cameras_gone_<дата>.csv [--apply]
+```
+
+Ниже — прежний путь (v12): сопоставление только по расстоянию 200 м.
 
 ```bash
 python3 server/merge_cameras.py --base RadarMap/Resources/cameras.json \

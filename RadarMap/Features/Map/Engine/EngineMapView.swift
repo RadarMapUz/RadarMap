@@ -1226,7 +1226,7 @@ struct EngineMapView: UIViewRepresentable {
             @unknown default: "?"
             }
             let onMain = view.window?.screen == UIScreen.main
-            // Внутреннее состояние MapLibre 6.29 (MLNMapView.mm): спит ли
+            // Внутреннее состояние MapLibre 6.29–6.31 (MLNMapView.mm): спит ли
             // движок и тикает ли его таймер кадров. Через KVC и только при
             // наличии селектора — другая версия движка просто даст «?».
             let dormant = view.responds(to: NSSelectorFromString("isDormant"))

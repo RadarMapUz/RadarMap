@@ -154,7 +154,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         windowRoot = root
         // Содержимое — только когда и сцена на экране, и приложение не в фоне:
         // MLNMapView, созданный при applicationState == .background, стартует
-        // «спящим» и будится не всегда (MLNMapView.mm 6.29, dormant) — карта
+        // «спящим» и будится не всегда (MLNMapView.mm 6.29–6.31, dormant) — карта
         // осталась бы пустой или стоящей. Иначе — в sceneDidBecomeActive.
         if shown && UIApplication.shared.applicationState != .background {
             installHost()

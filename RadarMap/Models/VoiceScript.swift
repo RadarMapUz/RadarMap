@@ -232,7 +232,7 @@ nonisolated enum VoiceScript {
     }
 
     /// Слово внутри предложения — со строчной, кроме аббревиатур («YPX»,
-    /// «ДТП»): «Marshrutda statsionar radar», но «пост ДПС».
+    /// «ДТП»): «Marshrutda koʻchma radar», но «пост ДПС».
     private static func midSentence(_ word: String) -> String {
         let letters = Array(word.prefix(2))
         guard letters.count == 2, letters[1].isLowercase else { return word }
@@ -252,7 +252,6 @@ nonisolated enum VoiceScript {
     static func note(_ id: SegmentID, _ language: VoiceLanguage) -> String {
         guard language == .uz else { return "" }
         switch id.raw {
-        case "kind.intelligent_radar": return "«+» читать как «va»: «intellektual kamera va radar»"
         case "kind.dps_post": return "аббревиатуру читать так, как говорят вслух (уточнить: «ye-pe-xa posti»)"
         case "kind.accident": return "аббревиатуру читать так, как говорят вслух (уточнить: «ye-te-xa»)"
         case "w.drivers_mark": return "после — пауза двоеточия, фраза продолжается"
@@ -299,9 +298,8 @@ nonisolated enum VoiceScript {
 
     static let uzbek: [SegmentID: String] = {
         var t: [SegmentID: String] = [
-            "kind.stationary_camera": "Statsionar kamera",
-            "kind.stationary_radar": "Statsionar radar",
-            "kind.intelligent_radar": "Intellektual kamera + radar",
+            // Стационарные типы по-узбекски голос называет одним словом —
+            // «Kamera» / «Radar» (VoiceComposer.Uzbek.kind, решение 23.10).
             "kind.mobile_radar": "Koʻchma radar",
             "kind.tripod": "Uch oyoq kamera",
             "kind.dps_post": "YPX posti",

@@ -87,6 +87,18 @@ struct AlertSettingsPage: View {
                         set: { settings.voiceSourceChoice = $0 })) {
                         ForEach(VoiceSource.allCases) { Text($0.title).tag($0) }
                     }
+                    // Женский или мужской набор (28.M) — когда в сборке оба
+                    // и звучит запись.
+                    if env.alerts.recorded.genders.count > 1, env.alerts.recorded.isActive {
+                        Picker("Голос", selection: Binding(
+                            get: { settings.voiceGender },
+                            set: {
+                                settings.voiceGender = $0
+                                env.alerts.recorded.reload()
+                            })) {
+                            ForEach(VoiceGender.allCases) { Text($0.title).tag($0) }
+                        }
+                    }
                 }
                 #if DEBUG
                 // Ключ запуска -voicePlaceholder включает заглушку и без
@@ -105,7 +117,7 @@ struct AlertSettingsPage: View {
                     "О камерах, которые вы каждый день проезжаете спокойно, приложение молчит и только отмечает вибрацией. Подъедете с превышением — заговорит.",
                     "«Голос о превышении» — про фразу без камеры. В режиме «У камер» она звучит, только когда камера впереди по вашей дороге; в остальное время превышение видно цветом скорости.",
                 ] + (env.alerts.recorded.isAvailable ? [
-                    "«Записанный голос» — фразы, записанные диктором. Фразу, которой в записи нет (например, с названием улицы), целиком прочтёт системный голос.",
+                    "«Записанный голос» — заранее озвученные фразы: голос ровный, без синтезатора в моменте. Фразу, которой в записи нет (например, с названием улицы), целиком прочтёт системный голос.",
                 ] : []))
             } header: {
                 Text("Голос")

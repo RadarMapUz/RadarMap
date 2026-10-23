@@ -47,6 +47,16 @@ nonisolated final class SegmentPlayer: @unchecked Sendable {
     private var attached = false
     private var connectedFormat: AVAudioFormat?
     private var cache = SegmentCache(budgetBytes: AppConfig.voiceCacheBytes)
+    /// Из какого набора кэш. Сменили голос (28.M) — кэш другого голоса не
+    /// годится: иначе в одной фразе зазвучали бы два диктора.
+    private var cachedPack: URL?
+
+    /// Кэш — только для отрывков этого набора.
+    private func adopt(_ pack: VoicePack) {
+        guard cachedPack != pack.directory else { return }
+        cache = SegmentCache(budgetBytes: AppConfig.voiceCacheBytes)
+        cachedPack = pack.directory
+    }
 
     /// Склеить фразу: раскодировать (или взять из кэша) отрывки и паузы.
     /// Ошибка у любого отрывка — ошибка всей фразы: полфразы не звучит.
@@ -55,6 +65,7 @@ nonisolated final class SegmentPlayer: @unchecked Sendable {
         // по 4–5 мс подряд — это 40 мс до первого звука, параллельно — около
         // десяти. Готовое держим и локально: кэш с потолком мог бы вытеснить
         // только что положенное раньше, чем фраза склеится.
+        adopt(pack)
         var fresh: [SegmentID: AVAudioPCMBuffer] = [:]
         let missing = Array(Set(ids.filter { !$0.isPause && cache[$0] == nil }))
         for (id, result) in zip(missing, Self.decodeAll(missing, pack: pack)) {
@@ -161,6 +172,7 @@ nonisolated final class SegmentPlayer: @unchecked Sendable {
     /// Прогреть кодек: первое раскодирование AAC в процессе поднимает
     /// декодер (десятки миллисекунд), и платить их должен не первый алерт.
     func warm(_ id: SegmentID, pack: VoicePack) {
+        adopt(pack)
         guard cache[id] == nil else { return }
         do {
             cache[id] = try SegmentDecoder.decode(id, in: pack)

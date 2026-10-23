@@ -1,34 +1,31 @@
 id,text,example,position,note
 kind.accident,YTH,"YTH, uch yuz metr","начало, середина, отдельно","аббревиатуру читать так, как говорят вслух (уточнить: «ye-te-xa»)"
-kind.camera,Kamera,"Kamera, uch yuz metr",начало,
+kind.camera,Kamera,"Kamera, uch yuz metr","начало, середина, отдельно",
 kind.dps_post,YPX posti,"YPX posti, uch yuz metr","начало, середина, отдельно","аббревиатуру читать так, как говорят вслух (уточнить: «ye-pe-xa posti»)"
-kind.intelligent_radar,Intellektual kamera + radar,"Intellektual kamera + radar oldinda, besh yuz metr","начало, середина, отдельно",«+» читать как «va»: «intellektual kamera va radar»
 kind.mobile_radar,Koʻchma radar,"Koʻchma radar, uch yuz metr","начало, середина, отдельно",
-kind.radar,Radar,"Radar, uch yuz metr",начало,
-kind.stationary_camera,Statsionar kamera,"Statsionar kamera oldinda, besh yuz metr","начало, середина, отдельно",
-kind.stationary_radar,Statsionar radar,"Statsionar radar oldinda, besh yuz metr","начало, середина, отдельно",
+kind.radar,Radar,"Radar, uch yuz metr","начало, середина, отдельно",
 kind.tripod,Uch oyoq kamera,"Uch oyoq kamera, uch yuz metr","начало, середина, отдельно",
-side.ahead,oldinda,"Statsionar kamera oldinda, besh yuz metr",середина,
-side.ahead_left,oldinda chapda,"Statsionar kamera oldinda chapda, besh yuz metr",середина,
-side.ahead_right,oldinda oʻngda,"Statsionar kamera oldinda oʻngda, besh yuz metr",середина,
+side.ahead,oldinda,"Kamera oldinda, besh yuz metr",середина,
+side.ahead_left,oldinda chapda,"Kamera oldinda chapda, besh yuz metr",середина,
+side.ahead_right,oldinda oʻngda,"Kamera oldinda oʻngda, besh yuz metr",середина,
 w.about,taxminan,"Oldinda tirbandlik, taxminan uch yuz metr, qoʻshimcha toʻrt daqiqa",середина,
 w.cameras_ahead,Oldinda kameralar,"Oldinda kameralar, uch yuz metr",начало,
 w.drivers_mark,Haydovchilar belgisi,"Haydovchilar belgisi, koʻchma radar oldinda, uch yuz metr",начало,"после — пауза двоеточия, фраза продолжается"
 w.faster_way,tezroq yoʻl bor,Oldinda tirbandlik. Bir daqiqa tezroq yoʻl bor,конец,
-w.here,bu yerda,"Statsionar radar oldinda, toʻrt yuz metr, bu yerda yetmish",середина,
+w.here,bu yerda,"Radar oldinda, toʻrt yuz metr, bu yerda yetmish",середина,
 w.jam_ahead,Oldinda tirbandlik,"Oldinda tirbandlik, taxminan uch yuz metr, qoʻshimcha toʻrt daqiqa",начало,
-w.limit,cheklov,"Statsionar radar oldinda, toʻrt yuz metr. Tezligingiz yetmish besh, cheklov oltmish",середина,
+w.limit,cheklov,"Radar oldinda, toʻrt yuz metr. Tezligingiz yetmish besh, cheklov oltmish",середина,
 w.not_sent,Yuborilmadi,"Yuborilmadi, aloqa yoʻq",начало,
-w.on_route,Marshrutda,Marshrutda statsionar kamera toʻrt yuz metrdan soʻng,начало,
+w.on_route,Marshrutda,Marshrutda kamera toʻrt yuz metrdan soʻng,начало,
 w.plus,qoʻshimcha,"Oldinda tirbandlik, taxminan uch yuz metr, qoʻshimcha toʻrt daqiqa",середина,
 w.send_later,keyinroq yuboraman,"Aloqa yoʻq, keyinroq yuboraman",конец,
 w.speed_limit,tezlik cheklovi,Yuz metrdan soʻng tezlik cheklovi qirq,середина,
-w.your_speed,Tezligingiz,"Statsionar radar oldinda, toʻrt yuz metr. Tezligingiz yetmish besh, cheklov oltmish",середина,
+w.your_speed,Tezligingiz,"Radar oldinda, toʻrt yuz metr. Tezligingiz yetmish besh, cheklov oltmish",середина,
 num.1,bir,"Koʻchma radar oldinda, uch yuz metr. Tezligingiz yigirma bir","середина, конец","числительное: ровный тон — запись встаёт и в середину фразы, и в конец"
 num.2,ikki,"Koʻchma radar oldinda, uch yuz metr. Tezligingiz yigirma ikki","середина, конец","числительное: ровный тон — запись встаёт и в середину фразы, и в конец"
 num.3,uch,"Koʻchma radar oldinda, uch yuz metr. Tezligingiz yigirma uch","середина, конец","числительное: ровный тон — запись встаёт и в середину фразы, и в конец"
 num.4,toʻrt,"Koʻchma radar oldinda, uch yuz metr. Tezligingiz yigirma toʻrt","середина, конец","числительное: ровный тон — запись встаёт и в середину фразы, и в конец"
-num.5,besh,"Statsionar radar oldinda, toʻrt yuz metr. Tezligingiz yetmish besh, cheklov oltmish","середина, конец","числительное: ровный тон — запись встаёт и в середину фразы, и в конец"
+num.5,besh,"Radar oldinda, toʻrt yuz metr. Tezligingiz yetmish besh, cheklov oltmish","середина, конец","числительное: ровный тон — запись встаёт и в середину фразы, и в конец"
 num.6,olti,"Koʻchma radar oldinda, uch yuz metr. Tezligingiz yigirma olti","середина, конец","числительное: ровный тон — запись встаёт и в середину фразы, и в конец"
 num.7,yetti,"Koʻchma radar oldinda, uch yuz metr. Tezligingiz yigirma yetti","середина, конец","числительное: ровный тон — запись встаёт и в середину фразы, и в конец"
 num.8,sakkiz,"Koʻchma radar oldinda, uch yuz metr. Tezligingiz yigirma sakkiz","середина, конец","числительное: ровный тон — запись встаёт и в середину фразы, и в конец"
@@ -38,8 +35,8 @@ num.20,yigirma,"Koʻchma radar oldinda, uch yuz metr. Tezligingiz yigirma","се
 num.30,oʻttiz,"Koʻchma radar oldinda, uch yuz metr. Tezligingiz oʻttiz","середина, конец","числительное: ровный тон — запись встаёт и в середину фразы, и в конец"
 num.40,qirq,"Koʻchma radar oldinda, uch yuz metr. Tezligingiz qirq","середина, конец","числительное: ровный тон — запись встаёт и в середину фразы, и в конец"
 num.50,ellik,"Koʻchma radar oldinda, uch yuz metr. Tezligingiz ellik","середина, конец","числительное: ровный тон — запись встаёт и в середину фразы, и в конец"
-num.60,oltmish,"Statsionar radar oldinda, toʻrt yuz metr. Tezligingiz yetmish besh, cheklov oltmish","середина, конец","числительное: ровный тон — запись встаёт и в середину фразы, и в конец"
-num.70,yetmish,"Statsionar radar oldinda, toʻrt yuz metr. Tezligingiz yetmish besh, cheklov oltmish","середина, конец","числительное: ровный тон — запись встаёт и в середину фразы, и в конец"
+num.60,oltmish,"Radar oldinda, toʻrt yuz metr. Tezligingiz yetmish besh, cheklov oltmish","середина, конец","числительное: ровный тон — запись встаёт и в середину фразы, и в конец"
+num.70,yetmish,"Radar oldinda, toʻrt yuz metr. Tezligingiz yetmish besh, cheklov oltmish","середина, конец","числительное: ровный тон — запись встаёт и в середину фразы, и в конец"
 num.80,sakson,"Koʻchma radar oldinda, uch yuz metr. Tezligingiz sakson","середина, конец","числительное: ровный тон — запись встаёт и в середину фразы, и в конец"
 num.90,toʻqson,"Koʻchma radar oldinda, uch yuz metr. Tezligingiz toʻqson","середина, конец","числительное: ровный тон — запись встаёт и в середину фразы, и в конец"
 num.100,yuz,"Koʻchma radar oldinda, uch yuz metr. Tezligingiz yuz","середина, конец",«yuz» без «bir»: 120 — «yuz yigirma» (так говорит и синтезатор)
@@ -47,35 +44,35 @@ num.200,ikki yuz,"Koʻchma radar oldinda, uch yuz metr. Tezligingiz ikki yuz","�
 unit.hour,soat,"Oldinda tirbandlik, taxminan bir kilometr, qoʻshimcha bir soat","середина, конец",
 unit.minute,daqiqa,"Oldinda tirbandlik, taxminan uch yuz metr, qoʻshimcha toʻrt daqiqa","середина, конец",
 dist.50,ellik metr,"Radar, ellik metr",конец,
-dist.50.after,ellik metrdan soʻng,Marshrutda statsionar radar ellik metrdan soʻng,"начало, конец",
+dist.50.after,ellik metrdan soʻng,Marshrutda radar ellik metrdan soʻng,"начало, конец",
 dist.100,yuz metr,"Radar, yuz metr",конец,
-dist.100.after,yuz metrdan soʻng,Marshrutda statsionar radar yuz metrdan soʻng,"начало, конец",
+dist.100.after,yuz metrdan soʻng,Marshrutda radar yuz metrdan soʻng,"начало, конец",
 dist.150,yuz ellik metr,"Radar, yuz ellik metr",конец,
-dist.150.after,yuz ellik metrdan soʻng,Marshrutda statsionar radar yuz ellik metrdan soʻng,"начало, конец",
+dist.150.after,yuz ellik metrdan soʻng,Marshrutda radar yuz ellik metrdan soʻng,"начало, конец",
 dist.200,ikki yuz metr,"Radar, ikki yuz metr",конец,
-dist.200.after,ikki yuz metrdan soʻng,Marshrutda statsionar radar ikki yuz metrdan soʻng,"начало, конец",
+dist.200.after,ikki yuz metrdan soʻng,Marshrutda radar ikki yuz metrdan soʻng,"начало, конец",
 dist.250,ikki yuz ellik metr,"Radar, ikki yuz ellik metr",конец,
-dist.250.after,ikki yuz ellik metrdan soʻng,Marshrutda statsionar radar ikki yuz ellik metrdan soʻng,"начало, конец",
+dist.250.after,ikki yuz ellik metrdan soʻng,Marshrutda radar ikki yuz ellik metrdan soʻng,"начало, конец",
 dist.300,uch yuz metr,"Kamera, uch yuz metr","середина, конец",
-dist.300.after,uch yuz metrdan soʻng,Marshrutda statsionar radar uch yuz metrdan soʻng,"начало, конец",
+dist.300.after,uch yuz metrdan soʻng,Marshrutda radar uch yuz metrdan soʻng,"начало, конец",
 dist.350,uch yuz ellik metr,"Radar, uch yuz ellik metr",конец,
-dist.350.after,uch yuz ellik metrdan soʻng,Marshrutda statsionar radar uch yuz ellik metrdan soʻng,"начало, конец",
+dist.350.after,uch yuz ellik metrdan soʻng,Marshrutda radar uch yuz ellik metrdan soʻng,"начало, конец",
 dist.400,toʻrt yuz metr,"Radar, toʻrt yuz metr","середина, конец",
-dist.400.after,toʻrt yuz metrdan soʻng,Marshrutda statsionar kamera toʻrt yuz metrdan soʻng,"начало, конец",
-dist.500,besh yuz metr,"Statsionar kamera oldinda, besh yuz metr","середина, конец",
-dist.500.after,besh yuz metrdan soʻng,Marshrutda statsionar radar besh yuz metrdan soʻng,"начало, конец",
+dist.400.after,toʻrt yuz metrdan soʻng,Marshrutda kamera toʻrt yuz metrdan soʻng,"начало, конец",
+dist.500,besh yuz metr,"Kamera oldinda, besh yuz metr","середина, конец",
+dist.500.after,besh yuz metrdan soʻng,Marshrutda radar besh yuz metrdan soʻng,"начало, конец",
 dist.600,olti yuz metr,"Radar, olti yuz metr","середина, конец",
-dist.600.after,olti yuz metrdan soʻng,Marshrutda statsionar radar olti yuz metrdan soʻng,"начало, конец",
+dist.600.after,olti yuz metrdan soʻng,Marshrutda radar olti yuz metrdan soʻng,"начало, конец",
 dist.700,yetti yuz metr,"Radar, yetti yuz metr","середина, конец",
-dist.700.after,yetti yuz metrdan soʻng,Marshrutda statsionar radar yetti yuz metrdan soʻng,"начало, конец",
+dist.700.after,yetti yuz metrdan soʻng,Marshrutda radar yetti yuz metrdan soʻng,"начало, конец",
 dist.800,sakkiz yuz metr,"Radar, sakkiz yuz metr","середина, конец",
-dist.800.after,sakkiz yuz metrdan soʻng,Marshrutda statsionar radar sakkiz yuz metrdan soʻng,"начало, конец",
+dist.800.after,sakkiz yuz metrdan soʻng,Marshrutda radar sakkiz yuz metrdan soʻng,"начало, конец",
 dist.900,toʻqqiz yuz metr,"Radar, toʻqqiz yuz metr","середина, конец",
-dist.900.after,toʻqqiz yuz metrdan soʻng,Marshrutda statsionar radar toʻqqiz yuz metrdan soʻng,"начало, конец",
+dist.900.after,toʻqqiz yuz metrdan soʻng,Marshrutda radar toʻqqiz yuz metrdan soʻng,"начало, конец",
 dist.1000,bir kilometr,"Radar, bir kilometr","середина, конец",
-dist.1000.after,bir kilometrdan soʻng,Marshrutda statsionar radar bir kilometrdan soʻng,конец,
+dist.1000.after,bir kilometrdan soʻng,Marshrutda radar bir kilometrdan soʻng,конец,
 dist.1500,bir yarim kilometr,"Radar, bir yarim kilometr","середина, конец",
-dist.1500.after,bir yarim kilometrdan soʻng,Marshrutda statsionar radar bir yarim kilometrdan soʻng,конец,
+dist.1500.after,bir yarim kilometrdan soʻng,Marshrutda radar bir yarim kilometrdan soʻng,конец,
 man.arrived,yetib keldingiz,Yetib keldingiz,"конец, отдельно",
 man.exit.1,birinchi chiqish,Aylanada birinchi chiqish,конец,
 man.exit.2,ikkinchi chiqish,Aylanada ikkinchi chiqish,конец,

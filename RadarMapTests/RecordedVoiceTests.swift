@@ -18,7 +18,7 @@ final class RecordedVoiceTests: XCTestCase {
     /// Пакет-заглушка из бандла (только отладочная сборка — в выпуск не едет).
     private func placeholder() throws -> VoicePack {
         let url = try XCTUnwrap(Bundle.main.resourceURL)
-            .appendingPathComponent(VoicePack.directoryName(.uz, placeholder: true))
+            .appendingPathComponent(VoicePack.placeholderDirectoryName(.uz))
         return try VoicePack.load(from: url)
     }
 
@@ -75,14 +75,193 @@ final class RecordedVoiceTests: XCTestCase {
         XCTAssertLessThanOrEqual(bytes, 3 * 1024 * 1024, "бюджет пакета — 3 МБ")
     }
 
-    /// Пока настоящей записи нет, «записанный голос» не предлагается: заглушка
-    /// берётся только по отладочному переключателю.
+    /// Заглушка — только по отладочному переключателю и только когда
+    /// настоящих наборов нет: настоящий набор главнее.
     func testPlaceholderIsNotOfferedWithoutTheDebugSwitch() throws {
+        let root = try fakeRoot(genders: [], placeholder: true)
+        XCTAssertNil(VoicePack.discover(language: .uz, gender: .female, allowPlaceholder: false, in: root))
+        XCTAssertEqual(VoicePack.discover(language: .uz, gender: .female, allowPlaceholder: true, in: root)?
+            .isPlaceholder, true)
+        XCTAssertNil(VoicePack.discover(language: .ru, gender: .female, allowPlaceholder: true, in: root),
+                     "русского пакета нет")
+        let both = try fakeRoot(genders: [.female, .male], placeholder: true)
+        XCTAssertEqual(VoicePack.discover(language: .uz, gender: .female, allowPlaceholder: true, in: both)?
+            .isPlaceholder, false, "настоящий набор главнее заглушки")
+    }
+
+    // MARK: - Два голоса (28.M: озвучка Navoiy TTS)
+
+    /// Папка-«бандл» во временном каталоге: копии заглушки под именами
+    /// настоящих наборов (с `placeholder: false`) и, по желанию, сама заглушка.
+    private func fakeRoot(genders: [VoiceGender], placeholder includePlaceholder: Bool) throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("voice-root-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        let source = try placeholder().directory
+        for gender in genders {
+            let target = root.appendingPathComponent(VoicePack.directoryName(.uz, gender: gender))
+            try FileManager.default.copyItem(at: source, to: target)
+            let url = target.appendingPathComponent("manifest.json")
+            var json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+            json["placeholder"] = false
+            json["voice"] = gender.rawValue
+            try JSONSerialization.data(withJSONObject: json).write(to: url)
+        }
+        if includePlaceholder {
+            try FileManager.default.copyItem(at: source,
+                                             to: root.appendingPathComponent(VoicePack.placeholderDirectoryName(.uz)))
+        }
+        return root
+    }
+
+    private func corrupt(_ segment: String, gender: VoiceGender, in root: URL) throws {
+        let file = root.appendingPathComponent(VoicePack.directoryName(.uz, gender: gender))
+            .appendingPathComponent(segment + ".m4a")
+        var bytes = try Data(contentsOf: file)
+        bytes[bytes.count / 2] ^= 0xFF
+        try bytes.write(to: file)
+    }
+
+    func testChosenGenderIsUsedAndTheOtherIsTheFallback() throws {
+        let root = try fakeRoot(genders: [.female, .male], placeholder: false)
+        XCTAssertEqual(VoicePack.discover(language: .uz, gender: .female, allowPlaceholder: false, in: root)?.gender,
+                       .female)
+        XCTAssertEqual(VoicePack.discover(language: .uz, gender: .male, allowPlaceholder: false, in: root)?.gender,
+                       .male)
+        XCTAssertEqual(VoicePack.availableGenders(language: .uz, in: root), [.female, .male])
+
+        let onlyMale = try fakeRoot(genders: [.male], placeholder: false)
+        XCTAssertEqual(VoicePack.discover(language: .uz, gender: .female, allowPlaceholder: false, in: onlyMale)?
+            .gender, .male, "выбранного набора нет — второй, а не синтезатор")
+        XCTAssertEqual(VoicePack.availableGenders(language: .uz, in: onlyMale), [.male])
+    }
+
+    func testBrokenChosenPackFallsBackToTheIntactOne() throws {
+        let root = try fakeRoot(genders: [.female, .male], placeholder: false)
+        try corrupt("kind.radar", gender: .female, in: root)
+        let pack = try XCTUnwrap(VoicePack.discover(language: .uz, gender: .female, allowPlaceholder: false, in: root))
+        XCTAssertEqual(pack.gender, .male, "битый выбранный набор — целый второй")
+        XCTAssertTrue(pack.segmentIDs.contains("kind.radar"))
+
+        // Манифест выбранного не читается — тоже второй.
+        let unreadable = try fakeRoot(genders: [.female, .male], placeholder: false)
+        try Data("{".utf8).write(to: unreadable.appendingPathComponent(VoicePack.directoryName(.uz, gender: .female))
+            .appendingPathComponent("manifest.json"))
+        XCTAssertEqual(VoicePack.discover(language: .uz, gender: .female, allowPlaceholder: false, in: unreadable)?
+            .gender, .male)
+    }
+
+    /// Оба набора битые — звучит тот, где уцелело больше, без битых
+    /// отрывков: фраза с битым целиком уходит синтезатору, тишины нет.
+    func testBothPacksBrokenLeaveOnlyIntactSegmentsAndSynthesizerForTheRest() throws {
+        let root = try fakeRoot(genders: [.female, .male], placeholder: false)
+        try corrupt("kind.radar", gender: .female, in: root)
+        try corrupt("kind.radar", gender: .male, in: root)
+        try corrupt("dist.300", gender: .male, in: root)
+        let pack = try XCTUnwrap(VoicePack.discover(language: .uz, gender: .male, allowPlaceholder: false, in: root))
+        XCTAssertEqual(pack.gender, .female, "у женского уцелело больше")
+        XCTAssertFalse(pack.segmentIDs.contains("kind.radar"))
+        let radar = VoiceEvent.camera(Call(kind: .stationaryRadar, form: .brief, meters: 300))
+        XCTAssertNil(RecordedVoicePlan.segments(for: radar, language: .uz, available: pack.segmentIDs),
+                     "фраза с битым отрывком — синтезатором целиком")
+        XCTAssertNotNil(RecordedVoicePlan.segments(for: .phrase(.overspeed), language: .uz,
+                                                   available: pack.segmentIDs))
+        XCTAssertNil(VoicePack.discover(language: .uz, gender: .male, allowPlaceholder: false,
+                                        in: try fakeRoot(genders: [], placeholder: false)),
+                     "наборов нет — синтезатор")
+    }
+
+    /// Сменили голос — кэш раскодированных отрывков прежнего набора не
+    /// используется: два диктора в одной фразе не звучат.
+    func testSwitchingPacksDropsTheDecodedCache() throws {
+        let root = try fakeRoot(genders: [.female, .male], placeholder: false)
+        let female = try VoicePack.load(from: root.appendingPathComponent(VoicePack.directoryName(.uz, gender: .female)))
+        let male = try VoicePack.load(from: root.appendingPathComponent(VoicePack.directoryName(.uz, gender: .male)))
+        let ids: [SegmentID] = ["kind.radar", .comma, "dist.300"]
+        let player = SegmentPlayer()
+        XCTAssertNoThrow(try player.prepare(ids, pack: female))
+        try corrupt("kind.radar", gender: .male, in: root)
+        XCTAssertThrowsError(try player.prepare(ids, pack: male), "отрывок взят из мужского набора, не из кэша женского") {
+            XCTAssertEqual($0 as? SegmentPlayer.PlayError, .segment("kind.radar", .shaMismatch))
+        }
+    }
+
+    @MainActor
+    func testVoiceGenderDefaultsToFemaleAndPersists() {
+        XCTAssertEqual(VoiceGender.female.other, .male)
+        XCTAssertEqual(VoiceGender.male.other, .female)
+        let defaults = UserDefaults.standard
+        let key = "voiceGender"
+        let saved = defaults.object(forKey: key)
+        defer {
+            if let saved { defaults.set(saved, forKey: key) } else { defaults.removeObject(forKey: key) }
+        }
+        defaults.removeObject(forKey: key)
+        XCTAssertEqual(AppSettings().voiceGender, .female, "по умолчанию — женский")
+        for gender in VoiceGender.allCases {
+            AppSettings().voiceGender = gender
+            XCTAssertEqual(AppSettings().voiceGender, gender, "выбор сохраняется")
+        }
+    }
+
+    /// Наборы `voice-uz-female.bundle` и `voice-uz-male.bundle` едут в выпуск:
+    /// полные по сценарию, не заглушки, каждый в бюджете 3 МБ, целые.
+    func testShippedPacksAreCompleteIntactAndInBudget() throws {
         let root = try XCTUnwrap(Bundle.main.resourceURL)
-        let offered = VoicePack.discover(language: .uz, allowPlaceholder: false, in: root)
-        XCTAssertFalse(offered?.isPlaceholder ?? false)
-        XCTAssertEqual(VoicePack.discover(language: .uz, allowPlaceholder: true, in: root)?.language, .uz)
-        XCTAssertNil(VoicePack.discover(language: .ru, allowPlaceholder: true, in: root), "русского пакета нет")
+        XCTAssertEqual(VoicePack.availableGenders(language: .uz, in: root), [.female, .male])
+        for gender in VoiceGender.allCases {
+            let pack = try VoicePack.load(from: root.appendingPathComponent(VoicePack.directoryName(.uz, gender: gender)))
+            XCTAssertFalse(pack.isPlaceholder, gender.rawValue)
+            XCTAssertEqual(pack.language, .uz)
+            XCTAssertEqual(pack.manifest.sampleRate, 48000)
+            XCTAssertEqual(pack.segmentIDs, Set(VoiceScript.inventory(.uz)), "\(gender): собран по текущему сценарию")
+            XCTAssertEqual(pack.corruptSegments(), [], gender.rawValue)
+            let bytes = try pack.segmentIDs.reduce(0) { total, id in
+                total + (try FileManager.default.attributesOfItem(atPath: pack.url(for: id)!.path)[.size] as? Int ?? 0)
+            }
+            XCTAssertLessThanOrEqual(bytes, 3 * 1024 * 1024, "\(gender): бюджет набора — 3 МБ")
+            for allow in [false, true] {
+                let found = try XCTUnwrap(VoicePack.discover(language: .uz, gender: gender, allowPlaceholder: allow, in: root))
+                XCTAssertEqual(found.gender, gender, "выбранный голос (allowPlaceholder: \(allow))")
+                XCTAssertFalse(found.isPlaceholder)
+            }
+        }
+        XCTAssertEqual(VoiceSource.effective(choice: nil, packAvailable: true), .recorded,
+                       "с набором узбекский по умолчанию звучит записью")
+    }
+
+    /// С настоящими наборами фразы образцов идут записью: план — отрывки, а
+    /// не синтезатор, склейка — длина отрывков плюс паузы.
+    func testShippedPacksPlanAndPrepareRecordedPhrases() throws {
+        let root = try XCTUnwrap(Bundle.main.resourceURL)
+        let events: [VoiceEvent] = [
+            .camera(Call(kind: .stationaryRadar, form: .full(.aheadRight), meters: 500)),
+            .maneuver(.init(action: .turnRight, meters: 300, lanes: nil)),
+            .phrase(.overspeed),
+            .limitAhead(limit: 60, meters: 200),
+            .jam(meters: 800, delaySeconds: 240),
+            .phrase(.reportAccepted),
+        ]
+        for gender in VoiceGender.allCases {
+            let pack = try XCTUnwrap(VoicePack.discover(language: .uz, gender: gender, allowPlaceholder: false, in: root))
+            let player = SegmentPlayer()
+            for event in events {
+                let rendered = VoiceText.render(event)
+                let decided = RecordedVoicePlan.decide(text: rendered, event: event, rendered: rendered,
+                                                       language: .uz, available: pack.segmentIDs)
+                guard case .success(let ids) = decided else { return XCTFail("\(gender) \(event): \(decided)") }
+                let buffer = try player.prepare(ids, pack: pack)
+                XCTAssertEqual(Double(buffer.frameLength) / 48000, pack.duration(of: ids)
+                               + Double(ids.filter { $0 == .comma }.count) * AppConfig.voicePauseCommaSeconds
+                               + Double(ids.filter { $0 == .stop }.count) * AppConfig.voicePauseStopSeconds,
+                               accuracy: 0.01, "\(gender) \(ids)")
+            }
+            for id in pack.segmentIDs {
+                let buffer = try SegmentDecoder.decode(id, in: pack)
+                XCTAssertEqual(Double(buffer.frameLength) / buffer.format.sampleRate,
+                               pack.manifest.segments[id.raw]!.duration, accuracy: 0.002, "\(gender) \(id)")
+            }
+        }
     }
 
     func testEverySegmentDecodesToItsManifestDuration() throws {

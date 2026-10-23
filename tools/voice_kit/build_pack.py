@@ -2,7 +2,7 @@
 """Сборка пакета голоса для приложения (этап 16.2).
 
     python3 build_pack.py recordings/ \\
-        --out ../../RadarMap/Resources/Voice/voice-uz.bundle --voice "Имя диктора"
+        --out ../../RadarMap/Resources/Voice/voice-uz-female.bundle --voice "Имя диктора"
 
 Шаги: проверка папки (validate.py — с ошибками сборка не идёт) → каждый
 отрывок обрезается до 12 мс тишины по краям, выравнивается по громкости
@@ -116,7 +116,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Сборка пакета голоса (AAC + manifest.json)")
     parser.add_argument("directory", help="папка с WAV диктора")
     parser.add_argument("--script", default=os.path.join(here, "script_uz.csv"))
-    parser.add_argument("--out", required=True, help="папка пакета, например …/voice-uz.bundle")
+    parser.add_argument("--out", required=True, help="папка пакета, например …/voice-uz-female.bundle")
     parser.add_argument("--language", default="uz")
     parser.add_argument("--voice", required=True, help="кто говорит — для экрана и журнала")
     parser.add_argument("--bitrate", type=int, default=DEFAULT_BITRATE)

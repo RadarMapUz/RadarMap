@@ -1995,22 +1995,6 @@
         }
       }
     },
-    "«Записанный голос» — фразы, записанные диктором. Фразу, которой в записи нет (например, с названием улицы), целиком прочтёт системный голос.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Записанный голос» — фразы, записанные диктором. Фразу, которой в записи нет (например, с названием улицы), целиком прочтёт системный голос."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Yozib olingan ovoz» — diktor yozib olgan iboralar. Yozuvda yoʻq iborani (masalan, koʻcha nomi bilan) tizim ovozi toʻliq oʻqiydi."
-          }
-        }
-      }
-    },
     "«Когда выезжать на работу» напоминает по будням, только если выехать в другое время выгоднее или нужно успеть к сроку «быть к».": {
       "localizations": {
         "ru": {
@@ -31409,6 +31393,122 @@
           "stringUnit": {
             "state": "translated",
             "value": "Xarita maʼlumotlari"
+          }
+        }
+      }
+    },
+    "voice.kind.stationary_camera": {
+      "comment": "Голос: тип камеры в полной фразе. uz — одним словом.",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Стационарная камера"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera"
+          }
+        }
+      }
+    },
+    "voice.kind.stationary_radar": {
+      "comment": "Голос: тип камеры в полной фразе. uz — одним словом.",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Стационарный радар"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radar"
+          }
+        }
+      }
+    },
+    "voice.kind.intelligent_radar": {
+      "comment": "Голос: тип камеры в полной фразе. uz — одним словом.",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Интеллектуальная камера + радар"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radar"
+          }
+        }
+      }
+    },
+    "voice.short.intelligent_radar": {
+      "comment": "Голос: интеллектуальный радар в короткой фразе. uz — «Radar».",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камера"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radar"
+          }
+        }
+      }
+    },
+    "Женский": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Женский"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ayol"
+          }
+        }
+      }
+    },
+    "Мужской": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Мужской"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erkak"
+          }
+        }
+      }
+    },
+    "«Записанный голос» — заранее озвученные фразы: голос ровный, без синтезатора в моменте. Фразу, которой в записи нет (например, с названием улицы), целиком прочтёт системный голос.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Записанный голос» — заранее озвученные фразы: голос ровный, без синтезатора в моменте. Фразу, которой в записи нет (например, с названием улицы), целиком прочтёт системный голос."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Yozib olingan ovoz» — oldindan ovozlashtirilgan iboralar: ovoz bir tekis, sintezatorsiz. Yozuvda yoʻq iborani (masalan, koʻcha nomi bilan) tizim ovozi toʻliq oʻqiydi."
           }
         }
       }

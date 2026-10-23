@@ -455,7 +455,7 @@ class ArrowRowFitsDrawnRoadTests(unittest.TestCase):
         self.assertIsNotNone(found)
         axis, width, oneway, marked, heading = found
         self.assertAlmostEqual(heading, 90.0, delta=0.5, msg="азимут оси ленты по ходу")
-        self.assertEqual(marked, 0, "полосы не размечены — линий нет")
+        self.assertEqual(marked, 3, "проспект без данных — полосы по нарисованной ширине (10,6 м / 3,25)")
         self.assertAlmostEqual(width, 10.6, places=3)
         self.assertTrue(oneway)
         self.assertAlmostEqual((axis[1] - LAT) * sc.LAT_METERS, 0.0, delta=0.01)

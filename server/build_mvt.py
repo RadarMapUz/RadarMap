@@ -20,11 +20,11 @@ import mvt
 from build_roads import (AREA_DIVIDER, AREA_KERB, FLAG_LANES_INFERRED, AREA_FILLET, AREA_HOUSE, AREA_JUNCTION, AREA_JUNCTION_BOX, AREA_MEDIAN, AREA_ROAD,
                          clip_ring,
                          FLAG_BRIDGE,
-                         FLAG_LANES_TAGGED, FLAG_ONEWAY, FLAG_TUNNEL,
+                         FLAG_LANES_TAGGED, FLAG_LINK, FLAG_ONEWAY, FLAG_TUNNEL,
                          PFLAG_CONFIRMED, PFLAG_PAINTED, PFLAG_ONEWAY, point_azimuth, point_width,
                          SURFACE_CLASS_MASK, SURFACE_CLASS_SHIFT, lanes_of,
                          road_width_meters, POINT_LANE_ARROWS, MAX_ARROW_LANES,
-                         unpack_turns, turn_count)
+                         unpack_turns, turn_count, junction_class)
 
 # Зумы. Два, а не десять.
 #
@@ -747,13 +747,33 @@ def marked_lanes(code, flags, width):
     """
     lanes = lanes_of(flags)
     tagged = flags & (FLAG_LANES_TAGGED | FLAG_LANES_INFERRED) and 2 <= lanes <= MAX_MARKED_LANES
-    if not tagged or width / lanes < MIN_MARKED_LANE_METERS:
+    if not tagged:
+        return guessed_lanes(code, flags, width)
+    if width / lanes < MIN_MARKED_LANE_METERS:
         return 0
     if flags & FLAG_ONEWAY:
         return lanes
     if code <= CENTRE_MAX_CLASS and width >= CENTRE_MIN_WIDTH_METERS and lanes >= 4 and lanes % 2 == 0:
         return lanes // 2
     return 0
+
+
+# Проспект без данных о полосах (ни тега, ни угадки по соседям) — Амира
+# Темура, Мустакиллик: ни одной линии, а у соседней Навои пять (аудит 28.G,
+# №9). Яндекс размечает все многополосные. Делим НАРИСОВАННУЮ ленту на полосы
+# не уже GUESS_LANE_METERS — только у односторонней ленты проспекта и выше
+# (не у съезда): двусторонней хватает осевой, а у младших классов ширина —
+# догадка по классу, и линии на ней были бы выдумкой.
+GUESS_MAX_CLASS = 3
+GUESS_LANE_METERS = 3.25
+
+
+def guessed_lanes(code, flags, width):
+    """Полос по ширине нарисованной ленты, когда данных нет; 0 — не размечаем."""
+    if code > GUESS_MAX_CLASS or not flags & FLAG_ONEWAY or flags & (FLAG_LINK | FLAG_TUNNEL):
+        return 0
+    count = min(MAX_MARKED_LANES, int(width / GUESS_LANE_METERS))
+    return count if count >= 2 else 0
 
 
 # Полоса уже этого на карте — не полоса. Лента, сжатая под разделительную
@@ -1812,6 +1832,96 @@ def tapered_pieces(road, width, target):
     return [(p, w) for p, w in head + middle + tail if len(p) >= 2]
 
 
+BRIDGE_JOIN_MAX_TURN_DEGREES = 30.0
+
+
+def bridge_chains(roads, widths, overlap=None):
+    """(id склеенных кусков, [(лента-цепочка, ширина)]) — мосты одной линией.
+
+    Мост в OSM режется на куски (опоры, смена числа полос, слияния), и каждый
+    кусок был отдельной линией с прямыми торцами: на изломе между кусками
+    оставался клин, сквозь который видны тень и ограждение, — поперечные швы
+    через весь настил (эстакада Малой кольцевой, мост Урда, 23.10.2026).
+    Клеим куски одного моста одного класса, направления и ширины, стыкующиеся
+    продолжением (в узле ровно два таких конца, излом не круче 30°). Ленту
+    внутри чужого асфальта (inner) не трогаем — у неё свои правила рисования.
+    """
+    widths = widths or {}
+
+    def key(point):
+        return (round(point[0], 6), round(point[1], 6))
+
+    def heading(a, b):
+        kx = math.cos(math.radians(a[1]))
+        return math.degrees(math.atan2((b[0] - a[0]) * kx, b[1] - a[1])) % 360
+
+    def width_of(road):
+        return round(widths.get(id(road)) or road_width_meters(road[0], lanes_of(road[1])), 1)
+
+    candidates = [road for road in roads
+                  if road[0] <= 7 and road[1] & FLAG_BRIDGE and len(road[2]) >= 2
+                  and not (overlap is not None and inner_share(road, overlap) >= INNER_ROAD_SHARE)]
+    ends = defaultdict(list)
+    for road in candidates:
+        ends[key(road[2][0])].append((road, True))
+        ends[key(road[2][-1])].append((road, False))
+
+    def signature(road):
+        return (road[0], bool(road[1] & FLAG_ONEWAY), width_of(road))
+
+    def partner(road, at_start):
+        here = ends[key(road[2][0] if at_start else road[2][-1])]
+        if len(here) != 2:
+            return None
+        other, other_start = here[0] if here[1][0] is road else here[1]
+        if other is road or signature(other) != signature(road):
+            return None
+        if road[1] & FLAG_ONEWAY and other_start == at_start:
+            return None
+        pts = road[2]
+        ours = heading(pts[1], pts[0]) if at_start else heading(pts[-2], pts[-1])
+        o = other[2]
+        theirs = heading(o[0], o[1]) if other_start else heading(o[-1], o[-2])
+        if abs((theirs - ours + 180) % 360 - 180) > BRIDGE_JOIN_MAX_TURN_DEGREES:
+            return None
+        return other, other_start
+
+    merged, out, seen = set(), [], set()
+    for road in candidates:
+        if id(road) in seen:
+            continue
+        # Идём назад до начала цепочки, потом вперёд, собирая точки.
+        start, at_start, guard = road, True, 0
+        while guard < len(candidates):
+            found = partner(start, at_start)
+            if found is None or id(found[0]) in seen or found[0] is road and guard:
+                break
+            other, other_start = found
+            start, at_start = other, not other_start
+            guard += 1
+            if start is road:
+                break
+        chain, points = [], None
+        current, forward = start, at_start      # at_start=True — цепочка начинается с начала куска
+        while current is not None and id(current) not in seen:
+            seen.add(id(current))
+            chain.append(current)
+            pts = list(current[2]) if forward else list(reversed(current[2]))
+            points = pts if points is None else points + pts[1:]
+            found = partner(current, not forward)
+            if found is None:
+                break
+            current, other_start = found
+            forward = other_start
+        if len(chain) < 2:
+            continue
+        first = chain[0]
+        merged.update(id(piece) for piece in chain)
+        name = next((piece[3] for piece in chain if len(piece) > 3 and piece[3]), "")
+        out.append(((first[0], first[1], points, name), width_of(first)))
+    return merged, out
+
+
 INNER_ROAD_SHARE = 0.6
 INNER_STEP_METERS = 4.0
 
@@ -2120,6 +2230,7 @@ def fit_zebras(crossings, fitter, with_meta=False):
             shift = (anchor[0][0] - point[0]) * kx * fx + (anchor[0][1] - point[1]) * 111_320 * fy
             point = (point[0] + fx * shift / kx, point[1] + fy * shift / 111_320)
         aligned.append((key, point, heading, half, sine, marked))
+    aligned = _align_across_carriageways(aligned, fitter.names)
     kept = []
     for key, point, heading, half, sine, marked in aligned:
         kx = 111_320 * math.cos(math.radians(point[1]))
@@ -2143,6 +2254,45 @@ def fit_zebras(crossings, fitter, with_meta=False):
 
 ZEBRA_BODY_CLEAR_METERS = 3.0
 ZEBRA_EXTEND_METERS = 30.0
+# Переход через проспект часто нанесён в OSM двумя точками или двумя линиями —
+# по одной на каждую ленту, — и зебры вставали ступенькой со сдвигом вдоль
+# улицы на 1–10 м (Нурафшон × Фаробий, Навои × Лабзак; аудит 28.G, №8).
+# Зебра на ленте той же улицы, параллельная уже поставленной, ближе этого
+# вдоль и не дальше ZEBRA_ALIGN_ACROSS_METERS поперёк — тот же переход:
+# встаёт на его линию.
+ZEBRA_ALIGN_ALONG_METERS = 10.0
+# Ленты на изгибе расходятся по азимуту — до 25° это всё ещё один переход.
+ZEBRA_ALIGN_PARALLEL_SINE = 0.42
+ZEBRA_ALIGN_ACROSS_METERS = 30.0
+
+
+def _align_across_carriageways(aligned, names):
+    """Зебры одного перехода через встречные ленты одной улицы — на одну прямую."""
+    anchors = []
+    out = []
+    for key, point, heading, half, sine, marked in aligned:
+        name = names.get(key) or ""
+        kx = 111_320 * math.cos(math.radians(point[1]))
+        fx, fy = math.sin(heading), math.cos(heading)
+        best = None
+        if name:
+            for a_key, a_point, a_heading, a_name in anchors:
+                if a_key == key or a_name != name:
+                    continue
+                if abs(math.sin(heading - a_heading)) >= ZEBRA_ALIGN_PARALLEL_SINE:
+                    continue
+                dx, dy = (a_point[0] - point[0]) * kx, (a_point[1] - point[1]) * 111_320
+                along = dx * fx + dy * fy
+                across = abs(dx * fy - dy * fx)
+                if abs(along) > ZEBRA_ALIGN_ALONG_METERS or across > ZEBRA_ALIGN_ACROSS_METERS:
+                    continue
+                if best is None or abs(along) < abs(best):
+                    best = along
+        if best is not None and abs(best) > 0.05:
+            point = (point[0] + fx * best / kx, point[1] + fy * best / 111_320)
+        anchors.append((key, point, heading, name))
+        out.append((key, point, heading, half, sine, marked))
+    return out
 
 
 def _extend(a, b, meters):
@@ -2599,6 +2749,8 @@ def _area_props(kind, flags):
         props["strip"] = True
     if kind == AREA_JUNCTION and flags & 2:
         props["fill"] = True
+    if kind == AREA_JUNCTION and junction_class(flags):
+        props["cls"] = junction_class(flags)
     if kind == AREA_MEDIAN and flags & 4:
         props["island"] = True
     return props
@@ -2791,11 +2943,20 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         # проспекта (Навои у Драмтеатра, 07.10.2026).
         overlap = OverlapIndex(roads, widths)
         tapers = taper_targets(roads, widths)
+        # Мост — одной линией: куски моста с прямыми торцами давали поперечные
+        # швы на настиле (аудит 28.G, №2).
+        merged, bridges = bridge_chains(roads, widths, overlap)
+        for road, width in bridges:
+            _put(buckets, zoom, LAYER_ROADS, mvt.LINESTRING, road[2], _road_props(road, width))
         for road in roads:
+            if id(road) in merged:
+                continue
             props = _road_props(road, widths.get(id(road)))
             if road[0] <= 7 and inner_share(road, overlap) >= INNER_ROAD_SHARE:
                 props["inner"] = True
-            for piece, width in tapered_pieces(road, props["width"], tapers.get(id(road))):
+            # Мост не сужается ступенями: каждая ступень — шов на настиле.
+            taper = None if road[1] & FLAG_BRIDGE else tapers.get(id(road))
+            for piece, width in tapered_pieces(road, props["width"], taper):
                 piece_props = dict(props)
                 if width != props["width"]:
                     piece_props["width"] = width

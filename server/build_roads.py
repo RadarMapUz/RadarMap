@@ -2609,6 +2609,54 @@ AREA_FLAG_STRIP = 2
 # 28,6 % площади островков Ташкента под полотном, 05.10.2026).
 AREA_FLAG_DRAWN = 4
 ISLAND_TAG = ("area:highway", "traffic_island")
+# Класс площади узла (вид 8) — у узла одного класса, в битах 3–6. Без
+# него стиль красил каждый узел цветом проспекта, и на магистрали у торцов
+# эстакад лежали белые днём и тёмные ночью заплатки (аудит 28.G, №3).
+JUNCTION_CLASS_SHIFT = 3
+JUNCTION_CLASS_MASK = 0xF
+
+
+def with_junction_class(flags, code):
+    """Флаги площади узла с классом старшей дороги (меньший код — старше)."""
+    if not code:
+        return flags
+    return flags | (min(int(code), JUNCTION_CLASS_MASK) << JUNCTION_CLASS_SHIFT)
+
+
+# Перемычка между лентами ближе этого к узлу кластера — часть этого узла.
+JUNCTION_COLOUR_REACH_METERS = 40.0
+# Узел цвета класса ближе этого к смешанному узлу — часть того же перекрёстка.
+JUNCTION_NEIGHBOUR_METERS = 35.0
+
+
+def junction_colour_code(legs):
+    """Класс, которым красить площадь узла, или None — нейтральный цвет проспекта.
+
+    Классом — только узел одного класса: все его сквозные (не съезды) ноги
+    одного цвета асфальта. Узел съездов и смешанный узел красился цветом
+    самой широкой ноги и ложился неровным пятном цвета магистрали на белый
+    перекрёсток (перемычки съездов «2-я Паркентская» у эстакады Малой
+    кольцевой, 23.10.2026) — им прежний нейтральный цвет.
+    """
+    through = [leg for leg in legs if getattr(leg, "code", None) and not getattr(leg, "link", False)]
+    if not through:
+        return None
+    groups = {colour_group(leg.code) for leg in through}
+    if len(groups) != 1:
+        return None
+    return min(leg.code for leg in through)
+
+
+def colour_group(code):
+    """Группа цвета асфальта класса — как make_style.class_asphalt."""
+    if code in (1, 2):
+        return 1
+    return code if code in (3, 4, 5) else 6
+
+
+def junction_class(flags):
+    """Класс площади узла из флагов; 0 — не записан (старые тайлы, тесты)."""
+    return (flags >> JUNCTION_CLASS_SHIFT) & JUNCTION_CLASS_MASK
 
 
 # Местность обзора: вода и крупная зелень, только площади.
@@ -3963,9 +4011,11 @@ class Leg(tuple):
     кромка их полотна). Нога из простого кортежа (тесты) класса не знает.
     """
 
-    def __new__(cls, node, neighbour, width, code=None):
+    def __new__(cls, node, neighbour, width, code=None, link=False, bridge=False):
         leg = super().__new__(cls, (node, neighbour, width))
         leg.code = code
+        leg.link = link
+        leg.bridge = bridge
         return leg
 
 
@@ -3980,7 +4030,9 @@ def junction_arms(chains):
             points = piece[2]
             for node, neighbour in ((points[0], points[1]),
                                     (points[-1], points[-2])):
-                arms[_node_key(node)].append(Leg(node, neighbour, width, street[0]))
+                arms[_node_key(node)].append(Leg(node, neighbour, width, street[0],
+                                                 bool(street[1] & FLAG_LINK),
+                                                 bool(street[1] & FLAG_BRIDGE)))
     return arms
 
 
@@ -4676,12 +4728,62 @@ def _mouth_fits(legs, outline):
             and uncovered_share(legs, outline) <= JUNCTION_MAX_UNCOVERED)
 
 
-def iter_junctions(arms, outlined=None):
+def iter_junctions(arms, outlined=None, colours=None):
     """Асфальт перекрёстка — по устьям подходов с дугами бордюра; где так не
     вышло — прежняя оболочка кромок всех его дорог. outlined (множество) —
-    сюда пишутся узлы, построенные по устьям."""
-    for legs in cluster_junctions(arms):
-        yield from _junction_figures(legs, outlined)
+    сюда пишутся узлы, построенные по устьям. colours (JunctionColours) —
+    сюда пишется цвет каждого узла: перемычки между лентами внутри узла
+    (build_medians) красятся так же, как сам узел."""
+    clusters = [(legs, junction_colour_code(legs)) for legs in cluster_junctions(arms)]
+    # Узел цвета класса рядом со смешанным (нейтральным) узлом на той же земле
+    # — часть одного перекрёстка: съезды магистрали у узла проспекта, края
+    # подхода магистрали у перекрёстка с улицей. Покрашенные порознь, они
+    # ложились абрикосовыми пятнами на серый узел (Малая кольцевая × Беруни,
+    # «2-я Паркентская», 23.10.2026). Узел с ногами моста — на другом уровне.
+    neutral = JunctionColours()
+    for legs, colour in clusters:
+        if colour is None and not any(getattr(leg, "bridge", False) for leg in legs):
+            neutral.add(legs, None)
+    for legs, colour in clusters:
+        if colour is not None and not any(getattr(leg, "bridge", False) for leg in legs):
+            if any(neutral.near(leg[0], JUNCTION_NEIGHBOUR_METERS)[0] for leg in legs):
+                colour = None
+        if colours is not None:
+            colours.add(legs, colour)
+        yield from _junction_figures(legs, outlined, colour=colour)
+
+
+class JunctionColours:
+    """Цвет узла по месту: перемычка между лентами внутри узла — цвета узла.
+
+    Узел, разобранный на несколько фигур (по узлам кластера, перемычки между
+    встречными лентами), красился по кускам: середина нейтральная, а края и
+    перемычки — цветом магистрали, и на белом перекрёстке лежали абрикосовые
+    пятна (эстакада Малой кольцевой, ТКАД, 23.10.2026). Цвет решается один
+    раз на весь кластер.
+    """
+
+    CELL = 0.0005
+
+    def __init__(self):
+        self._grid = defaultdict(list)
+
+    def add(self, legs, colour):
+        for leg in legs:
+            node = leg[0]
+            self._grid[(int(node[0] / self.CELL), int(node[1] / self.CELL))].append((node, colour))
+
+    def near(self, point, metres=JUNCTION_COLOUR_REACH_METERS):
+        """(найден?, цвет) ближайшего узла в пределах metres."""
+        best = None
+        cell = (int(point[0] / self.CELL), int(point[1] / self.CELL))
+        for gx in (-1, 0, 1):
+            for gy in (-1, 0, 1):
+                for node, colour in self._grid.get((cell[0] + gx, cell[1] + gy), ()):
+                    d = meters_between(point, node)
+                    if d <= metres and (best is None or d < best[0]):
+                        best = (d, colour)
+        return (False, None) if best is None else (True, best[1])
 
 
 def _mouth_figure(legs, kerbs=None):
@@ -4708,7 +4810,23 @@ def _slip_nodes(legs):
             if _is_major_node(alone) and not _joins_cluster(alone)}
 
 
-def _junction_figures(legs, outlined, retry=True):
+_UNSET = object()
+
+
+def _level_colour(legs, colour):
+    """Цвет куска разобранного узла: кусок у моста — своего уровня.
+
+    Узел у торца эстакады попадает в один кластер с наземным перекрёстком
+    под ней (в 20–30 м) и красился его нейтральным цветом — серые заплатки
+    на магистрали у торцов эстакад (аудит 28.G, №3). Кусок, у которого есть
+    ноги моста, решает цвет по своим ногам.
+    """
+    if any(getattr(leg, "bridge", False) for leg in legs):
+        return junction_colour_code(legs)
+    return colour
+
+
+def _junction_figures(legs, outlined, retry=True, colour=_UNSET):
     if len(legs) < MIN_JUNCTION_ARMS and not _seam_needs_patch(legs):
         return
     if max(leg[2] for leg in legs) < JUNCTION_MIN_WIDEST_METERS:
@@ -4723,6 +4841,10 @@ def _junction_figures(legs, outlined, retry=True):
     flags = AREA_FLAG_CLOSED
     if retry and len(keys) == 1 and _slip_nodes(legs):
         flags |= AREA_FLAG_STRIP
+    # Цвет — один на весь кластер: куски разобранного узла не красятся порознь.
+    if colour is _UNSET:
+        colour = junction_colour_code(legs)
+    flags = with_junction_class(flags, colour)
     kerbs = []
     outline = _mouth_figure(legs, kerbs)
     if outline:
@@ -4758,10 +4880,10 @@ def _junction_figures(legs, outlined, retry=True):
             if _node_key(leg[0]) not in slips:
                 core[_node_key(leg[0])].append(leg)
         for group in cluster_junctions(core):
-            yield from _junction_figures(group, outlined, retry=False)
+            yield from _junction_figures(group, outlined, retry=False, colour=_level_colour(group, colour))
         for key in sorted(slips):
-            yield from _junction_figures([leg for leg in legs if _node_key(leg[0]) == key],
-                                         outlined, retry=False)
+            alone = [leg for leg in legs if _node_key(leg[0]) == key]
+            yield from _junction_figures(alone, outlined, retry=False, colour=_level_colour(alone, colour))
         return
     # Кластер растянулся — разбираем обратно по узлам. Лучше шов, чем
     # двор, залитый асфальтом.
@@ -4778,7 +4900,8 @@ def _junction_figures(legs, outlined, retry=True):
         if small and _hull_fits(alone, small):
             small = clip_to_reach(alone, small)
             if len(small) >= 3:
-                yield (AREA_JUNCTION, flags, small)
+                yield (AREA_JUNCTION, with_junction_class(flags & ~(JUNCTION_CLASS_MASK << JUNCTION_CLASS_SHIFT),
+                                                          _level_colour(alone, colour)), small)
 
 
 # Галтели: радиус бордюра — доля ширины узкой из двух дорог, в пределах.
@@ -5006,7 +5129,8 @@ def stream_surface(roads, target_dir, degrees, handles=64, islands=()):
         for figure in iter_surface(street for street, _chain in chains):
             put(figure)
         outlined = set()
-        for figure in iter_junctions(arms, outlined):
+        colours = JunctionColours()
+        for figure in iter_junctions(arms, outlined, colours):
             put(figure)
         # Фаски подходов больше не нужны: узел строится по устьям с дугами
         # бордюра, а фаска поверх него торчала серым клином у каждого
@@ -5017,7 +5141,7 @@ def stream_surface(roads, target_dir, degrees, handles=64, islands=()):
         for figure in iter_fillets(arms, outlined):
             put(figure)
         spots = junction_spots(arms)
-        for figure in build_medians(chains, junction_index(median_stops(arms, chains))):
+        for figure in build_medians(chains, junction_index(median_stops(arms, chains)), colours):
             put(figure)
         del chains
         # Середина перекрёстка — не островок и не разделительная: у Навои ×
@@ -5208,7 +5332,7 @@ def _point_segment_meters(p, a, b):
     return math.hypot(ax + t * dx, ay + t * dy)
 
 
-def build_medians(chains, junctions=()):
+def build_medians(chains, junctions=(), colours=None):
     """Полосы земли между встречными проезжими одной улицы.
 
     `junctions` — узлы, через которые полоса идти НЕ ИМЕЕТ ПРАВА. На
@@ -5264,7 +5388,17 @@ def build_medians(chains, junctions=()):
                     out.append((AREA_DIVIDER, 0, line))
                 # Промежуток между лентами внутри узла — асфальт перекрёстка.
                 for fill in fills:
-                    out.append((AREA_JUNCTION, AREA_FLAG_CLOSED | AREA_FLAG_STRIP, fill))
+                    # Перемычка между лентами одной улицы — её цвета; между
+                    # съездами или лентами разных классов — нейтральная.
+                    same = (colour_group(one[0]) == colour_group(other[0])
+                            and not (one[1] | other[1]) & FLAG_LINK)
+                    code = min(one[0], other[0]) if same else None
+                    if colours is not None and code is not None:
+                        found, at_junction = colours.near(_centroid(fill))
+                        if found:
+                            code = at_junction
+                    out.append((AREA_JUNCTION, with_junction_class(AREA_FLAG_CLOSED | AREA_FLAG_STRIP, code),
+                                fill))
     return out
 
 
@@ -5823,11 +5957,12 @@ def build_road_surface(roads):
     chains = street_chains(roads)
     arms = junction_arms(chains)
     outlined = set()
-    junctions = list(iter_junctions(arms, outlined))
+    colours = JunctionColours()
+    junctions = list(iter_junctions(arms, outlined, colours))
     flares = list(iter_flares(arms)) if FLARES_ENABLED else []
     return (list(iter_surface(street for street, _chain in chains))
             + junctions + flares + list(iter_fillets(arms, outlined))
-            + build_medians(chains, median_stops(arms, chains))
+            + build_medians(chains, median_stops(arms, chains), colours)
             + build_islands(roads))
 
 

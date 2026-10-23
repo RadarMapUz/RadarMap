@@ -205,7 +205,9 @@ class BuildTests(unittest.TestCase):
         points = [(69.28, 41.311), (69.282, 41.311)]
         tagged = build_mvt.FLAG_LANES_TAGGED | (3 << 4)
         self.assertEqual(list(build_mvt.lane_markings([self.road(points, flags=tagged)])), [])
-        self.assertEqual(list(build_mvt.lane_markings([self.road(points, flags=build_mvt.FLAG_ONEWAY)])), [])
+        # Без данных о полосах младший класс не размечается (ширина — догадка).
+        self.assertEqual(list(build_mvt.lane_markings([self.road(points, code=5, flags=build_mvt.FLAG_ONEWAY)])),
+                         [])
         lines = list(build_mvt.lane_markings([self.road(points, flags=tagged | build_mvt.FLAG_ONEWAY)]))
         self.assertEqual(len(lines), 2)
         self.assertLess(lines[0][0][1], points[0][1])
@@ -401,6 +403,18 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(far, [-4.38, 0.0, 4.38])
         import road_metrics
         self.assertEqual(road_metrics.marking_jumps([(line, {}) for line in lines])[0], 0.0)
+
+    def test_avenue_without_lane_data_is_marked_by_its_drawn_width(self):
+        # Амира Темура: ни тега lanes, ни угадки — а лента проспекта 11,25 м.
+        # Делим нарисованную ширину на полосы не уже 3,25 м (аудит 28.G, №9).
+        points = [(69.28, 41.311), (69.282, 41.311)]
+        road = self.road(points, code=3, flags=build_mvt.FLAG_ONEWAY)
+        self.assertEqual(build_mvt.marked_lanes(3, build_mvt.FLAG_ONEWAY, 11.25), 3)
+        self.assertEqual(len(list(build_mvt.lane_markings([road], {id(road): 11.25}))), 2)
+        self.assertEqual(build_mvt.marked_lanes(3, build_mvt.FLAG_ONEWAY, 6.0), 0, "уже двух полос — без линий")
+        self.assertEqual(build_mvt.marked_lanes(3, 0, 14.0), 0, "двусторонней хватает осевой")
+        self.assertEqual(build_mvt.marked_lanes(3, build_mvt.FLAG_ONEWAY | build_roads.FLAG_LINK, 11.0), 0,
+                         "съезд не размечаем")
 
     def test_lanes_squeezed_below_a_lane_are_not_marked(self):
         # Пять полос по тегу в ленте, сжатой до 4,5 м: линии через 0,9 м —
@@ -783,3 +797,77 @@ class JunctionLightTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)
+
+
+class JunctionClassPropsTests(unittest.TestCase):
+    def test_junction_props_carry_the_class(self):
+        flags = build_roads.with_junction_class(build_roads.AREA_FLAG_CLOSED, 2)
+        self.assertEqual(build_mvt._area_props(build_roads.AREA_JUNCTION, flags), {"kind": 8, "cls": 2})
+        self.assertEqual(build_mvt._area_props(build_roads.AREA_JUNCTION, build_roads.AREA_FLAG_CLOSED),
+                         {"kind": 8}, "старые данные без класса — без свойства")
+
+
+class BridgeChainTests(unittest.TestCase):
+    """Мост — одной линией: куски с прямыми торцами давали швы (аудит 28.G, №2)."""
+
+    def road(self, points, code=2, flags=build_roads.FLAG_BRIDGE | build_roads.FLAG_ONEWAY):
+        return (code, build_roads.with_lanes(flags, 3), points, "")
+
+    def test_pieces_of_one_bridge_become_one_line(self):
+        a = self.road([(69.300, 41.310), (69.301, 41.310)])
+        b = self.road([(69.301, 41.310), (69.302, 41.3101)])
+        c = self.road([(69.302, 41.3101), (69.303, 41.3102)])
+        merged, out = build_mvt.bridge_chains([c, a, b], {})
+        self.assertEqual(merged, {id(a), id(b), id(c)})
+        self.assertEqual(len(out), 1)
+        road, _width = out[0]
+        self.assertEqual(road[2][0], (69.300, 41.310))
+        self.assertEqual(road[2][-1], (69.303, 41.3102))
+        self.assertEqual(len(road[2]), 4)
+
+    def test_different_width_or_ground_road_stays_apart(self):
+        a = self.road([(69.300, 41.310), (69.301, 41.310)])
+        b = self.road([(69.301, 41.310), (69.302, 41.310)])
+        ground = self.road([(69.302, 41.310), (69.303, 41.310)], flags=build_roads.FLAG_ONEWAY)
+        merged, out = build_mvt.bridge_chains([a, b, ground], {id(a): 11.0, id(b): 14.0})
+        self.assertEqual((merged, out), (set(), []))
+
+    def test_two_way_pieces_join_whatever_their_direction(self):
+        a = self.road([(69.300, 41.310), (69.301, 41.310)], flags=build_roads.FLAG_BRIDGE)
+        b = self.road([(69.302, 41.310), (69.301, 41.310)], flags=build_roads.FLAG_BRIDGE)
+        merged, out = build_mvt.bridge_chains([a, b], {})
+        self.assertEqual(len(out), 1)
+        self.assertEqual(sorted(out[0][0][2]), [(69.300, 41.310), (69.301, 41.310), (69.302, 41.310)])
+
+    def test_fork_is_not_glued(self):
+        a = self.road([(69.300, 41.310), (69.301, 41.310)])
+        b = self.road([(69.301, 41.310), (69.302, 41.310)])
+        c = self.road([(69.301, 41.310), (69.302, 41.3103)])
+        self.assertEqual(build_mvt.bridge_chains([a, b, c], {})[1], [])
+
+
+class ZebraStepTests(unittest.TestCase):
+    """Переход через проспект — одной прямой, а не ступенькой (аудит 28.G, №8)."""
+
+    lat = 41.311
+
+    def at(self, east, north):
+        kx = 111_320 * math.cos(math.radians(self.lat))
+        return (69.28 + east / kx, self.lat + north / 111_320)
+
+    def align(self, second_east, names):
+        # Проспект на север (азимут 0): западная лента и восточная в 14 м от неё.
+        heading = 0.0
+        zebras = [("w", self.at(0, 0), heading, 5.0, 1.0, True),
+                  ("e", self.at(14, second_east), heading, 5.0, 1.0, True)]
+        return build_mvt._align_across_carriageways(zebras, names)
+
+    def test_same_street_crossing_lines_up(self):
+        out = self.align(5.0, {"w": "Навои", "e": "Навои"})
+        self.assertAlmostEqual((out[1][1][1] - out[0][1][1]) * 111_320, 0.0, delta=0.05)
+
+    def test_other_street_or_far_crossing_stays(self):
+        out = self.align(5.0, {"w": "Навои", "e": "Лабзак"})
+        self.assertAlmostEqual((out[1][1][1] - out[0][1][1]) * 111_320, 5.0, delta=0.05)
+        out = self.align(18.0, {"w": "Навои", "e": "Навои"})
+        self.assertAlmostEqual((out[1][1][1] - out[0][1][1]) * 111_320, 18.0, delta=0.05)

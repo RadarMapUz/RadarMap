@@ -487,6 +487,202 @@ def marking_jumps(markings, examples=None):
     return (100_000.0 * jumps / total if total else 0.0), round(worst, 2)
 
 
+# Зебра ступенькой: две зебры одного перехода на соседних лентах проспекта
+# стоят со сдвигом вдоль улицы (Нурафшон × Фаробий, Навои × Лабзак).
+ZEBRA_STEP_MIN_METERS = 1.0
+ZEBRA_STEP_MAX_METERS = 10.0
+ZEBRA_STEP_GAP_METERS = 8.0
+
+
+def zebra_steps(zebras, examples=None):
+    """Зебр-ступенек на 100 зебр: параллельная соседка, конец к концу не дальше
+    ZEBRA_STEP_GAP_METERS, но сдвинута вдоль улицы на 1–10 м."""
+    items = []
+    for line in zebras:
+        if len(line) < 2:
+            continue
+        a, b = line[0], line[-1]
+        kx = LAT_M * math.cos(math.radians(a[1]))
+        dx, dy = (b[0] - a[0]) * kx, (b[1] - a[1]) * LAT_M
+        length = math.hypot(dx, dy)
+        if length == 0:
+            continue
+        items.append((a, b, ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2), (dx / length, dy / length)))
+    grid = defaultdict(list)
+    for index, item in enumerate(items):
+        grid[(int(item[2][0] / 0.0005), int(item[2][1] / 0.0005))].append(index)
+    stepped = set()
+    for index, (a, b, centre, (ux, uy)) in enumerate(items):
+        kx = LAT_M * math.cos(math.radians(centre[1]))
+        cell = (int(centre[0] / 0.0005), int(centre[1] / 0.0005))
+        for gx in (-1, 0, 1):
+            for gy in (-1, 0, 1):
+                for other in grid.get((cell[0] + gx, cell[1] + gy), ()):
+                    if other <= index:
+                        continue
+                    oa, ob, oc, (vx, vy) = items[other]
+                    if abs(ux * vx + uy * vy) < 0.97:
+                        continue
+                    gap = min(math.hypot((p[0] - q[0]) * kx, (p[1] - q[1]) * LAT_M)
+                              for p in (a, b) for q in (oa, ob))
+                    if gap > ZEBRA_STEP_GAP_METERS:
+                        continue
+                    dx, dy = (oc[0] - centre[0]) * kx, (oc[1] - centre[1]) * LAT_M
+                    along = abs(dx * uy - dy * ux)          # вдоль улицы = поперёк зебры
+                    beside = abs(dx * ux + dy * uy)         # бок о бок — вдоль зебры
+                    shorter = min(math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * LAT_M),
+                                  math.hypot((ob[0] - oa[0]) * kx, (ob[1] - oa[1]) * LAT_M))
+                    # Ступенька — соседки бок о бок (на соседних лентах); зебры
+                    # друг за другом вдоль одной ленты — это разные переходы.
+                    if beside < 0.6 * shorter:
+                        continue
+                    if ZEBRA_STEP_MIN_METERS <= along <= ZEBRA_STEP_MAX_METERS:
+                        stepped.update((index, other))
+                        if examples is not None:
+                            examples.append((round(centre[1], 5), round(centre[0], 5), round(along, 1)))
+    return 100.0 * len(stepped) / len(items) if items else 0.0
+
+
+UNMARKED_MIN_WIDTH_METERS = 6.5
+UNMARKED_STEP_METERS = 10.0
+
+
+def unmarked_avenues(roads, line_index, examples=None):
+    """% длины односторонних лент проспекта и выше (шире 6,5 м) без единой
+    линии полос рядом — «то есть разметка, то нет» (аудит 28.G, №9)."""
+    total = bare = 0.0
+    for line, props in roads:
+        if (not props.get("oneway") or props.get("cls", 9) > 3 or props.get("tunnel")
+                or float(props.get("width") or 0) < UNMARKED_MIN_WIDTH_METERS):
+            continue
+        half = float(props["width"]) / 2.0
+        for p in densify(line, UNMARKED_STEP_METERS)[1:-1]:
+            total += UNMARKED_STEP_METERS
+            marked = False
+            for a, b, _centre in line_index.near(p):
+                if seg_distance_m(p, a, b) <= half - 0.3:
+                    marked = True
+                    break
+            if not marked:
+                bare += UNMARKED_STEP_METERS
+                if examples is not None and len(examples) < 200:
+                    examples.append((round(p[1], 5), round(p[0], 5)))
+    return 100.0 * bare / total if total else 0.0
+
+
+def bridge_seams(roads, examples=None):
+    """Стыков кусков моста на 1 км настила: два конца лент моста в одной точке,
+    одна продолжает другую. Каждый такой стык — поперечный шов на настиле
+    (прямые торцы под углом, аудит 28.G, №2)."""
+    grid = defaultdict(list)
+    total = 0.0
+    for index, (line, props) in enumerate(roads):
+        if not props.get("bridge") or len(line) < 2:
+            continue
+        kx = LAT_M * math.cos(math.radians(line[0][1]))
+        total += sum(math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * LAT_M) for a, b in zip(line, line[1:]))
+        for end in (line[0], line[-1]):
+            grid[(round(end[0], 5), round(end[1], 5))].append(index)
+    seams = 0
+    for spot, items in grid.items():
+        if len(set(items)) == 2:
+            seams += 1
+            if examples is not None:
+                examples.append((spot[1], spot[0]))
+    return 1000.0 * seams / total if total else 0.0
+
+
+def _colour_group(cls):
+    """Группа цвета асфальта класса — как make_style.class_asphalt."""
+    if cls in (1, 2):
+        return 1
+    return cls if cls in (3, 4, 5) else 6
+
+
+def _ground_ribbons(roads):
+    index = _Segments()
+    for line, props in roads:
+        half = float(props.get("width") or 0) / 2.0
+        # Узел — на земле: эстакада над ним (и тоннель под ним) — не его лента.
+        if half <= 0 or props.get("tunnel") or props.get("bridge") or props.get("cls", 9) > 7:
+            continue
+        for a, b in zip(line, line[1:]):
+            index.add(a, b, (half, props.get("cls", 9)), pad_m=half + 2.0)
+    return index
+
+
+def junction_colour_mismatch(junctions, roads, examples=None):
+    """Доля (%) площадей узла одного цвета, нарисованных контрастным чужим
+    (магистраль / не магистраль, см. _contrast_group).
+
+    junctions — [(кольцо, свойства)], roads — [(линия, свойства)]. Узел, все
+    ленты которого (под центром и у вершин контура) одного цвета, обязан быть
+    этого цвета: иначе на магистрали у торца эстакады лежит белая заплатка
+    (аудит 28.G, №3). Смешанный узел красится нейтрально — его не судим.
+    """
+    index = _ground_ribbons(roads)
+    checked = bad = 0
+    for ring, props in junctions:
+        cx = sum(p[0] for p in ring) / len(ring)
+        cy = sum(p[1] for p in ring) / len(ring)
+        groups = {_contrast_group(cls) for q in [(cx, cy)] + list(ring) for a, b, (half, cls) in index.near(q)
+                  if seg_distance_m(q, a, b) <= half + 0.5}
+        if len(groups) != 1:
+            continue
+        checked += 1
+        drawn = props.get("cls", 3)          # без класса — цвет проспекта
+        if _contrast_group(drawn) not in groups:
+            bad += 1
+            if examples is not None:
+                examples.append((round(cy, 5), round(cx, 5), drawn, sorted(groups)[0]))
+    return 100.0 * bad / checked if checked else 0.0
+
+
+def _contrast_group(cls):
+    """Магистраль или нет. Клякса видна глазом там, где цвета контрастны: в
+    обеих темах магистраль (1–2) резко отличается от остальных, а проспект,
+    второй и третий класс и дворы днём одного белого цвета, ночью — оттенков
+    одного серого."""
+    return 1 if cls in (1, 2) else 0
+
+
+JUNCTION_BORDER_STEP_METERS = 2.0
+JUNCTION_BORDER_REACH_METERS = 1.5
+
+
+def junction_colour_blots(junctions, roads, examples=None):
+    """Число площадей узла цвета класса, больше половины края которых граничит
+    с лентами контрастного цвета (магистраль / не магистраль), — «клякса»
+    цвета магистрали на белом узле или белая на магистрали
+    (перемычки съездов у эстакады Малой кольцевой, 23.10.2026). examples —
+    [(площадь, широта, долгота)], крупные первыми."""
+    index = _ground_ribbons(roads)
+    blots = []
+    for ring, props in junctions:
+        if "cls" not in props or len(ring) < 3:
+            continue
+        own = _contrast_group(props["cls"])
+        near = other = 0
+        for q in densify(ring + ring[:1], JUNCTION_BORDER_STEP_METERS):
+            best = None
+            for a, b, (half, cls) in index.near(q):
+                d = seg_distance_m(q, a, b)
+                if d <= half + JUNCTION_BORDER_REACH_METERS and (best is None or half > best[0]):
+                    best = (half, cls)
+            if best is None:
+                continue
+            near += 1
+            other += _contrast_group(best[1]) != own
+        if near and other > near / 2:
+            cx = sum(p[0] for p in ring) / len(ring)
+            cy = sum(p[1] for p in ring) / len(ring)
+            blots.append((round(polygon_area_m2(ring)), round(cy, 5), round(cx, 5)))
+    blots.sort(reverse=True)
+    if examples is not None:
+        examples.extend(blots)
+    return len(blots)
+
+
 def lane_arrow_defects(arrows, road_index, line_index, examples=None):
     """{вид брака: число} по всем стрелкам; examples — [(вид, lon, lat, подробности)]."""
     counts = defaultdict(int)
@@ -827,6 +1023,21 @@ def measure(tiles_dir, islands_path=None, bbox=None):
                     reverse=True)
     jump_examples = []
     jumps, jump_worst = marking_jumps(marking_lines, jump_examples)
+    bare_examples = []
+    bare = unmarked_avenues([(part, props) for parts, props in road_lines for part in parts], line_index,
+                            bare_examples)
+    step_examples = []
+    steps = zebra_steps([part for g, parts, props in paint if props.get("kind") == 12 for part in parts],
+                        step_examples)
+    seam_examples = []
+    seams = bridge_seams([(part, props) for parts, props in road_lines for part in parts], seam_examples)
+    colour_examples = []
+    junction_shapes = [(parts[0], props) for g, parts, props in surface
+                       if g == 3 and props.get("kind") == 8 and parts]
+    ribbon_lines = [(part, props) for parts, props in road_lines for part in parts]
+    colour_mismatch = junction_colour_mismatch(junction_shapes, ribbon_lines, colour_examples)
+    blot_examples = []
+    blots = junction_colour_blots(junction_shapes, ribbon_lines, blot_examples)
 
     houses = []
     for set_name in ("h",):
@@ -892,6 +1103,16 @@ def measure(tiles_dir, islands_path=None, bbox=None):
         "arrows_angle_max": round(max((a for a, _ in angles), default=0.0), 1),
         "arrows_tilted": round(1000 * len(tilted) / len(lane_arrows), 1) if lane_arrows else 0.0,
         "marking_jumps": round(jumps, 1),
+        "junction_colour_mismatch": round(colour_mismatch, 2),
+        "junction_colour_blots": blots,
+        "_blot_examples": blot_examples[:30],
+        "bridge_seams": round(seams, 2),
+        "zebra_steps": round(steps, 2),
+        "avenues_unmarked": round(bare, 1),
+        "_unmarked_examples": bare_examples[:30],
+        "_zebra_step_examples": step_examples[:30],
+        "_seam_examples": seam_examples[:30],
+        "_colour_examples": colour_examples[:30],
         "_marking_jump_worst": jump_worst,
         "_tilted_examples": [(round(a, 1), round(arrow[1], 5), round(arrow[0], 5)) for a, arrow in tilted[:30]],
         "_jump_examples": sorted(jump_examples, key=lambda e: -e[2])[:30],
@@ -924,6 +1145,11 @@ UNITS = {
     "arrows_angle_max": "° наибольший поворот стрелки к оси ленты",
     "arrows_tilted": f"на 1000 стрелок повёрнуты больше {ARROW_ANGLE_LIMIT_DEGREES:g}°",
     "marking_jumps": "ступенек пунктира на 100 км",
+    "junction_colour_mismatch": "% узлов чужого цвета (магистраль/нет)",
+    "junction_colour_blots": "узлов-клякс цвета класса на чужих лентах",
+    "bridge_seams": "швов на 1 км настила мостов",
+    "zebra_steps": "% зебр ступенькой к соседке",
+    "avenues_unmarked": "% длины проспектов без линий полос",
 }
 
 # Потолки, выше которых публикация останавливается независимо от прошлой
@@ -953,7 +1179,7 @@ NOISE_FLOOR = {"houses_under_asphalt": 0.2, "islands_under_asphalt": 5.0, "arrow
                "dashes_through_medians": 2.0, "zebra_overhang": 3.0, "zebra_duplicates": 2.0,
                "junction_spikes": 2.0, "island_slivers": 2.0, "junction_bloat": 2.0,
                "arrows_off_lane": 5.0, "arrows_icon_size": 5.0, "markings_off_road": 2.0,
-               "arrows_tilted": 5.0, "marking_jumps": 5.0, "arrows_angle_max": ARROW_ANGLE_LIMIT_DEGREES}
+               "arrows_tilted": 5.0, "marking_jumps": 5.0, "junction_colour_mismatch": 1.0, "junction_colour_blots": 3, "bridge_seams": 1.0, "zebra_steps": 1.0, "avenues_unmarked": 5.0, "arrows_angle_max": ARROW_ANGLE_LIMIT_DEGREES}
 
 
 def compare(previous, current):
@@ -994,6 +1220,7 @@ def main():
         print(f"    {kind:10} {lat},{lon}  {detail}")
     print("  разметка за кромкой (точки):", result["_marking_off_examples"][:args.worst])
     print("  повёрнутые стрелки (°, широта, долгота):", result["_tilted_examples"][:args.worst])
+    print("  кляксы цвета узла (м², широта, долгота):", result["_blot_examples"][:args.worst])
     print("  ступеньки пунктира (широта, долгота, сдвиг м), худшая", result["_marking_jump_worst"], ":",
           result["_jump_examples"][:args.worst])
     if args.json:

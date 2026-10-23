@@ -859,7 +859,11 @@ def _layers_in_draw_order(p):
         {"id": "radar-junction", "type": "fill", "source": "radar", "source-layer": "surface",
          "minzoom": OUR_ROADS_FROM,
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["in", ["get", "kind"], ["literal", [8, 10]]]],
-         "paint": {"fill-color": p["road"], "fill-antialias": False}},
+         # Цвет — по классу старшего подхода (свойство cls узла, 28.G): узел
+         # магистрали — цвета магистрали, без заплаток цвета проспекта у
+         # торцов эстакад. Тайлы без cls — прежний цвет проспекта.
+         "paint": {"fill-color": ["case", ["has", "cls"], class_asphalt(p), p["road"]],
+                   "fill-antialias": False}},
         # Бордюр угла перекрёстка (вид 16): продолжение кромки полотна по дуге
         # от устья подхода к устью соседа. Кромка лент под площадью узла не
         # видна, и бордюр проспекта обрывался, не дойдя до угла (18.10.2026).

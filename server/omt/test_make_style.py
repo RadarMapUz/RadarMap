@@ -99,16 +99,18 @@ class StyleTests(unittest.TestCase):
         self.assertLess(ids.index("radar-junction"), ids.index("radar-median-strip"))
 
     def test_junction_kerb_continues_the_ribbon_kerb_round_the_corner(self):
-        # Бордюр угла (вид 16) поверх площади узла — иначе её заливка его
-        # накрыла бы; под разметкой. Снаружи кромки, той же толщины, что
+        # Бордюр угла (вид 16) — ПОД площадью узла (над лентами): он лежит
+        # снаружи её кромки и виден, а его куски, прошедшие через узел от
+        # устья внутри кластера, заливка накрывает — без «паутины» по
+        # асфальту (Дурмон йули × Зиёлилар, 23.10.2026). Той же толщины, что
         # кайма ленты: жёлтая кромка проспекта идёт по углу без ступеньки.
         layers = {layer["id"]: layer for layer in self.style["layers"]}
         ids = [layer["id"] for layer in self.style["layers"]]
         kerb = layers["radar-junction-kerb"]
         self.assertEqual(kerb["type"], "line")
         self.assertIn(["==", ["get", "kind"], 16], kerb["filter"])
-        self.assertLess(ids.index("radar-junction"), ids.index("radar-junction-kerb"))
-        self.assertLess(ids.index("radar-junction-kerb"), ids.index("radar-markings"))
+        self.assertLess(ids.index("radar-junction-kerb"), ids.index("radar-junction"))
+        self.assertLess(ids.index("radar-roads"), ids.index("radar-junction-kerb"))
         self.assertEqual(kerb["paint"]["line-width"], make_style.ROAD_KERB_EXTRA_PX / 2)
         self.assertEqual(kerb["paint"]["line-offset"], kerb["paint"]["line-width"] / 2)
         self.assertEqual(layers["radar-roads-case"]["paint"]["line-width"],

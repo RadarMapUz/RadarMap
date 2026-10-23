@@ -64,6 +64,26 @@ class PaletteRules(unittest.TestCase):
         _, failures = palette_check.measure("dark", p)
         self.assertIn("линия маршрута на асфальте < 3:1", failures)
 
+    def test_rules_catch_grey_paint_on_a_white_street(self):
+        # До 28.L: серая краска #c4c9d1 на белом полотне — по яркости 1,66:1,
+        # но краска темнее асфальта читалась швом, а не разметкой.
+        light = make_style.PALETTES["light"]
+        white = {k: "#ffffff" for k in palette_check.MARKED_KEYS}
+        p = dict(light, paint="#c4c9d1", zebra_base="#ffffff", **white)
+        _, failures = palette_check.measure("light", p)
+        self.assertIn("разметка темнее асфальта", failures)
+
+    def test_rules_catch_lane_paint_lost_on_pale_asphalt(self):
+        # Тон #dfe2e7 — белая краска 1,30:1, пунктир растворяется.
+        p = dict(make_style.PALETTES["light"], near_primary="#dfe2e7")
+        _, failures = palette_check.measure("light", p)
+        self.assertIn("разметка на асфальте < 1,4:1", failures)
+
+    def test_rules_catch_asphalt_lost_among_houses(self):
+        p = dict(make_style.PALETTES["light"], near_tertiary=make_style.PALETTES["light"]["building"])
+        _, failures = palette_check.measure("light", p)
+        self.assertIn("асфальт вблизи сливается с домами", failures)
+
     def test_formulas_match_known_values(self):
         # Чёрный на белом — 21:1, одинаковые цвета — 1:1 и ΔE 0.
         self.assertAlmostEqual(palette_check.contrast("#000000", "#ffffff"), 21, places=3)

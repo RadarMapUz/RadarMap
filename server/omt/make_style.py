@@ -34,7 +34,10 @@ OUR_ROADS_FROM = 15   # с этого зума полотно — наше
 # и проспект сливается в одну серую полосу (Навои × Рашидов).
 ONEWAY_SHARE = 0.55
 # Ширина по классу OpenMapTiles, метры (до 15-го зума — там наших лент нет).
-CLASS_M = {"motorway": 32, "trunk": 30, "primary": 24, "secondary-tertiary": 16, "link": 8,
+# Primary — 30, а не 24 (аудит 23.10, №4): на обзоре проспект шире улицы, а
+# у 15-го зума две его ленты по ONEWAY_SHARE (16,5 м) — как наши измеренные
+# ленты проспектов (Навои — 17–18 м), без скачка ширины на смене основы (№5).
+CLASS_M = {"motorway": 32, "trunk": 30, "primary": 30, "secondary-tertiary": 16, "link": 8,
            "motorway-link": 9, "minor": 9, "service-track": 5.5, "path": 1.8, "path-steps": 1.8}
 MAJOR = {"motorway", "trunk", "primary", "secondary-tertiary", "link", "motorway-link"}
 
@@ -60,7 +63,20 @@ MAJOR = {"motorway", "trunk", "primary", "secondary-tertiary", "link", "motorway
 # 0,083–0,133: там линия маршрута теряет 3:1 и телом, и каймой — поэтому
 # магистраль #626874 (0,138), а не #5a606c (0,116) со схемы. На ней же
 # белое имя улицы и подпись места — не ниже 4,5:1, отсюда потолок её
-# светлоты. Днём разметка на белой улице — серая: белая на белом не видна.
+# светлоты.
+#
+# Разметка днём (28.L, жалобы владельца: «разметку не видно»). На белой улице
+# разметка была серой (#c4c9d1) — и читалась швом или трещиной, а не краской;
+# белые стрелки полос и штриховку островков держала только тень. Как у Apple
+# Maps и Amap: на обзоре улицы белые, а с того зума, где появляется наше
+# полотно с разметкой (ASPHALT_NEAR), полотно улиц и проспектов плавно
+# становится светло-серым асфальтом (near_*), магистраль — тёплым, но темнее
+# обзорного, и вся разметка — БЕЛАЯ. Порог — белая краска к асфальту
+# любого размеченного класса не ниже PAINT_MIN по яркости (palette_check).
+# Двор остаётся белым: разметки полос на нём нет (осевая — только до
+# tertiary, build_mvt.CENTRE_MAX_CLASS), а светло-серый двор сливался бы с
+# крышами домов (#e4e6ea) и землёй кварталов. Зебра лежит на подложке тона
+# проспекта — на белом дворе и на магистрали она остаётся зеброй.
 PALETTES = {
     "light": {
         "bg": "#f2f3f5", "park": "#cdeac0", "wood": "#c1e3b0", "water": "#a9d5f7",
@@ -73,13 +89,21 @@ PALETTES = {
         # магистраль, проспекты белые с кромкой темнее улиц.
         "far_motorway": "#ffd896", "far_motorway_edge": "#e9ab55",
         "far_trunk": "#ffe2a8", "far_trunk_edge": "#eeb65e",
-        "far_primary": "#ffffff", "far_primary_edge": "#b9bfc8",
-        "far_secondary": "#ffffff", "far_secondary_edge": "#c6cbd2",
+        # Кайма проспекта и второго класса темнее (аудит 23.10, №4): белую
+        # дорогу на земле #f2f3f5 (1,11:1) несёт только кайма, и при светлой
+        # кайме проспект не отличался от улицы третьего класса.
+        "far_primary": "#ffffff", "far_primary_edge": "#9aa3b0",
+        "far_secondary": "#ffffff", "far_secondary_edge": "#adb4be",
         "far_tertiary": "#ffffff", "far_tertiary_edge": "#d6d9de",
-        # Разметка серая: на белом полотне белая краска невидима. Зебра —
-        # серые штрихи на белой подложке; на жёлтой магистрали подложка даёт
-        # переходу свою белую полосу.
-        "median": "#d8e8cf", "concrete": "#e1e4e8", "zebra_base": "#ffffff", "paint": "#c4c9d1",
+        # Полотно вблизи (28.L, с ASPHALT_NEAR): светло-серый асфальт под
+        # белой разметкой; магистраль тёплая, но темнее обзорной; двор белый.
+        "near_trunk": "#ecd096", "near_primary": "#d2d6dd", "near_secondary": "#d2d6dd",
+        "near_tertiary": "#d2d6dd", "near_minor": "#ffffff",
+        # Разметка белая — краска на сером асфальте. Зебра — белые штрихи на
+        # подложке тона проспекта. Черты парковочных мест — серые: площадка
+        # парковки светлая, белое на ней не видно.
+        "median": "#d8e8cf", "concrete": "#e1e4e8", "zebra_base": "#d2d6dd", "paint": "#ffffff",
+        "stall": "#c4c9d1",
         # Дома светлее земли не бывают: крыша чуть темнее фона, стены темнее
         # крыши — свет сбоку-сверху, нейтральный.
         "building": "#e4e6ea", "building_wall": "#cfd3da", "landuse": "#eceef1",
@@ -124,8 +148,13 @@ PALETTES = {
         "far_primary": "#464b55", "far_primary_edge": "#2a2d33",
         "far_secondary": "#3a3e47", "far_secondary_edge": "#25282d",
         "far_tertiary": "#32363e", "far_tertiary_edge": "#212328",
+        # Ночью полотно вблизи — то же, что на 15-м: светлая разметка на
+        # графите и так читается (3,7:1 на проспекте).
+        "near_trunk": "#626874", "near_primary": "#40454f", "near_secondary": "#383c45",
+        "near_tertiary": "#33373f", "near_minor": "#30343c",
         # Разметка ночью — приглушённо-светлая: белая во весь экран слепит.
         "median": "#1a2a20", "concrete": "#3b3f47", "zebra_base": "#2e3137", "paint": "#9aa0aa",
+        "stall": "#9aa0aa",
         # Дома — графитовые объёмы светлее земли и темнее любой улицы;
         # крыша светлее стен.
         "building": "#24272e", "building_wall": "#1b1d22", "landuse": "#1a1c20",
@@ -250,7 +279,11 @@ def street_halo(p):
     тонкая, имя лежит на фоне — ореол фоновый. Асфальт — по классу, как
     само полотно (class_asphalt).
     """
-    return ["interpolate", ["linear"], ["zoom"], 14.5, p["halo"], 15.5, class_asphalt(p, "class")]
+    far, near = class_asphalt(p, "class"), class_asphalt(near_palette(p), "class")
+    if far == near:
+        return ["interpolate", ["linear"], ["zoom"], 14.5, p["halo"], 15.5, far]
+    # Днём (28.L) полотно с ASPHALT_NEAR уходит к серому — ореол вместе с ним.
+    return ["interpolate", ["linear"], ["zoom"], 14.5, p["halo"], ASPHALT_NEAR[0], far, ASPHALT_NEAR[1], near]
 
 
 def poi_colour(p, theme):
@@ -287,6 +320,12 @@ def class_width(metres, extra=0.0, low=0.6, near_share=1.0):
             edge - 0.1, stop(edge - 0.1), edge, stop(edge, near_share),
             16, stop(16, near_share), 20, stop(20, near_share)]
 
+
+# Наибольший излом подписи улицы между соседними буквами, градусы.
+STREET_LABEL_MAX_ANGLE = 15
+
+# С этого зума кайма линий основы гаснет к OUR_ROADS_FROM.
+CASING_FADE_FROM = 14.6
 
 # Объёмные кроны деревьев OSM — с этого зума; ствол — TREE_TRUNK_METERS.
 TREE_3D_FROM = 16.8
@@ -462,13 +501,30 @@ def _base_layer(layer, p, mode, theme):
             else:
                 # Вдали — цвет класса (магистраль оранжевее, улица белее), вблизи —
                 # асфальт, на котором видна разметка. Как у Яндекса.
-                paint["line-color"] = ["interpolate", ["linear"], ["zoom"], 13, _far(p, "fill"),
-                                       14.5, _far(p, "fill"),
-                                       15.5, class_asphalt(p, "class")] \
-                    if major else ["interpolate", ["linear"], ["zoom"], 14.5, p["minor_far"], 15.5, p["minor"]]
+                near = class_asphalt(near_palette(p), "class")
+                if not major:
+                    paint["line-color"] = ["interpolate", ["linear"], ["zoom"], 14.5, p["minor_far"], 15.5, p["minor"]]
+                elif near == class_asphalt(p, "class"):
+                    paint["line-color"] = ["interpolate", ["linear"], ["zoom"], 13, _far(p, "fill"),
+                                           14.5, _far(p, "fill"), 15.5, class_asphalt(p, "class")]
+                else:
+                    # Днём запасная линия под нашей лентой уходит к асфальту
+                    # вблизи вместе с ней (ASPHALT_NEAR): где нашего тайла нет,
+                    # дорога того же тона, что соседние.
+                    paint["line-color"] = ["interpolate", ["linear"], ["zoom"], 13, _far(p, "fill"),
+                                           14.5, _far(p, "fill"), ASPHALT_NEAR[0], class_asphalt(p, "class"),
+                                           ASPHALT_NEAR[1], near]
             paint["line-width"] = class_width(metres, (2.0 if major else 1.4) if casing else 0.0,
                                               near_share=1.0 if casing else FALLBACK_SHARE)
             paint["line-opacity"] = 1 if major else ["interpolate", ["linear"], ["zoom"], 12.5, 0, 13.5, 1]
+            if casing:
+                # Кайма основы гаснет к 15-му плавно (аудит 23.10, №5): обрыв
+                # на OUR_ROADS_FROM делал дорогу на автозуме вдруг светлее. У
+                # мелочи кайма появляется только с 13,5 (№4): на 12–13 дворы
+                # с каймой рябили серой сеткой и спорили с проспектами.
+                fade = [CASING_FADE_FROM, 1, OUR_ROADS_FROM, 0]
+                paint["line-opacity"] = ["interpolate", ["linear"], ["zoom"], *fade] if major else \
+                    ["interpolate", ["linear"], ["zoom"], 13.5, 0, 14.5, 1, *fade]
             # С OUR_ROADS_FROM полотно рисуем мы, но сама линия основы остаётся
             # ПОД нашими слоями как запасная: где нашего тайла нет (офлайн,
             # не докачан, отброшен проверкой sha, район вне сборки), дорога
@@ -498,6 +554,11 @@ def _base_layer(layer, p, mode, theme):
                     # одно имя стояло шесть раз на экран (05.10.2026). Шаг и
                     # отступ — чтобы улица читалась один-два раза.
                     "symbol-spacing": 900, "text-padding": 50, "text-font": ["Noto Sans Bold"],
+                    # Не гнуть подпись через узел (аудит 23.10, №14): при 45° по
+                    # умолчанию «ул. Шарафа Рашидова» дугой лежала поперёк
+                    # площади перекрёстка Навои. Замер на этом узле: при 25° и
+                    # 20° дуга остаётся, при 15° подпись уходит на прямую.
+                    "text-max-angle": STREET_LABEL_MAX_ANGLE,
                     # Крупнее вблизи: на асфальте в 11 px имя терялось.
                     "text-size": ["interpolate", ["linear"], ["zoom"], 13, 10.5, 16, 12, 18, 14, 20, 16]
                     if street else ["interpolate", ["linear"], ["zoom"], 13, 10, 16, 11.5, 18, 13.5, 20, 15]})
@@ -592,7 +653,49 @@ def class_asphalt(p, key="cls"):
 def _our_layers(p):
     """Наши слои, снизу вверх: каймы, полотна, площади узлов, разделительные,
     разметка, зебры, стрелки, мосты с их разметкой, светофоры."""
-    return _bridge_order(_layers_in_draw_order(p))
+    return _bridge_order(_near_asphalt(_layers_in_draw_order(p), _layers_in_draw_order(near_palette(p))))
+
+
+# Полотно под разметкой (28.L): с ASPHALT_NEAR[0] асфальт цвета обзора, к
+# ASPHALT_NEAR[1] — тон near_*. Начало — OUR_ROADS_FROM: наше полотно сменяет
+# белую линию основы без скачка; конец — до первой разметки (зебры, стоп-линии
+# и штриховка с 16,5, полосы и стрелки с LANE_MARKINGS_FROM).
+ASPHALT_NEAR = (OUR_ROADS_FROM, 16)
+# Ключ асфальта на 15-м → его тон вблизи.
+NEAR_KEYS = {"road_trunk": "near_trunk", "road": "near_primary", "road_secondary": "near_secondary",
+             "road_tertiary": "near_tertiary", "minor": "near_minor"}
+COLOUR_PROPS = ("line-color", "fill-color")
+
+
+def near_palette(p):
+    """Палитра вблизи: асфальт классов заменён тоном near_*, остальное то же."""
+    return dict(p, **{key: p[near] for key, near in NEAR_KEYS.items()})
+
+
+def at_zoom_near(far, near):
+    """Цвет, переходящий к асфальту вблизи на ASPHALT_NEAR; ночью (тон тот же) — как был."""
+    if far == near:
+        return far
+    if "zoom" in json.dumps([far, near]):
+        # Зум можно звать только на верхнем уровне выражения: вложенный
+        # interpolate движок отвергнет вместе со всем стилем.
+        raise ValueError("цвет асфальта уже зависит от зума — вложить нельзя")
+    return ["interpolate", ["linear"], ["zoom"], ASPHALT_NEAR[0], far, ASPHALT_NEAR[1], near]
+
+
+def _near_asphalt(layers, near_layers):
+    """Слои, чей цвет зависит от асфальта, плавно уходят к тону вблизи.
+
+    Те же слои, собранные по палитре вблизи, отличаются ровно цветом
+    асфальта: где цвет разный — он переходит по зуму. Так и площадь узла,
+    чьё выражение цвета правится отдельно (класс узла из тайла), следует за
+    лентами без второго списка «кто асфальт».
+    """
+    for layer, near in zip(layers, near_layers):
+        for prop in COLOUR_PROPS:
+            if prop in layer.get("paint", {}):
+                layer["paint"][prop] = at_zoom_near(layer["paint"][prop], near["paint"][prop])
+    return layers
 
 
 def _layers_in_draw_order(p):
@@ -642,7 +745,7 @@ def _layers_in_draw_order(p):
         {"id": "radar-parking-stall", "type": "line", "source": "radar", "source-layer": "parking",
          "minzoom": 17.5, "filter": ["==", ["get", "kind"], "stall"],
          "layout": {"line-cap": "butt"},
-         "paint": {"line-color": p["paint"],
+         "paint": {"line-color": p["stall"],
                    "line-width": ["interpolate", ["exponential", 2], ["zoom"], 17, 0.5, 20, 1.8],
                    "line-opacity": ["interpolate", ["linear"], ["zoom"], 17.5, 0, 18, 0.85]}},
         {"id": "radar-median", "type": "fill", "source": "radar", "source-layer": "surface", "minzoom": 15.5,
@@ -674,6 +777,17 @@ def _layers_in_draw_order(p):
          # Едва видная полоса, как у Яндекса: плотный «призрак» тоннеля Фурката
          # поверх перекрёстка Навои читался второй дорогой (07.10.2026).
          "paint": {"line-color": p["tunnel"], "line-width": measured(), "line-opacity": 0.3}},
+        # Кромка площади узла (аудит 23.10, №1): контур многоугольника узла
+        # цветом кромки, под каймой лент. Внутреннюю половину закрывает
+        # заливка узла, у подходов — сами ленты; остаётся бордюр по внешнему
+        # краю. Крупные узлы с запасной оболочкой (610 из 2856 ≥ 300 м² в
+        # Ташкенте, среди них Навои × Рашидов) кромки из тайла не имеют и
+        # сливались с тротуаром.
+        {"id": "radar-junction-edge", "type": "line", "source": "radar", "source-layer": "surface",
+         "minzoom": OUR_ROADS_FROM,
+         "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["in", ["get", "kind"], ["literal", [8, 10]]]],
+         "layout": {"line-join": "round"},
+         "paint": {"line-color": p["kerb"], "line-width": ROAD_KERB_EXTRA_PX}},
         {"id": "radar-roads-case", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["!", ["has", "tunnel"]], ["<=", ["get", "cls"], 7],
                                               ["!", ["has", "stub"]], ["!", ["has", "inner"]]],
@@ -717,9 +831,8 @@ def _layers_in_draw_order(p):
                     ["==", ["get", "major"], True]],
          # Скругление угла — тем же асфальтом, что дороги вблизи: светлый
          # «дворовый» треугольник у примыкания читался заплаткой (07.10.2026).
-         "paint": {"fill-color": ["interpolate", ["linear"], ["zoom"], 15,
-                                  ["case", ["get", "major"], p["road"], p["minor"]], 16.5, p["road"]],
-                   "fill-antialias": True}},
+         # Цвет — без зума: переход к асфальту вблизи добавляет _near_asphalt.
+         "paint": {"fill-color": p["road"], "fill-antialias": True}},
         # Двойная разделительная линия (вид 15): между встречными лентами, где
         # места под полосу нет, — как жёлтая двойная у Яндекса на Беруни.
         # Узкая разделительная (зазор меньше 2,5 м) — бетонная полоса с
@@ -791,9 +904,12 @@ def _layers_in_draw_order(p):
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["==", ["get", "bridge"], True]],
          "layout": {"line-cap": "butt", "line-join": "round"},
          "paint": {"line-color": p["bridge_edge"], "line-width": measured(4.0)}},
+        # Настил — с круглыми концами (аудит 23.10, №2): прямые торцы соседних
+        # кусков под углом оставляли клин, сквозь который просвечивали тень и
+        # ограждение, — эстакада читалась лоскутным одеялом с поперечными швами.
         {"id": "radar-bridge", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["==", ["get", "bridge"], True]],
-         "layout": {"line-cap": "butt", "line-join": "round"},
+         "layout": {"line-cap": "round", "line-join": "round"},
          "paint": {"line-color": road_color(p),
                    "line-width": measured()}},
         # Асфальт как асфальт: зерно поверх полотна (узор привязан к земле и

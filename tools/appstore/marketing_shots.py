@@ -2,6 +2,7 @@
 """Маркетинговые скриншоты App Store из «чистых» кадров.
 
 python3 tools/appstore/marketing_shots.py docs/appstore/screenshots/6.9
+python3 tools/appstore/marketing_shots.py docs/appstore/screenshots/6.9-uz --uz
 
 Берёт raw/NN_имя.png (1320×2868) и подписи из CAPTIONS, кладёт в marketing/
 кадр того же размера: подпись сверху крупно, снимок экрана ниже со
@@ -23,6 +24,16 @@ CAPTIONS = {
     "04_rating": (["Рейтинг, который", "можно проверить"], "day"),
     "05_family": (["Близкие видят,", "когда вы будете дома"], "day"),
     "06_night":  (["Ночью — спокойная", "тёмная карта"], "night"),
+}
+# Узбекский набор (латиница; ʻ — U+02BB после o/g, ʼ — U+02BC): для сайта и
+# Telegram, в App Store Connect узбекской локализации нет.
+CAPTIONS_UZ = {
+    "01_alert":  (["Kamera haqida", "oldindan ogohlantiradi"], "day"),
+    "02_drive":  (["Kamera — marshrut", "chizig\u02bbining o\u02bbzida"], "day"),
+    "03_myroad": (["Uyga o\u02bbz yo\u02bblingiz", "va marshrut tanlash"], "day"),
+    "04_rating": (["Tekshirsa bo\u02bbladigan", "reyting"], "day"),
+    "05_family": (["Yaqinlaringiz uyga qachon", "yetishingizni ko\u02bbradi"], "day"),
+    "06_night":  (["Tunda — xotirjam", "qorong\u02bbi xarita"], "night"),
 }
 THEMES = {
     # Theme.accentFill 0x2563D9 → чуть темнее книзу; ночь — Theme.background/surface тёмные.
@@ -96,9 +107,10 @@ def compose(raw: Path, lines, theme, out: Path):
 
 def main():
     root = Path(sys.argv[1])
+    captions = CAPTIONS_UZ if "--uz" in sys.argv[2:] else CAPTIONS
     raw_dir, out_dir = root / "raw", root / "marketing"
     out_dir.mkdir(parents=True, exist_ok=True)
-    for name, (lines, theme) in CAPTIONS.items():
+    for name, (lines, theme) in captions.items():
         raw = raw_dir / f"{name}.png"
         if not raw.exists():
             print(f"нет {raw}")

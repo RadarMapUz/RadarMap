@@ -379,6 +379,18 @@ class LaneArrowTests(unittest.TestCase):
         self.assertTrue(all(spot[0] < LON for spot, _p in arrows))
         self.assertTrue(all(p["bearing"] == 90 for _spot, p in arrows))
 
+    def test_arrow_knows_its_lane_and_the_row(self):
+        # 28.C: номер полосы слева направо и число полос — по ним телефон
+        # сопоставляет стрелку с полосой манёвра OSRM. Пустая полоса
+        # стрелки не даёт, но номер соседей не сдвигает.
+        turns = [build_roads.TURN_LEFT, build_roads.TURN_NONE, build_roads.TURN_THROUGH,
+                 build_roads.TURN_THROUGH_RIGHT]
+        arrows = list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, self.point(turns), (LON, LAT)))
+        self.assertEqual([(p["li"], p["turn"]) for _spot, p in arrows],
+                         [(0, build_roads.TURN_LEFT), (2, build_roads.TURN_THROUGH),
+                          (3, build_roads.TURN_THROUGH_RIGHT)])
+        self.assertTrue(all(p["ln"] == 4 for _spot, p in arrows))
+
     def test_empty_lane_draws_nothing(self):
         turns = [build_roads.TURN_NONE, build_roads.TURN_THROUGH]
         arrows = list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, self.point(turns), (LON, LAT)))

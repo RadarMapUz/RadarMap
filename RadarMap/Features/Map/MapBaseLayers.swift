@@ -106,6 +106,7 @@ struct EngineBaseLayer: View {
                         routeObject: env.route.polyline,
                         routeProgress: env.route.progressAlong,
                         maneuverAlong: env.route.nextStep?.kind?.isDrawable == true ? env.route.nextStep?.distanceAlong : nil,
+                        laneFocus: env.route.laneFocusStep,
                         recenterToken: recenterToken,
                         modernStyle: env.settings.mapModernStyle,
                         performance: env.thermal.mode,

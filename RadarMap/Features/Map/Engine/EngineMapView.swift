@@ -76,6 +76,8 @@ struct EngineMapView: UIViewRepresentable {
     var routeObject: MKPolyline?
     var routeProgress: Double = 0
     var maneuverAlong: Double?
+    /// Ряд стрелок полос у ближайшего манёвра (28.C, LaneFocus); nil — полос нет.
+    var laneFocus: LaneFocus.Step? = nil
     var recenterToken: Int = 0
     /// Новая карта: основа OpenMapTiles + наши слои (EngineModernStyle) по
     /// выпуску тайлов. Выключено или выпуска нет — прежний стиль.
@@ -284,6 +286,8 @@ struct EngineMapView: UIViewRepresentable {
         private var camerasDaylight: Bool?
         /// Линия маршрута и срез пройденного под значком (27.A).
         fileprivate let routeLine = EngineRouteLine()
+        /// «Нужная полоса» на асфальте у манёвра (28.C).
+        private let laneFocusLayers = EngineLaneFocus()
         private var positionHeading = 0.0
         /// Значок между фиксами: где машина СЕЙЧАС (MarkerPredictor). До 21.10
         /// стрелка плыла к последнему фиксу за интервал между фиксами и всегда
@@ -682,6 +686,7 @@ struct EngineMapView: UIViewRepresentable {
             routeVariants.styleLoaded()
             lastCameras = nil
             routeLine.styleLoaded()
+            laneFocusLayers.styleLoaded()
             hiddenLayers = nil
             hotShown = nil
             modernDrivingLayerIDs = nil
@@ -1107,6 +1112,7 @@ struct EngineMapView: UIViewRepresentable {
             routeVariants.update(model.variants, selected: model.selectedVariantID,
                                  daylight: model.daylight, avoid: spots, in: view)
             routeLine.update(model, in: view)
+            laneFocusLayers.update(model, in: view)
         }
 
         /// Объёмные украшения и размытые тени — первое, что уходит на горячем

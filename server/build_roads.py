@@ -2609,6 +2609,23 @@ AREA_FLAG_STRIP = 2
 # 28,6 % площади островков Ташкента под полотном, 05.10.2026).
 AREA_FLAG_DRAWN = 4
 ISLAND_TAG = ("area:highway", "traffic_island")
+# Класс площади узла (вид 8) — класс самой широкой его дороги, в битах 3–6. Без
+# него стиль красил каждый узел цветом проспекта, и на магистрали у торцов
+# эстакад лежали белые днём и тёмные ночью заплатки (аудит 28.G, №3).
+JUNCTION_CLASS_SHIFT = 3
+JUNCTION_CLASS_MASK = 0xF
+
+
+def with_junction_class(flags, code):
+    """Флаги площади узла с классом старшей дороги (меньший код — старше)."""
+    if not code:
+        return flags
+    return flags | (min(int(code), JUNCTION_CLASS_MASK) << JUNCTION_CLASS_SHIFT)
+
+
+def junction_class(flags):
+    """Класс площади узла из флагов; 0 — не записан (старые тайлы, тесты)."""
+    return (flags >> JUNCTION_CLASS_SHIFT) & JUNCTION_CLASS_MASK
 
 
 # Местность обзора: вода и крупная зелень, только площади.
@@ -3963,9 +3980,10 @@ class Leg(tuple):
     кромка их полотна). Нога из простого кортежа (тесты) класса не знает.
     """
 
-    def __new__(cls, node, neighbour, width, code=None):
+    def __new__(cls, node, neighbour, width, code=None, link=False):
         leg = super().__new__(cls, (node, neighbour, width))
         leg.code = code
+        leg.link = link
         return leg
 
 
@@ -3980,7 +3998,8 @@ def junction_arms(chains):
             points = piece[2]
             for node, neighbour in ((points[0], points[1]),
                                     (points[-1], points[-2])):
-                arms[_node_key(node)].append(Leg(node, neighbour, width, street[0]))
+                arms[_node_key(node)].append(Leg(node, neighbour, width, street[0],
+                                                 bool(street[1] & FLAG_LINK)))
     return arms
 
 
@@ -4723,6 +4742,16 @@ def _junction_figures(legs, outlined, retry=True):
     flags = AREA_FLAG_CLOSED
     if retry and len(keys) == 1 and _slip_nodes(legs):
         flags |= AREA_FLAG_STRIP
+    # Цвет узла — по самой широкой его дороге (при равной ширине — старшей):
+    # узел проспекта со съездами магистрали остаётся цвета проспекта, а не
+    # заливается цветом узкого съезда (Мустакиллик у Малой кольцевой).
+    # Съезды в счёт не идут, если в узле есть сквозная дорога: съезд
+    # магистрали бывает шире ленты проспекта, и узел проспекта заливался
+    # цветом магистрали пятном посреди белого асфальта.
+    coded = [(-leg[2], leg.code) for leg in legs
+             if getattr(leg, "code", None) and not getattr(leg, "link", False)] \
+        or [(-leg[2], leg.code) for leg in legs if getattr(leg, "code", None)]
+    flags = with_junction_class(flags, min(coded)[1] if coded else None)
     kerbs = []
     outline = _mouth_figure(legs, kerbs)
     if outline:
@@ -5264,7 +5293,8 @@ def build_medians(chains, junctions=()):
                     out.append((AREA_DIVIDER, 0, line))
                 # Промежуток между лентами внутри узла — асфальт перекрёстка.
                 for fill in fills:
-                    out.append((AREA_JUNCTION, AREA_FLAG_CLOSED | AREA_FLAG_STRIP, fill))
+                    out.append((AREA_JUNCTION, with_junction_class(AREA_FLAG_CLOSED | AREA_FLAG_STRIP,
+                                                                   min(one[0], other[0])), fill))
     return out
 
 

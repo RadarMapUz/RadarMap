@@ -2944,6 +2944,36 @@ class JunctionKerbTests(unittest.TestCase):
         self.assertTrue(kerbs)
         self.assertTrue(all(not flags & build_roads.FILLET_MAJOR for _k, flags, _l in kerbs))
 
+    def test_junction_carries_the_class_of_its_widest_road(self):
+        # Узел магистрали с двором — цвета магистрали (аудит 28.G, №3: белые
+        # заплатки цвета проспекта на магистрали у торцов эстакад).
+        legs = [self.leg(0, 14.0, code=2), self.leg(180, 14.0, code=2), self.leg(90, 8.0, code=6),
+                self.leg(270, 8.0, code=6)]
+        rings = [f for f in self.made(legs) if f[0] == build_roads.AREA_JUNCTION]
+        self.assertTrue(rings)
+        self.assertTrue(all(build_roads.junction_class(flags) == 2 for _k, flags, _r in rings))
+        # Проспект со съездами магистрали: цвет — по широкой дороге, не по съезду.
+        legs = [self.leg(0, 15.0, code=4), self.leg(180, 15.0, code=4), self.leg(60, 7.0, code=2),
+                self.leg(250, 7.0, code=2)]
+        rings = [f for f in self.made(legs) if f[0] == build_roads.AREA_JUNCTION]
+        self.assertTrue(rings and all(build_roads.junction_class(flags) == 4 for _k, flags, _r in rings))
+        # Съезд магистрали шире ленты проспекта — узел всё равно цвета проспекта.
+        kx = 111_320 * math.cos(math.radians(self.node[1]))
+        ramp = build_roads.Leg(self.node, (self.node[0] + 60 / kx, self.node[1] + 30 / 111_320), 9.0, 2, True)
+        legs = [self.leg(0, 7.0, code=4), self.leg(180, 7.0, code=4), self.leg(90, 7.0, code=4), ramp]
+        rings = [f for f in self.made(legs) if f[0] == build_roads.AREA_JUNCTION]
+        self.assertTrue(rings and all(build_roads.junction_class(flags) == 4 for _k, flags, _r in rings))
+        self.assertTrue(all(flags & build_roads.AREA_FLAG_CLOSED for _k, flags, _r in rings))
+        # Класс не задевает флаг перемычки и проходит ворота тайла.
+        self.assertTrue(all(not flags & build_roads.AREA_FLAG_STRIP for _k, flags, _r in rings))
+        self.assertTrue(all(build_roads.surface_gate(f) for f in rings))
+
+    def test_junction_class_round_trip(self):
+        flags = build_roads.with_junction_class(build_roads.AREA_FLAG_CLOSED | build_roads.AREA_FLAG_STRIP, 4)
+        self.assertEqual(build_roads.junction_class(flags), 4)
+        self.assertTrue(flags & build_roads.AREA_FLAG_STRIP)
+        self.assertEqual(build_roads.junction_class(build_roads.with_junction_class(1, None)), 0)
+
     def test_outline_never_dies_at_the_tile_gate(self):
         # Малый контур с дугами после округления до 1e-5° бывал перекручен, и
         # ворота выбрасывали узел целиком — дыра в перекрёстке (18.10.2026).

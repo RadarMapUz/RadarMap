@@ -10378,7 +10378,33 @@
    "minzoom": 15,
    "paint": {
     "fill-antialias": false,
-    "fill-color": "#40454f"
+    "fill-color": [
+     "case",
+     [
+      "has",
+      "cls"
+     ],
+     [
+      "match",
+      [
+       "get",
+       "cls"
+      ],
+      [
+       1,
+       2
+      ],
+      "#626874",
+      3,
+      "#40454f",
+      4,
+      "#383c45",
+      5,
+      "#33373f",
+      "#30343c"
+     ],
+     "#40454f"
+    ]
    },
    "source": "radar",
    "source-layer": "surface",

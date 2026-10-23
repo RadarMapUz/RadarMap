@@ -163,6 +163,48 @@ class MarkingJumpTests(unittest.TestCase):
         self.assertEqual(rm.marking_jumps(lines)[0], 0.0)
 
 
+class JunctionColourTests(unittest.TestCase):
+    def setUp(self):
+        self.roads = [([m(-80, 0), m(80, 0)], {"cls": 2, "width": 14.0}),
+                      ([m(0, -80), m(0, 80)], {"cls": 6, "width": 6.0})]
+        self.ring = square(-8, -8, 8, 8)
+
+    def test_trunk_junction_in_trunk_colour_is_fine(self):
+        self.assertEqual(rm.junction_colour_mismatch([(self.ring, {"kind": 8, "cls": 2})], self.roads), 0.0)
+
+    def test_unclassed_junction_on_a_trunk_is_a_patch(self):
+        self.assertEqual(rm.junction_colour_mismatch([(self.ring, {"kind": 8})], self.roads), 100.0)
+
+
+class BridgeSeamTests(unittest.TestCase):
+    def test_two_bridge_pieces_end_to_end_make_a_seam(self):
+        roads = [([m(-50, 0), m(0, 0)], {"bridge": True}), ([m(0, 0), m(50, 0)], {"bridge": True})]
+        self.assertAlmostEqual(rm.bridge_seams(roads), 10.0, delta=0.5)
+
+    def test_one_line_bridge_has_none(self):
+        self.assertEqual(rm.bridge_seams([([m(-50, 0), m(50, 0)], {"bridge": True})]), 0.0)
+
+
+class UnmarkedAvenueTests(unittest.TestCase):
+    def test_avenue_without_lines_is_measured(self):
+        road = ([m(-60, 0), m(60, 0)], {"cls": 3, "width": 10.5, "oneway": True})
+        roads, lines = rm.lane_index([road], [])
+        self.assertEqual(rm.unmarked_avenues([road], lines), 100.0)
+        roads, lines = rm.lane_index([road], [([m(-60, 1.75), m(60, 1.75)], {"verified": True})])
+        self.assertEqual(rm.unmarked_avenues([road], lines), 0.0)
+
+
+class ZebraStepMetricTests(unittest.TestCase):
+    def test_side_by_side_zebras_shifted_along_are_a_step(self):
+        # Проспект на восток, две ленты: зебры поперёк (по долготе 0 и 5 м).
+        zebras = [[m(0, 1), m(0, 8)], [m(5, -8), m(5, -1)]]
+        self.assertEqual(rm.zebra_steps(zebras), 100.0)
+
+    def test_aligned_or_consecutive_zebras_are_fine(self):
+        self.assertEqual(rm.zebra_steps([[m(0, 1), m(0, 8)], [m(0, -8), m(0, -1)]]), 0.0)
+        self.assertEqual(rm.zebra_steps([[m(0, -3), m(0, 3)], [m(8, -3), m(8, 3)]]), 0.0)
+
+
 class CompareTests(unittest.TestCase):
     def test_worse_metric_stops_publish(self):
         reasons = rm.compare({"dashes_in_junction": 45.0}, {"dashes_in_junction": 80.0})

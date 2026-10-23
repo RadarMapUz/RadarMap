@@ -10791,9 +10791,61 @@
       "zoom"
      ],
      15,
-     "#ffffff",
+     [
+      "case",
+      [
+       "has",
+       "cls"
+      ],
+      [
+       "match",
+       [
+        "get",
+        "cls"
+       ],
+       [
+        1,
+        2
+       ],
+       "#ffe2a8",
+       3,
+       "#ffffff",
+       4,
+       "#ffffff",
+       5,
+       "#ffffff",
+       "#ffffff"
+      ],
+      "#ffffff"
+     ],
      16,
-     "#d2d6dd"
+     [
+      "case",
+      [
+       "has",
+       "cls"
+      ],
+      [
+       "match",
+       [
+        "get",
+        "cls"
+       ],
+       [
+        1,
+        2
+       ],
+       "#ecd096",
+       3,
+       "#d2d6dd",
+       4,
+       "#d2d6dd",
+       5,
+       "#d2d6dd",
+       "#ffffff"
+      ],
+      "#d2d6dd"
+     ]
     ]
    },
    "source": "radar",

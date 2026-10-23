@@ -104,6 +104,9 @@ PALETTES = {
         # парковки светлая, белое на ней не видно.
         "median": "#d8e8cf", "concrete": "#e1e4e8", "zebra_base": "#d2d6dd", "paint": "#ffffff",
         "stall": "#c4c9d1",
+        # Штриховка островка из спрайта — белая с альфой 0,92; при 0,9 слоя на
+        # сером асфальте она давала 1,37:1, в полную силу — 1,42 (≥ PAINT_MIN).
+        "hatch_opacity": 1.0,
         # Дома светлее земли не бывают: крыша чуть темнее фона, стены темнее
         # крыши — свет сбоку-сверху, нейтральный.
         "building": "#e4e6ea", "building_wall": "#cfd3da", "landuse": "#eceef1",
@@ -154,7 +157,7 @@ PALETTES = {
         "near_tertiary": "#33373f", "near_minor": "#30343c",
         # Разметка ночью — приглушённо-светлая: белая во весь экран слепит.
         "median": "#1a2a20", "concrete": "#3b3f47", "zebra_base": "#2e3137", "paint": "#9aa0aa",
-        "stall": "#9aa0aa",
+        "stall": "#9aa0aa", "hatch_opacity": 0.9,
         # Дома — графитовые объёмы светлее земли и темнее любой улицы;
         # крыша светлее стен.
         "building": "#24272e", "building_wall": "#1b1d22", "landuse": "#1a1c20",
@@ -760,7 +763,7 @@ def _layers_in_draw_order(p):
          "filter": ["all", ["==", ["geometry-type"], "Polygon"], ["==", ["get", "kind"], 9],
                     ["!", ["has", "strip"]], ["!", ["has", "island"]]],
          "paint": {"fill-pattern": "hatch",
-                   "fill-opacity": ["interpolate", ["linear"], ["zoom"], 16.5, 0, 17.2, 0.9]}},
+                   "fill-opacity": ["interpolate", ["linear"], ["zoom"], 16.5, 0, 17.2, p["hatch_opacity"]]}},
         # Тоннель — ПОД наземными дорогами: полупрозрачный асфальт и
         # пунктирная кромка. Раньше он рисовался обычной дорогой поверх всего,
         # и на Кичик Халка йули не понять было, что дорога уходит под землю.

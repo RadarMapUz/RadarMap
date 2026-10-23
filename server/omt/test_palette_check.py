@@ -135,6 +135,13 @@ class AppColoursInSync(unittest.TestCase):
             copy = ["#" + h.strip()[2:].lower() for h in found.group(group).split(",")]
             self.assertEqual(copy, [make_style.PALETTES[theme][k] for k in keys], theme)
 
+    def test_hatch_alpha_matches_the_sprite(self):
+        with open(os.path.join(HERE, "make_arrows.py"), encoding="utf-8") as handle:
+            source = handle.read()
+        hatch = source[source.index("def hatch("):]
+        alpha = int(re.search(r"fill=\(255, 255, 255, (\d+)\)", hatch).group(1))
+        self.assertAlmostEqual(palette_check.HATCH_ALPHA, alpha / 255)
+
     def test_camera_label_uses_the_map_label_and_halo(self):
         style = _swift("RadarMap/Features/Map/Engine/EngineModernStyle.swift")
         for name, key in (("labelHex", "label"), ("haloHex", "halo")):

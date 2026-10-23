@@ -53,6 +53,8 @@ PAINT_MIN = 1.4
 # Асфальт вблизи не сливается с крышами домов (дом #e4e6ea): серая лента
 # в квартале остаётся лентой.
 NEAR_HOUSE_DE_MIN = 5
+# Альфа белой штриховки островка в спрайте (make_arrows.hatch: 235/255).
+HATCH_ALPHA = 235 / 255
 
 
 def rgb(colour):
@@ -113,6 +115,12 @@ MARKED_KEYS = ("near_trunk", "near_primary", "near_secondary", "near_tertiary")
 FAR_KEYS = ("far_motorway", "far_trunk", "far_primary", "far_secondary", "far_tertiary")
 TRUNK_PRIMARY_DE_MIN = 12   # магистраль видна издалека: отличается от проспекта
 ROUTE_TRUNK_DE_MIN = 30     # линия маршрута не похожа на магистраль под ней
+
+
+def _over(alpha, surface, top="#ffffff"):
+    """Цвет полупрозрачного top поверх surface (смешение в sRGB, как у движка)."""
+    mixed = (alpha * a + (1 - alpha) * b for a, b in zip(rgb(top), rgb(surface)))
+    return "#" + "".join(f"{round(255 * c):02x}" for c in mixed)
 
 
 def _edge(fill, surface):
@@ -181,6 +189,10 @@ def measure(theme, p=None):
         # приглушённо-светлая на графите. Зебра лежит на своей подложке.
         "разметка / асфальт вблизи (мин)": min(contrast(p["paint"], p[k]) for k in MARKED_KEYS),
         "разметка / подложка зебры": contrast(p["paint"], p["zebra_base"]),
+        # Штриховка островка — белый узор спрайта (альфа HATCH_ALPHA) с
+        # прозрачностью слоя на асфальте проспекта.
+        "штриховка / асфальт вблизи": contrast(_over(HATCH_ALPHA * p["hatch_opacity"], p["near_primary"]),
+                                              p["near_primary"]),
         "ΔE асфальт вблизи / дом (мин)": min(delta_e(p[k], p["building"]) for k in MARKED_KEYS),
         # Иерархия классов: магистраль отличается от проспекта и вблизи, и на
         # обзоре — цветом днём, светлотой ночью.
@@ -222,7 +234,8 @@ def measure(theme, p=None):
     need(m["ΔE «медленно» / жёлтая кромка"] >= SLOW_KERB_DE_MIN, "«медленно» похоже на кромку")
     need(all(luminance(p["paint"]) > luminance(p[k]) for k in MARKED_KEYS + ("zebra_base",)),
          "разметка темнее асфальта")
-    need(min(m["разметка / асфальт вблизи (мин)"], m["разметка / подложка зебры"]) >= PAINT_MIN,
+    need(min(m["разметка / асфальт вблизи (мин)"], m["разметка / подложка зебры"],
+             m["штриховка / асфальт вблизи"]) >= PAINT_MIN,
          "разметка на асфальте < 1,4:1")
     need(m["ΔE асфальт вблизи / дом (мин)"] >= NEAR_HOUSE_DE_MIN, "асфальт вблизи сливается с домами")
     # Иерархия: дорога — главное на земле, дома тише неё (по яркости — её

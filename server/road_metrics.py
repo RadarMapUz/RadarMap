@@ -198,6 +198,206 @@ def arrows_after_stop(arrows, stop_lines):
     return bad / len(arrows)
 
 
+# --- стрелки в своих полосах -------------------------------------------------
+#
+# Жалоба владельца (снимок с телефона, 23.10.2026): «стрелка лежит на линии
+# разметки, ряд стрелок не совпадает с пунктирами». Глазами такое находили по
+# одному месту; здесь — по всей сборке: где центр каждой стрелки относительно
+# нарисованных кромок ленты и линий полос рядом с ней.
+
+# Лента под стрелкой: идёт вдоль хода (до 35°), стрелка на её полотне с запасом.
+LANE_ROAD_COS = math.cos(math.radians(35))
+LANE_ROAD_SLACK_METERS = 1.5
+# Линия полосы рядом со стрелкой: параллельна ходу (до 20°), ближе этого вбок
+# и вдоль — под стрелкой или кончается не дальше этого от неё: глаз продолжает
+# линию, оборванную у узла, и стрелка на её продолжении читается «на линии».
+LANE_LINE_COS = math.cos(math.radians(20))
+LANE_LINE_REACH_METERS = 9.0
+LANE_LINE_ALONG_SLACK_METERS = 6.0
+# Стрелка «посередине своей полосы», если до ближайшей границы полосы не
+# меньше этой доли её ширины: 0,25 — центр стрелки в средней половине полосы.
+LANE_CENTRE_SHARE = 0.25
+# Линии ближе этого друг к другу — одна граница (осевая у кромки и т. п.).
+LANE_MERGE_METERS = 0.6
+# Значок стрелки (lw) не шире и не уже своей полосы больше чем на эту долю.
+LANE_ICON_SHARE = 0.3
+# Линия разметки «на полотне»: от оси ленты не дальше полуширины минус это.
+MARKING_EDGE_MARGIN_METERS = 0.2
+
+
+class _Segments:
+    """Отрезки с полезной нагрузкой по клеткам ~55 м (дороги, линии разметки)."""
+
+    CELL = 0.0005
+
+    def __init__(self):
+        self._grid = defaultdict(list)
+
+    def add(self, a, b, payload, pad_m=0.0):
+        pad = pad_m / 80_000
+        for gx in range(int((min(a[0], b[0]) - pad) / self.CELL) - 1, int((max(a[0], b[0]) + pad) / self.CELL) + 2):
+            for gy in range(int((min(a[1], b[1]) - pad) / self.CELL) - 1, int((max(a[1], b[1]) + pad) / self.CELL) + 2):
+                self._grid[(gx, gy)].append((a, b, payload))
+
+    def near(self, p):
+        return self._grid.get((int(p[0] / self.CELL), int(p[1] / self.CELL)), ())
+
+
+def _local(p, a, b):
+    """(вектор отрезка в метрах, длина, t проекции p без обрезки, точка проекции − p в метрах)."""
+    kx = LAT_M * math.cos(math.radians(p[1]))
+    ax, ay = (a[0] - p[0]) * kx, (a[1] - p[1]) * LAT_M
+    bx, by = (b[0] - p[0]) * kx, (b[1] - p[1]) * LAT_M
+    dx, dy = bx - ax, by - ay
+    length = math.hypot(dx, dy)
+    if length == 0:
+        return (0.0, 0.0), 0.0, 0.0, (ax, ay)
+    t = -(ax * dx + ay * dy) / (length * length)
+    tc = max(0.0, min(1.0, t))
+    return (dx / length, dy / length), length, t, (ax + tc * dx, ay + tc * dy)
+
+
+def lane_index(roads, markings):
+    """roads — [(линия, свойства слоя roads)], markings — [(линия, свойства)].
+
+    Только наземные: стрелки ставятся на землю, а эстакада над узлом со своими
+    полосами — другой уровень.
+    """
+    road_index, line_index = _Segments(), _Segments()
+    for line, props in roads:
+        if props.get("tunnel") or props.get("bridge") or props.get("cls", 9) > 7:
+            continue
+        half = float(props.get("width") or 0) / 2.0
+        if half <= 0:
+            continue
+        for a, b in zip(line, line[1:]):
+            road_index.add(a, b, (half, bool(props.get("oneway"))), pad_m=half + LANE_ROAD_SLACK_METERS)
+    for line, props in markings:
+        if props.get("bridge"):
+            continue
+        for a, b in zip(line, line[1:]):
+            line_index.add(a, b, props.get("centre", 0), pad_m=LANE_LINE_REACH_METERS)
+    return road_index, line_index
+
+
+def arrow_in_lane(arrow, road_index, line_index):
+    """Разбор одной стрелки: None — всё хорошо, иначе (вид брака, подробности).
+
+    arrow — (lon, lat, азимут, lw). Виды брака:
+      no_road    — под стрелкой нет ленты по ходу (стрелка на газоне/в узле);
+      off_road   — центр стрелки за кромкой своей ленты;
+      off_centre — центр ближе LANE_CENTRE_SHARE ширины полосы к её границе
+                   (линии разметки или кромке): «стрелка на линии»;
+      icon_size  — ширина значка (lw) не по полосе между линиями.
+    """
+    lon, lat, bearing, lw = arrow
+    p = (lon, lat)
+    fx, fy = math.sin(math.radians(bearing)), math.cos(math.radians(bearing))
+    rx, ry = fy, -fx                                   # вправо от хода
+    best = None
+    for a, b, (half, oneway) in road_index.near(p):
+        (ux, uy), length, _t, (px, py) = _local(p, a, b)
+        if length == 0:
+            continue
+        cos = ux * fx + uy * fy
+        if (cos if oneway else abs(cos)) < LANE_ROAD_COS:
+            continue
+        lateral = math.hypot(px, py)
+        if lateral > half + LANE_ROAD_SLACK_METERS:
+            continue
+        if best is None or lateral < best[0]:
+            # s — положение стрелки поперёк ленты, вправо от оси, м.
+            best = (lateral, -(px * rx + py * ry), half, oneway)
+    if best is None:
+        return ("no_road", {})
+    _lateral, s, half, oneway = best
+    low, high = (-half, half) if oneway else (0.0, half)
+    if not low - 0.05 <= s <= high + 0.05:
+        return ("off_road", {"s": round(s, 2), "half": round(half, 2)})
+    bounds = [low, high]
+    dividers = 0
+    for a, b, _centre in line_index.near(p):
+        (ux, uy), length, t, (px, py) = _local(p, a, b)
+        if length == 0 or abs(ux * fx + uy * fy) < LANE_LINE_COS:
+            continue
+        slack = LANE_LINE_ALONG_SLACK_METERS / length
+        if not -slack <= t <= 1 + slack:
+            continue
+        across = px * rx + py * ry                     # линия правее стрелки на столько
+        if abs(across) > LANE_LINE_REACH_METERS:
+            continue
+        at = s + across
+        if low + LANE_MERGE_METERS < at < high - LANE_MERGE_METERS:
+            bounds.append(at)
+            dividers += 1
+    bounds.sort()
+    merged = [bounds[0]]
+    for value in bounds[1:]:
+        if value - merged[-1] >= LANE_MERGE_METERS:
+            merged.append(value)
+        else:
+            merged[-1] = (merged[-1] + value) / 2
+    for left, right in zip(merged, merged[1:]):
+        if left <= s <= right:
+            width = right - left
+            gap = min(s - left, right - s)
+            detail = {"s": round(s, 2), "lane": round(width, 2), "gap": round(gap, 2),
+                      "lines": dividers, "lw": lw}
+            if not dividers and lw:
+                # Линий рядом нет — полосы задаёт сам ряд: стрелка должна
+                # стоять посередине своей клетки шириной lw от кромки.
+                cell = (s - low) / lw
+                if abs(cell - math.floor(cell) - 0.5) > 0.5 - LANE_CENTRE_SHARE or s - low < lw * LANE_CENTRE_SHARE \
+                        or high - s < lw * LANE_CENTRE_SHARE:
+                    return ("off_centre", detail)
+                return None
+            if gap < LANE_CENTRE_SHARE * width:
+                return ("off_centre", detail)
+            if dividers and lw and abs(lw - width) > LANE_ICON_SHARE * width:
+                return ("icon_size", detail)
+            return None
+    return ("off_road", {"s": round(s, 2), "half": round(half, 2)})
+
+
+def lane_arrow_defects(arrows, road_index, line_index, examples=None):
+    """{вид брака: число} по всем стрелкам; examples — [(вид, lon, lat, подробности)]."""
+    counts = defaultdict(int)
+    for arrow in arrows:
+        found = arrow_in_lane(arrow, road_index, line_index)
+        if found is None:
+            continue
+        kind, detail = found
+        counts[kind] += 1
+        if examples is not None:
+            examples.append((kind, round(arrow[1], 5), round(arrow[0], 5), detail))
+    return dict(counts)
+
+
+def markings_off_road(markings, road_index, asphalt, examples=None):
+    """Метров наземной разметки за кромкой полотна на 1 км разметки.
+
+    «На полотне» — ближе полуширины минус MARKING_EDGE_MARGIN_METERS к оси
+    любой наземной ленты или на площади асфальта (узел, скругление угла).
+    """
+    total = off = 0.0
+    for line, props in markings:
+        if props.get("bridge"):
+            continue
+        for q in densify(line):
+            total += SAMPLE_STEP_METERS
+            ok = asphalt is not None and asphalt.covers(q)
+            if not ok:
+                for a, b, (half, _oneway) in road_index.near(q):
+                    if seg_distance_m(q, a, b) <= half - MARKING_EDGE_MARGIN_METERS:
+                        ok = True
+                        break
+            if not ok:
+                off += SAMPLE_STEP_METERS
+                if examples is not None:
+                    examples.append((round(q[1], 5), round(q[0], 5)))
+    return (1000.0 * off / total) if total else 0.0
+
+
 def zebra_defects(zebras, asphalt):
     """(доля зебр с концом за кромкой, доля зебр-дублей) — на 1 зебру.
 
@@ -483,6 +683,15 @@ def measure(tiles_dir, islands_path=None, bbox=None):
     arrows = [(parts[0][0][0], parts[0][0][1], props.get("bearing", 0))
               for g, parts, props in layers.get("arrows", []) if parts]
     markings = [part for g, parts, props in layers.get("markings", []) for part in parts]
+    marking_lines = [(part, props) for g, parts, props in layers.get("markings", []) if g == 2 for part in parts]
+    road_index, line_index = lane_index([(part, props) for parts, props in road_lines for part in parts],
+                                        marking_lines)
+    lane_arrows = [(parts[0][0][0], parts[0][0][1], props.get("bearing", 0), props.get("lw"))
+                   for g, parts, props in layers.get("arrows", []) if parts]
+    lane_examples = []
+    lane_counts = lane_arrow_defects(lane_arrows, road_index, line_index, lane_examples)
+    off_road_examples = []
+    marking_off = markings_off_road(marking_lines, road_index, open_areas, off_road_examples)
 
     houses = []
     for set_name in ("h",):
@@ -541,6 +750,13 @@ def measure(tiles_dir, islands_path=None, bbox=None):
         "junction_spikes": round(100 * spikes / len(shapes), 2) if shapes else 0.0,
         "island_slivers": round(100 * slivers / len(island_rings), 2) if island_rings else 0.0,
         "zebra_duplicates": round(100 * zebra_duplicates, 2),
+        "arrows_off_lane": round(1000 * sum(lane_counts.get(k, 0) for k in ("off_centre", "off_road", "no_road"))
+                                 / len(lane_arrows), 1) if lane_arrows else 0.0,
+        "arrows_icon_size": round(1000 * lane_counts.get("icon_size", 0) / len(lane_arrows), 1) if lane_arrows else 0.0,
+        "markings_off_road": round(marking_off, 1),
+        "_lane_counts": lane_counts,
+        "_lane_examples": lane_examples,
+        "_marking_off_examples": off_road_examples,
         "_median_examples": median_examples,
         "_counts": {"houses": len(houses), "islands": len(islands), "arrows": len(arrows),
                     "markings_km": round(total / 1000, 1), "zebras": len(zebra_lines), "medians": len(medians),
@@ -561,6 +777,9 @@ UNITS = {
     "junction_spikes": "% фигур узла с иглой",
     "island_slivers": "% островков-клиньев",
     "zebra_duplicates": "% зебр-дублей",
+    "arrows_off_lane": "на 1000 стрелок не посередине полосы",
+    "arrows_icon_size": "на 1000 стрелок значок не по полосе",
+    "markings_off_road": "м разметки за кромкой на 1 км",
 }
 
 
@@ -584,7 +803,8 @@ WORSE_FACTOR = 1.2
 NOISE_FLOOR = {"houses_under_asphalt": 0.2, "islands_under_asphalt": 5.0, "arrows_after_stop": 5.0,
                "dashes_in_junction": 10.0, "dashes_on_zebra": 2.0, "medians_on_asphalt": 2.0,
                "dashes_through_medians": 2.0, "zebra_overhang": 3.0, "zebra_duplicates": 2.0,
-               "junction_spikes": 2.0, "island_slivers": 2.0, "junction_bloat": 2.0}
+               "junction_spikes": 2.0, "island_slivers": 2.0, "junction_bloat": 2.0,
+               "arrows_off_lane": 5.0, "arrows_icon_size": 5.0, "markings_off_road": 2.0}
 
 
 def compare(previous, current):
@@ -607,6 +827,7 @@ def main():
     parser.add_argument("--islands")
     parser.add_argument("--json")
     parser.add_argument("--bbox", help="юг,запад,север,восток; 'tashkent' — рамка ворот")
+    parser.add_argument("--worst", type=int, default=12, help="сколько худших мест печатать")
     parser.add_argument("--compare", help="metrics.json опубликованной сборки: ухудшение — код 1")
     args = parser.parse_args()
     bbox = None
@@ -617,6 +838,10 @@ def main():
         print(f"  {key:24} {result[key]!s:>8}  {unit}")
     print("  объём:", result["_counts"])
     print("  примеры разделительных на асфальте:", result["_median_examples"][:6])
+    print("  стрелки по видам брака:", result["_lane_counts"])
+    for kind, lat, lon, detail in result["_lane_examples"][:args.worst]:
+        print(f"    {kind:10} {lat},{lon}  {detail}")
+    print("  разметка за кромкой (точки):", result["_marking_off_examples"][:args.worst])
     if args.json:
         with open(args.json, "w", encoding="utf-8") as handle:
             json.dump(result, handle, ensure_ascii=False, indent=1)

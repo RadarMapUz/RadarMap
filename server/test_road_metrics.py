@@ -76,6 +76,61 @@ class ShapeTests(unittest.TestCase):
         self.assertFalse(rm.thin(square(0, 0, 10, 10)))
 
 
+class LaneArrowTests(unittest.TestCase):
+    """Стрелка — посередине своей полосы между линиями разметки (снимок владельца 23.10.2026)."""
+
+    def setUp(self):
+        # Односторонняя лента на восток, три полосы по 3,5 м, линии на ±1,75 м.
+        road = ([m(-60, 0), m(60, 0)], {"cls": 3, "width": 10.5, "oneway": True})
+        lines = [([m(-60, y), m(60, y)], {"verified": True}) for y in (-1.75, 1.75)]
+        self.roads, self.lines = rm.lane_index([road], lines)
+
+    def check(self, dy, lw=3.5):
+        lon, lat = m(0, dy)
+        return rm.arrow_in_lane((lon, lat, 90, lw), self.roads, self.lines)
+
+    def test_arrow_in_lane_middle_is_fine(self):
+        self.assertIsNone(self.check(0.0))
+        self.assertIsNone(self.check(3.5))     # левая полоса (север — слева по ходу на восток)
+
+    def test_arrow_on_lane_line_is_caught(self):
+        self.assertEqual(self.check(1.6)[0], "off_centre")
+
+    def test_arrow_past_kerb_is_caught(self):
+        self.assertEqual(self.check(6.5)[0], "off_road")
+
+    def test_icon_wider_than_lane_is_caught(self):
+        self.assertEqual(self.check(0.0, lw=5.3)[0], "icon_size")
+
+    def test_arrow_off_any_road(self):
+        self.assertEqual(self.check(30.0)[0], "no_road")
+
+    def test_two_way_arrows_live_on_the_right_half(self):
+        road = ([m(-60, 0), m(60, 0)], {"cls": 5, "width": 7.0})
+        roads, lines = rm.lane_index([road], [([m(-60, 0), m(60, 0)], {"centre": 1})])
+        lon, lat = m(0, -1.75)                  # правая половина при езде на восток
+        self.assertIsNone(rm.arrow_in_lane((lon, lat, 90, 3.5), roads, lines))
+        lon, lat = m(0, 1.75)                   # встречная половина
+        self.assertEqual(rm.arrow_in_lane((lon, lat, 90, 3.5), roads, lines)[0], "off_road")
+
+    def test_counts_by_kind(self):
+        arrows = [(*m(0, 0), 90, 3.5), (*m(0, 1.6), 90, 3.5)]
+        self.assertEqual(rm.lane_arrow_defects(arrows, self.roads, self.lines), {"off_centre": 1})
+
+
+class MarkingsOffRoadTests(unittest.TestCase):
+    def test_line_inside_ribbon_is_fine(self):
+        road = ([m(-60, 0), m(60, 0)], {"cls": 3, "width": 10.5, "oneway": True})
+        roads, _ = rm.lane_index([road], [])
+        self.assertEqual(rm.markings_off_road([([m(-50, 1.75), m(50, 1.75)], {})], roads, None), 0.0)
+
+    def test_line_past_kerb_is_measured(self):
+        road = ([m(-60, 0), m(60, 0)], {"cls": 3, "width": 10.5, "oneway": True})
+        roads, _ = rm.lane_index([road], [])
+        self.assertAlmostEqual(rm.markings_off_road([([m(-50, 6.5), m(50, 6.5)], {})], roads, None),
+                               1000.0, delta=30)
+
+
 class CompareTests(unittest.TestCase):
     def test_worse_metric_stops_publish(self):
         reasons = rm.compare({"dashes_in_junction": 45.0}, {"dashes_in_junction": 80.0})

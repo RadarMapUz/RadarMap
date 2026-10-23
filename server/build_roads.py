@@ -182,6 +182,27 @@ def tagged_lanes(properties):
     return 1 <= value <= MAX_LANES
 
 
+def lanes_from_turns(properties):
+    """Свойства с `lanes` из turn:lanes, если тега lanes нет, а лента односторонняя.
+
+    turn:lanes перечисляет КАЖДУЮ полосу по ходу, и их число — это и есть
+    число полос. Без этого полосы ленты брались по классу или угадывались по
+    соседям (lane_inference), а ряд стрелок — по turn:lanes: на снимке
+    владельца (23.10.2026) три линии делили ленту на четыре полосы, а стрелок
+    было две-три, и они ложились на линии. У двусторонней ленты turn:lanes
+    описывает одно направление, а lanes — оба: не трогаем.
+    """
+    raw = properties.get("turn:lanes")
+    if not raw or properties.get("lanes") is not None:
+        return properties
+    if properties.get("oneway") not in ("yes", "1", "true", "-1"):
+        return properties
+    count = len(str(raw).split("|"))
+    if not 1 <= count <= MAX_LANES:
+        return properties
+    return dict(properties, lanes=str(count))
+
+
 def road_lanes(properties, code, oneway):
     """Полосы дороги: из тега, если он есть и правдоподобен, иначе по классу.
 
@@ -1700,6 +1721,7 @@ def collect(source_path):
             if properties.get("lanes") is not None:
                 lanes_tagged += 1
             turns = parse_turn_lanes(properties.get("turn:lanes"))
+            properties = lanes_from_turns(properties)
             if turns:
                 # Стрелки стоят ПЕРЕД перекрёстком, а не в нём: решение о
                 # полосе принимают на подъезде. Отступаем от конца пути на
@@ -3171,11 +3193,29 @@ def parse_turn_lanes(value):
     return lanes[:MAX_ARROW_LANES]
 
 
+# Сколько полос перечислено в turn:lanes — отдельно от направлений. Полоса
+# «без стрелки» (none, пусто) кодируется нулём, и хвост таких полос справа в
+# направлениях неотличим от «полос нет»: «through|none|none» читался как ОДНА
+# полоса, и единственная стрелка вставала посередине всей ленты — ровно на
+# линию разметки между полосами, а значок растягивался на три полосы (снимок
+# владельца 23.10.2026). Число полос ряда — выше флага «подтверждено»: биты
+# 48–51, всё ещё в 53 битах double.
+PFLAG_TURN_COUNT_SHIFT = 48
+PFLAG_TURN_COUNT_MASK = 0xF
+
+
 def pack_turns(flags, lanes):
-    """Уложить направления полос в старшие биты записи точки."""
+    """Уложить направления полос и их число в старшие биты записи точки."""
     for index, code in enumerate(lanes[:MAX_ARROW_LANES]):
         flags |= (code & 0xF) << (PFLAG_TURNS_SHIFT + index * TURN_BITS)
-    return flags
+    count = min(len(lanes), MAX_ARROW_LANES)
+    flags &= ~(PFLAG_TURN_COUNT_MASK << PFLAG_TURN_COUNT_SHIFT)
+    return flags | (count << PFLAG_TURN_COUNT_SHIFT)
+
+
+def turn_count(flags):
+    """Сколько полос в ряду стрелок (с полосами «без стрелки»); 0 — не записано."""
+    return (flags >> PFLAG_TURN_COUNT_SHIFT) & PFLAG_TURN_COUNT_MASK
 
 
 def unpack_turns(flags, count):

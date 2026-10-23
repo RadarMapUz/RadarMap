@@ -370,12 +370,21 @@ class BuildTests(unittest.TestCase):
         flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (3 << 4)
         road = self.road([(69.278, 41.311), (69.282, 41.311)], flags=flags)
         wide = list(build_mvt.lane_markings([road]))
-        narrow = list(build_mvt.lane_markings([road], {id(road): 6.0}))
+        narrow = list(build_mvt.lane_markings([road], {id(road): 7.5}))
         axis = road[2][0][1]
         wide_off = abs(wide[0][0][1] - axis) * 111_320
         narrow_off = abs(narrow[0][0][1] - axis) * 111_320
-        self.assertAlmostEqual(narrow_off, 1.0, delta=0.05, msg="полотно сужено до 6 м — пунктир в 1 м от оси")
+        self.assertAlmostEqual(narrow_off, 1.25, delta=0.05, msg="полотно сужено до 7,5 м — пунктир в 1,25 м от оси")
         self.assertGreater(wide_off, narrow_off)
+
+    def test_lanes_squeezed_below_a_lane_are_not_marked(self):
+        # Пять полос по тегу в ленте, сжатой до 4,5 м: линии через 0,9 м —
+        # штриховка, а не полосы (Ислама Каримова, 23.10.2026).
+        flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (5 << 4)
+        road = self.road([(69.278, 41.311), (69.282, 41.311)], flags=flags)
+        self.assertEqual(list(build_mvt.lane_markings([road], {id(road): 4.5})), [])
+        self.assertEqual(build_mvt.marked_lanes(3, flags, 4.5), 0)
+        self.assertEqual(build_mvt.marked_lanes(3, flags, 17.5), 5)
 
     def test_yard_entrance_does_not_break_the_dashes(self):
         # Беруни: двор через каждые 80 м рвал пунктир проспекта в обрывки.

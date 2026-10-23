@@ -14,7 +14,7 @@ import json
 import math
 import os
 import shutil
-from collections import OrderedDict, defaultdict
+from collections import Counter, OrderedDict, defaultdict
 
 import mvt
 from build_roads import (AREA_DIVIDER, AREA_KERB, FLAG_LANES_INFERRED, AREA_FILLET, AREA_HOUSE, AREA_JUNCTION, AREA_JUNCTION_BOX, AREA_MEDIAN, AREA_ROAD,
@@ -24,7 +24,7 @@ from build_roads import (AREA_DIVIDER, AREA_KERB, FLAG_LANES_INFERRED, AREA_FILL
                          PFLAG_CONFIRMED, PFLAG_PAINTED, PFLAG_ONEWAY, point_azimuth, point_width,
                          SURFACE_CLASS_MASK, SURFACE_CLASS_SHIFT, lanes_of,
                          road_width_meters, POINT_LANE_ARROWS, MAX_ARROW_LANES,
-                         unpack_turns)
+                         unpack_turns, turn_count)
 
 # Зумы. Два, а не десять.
 #
@@ -110,7 +110,7 @@ def arrow_setback(flags, point, signals):
         if stop_line - ARROW_BEFORE_STOP_METERS < -ARROW_SETBACK_METERS else ARROW_SETBACK_METERS
 
 
-def lane_arrows(code, flags, point, setback=None, carriageway=None):
+def lane_arrows(code, flags, point, setback=None, carriageway=None, crowded=None, why=None):
     """Стрелки полос по одной на полосу, поперёк проезжей части.
 
     turn:lanes в OSM перечисляет полосы слева направо по ходу движения, поэтому
@@ -138,6 +138,9 @@ def lane_arrows(code, flags, point, setback=None, carriageway=None):
     used = max((i + 1 for i, turn in enumerate(turns) if turn), default=0)
     if used == 0:
         return
+    # Полос в ряду — сколько перечислено в turn:lanes, с полосами «без
+    # стрелки» справа: иначе «through|none|none» делил ленту на одну полосу.
+    used = max(used, turn_count(flags))
     bearing = point_azimuth(flags)
     angle = math.radians(bearing)
     fx, fy = math.sin(angle), math.cos(angle)     # вперёд по ходу
@@ -148,8 +151,22 @@ def lane_arrows(code, flags, point, setback=None, carriageway=None):
     centre = (lon + fx * along / kx, lat + fy * along / 111_320)
     oneway = bool(flags & PFLAG_ONEWAY)
     found = carriageway(centre, bearing) if carriageway else None
+    if carriageway and not found:
+        # Под рядом нет ленты по ходу: точка села на поперечную улицу или в
+        # узел. Стрелки встали бы поперёк чужого полотна — здесь ряда нет.
+        if why is not None:
+            why.append("нет ленты по ходу")
+        return
     if found:
-        centre, width, oneway = found
+        centre, width, oneway, marked = found
+        # Линии полос на этой ленте делят её на `marked` полос. Ряд другой
+        # длины встал бы стрелками на линии (снимок владельца 23.10.2026):
+        # здесь ему не место — placed_arrows поищет место дальше по подходу,
+        # где число полос совпадает, или не нарисует ряд вовсе.
+        if marked and marked != used:
+            if why is not None:
+                why.append("полос по разметке не столько, сколько в turn:lanes")
+            return
     if width <= 0:
         return
     if not oneway:
@@ -157,13 +174,24 @@ def lane_arrows(code, flags, point, setback=None, carriageway=None):
         width /= 2.0
         centre = (centre[0] + rx * width / 2 / kx, centre[1] + ry * width / 2 / 111_320)
     lane = width / used
+    if found and lane < MIN_MARKED_LANE_METERS:
+        if why is not None:
+            why.append("полоса уже 2,2 м")
+        return
+    axis = centre
+    row = []
     for index, turn in enumerate(turns[:used]):
         if not turn:
             continue
         across = -width / 2 + lane * (index + 0.5)
-        yield ((centre[0] + rx * across / kx, centre[1] + ry * across / 111_320),
-               {"turn": turn, "bearing": round(bearing), "lw": round(lane, 1),
-                "li": index, "ln": used})
+        spot = (centre[0] + rx * across / kx, centre[1] + ry * across / 111_320)
+        if crowded and crowded(spot, axis, bearing):
+            if why is not None:
+                why.append("на чужой ленте")
+            return          # стрелка легла бы на чужую ленту — ищем место дальше
+        row.append((spot, {"turn": turn, "bearing": round(bearing), "lw": round(lane, 1),
+                           "li": index, "ln": used}))
+    yield from row
 
 
 # Ряд стрелок, упавший в площадь перекрёстка или на зебру, отодвигается назад
@@ -186,7 +214,8 @@ def _arrow_body(arrow, bearing):
             for d in (-ARROW_HALF_LENGTH_METERS, 0.0, ARROW_HALF_LENGTH_METERS)]
 
 
-def placed_arrows(code, flags, point, setback, mask=None, asphalt=None, carriageway=None):
+def placed_arrows(code, flags, point, setback, mask=None, asphalt=None, carriageway=None, crowded=None,
+                  why=None):
     """Стрелки ряда, поставленные до перекрёстка и только на полотно.
 
     Сначала ищется место, где ряд целиком на асфальте и не задевает узел.
@@ -202,14 +231,16 @@ def placed_arrows(code, flags, point, setback, mask=None, asphalt=None, carriage
     def paved(arrow):
         return asphalt is None or asphalt.covers(arrow)
 
-    first = list(lane_arrows(code, flags, point, base, carriageway))
+    first = list(lane_arrows(code, flags, point, base, carriageway, crowded, why))
     extra = 0.0
     while extra <= ARROW_PULLBACK_MAX_METERS:
-        row = first if extra == 0.0 else list(lane_arrows(code, flags, point, base + extra, carriageway))
-        if all(clear(arrow) and paved(arrow) for arrow, _props in row):
+        row = first if extra == 0.0 else list(lane_arrows(code, flags, point, base + extra, carriageway, crowded,
+                                                          why))
+        # Пустой ряд — число полос под ним не совпало с разметкой: ищем дальше.
+        if row and all(clear(arrow) and paved(arrow) for arrow, _props in row):
             return row
         extra += ARROW_PULLBACK_STEP_METERS
-    if all(clear(arrow) for arrow, _props in first):
+    if first and all(clear(arrow) for arrow, _props in first):
         return [(arrow, props) for arrow, props in first if paved(arrow)]
     return []
 
@@ -687,10 +718,54 @@ CENTRE_SOLID_WIDTH_METERS = 13.0
 CENTRE_DASHED, CENTRE_SOLID = 1, 2
 
 
+def marked_lanes(code, flags, width):
+    """Сколько полос по ходу размечено линиями на ленте; 0 — линий полос нет.
+
+    Одно правило для линий полос (`_markings`) и для ряда стрелок
+    (`OverlapIndex.carriageway` → `lane_arrows`): раньше линии делили ленту по
+    тегу lanes, а стрелки — по числу записей turn:lanes, и стрелки ложились на
+    линии (снимок владельца 23.10.2026). У односторонней ленты — все её
+    полосы; у двусторонней — полосы одной (правой) половины, и только когда
+    по сторонам осевой есть линии (чётное подтверждённое lanes ≥ 4).
+    """
+    lanes = lanes_of(flags)
+    tagged = flags & (FLAG_LANES_TAGGED | FLAG_LANES_INFERRED) and 2 <= lanes <= MAX_MARKED_LANES
+    if not tagged or width / lanes < MIN_MARKED_LANE_METERS:
+        return 0
+    if flags & FLAG_ONEWAY:
+        return lanes
+    if code <= CENTRE_MAX_CLASS and width >= CENTRE_MIN_WIDTH_METERS and lanes >= 4 and lanes % 2 == 0:
+        return lanes // 2
+    return 0
+
+
+# Полоса уже этого на карте — не полоса. Лента, сжатая под разделительную
+# (fit_carriageways до 3,5 м), с пятью полосами по тегу давала линии через
+# 0,9 м — штриховку, и стрелки в метр шириной (Ислама Каримова, 23.10.2026).
+# Такую ленту не размечаем и ряд стрелок на неё не ставим.
+MIN_MARKED_LANE_METERS = 2.2
+
+
 # Лента под рядом стрелок: идёт вдоль хода (cos угла ≥ 0,82 — до 35°), и ряд
 # лежит на её полотне с запасом на посадку точки.
 CARRIAGEWAY_COS = math.cos(math.radians(35))
 CARRIAGEWAY_SLACK_METERS = 1.5
+
+
+# Чужая лента под стрелкой: параллельная ось дальше этого от своей — другая
+# лента, ближе — продолжение своей.
+CROWD_PARALLEL_COS = math.cos(math.radians(20))
+CROWD_SAME_AXIS_METERS = 1.0
+
+
+def _segment_m(p, a, b, kx):
+    """Расстояние от точки до отрезка, м (kx — метров в градусе долготы)."""
+    ax, ay = (a[0] - p[0]) * kx, (a[1] - p[1]) * 111_320
+    bx, by = (b[0] - p[0]) * kx, (b[1] - p[1]) * 111_320
+    dx, dy = bx - ax, by - ay
+    length = dx * dx + dy * dy
+    t = 0.0 if length == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / length))
+    return math.hypot(ax + t * dx, ay + t * dy)
 
 
 class OverlapIndex:
@@ -731,12 +806,13 @@ class OverlapIndex:
             level = flags & (FLAG_BRIDGE | FLAG_TUNNEL)
             pad = (half + 2.0) / 111_320
             key = id(road)
+            marked = marked_lanes(code, flags, 2.0 * half) if code <= 7 and not flags & FLAG_TUNNEL else 0
             for a, b in zip(points, points[1:]):
                 x0, x1 = sorted((a[0], b[0]))
                 y0, y1 = sorted((a[1], b[1]))
                 # Один кортеж на отрезок, в клетки — ссылка на него: копия на
                 # каждую клетку держала страну в 30 ГБ (07.10.2026).
-                entry = (key, level, a, b, half, bool(flags & FLAG_ONEWAY))
+                entry = (key, level, a, b, half, bool(flags & FLAG_ONEWAY), marked)
                 for gx in range(int((x0 - pad * 1.4) / self.CELL), int((x1 + pad * 1.4) / self.CELL) + 1):
                     for gy in range(int((y0 - pad) / self.CELL), int((y1 + pad) / self.CELL) + 1):
                         self._grid[(gx, gy)].append(entry)
@@ -746,7 +822,7 @@ class OverlapIndex:
         own_ends = self._ends.get(id(road), set())
         own_rank = self._rank.get(id(road))
         kx = 111_320 * math.cos(math.radians(point[1]))
-        for key, lvl, a, b, half, _oneway in self._grid.get((int(point[0] / self.CELL), int(point[1] / self.CELL)), ()):
+        for key, lvl, a, b, half, _oneway, _marked in self._grid.get((int(point[0] / self.CELL), int(point[1] / self.CELL)), ()):
             if key == id(road) or lvl != level:
                 continue
             shared = own_ends & self._ends.get(key, set())
@@ -762,7 +838,10 @@ class OverlapIndex:
         return False
 
     def carriageway(self, point, bearing):
-        """(точка на оси, ширина нарисованной ленты, односторонняя?) под точкой или None.
+        """(точка на оси, ширина нарисованной ленты, односторонняя?, размечено полос) под точкой или None.
+
+        Размечено полос — `marked_lanes` ленты: сколько полос между линиями
+        разметки, 0 — линий нет.
 
         Лента — ближайшая наземная, идущая по ходу `bearing` (односторонняя —
         в ту же сторону, двусторонняя — вдоль), и точка лежит на её полотне.
@@ -773,7 +852,7 @@ class OverlapIndex:
         kx = 111_320 * math.cos(math.radians(point[1]))
         fx, fy = math.sin(math.radians(bearing)), math.cos(math.radians(bearing))
         best = None
-        for _key, level, a, b, half, oneway in self._grid.get(
+        for _key, level, a, b, half, oneway, marked in self._grid.get(
                 (int(point[0] / self.CELL), int(point[1] / self.CELL)), ()):
             if level:
                 continue
@@ -792,8 +871,35 @@ class OverlapIndex:
             if lateral > half + CARRIAGEWAY_SLACK_METERS:
                 continue
             if best is None or lateral < best[0]:
-                best = (lateral, (point[0] + px / kx, point[1] + py / 111_320), 2.0 * half, oneway)
+                best = (lateral, (point[0] + px / kx, point[1] + py / 111_320), 2.0 * half, oneway, marked)
         return None if best is None else best[1:]
+
+    def crowded(self, point, axis, bearing):
+        """Лежит ли точка на чужой наземной ленте — не на продолжении своей.
+
+        `axis` — точка на оси своей ленты под рядом стрелок. Продолжение той
+        же ленты (соседний кусок цепочки) проходит через неё же и параллельно —
+        это не чужая лента. Чужая — встречная, сходящаяся у узла (две ленты
+        Нурафшон-айланма накрывали друг друга, и стрелки одной лежали на
+        линиях другой) или поперечная улица у устья.
+        """
+        kx = 111_320 * math.cos(math.radians(point[1]))
+        fx, fy = math.sin(math.radians(bearing)), math.cos(math.radians(bearing))
+        for _key, level, a, b, half, _oneway, _marked in self._grid.get(
+                (int(point[0] / self.CELL), int(point[1] / self.CELL)), ()):
+            if level:
+                continue
+            if _segment_m(point, a, b, kx) > half - self.MARGIN_METERS:
+                continue
+            dx, dy = (b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320
+            length = math.hypot(dx, dy)
+            if length == 0:
+                continue
+            parallel = abs(dx * fx + dy * fy) / length >= CROWD_PARALLEL_COS
+            if parallel and _segment_m(axis, a, b, kx) <= CROWD_SAME_AXIS_METERS:
+                continue
+            return True
+        return False
 
     def clip(self, line, road, step_meters=MARKING_CLIP_STEP_METERS):
         """Куски линии вне чужих лент; короче MARKING_MIN_METERS — выбрасываются."""
@@ -876,20 +982,21 @@ def _markings(roads, widths=None, mask=None, overlap=None):
             continue
         lanes = lanes_of(flags)
         confirmed = flags & FLAG_LANES_TAGGED and 2 <= lanes <= MAX_MARKED_LANES
-        # Угаданные полосы (lane_inference) — тоже пунктир: 97,5 % угадано на
-        # спрятанных. Но не сплошная осевая: она запрещает поворот, и по
-        # догадке её не рисуем.
-        tagged = (flags & (FLAG_LANES_TAGGED | FLAG_LANES_INFERRED)
-                  and 2 <= lanes <= MAX_MARKED_LANES)
-        # Ширина — та же, по которой нарисовано полотно: сужение под
-        # разделительную (fit_carriageways) иначе уводило пунктир на неё.
-        width = road_width_meters(code, lanes)
-        if widths:
-            width = min(width, widths.get(id(road)) or width)
+        # Угаданные полосы (lane_inference) — тоже пунктир (marked_lanes):
+        # 97,5 % угадано на спрятанных. Но не сплошная осевая: она запрещает
+        # поворот, и по догадке её не рисуем.
+        # Делим ту ширину, которой лента НАРИСОВАНА (свойство width тайла:
+        # ширина цепочки и сужение под разделительную), — ту же, что делит
+        # ряд стрелок (OverlapIndex.carriageway). Было min(своя по полосам,
+        # нарисованная): у куска уже своей цепочки линии собирались к оси, а
+        # стрелки делили всю ленту — и стрелки ложились на линии (снимок
+        # владельца 23.10.2026).
+        width = (widths.get(id(road)) if widths else None) or road_width_meters(code, lanes)
         offsets = []
+        marked = marked_lanes(code, flags, width)
         if flags & FLAG_ONEWAY:
-            if tagged:
-                offsets = [(width * (lane / lanes - .5), 0) for lane in range(1, lanes)]
+            if marked:
+                offsets = [(width * (lane / marked - .5), 0) for lane in range(1, marked)]
         elif code <= CENTRE_MAX_CLASS and width >= CENTRE_MIN_WIDTH_METERS:
             # Сплошная — только по ПОДТВЕРЖДЁННЫМ полосам: ширина без тега
             # lanes — догадка по классу (у tertiary 14 м), и сплошная по
@@ -899,9 +1006,9 @@ def _markings(roads, widths=None, mask=None, overlap=None):
             offsets = [(0.0, centre)]
             # Полосы по сторонам — только при чётном lanes: делим поровну, а
             # нечётное число (средняя реверсивная?) не угадываем.
-            if tagged and lanes >= 4 and lanes % 2 == 0:
-                offsets += [(width * (lane / lanes - .5), 0)
-                            for lane in range(1, lanes) if lane * 2 != lanes]
+            if marked:
+                offsets += [(width * (lane / (2 * marked) - .5), 0)
+                            for lane in range(1, 2 * marked) if lane != marked]
         if not offsets:
             continue
         origin = points[0]
@@ -2756,6 +2863,8 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         # Индекс лент живёт до стрелок: ряд делит нарисованную ленту под собой.
         crossings = StopIndex(line for line, _marked in fitted_zebras)
         arrows_past_stop = 0
+        # Почему ряд не встал: последняя причина из поисков места по подходу.
+        arrows_skipped = Counter()
         for line, kind in stop_lines.get(-1, ()):
             _put(buckets, zoom, LAYER_PAINT, mvt.LINESTRING, line, {"kind": kind})
         for index, point in enumerate(points):
@@ -2778,12 +2887,16 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                 continue
             # Ряд — от стоп-линии своего подхода; нет её — по светофору, как раньше.
             ahead = stops.ahead(spot[0], point_azimuth(flags), point_width(flags))
+            why = []
             if ahead is not None:
                 row = placed_arrows(code, flags, spot[0], ARROW_BEFORE_STOP_METERS - ahead,
-                                    mask.zebras_only(), asphalt, overlap.carriageway)
+                                    mask.zebras_only(), asphalt, overlap.carriageway, overlap.crowded, why)
             else:
                 row = placed_arrows(code, flags, spot[0], arrow_setback(flags, spot[0], signals),
-                                    mask, asphalt, overlap.carriageway)
+                                    mask, asphalt, overlap.carriageway, overlap.crowded, why)
+            if not row:
+                arrows_skipped[why[-1] if why else "в узле или на зебре"] += 1
+                continue
             if row_past_stop(row, point_azimuth(flags), stops, crossings):
                 arrows_past_stop += 1
                 continue
@@ -2792,6 +2905,8 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         del overlap
         if arrows_past_stop:
             print(f"        рядов стрелок за стоп-линией (не рисуются): {arrows_past_stop}")
+        for reason, count in sorted(arrows_skipped.items()):
+            print(f"        рядов стрелок без места ({reason}): {count}")
     finally:
         buckets.close()
 

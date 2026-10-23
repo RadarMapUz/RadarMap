@@ -370,7 +370,7 @@ class LaneArrowTests(unittest.TestCase):
         # Дорога на восток (азимут 90°): левая по ходу полоса — севернее.
         turns = [build_roads.TURN_LEFT, build_roads.TURN_THROUGH, build_roads.TURN_RIGHT]
         arrows = list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS,
-                                            self.point(turns), (LON, LAT)))
+                                            self.point(turns, width=14), (LON, LAT)))
         self.assertEqual([p["turn"] for _spot, p in arrows], turns)
         lats = [spot[1] for spot, _p in arrows]
         self.assertGreater(lats[0], lats[1])
@@ -419,7 +419,7 @@ class ArrowRowFitsDrawnRoadTests(unittest.TestCase):
         turns = [build_roads.TURN_LEFT, build_roads.TURN_THROUGH, build_roads.TURN_THROUGH,
                  build_roads.TURN_RIGHT]
         drawn = 10.6
-        carriageway = lambda centre, bearing: ((centre[0], LAT), drawn, True)
+        carriageway = lambda centre, bearing: ((centre[0], LAT), drawn, True, 0)
         arrows = list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, self.point(turns),
                                             (LON, LAT), carriageway=carriageway))
         self.assertEqual(len(arrows), 4)
@@ -433,7 +433,7 @@ class ArrowRowFitsDrawnRoadTests(unittest.TestCase):
     def test_row_sits_on_the_axis_of_the_ribbon(self):
         # Точка посадки в метре от оси — ряд всё равно по центру ленты.
         turns = [build_roads.TURN_THROUGH, build_roads.TURN_THROUGH]
-        carriageway = lambda centre, bearing: ((centre[0], LAT), 7.0, True)
+        carriageway = lambda centre, bearing: ((centre[0], LAT), 7.0, True, 0)
         arrows = list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, self.point(turns),
                                             metres(0, 1.0), carriageway=carriageway))
         mid = sum(self.across(spot) for spot, _p in arrows) / len(arrows)
@@ -441,7 +441,7 @@ class ArrowRowFitsDrawnRoadTests(unittest.TestCase):
 
     def test_two_way_road_keeps_arrows_on_its_right_half(self):
         turns = [build_roads.TURN_LEFT, build_roads.TURN_THROUGH]
-        carriageway = lambda centre, bearing: ((centre[0], LAT), 12.0, False)
+        carriageway = lambda centre, bearing: ((centre[0], LAT), 12.0, False, 0)
         arrows = list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, self.point(turns, oneway=False),
                                             (LON, LAT), carriageway=carriageway))
         for spot, props in arrows:
@@ -453,12 +453,108 @@ class ArrowRowFitsDrawnRoadTests(unittest.TestCase):
         index = build_mvt.OverlapIndex([road], {id(road): 10.6})
         found = index.carriageway(metres(0, 2.0), 90)
         self.assertIsNotNone(found)
-        axis, width, oneway = found
+        axis, width, oneway, marked = found
+        self.assertEqual(marked, 0, "полосы не размечены — линий нет")
         self.assertAlmostEqual(width, 10.6, places=3)
         self.assertTrue(oneway)
         self.assertAlmostEqual((axis[1] - LAT) * sc.LAT_METERS, 0.0, delta=0.01)
         self.assertIsNone(index.carriageway(metres(0, 2.0), 270), "встречное направление — не наша лента")
         self.assertIsNone(index.carriageway(metres(0, 12.0), 90), "мимо полотна — ленты нет")
+
+
+class ArrowsShareLanesWithLinesTests(unittest.TestCase):
+    """Стрелки и линии полос делят ленту одним расчётом (снимок владельца 23.10.2026:
+    стрелка на линии разметки, ряд не совпадает с пунктирами)."""
+
+    def point(self, turns, width=14, azimuth=90):
+        flags = build_roads.point_flags(azimuth, width) | build_roads.PFLAG_ONEWAY
+        return build_roads.pack_turns(flags, turns)
+
+    def test_lanes_without_arrow_still_count(self):
+        # «through|none|none»: три полосы, стрелка — только в левой. Было:
+        # одна полоса на всю ленту, стрелка посередине — на линии между полосами.
+        turns = build_roads.parse_turn_lanes("through|none|none")
+        carriageway = lambda centre, bearing: ((centre[0], LAT), 10.5, True, 3)
+        arrows = list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, self.point(turns),
+                                            (LON, LAT), carriageway=carriageway))
+        self.assertEqual(len(arrows), 1)
+        spot, props = arrows[0]
+        self.assertAlmostEqual((spot[1] - LAT) * sc.LAT_METERS, 3.5, delta=0.05, msg="середина левой полосы")
+        self.assertAlmostEqual(props["lw"], 3.5)
+
+    def test_row_and_lines_split_the_ribbon_identically(self):
+        # Лента из тайла: 4 полосы по тегу, нарисована в 10,6 м (сужена под
+        # разделительную). Центры стрелок — ровно между соседними линиями.
+        flags = build_roads.with_lanes(build_roads.FLAG_ONEWAY | build_roads.FLAG_LANES_TAGGED, 4)
+        road = (3, flags, [metres(-80, 0), metres(80, 0)], "")
+        widths = {id(road): 10.6}
+        lines = [line for line, centre, _s, _b in build_mvt._markings([road], widths) if not centre]
+        offsets = sorted(round((line[0][1] - LAT) * sc.LAT_METERS, 2) for line in lines)
+        self.assertEqual(len(offsets), 3)
+        index = build_mvt.OverlapIndex([road], widths)
+        turns = build_roads.parse_turn_lanes("left|through|through|right")
+        arrows = list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, self.point(turns, 11),
+                                            metres(10, 0), setback=0, carriageway=index.carriageway))
+        centres = sorted((spot[1] - LAT) * sc.LAT_METERS for spot, _p in arrows)
+        bounds = [-5.3] + offsets + [5.3]
+        for centre, (low, high) in zip(centres, zip(bounds, bounds[1:])):
+            self.assertAlmostEqual(centre, (low + high) / 2, delta=0.05)
+
+    def test_row_of_other_length_does_not_land_on_marked_lanes(self):
+        # Линии делят ленту на 4 полосы, а в turn:lanes — 3: здесь ряд встал бы
+        # стрелками на линии. Не рисуем его на этой ленте.
+        turns = build_roads.parse_turn_lanes("left|through|through")
+        carriageway = lambda centre, bearing: ((centre[0], LAT), 14.0, True, 4)
+        self.assertEqual(list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, self.point(turns),
+                                                    (LON, LAT), carriageway=carriageway)), [])
+
+    def test_lanes_follow_turn_lanes_when_lanes_tag_is_missing(self):
+        props = build_roads.lanes_from_turns({"oneway": "yes", "turn:lanes": "left|through||right"})
+        self.assertEqual(props["lanes"], "4")
+        two_way = {"turn:lanes": "left|through"}
+        self.assertIs(build_roads.lanes_from_turns(two_way), two_way, "у двусторонней lanes — оба направления")
+        tagged = {"oneway": "yes", "lanes": "3", "turn:lanes": "left|through"}
+        self.assertEqual(build_roads.lanes_from_turns(tagged)["lanes"], "3", "тег lanes главнее")
+
+    def test_turn_count_survives_packing(self):
+        flags = build_roads.pack_turns(build_roads.point_flags(90, 10), [1, 0, 0])
+        self.assertEqual(build_roads.turn_count(flags), 3)
+        self.assertEqual(build_roads.unpack_turns(flags, 3), [1, 0, 0])
+        self.assertLess(flags, 2 ** 53, "число в JSON без потери точности")
+
+
+class ArrowRowPlacementTests(unittest.TestCase):
+    """Ряд не встаёт на чужую ленту и не встаёт без своей ленты под ним."""
+
+    def point(self, turns, width=8, azimuth=90):
+        flags = build_roads.point_flags(azimuth, width) | build_roads.PFLAG_ONEWAY
+        return build_roads.pack_turns(flags, turns)
+
+    def test_no_ribbon_under_the_row_means_no_row(self):
+        turns = [build_roads.TURN_THROUGH, build_roads.TURN_RIGHT]
+        self.assertEqual(list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, self.point(turns),
+                                                    (LON, LAT), carriageway=lambda c, b: None)), [])
+
+    def test_arrow_on_a_converging_carriageway_is_crowded(self):
+        # Наша лента на восток и встречная, сошедшаяся к ней у узла: их полотна
+        # накрывают друг друга. Ряд, легший на встречную, не ставится.
+        ours = (3, build_roads.FLAG_ONEWAY, [metres(-60, 0), metres(60, 0)], "a")
+        other = (3, build_roads.FLAG_ONEWAY, [metres(60, 5), metres(-60, 5)], "a")
+        index = build_mvt.OverlapIndex([ours, other], {id(ours): 8.0, id(other): 8.0})
+        self.assertTrue(index.crowded(metres(0, 2.5), metres(0, 0), 90))
+        self.assertFalse(index.crowded(metres(0, -2.5), metres(0, 0), 90))
+
+    def test_continuation_of_own_ribbon_is_not_crowding(self):
+        one = (3, build_roads.FLAG_ONEWAY, [metres(-60, 0), metres(0, 0)], "a")
+        two = (3, build_roads.FLAG_ONEWAY, [metres(0, 0), metres(60, 0)], "a")
+        index = build_mvt.OverlapIndex([one, two], {id(one): 8.0, id(two): 8.0})
+        self.assertFalse(index.crowded(metres(-1, 2.0), metres(-1, 0), 90))
+
+    def test_squeezed_lanes_get_no_row(self):
+        turns = build_roads.parse_turn_lanes("left|through|through|through|right")
+        carriageway = lambda centre, bearing: ((centre[0], LAT), 4.5, True, 0)
+        self.assertEqual(list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, self.point(turns),
+                                                    (LON, LAT), carriageway=carriageway)), [])
 
 
 class ArrowRowPastStopTests(unittest.TestCase):

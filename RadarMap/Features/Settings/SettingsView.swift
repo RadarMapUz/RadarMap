@@ -123,14 +123,14 @@ struct SettingsView: View {
                     SettingsRow(.project, accessory: "arrow.up.right")
                 }
                 .tint(Theme.textPrimary)
-                // Условие лицензии CC BY-SA 4.0 портала: ссылка на источник.
-                Link(destination: AppConfig.openDataURL) {
-                    SettingsRow(.openData, accessory: "arrow.up.right")
-                }
-                .tint(Theme.textPrimary)
+                // Источники — по строке со ссылкой (ODbL, CC BY, CC BY-SA
+                // требуют сослаться), лицензии кода и шрифтов — полным
+                // текстом (BSD требует воспроизвести его в поставке). 28.F.
+                link(.openData) { DataSourcesPage() }
+                link(.licenses) { LicensesPage() }
                 SettingsRow(.version, value: Self.appVersion)
             } footer: {
-                Text("Карты и ограничения скорости — © участники OpenStreetMap. Камеры, банкоматы и гостиницы — Портал открытых данных Республики Узбекистан (CC BY-SA 4.0). Погода на перевалах — Weather data by Open-Meteo.com (CC BY 4.0). Приложение бесплатное, без рекламы и без слежки.")
+                Text("Карта — © OpenMapTiles © участники OpenStreetMap. Приложение бесплатное, без рекламы и без слежки.")
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -162,6 +162,10 @@ struct SettingsView: View {
         case "maintenance": MaintenancePage()
         case "family": FamilyShareSettingsPage()
         case "fines": Form { FineCheckSection() }.settingsPage("Штрафы")
+        case "sources": DataSourcesPage()
+        case "licenses": LicensesPage()
+        case "license-maplibre": LicenseTextPage(license: .mapLibre)
+        case "license-noto": LicenseTextPage(license: .notoSans)
         default: HelpSettingsPage()
         }
     }
@@ -198,7 +202,7 @@ enum SettingsItem {
     case map, offline, places
     case learning, battery, privacy
     case database, backup, language
-    case help, feedback, project, version, openData, about
+    case help, feedback, project, version, openData, licenses, about
 
     var title: LocalizedStringKey {
         switch self {
@@ -221,6 +225,7 @@ enum SettingsItem {
         case .project:  return "Страница проекта"
         case .version:  return "Версия"
         case .openData: return "Источники данных"
+        case .licenses: return "Лицензии"
         case .about:    return "О приложении"
         }
     }
@@ -246,6 +251,7 @@ enum SettingsItem {
         case .project:  return "safari.fill"
         case .version:  return "info.circle.fill"
         case .openData: return "doc.text.fill"
+        case .licenses: return "checkmark.seal.fill"
         case .about:    return "info.circle.fill"
         }
     }
@@ -273,6 +279,7 @@ enum SettingsItem {
         case .project:  return Color(uiColor: .systemCyan)
         case .version:  return Color(uiColor: .systemGray)
         case .openData: return Color(uiColor: .systemGray)
+        case .licenses: return Color(uiColor: .systemGray)
         case .about:    return Color(uiColor: .systemGray)
         }
     }

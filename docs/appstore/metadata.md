@@ -101,7 +101,7 @@ RadarMap — карта камер видеофиксации Узбекиста
 ПРИВАТНОСТЬ
 Без регистрации, рекламы и трекеров. Поездки, треки и места дома и работы хранятся на телефоне и на сервер не уходят. Что отправляется — полный список в политике конфиденциальности.
 
-Карты, маршруты и ограничения скорости — © участники OpenStreetMap. Камеры — Портал открытых данных Республики Узбекистан (CC BY-SA 4.0).
+Карта — © OpenMapTiles © участники OpenStreetMap; маршруты и ограничения скорости — © участники OpenStreetMap. Камеры — Портал открытых данных Республики Узбекистан (CC BY-SA 4.0). Лицензии — в приложении: Настройки → О приложении.
 
 RadarMap помогает соблюдать ограничения скорости; соблюдайте ПДД и знаки на дороге.
 ```
@@ -150,7 +150,7 @@ ALSO
 PRIVACY
 No sign-up, no ads, no trackers. Trips, tracks, home and work stay on your phone. Everything that is sent is listed in the privacy policy.
 
-Maps, routing and speed limits © OpenStreetMap contributors. Cameras: Open Data Portal of the Republic of Uzbekistan (CC BY-SA 4.0).
+Map © OpenMapTiles © OpenStreetMap contributors; routing and speed limits © OpenStreetMap contributors. Cameras: Open Data Portal of the Republic of Uzbekistan (CC BY-SA 4.0). Licenses: in the app, Settings → About.
 
 RadarMap helps you keep to speed limits; always follow traffic rules and road signs.
 ```
@@ -199,7 +199,7 @@ YANA
 MAXFIYLIK
 Roʻyxatdan oʻtish, reklama va kuzatuv yoʻq. Safarlar, treklar, uy va ish joylari telefonda saqlanadi va serverga yuborilmaydi. Nima yuborilishi — maxfiylik siyosatida toʻliq roʻyxat.
 
-Xaritalar, marshrutlar va tezlik cheklovlari — © OpenStreetMap ishtirokchilari. Kameralar — Oʻzbekiston Respublikasi Ochiq maʼlumotlar portali (CC BY-SA 4.0).
+Xarita — © OpenMapTiles © OpenStreetMap ishtirokchilari; marshrutlar va tezlik cheklovlari — © OpenStreetMap ishtirokchilari. Kameralar — Oʻzbekiston Respublikasi Ochiq maʼlumotlar portali (CC BY-SA 4.0). Litsenziyalar — ilovada: Sozlamalar → Ilova haqida.
 
 RadarMap tezlik cheklovlariga rioya qilishga yordam beradi; yoʻl harakati qoidalari va yoʻl belgilariga amal qiling.
 ```
@@ -252,6 +252,23 @@ iCloud», который уже есть в `server/privacy.html`. Пока iClo
 - Copyright: `2026 Zafarbek Polvonboev` (или юрлицо владельца аккаунта)
 - App Review Contact: имя, телефон, e-mail владельца (rasul.sadullaev@gmail.com)
 - Sign-in required: **No** (аккаунтов нет)
+
+**Чужое в приложении и где это сказано (28.F).** Поле Copyright в ASC — только
+владелец; упоминания третьих сторон живут в самом приложении и в описании:
+- на карте — «i» в левом нижнем углу и подпись «© OpenMapTiles © OpenStreetMap»
+  (тает через 5 с, как разрешают правила OSMF; лицензия OpenMapTiles просит
+  подпись в углу карты со ссылками на openmaptiles.org и
+  openstreetmap.org/copyright — они в листе «i»);
+- Настройки → О приложении → «Источники данных» (по строке на источник со
+  ссылкой: OpenMapTiles, OpenStreetMap/ODbL, портал открытых данных/CC BY-SA,
+  Open-Meteo/CC BY, стиль OSM Bright) и «Лицензии» — полный английский текст
+  MapLibre Native (BSD-2 + уведомления вшитых библиотек: Boost, RapidJSON,
+  Metal-cpp, FreeType, HarfBuzz…), OSM Bright (BSD-3, CC BY 4.0), Noto Sans
+  (OFL 1.1). BSD требует воспроизвести текст «в документации» бинарной
+  поставки — экран «Лицензии» и есть это место.
+- В CarPlay — только подпись «© OpenMapTiles © OpenStreetMap» на 5 с: касаний
+  в окне машины нет, а лицензии доступны на телефоне.
+- Подробно — `server/ATTRIBUTION.md`.
 
 ## 9. Заметки для App Review (по-английски, вставить как есть)
 

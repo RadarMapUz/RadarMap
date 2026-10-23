@@ -7797,22 +7797,6 @@
         }
       }
     },
-    "Карты и ограничения скорости — © участники OpenStreetMap. Камеры, банкоматы и гостиницы — Портал открытых данных Республики Узбекистан (CC BY-SA 4.0). Погода на перевалах — Weather data by Open-Meteo.com (CC BY 4.0). Приложение бесплатное, без рекламы и без слежки.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Карты и ограничения скорости — © участники OpenStreetMap. Камеры, банкоматы и гостиницы — Портал открытых данных Республики Узбекистан (CC BY-SA 4.0). Погода на перевалах — Weather data by Open-Meteo.com (CC BY 4.0). Приложение бесплатное, без рекламы и без слежки."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Xaritalar va tezlik cheklovlari — © OpenStreetMap ishtirokchilari. Kameralar, bankomatlar va mehmonxonalar — Oʻzbekiston Respublikasi Ochiq maʼlumotlar portali (CC BY-SA 4.0). Dovonlardagi ob-havo — Weather data by Open-Meteo.com (CC BY 4.0). Ilova bepul, reklamasiz va kuzatuvsiz."
-          }
-        }
-      }
-    },
     "Километры недели, дни и привычная норма": {
       "localizations": {
         "ru": {
@@ -31137,6 +31121,294 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sozlamalar → Safar → Safarlar tarixi → «Safarlarni saqlash: iCloudʼda» ni yoqing — xuddi shu Apple ID bilan yangi iPhoneʼda tarix oʻzi paydo boʻladi. iCloudsiz — Sozlamalar → Ilova haqida → Mening maʼlumotlarim → «Nusxani saqlash», soʻng yangi telefonda «Fayldan tiklash». Tarix bizning serverimizga hech qachon yuborilmaydi."
+          }
+        }
+      }
+    },
+    "Карта собрана из данных OpenStreetMap по схеме OpenMapTiles.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Карта собрана из данных OpenStreetMap по схеме OpenMapTiles."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarita OpenStreetMap maʼlumotlaridan OpenMapTiles sxemasi boʻyicha tuzilgan."
+          }
+        }
+      }
+    },
+    "Данные и стиль": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Данные и стиль"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maʼlumotlar va uslub"
+          }
+        }
+      }
+    },
+    "Приложение бесплатное, без рекламы и без слежки.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приложение бесплатное, без рекламы и без слежки."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ilova bepul, reklamasiz va kuzatuvsiz."
+          }
+        }
+      }
+    },
+    "© участники OpenStreetMap": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "© участники OpenStreetMap"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "© OpenStreetMap ishtirokchilari"
+          }
+        }
+      }
+    },
+    "Портал открытых данных Республики Узбекистан": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Портал открытых данных Республики Узбекистан"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻzbekiston Respublikasi Ochiq maʼlumotlar portali"
+          }
+        }
+      }
+    },
+    "Схема векторной карты": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Схема векторной карты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vektor xarita sxemasi"
+          }
+        }
+      }
+    },
+    "Дороги, адреса, заведения, ограничения скорости, маршруты": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дороги, адреса, заведения, ограничения скорости, маршруты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻllar, manzillar, muassasalar, tezlik cheklovlari, marshrutlar"
+          }
+        }
+      }
+    },
+    "Камеры, банкоматы и гостиницы (data.egov.uz)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камеры, банкоматы и гостиницы (data.egov.uz)"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralar, bankomatlar va mehmonxonalar (data.egov.uz)"
+          }
+        }
+      }
+    },
+    "Основа стиля карты": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Основа стиля карты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarita uslubining asosi"
+          }
+        }
+      }
+    },
+    "Программы и шрифты": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Программы и шрифты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dasturlar va shriftlar"
+          }
+        }
+      }
+    },
+    "Полный текст лицензии — на языке оригинала.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Полный текст лицензии — на языке оригинала."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Litsenziyaning toʻliq matni — asl tilida."
+          }
+        }
+      }
+    },
+    "Лицензии данных": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лицензии данных"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maʼlumotlar litsenziyalari"
+          }
+        }
+      }
+    },
+    "На этих условиях распространяются данные OpenStreetMap, схема OpenMapTiles, погода и наборы портала открытых данных.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На этих условиях распространяются данные OpenStreetMap, схема OpenMapTiles, погода и наборы портала открытых данных."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenStreetMap maʼlumotlari, OpenMapTiles sxemasi, ob-havo va Ochiq maʼlumotlar portali toʻplamlari shu shartlarda tarqatiladi."
+          }
+        }
+      }
+    },
+    "Лицензии": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лицензии"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Litsenziyalar"
+          }
+        }
+      }
+    },
+    "Текст лицензии не найден в сборке.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Текст лицензии не найден в сборке."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Litsenziya matni ilovada topilmadi."
+          }
+        }
+      }
+    },
+    "Карта — © OpenMapTiles © участники OpenStreetMap. Приложение бесплатное, без рекламы и без слежки.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Карта — © OpenMapTiles © участники OpenStreetMap. Приложение бесплатное, без рекламы и без слежки."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarita — © OpenMapTiles © OpenStreetMap ishtirokchilari. Ilova bepul, reklamasiz va kuzatuvsiz."
+          }
+        }
+      }
+    },
+    "Данные карты и лицензии": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Данные карты и лицензии"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarita maʼlumotlari va litsenziyalar"
+          }
+        }
+      }
+    },
+    "Данные карты": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Данные карты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarita maʼlumotlari"
           }
         }
       }

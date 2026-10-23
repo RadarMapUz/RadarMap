@@ -124,6 +124,12 @@ def lane_arrows(code, flags, point, setback=None, carriageway=None):
     ленты ряд — на правой половине: стрелки нашего направления. `lw` —
     ширина полосы в метрах: по ней стиль подбирает размер значка, чтобы он
     не был шире своей полосы.
+
+    `li` — номер полосы слева направо по ходу (с нуля, как в turn:lanes и в
+    `lanes` OSRM), `ln` — полос в ряду. По ним телефон узнаёт «нашу» полосу
+    у манёвра (LaneFocus, 28.C) и на них же встанет лента в полосе: место
+    полосы на ленте — `li` и `lw` от кромки. Старые тайлы без них
+    подсвечиваются по набору поворотов стрелки.
     """
     if code != POINT_LANE_ARROWS:
         return
@@ -156,7 +162,8 @@ def lane_arrows(code, flags, point, setback=None, carriageway=None):
             continue
         across = -width / 2 + lane * (index + 0.5)
         yield ((centre[0] + rx * across / kx, centre[1] + ry * across / 111_320),
-               {"turn": turn, "bearing": round(bearing), "lw": round(lane, 1)})
+               {"turn": turn, "bearing": round(bearing), "lw": round(lane, 1),
+                "li": index, "ln": used})
 
 
 # Ряд стрелок, упавший в площадь перекрёстка или на зебру, отодвигается назад

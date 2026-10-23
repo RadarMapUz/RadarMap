@@ -58,6 +58,42 @@ nonisolated enum CameraType: Hashable {
         }
     }
 
+    /// Как тип называет ГОЛОС в полной фразе («… впереди справа, 500 метров»,
+    /// «По маршруту … через»). По-русски — как на экране. По-узбекски
+    /// стационарные типы — одним словом (решение владельца 23.10, 28.M):
+    /// «Statsionar» звучит плохо и не меняет решение водителя, а
+    /// «Intellektual kamera va radar» — четыре слова там, где водителю нужно
+    /// одно: меряет скорость — значит «Radar». Экран (`displayName`) не
+    /// меняется. Свои ключи каталога — чтобы русский текст остался прежним.
+    var spokenName: String {
+        switch self {
+        case .stationaryCamera:
+            return String(localized: "voice.kind.stationary_camera", defaultValue: "Стационарная камера",
+                          comment: "Голос: тип камеры в полной фразе. uz — одним словом.")
+        case .stationaryRadar:
+            return String(localized: "voice.kind.stationary_radar", defaultValue: "Стационарный радар",
+                          comment: "Голос: тип камеры в полной фразе. uz — одним словом.")
+        case .intelligentRadar:
+            return String(localized: "voice.kind.intelligent_radar", defaultValue: "Интеллектуальная камера + радар",
+                          comment: "Голос: тип камеры в полной фразе. uz — одним словом.")
+        default:
+            return displayName
+        }
+    }
+
+    /// Как тип называет голос в короткой городской фразе («Камера, 300 метров»).
+    /// Отличается от `shortName` (он же на экране CarPlay) только узбекским
+    /// интеллектуальным радаром: «Radar», как и в полной фразе.
+    var spokenShortName: String {
+        switch self {
+        case .intelligentRadar:
+            return String(localized: "voice.short.intelligent_radar", defaultValue: "Камера",
+                          comment: "Голос: интеллектуальный радар в короткой фразе. uz — «Radar».")
+        default:
+            return shortName
+        }
+    }
+
     /// Короткая фраза в родительном падеже для HUD («до камеры»).
     var genitivePhrase: String {
         switch self {

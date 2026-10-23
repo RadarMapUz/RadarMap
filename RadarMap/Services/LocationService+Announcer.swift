@@ -257,13 +257,13 @@ extension LocationService {
             phrase = String(format: String(localized: "Камеры впереди, %lld метров"), rounded)
         } else if brief {
             phrase = String(format: String(localized: "%@, %lld метров"),
-                            camera.kind.shortName, rounded)
+                            camera.kind.spokenShortName, rounded)
         } else if camera == nearestCamera ? nearestViaRoute : isCameraOnRoute(camera) {
             phrase = String(format: String(localized: "По маршруту %@ через %lld метров"),
-                            camera.kind.displayName.lowercased(), rounded)
+                            camera.kind.spokenName.lowercased(), rounded)
         } else {
             phrase = String(format: String(localized: "%@ %@, %lld метров"),
-                            camera.kind.displayName, directionPhrase, rounded)
+                            camera.kind.spokenName, directionPhrase, rounded)
         }
         // Неподтверждённая отметка водителей: предупреждаем всегда (тишина
         // хуже лишнего сигнала), но слух не выдаём за факт — называем источник.

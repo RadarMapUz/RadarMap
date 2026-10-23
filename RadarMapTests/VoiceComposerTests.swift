@@ -104,19 +104,49 @@ final class VoiceComposerTests: XCTestCase {
         XCTAssertEqual(uz(.camera(Call(kind: .stationaryCamera, form: .brief, meters: 300))),
                        "Kamera, uch yuz metr")
         XCTAssertEqual(uz(.camera(Call(kind: .stationaryRadar, form: .full(.aheadRight), meters: 500))),
-                       "Statsionar radar oldinda oʻngda, besh yuz metr")
+                       "Radar oldinda oʻngda, besh yuz metr")
         XCTAssertEqual(uz(.camera(Call(kind: .stationaryRadar, form: .onRoute, meters: 500))),
-                       "Marshrutda statsionar radar besh yuz metrdan soʻng")
+                       "Marshrutda radar besh yuz metrdan soʻng")
         XCTAssertEqual(uz(.camera(Call(kind: .tripod, form: .group, meters: 300))),
                        "Oldinda kameralar, uch yuz metr")
         XCTAssertEqual(uz(.camera(Call(kind: .mobileRadar, form: .full(.ahead), meters: 300, fromDrivers: true))),
                        "Haydovchilar belgisi, koʻchma radar oldinda, uch yuz metr")
         XCTAssertEqual(uz(.camera(Call(kind: .stationaryRadar, form: .full(.ahead), meters: 400,
                                        tail: .speedAndLimit(speed: 75, limit: 60)))),
-                       "Statsionar radar oldinda, toʻrt yuz metr. Tezligingiz yetmish besh, cheklov oltmish")
+                       "Radar oldinda, toʻrt yuz metr. Tezligingiz yetmish besh, cheklov oltmish")
         XCTAssertEqual(uz(.camera(Call(kind: .stationaryRadar, form: .full(.ahead), meters: 1300,
                                        tail: .limit(90)))),
-                       "Statsionar radar oldinda, bir yarim kilometr, bu yerda toʻqson")
+                       "Radar oldinda, bir yarim kilometr, bu yerda toʻqson")
+    }
+
+    /// Решение владельца 23.10 (28.M): узбекский голос не говорит
+    /// «Statsionar» и «Intellektual …» — стационарные типы одним словом; у
+    /// остальных типов и у русского голоса всё как было.
+    func testUzbekVoiceNamesStationaryTypesInOneWord() {
+        XCTAssertEqual(uz(.camera(Call(kind: .stationaryCamera, form: .full(.ahead), meters: 500))),
+                       "Kamera oldinda, besh yuz metr")
+        XCTAssertEqual(uz(.camera(Call(kind: .intelligentRadar, form: .full(.aheadLeft), meters: 500))),
+                       "Radar oldinda chapda, besh yuz metr")
+        XCTAssertEqual(uz(.camera(Call(kind: .intelligentRadar, form: .brief, meters: 300))),
+                       "Radar, uch yuz metr", "меряет скорость — «Radar» и в короткой фразе")
+        XCTAssertEqual(uz(.camera(Call(kind: .stationaryCamera, form: .onRoute, meters: 400))),
+                       "Marshrutda kamera toʻrt yuz metrdan soʻng")
+        XCTAssertEqual(uz(.camera(Call(kind: .dpsPost, form: .full(.ahead), meters: 300))),
+                       "YPX posti oldinda, uch yuz metr")
+        XCTAssertEqual(uz(.cameraName(.stationaryRadar)), "Radar")
+        for event in VoiceScript.eventSpace {
+            guard let text = uz(event) else { continue }
+            XCTAssertFalse(text.lowercased().contains("statsionar"), text)
+            XCTAssertFalse(text.lowercased().contains("intellektual"), text)
+        }
+        XCTAssertFalse(VoiceScript.inventory(.uz).contains("kind.stationary_radar"))
+        XCTAssertFalse(VoiceScript.inventory(.uz).contains("kind.stationary_camera"))
+        XCTAssertFalse(VoiceScript.inventory(.uz).contains("kind.intelligent_radar"))
+        // Русский голос — без изменений.
+        XCTAssertEqual(ru(.camera(Call(kind: .intelligentRadar, form: .brief, meters: 300))),
+                       "Камера, триста метров")
+        XCTAssertEqual(ru(.camera(Call(kind: .stationaryCamera, form: .full(.ahead), meters: 500))),
+                       "Стационарная камера впереди, пятьсот метров")
     }
 
     func testGroupPhraseDoesNotNameTheDriversMark() {

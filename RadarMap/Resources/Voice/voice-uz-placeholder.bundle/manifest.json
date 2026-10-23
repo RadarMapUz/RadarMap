@@ -172,11 +172,6 @@
    "file": "kind.dps_post.m4a",
    "sha256": "0a8a5d1d36ce845c11576fecdb304c79659d47fc7f649c64398ff830ea342df6"
   },
-  "kind.intelligent_radar": {
-   "duration": 2.092,
-   "file": "kind.intelligent_radar.m4a",
-   "sha256": "dc3a241281fb3a8d9da8cb56b10fe5f40788431adef00e4d5df45141ba09de0c"
-  },
   "kind.mobile_radar": {
    "duration": 0.972,
    "file": "kind.mobile_radar.m4a",
@@ -186,16 +181,6 @@
    "duration": 0.55,
    "file": "kind.radar.m4a",
    "sha256": "e7c7e3bcb896f420d851712063ce100260fe27977a073ad2ea19bb881c04b18b"
-  },
-  "kind.stationary_camera": {
-   "duration": 1.45,
-   "file": "kind.stationary_camera.m4a",
-   "sha256": "edd3c1420c51c242ef2534277d80b31b71f58dbb9affcd9ee6452ae5112a4a7c"
-  },
-  "kind.stationary_radar": {
-   "duration": 1.487,
-   "file": "kind.stationary_radar.m4a",
-   "sha256": "f985f4ed00a67c3b683ffb1721076c656d5623c4a0ec14a7243859ede17c3884"
   },
   "kind.tripod": {
    "duration": 1.082,

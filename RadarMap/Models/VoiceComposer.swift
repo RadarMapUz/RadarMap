@@ -164,8 +164,12 @@ nonisolated enum VoiceComposer {
     /// Фраза о камере. Порядок слов у русского и узбекского одинаков; всё
     /// различие — внутри отрывков («через пятьсот метров» против «besh yuz
     /// metrdan soʻng») и в числительных (`number`).
+    /// `kind`/`short` — как язык называет тип (`CameraType.spokenName` /
+    /// `spokenShortName`): по-узбекски стационарные типы — одним словом.
     static func camera(_ call: VoiceEvent.CameraCall,
-                       number: (Int) -> [SegmentID]?) -> [SegmentID]? {
+                       number: (Int) -> [SegmentID]?,
+                       kind: (VoiceEvent.Kind) -> SegmentID = { VoiceComposer.kind($0) },
+                       short: (VoiceEvent.Kind) -> SegmentID = { VoiceComposer.shortKind($0) }) -> [SegmentID]? {
         var out: [SegmentID] = []
         if call.fromDrivers, call.form != .group { out += ["w.drivers_mark", .comma] }
         switch call.form {
@@ -174,9 +178,9 @@ nonisolated enum VoiceComposer {
             out += ["w.cameras_ahead", .comma, d]
         case .brief:
             guard let d = VoiceDistance.segment(meters: call.meters, form: .plain) else { return nil }
-            out += [shortKind(call.kind), .comma, d]
+            out += [short(call.kind), .comma, d]
         case .onRoute:
-            // «Marshrutda statsionar radar besh yuz metrdan soʻng»
+            // «Marshrutda radar besh yuz metrdan soʻng»
             guard let d = VoiceDistance.segment(meters: call.meters, form: .after) else { return nil }
             out += ["w.on_route", kind(call.kind), d]
         case .full(let place):
@@ -286,8 +290,10 @@ extension VoiceComposer {
 
         static func compose(_ event: VoiceEvent) -> [SegmentID]? {
             switch event {
-            case .camera(let call):         return VoiceComposer.camera(call, number: { number($0) })
-            case .cameraName(let kind):     return [VoiceComposer.kind(kind)]
+            case .camera(let call):
+                return VoiceComposer.camera(call, number: { number($0) }, kind: { Self.kind($0) },
+                                            short: { Self.kind($0) })
+            case .cameraName(let kind):     return [Self.kind(kind)]
             case .maneuver(let call):       return VoiceComposer.maneuver(call)
             case .limitAhead(let limit, let meters):
                 // «ikki yuz metrdan soʻng tezlik cheklovi qirq»
@@ -308,6 +314,17 @@ extension VoiceComposer {
                 return ["p.tripod_often", .comma, VoiceComposer.peak(peak)]
             case .phrase(let phrase):
                 return VoiceComposer.phrase(phrase, closureMark: "p.road_closure")
+            }
+        }
+
+        /// Тип камеры — как `CameraType.spokenName` / `spokenShortName` (uz):
+        /// без «Statsionar» и «Intellektual …», одним словом и в полной, и в
+        /// короткой фразе (решение владельца 23.10, 28.M).
+        static func kind(_ kind: VoiceEvent.Kind) -> SegmentID {
+            switch kind {
+            case .stationaryCamera:                   return "kind.camera"
+            case .stationaryRadar, .intelligentRadar: return "kind.radar"
+            default:                                  return VoiceComposer.kind(kind)
             }
         }
 

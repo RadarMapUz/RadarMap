@@ -550,6 +550,12 @@ final class AppSettings {
             }
         }
     }
+    /// Чей записанный голос: женский или мужской набор (28.M). По умолчанию —
+    /// женский; выбранного набора нет или он битый — звучит второй
+    /// (`VoicePack.discover`).
+    var voiceGender: VoiceGender {
+        didSet { store.set(voiceGender.rawValue, forKey: Keys.voiceGender) }
+    }
     #if DEBUG
     /// Отладка: пакет-заглушка (синтезатор macOS) вместо записи диктора —
     /// чтобы склейка, задержка и подмена проверялись до студии.
@@ -782,6 +788,7 @@ final class AppSettings {
         static let turnByTurn = "turnByTurnVoice"
         static let navigationMetadata = "carPlayNavigationMetadata"
         static let voiceSource = "voiceSource"
+        static let voiceGender = "voiceGender"
         static let placeholderVoice = "placeholderVoice"
         static let speedLimits = "speedLimitsEnabled"
         static let overspeed = "overspeedTolerance"
@@ -900,6 +907,7 @@ final class AppSettings {
         turnByTurnVoice = store.bool(forKey: Keys.turnByTurn)
         carPlayNavigationMetadata = store.bool(forKey: Keys.navigationMetadata)
         voiceSourceChoice = VoiceSource(rawValue: store.string(forKey: Keys.voiceSource) ?? "")
+        voiceGender = VoiceGender(rawValue: store.string(forKey: Keys.voiceGender) ?? "") ?? .female
         #if DEBUG
         placeholderVoice = store.bool(forKey: Keys.placeholderVoice)
         #endif
@@ -1129,7 +1137,7 @@ extension AppSettings {
     /// может попасть в белый список.
     static let deviceOnlySettingKeys: Set<String> = [
         Keys.carDevices, Keys.knownCarAudio, Keys.licensePlate, Keys.timedTrack,
-        Keys.voiceSource, Keys.placeholderVoice, Keys.tripStartMode, Keys.voiceBeforeMute,
+        Keys.voiceSource, Keys.voiceGender, Keys.placeholderVoice, Keys.tripStartMode, Keys.voiceBeforeMute,
         Keys.home, Keys.work, Keys.recents, Keys.favorites, Keys.fuelProfile, Keys.vehicleEnergy,
         Keys.navigationMetadata, Keys.departureReminders, Keys.departureRemindersAsked,
         Keys.workTarget, Keys.workTargetAsked, Keys.adaptive,

@@ -53,13 +53,13 @@ enum VoiceText {
         case .group:
             phrase = String(format: String(localized: "Камеры впереди, %lld метров"), call.meters)
         case .brief:
-            phrase = String(format: String(localized: "%@, %lld метров"), type.shortName, call.meters)
+            phrase = String(format: String(localized: "%@, %lld метров"), type.spokenShortName, call.meters)
         case .onRoute:
             phrase = String(format: String(localized: "По маршруту %@ через %lld метров"),
-                            type.displayName.lowercased(), call.meters)
+                            type.spokenName.lowercased(), call.meters)
         case .full(let side):
             phrase = String(format: String(localized: "%@ %@, %lld метров"),
-                            type.displayName, text(side), call.meters)
+                            type.spokenName, text(side), call.meters)
         }
         if call.fromDrivers, call.form != .group {
             phrase = String(format: String(localized: "Отметка водителей: %@"),

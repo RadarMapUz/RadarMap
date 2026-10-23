@@ -40,6 +40,22 @@ enum VoiceSource: String, CaseIterable, Identifiable {
     }
 }
 
+/// Чей записанный голос (28.M): два набора, озвученных Navoiy TTS.
+nonisolated enum VoiceGender: String, CaseIterable, Identifiable, Sendable {
+    case female, male
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .female: return String(localized: "Женский")
+        case .male:   return String(localized: "Мужской")
+        }
+    }
+
+    /// Второй голос — запасной, если выбранного набора нет или он битый.
+    var other: VoiceGender { self == .female ? .male : .female }
+}
+
 /// Чистая часть решения — покрыта RecordedVoiceTests.
 nonisolated enum RecordedVoicePlan {
 
@@ -82,6 +98,9 @@ final class RecordedVoice {
 
     /// Пакет языка приложения; nil — нет (или ещё читается).
     private(set) var pack: VoicePack?
+    /// Какие голоса (женский/мужской) есть в сборке — настройка «Голос»
+    /// показывается, только когда выбирать есть из чего.
+    private(set) var genders: Set<VoiceGender> = []
     let language: VoiceLanguage
 
     @ObservationIgnored private let settings: AppSettings
@@ -111,11 +130,17 @@ final class RecordedVoice {
         let generation = loadGeneration
         let language = language
         let allowPlaceholder = settings.placeholderVoiceAllowed
+        let gender = settings.voiceGender
         // Низкий приоритет: пакет нужен к первой фразе, а не к первому кадру.
         Task(priority: .utility) { [weak self] in
-            let pack = await Self.discover(language: language, allowPlaceholder: allowPlaceholder)
+            let (pack, genders) = await Self.discover(language: language, gender: gender,
+                                                      allowPlaceholder: allowPlaceholder)
             guard let self, generation == self.loadGeneration else { return }
             self.pack = pack
+            self.genders = genders
+            if let pack, pack.gender != nil, pack.gender != gender {
+                Log.alerts.error("записанный голос: набор «\(gender.rawValue, privacy: .public)» недоступен — звучит «\(pack.gender?.rawValue ?? "", privacy: .public)»")
+            }
             if let pack {
                 // Указатель фраз по тексту — сейчас, а не на первом алерте.
                 _ = self.index
@@ -127,9 +152,10 @@ final class RecordedVoice {
 
     /// Чтение манифеста и проверка ~150 файлов — вне главного потока.
     @concurrent
-    private nonisolated static func discover(language: VoiceLanguage,
-                                             allowPlaceholder: Bool) async -> VoicePack? {
-        VoicePack.discover(language: language, allowPlaceholder: allowPlaceholder)
+    private nonisolated static func discover(language: VoiceLanguage, gender: VoiceGender,
+                                             allowPlaceholder: Bool) async -> (VoicePack?, Set<VoiceGender>) {
+        (VoicePack.discover(language: language, gender: gender, allowPlaceholder: allowPlaceholder),
+         VoicePack.availableGenders(language: language))
     }
 
     /// Отрывки фразы — или nil, и тогда её читает синтезатор.

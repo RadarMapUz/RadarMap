@@ -2,8 +2,9 @@
 //  VoicePack.swift
 //  RadarMap
 //
-//  Пакет записанного голоса (этап 16.3): папка `voice-<язык>.bundle` в
-//  приложении — `manifest.json` и по файлу AAC на отрывок.
+//  Пакет записанного голоса (этап 16.3): папка `voice-<язык>-<голос>.bundle`
+//  в приложении (`voice-uz-female.bundle`, `voice-uz-male.bundle` — 28.M) —
+//  `manifest.json` и по файлу AAC на отрывок.
 //
 //  Пакет едет внутри подписанного приложения, поэтому sha256 в манифесте —
 //  не защита от злоумышленника (её даёт подпись сборки), а проверка
@@ -57,6 +58,8 @@ nonisolated struct VoicePack: Sendable {
     let manifest: VoicePackManifest
     /// Отрывки, файлы которых на месте (sha проверяется при раскодировании).
     let segmentIDs: Set<SegmentID>
+    /// Чей голос — женский или мужской набор; nil у заглушки.
+    var gender: VoiceGender? = nil
 
     var isPlaceholder: Bool { manifest.placeholder }
     var language: VoiceLanguage? { VoiceLanguage(rawValue: manifest.language) }
@@ -70,9 +73,39 @@ nonisolated struct VoicePack: Sendable {
         ids.reduce(0) { $0 + (manifest.segments[$1.raw]?.duration ?? 0) }
     }
 
-    /// Имя папки пакета в бандле.
-    static func directoryName(_ language: VoiceLanguage, placeholder: Bool) -> String {
-        placeholder ? "voice-\(language.rawValue)-placeholder.bundle" : "voice-\(language.rawValue).bundle"
+    /// Имя папки набора в бандле: `voice-uz-female.bundle`, `voice-uz-male.bundle`.
+    static func directoryName(_ language: VoiceLanguage, gender: VoiceGender) -> String {
+        "voice-\(language.rawValue)-\(gender.rawValue).bundle"
+    }
+
+    /// Имя папки заглушки (только отладочная сборка).
+    static func placeholderDirectoryName(_ language: VoiceLanguage) -> String {
+        "voice-\(language.rawValue)-placeholder.bundle"
+    }
+
+    /// Отрывки, чей файл не сходится с sha манифеста. Чтение ~150 мелких
+    /// файлов (~1,5 МБ) — миллисекунды, и только вне главного потока.
+    func corruptSegments() -> Set<SegmentID> {
+        var bad = Set<SegmentID>()
+        for id in segmentIDs {
+            guard let url = url(for: id), let entry = manifest.segments[id.raw],
+                  let data = try? Data(contentsOf: url),
+                  SegmentDecoder.sha256Hex(of: data) == entry.sha256.lowercased() else {
+                bad.insert(id)
+                continue
+            }
+        }
+        return bad
+    }
+
+    /// Тот же набор без отрывков из `ids`: фраза с ними пойдёт синтезатором.
+    func excluding(_ ids: Set<SegmentID>) -> VoicePack {
+        VoicePack(directory: directory, manifest: manifest, segmentIDs: segmentIDs.subtracting(ids), gender: gender)
+    }
+
+    /// Полон ли набор: есть каждый отрывок сценария языка.
+    func isComplete(_ inventory: Set<SegmentID>) -> Bool {
+        inventory.isSubset(of: segmentIDs)
     }
 
     /// Прочитать пакет. Отрывок без файла в набор не входит — фраза с ним
@@ -107,35 +140,72 @@ nonisolated struct VoicePack: Sendable {
         return VoicePack(directory: directory, manifest: manifest, segmentIDs: present)
     }
 
-    /// Пакет для языка: настоящий, а без него — заглушка, если её разрешили
-    /// (только отладочная сборка). nil — пакета нет, говорит синтезатор.
-    static func discover(language: VoiceLanguage, allowPlaceholder: Bool,
+    /// Набор для языка и выбранного голоса (28.M).
+    ///
+    /// Порядок: выбранный голос, целый (все отрывки сценария, sha сходятся);
+    /// иначе второй голос, целый; иначе тот из двух, где уцелело больше
+    /// отрывков, — битые из него вычеркнуты, и фразы с ними целиком читает
+    /// синтезатор (два голоса в одной фразе не звучат никогда: набор один на
+    /// всё). Ни одного настоящего набора — заглушка, если её разрешили
+    /// (только отладочная сборка); иначе nil — говорит синтезатор.
+    static func discover(language: VoiceLanguage, gender: VoiceGender, allowPlaceholder: Bool,
                          in root: URL? = Bundle.main.resourceURL) -> VoicePack? {
         guard let root else { return nil }
-        var candidates = [directoryName(language, placeholder: false)]
+        let inventory = Set(VoiceScript.inventory(language))
+        var damaged: [VoicePack] = []
+        for candidate in [gender, gender.other] {
+            guard let pack = loadReal(language: language, gender: candidate, root: root) else { continue }
+            let corrupt = pack.corruptSegments()
+            if !corrupt.isEmpty {
+                Log.alerts.error("набор голоса \(candidate.rawValue, privacy: .public): битых отрывков \(corrupt.count, privacy: .public)")
+            }
+            let usable = pack.excluding(corrupt)
+            if usable.isComplete(inventory) { return usable }
+            if !usable.segmentIDs.isEmpty { damaged.append(usable) }
+        }
+        if let best = damaged.max(by: { $0.segmentIDs.count < $1.segmentIDs.count }) { return best }
         #if DEBUG
-        if allowPlaceholder { candidates.append(directoryName(language, placeholder: true)) }
-        #endif
-        for name in candidates {
-            let directory = root.appendingPathComponent(name)
-            guard FileManager.default.fileExists(atPath: directory.path) else { continue }
-            do {
-                let pack = try load(from: directory)
-                guard pack.language == language else {
-                    Log.alerts.error("пакет голоса \(name, privacy: .public): язык \(pack.manifest.language, privacy: .public)")
-                    continue
+        if allowPlaceholder {
+            let directory = root.appendingPathComponent(placeholderDirectoryName(language))
+            if FileManager.default.fileExists(atPath: directory.path) {
+                do {
+                    let pack = try load(from: directory)
+                    if pack.language == language { return pack }
+                } catch {
+                    Log.alerts.error("заглушка голоса не прочитана: \(String(describing: error), privacy: .public)")
                 }
-                #if !DEBUG
-                // Заглушка в выпуске не звучит ни под каким именем.
-                if pack.isPlaceholder { continue }
-                #endif
-                if pack.isPlaceholder, !allowPlaceholder { continue }
-                return pack
-            } catch {
-                Log.alerts.error("пакет голоса \(name, privacy: .public) не прочитан: \(String(describing: error), privacy: .public)")
             }
         }
+        #endif
         return nil
+    }
+
+    /// Какие голоса языка есть в сборке (для настройки «Голос»): папка на
+    /// месте и манифест читается. Целостность проверяет `discover`.
+    static func availableGenders(language: VoiceLanguage, in root: URL? = Bundle.main.resourceURL) -> Set<VoiceGender> {
+        guard let root else { return [] }
+        return Set(VoiceGender.allCases.filter { loadReal(language: language, gender: $0, root: root) != nil })
+    }
+
+    /// Настоящий набор голоса: читается, язык тот, не заглушка.
+    private static func loadReal(language: VoiceLanguage, gender: VoiceGender, root: URL) -> VoicePack? {
+        let name = directoryName(language, gender: gender)
+        let directory = root.appendingPathComponent(name)
+        guard FileManager.default.fileExists(atPath: directory.path) else { return nil }
+        do {
+            var pack = try load(from: directory)
+            guard pack.language == language else {
+                Log.alerts.error("набор голоса \(name, privacy: .public): язык \(pack.manifest.language, privacy: .public)")
+                return nil
+            }
+            // Заглушка под именем настоящего набора не звучит нигде.
+            guard !pack.isPlaceholder else { return nil }
+            pack.gender = gender
+            return pack
+        } catch {
+            Log.alerts.error("набор голоса \(name, privacy: .public) не прочитан: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 }
 

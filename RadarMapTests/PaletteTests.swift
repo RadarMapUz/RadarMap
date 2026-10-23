@@ -288,14 +288,19 @@ final class PaletteTests: XCTestCase {
 extension PaletteTests {
 
     /// Полотно дороги новой карты — server/omt/make_style.py PALETTES
-    /// (road, road_trunk, road_secondary, road_tertiary, minor) и фон, по
-    /// темам; test_palette_check сверяет копию с генератором. С 28.A
-    /// («Чистый»): днём улицы и проспекты белые, тёплая только магистраль,
-    /// ночью нейтральный графит, светлее с каждым классом.
+    /// (road, road_trunk, road_secondary, road_tertiary, minor, затем то же
+    /// полотно вблизи near_primary, near_trunk, near_secondary,
+    /// near_tertiary, near_minor) и фон, по темам; test_palette_check
+    /// сверяет копию с генератором. С 28.A («Чистый»): днём улицы и
+    /// проспекты белые, тёплая только магистраль, ночью нейтральный графит,
+    /// светлее с каждым классом. С 28.L днём вблизи (с z15–16) размеченное
+    /// полотно — светло-серый асфальт под белой краской, магистраль темнее.
     private func asphalt(_ theme: String) -> [Color] {
         let hex: [UInt32] = theme == "днём"
-            ? [0xFFFFFF, 0xFFE2A8, 0xFFFFFF, 0xFFFFFF, 0xFFFFFF, 0xF2F3F5]
-            : [0x40454F, 0x626874, 0x383C45, 0x33373F, 0x30343C, 0x16181C]
+            ? [0xFFFFFF, 0xFFE2A8, 0xFFFFFF, 0xFFFFFF, 0xFFFFFF,
+               0xD2D6DD, 0xECD096, 0xD2D6DD, 0xD2D6DD, 0xFFFFFF, 0xF2F3F5]
+            : [0x40454F, 0x626874, 0x383C45, 0x33373F, 0x30343C,
+               0x40454F, 0x626874, 0x383C45, 0x33373F, 0x30343C, 0x16181C]
         return hex.map { Color(uiColor: Theme.rgb($0)) }
     }
 

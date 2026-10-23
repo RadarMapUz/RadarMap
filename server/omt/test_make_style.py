@@ -183,8 +183,85 @@ class StyleTests(unittest.TestCase):
         for layer_id in ("highway-name-major", "highway-name-minor"):
             halo = layers[layer_id]["paint"]["text-halo-color"]
             self.assertEqual(halo[0], "interpolate", layer_id)
-            self.assertEqual(halo[-1], make_style.class_asphalt(palette, "class"), "вблизи — асфальт класса")
+            # Вблизи — асфальт класса: днём с 28.L тот, что под разметкой.
+            near = make_style.class_asphalt(make_style.near_palette(palette), "class")
+            self.assertEqual(halo[-1], near, "вблизи — асфальт класса")
             self.assertEqual(halo[4], palette["halo"], "до нашего полотна — фон")
+
+    def test_asphalt_turns_lane_grey_by_zoom(self):
+        # 28.L: днём полотно улиц с OUR_ROADS_FROM плавно уходит к серому
+        # асфальту под белой разметкой; ночью цвет как был — без зума.
+        layers = {layer["id"]: layer for layer in self.style["layers"]}
+        palette = make_style.PALETTES[self.theme]
+        near = make_style.near_palette(palette)
+        changes = palette != near
+        for layer_id, prop in (("radar-roads", "line-color"), ("radar-roads-stub", "line-color"),
+                               ("radar-bridge", "line-color"), ("radar-junction", "fill-color"),
+                               ("radar-fillet", "fill-color"), ("radar-median", "fill-color")):
+            colour = layers[layer_id]["paint"][prop]
+            if not changes:
+                self.assertNotIn("zoom", json.dumps(colour), layer_id)
+                continue
+            self.assertEqual(colour[:3], ["interpolate", ["linear"], ["zoom"]], layer_id)
+            self.assertEqual(colour[3::2], list(make_style.ASPHALT_NEAR), layer_id)
+            # Зум — только на верхнем уровне: вложенный движок отвергает.
+            self.assertNotIn("zoom", json.dumps(colour[4:]), layer_id)
+        # Полотно доходит до серого раньше первой разметки.
+        self.assertLessEqual(make_style.ASPHALT_NEAR[1], layers["radar-zebra"]["minzoom"])
+        self.assertLessEqual(make_style.ASPHALT_NEAR[1], make_style.LANE_MARKINGS_FROM)
+        self.assertEqual(make_style.ASPHALT_NEAR[0], make_style.OUR_ROADS_FROM)
+
+    def test_paint_is_one_colour_parking_stalls_their_own(self):
+        layers = {layer["id"]: layer for layer in self.style["layers"]}
+        palette = make_style.PALETTES[self.theme]
+        for layer_id in ("radar-markings", "radar-markings-solid", "radar-centre-dashed", "radar-centre-solid",
+                         "radar-zebra", "radar-stop-line", "radar-crossing"):
+            self.assertEqual(layers[layer_id]["paint"]["line-color"], palette["paint"], layer_id)
+        self.assertEqual(layers["radar-parking-stall"]["paint"]["line-color"], palette["stall"])
+
+    def test_junction_has_an_edge_under_the_kerbs(self):
+        # Аудит 23.10, №1: крупный узел с запасной оболочкой без кромки
+        # сливался с тротуаром.
+        ids = [layer["id"] for layer in self.style["layers"]]
+        layers = {layer["id"]: layer for layer in self.style["layers"]}
+        edge = layers["radar-junction-edge"]
+        self.assertLess(ids.index("radar-junction-edge"), ids.index("radar-roads-case"))
+        self.assertLess(ids.index("radar-junction-edge"), ids.index("radar-junction"))
+        self.assertEqual(edge["filter"], layers["radar-junction"]["filter"])
+        self.assertEqual(edge["paint"]["line-color"], make_style.PALETTES[self.theme]["kerb"])
+
+    def test_bridge_deck_has_round_ends(self):
+        # Аудит 23.10, №2: прямые торцы кусков настила давали поперечные швы.
+        layers = {layer["id"]: layer for layer in self.style["layers"]}
+        self.assertEqual(layers["radar-bridge"]["layout"]["line-cap"], "round")
+
+    def test_street_labels_do_not_bend_through_junctions(self):
+        layers = {layer["id"]: layer for layer in self.style["layers"]}
+        for layer_id in ("highway-name-major", "highway-name-minor"):
+            self.assertEqual(layers[layer_id]["layout"]["text-max-angle"], make_style.STREET_LABEL_MAX_ANGLE)
+        self.assertLess(make_style.STREET_LABEL_MAX_ANGLE, 45)
+
+    def test_base_casing_fades_into_ours(self):
+        # Аудит 23.10, №5: кайма основы обрывалась на 15-м — дорога на
+        # автозуме вдруг светлела. Теперь гаснет с CASING_FADE_FROM; у мелочи
+        # на 12–13 каймы нет вовсе (№4).
+        layers = {layer["id"]: layer for layer in self.style["layers"]}
+        major, minor = layers["highway-primary-casing"], layers["highway-minor-casing"]
+        for layer in (major, minor):
+            opacity = layer["paint"]["line-opacity"]
+            self.assertEqual(opacity[-4:], [make_style.CASING_FADE_FROM, 1, make_style.OUR_ROADS_FROM, 0])
+        self.assertEqual(minor["paint"]["line-opacity"][3:5], [13.5, 0])
+
+    def test_primary_wider_than_streets_on_the_overview(self):
+        self.assertGreater(make_style.CLASS_M["primary"], make_style.CLASS_M["secondary-tertiary"])
+        palette = make_style.PALETTES[self.theme]
+        if self.theme == "light":
+            # Белую дорогу на светлой земле несёт кайма: у проспекта темнее.
+            def lightness(colour):
+                colour = colour.lstrip("#")
+                return sum(int(colour[i:i + 2], 16) for i in (0, 2, 4)) / 3
+            self.assertLess(lightness(palette["far_primary_edge"]), lightness(palette["far_secondary_edge"]))
+            self.assertLess(lightness(palette["far_secondary_edge"]), lightness(palette["far_tertiary_edge"]))
 
     def test_waterway_in_a_pipe_is_not_labelled(self):
         layers = {layer["id"]: layer for layer in self.style["layers"]}

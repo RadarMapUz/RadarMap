@@ -102,6 +102,7 @@ struct EngineBaseLayer: View {
                         // они же — на линии маршрута (27.B, CameraOnLine).
                         pathCameraIDs: cameraLine.pathIDs,
                         cameraPoints: cameraLine.points,
+                        cameraZone: env.cameraZone(line: cameraLine),
                         familiarCameraIDs: env.location.familiarCameraIDs,
                         route: env.route.routeCoordinates,
                         routeObject: env.route.polyline,

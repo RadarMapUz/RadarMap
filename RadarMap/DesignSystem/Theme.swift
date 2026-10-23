@@ -577,7 +577,11 @@ nonisolated enum RouteColors {
     typealias Pair = (day: UInt32, night: UInt32)
     static let body: Pair = (0x2A6FF0, 0x66A3FF)
     static let casing: Pair = (0x1E4FB8, 0x0E1A33)
-    static let traveled: Pair = (0x9AA6B8, 0x4A5568)
+    /// Пройденное (28.D): серо-синее, бледнее линии впереди, но читается на
+    /// полотне любого класса. Ночной 0x4A5568 сливался с графитом улиц
+    /// (ΔE 4–6 — линия позади машины просто пропадала, а не «гасла»);
+    /// 0x7A869C держит ΔE ≥ 8,5 на всех полотнах обеих палитр (RouteTraveledTests).
+    static let traveled: Pair = (0x9AA6B8, 0x7A869C)
     /// Подсветка ближнего манёвра на линии.
     static let maneuver: Pair = (0x123A8F, 0xD6E6FF)
     /// Светлая середина: белый с этой непрозрачностью поверх тела.

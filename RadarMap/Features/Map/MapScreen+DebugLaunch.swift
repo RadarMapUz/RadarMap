@@ -343,6 +343,15 @@ extension MapScreen {
                     }
                     // Поездка с шумом GPS и неровным интервалом (замер 27.A).
                     if NoisyDriveDebug.enabled { Task { await NoisyDriveDebug.run(env: env) } }
+                    // Знак смены лимита у машины (29.B): «40» в ~250 м по маршруту.
+                    if args.contains("-demoLimitAhead") {
+                        Task {
+                            await Task.pause(seconds: 2)
+                            guard let here = env.location.currentCoordinate,
+                                  let at = env.route.pathAhead(from: here, meters: 250)?.last else { return }
+                            env.speedLimits.pinLimitAheadCue(LimitAhead.Notice(limit: 40, distance: 250, at: at))
+                        }
+                    }
                     // Автозавершение поездки через N секунд: на симуляторе нет
                     // CoreMotion (автостоп не сработает) и нет тапов — а для
                     // проверки Итогов/шеринга нужна завершённая запись в истории.

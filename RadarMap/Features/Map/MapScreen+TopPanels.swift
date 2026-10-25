@@ -175,6 +175,11 @@ extension MapScreen {
                     Spacer()
                     controlColumn
                 }
+                // Низ колонки — верх полосы хода маршрута (29.B).
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: {
+                    columnBottomEdge = $0
+                    applySketchInsets()
+                }
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             }
             Spacer()

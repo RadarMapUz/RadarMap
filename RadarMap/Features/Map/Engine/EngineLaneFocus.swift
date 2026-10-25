@@ -64,11 +64,13 @@ final class EngineLaneFocus {
         retryAt = nil
     }
 
-    func update(_ model: EngineMapView, in view: MLNMapView) {
+    /// - Parameter routeDaylight: тема линии маршрута (29.B): стрелки «наших»
+    ///   полос — её цветом.
+    func update(_ model: EngineMapView, routeDaylight: Bool, in view: MLNMapView) {
         let speedKmh = (model.markerMotion?.speedMps ?? 0) * 3.6
         let shown = gate.update(model.laneFocus, progress: model.routeProgress, speedKmh: speedKmh)
         let key = shown.map {
-            Key(step: $0, route: model.routeObject.map(ObjectIdentifier.init), daylight: model.daylight)
+            Key(step: $0, route: model.routeObject.map(ObjectIdentifier.init), daylight: routeDaylight)
         }
         let retryDue = retryAt.map { CACurrentMediaTime() >= $0 } ?? false
         guard key != applied || retryDue, let style = view.style else { return }

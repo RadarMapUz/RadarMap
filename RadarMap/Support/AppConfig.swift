@@ -3112,4 +3112,38 @@ nonisolated enum AppConfig {
     /// Самая длинная фраза синтезатора (манёвр с улицей и рядом) — 6–7 с;
     /// вдвое больше значит, что «договорил» потерялся, а не что говорят.
     static let voiceQueueStallSeconds: Double = 15
+
+    // MARK: - Режим поездки как у Amap (29.B)
+
+    /// Смена асфальта на старте и конце поездки — переход цвета слоёв, с.
+    /// Мгновенная перекраска всего полотна на старте читалась миганием.
+    static let driveAsphaltTransitionSeconds: TimeInterval = 0.6
+
+    /// Полоса хода маршрута: зазор от колонки кнопок и от нижней панели, pt.
+    static let routeRailGapPoints: Double = 14
+    /// Короче — полосу не показываем: на SE в 120 pt ещё читаются камеры и
+    /// «я», ниже значки камер слипаются в одну кляксу.
+    static let routeRailMinHeightPoints: Double = 120
+    /// Ширина шкалы и значков, pt (тонкая — полоса не карта, а подсказка).
+    static let routeRailTrackWidth: CGFloat = 6
+    static let routeRailCameraSize: CGFloat = 11
+    static let routeRailMeSize: CGFloat = 18
+    /// Отступ полосы от правого края экрана, pt.
+    static let routeRailEdgeInset: CGFloat = 8
+    /// Шаг отметки «я», pt: перерисовка не чаще одного шага.
+    static let routeRailStepPoints: Double = 1
+
+    /// Знак смены лимита у машины: ближе этого к точке смены — уже проехали, м.
+    static let limitBadgeGoneMeters: Double = 12
+    /// Отдалились от точки смены больше чем на это от ближайшего — проехали
+    /// (шум GPS у знака в пару метров знак не гасит), м.
+    static let limitBadgePassedSlackMeters: Double = 25
+    /// Знак у машины: от центра значка «я» до края знака по горизонтали, pt.
+    /// Больше радиуса кольца компаса (compassRadiusPoints) с запасом: знак
+    /// закрывал букву W.
+    static let limitBadgeGapPoints: CGFloat = 44
+    /// Кольцо компаса вокруг машины: радиус и кегль букв, pt. Шире значка
+    /// машины с тенью (до 44 pt в длину) — кольцо обводит её, а не режет.
+    static let compassRadiusPoints: CGFloat = 34
+    static let compassLetterSize: CGFloat = 10
 }

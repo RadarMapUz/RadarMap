@@ -30,6 +30,26 @@ class PaletteRules(unittest.TestCase):
             _, failures = palette_check.measure(theme)
             self.assertEqual(failures, [], theme)
 
+    def test_drive_asphalt_passes_every_rule(self):
+        # 29.B: тёмное полотно поездки — белая разметка, светлое имя улицы,
+        # ночной маршрут, камеры и пробки на нём читаются.
+        for theme in ("light", "dark"):
+            _, failures = palette_check.measure_drive(theme)
+            self.assertEqual(failures, [], theme)
+
+    def test_drive_rules_catch_asphalt_in_the_route_dead_band(self):
+        # Асфальт поездки светлее 0,087 — светлое тело ночного маршрута на
+        # нём теряет 3:1, а тёмной кайме ещё не хватает светлоты.
+        p = dict(make_style.PALETTES["light"], drive_primary="#5b6476")
+        _, failures = palette_check.measure_drive("light", p)
+        self.assertIn("поездка: линия маршрута < 3:1", failures)
+
+    def test_drive_rules_catch_a_dark_street_name(self):
+        # Тёмное имя улицы дневной палитры на тёмном полотне — нарушение.
+        p = dict(make_style.PALETTES["light"], drive_street_label=make_style.PALETTES["light"]["street_label"])
+        _, failures = palette_check.measure_drive("light", p)
+        self.assertIn("поездка: имя улицы на асфальте < 4,5:1", failures)
+
     def test_rules_catch_a_road_lost_in_the_ground(self):
         # Двор цвета земли без кромки — нарушение, а не «все правила соблюдены».
         p = dict(make_style.PALETTES["light"], minor=make_style.PALETTES["light"]["bg"],

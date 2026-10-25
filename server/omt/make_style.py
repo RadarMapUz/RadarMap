@@ -138,6 +138,20 @@ PALETTES = {
         "housenumber": "#707681", "water_label": "#3b78b8",
         # Рельсы и аэродром — нейтральные: белое поле аэропорта ночью слепило.
         "rail": "#b6bbc4", "aeroway": "#e6e8ec", "aeroway_edge": "#c5cad2",
+        # Асфальт поездки (29.B, как у Amap): в поездке с DRIVE_ASPHALT полотно
+        # тёмное серо-синее, разметка белая, кромки светлые. Светлота асфальта —
+        # не выше 0,087: маршрут в поездке берёт ночной набор (RouteColors
+        # .night), и его светлое тело держит 3:1 только на тёмном полотне;
+        # в полосе 0,087–0,137 линия теряет 3:1 и телом, и каймой. Магистраль
+        # — чуть теплее и светлее улиц. Двор остаётся белым с серой кромкой:
+        # тёмная паутина дворов поперёк кварталов спорила с улицами, по
+        # которым едут, а разметки на дворе нет. Имя улицы — светлое, ореол —
+        # цвета асфальта (street_halo); имя двора — прежнее (DRIVE_KEEP_LAYERS).
+        "drive_trunk": "#4b4f5a", "drive_primary": "#3f4859", "drive_secondary": "#3f4859",
+        "drive_tertiary": "#434c5e", "drive_minor": "#ffffff",
+        "drive_kerb": "#e4e8ee", "drive_kerb_trunk": "#f0c46e", "drive_minor_edge": "#d9dce1",
+        "drive_casing": "#d7dce3", "drive_gutter": "#363e4d", "drive_zebra_base": "#3f4859",
+        "drive_paint": "#ffffff", "drive_street_label": "#f2f4f7",
     },
     "dark": {
         "bg": "#16181c", "park": "#16271e", "wood": "#14241b", "water": "#172a40",
@@ -179,6 +193,14 @@ PALETTES = {
         "label": "#e6e9ee", "street_label": "#f2f4f7", "halo": "#16181c", "oneway_opacity": 0.7,
         "housenumber": "#8b929d", "water_label": "#7fa6d1",
         "rail": "#4a4f59", "aeroway": "#2a2e35", "aeroway_edge": "#3d424b",
+        # Ночью асфальт поездки — тот же графит: светлая разметка на нём и так
+        # читается, а маршрут уже ночной. Ключи те же, что днём, — палитры
+        # обязаны определять одни цвета (test_themes_define_the_same_colours).
+        "drive_trunk": "#626874", "drive_primary": "#40454f", "drive_secondary": "#383c45",
+        "drive_tertiary": "#33373f", "drive_minor": "#30343c",
+        "drive_kerb": "#575c66", "drive_kerb_trunk": "#9a8352", "drive_minor_edge": "#1f2227",
+        "drive_casing": "#25282e", "drive_gutter": "#1d2025", "drive_zebra_base": "#2e3137",
+        "drive_paint": "#9aa0aa", "drive_street_label": "#f2f4f7",
     },
 }
 
@@ -701,6 +723,98 @@ def _near_asphalt(layers, near_layers):
     return layers
 
 
+# Асфальт поездки (29.B): с DRIVE_ASPHALT[0] полотно, кромки, разметка и
+# ореол имени улицы плавно уходят к тонам drive_* и к DRIVE_ASPHALT[1] стоят
+# в них целиком. Стиль из-за этого не перезагружается: генератор пишет только
+# РАЗНИЦУ — {слой: {свойство цвета: выражение}} (map_drive_<тема>.json), и
+# приложение кладёт её свойствами слоёв на старте поездки и снимает на
+# остановке (EngineDriveAsphalt). Вне поездки стиль тот же, что был.
+# Окно — то же, что у серого асфальта вблизи (ASPHALT_NEAR), только к его
+# концу полотно уже тёмное: камера поездки на телефоне стоит на z16–17,
+# в машине — на z15,5–16,5 (DriveCamera), и при окне 16→17 асфальт всю
+# поездку оставался серединой перехода — серым, а не тёмным (снимки 29.B).
+DRIVE_ASPHALT = (OUR_ROADS_FROM, 16)
+# Имя улицы меняет цвет ступенькой посередине: тёмное на светлеющем и
+# светлое на темнеющем асфальте — плавный переход провёл бы его через серое
+# на сером.
+DRIVE_LABEL_STEP = 15.5
+DRIVE_KEYS = {"near_trunk": "drive_trunk", "near_primary": "drive_primary",
+              "near_secondary": "drive_secondary", "near_tertiary": "drive_tertiary",
+              "near_minor": "drive_minor", "kerb": "drive_kerb", "kerb_trunk": "drive_kerb_trunk",
+              "minor_edge": "drive_minor_edge", "casing": "drive_casing", "gutter": "drive_gutter",
+              "zebra_base": "drive_zebra_base", "paint": "drive_paint",
+              "street_label": "drive_street_label"}
+# Подписи дворов и дорожек: полотно под ними в поездке не темнеет, и имя
+# остаётся тёмным на белом (общий ключ street_label перекрасил бы и их).
+DRIVE_KEEP_LAYERS = ("highway-name-minor", "highway-name-path")
+DRIVE_COLOUR_PROPS = ("line-color", "fill-color", "fill-outline-color", "text-color",
+                      "text-halo-color", "circle-color", "icon-color", "fill-extrusion-color")
+
+
+def drive_palette(p):
+    """Палитра поездки: асфальт вблизи, кромки, разметка и имя улицы — drive_*."""
+    return dict(p, **{key: p[drive] for key, drive in DRIVE_KEYS.items()})
+
+
+def _zoom_stops(value):
+    """Ступени линейной интерполяции по зуму верхнего уровня; None — не она."""
+    if (isinstance(value, list) and len(value) >= 5 and value[0] == "interpolate"
+            and value[1] == ["linear"] and value[2] == ["zoom"]):
+        return value[3:]
+    return None
+
+
+def _zoom_free(value):
+    return "zoom" not in json.dumps(value)
+
+
+def drive_value(prop, normal, drive):
+    """Цвет слоя в поездке: обычный до DRIVE_ASPHALT[0], цвет поездки с DRIVE_ASPHALT[1]."""
+    stops = _zoom_stops(drive)
+    high = stops[-1] if stops else drive
+    if not _zoom_free(high):
+        raise ValueError(f"{prop}: цвет поездки зависит от зума глубже верхнего уровня")
+    if prop == "text-color":
+        if not _zoom_free(normal):
+            raise ValueError("цвет подписи уже зависит от зума — ступеньку не поставить")
+        return ["step", ["zoom"], normal, DRIVE_LABEL_STEP, high]
+    start, end = DRIVE_ASPHALT
+    if _zoom_free(normal):
+        return ["interpolate", ["linear"], ["zoom"], start, normal, end, high]
+    own = _zoom_stops(normal)
+    if own is None or not all(_zoom_free(v) for v in own[1::2]):
+        raise ValueError(f"{prop}: обычный цвет — не простая интерполяция по зуму")
+    # Ступени до начала окна — как были; дальше — цвет поездки. Ступень
+    # внутри окна (серый асфальт вблизи у 16-го) заменяется поездкой.
+    head = [x for z, v in zip(own[0::2], own[1::2]) if z <= start for x in (z, v)]
+    if not head:
+        raise ValueError(f"{prop}: обычный цвет начинается позже {start}-го")
+    if head[-2] < start:
+        later = [z for z in own[0::2] if z > start]
+        if later:
+            raise ValueError(f"{prop}: ступень обычного цвета внутри окна поездки")
+        head += [start, head[-1]]
+    return normal[:3] + head + [end, high]
+
+
+def drive_overrides(theme):
+    """{слой: {свойство: выражение}} — чем стиль поездки отличается от обычного."""
+    normal = build(APP_BASE, theme, "full", tileset=APP_TILESET)["layers"]
+    driven = build(APP_BASE, theme, "full", tileset=APP_TILESET,
+                   palette=drive_palette(PALETTES[theme]))["layers"]
+    if [l["id"] for l in normal] != [l["id"] for l in driven]:
+        raise ValueError("палитра поездки поменяла состав слоёв")
+    out = {}
+    for a, b in zip(normal, driven):
+        if a["id"] in DRIVE_KEEP_LAYERS:
+            continue
+        for prop in DRIVE_COLOUR_PROPS:
+            was, now = a.get("paint", {}).get(prop), b.get("paint", {}).get(prop)
+            if was != now:
+                out.setdefault(a["id"], {})[prop] = drive_value(prop, was, now)
+    return out
+
+
 def _layers_in_draw_order(p):
     return [
         # Разделительные и островки — ПОД полотном. Они построены по осям и не
@@ -1023,12 +1137,12 @@ APP_TILESET = "{{TILESET}}"
 APP_STYLE_DIR = os.path.join(HERE, "..", "..", "RadarMap", "Resources", "MapStyle")
 
 
-def build(base, theme="light", mode="full", tileset=None):
+def build(base, theme="light", mode="full", tileset=None, palette=None):
     """tileset — номер выпуска (или плейсхолдер): тайлы из /v/<N>/, а не из
-    старых адресов без версии."""
+    старых адресов без версии. palette — своя палитра темы (поездка, 29.B)."""
     if theme not in PALETTES or mode not in ("full", "roads"):
         raise ValueError(f"тема {theme!r} / режим {mode!r}")
-    p = PALETTES[theme]
+    p = palette or PALETTES[theme]
     base = base.rstrip("/")
     tiles_root = base if tileset is None else f"{base}/v/{tileset}"
     with open(os.path.join(HERE, "osm-bright.json")) as handle:
@@ -1190,10 +1304,15 @@ def _driver_pois(out, p, theme):
 
 
 def app_styles():
-    """{имя файла: текст} — стили для бандла приложения, светлый и тёмный."""
-    return {f"map_style_{theme}.json": json.dumps(build(APP_BASE, theme, "full", tileset=APP_TILESET),
-                                                  ensure_ascii=False, sort_keys=True, indent=1) + "\n"
-            for theme in ("light", "dark")}
+    """{имя файла: текст} — стили для бандла приложения, светлый и тёмный, и
+    разница поездки к каждому (map_drive_<тема>.json, 29.B)."""
+    out = {f"map_style_{theme}.json": json.dumps(build(APP_BASE, theme, "full", tileset=APP_TILESET),
+                                                 ensure_ascii=False, sort_keys=True, indent=1) + "\n"
+           for theme in ("light", "dark")}
+    for theme in ("light", "dark"):
+        out[f"map_drive_{theme}.json"] = json.dumps({"layers": drive_overrides(theme)},
+                                                    ensure_ascii=False, sort_keys=True, indent=1) + "\n"
+    return out
 
 
 def main(argv):

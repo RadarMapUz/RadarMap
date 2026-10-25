@@ -430,6 +430,66 @@ class AppResourceTests(unittest.TestCase):
         self.assertTrue(style["glyphs"].startswith("{{BASE}}/glyphs/"))
 
 
+class DriveAsphaltTests(unittest.TestCase):
+    """Асфальт поездки (29.B) — разница свойствами слоёв, без перезагрузки стиля."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.style = make_style.build(make_style.APP_BASE, "light", "full", tileset=make_style.APP_TILESET)
+        cls.drive = make_style.drive_overrides("light")
+
+    def test_only_colours_of_existing_layers_change(self):
+        layers = {l["id"]: l for l in self.style["layers"]}
+        for layer_id, props in self.drive.items():
+            self.assertIn(layer_id, layers)
+            for prop in props:
+                self.assertIn(prop, make_style.DRIVE_COLOUR_PROPS)
+                self.assertTrue(prop.startswith(PREFIX[layers[layer_id]["type"]]), (layer_id, prop))
+
+    def test_road_ribbon_kerbs_paint_base_and_street_halo_follow(self):
+        for layer_id in ("radar-roads", "radar-roads-case", "radar-junction", "radar-zebra-base",
+                         "radar-bridge", "highway-name-major"):
+            self.assertIn(layer_id, self.drive)
+        self.assertIn("text-halo-color", self.drive["highway-name-major"])
+
+    def test_below_the_drive_zoom_nothing_changes(self):
+        # Ниже DRIVE_ASPHALT[0] выражение поездки отдаёт тот же цвет, что обычное:
+        # вне крупных зумов поездка карту не перекрашивает.
+        start, end = make_style.DRIVE_ASPHALT
+        layers = {l["id"]: l for l in self.style["layers"]}
+        for layer_id, props in self.drive.items():
+            for prop, value in props.items():
+                normal = layers[layer_id]["paint"][prop]
+                if value[0] == "step":
+                    self.assertEqual(value[2], normal)
+                    self.assertTrue(start < value[3] < end)
+                    continue
+                stops = value[3:]
+                self.assertEqual(stops[-2], end)
+                head = stops[:-2]
+                self.assertEqual(head[-2], start)
+                own = make_style._zoom_stops(normal)
+                if own is None:
+                    self.assertEqual(head, [start, normal])
+                    continue
+                kept = [x for z, v in zip(own[0::2], own[1::2]) if z <= start for x in (z, v)]
+                self.assertEqual(head[:len(kept)], kept)
+
+    def test_drive_colour_is_reached_at_the_end_zoom(self):
+        roads = self.drive["radar-roads"]["line-color"]
+        self.assertEqual(roads[-1][5], make_style.PALETTES["light"]["drive_primary"])
+
+    def test_night_drive_is_the_night_style(self):
+        # Ночью асфальт и так графитовый: разницы нет, перекрашивать нечего.
+        self.assertEqual(make_style.drive_overrides("dark"), {})
+
+    def test_nested_zoom_is_refused(self):
+        with self.assertRaises(ValueError):
+            make_style.drive_value("line-color", "#ffffff",
+                                   ["match", ["get", "c"], 1, ["interpolate", ["linear"], ["zoom"], 1, "#000", 2, "#fff"],
+                                    "#000"])
+
+
 class PaletteTests(unittest.TestCase):
     def test_themes_define_the_same_colours(self):
         light, dark = make_style.PALETTES["light"], make_style.PALETTES["dark"]

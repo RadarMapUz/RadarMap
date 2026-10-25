@@ -43,9 +43,13 @@ nonisolated enum RouteTraffic {
     /// `cumulative` — пройденное по линии до каждой точки (длины
     /// EngineMapPresentation.RouteIndex): с ним `from`/`to` кусков — в той же
     /// мере, что и срез линии у машины; без него — своя быстрая оценка.
+    /// `levels` — какие уровни собирать: линия маршрута — только «медленно»
+    /// и «стоим» (свободно её не трогает); полоса хода маршрута (29.B) —
+    /// и «свободно», чтобы отличить зелёное от «данных нет».
     static func pieces(along route: [CLLocationCoordinate2D], snapshot: TrafficSnapshot,
                        minMeters: Double = AppConfig.routeTrafficMinMeters,
-                       cumulative: [Double]? = nil) -> [Piece] {
+                       cumulative: [Double]? = nil,
+                       levels: ClosedRange<Int> = 2...3) -> [Piece] {
         guard route.count >= 2, !snapshot.edges.isEmpty else { return [] }
         let measured = cumulative.flatMap { $0.count == route.count ? $0 : nil }
         var out: [Piece] = []
@@ -76,7 +80,7 @@ nonisolated enum RouteTraffic {
             for s in 0..<steps {
                 let t0 = Double(s) / Double(steps), t1 = Double(s + 1) / Double(steps)
                 let level = snapshot.matchingEdge(at: at((t0 + t1) / 2), course: course)
-                    .map(\.level).flatMap { $0 >= 2 ? $0 : nil }
+                    .map(\.level).flatMap { levels.contains($0) ? $0 : nil }
                 if level != current?.level { close() }
                 guard let level else { continue }
                 if current == nil {

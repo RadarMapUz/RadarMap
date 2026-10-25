@@ -408,20 +408,53 @@ final class SpeedLimitService {
     @ObservationIgnored private var limitAheadAnnouncer = LimitAhead.Announcer()
     @ObservationIgnored private var limitAheadCheckedAt: Date?
 
-    /// - Parameter path: точки пути впереди от машины (маршрут); nil — по оси
-    ///   текущей дороги прямо.
+    /// Смена лимита впереди для знака у машины на карте (29.B,
+    /// LimitAhead.visual). Пишется только на смену — раз в
+    /// limitAheadCheckSeconds, не на тике; расстояние карта считает сама.
+    private(set) var limitAheadCue: LimitAhead.Notice?
+
+    private func setLimitAheadCue(_ cue: LimitAhead.Notice?) {
+        #if DEBUG
+        if limitAheadCuePinned { return }
+        #endif
+        if cue != limitAheadCue { limitAheadCue = cue }
+    }
+
+    #if DEBUG
+    /// Снимки знака у машины (`-demoLimitAhead`): смена лимита там, где её
+    /// на демо-маршруте нет; проверки пути её не перезаписывают.
+    @ObservationIgnored private var limitAheadCuePinned = false
+
+    func pinLimitAheadCue(_ cue: LimitAhead.Notice) {
+        limitAheadCuePinned = true
+        limitAheadCue = cue
+    }
+    #endif
+
+    /// - Parameters:
+    ///   - path: точки пути впереди от машины (маршрут); nil — по оси
+    ///     текущей дороги прямо.
+    ///   - announce: можно ли сказать голосом.
+    ///   - show: нужен ли знак у машины на карте (поездка).
     func checkLimitAhead(coordinate: CLLocationCoordinate2D, course: CLLocationDirection,
                          speedKmh: Double, path: () -> [CLLocationCoordinate2D]?, announce: Bool,
-                         now: Date = Date()) {
+                         show: Bool = false, now: Date = Date()) {
+        guard announce || show, settings.speedLimitsEnabled, let index else {
+            setLimitAheadCue(nil)
+            return
+        }
         // Предполагаемый лимит (по классу дороги) — не повод для фразы «через
-        // 200 м»: это догадка, а не знак.
-        guard announce, settings.speedLimitsEnabled, let index, course >= 0,
-              speedKmh >= AppConfig.limitAheadMinSpeedKmh,
+        // 200 м»: это догадка, а не знак. Нет курса или медленно — знак, если
+        // был, остаётся (тормозим перед сороковой зоной), а гасит его карта,
+        // когда точку смены проехали.
+        guard course >= 0, speedKmh >= AppConfig.limitAheadMinSpeedKmh,
               let current = currentLimit, !isCurrentLimitAssumed else { return }
         if let at = limitAheadCheckedAt, now.timeIntervalSince(at) < AppConfig.limitAheadCheckSeconds { return }
         limitAheadCheckedAt = now
         let probes = Self.probes(index: index, from: coordinate, course: course, path: path())
-        guard let notice = LimitAhead.notice(current: current, speedKmh: speedKmh,
+        setLimitAheadCue(show ? LimitAhead.visual(current: current, probes: probes) : nil)
+        guard announce,
+              let notice = LimitAhead.notice(current: current, speedKmh: speedKmh,
                                              tolerance: settings.overspeedTolerance, probes: probes),
               limitAheadAnnouncer.shouldAnnounce(notice, at: now) else { return }
         Log.route.notice("лимит впереди: \(notice.limit, privacy: .public) через \(Int(notice.distance), privacy: .public) м")

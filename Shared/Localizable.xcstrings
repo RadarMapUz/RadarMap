@@ -31512,6 +31512,54 @@
           }
         }
       }
+    },
+    "Ход маршрута": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ход маршрута"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrut borishi"
+          }
+        }
+      }
+    },
+    "Пройдено %lld %%": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пройдено %lld %%"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld %% yoʻl bosildi"
+          }
+        }
+      }
+    },
+    "Машина 3D": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Машина 3D"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3D mashina"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

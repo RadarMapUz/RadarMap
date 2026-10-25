@@ -74,6 +74,58 @@ nonisolated enum LimitAhead {
         return nil
     }
 
+    /// Смена лимита впереди для знака у машины на карте (29.B): то же
+    /// снижение, подтверждённое двумя пробами, но без условия скорости — знак
+    /// не упрёк, а сведение, и едущему 35 в сороковую зону он тоже честен.
+    /// Повышение лимита знаком не показываем: текущий лимит и так в HUD.
+    static func visual(current: Int?, probes: [Probe]) -> Notice? {
+        guard let current else { return nil }
+        for (index, probe) in probes.enumerated() {
+            guard let limit = probe.limit, limit < current else { continue }
+            guard index + 1 < probes.count, probes[index + 1].limit == limit,
+                  probe.along <= AppConfig.limitAheadMaxMeters else { return nil }
+            return Notice(limit: limit, distance: probe.along, at: probe.coordinate)
+        }
+        return nil
+    }
+
+    /// Расстояние на знаке у машины: до 100 м — десятками, дальше — по 50:
+    /// цифра, прыгающая на каждом метре, читается хуже, чем шаг.
+    static func badgeMeters(_ distance: Double) -> Int {
+        guard distance.isFinite, distance > 0 else { return 0 }
+        let step = distance < 100 ? 10.0 : 50.0
+        return Int((distance / step).rounded() * step)
+    }
+
+    /// Знак у машины между проверками лимита (раз в limitAheadCheckSeconds):
+    /// расстояние — живое, до точки смены; проехали точку (ближе
+    /// `limitBadgeGoneMeters` или удаляемся от неё) — знака нет, даже если
+    /// служба ещё не пересчитала смену.
+    struct Badge: Equatable, Sendable {
+        private var shown: Notice?
+        private var closest = Double.infinity
+
+        /// Метры на знаке или nil — знак не показываем.
+        mutating func meters(for notice: Notice?, distance: Double) -> Int? {
+            guard let notice, distance.isFinite else {
+                shown = nil
+                closest = .infinity
+                return nil
+            }
+            if shown?.limit != notice.limit || shown.map({
+                GeoMath.fastDistance($0.at.latitude, $0.at.longitude, notice.at.latitude, notice.at.longitude)
+                    > AppConfig.limitAheadSameMeters
+            }) ?? true {
+                shown = notice
+                closest = .infinity
+            }
+            if distance > closest + AppConfig.limitBadgePassedSlackMeters { return nil }
+            closest = min(closest, distance)
+            guard distance >= AppConfig.limitBadgeGoneMeters else { return nil }
+            return LimitAhead.badgeMeters(distance)
+        }
+    }
+
     /// Одна фраза на одну смену лимита.
     struct Announcer: Equatable, Sendable {
         private var last: Notice?

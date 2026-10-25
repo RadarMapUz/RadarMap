@@ -134,6 +134,9 @@ struct EngineBaseLayer: View {
                         trafficSnapshot: env.traffic.isShown ? env.traffic.snapshot : nil,
                         labelLanguage: env.settings.appLanguage.mapCode,
                         cursorStyle: env.settings.cursorStyle,
+                        // Компас вокруг машины и знак смены лимита (29.B) — в поездке.
+                        compass: env.location.isTripActive,
+                        limitAhead: env.location.isTripActive ? env.speedLimits.limitAheadCue : nil,
                         overviewCommand: map.overviewCommand,
                         // Кадр «весь маршрут» — между НАСТОЯЩИМИ панелями (27.D).
                         overviewPadding: overviewPadding(size: geo.size, insets: insets),

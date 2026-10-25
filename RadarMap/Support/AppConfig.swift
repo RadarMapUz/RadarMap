@@ -3118,4 +3118,18 @@ nonisolated enum AppConfig {
     /// Смена асфальта на старте и конце поездки — переход цвета слоёв, с.
     /// Мгновенная перекраска всего полотна на старте читалась миганием.
     static let driveAsphaltTransitionSeconds: TimeInterval = 0.6
+
+    /// Полоса хода маршрута: зазор от колонки кнопок и от нижней панели, pt.
+    static let routeRailGapPoints: Double = 14
+    /// Короче — полосу не показываем: на SE в 120 pt ещё читаются камеры и
+    /// «я», ниже значки камер слипаются в одну кляксу.
+    static let routeRailMinHeightPoints: Double = 120
+    /// Ширина шкалы и значков, pt (тонкая — полоса не карта, а подсказка).
+    static let routeRailTrackWidth: CGFloat = 6
+    static let routeRailCameraSize: CGFloat = 11
+    static let routeRailMeSize: CGFloat = 18
+    /// Отступ полосы от правого края экрана, pt.
+    static let routeRailEdgeInset: CGFloat = 8
+    /// Шаг отметки «я», pt: перерисовка не чаще одного шага.
+    static let routeRailStepPoints: Double = 1
 }

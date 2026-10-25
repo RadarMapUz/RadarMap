@@ -31512,6 +31512,38 @@
           }
         }
       }
+    },
+    "Ход маршрута": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ход маршрута"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrut borishi"
+          }
+        }
+      }
+    },
+    "Пройдено %lld %%": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пройдено %lld %%"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld %% yoʻl bosildi"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

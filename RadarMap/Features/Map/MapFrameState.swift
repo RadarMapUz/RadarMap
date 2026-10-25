@@ -29,6 +29,25 @@ final class MapFrameState {
     @ObservationIgnored private var panelTop: CGFloat = 0
     @ObservationIgnored private var panelBottom: CGFloat = 0
 
+    /// Где стоит полоса хода маршрута (29.B), пункты окна; nil — места нет.
+    /// Наблюдаема только полосой: меняется на смене панелей, не на тике.
+    private(set) var rail: ClosedRange<Double>?
+
+    /// Кромки для полосы: низ колонки кнопок и верх нижних панелей. Пишем
+    /// только сдвиг от пункта — панели анимируются, и каждая запись будила бы
+    /// полосу на каждом кадре анимации.
+    func setRail(columnBottom: CGFloat, panelBottom: CGFloat) {
+        let fresh = RouteProgressBar.frame(columnBottom: Double(columnBottom), panelBottom: Double(panelBottom),
+                                           gap: AppConfig.routeRailGapPoints,
+                                           minHeight: AppConfig.routeRailMinHeightPoints)
+        switch (rail, fresh) {
+        case (nil, nil): return
+        case let (old?, new?) where abs(old.lowerBound - new.lowerBound) < 1
+            && abs(old.upperBound - new.upperBound) < 1: return
+        default: rail = fresh
+        }
+    }
+
     /// Карта измерила себя.
     func setViewHeight(_ height: CGFloat) {
         guard height != viewHeight else { return }

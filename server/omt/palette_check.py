@@ -262,10 +262,73 @@ def measure(theme, p=None):
     return m, failures
 
 
+# Асфальт поездки (29.B): тёмное полотно с белой разметкой. Ключи полотна
+# поездки по классам — тех, где лежит линия маршрута и подпись улицы.
+# Двор в поездке белый, как был (make_style: drive_minor) — его проверяет measure.
+DRIVE_ASPHALT_KEYS = ("drive_trunk", "drive_primary", "drive_secondary", "drive_tertiary")
+DRIVE_MARKED_KEYS = ("drive_trunk", "drive_primary", "drive_secondary", "drive_tertiary")
+# Кромка поездки светлее полотна — край дороги читается и на светлой земле
+# (там его несёт само тёмное полотно), и между полотном и разделительной.
+DRIVE_KERB_MIN = 3.0
+# В поездке линия маршрута — ночным набором в ОБЕИХ темах (EngineDriveAsphalt:
+# RouteColors.night днём): светлое тело на тёмном полотне, тёмная кайма на
+# светлом асфальте обзора и на земле.
+DRIVE_ROUTE = ROUTE["dark"]
+
+
+def measure_drive(theme, p=None):
+    """Числа и нарушения асфальта поездки: имя улицы, разметка, маршрут,
+    камеры и пробки на тёмном полотне. Линия маршрута проверяется и на
+    обычных поверхностях (обзор, асфальт до 16-го, земля): её цвет в поездке
+    один на все зумы."""
+    p = p or make_style.PALETTES[theme]
+    d = make_style.drive_palette(p)
+    traffic, calm = TRAFFIC[theme], CALM[theme]
+    drive = [p[k] for k in DRIVE_ASPHALT_KEYS]
+    light = [p[k] for k in ASPHALT_KEYS + FAR_KEYS] + [p["bg"]]
+    m = {
+        "поездка: имя улицы / асфальт (мин)": min(contrast(d["street_label"], a) for a in drive),
+        "поездка: разметка / асфальт (мин)": min(contrast(d["paint"], p[k]) for k in DRIVE_MARKED_KEYS),
+        "поездка: разметка / подложка зебры": contrast(d["paint"], d["zebra_base"]),
+        "поездка: кромка / асфальт (мин)": min(contrast(k, a) for k in (d["kerb"], d["kerb_trunk"])
+                                               for a in drive),
+        "поездка: линия маршрута / асфальт и земля (мин)": min(
+            max(contrast(DRIVE_ROUTE["body"], s), contrast(DRIVE_ROUTE["casing"], s)) for s in drive + light),
+        "поездка: камера не видна (пар тип × асфальт)": float(sum(not _camera_visible(c, a)
+                                                                  for c in CAMERA_TYPES.values() for a in drive)),
+        "поездка: спокойная камера / асфальт (мин)": min(max(contrast(calm["fill"], a), contrast(calm["ring"], a))
+                                                       for a in drive),
+        "поездка: ΔE пробки / асфальт (мин)": min(delta_e(c, a) for c in traffic.values() for a in drive),
+        "поездка: ΔE «медленно» / жёлтая кромка": delta_e(traffic["slow"], d["kerb_trunk"]),
+    }
+    failures = []
+
+    def need(ok, text):
+        if not ok:
+            failures.append(text)
+    need(m["поездка: имя улицы / асфальт (мин)"] >= TEXT_MIN, "поездка: имя улицы на асфальте < 4,5:1")
+    need(all(luminance(d["paint"]) > luminance(p[k]) for k in DRIVE_MARKED_KEYS),
+         "поездка: разметка темнее асфальта")
+    need(min(m["поездка: разметка / асфальт (мин)"], m["поездка: разметка / подложка зебры"]) >= PAINT_MIN,
+         "поездка: разметка на асфальте < 1,4:1")
+    need(m["поездка: линия маршрута / асфальт и земля (мин)"] >= GRAPHIC_MIN, "поездка: линия маршрута < 3:1")
+    need(m["поездка: камера не видна (пар тип × асфальт)"] == 0, "поездка: маркер камеры сливается с асфальтом")
+    need(m["поездка: спокойная камера / асфальт (мин)"] >= GRAPHIC_MIN, "поездка: спокойная камера < 3:1")
+    need(m["поездка: ΔE пробки / асфальт (мин)"] >= TRAFFIC_DE_MIN, "поездка: пробка сливается с асфальтом")
+    need(m["поездка: ΔE «медленно» / жёлтая кромка"] >= SLOW_KERB_DE_MIN, "поездка: «медленно» похоже на кромку")
+    if theme == "light":
+        # Днём кромка — светлая линия края тёмного полотна (как у Amap).
+        need(m["поездка: кромка / асфальт (мин)"] >= DRIVE_KERB_MIN, "поездка: кромка не светлее асфальта")
+    return m, failures
+
+
 def table():
     rows = []
     for theme in ("light", "dark"):
         m, failures = measure(theme)
+        drive, drive_failures = measure_drive(theme)
+        m.update(drive)
+        failures += drive_failures
         rows.append("день" if theme == "light" else "ночь")
         rows += [f"  {name}: {value:.2f}" for name, value in m.items()]
         rows.append("  " + ("все правила соблюдены" if not failures else "нарушено: " + "; ".join(failures)))

@@ -293,6 +293,8 @@ struct EngineMapView: UIViewRepresentable {
         private let laneFocusLayers = EngineLaneFocus()
         /// Зона камеры на асфальте (28.B).
         private let cameraZone = EngineCameraZone()
+        /// Асфальт поездки и тема линии маршрута (29.B).
+        private let driveAsphalt = EngineDriveAsphalt()
         private var positionHeading = 0.0
         /// Значок между фиксами: где машина СЕЙЧАС (MarkerPredictor). До 21.10
         /// стрелка плыла к последнему фиксу за интервал между фиксами и всегда
@@ -693,6 +695,7 @@ struct EngineMapView: UIViewRepresentable {
             routeLine.styleLoaded()
             laneFocusLayers.styleLoaded()
             cameraZone.styleLoaded()
+            driveAsphalt.styleLoaded()
             EngineLaneArrowsOrder.raise(in: style)
             hiddenLayers = nil
             hotShown = nil
@@ -1118,8 +1121,13 @@ struct EngineMapView: UIViewRepresentable {
             }
             routeVariants.update(model.variants, selected: model.selectedVariantID,
                                  daylight: model.daylight, avoid: spots, in: view)
-            routeLine.update(model, in: view)
-            laneFocusLayers.update(model, in: view)
+            let asphalt = DriveAsphalt.isActive(driving: model.driving, modernStyle: modernLoaded)
+            if let style = view.style {
+                driveAsphalt.update(active: asphalt, daylight: model.daylight, in: style)
+            }
+            let routeDaylight = DriveAsphalt.routeDaylight(daylight: model.daylight, active: asphalt)
+            routeLine.update(model, routeDaylight: routeDaylight, in: view)
+            laneFocusLayers.update(model, routeDaylight: routeDaylight, in: view)
             cameraZone.update(model.cameraZone, daylight: model.daylight, in: view)
         }
 

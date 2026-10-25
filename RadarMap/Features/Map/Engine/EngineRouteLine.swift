@@ -137,10 +137,12 @@ final class EngineRouteLine {
 
     // MARK: - Применение модели
 
-    func update(_ model: EngineMapView, in view: MLNMapView) {
-        if daylight != model.daylight {
-            daylight = model.daylight
-            colours = RouteCut.Colours(daylight: model.daylight)
+    /// - Parameter routeDaylight: тема линии — в поездке ночная и днём (29.B,
+    ///   DriveAsphalt.routeDaylight): светлое тело на тёмном асфальте поездки.
+    func update(_ model: EngineMapView, routeDaylight: Bool, in view: MLNMapView) {
+        if daylight != routeDaylight {
+            daylight = routeDaylight
+            colours = RouteCut.Colours(daylight: routeDaylight)
         }
         let fixMoved = fixAlong != model.routeProgress
         fixAlong = model.routeProgress

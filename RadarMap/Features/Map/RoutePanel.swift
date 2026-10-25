@@ -491,7 +491,7 @@ struct ManeuverBanner: View {
             .padding(.vertical, 8)
             .accessibilityElement(children: .contain)
         }
-        if let then {
+        if let then, distance <= AppConfig.maneuverThenShowMeters {
             Rectangle().fill(ink.opacity(0.22)).frame(height: 1)
             // «Затем ↰» — как у Яндекса: второй поворот близко, и ряд под
             // него выбирают ещё до первого.

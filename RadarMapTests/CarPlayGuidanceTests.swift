@@ -396,6 +396,24 @@ final class CarPlayGuidanceTests: XCTestCase {
                      "с метаданными ряд не шлём: приборка прочла бы его вторым поворотом")
     }
 
+    /// «Затем …» (29.G): близкий второй манёвр вторым в списке — но только
+    /// без ряда полос (место второго одно, и ряд нужнее у стоп-линии).
+    func testCloseSecondManeuverGoesSecondWithoutLaneRow() throws {
+        let then = RouteStep(distanceAlong: 880, text: "поверните направо на улицу Навои", icon: "arrow.turn.up.right",
+                             kind: .right, shortText: "поверните направо")
+        let card = CarPlayGuidance.card(for: leftTurn(), carDark: true, metadata: false, then: then)
+        let second = try XCTUnwrap(card.then)
+        XCTAssertEqual(card.upcoming.count, 2)
+        XCTAssertFalse(CarPlayGuidance.isLaneRow(second))
+        XCTAssertEqual(second.instructionVariants.first, String(format: String(localized: "Затем: %@"), "поверните направо"))
+        XCTAssertNotNil(second.symbolImage)
+        let lanes = [LaneHint(arrows: [.left], isValid: true), LaneHint(arrows: [.straight], isValid: false)]
+        let withRow = CarPlayGuidance.card(for: leftTurn(lanes: lanes), carDark: true, metadata: false, then: then)
+        XCTAssertNil(withRow.then)
+        XCTAssertTrue(CarPlayGuidance.isLaneRow(try XCTUnwrap(withRow.upcoming.last)))
+        XCTAssertEqual(CarPlayGuidance.card(for: leftTurn(), carDark: true, metadata: false).upcoming.count, 1)
+    }
+
     func testEdgeGoesIntoTheTextWithoutLaneData() {
         let card = CarPlayGuidance.card(for: leftTurn(approach: 2), carDark: false, metadata: false)
         XCTAssertNil(card.laneRow, "полосы по догадке не рисуем")

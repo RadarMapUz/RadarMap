@@ -25,19 +25,26 @@ final class DriveCameraStopTests: XCTestCase {
         let carY: Double
         let top: Double
         let kind: Cam.Screen
+        var width = 393.0
+        /// Нижняя панель (доля высоты): у машины — док HUD, позади «я» мало места.
+        var bottom = 0.12
+
+        var clear: Cam.Clear {
+            Cam.Clear(top: top, bottom: bottom, width: width, side: AppConfig.engineKeepSidePoints)
+        }
     }
 
     private let screens = [
         Screen(name: "телефон", height: 852, carY: 0.72, top: 0.18, kind: .phone),
-        Screen(name: "SE", height: 667, carY: 0.70, top: 0.22, kind: .phone),
-        Screen(name: "машина", height: 382, carY: 0.62, top: 0.12, kind: .car),
+        Screen(name: "SE", height: 667, carY: 0.70, top: 0.22, kind: .phone, width: 375, bottom: 0.15),
+        Screen(name: "машина", height: 382, carY: 0.62, top: 0.12, kind: .car, width: 800, bottom: 0.30),
     ]
 
     private func frame(_ s: Screen, kmh: Double = 0, turn: Double? = nil, stop: StopView.State = .moving,
                        jam: Double? = nil, keep: Cam.Keep? = nil) -> Cam.Frame {
         Cam.target(speedKmh: kmh, maneuverDistance: turn, pitchAllowed: true, screen: s.kind, keep: keep,
                    stop: stop, jamEnd: jam, viewHeight: s.height, latitude: tashkent,
-                   clear: Cam.Clear(top: s.top), carY: { _ in s.carY })
+                   clear: s.clear, carY: { _ in s.carY })
     }
 
     private func ahead(_ f: Cam.Frame, _ s: Screen) -> Double {
@@ -170,6 +177,67 @@ final class DriveCameraStopTests: XCTestCase {
                                          "\(s.name): без скачков зума")
             }
             XCTAssertLessThanOrEqual(reversals, 1, "\(s.name): вид не качается в пробке")
+        }
+    }
+
+    // MARK: - Пол остановки и удерживаемые точки (26.10)
+
+    func testStopFloorHoldsWhenTheCameraFitsAnyway() {
+        // Камера в 120 м прямо впереди влезает и на полу — кадр его не пробивает.
+        for s in screens {
+            let f = frame(s, turn: 245, stop: stand, keep: Cam.Keep(forward: 120, right: 0))
+            XCTAssertGreaterThanOrEqual(f.zoom, Cam.stopMinZoom(s.kind) - 1e-9, s.name)
+        }
+    }
+
+    func testBelowTheFloorOnlyAsMuchAsTheCameraNeeds() {
+        // Камера впереди и сбоку, на полу не влезает: отъезд ровно до неё, не дальше.
+        for s in screens {
+            let keep = Cam.Keep(forward: 230, right: 140)
+            let f = frame(s, turn: 245, stop: stand, keep: keep)
+            let needed = max(Cam.keepMinZoom(speedKmh: 0),
+                             Cam.maxZoom(keeping: keep, pitchDegrees: f.pitchDegrees, viewHeight: s.height,
+                                         carY: s.carY, latitude: tashkent, clear: s.clear))
+            if needed < Cam.stopMinZoom(s.kind) {
+                XCTAssertEqual(f.zoom, needed, accuracy: 1e-6, "\(s.name): минимально нужный отъезд")
+            } else {
+                XCTAssertGreaterThanOrEqual(f.zoom, Cam.stopMinZoom(s.kind) - 1e-9, s.name)
+            }
+        }
+    }
+
+    func testPassedCameraBehindNeverPullsBelowTheFloor() {
+        // Камера в 40 м позади стоя (её проехали) — кадр остановки не мельчает до района.
+        for s in screens {
+            for stop in [stand, StopView.State(standing: true)] {
+                let f = frame(s, turn: stop.maneuverWindow == nil ? nil : 200, stop: stop,
+                              keep: Cam.Keep(forward: -40, right: -15))
+                XCTAssertGreaterThanOrEqual(f.zoom, Cam.stopMinZoom(s.kind) - 1e-9, s.name)
+            }
+        }
+    }
+
+    func testArrivalPointsBehindFollowTheSameFloor() {
+        // Цель и парковки (alsoKeep, 29.H) — по тому же правилу.
+        for s in screens {
+            let f = Cam.target(speedKmh: 0, maneuverDistance: 200, pitchAllowed: true, screen: s.kind,
+                               stop: stand, alsoKeep: [Cam.Keep(forward: -60, right: 10),
+                                                       Cam.Keep(forward: 90, right: 20)],
+                               viewHeight: s.height, latitude: tashkent, clear: s.clear,
+                               carY: { _ in s.carY })
+            XCTAssertGreaterThanOrEqual(f.zoom, Cam.stopMinZoom(s.kind) - 1e-9, s.name)
+        }
+    }
+
+    func testCameraBesideStandingIsStillKept() {
+        // 12.10: «136 м до камеры» сбоку стоя — в кадре, даже ценой пола.
+        for s in screens {
+            let keep = Cam.Keep(forward: 0, right: 136)
+            let f = frame(s, stop: StopView.State(standing: true), keep: keep)
+            let needed = max(Cam.keepMinZoom(speedKmh: 0),
+                             Cam.maxZoom(keeping: keep, pitchDegrees: f.pitchDegrees, viewHeight: s.height,
+                                         carY: s.carY, latitude: tashkent, clear: s.clear))
+            XCTAssertLessThanOrEqual(f.zoom, needed + 1e-6, "\(s.name): камера сбоку не выпадает")
         }
     }
 }

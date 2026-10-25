@@ -128,6 +128,10 @@ struct CarPlayEngineLayer: View {
             viewHeight: height, latitude: me.latitude, clear: clear,
             carY: { surface.fixedMeY ?? Self.meY(size: size, safe: safe, share: $0) })
         let frame = model.cameraSmoother.step(toward: target, at: Date())
+        #if DEBUG
+        DriveFrameLog.note(surface.healthTag, stop: stop.state, maneuver: maneuverDistance, keep: keep,
+                           also: arrivalKeep.count, target: target, frame: frame, bias: model.zoomBias)
+        #endif
         let cue = CarPlayCameraCue.current(env.location)
         let cameraLine = env.cameraOnLine
         let offlineFiles: OfflineFiles? = env.network.isMapOnline

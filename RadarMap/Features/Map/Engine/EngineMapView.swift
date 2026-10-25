@@ -81,6 +81,12 @@ struct EngineMapView: UIViewRepresentable {
     var maneuverAlong: Double?
     /// Ряд стрелок полос у ближайшего манёвра (28.C, LaneFocus); nil — полос нет.
     var laneFocus: LaneFocus.Step? = nil
+    /// Тип ближайшего манёвра — для стрелки на линии (29.G, ManeuverArrow).
+    var maneuverKind: ManeuverKind? = nil
+    /// Выноска манёвра на карте (29.G, ManeuverCallout) и экран для неё;
+    /// nil — выноски нет (машина: ряд полос — в карточке манёвра системы).
+    var maneuverCallout: ManeuverCallout.Content? = nil
+    var calloutFrame: ManeuverCallout.Frame? = nil
     var recenterToken: Int = 0
     /// Новая карта: основа OpenMapTiles + наши слои (EngineModernStyle) по
     /// выпуску тайлов. Выключено или выпуска нет — прежний стиль.
@@ -308,6 +314,9 @@ struct EngineMapView: UIViewRepresentable {
         private let laneFocusLayers = EngineLaneFocus()
         /// Зона камеры на асфальте (28.B).
         private let cameraZone = EngineCameraZone()
+        /// Стрелка манёвра на линии и выноска у точки манёвра (29.G).
+        private let maneuverArrow = EngineManeuverArrow()
+        private let maneuverCallout = EngineManeuverCallout()
         /// Асфальт поездки и тема линии маршрута (29.B).
         private let driveAsphalt = EngineDriveAsphalt()
         /// Кольцо компаса и знак лимита у машины (29.B).
@@ -728,6 +737,7 @@ struct EngineMapView: UIViewRepresentable {
             if (pending ?? current)?.largeLabels == true { EngineCarScale.apply(in: style) }
             EngineLaneArrowsOrder.raise(in: style)
             stopDetail.styleLoaded(style)
+            maneuverArrow.styleLoaded()
             hiddenLayers = nil
             hotShown = nil
             modernDrivingLayerIDs = nil
@@ -1166,6 +1176,46 @@ struct EngineMapView: UIViewRepresentable {
                 daylight: model.daylight, in: view)
             haze.update(pitchDegrees: view.camera.pitch, daylight: model.daylight, in: view)
             streetProbe.update(model, at: displayedPosition ?? model.coordinate, in: view)
+            updateManeuverMarks(model, routeDaylight: routeDaylight, in: view)
+        }
+
+        /// Стрелка манёвра на линии и выноска у точки манёвра (29.G): данные —
+        /// раз на применение модели, место выноски — на кадре (layoutPositionView).
+        private func updateManeuverMarks(_ model: EngineMapView, routeDaylight: Bool, in view: MLNMapView) {
+            maneuverArrow.update(route: model.route, routeObject: model.routeObject, progress: model.routeProgress,
+                                 along: model.maneuverAlong, kind: model.maneuverKind,
+                                 routeDaylight: routeDaylight, in: view)
+            guard let content = model.maneuverCallout, model.calloutFrame != nil else {
+                maneuverCallout.update(nil)
+                maneuverCallout.layout(cursor: nil, visible: false, in: view)
+                return
+            }
+            let anchor = maneuverArrow.point(along: content.along, route: model.route)
+            var avoid: [CLLocationCoordinate2D] = []
+            var approach: [CLLocationCoordinate2D] = []
+            if let anchor {
+                for camera in cachedCameras where model.pathCameraIDs.contains(camera.id) || camera.id == model.alertCameraID {
+                    let drawn = model.cameraPoints[camera.id]
+                    let point = CLLocationCoordinate2D(latitude: drawn?.latitude ?? camera.coordinate.latitude,
+                                                       longitude: drawn?.longitude ?? camera.coordinate.longitude)
+                    guard GeoMath.fastDistance(point.latitude, point.longitude, anchor.latitude, anchor.longitude)
+                            <= AppConfig.maneuverCalloutCameraNearMeters else { continue }
+                    avoid.append(point)
+                }
+                avoid += model.cameraZone?.points.map(\.coordinate) ?? []
+                // Подъезд к повороту — стоп-линия и стрелки полос на асфальте
+                // (28.C): выноска их не закрывает, а встаёт сбоку.
+                for back in AppConfig.maneuverCalloutApproachMeters {
+                    if let point = maneuverArrow.point(along: content.along - back, route: model.route) {
+                        approach.append(point)
+                    }
+                }
+            }
+            maneuverCallout.update(EngineManeuverCallout.Input(
+                content: content, anchor: anchor, distance: content.along - model.routeProgress,
+                speedKmh: (model.markerMotion?.speedMps ?? 0) * 3.6, daylight: model.daylight,
+                frame: model.calloutFrame, avoid: avoid, approach: approach))
+            maneuverCallout.layout(cursor: shownPosition?.point, visible: model.showsPosition, in: view)
         }
 
         /// Объёмные украшения и размытые тени — первое, что уходит на горячем
@@ -1690,6 +1740,7 @@ struct EngineMapView: UIViewRepresentable {
             carDecor.layout(at: point, coordinate: coordinate, mapDirection: view.direction,
                             pitchDegrees: pitch, compass: current?.compass ?? false,
                             limit: current?.limitAhead, visible: current?.showsPosition ?? true, in: view)
+            maneuverCallout.layout(cursor: point, visible: current?.showsPosition ?? true, in: view)
             if let shown = shownPosition,
                abs(shown.point.x - point.x) < 0.25, abs(shown.point.y - point.y) < 0.25,
                abs(shown.angle - angle) < 0.0035, shownPitch == pitch { return }

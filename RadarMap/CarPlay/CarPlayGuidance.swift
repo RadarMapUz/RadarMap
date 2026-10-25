@@ -597,7 +597,8 @@ final class CarPlayGuidance {
             return
         }
         let card = Self.card(for: step, carDark: model.carIsDark ?? !model.isDaylight,
-                             metadata: sessionMetadata, limitSign: limitSign(for: step))
+                             metadata: sessionMetadata, limitSign: limitSign(for: step),
+                             then: env.route.thenStep)
         let next = card.maneuver
         maneuverShownAt = Date()
         sentManeuverState = nil
@@ -654,11 +655,15 @@ final class CarPlayGuidance {
         let laneRow: CPManeuver?
         /// Полосы для CPLaneGuidance (метаданные приборки).
         let lanes: [CarPlayGuidanceMapping.Lane]
+        /// Второй манёвр сразу за первым («Затем …», ManeuverThen, 29.G) —
+        /// только когда ряда полос нет: место второго манёвра одно.
+        var then: CPManeuver? = nil
 
-        /// Что уходит в `upcomingManeuvers`: манёвр и ряд полос под ним. С
-        /// метаданными ряда нет (`card(metadata:)`) — в списке один манёвр,
-        /// и приборка не прочтёт картинку полос вторым поворотом.
-        var upcoming: [CPManeuver] { [maneuver] + (laneRow.map { [$0] } ?? []) }
+        /// Что уходит в `upcomingManeuvers`: манёвр и под ним ряд полос или,
+        /// без ряда, близкий второй манёвр. С метаданными ряда нет
+        /// (`card(metadata:)`) — приборка не прочтёт картинку полос вторым
+        /// поворотом; настоящий второй манёвр ей читать можно.
+        var upcoming: [CPManeuver] { [maneuver] + ((laneRow ?? then).map { [$0] } ?? []) }
     }
 
     /// Полосы для метаданных приборки (CPLaneGuidance), nil — выбирать
@@ -687,7 +692,8 @@ final class CarPlayGuidance {
     /// не показывается.
     static func card(for step: RouteStep, carDark: Bool,
                      metadata: Bool,
-                     limitSign: Int? = nil) -> Card {
+                     limitSign: Int? = nil,
+                     then: RouteStep? = nil) -> Card {
         let next = CPManeuver()
         next.instructionVariants = CarPlayGuidanceMapping.instructionVariants(
             text: step.text, shortText: step.shortText, advice: step.laneAdvice)
@@ -728,7 +734,24 @@ final class CarPlayGuidance {
         // до 18.10 полос в машине не было нигде (аудит, п. 5).
         let row = metadata || !CarPlayGuidanceMapping.isUseful(lanes)
             ? nil : laneRow(step.lanes, kind: step.kind)
-        return Card(maneuver: next, laneRow: row, lanes: lanes)
+        // «Затем …» (29.G): второй манёвр близко — как у Apple Maps, вторым
+        // в списке (Руководство CarPlay: два манёвра подряд — оба).
+        let following = row == nil ? then.map { thenManeuver($0, carDark: carDark) } : nil
+        return Card(maneuver: next, laneRow: row, lanes: lanes, then: following)
+    }
+
+    /// Второй манёвр карточки: «Затем налево» и его стрелка.
+    static func thenManeuver(_ step: RouteStep, carDark: Bool) -> CPManeuver {
+        let then = CPManeuver()
+        let command = step.shortText ?? step.text
+        then.instructionVariants = [String(format: String(localized: "Затем: %@"), command),
+                                    String(localized: "Затем")]
+        then.cardBackgroundColor = cardColor
+        let symbolName = step.kind?.isDrawable == false ? "flag.checkered" : step.icon
+        then.symbolImage = symbol(symbolName, pointSize: 22, onDark: whiteArrow(on: cardColor, dark: carDark))
+        then.maneuverType = CarPlayGuidanceMapping.maneuverType(step.kind)
+        then.trafficSide = .right
+        return then
     }
 
     /// Знак ограничения после манёвра — только на iOS 27 и только когда он

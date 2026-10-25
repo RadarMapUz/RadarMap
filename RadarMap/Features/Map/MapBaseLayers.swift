@@ -47,6 +47,22 @@ struct EngineBaseLayer: View {
         return UIEdgeInsets(top: p.top, left: p.left, bottom: p.bottom, right: p.right)
     }
 
+    /// Где выноске манёвра можно быть (29.G): между панелями, левее колонки
+    /// кнопок; строка скорости и плашки улицы над нижней панелью закрыта.
+    private func calloutFrame(size: CGSize, insets: MapViewport.Insets) -> ManeuverCallout.Frame {
+        let width = Double(size.width), height = Double(size.height)
+        let clear = ManeuverCallout.clearRect(width: width, height: height, topShare: insets.safeTop,
+                                              bottomShare: insets.safeBottom, left: 0,
+                                              right: AppConfig.engineKeepSidePoints,
+                                              margin: AppConfig.maneuverCalloutMarginPoints)
+        let bottom = height * (1 - insets.safeBottom)
+        // Строка над нижней панелью: круг скорости слева и плашка улицы (29.F)
+        // по центру — во всю ширину.
+        let speed = CGRect(x: 0, y: bottom - AppConfig.maneuverCalloutSpeedBlockHeight,
+                           width: width, height: AppConfig.maneuverCalloutSpeedBlockHeight)
+        return ManeuverCallout.Frame(clear: clear, blocked: [speed])
+    }
+
     var body: some View {
         // Без геопозиции («Никогда», ещё нет фикса) карта — не пустая подложка,
         // а город: камеры, поиск и «Итоги» работают и так (12в A10: до 20.10
@@ -115,6 +131,10 @@ struct EngineBaseLayer: View {
                         routeProgress: env.route.progressAlong,
                         maneuverAlong: env.route.nextStep?.kind?.isDrawable == true ? env.route.nextStep?.distanceAlong : nil,
                         laneFocus: env.route.laneFocusStep,
+                        maneuverKind: env.route.nextStep?.kind,
+                        // Выноска манёвра (29.G) — в ведении: поездка и маршрут.
+                        maneuverCallout: env.location.isTripActive ? ManeuverCallout.content(step: env.route.nextStep) : nil,
+                        calloutFrame: calloutFrame(size: geo.size, insets: insets),
                         recenterToken: recenterToken,
                         modernStyle: env.settings.mapModernStyle,
                         performance: env.thermal.mode,

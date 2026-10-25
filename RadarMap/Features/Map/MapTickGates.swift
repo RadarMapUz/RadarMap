@@ -86,7 +86,7 @@ struct ManeuverBannerGate: View {
                 VStack(spacing: 8) {
                     if let step = env.route.nextStep {
                         ManeuverBanner(step: step, distance: env.route.nextStepDistance,
-                                       speedKmh: env.location.speedKmh)
+                                       speedKmh: env.location.speedKmh, then: env.route.thenStep)
                     }
                     if let notice = env.route.laneNotice {
                         LaneNoticeBanner(lanes: notice.lanes, distance: env.route.laneNoticeDistance)

@@ -389,6 +389,8 @@ struct ManeuverBanner: View {
     let distance: CLLocationDistance
     /// Скорость — только для того, когда показать ряд полос (на трассе раньше).
     var speedKmh: Double = 0
+    /// Второй манёвр сразу за этим (ManeuverThen, 29.G); nil — далеко или нет.
+    var then: RouteStep? = nil
     /// Манёвр, для которого ряд полос уже показан: дальше он не прячется.
     /// Порог зависит от скорости, и на 68–72 км/ч между 600 и 1000 м ряд
     /// мигал бы — появился, исчез, появился.
@@ -488,6 +490,24 @@ struct ManeuverBanner: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .accessibilityElement(children: .contain)
+        }
+        if let then, distance <= AppConfig.maneuverThenShowMeters {
+            Rectangle().fill(ink.opacity(0.22)).frame(height: 1)
+            // «Затем ↰» — как у Яндекса: второй поворот близко, и ряд под
+            // него выбирают ещё до первого.
+            HStack(spacing: 8) {
+                Text("Затем")
+                    .font(.rounded(15, .semibold))
+                    .foregroundStyle(Theme.onAccentFillSecondary)
+                Image(systemName: then.icon)
+                    .font(.rounded(18, .heavy))
+                    .foregroundStyle(ink)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(String(format: String(localized: "Затем: %@"), then.text)))
         }
         }
         .liftedBackground(fill, in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))

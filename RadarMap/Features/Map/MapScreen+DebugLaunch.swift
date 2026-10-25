@@ -347,7 +347,10 @@ extension MapScreen {
                 buildRoute(to: custom ?? CLLocationCoordinate2D(latitude: 41.3260, longitude: 69.2810),
                            name: "Демо-маршрут")
                 if args.contains("-driveDemo") {
-                    await Task.pause(seconds: 3)
+                    // Маршрут строится по сети 1–10 с: ждём его, а не ровно 3 с
+                    // (до 29.G поездка не начиналась, если OSRM отвечал дольше).
+                    await Task.pause(seconds: 1)
+                    for _ in 0..<40 where !env.route.isActive { await Task.pause(seconds: 0.5) }
                     if env.route.isActive {
                         env.location.startTrip()   // ориентацию поставит onChange
                     }

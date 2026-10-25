@@ -164,6 +164,9 @@ struct CarPlayEngineLayer: View {
             routeProgress: env.route.progressAlong,
             maneuverAlong: env.route.nextStep?.kind?.isDrawable == true ? env.route.nextStep?.distanceAlong : nil,
             laneFocus: env.route.laneFocusStep,
+            // Стрелка манёвра на линии (29.G) — и в машине; выноски полос нет:
+            // ряд полос там в карточке манёвра системы (laneRow).
+            maneuverKind: env.route.nextStep?.kind,
             recenterToken: model.recenterRequests,
             modernStyle: env.settings.mapModernStyle,
             performance: env.thermal.mode,

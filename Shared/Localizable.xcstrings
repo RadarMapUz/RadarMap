@@ -31576,6 +31576,38 @@
           }
         }
       }
+    },
+    "Затем": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Затем"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keyin"
+          }
+        }
+      }
+    },
+    "Затем: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Затем: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keyin: %@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

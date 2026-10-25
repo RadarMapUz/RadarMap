@@ -2,9 +2,10 @@
 //  RouteProgressBar.swift
 //  RadarMap
 //
-//  Полоса хода маршрута у правого края (29.B, как у Amap): тонкая
-//  вертикальная шкала, низ — старт, верх — финиш, отметка «я», отрезки цветом
-//  пробок и значки камер маршрута по их месту.
+//  Полоса хода маршрута (29.B; с 29.G — горизонтально в нижней панели
+//  поездки, как у Яндекса): тонкая шкала, слева старт, справа финиш, отметка
+//  «я», отрезки цветом пробок и значки камер маршрута по их месту. Раскладка
+//  в долях длины — одна для любой ориентации.
 //
 //  Цвет отрезка — только по данным: «свободно» зелёное, «медленно» и «стоим» —
 //  свои; где данных о пробках нет — нейтральный серый, НЕ зелёный: зелёный
@@ -143,16 +144,5 @@ nonisolated enum RouteProgressBar {
         let steps = (height / points).rounded(.down)
         guard steps >= 1 else { return fraction }
         return (fraction * steps).rounded() / steps
-    }
-
-    /// Где полоса стоит по вертикали (пункты окна): от низа колонки кнопок
-    /// до верха нижних панелей, с зазором. nil — места меньше `minHeight`
-    /// или кромки ещё не измерены: полосу не показываем, а не сжимаем в точку.
-    static func frame(columnBottom: Double, panelBottom: Double, gap: Double,
-                      minHeight: Double) -> ClosedRange<Double>? {
-        guard columnBottom > 0, panelBottom > 0 else { return nil }
-        let top = columnBottom + gap, bottom = panelBottom - gap
-        guard bottom - top >= minHeight else { return nil }
-        return top...bottom
     }
 }

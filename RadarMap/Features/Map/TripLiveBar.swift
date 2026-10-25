@@ -44,11 +44,19 @@ struct TripLiveBar: View {
             // когда места хватает, а сводка в крайнем случае ужимается одной
             // строкой — никаких «19:3 / 5».
             HStack(spacing: 10) {
-                summary
-                    .minimumScaleFactor(0.6)
-                    .layoutPriority(1)
-                if barWidth >= Self.cameraCapsuleMinWidth {
-                    cameraCapsule
+                if env.route.isActive {
+                    // С маршрутом — как у Яндекса (29.G): осталось · прибытие ·
+                    // минуты и под ними полоса хода с пробками и камерами.
+                    // Камеры маршрута — точки на полосе; капсула «📷 320 м»
+                    // рядом не помещалась бы и повторяла бы чип у манёвра.
+                    routeSummary
+                } else {
+                    summary
+                        .minimumScaleFactor(0.6)
+                        .layoutPriority(1)
+                    if barWidth >= Self.cameraCapsuleMinWidth {
+                        cameraCapsule
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -76,6 +84,48 @@ struct TripLiveBar: View {
     }
 
     // MARK: - Сведения о пути
+
+    /// Маршрут: три числа одной строкой и полоса хода под ними. Цифры не
+    /// переносятся никогда — в крайнем случае (SE, крупный шрифт) строка
+    /// ужимается целиком; прибытие — крупное зелёное на том же месте, что и
+    /// без маршрута.
+    private var routeSummary: some View {
+        let route = env.route
+        return VStack(spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(Formatting.distance(route.remainingDistance))
+                    .font(.rounded(19, .bold).monospacedDigit())
+                    .foregroundStyle(Theme.textPrimary)
+                    .liveNumber()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(route.arrivalDate, style: .time)
+                    .font(.rounded(21, .heavy).monospacedDigit())
+                    .foregroundStyle(Theme.success)
+                    .contentTransition(.numericText())
+                    .fixedSize()
+                Text(Formatting.duration(route.remainingTime))
+                    .font(.rounded(19, .bold).monospacedDigit())
+                    .foregroundStyle(Theme.textPrimary)
+                    .liveNumber()
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .accessibilityElement(children: .combine)
+            Button(action: onShowCameras) {
+                // Мишень — 44 pt по высоте (правило 22), а строка остаётся
+                // в 14 pt: поле касания растёт, панель — нет.
+                RouteProgressStripGate()
+                    .padding(.horizontal, AppConfig.routeStripMeSize / 2)
+                    .padding(.vertical, 15)
+                    .contentShape(Rectangle())
+                    .padding(.vertical, -15)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(Text("Камеры на маршруте"))
+        }
+        .frame(maxWidth: .infinity)
+    }
 
     /// С маршрутом — время прибытия крупно и остаток мелко; без — таймер
     /// крупно и «км · камеры» мелко. Одна вёрстка на оба случая: глаз ищет

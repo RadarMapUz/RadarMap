@@ -29,8 +29,6 @@ struct MapScreen: View {
     /// Меряют сами панели; схема переводит их в доли своей высоты.
     @State var topPanelEdge: CGFloat = 0
     @State var bottomPanelEdge: CGFloat = 0
-    /// Низ колонки кнопок справа — под ней полоса хода маршрута (29.B).
-    @State var columnBottomEdge: CGFloat = 0
     /// Верх нижней карточки предупреждения о камере (в навигации), nil — нет.
     @State var alertCardEdge: CGFloat?
     /// Сколько кнопок помещается в колонку справа (TripScreenLayout.columnSlots).
@@ -126,10 +124,6 @@ struct MapScreen: View {
                 // читает скорость и дистанцию, меняющиеся каждый тик GPS, — в body
                 // MapScreen это чтение пересобирало весь экран с картой ежесекундно.
                 OverspeedVignetteGate()
-
-                // Полоса хода маршрута справа (29.B): своя вью — отметка «я»
-                // читает прогресс маршрута, меняющийся на каждом фиксе.
-                RouteProgressRailGate(frame: frame)
 
                 // Следование за GPS: единственный подписчик locationTick.
                 LocationFollowDriver(map: map)
@@ -394,7 +388,6 @@ struct MapScreen: View {
     func applySketchInsets() {
         frame.setPanelEdges(top: topPanelEdge,
                             bottom: MapFrameState.bottomEdge(panel: bottomPanelEdge, overlay: alertCardEdge))
-        frame.setRail(columnBottom: columnBottomEdge, panelBottom: bottomPanelEdge)
     }
 
     /// Подложка. Сам этот кусок body НЕ читает ничего, что пишется на тике:

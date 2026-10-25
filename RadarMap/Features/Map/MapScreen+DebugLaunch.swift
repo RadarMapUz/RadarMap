@@ -343,6 +343,8 @@ extension MapScreen {
                     }
                     // Поездка с шумом GPS и неровным интервалом (замер 27.A).
                     if NoisyDriveDebug.enabled { Task { await NoisyDriveDebug.run(env: env) } }
+                    // Поездка с остановками (29.D): светофор, пробка, старт.
+                    if StopDriveDebug.enabled { Task { await StopDriveDebug.run(env: env) } }
                     // Знак смены лимита у машины (29.B): «40» в ~250 м по маршруту.
                     if args.contains("-demoLimitAhead") {
                         Task {

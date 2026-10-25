@@ -129,6 +129,11 @@ struct EngineBaseLayer: View {
                         // В поездке на ходу — только дорога (как в машине).
                         declutter: env.location.isTripActive
                             && map.declutter.update(speedKmh: env.location.speedKmh, at: Date()),
+                        // Стоим (29.D) — значки заведений по пути, вне тревоги.
+                        stopDetailLayers: StopView.shownLayers(
+                            state: camera.stop, tripActive: env.location.isTripActive,
+                            places: env.settings.mapPlaces, covered: env.location.isApproachingCamera,
+                            performance: env.thermal.mode),
                         trafficEdges: env.traffic.isShown ? env.traffic.snapshot?.edges ?? [] : [],
                         trafficRevision: env.traffic.revision * 2 + (env.traffic.isShown ? 1 : 0),
                         trafficSnapshot: env.traffic.isShown ? env.traffic.snapshot : nil,
@@ -198,16 +203,19 @@ struct EngineBaseLayer: View {
     /// горячем телефоне — плоско: наклон тянет к горизонту втрое больше тайлов.
     private func camera(me: CLLocationCoordinate2D, size: CGSize, insets: MapViewport.Insets,
                         maneuverDistance: Double?) -> (spanMeters: Double, pitchDegrees: Double,
-                                                       visibleAhead: Double) {
+                                                       visibleAhead: Double, stop: StopView.State) {
         let pitchAllowed = map.prefers3D && env.thermal.mode == .full
         let viewHeight = max(1, Double(size.height))
+        // Вид на остановке (29.D): «стоим» с гистерезисом, конец пробки.
+        let stop = StopViewInput.read(&map.stopView, env: env, maneuverDistance: maneuverDistance,
+                                      active: env.location.isTripActive)
         guard env.location.isTripActive else {
             map.cameraSmoother.reset()
             let span = AppConfig.engineOverviewSpan * pow(2, -map.zoomBias)
             let pitch = pitchAllowed ? AppConfig.engineOverviewPitchDegrees : 0
             let zoom = log2(DriveCamera.span(zoom: 0, viewHeight: viewHeight, latitude: me.latitude) / span)
             return (span, pitch, DriveCamera.visibleAhead(zoom: zoom, pitchDegrees: pitch, viewHeight: viewHeight,
-                                                          carY: insets.meY, latitude: me.latitude))
+                                                          carY: insets.meY, latitude: me.latitude), stop.state)
         }
         // Ближайшая камера в 500 м — в кадре всегда и в любую сторону: «368 м
         // до радара» над картой, на которой радара не видно, — «куда пропал
@@ -224,6 +232,7 @@ struct EngineBaseLayer: View {
                                       width: Double(size.width), side: AppConfig.engineKeepSidePoints)
         let target = DriveCamera.target(speedKmh: env.location.speedKmh, maneuverDistance: maneuverDistance,
                                         pitchAllowed: pitchAllowed, keep: keep,
+                                        stop: stop.state, jamEnd: stop.jamEnd,
                                         viewHeight: viewHeight, latitude: me.latitude,
                                         clear: clear, carY: { _ in insets.meY })
         let frame = map.cameraSmoother.step(toward: target, at: Date())
@@ -231,7 +240,7 @@ struct EngineBaseLayer: View {
         return (DriveCamera.span(zoom: zoom, viewHeight: viewHeight, latitude: me.latitude),
                 frame.pitchDegrees,
                 DriveCamera.visibleAhead(zoom: zoom, pitchDegrees: frame.pitchDegrees, viewHeight: viewHeight,
-                                         carY: insets.meY, latitude: me.latitude))
+                                         carY: insets.meY, latitude: me.latitude), stop.state)
     }
 }
 #endif

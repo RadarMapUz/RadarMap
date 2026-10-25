@@ -103,9 +103,15 @@ struct CarPlayEngineLayer: View {
                                     + AppConfig.engineKeepSidePoints)
         // Профиль экрана машины: впереди секунды пути, а не 100 м разметки
         // (аудит 18.10, «при езде нормального вида нет»).
+        // Вид на остановке (29.D): на светофоре в машине развилка в 200 м
+        // была за краем экрана (105 м обзора стоя). Машина подключена —
+        // значит едем: вид работает и без начатой поездки.
+        let stop = StopViewInput.read(&model.stopView, env: env, maneuverDistance: maneuverDistance,
+                                      active: true)
         let target = DriveCamera.target(
             speedKmh: env.location.speedKmh, maneuverDistance: maneuverDistance,
             pitchAllowed: surface.pitchAllowed(performance: env.thermal.mode), screen: .car, keep: keep,
+            stop: stop.state, jamEnd: stop.jamEnd,
             viewHeight: height, latitude: me.latitude, clear: clear,
             carY: { surface.fixedMeY ?? Self.meY(size: size, safe: safe, share: $0) })
         let frame = model.cameraSmoother.step(toward: target, at: Date())

@@ -89,8 +89,13 @@ final class EngineManeuverCallout {
                                              radius: AppConfig.maneuverCalloutCameraRadius))
         }
         for coordinate in input.approach {
-            avoid.append(ManeuverCallout.box(view.convert(coordinate, toPointTo: view),
-                                             radius: AppConfig.maneuverCalloutApproachRadius))
+            let spot = view.convert(coordinate, toPointTo: view)
+            // Точка подъезда у самого якоря (короткий разворот, вид сверху на
+            // узел) — это сам поворот: её поле накрыло бы кончик хвостика, и
+            // выноске не нашлось бы места нигде (SE, 26.10).
+            guard hypot(spot.x - point.x, spot.y - point.y)
+                    > AppConfig.maneuverCalloutApproachRadius + AppConfig.maneuverCalloutTailPoints else { continue }
+            avoid.append(ManeuverCallout.box(spot, radius: AppConfig.maneuverCalloutApproachRadius))
         }
         guard let place = ManeuverCallout.place(anchor: point, size: size, clear: frame.clear,
                                                 avoid: avoid, previous: placement,

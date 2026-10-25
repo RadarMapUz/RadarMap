@@ -255,10 +255,10 @@ extension MapScreen {
                         hudGestures(TripSpeedCluster())
                             .transition(.move(edge: .leading).combined(with: .opacity))
                     }
+                    // Полоса хода маршрута с 29.G — в самой нижней панели, под
+                    // этой строкой: справа место больше не держим.
                     PhoneStreetNamePill(map: map)
                         .frame(maxWidth: .infinity)
-                        // Полоса хода маршрута справа (RouteProgressRail) — не накрывать.
-                        .padding(.trailing, mode.speedPlacement == .bottomLeading ? 18 : 0)
                 }
             }
             bottomPanels

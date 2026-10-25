@@ -3208,9 +3208,8 @@ nonisolated enum AppConfig {
     static let maneuverCalloutMarginPoints = 8.0
     static let maneuverCalloutCursorRadius: CGFloat = 30
     static let maneuverCalloutCameraRadius: CGFloat = 22
-    /// Круг скорости и знак лимита в левом нижнем углу над нижней панелью
-    /// (TripSpeedCluster: 62 + 8 + 46 pt и поля) — выноска его не закрывает.
-    static let maneuverCalloutSpeedBlockWidth = 140.0
+    /// Строка над нижней панелью — круг скорости (62 pt и поля) и плашка
+    /// улицы 29.F: выноска её не закрывает, высота строки, pt.
     static let maneuverCalloutSpeedBlockHeight = 84.0
     /// Над значком «я», камерами и кольцом компаса — но под знаком лимита
     /// (zPosition: engineCursorZPosition − 30).

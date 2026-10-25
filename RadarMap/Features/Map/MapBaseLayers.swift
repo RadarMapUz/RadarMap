@@ -48,7 +48,7 @@ struct EngineBaseLayer: View {
     }
 
     /// Где выноске манёвра можно быть (29.G): между панелями, левее колонки
-    /// кнопок; круг скорости в левом нижнем углу закрыт.
+    /// кнопок; строка скорости и плашки улицы над нижней панелью закрыта.
     private func calloutFrame(size: CGSize, insets: MapViewport.Insets) -> ManeuverCallout.Frame {
         let width = Double(size.width), height = Double(size.height)
         let clear = ManeuverCallout.clearRect(width: width, height: height, topShare: insets.safeTop,
@@ -56,9 +56,10 @@ struct EngineBaseLayer: View {
                                               right: AppConfig.engineKeepSidePoints,
                                               margin: AppConfig.maneuverCalloutMarginPoints)
         let bottom = height * (1 - insets.safeBottom)
+        // Строка над нижней панелью: круг скорости слева и плашка улицы (29.F)
+        // по центру — во всю ширину.
         let speed = CGRect(x: 0, y: bottom - AppConfig.maneuverCalloutSpeedBlockHeight,
-                           width: AppConfig.maneuverCalloutSpeedBlockWidth,
-                           height: AppConfig.maneuverCalloutSpeedBlockHeight)
+                           width: width, height: AppConfig.maneuverCalloutSpeedBlockHeight)
         return ManeuverCallout.Frame(clear: clear, blocked: [speed])
     }
 

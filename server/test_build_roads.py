@@ -3186,6 +3186,26 @@ class JunctionOutlineTests(unittest.TestCase):
         # Щель в полметра между почти касающимися лентами — не газон.
         self.assertIsNotNone(build_roads.union_outline(self.median_locked_by_a_u_turn(7.5), []))
 
+    def test_notch_is_closed_and_block_corner_kept(self):
+        # Щель разделительной 3 × 30 м, заходящая в площадь, закрывается
+        # прямой; угол квартала (L) остаётся углом.
+        # Обход против часовой; щель шириной 3 м врезается сверху на 28 м.
+        notched = [(0, 0), (40, 0), (40, 40), (21.5, 40), (21.5, 12), (18.5, 12), (18.5, 40), (0, 40)]
+        closed = build_roads._close_notches([(q, ("side", 0)) for q in notched])
+        area = abs(build_roads._ring_area([q for q, _l in closed]))
+        self.assertAlmostEqual(area, 1600.0, delta=1.0)
+        corner = [(0, 0), (40, 0), (40, 10), (10, 10), (10, 40), (0, 40)]
+        kept = build_roads._close_notches([(q, ("side", 0)) for q in corner])
+        self.assertAlmostEqual(abs(build_roads._ring_area([q for q, _l in kept])),
+                               abs(build_roads._ring_area(corner)), delta=0.01)
+
+    def test_polygon_difference_cuts_a_strip(self):
+        strip = [(0, 0), (30, 0), (30, 4), (0, 4)]
+        cut = build_roads.polygon_difference(strip, [[(10, -5), (15, -5), (15, 10), (10, 10)]])
+        self.assertEqual(sorted(round(build_roads._ring_area(r)) for r in cut), [40, 60])
+        self.assertEqual(build_roads.polygon_difference(strip, [[(-1, -1), (31, -1), (31, 5), (-1, 5)]]), [])
+        self.assertEqual(build_roads.polygon_difference(strip, [[(40, 0), (50, 0), (50, 4), (40, 4)]]), [strip])
+
     def test_ramp_only_node_does_not_grey_the_trunk(self):
         # Перемычка разворота (одни узкие съезды) фигуры не даёт — и не красит
         # соседний узел магистрали в серый (D001, 41.24111, 69.16677).

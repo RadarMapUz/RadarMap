@@ -242,6 +242,20 @@ class JunctionContourTests(unittest.TestCase):
         road = square(-6, 0, 6, 90)              # зубец лежит на полотне улицы
         self.assertEqual(rm.junction_contour_defects([tooth], [], asphalt=[road])["teeth"], 0.0)
 
+    def test_median_inside_a_junction_and_across_a_crossing_is_measured(self):
+        junction = square(-20, -20, 20, 20)
+        inside = square(-40, -1.5, 10, 1.5)
+        self.assertGreater(rm.medians_in_junctions([inside], [junction]), 100)
+        self.assertEqual(rm.medians_in_junctions([square(-60, -1.5, -20, 1.5)], [junction]), 0.0)
+        zebra = [m(-30, 2), m(-30, 9)]                      # кончается у разделительной
+        self.assertEqual(rm.medians_through_zebras([zebra], [inside]), 1)
+        self.assertEqual(rm.medians_through_zebras([zebra], [square(-60, -1.5, -36, 1.5)]), 0)
+
+    def test_notch_on_the_edge_is_measured(self):
+        notched = [m(0, 0), m(40, 0), m(40, 40), m(21.5, 40), m(21.5, 12), m(18.5, 12), m(18.5, 40), m(0, 40)]
+        self.assertEqual(rm.junction_notches([notched]), 100.0)
+        self.assertEqual(rm.junction_notches([square(0, 0, 40, 40)]), 0.0)
+
     def test_small_patches_are_not_judged(self):
         self.assertEqual(rm.junction_contour_defects([square(0, 0, 10, 10)], [])["big"], 0)
 

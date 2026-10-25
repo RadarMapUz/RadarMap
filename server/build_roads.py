@@ -4875,6 +4875,10 @@ UNION_EPS = 1e-7
 # Подход заходит в узел до угла с соседом, плюс касательная дуги и метр.
 UNION_MOUTH_MAX_METERS = 40.0
 UNION_TANGENT_RADII = 2.0
+# До края прежней оболочки подход тянется не дальше стольких метров за угол:
+# иначе узел растягивался вдоль проспекта и съедал нос разделительной
+# (Мустакиллик).
+UNION_ENVELOPE_EXTRA_METERS = 8.0
 # Перемычка между лентами одной улицы — только у узлов, разошедшихся вдоль
 # неё не больше чем на столько.
 UNION_BRIDGE_ALONG_METERS = 15.0
@@ -5039,6 +5043,110 @@ def polygon_union_outline(polygons):
     return outer, holes
 
 
+def _cut_edges(rings):
+    """Рёбра колец, разрезанные во всех точках пересечения: [(кольцо, начало, конец)]."""
+    edges = []
+    for ri, ring in enumerate(rings):
+        for i in range(len(ring)):
+            a, b = ring[i], ring[(i + 1) % len(ring)]
+            if a != b:
+                edges.append((ri, a, b, (min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1]))))
+    cuts = [[(0.0, e[1]), (1.0, e[2])] for e in edges]
+    for i in range(len(edges)):
+        ri, p, q, bi = edges[i]
+        for j in range(i + 1, len(edges)):
+            rj, a, b, bj = edges[j]
+            if ri == rj or bi[0] > bj[2] + 1e-6 or bj[0] > bi[2] + 1e-6 \
+                    or bi[1] > bj[3] + 1e-6 or bj[1] > bi[3] + 1e-6:
+                continue
+            hit = _seg_cross(p, q, a, b)
+            if hit is not None:
+                cuts[i].append((hit[1], hit[0]))
+                cuts[j].append((hit[2], hit[0]))
+    out = []
+    for i, (ri, _p, _q, _box) in enumerate(edges):
+        stops = sorted(cuts[i], key=lambda c: c[0])
+        for (t0, s0), (t1, e0) in zip(stops, stops[1:]):
+            if t1 - t0 >= 1e-9 and s0 != e0:
+                out.append((ri, s0, e0))
+    return out
+
+
+def _chain_rings(pieces):
+    """Сцепить куски [(начало, конец)] в кольца: (против часовой, по часовой)."""
+    outgoing = defaultdict(list)
+    for index, (s0, _e0) in enumerate(pieces):
+        outgoing[_union_key(s0)].append(index)
+    used = [False] * len(pieces)
+    outer, holes = [], []
+    for start in range(len(pieces)):
+        if used[start]:
+            continue
+        ring, index = [], start
+        while index is not None and not used[index]:
+            used[index] = True
+            s0, e0 = pieces[index]
+            ring.append(s0)
+            heading = math.atan2(e0[1] - s0[1], e0[0] - s0[0])
+            best, best_turn = None, None
+            for other in outgoing.get(_union_key(e0), ()):
+                if used[other] and other != start:
+                    continue
+                s2, e2 = pieces[other]
+                turn = (math.atan2(e2[1] - s2[1], e2[0] - s2[0]) - heading + math.pi) % (2 * math.pi) - math.pi
+                if best is None or turn < best_turn:
+                    best, best_turn = other, turn
+            if best == start or best is None:
+                break
+            index = best
+        if len(ring) >= 3:
+            (outer if _ring_area(ring) > 0 else holes).append(ring)
+    return outer, holes
+
+
+def polygon_difference(subject, clips):
+    """Куски простого многоугольника subject (xy, против часовой) вне clips.
+
+    clips — [кольцо xy против часовой]. Тот же разбор рёбер, что у
+    polygon_union_outline: кромка subject остаётся вне всех вырезов, кромка
+    выреза — внутри subject и вне других вырезов (обратным ходом). Пустоту
+    (вырез целиком внутри) кольцом без дыр не выразить — тогда subject как есть.
+    Общие (наложенные) кромки subject и выреза не разбираются: вырез должен
+    пересекать subject, а не делить с ним край.
+    """
+    rings = [list(subject)] + [list(c) for c in clips]
+    pieces, touched = [], False
+    for ri, s0, e0 in _cut_edges(rings):
+        mid = ((s0[0] + e0[0]) / 2, (s0[1] + e0[1]) / 2)
+        in_clip = any(_point_in_ring(mid, rings[k]) for k in range(1, len(rings)) if k != ri)
+        if ri == 0:
+            if in_clip:
+                touched = True
+            else:
+                pieces.append((s0, e0))
+        elif _point_in_ring(mid, rings[0]) and not in_clip:
+            touched = True
+            pieces.append((e0, s0))
+    if not touched:
+        return [list(subject)]
+    outer, holes = _chain_rings(pieces)
+    if holes and not outer:
+        return [list(subject)]
+    return outer
+
+
+def polygon_intersection(subject, clip):
+    """Общие куски двух простых многоугольников (xy, против часовой)."""
+    rings = [list(subject), list(clip)]
+    pieces = []
+    for ri, s0, e0 in _cut_edges(rings):
+        mid = ((s0[0] + e0[0]) / 2, (s0[1] + e0[1]) / 2)
+        if _point_in_ring(mid, rings[1 - ri]):
+            pieces.append((s0, e0))
+    outer, _holes = _chain_rings(pieces)
+    return outer
+
+
 def _union_key(point):
     return (round(point[0] * 1e5), round(point[1] * 1e5))
 
@@ -5084,6 +5192,99 @@ def _tidy_ring(ring):
     return ring
 
 
+# Выемки внешнего края, закрываемые прямой (29.A, отзыв координатора по
+# Навои × Рашидов): щель разделительной между лентами, заходящая в площадь
+# узла, клин между расходящимися лентами и ступенька на прямом краю. Внутри
+# площади их видно светлыми полосами и зубцами; в main оболочка их заливала.
+# Выемка — карман, который обход огибает с поворотом больше
+# UNION_NOTCH_TURN_DEGREES (угол квартала — 90°, его не трогаем), с устьем не
+# шире UNION_NOTCH_MAX_METERS и площадью не больше UNION_NOTCH_MAX_M2.
+UNION_NOTCH_MAX_METERS = 8.0
+UNION_NOTCH_MAX_M2 = 600.0
+UNION_NOTCH_TURN_DEGREES = 150.0
+UNION_NOTCH_STEP_METERS = 2.0
+
+
+def _densify_ring(ring, step):
+    out = []
+    n = len(ring)
+    for i in range(n):
+        (a, label), b = ring[i], ring[(i + 1) % n][0]
+        parts = max(1, int(math.hypot(b[0] - a[0], b[1] - a[1]) / step))
+        out.extend(((a[0] + (b[0] - a[0]) * t / parts, a[1] + (b[1] - a[1]) * t / parts), label)
+                   for t in range(parts))
+    return out
+
+
+def _close_notches(ring):
+    """Закрыть выемки внешнего края прямой. ring — [(точка, метка ребра от неё)].
+
+    Края уплотняются: устье щели между двумя лентами лежит посреди их длинных
+    кромок, а не в вершинах."""
+    limit = -math.radians(UNION_NOTCH_TURN_DEGREES)
+    ring = _densify_ring(ring, UNION_NOTCH_STEP_METERS)
+    while len(ring) > 4:
+        pts = [p for p, _l in ring]
+        n = len(pts)
+        turns = []
+        for i in range(n):
+            a, b, c = pts[i - 1], pts[i], pts[(i + 1) % n]
+            u = (b[0] - a[0], b[1] - a[1])
+            v = (c[0] - b[0], c[1] - b[1])
+            turns.append(math.atan2(u[0] * v[1] - u[1] * v[0], u[0] * v[0] + u[1] * v[1]))
+        cross = [pts[i][0] * pts[(i + 1) % n][1] - pts[(i + 1) % n][0] * pts[i][1] for i in range(n)]
+        turn_sum = [0.0]
+        cross_sum = [0.0]
+        for t in range(2 * n):
+            turn_sum.append(turn_sum[-1] + turns[t % n])
+            cross_sum.append(cross_sum[-1] + cross[t % n])
+        cell = UNION_NOTCH_MAX_METERS
+        grid = defaultdict(list)
+        for m, q in enumerate(pts):
+            grid[(int(q[0] // cell), int(q[1] // cell))].append(m)
+        best = None
+        for i in range(n):
+            a = pts[i]
+            gx, gy = int(a[0] // cell), int(a[1] // cell)
+            near = [m for dx in (-1, 0, 1) for dy in (-1, 0, 1) for m in grid.get((gx + dx, gy + dy), ())]
+            for j in near:
+                k = (j - i) % n
+                if k < 2 or k > n - 2:
+                    continue
+                b = pts[j]
+                chord = math.hypot(b[0] - a[0], b[1] - a[1])
+                if chord > UNION_NOTCH_MAX_METERS or chord < 0.05:
+                    continue
+                if turn_sum[i + k] - turn_sum[i + 1] > limit:
+                    continue
+                area = (cross_sum[i + k] - cross_sum[i] + b[0] * a[1] - a[0] * b[1]) / 2.0
+                if area >= 0 or -area > UNION_NOTCH_MAX_M2:
+                    continue
+                if best is not None and -area <= best[0]:
+                    continue
+                mid = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+                if _point_in_ring(mid, pts):
+                    continue
+                if any(_seg_cross(a, b, pts[m], pts[(m + 1) % n]) is not None
+                       for m in range(n) if m not in (i, (j - 1) % n, (i - 1) % n, j)
+                       and pts[m] not in (a, b) and pts[(m + 1) % n] not in (a, b)):
+                    continue
+                best = (-area, i, k, chord)
+        if best is None:
+            return ring
+        _area, i, k, chord = best
+        a, b = pts[i], pts[(i + k) % n]
+        depth = max(_distance_to_segment(pts[(i + t) % n], a, b) for t in range(1, k))
+        # Глубокая щель (разделительная) — устье без бордюра; ступенька на
+        # краю — продолжение того же бордюра.
+        label = ("bridge",) if depth > chord else ring[i][1]
+        # Новое кольцо: от pts[i + k] по обходу до pts[i]; ребро pts[i] →
+        # pts[i + k] — хорда.
+        ring = [ring[(i + k + t) % n] for t in range(n - k + 1)]
+        ring[-1] = (ring[-1][0], label)
+    return ring
+
+
 def _is_kerbish(label):
     return label[0] in ("side", "disc", "arc")
 
@@ -5103,6 +5304,37 @@ def _ccw(ring, labels):
         return ring, labels
     n = len(ring)
     return ring[::-1], [labels[(n - 2 - j) % n] for j in range(n)]
+
+
+UNION_GAP_FILL_METERS = 8.0
+UNION_GAP_PARALLEL_DEGREES = 15.0
+
+
+def _parallel_gap(a, b):
+    """Четырёхугольник щели между двумя параллельными лентами (xy) или None."""
+    cos = a["d"][0] * b["d"][0] + a["d"][1] * b["d"][1]
+    if abs(cos) < math.cos(math.radians(UNION_GAP_PARALLEL_DEGREES)):
+        return None
+    ux, uy = a["d"]
+    nx, ny = -uy, ux
+    end_a = a["length"] if a["internal"] else a["mouth"]
+    end_b = b["length"] if b["internal"] else b["mouth"]
+    b0 = b["n"]
+    b1 = (b0[0] + b["d"][0] * end_b, b0[1] + b["d"][1] * end_b)
+    sb = sorted(((q[0] - a["n"][0]) * ux + (q[1] - a["n"][1]) * uy) for q in (b0, b1))
+    s0, s1 = max(0.0, sb[0]), min(end_a, sb[1])
+    if s1 - s0 < 1.0:
+        return None
+    offset = ((b0[0] - a["n"][0]) * nx + (b0[1] - a["n"][1]) * ny)
+    gap = abs(offset) - a["half"] - b["half"]
+    if gap <= 0.05 or gap > UNION_GAP_FILL_METERS:
+        return None
+    side = 1.0 if offset > 0 else -1.0
+    inner_a = a["half"] * side
+    inner_b = offset - b["half"] * side
+    corners = [(a["n"][0] + ux * s + nx * t, a["n"][1] + uy * s + ny * t)
+               for s, t in ((s0, inner_a), (s1, inner_a), (s1, inner_b), (s0, inner_b))]
+    return _hull_xy(corners)
 
 
 def _hull_xy(points):
@@ -5186,6 +5418,21 @@ def union_outline(legs, kerbs=None, report=None):
     outside = [a for a in arms if not a["internal"]]
     if len(outside) < 2:
         return None
+    # Подход идёт в площадь не короче, чем до края прежней оболочки узла
+    # (_hull_of, обрезанной кругом досягаемости): асфальт, который в main
+    # лежал под площадью узла, и сейчас под ней — кромки лент и щели внутри
+    # узла не видны (Навои × Рашидов, отзыв координатора). Углы при этом
+    # остаются вогнутыми, со скруглением, а не хордой через тротуар.
+    envelope = [xy(p) for p in clip_to_reach(legs, _hull_of(legs))] if len(legs) >= MIN_JUNCTION_ARMS else []
+    for a in outside:
+        a["inside"] = 0.0
+        if len(envelope) < 3:
+            continue
+        far = (a["n"][0] + a["d"][0] * UNION_MOUTH_MAX_METERS, a["n"][1] + a["d"][1] * UNION_MOUTH_MAX_METERS)
+        for k in range(len(envelope)):
+            hit = _seg_cross(a["n"], far, envelope[k], envelope[(k + 1) % len(envelope)])
+            if hit is not None:
+                a["inside"] = max(a["inside"], hit[1] * UNION_MOUTH_MAX_METERS)
     # Устье подхода — за последним углом с соседней лентой, плюс касательная
     # дуги бордюра и метр (как у mouth_outline).
     for a in outside:
@@ -5218,9 +5465,32 @@ def union_outline(legs, kerbs=None, report=None):
                     s, u = hit
                     if 0 <= s <= limit_a and -b["half"] <= u <= limit_b:
                         reach = max(reach, s + tangent + 1.0)
-        a["mouth"] = min(UNION_MOUTH_MAX_METERS, max(reach, widest_at[a["key"]] + 1.0))
+        reach = max(reach, widest_at[a["key"]] + 1.0)
+        a["mouth"] = min(UNION_MOUTH_MAX_METERS, max(reach, min(a["inside"], reach + UNION_ENVELOPE_EXTRA_METERS)))
         if a["shared"] is not None:
             a["mouth"] = min(a["mouth"], a["shared"])
+    # Подход, рядом с которым в щели до 8 м идёт другая лента узла (карман
+    # поворота, лента разворота), тянется вдоль неё до её конца: иначе между
+    # ними внутри узла остаётся светлая щель (Навои × Рашидов).
+    for a in outside:
+        for b in arms:
+            if b is a or a["shared"] is not None:
+                continue
+            cos = a["d"][0] * b["d"][0] + a["d"][1] * b["d"][1]
+            if abs(cos) < math.cos(math.radians(UNION_GAP_PARALLEL_DEGREES)):
+                continue
+            ux, uy = a["d"]
+            offset = (b["n"][0] - a["n"][0]) * -uy + (b["n"][1] - a["n"][1]) * ux
+            gap = abs(offset) - a["half"] - b["half"]
+            if gap > UNION_GAP_FILL_METERS:
+                continue
+            end_b = b["length"] if b["internal"] else b["mouth"]
+            far = max(((q[0] - a["n"][0]) * ux + (q[1] - a["n"][1]) * uy)
+                      for q in (b["n"], (b["n"][0] + b["d"][0] * end_b, b["n"][1] + b["d"][1] * end_b)))
+            near = min(((q[0] - a["n"][0]) * ux + (q[1] - a["n"][1]) * uy)
+                       for q in (b["n"], (b["n"][0] + b["d"][0] * end_b, b["n"][1] + b["d"][1] * end_b)))
+            if near <= a["mouth"] and far > a["mouth"]:
+                a["mouth"] = min(UNION_MOUTH_MAX_METERS, far)
     polygons = []
     for index, a in enumerate(arms):
         end = a["length"] if a["internal"] else a["mouth"]
@@ -5278,6 +5548,25 @@ def union_outline(legs, kerbs=None, report=None):
             if len(ring) < 3 or abs(_ring_area(ring)) < 0.5:
                 continue
             polygons.append((ring, [("bridge",)] * len(ring)))
+    # Щель между параллельными лентами одной улицы (разделительная уже 8 м,
+    # карман поворота у ленты) внутри прежней оболочки узла — асфальт узла:
+    # иначе внутри площади видны светлые полосы и кромки лент (Навои ×
+    # Рашидов, отзыв координатора). Широкая разделительная остаётся: у неё
+    # свой остров, обрезанный по площади узла.
+    if len(envelope) >= 3:
+        hull_env = _hull_xy(envelope)
+        for i, a in enumerate(arms):
+            for b in arms[i + 1:]:
+                # Две внутренние ленты — разделительная между узлами кластера
+                # (до разворота): её не заливаем (Каратош у Бунёдкора).
+                if a["internal"] and b["internal"]:
+                    continue
+                gap = _parallel_gap(a, b)
+                if gap is None:
+                    continue
+                for piece in polygon_intersection(gap, hull_env):
+                    if abs(_ring_area(piece)) >= 0.5:
+                        polygons.append((piece, [("bridge",)] * len(piece)))
     outer, holes = polygon_union_outline(polygons)
     outer = [r for r in outer if _ring_area([p for p, _l in r]) > 1.0]
     if not outer:
@@ -5294,7 +5583,7 @@ def union_outline(legs, kerbs=None, report=None):
             return None
     parts = []
     for part in outer:
-        ring = _tidy_ring(_fillet_ring(_tidy_ring(part), arms))
+        ring = _tidy_ring(_fillet_ring(_close_notches(_tidy_ring(part)), arms))
         if len(ring) < 3:
             return None
         out = [back(p) for p, _l in ring]

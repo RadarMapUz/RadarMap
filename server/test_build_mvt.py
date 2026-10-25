@@ -830,6 +830,20 @@ class KerbMaskTests(unittest.TestCase):
         self.assertEqual(len(kept), 1)
         self.assertEqual((kept[0][0], kept[0][-1]), (edge[0], edge[-1]))
 
+    def test_median_island_stops_at_the_junction_and_the_crossing(self):
+        # Навои × Фуркат: остров разделительной шёл через зебру; Навои ×
+        # Рашидов: кромка разделительной заходила в площадь узла.
+        island = [self.p(-60, -1.5), self.p(0, -1.5), self.p(0, 1.5), self.p(-60, 1.5)]
+        junction = [self.p(-10, -20), self.p(20, -20), self.p(20, 20), self.p(-10, 20)]
+        zebra = [self.p(-30, 3), self.p(-30, 10)]           # зебра на северной ленте
+        cover = build_mvt.JunctionMask([junction, build_mvt.zebra_box(zebra)])
+        pieces = build_mvt.clip_strip(island, cover)
+        self.assertEqual(len(pieces), 2, "остров рвётся переходом")
+        for piece in pieces:
+            xs = [(q[0] - 69.33) * self.kx for q in piece]
+            self.assertLessEqual(max(xs), -10 + 0.01, "остров зашёл в площадь узла")
+            self.assertFalse(any(-32.4 < x < -27.6 for x in xs), "остров на полосе перехода")
+
 
 class BridgeChainTests(unittest.TestCase):
     """Мост — одной линией: куски с прямыми торцами давали швы (аудит 28.G, №2)."""

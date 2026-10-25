@@ -271,6 +271,10 @@ struct EngineBaseLayer: View {
                                         viewHeight: viewHeight, latitude: me.latitude,
                                         clear: clear, carY: { _ in insets.meY })
         let frame = map.cameraSmoother.step(toward: target, at: Date())
+        #if DEBUG
+        DriveFrameLog.note("телефон", stop: stop.state, maneuver: maneuverDistance, keep: keep,
+                           also: arrivalKeep.count, target: target, frame: frame, bias: map.zoomBias)
+        #endif
         let zoom = frame.zoom + map.zoomBias
         return (DriveCamera.span(zoom: zoom, viewHeight: viewHeight, latitude: me.latitude),
                 frame.pitchDegrees,

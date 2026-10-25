@@ -365,9 +365,16 @@ nonisolated enum DriveCamera {
         for keep in [keep].compactMap({ $0 }) + alsoKeep
         where keep.distance.isFinite && keep.distance <= keepAheadMaxMeters
             && !isPassed(keep, speedKmh: speedKmh) {
-            let cap = max(keepMinZoom(speedKmh: speedKmh),
+            var cap = max(keepMinZoom(speedKmh: speedKmh),
                           maxZoom(keeping: keep, pitchDegrees: pitch, viewHeight: viewHeight,
                                   carY: y, latitude: latitude, clear: clear))
+            // Стоим, а точка ПОЗАДИ (её проехали): ради неё вид остановки не
+            // уходит мельче своего пола. Позади «я» на экране машины ~25 %
+            // высоты, и камера в 40 м сзади уводила кадр к z15,5 — перекрёсток
+            // впереди мельчал до района (29.F/29.H, 26.10). Сбоку и впереди
+            // точка держится по-прежнему — до минимально нужного отъезда:
+            // «136 м до камеры» сбоку стоя обязана быть видна (12.10).
+            if stop.standing, isBehind(keep) { cap = max(cap, stopMinZoom(screen)) }
             zoom = min(zoom, cap)
             minZoom = min(minZoom, cap)
         }
@@ -397,6 +404,12 @@ nonisolated enum DriveCamera {
         guard !keep.anyDirection, speedKmh > AppConfig.driveKeepBehindMaxKmh else { return false }
         let cone = tan(AppConfig.driveKeepMovingConeDegrees * .pi / 180)
         return keep.forward < 0 || abs(keep.right) > keep.forward * cone
+    }
+
+    /// Точка позади машины: в заднем конусе ±45° (поворот карты известен).
+    /// Сбоку и при неизвестном повороте — не «позади».
+    static func isBehind(_ keep: Keep) -> Bool {
+        !keep.anyDirection && keep.forward < 0 && abs(keep.right) < -keep.forward
     }
 
     /// Что держать в кадре: ближайшую камеру — кроме своей. Своя камера

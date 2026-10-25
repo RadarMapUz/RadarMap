@@ -146,6 +146,39 @@ final class RouteChoiceTests: XCTestCase {
         XCTAssertFalse(verdict.assessments.contains { $0.labels.contains(.simpler) })
     }
 
+    /// 29.E: ничего личного не выбрано — вариант без пары разворотов и
+    /// левых через встречку предлагается первым, если стоит не больше
+    /// max(1 мин, 5 %); дороже — решает человек.
+    func testSimplerIsRecommendedWhenItCostsAMinute() {
+        var verdict = RouteChoice.decide([input(line(5000), minutes: 20, hard: 5),
+                                          input(line(5000, north: 300), minutes: 21, hard: 2)],
+                                         history: nil)
+        XCTAssertTrue(verdict.assessments[1].labels.contains(.simpler))
+        XCTAssertEqual(verdict.recommended, 1, "минута за три сложных манёвра — дёшево")
+
+        verdict = RouteChoice.decide([input(line(5000), minutes: 20, hard: 5),
+                                      input(line(5000, north: 300), minutes: 22, hard: 2)],
+                                     history: nil)
+        XCTAssertTrue(verdict.assessments[1].labels.contains(.simpler), "ярлык остаётся")
+        XCTAssertEqual(verdict.recommended, 0, "две минуты на 20 — дороже 5 %: решает человек")
+
+        // На длинном пути допуск — доля: 5 % от часа — три минуты.
+        verdict = RouteChoice.decide([input(line(5000), minutes: 60, hard: 5),
+                                      input(line(5000, north: 300), minutes: 62.5, hard: 2)],
+                                     history: nil)
+        XCTAssertEqual(verdict.recommended, 1)
+    }
+
+    func testSimplerDoesNotOverrideFamiliar() {
+        let tracks = Array(repeating: track(5000), count: 4)
+        let verdict = RouteChoice.decide([input(line(5000, north: 300), minutes: 20, hard: 5),
+                                          input(line(5000), minutes: 21, hard: 5),
+                                          input(line(5000, north: 600), minutes: 20.5, hard: 1)],
+                                         history: RouteChoice.History(tracks: tracks, overspeedCameraIDs: []))
+        XCTAssertTrue(verdict.assessments[1].labels.contains(.familiar))
+        XCTAssertEqual(verdict.recommended, 1, "своя привычка — выше простоты")
+    }
+
     func testShortestNeedsANoticeableGain() {
         var verdict = RouteChoice.decide([input(line(5000), minutes: 10, km: 10),
                                           input(line(5000, north: 300), minutes: 12, km: 8)],

@@ -487,7 +487,8 @@ final class RouteGeometryTests: XCTestCase {
         let items = RouteService.osrmQueryItems(alternatives: true,
                                                 heading: RouteService.requestHeading(course: 200, speedKmh: 50),
                                                 waypoints: 2)
-        XCTAssertEqual(items.first { $0.name == "alternatives" }?.value, "true", "варианты — и с курсом")
+        XCTAssertEqual(items.first { $0.name == "alternatives" }?.value, String(AppConfig.osrmAlternatives),
+                       "варианты — и с курсом (29.E: числом, а не true)")
         XCTAssertEqual(items.first { $0.name == "radiuses" }?.value,
                        "\(AppConfig.rerouteBearingRadiusMeters);unlimited")
     }

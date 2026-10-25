@@ -36,7 +36,7 @@ enum CarPlayTripPreview {
                      among all: [RouteService.Variant]) -> ChoiceText {
         let eta = variant.etaText
         let head = variant.assessment.labels.first.map { RoutePanel.title($0, variant) }
-        let cameras = String(format: String(localized: "камер: %lld"), variant.cameras.count)
+        let cameras = String(format: String(localized: "камер: %lld"), variant.ourCameraCount)
         let facts = [variant.distanceText, cameras, variant.trafficNote]
             .compactMap { $0 }.joined(separator: " · ")
         let short = "\(variant.distanceText) · \(cameras)"

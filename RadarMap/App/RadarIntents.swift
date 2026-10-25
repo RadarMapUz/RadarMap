@@ -109,7 +109,7 @@ private func routeBySiri(_ slot: PlaceSlot) async -> IntentDialog {
     }
     env.settings.addRecent(title: title, lat: destination.latitude, lon: destination.longitude)
     let time = Formatting.duration(env.route.remainingTime)
-    let cameras = env.route.camerasOnRoute.count
+    let cameras = env.route.ourCameraCount
     return slot == .home
         ? IntentDialog("Едем домой: \(time), камер на пути — \(cameras).")
         : IntentDialog("Едем на работу: \(time), камер на пути — \(cameras).")

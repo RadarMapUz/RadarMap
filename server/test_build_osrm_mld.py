@@ -65,6 +65,26 @@ class DryRunTest(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertIn("download.geofabrik.de/asia/uzbekistan-latest.osm.pbf.md5", out)
 
+    def test_own_profile_is_mounted_next_to_stock_libs(self):
+        # 29.E: свой профиль кладётся в /opt рядом со стоковыми lib/ — иначе
+        # require('lib/set') его не найдёт.
+        profile = os.path.join(HERE, "osrm", "car_radarmap.lua")
+        code, out, err, _ = dry("--profile", profile)
+        self.assertEqual(code, 0, err)
+        self.assertIn(f"-v {profile}:/opt/car_radarmap.lua:ro", out)
+        self.assertIn("osrm-extract -p /opt/car_radarmap.lua", out)
+        self.assertNotIn("-p /opt/car.lua", out)
+
+    def test_ch_build_for_the_current_server_mode(self):
+        code, out, err, work = dry("--ch", "--profile", os.path.join(HERE, "osrm", "car_radarmap.lua"))
+        self.assertEqual(code, 0, err)
+        steps = [next(w for w in s.split() if w.startswith("osrm-"))
+                 for s in out.splitlines() if "osrm-" in s and "docker run" in s]
+        self.assertEqual(steps, ["osrm-extract", "osrm-contract"], "CH: extract → contract")
+        self.assertIn(os.path.join(work, "ch-uzbekistan"), out)
+        for word in ("ssh ", "scp ", "soulmed.uz", "docker restart"):
+            self.assertNotIn(word, out)
+
     def test_unknown_key_is_refused(self):
         code, _out, err, _ = dry("--deploy")
         self.assertEqual(code, 2)

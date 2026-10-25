@@ -211,7 +211,7 @@ struct RoutePanel: View {
                 HStack(spacing: 4) {
                     Text(variant.distanceText)
                     Image(systemName: Icon.cameras).font(.rounded(10, .semibold))
-                    Text("\(variant.cameras.count)")
+                    Text("\(variant.ourCameraCount)")
                 }
                 .font(.rounded(12, .semibold))
                 .foregroundStyle(isSelected ? Theme.onAccentFillSecondary : Theme.textSecondary)
@@ -285,7 +285,7 @@ struct RoutePanel: View {
         case .myRoad:          return String(localized: "Моя дорога")
         case .familiar:        return String(localized: "Знакомый")
         case .fastest:         return String(localized: "Быстрый")
-        case .fewerCameras:    return variant.cameras.isEmpty
+        case .fewerCameras:    return variant.ourCameraCount == 0
                                    ? String(localized: "Без камер") : String(localized: "Меньше камер")
         case .avoidsOverspeed: return String(localized: "Спокойнее")
         case .simpler:         return String(localized: "Проще")
@@ -317,7 +317,7 @@ struct RoutePanel: View {
                 parts.append(String(format: String(localized: "поездок этим путём: %lld"), a.familiarTrips))
             case .fewerCameras:
                 parts.append(String(format: String(localized: "камер: %1$lld вместо %2$lld"),
-                                    variant.cameras.count, fastest.cameras.count))
+                                    variant.ourCameraCount, fastest.ourCameraCount))
             case .avoidsOverspeed:
                 parts.append(String(format: String(localized: "без камер, где вы превышали (на быстром: %lld)"),
                                     fastest.assessment.overspeedCameras))
@@ -364,8 +364,8 @@ struct RoutePanel: View {
             HStack(spacing: 10) {
                 Image(systemName: Icon.cameras)
                     .font(.rounded(15, .bold))
-                    .foregroundStyle(route.camerasOnRoute.isEmpty ? Theme.success : Theme.Types.camera)
-                Text("\(route.camerasOnRoute.count) камер на маршруте")
+                    .foregroundStyle(route.ourCameraCount == 0 ? Theme.success : Theme.Types.camera)
+                Text("\(route.ourCameraCount) камер на маршруте")
                     .font(.rounded(14, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                 Spacer()

@@ -110,6 +110,9 @@ struct EngineMapView: UIViewRepresentable {
     /// тротуары, деревья, тени, парковки, значки заведений прячутся видимостью
     /// слоёв; встали — возвращаются.
     var declutter: Bool = false
+    /// Вид на остановке (StopView, 29.D): слои заведений, которые стоя
+    /// возвращаются на карту поездки. Пусто — как на ходу.
+    var stopDetailLayers: [String] = []
     /// Можно ли трогать карту. Плитка главного экрана машины — только для
     /// взгляда: касание по ней открывает приложение, а случайный жест движка
     /// снимал слежение навсегда (у плитки нет «к себе»).
@@ -707,6 +710,7 @@ struct EngineMapView: UIViewRepresentable {
             cameraZone.styleLoaded()
             driveAsphalt.styleLoaded()
             EngineLaneArrowsOrder.raise(in: style)
+            EngineStopDetail.lower(in: style)
             hiddenLayers = nil
             hotShown = nil
             modernDrivingLayerIDs = nil
@@ -1203,6 +1207,8 @@ struct EngineMapView: UIViewRepresentable {
             if model.driving, modernLoaded {
                 wanted.formUnion(drivingLayerIDs(style))
             }
+            // Стоим (29.D) — значки заведений по пути возвращаются.
+            wanted.subtract(model.stopDetailLayers)
             let hot = model.performance != .full
             if wanted != hiddenLayers || hot != hotShown {
                 hiddenLayers = wanted

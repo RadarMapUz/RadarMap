@@ -103,6 +103,9 @@ final class MapState {
     @ObservationIgnored var cameraSmoother = DriveCamera.Smoother()
     /// На ходу — только дорога (DrivingDeclutter); пишет тело карты на тике.
     @ObservationIgnored var declutter = DrivingDeclutter()
+    /// Вид на остановке (StopView, 29.D): «стоим» с гистерезисом и развилка,
+    /// взятая в кадр стоя; пишет тело карты на тике, как `declutter`.
+    @ObservationIgnored var stopView = StopView.Tracker()
     /// Счётчик нажатий и шаг последнего — движку, когда карта свободна
     /// (тогда приближает сам вид, а не охват слежения).
     private(set) var zoomCommand = 0

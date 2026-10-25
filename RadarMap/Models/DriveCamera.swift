@@ -200,6 +200,17 @@ nonisolated enum DriveCamera {
     static func minLookahead(_ screen: Screen) -> Double {
         screen == .car ? carMinLookaheadMeters : minLookaheadMeters
     }
+
+    /// Обзор впереди стоя без развилки в кадре (StopView, 29.D).
+    static func stopLookahead(_ screen: Screen) -> Double {
+        screen == .car ? AppConfig.stopViewLookaheadCar : AppConfig.stopViewLookaheadPhone
+    }
+
+    /// Мельче этого вид на остановке не уходит — ни к дальней развилке, ни к
+    /// концу пробки (удерживаемая камера — может: она старше).
+    static func stopMinZoom(_ screen: Screen) -> Double {
+        screen == .car ? AppConfig.stopViewMinZoomCar : AppConfig.stopViewMinZoomPhone
+    }
     /// Развилка: с какого времени до неё камера начинает подтягиваться, и
     /// не дальше/не ближе каких расстояний.
     static let maneuverLeadSeconds = 15.0
@@ -261,10 +272,15 @@ nonisolated enum DriveCamera {
     ///     верхней панели (HUD телефона, бар машины): камера под плашкой
     ///     «377 м до радара» в кадре только формально (12.10), — до верхней
     ///     кромки нижней и до кнопок сбоку.
+    ///   - stop: вид на остановке (StopView, 29.D): стоим — окно развилки
+    ///     шире, без развилки — обзор перекрёстка или пробки впереди.
+    ///   - jamEnd: метров до конца пробки на маршруте впереди (StopView.jamEnd),
+    ///     учитывается только стоя.
     static func target(speedKmh: Double, maneuverDistance: Double?, pitchAllowed: Bool,
                        maxPitch: Double = AppConfig.engineMapPitchDegrees,
                        screen: Screen = .phone,
                        keep: Keep? = nil,
+                       stop: StopView.State = .moving, jamEnd: Double? = nil,
                        viewHeight: Double, latitude: Double, clear: Clear = Clear(),
                        carY: (Double) -> Double) -> Frame {
         let profile = profile(speedKmh: speedKmh, pitchAllowed: pitchAllowed, maxPitch: maxPitch,
@@ -280,11 +296,22 @@ nonisolated enum DriveCamera {
         // виду развилки во второй половине подъезда, порог масштаба растёт
         // к стрелкам полос — но никогда не выталкивает развилку за край.
         var visibilityCap = Double.infinity
+        var framesManeuver = false
+        var stopFloor: Double?
         if let d = maneuverDistance, d.isFinite, d >= 0 {
-            let window = min(maneuverWindowMax, max(maneuverWindowMin, mps * maneuverLeadSeconds))
+            // Стоя (и по пути к развилке, взятой стоя) окно шире: поворот в
+            // 200 м от светофора был за краем экрана (29.D).
+            let moving = min(maneuverWindowMax, max(maneuverWindowMin, mps * maneuverLeadSeconds))
+            let window = max(moving, stop.maneuverWindow ?? 0)
             if d < window {
+                framesManeuver = true
+                // Развилка дальше обычного окна — только ради остановки: порог
+                // масштаба не ниже `stopFloor` (экран машины низкий — 250 м
+                // там z15,8, район вместо перекрёстка).
+                if d >= moving { stopFloor = stopMinZoom(screen) }
                 let w = ramp(d, from: window, to: maneuverCloseMeters)
-                let late = ramp(d, from: max(window * maneuverPitchShare,
+                // Наклон — по обычному окну: внутри него остановка кадр не меняет.
+                let late = ramp(d, from: max(moving * maneuverPitchShare,
                                              maneuverCloseMeters + maneuverPitchRampMinMeters),
                                 to: maneuverCloseMeters)
                 pitch += (min(pitch, maneuverPitch) - pitch) * late
@@ -294,14 +321,31 @@ nonisolated enum DriveCamera {
             }
         }
 
+        // Стоим без развилки в кадре: перекрёсток, светофор и переход впереди
+        // (не мельче полос — порог профиля), а в пробке на маршруте — до её
+        // конца, с порогом масштаба пониже (29.D).
+        if stop.standing, !framesManeuver {
+            lookahead = max(lookahead, stopLookahead(screen))
+            if let jam = jamEnd, jam.isFinite, jam > 0 {
+                let wanted = min(AppConfig.stopViewJamMaxMeters, jam + AppConfig.stopViewJamMarginMeters)
+                if wanted > lookahead {
+                    lookahead = wanted
+                    stopFloor = stopMinZoom(screen)
+                }
+            }
+        }
+
         let y = carY(profile.carShare)
         var zoom = zoomShowing(lookahead, pitchDegrees: pitch, viewHeight: viewHeight,
                                carY: y, latitude: latitude, clearTop: clear.top)
+        // Пробка: порог полос уступает обзору до её конца, но не мельче `stopFloor`.
+        if let stopFloor, !framesManeuver { minZoom = max(stopFloor, min(minZoom, zoom)) }
         // Порог полос не крупнее масштаба, при котором развилка ещё в кадре.
         if visibilityCap.isFinite {
             minZoom = min(minZoom, zoomShowing(visibilityCap, pitchDegrees: pitch,
                                                viewHeight: viewHeight, carY: y, latitude: latitude,
                                                clearTop: clear.top))
+            if let stopFloor { minZoom = max(stopFloor, minZoom) }
         }
         // Камера, которая обязана быть видна: масштаб не крупнее того, при
         // котором она в кадре, и порог полос ей уступает — в приложении о

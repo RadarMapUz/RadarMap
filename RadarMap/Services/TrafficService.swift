@@ -248,6 +248,13 @@ final class TrafficService {
     }
 
     #if DEBUG
+    /// Скриншот-хук `-driveDemoStops -stopScene jam` (29.D): своя пробка по
+    /// линии демо-маршрута — демо Амира Темура лежит в сотне метров от неё.
+    func seedDemo(edges: [TrafficEdge]) {
+        snapshot = TrafficSnapshot(generated: Date(), edges: edges)
+        revision &+= 1
+    }
+
     /// Скриншот-хук `-demoTraffic`: пробки вдоль Амира Темура (север — юг),
     /// оба направления, все три уровня — посмотреть цвета и ширину без
     /// выложенного сервера.

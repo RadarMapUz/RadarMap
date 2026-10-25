@@ -53,6 +53,9 @@ final class CarPlayMapModel {
     @ObservationIgnored var cameraSmoother = DriveCamera.Smoother()
     /// На ходу — только дорога (DrivingDeclutter); пишет тело карты на тике.
     @ObservationIgnored var declutter = DrivingDeclutter()
+    /// Вид на остановке (StopView, 29.D): «стоим» с гистерезисом и развилка,
+    /// взятая в кадр стоя; пишет тело карты на тике, как `declutter`.
+    @ObservationIgnored var stopView = StopView.Tracker()
     /// Поворот карты, каким его нарисовал движок (после каждого хода
     /// камеры). Камеру «держать в кадре» считаем по нему, а не по курсу:
     /// поворот, которого карта не сделала, кадр не спасает.

@@ -101,17 +101,30 @@ struct CarPlayEngineLayer: View {
                                 width: width,
                                 side: Double(max(safe.leading, safe.trailing, model.mapButtonInsets.trailing))
                                     + AppConfig.engineKeepSidePoints)
-        // Профиль экрана машины: впереди секунды пути, а не 100 м разметки
-        // (аудит 18.10, «при езде нормального вида нет»).
         // Вид на остановке (29.D): на светофоре в машине развилка в 200 м
         // была за краем экрана (105 м обзора стоя). Машина подключена —
         // значит едем: вид работает и без начатой поездки.
         let stop = StopViewInput.read(&model.stopView, env: env, maneuverDistance: maneuverDistance,
                                       active: true)
+        // Что показывать сейчас (MapDetailPolicy, 29.H): на ходу — дорога,
+        // маршрут, камеры и заправки по пути; стоя — окрестность; у цели —
+        // номера домов, ореол цели, парковки; плитка и приборка — маршрут и
+        // камеры. «Стоим» — тот же гистерезис, что у кадра остановки
+        // (StopView): окрестность и кадр меняются одним моментом. Приборка —
+        // «на ходу» всегда.
+        let detail = MapDetailInput.read(&model.detailArriving, env: env, surface: MapDetailPolicy.Surface(surface),
+                                         tripActive: true,
+                                         standing: !surface.alwaysDeclutter && stop.state.standing,
+                                         night: !model.isDaylight)
+        // У цели кадр держит и её, и ближайшие парковки — вместе с камерой.
+        let arrivalKeep = detail.keepPoints.map { DriveCamera.Keep.offset(from: me, to: $0, bearing: bearing) }
+        // Профиль экрана машины: впереди секунды пути, а не 100 м разметки
+        // (аудит 18.10, «при езде нормального вида нет»).
         let target = DriveCamera.target(
             speedKmh: env.location.speedKmh, maneuverDistance: maneuverDistance,
             pitchAllowed: surface.pitchAllowed(performance: env.thermal.mode), screen: .car, keep: keep,
             stop: stop.state, jamEnd: stop.jamEnd,
+            alsoKeep: arrivalKeep,
             viewHeight: height, latitude: me.latitude, clear: clear,
             carY: { surface.fixedMeY ?? Self.meY(size: size, safe: safe, share: $0) })
         let frame = model.cameraSmoother.step(toward: target, at: Date())
@@ -169,10 +182,9 @@ struct CarPlayEngineLayer: View {
             // тот же режим, что под полноэкранной тревогой.
             covered: surface.lowFrameRate,
             cruise: env.location.isCruising,
-            // На ходу — только дорога; встали — окрестность возвращается.
-            // На приборке — только дорога всегда.
-            declutter: surface.alwaysDeclutter
-                || model.declutter.update(speedKmh: env.location.speedKmh, at: Date()),
+            detail: detail.decision,
+            detailMarks: detail.marks,
+            destinationApproach: detail.approach,
             // Плитка и приборка — только смотреть: случайный жест снимал
             // слежение, а вернуть его там нечем.
             interactive: surface.interactive,
@@ -203,6 +215,8 @@ struct CarPlayEngineLayer: View {
             } : [],
             selectedVariantID: model.isPreviewing ? env.route.selectedID : nil,
             panTotal: model.panTotal,
+            // Флаг цели (с 29.H и в машине): у цели — с ореолом и пунктиром.
+            destination: detail.destination,
             // Перекрытия и ремонт (12б.5) — в машине тоже: о ремонте говорит
             // голос, и значок должен стоять там, где о нём сказали.
             roadEvents: env.mobile.roadEvents,

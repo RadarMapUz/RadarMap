@@ -12,7 +12,8 @@
 //    * иначе — пробка на маршруте до её конца (машина в ней или она вот-вот);
 //    * иначе — перекрёсток, светофор и переход впереди (обзор 180/140 м),
 //      не мельче полос;
-//    * значки заведений (в поездке они скрыты всегда) — телефон, вне тревоги.
+//    * значки заведений первого ряда — решает MapDetailPolicy (29.H), здесь
+//      только круг у машины, где их нет.
 //
 //  Гистерезис: встали — это `stopViewEnterSeconds` подряд не быстрее
 //  `stopViewEnterKmh` (пауза в 2 с ничего не меняет); тронулись — проехали
@@ -151,22 +152,6 @@ nonisolated enum StopView {
 
     // MARK: - Детали
 
-    /// Единственное решение «что из заведений показать стоя» — одна точка
-    /// для карты телефона (MapBaseLayers) и для будущей общей политики
-    /// видимости слоёв: пусто — как на ходу.
-    static func shownLayers(state: State, tripActive: Bool, places: Bool, covered: Bool,
-                            performance: PerformanceMode) -> [String] {
-        showsDetail(state: state, tripActive: tripActive, places: places, covered: covered,
-                    performance: performance) ? detailLayers : []
-    }
-
-    /// Значки заведений, которые стоя возвращаются на карту телефона: в
-    /// поездке они скрыты всегда (EngineModernStyle.hiddenWhileDriving).
-    /// Только самые заметные (`poi-level-1`: ранг ≤ 14, с именем): со вторым
-    /// рядом на снимке остановки у развилки было десять подписей — «нужные
-    /// детали» превращались в справочник, на SE — в кашу.
-    static let detailLayers = ["poi-level-1"]
-
     /// Круг у машины, в котором значков нет: «я» и кольцо компаса — виды
     /// поверх карты, и движок положил бы подпись прямо под них.
     static func carClearRing(center: CLLocationCoordinate2D, radius: Double,
@@ -191,12 +176,5 @@ nonisolated enum StopView {
                 > AppConfig.stopViewCarClearRewriteMeters
         default: return true
         }
-    }
-
-    /// Показывать ли значки стоя: в поездке, стоим, слой заведений включён
-    /// настройкой, карта не накрыта тревогой, телефон не горячий.
-    static func showsDetail(state: State, tripActive: Bool, places: Bool, covered: Bool,
-                            performance: PerformanceMode) -> Bool {
-        tripActive && state.standing && places && !covered && performance == .full
     }
 }

@@ -73,8 +73,15 @@ struct EngineBaseLayer: View {
             let offlineFiles: OfflineFiles? = env.network.isMapOnline
                 ? nil : env.offlineMaps.offlineFiles(at: me)
             GeometryReader { geo in
+                // Что показывать сейчас (MapDetailPolicy, 29.H): вне поездки —
+                // всё, как было; в поездке — как в машине, чуть плотнее.
+                // Вид на остановке (29.D): «стоим» с гистерезисом, конец пробки —
+                // один раз на тик, для кадра и для решения.
+                let stop = StopViewInput.read(&map.stopView, env: env, maneuverDistance: maneuverDistance,
+                                              active: env.location.isTripActive)
+                let detail = detail(standing: stop.state.standing)
                 let camera = camera(me: me, size: geo.size, insets: insets,
-                                    maneuverDistance: maneuverDistance)
+                                    maneuverDistance: maneuverDistance, stop: stop, keepPoints: detail.keepPoints)
                 let inRange = distance.map { $0 <= camera.visibleAhead * AppConfig.engineCameraInRangeShare } ?? false
                 ZStack {
                     EngineMapView(
@@ -126,14 +133,9 @@ struct EngineBaseLayer: View {
                             && !MapMode.current(isTripActive: env.location.isTripActive,
                                                 hasRoute: env.route.isActive).showsManeuver,
                         cruise: env.location.isCruising,
-                        // В поездке на ходу — только дорога (как в машине).
-                        declutter: env.location.isTripActive
-                            && map.declutter.update(speedKmh: env.location.speedKmh, at: Date()),
-                        // Стоим (29.D) — значки заведений по пути, вне тревоги.
-                        stopDetailLayers: StopView.shownLayers(
-                            state: camera.stop, tripActive: env.location.isTripActive,
-                            places: env.settings.mapPlaces, covered: env.location.isApproachingCamera,
-                            performance: env.thermal.mode),
+                        detail: detail.decision,
+                        detailMarks: detail.marks,
+                        destinationApproach: detail.approach,
                         trafficEdges: env.traffic.isShown ? env.traffic.snapshot?.edges ?? [] : [],
                         trafficRevision: env.traffic.revision * 2 + (env.traffic.isShown ? 1 : 0),
                         trafficSnapshot: env.traffic.isShown ? env.traffic.snapshot : nil,
@@ -153,7 +155,7 @@ struct EngineBaseLayer: View {
                             env.route.selectVariant(id)
                             UISelectionFeedbackGenerator().selectionChanged()
                         },
-                        destination: env.route.destinationCoordinate,
+                        destination: detail.destination,
                         pressedPoint: map.pressedPoint?.coordinate,
                         roadEvents: env.mobile.roadEvents,
                         cngStations: env.cng.isActive ? env.cng.mapStations : [],
@@ -201,21 +203,30 @@ struct EngineBaseLayer: View {
     /// Вне поездки — обзор города, как раньше. «+ / −» сдвигают масштаб на
     /// ступень за нажатие. 3D — кнопкой «3D» (по умолчанию включено); на
     /// горячем телефоне — плоско: наклон тянет к горизонту втрое больше тайлов.
+    /// Решение «что показывать» для телефона (MapDetailPolicy, 29.H). «Стоим»
+    /// — из кадра остановки (StopView); накрыта карта — тем же правилом, что
+    /// `covered` у движка.
+    private func detail(standing: Bool) -> MapDetailInput.Output {
+        let trip = env.location.isTripActive
+        let covered = env.location.isApproachingCamera
+            && !MapMode.current(isTripActive: trip, hasRoute: env.route.isActive).showsManeuver
+        return MapDetailInput.read(&map.detailArriving, env: env, surface: .phone, tripActive: trip,
+                                   standing: standing, night: !env.interfaceIsDaylight, covered: covered)
+    }
+
     private func camera(me: CLLocationCoordinate2D, size: CGSize, insets: MapViewport.Insets,
-                        maneuverDistance: Double?) -> (spanMeters: Double, pitchDegrees: Double,
-                                                       visibleAhead: Double, stop: StopView.State) {
+                        maneuverDistance: Double?, stop: StopViewInput.Input,
+                        keepPoints: [CLLocationCoordinate2D] = []) -> (spanMeters: Double, pitchDegrees: Double,
+                                                                         visibleAhead: Double) {
         let pitchAllowed = map.prefers3D && env.thermal.mode == .full
         let viewHeight = max(1, Double(size.height))
-        // Вид на остановке (29.D): «стоим» с гистерезисом, конец пробки.
-        let stop = StopViewInput.read(&map.stopView, env: env, maneuverDistance: maneuverDistance,
-                                      active: env.location.isTripActive)
         guard env.location.isTripActive else {
             map.cameraSmoother.reset()
             let span = AppConfig.engineOverviewSpan * pow(2, -map.zoomBias)
             let pitch = pitchAllowed ? AppConfig.engineOverviewPitchDegrees : 0
             let zoom = log2(DriveCamera.span(zoom: 0, viewHeight: viewHeight, latitude: me.latitude) / span)
             return (span, pitch, DriveCamera.visibleAhead(zoom: zoom, pitchDegrees: pitch, viewHeight: viewHeight,
-                                                          carY: insets.meY, latitude: me.latitude), stop.state)
+                                                          carY: insets.meY, latitude: me.latitude))
         }
         // Ближайшая камера в 500 м — в кадре всегда и в любую сторону: «368 м
         // до радара» над картой, на которой радара не видно, — «куда пропал
@@ -230,9 +241,11 @@ struct EngineBaseLayer: View {
         }
         let clear = DriveCamera.Clear(top: insets.safeTop, bottom: insets.safeBottom,
                                       width: Double(size.width), side: AppConfig.engineKeepSidePoints)
+        // У цели кадр держит и её, и ближайшие парковки (29.H) — вместе с камерой.
+        let arrivalKeep = keepPoints.map { DriveCamera.Keep.offset(from: me, to: $0, bearing: bearing) }
         let target = DriveCamera.target(speedKmh: env.location.speedKmh, maneuverDistance: maneuverDistance,
                                         pitchAllowed: pitchAllowed, keep: keep,
-                                        stop: stop.state, jamEnd: stop.jamEnd,
+                                        stop: stop.state, jamEnd: stop.jamEnd, alsoKeep: arrivalKeep,
                                         viewHeight: viewHeight, latitude: me.latitude,
                                         clear: clear, carY: { _ in insets.meY })
         let frame = map.cameraSmoother.step(toward: target, at: Date())
@@ -240,7 +253,7 @@ struct EngineBaseLayer: View {
         return (DriveCamera.span(zoom: zoom, viewHeight: viewHeight, latitude: me.latitude),
                 frame.pitchDegrees,
                 DriveCamera.visibleAhead(zoom: zoom, pitchDegrees: frame.pitchDegrees, viewHeight: viewHeight,
-                                         carY: insets.meY, latitude: me.latitude), stop.state)
+                                         carY: insets.meY, latitude: me.latitude))
     }
 }
 #endif

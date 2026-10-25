@@ -268,6 +268,8 @@ nonisolated enum DriveCamera {
     ///     сторону, не только вперёд: стоя курса нет, и камера «136 м» сбоку
     ///     за краем экрана — та же пропажа, что впереди (12.10); дальше
     ///     `keepAheadMaxMeters` не учитывается.
+    ///   - alsoKeep: что ещё держать в кадре по тому же правилу — цель и
+    ///     ближайшие парковки у неё в режиме прибытия (29.H).
     ///   - clear: незакрытая часть экрана. «Видно» считается до нижней кромки
     ///     верхней панели (HUD телефона, бар машины): камера под плашкой
     ///     «377 м до радара» в кадре только формально (12.10), — до верхней
@@ -281,6 +283,7 @@ nonisolated enum DriveCamera {
                        screen: Screen = .phone,
                        keep: Keep? = nil,
                        stop: StopView.State = .moving, jamEnd: Double? = nil,
+                       alsoKeep: [Keep] = [],
                        viewHeight: Double, latitude: Double, clear: Clear = Clear(),
                        carY: (Double) -> Double) -> Frame {
         let profile = profile(speedKmh: speedKmh, pitchAllowed: pitchAllowed, maxPitch: maxPitch,
@@ -357,8 +360,11 @@ nonisolated enum DriveCamera {
         // «ближайшей» она остаётся ещё 60 м по маршруту (на экране машины до
         // дока позади «я» 50 точек, и ради неё кадр уходил до z10,6); и потолок не мельче
         // `keepMinZoom` — камера в 400 м на 10 км/ч уводила кадр в район (z15).
-        if let keep, keep.distance.isFinite, keep.distance <= keepAheadMaxMeters,
-           !isPassed(keep, speedKmh: speedKmh) {
+        // Цель и парковки у неё в режиме прибытия (MapDetailPolicy, 29.H) —
+        // по тому же правилу и вместе с камерой: из потолков берётся меньший.
+        for keep in [keep].compactMap({ $0 }) + alsoKeep
+        where keep.distance.isFinite && keep.distance <= keepAheadMaxMeters
+            && !isPassed(keep, speedKmh: speedKmh) {
             let cap = max(keepMinZoom(speedKmh: speedKmh),
                           maxZoom(keeping: keep, pitchDegrees: pitch, viewHeight: viewHeight,
                                   carY: y, latitude: latitude, clear: clear))

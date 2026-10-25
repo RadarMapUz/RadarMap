@@ -106,13 +106,15 @@ struct EngineMapView: UIViewRepresentable {
     /// Крейсер вдали от камер и манёвра (EngineMapView.isCruise): кадров
     /// меньше — картинка на трассе почти неподвижна (аудит энергии 19.10).
     var cruise: Bool = false
-    /// На ходу — только дорога (DrivingDeclutter): пешеходные тоннели и
-    /// тротуары, деревья, тени, парковки, значки заведений прячутся видимостью
-    /// слоёв; встали — возвращаются.
-    var declutter: Bool = false
-    /// Вид на остановке (StopView, 29.D): слои заведений, которые стоя
-    /// возвращаются на карту поездки. Пусто — как на ходу.
-    var stopDetailLayers: [String] = []
+    /// Что показывать сейчас (MapDetailPolicy, 29.H): декор, заведения,
+    /// номера домов, заправки и парковки — видимостью слоёв, на смене
+    /// решения; вне поездки на телефоне — всё, как было.
+    var detail: MapDetailPolicy.Decision = .browse
+    /// Наши значки, разрешённые решением (MapDetailPlaces.marks): заправки по
+    /// пути, парковки у цели, ближайшие из «По пути».
+    var detailMarks: [MapDetailPlaces.Mark] = []
+    /// Пунктир от конца маршрута к цели в режиме прибытия; nil — не рисуем.
+    var destinationApproach: [CLLocationCoordinate2D]?
     /// Можно ли трогать карту. Плитка главного экрана машины — только для
     /// взгляда: касание по ней открывает приложение, а случайный жест движка
     /// снимал слежение навсегда (у плитки нет «к себе»).
@@ -305,6 +307,8 @@ struct EngineMapView: UIViewRepresentable {
         private let driveAsphalt = EngineDriveAsphalt()
         /// Кольцо компаса и знак лимита у машины (29.B).
         private let carDecor = EngineCarDecor()
+        /// Значки «нужного сейчас» и цель в режиме прибытия (29.H).
+        private let mapDetail = EngineMapDetail()
         private var positionHeading = 0.0
         /// Значок между фиксами: где машина СЕЙЧАС (MarkerPredictor). До 21.10
         /// стрелка плыла к последнему фиксу за интервал между фиксами и всегда
@@ -709,6 +713,7 @@ struct EngineMapView: UIViewRepresentable {
             laneFocusLayers.styleLoaded()
             cameraZone.styleLoaded()
             driveAsphalt.styleLoaded()
+            mapDetail.styleLoaded()
             EngineLaneArrowsOrder.raise(in: style)
             stopDetail.styleLoaded(style)
             hiddenLayers = nil
@@ -1143,6 +1148,11 @@ struct EngineMapView: UIViewRepresentable {
             routeLine.update(model, routeDaylight: routeDaylight, in: view)
             laneFocusLayers.update(model, routeDaylight: routeDaylight, in: view)
             cameraZone.update(model.cameraZone, daylight: model.daylight, in: view)
+            mapDetail.update(EngineMapDetail.Content(
+                marks: model.detailMarks,
+                halo: model.detail.destination == .arrival ? model.destination : nil,
+                approach: model.detail.destination == .arrival ? model.destinationApproach : nil),
+                daylight: model.daylight, in: view)
         }
 
         /// Объёмные украшения и размытые тени — первое, что уходит на горячем
@@ -1159,26 +1169,6 @@ struct EngineMapView: UIViewRepresentable {
         /// Видны ТОЛЬКО на горячем телефоне: плоские дома вместо объёмных —
         /// город не пустеет (в стиле выключены, make_style «building-flat»).
         static let hotShownLayers = ["building-flat"]
-        /// На ходу (DrivingDeclutter) — всё, что не дорога: подземные
-        /// пешеходные переходы и тротуары (широкие фиолетовые полосы поперёк
-        /// проспекта — «убери тоннели», 12.10), наложение тоннелей, деревья и
-        /// тени, парковочная разметка, значки заведений, зерно асфальта.
-        /// Дорога, полосы, «зебры», светофоры, заправки, маршрут и камеры
-        /// остаются. Слоя нет в стиле — пропускается.
-        static let drivingHiddenLayers = [
-            "tunnel-path-steps-casing", "tunnel-path-steps", "tunnel-path",
-            "bridge-path-shadow", "bridge-path-casing", "bridge-path-steps", "bridge-path",
-            "highway-path-steps-casing", "highway-path", "highway-path-steps", "highway-name-path",
-            "radar-tunnel-case", "radar-tunnel",
-            "trees", "radar-tree-shadow", "radar-tree", "radar-tree-light", "radar-tree-3d", "radar-barrier-3d",
-            "building-ground-shadow",
-            "radar-parking", "radar-parking-kerb", "radar-parking-stall", "radar-poi-parking",
-            "poi-level-1", "poi-level-2", "poi-level-3", "poi-railway",
-            "radar-asphalt-grain",
-            // Имена арыков и каналов: за рулём не нужны, а у моста или трубы
-            // ложились наискось поперёк проспекта (снимок CarPlay 13.10.2026).
-            "waterway-name",
-        ]
         private var hiddenLayers: Set<String>?
         /// Значки заведений стоя (29.D): порядок слоёв и круг у машины.
         private let stopDetail = EngineStopDetail()
@@ -1201,36 +1191,64 @@ struct EngineMapView: UIViewRepresentable {
         /// сброс тайлов, а на ходу слои меняются на каждой остановке.
         private func applyHiddenLayers(_ model: EngineMapView, in view: MLNMapView) {
             guard let style = view.style else { return }
-            var wanted = Set<String>()
-            if model.performance != .full { wanted.formUnion(Self.hotHiddenLayers) }
-            if model.declutter { wanted.formUnion(Self.drivingHiddenLayers) }
+            // Решение «что нужно сейчас» (29.H): декор, заведения, номера
+            // домов, заправки, парковки. Своих значков парковок у цели нет —
+            // значки тайлов остаются (MapDetailLayers.shown).
+            let parkingsKnown = model.detailMarks.contains { $0.kind == .parking }
+            // Входы решения не менялись — множества не пересчитываются: это
+            // зовётся на каждом фиксе, а меняется на смене решения.
+            let key = LayerKey(detail: model.detail, parkingsKnown: parkingsKnown, driving: model.driving,
+                               modern: modernLoaded, hot: model.performance != .full)
+            if key != layerKey || hiddenLayers == nil {
+                layerKey = key
+                applyLayerVisibility(model, parkingsKnown: parkingsKnown, in: style)
+            }
+            // Значки заведений, вернувшиеся в поездке (стоим, у цели), — не под
+            // «я» и кольцом компаса (29.D, EngineStopDetail): фильтр меняется
+            // на входе в остановку и на сдвиге машины, не на тике. Вне поездки
+            // телефона — как было, без круга.
+            stopDetail.update(layers: MapDetailLayers.tripPlaceRows(model.detail), car: model.coordinate, in: style)
+            if modernLoaded, lastDriving != model.driving {
+                lastDriving = model.driving
+                if let buildings = style.layer(withIdentifier: "building-3d") as? MLNFillExtrusionStyleLayer {
+                    buildings.fillExtrusionOpacity = NSExpression(
+                        forConstantValue: model.driving ? AppConfig.engineDrivingBuildingOpacity : 1)
+                }
+            }
+        }
+
+        private struct LayerKey: Equatable {
+            var detail: MapDetailPolicy.Decision
+            var parkingsKnown: Bool
+            var driving: Bool
+            var modern: Bool
+            var hot: Bool
+        }
+        private var layerKey: LayerKey?
+
+        private func applyLayerVisibility(_ model: EngineMapView, parkingsKnown: Bool, in style: MLNStyle) {
+            var wanted = MapDetailLayers.hidden(model.detail, destinationParkingsKnown: parkingsKnown)
             // Режим «в поездке» новой карты: заведения, номера домов, подписи
             // дорожек — те же слои, что раньше вырезал drivingLayers при сборке.
+            // Что решение разрешило (номера домов у цели, значки стоя), он не гасит.
             if model.driving, modernLoaded {
                 wanted.formUnion(drivingLayerIDs(style))
+                wanted.subtract(MapDetailLayers.shown(model.detail, destinationParkingsKnown: parkingsKnown))
             }
-            // Стоим (29.D) — значки заведений по пути возвращаются, кроме
-            // тех, что легли бы под «я».
-            wanted.subtract(model.stopDetailLayers)
-            stopDetail.update(layers: model.stopDetailLayers, car: model.coordinate, in: style)
+            // Горячий телефон — поверх решения: объёмный декор не возвращается
+            // и стоя.
+            if model.performance != .full { wanted.formUnion(Self.hotHiddenLayers) }
             let hot = model.performance != .full
             if wanted != hiddenLayers || hot != hotShown {
                 hiddenLayers = wanted
                 hotShown = hot
-                let managed = Set(Self.hotHiddenLayers).union(Self.drivingHiddenLayers)
+                let managed = Set(Self.hotHiddenLayers).union(MapDetailLayers.managed)
                     .union(drivingLayerIDs(style))
                 for id in managed {
                     style.layer(withIdentifier: id)?.isVisible = !wanted.contains(id)
                 }
                 for id in Self.hotShownLayers {
                     style.layer(withIdentifier: id)?.isVisible = hot
-                }
-            }
-            if modernLoaded, lastDriving != model.driving {
-                lastDriving = model.driving
-                if let buildings = style.layer(withIdentifier: "building-3d") as? MLNFillExtrusionStyleLayer {
-                    buildings.fillExtrusionOpacity = NSExpression(
-                        forConstantValue: model.driving ? AppConfig.engineDrivingBuildingOpacity : 1)
                 }
             }
         }

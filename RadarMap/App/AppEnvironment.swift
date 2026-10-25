@@ -90,6 +90,10 @@ final class AppEnvironment {
     let laneOverlay = LaneOverlayService()
     /// Коридор длинного маршрута (19.3): карта и граф по пути, «По пути».
     let corridor = RouteCorridorService()
+    /// «Нужное сейчас» на карте (29.H): заправки по пути, парковки у цели,
+    /// ближайшие из «По пути» — данные значков; что показать, решает
+    /// MapDetailPolicy в каждой карте.
+    let mapDetail = MapDetailService()
     /// Горячие точки треног: подписанный список мест, где водители отмечали
     /// радар снова и снова. Не камеры и не отметки — память, поэтому и живут
     /// отдельным сервисом с недельным обновлением и своим тихим тоном.
@@ -462,6 +466,9 @@ final class AppEnvironment {
             }
             traffic?.note(coordinate, speedKmh: location?.speedKmh ?? -1,
                           simulated: location?.isFixSimulated ?? false)
+            // Значки «нужного сейчас» (29.H): дёшево, поиск — только на смене
+            // километра пути, цели или подъезда к ней.
+            self?.mapDetail.note(position: coordinate)
             if let self, let location, location.isTripActive {
                 if self.commuteGhostPending { self.tryStartCommuteGhost() }
                 if self.commuteLive.isRunning {
@@ -522,6 +529,10 @@ final class AppEnvironment {
         corridor.graph = offlineRoutes
         corridor.roads = roads
         corridor.network = network
+        mapDetail.roads = roads
+        mapDetail.corridor = corridor
+        mapDetail.route = route
+        mapDetail.fuelKinds = { [weak settings] in settings?.vehicleEnergy.stops ?? [.fuel] }
         // Слой полос (20.8): пульт (`features.laneOverlay`) и сеть; маршрут
         // спрашивает слой при построении и прикладывает заново, когда тот
         // приехал или снят.

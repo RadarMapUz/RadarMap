@@ -101,11 +101,12 @@ final class MapState {
     /// Сглаживание камеры поездки (DriveCamera). Шаг делает вид карты на
     /// своём пересчёте; состояние не наблюдаемое и перерисовку не вызывает.
     @ObservationIgnored var cameraSmoother = DriveCamera.Smoother()
-    /// На ходу — только дорога (DrivingDeclutter); пишет тело карты на тике.
-    @ObservationIgnored var declutter = DrivingDeclutter()
     /// Вид на остановке (StopView, 29.D): «стоим» с гистерезисом и развилка,
     /// взятая в кадр стоя; пишет тело карты на тике, как `declutter`.
     @ObservationIgnored var stopView = StopView.Tracker()
+    /// Прошлое решение «что показывать» было «подъезд к цели» — гистерезис
+    /// MapDetailPolicy (29.H); пишет тело карты на тике, как `declutter`.
+    @ObservationIgnored var detailArriving = false
     /// Счётчик нажатий и шаг последнего — движку, когда карта свободна
     /// (тогда приближает сам вид, а не охват слежения).
     private(set) var zoomCommand = 0

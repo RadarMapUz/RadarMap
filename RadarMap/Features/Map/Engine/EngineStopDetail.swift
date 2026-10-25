@@ -3,7 +3,7 @@
 //  RadarMap
 //
 //  Значки заведений, которые стоя возвращаются на карту поездки (StopView,
-//  29.D). Решение «что показать» — StopView.shownLayers; здесь — только
+//  29.D). Решение «что показать» — MapDetailPolicy (29.H, `places`); здесь — только
 //  порядок слоёв и место у машины.
 //
 
@@ -49,7 +49,7 @@ final class EngineStopDetail {
         }
     }
 
-    /// `layers` — показанные стоя (StopView.shownLayers), `car` — машина.
+    /// `layers` — показанные в поездке ряды (MapDetailLayers.tripPlaceRows), `car` — машина.
     func update(layers: [String], car: CLLocationCoordinate2D, in style: MLNStyle) {
         guard !layers.isEmpty else {
             if clearedAt != nil { restore(in: style) }

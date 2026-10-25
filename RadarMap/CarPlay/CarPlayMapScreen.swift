@@ -51,11 +51,12 @@ final class CarPlayMapModel {
     /// Шаг делает вид карты на каждом своём пересчёте — состояние не
     /// наблюдаемое, перерисовку оно не вызывает.
     @ObservationIgnored var cameraSmoother = DriveCamera.Smoother()
-    /// На ходу — только дорога (DrivingDeclutter); пишет тело карты на тике.
-    @ObservationIgnored var declutter = DrivingDeclutter()
     /// Вид на остановке (StopView, 29.D): «стоим» с гистерезисом и развилка,
     /// взятая в кадр стоя; пишет тело карты на тике, как `declutter`.
     @ObservationIgnored var stopView = StopView.Tracker()
+    /// Прошлое решение «что показывать» было «подъезд к цели» — гистерезис
+    /// MapDetailPolicy (29.H); пишет тело карты на тике, как `declutter`.
+    @ObservationIgnored var detailArriving = false
     /// Поворот карты, каким его нарисовал движок (после каждого хода
     /// камеры). Камеру «держать в кадре» считаем по нему, а не по курсу:
     /// поворот, которого карта не сделала, кадр не спасает.

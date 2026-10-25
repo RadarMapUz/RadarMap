@@ -187,34 +187,7 @@ final class StopViewTests: XCTestCase {
         XCTAssertNil(jam(450) { _ in nil })
     }
 
-    // MARK: - Детали
-
-    func testDetailOnlyStandingInTripAndCalm() {
-        let stand = StopView.State(standing: true, maneuverWindow: nil)
-        XCTAssertTrue(StopView.showsDetail(state: stand, tripActive: true, places: true, covered: false,
-                                           performance: .full))
-        XCTAssertFalse(StopView.showsDetail(state: .moving, tripActive: true, places: true, covered: false,
-                                            performance: .full), "на ходу — только дорога")
-        XCTAssertFalse(StopView.showsDetail(state: stand, tripActive: true, places: true, covered: true,
-                                            performance: .full), "под тревогой камеры — нет")
-        XCTAssertFalse(StopView.showsDetail(state: stand, tripActive: true, places: true, covered: false,
-                                            performance: .reduced), "горячий телефон — нет")
-        XCTAssertFalse(StopView.showsDetail(state: stand, tripActive: true, places: false, covered: false,
-                                            performance: .full), "слой «Места» выключен — нет")
-    }
-
-    func testShownLayersIsOneDecision() {
-        let stand = StopView.State(standing: true, maneuverWindow: nil)
-        XCTAssertEqual(StopView.shownLayers(state: stand, tripActive: true, places: true, covered: false,
-                                            performance: .full), ["poi-level-1"])
-        XCTAssertEqual(StopView.shownLayers(state: stand, tripActive: false, places: true, covered: false,
-                                            performance: .full), [], "вне поездки — как было")
-    }
-
-    func testOnlyTheMostNotablePlaces() {
-        XCTAssertEqual(StopView.detailLayers, ["poi-level-1"], "второй ряд — справочник, на SE — каша")
-        XCTAssertFalse(StopView.detailLayers.contains("housenumber"))
-    }
+    // MARK: - Детали (какие значки стоя — MapDetailPolicyTests)
 
     func testCarClearRingIsAClosedCircle() {
         let c = CLLocationCoordinate2D(latitude: 41.3, longitude: 69.28)

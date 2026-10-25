@@ -683,6 +683,108 @@ def junction_colour_blots(junctions, roads, examples=None):
     return len(blots)
 
 
+# --- контур площади узла ---------------------------------------------------
+#
+# Крупный перекрёсток — одна площадь с бордюром по внешнему краю. Брак, который
+# владелец видит глазами (Дурмон йули × Зиёлилар, Муминова, 23.10.2026):
+# площадь из нескольких кусков внахлёст (рваный край), бордюр, проходящий
+# через асфальт узла («паутина»), запасная оболочка без бордюра, острые зубцы.
+
+JUNCTION_BIG_M2 = 300.0
+KERB_INSIDE_DEPTH_METERS = 1.0
+JUNCTION_TOOTH_DEGREES = 40.0
+# Зубец, накрытый чужим асфальтом глубже этого, не виден.
+TOOTH_HIDDEN_DEPTH_METERS = 0.3
+# Рёбра короче этого — ступеньки сетки тайла (1e-5° ≈ 0,8–1,1 м), а не зубцы.
+TOOTH_MIN_EDGE_METERS = 2.0
+# Перекрёсток, а не перемычка разворота или стык двух лент: через площадь
+# проходят хотя бы две разные улицы (как маска разметки build_mvt).
+JUNCTION_MIN_STREETS = 2
+
+
+def _ring_distance_m(p, ring):
+    return min(seg_distance_m(p, a, b) for a, b in zip(ring, ring[1:] + ring[:1]))
+
+
+def _deep_inside(index, q, depth, skip=None):
+    for box, ring in index._grid.get((int(q[0] / index.CELL), int(q[1] / index.CELL)), ()):
+        if ring is skip or not (box[0] <= q[0] <= box[2] and box[1] <= q[1] <= box[3]):
+            continue
+        if inside(q, ring) and _ring_distance_m(q, ring) > depth:
+            return True
+    return False
+
+
+def junction_contour_defects(junctions, kerbs, asphalt=(), names=None, examples=None):
+    """Меры контура площадей узла.
+
+    junctions — [кольцо] (вид 8 без перемычек, вид 10), kerbs — [линия] (вид 16),
+    asphalt — кольца асфальта (виды 7, 8, 10, 13), names — build_mvt.StreetNames.
+    Крупная площадь — от 300 м², через которую идут две разные улицы
+    (перекрёсток, а не перемычка разворота). Возвращает словарь:
+      kerbless  — % крупных площадей без бордюра: запасная оболочка;
+      overlap   — % крупных площадей, накрытых другой площадью узла внахлёст
+                  (вершины глубже метра внутри чужой фигуры) — рваный край;
+      teeth     — % крупных площадей с острым (< 40°) углом контура, не
+                  накрытым чужим асфальтом, — видимый зубец;
+      kerb_inside — м бордюра глубже метра внутри площади узла на 1 км бордюра.
+    """
+    index = PolygonIndex(junctions)
+    kerb_index = SegmentIndex(kerbs)
+    asphalt_index = PolygonIndex(asphalt)
+    big = [ring for ring in junctions if len(ring) >= 3 and polygon_area_m2(ring) >= JUNCTION_BIG_M2
+           and (names is None or len(names.inside(ring)) >= JUNCTION_MIN_STREETS)]
+    kerbless = overlap = teeth = 0
+    for ring in big:
+        centre = (round(sum(q[1] for q in ring) / len(ring), 5), round(sum(q[0] for q in ring) / len(ring), 5))
+        step = max(1, len(ring) // 16)
+        if not any(kerb_index.near(q, 2.0) for q in ring[::step]):
+            kerbless += 1
+            if examples is not None:
+                examples.append(("kerbless",) + centre + (round(polygon_area_m2(ring)),))
+        if any(_deep_inside(index, q, KERB_INSIDE_DEPTH_METERS, skip=ring) for q in ring[::step]):
+            overlap += 1
+            if examples is not None:
+                examples.append(("overlap",) + centre + (round(polygon_area_m2(ring)),))
+        kx = LAT_M * math.cos(math.radians(ring[0][1]))
+        pts = [((q[0] - ring[0][0]) * kx, (q[1] - ring[0][1]) * LAT_M) for q in ring]
+        sharp = [i for i in _sharp_vertices(pts, JUNCTION_TOOTH_DEGREES, TOOTH_MIN_EDGE_METERS)
+                 if not _deep_inside(asphalt_index, ring[i], TOOTH_HIDDEN_DEPTH_METERS, skip=ring)]
+        if sharp:
+            teeth += 1
+            if examples is not None:
+                examples.append(("teeth", round(ring[sharp[0]][1], 5), round(ring[sharp[0]][0], 5),
+                                 round(polygon_area_m2(ring))))
+    total = deep = 0.0
+    for line in kerbs:
+        for q in densify(line, 1.0):
+            total += 1.0
+            if _deep_inside(index, q, KERB_INSIDE_DEPTH_METERS):
+                deep += 1.0
+                if examples is not None:
+                    examples.append(("kerb_inside", round(q[1], 5), round(q[0], 5), 0))
+    n = len(big) or 1
+    return {"kerbless": 100.0 * kerbless / n, "overlap": 100.0 * overlap / n, "teeth": 100.0 * teeth / n,
+            "kerb_inside": 1000.0 * deep / total if total else 0.0, "big": len(big)}
+
+
+def _sharp_vertices(pts, degrees, min_edge=0.5):
+    """Индексы вершин кольца (м) с углом острее degrees, рёбра длиннее min_edge."""
+    out = []
+    n = len(pts)
+    for i in range(n):
+        a, b, c = pts[i - 1], pts[i], pts[(i + 1) % n]
+        u = (a[0] - b[0], a[1] - b[1])
+        v = (c[0] - b[0], c[1] - b[1])
+        lu, lv = math.hypot(*u), math.hypot(*v)
+        if lu < min_edge or lv < min_edge:
+            continue
+        cos = max(-1.0, min(1.0, (u[0] * v[0] + u[1] * v[1]) / (lu * lv)))
+        if math.degrees(math.acos(cos)) < degrees:
+            out.append(i)
+    return out
+
+
 def lane_arrow_defects(arrows, road_index, line_index, examples=None):
     """{вид брака: число} по всем стрелкам; examples — [(вид, lon, lat, подробности)]."""
     counts = defaultdict(int)
@@ -1029,6 +1131,12 @@ def measure(tiles_dir, islands_path=None, bbox=None):
     step_examples = []
     steps = zebra_steps([part for g, parts, props in paint if props.get("kind") == 12 for part in parts],
                         step_examples)
+    contour_examples = []
+    contour = junction_contour_defects(
+        [parts[0] for g, parts, props in surface
+         if g == 3 and props.get("kind") in (8, 10) and parts and not props.get("fill")],
+        [part for g, parts, props in surface if g == 2 and props.get("kind") == 16 for part in parts],
+        asphalt_rings, names, contour_examples)
     seam_examples = []
     seams = bridge_seams([(part, props) for parts, props in road_lines for part in parts], seam_examples)
     colour_examples = []
@@ -1107,6 +1215,12 @@ def measure(tiles_dir, islands_path=None, bbox=None):
         "junction_colour_blots": blots,
         "_blot_examples": blot_examples[:30],
         "bridge_seams": round(seams, 2),
+        "junction_kerbless": round(contour["kerbless"], 2),
+        "junction_overlap": round(contour["overlap"], 2),
+        "junction_teeth": round(contour["teeth"], 2),
+        "kerb_inside_junction": round(contour["kerb_inside"], 1),
+        "_contour_examples": [e for kind in ("kerbless", "overlap", "teeth", "kerb_inside")
+                              for e in contour_examples if e[0] == kind][:400],
         "zebra_steps": round(steps, 2),
         "avenues_unmarked": round(bare, 1),
         "_unmarked_examples": bare_examples[:30],
@@ -1148,6 +1262,10 @@ UNITS = {
     "junction_colour_mismatch": "% узлов чужого цвета (магистраль/нет)",
     "junction_colour_blots": "узлов-клякс цвета класса на чужих лентах",
     "bridge_seams": "швов на 1 км настила мостов",
+    "junction_kerbless": "% крупных узлов без бордюра (запасная оболочка)",
+    "junction_overlap": "% крупных узлов внахлёст с другим (рваный край)",
+    "junction_teeth": "% крупных узлов с зубцом < 40°",
+    "kerb_inside_junction": "м бордюра внутри площади узла на 1 км",
     "zebra_steps": "% зебр ступенькой к соседке",
     "avenues_unmarked": "% длины проспектов без линий полос",
 }
@@ -1179,7 +1297,8 @@ NOISE_FLOOR = {"houses_under_asphalt": 0.2, "islands_under_asphalt": 5.0, "arrow
                "dashes_through_medians": 2.0, "zebra_overhang": 3.0, "zebra_duplicates": 2.0,
                "junction_spikes": 2.0, "island_slivers": 2.0, "junction_bloat": 2.0,
                "arrows_off_lane": 5.0, "arrows_icon_size": 5.0, "markings_off_road": 2.0,
-               "arrows_tilted": 5.0, "marking_jumps": 5.0, "junction_colour_mismatch": 1.0, "junction_colour_blots": 3, "bridge_seams": 1.0, "zebra_steps": 1.0, "avenues_unmarked": 5.0, "arrows_angle_max": ARROW_ANGLE_LIMIT_DEGREES}
+               "arrows_tilted": 5.0, "marking_jumps": 5.0, "junction_colour_mismatch": 1.0, "junction_colour_blots": 3, "bridge_seams": 1.0, "junction_kerbless": 2.0, "junction_overlap": 2.0, "junction_teeth": 2.0,
+               "kerb_inside_junction": 5.0, "zebra_steps": 1.0, "avenues_unmarked": 5.0, "arrows_angle_max": ARROW_ANGLE_LIMIT_DEGREES}
 
 
 def compare(previous, current):
@@ -1221,6 +1340,8 @@ def main():
     print("  разметка за кромкой (точки):", result["_marking_off_examples"][:args.worst])
     print("  повёрнутые стрелки (°, широта, долгота):", result["_tilted_examples"][:args.worst])
     print("  кляксы цвета узла (м², широта, долгота):", result["_blot_examples"][:args.worst])
+    for kind in ("kerbless", "overlap", "teeth", "kerb_inside"):
+        print(f"  контур узла — {kind}:", [e[1:] for e in result["_contour_examples"] if e[0] == kind][:args.worst])
     print("  ступеньки пунктира (широта, долгота, сдвиг м), худшая", result["_marking_jump_worst"], ":",
           result["_jump_examples"][:args.worst])
     if args.json:

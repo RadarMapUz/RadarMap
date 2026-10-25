@@ -807,6 +807,30 @@ class JunctionClassPropsTests(unittest.TestCase):
                          {"kind": 8}, "старые данные без класса — без свойства")
 
 
+
+class KerbMaskTests(unittest.TestCase):
+    """Бордюр угла — только по краю асфальта (29.A): кусок внутри чужой
+    площади узла режется, свой край фигуры остаётся."""
+
+    kx = 111_320 * math.cos(math.radians(41.34))
+
+    def p(self, x, y):
+        return (69.33 + x / self.kx, 41.34 + y / 111_320)
+
+    def test_kerb_across_another_junction_is_cut_and_its_own_edge_stays(self):
+        square = [self.p(-20, -20), self.p(20, -20), self.p(20, 20), self.p(-20, 20)]
+        mask = build_mvt.KerbMask([square])
+        across = mask.clip_kerb([self.p(-40, 0), self.p(40, 0)])
+        self.assertEqual(len(across), 2, "по обе стороны чужой площади")
+        for piece in across:
+            for q in piece:
+                self.assertGreater(abs(q[0] - 69.33) * self.kx, 20 - build_mvt.KERB_INSIDE_DEPTH_METERS - 0.6)
+        edge = [self.p(-20, -20), self.p(20, -20)]
+        kept = mask.clip_kerb(edge)
+        self.assertEqual(len(kept), 1)
+        self.assertEqual((kept[0][0], kept[0][-1]), (edge[0], edge[-1]))
+
+
 class BridgeChainTests(unittest.TestCase):
     """Мост — одной линией: куски с прямыми торцами давали швы (аудит 28.G, №2)."""
 

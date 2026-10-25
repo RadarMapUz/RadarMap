@@ -217,6 +217,35 @@ class ZebraStepMetricTests(unittest.TestCase):
         self.assertEqual(rm.zebra_steps([[m(0, -3), m(0, 3)], [m(8, -3), m(8, 3)]]), 0.0)
 
 
+
+class JunctionContourTests(unittest.TestCase):
+    """Контур площади узла (29.A): внахлёст, бордюр по асфальту, видимый зубец, без бордюра."""
+
+    def test_kerb_through_the_junction_is_measured_and_on_its_edge_is_not(self):
+        ring = square(-20, -20, 20, 20)
+        across = [m(-15, 0), m(15, 0)]          # «паутина»: поперёк асфальта узла
+        edge = [m(-20, -20), m(20, -20)]        # по краю — так и надо
+        self.assertGreater(rm.junction_contour_defects([ring], [across])["kerb_inside"], 900)
+        self.assertEqual(rm.junction_contour_defects([ring], [edge])["kerb_inside"], 0.0)
+
+    def test_two_pieces_on_top_of_each_other_are_a_ragged_edge(self):
+        one, two = square(-20, -20, 20, 20), square(5, -15, 45, 25)
+        result = rm.junction_contour_defects([one, two], [])
+        self.assertEqual(result["overlap"], 100.0)
+        self.assertEqual(result["kerbless"], 100.0)
+        apart = rm.junction_contour_defects([one, square(20, -20, 60, 20)], [])
+        self.assertEqual(apart["overlap"], 0.0, "встык — не внахлёст")
+
+    def test_tooth_counts_only_where_no_asphalt_hides_it(self):
+        tooth = [m(-20, -20), m(20, -20), m(20, 20), m(0, 60), m(-2, 20), m(-20, 20)]
+        self.assertEqual(rm.junction_contour_defects([tooth], [])["teeth"], 100.0)
+        road = square(-6, 0, 6, 90)              # зубец лежит на полотне улицы
+        self.assertEqual(rm.junction_contour_defects([tooth], [], asphalt=[road])["teeth"], 0.0)
+
+    def test_small_patches_are_not_judged(self):
+        self.assertEqual(rm.junction_contour_defects([square(0, 0, 10, 10)], [])["big"], 0)
+
+
 class CompareTests(unittest.TestCase):
     def test_worse_metric_stops_publish(self):
         reasons = rm.compare({"dashes_in_junction": 45.0}, {"dashes_in_junction": 80.0})

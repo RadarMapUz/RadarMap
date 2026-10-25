@@ -4011,11 +4011,16 @@ class Leg(tuple):
     кромка их полотна). Нога из простого кортежа (тесты) класса не знает.
     """
 
-    def __new__(cls, node, neighbour, width, code=None, link=False, bridge=False):
+    def __new__(cls, node, neighbour, width, code=None, link=False, bridge=False, far=None, length=None):
         leg = super().__new__(cls, (node, neighbour, width))
         leg.code = code
         leg.link = link
         leg.bridge = bridge
+        # Другой конец куска (ключ узла) и длина куска, м: перемычку между
+        # узлами одного перекрёстка видно по ним (cluster_junctions).
+        leg.far = far
+        leg.length = length
+        leg.far_arms = 0
         return leg
 
 
@@ -4028,11 +4033,18 @@ def junction_arms(chains):
             continue
         for piece in chain:
             points = piece[2]
-            for node, neighbour in ((points[0], points[1]),
-                                    (points[-1], points[-2])):
+            length = sum(meters_between(a, b) for a, b in zip(points, points[1:]))
+            for node, neighbour, far in ((points[0], points[1], points[-1]),
+                                         (points[-1], points[-2], points[0])):
                 arms[_node_key(node)].append(Leg(node, neighbour, width, street[0],
                                                  bool(street[1] & FLAG_LINK),
-                                                 bool(street[1] & FLAG_BRIDGE)))
+                                                 bool(street[1] & FLAG_BRIDGE),
+                                                 _node_key(far), length))
+    # Сколько ног у дальнего конца: подход к соседнему узлу не заходит за
+    # середину куска, иначе площади двух узлов ложатся внахлёст (union_outline).
+    for legs in arms.values():
+        for leg in legs:
+            leg.far_arms = len(arms.get(leg.far, ()))
     return arms
 
 
@@ -4068,6 +4080,43 @@ JUNCTION_CLUSTER_MAX_SPAN = 90.0
 def _is_major_node(legs):
     """В узле сходятся хотя бы две магистральные ленты (шире JUNCTION_MIN_WIDEST)."""
     return sum(1 for leg in legs if leg[2] >= JUNCTION_MIN_WIDEST_METERS) >= 2
+
+
+# Узлы-близнецы одного перекрёстка: связаны прямым куском не длиннее этого, и в
+# каждом сходятся три и больше улиц не ниже третьего класса. Пересечение двух
+# проспектов с лентами по 7–8 м (Дурмон йули × Зиёлилар, Муминова, 23.10.2026)
+# — четыре узла в 13–15 м друг от друга, но магистральным (две ленты шире 9 м)
+# был один: узлы не сводились, и на месте перекрёстка лежали четыре фигуры
+# внахлёст — рваный край, а бордюр каждой шёл по асфальту соседней.
+# Двор в 22 м от перекрёстка (Каратош × Бешёгоч) сюда не попадает: у узла
+# двора старших ног две.
+JUNCTION_TWIN_METERS = 25.0
+JUNCTION_TWIN_MAX_CLASS = 5
+
+
+def _is_crossing_node(legs):
+    return sum(1 for leg in legs
+               if getattr(leg, "code", None) is not None and leg.code <= JUNCTION_TWIN_MAX_CLASS) >= 3
+
+
+def _twin_links(spots):
+    """Пары индексов spots, связанных коротким куском между узлами-перекрёстками."""
+    index = {key: i for i, (key, _legs) in enumerate(spots)}
+    pairs = set()
+    for i, (key, legs) in enumerate(spots):
+        if not _is_crossing_node(legs):
+            continue
+        for leg in legs:
+            far = getattr(leg, "far", None)
+            length = getattr(leg, "length", None)
+            if far is None or far == key or length is None or length > JUNCTION_TWIN_METERS:
+                continue
+            if leg.code is None or leg.code > JUNCTION_TWIN_MAX_CLASS:
+                continue
+            j = index.get(far)
+            if j is not None and _is_crossing_node(spots[j][1]):
+                pairs.add((min(i, j), max(i, j)))
+    return sorted(pairs)
 
 
 # Примыкание съезда острым углом (лента насквозь плюс узкий отросток уже
@@ -4180,6 +4229,8 @@ def cluster_junctions(arms):
                 # Бешёгоч, 05.10.2026). Двор остаётся своим маленьким узлом.
                 if _is_major_node(spots[one][1]) and _is_major_node(spots[other][1]):
                     unite(one, other)
+    for one, other in _twin_links(spots):
+        unite(one, other)
 
     groups = {}
     for index, (_key, legs) in enumerate(spots):
@@ -4740,9 +4791,13 @@ def iter_junctions(arms, outlined=None, colours=None):
     # подхода магистрали у перекрёстка с улицей. Покрашенные порознь, они
     # ложились абрикосовыми пятнами на серый узел (Малая кольцевая × Беруни,
     # «2-я Паркентская», 23.10.2026). Узел с ногами моста — на другом уровне.
+    # Соседом считается только узел, у которого есть площадь: узел одних
+    # узких съездов (перемычка разворота, 3,8 м) фигуры не даёт, а серыми
+    # делал соседние узлы магистрали — серые заплатки на абрикосовой ТКАД у
+    # каждого разворота (D001, 41.24111, 69.16677; аудит 28.G, §5).
     neutral = JunctionColours()
     for legs, colour in clusters:
-        if colour is None and not any(getattr(leg, "bridge", False) for leg in legs):
+        if colour is None and _makes_figure(legs) and not any(getattr(leg, "bridge", False) for leg in legs):
             neutral.add(legs, None)
     for legs, colour in clusters:
         if colour is not None and not any(getattr(leg, "bridge", False) for leg in legs):
@@ -4801,6 +4856,554 @@ def _mouth_figure(legs, kerbs=None):
     return None
 
 
+# --- Контур узла объединением лент (29.A) ----------------------------------
+#
+# Контур по устьям (mouth_outline) обходит подходы по углу вокруг центра
+# кластера. У растянутого кластера (Бунёдкор × Фуркат, Беруни × Малая
+# кольцевая, 41 нога на 90 м) порядок по углу не совпадает с порядком по
+# краю: контур перекручивается, и узел уходил в выпуклую оболочку — прямые
+# хорды через тротуар, острые срезанные углы, без бордюра (аудит 28.G, №1).
+#
+# Здесь порядок не нужен вовсе: площадь узла — объединение самих лент
+# кластера (внутренние куски целиком, подходы — до устья), пятачков в узлах
+# и перемычек между параллельными лентами одной улицы; внутренние пустоты
+# заливаются. Вогнутые углы внешнего края скругляются бордюрным радиусом по
+# двум дорогам угла (corner_radius), и бордюр — это ровно внешний край без
+# устьев: по асфальту узла он не идёт по построению.
+UNION_DISC_SIDES = 12
+UNION_EPS = 1e-7
+# Подход заходит в узел до угла с соседом, плюс касательная дуги и метр.
+UNION_MOUTH_MAX_METERS = 40.0
+UNION_TANGENT_RADII = 2.0
+# Перемычка между лентами одной улицы — только у узлов, разошедшихся вдоль
+# неё не больше чем на столько.
+UNION_BRIDGE_ALONG_METERS = 15.0
+# Угол с соседней лентой ищется не дальше стольких суммарных полуширин.
+UNION_CORNER_WIDTHS = 3.0
+# Насколько больше земли (доля площади вне полотна) должен залить контур по
+# устьям кластера, чтобы вместо него взять объединение лент.
+UNION_PREFER_UNCOVERED = 0.08
+# Клин между лентами, расходящимися из одной точки, уже этого — закрывается.
+UNION_WEDGE_DEGREES = 35.0
+# Пустота внутри кластера больше этой — квартал, а не середина перекрёстка
+# (середина между четырьмя лентами двух проспектов — до 30 × 30 м):
+# заливать её асфальтом нельзя, контура нет.
+UNION_HOLE_MAX_M2 = 900.0
+# Пустота длиннее этого и уже UNION_HOLE_THIN_METERS в среднем —
+# разделительная между лентами, запертая разворотом в полусотне метров от
+# узла (Каратош у Бунёдкора): залитая, она стирала газон разделительной на
+# всю длину. Тогда узел строится по своим узлам.
+UNION_HOLE_MAX_SPAN_METERS = 25.0
+UNION_HOLE_THIN_METERS = 8.0
+# Щель уже этого между почти касающимися лентами — не газон: заливается.
+UNION_HOLE_SLIT_METERS = 2.5
+# Вершины ближе этого сливаются, излом меньше этого — прямая.
+UNION_MIN_EDGE_METERS = 1.0
+UNION_STRAIGHT_DEGREES = 1.0
+
+
+def _seg_cross(p, q, a, b):
+    """Пересечение отрезков pq и ab внутри обоих: (точка, t вдоль pq, u вдоль ab)."""
+    rx, ry = q[0] - p[0], q[1] - p[1]
+    sx, sy = b[0] - a[0], b[1] - a[1]
+    den = rx * sy - ry * sx
+    if abs(den) < 1e-12:
+        return None
+    qx, qy = a[0] - p[0], a[1] - p[1]
+    t = (qx * sy - qy * sx) / den
+    u = (qx * ry - qy * rx) / den
+    if -UNION_EPS <= t <= 1 + UNION_EPS and -UNION_EPS <= u <= 1 + UNION_EPS:
+        return (p[0] + rx * t, p[1] + ry * t), t, u
+    return None
+
+
+def _on_segment(p, a, b, eps=1e-6):
+    """Доля вдоль ab для точки p, лежащей на отрезке (в пределах eps), иначе None."""
+    ax, ay = b[0] - a[0], b[1] - a[1]
+    length = ax * ax + ay * ay
+    if length == 0:
+        return None
+    t = ((p[0] - a[0]) * ax + (p[1] - a[1]) * ay) / length
+    if t < -1e-9 or t > 1 + 1e-9:
+        return None
+    if math.hypot(p[0] - a[0] - ax * t, p[1] - a[1] - ay * t) > eps:
+        return None
+    return t
+
+
+def polygon_union_outline(polygons):
+    """Внешние контуры объединения простых многоугольников против часовой.
+
+    polygons — [(кольцо xy против часовой, [метка ребра i]...)]. Возвращает
+    (внешние кольца, пустоты): кольцо — [(точка, метка ребра от неё)],
+    внешние — против часовой, пустоты — по часовой. Ребро остаётся, если его
+    кусок не лежит внутри другого многоугольника; общий участок двух рёбер
+    в одну сторону остаётся один раз, встречный — пропадает (стык двух фигур).
+    """
+    edges = []
+    for pi, (ring, labels) in enumerate(polygons):
+        for i in range(len(ring)):
+            a, b = ring[i], ring[(i + 1) % len(ring)]
+            if a != b:
+                edges.append((pi, a, b, labels[i],
+                              (min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1]))))
+    cuts = [[(0.0, e[1]), (1.0, e[2])] for e in edges]
+    for i in range(len(edges)):
+        pi, p, q, _l, bi = edges[i]
+        for j in range(i + 1, len(edges)):
+            pj, a, b, _m, bj = edges[j]
+            if pi == pj or bi[0] > bj[2] + 1e-6 or bj[0] > bi[2] + 1e-6 \
+                    or bi[1] > bj[3] + 1e-6 or bj[1] > bi[3] + 1e-6:
+                continue
+            hit = _seg_cross(p, q, a, b)
+            if hit is not None:
+                point, t, u = hit
+                cuts[i].append((t, point))
+                cuts[j].append((u, point))
+                continue
+            # Параллельные: концы одного на другом — точки разреза.
+            for point, mine, other in ((a, i, None), (b, i, None), (p, j, None), (q, j, None)):
+                host = edges[mine]
+                t = _on_segment(point, host[1], host[2])
+                if t is not None:
+                    cuts[mine].append((t, point))
+    pieces = []
+    rings = [poly[0] for poly in polygons]
+    boxes = [(min(x for x, _ in r), min(y for _, y in r), max(x for x, _ in r), max(y for _, y in r))
+             for r in rings]
+    for i, (pi, p, q, label, _box) in enumerate(edges):
+        stops = sorted(cuts[i], key=lambda c: c[0])
+        for (t0, s), (t1, e) in zip(stops, stops[1:]):
+            if t1 - t0 < 1e-9 or s == e:
+                continue
+            mid = ((s[0] + e[0]) / 2, (s[1] + e[1]) / 2)
+            keep = True
+            for k, ring in enumerate(rings):
+                if k == pi:
+                    continue
+                box = boxes[k]
+                if not (box[0] - 1e-6 <= mid[0] <= box[2] + 1e-6 and box[1] - 1e-6 <= mid[1] <= box[3] + 1e-6):
+                    continue
+                on = None
+                for m in range(len(ring)):
+                    a, b = ring[m], ring[(m + 1) % len(ring)]
+                    if _on_segment(mid, a, b) is not None:
+                        on = (a, b)
+                        break
+                if on is not None:
+                    same = (e[0] - s[0]) * (on[1][0] - on[0][0]) + (e[1] - s[1]) * (on[1][1] - on[0][1]) > 0
+                    if not same or k < pi:
+                        keep = False
+                        break
+                    continue
+                if _point_in_ring(mid, ring):
+                    keep = False
+                    break
+            if keep:
+                pieces.append((s, e, label))
+    # Сцепка кусков в кольца: из каждой точки — самый правый поворот (внешний
+    # край обходится плотно, касание двух фигур в точке не склеивает кольца).
+    outgoing = defaultdict(list)
+    for index, (s, e, _label) in enumerate(pieces):
+        outgoing[_union_key(s)].append(index)
+    used = [False] * len(pieces)
+    outer, holes = [], []
+    for start in range(len(pieces)):
+        if used[start]:
+            continue
+        ring = []
+        index = start
+        while index is not None and not used[index]:
+            used[index] = True
+            s, e, label = pieces[index]
+            ring.append((s, label))
+            heading = math.atan2(e[1] - s[1], e[0] - s[0])
+            best, best_turn = None, None
+            for other in outgoing.get(_union_key(e), ()):
+                if used[other] and other != start:
+                    continue
+                s2, e2, _l2 = pieces[other]
+                turn = (math.atan2(e2[1] - s2[1], e2[0] - s2[0]) - heading + math.pi) % (2 * math.pi) - math.pi
+                if best is None or turn < best_turn:
+                    best, best_turn = other, turn
+            if best == start or best is None:
+                break
+            index = best
+        if len(ring) < 3:
+            continue
+        area = _ring_area([p for p, _l in ring])
+        if area > 0:
+            outer.append(ring)
+        elif area < 0:
+            holes.append(ring)
+    return outer, holes
+
+
+def _union_key(point):
+    return (round(point[0] * 1e5), round(point[1] * 1e5))
+
+
+def _ring_area(points):
+    return sum(points[i - 1][0] * points[i][1] - points[i][0] * points[i - 1][1]
+               for i in range(len(points))) / 2.0
+
+
+def _tidy_ring(ring):
+    """Слить близкие вершины и прямые изломы. ring — [(точка, метка ребра от неё)]."""
+    ring = list(ring)
+    changed = True
+    while changed and len(ring) > 3:
+        changed = False
+        i = 0
+        while i < len(ring) and len(ring) > 3:
+            n = len(ring)
+            p, _label = ring[i]
+            q, next_label = ring[(i + 1) % n]
+            if math.hypot(q[0] - p[0], q[1] - p[1]) < UNION_MIN_EDGE_METERS:
+                # Короткое ребро: его конец уходит, ребро берёт метку следующего.
+                ring[i] = (p, next_label)
+                del ring[(i + 1) % n]
+                if (i + 1) % n == 0:
+                    i -= 1
+                changed = True
+                continue
+            i += 1
+        i = 0
+        while i < len(ring) and len(ring) > 3:
+            n = len(ring)
+            a, b, c = ring[i - 1][0], ring[i][0], ring[(i + 1) % n][0]
+            u = (b[0] - a[0], b[1] - a[1])
+            v = (c[0] - b[0], c[1] - b[1])
+            turn = math.degrees(abs(math.atan2(u[0] * v[1] - u[1] * v[0], u[0] * v[0] + u[1] * v[1])))
+            if turn < UNION_STRAIGHT_DEGREES and _is_kerbish(ring[i - 1][1]) == _is_kerbish(ring[i][1]) \
+                    and (ring[i - 1][1][0] == "arc") == (ring[i][1][0] == "arc"):
+                del ring[i]
+                changed = True
+                continue
+            i += 1
+    return ring
+
+
+def _is_kerbish(label):
+    return label[0] in ("side", "disc", "arc")
+
+
+def _rect(n, d, half, start, end):
+    """Лента от start до end вдоль d, против часовой: правая кромка, торец, левая, начало."""
+    ax, ay = -d[1] * half, d[0] * half
+    p0 = (n[0] + d[0] * start - ax, n[1] + d[1] * start - ay)
+    p1 = (n[0] + d[0] * end - ax, n[1] + d[1] * end - ay)
+    p2 = (n[0] + d[0] * end + ax, n[1] + d[1] * end + ay)
+    p3 = (n[0] + d[0] * start + ax, n[1] + d[1] * start + ay)
+    return [p0, p1, p2, p3]
+
+
+def _ccw(ring, labels):
+    if _ring_area(ring) >= 0:
+        return ring, labels
+    n = len(ring)
+    return ring[::-1], [labels[(n - 2 - j) % n] for j in range(n)]
+
+
+def _hull_xy(points):
+    """Выпуклая оболочка точек в метрах, против часовой."""
+    unique = sorted(set(points))
+    if len(unique) < 3:
+        return unique
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    def half(source):
+        out = []
+        for point in source:
+            while len(out) > 1 and cross(out[-2], out[-1], point) <= 1e-9:
+                out.pop()
+            out.append(point)
+        return out[:-1]
+
+    return half(unique) + half(unique[::-1])
+
+
+def _line_hit(p, d, a, e):
+    """Пересечение прямых p + d·s и a + e·u: (s, u) или None."""
+    den = d[0] * e[1] - d[1] * e[0]
+    if abs(den) < 1e-9:
+        return None
+    qx, qy = a[0] - p[0], a[1] - p[1]
+    return (qx * e[1] - qy * e[0]) / den, (qx * d[1] - qy * d[0]) / den
+
+
+def union_outline(legs, kerbs=None, report=None):
+    """Кольцо узла объединением лент кластера с бордюрными дугами или None.
+
+    kerbs (список) — сюда кладутся бордюры (магистральный?, линия), асфальт
+    слева: внешний край фигуры без устьев. Только если контур вышел.
+    report (словарь) получает «hole», если контур не вышел из-за пустоты,
+    которую заливать нельзя (квартал, разделительная).
+    """
+    nodes = {}
+    for leg in legs:
+        nodes.setdefault(_node_key(leg[0]), leg[0])
+    centre = (sum(p[0] for p in nodes.values()) / len(nodes),
+              sum(p[1] for p in nodes.values()) / len(nodes))
+    kx = LAT_METERS * math.cos(math.radians(centre[1]))
+
+    def xy(p):
+        return ((p[0] - centre[0]) * kx, (p[1] - centre[1]) * LAT_METERS)
+
+    def back(p):
+        return (centre[0] + p[0] / kx, centre[1] + p[1] / LAT_METERS)
+
+    arms, seen = [], set()
+    widest_at = defaultdict(float)
+    for leg in legs:
+        node, neighbour, width = leg
+        key = _node_key(node)
+        n, q = xy(node), xy(neighbour)
+        d = _unit(q[0] - n[0], q[1] - n[1])
+        if d == (0.0, 0.0) or width <= 0:
+            continue
+        widest_at[key] = max(widest_at[key], width / 2.0)
+        far = getattr(leg, "far", None)
+        internal = far is not None and far != key and far in nodes
+        length = 0.0
+        if internal:
+            if (far, key) in seen or (key, far) in seen:
+                continue
+            seen.add((key, far))
+            target = xy(nodes[far])
+            length = math.hypot(target[0] - n[0], target[1] - n[1])
+            if length > 0.5:
+                d = _unit(target[0] - n[0], target[1] - n[1])
+        piece = getattr(leg, "length", None)
+        # Подход к соседнему узлу (другому перекрёстку): устье не дальше
+        # середины куска — там начинается площадь соседа.
+        shared = (None if internal or piece is None or getattr(leg, "far_arms", 0) < MIN_JUNCTION_ARMS
+                  else max(MOUTH_MIN_METERS, piece / 2.0))
+        arms.append({"n": n, "d": d, "half": width / 2.0, "width": width, "internal": internal,
+                     "length": length, "code": getattr(leg, "code", None), "key": key, "shared": shared})
+    outside = [a for a in arms if not a["internal"]]
+    if len(outside) < 2:
+        return None
+    # Устье подхода — за последним углом с соседней лентой, плюс касательная
+    # дуги бордюра и метр (как у mouth_outline).
+    for a in outside:
+        reach = MOUTH_MIN_METERS
+        for b in arms:
+            if b is a:
+                continue
+            cos = a["d"][0] * b["d"][0] + a["d"][1] * b["d"][1]
+            phi = math.acos(max(-1.0, min(1.0, cos)))
+            if phi < math.radians(MOUTH_PARALLEL_DEGREES) or phi > math.radians(180 - 5):
+                continue
+            radius = corner_radius(a["width"], b["width"])
+            # Касательная острого угла длинная, но дугу там всё равно
+            # ограничит место (_fillet_ring): устье не тянется вдоль улицы.
+            tangent = min(UNION_TANGENT_RADII * radius, radius / math.tan(phi / 2))
+            # Угол — только с соседкой рядом: кромка, встретившая чужую ленту
+            # в тридцати метрах вдоль обеих, тянула устье на всю улицу, а
+            # перемычка заливала разделительную до него (Бунёдкор × Фуркат).
+            near = UNION_CORNER_WIDTHS * (a["half"] + b["half"])
+            limit_b = b["length"] if b["internal"] else min(MOUTH_MAX_TANGENT_METERS, near)
+            limit_a = min(MOUTH_MAX_TANGENT_METERS,
+                          near + math.hypot(b["n"][0] - a["n"][0], b["n"][1] - a["n"][1]))
+            for sa in (1, -1):
+                pa = (a["n"][0] - a["d"][1] * a["half"] * sa, a["n"][1] + a["d"][0] * a["half"] * sa)
+                for sb in (1, -1):
+                    pb = (b["n"][0] - b["d"][1] * b["half"] * sb, b["n"][1] + b["d"][0] * b["half"] * sb)
+                    hit = _line_hit(pa, a["d"], pb, b["d"])
+                    if hit is None:
+                        continue
+                    s, u = hit
+                    if 0 <= s <= limit_a and -b["half"] <= u <= limit_b:
+                        reach = max(reach, s + tangent + 1.0)
+        a["mouth"] = min(UNION_MOUTH_MAX_METERS, max(reach, widest_at[a["key"]] + 1.0))
+        if a["shared"] is not None:
+            a["mouth"] = min(a["mouth"], a["shared"])
+    polygons = []
+    for index, a in enumerate(arms):
+        end = a["length"] if a["internal"] else a["mouth"]
+        ring = _rect(a["n"], a["d"], a["half"], 0.0, end)
+        cap = ("back", index) if a["internal"] else ("cap", index)
+        polygons.append((ring, [("side", index), cap, ("side", index), ("back", index)]))
+    for key, node in nodes.items():
+        half = widest_at.get(key, 0.0)
+        if half <= 0:
+            continue
+        c = xy(node)
+        radius = half / math.cos(math.pi / UNION_DISC_SIDES) * 1.01
+        ring = [(c[0] + radius * math.cos(2 * math.pi * (k + 0.5) / UNION_DISC_SIDES),
+                 c[1] + radius * math.sin(2 * math.pi * (k + 0.5) / UNION_DISC_SIDES))
+                for k in range(UNION_DISC_SIDES)]
+        polygons.append((ring, [("disc", key)] * UNION_DISC_SIDES))
+    # Две ленты одной улицы бок о бок (разделительная) — общее устье: полоса
+    # между внутренними кромками до устьев закрывается, иначе в край узла
+    # врезается узкая щель разделительной, а дуги на её дне сходятся.
+    for i, a in enumerate(outside):
+        for b in outside[i + 1:]:
+            cos = a["d"][0] * b["d"][0] + a["d"][1] * b["d"][1]
+            if cos < math.cos(math.radians(UNION_WEDGE_DEGREES)):
+                continue
+            vx, vy = b["n"][0] - a["n"][0], b["n"][1] - a["n"][1]
+            side = a["d"][0] * vy - a["d"][1] * vx
+            gap = abs(side) - a["half"] - b["half"]
+            # Ленты, расходящиеся из одной точки острым клином (gap ≤ 0), —
+            # тоже: дно клина не скруглить, и в край узла врезался зубец.
+            if gap > MEDIAN_MAX_METERS or (gap > 0 and cos < math.cos(math.radians(MOUTH_PARALLEL_DEGREES))):
+                continue
+            # Узлы далеко друг от друга вдоль улицы — не одно устье: перемычка
+            # залила бы разделительную на всю длину между ними (Каратош).
+            if abs(a["d"][0] * vx + a["d"][1] * vy) > UNION_BRIDGE_ALONG_METERS:
+                continue
+            if abs(side) < 1e-6:
+                side = 1e-6
+            between = False
+            for c in outside:
+                if c is a or c is b:
+                    continue
+                if c["d"][0] * a["d"][0] + c["d"][1] * a["d"][1] < math.cos(math.radians(MOUTH_PARALLEL_DEGREES)):
+                    continue
+                cs = a["d"][0] * (c["n"][1] - a["n"][1]) - a["d"][1] * (c["n"][0] - a["n"][0])
+                if 0 < cs / side < 1:
+                    between = True
+                    break
+            if between:
+                continue
+            sa = 1 if side > 0 else -1
+            ia = (a["n"][0] - a["d"][1] * a["half"] * sa, a["n"][1] + a["d"][0] * a["half"] * sa)
+            ib = (b["n"][0] + b["d"][1] * b["half"] * sa, b["n"][1] - b["d"][0] * b["half"] * sa)
+            ring = _hull_xy([ia, (ia[0] + a["d"][0] * a["mouth"], ia[1] + a["d"][1] * a["mouth"]),
+                             (ib[0] + b["d"][0] * b["mouth"], ib[1] + b["d"][1] * b["mouth"]), ib])
+            if len(ring) < 3 or abs(_ring_area(ring)) < 0.5:
+                continue
+            polygons.append((ring, [("bridge",)] * len(ring)))
+    outer, holes = polygon_union_outline(polygons)
+    outer = [r for r in outer if _ring_area([p for p, _l in r]) > 1.0]
+    if not outer:
+        return None
+    for hole in holes:
+        points = [p for p, _l in hole]
+        span = max(math.hypot(a[0] - b[0], a[1] - b[1]) for a in points for b in points)
+        area = -_ring_area(points)
+        thin = (span > UNION_HOLE_MAX_SPAN_METERS
+                and UNION_HOLE_SLIT_METERS <= area / span < UNION_HOLE_THIN_METERS)
+        if area > UNION_HOLE_MAX_M2 or thin:
+            if report is not None:
+                report["hole"] = True
+            return None
+    parts = []
+    for part in outer:
+        ring = _tidy_ring(_fillet_ring(_tidy_ring(part), arms))
+        if len(ring) < 3:
+            return None
+        out = [back(p) for p, _l in ring]
+        if surface_check.defect(out) is not None or surface_check.defect(quantized(out)) is not None:
+            return None
+        parts.append((out, _outline_kerbs(ring, arms, back)))
+    if len(parts) > 1:
+        # Кластер распался на куски, не связанные лентами (узлы свела близость,
+        # а не общий кусок): каждый кусок — своя площадь.
+        if report is not None:
+            report["parts"] = parts
+        return None
+    if kerbs is not None:
+        kerbs.extend(parts[0][1])
+    return parts[0][0]
+
+
+def _arm_width(label, arms):
+    if label[0] in ("side", "back", "cap") and label[1] < len(arms):
+        return arms[label[1]]["width"]
+    if label[0] == "arc":
+        return label[2]
+    return None
+
+
+def _fillet_ring(ring, arms):
+    """Скруглить вогнутые углы внешнего края (угол квартала) бордюрной дугой."""
+    n = len(ring)
+    out = []
+    for i in range(n):
+        a, b, c = ring[i - 1][0], ring[i][0], ring[(i + 1) % n][0]
+        before, after = ring[i - 1][1], ring[i][1]
+        u = (b[0] - a[0], b[1] - a[1])
+        v = (c[0] - b[0], c[1] - b[1])
+        lu, lv = math.hypot(*u), math.hypot(*v)
+        cross = u[0] * v[1] - u[1] * v[0]
+        turn = math.atan2(cross, u[0] * v[0] + u[1] * v[1])
+        kerbish = _is_kerbish(before) and _is_kerbish(after)
+        if turn >= -math.radians(KERB_STRAIGHT_DEGREES) or not kerbish or lu < 0.5 or lv < 0.5:
+            out.append(ring[i])
+            continue
+        widths = [w for w in (_arm_width(before, arms), _arm_width(after, arms)) if w]
+        radius = corner_radius(min(widths), min(widths)) if widths else KERB_RADIUS_MIN
+        if len(widths) == 2:
+            radius = corner_radius(widths[0], widths[1])
+        half = abs(turn) / 2
+        tangent = radius * math.tan(half)
+        room = 0.45 * min(lu, lv)
+        if tangent > room:
+            tangent = room
+            radius = tangent / math.tan(half)
+        if radius < 1.0:
+            out.append(ring[i])
+            continue
+        du, dv = (u[0] / lu, u[1] / lu), (v[0] / lv, v[1] / lv)
+        p1 = (b[0] - du[0] * tangent, b[1] - du[1] * tangent)
+        p2 = (b[0] + dv[0] * tangent, b[1] + dv[1] * tangent)
+        # Центр — снаружи фигуры: справа от хода против часовой.
+        centre = (p1[0] + du[1] * radius, p1[1] - du[0] * radius)
+        a0 = math.atan2(p1[1] - centre[1], p1[0] - centre[0])
+        a1 = math.atan2(p2[1] - centre[1], p2[0] - centre[0])
+        sweep = (a1 - a0 + math.pi) % (2 * math.pi) - math.pi
+        steps = max(2, min(int(abs(math.degrees(sweep)) / MOUTH_ARC_STEP_DEGREES) + 1,
+                           int(radius * abs(sweep) / FILLET_ARC_SPACING) + 1))
+        width = min(widths) if widths else 2 * KERB_RADIUS_MIN
+        arc_label = ("arc", None, width,
+                     before[1] if before[0] == "side" else None, after[1] if after[0] == "side" else None)
+        out.append((p1, arc_label))
+        for k in range(1, steps):
+            ang = a0 + sweep * k / steps
+            out.append(((centre[0] + radius * math.cos(ang), centre[1] + radius * math.sin(ang)), arc_label))
+        out.append((p2, after))
+    return out
+
+
+def _outline_kerbs(ring, arms, back):
+    """Бордюр — внешний край без устьев и перемычек: [(магистральный?, линия)]."""
+    n = len(ring)
+    start = next((i for i in range(n) if not _is_kerbish(ring[i][1])), None)
+    if start is None:
+        return []
+    chains, current, touched = [], [], set()
+    for k in range(1, n + 1):
+        i = (start + k) % n
+        point, label = ring[i]
+        if _is_kerbish(label):
+            if not current:
+                current = [point]
+            current.append(ring[(i + 1) % n][0])
+            if label[0] == "side":
+                touched.add(label[1])
+            elif label[0] == "arc":
+                touched.update(x for x in label[3:] if x is not None)
+        elif current:
+            chains.append((current, touched))
+            current, touched = [], set()
+    if current:
+        chains.append((current, touched))
+    result = []
+    for line, legs_touched in chains:
+        length = sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(line, line[1:]))
+        if length < 2.0 or len(line) < 2:
+            continue
+        codes = [arms[i]["code"] for i in legs_touched if i < len(arms)]
+        major = bool(codes) and all(c is not None and c <= KERB_MAJOR_MAX_CLASS for c in codes)
+        result.append((major, [back(p) for p in line]))
+    return result
+
+
 def _slip_nodes(legs):
     """Ключи узлов кластера, где к ленте острым углом примыкает съезд."""
     by_node = {}
@@ -4826,10 +5429,59 @@ def _level_colour(legs, colour):
     return colour
 
 
-def _junction_figures(legs, outlined, retry=True, colour=_UNSET):
+# Чем построен каждый перекрёсток (три ноги и больше): по устьям, объединением
+# лент или прежней оболочкой — доля оболочки печатается в отчёте сборки.
+JUNCTION_OUTLINES = Counter()
+
+
+# Цепочка: три и больше узлов кластера в полосе не шире этого поперёк их
+# общей оси и растянутые вдоль неё больше чем на JUNCTION_CHAIN_WIDTHS самой
+# широкой ноги. Это ряд примыканий вдоль одной улицы, а не один перекрёсток:
+# площадь объединением легла бы на всю улицу между ними и стёрла бы пунктир.
+JUNCTION_CHAIN_BAND_METERS = 6.0
+JUNCTION_CHAIN_WIDTHS = 2.5
+
+
+def _is_chain(legs):
+    nodes = list({_node_key(leg[0]): leg[0] for leg in legs}.values())
+    if len(nodes) < 3:
+        return False
+    cx = sum(p[0] for p in nodes) / len(nodes)
+    cy = sum(p[1] for p in nodes) / len(nodes)
+    kx = LAT_METERS * math.cos(math.radians(cy))
+    pts = [((p[0] - cx) * kx, (p[1] - cy) * LAT_METERS) for p in nodes]
+    sxx = sum(x * x for x, _ in pts)
+    syy = sum(y * y for _, y in pts)
+    sxy = sum(x * y for x, y in pts)
+    angle = 0.5 * math.atan2(2 * sxy, sxx - syy)
+    ux, uy = math.cos(angle), math.sin(angle)
+    along = [x * ux + y * uy for x, y in pts]
+    across = [-x * uy + y * ux for x, y in pts]
+    widest = max(leg[2] for leg in legs)
+    return (max(across) - min(across) <= JUNCTION_CHAIN_BAND_METERS
+            and max(along) - min(along) >= JUNCTION_CHAIN_WIDTHS * widest)
+
+
+def _union_figure(legs, kerbs, report=None):
+    """Контур объединением лент, если вышел и не заливает лишнего; kerbs
+    получает его бордюры."""
+    found = []
+    outline = union_outline(legs, found, report)
+    if not outline or uncovered_share(legs, outline) > JUNCTION_MAX_UNCOVERED:
+        return None
+    kerbs.extend(found)
+    return outline
+
+
+def _makes_figure(legs):
+    """Даст ли кластер площадь узла (_junction_figures)."""
     if len(legs) < MIN_JUNCTION_ARMS and not _seam_needs_patch(legs):
-        return
-    if max(leg[2] for leg in legs) < JUNCTION_MIN_WIDEST_METERS:
+        return False
+    return max(leg[2] for leg in legs) >= JUNCTION_MIN_WIDEST_METERS
+
+
+def _junction_figures(legs, outlined, retry=True, colour=_UNSET):
+    if not _makes_figure(legs):
         return
     keys = {_node_key(leg[0]) for leg in legs}
     # Примыкание съезда к ленте (_joins_cluster) само по себе — асфальт, но не
@@ -4846,7 +5498,42 @@ def _junction_figures(legs, outlined, retry=True, colour=_UNSET):
         colour = junction_colour_code(legs)
     flags = with_junction_class(flags, colour)
     kerbs = []
+    report = {}
     outline = _mouth_figure(legs, kerbs)
+    way = "mouth"
+    if len(legs) >= MIN_JUNCTION_ARMS and len(keys) > 1 and not _is_chain(legs) or not outline \
+            and len(legs) >= MIN_JUNCTION_ARMS and not _is_chain(legs):
+        found = []
+        candidate = _union_figure(legs, found, report)
+        # Контур по устьям у кластера бывает косым: устья двух лент одной
+        # улицы разошлись вдоль неё, и кромка группы режет разделительную
+        # клином (Навои × Рашидов, 28.O). Объединение лент лежит на полотне;
+        # если устья заливают заметно больше земли — берётся оно.
+        if candidate and (not outline or uncovered_share(legs, outline)
+                          > uncovered_share(legs, candidate) + UNION_PREFER_UNCOVERED):
+            outline = candidate
+            kerbs[:] = found
+            way = "union"
+    # Пустота, которую объединение не заливает (разделительная, квартал), —
+    # её зальёт и контур по устьям, и оболочка: узел строится по узлам.
+    if report.get("hole") and len(keys) > 1:
+        outline = None
+        way = "nodes"
+    if not outline and way != "nodes" and report.get("parts"):
+        parts = [(ring, found) for ring, found in report["parts"]
+                 if uncovered_share(legs, ring) <= JUNCTION_MAX_UNCOVERED]
+        if len(parts) == len(report["parts"]):
+            if retry:
+                JUNCTION_OUTLINES["union"] += 1
+            if outlined is not None:
+                outlined.update(keys)
+            for ring, found in parts:
+                yield (AREA_JUNCTION, flags, ring)
+                for major, line in found:
+                    yield (AREA_KERB, FILLET_MAJOR if major else 0, line)
+            return
+    if retry and len(legs) >= MIN_JUNCTION_ARMS:
+        JUNCTION_OUTLINES[way if outline or way == "nodes" else "hull"] += 1
     if outline:
         if outlined is not None:
             outlined.update(keys)
@@ -4857,8 +5544,8 @@ def _junction_figures(legs, outlined, retry=True, colour=_UNSET):
     # Ядро, оставшееся без съездов, — только контуром по устьям: оболочка
     # такого ядра тянулась бы вдоль проспекта на сотню метров через
     # разделительную (Шота Руставели, 07.10.2026). Не вышел контур — по узлам.
-    ring = _hull_of(legs) if retry or len(keys) == 1 else []
-    if retry and not ring:
+    ring = _hull_of(legs) if (retry or len(keys) == 1) and way != "nodes" else []
+    if retry and not ring and way != "nodes":
         return
     if ring and _hull_fits(legs, ring):
         scale = _lon_scale([legs[0][0]]) or 1.0
@@ -4893,6 +5580,19 @@ def _junction_figures(legs, outlined, retry=True, colour=_UNSET):
     for key in sorted(by_node):
         alone = by_node[key]
         if len(alone) < MIN_JUNCTION_ARMS and not _seam_needs_patch(alone):
+            continue
+        # Узел цепочки — своим контуром: подход к соседнему узлу кончается на
+        # середине куска (union_outline), и фигуры встают встык, а не внахлёст.
+        piece_flags = with_junction_class(flags & ~(JUNCTION_CLASS_MASK << JUNCTION_CLASS_SHIFT),
+                                          _level_colour(alone, colour))
+        found = []
+        own = _union_figure(alone, found) if len(alone) >= MIN_JUNCTION_ARMS else None
+        if own:
+            if outlined is not None:
+                outlined.add(key)
+            yield (AREA_JUNCTION, piece_flags, own)
+            for major, line in found:
+                yield (AREA_KERB, FILLET_MAJOR if major else 0, line)
             continue
         small = _hull_of(alone)
         # Оболочка одного узла тоже бывает клином: острый угол входа даёт
@@ -6326,6 +7026,12 @@ def main():
                           if ranks.get(rank))
         print(f"места: {len(places)} — {named}")
 
+    if JUNCTION_OUTLINES:
+        total = sum(JUNCTION_OUTLINES.values())
+        print(f"контур перекрёстков: по устьям {JUNCTION_OUTLINES['mouth']}, "
+              f"объединением лент {JUNCTION_OUTLINES['union']}, по узлам {JUNCTION_OUTLINES['nodes']}, "
+              f"оболочкой {JUNCTION_OUTLINES['hull']} "
+              f"({100.0 * JUNCTION_OUTLINES['hull'] / total:.1f} %)")
     if SURFACE_REJECTED:
         names = {AREA_ROAD: "полотно", AREA_JUNCTION: "узел", AREA_MEDIAN: "разделительная"}
         print("поверхность, не пущено воротами: " + ", ".join(

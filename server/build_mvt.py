@@ -527,6 +527,69 @@ class JunctionMask:
         return out
 
 
+
+# Бордюр угла узла — только по внешнему краю асфальта (29.A). Кусок бордюра,
+# ушедший вглубь чужой площади узла (соседний кластер, середина перекрёстка,
+# перемычка между лентами), — «паутина» по асфальту: на Дурмон йули ×
+# Зиёлилар (23.10.2026) бордюры четырёх фигур шли через весь перекрёсток, и
+# стиль спрятал их под заливку узла (0ccf731). Свой край фигуры лежит на её
+# границе (глубина 0) и остаётся.
+KERB_INSIDE_DEPTH_METERS = 0.75
+KERB_CLIP_STEP_METERS = 0.5
+KERB_MIN_METERS = 1.5
+
+
+class KerbMask(JunctionMask):
+    """Площади, внутри которых бордюра быть не может (виды 8 и 10)."""
+
+    def _depth_inside(self, point):
+        kx = 111_320 * math.cos(math.radians(point[1]))
+        for box, ring in self._grid.get((int(point[0] / self.CELL), int(point[1] / self.CELL)), ()):
+            if not (box[0] <= point[0] <= box[2] and box[1] <= point[1] <= box[3]) or not _inside(point, ring):
+                continue
+            nearest = min(_segment_meters(point, a, b, kx) for a, b in zip(ring, ring[1:] + ring[:1]))
+            if nearest > KERB_INSIDE_DEPTH_METERS:
+                return True
+        return False
+
+    def clip_kerb(self, line):
+        """Куски бордюра не глубже KERB_INSIDE_DEPTH_METERS в площадях."""
+        if not self._grid or len(line) < 2:
+            return [line] if len(line) >= 2 else []
+        kx = 111_320 * math.cos(math.radians(line[0][1]))
+        dense = [line[0]]
+        for a, b in zip(line, line[1:]):
+            length = math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320)
+            parts = max(1, int(length / KERB_CLIP_STEP_METERS))
+            dense.extend((a[0] + (b[0] - a[0]) * i / parts, a[1] + (b[1] - a[1]) * i / parts)
+                         for i in range(1, parts + 1))
+        runs, current = [], []
+        for point in dense:
+            if self._depth_inside(point):
+                runs.append(current)
+                current = []
+            else:
+                current.append(point)
+        runs.append(current)
+        out = []
+        for run in runs:
+            if len(run) < 2:
+                continue
+            length = sum(math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320)
+                         for a, b in zip(run, run[1:]))
+            if length >= KERB_MIN_METERS:
+                out.append(_simplify_straight(run))
+        return out
+
+
+def _segment_meters(p, a, b, kx):
+    ax, ay = (a[0] - p[0]) * kx, (a[1] - p[1]) * 111_320
+    bx, by = (b[0] - p[0]) * kx, (b[1] - p[1]) * 111_320
+    dx, dy = bx - ax, by - ay
+    length = dx * dx + dy * dy
+    t = 0.0 if length == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / length))
+    return math.hypot(ax + t * dx, ay + t * dy)
+
 # Пунктир прерывается в узле, где сходятся минимум две РАЗНЫЕ улицы этого
 # класса и выше (tertiary); дворы и проезды его не рвут.
 MARKING_BREAK_MAX_CLASS = 5
@@ -2988,6 +3051,7 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         # Дома и поверхность — из уже написанных тайлов: в памяти их нет.
         signals = _signal_grid(points)
         boxes, junction_areas, strips, drawn_islands = [], [], [], []
+        kerb_cover, kerb_lines = [], []
         # Полотно — только у стрелок: вся страна в память не влезет.
         arrow_area = arrow_cells(points, _SIGNAL_CELL)
         tree_area = {(int(t[0] / JunctionMask.CELL), int(t[1] / JunctionMask.CELL)) for t in trees}
@@ -3009,12 +3073,24 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                 if kind in (AREA_JUNCTION, AREA_JUNCTION_BOX) and flags & 1 and not (
                         kind == AREA_JUNCTION and flags & 2):
                     junction_areas.append(shape)
+                if kind in (AREA_JUNCTION, AREA_JUNCTION_BOX) and flags & 1:
+                    kerb_cover.append(shape)
+                if kind == AREA_KERB:
+                    kerb_lines.append((flags, shape))
+                    continue
                 if kind == AREA_MEDIAN and flags & 4:
                     drawn_islands.append(shape)
                 if (kind == AREA_MEDIAN and flags & 2) or kind == AREA_DIVIDER:
                     strips.append((kind, flags, shape))
                     continue
                 lay(kind, flags, shape)
+        # Бордюр угла — после всех площадей узлов: режется их глубиной.
+        kerb_mask = KerbMask(kerb_cover)
+        del kerb_cover
+        for flags, shape in kerb_lines:
+            for piece in kerb_mask.clip_kerb(shape):
+                lay(AREA_KERB, flags, piece)
+        del kerb_lines, kerb_mask
         # Разметка — после узлов: режется их площадью.
         # Маска разметки — только настоящие перекрёстки: ядра пересечений
         # улиц, середины узлов и площади узлов рядом с ними. Площадь узла у

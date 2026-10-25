@@ -118,7 +118,7 @@ struct RootView: View {
                     ? CGSize(width: geometry.size.height, height: geometry.size.width)
                     : geometry.size
                 let scale = min(room.width / size.width, room.height / size.height)
-                CarPlayMapScreen(model: carPlayPreviewModel)
+                carPlayPreviewSurface
                     .environment(env)
                     .frame(width: size.width, height: size.height)
                     .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -242,6 +242,24 @@ struct RootView: View {
 
 #if DEBUG
 extension RootView {
+    /// `-carplayDashboard` — плитка главного экрана машины вместо экрана
+    /// машины (29.H: снимки «плитка — только маршрут и камеры»).
+    @ViewBuilder var carPlayPreviewSurface: some View {
+        #if canImport(MapLibre)
+        if ProcessInfo.processInfo.arguments.contains("-carplayDashboard") {
+            CarPlayEngineLayer(model: carPlayPreviewModel, surface: .dashboard)
+                // Тему экрану машины ставит CarPlayMapScreen; плитке без него — здесь.
+                .onAppear {
+                    carPlayPreviewModel.refreshDaylight(appearance: env.settings.mapAppearance, sunDay: env.sunIsUp)
+                }
+        } else {
+            CarPlayMapScreen(model: carPlayPreviewModel)
+        }
+        #else
+        CarPlayMapScreen(model: carPlayPreviewModel)
+        #endif
+    }
+
     /// Размер экрана машины для предпросмотра (`-carplaySize WxH`).
     static var carPlayPreviewSize: CGSize {
         let args = ProcessInfo.processInfo.arguments

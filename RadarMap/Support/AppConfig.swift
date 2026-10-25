@@ -2445,9 +2445,10 @@ nonisolated enum AppConfig {
     // машина — 105): поворот, ради которого стоим на светофоре в 200 м, был
     // за краем экрана; значки заведений в поездке скрыты всегда.
 
-    /// «Стоим» — не быстрее этого, км/ч, столько секунд подряд: те же 4 км/ч
-    /// и 4 с, что у DrivingDeclutter, — окрестность и кадр меняются одним
-    /// моментом, а пауза в 2 с на перекрёстке не меняет ничего.
+    /// «Стоим» — не быстрее этого, км/ч, столько секунд подряд. Тот же
+    /// гистерезис решает и что показать на карте (MapDetailPolicy, 29.H) —
+    /// окрестность и кадр меняются одним моментом, а пауза в 2 с на
+    /// перекрёстке не меняет ничего.
     static let stopViewEnterKmh = 4.0
     static let stopViewEnterSeconds: TimeInterval = 4
     /// Тронулись — проехали столько метров без новой остановки или
@@ -3253,4 +3254,49 @@ nonisolated enum AppConfig {
     /// машины с тенью (до 44 pt в длину) — кольцо обводит её, а не режет.
     static let compassRadiusPoints: CGFloat = 34
     static let compassLetterSize: CGFloat = 10
+
+    // MARK: - Нужное сейчас на карте (MapDetailPolicy, 29.H)
+
+    /// Подъезд к цели: вход — осталось столько метров… В Ташкенте парковку
+    /// начинают искать за два-три квартала (~1 км), а 1,5 км — это около
+    /// трёх минут на городских 30 км/ч: успеваешь разглядеть, где встать.
+    static let mapDetailArrivalEnterMeters: Double = 1_500
+    /// …или столько секунд, но только ближе потолка ниже: три минуты на
+    /// трассе — это 4,5 км, и режим прибытия там включился бы на въезде в город.
+    static let mapDetailArrivalEnterSeconds: Double = 180
+    static let mapDetailArrivalTimeCeilingMeters: Double = 2_500
+    /// Выход — дальше этого и дольше этого (гистерезис 300 м / 40 с):
+    /// перестроение у цели на сотню метров не мигает режимом.
+    static let mapDetailArrivalExitMeters: Double = 1_800
+    static let mapDetailArrivalExitSeconds: Double = 220
+    /// Парковки у цели: радиус, м. 300 м — четыре-пять минут пешком, дальше
+    /// уже «другое место»; и столько же квартал в центре Ташкента.
+    static let mapDetailArrivalParkingMeters: Double = 300
+    /// Сколько парковок у цели держит расчёт (решение берёт первые N).
+    static let mapDetailParkingsKept = 6
+    /// Парковок у цели на карте: машина — 3 (экран читают боковым зрением),
+    /// телефон — 5.
+    static let mapDetailArrivalParkingsCar = 3
+    static let mapDetailArrivalParkingsPhone = 5
+    /// Заправок «по пути» на ходу: машина — 2, телефон — 3.
+    static let mapDetailFuelAheadCar = 2
+    static let mapDetailFuelAheadPhone = 3
+    /// Сколько заправок по пути держит расчёт и как далеко вперёд, м: в
+    /// городе дальше 10 км заправка «по пути» — это уже не про сейчас.
+    static let mapDetailFuelKept = 4
+    static let mapDetailFuelAheadMeters: Double = 10_000
+    /// Ближайших из «По пути» на карте дальней дороги: машина — 2, телефон — 3.
+    static let mapDetailCorridorCar = 2
+    static let mapDetailCorridorPhone = 3
+    /// Горячий телефон: не больше стольких значков группы (и коридора).
+    static let mapDetailHotLimit = 2
+    static let mapDetailHotCorridor = 1
+    /// Пересчёт значков по пути — через столько метров пройденного маршрута.
+    static let mapDetailRefreshMeters: Double = 1_000
+    /// Пунктир от конца маршрута к цели: ближе — не рисуем (хвостик у линии
+    /// читается как ошибка), дальше — тоже (это уже не «подойти от машины»).
+    static let mapDetailApproachMinMeters: Double = 20
+    static let mapDetailApproachMaxMeters: Double = 400
+    /// Ореол цели, м по земле.
+    static let mapDetailDestinationHaloMeters: Double = 28
 }

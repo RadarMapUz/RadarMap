@@ -259,7 +259,7 @@ struct EngineCameraMarkersTests {
     @Test("Слои камер не гасятся ни на горячем телефоне, ни на ходу")
     @MainActor func cameraLayersNeverHidden() {
         let cameraLayers = ["camera-halo", "camera-dot", "camera-icons", "camera-badges"]
-        let hidden = Set(EngineMapView.Coordinator.hotHiddenLayers + EngineMapView.Coordinator.drivingHiddenLayers)
+        let hidden = Set(EngineMapView.Coordinator.hotHiddenLayers).union(MapDetailLayers.managed)
         for id in cameraLayers {
             #expect(!hidden.contains(id), "\(id) в списке гасимых")
             #expect(!EngineModernStyle.hiddenWhileDriving(id), "\(id) вырезается в поездке")

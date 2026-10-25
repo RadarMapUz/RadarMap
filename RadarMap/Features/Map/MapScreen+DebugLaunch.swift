@@ -302,6 +302,8 @@ extension MapScreen {
                 if args.contains("-driveDemo") {
                     await Task.pause(seconds: 1)
                     env.location.startTrip()
+                    // Трасса на ходу (снимки 29.H): фиксы по линии на 90 км/ч.
+                    if NoisyDriveDebug.enabled { Task { await NoisyDriveDebug.run(env: env, speed: 90 / 3.6) } }
                 }
                 if args.contains("-openAlong") {
                     await Task.pause(seconds: 1.5)
@@ -323,6 +325,14 @@ extension MapScreen {
                     await Task.pause(seconds: seconds)
                     if env.route.isActive { env.location.startTrip() }
                 }
+            }
+        }
+        // Режим прибытия (29.H): парковки у цели демо-маршрута, если файла
+        // заведений нет (без сети, клетка не опубликована).
+        if args.contains("-demoArrival") {
+            Task {
+                for _ in 0..<60 where env.route.destinationCoordinate == nil { await Task.pause(seconds: 0.5) }
+                if let target = env.route.destinationCoordinate { env.mapDetail.seedDemoParkings(around: target) }
             }
         }
         if args.contains("-demoRoute") {

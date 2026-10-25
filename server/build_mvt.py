@@ -606,6 +606,68 @@ def is_crossing_stub(piece, touch_bands):
     return any(touch_bands._covers_area(q) for q in piece)
 
 
+# Асфальт на месте острова — с напуском на соседние площади и ленты: края
+# общей геометрии в тайле округляются порознь (шаг сетки MVT около 0,3 м), и
+# между заплаткой и узлом оставалась светлая волосяная щель (Нурафшон, 29.A).
+FILL_OVERLAP_METERS = 0.4
+
+
+def grown(ring, meters=FILL_OVERLAP_METERS):
+    """Кольцо [lon, lat], раздвинутое наружу на meters (вершины по биссектрисе)."""
+    if len(ring) < 3:
+        return ring
+    lon0, lat0 = ring[0]
+    kx = 111_320 * math.cos(math.radians(lat0))
+    pts = [((p[0] - lon0) * kx, (p[1] - lat0) * 111_320) for p in ring]
+    area = sum(pts[i - 1][0] * pts[i][1] - pts[i][0] * pts[i - 1][1] for i in range(len(pts)))
+    sign = 1.0 if area >= 0 else -1.0
+    n = len(pts)
+    out = []
+    for i in range(n):
+        a, b, c = pts[i - 1], pts[i], pts[(i + 1) % n]
+        normals = []
+        for p, q in ((a, b), (b, c)):
+            dx, dy = q[0] - p[0], q[1] - p[1]
+            length = math.hypot(dx, dy)
+            normals.append((dy / length * sign, -dx / length * sign) if length else (0.0, 0.0))
+        mx, my = normals[0][0] + normals[1][0], normals[0][1] + normals[1][1]
+        lm = math.hypot(mx, my)
+        if lm < 1e-9:
+            out.append(ring[i])
+            continue
+        cos_half = lm / 2.0
+        scale = meters / max(cos_half, 0.35)
+        x, y = b[0] + mx / lm * scale, b[1] + my / lm * scale
+        out.append((lon0 + x / kx, lat0 + y / 111_320))
+    return out
+
+
+def fill_flags_near(piece, fitter, classes):
+    """Флаги асфальта на месте острова — цвета лент, к которым он прилегает по
+    краю (большинство вершин): на магистрали абрикосовый, как полотно по
+    бокам, у поперечной улицы — её цвет, а не пятно чужого класса."""
+    votes = defaultdict(int)
+    for q in piece:
+        best = None
+        for gx in (-1, 0, 1):
+            for gy in (-1, 0, 1):
+                cell = (int(q[0] / fitter.CELL) + gx, int(q[1] / fitter.CELL) + gy)
+                for key, a, b, half in fitter._grid.get(cell, ()):
+                    # Самая широкая лента рядом: край пятна читается по ней.
+                    if _point_segment_m(q, a, b) - half <= 1.5 and (best is None or half > best[0]):
+                        best = (half, classes.get(key, 0))
+        if best and best[1]:
+            votes[best[1]] += 1
+    if not votes:
+        return 3
+    trunk = sum(v for c, v in votes.items() if c in (1, 2))
+    other = sum(v for c, v in votes.items() if c not in (1, 2))
+    if trunk > other:
+        return with_junction_class(3, min(c for c in votes if c in (1, 2)))
+    common = max((v, -c) for c, v in votes.items() if c not in (1, 2))
+    return with_junction_class(3, -common[1])
+
+
 def ribbon_class_near(piece, fitter, classes):
     """Класс ближайшей ленты к куску — цвет асфальта между её направлениями, или 0."""
     centre = _box_centre(piece)
@@ -652,14 +714,21 @@ def strip_remainder(ring, bands, junctions):
 
     near = [xy(p) for p in _covers_of(ring, junctions) if len(p) >= 3]
     out = []
+    taken = []
     for band in near_bands:
         for part in polygon_intersection(xy(ring), xy(band)):
-            for piece in (polygon_difference(part, near) if near else [part]):
-                piece = _blunt_tips(piece)
+            # Полосы переходов двух лент перекрываются: асфальт кладётся один
+            # раз (двойное зерно асфальта видно светлым пятном).
+            blockers = near + taken
+            fresh = polygon_difference(part, blockers) if blockers else [part]
+            taken.append(part)
+            for piece in fresh:
                 area = sum(piece[i - 1][0] * piece[i][1] - piece[i][0] * piece[i - 1][1]
                            for i in range(len(piece))) / 2
                 perimeter = sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(piece, piece[1:] + piece[:1]))
-                if area >= STRIP_MIN_PIECE_M2 and perimeter > 0 and 2 * area / perimeter >= STRIP_MIN_MEAN_WIDTH_METERS:
+                # Встык с островом и узлом — даже узкий кусок: иначе на его
+                # месте светлая щель.
+                if area >= 0.5:
                     out.append([(lon0 + x / kx, lat0 + y / 111_320) for x, y in piece])
     return out
 
@@ -681,10 +750,17 @@ def _covers_of(ring, cover, pad=0.0):
 
 
 def clip_strip(ring, cover):
-    """Куски острова разделительной вне площадей cover (KerbMask/JunctionMask)."""
+    """(куски острова разделительной вне площадей cover, осколки).
+
+    Новые углы, которые дал рез площадью узла или переходом, скругляются —
+    нос острова, как у настоящего бордюра. Осколок — меньше
+    STRIP_MIN_PIECE_M2, уже STRIP_MIN_MEAN_WIDTH_METERS в среднем или с углом
+    острее STRIP_TIP_DEGREES: такие не рисуются островом, на их месте асфальт
+    (Дурмон йули × Зиёлилар: светлые клинья у переходов, 29.A).
+    """
     found = _covers_of(ring, cover)
     if not found:
-        return [ring]
+        return [ring], []
     lon0, lat0 = ring[0]
     kx = 111_320 * math.cos(math.radians(lat0))
 
@@ -693,26 +769,125 @@ def clip_strip(ring, cover):
         area = sum(local[i - 1][0] * local[i][1] - local[i][0] * local[i - 1][1] for i in range(len(local)))
         return local if area >= 0 else local[::-1]
 
-    pieces = polygon_difference(xy(ring), [xy(other) for other in found if len(other) >= 3])
+    def back(piece):
+        return [(lon0 + x / kx, lat0 + y / 111_320) for x, y in piece]
+
+    original = xy(ring)
+    pieces = polygon_difference(original, [xy(other) for other in found if len(other) >= 3])
     if len(pieces) == 1 and len(pieces[0]) == len(ring) and all(
             abs(a[0] - b[0]) < 1e-6 and abs(a[1] - b[1]) < 1e-6
-            for a, b in zip(sorted(pieces[0]), sorted(xy(ring)))):
-        return [ring]
-    out = []
+            for a, b in zip(sorted(pieces[0]), sorted(original))):
+        return [ring], []
+    keep = {(round(p[0], 4), round(p[1], 4)) for p in original}
+    kept, shards = [], []
     for piece in pieces:
-        piece = _blunt_tips(piece)
-        area = sum(piece[i - 1][0] * piece[i][1] - piece[i][0] * piece[i - 1][1] for i in range(len(piece))) / 2
-        perimeter = sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(piece, piece[1:] + piece[:1]))
-        # Обрезок наискось — клин: узкий кусок не рисуется (island_slivers).
-        if area >= STRIP_MIN_PIECE_M2 and perimeter > 0 and 2 * area / perimeter >= STRIP_MIN_MEAN_WIDTH_METERS:
-            out.append([(lon0 + x / kx, lat0 + y / 111_320) for x, y in piece])
-    return out
+        if _is_shard(piece):
+            shards.append(back(piece))
+            continue
+        bits = []
+        rounded = _round_nose(_blunt_tips(piece), keep, bits)
+        kept.append(StripPiece(back(rounded), back(piece), [back(bit) for bit in bits]))
+    return kept, shards
+
+
+class StripPiece(list):
+    """Кусок острова (скруглённый) с исходным контуром и срезанными углами:
+    углы и обрубки кладутся асфальтом, встык, без наложения (у наложенных
+    площадей зерно асфальта ложится дважды и пятно видно)."""
+
+    def __new__(cls, rounded, raw, bits):
+        return super().__new__(cls)
+
+    def __init__(self, rounded, raw, bits):
+        super().__init__(rounded)
+        self.raw = raw
+        self.bits = bits
 
 
 STRIP_MIN_MEAN_WIDTH_METERS = 1.5
-# Острый угол куска (рез площадью узла наискось) срезается до торца в метр.
-STRIP_TIP_DEGREES = 25.0
+STRIP_NOSE_RADIUS_METERS = 1.5
+# Острый угол куска (рез наискось) срезается до торца в метр (_blunt_tips).
+STRIP_TIP_DEGREES = 30.0
 STRIP_TIP_WIDTH_METERS = 1.0
+
+
+def _piece_area_perimeter(piece):
+    area = sum(piece[i - 1][0] * piece[i][1] - piece[i][0] * piece[i - 1][1] for i in range(len(piece))) / 2
+    perimeter = sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(piece, piece[1:] + piece[:1]))
+    return area, perimeter
+
+
+def _sharpest_angle(piece):
+    best = math.pi
+    n = len(piece)
+    for i in range(n):
+        a, b, c = piece[i - 1], piece[i], piece[(i + 1) % n]
+        u = (a[0] - b[0], a[1] - b[1])
+        v = (c[0] - b[0], c[1] - b[1])
+        lu, lv = math.hypot(*u), math.hypot(*v)
+        if lu > 0.3 and lv > 0.3:
+            best = min(best, math.acos(max(-1.0, min(1.0, (u[0] * v[0] + u[1] * v[1]) / (lu * lv)))))
+    return best
+
+
+def _is_shard(piece):
+    if len(piece) < 3:
+        return True
+    area, perimeter = _piece_area_perimeter(piece)
+    if area < STRIP_MIN_PIECE_M2 or perimeter <= 0 or 2 * area / perimeter < STRIP_MIN_MEAN_WIDTH_METERS:
+        return True
+    # Острый клин после реза — осколок, пока он короткий: длинный остров с
+    # острым носом у слияния лент — нормальный остров.
+    span = max(math.hypot(p[0] - q[0], p[1] - q[1]) for p in piece for q in piece)
+    return _sharpest_angle(piece) < math.radians(STRIP_TIP_DEGREES) and span < STRIP_STUB_METERS
+
+
+def _round_nose(piece, original, bits=None):
+    """Скруглить выпуклые углы, которых не было у острова (рез), радиусом до 1,5 м.
+    bits (список) получает срезанные уголки — их место занимает асфальт."""
+    out = []
+    n = len(piece)
+    for i in range(n):
+        a, b, c = piece[i - 1], piece[i], piece[(i + 1) % n]
+        if (round(b[0], 4), round(b[1], 4)) in original:
+            out.append(b)
+            continue
+        u = (a[0] - b[0], a[1] - b[1])
+        v = (c[0] - b[0], c[1] - b[1])
+        lu, lv = math.hypot(*u), math.hypot(*v)
+        cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+        if lu < 0.2 or lv < 0.2 or cross <= 0:
+            out.append(b)
+            continue
+        angle = math.acos(max(-1.0, min(1.0, (u[0] * v[0] + u[1] * v[1]) / (lu * lv))))
+        if angle > math.radians(170):
+            out.append(b)
+            continue
+        tangent = min(STRIP_NOSE_RADIUS_METERS / math.tan(angle / 2), 0.45 * lu, 0.45 * lv)
+        radius = tangent * math.tan(angle / 2)
+        uu, vv = (u[0] / lu, u[1] / lu), (v[0] / lv, v[1] / lv)
+        p1 = (b[0] + uu[0] * tangent, b[1] + uu[1] * tangent)
+        p2 = (b[0] + vv[0] * tangent, b[1] + vv[1] * tangent)
+        bis = (uu[0] + vv[0], uu[1] + vv[1])
+        lb = math.hypot(*bis)
+        if lb == 0 or radius < 0.2:
+            out.append(b)
+            continue
+        dist = radius / math.sin(angle / 2)
+        centre = (b[0] + bis[0] / lb * dist, b[1] + bis[1] / lb * dist)
+        a0 = math.atan2(p1[1] - centre[1], p1[0] - centre[0])
+        a1 = math.atan2(p2[1] - centre[1], p2[0] - centre[0])
+        sweep = (a1 - a0 + math.pi) % (2 * math.pi) - math.pi
+        arc = [(centre[0] + radius * math.cos(a0 + sweep * k / STRIP_NOSE_STEPS),
+                centre[1] + radius * math.sin(a0 + sweep * k / STRIP_NOSE_STEPS))
+               for k in range(STRIP_NOSE_STEPS + 1)]
+        out.extend(arc)
+        if bits is not None:
+            bits.append([b] + arc[::-1])
+    return out
+
+
+STRIP_NOSE_STEPS = 4
 
 
 def _blunt_tips(piece):
@@ -3300,8 +3475,10 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         # (05.10.2026). Из накрывающих друг друга остаётся бо́льшая.
         strips = drop_overlapping_strips(strips)
         bands = [box for box in (zebra_box(line) for line, _m in fitted_zebras) if box]
-        touch_bands = JunctionMask([box for box in (zebra_box(line, STRIP_ZEBRA_EXTEND_METERS + 0.5,
-                                                              STRIP_ZEBRA_CLEAR_METERS + 0.5)
+        # Запас шире радиуса скругления носа: скруглённый обрубок отходит от
+        # полосы перехода до STRIP_NOSE_RADIUS_METERS.
+        touch_bands = JunctionMask([box for box in (zebra_box(line, STRIP_ZEBRA_EXTEND_METERS + 2.0,
+                                                              STRIP_ZEBRA_CLEAR_METERS + 2.0)
                                                      for line, _m in fitted_zebras) if box])
         strip_cover = JunctionMask(kerb_cover + bands)
         junction_cover = JunctionMask(kerb_cover)
@@ -3313,24 +3490,33 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                 # Двойная линия — как пунктир: режется площадью перекрёстка.
                 for piece in mask.clip(shape):
                     lay(kind, flags, piece)
-            elif strip_outside_junction(shape, mask):
-                kept = clip_strip(shape, strip_cover)
+            else:
+                # Сначала рез по площадям узла и переходам, потом проверка
+                # куска: остров теперь доходит до самого узла (median_stops),
+                # и целиком его центр часто внутри площади.
+                kept, shards = clip_strip(shape, strip_cover)
+                for piece in shards:
+                    lay(AREA_JUNCTION, fill_flags_near(piece, zebra_fitter, road_classes), grown(piece))
                 # Бетон или газон — по целому острову: обрезок узкого носа
                 # не должен менять цвет (Мустакиллик).
                 concrete = is_concrete(flags, shape)
                 for piece in kept:
+                    raw = getattr(piece, "raw", piece)
                     if piece is not shape and is_crossing_stub(piece, touch_bands):
                         # Обрубок между переходом и узлом — не остров: асфальт.
-                        lay(AREA_JUNCTION, with_junction_class(
-                            3, ribbon_class_near(piece, zebra_fitter, road_classes) or None), piece)
+                        lay(AREA_JUNCTION, fill_flags_near(raw, zebra_fitter, road_classes), grown(raw))
                         continue
-                    lay(kind, flags, piece, concrete)
+                    if strip_outside_junction(piece, mask):
+                        lay(kind, flags, piece, concrete)
+                        for bit in getattr(piece, "bits", ()):
+                            lay(AREA_JUNCTION, fill_flags_near(bit, zebra_fitter, road_classes), grown(bit))
+                    else:
+                        lay(AREA_JUNCTION, fill_flags_near(raw, zebra_fitter, road_classes), grown(raw))
                 for piece in (strip_remainder(shape, band_cover, junction_cover)
                               if not (len(kept) == 1 and kept[0] is shape) else []):
                     # Асфальт на месте острова — перемычкой (флаг полосы): не
                     # маска узла и не мера контура, цвета соседней площади.
-                    lay(AREA_JUNCTION, with_junction_class(
-                        3, ribbon_class_near(piece, zebra_fitter, road_classes) or None), piece)
+                    lay(AREA_JUNCTION, fill_flags_near(piece, zebra_fitter, road_classes), grown(piece))
         del strip_cover, junction_cover, band_cover, bands, touch_bands, road_classes
         # Регулируемые перекрёстки — после всех центров: светофор отдаётся
         # ближайшему узлу. Центры — и «середины узла» (вид 10), и ядра

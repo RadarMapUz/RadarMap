@@ -837,12 +837,27 @@ class KerbMaskTests(unittest.TestCase):
         junction = [self.p(-10, -20), self.p(20, -20), self.p(20, 20), self.p(-10, 20)]
         zebra = [self.p(-30, 3), self.p(-30, 10)]           # зебра на северной ленте
         cover = build_mvt.JunctionMask([junction, build_mvt.zebra_box(zebra)])
-        pieces = build_mvt.clip_strip(island, cover)
+        pieces, shards = build_mvt.clip_strip(island, cover)
+        self.assertEqual(shards, [])
         self.assertEqual(len(pieces), 2, "остров рвётся переходом")
         for piece in pieces:
             xs = [(q[0] - 69.33) * self.kx for q in piece]
             self.assertLessEqual(max(xs), -10 + 0.01, "остров зашёл в площадь узла")
             self.assertFalse(any(-32.4 < x < -27.6 for x in xs), "остров на полосе перехода")
+
+    def test_cut_nose_is_rounded_and_shards_become_asphalt(self):
+        # Дурмон йули: после реза у перехода оставались светлые клинья, а нос
+        # острова был прямым торцом.
+        island = [self.p(-60, -2), self.p(0, -2), self.p(0, 2), self.p(-60, 2)]
+        cover = build_mvt.JunctionMask([[self.p(-10, -20), self.p(20, -20), self.p(20, 20), self.p(-10, 20)]])
+        pieces, shards = build_mvt.clip_strip(island, cover)
+        self.assertEqual((len(pieces), shards), (1, []))
+        nose = [q for q in pieces[0] if (q[0] - 69.33) * self.kx > -12]
+        self.assertGreater(len(nose), 4, "нос не скруглён")
+        # Клин наискось у самого узла — осколок, не остров.
+        wedge = [self.p(-14, -2), self.p(-9, -2), self.p(-14, 0.5)]
+        pieces, shards = build_mvt.clip_strip(wedge, cover)
+        self.assertEqual((pieces, len(shards)), ([], 1))
 
 
 class BridgeChainTests(unittest.TestCase):

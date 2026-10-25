@@ -810,6 +810,36 @@ def medians_through_zebras(zebras, medians, examples=None):
     return count
 
 
+SHARD_NEAR_METERS = 5.0
+SHARD_MIN_M2 = 6.0
+SHARD_MIN_WIDTH_METERS = 1.5
+SHARD_TIP_DEGREES = 30.0
+SHARD_SHORT_METERS = 25.0
+
+
+def median_shards(medians, junctions, examples=None):
+    """Сколько осколков острова разделительной у узла (ближе 5 м к площади):
+    меньше 6 м², уже 1,5 м в среднем или короткий клин острее 30°."""
+    index = SegmentIndex([ring + ring[:1] for ring in junctions])
+    count = 0
+    for ring in medians:
+        if len(ring) < 3 or not any(index.near(q, SHARD_NEAR_METERS) for q in ring):
+            continue
+        kx = LAT_M * math.cos(math.radians(ring[0][1]))
+        pts = [((q[0] - ring[0][0]) * kx, (q[1] - ring[0][1]) * LAT_M) for q in ring]
+        area = polygon_area_m2(ring)
+        perimeter = sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(pts, pts[1:] + pts[:1]))
+        span = max(math.hypot(a[0] - b[0], a[1] - b[1]) for a in pts for b in pts)
+        shard = (area < SHARD_MIN_M2 or perimeter <= 0 or 2 * area / perimeter < SHARD_MIN_WIDTH_METERS
+                 or (span < SHARD_SHORT_METERS and _sharp_vertices(pts, SHARD_TIP_DEGREES, 0.3)))
+        if shard:
+            count += 1
+            if examples is not None:
+                examples.append((round(sum(q[1] for q in ring) / len(ring), 5),
+                                 round(sum(q[0] for q in ring) / len(ring), 5), round(area, 1)))
+    return count
+
+
 def junction_notches(junctions, names=None, examples=None):
     """% крупных площадей узла с выемкой: щель или ступенька на краю, которую
     закрывает прямая не длиннее 8 м (build_roads._close_notches), от 3 м²."""
@@ -1207,6 +1237,8 @@ def measure(tiles_dir, islands_path=None, bbox=None):
     zebra_medians = medians_through_zebras([part for g, parts, props in paint if props.get("kind") == 12
                                             for part in parts], medians, zebra_median_examples)
     notches = junction_notches(junction_all_rings, names, notch_examples)
+    shard_examples = []
+    shards = median_shards(medians, junction_all_rings, shard_examples)
     seam_examples = []
     seams = bridge_seams([(part, props) for parts, props in road_lines for part in parts], seam_examples)
     colour_examples = []
@@ -1294,6 +1326,8 @@ def measure(tiles_dir, islands_path=None, bbox=None):
         "medians_through_zebras": zebra_medians,
         "_zebra_median_examples": zebra_median_examples[:30],
         "junction_notches": round(notches, 2),
+        "median_shards": shards,
+        "_shard_examples": shard_examples[:30],
         "_notch_examples": notch_examples[:30],
         "_contour_examples": [e for kind in ("kerbless", "overlap", "teeth", "kerb_inside")
                               for e in contour_examples if e[0] == kind][:400],
@@ -1345,6 +1379,7 @@ UNITS = {
     "medians_in_junction": "м кромки разделительной внутри площади узла на 1 км",
     "medians_through_zebras": "зебр, через которые идёт разделительная",
     "junction_notches": "% крупных узлов с выемкой на краю",
+    "median_shards": "осколков разделительной у узла",
     "zebra_steps": "% зебр ступенькой к соседке",
     "avenues_unmarked": "% длины проспектов без линий полос",
 }
@@ -1378,7 +1413,7 @@ NOISE_FLOOR = {"houses_under_asphalt": 0.2, "islands_under_asphalt": 5.0, "arrow
                "arrows_off_lane": 5.0, "arrows_icon_size": 5.0, "markings_off_road": 2.0,
                "arrows_tilted": 5.0, "marking_jumps": 5.0, "junction_colour_mismatch": 1.0, "junction_colour_blots": 3, "bridge_seams": 1.0, "junction_kerbless": 2.0, "junction_overlap": 2.0, "junction_teeth": 2.0,
                "kerb_inside_junction": 5.0, "medians_in_junction": 5.0, "medians_through_zebras": 3,
-               "junction_notches": 2.0, "zebra_steps": 1.0, "avenues_unmarked": 5.0, "arrows_angle_max": ARROW_ANGLE_LIMIT_DEGREES}
+               "junction_notches": 2.0, "median_shards": 3, "zebra_steps": 1.0, "avenues_unmarked": 5.0, "arrows_angle_max": ARROW_ANGLE_LIMIT_DEGREES}
 
 
 def compare(previous, current):
@@ -1423,6 +1458,7 @@ def main():
     print("  разделительная в узле:", result["_median_inside_examples"][:args.worst])
     print("  разделительная через зебру:", result["_zebra_median_examples"][:args.worst])
     print("  выемки контура:", result["_notch_examples"][:args.worst])
+    print("  осколки разделительной:", result["_shard_examples"][:args.worst])
     for kind in ("kerbless", "overlap", "teeth", "kerb_inside"):
         print(f"  контур узла — {kind}:", [e[1:] for e in result["_contour_examples"] if e[0] == kind][:args.worst])
     print("  ступеньки пунктира (широта, долгота, сдвиг м), худшая", result["_marking_jump_worst"], ":",

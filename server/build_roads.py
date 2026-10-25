@@ -4688,6 +4688,7 @@ def mouth_outline(legs, kerbs=None, uniform=False):
         left = edge(last, 1)
         mouths.append(((right[0] + first["d"][0] * m, right[1] + first["d"][1] * m),
                        (left[0] + last["d"][0] * m, left[1] + last["d"][1] * m)))
+
     ring = []
     chains = []
     for i, (right, left) in enumerate(mouths):
@@ -5205,6 +5206,44 @@ UNION_NOTCH_TURN_DEGREES = 150.0
 UNION_NOTCH_STEP_METERS = 2.0
 
 
+# Ступенька края («Z»): вогнутый и выпуклый излом подряд через короткое
+# ребро, а края до и после почти параллельны (Навои × Рашидов, юго-запад:
+# кромка кармана и ленты стыкуются уступом). Вогнутая вершина убирается —
+# край идёт наискось, без зубца.
+UNION_STEP_EDGE_METERS = 3.0
+UNION_STEP_PARALLEL_DEGREES = 30.0
+
+
+def _smooth_steps(ring):
+    changed = True
+    while changed and len(ring) > 4:
+        changed = False
+        pts = [p for p, _l in ring]
+        n = len(pts)
+        for i in range(n):
+            a, b, c, d = pts[i - 1], pts[i], pts[(i + 1) % n], pts[(i + 2) % n]
+            e1 = (b[0] - a[0], b[1] - a[1])
+            e2 = (c[0] - b[0], c[1] - b[1])
+            e3 = (d[0] - c[0], d[1] - c[1])
+            l1, l2, l3 = math.hypot(*e1), math.hypot(*e2), math.hypot(*e3)
+            if l2 >= UNION_STEP_EDGE_METERS or min(l1, l3) < l2 or l1 == 0 or l3 == 0:
+                continue
+            turn_b = e1[0] * e2[1] - e1[1] * e2[0]
+            turn_c = e2[0] * e3[1] - e2[1] * e3[0]
+            if (turn_b < 0) == (turn_c < 0):
+                continue
+            cos = (e1[0] * e3[0] + e1[1] * e3[1]) / (l1 * l3)
+            if cos < math.cos(math.radians(UNION_STEP_PARALLEL_DEGREES)):
+                continue
+            # Вогнутая из двух уходит: край срезается в сторону асфальта.
+            # Ребро от предыдущей вершины сохраняет её метку.
+            drop = i if turn_b < 0 else (i + 1) % n
+            ring = [ring[m] for m in range(n) if m != drop]
+            changed = True
+            break
+    return ring
+
+
 def _densify_ring(ring, step):
     out = []
     n = len(ring)
@@ -5583,7 +5622,7 @@ def union_outline(legs, kerbs=None, report=None):
             return None
     parts = []
     for part in outer:
-        ring = _tidy_ring(_fillet_ring(_close_notches(_tidy_ring(part)), arms))
+        ring = _tidy_ring(_fillet_ring(_smooth_steps(_tidy_ring(_close_notches(_tidy_ring(part)))), arms))
         if len(ring) < 3:
             return None
         out = [back(p) for p, _l in ring]
@@ -6130,7 +6169,7 @@ def stream_surface(roads, target_dir, degrees, handles=64, islands=()):
         for figure in iter_fillets(arms, outlined):
             put(figure)
         spots = junction_spots(arms)
-        for figure in build_medians(chains, junction_index(median_stops(arms, chains)), colours):
+        for figure in build_medians(chains, junction_index(median_stops(arms, chains, outlined)), colours):
             put(figure)
         del chains
         # Середина перекрёстка — не островок и не разделительная: у Навои ×
@@ -6867,7 +6906,14 @@ MEDIAN_CROSSOVER_MAX_METERS = 60.0
 MEDIAN_STOP_MARGIN_METERS = 3.0
 
 
-def median_stops(arms, chains=()):
+# У узла с контуром (по устьям или объединением) разделительная доходит до
+# самого узла: build_mvt режет её по площади узла и по переходу. С прежним
+# радиусом она кончалась, не дойдя до кромки площади, и между её носом и
+# узлом оставалась светлая щель (Дурмон йули × Зиёлилар, 29.A).
+MEDIAN_OUTLINED_STOP_METERS = 2.0
+
+
+def median_stops(arms, chains=(), outlined=None):
     """Узлы с радиусом, в котором разделительная обязана прерваться."""
     names = defaultdict(set)
     for street, chain in chains:
@@ -6882,6 +6928,8 @@ def median_stops(arms, chains=()):
     for node, radius in junction_spots(arms):
         key = _node_key(node)
         if not chains or len(names[key] - {""}) >= 2:
+            if outlined is not None and key in outlined:
+                radius = MEDIAN_OUTLINED_STOP_METERS
             spots[key] = (node, radius)
     for street, chain in chains:
         points = street[2]
@@ -6951,7 +6999,7 @@ def build_road_surface(roads):
     flares = list(iter_flares(arms)) if FLARES_ENABLED else []
     return (list(iter_surface(street for street, _chain in chains))
             + junctions + flares + list(iter_fillets(arms, outlined))
-            + build_medians(chains, median_stops(arms, chains), colours)
+            + build_medians(chains, median_stops(arms, chains, outlined), colours)
             + build_islands(roads))
 
 

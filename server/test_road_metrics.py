@@ -256,6 +256,13 @@ class JunctionContourTests(unittest.TestCase):
         self.assertEqual(rm.junction_notches([notched]), 100.0)
         self.assertEqual(rm.junction_notches([square(0, 0, 40, 40)]), 0.0)
 
+    def test_median_shard_at_a_junction_is_counted(self):
+        junction = square(-20, -20, 20, 20)
+        shard = [m(21, -1), m(23, -1), m(21, 1.5)]          # клин 2 × 2,5 м у края узла
+        island = square(22, -2, 80, 2)
+        self.assertEqual(rm.median_shards([shard, island], [junction]), 1)
+        self.assertEqual(rm.median_shards([[m(200, -1), m(202, -1), m(200, 1.5)]], [junction]), 0)
+
     def test_small_patches_are_not_judged(self):
         self.assertEqual(rm.junction_contour_defects([square(0, 0, 10, 10)], [])["big"], 0)
 

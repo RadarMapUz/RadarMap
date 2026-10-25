@@ -3199,6 +3199,15 @@ class JunctionOutlineTests(unittest.TestCase):
         self.assertAlmostEqual(abs(build_roads._ring_area([q for q, _l in kept])),
                                abs(build_roads._ring_area(corner)), delta=0.01)
 
+    def test_step_on_a_straight_edge_is_smoothed(self):
+        # Уступ 1,5 м на прямом краю (Навои × Рашидов, юго-запад) — край
+        # идёт наискось; угол квартала остаётся.
+        stepped = [(0, 0), (40, 0), (40, 20), (22, 20), (22, 21.5), (0, 21.5)]
+        smooth = build_roads._smooth_steps([(q, ("side", 0)) for q in stepped])
+        self.assertEqual(len(smooth), 5)
+        corner = [(0, 0), (40, 0), (40, 10), (10, 10), (10, 40), (0, 40)]
+        self.assertEqual(len(build_roads._smooth_steps([(q, ("side", 0)) for q in corner])), 6)
+
     def test_polygon_difference_cuts_a_strip(self):
         strip = [(0, 0), (30, 0), (30, 4), (0, 4)]
         cut = build_roads.polygon_difference(strip, [[(10, -5), (15, -5), (15, 10), (10, 10)]])

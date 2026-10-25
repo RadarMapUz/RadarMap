@@ -4,6 +4,7 @@
 #
 #   bash server/build_osrm_mld.sh [--city] [--pbf файл] [--work каталог]
 #                                 [--speeds speeds.csv] [--fetch] [--dry-run]
+#                                 [--profile car_radarmap.lua] [--ch]
 #
 #   --city      только Ташкент с пригородом (osmium extract по рамке CITY_BBOX):
 #               отдельный городской граф для маршрутов с пробками;
@@ -11,7 +12,13 @@
 #   --fetch     скачать свежую выгрузку Geofabrik с проверкой md5;
 #   --speeds    пробный customize копии набора с файлом скоростей
 #               (traffic_speeds.py) и отчёт, КАКИЕ файлы он переписал;
-#   --dry-run   только напечатать команды.
+#   --dry-run   только напечатать команды;
+#   --profile   свой профиль вместо стокового /opt/car.lua (29.E:
+#               server/osrm/car_radarmap.lua — махалли, светофоры, левые без
+#               светофора). Файл монтируется в /opt рядом со стоковыми lib/;
+#   --ch        собрать CH (osrm-contract) вместо MLD — для замены графа на
+#               VPS без смены режима сервера (тот же --algorithm ch). Каталог
+#               набора — ch-<имя>, чтобы не смешать с MLD.
 #
 # Почему так (замер VPS 22.10.2026, только чтение):
 #   * VPS: 2 ГБ ОЗУ (1963 МБ, доступно ~1,2 ГБ), своп 3 ГБ, 2 ядра QEMU; на той
@@ -68,7 +75,7 @@ CITY_BBOX="69.05,41.15,69.55,41.48"
 GEOFABRIK="https://download.geofabrik.de/asia/uzbekistan-latest.osm.pbf"
 THREADS="${RADARMAP_OSRM_THREADS:-4}"
 
-CITY=0; DRY=0; FETCH=0; PBF=""; SPEEDS=""
+CITY=0; DRY=0; FETCH=0; PBF=""; SPEEDS=""; PROFILE=""; CH=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --city) CITY=1 ;;
@@ -77,13 +84,24 @@ while [ $# -gt 0 ]; do
         --pbf) PBF="${2:?--pbf: нужен файл}"; shift ;;
         --work) WORK="${2:?--work: нужен каталог}"; shift ;;
         --speeds) SPEEDS="${2:?--speeds: нужен файл}"; shift ;;
+        --profile) PROFILE="${2:?--profile: нужен файл .lua}"; shift ;;
+        --ch) CH=1 ;;
         *) echo "неизвестный ключ: $1" >&2; exit 2 ;;
     esac
     shift
 done
 PBF="${PBF:-$WORK/uzbekistan-latest.osm.pbf}"
 NAME=$([ "$CITY" = 1 ] && echo tashkent || echo uzbekistan)
-OUT="$WORK/mld-$NAME"
+KIND=$([ "$CH" = 1 ] && echo ch || echo mld)
+OUT="$WORK/$KIND-$NAME"
+# Профиль: стоковый из образа или свой, смонтированный рядом со стоковыми lib/.
+LUA="/opt/car.lua"; MOUNT=()
+if [ -n "$PROFILE" ]; then
+    [ "$DRY" = 1 ] || [ -s "$PROFILE" ] || { echo "нет профиля $PROFILE" >&2; exit 1; }
+    PROFILE_ABS="$(cd "$(dirname "$PROFILE")" && pwd)/$(basename "$PROFILE")"
+    LUA="/opt/$(basename "$PROFILE")"
+    MOUNT=(-v "$PROFILE_ABS:$LUA:ro")
+fi
 
 run() {
     echo "+ $*"
@@ -94,10 +112,10 @@ osrm() {
     # Каталог набора монтируется как /data; лог шага — рядом, для пиков памяти.
     local step="$1"; shift
     if [ "$DRY" = 1 ]; then
-        echo "+ docker run --rm --platform $PLATFORM -v $OUT:/data $IMAGE $step $*"
+        echo "+ docker run --rm --platform $PLATFORM -v $OUT:/data ${MOUNT[*]+${MOUNT[*]} }$IMAGE $step $*"
         return
     fi
-    docker run --rm --platform "$PLATFORM" -v "$OUT:/data" "$IMAGE" "$step" "$@" 2>&1 | tee "$OUT/$step.log"
+    docker run --rm --platform "$PLATFORM" -v "$OUT:/data" ${MOUNT[@]+"${MOUNT[@]}"} "$IMAGE" "$step" "$@" 2>&1 | tee "$OUT/$step.log"
 }
 
 [ "$DRY" = 1 ] || command -v docker >/dev/null || { echo "нет docker: запустите Docker Desktop" >&2; exit 1; }
@@ -123,14 +141,19 @@ else
 fi
 
 start=$(date +%s)
-osrm osrm-extract -p /opt/car.lua -t "$THREADS" "/data/$NAME.osm.pbf"
-osrm osrm-partition -t "$THREADS" "/data/$NAME.osrm"
-osrm osrm-customize -t "$THREADS" "/data/$NAME.osrm"
+osrm osrm-extract -p "$LUA" -t "$THREADS" "/data/$NAME.osm.pbf"
+if [ "$CH" = 1 ]; then
+    osrm osrm-contract -t "$THREADS" "/data/$NAME.osrm"
+else
+    osrm osrm-partition -t "$THREADS" "/data/$NAME.osrm"
+    osrm osrm-customize -t "$THREADS" "/data/$NAME.osrm"
+fi
 run rm -f "$OUT/$NAME.osm.pbf"
 
 if [ "$DRY" = 0 ]; then
     echo "→ собрано за $(( ($(date +%s) - start) / 60 )) мин; пики памяти по шагам:"
-    for step in osrm-extract osrm-partition osrm-customize; do
+    for step in osrm-extract osrm-partition osrm-customize osrm-contract; do
+        [ -f "$OUT/$step.log" ] || continue
         peak=$(grep -h "RAM: peak bytes used" "$OUT/$step.log" | tail -1 | awk '{print $NF}')
         echo "  $step: $(( ${peak:-0} / 1048576 )) МБ"
     done
@@ -138,6 +161,7 @@ if [ "$DRY" = 0 ]; then
     ls -l "$OUT"/*.osrm* | awk '{printf "  %-48s %6.1f МБ\n", $NF, $5 / 1048576}'
     # Манифест: что за граф и чем собран — VPS сверит sha перед подменой.
     ( cd "$OUT" && { echo "image $IMAGE"; echo "pbf $(md5 -q "$PBF")"; echo "built $(date -u +%FT%TZ)";
+                     echo "algorithm $KIND"; echo "profile ${PROFILE:-/opt/car.lua} $( [ -n "$PROFILE" ] && shasum -a 256 "$PROFILE" | cut -d' ' -f1)";
                      shasum -a 256 "$NAME".osrm*; } > manifest.txt )
 fi
 
@@ -159,4 +183,4 @@ if [ -n "$SPEEDS" ]; then
         ( cd "$TRIAL" && shasum -a 256 -c before.sha 2>/dev/null | grep -v ': OK$' || echo "  ничего" )
     fi
 fi
-echo "✓ Набор MLD: $OUT (на VPS не выкладывался)"
+echo "✓ Набор $KIND: $OUT (на VPS не выкладывался)"

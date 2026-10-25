@@ -119,8 +119,16 @@ PALETTES = {
         # Подземный переход — сиреневый, но приглушённый: виден, не кричит.
         "underpass": "#c6c0ea", "underpass_edge": "#9a91cc",
         "footbridge": "#ffffff", "footbridge_edge": "#b6bcc6", "steps": "#d2d6dc",
-        "light": {"anchor": "viewport", "color": "#f8fafd", "intensity": 0.45,
-                  "position": [1.3, 200, 35]},
+        # Свет на объём (29.F): сильнее и чуть выше — стены теневой стороны
+        # заметно темнее крыш, дом читается кубом со светом сбоку-сверху, а
+        # не молочной коробкой (при 0,45 стена и крыша почти сливались).
+        "light": {"anchor": "viewport", "color": "#f8fafd", "intensity": 0.62,
+                  "position": [1.25, 210, 40]},
+        # Высотки (≥ BUILDING_TALL_METERS) — свой тон; днём тот же, что у
+        # остальных: город светлый и спокойный.
+        "building_tall": "#e4e6ea",
+        # Свечение магистрали — только ночью (29.F); днём его нет.
+        "trunk_glow": None,
         # Кайма НАШИХ лент — нейтральная (Фурката, 28.09.2026: цветная у
         # каждой ленты давала «нитки» внутри асфальта).
         "casing": "#cfd3d9",
@@ -152,6 +160,9 @@ PALETTES = {
         "drive_kerb": "#e4e8ee", "drive_kerb_trunk": "#f0c46e", "drive_minor_edge": "#d9dce1",
         "drive_casing": "#d7dce3", "drive_gutter": "#363e4d", "drive_zebra_base": "#3f4859",
         "drive_paint": "#ffffff", "drive_street_label": "#f2f4f7",
+        # Дома в поездке (29.F) — чуть светлее и холоднее: на тёмном асфальте
+        # светлые объёмы как у Amap, без прозрачности (она просвечивала стены).
+        "drive_building": "#e9ecf1",
     },
     "dark": {
         "bg": "#16181c", "park": "#16271e", "wood": "#14241b", "water": "#172a40",
@@ -181,8 +192,15 @@ PALETTES = {
         "boundary": "#3a3e47", "building_shadow": "rgba(0,0,0,0.5)",
         "underpass": "#4d4870", "underpass_edge": "#7870a8",
         "footbridge": "#3b3f47", "footbridge_edge": "#5a5f69", "steps": "#2a2d33",
-        "light": {"anchor": "viewport", "color": "#d8dde6", "intensity": 0.4,
-                  "position": [1.3, 200, 35]},
+        "light": {"anchor": "viewport", "color": "#d8dde6", "intensity": 0.5,
+                  "position": [1.25, 210, 40]},
+        # Ночью высотки чуть теплее и светлее (подсвеченные крыши Tashkent
+        # City), умеренно: акцент на карте — маршрут, камеры и машина.
+        "building_tall": "#34322f",
+        # Магистраль ночью чуть светится тёплым, как под фонарями (29.F):
+        # широкая размытая полоса под кромкой, слабая — акцент остаётся за
+        # маршрутом, камерами и машиной.
+        "trunk_glow": "#c9a35a",
         "casing": "#25282e",
         "kerb": "#575c66", "kerb_trunk": "#9a8352", "trees": "trees-dark", "asphalt": "asphalt-dark",
         "gutter": "#1d2025",
@@ -201,6 +219,7 @@ PALETTES = {
         "drive_kerb": "#575c66", "drive_kerb_trunk": "#9a8352", "drive_minor_edge": "#1f2227",
         "drive_casing": "#25282e", "drive_gutter": "#1d2025", "drive_zebra_base": "#2e3137",
         "drive_paint": "#9aa0aa", "drive_street_label": "#f2f4f7",
+        "drive_building": "#24272e",
     },
 }
 
@@ -656,6 +675,25 @@ def _bridge_order(layers):
     return rest
 
 
+# Свечение магистрали ночью: на сколько пикселей шире полотна (на обе
+# стороны) и сила. Размытие — на всю ширину ореола: края нет, только свет.
+TRUNK_GLOW_EXTRA_PX = 16
+TRUNK_GLOW_OPACITY = 0.16
+
+# Высотка — с этой высоты (м) тон дома уходит к building_tall, к
+# BUILDING_TALL_FULL — целиком: у Tashkent City и Ташкент-Сити Парка 60–150 м.
+BUILDING_TALL_METERS = 35
+BUILDING_TALL_FULL = 110
+
+
+def building_colour(p):
+    """Цвет дома: по высоте из тайла, если у темы свой тон высоток."""
+    if p["building_tall"] == p["building"]:
+        return p["building"]
+    return ["interpolate", ["linear"], ["coalesce", ["get", "render_height"], 10],
+            BUILDING_TALL_METERS, p["building"], BUILDING_TALL_FULL, p["building_tall"]]
+
+
 def road_color(p):
     """Асфальт нашего полотна — по классу на всех зумах (27.C): иерархия
     читается цветом, а не только шириной."""
@@ -743,7 +781,7 @@ DRIVE_KEYS = {"near_trunk": "drive_trunk", "near_primary": "drive_primary",
               "near_minor": "drive_minor", "kerb": "drive_kerb", "kerb_trunk": "drive_kerb_trunk",
               "minor_edge": "drive_minor_edge", "casing": "drive_casing", "gutter": "drive_gutter",
               "zebra_base": "drive_zebra_base", "paint": "drive_paint",
-              "street_label": "drive_street_label"}
+              "street_label": "drive_street_label", "building": "drive_building"}
 # Подписи дворов и дорожек: полотно под ними в поездке не темнеет, и имя
 # остаётся тёмным на белом (общий ключ street_label перекрасил бы и их).
 DRIVE_KEEP_LAYERS = ("highway-name-minor", "highway-name-path")
@@ -753,7 +791,12 @@ DRIVE_COLOUR_PROPS = ("line-color", "fill-color", "fill-outline-color", "text-co
 
 def drive_palette(p):
     """Палитра поездки: асфальт вблизи, кромки, разметка и имя улицы — drive_*."""
-    return dict(p, **{key: p[drive] for key, drive in DRIVE_KEYS.items()})
+    out = dict(p, **{key: p[drive] for key, drive in DRIVE_KEYS.items()})
+    # Тон высоток без своего цвета следует за домом поездки (иначе днём
+    # высотки остались бы прежнего тона среди посветлевших домов).
+    if p["building_tall"] == p["building"]:
+        out["building_tall"] = out["building"]
+    return out
 
 
 def _zoom_stops(value):
@@ -900,6 +943,12 @@ def _layers_in_draw_order(p):
         # краю. Крупные узлы с запасной оболочкой (610 из 2856 ≥ 300 м² в
         # Ташкенте, среди них Навои × Рашидов) кромки из тайла не имеют и
         # сливались с тротуаром.
+        *([] if not p["trunk_glow"] else [
+            {"id": "radar-trunk-glow", "type": "line", "source": "radar", "source-layer": "roads",
+             "minzoom": OUR_ROADS_FROM, "filter": ["all", ["!", ["has", "tunnel"]], ["<=", ["get", "cls"], 2]],
+             "layout": {"line-cap": "round", "line-join": "round"},
+             "paint": {"line-color": p["trunk_glow"], "line-width": measured(TRUNK_GLOW_EXTRA_PX),
+                       "line-blur": TRUNK_GLOW_EXTRA_PX, "line-opacity": TRUNK_GLOW_OPACITY}}]),
         {"id": "radar-roads-case", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["!", ["has", "tunnel"]], ["<=", ["get", "cls"], 7],
                                               ["!", ["has", "stub"]], ["!", ["has", "inner"]]],
@@ -1178,7 +1227,7 @@ def build(base, theme="light", mode="full", tileset=None, palette=None):
         out.insert(first_symbol, {"id": "building-flat", "type": "fill", "source": "openmaptiles",
                                   "source-layer": "building", "minzoom": 14,
                                   "layout": {"visibility": "none"},
-                                  "paint": {"fill-color": p["building"],
+                                  "paint": {"fill-color": building_colour(p),
                                             "fill-outline-color": p["building_wall"]}})
         first_symbol += 1
         # Объём (25.D, «у Яндекса дома объёмом под наклоном»): высота из
@@ -1188,7 +1237,7 @@ def build(base, theme="light", mode="full", tileset=None, palette=None):
         # стоят в полный рост.
         out.insert(first_symbol, {"id": "building-3d", "type": "fill-extrusion", "source": "openmaptiles",
                                   "source-layer": "building", "minzoom": 14,
-                                  "paint": {"fill-extrusion-color": p["building"],
+                                  "paint": {"fill-extrusion-color": building_colour(p),
                                             "fill-extrusion-vertical-gradient": True,
                                             "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 15, 0, 16,
                                                                       ["coalesce", ["get", "render_height"], 10]],

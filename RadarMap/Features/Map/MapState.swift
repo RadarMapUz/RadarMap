@@ -30,6 +30,9 @@ final class MapState {
     /// main рантайма баг уже исправлен; до выхода такой iOS помогает одно —
     /// не синтезировать isolated deinit вовсе.
     nonisolated deinit {}
+    /// Улица под значком «я» в поездке (29.F, EngineStreetProbe) — для
+    /// плашки внизу; читает только PhoneStreetNamePill.
+    var streetName: String?
     var selectedCamera: Camera?          // открытый попап детали
     var highlightedID: Int?              // подсвеченный маркер на карте
     var showNearbySheet = false

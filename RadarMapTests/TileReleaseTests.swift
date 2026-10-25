@@ -236,8 +236,10 @@ final class TileReleaseTests: XCTestCase {
             let building = layers.first { $0["id"] as? String == "building-3d" }
             return (building?["paint"] as? [String: Any])?["fill-extrusion-opacity"] as? Double
         }
-        XCTAssertEqual(opacity(driving), AppConfig.engineDrivingBuildingOpacity, "дома в поездке приглушены")
-        XCTAssertNotEqual(opacity(parked), AppConfig.engineDrivingBuildingOpacity)
+        // 29.F: объём в поездке непрозрачный — при 0,75 дом просвечивал
+        // своими задними стенами. Тише его делает цвет, не прозрачность.
+        XCTAssertEqual(opacity(driving), 1.0, "дома в поездке не просвечивают")
+        XCTAssertEqual(opacity(parked), 1.0)
     }
 
     func testDrivingFilterIsPure() {

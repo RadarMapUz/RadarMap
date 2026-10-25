@@ -17364,11 +17364,11 @@
  "light": {
   "anchor": "viewport",
   "color": "#f8fafd",
-  "intensity": 0.45,
+  "intensity": 0.62,
   "position": [
-   1.3,
-   200,
-   35
+   1.25,
+   210,
+   40
   ]
  },
  "metadata": {

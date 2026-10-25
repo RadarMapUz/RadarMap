@@ -198,17 +198,14 @@ nonisolated enum EngineModernStyle {
         id.hasPrefix("poi-level") || id == "housenumber" || id == "highway-name-path"
     }
 
-    /// Слои стиля для поездки: лишнее убрано, объёмные дома приглушены.
+    /// Слои стиля для поездки: лишнее убрано. Дома НЕ приглушаются
+    /// прозрачностью (29.F): объём при 0,75 просвечивал собственными
+    /// задними стенами и крышами соседей — «пластиковые» кубы-призраки.
+    /// Тише в поездке они становятся цветом (make_style drive_building).
     static func drivingLayers(_ layers: [[String: Any]]) -> [[String: Any]] {
-        layers.compactMap { layer in
-            guard let id = layer["id"] as? String else { return layer }
-            if hiddenWhileDriving(id) { return nil }
-            guard id == "building-3d" else { return layer }
-            var dimmed = layer
-            var paint = dimmed["paint"] as? [String: Any] ?? [:]
-            paint["fill-extrusion-opacity"] = AppConfig.engineDrivingBuildingOpacity
-            dimmed["paint"] = paint
-            return dimmed
+        layers.filter { layer in
+            guard let id = layer["id"] as? String else { return true }
+            return !hiddenWhileDriving(id)
         }
     }
 

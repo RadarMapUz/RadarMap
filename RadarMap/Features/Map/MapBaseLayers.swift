@@ -169,7 +169,9 @@ struct EngineBaseLayer: View {
                         onLongPress: onLongPress,
                         onRegion: { map.updateVisible(for: $0) },
                         showsPosition: known != nil,
-                        markerMotion: env.location.markerMotion)
+                        markerMotion: env.location.markerMotion,
+                        // Плашка улицы (29.F): пишет только на смене имени.
+                        onStreetName: { map.streetName = $0 })
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
                 // Подпись данных — над нижней панелью: «i» остаётся, текст

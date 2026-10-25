@@ -20,6 +20,8 @@ struct CarPlayOverlay: View {
     /// Свой баннер манёвра. Выключен, пока манёвр рисует сама машина
     /// (навигационная сессия CarPlay).
     var showsManeuver = true
+    /// Источник плашки улицы (29.F): читает её только CarStreetSlot.
+    var street: CarPlayMapModel?
     /// Сколько занимают кнопки карты по краям окна (CarPlayWindowRoot →
     /// mapButtonSafeAreaLayoutGuide): док у правого края встаёт левее них.
     var buttonInsets = EdgeInsets()
@@ -114,7 +116,10 @@ struct CarPlayOverlay: View {
                                           hasGhost: env.commuteLive.display != nil,
                                           fitsSecond: Self.fitsRoute(hudWidth: width))
         return HStack(alignment: .bottom, spacing: 10) {
-            Spacer(minLength: 0)
+            // Плашка улицы (29.F) — по центру свободного места левее дока:
+            // по центру экрана она ложилась на капсулу прибытия.
+            CarStreetSlot(model: street)
+                .frame(maxWidth: .infinity)
             if items.contains(.arrival) {
                 pill { etaCell }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -329,4 +334,13 @@ struct CarPlayOverlay: View {
 
     /// Цвет скорости: обычный в рамках лимита, красный при превышении.
     private var speedColor: Color { isOver ? Theme.danger : Theme.textPrimary }
+}
+
+/// Плашка улицы в доке машины: своя вью — имя читается только здесь.
+private struct CarStreetSlot: View {
+    let model: CarPlayMapModel?
+    var body: some View {
+        StreetNamePill(name: model?.streetName, large: true)
+            .padding(.bottom, 6)
+    }
 }

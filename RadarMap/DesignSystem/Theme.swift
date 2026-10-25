@@ -584,6 +584,9 @@ nonisolated enum RouteColors {
     static let traveled: Pair = (0x9AA6B8, 0x7A869C)
     /// Подсветка ближнего манёвра на линии.
     static let maneuver: Pair = (0x123A8F, 0xD6E6FF)
+    /// Свечение под линией (29.F): днём на светлой земле — лёгкий ореол,
+    /// ночью и на тёмном асфальте поездки — заметнее (линия «светится»).
+    static let glowOpacity: (day: Double, night: Double) = (0.28, 0.55)
     /// Светлая середина: белый с этой непрозрачностью поверх тела.
     static let coreAlpha: (day: Double, night: Double) = (0.38, 0.32)
     /// Стрелки направления вдоль линии: белая заливка с каймой линии.

@@ -31560,6 +31560,22 @@
           }
         }
       }
+    },
+    "Улица: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Улица: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Koʻcha: %@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

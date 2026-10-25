@@ -425,6 +425,36 @@
     ]
    ]
   },
+  "building-3d": {
+   "fill-extrusion-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    15,
+    "#e4e6ea",
+    16,
+    "#e9ecf1"
+   ]
+  },
+  "building-flat": {
+   "fill-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    15,
+    "#e4e6ea",
+    16,
+    "#e9ecf1"
+   ]
+  },
   "highway-link": {
    "line-color": [
     "interpolate",
@@ -995,6 +1025,21 @@
      "#434c5e",
      "#ffffff"
     ]
+   ]
+  },
+  "housenumber": {
+   "text-halo-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    15,
+    "#e4e6ea",
+    16,
+    "#e9ecf1"
    ]
   },
   "radar-bridge": {

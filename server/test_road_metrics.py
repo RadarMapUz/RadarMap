@@ -217,6 +217,56 @@ class ZebraStepMetricTests(unittest.TestCase):
         self.assertEqual(rm.zebra_steps([[m(0, -3), m(0, 3)], [m(8, -3), m(8, 3)]]), 0.0)
 
 
+
+class JunctionContourTests(unittest.TestCase):
+    """Контур площади узла (29.A): внахлёст, бордюр по асфальту, видимый зубец, без бордюра."""
+
+    def test_kerb_through_the_junction_is_measured_and_on_its_edge_is_not(self):
+        ring = square(-20, -20, 20, 20)
+        across = [m(-15, 0), m(15, 0)]          # «паутина»: поперёк асфальта узла
+        edge = [m(-20, -20), m(20, -20)]        # по краю — так и надо
+        self.assertGreater(rm.junction_contour_defects([ring], [across])["kerb_inside"], 900)
+        self.assertEqual(rm.junction_contour_defects([ring], [edge])["kerb_inside"], 0.0)
+
+    def test_two_pieces_on_top_of_each_other_are_a_ragged_edge(self):
+        one, two = square(-20, -20, 20, 20), square(5, -15, 45, 25)
+        result = rm.junction_contour_defects([one, two], [])
+        self.assertEqual(result["overlap"], 100.0)
+        self.assertEqual(result["kerbless"], 100.0)
+        apart = rm.junction_contour_defects([one, square(20, -20, 60, 20)], [])
+        self.assertEqual(apart["overlap"], 0.0, "встык — не внахлёст")
+
+    def test_tooth_counts_only_where_no_asphalt_hides_it(self):
+        tooth = [m(-20, -20), m(20, -20), m(20, 20), m(0, 60), m(-2, 20), m(-20, 20)]
+        self.assertEqual(rm.junction_contour_defects([tooth], [])["teeth"], 100.0)
+        road = square(-6, 0, 6, 90)              # зубец лежит на полотне улицы
+        self.assertEqual(rm.junction_contour_defects([tooth], [], asphalt=[road])["teeth"], 0.0)
+
+    def test_median_inside_a_junction_and_across_a_crossing_is_measured(self):
+        junction = square(-20, -20, 20, 20)
+        inside = square(-40, -1.5, 10, 1.5)
+        self.assertGreater(rm.medians_in_junctions([inside], [junction]), 100)
+        self.assertEqual(rm.medians_in_junctions([square(-60, -1.5, -20, 1.5)], [junction]), 0.0)
+        zebra = [m(-30, 2), m(-30, 9)]                      # кончается у разделительной
+        self.assertEqual(rm.medians_through_zebras([zebra], [inside]), 1)
+        self.assertEqual(rm.medians_through_zebras([zebra], [square(-60, -1.5, -36, 1.5)]), 0)
+
+    def test_notch_on_the_edge_is_measured(self):
+        notched = [m(0, 0), m(40, 0), m(40, 40), m(21.5, 40), m(21.5, 12), m(18.5, 12), m(18.5, 40), m(0, 40)]
+        self.assertEqual(rm.junction_notches([notched]), 100.0)
+        self.assertEqual(rm.junction_notches([square(0, 0, 40, 40)]), 0.0)
+
+    def test_median_shard_at_a_junction_is_counted(self):
+        junction = square(-20, -20, 20, 20)
+        shard = [m(21, -1), m(23, -1), m(21, 1.5)]          # клин 2 × 2,5 м у края узла
+        island = square(22, -2, 80, 2)
+        self.assertEqual(rm.median_shards([shard, island], [junction]), 1)
+        self.assertEqual(rm.median_shards([[m(200, -1), m(202, -1), m(200, 1.5)]], [junction]), 0)
+
+    def test_small_patches_are_not_judged(self):
+        self.assertEqual(rm.junction_contour_defects([square(0, 0, 10, 10)], [])["big"], 0)
+
+
 class CompareTests(unittest.TestCase):
     def test_worse_metric_stops_publish(self):
         reasons = rm.compare({"dashes_in_junction": 45.0}, {"dashes_in_junction": 80.0})

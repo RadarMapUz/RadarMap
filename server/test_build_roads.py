@@ -15,6 +15,7 @@ import io
 import math
 import sys
 import unittest
+from collections import defaultdict
 
 import build_roads
 
@@ -3019,6 +3020,216 @@ class JunctionKerbTests(unittest.TestCase):
         made = self.made(legs)
         self.assertEqual(sum(1 for f in made if f[0] == build_roads.AREA_JUNCTION), 1)
         self.assertTrue(all(not f[1] & build_roads.FILLET_MAJOR for f in made if f[0] == build_roads.AREA_KERB))
+
+
+
+class JunctionOutlineTests(unittest.TestCase):
+    """Контур крупного перекрёстка (29.A): одна фигура, без оболочки, бордюр по краю.
+
+    Дурмон йули × Зиёлилар (23.10.2026): две улицы с лентами по 7,8 м — четыре
+    узла в 14 м друг от друга, но магистральным был один, и на перекрёстке
+    лежали четыре фигуры внахлёст, а бордюр каждой шёл по асфальту соседней.
+    """
+
+    centre = (69.3359, 41.3404)
+
+    def p(self, x, y):
+        kx = 111_320 * math.cos(math.radians(self.centre[1]))
+        return (self.centre[0] + x / kx, self.centre[1] + y / 111_320)
+
+    def xy(self, point):
+        kx = 111_320 * math.cos(math.radians(self.centre[1]))
+        return ((point[0] - self.centre[0]) * kx, (point[1] - self.centre[1]) * 111_320)
+
+    def crossing(self, half=7.0, width=7.8, code=3, reach=60.0):
+        """Две улицы с раздельными лентами: узлы в (±half, ±half)."""
+        corners = [(-half, half), (half, half), (half, -half), (-half, -half)]
+        arms = {}
+        for x, y in corners:
+            node = self.p(x, y)
+            legs = []
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                other = (x + dx * 2 * half, y + dy * 2 * half)
+                if other in corners:
+                    far, length = build_roads._node_key(self.p(*other)), 2 * half
+                else:
+                    far, length = build_roads._node_key(self.p(x + dx * reach, y + dy * reach)), reach
+                legs.append(build_roads.Leg(node, self.p(x + dx * 5, y + dy * 5), width, code,
+                                            far=far, length=length))
+            arms[build_roads._node_key(node)] = legs
+        for legs in arms.values():
+            for leg in legs:
+                leg.far_arms = len(arms.get(leg.far, ()))
+        return arms
+
+    def test_narrow_divided_crossing_is_one_cluster(self):
+        groups = build_roads.cluster_junctions(self.crossing())
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(len(groups[0]), 16)
+
+    def test_a_yard_next_to_the_crossing_stays_apart(self):
+        arms = self.crossing()
+        yard = self.p(7.0 + 20.0, -7.0)
+        arms[build_roads._node_key(yard)] = [
+            build_roads.Leg(yard, self.p(40, -7), 7.8, 3, far=build_roads._node_key(self.p(90, -7)), length=60),
+            build_roads.Leg(yard, self.p(20, -7), 7.8, 3, far=build_roads._node_key(self.p(7, -7)), length=20),
+            build_roads.Leg(yard, self.p(27, -20), 4.0, 6, far=build_roads._node_key(self.p(27, -60)), length=50)]
+        groups = build_roads.cluster_junctions(arms)
+        self.assertTrue(any(len(g) == 3 for g in groups), "двор затянуло в перекрёсток")
+
+    def test_union_outline_is_one_ring_with_kerbs_on_its_edge(self):
+        legs = build_roads.cluster_junctions(self.crossing())[0]
+        kerbs = []
+        ring = build_roads.union_outline(legs, kerbs)
+        self.assertIsNotNone(ring)
+        self.assertIsNone(build_roads.surface_check.defect(build_roads.quantized(ring)))
+        self.assertEqual(len(kerbs), 4, "бордюр — по одному на угол квартала")
+        shape = [self.xy(q) for q in ring]
+        for _major, line in kerbs:
+            for q in line:
+                x, y = self.xy(q)
+                edge = min(build_roads._distance_to_segment((x, y), a, b)
+                           for a, b in zip(shape, shape[1:] + shape[:1]))
+                self.assertLess(edge, 0.05, "бордюр ушёл с края на асфальт узла")
+        # Середина перекрёстка — асфальт (пустота между лентами залита).
+        self.assertTrue(build_roads._point_in_ring((0.0, 0.0), shape))
+        # Середина и подходы: площадь больше квадрата между внешними кромками.
+        self.assertGreater(abs(build_roads._ring_area(shape)), (14 + 7.8) ** 2)
+
+    def test_union_of_overlapping_and_touching_squares(self):
+        def sq(x0, y0, x1, y1):
+            return ([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], [("side", 0)] * 4)
+        outer, holes = build_roads.polygon_union_outline([sq(0, 0, 10, 10), sq(5, 5, 15, 15)])
+        self.assertEqual(len(outer), 1)
+        self.assertAlmostEqual(build_roads._ring_area([p for p, _l in outer[0]]), 175.0, places=6)
+        outer, _ = build_roads.polygon_union_outline([sq(0, 0, 10, 10), sq(10, 0, 20, 10)])
+        self.assertEqual(len(outer), 1, "встык — одна фигура")
+        self.assertAlmostEqual(build_roads._ring_area([p for p, _l in outer[0]]), 200.0, places=6)
+        outer, _ = build_roads.polygon_union_outline([sq(0, 0, 10, 10), sq(2, 2, 4, 4)])
+        self.assertAlmostEqual(build_roads._ring_area([p for p, _l in outer[0]]), 100.0, places=6)
+        # Кольцо из четырёх лент: пустота в середине — дыра, внешний край один.
+        ring = [sq(0, 0, 30, 5), sq(25, 0, 30, 30), sq(0, 25, 30, 30), sq(0, 0, 5, 30)]
+        outer, holes = build_roads.polygon_union_outline(ring)
+        self.assertEqual((len(outer), len(holes)), (1, 1))
+        self.assertAlmostEqual(-build_roads._ring_area([p for p, _l in holes[0]]), 400.0, places=6)
+
+    def test_chain_of_nodes_along_a_street_is_not_one_area(self):
+        # Ряд примыканий вдоль улицы — не один перекрёсток: объединением такой
+        # кластер не строится (площадь легла бы на всю улицу), а контуры его
+        # узлов по отдельности встают встык по середине кусков, не внахлёст.
+        arms = {}
+        keys = [build_roads._node_key(self.p(x, 0)) for x in (0, 25, 50, 75)]
+        for i, x in enumerate((0, 25, 50, 75)):
+            node = self.p(x, 0)
+            east = keys[i + 1] if i < 3 else build_roads._node_key(self.p(200, 0))
+            west = keys[i - 1] if i > 0 else build_roads._node_key(self.p(-200, 0))
+            arms[keys[i]] = [
+                build_roads.Leg(node, self.p(x + 5, 0), 10.0, 3, far=east, length=25 if i < 3 else 125),
+                build_roads.Leg(node, self.p(x - 5, 0), 10.0, 3, far=west, length=25 if i > 0 else 200),
+                build_roads.Leg(node, self.p(x, 5), 7.0, 4, far=build_roads._node_key(self.p(x, 80)), length=80)]
+        for legs in arms.values():
+            for leg in legs:
+                leg.far_arms = len(arms.get(leg.far, ()))
+        chain = [leg for legs in arms.values() for leg in legs]
+        self.assertTrue(build_roads._is_chain(chain))
+        self.assertFalse(build_roads._is_chain(build_roads.cluster_junctions(self.crossing())[0]))
+        shapes = []
+        for legs in arms.values():
+            ring = build_roads.union_outline(legs)
+            self.assertIsNotNone(ring)
+            shapes.append([self.xy(q) for q in ring])
+        for i, one in enumerate(shapes):
+            for j, other in enumerate(shapes):
+                if i == j:
+                    continue
+                for q in one:
+                    if build_roads._point_in_ring(q, other):
+                        edge = min(build_roads._distance_to_segment(q, a, b)
+                                   for a, b in zip(other, other[1:] + other[:1]))
+                        self.assertLess(edge, 0.5, "площади соседних узлов внахлёст")
+
+    def median_locked_by_a_u_turn(self, apart):
+        """Две ленты проспекта (оси в apart м) от перекрёстка с улицей до
+        разворота в 50 м западнее: разделительная между ними заперта."""
+        nodes = {(x, y): self.p(x, y) for x in (0, -50) for y in (apart / 2, -apart / 2)}
+        key = {xy: build_roads._node_key(p) for xy, p in nodes.items()}
+        arms = defaultdict(list)
+
+        def leg(at, towards, width, far_xy=None, code=3):
+            x, y = at
+            tx, ty = towards
+            length = math.hypot(tx - x, ty - y)
+            far = key.get(far_xy) if far_xy else build_roads._node_key(self.p(tx, ty))
+            step = 5 / max(length, 1e-9)
+            arms[key[at]].append(build_roads.Leg(nodes[at], self.p(x + (tx - x) * step, y + (ty - y) * step),
+                                                 width, code, far=far, length=length))
+
+        for y in (apart / 2, -apart / 2):
+            leg((0, y), (-50, y), 7.0, (-50, y))
+            leg((-50, y), (0, y), 7.0, (0, y))
+            leg((0, y), (80, y), 7.0)
+            leg((-50, y), (-130, y), 7.0)
+        leg((0, apart / 2), (0, -apart / 2), 7.0, (0, -apart / 2), code=4)
+        leg((0, -apart / 2), (0, apart / 2), 7.0, (0, apart / 2), code=4)
+        leg((0, apart / 2), (0, 80), 7.0, code=4)
+        leg((0, -apart / 2), (0, -80), 7.0, code=4)
+        leg((-50, apart / 2), (-50, -apart / 2), 4.0, (-50, -apart / 2), code=4)
+        leg((-50, -apart / 2), (-50, apart / 2), 4.0, (-50, apart / 2), code=4)
+        return [l for legs in arms.values() for l in legs]
+
+    def test_median_locked_by_a_u_turn_is_not_paved(self):
+        # Каратош у Бунёдкора: разделительная между лентами, запертая
+        # разворотом, заливалась асфальтом на всю длину.
+        report = {}
+        self.assertIsNone(build_roads.union_outline(self.median_locked_by_a_u_turn(11.0), [], report))
+        self.assertTrue(report.get("hole"))
+        # Щель в полметра между почти касающимися лентами — не газон.
+        self.assertIsNotNone(build_roads.union_outline(self.median_locked_by_a_u_turn(7.5), []))
+
+    def test_notch_is_closed_and_block_corner_kept(self):
+        # Щель разделительной 3 × 30 м, заходящая в площадь, закрывается
+        # прямой; угол квартала (L) остаётся углом.
+        # Обход против часовой; щель шириной 3 м врезается сверху на 28 м.
+        notched = [(0, 0), (40, 0), (40, 40), (21.5, 40), (21.5, 12), (18.5, 12), (18.5, 40), (0, 40)]
+        closed = build_roads._close_notches([(q, ("side", 0)) for q in notched])
+        area = abs(build_roads._ring_area([q for q, _l in closed]))
+        self.assertAlmostEqual(area, 1600.0, delta=1.0)
+        corner = [(0, 0), (40, 0), (40, 10), (10, 10), (10, 40), (0, 40)]
+        kept = build_roads._close_notches([(q, ("side", 0)) for q in corner])
+        self.assertAlmostEqual(abs(build_roads._ring_area([q for q, _l in kept])),
+                               abs(build_roads._ring_area(corner)), delta=0.01)
+
+    def test_step_on_a_straight_edge_is_smoothed(self):
+        # Уступ 1,5 м на прямом краю (Навои × Рашидов, юго-запад) — край
+        # идёт наискось; угол квартала остаётся.
+        stepped = [(0, 0), (40, 0), (40, 20), (22, 20), (22, 21.5), (0, 21.5)]
+        smooth = build_roads._smooth_steps([(q, ("side", 0)) for q in stepped])
+        self.assertEqual(len(smooth), 5)
+        corner = [(0, 0), (40, 0), (40, 10), (10, 10), (10, 40), (0, 40)]
+        self.assertEqual(len(build_roads._smooth_steps([(q, ("side", 0)) for q in corner])), 6)
+
+    def test_polygon_difference_cuts_a_strip(self):
+        strip = [(0, 0), (30, 0), (30, 4), (0, 4)]
+        cut = build_roads.polygon_difference(strip, [[(10, -5), (15, -5), (15, 10), (10, 10)]])
+        self.assertEqual(sorted(round(build_roads._ring_area(r)) for r in cut), [40, 60])
+        self.assertEqual(build_roads.polygon_difference(strip, [[(-1, -1), (31, -1), (31, 5), (-1, 5)]]), [])
+        self.assertEqual(build_roads.polygon_difference(strip, [[(40, 0), (50, 0), (50, 4), (40, 4)]]), [strip])
+
+    def test_ramp_only_node_does_not_grey_the_trunk(self):
+        # Перемычка разворота (одни узкие съезды) фигуры не даёт — и не красит
+        # соседний узел магистрали в серый (D001, 41.24111, 69.16677).
+        trunk = self.p(0, 0)
+        ramp = self.p(0, 20)
+        arms = {
+            build_roads._node_key(trunk): [
+                build_roads.Leg(trunk, self.p(30, 0), 11.1, 2), build_roads.Leg(trunk, self.p(-30, 0), 11.1, 2),
+                build_roads.Leg(trunk, self.p(0, 10), 3.8, 2, True)],
+            build_roads._node_key(ramp): [
+                build_roads.Leg(ramp, self.p(0, 10), 3.8, 2, True), build_roads.Leg(ramp, self.p(10, 30), 3.8, 2, True),
+                build_roads.Leg(ramp, self.p(-10, 30), 3.8, 2, True)]}
+        rings = [f for f in build_roads.iter_junctions(arms, set()) if f[0] == build_roads.AREA_JUNCTION]
+        self.assertTrue(rings)
+        self.assertTrue(all(build_roads.junction_class(flags) == 2 for _k, flags, _r in rings))
 
 
 class MedianOpeningTests(unittest.TestCase):

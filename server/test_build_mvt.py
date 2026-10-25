@@ -807,6 +807,59 @@ class JunctionClassPropsTests(unittest.TestCase):
                          {"kind": 8}, "старые данные без класса — без свойства")
 
 
+
+class KerbMaskTests(unittest.TestCase):
+    """Бордюр угла — только по краю асфальта (29.A): кусок внутри чужой
+    площади узла режется, свой край фигуры остаётся."""
+
+    kx = 111_320 * math.cos(math.radians(41.34))
+
+    def p(self, x, y):
+        return (69.33 + x / self.kx, 41.34 + y / 111_320)
+
+    def test_kerb_across_another_junction_is_cut_and_its_own_edge_stays(self):
+        square = [self.p(-20, -20), self.p(20, -20), self.p(20, 20), self.p(-20, 20)]
+        mask = build_mvt.KerbMask([square])
+        across = mask.clip_kerb([self.p(-40, 0), self.p(40, 0)])
+        self.assertEqual(len(across), 2, "по обе стороны чужой площади")
+        for piece in across:
+            for q in piece:
+                self.assertGreater(abs(q[0] - 69.33) * self.kx, 20 - build_mvt.KERB_INSIDE_DEPTH_METERS - 0.6)
+        edge = [self.p(-20, -20), self.p(20, -20)]
+        kept = mask.clip_kerb(edge)
+        self.assertEqual(len(kept), 1)
+        self.assertEqual((kept[0][0], kept[0][-1]), (edge[0], edge[-1]))
+
+    def test_median_island_stops_at_the_junction_and_the_crossing(self):
+        # Навои × Фуркат: остров разделительной шёл через зебру; Навои ×
+        # Рашидов: кромка разделительной заходила в площадь узла.
+        island = [self.p(-60, -1.5), self.p(0, -1.5), self.p(0, 1.5), self.p(-60, 1.5)]
+        junction = [self.p(-10, -20), self.p(20, -20), self.p(20, 20), self.p(-10, 20)]
+        zebra = [self.p(-30, 3), self.p(-30, 10)]           # зебра на северной ленте
+        cover = build_mvt.JunctionMask([junction, build_mvt.zebra_box(zebra)])
+        pieces, shards = build_mvt.clip_strip(island, cover)
+        self.assertEqual(shards, [])
+        self.assertEqual(len(pieces), 2, "остров рвётся переходом")
+        for piece in pieces:
+            xs = [(q[0] - 69.33) * self.kx for q in piece]
+            self.assertLessEqual(max(xs), -10 + 0.01, "остров зашёл в площадь узла")
+            self.assertFalse(any(-32.4 < x < -27.6 for x in xs), "остров на полосе перехода")
+
+    def test_cut_nose_is_rounded_and_shards_become_asphalt(self):
+        # Дурмон йули: после реза у перехода оставались светлые клинья, а нос
+        # острова был прямым торцом.
+        island = [self.p(-60, -2), self.p(0, -2), self.p(0, 2), self.p(-60, 2)]
+        cover = build_mvt.JunctionMask([[self.p(-10, -20), self.p(20, -20), self.p(20, 20), self.p(-10, 20)]])
+        pieces, shards = build_mvt.clip_strip(island, cover)
+        self.assertEqual((len(pieces), shards), (1, []))
+        nose = [q for q in pieces[0] if (q[0] - 69.33) * self.kx > -12]
+        self.assertGreater(len(nose), 4, "нос не скруглён")
+        # Клин наискось у самого узла — осколок, не остров.
+        wedge = [self.p(-14, -2), self.p(-9, -2), self.p(-14, 0.5)]
+        pieces, shards = build_mvt.clip_strip(wedge, cover)
+        self.assertEqual((pieces, len(shards)), ([], 1))
+
+
 class BridgeChainTests(unittest.TestCase):
     """Мост — одной линией: куски с прямыми торцами давали швы (аудит 28.G, №2)."""
 

@@ -268,7 +268,8 @@ struct CarPlayOverlay: View {
         let progress = env.route.progressAlong
         // count(where:) вместо filter().count: считается на каждый тик GPS, а
         // промежуточный массив камер маршрута тут не нужен никому.
-        return env.route.camerasOnRoute.count { $0.distanceAlong > progress }
+        // Только свои (29.E): встречная камера проспекта — не «впереди у нас».
+        return env.route.camerasOnRoute.count { $0.countsAsOurs && $0.distanceAlong > progress }
     }
 
     // MARK: - Верхние баннеры

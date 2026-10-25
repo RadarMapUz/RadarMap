@@ -213,6 +213,14 @@ nonisolated enum RouteChoice {
                 recommended = familiar
             }
         }
+        // Проще (29.E): ничего личного не выбрано, а вариант без пары
+        // разворотов и левых через встречку дольше быстрого на минуту —
+        // первым его: так выбирает местный водитель (и Яндекс).
+        if recommended == fastest,
+           let simpler = labels.firstIndex(where: { $0.contains(.simpler) }),
+           isSimplerWorthIt(time: inputs[simpler].travelTime, against: base.travelTime) {
+            recommended = simpler
+        }
         // На пути перекрытие — первым не предлагаем: быстрейший из чистых.
         // Все перекрыты — оставляем как есть, ярлык скажет сам.
         if inputs[recommended].closures > 0,
@@ -228,6 +236,13 @@ nonisolated enum RouteChoice {
     static func isAffordable(time: TimeInterval, against fastest: TimeInterval) -> Bool {
         time - fastest <= max(AppConfig.routeFamiliarMaxExtraSeconds,
                               fastest * AppConfig.routeFamiliarMaxExtraShare)
+    }
+
+    /// Простота стоит недорого: дольше быстрого не больше чем на
+    /// max(1 мин, 5 %) — `routeSimplerMaxExtra*`.
+    static func isSimplerWorthIt(time: TimeInterval, against fastest: TimeInterval) -> Bool {
+        time - fastest <= max(AppConfig.routeSimplerMaxExtraSeconds,
+                              fastest * AppConfig.routeSimplerMaxExtraShare)
     }
 
     /// Индекс единственного минимума; при ничьей — nil (ярлык «меньше» у

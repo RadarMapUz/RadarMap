@@ -82,6 +82,11 @@ final class RouteService {
         /// Время в пути с пробками — его и показываем, и сравниваем. У своей
         /// дороги (24.4) — по своим поездкам в этот час, если их хватает.
         var expectedTime: TimeInterval { assessment.myRoad?.seconds ?? travelTime + (trafficDelay ?? 0) }
+        /// Камеры, которые этот путь вправе назвать своими (29.E): доказанно
+        /// встречные (27.J) на проспекте с разделительной лежат в коридоре,
+        /// но снимают другую сторону — в плашке «📷 5» и в «Меньше камер»
+        /// они раздували счёт пути по проспекту против пути переулками.
+        var ourCameraCount: Int { cameras.reduce(0) { $0 + ($1.countsAsOurs ? 1 : 0) } }
         var etaText: String { Formatting.duration(expectedTime) }
         var distanceText: String { Formatting.distance(distance) }
         /// Задержка пробками, которую показываем: у своей дороги со своим
@@ -348,6 +353,9 @@ final class RouteService {
     @ObservationIgnored private var coordinatesCache:
         (polyline: MKPolyline, points: [CLLocationCoordinate2D])?
     var camerasOnRoute: [RouteCamera] { selected?.cameras ?? [] }
+    /// Сколько камер маршрута — его (29.E): доказанно встречные лежат в
+    /// коридоре, но число «камер на маршруте» обязано совпадать с плашкой.
+    var ourCameraCount: Int { selected?.ourCameraCount ?? 0 }
     /// Точки камер маршрута на его линии — только для карты (27.B).
     var cameraSpotsOnRoute: [Int: CameraOnLine.Spot] { selected?.cameraSpots ?? [:] }
     var distanceText: String { selected?.distanceText ?? "" }
@@ -1254,31 +1262,39 @@ final class RouteService {
         let path = waypoints
             .map { String(format: "%.6f,%.6f", $0.longitude, $0.latitude) }
             .joined(separator: ";")
-        var components = URLComponents(url: AppConfig.osrmBaseURL
-            .appendingPathComponent("route/v1/driving")
-            .appendingPathComponent(path),
-            resolvingAgainstBaseURL: false)!
-        components.queryItems = pass.isEmpty
-            ? Self.osrmQueryItems(alternatives: alternatives, heading: heading, waypoints: waypoints.count)
-            : Self.osrmQueryItems(heading: heading, via: pass)
 
         // Сторонний OSRM, не наш бэкенд — единственное осознанное исключение из
         // правила «сеть только через APIClient» (свой формат URL и ошибок).
-        let data: Data
-        let response: URLResponse
-        do {
+        // Отказ сервера на новые параметры (29.E) — один повтор прежним
+        // запросом (OSRMQuery.send): маршрут обязан построиться.
+        let answer = try await OSRMQuery.send { legacy in
+            var components = URLComponents(url: AppConfig.osrmBaseURL
+                .appendingPathComponent("route/v1/driving")
+                .appendingPathComponent(path),
+                resolvingAgainstBaseURL: false)!
+            components.queryItems = pass.isEmpty
+                ? Self.osrmQueryItems(alternatives: alternatives, heading: heading, waypoints: waypoints.count,
+                                      legacy: legacy)
+                : Self.osrmQueryItems(heading: heading, via: pass, legacy: legacy)
             var request = URLRequest(url: components.url!, timeoutInterval: AppConfig.osrmTimeoutSeconds)
             request.cachePolicy = .reloadIgnoringLocalCacheData
-            (data, response) = try await URLSession.shared.data(for: request)
-        } catch {
-            throw RouteError.noConnection
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                return OSRMQuery.Answer(status: (response as? HTTPURLResponse)?.statusCode ?? 200, data: data)
+            } catch {
+                throw RouteError.noConnection
+            }
+        }
+        if answer.legacy {
+            Log.route.notice("OSRM отверг новые параметры — маршрут прежним запросом")
         }
         // 5xx/4xx без валидного тела — это «сервер недоступен», а не «маршрута нет»:
         // пользователь должен видеть проблему сети, а не думать, что дороги не существует.
-        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-            Log.route.error("OSRM HTTP \(http.statusCode, privacy: .public)")
+        guard (200...299).contains(answer.status) else {
+            Log.route.error("OSRM HTTP \(answer.status, privacy: .public)")
             throw RouteError.serverUnreachable
         }
+        let data = answer.data
 
         // Один язык на весь ответ: фраза баннера и голос получают одно имя.
         let language = streetNameLanguage?() ?? "ru"
@@ -1316,6 +1332,11 @@ final class RouteService {
                 CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0])
             }
             let points = path.map(MKMapPoint.init)
+            // Излом «прямо» (29.E, TurnBend): точка манёвра — вершина линии
+            // (location шага), ищем её по порядку, а не по сумме длин шагов —
+            // на трассе та расходится с линией на сотни метров.
+            let cumulative = TurnBend.cumulative(path)
+            var vertex = 0
             var steps: [RouteStep] = []
             var notices: [LaneNotice] = []
             var probes = LaneProbeCollector(path: path)
@@ -1325,9 +1346,16 @@ final class RouteService {
                 let isLast = legIndex == route.legs.count - 1
                 var currentName: String?
                 for step in leg.steps {
+                    var bend: TurnBend.Measure?
+                    if step.maneuver.type == "continue" || step.maneuver.type == "new name",
+                       let at = step.maneuver.location, at.count == 2,
+                       let index = vertexIndex(of: at, in: path, from: vertex) {
+                        vertex = index
+                        bend = TurnBend.measure(path: path, cumulative: cumulative, at: cumulative[index])
+                    }
                     let built = maneuverStep(step, at: along, language: language,
                                              stopName: isLast ? nil : stopName,
-                                             currentName: currentName)
+                                             currentName: currentName, bend: bend)
                     currentName = step.name
                     probes.add(step, at: along, built: built, index: steps.count)
                     if let built { steps.append(built) }
@@ -1341,6 +1369,22 @@ final class RouteService {
                                 laneProbes: probes.probes, stopAlong: stopAlong)
         }
         return variants.isEmpty ? nil : variants
+    }
+
+    /// Вершина линии, совпадающая с точкой манёвра ([lon, lat]), начиная с
+    /// `start`: манёвры идут по порядку линии. nil — не нашли (тогда излом
+    /// не судим и шаг молчит, как до 29.E).
+    nonisolated static func vertexIndex(of location: [Double], in path: [CLLocationCoordinate2D],
+                                        from start: Int) -> Int? {
+        guard location.count == 2 else { return nil }
+        let tolerance = 1e-6
+        var index = max(0, start)
+        while index < path.count {
+            if abs(path[index].longitude - location[0]) < tolerance,
+               abs(path[index].latitude - location[1]) < tolerance { return index }
+            index += 1
+        }
+        return nil
     }
 
     /// nonisolated: разбирается в фоне (parseOSRM) — изоляция главным потоком
@@ -1376,6 +1420,8 @@ final class RouteService {
         }
         nonisolated struct Intersection: Decodable {
             let lanes: [Lane]?
+            /// Курсы всех дорог узла — сколько их сходится (TurnBend, 29.E).
+            var bearings: [Int]? = nil
             /// [lon, lat] перекрёстка.
             var location: [Double]? = nil
         }
@@ -1397,8 +1443,14 @@ final class RouteService {
                                          at along: CLLocationDistance,
                                          language: String,
                                          stopName: String? = nil,
-                                         currentName: String? = nil) -> RouteStep? {
+                                         currentName: String? = nil,
+                                         bend: TurnBend.Measure? = nil) -> RouteStep? {
         let m = step.maneuver
+        // «Остаёмся на дороге», а линия на перекрёстке ломается (29.E,
+        // TurnBend): говорим как поворот — и в голосе, и в крае ряда.
+        let bendTurn = TurnBend.voices(type: m.type, modifier: m.modifier, bend: bend,
+                                       roads: step.intersections?.first?.bearings?.count ?? 0)
+        let type = bendTurn ? "turn" : m.type
         var text: String?
         var icon = "arrow.up"
 
@@ -1425,12 +1477,17 @@ final class RouteService {
             // «поверните направо». Водитель едет прямо и слышит команду
             // свернуть; каждый такой шаг объявлялся ещё и трижды.
             //
-            // Молчим. Если изгиб настолько крут, что нужен голос, OSRM пришлёт
-            // turn, а не continue. Разворот — единственное исключение: он
-            // требует действия, как его ни назови.
+            // Молчим. Разворот — исключение: он требует действия, как его ни
+            // назови. И излом на перекрёстке (29.E): OSRM прислал continue, а
+            // улица ломается на 60–90° среди других дорог — это поворот.
             if m.modifier == "uturn", let (phrase, symbol) = turnPhrase("uturn") {
                 text = phrase; icon = symbol
+            } else if bendTurn, let (phrase, symbol) = turnPhrase(m.modifier) {
+                text = phrase; icon = symbol
             }
+        case "new name":
+            // Смена названия молчит — кроме того же излома на перекрёстке.
+            if bendTurn, let (phrase, symbol) = turnPhrase(m.modifier) { text = phrase; icon = symbol }
         case "fork":
             switch m.modifier {
             case "left", "slight left":
@@ -1466,7 +1523,10 @@ final class RouteService {
         if uturnInPlace { text = String(localized: "развернитесь") }
         guard var result = text else { return nil }
         let phrase = result
-        if !step.name.isEmpty, m.type != "arrive", !uturnInPlace {
+        // Излом на своей же улице: улицу не называем — «налево на улицу
+        // Сеул», когда мы и так на Сеуле, звучит как поворот куда-то ещё.
+        let bendInPlace = bendTurn && sameStreet(step.name, currentName)
+        if !step.name.isEmpty, m.type != "arrive", !uturnInPlace, !bendInPlace {
             // «на улицу Беруни», а не «на Beruniy shoh ko'chasi»: фраза просит
             // винительный падеж.
             let street = StreetName.display(step.name, language: language,
@@ -1482,12 +1542,12 @@ final class RouteService {
         // Тип команды для записанного голоса — только у фразы без имени
         // собственного: улицу и название остановки диктор не записывал.
         let voiceAction = result == phrase && stopName == nil
-            ? VoiceEvent.Action(osrmType: m.type, modifier: m.modifier, exit: m.exit) : nil
+            ? VoiceEvent.Action(osrmType: type, modifier: m.modifier, exit: m.exit) : nil
         return RouteStep(distanceAlong: along, text: result, icon: icon,
                          kind: kind, lanes: lanes(of: step),
                          shortText: result == phrase ? nil : phrase,
                          voiceAction: voiceAction,
-                         edge: LaneAdvice.edge(osrmType: m.type, modifier: m.modifier))
+                         edge: LaneAdvice.edge(osrmType: type, modifier: m.modifier))
     }
 
     /// Одна ли это улица: имена OSRM сравниваются без регистра и крайних
@@ -1652,7 +1712,9 @@ final class RouteService {
                 RouteChoice.Input(path: inputs[index].points.map(\.coordinate),
                                   distance: inputs[index].distance,
                                   travelTime: inputs[index].travelTime + (delays[index] ?? 0),
-                                  cameraIDs: found[index].map(\.camera.id),
+                                  // Только свои (29.E): встречная камера проспекта
+                                  // не делает путь «камерным».
+                                  cameraIDs: found[index].filter { !$0.provenOncoming }.map(\.camera.id),
                                   hardManeuvers: RouteChoice.hardManeuvers(inputs[index].steps),
                                   closures: RoadEventRules.closures(on: inputs[index].points.map(\.coordinate),
                                                                     events: events, now: eventsNow),
@@ -2064,53 +2126,17 @@ final class RouteService {
         return snap
     }
 
-    /// Параметры запроса OSRM. С курсом (перестроение на ходу) — `bearings`
-    /// и `radiuses` для первой точки: маршрут начинается туда, куда машина
-    /// едет, по дороге не дальше `rerouteBearingRadiusMeters`; остальным
-    /// точкам — без ограничений.
+    /// Параметры запроса OSRM — `OSRMQuery` (29.E: число альтернатив,
+    /// подъезд к цели с её стороны; `legacy` — запрос до 29.E).
     nonisolated static func osrmQueryItems(alternatives: Bool, heading: CLLocationDirection?,
-                                           waypoints: Int) -> [URLQueryItem] {
-        var items = [
-            URLQueryItem(name: "overview", value: "full"),
-            URLQueryItem(name: "geometries", value: "geojson"),
-            URLQueryItem(name: "alternatives", value: alternatives ? "true" : "false"),
-            URLQueryItem(name: "steps", value: "true"),
-        ]
-        if let heading, heading.isFinite, heading >= 0, waypoints >= 2 {
-            let degrees = Int(heading.rounded()) % 360
-            let rest = Array(repeating: "", count: waypoints - 1)
-            items.append(URLQueryItem(name: "bearings", value: (
-                ["\(degrees),\(AppConfig.rerouteBearingRangeDegrees)"] + rest).joined(separator: ";")))
-            items.append(URLQueryItem(name: "radiuses", value: (
-                ["\(AppConfig.rerouteBearingRadiusMeters)"] + rest.map { _ in "unlimited" }).joined(separator: ";")))
-        }
-        return items
+                                           waypoints: Int, legacy: Bool = false) -> [URLQueryItem] {
+        OSRMQuery.items(alternatives: alternatives, heading: heading, waypoints: waypoints, legacy: legacy)
     }
 
-    /// Параметры запроса своей дороги (24.4): опорные точки — проходные
-    /// (`waypoints` — только старт и цель: одно плечо, без «прибытия» у
-    /// каждой точки), с курсом линии и радиусом поиска дороги — точка берёт
-    /// свою проезжую часть, а не встречную; разворот у точки запрещён
-    /// (`continue_straight`).
-    nonisolated static func osrmQueryItems(heading: CLLocationDirection?, via: [MyRoad.Via]) -> [URLQueryItem] {
-        let count = via.count + 2
-        var bearings = [""], radiuses = ["unlimited"]
-        if let heading, heading.isFinite, heading >= 0 {
-            bearings = ["\(Int(heading.rounded()) % 360),\(AppConfig.rerouteBearingRangeDegrees)"]
-            radiuses = ["\(AppConfig.rerouteBearingRadiusMeters)"]
-        }
-        bearings += via.map { "\($0.bearing),\(AppConfig.myRoadViaBearingRange)" } + [""]
-        radiuses += via.map { _ in "\(AppConfig.myRoadViaRadiusMeters)" } + ["unlimited"]
-        return [
-            URLQueryItem(name: "overview", value: "full"),
-            URLQueryItem(name: "geometries", value: "geojson"),
-            URLQueryItem(name: "alternatives", value: "false"),
-            URLQueryItem(name: "steps", value: "true"),
-            URLQueryItem(name: "continue_straight", value: "true"),
-            URLQueryItem(name: "waypoints", value: "0;\(count - 1)"),
-            URLQueryItem(name: "bearings", value: bearings.joined(separator: ";")),
-            URLQueryItem(name: "radiuses", value: radiuses.joined(separator: ";")),
-        ]
+    /// Параметры запроса своей дороги (24.4) — `OSRMQuery.viaItems`.
+    nonisolated static func osrmQueryItems(heading: CLLocationDirection?, via: [MyRoad.Via],
+                                           legacy: Bool = false) -> [URLQueryItem] {
+        OSRMQuery.viaItems(heading: heading, via: via, legacy: legacy)
     }
 
     /// Курс для маршрута, построенного сейчас (20.9): только на ходу (не

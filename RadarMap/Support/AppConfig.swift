@@ -1486,7 +1486,29 @@ nonisolated enum AppConfig {
     /// Наш OSRM-сервер (граф дорог OpenStreetMap): Apple Maps не строит
     /// автомобильные маршруты на территории Узбекистана, поэтому MKDirections —
     /// только первая попытка, при отказе едем через свой движок.
-    static let osrmBaseURL = syncBaseURL.appendingPathComponent("osrm")
+    static let osrmBaseURL: URL = {
+        #if DEBUG
+        // `-osrmBase http://127.0.0.1:5103` — локальный OSRM с новым профилем
+        // (server/osrm/README.md): снимки «после» без выкладки на сервер.
+        let args = ProcessInfo.processInfo.arguments
+        if let index = args.firstIndex(of: "-osrmBase"), index + 1 < args.count,
+           let url = URL(string: args[index + 1]) {
+            return url
+        }
+        #endif
+        return syncBaseURL.appendingPathComponent("osrm")
+    }()
+    /// Сколько альтернатив просить у OSRM (29.E). `alternatives=true` — это
+    /// одна альтернатива, и выбор из трёх плашек не случался никогда. CH на
+    /// сервере всё равно отдаёт не больше одной (число принимает без
+    /// ошибки), MLD — до трёх: параметр готов к переходу графа.
+    nonisolated static let osrmAlternatives = 3
+    /// Прибыть к цели с её стороны (OSRM `approaches=curb`, 29.E): цель
+    /// через проспект — это разворот, который навигатор обязан был сделать
+    /// сам. На 20 парах аудита — не дороже 65 с (docs/route_audit_2026-10-25.md).
+    /// Сервер отверг параметры (4xx) — повтор прежним запросом
+    /// (`OSRMQuery.retriesLegacy`): маршрут обязан построиться.
+    nonisolated static let osrmArriveCurbSide = true
 
     /// Отклонение от линии маршрута (метры), после которого считаем «свернул не туда».
     static let rerouteDeviationMeters: CLLocationDistance = 150
@@ -1644,6 +1666,33 @@ nonisolated enum AppConfig {
     static let routeShorterMinShare = 0.03
     /// «Проще» — минимум на столько сложных манёвров меньше быстрого.
     static let routeSimplerMinDelta = 2
+    /// «Проще» предлагается первым (29.E), если дольше быстрого не больше
+    /// чем на столько (абсолютно или долей — что больше): два разворота
+    /// ради минуты — не выигрыш, а так выбирает местный водитель и Яндекс.
+    /// Дороже — решает человек, плашка остаётся рядом.
+    static let routeSimplerMaxExtraSeconds: TimeInterval = 60
+    static let routeSimplerMaxExtraShare = 0.05
+
+    // MARK: - Голос на изломе «прямо» (TurnBend, 29.E)
+
+    /// OSRM `continue`/`new name` молчат: «остаёмся на своей дороге». Но
+    /// аудит 25.10 нашёл 7 таких шагов на 30 вариантах с изломом 60–88° на
+    /// перекрёстке (Sharq Tongi, Seul) — водитель доезжает до развилки
+    /// улиц молча. Говорим, если излом по линии маршрута за
+    /// `turnBendBeforeMeters` до и `turnBendAfterMeters` после точки — не
+    /// меньше `turnBendMinDegrees` и на узле сходятся 3+ дороги. Окна
+    /// короткие намеренно: плавный изгиб проспекта (радиус ≥ 150 м) на 70 м
+    /// линии набирает меньше 30°, угол перекрёстка — все 90°.
+    nonisolated static let turnBendMinDegrees: Double = 50
+    nonisolated static let turnBendBeforeMeters: Double = 30
+    nonisolated static let turnBendAfterMeters: Double = 40
+    /// …и подтверждается широким окном: курс за 150 м до против 150 м после
+    /// не меньше 45° в ту же сторону. Без него «ступенька» через развязку
+    /// (Seul ko'chasi: налево и сразу направо на 80 м — та же улица прямо
+    /// через узел двух проезжих частей) звучала бы двумя командами, а
+    /// водитель едет прямо. Ложная команда хуже молчания.
+    nonisolated static let turnBendWideMeters: Double = 150
+    nonisolated static let turnBendWideMinDegrees: Double = 45
 
     // MARK: - «Моя дорога» (MyRoad, 24.4)
 

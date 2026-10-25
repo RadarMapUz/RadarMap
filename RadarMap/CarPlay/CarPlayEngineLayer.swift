@@ -223,7 +223,11 @@ struct CarPlayEngineLayer: View {
             onHeading: { model.mapDirection = $0 },
             onBrowse: { model.mapStartedBrowsing() },
             // Значок и камера — по оценке «где машина сейчас» (MarkerPredictor).
-            markerMotion: env.location.markerMotion)
+            markerMotion: env.location.markerMotion,
+            // Плашка улицы и крупные подписи (29.F) — на карте машины;
+            // плитка и приборка малы, плашка закрыла бы им дорогу.
+            onStreetName: surface == .car ? { model.streetName = $0 } : nil,
+            largeLabels: surface == .car)
     }
 
     /// Новая карта (вернулись из музыки, из схемы) стартует со слежения —

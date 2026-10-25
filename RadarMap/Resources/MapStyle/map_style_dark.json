@@ -8689,7 +8689,24 @@
    },
    "minzoom": 14,
    "paint": {
-    "fill-color": "#24272e",
+    "fill-color": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "coalesce",
+      [
+       "get",
+       "render_height"
+      ],
+      10
+     ],
+     35,
+     "#24272e",
+     110,
+     "#34322f"
+    ],
     "fill-outline-color": "#1b1d22"
    },
    "source": "openmaptiles",
@@ -9554,6 +9571,113 @@
        0.0
       ],
       1.0
+     ]
+    ]
+   },
+   "source": "radar",
+   "source-layer": "roads",
+   "type": "line"
+  },
+  {
+   "filter": [
+    "all",
+    [
+     "!",
+     [
+      "has",
+      "tunnel"
+     ]
+    ],
+    [
+     "<=",
+     [
+      "get",
+      "cls"
+     ],
+     2
+    ]
+   ],
+   "id": "radar-trunk-glow",
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "minzoom": 15,
+   "paint": {
+    "line-blur": 16,
+    "line-color": "#c9a35a",
+    "line-opacity": 0.16,
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      2
+     ],
+     [
+      "zoom"
+     ],
+     15,
+     [
+      "max",
+      [
+       "+",
+       [
+        "*",
+        [
+         "coalesce",
+         [
+          "get",
+          "width"
+         ],
+         8
+        ],
+        0.557056
+       ],
+       16
+      ],
+      17.0
+     ],
+     18,
+     [
+      "max",
+      [
+       "+",
+       [
+        "*",
+        [
+         "coalesce",
+         [
+          "get",
+          "width"
+         ],
+         8
+        ],
+        4.456448
+       ],
+       16
+      ],
+      17.0
+     ],
+     20,
+     [
+      "max",
+      [
+       "+",
+       [
+        "*",
+        [
+         "coalesce",
+         [
+          "get",
+          "width"
+         ],
+         8
+        ],
+        17.825792
+       ],
+       16
+      ],
+      17.0
      ]
     ]
    },
@@ -12451,7 +12575,24 @@
       0
      ]
     ],
-    "fill-extrusion-color": "#24272e",
+    "fill-extrusion-color": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "coalesce",
+      [
+       "get",
+       "render_height"
+      ],
+      10
+     ],
+     35,
+     "#24272e",
+     110,
+     "#34322f"
+    ],
     "fill-extrusion-height": [
      "interpolate",
      [
@@ -16832,11 +16973,11 @@
  "light": {
   "anchor": "viewport",
   "color": "#d8dde6",
-  "intensity": 0.4,
+  "intensity": 0.5,
   "position": [
-   1.3,
-   200,
-   35
+   1.25,
+   210,
+   40
   ]
  },
  "metadata": {

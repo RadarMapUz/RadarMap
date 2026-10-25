@@ -246,12 +246,20 @@ extension MapScreen {
             // Скорость и лимит в навигации — внизу слева, над панелью поездки.
             // Вне замера кромки: это угол, а не полоса поперёк экрана, и
             // карта под ним видна справа.
-            if mode.speedPlacement == .bottomLeading, !arrivalShown, !map.isAddingCamera {
-                HStack {
-                    hudGestures(TripSpeedCluster())
-                    Spacer(minLength: 0)
+            // Плашка улицы (29.F) — в той же строке, по центру свободного места
+            // справа от скорости; без маршрута (скорость сверху) — по центру.
+            if mode.speedPlacement == .bottomLeading || env.location.isTripActive,
+               !arrivalShown, !map.isAddingCamera {
+                HStack(spacing: 8) {
+                    if mode.speedPlacement == .bottomLeading {
+                        hudGestures(TripSpeedCluster())
+                            .transition(.move(edge: .leading).combined(with: .opacity))
+                    }
+                    PhoneStreetNamePill(map: map)
+                        .frame(maxWidth: .infinity)
+                        // Полоса хода маршрута справа (RouteProgressRail) — не накрывать.
+                        .padding(.trailing, mode.speedPlacement == .bottomLeading ? 18 : 0)
                 }
-                .transition(.move(edge: .leading).combined(with: .opacity))
             }
             bottomPanels
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: {

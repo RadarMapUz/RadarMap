@@ -98,7 +98,7 @@ struct EngineMapView: UIViewRepresentable {
     /// Общие POI на новой карте (тумблер «Места»).
     var places: Bool = true
     /// Режим «в поездке»: без общих POI, номеров домов и подписей дорожек,
-    /// дома приглушены (EngineModernStyle.drivingLayers).
+    /// дома тише цветом поездки (EngineModernStyle.drivingLayers, map_drive_*).
     var driving: Bool = false
     /// Карту накрыло полноэкранное предупреждение о камере (градиент до 96 %):
     /// рисовать её на полной частоте незачем (аудит 11.10).
@@ -197,6 +197,12 @@ struct EngineMapView: UIViewRepresentable {
     /// «где машина сейчас» (MarkerPredictor), а не по фиксу, — иначе значок
     /// всегда на фикс позади. nil или фикс другой точки — без предсказания.
     var markerMotion: MarkerPredictor.Fix?
+    /// Плашка улицы (29.F): имя ленты под значком «я» в поездке, только на
+    /// смене. nil — карта не спрашивает вовсе (выбор места, плитка).
+    var onStreetName: ((String?) -> Void)?
+    /// Экран машины (29.F): подписи улиц и линия маршрута крупнее телефонных
+    /// (EngineCarScale) — раз на загрузку стиля.
+    var largeLabels: Bool = false
 
     func makeUIView(context: Context) -> MLNMapView {
         // Сторож тайлов — ДО первой карты: движок начинает качать сразу, и
@@ -286,7 +292,6 @@ struct EngineMapView: UIViewRepresentable {
         private var lastDaylight: Bool?
         private var lastHouses: Bool?
         private var lastPlaces: Bool?
-        private var lastDriving: Bool?
         private var lastOffline: OfflineFiles?
         private var themeLayers: [[String: Any]] = []
         private var lastCameras: [Camera]?
@@ -309,6 +314,9 @@ struct EngineMapView: UIViewRepresentable {
         private let carDecor = EngineCarDecor()
         /// Значки «нужного сейчас» и цель в режиме прибытия (29.H).
         private let mapDetail = EngineMapDetail()
+        /// Дымка у горизонта наклонной карты и имя улицы под значком (29.F).
+        private let haze = EngineHorizonHaze()
+        private let streetProbe = EngineStreetProbe()
         private var positionHeading = 0.0
         /// Значок между фиксами: где машина СЕЙЧАС (MarkerPredictor). До 21.10
         /// стрелка плыла к последнему фиксу за интервал между фиксами и всегда
@@ -385,10 +393,12 @@ struct EngineMapView: UIViewRepresentable {
         /// вид поверх карты, и её экранную точку пересчитываем сами.
         func mapViewRegionIsChanging(_ mapView: MLNMapView) {
             layoutPositionView(in: mapView)
+            haze.update(pitchDegrees: mapView.camera.pitch, daylight: current?.daylight ?? true, in: mapView)
         }
 
         func mapView(_ mapView: MLNMapView, regionDidChangeAnimated animated: Bool) {
             layoutPositionView(in: mapView)
+            haze.update(pitchDegrees: mapView.camera.pitch, daylight: current?.daylight ?? true, in: mapView)
             if let current, styleReady { updateCameras(current, in: mapView) }
             // Масштаб меняет видимый ранг стрелок — и порог фильтра за срезом.
             if styleReady { routeLine.regionChanged(in: mapView) }
@@ -714,6 +724,8 @@ struct EngineMapView: UIViewRepresentable {
             cameraZone.styleLoaded()
             driveAsphalt.styleLoaded()
             mapDetail.styleLoaded()
+            streetProbe.styleLoaded()
+            if (pending ?? current)?.largeLabels == true { EngineCarScale.apply(in: style) }
             EngineLaneArrowsOrder.raise(in: style)
             stopDetail.styleLoaded(style)
             hiddenLayers = nil
@@ -786,7 +798,6 @@ struct EngineMapView: UIViewRepresentable {
             lastDaylight = model.daylight
             lastHouses = model.houses
             lastPlaces = model.places
-            lastDriving = nil   // приглушение домов выставит applyHiddenLayers после загрузки
             lastOffline = model.offline
             lastModern = model.modernStyle
             os_signpost(.event, log: performanceLog, name: "Style replacement")
@@ -1153,6 +1164,8 @@ struct EngineMapView: UIViewRepresentable {
                 halo: model.detail.destination == .arrival ? model.destination : nil,
                 approach: model.detail.destination == .arrival ? model.destinationApproach : nil),
                 daylight: model.daylight, in: view)
+            haze.update(pitchDegrees: view.camera.pitch, daylight: model.daylight, in: view)
+            streetProbe.update(model, at: displayedPosition ?? model.coordinate, in: view)
         }
 
         /// Объёмные украшения и размытые тени — первое, что уходит на горячем
@@ -1164,8 +1177,11 @@ struct EngineMapView: UIViewRepresentable {
         /// С 21.10 (25.D) — и объёмные дома: под наклоном они главный
         /// украшатель кадра, но горячий телефон и так идёт плоско, а объём —
         /// лишний проход глубины. Вместо них — плоские (`hotShownLayers`).
+        /// С 29.F сюда же — свечения (линии маршрута и ночной магистрали):
+        /// размытые широкие линии — украшение, а не информация.
         static let hotHiddenLayers = ["radar-tree-3d", "radar-barrier-3d", "radar-tree-shadow",
-                                      "building-ground-shadow", "building-3d"]
+                                      "building-ground-shadow", "building-3d", "radar-trunk-glow",
+                                      "route-glow", EngineMapStyle.routeNearLayers.glow]
         /// Видны ТОЛЬКО на горячем телефоне: плоские дома вместо объёмных —
         /// город не пустеет (в стиле выключены, make_style «building-flat»).
         static let hotShownLayers = ["building-flat"]
@@ -1208,13 +1224,6 @@ struct EngineMapView: UIViewRepresentable {
             // на входе в остановку и на сдвиге машины, не на тике. Вне поездки
             // телефона — как было, без круга.
             stopDetail.update(layers: MapDetailLayers.tripPlaceRows(model.detail), car: model.coordinate, in: style)
-            if modernLoaded, lastDriving != model.driving {
-                lastDriving = model.driving
-                if let buildings = style.layer(withIdentifier: "building-3d") as? MLNFillExtrusionStyleLayer {
-                    buildings.fillExtrusionOpacity = NSExpression(
-                        forConstantValue: model.driving ? AppConfig.engineDrivingBuildingOpacity : 1)
-                }
-            }
         }
 
         private struct LayerKey: Equatable {

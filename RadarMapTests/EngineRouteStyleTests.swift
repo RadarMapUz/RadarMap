@@ -17,7 +17,7 @@ import Testing
 @Suite("Линия маршрута и спокойные камеры")
 struct EngineRouteStyleTests {
 
-    private let order = ["traffic", "route-traveled", "route-case", "route-near-case", "route", "route-near",
+    private let order = ["traffic", "route-traveled", "route-glow", "route-near-glow", "route-case", "route-near-case", "route", "route-near",
                          "route-traffic", "route-maneuver", "route-near-maneuver", "route-core",
                          "route-near-core", "route-arrows"]
 
@@ -111,8 +111,8 @@ struct EngineRouteStyleTests {
         #expect(EngineModernStyle.liveSources.contains(EngineMapStyle.routeArrowsSource))
         let all = layers(daylight: daylight)
         let ids = EngineMapStyle.routeNearLayers
-        for (id, pair) in [(ids.casing, "route-case"), (ids.body, "route"), (ids.maneuver, "route-maneuver"),
-                           (ids.core, "route-core")] {
+        for (id, pair) in [(ids.glow, "route-glow"), (ids.casing, "route-case"), (ids.body, "route"),
+                           (ids.maneuver, "route-maneuver"), (ids.core, "route-core")] {
             let paint = try #require(layer(id, all)?["paint"] as? [String: Any])
             #expect(layer(id, all)?["source"] as? String == EngineMapStyle.routeNearSource)
             #expect(String(describing: paint["line-gradient"] ?? "").contains("line-progress"))

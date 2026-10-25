@@ -17,13 +17,16 @@ nonisolated enum MapDetailLayers {
     /// наложение тоннелей, деревья и тени, зерно асфальта, имена арыков (у
     /// моста ложились наискось поперёк проспекта, CarPlay 13.10). Подписи
     /// дорожек (`highway-name-path`) прячет режим «в поездке» сам.
+    /// Тени у подножия домов (`building-ground-shadow`) здесь нет с 29.F:
+    /// это часть объёма, а не «не дорога» — без неё дом под наклоном висит
+    /// над землёй «пластиковым» кубом; гаснет только с объёмом на горячем
+    /// телефоне (EngineMapView.hotHiddenLayers).
     static let decor = [
         "tunnel-path-steps-casing", "tunnel-path-steps", "tunnel-path",
         "bridge-path-shadow", "bridge-path-casing", "bridge-path-steps", "bridge-path",
         "highway-path-steps-casing", "highway-path", "highway-path-steps",
         "radar-tunnel-case", "radar-tunnel",
         "trees", "radar-tree-shadow", "radar-tree", "radar-tree-light", "radar-tree-3d", "radar-barrier-3d",
-        "building-ground-shadow",
         "radar-asphalt-grain",
         "waterway-name",
     ]

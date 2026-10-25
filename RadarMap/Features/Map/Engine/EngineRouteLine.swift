@@ -87,7 +87,7 @@ final class EngineRouteLine {
     private var paintKey: PaintKey?
     private var paintedCut = -Double.infinity
     private var painted = RouteCut.Paint.clear
-    private var layers: (casing: MLNLineStyleLayer, body: MLNLineStyleLayer,
+    private var layers: (glow: MLNLineStyleLayer, casing: MLNLineStyleLayer, body: MLNLineStyleLayer,
                          maneuver: MLNLineStyleLayer, core: MLNLineStyleLayer)?
     private var arrowLayer: MLNSymbolStyleLayer?
     private var arrowThreshold: Double?
@@ -307,24 +307,28 @@ final class EngineRouteLine {
         let old = painted
         painted = paint
         set(layers.casing, paint.casing, old.casing)
+        // Свечение — ступенями тела: пробка светится своим цветом.
+        set(layers.glow, paint.body, old.body)
         set(layers.body, paint.body, old.body)
         set(layers.maneuver, paint.maneuver, old.maneuver)
         set(layers.core, paint.core, old.core)
     }
 
     private func nearLayers(in view: MLNMapView)
-        -> (casing: MLNLineStyleLayer, body: MLNLineStyleLayer, maneuver: MLNLineStyleLayer, core: MLNLineStyleLayer)? {
+        -> (glow: MLNLineStyleLayer, casing: MLNLineStyleLayer, body: MLNLineStyleLayer,
+            maneuver: MLNLineStyleLayer, core: MLNLineStyleLayer)? {
         if let layers { return layers }
         guard let style = view.style else { return nil }
         let ids = EngineMapStyle.routeNearLayers
-        guard let casing = style.layer(withIdentifier: ids.casing) as? MLNLineStyleLayer,
+        guard let glow = style.layer(withIdentifier: ids.glow) as? MLNLineStyleLayer,
+              let casing = style.layer(withIdentifier: ids.casing) as? MLNLineStyleLayer,
               let body = style.layer(withIdentifier: ids.body) as? MLNLineStyleLayer,
               let maneuver = style.layer(withIdentifier: ids.maneuver) as? MLNLineStyleLayer,
               let core = style.layer(withIdentifier: ids.core) as? MLNLineStyleLayer else { return nil }
         // В стиле слои окна пусты (прозрачны): то, что считаем
         // нарисованным, должно совпадать с ними.
         painted = .clear
-        layers = (casing, body, maneuver, core)
+        layers = (glow, casing, body, maneuver, core)
         return layers
     }
 

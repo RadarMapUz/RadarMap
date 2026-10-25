@@ -40,6 +40,8 @@ final class CarPlayMapModel {
     /// не синтезировать isolated deinit вовсе.
     nonisolated deinit {}
 
+    /// Улица под значком «я» (29.F) — плашка внизу по центру.
+    var streetName: String?
     var recenterRequests = 0
     /// Карта на движке: панорама от шаблона (счётчик и сдвиг содержимого в
     /// точках), «+/−» при слежении — сдвиг автозума вдвое за нажатие (как на
@@ -264,6 +266,7 @@ struct CarPlayMapScreen: View {
                 // (ведение или выбор) читает сам HUD: тело с картой маршрут не
                 // читает.
                 CarPlayOverlay(showsManeuver: !model.hasSystemGuidance && !model.isPreviewing,
+                               street: model,
                                buttonInsets: model.mapButtonInsets,
                                systemLocating: model.isLocatingPaused)
             }
@@ -339,3 +342,4 @@ private struct CarPlayLiveness: View {
         .allowsHitTesting(false)
     }
 }
+

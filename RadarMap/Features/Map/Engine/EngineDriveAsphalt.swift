@@ -112,6 +112,13 @@ final class EngineDriveAsphalt {
         for (id, value) in lines {
             (style.layer(withIdentifier: id) as? MLNLineStyleLayer)?.lineColor = value
         }
+        // Свечение (29.F): цвет — тела, сила — по теме линии. Окно у машины
+        // (route-near-glow) берёт цвет из своей краски, силу — отсюда.
+        (style.layer(withIdentifier: "route-glow") as? MLNLineStyleLayer)?.lineColor = colour(RouteColors.body)
+        let glow = NSExpression(forConstantValue: daylight ? RouteColors.glowOpacity.day : RouteColors.glowOpacity.night)
+        for id in ["route-glow", EngineMapStyle.routeNearLayers.glow] {
+            (style.layer(withIdentifier: id) as? MLNLineStyleLayer)?.lineOpacity = glow
+        }
         (style.layer(withIdentifier: "route-arrows") as? MLNSymbolStyleLayer)?.iconImageName =
             NSExpression(forConstantValue: EngineMapStyle.routeArrowImage(daylight: daylight))
     }

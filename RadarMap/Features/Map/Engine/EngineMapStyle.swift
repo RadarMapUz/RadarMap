@@ -144,7 +144,7 @@ nonisolated enum EngineMapStyle {
     /// Стрелки направления — точками с местом на линии (RouteCut.arrows).
     static let routeArrowsSource = "route-arrows"
     /// Слои окна у машины: кайма, тело, манёвр, середина — режутся одинаково.
-    static let routeNearLayers = (casing: "route-near-case", body: "route-near",
+    static let routeNearLayers = (glow: "route-near-glow", casing: "route-near-case", body: "route-near",
                                   maneuver: "route-near-maneuver", core: "route-near-core")
 
     /// Ширина линии в пикселях по НАСТОЯЩЕЙ ширине дороги из тайла.
@@ -175,6 +175,14 @@ nonisolated enum EngineMapStyle {
          11, 6 * share + extra, 15, 7 * share + extra, 17, 11 * share + extra,
          19, 16 * share + extra, 20, 19 * share + extra]
     }
+
+    /// Свечение линии: насколько шире тела (точек, на обе стороны вместе) и
+    /// размытие края, точек (29.F).
+    static let routeGlowExtra: Double = 16
+    static let routeGlowBlur: Double = 9
+    /// Светлая середина — размытой жилой, а не резкой белой полосой поверх
+    /// тела: блик объёма, а не «пластиковая трубка» (29.F).
+    static let routeCoreBlur: [Any] = ["interpolate", ["linear"], ["zoom"], 11, 1.2, 17, 2.4, 20, 4]
 
     /// Стрелка направления вдоль линии маршрута (EngineMapView.routeArrowIcon):
     /// белый шеврон с каймой линии — своей у каждой темы.
@@ -358,6 +366,24 @@ nonisolated enum EngineMapStyle {
             ["id": id, "type": "line", "source": nearSource, "layout": round,
              "paint": ["line-gradient": RouteCut.gradient(RouteCut.Paint.clear.body), "line-width": width]]
         }
+        // Мягкое свечение под каймой (29.F, «линия как у Amap»): широкая
+        // размытая полоса цвета тела. На тёмном асфальте поездки линия
+        // светится, а не лежит пластиковой трубкой; днём на светлой земле —
+        // лёгкий ореол. Пробки на нём тем же цветом, что тело (краска окна).
+        out.append([
+            "id": "route-glow", "type": "line", "source": "route",
+            "layout": round,
+            "paint": ["line-color": colour(RouteColors.body), "line-width": routeWidth(extra: Self.routeGlowExtra),
+                      "line-blur": Self.routeGlowBlur,
+                      "line-opacity": daylight ? RouteColors.glowOpacity.day : RouteColors.glowOpacity.night],
+        ])
+        var nearGlow = nearLayer(near.glow, width: routeWidth(extra: Self.routeGlowExtra))
+        if var paint = nearGlow["paint"] as? [String: Any] {
+            paint["line-blur"] = Self.routeGlowBlur
+            paint["line-opacity"] = daylight ? RouteColors.glowOpacity.day : RouteColors.glowOpacity.night
+            nearGlow["paint"] = paint
+        }
+        out.append(nearGlow)
         out.append([
             "id": "route-case", "type": "line", "source": "route",
             "layout": round,
@@ -392,9 +418,15 @@ nonisolated enum EngineMapStyle {
             "id": "route-core", "type": "line", "source": "route",
             "layout": round,
             "paint": ["line-color": RouteColors.core(daylight: daylight),
-                      "line-width": routeWidth(extra: 0, share: 0.34)],
+                      "line-width": routeWidth(extra: 0, share: 0.34),
+                      "line-blur": Self.routeCoreBlur],
         ])
-        out.append(nearLayer(near.core, width: routeWidth(extra: 0, share: 0.34)))
+        var nearCore = nearLayer(near.core, width: routeWidth(extra: 0, share: 0.34))
+        if var paint = nearCore["paint"] as? [String: Any] {
+            paint["line-blur"] = Self.routeCoreBlur
+            nearCore["paint"] = paint
+        }
+        out.append(nearCore)
         // Стрелки направления — точками с местом на линии (RouteCut.arrows):
         // фильтр прячет всё позади среза, порог переходит, когда срез
         // проходит стрелку, — она в этот момент под значком. Ранг редеет на

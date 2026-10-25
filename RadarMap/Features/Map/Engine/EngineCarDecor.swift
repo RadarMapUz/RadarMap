@@ -144,6 +144,11 @@ final class CompassRingView: UIView {
 
     private let ellipse = CAShapeLayer()
     private let outline = CAShapeLayer()
+    /// Мягкое световое пятно на асфальте под машиной (29.F, как у Amap):
+    /// радиальный градиент цвета линии маршрута внутри кольца — значок
+    /// стоит на дороге, а не висит над ней. Статичный слой, перестраивается
+    /// только со сменой наклона.
+    private let pool = CAGradientLayer()
     private var labels: [UILabel] = []
     private var shown: (center: CGPoint, direction: Double, pitch: Double)?
 
@@ -159,6 +164,15 @@ final class CompassRingView: UIView {
         ellipse.fillColor = UIColor.clear.cgColor
         ellipse.strokeColor = UIColor.white.withAlphaComponent(0.85).cgColor
         ellipse.lineWidth = 1.3
+        pool.type = .radial
+        pool.startPoint = CGPoint(x: 0.5, y: 0.5)
+        pool.endPoint = CGPoint(x: 1, y: 1)
+        let tint = Theme.rgb(RouteColors.body.night)
+        pool.colors = [tint.withAlphaComponent(AppConfig.compassPoolAlpha).cgColor,
+                       tint.withAlphaComponent(AppConfig.compassPoolAlpha * 0.45).cgColor,
+                       tint.withAlphaComponent(0).cgColor]
+        pool.locations = [0, 0.55, 1]
+        layer.addSublayer(pool)
         layer.addSublayer(outline)
         layer.addSublayer(ellipse)
         for mark in CompassRing.marks {
@@ -198,6 +212,7 @@ final class CompassRingView: UIView {
                               width: geometry.radiusX * 2, height: geometry.radiusY * 2)
             ellipse.path = UIBezierPath(ovalIn: rect).cgPath
             outline.path = ellipse.path
+            pool.frame = rect
         }
         for (label, point) in zip(labels, geometry.letters) {
             label.center = point

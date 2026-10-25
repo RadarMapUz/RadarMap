@@ -137,6 +137,14 @@ extension MapScreen {
                 }
             }
         }
+        // 29.C: листы вариантов значков камер в PNG (папка — следующий аргумент).
+        if let idx = args.firstIndex(of: "-dumpCameraIconSheets"), idx + 1 < args.count {
+            let directory = URL(fileURLWithPath: args[idx + 1])
+            Task {
+                await Task.pause(seconds: 1)
+                CameraIconStudy.dumpSheets(to: directory)
+            }
+        }
         // Шеринг-карточки в PNG (Documents) — визуальная проверка без share-шита.
         if args.contains("-dumpShareCards") {
             Task {
@@ -249,6 +257,23 @@ extension MapScreen {
                 if let record = env.trip.history.first {
                     withMotion(.spring(duration: 0.4)) { tripEndRecord = record }
                 }
+            }
+        }
+        // 29.C: все краудсорс-типы рядом — значки вариантов на одной карте.
+        if args.contains("-studyCrowd") {
+            Task {
+                await Task.pause(seconds: 2)
+                if let center = env.location.currentCoordinate {
+                    env.mobile.seedIconStudy(near: center)
+                }
+            }
+        }
+        // 29.C: сдвиг масштаба, как кнопкой «−» (`-studyZoom -2`), — больше камер в кадре.
+        if let idx = args.firstIndex(of: "-studyZoom"),
+           let delta = args.dropFirst(idx + 1).first.flatMap(Double.init) {
+            Task {
+                await Task.pause(seconds: 7)
+                map.zoomStep(delta)
             }
         }
         // Краудсорс-доверие: призрак + подтверждённая отметка и «Что это было?»

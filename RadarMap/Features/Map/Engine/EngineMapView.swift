@@ -597,12 +597,32 @@ struct EngineMapView: UIViewRepresentable {
                 return
             }
             let kinds = Self.markerKinds
+            #if DEBUG
+            // 29.C, этап 1: значки варианта на выбор владельца (CameraIconStudy).
+            if let variant = CameraIconVariant.launch {
+                for kind in kinds {
+                    for look in Self.markerLooks {
+                        if let image = CameraIconStudy.mapImage(kind: kind, suffix: look.suffix, variant: variant) {
+                            style.setImage(image, forName: kind.symbolName + look.suffix)
+                        }
+                    }
+                }
+                if let ghost = CameraIconStudy.badgeImage(.ghost, variant: variant),
+                   let own = CameraIconStudy.badgeImage(.own, variant: variant) {
+                    style.setImage(ghost, forName: CameraMarkerLook.ghostBadge)
+                    style.setImage(own, forName: CameraMarkerLook.ownBadge)
+                }
+            }
+            let studyIcons = CameraIconVariant.launch != nil
+            #else
+            let studyIcons = false
+            #endif
             // Вариант B «Спокойная карта» (владелец, 12.10; CameraMarkerLook):
             // цвет типа — только у камер на нашем пути и у тревоги, остальные
             // — графитовый круг поменьше, тип читается по глифу. Цвет
             // запекается в пиксели: движок не применяет к картинке стиля
             // template-режим UIKit. Ореол тревоги рисует слой camera-halo.
-            for kind in kinds {
+            for kind in kinds where !studyIcons {
                 for look in Self.markerLooks {
                     let configuration = UIImage.SymbolConfiguration(pointSize: look.glyph, weight: .semibold)
                     guard let glyph = UIImage(systemName: kind.symbolName, withConfiguration: configuration) else {
@@ -624,8 +644,10 @@ struct EngineMapView: UIViewRepresentable {
                     style.setImage(bitmap, forName: kind.symbolName + look.suffix)
                 }
             }
-            style.setImage(Self.badgeIcon(fill: 0x46525E, text: "?"), forName: CameraMarkerLook.ghostBadge)
-            style.setImage(Self.badgeIcon(fill: 0x177A41, text: nil), forName: CameraMarkerLook.ownBadge)
+            if !studyIcons {
+                style.setImage(Self.badgeIcon(fill: 0x46525E, text: "?"), forName: CameraMarkerLook.ghostBadge)
+                style.setImage(Self.badgeIcon(fill: 0x177A41, text: nil), forName: CameraMarkerLook.ownBadge)
+            }
             // Светофор — минималистично (владелец, 12.10: «красиво, по-другому,
             // задевает камеры»): маленькая графитовая капсула с тремя светлыми
             // точками, без красно-жёлто-зелёных огней — фазу тайл всё равно не

@@ -3189,6 +3189,59 @@ nonisolated enum AppConfig {
     /// Значков спрайта ещё нет (стиль только что загрузился) — повтор не раньше, с.
     static let laneFocusRetrySeconds: CFTimeInterval = 2
 
+    // MARK: - Ведение по маршруту на карте (29.G: выноска, стрелка, «затем»)
+
+    /// Расстояние в выноске манёвра — на ближайших стольких метрах, м. Как у
+    /// Яндекса («180 м» у точки поворота): дальше цифра есть в карточке, а на
+    /// карте поворот ещё мелкий, и подпись спорила бы с камерами.
+    static let maneuverCalloutMarkMeters = 300.0
+    /// Ближе — манёвр уже под машиной: выноска гаснет, м (шум прогресса у
+    /// стоп-линии не должен её мигать).
+    static let maneuverCalloutGoneMeters = 8.0
+    /// Больше полос — ряд не помещается в выноску (у карточки тот же предел).
+    static let maneuverCalloutMaxLanes = 8
+    /// Хвостик выноски (от тела до точки манёвра) и скругление тела, pt.
+    static let maneuverCalloutTailPoints: CGFloat = 9
+    static let maneuverCalloutCornerPoints: CGFloat = 12
+    /// Поле свободной части экрана и вокруг значков, которые выноска не
+    /// закрывает (значок «я» ~44 pt, значок камеры на пути ~30 pt), pt.
+    static let maneuverCalloutMarginPoints = 8.0
+    static let maneuverCalloutCursorRadius: CGFloat = 30
+    static let maneuverCalloutCameraRadius: CGFloat = 22
+    /// Круг скорости и знак лимита в левом нижнем углу над нижней панелью
+    /// (TripSpeedCluster: 62 + 8 + 46 pt и поля) — выноска его не закрывает.
+    static let maneuverCalloutSpeedBlockWidth = 140.0
+    static let maneuverCalloutSpeedBlockHeight = 84.0
+    /// Над значком «я», камерами и кольцом компаса — но под знаком лимита
+    /// (zPosition: engineCursorZPosition − 30).
+    static let maneuverCalloutZPosition: CGFloat = 370
+    /// Камеры пути, которые выноска обходит: не дальше стольких метров от
+    /// точки манёвра (дальше они на экране не рядом), м.
+    static let maneuverCalloutCameraNearMeters = 400.0
+    /// Точки подъезда к повороту, которые выноска не закрывает: стоп-линия и
+    /// ряд стрелок полос на асфальте (laneFocusBackMeters — до 60 м), м.
+    static let maneuverCalloutApproachMeters: [Double] = [12, 30, 50]
+    /// …и поле вокруг них, pt: линия маршрута на подъезде ~10–16 pt шириной.
+    static let maneuverCalloutApproachRadius: CGFloat = 10
+    /// Выноска снизу-сбоку: от точки до ближнего края тела по горизонтали, pt
+    /// (больше поля подъезда — тело не ложится на линию).
+    static let maneuverCalloutDiagonalGapPoints: CGFloat = 14
+
+    /// Стрелка на линии: древко от стольких метров до манёвра…
+    static let maneuverArrowBackMeters = 22.0
+    /// …до стольких после него, м. Короче — наконечник лёг бы на середину
+    /// перекрёстка, длиннее — уходил бы за кадр вблизи.
+    static let maneuverArrowAheadMeters = 20.0
+    /// Курс наконечника — по последним стольким метрам древка, м.
+    static let maneuverArrowHeadBaseMeters = 6.0
+    /// Стрелку показываем ближе стольких метров до манёвра — тот же порог,
+    /// что у подсветки отрезка манёвра на линии (engineManeuverApproachMeters).
+    static let maneuverArrowShowMeters = 600.0
+
+    /// «Затем …» под карточкой: второй манёвр не дальше стольких метров за
+    /// первым. 150 м на 40 км/ч — 13 с: между двумя командами голоса.
+    static let maneuverThenMeters = 150.0
+
     // MARK: - Записанный голос (этап 16)
 
     /// Пауза на месте запятой между записанными отрывками, с. Короче
@@ -3221,19 +3274,14 @@ nonisolated enum AppConfig {
     /// Мгновенная перекраска всего полотна на старте читалась миганием.
     static let driveAsphaltTransitionSeconds: TimeInterval = 0.6
 
-    /// Полоса хода маршрута: зазор от колонки кнопок и от нижней панели, pt.
-    static let routeRailGapPoints: Double = 14
-    /// Короче — полосу не показываем: на SE в 120 pt ещё читаются камеры и
-    /// «я», ниже значки камер слипаются в одну кляксу.
-    static let routeRailMinHeightPoints: Double = 120
-    /// Ширина шкалы и значков, pt (тонкая — полоса не карта, а подсказка).
-    static let routeRailTrackWidth: CGFloat = 6
-    static let routeRailCameraSize: CGFloat = 11
-    static let routeRailMeSize: CGFloat = 18
-    /// Отступ полосы от правого края экрана, pt.
-    static let routeRailEdgeInset: CGFloat = 8
+    /// Полоса хода маршрута в нижней панели поездки (29.G; в 29.B стояла
+    /// вертикально справа): высота строки, толщина шкалы, значки, pt.
+    static let routeStripHeight: CGFloat = 14
+    static let routeStripTrackHeight: CGFloat = 5
+    static let routeStripCameraSize: CGFloat = 9
+    static let routeStripMeSize: CGFloat = 14
     /// Шаг отметки «я», pt: перерисовка не чаще одного шага.
-    static let routeRailStepPoints: Double = 1
+    static let routeStripStepPoints: Double = 1
 
     /// Знак смены лимита у машины: ближе этого к точке смены — уже проехали, м.
     static let limitBadgeGoneMeters: Double = 12

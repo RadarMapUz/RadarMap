@@ -80,13 +80,6 @@ final class RouteProgressBarTests: XCTestCase {
         XCTAssertNotEqual(a, c)
     }
 
-    func testRailNeedsRoomAndMeasuredEdges() {
-        XCTAssertNil(RouteProgressBar.frame(columnBottom: 0, panelBottom: 600, gap: 14, minHeight: 120))
-        XCTAssertNil(RouteProgressBar.frame(columnBottom: 400, panelBottom: 500, gap: 14, minHeight: 120))
-        let frame = RouteProgressBar.frame(columnBottom: 300, panelBottom: 600, gap: 14, minHeight: 120)
-        XCTAssertEqual(frame, 314...586)
-    }
-
     func testOnlyFreeSlowAndJamLevelsHaveColour() {
         XCTAssertEqual(RouteProgressBar.Tone(level: nil), .unknown)
         XCTAssertEqual(RouteProgressBar.Tone(level: 0), .unknown)

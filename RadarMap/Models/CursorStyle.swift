@@ -36,6 +36,9 @@ nonisolated enum CursorStyle: String, CaseIterable, Identifiable, Sendable {
     case rally
     /// Звездолёт с маленьким пламенем двигателя.
     case spaceship
+    /// Объёмная машина (29.B, как у Amap): кадры модели с разных ракурсов по
+    /// повороту и наклону карты (Car3DModel), а не одна картинка сверху.
+    case car3D
 
     var id: String { rawValue }
 
@@ -48,6 +51,7 @@ nonisolated enum CursorStyle: String, CaseIterable, Identifiable, Sendable {
         case .supercar:  return String(localized: "Суперкар")
         case .rally:     return String(localized: "Ралли")
         case .spaceship: return String(localized: "Звездолёт")
+        case .car3D:     return String(localized: "Машина 3D")
         }
     }
 
@@ -57,6 +61,9 @@ nonisolated enum CursorStyle: String, CaseIterable, Identifiable, Sendable {
     var frameSize: CGSize {
         switch self {
         case .formula, .supercar, .rally: return CGSize(width: 32, height: 44)
+        // Под наклоном крыша и капот поднимаются над точкой на земле — рамка
+        // выше, шире — под боковые ракурсы.
+        case .car3D:                      return CGSize(width: 46, height: 46)
         default:                          return CGSize(width: 30, height: 36)
         }
     }

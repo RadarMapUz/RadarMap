@@ -41,6 +41,7 @@ struct MeCursor: View {
         case .supercar:  SupercarCursor(scale: scale)
         case .rally:     RallyCursor(scale: scale)
         case .spaceship: SpaceshipCursor(scale: scale)
+        case .car3D:     Car3DCursor(scale: scale)
         }
     }
 }

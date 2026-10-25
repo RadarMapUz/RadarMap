@@ -31544,6 +31544,22 @@
           }
         }
       }
+    },
+    "Машина 3D": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Машина 3D"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3D mashina"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

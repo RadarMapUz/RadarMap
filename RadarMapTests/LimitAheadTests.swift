@@ -79,4 +79,49 @@ final class LimitAheadTests: XCTestCase {
         XCTAssertFalse(announcer.shouldAnnounce(next, at: t0 + 30), "не чаще раза в минуту")
         XCTAssertTrue(announcer.shouldAnnounce(next, at: t0 + 90))
     }
+
+    // MARK: - Знак у машины на карте (29.B)
+
+    func testBadgeShowsALowerLimitEvenWhenAlreadySlow() throws {
+        // Голос молчит (едем 35 в сороковую), а знак — сведение, он есть.
+        XCTAssertNil(LimitAhead.notice(current: 70, speedKmh: 35, tolerance: 0, probes: probes([70, 70, 40, 40])))
+        let cue = try XCTUnwrap(LimitAhead.visual(current: 70, probes: probes([70, 70, 40, 40])))
+        XCTAssertEqual(cue.limit, 40)
+        XCTAssertEqual(cue.distance, 150)
+    }
+
+    func testBadgeNeedsADecreaseConfirmedByTwoProbes() {
+        XCTAssertNil(LimitAhead.visual(current: 40, probes: probes([40, 60, 60])), "повышение — не знак")
+        XCTAssertNil(LimitAhead.visual(current: 70, probes: probes([70, 40, 70])), "одна проба — шум")
+        XCTAssertNil(LimitAhead.visual(current: nil, probes: probes([40, 40])))
+        XCTAssertNil(LimitAhead.visual(current: 70, probes: probes([70, 70, 70, 70, 70, 70, 70, 70, 40, 40])),
+                     "дальше limitAheadMaxMeters — рано")
+    }
+
+    func testBadgeMetersRoundToReadableSteps() {
+        XCTAssertEqual(LimitAhead.badgeMeters(87), 90)
+        XCTAssertEqual(LimitAhead.badgeMeters(212), 200)
+        XCTAssertEqual(LimitAhead.badgeMeters(238), 250)
+        XCTAssertEqual(LimitAhead.badgeMeters(-1), 0)
+    }
+
+    func testBadgeGoesAwayOncePassed() {
+        let at = CLLocationCoordinate2D(latitude: 41.30, longitude: 69.24)
+        let cue = LimitAhead.Notice(limit: 40, distance: 200, at: at)
+        var badge = LimitAhead.Badge()
+        XCTAssertEqual(badge.meters(for: cue, distance: 200), 200)
+        XCTAssertEqual(badge.meters(for: cue, distance: 120), 100)
+        XCTAssertEqual(badge.meters(for: cue, distance: 40), 40)
+        // GPS дрогнул на пару метров назад — знак остаётся.
+        XCTAssertEqual(badge.meters(for: cue, distance: 45), 50)
+        // У самой точки смены — уже проехали.
+        XCTAssertNil(badge.meters(for: cue, distance: 8))
+        // Удаляемся от точки — проехали, даже если служба ещё держит смену.
+        XCTAssertNil(badge.meters(for: cue, distance: 60))
+        // Новая смена в другом месте — знак снова.
+        let next = LimitAhead.Notice(limit: 30, distance: 300,
+                                     at: CLLocationCoordinate2D(latitude: 41.31, longitude: 69.24))
+        XCTAssertEqual(badge.meters(for: next, distance: 300), 300)
+        XCTAssertNil(badge.meters(for: nil, distance: 0))
+    }
 }

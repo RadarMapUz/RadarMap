@@ -379,7 +379,9 @@ extension LocationService {
                 path: { [weak self] in
                     self?.route?.pathAhead(from: coordinate, meters: AppConfig.limitAheadMaxMeters + 100)
                 },
-                announce: isTripActive && settings.voiceEnabled && !willSpeakAboutCameraAhead)
+                announce: isTripActive && settings.voiceEnabled && !willSpeakAboutCameraAhead,
+                // Знак у машины на карте (29.B) — в поездке, и при молчащем голосе.
+                show: isTripActive)
             // Память о треногах — строго ПОСЛЕ speedLimits.update: подсказка
             // звучит только при превышении, а знает о нём именно он.
             announceHotspotIfNeeded(from: coordinate)

@@ -3132,4 +3132,18 @@ nonisolated enum AppConfig {
     static let routeRailEdgeInset: CGFloat = 8
     /// Шаг отметки «я», pt: перерисовка не чаще одного шага.
     static let routeRailStepPoints: Double = 1
+
+    /// Знак смены лимита у машины: ближе этого к точке смены — уже проехали, м.
+    static let limitBadgeGoneMeters: Double = 12
+    /// Отдалились от точки смены больше чем на это от ближайшего — проехали
+    /// (шум GPS у знака в пару метров знак не гасит), м.
+    static let limitBadgePassedSlackMeters: Double = 25
+    /// Знак у машины: от центра значка «я» до края знака по горизонтали, pt.
+    /// Больше радиуса кольца компаса (compassRadiusPoints) с запасом: знак
+    /// закрывал букву W.
+    static let limitBadgeGapPoints: CGFloat = 44
+    /// Кольцо компаса вокруг машины: радиус и кегль букв, pt. Шире значка
+    /// машины с тенью (до 44 pt в длину) — кольцо обводит её, а не режет.
+    static let compassRadiusPoints: CGFloat = 34
+    static let compassLetterSize: CGFloat = 10
 }

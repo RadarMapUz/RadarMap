@@ -176,6 +176,10 @@ struct CarPlayEngineLayer: View {
             trafficSnapshot: env.traffic.isShown ? env.traffic.snapshot : nil,
             labelLanguage: env.settings.appLanguage.mapCode,
             cursorStyle: env.settings.cursorStyle,
+            // Компас вокруг машины и знак смены лимита (29.B) — на карте
+            // машины; плитка и приборка малы, там они закрыли бы дорогу.
+            compass: surface == .car,
+            limitAhead: surface == .car ? env.speedLimits.limitAheadCue : nil,
             // Выбор маршрута: линия целиком, слева — место под карточку
             // вариантов, справа — под кнопки карты.
             overviewCommand: model.overviewCommand,

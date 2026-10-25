@@ -132,6 +132,11 @@ struct EngineMapView: UIViewRepresentable {
     /// картинки в живом стиле, а не перезагрузка стиля: перезагрузка
     /// сбрасывает слои, маршрут и камеры ради значка в сорок пунктов.
     var cursorStyle: CursorStyle = .arrow
+    /// Кольцо компаса N/E/S/W вокруг машины (29.B) — в поездке.
+    var compass: Bool = false
+    /// Смена лимита на снижение впереди — знак «200 м · 40» у машины (29.B,
+    /// LimitAhead.visual); nil — знака нет. Расстояние карта считает сама.
+    var limitAhead: LimitAhead.Notice?
     /// «Весь маршрут»: счётчик нажатий — вписать линию маршрута в экран.
     var overviewCommand: Int = 0
     /// Поля вписывания: на телефоне — под панели сверху и снизу, в машине —
@@ -295,6 +300,8 @@ struct EngineMapView: UIViewRepresentable {
         private let cameraZone = EngineCameraZone()
         /// Асфальт поездки и тема линии маршрута (29.B).
         private let driveAsphalt = EngineDriveAsphalt()
+        /// Кольцо компаса и знак лимита у машины (29.B).
+        private let carDecor = EngineCarDecor()
         private var positionHeading = 0.0
         /// Значок между фиксами: где машина СЕЙЧАС (MarkerPredictor). До 21.10
         /// стрелка плыла к последнему фиксу за интервал между фиксами и всегда
@@ -429,6 +436,9 @@ struct EngineMapView: UIViewRepresentable {
         /// Курсор «я» — картинка вида-стрелки поверх карты (см. «Стрелка»).
         private func installCursor(_ cursor: CursorStyle) {
             lastCursor = cursor
+            // Новый значок — поставить заново, а «Машине 3D» — выбрать кадр.
+            shownCarFrame = nil
+            shownPosition = nil
             guard let image = Self.cursorImage(cursor) else {
                 Log.network.error("MapLibre: курсор \(cursor.rawValue, privacy: .public) не отрисовался")
                 return
@@ -1637,15 +1647,33 @@ struct EngineMapView: UIViewRepresentable {
             let point = view.convert(coordinate, toPointTo: view)
             let angle = (positionHeading - view.direction) * .pi / 180
             let pitch = (current?.pitchDegrees ?? 0).rounded()
+            // Кольцо компаса и знак лимита (29.B) — до пропуска повтора: карта
+            // крутится вслед за курсом при неподвижной стрелке, а расстояние
+            // до смены лимита идёт, пока стрелка стоит на месте экрана.
+            carDecor.layout(at: point, coordinate: coordinate, mapDirection: view.direction,
+                            pitchDegrees: pitch, compass: current?.compass ?? false,
+                            limit: current?.limitAhead, visible: current?.showsPosition ?? true, in: view)
             if let shown = shownPosition,
                abs(shown.point.x - point.x) < 0.25, abs(shown.point.y - point.y) < 0.25,
                abs(shown.angle - angle) < 0.0035, shownPitch == pitch { return }
             shownPosition = (point, angle)
             shownPitch = pitch
+            // «Машина 3D» (29.B): кадр модели по ракурсу, поворот картинки —
+            // только остаток до кадра, без наклона (он уже в кадре).
+            var transform = Self.cursorTransform(angle: angle, pitchDegrees: pitch)
+            if lastCursor == .car3D {
+                let pick = Car3DModel.frame(relativeYaw: angle * 180 / .pi, pitch: pitch)
+                if pick.frame != shownCarFrame, let image = Car3DSprites.image(pick.frame) {
+                    shownCarFrame = pick.frame
+                    marker.image = image
+                    marker.bounds = CGRect(origin: .zero, size: image.size)
+                }
+                transform = Self.car3DTransform(residualDegrees: pick.residual, pitchDegrees: pitch)
+            }
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             marker.layer.position = point
-            marker.layer.transform = Self.cursorTransform(angle: angle, pitchDegrees: pitch)
+            marker.layer.transform = transform
             CATransaction.commit()
         }
         #if DEBUG
@@ -1655,6 +1683,17 @@ struct EngineMapView: UIViewRepresentable {
         private var shownPosition: (point: CGPoint, angle: Double)?
         /// Наклон, под который посажена стрелка (целые градусы).
         private var shownPitch: Double?
+        /// Кадр «Машины 3D», что сейчас в виде стрелки (nil — не она или не ставили).
+        private var shownCarFrame: Car3DModel.Frame?
+
+        /// «Машина 3D»: ракурс уже нарисован в кадре — картинка только
+        /// докручивается на остаток до кадра (≤ полшага) и чуть растёт с
+        /// наклоном, как плоские значки (engineCursorPitchGrow).
+        static func car3DTransform(residualDegrees: Double, pitchDegrees: Double) -> CATransform3D {
+            let share = min(max(0, pitchDegrees), AppConfig.engineMapPitchDegrees) / AppConfig.engineMapPitchDegrees
+            let grow = 1 + AppConfig.engineCursorPitchGrow * share
+            return CATransform3DRotate(CATransform3DMakeScale(grow, grow, 1), residualDegrees * .pi / 180, 0, 0, 1)
+        }
 
         /// Посадка значка «я» на наклонную карту (25.D): курс в плоскости
         /// карты, затем наклон к горизонту — ДОЛЯ наклона карты, чтобы значок

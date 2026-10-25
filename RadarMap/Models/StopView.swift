@@ -155,21 +155,43 @@ nonisolated enum StopView {
     /// для карты телефона (MapBaseLayers) и для будущей общей политики
     /// видимости слоёв: пусто — как на ходу.
     static func shownLayers(state: State, tripActive: Bool, places: Bool, covered: Bool,
-                            performance: PerformanceMode, viewHeight: Double) -> [String] {
+                            performance: PerformanceMode) -> [String] {
         showsDetail(state: state, tripActive: tripActive, places: places, covered: covered,
-                    performance: performance) ? detailLayers(viewHeight: viewHeight) : []
+                    performance: performance) ? detailLayers : []
     }
 
     /// Значки заведений, которые стоя возвращаются на карту телефона: в
     /// поездке они скрыты всегда (EngineModernStyle.hiddenWhileDriving).
-    /// Самые заметные (`poi-level-1`), на высоком экране — и второй ряд;
-    /// на SE второй ряд был бы тесно.
-    static func detailLayers(viewHeight: Double) -> [String] {
-        viewHeight >= tallViewHeight ? ["poi-level-1", "poi-level-2"] : ["poi-level-1"]
+    /// Только самые заметные (`poi-level-1`: ранг ≤ 14, с именем): со вторым
+    /// рядом на снимке остановки у развилки было десять подписей — «нужные
+    /// детали» превращались в справочник, на SE — в кашу.
+    static let detailLayers = ["poi-level-1"]
+
+    /// Круг у машины, в котором значков нет: «я» и кольцо компаса — виды
+    /// поверх карты, и движок положил бы подпись прямо под них.
+    static func carClearRing(center: CLLocationCoordinate2D, radius: Double,
+                             sides: Int = 16) -> [CLLocationCoordinate2D] {
+        let k = cos(center.latitude * .pi / 180) * 111_320
+        let n = max(3, sides)
+        let ring = (0..<n).map { i -> CLLocationCoordinate2D in
+            let a = Double(i) / Double(n) * 2 * .pi
+            return CLLocationCoordinate2D(latitude: center.latitude + radius * cos(a) / 111_320,
+                                          longitude: center.longitude + radius * sin(a) / k)
+        }
+        return ring + [ring[0]]
     }
 
-    /// С этой высоты вида карты (pt) — второй ряд значков. SE — 667.
-    static let tallViewHeight = 760.0
+    /// Переписать фильтр круга: появился, пропал или машина сдвинулась
+    /// дальше `stopViewCarClearRewriteMeters` (шум позиции стоя — нет).
+    static func carClearNeedsRewrite(_ old: CLLocationCoordinate2D?, _ new: CLLocationCoordinate2D?) -> Bool {
+        switch (old, new) {
+        case (nil, nil): return false
+        case let (a?, b?):
+            return GeoMath.fastDistance(a.latitude, a.longitude, b.latitude, b.longitude)
+                > AppConfig.stopViewCarClearRewriteMeters
+        default: return true
+        }
+    }
 
     /// Показывать ли значки стоя: в поездке, стоим, слой заведений включён
     /// настройкой, карта не накрыта тревогой, телефон не горячий.

@@ -710,7 +710,7 @@ struct EngineMapView: UIViewRepresentable {
             cameraZone.styleLoaded()
             driveAsphalt.styleLoaded()
             EngineLaneArrowsOrder.raise(in: style)
-            EngineStopDetail.lower(in: style)
+            stopDetail.styleLoaded(style)
             hiddenLayers = nil
             hotShown = nil
             modernDrivingLayerIDs = nil
@@ -1180,6 +1180,8 @@ struct EngineMapView: UIViewRepresentable {
             "waterway-name",
         ]
         private var hiddenLayers: Set<String>?
+        /// Значки заведений стоя (29.D): порядок слоёв и круг у машины.
+        private let stopDetail = EngineStopDetail()
         /// Плоские дома горячего телефона показаны (nil — после загрузки стиля).
         private var hotShown: Bool?
         /// Слои нового стиля, гасимые в поездке, — один раз на загрузку
@@ -1207,8 +1209,10 @@ struct EngineMapView: UIViewRepresentable {
             if model.driving, modernLoaded {
                 wanted.formUnion(drivingLayerIDs(style))
             }
-            // Стоим (29.D) — значки заведений по пути возвращаются.
+            // Стоим (29.D) — значки заведений по пути возвращаются, кроме
+            // тех, что легли бы под «я».
             wanted.subtract(model.stopDetailLayers)
+            stopDetail.update(layers: model.stopDetailLayers, car: model.coordinate, in: style)
             let hot = model.performance != .full
             if wanted != hiddenLayers || hot != hotShown {
                 hiddenLayers = wanted

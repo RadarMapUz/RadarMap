@@ -2439,7 +2439,13 @@ nonisolated enum AppConfig {
     /// перекрёстке не делит её надвое).
     static let stopViewJamGapMeters: Double = 50
     /// Запас обзора за концом пробки, м.
-    static let stopViewJamMarginMeters: Double = 30
+    static let stopViewJamMarginMeters: Double = 50
+    /// Значки заведений стоя — не ближе этого к машине: «я» с кольцом компаса
+    /// ~80 pt, подпись значка — ещё строка-две под ним; на z17–17,6 это
+    /// 25–40 м.
+    static let stopViewCarClearMeters: Double = 40
+    /// Круг у машины переписывается, когда она сдвинулась дальше этого.
+    static let stopViewCarClearRewriteMeters: Double = 5
 
     // MARK: - Значок «я» между фиксами (MarkerPredictor, 25.B)
 

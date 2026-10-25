@@ -133,7 +133,7 @@ struct EngineBaseLayer: View {
                         stopDetailLayers: StopView.shownLayers(
                             state: camera.stop, tripActive: env.location.isTripActive,
                             places: env.settings.mapPlaces, covered: env.location.isApproachingCamera,
-                            performance: env.thermal.mode, viewHeight: Double(geo.size.height)),
+                            performance: env.thermal.mode),
                         trafficEdges: env.traffic.isShown ? env.traffic.snapshot?.edges ?? [] : [],
                         trafficRevision: env.traffic.revision * 2 + (env.traffic.isShown ? 1 : 0),
                         trafficSnapshot: env.traffic.isShown ? env.traffic.snapshot : nil,

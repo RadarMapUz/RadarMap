@@ -206,15 +206,34 @@ final class StopViewTests: XCTestCase {
     func testShownLayersIsOneDecision() {
         let stand = StopView.State(standing: true, maneuverWindow: nil)
         XCTAssertEqual(StopView.shownLayers(state: stand, tripActive: true, places: true, covered: false,
-                                            performance: .full, viewHeight: 667), ["poi-level-1"])
+                                            performance: .full), ["poi-level-1"])
         XCTAssertEqual(StopView.shownLayers(state: stand, tripActive: false, places: true, covered: false,
-                                            performance: .full, viewHeight: 852), [], "вне поездки — как было")
+                                            performance: .full), [], "вне поездки — как было")
     }
 
-    func testSmallScreenGetsOneRowOfPlaces() {
-        XCTAssertEqual(StopView.detailLayers(viewHeight: 667), ["poi-level-1"], "SE — не тесно")
-        XCTAssertEqual(StopView.detailLayers(viewHeight: 852), ["poi-level-1", "poi-level-2"])
-        XCTAssertFalse(StopView.detailLayers(viewHeight: 852).contains("housenumber"))
+    func testOnlyTheMostNotablePlaces() {
+        XCTAssertEqual(StopView.detailLayers, ["poi-level-1"], "второй ряд — справочник, на SE — каша")
+        XCTAssertFalse(StopView.detailLayers.contains("housenumber"))
+    }
+
+    func testCarClearRingIsAClosedCircle() {
+        let c = CLLocationCoordinate2D(latitude: 41.3, longitude: 69.28)
+        let ring = StopView.carClearRing(center: c, radius: 40)
+        XCTAssertEqual(ring.first?.latitude, ring.last?.latitude)
+        XCTAssertEqual(ring.first?.longitude, ring.last?.longitude)
+        for p in ring {
+            XCTAssertEqual(GeoMath.fastDistance(c.latitude, c.longitude, p.latitude, p.longitude), 40, accuracy: 1)
+        }
+    }
+
+    func testCarClearRewritesOnlyOnRealMoves() {
+        let a = CLLocationCoordinate2D(latitude: 41.3, longitude: 69.28)
+        let jitter = CLLocationCoordinate2D(latitude: 41.3 + 3 / 111_320, longitude: 69.28)
+        let moved = CLLocationCoordinate2D(latitude: 41.3 + 12 / 111_320, longitude: 69.28)
+        XCTAssertFalse(StopView.carClearNeedsRewrite(a, jitter), "шум позиции стоя — фильтр тот же")
+        XCTAssertTrue(StopView.carClearNeedsRewrite(a, moved))
+        XCTAssertTrue(StopView.carClearNeedsRewrite(nil, a))
+        XCTAssertFalse(StopView.carClearNeedsRewrite(nil, nil))
     }
 
     // MARK: -

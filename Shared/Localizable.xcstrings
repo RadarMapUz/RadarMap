@@ -1201,46 +1201,6 @@
         }
       }
     },
-    "%lld камер на маршруте": {
-      "localizations": {
-        "ru": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld камера на маршруте"
-                }
-              },
-              "few": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld камеры на маршруте"
-                }
-              },
-              "many": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld камер на маршруте"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld камеры на маршруте"
-                }
-              }
-            }
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "marshrutda %lld ta kamera"
-          }
-        }
-      }
-    },
     "%lld км/ч": {
       "localizations": {
         "ru": {
@@ -18655,22 +18615,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "sizdan %@ masofada"
-          }
-        }
-      }
-    },
-    "в движении": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "в движении"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "harakatda"
           }
         }
       }

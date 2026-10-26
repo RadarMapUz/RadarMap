@@ -44,7 +44,7 @@ extension AppConfig {
     nonisolated static let overLimitMarginKmh = 10.0
     /// Ближе этого к камере путь не считается: у камер своя строка
     /// («Возможные штрафы»), здесь — дорога между ними.
-    nonisolated static let overLimitCameraZoneMeters: CLLocationDistance = 300
+    nonisolated static let overLimitNearCameraMeters: CLLocationDistance = 300
     /// Короче — разгон на обгоне, а не привычка; в места не идёт.
     nonisolated static let overLimitMinRunMeters: CLLocationDistance = 100
     nonisolated static let overLimitMaxRunsPerTrip = 40

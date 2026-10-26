@@ -164,8 +164,8 @@ extension TripStatsSheet {
     // MARK: - Достижения
 
     func achievementsSection(trip: TripStats) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionHeader(String(localized: "Достижения"))
+        // Без своего заголовка (31E): живёт в блоке «Вы и сообщество».
+        VStack(alignment: .leading, spacing: 16) {
             // Лента бейджей показывает всё сразу и не отвечает «а что дальше» —
             // ближайшая цель с прогрессом отвечает.
             if let next = Achievements.next(for: trip.lifetime) {

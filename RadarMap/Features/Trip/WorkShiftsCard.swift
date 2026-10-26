@@ -15,16 +15,19 @@ struct WorkShiftsCard: View {
     let shifts: [WorkShift]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionHeader(String(localized: "Смены"))
-            VStack(spacing: 0) {
-                ForEach(Array(shifts.prefix(AppConfig.workShiftsShown).enumerated()), id: \.element.id) { index, shift in
-                    if index > 0 { Divider().overlay(Theme.stroke) }
-                    row(shift)
-                }
+        // Заголовок — внутри карточки (31E): над ней уже стоит заголовок
+        // блока «Машина и работа», второй заголовок раздела был бы лишним.
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Смены")
+                .font(.rounded(14, .semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .accessibilityAddTraits(.isHeader)
+            ForEach(Array(shifts.prefix(AppConfig.workShiftsShown).enumerated()), id: \.element.id) { index, shift in
+                if index > 0 { Divider().overlay(Theme.stroke) }
+                row(shift)
             }
-            .statCard(padding: 14, radius: Theme.cornerMedium)
         }
+        .statCard(padding: 14, radius: Theme.cornerMedium)
     }
 
     private func row(_ shift: WorkShift) -> some View {

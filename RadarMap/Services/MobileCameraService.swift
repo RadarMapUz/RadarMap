@@ -684,6 +684,14 @@ final class MobileCameraService {
         impactFetchedAt = now
         impactRevision &+= 1
     }
+
+    /// «Мало данных» (`-itogiDemoFew`): своих отметок нет — и с прошлых демо тоже.
+    func clearImpactDemo() {
+        mine = []
+        saveMine()
+        impactFetchedAt = Date()
+        impactRevision &+= 1
+    }
     #endif
 
     private func noteMine(id: Int, item: PendingReport) {

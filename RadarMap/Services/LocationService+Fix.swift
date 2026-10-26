@@ -313,7 +313,7 @@ extension LocationService {
             trip.update(coordinate: coordinate, speedKmh: speedKmh, at: lastFixTime,
                         limitKmh: speedLimits?.certainLimit,
                         atCamera: (distanceToNearest ?? .greatestFiniteMagnitude)
-                            <= AppConfig.overLimitCameraZoneMeters)
+                            <= AppConfig.overLimitNearCameraMeters)
             // Лимит дороги и «превышаем устойчиво» — ДО записи проезда и
             // оповещения: фраза о камере и запись читают лимит ЭТОГО тика.
             // Здесь, а не в UI: голос должен работать со свёрнутым приложением.

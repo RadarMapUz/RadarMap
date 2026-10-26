@@ -182,14 +182,26 @@ extension TripStatsSheet {
             .foregroundStyle(Theme.textPrimary)
         if let delta, abs(delta) >= AppConfig.insightRatingStep {
             let versus = period.versusPrevious
-            (level + Text(verbatim: " · ").font(.rounded(13)).foregroundStyle(Theme.textTertiary)
-                + Text(period.ratingDeltaText(delta))
-                    .font(.rounded(13, .semibold).monospacedDigit())
-                    .foregroundStyle(delta > 0 ? Theme.success : Theme.danger))
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityLabel(Text(DrivingScore.level(for: rating)) + Text(verbatim: ", ")
-                    + Text(delta > 0 ? String(localized: "Рейтинг вырос на \(delta) \(versus)")
-                                     : String(localized: "Рейтинг снизился на \(abs(delta)) \(versus)")))
+            let change = Text(period.ratingDeltaText(delta))
+                .font(.rounded(13, .semibold).monospacedDigit())
+                .foregroundStyle(delta > 0 ? Theme.success : Theme.danger)
+            // Не влезает рядом — дельта строкой ниже, а не «стиль ·» с
+            // повисшей точкой в конце строки (снимок SE, 26.10).
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    level.fixedSize()
+                    Text(verbatim: "·").font(.rounded(13)).foregroundStyle(Theme.textTertiary)
+                    change.fixedSize()
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    level.fixedSize(horizontal: false, vertical: true)
+                    change.fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(DrivingScore.level(for: rating)) + Text(verbatim: ", ")
+                + Text(delta > 0 ? String(localized: "Рейтинг вырос на \(delta) \(versus)")
+                                 : String(localized: "Рейтинг снизился на \(abs(delta)) \(versus)")))
         } else {
             level.fixedSize(horizontal: false, vertical: true)
         }
@@ -231,7 +243,7 @@ extension TripStatsSheet {
         } ?? String(format: String(localized: "Сбавьте у «%1$@»: проезды выше лимита — %2$lld из %3$lld"),
                     hint.location, hint.over, hint.passes)
         if hint.fine > 0 {
-            text += " " + String(format: String(localized: "Это %@ возможных штрафов."), Formatting.money(hint.fine))
+            text += ". " + String(format: String(localized: "Это %@ возможных штрафов."), Formatting.money(hint.fine))
         }
         return text
     }

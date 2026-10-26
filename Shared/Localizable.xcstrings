@@ -6850,22 +6850,6 @@
         }
       }
     },
-    "Достижения": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Достижения"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yutuqlar"
-          }
-        }
-      }
-    },
     "Доступна новая версия": {
       "localizations": {
         "ru": {

@@ -173,8 +173,10 @@ struct TripStatsSheet: View {
                             .id("risk")
                         roadsBlock(itogi, proxy: proxy)
                             .entrance(3, appeared)
+                            .id("roads")
                         carBlock(summary: summary)
                             .entrance(4, appeared)
+                            .id("car")
                         // «Сохранять поездки в iCloud?» (27.F) — один раз, пока
                         // человек не ответил; молча не включается.
                         if !active, env.cloud.shouldOffer(storedTrips: trip.storedTripCount) {
@@ -239,7 +241,13 @@ struct TripStatsSheet: View {
                             lifetimeExpanded = true
                         }
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            proxy.scrollTo(target, anchor: .top)
+                            // `-scrollAnchor bottom|center` — снимки «сверху
+                            // донизу» без дыр под липкой шапкой (31E).
+                            let anchorArg = args.firstIndex(of: "-scrollAnchor").map { args[$0 + 1] }
+                            // «lead» — верх блока чуть ниже липкой шапки (высокий блок).
+                            proxy.scrollTo(target, anchor: anchorArg == "bottom" ? .bottom
+                                           : anchorArg == "center" ? .center
+                                           : anchorArg == "lead" ? UnitPoint(x: 0.5, y: -0.15) : .top)
                         }
                     }
                 }

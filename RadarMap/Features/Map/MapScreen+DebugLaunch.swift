@@ -28,7 +28,12 @@ extension MapScreen {
         if args.contains("-demoMergePair") { env.trip.seedDemoMergePair() }
         // «Итоги» 31E: пробки, выше лимита вне камер, рейсы, свои отметки и
         // новые камеры на своих дорогах — `-itogiDemo [-itogiDemoGoal] -showStats`.
-        if args.contains("-itogiDemoFew") { env.trip.seedItogiFewDemo() }
+        if args.contains("-itogiDemoFew") {
+            env.trip.seedItogiFewDemo()
+            env.mobile.clearImpactDemo()
+            env.roadMemory.dismissNews()
+            env.clearWorkShifts()
+        }
         if args.contains("-itogiDemo") {
             env.trip.seedItogiDemo(cleanGoal: args.contains("-itogiDemoGoal"))
             env.mobile.seedImpactDemo()

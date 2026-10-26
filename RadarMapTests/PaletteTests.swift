@@ -100,10 +100,9 @@ final class PaletteTests: XCTestCase {
          ("danger", Theme.danger), ("success", Theme.success)]
     }
 
+    /// Заливки значков (29.C2): камера — одна на все типы камер; пост и ДТП.
     private var types: [(String, Color)] {
-        [("camera", Theme.Types.camera), ("radar", Theme.Types.radar),
-         ("intelligent", Theme.Types.intelligent), ("mobile", Theme.Types.mobile),
-         ("post", Theme.Types.post)]
+        [("camera", Theme.Types.camera), ("post", Theme.Types.post), ("accident", Theme.Types.accident)]
     }
 
     /// Тип камеры → его заливка и глиф на ней (как рисует маркер). С 29.C —
@@ -224,11 +223,14 @@ final class PaletteTests: XCTestCase {
     }
 
     /// Типы различимы между собой — и при дейтеранопии (у ~6 % водителей).
-    /// Камера и радар разведены СВЕТЛОТОЙ, поэтому не сливаются и тогда.
+    /// С 29.C2 их три: камера, пост ДПС, ДТП. Камера и ДТП — оба красные
+    /// намеренно (красный = опасность впереди) и различаются ГЛИФОМ — это
+    /// держит CameraGlyphTests.testGlyphsAreDistinguishableBySilhouette;
+    /// цветом от них обоих отличается пост.
     func testTypesAreDistinguishableFromEachOther() {
         inBothThemes { theme in
             for i in types.indices {
-                for j in types.indices where j > i {
+                for j in types.indices where j > i && !(types[i].0 == "camera" && types[j].0 == "accident") {
                     XCTAssertGreaterThanOrEqual(deltaE(types[i].1, types[j].1), 25,
                         "типы \(types[i].0) и \(types[j].0) слишком близки \(theme)")
                     XCTAssertGreaterThanOrEqual(deltaEDeutan(types[i].1, types[j].1), 15,

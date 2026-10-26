@@ -552,15 +552,17 @@ struct EngineMapView: UIViewRepresentable {
             }
         }
 
-        /// Типы, чьи значки кладутся в стиль: по одному на символ CameraType.
-        static let markerKinds: [CameraType] = [.stationaryCamera, .stationaryRadar,
-            .intelligentRadar, .mobileRadar, .tripod, .dpsPost, .accident, .other("")]
+        /// Значки, что кладутся в стиль: по одному на глиф — у всех камер один
+        /// (29.C2), свои у поста ДПС, ДТП и «прочего».
+        static let markerGlyphs = CameraGlyph.allCases
 
         /// Имена картинок камер в стиле — всё, что может назвать точка камеры
         /// (cameraAttributes → CameraMarkerLook.icon/badge). Имени, которого
         /// нет в стиле, движок не рисует вовсе — молча (EngineCameraMarkersTests).
         static var cameraImageNames: [String] {
-            markerKinds.flatMap { kind in CameraMarkerLook.rasters.map { kind.symbolName + $0.suffix } }
+            markerGlyphs.flatMap { glyph in
+                CameraMarkerLook.rasters.map { CameraMarkerLook.imageBase(glyph) + $0.suffix }
+            }
                 + [CameraMarkerLook.ghostBadge, CameraMarkerLook.ownBadge]
         }
 
@@ -570,16 +572,16 @@ struct EngineMapView: UIViewRepresentable {
                 for (name, image) in Self.iconCache { style.setImage(image, forName: name) }
                 return
             }
-            let kinds = Self.markerKinds
             // Значок «Монета» (29.C, CameraIconArt) в обликах «Спокойной карты»
-            // (вариант B, владелец, 12.10; CameraMarkerLook): цвет типа — только
+            // (вариант B, владелец, 12.10; CameraMarkerLook): красный — только
             // у камер на нашем пути и у тревоги, остальные — графитовый круг
-            // поменьше, тип читается по глифу. Цвет запекается в пиксели:
-            // движок не применяет к картинке стиля template-режим UIKit. Ореол
-            // тревоги рисует слой camera-halo.
-            for kind in kinds {
+            // поменьше; пост ДПС и ДТП отличаются глифом. Все типы камер — один
+            // значок (29.C2). Цвет запекается в пиксели: движок не применяет к
+            // картинке стиля template-режим UIKit. Ореол тревоги — слой camera-halo.
+            for glyph in Self.markerGlyphs {
                 for look in CameraMarkerLook.rasters {
-                    style.setImage(CameraIconArt.marker(kind, look: look), forName: kind.symbolName + look.suffix)
+                    style.setImage(CameraIconArt.marker(glyph, look: look),
+                                   forName: CameraMarkerLook.imageBase(glyph) + look.suffix)
                 }
             }
             style.setImage(Self.badgeIcon(fill: 0x46525E, text: "?"), forName: CameraMarkerLook.ghostBadge)
@@ -1882,7 +1884,7 @@ struct EngineMapView: UIViewRepresentable {
                     "sort": CameraMarkerLook.sortKey(tier),
                     "color": CameraMarkerLook.dotColor(typeHex: EngineMapStyle.typeHex(camera.kind),
                                                        tier: tier, daylight: daylight),
-                    "icon": CameraMarkerLook.icon(symbol: camera.kind.symbolName, tier: tier, daylight: daylight),
+                    "icon": CameraMarkerLook.icon(glyph: camera.kind.glyph, tier: tier, daylight: daylight),
                     "badge": CameraMarkerLook.badge(tier: tier, unconfirmed: camera.isUnconfirmedMobile,
                                                     familiar: familiar.contains(camera.id)),
                     "limit": limit.map(String.init) ?? "",

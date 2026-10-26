@@ -13,22 +13,20 @@ import SwiftUI
 import UIKit
 
 extension CameraType {
-    /// Глиф типа.
+    /// Значок типа: все камеры — один (29.C2, владелец 26.10: «все камеры —
+    /// одна иконка, они вроде все радары»); тип остаётся словом.
     nonisolated var glyph: CameraGlyph {
         switch self {
-        case .stationaryCamera: return .camera
-        case .stationaryRadar:  return .radar
-        case .intelligentRadar: return .intelligent
-        case .mobileRadar:      return .mobile
-        case .tripod:           return .tripod
-        case .dpsPost:          return .post
-        case .accident:         return .accident
-        case .other:            return .other
+        case .stationaryCamera, .stationaryRadar, .intelligentRadar, .mobileRadar, .tripod:
+            return .camera
+        case .dpsPost:  return .post
+        case .accident: return .accident
+        case .other:    return .other
         }
     }
 }
 
-/// Значок камеры: круг цвета типа, белый кант, глиф типа.
+/// Значок камеры: красный круг камеры (у поста и ДТП — свои), белый кант, глиф.
 struct CameraIcon: View, Equatable {
     let kind: CameraType
     let side: CGFloat
@@ -73,24 +71,25 @@ struct SymbolIcon: View {
 enum CameraIconArt {
 
     /// Значок стороной `side`, с полем `pad` вокруг круга (под тень).
-    nonisolated static func image(_ kind: CameraType, side: CGFloat, fill: UInt32? = nil, ink: UInt32? = nil,
+    /// `fill`/`ink` nil — цвета самого значка (`CameraGlyph.fillRGB`/`inkRGB`).
+    nonisolated static func image(_ glyph: CameraGlyph, side: CGFloat, fill: UInt32? = nil, ink: UInt32? = nil,
                                   rim: UInt32 = 0xFFFFFF, shadow: Bool, pad: CGFloat = 0,
                                   scale: CGFloat = 0) -> UIImage {
         let format = UIGraphicsImageRendererFormat.preferred()
         if scale > 0 { format.scale = scale }
         let full = side + 2 * pad
         return UIGraphicsImageRenderer(size: CGSize(width: full, height: full), format: format).image { context in
-            CameraCoin.draw(kind.glyph, in: context.cgContext,
+            CameraCoin.draw(glyph, in: context.cgContext,
                             disc: CGRect(x: pad, y: pad, width: side, height: side),
-                            fill: Theme.rgb(fill ?? kind.markerRGB).cgColor,
-                            ink: ink.map { Theme.rgb($0).cgColor } ?? glyphColor(kind),
+                            fill: Theme.rgb(fill ?? glyph.fillRGB).cgColor,
+                            ink: Theme.rgb(ink ?? glyph.inkRGB).cgColor,
                             rim: Theme.rgb(rim).cgColor, shadow: shadow)
         }
     }
 
     /// Облик значка на карте (CameraMarkerLook.rasters): с тенью и полем под неё.
-    nonisolated static func marker(_ kind: CameraType, look: CameraMarkerLook.Raster) -> UIImage {
-        image(kind, side: CGFloat(look.side), fill: look.fill, ink: look.ink, rim: look.rim,
+    nonisolated static func marker(_ glyph: CameraGlyph, look: CameraMarkerLook.Raster) -> UIImage {
+        image(glyph, side: CGFloat(look.side), fill: look.fill, ink: look.ink, rim: look.rim,
               shadow: true, pad: CameraCoin.shadowPad)
     }
 
@@ -103,10 +102,5 @@ enum CameraIconArt {
             glyph.draw(in: context.cgContext, rect: CGRect(x: 0, y: 0, width: side, height: side),
                             ink: ink.cgColor)
         }
-    }
-
-    /// Цвет глифа на заливке типа (тот же выбор, что `CameraType.glyphTint`).
-    nonisolated static func glyphColor(_ kind: CameraType) -> CGColor {
-        Theme.rgb(kind.glyph.inkRGB).cgColor
     }
 }

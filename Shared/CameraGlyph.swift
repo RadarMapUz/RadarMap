@@ -9,7 +9,12 @@
 //  экран рисовал свой круг по-своему.
 //
 //  Теперь один источник на все поверхности (карта, HUD, оповещение, списки,
-//  CarPlay, Live Activity, часы):
+//  CarPlay, Live Activity, часы). С 26.10 («все камеры — одна иконка, а то
+//  все разные, они вроде все радары», 29.C2) значок у всех камер ОДИН:
+//  стационарная камера и радар, интеллектуальная, передвижной радар и тренога
+//  — камера наблюдения на красном круге. Тип остаётся словом (карточка,
+//  оповещение, голос); отдельный значок — только у того, что не камера:
+//  пост ДПС, ДТП и «прочее».
 //    * глиф — контур на одной сетке 24×24, линия 2,2 со скруглёнными концами,
 //      но не тоньше 1,5 pt на мелком значке (`gridLineWidth`): на 24 pt
 //      контур 2,2 давал 1,3 pt и терялся боковым зрением и на тёмном асфальте;
@@ -25,18 +30,18 @@ import SwiftUI
 import CoreGraphics
 
 nonisolated enum CameraGlyph: String, CaseIterable, Sendable {
-    case camera, radar, intelligent, mobile, tripod, post, accident, other
+    /// Камера любого типа, пост ДПС, ДТП, неизвестная точка.
+    case camera, post, accident, other
 
     /// По имени символа типа (`CameraType.symbolName`): оно ходит строкой в
     /// Live Activity и на часы и служит именем картинки в стиле движка.
     /// nil — не камера (щит «камер нет», «нет геопозиции»): там свой символ.
     init?(symbol: String?) {
         switch symbol {
-        case "camera.fill":                        self = .camera
-        case "speedometer":                        self = .radar
-        case "sensor.tag.radiowaves.forward.fill": self = .intelligent
-        case "dot.radiowaves.left.and.right":      self = .mobile
-        case "light.beacon.max.fill":              self = .tripod
+        // Все камеры, что меряют скорость или фиксируют нарушения, — один значок.
+        case "camera.fill", "speedometer", "sensor.tag.radiowaves.forward.fill",
+             "dot.radiowaves.left.and.right", "light.beacon.max.fill":
+                                                   self = .camera
         case "shield.lefthalf.filled":             self = .post
         case "exclamationmark.triangle.fill":      self = .accident
         case "mappin":                             self = .other
@@ -44,29 +49,22 @@ nonisolated enum CameraGlyph: String, CaseIterable, Sendable {
         }
     }
 
-    /// Заливка значка — цвет типа (Theme.Types; PaletteTests). Один источник на
-    /// приложение (`CameraType.markerRGB`), стиль движка, виджеты и часы.
-    /// ДТП — постоянный красный опасности: ночной #FF7A70 с белым глифом не
-    /// дотягивал до 4,5:1; неизвестный тип — графит, не синий интерфейса.
+    /// Заливка значка (Theme.Types; PaletteTests). Один источник на приложение
+    /// (`CameraType.markerRGB`), стиль движка, виджеты и часы. Камера — красный
+    /// камеры у всех её типов; ДТП — постоянный красный опасности (ночной
+    /// #FF7A70 с белым глифом не дотягивал до 4,5:1), отличается от камеры
+    /// глифом; неизвестный тип — графит, не синий интерфейса.
     var fillRGB: UInt32 {
         switch self {
-        case .camera:          return 0xD93025
-        case .radar, .tripod:  return 0xF2B200
-        case .intelligent:     return 0x6A3FD6
-        case .mobile:          return 0xC2409E
-        case .post:            return 0x46525E
-        case .accident:        return 0xC62828
-        case .other:           return 0x556070
+        case .camera:   return 0xD93025
+        case .post:     return 0x46525E
+        case .accident: return 0xC62828
+        case .other:    return 0x556070
         }
     }
 
-    /// Глиф на своей заливке: тёмный на светлом янтаре, белый на остальных.
-    var inkRGB: UInt32 {
-        switch self {
-        case .radar, .tripod: return 0x1C1C1E
-        default:              return 0xFFFFFF
-        }
-    }
+    /// Глиф на своей заливке — белый: все заливки тёмные (≥ 4,5:1).
+    var inkRGB: UInt32 { 0xFFFFFF }
 
     /// Сетка глифа.
     static let grid: CGFloat = 24
@@ -74,8 +72,6 @@ nonisolated enum CameraGlyph: String, CaseIterable, Sendable {
     static let lineWidth: CGFloat = 2.2
     /// Тоньше этого линия не бывает (pt): мелкий значок толще своей сетки.
     static let minLinePoints: CGFloat = 1.5
-    /// Кольцо объектива — чуть тоньше основной линии.
-    static let ringShare: CGFloat = 0.82
 
     /// Толщина линии в единицах сетки для глифа стороной `side` pt.
     static func gridLineWidth(side: CGFloat) -> CGFloat {
@@ -84,7 +80,7 @@ nonisolated enum CameraGlyph: String, CaseIterable, Sendable {
 
     // MARK: - Части
 
-    enum Role: Sendable { case stroke, ring, fill }
+    enum Role: Sendable { case stroke, fill }
 
     struct Part {
         let role: Role
@@ -95,14 +91,6 @@ nonisolated enum CameraGlyph: String, CaseIterable, Sendable {
         CGPath(ellipseIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r), transform: nil)
     }
 
-    /// Дуга точками: 0° — вправо, −90° — вверх (ось y вниз).
-    private static func arc(_ c: CGPoint, _ r: CGFloat, from: Double, to: Double, steps: Int = 24) -> [CGPoint] {
-        (0...steps).map { i in
-            let a = (from + (to - from) * Double(i) / Double(steps)) * .pi / 180
-            return CGPoint(x: c.x + r * cos(a), y: c.y + r * sin(a))
-        }
-    }
-
     private static func lines(_ points: [CGPoint], closed: Bool = false) -> CGPath {
         let path = CGMutablePath()
         path.addLines(between: points)
@@ -110,18 +98,15 @@ nonisolated enum CameraGlyph: String, CaseIterable, Sendable {
         return path
     }
 
-    private static func waves(_ c: CGPoint, radii: [CGFloat], half: Double, sides: [Double]) -> [Part] {
-        radii.flatMap { r in
-            sides.map { mid in Part(role: .stroke, path: lines(arc(c, r, from: mid - half, to: mid + half))) }
-        }
-    }
-
     /// Глиф на сетке 24×24.
     var parts: [Part] {
         switch self {
         case .camera:
-            // Камера видеофиксации: корпус с козырьком, наклонён к дороге, на
-            // кронштейне. Объектив уже корпуса — иначе читается рупором.
+            // Камера наблюдения: корпус с козырьком, наклонён к дороге, на
+            // кронштейне. Объектив уже корпуса — иначе читается рупором. Один
+            // значок на все типы камер: на 24 pt он читается «камерой» (как
+            // и «до камеры» в HUD), а волны «радара» — это кнопка «Радар!»,
+            // то есть «отметить», а не «здесь стоит».
             var tilt = CGAffineTransform(translationX: 11, y: 10).rotated(by: 14 * .pi / 180)
                 .translatedBy(x: -11, y: -10)
             let body = CGMutablePath()
@@ -135,34 +120,6 @@ nonisolated enum CameraGlyph: String, CaseIterable, Sendable {
                     Part(role: .stroke, path: visor.copy(using: &tilt) ?? visor),
                     Part(role: .stroke, path: mount),
                     Part(role: .fill, path: Self.circle(6.4, 10.25, 1.2).copy(using: &tilt) ?? Self.circle(6.4, 10.25, 1.2))]
-        case .radar:
-            // Радар: шкала спидометра со стрелкой.
-            let c = CGPoint(x: 12, y: 14.5)
-            let needle = Self.lines([c, CGPoint(x: c.x + 5.6 * cos(-50 * .pi / 180),
-                                                y: c.y + 5.6 * sin(-50 * .pi / 180))])
-            return [Part(role: .stroke, path: Self.lines(Self.arc(c, 8.6, from: 165, to: 375, steps: 40), closed: true)),
-                    Part(role: .stroke, path: needle),
-                    Part(role: .fill, path: Self.circle(c.x, c.y, 1.9))]
-        case .intelligent:
-            // Камера + радар: объектив в корпусе и волны измерения.
-            let body = CGPath(roundedRect: CGRect(x: 3, y: 6, width: 11.5, height: 12),
-                              cornerWidth: 3.2, cornerHeight: 3.2, transform: nil)
-            return [Part(role: .stroke, path: body), Part(role: .ring, path: Self.circle(8.75, 12, 2.9))]
-                + Self.waves(CGPoint(x: 14.5, y: 12), radii: [3.6, 7], half: 42, sides: [0])
-        case .mobile:
-            // Передвижной радар: источник и волны в обе стороны (кнопка «Радар!»).
-            return [Part(role: .fill, path: Self.circle(12, 12, 2.6))]
-                + Self.waves(CGPoint(x: 12, y: 12), radii: [5.6, 9.2], half: 38, sides: [0, 180])
-        case .tripod:
-            // Тренога: прибор на трёх ногах.
-            let body = CGPath(roundedRect: CGRect(x: 4.5, y: 3.5, width: 15, height: 7.5),
-                              cornerWidth: 2, cornerHeight: 2, transform: nil)
-            let legs = CGMutablePath()
-            for end in [CGPoint(x: 5.5, y: 20.5), CGPoint(x: 12, y: 20.5), CGPoint(x: 18.5, y: 20.5)] {
-                legs.move(to: CGPoint(x: 12, y: 11)); legs.addLine(to: end)
-            }
-            return [Part(role: .stroke, path: body), Part(role: .stroke, path: legs),
-                    Part(role: .ring, path: Self.circle(15.2, 7.25, 1.9))]
         case .post:
             // Пост ДПС: щит со звездой.
             let shield = CGMutablePath()
@@ -200,9 +157,6 @@ nonisolated enum CameraGlyph: String, CaseIterable, Sendable {
             switch part.role {
             case .stroke:
                 out.addPath(part.path.copy(strokingWithWidth: width, lineCap: .round, lineJoin: .round, miterLimit: 10))
-            case .ring:
-                out.addPath(part.path.copy(strokingWithWidth: width * Self.ringShare, lineCap: .round,
-                                           lineJoin: .round, miterLimit: 10))
             case .fill:
                 out.addPath(part.path)
             }
@@ -229,9 +183,6 @@ nonisolated enum CameraGlyph: String, CaseIterable, Sendable {
             switch part.role {
             case .stroke:
                 cg.setLineWidth(width)
-                cg.strokePath()
-            case .ring:
-                cg.setLineWidth(width * Self.ringShare)
                 cg.strokePath()
             case .fill:
                 cg.fillPath()

@@ -69,7 +69,7 @@ enum CarPlayBannerArt {
         // Значок «Монета» (29.C) — тот же, что на карте и телефоне.
         guard let cg = UIGraphicsGetCurrentContext() else { return }
         CameraCoin.draw(type.glyph, in: cg, disc: circle,
-                        fill: Theme.rgb(type.markerRGB).cgColor, ink: CameraIconArt.glyphColor(type),
+                        fill: Theme.rgb(type.glyph.fillRGB).cgColor, ink: Theme.rgb(type.glyph.inkRGB).cgColor,
                         rim: UIColor.white.cgColor, shadow: false)
     }
 
@@ -105,14 +105,6 @@ enum CarPlayBannerArt {
                                 width: max(barHeight, track.width * share), height: barHeight)
             UIColor(type.tint).setFill()
             UIBezierPath(roundedRect: filled, cornerRadius: barHeight / 2).fill()
-            // Светлая заливка (радар, тренога) на светлой дорожке днём —
-            // тонкий тёмный край, как кольцо у «Радар!».
-            if !onDark, type.glyphTint != .white {
-                let edge = UIBezierPath(roundedRect: filled.insetBy(dx: 0.5, dy: 0.5), cornerRadius: barHeight / 2)
-                edge.lineWidth = 1
-                UIColor(white: 0, alpha: 0.3).setStroke()
-                edge.stroke()
-            }
         }
     }
 

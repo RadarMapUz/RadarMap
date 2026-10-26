@@ -1,13 +1,15 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="uz">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RadarMap — камеры и радары Узбекистана</title>
-<meta name="description" content="Голосовой антирадар и карта камер видеофиксации Узбекистана. Работает без интернета, предупреждает голосом, треноги находим вместе.">
+<title data-ru="RadarMap — камеры и радары Узбекистана" data-uz="RadarMap — O‘zbekiston kameralari va radarlari">RadarMap — O‘zbekiston kameralari va radarlari</title>
+<meta name="description" content="O‘zbekiston yo‘l kameralari xaritasi va ovozli antiradar. Internetsiz ishlaydi, ovoz bilan ogohlantiradi, ko‘chma radarlarni birgalikda topamiz.">
 <meta name="theme-color" content="#05070c">
-<meta property="og:title" content="RadarMap — камеры и радары Узбекистана">
-<meta property="og:description" content="Предупреждает голосом о камерах. Работает без интернета. Треноги находим вместе.">
+<meta property="og:title" content="RadarMap — O‘zbekiston kameralari va radarlari">
+<meta property="og:description" content="Kameralar haqida ovoz bilan ogohlantiradi. Internetsiz ishlaydi. Ko‘chma radarlarni birgalikda topamiz.">
+<meta property="og:locale" content="uz_UZ">
+<meta property="og:locale:alternate" content="ru_RU">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://soulmed.uz/radarmap/">
 <!-- Ссылку шлют в мессенджеры — без картинки Telegram и WhatsApp рисуют голую
@@ -606,14 +608,14 @@ footer a:hover { text-decoration:underline; }
 
 <div class="bar" id="bar">
   <span class="name">RadarMap</span>
-  <div class="lang" id="lang" role="group" aria-label="Язык / Til">
-    <button type="button" data-set="ru" aria-pressed="true">RU</button>
-    <button type="button" data-set="uz" aria-pressed="false">UZ</button>
+  <div class="lang" id="lang" role="group" aria-label="Til / Язык">
+    <button type="button" data-set="uz" aria-pressed="true">UZ</button>
+    <button type="button" data-set="ru" aria-pressed="false">RU</button>
   </div>
   <!-- До публикации в App Store — «Скоро», не ссылка: app-id 6792473173 отдаёт 404. -->
   <span class="btn primary mini soon" aria-disabled="true"
      style="padding:9px 16px;font-size:14px"
-     data-ru="Скоро" data-uz="Tez orada">Скоро</span>
+     data-ru="Скоро" data-uz="Tez orada">Tez orada</span>
 </div>
 
 <div class="wrap">
@@ -629,47 +631,47 @@ footer a:hover { text-decoration:underline; }
     <p class="sub"
        data-ru="Карта дорожных камер Узбекистана и голосовое предупреждение. Работает без интернета."
        data-uz="O‘zbekiston yo‘llaridagi kameralar xaritasi va ovozli ogohlantirish. Internetsiz ishlaydi.">
-      Карта дорожных камер Узбекистана и голосовое предупреждение. Работает без интернета.</p>
+      O‘zbekiston yo‘llaridagi kameralar xaritasi va ovozli ogohlantirish. Internetsiz ishlaydi.</p>
     <div class="cta">
       <span class="btn primary soon" aria-disabled="true">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.4 12.8c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9-.7 0-1.8-.9-3-.8-1.5 0-2.9.9-3.7 2.3-1.6 2.7-.4 6.8 1.1 9 .8 1.1 1.6 2.4 2.8 2.3 1.1 0 1.6-.7 3-.7s1.8.7 3 .7c1.2 0 2-1.1 2.8-2.2.9-1.3 1.2-2.5 1.3-2.6-.1 0-2.4-.9-2.4-3.6zM14.2 5.9c.6-.8 1-1.8.9-2.9-.9 0-2 .6-2.6 1.4-.6.7-1.1 1.7-1 2.7 1 .1 2-.5 2.7-1.2z"/></svg>
-        <span data-ru="Скоро в App Store" data-uz="Tez orada App Store’da">Скоро в App Store</span>
+        <span data-ru="Скоро в App Store" data-uz="Tez orada App Store’da">Tez orada App Store’da</span>
       </span>
       <a class="btn support" href="https://taps.uz/radarmapuz" rel="noopener">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 20.7l-1.4-1.3C5.6 14.9 2.5 12 2.5 8.5 2.5 6 4.5 4 7 4c1.6 0 3.1.8 4 2 .9-1.2 2.4-2 4-2 2.5 0 4.5 2 4.5 4.5 0 3.5-3.1 6.4-8.1 10.9L12 20.7z"/></svg>
-        <span data-ru="Поддержать проект" data-uz="Loyihani qo‘llab-quvvatlash">Поддержать проект</span>
+        <span data-ru="Поддержать проект" data-uz="Loyihani qo‘llab-quvvatlash">Loyihani qo‘llab-quvvatlash</span>
       </a>
     </div>
     <p class="note" data-ru="iPhone · iOS 18 и новее · CarPlay и Apple Watch"
        data-uz="iPhone · iOS 18 va undan yuqori · CarPlay va Apple Watch">
-      iPhone · iOS 18 и новее · CarPlay и Apple Watch</p>
+      iPhone · iOS 18 va undan yuqori · CarPlay va Apple Watch</p>
   </header>
 
   <!-- ===== Сцена 1: сам момент предупреждения ===== -->
   <section class="demo rise">
     <div>
       <h2 data-ru="Скажет раньше, чем вы увидите"
-          data-uz="Siz ko‘rishingizdan oldin ogohlantiradi">Скажет раньше, чем вы увидите</h2>
+          data-uz="Siz ko‘rishingizdan oldin ogohlantiradi">Siz ko‘rishingizdan oldin ogohlantiradi</h2>
       <p class="lead"
          data-ru="Расстояние считается от вашей скорости, а не задано в метрах: на 110 км/ч предупреждение уходит за 670 метров, в городе — за 300."
          data-uz="Ogohlantirish masofasi oldindan belgilangan metrga emas, tezligingizga qarab hisoblanadi: soatiga 110 km tezlikda 670 metr qolganda, shahar ichida 300 metr qolganda aytiladi.">
-        Расстояние считается от вашей скорости, а не задано в метрах: на 110 км/ч предупреждение уходит за 670 метров, в городе — за 300.</p>
+        Ogohlantirish masofasi oldindan belgilangan metrga emas, tezligingizga qarab hisoblanadi: soatiga 110 km tezlikda 670 metr qolganda, shahar ichida 300 metr qolganda aytiladi.</p>
       <ul class="steps">
         <li><span class="n">1</span><div>
-          <h3 data-ru="В городе — коротко" data-uz="Shaharda — qisqa">В городе — коротко</h3>
+          <h3 data-ru="В городе — коротко" data-uz="Shaharda — qisqa">Shaharda — qisqa</h3>
           <p data-ru="«Камера, 300 метров». Камеры на перекрёстке назову одной фразой, а не четырьмя."
              data-uz="«Kamera, 300 metr». Chorrahadagi bir nechta kamerani to‘rt marta emas, bir marta aytaman.">
-            «Камера, 300 метров». Камеры на перекрёстке назову одной фразой, а не четырьмя.</p></div></li>
+            «Kamera, 300 metr». Chorrahadagi bir nechta kamerani to‘rt marta emas, bir marta aytaman.</p></div></li>
         <li><span class="n">2</span><div>
-          <h3 data-ru="На трассе — полностью" data-uz="Yo‘lda — batafsil">На трассе — полностью</h3>
+          <h3 data-ru="На трассе — полностью" data-uz="Yo‘lda — batafsil">Yo‘lda — batafsil</h3>
           <p data-ru="Тип камеры и сторона: там счёт идёт на секунды, и подробность окупается."
              data-uz="Kamera turi va qaysi tomonda ekani: yo‘lda vaqt soniyalar bilan o‘lchanadi, shuning uchun tafsilot asqotadi.">
-            Тип камеры и сторона: там счёт идёт на секунды, и подробность окупается.</p></div></li>
+            Kamera turi va qaysi tomonda ekani: yo‘lda vaqt soniyalar bilan o‘lchanadi, shuning uchun tafsilot asqotadi.</p></div></li>
         <li><span class="n">3</span><div>
-          <h3 data-ru="В пробке — молчу" data-uz="Tirbandlikda — jim turaman">В пробке — молчу</h3>
+          <h3 data-ru="В пробке — молчу" data-uz="Tirbandlikda — jim turaman">Tirbandlikda — jim turaman</h3>
           <p data-ru="И свои камеры, мимо которых вы ездите каждый день, тоже перестаю называть."
              data-uz="Har kuni yoningizdan o‘tadigan tanish kameralarni ham aytmay qo‘yaman.">
-            И свои камеры, мимо которых вы ездите каждый день, тоже перестаю называть.</p></div></li>
+            Har kuni yoningizdan o‘tadigan tanish kameralarni ham aytmay qo‘yaman.</p></div></li>
       </ul>
     </div>
 
@@ -683,7 +685,7 @@ footer a:hover { text-decoration:underline; }
         <span class="dash"></span><span class="dash"></span><span class="dash"></span>
         <span class="dash"></span><span class="dash"></span><span class="dash"></span>
         <div class="hud">
-          <div class="spd"><b></b><span data-ru="км/ч" data-uz="km/soat">км/ч</span></div>
+          <div class="spd"><b></b><span data-ru="км/ч" data-uz="km/soat">km/soat</span></div>
           <div class="limit">60</div>
         </div>
         <div class="pin">
@@ -722,8 +724,8 @@ footer a:hover { text-decoration:underline; }
         </div>
         <div class="alert">
           <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8-3h-3.2l-1.4-2H8.6L7.2 5H4a2 2 0 00-2 2v11a2 2 0 002 2h16a2 2 0 002-2V7a2 2 0 00-2-2z"/></svg></div>
-          <div><div class="t" data-ru="Камера" data-uz="Kamera">Камера</div><div class="d" data-ru="впереди справа" data-uz="oldinda, o‘ngda">впереди справа</div></div>
-          <div class="m"><span data-ru="м" data-uz="m">м</span></div>
+          <div><div class="t" data-ru="Камера" data-uz="Kamera">Kamera</div><div class="d" data-ru="впереди справа" data-uz="oldinda, o‘ngda">oldinda, o‘ngda</div></div>
+          <div class="m"><span data-ru="м" data-uz="m">m</span></div>
         </div>
         <div class="wave"><b></b><b></b><b></b><b></b><b></b><b></b><b></b></div>
       </div>
@@ -740,33 +742,33 @@ footer a:hover { text-decoration:underline; }
       <div class="cap"
            data-ru="Пунктир — пока никто не подтвердил. Сплошная — проверено другим водителем."
            data-uz="Uzuq chiziq — hali hech kim tasdiqlamagan. To‘liq chiziq — boshqa haydovchi tekshirgan.">
-        Пунктир — пока никто не подтвердил. Сплошная — проверено другим водителем.</div>
+        Uzuq chiziq — hali hech kim tasdiqlamagan. To‘liq chiziq — boshqa haydovchi tekshirgan.</div>
     </div>
     <div>
       <h2 data-ru="Треноги находим вместе"
-          data-uz="Uch oyoq kameralarni birgalikda topamiz">Треноги находим вместе</h2>
+          data-uz="Uch oyoq kameralarni birgalikda topamiz">Uch oyoq kameralarni birgalikda topamiz</h2>
       <p class="lead"
          data-ru="Расписание передвижных радаров утверждается ежедневно и не публикуется — с 2022 года его не увидеть даже на обочине. Единственный способ узнать о засаде — предупредить друг друга."
          data-uz="Ko‘chma radarlarning joylashuv jadvali har kuni tasdiqlanadi, ammo e’lon qilinmaydi — 2022 yildan beri uni yo‘l chetida ham ko‘rib bo‘lmaydi. Pistirma haqida bilishning yagona yo‘li — bir-birimizni ogohlantirish.">
-        Расписание передвижных радаров утверждается ежедневно и не публикуется — с 2022 года его не увидеть даже на обочине. Единственный способ узнать о засаде — предупредить друг друга.</p>
+        Ko‘chma radarlarning joylashuv jadvali har kuni tasdiqlanadi, ammo e’lon qilinmaydi — 2022 yildan beri uni yo‘l chetida ham ko‘rib bo‘lmaydi. Pistirma haqida bilishning yagona yo‘li — bir-birimizni ogohlantirish.</p>
       <ul class="steps">
         <li><span class="n">1</span><div>
           <h3 data-ru="Одна кнопка, не глядя на экран"
-              data-uz="Bitta tugma, ekranga qaramasdan">Одна кнопка, не глядя на экран</h3>
+              data-uz="Bitta tugma, ekranga qaramasdan">Bitta tugma, ekranga qaramasdan</h3>
           <p data-ru="Нажали случайно — рядом «Отменить». Нет связи — отправлю, когда появится."
              data-uz="Tasodifan bosildimi — yonida «Bekor qilish» turadi. Aloqa bo‘lmasa, paydo bo‘lishi bilan yuboraman.">
-            Нажали случайно — рядом «Отменить». Нет связи — отправлю, когда появится.</p></div></li>
+            Tasodifan bosildimi — yonida «Bekor qilish» turadi. Aloqa bo‘lmasa, paydo bo‘lishi bilan yuboraman.</p></div></li>
         <li><span class="n">2</span><div>
           <h3 data-ru="Слух не выдаётся за факт"
-              data-uz="Taxmin fakt o‘rnida ko‘rsatilmaydi">Слух не выдаётся за факт</h3>
+              data-uz="Taxmin fakt o‘rnida ko‘rsatilmaydi">Taxmin fakt o‘rnida ko‘rsatilmaydi</h3>
           <p data-ru="Неподтверждённую отметку рисую пунктиром и честно говорю: «отметка водителей»."
              data-uz="Tasdiqlanmagan belgini uzuq chiziq bilan chizaman va ochiq aytaman: «haydovchilar belgisi».">
-            Неподтверждённую отметку рисую пунктиром и честно говорю: «отметка водителей».</p></div></li>
+            Tasdiqlanmagan belgini uzuq chiziq bilan chizaman va ochiq aytaman: «haydovchilar belgisi».</p></div></li>
         <li><span class="n">3</span><div>
-          <h3 data-ru="Фейк умирает сам" data-uz="Soxta belgi o‘z-o‘zidan yo‘qoladi">Фейк умирает сам</h3>
+          <h3 data-ru="Фейк умирает сам" data-uz="Soxta belgi o‘z-o‘zidan yo‘qoladi">Soxta belgi o‘z-o‘zidan yo‘qoladi</h3>
           <p data-ru="Отметку, которую не подтвердил ни один независимый водитель, снимать не нужно — она исчезает."
              data-uz="Birorta mustaqil haydovchi tasdiqlamagan belgini o‘chirish shart emas — u o‘zi yo‘qoladi.">
-            Отметку, которую не подтвердил ни один независимый водитель, снимать не нужно — она исчезает.</p></div></li>
+            Birorta mustaqil haydovchi tasdiqlamagan belgini o‘chirish shart emas — u o‘zi yo‘qoladi.</p></div></li>
       </ul>
     </div>
   </section>
@@ -780,123 +782,123 @@ footer a:hover { text-decoration:underline; }
             <circle class="bg" cx="52" cy="52" r="47"></circle>
             <circle class="fg" cx="52" cy="52" r="47"></circle>
           </svg>
-          <div class="val"><b>78</b><span data-ru="рейтинг" data-uz="reyting">рейтинг</span></div>
+          <div class="val"><b>78</b><span data-ru="рейтинг" data-uz="reyting">reyting</span></div>
         </div>
         <div>
-          <div class="km" data-ru="486 км" data-uz="486 km">486 км</div>
-          <div class="cap" data-ru="за неделю · 12 поездок" data-uz="hafta davomida · 12 safar">за неделю · 12 поездок</div>
-          <span class="save" data-ru="−2,4 млн сум штрафов" data-uz="−2,4 mln so‘m jarima">−2,4 млн сум штрафов</span>
+          <div class="km" data-ru="486 км" data-uz="486 km">486 km</div>
+          <div class="cap" data-ru="за неделю · 12 поездок" data-uz="hafta davomida · 12 safar">hafta davomida · 12 safar</div>
+          <span class="save" data-ru="−2,4 млн сум штрафов" data-uz="−2,4 mln so‘m jarima">−2,4 mln so‘m jarima</span>
         </div>
       </div>
       <div class="week"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
       <div class="days">
-        <span data-ru="пн" data-uz="du">пн</span><span data-ru="вт" data-uz="se">вт</span>
-        <span data-ru="ср" data-uz="ch">ср</span><span data-ru="чт" data-uz="pa">чт</span>
-        <span data-ru="пт" data-uz="ju">пт</span><span data-ru="сб" data-uz="sh">сб</span>
-        <span data-ru="вс" data-uz="ya">вс</span></div>
+        <span data-ru="пн" data-uz="du">du</span><span data-ru="вт" data-uz="se">se</span>
+        <span data-ru="ср" data-uz="ch">ch</span><span data-ru="чт" data-uz="pa">pa</span>
+        <span data-ru="пт" data-uz="ju">ju</span><span data-ru="сб" data-uz="sh">sh</span>
+        <span data-ru="вс" data-uz="ya">ya</span></div>
     </div>
     <div>
       <h2 data-ru="После каждой поездки — разбор"
-          data-uz="Har bir safardan keyin — tahlil">После каждой поездки — разбор</h2>
+          data-uz="Har bir safardan keyin — tahlil">Har bir safardan keyin — tahlil</h2>
       <p class="lead"
          data-ru="Не «вы проехали 40 километров», а где именно вы теряете деньги: скорость на каждой камере, повторяющиеся места и счёт штрафов, которых удалось избежать."
          data-uz="«Siz 40 kilometr yurdingiz» emas, balki aynan qayerda pul yo‘qotayotganingiz: har bir kameradagi tezlik, takrorlanadigan joylar va oldini olingan jarimalar hisobi.">
-        Не «вы проехали 40 километров», а где именно вы теряете деньги: скорость на каждой камере, повторяющиеся места и счёт штрафов, которых удалось избежать.</p>
+        «Siz 40 kilometr yurdingiz» emas, balki aynan qayerda pul yo‘qotayotganingiz: har bir kameradagi tezlik, takrorlanadigan joylar va oldini olingan jarimalar hisobi.</p>
       <ul class="steps">
         <li><span class="n">1</span><div>
           <h3 data-ru="Рейтинг, который можно проверить"
-              data-uz="Tekshirib ko‘rsa bo‘ladigan reyting">Рейтинг, который можно проверить</h3>
+              data-uz="Tekshirib ko‘rsa bo‘ladigan reyting">Tekshirib ko‘rsa bo‘ladigan reyting</h3>
           <p data-ru="Каждый вычет разложен по поездкам и камерам и в сумме сходится до балла."
              data-uz="Har bir ayirma safarlar va kameralar bo‘yicha yoyilgan hamda ballgacha aniq jamlanadi.">
-            Каждый вычет разложен по поездкам и камерам и в сумме сходится до балла.</p></div></li>
+            Har bir ayirma safarlar va kameralar bo‘yicha yoyilgan hamda ballgacha aniq jamlanadi.</p></div></li>
         <li><span class="n">2</span><div>
-          <h3 data-ru="Деньги, а не абстракция" data-uz="Mavhumlik emas, aniq pul">Деньги, а не абстракция</h3>
+          <h3 data-ru="Деньги, а не абстракция" data-uz="Mavhumlik emas, aniq pul">Mavhumlik emas, aniq pul</h3>
           <p data-ru="Штрафы считаются по действующей шкале в БРВ — сумма настоящая."
              data-uz="Jarimalar amaldagi BHM shkalasi bo‘yicha hisoblanadi — summa haqiqiy.">
-            Штрафы считаются по действующей шкале в БРВ — сумма настоящая.</p></div></li>
+            Jarimalar amaldagi BHM shkalasi bo‘yicha hisoblanadi — summa haqiqiy.</p></div></li>
         <li><span class="n">3</span><div>
-          <h3 data-ru="История остаётся у вас" data-uz="Tarix sizda qoladi">История остаётся у вас</h3>
+          <h3 data-ru="История остаётся у вас" data-uz="Tarix sizda qoladi">Tarix sizda qoladi</h3>
           <p data-ru="Поездки, треки и проезды камер хранятся в телефоне и на сервер не уходят."
              data-uz="Safarlar, treklar va kameralardan o‘tishlar telefonda saqlanadi, serverga yuborilmaydi.">
-            Поездки, треки и проезды камер хранятся в телефоне и на сервер не уходят.</p></div></li>
+            Safarlar, treklar va kameralardan o‘tishlar telefonda saqlanadi, serverga yuborilmaydi.</p></div></li>
       </ul>
     </div>
   </section>
 
   <!-- ===== Возможности ===== -->
   <section class="rise">
-    <h2 data-ru="Что ещё умеет" data-uz="Yana nima qila oladi">Что ещё умеет</h2>
+    <h2 data-ru="Что ещё умеет" data-uz="Yana nima qila oladi">Yana nima qila oladi</h2>
     <div class="grid">
       <div class="card">
         <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div>
-        <h3 data-ru="Работает без сети" data-uz="Tarmoqsiz ishlaydi">Работает без сети</h3>
+        <h3 data-ru="Работает без сети" data-uz="Tarmoqsiz ishlaydi">Tarmoqsiz ishlaydi</h3>
         <p data-ru="База камер лежит в телефоне. На трассе карта может не открыться — предупреждения продолжают работать."
            data-uz="Kameralar bazasi telefon xotirasida. Yo‘lda xarita ochilmasligi mumkin, lekin ogohlantirishlar ishlayveradi.">
-          База камер лежит в телефоне. На трассе карта может не открыться — предупреждения продолжают работать.</p>
+          Kameralar bazasi telefon xotirasida. Yo‘lda xarita ochilmasligi mumkin, lekin ogohlantirishlar ishlayveradi.</p>
       </div>
       <div class="card">
         <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M5 11V8a7 7 0 0114 0v3"/></svg></div>
-        <h3 data-ru="Без регистрации" data-uz="Ro‘yxatdan o‘tish shart emas">Без регистрации</h3>
+        <h3 data-ru="Без регистрации" data-uz="Ro‘yxatdan o‘tish shart emas">Ro‘yxatdan o‘tish shart emas</h3>
         <p data-ru="Ни аккаунта, ни номера телефона, ни почты. Установили — работает."
            data-uz="Na hisob, na telefon raqami, na pochta kerak. O‘rnatdingiz — ishlaydi.">
-          Ни аккаунта, ни номера телефона, ни почты. Установили — работает.</p>
+          Na hisob, na telefon raqami, na pochta kerak. O‘rnatdingiz — ishlaydi.</p>
       </div>
       <div class="card">
         <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="7" width="16" height="10" rx="3"/><path d="M22 11v2"/></svg></div>
-        <h3 data-ru="Бережёт батарею" data-uz="Batareyani tejaydi">Бережёт батарею</h3>
+        <h3 data-ru="Бережёт батарею" data-uz="Batareyani tejaydi">Batareyani tejaydi</h3>
         <p data-ru="В фоне работает на геозонах, а не на постоянном GPS. Точность подстраивается под расстояние до ближайшей камеры."
            data-uz="Fon rejimida doimiy GPS emas, geozonalar orqali ishlaydi. Aniqlik eng yaqin kameragacha bo‘lgan masofaga moslashadi.">
-          В фоне работает на геозонах, а не на постоянном GPS. Точность подстраивается под расстояние до ближайшей камеры.</p>
+          Fon rejimida doimiy GPS emas, geozonalar orqali ishlaydi. Aniqlik eng yaqin kameragacha bo‘lgan masofaga moslashadi.</p>
       </div>
       <div class="card">
         <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="13" rx="2"/><path d="M8 21h8"/></svg></div>
-        <h3 data-ru="CarPlay и Apple Watch" data-uz="CarPlay va Apple Watch">CarPlay и Apple Watch</h3>
+        <h3 data-ru="CarPlay и Apple Watch" data-uz="CarPlay va Apple Watch">CarPlay va Apple Watch</h3>
         <p data-ru="Полноценная карта на экране машины и предупреждение вибрацией на запястье."
            data-uz="Avtomobil ekranida to‘liq xarita, bilakda esa tebranishli ogohlantirish.">
-          Полноценная карта на экране машины и предупреждение вибрацией на запястье.</p>
+          Avtomobil ekranida to‘liq xarita, bilakda esa tebranishli ogohlantirish.</p>
       </div>
       <div class="card">
         <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 010 18 15 15 0 010-18"/></svg></div>
-        <h3 data-ru="Русский и узбекский" data-uz="Rus va o‘zbek tillari">Русский и узбекский</h3>
+        <h3 data-ru="Русский и узбекский" data-uz="Rus va o‘zbek tillari">Rus va o‘zbek tillari</h3>
         <p data-ru="Язык переключается внутри приложения, независимо от языка телефона."
            data-uz="Til ilova ichida almashtiriladi — telefon tilidan qat’i nazar.">
-          Язык переключается внутри приложения, независимо от языка телефона.</p>
+          Til ilova ichida almashtiriladi — telefon tilidan qat’i nazar.</p>
       </div>
       <div class="card">
         <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8 4v6c0 5-3.4 8.6-8 10-4.6-1.4-8-5-8-10V6z"/></svg></div>
-        <h3 data-ru="Без рекламы" data-uz="Reklamasiz">Без рекламы</h3>
+        <h3 data-ru="Без рекламы" data-uz="Reklamasiz">Reklamasiz</h3>
         <p data-ru="Ни баннеров, ни подписок, ни трекеров. За рулём это не мелочь."
            data-uz="Na banner, na obuna, na kuzatuv. Rul ortida bu arzimas narsa emas.">
-          Ни баннеров, ни подписок, ни трекеров. За рулём это не мелочь.</p>
+          Na banner, na obuna, na kuzatuv. Rul ortida bu arzimas narsa emas.</p>
       </div>
     </div>
   </section>
 
   <!-- ===== Приватность ===== -->
   <section class="rise">
-    <h2 data-ru="Что уходит на сервер" data-uz="Serverga nima yuboriladi">Что уходит на сервер</h2>
+    <h2 data-ru="Что уходит на сервер" data-uz="Serverga nima yuboriladi">Serverga nima yuboriladi</h2>
     <p class="lead" data-ru="Полный список. Больше ничего нет — ни истории поездок, ни маршрутов, ни адресов."
        data-uz="To‘liq ro‘yxat. Bundan boshqa hech narsa yuborilmaydi — na safarlar tarixi, na marshrutlar, na manzillar.">
-      Полный список. Больше ничего нет — ни истории поездок, ни маршрутов, ни адресов.</p>
+      To‘liq ro‘yxat. Bundan boshqa hech narsa yuborilmaydi — na safarlar tarixi, na marshrutlar, na manzillar.</p>
     <div class="priv">
       <ul>
-        <li><span class="out">→</span><div><b data-ru="Отметки радаров" data-uz="Radar belgilari">Отметки радаров</b>
+        <li><span class="out">→</span><div><b data-ru="Отметки радаров" data-uz="Radar belgilari">Radar belgilari</b>
           <div data-ru="Только когда вы сами нажали кнопку: координата точки и случайный номер устройства."
                data-uz="Faqat o‘zingiz tugmani bosganingizda: belgi koordinatasi va tasodifiy qurilma raqami.">
-            Только когда вы сами нажали кнопку: координата точки и случайный номер устройства.</div></div></li>
-        <li><span class="out">→</span><div><b data-ru="Запрос маршрута" data-uz="Marshrut so‘rovi">Запрос маршрута</b>
+            Faqat o‘zingiz tugmani bosganingizda: belgi koordinatasi va tasodifiy qurilma raqami.</div></div></li>
+        <li><span class="out">→</span><div><b data-ru="Запрос маршрута" data-uz="Marshrut so‘rovi">Marshrut so‘rovi</b>
           <div data-ru="Точки «откуда» и «куда» в момент построения. Не сохраняются."
                data-uz="Marshrut qurilayotgan paytdagi boshlanish va tugash nuqtalari. Saqlanmaydi.">
-            Точки «откуда» и «куда» в момент построения. Не сохраняются.</div></div></li>
-        <li><span class="out">→</span><div><b data-ru="Счётчики за сутки" data-uz="Kunlik hisoblagichlar">Счётчики за сутки</b>
+            Marshrut qurilayotgan paytdagi boshlanish va tugash nuqtalari. Saqlanmaydi.</div></div></li>
+        <li><span class="out">→</span><div><b data-ru="Счётчики за сутки" data-uz="Kunlik hisoblagichlar">Kunlik hisoblagichlar</b>
           <div data-ru="Сколько поездок и километров — только числа, без координат и времени. Выключается в настройках."
                data-uz="Nechta safar va necha kilometr — faqat raqamlar, koordinata va vaqtsiz. Sozlamalarda o‘chirib qo‘yiladi.">
-            Сколько поездок и километров — только числа, без координат и времени. Выключается в настройках.</div></div></li>
+            Nechta safar va necha kilometr — faqat raqamlar, koordinata va vaqtsiz. Sozlamalarda o‘chirib qo‘yiladi.</div></div></li>
       </ul>
       <div class="foot"
            data-ru="Номер устройства случайный и обновляется каждые 30 дней — связать ваши поездки в одну длинную историю невозможно даже нам."
            data-uz="Qurilma raqami tasodifiy va har 30 kunda yangilanadi — safarlaringizni bitta uzun tarixga bog‘lash bizning ham qo‘limizdan kelmaydi.">
-        Номер устройства случайный и обновляется каждые 30 дней — связать ваши поездки в одну длинную историю невозможно даже нам.</div>
+        Qurilma raqami tasodifiy va har 30 kunda yangilanadi — safarlaringizni bitta uzun tarixga bog‘lash bizning ham qo‘limizdan kelmaydi.</div>
     </div>
   </section>
 
@@ -904,24 +906,24 @@ footer a:hover { text-decoration:underline; }
   <section class="rise">
     <div class="support-card">
       <h2 style="margin:0" data-ru="Проект живёт на свои"
-          data-uz="Loyiha o‘z hisobidan yashaydi">Проект живёт на свои</h2>
+          data-uz="Loyiha o‘z hisobidan yashaydi">Loyiha o‘z hisobidan yashaydi</h2>
       <p data-ru="Приложение бесплатное, без рекламы и без подписок. Сервер, карты и обновление базы камер оплачиваются из своего кармана — если оно вам пригодилось, можно помочь."
          data-uz="Ilova bepul, reklamasiz va obunasiz. Server, xaritalar va kameralar bazasini yangilash o‘z hisobimizdan qoplanadi — agar ilova asqotgan bo‘lsa, yordam berishingiz mumkin.">
-        Приложение бесплатное, без рекламы и без подписок. Сервер, карты и обновление базы камер оплачиваются из своего кармана — если оно вам пригодилось, можно помочь.</p>
+        Ilova bepul, reklamasiz va obunasiz. Server, xaritalar va kameralar bazasini yangilash o‘z hisobimizdan qoplanadi — agar ilova asqotgan bo‘lsa, yordam berishingiz mumkin.</p>
       <a class="btn support" href="https://taps.uz/radarmapuz" rel="noopener">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 20.7l-1.4-1.3C5.6 14.9 2.5 12 2.5 8.5 2.5 6 4.5 4 7 4c1.6 0 3.1.8 4 2 .9-1.2 2.4-2 4-2 2.5 0 4.5 2 4.5 4.5 0 3.5-3.1 6.4-8.1 10.9L12 20.7z"/></svg>
-        <span data-ru="Поддержать проект" data-uz="Loyihani qo‘llab-quvvatlash">Поддержать проект</span>
+        <span data-ru="Поддержать проект" data-uz="Loyihani qo‘llab-quvvatlash">Loyihani qo‘llab-quvvatlash</span>
       </a>
       <p class="note" data-ru="Откроется taps.uz — любая сумма, без регистрации"
          data-uz="taps.uz ochiladi — istalgan summa, ro‘yxatdan o‘tmasdan">
-        Откроется taps.uz — любая сумма, без регистрации</p>
+        taps.uz ochiladi — istalgan summa, ro‘yxatdan o‘tmasdan</p>
     </div>
   </section>
 
   <footer>
     <div class="links">
-      <a href="privacy.html" data-ru="Политика конфиденциальности" data-uz="Maxfiylik siyosati">Политика конфиденциальности</a>
-      <a href="mailto:rasul.sadullaev@gmail.com" data-ru="Написать разработчику" data-uz="Dasturchiga yozish">Написать разработчику</a>
+      <a href="privacy.html" data-ru="Политика конфиденциальности" data-uz="Maxfiylik siyosati">Maxfiylik siyosati</a>
+      <a href="mailto:rasul.sadullaev@gmail.com" data-ru="Написать разработчику" data-uz="Dasturchiga yozish">Dasturchiga yozish</a>
       <!-- Третьей ссылки «Поддержать» здесь больше нет: просьба звучала на
            странице трижды — в герое, в блоке и тут, — и разбавляла призыв,
            который должен побеждать. Блок с ней стоит прямо над подвалом. -->
@@ -929,7 +931,7 @@ footer a:hover { text-decoration:underline; }
     </div>
     <p data-ru="Карты и ограничения скорости — © участники OpenStreetMap."
        data-uz="Xaritalar va tezlik cheklovlari — © OpenStreetMap ishtirokchilari.">
-      Карты и ограничения скорости — © участники OpenStreetMap.</p>
+      Xaritalar va tezlik cheklovlari — © OpenStreetMap ishtirokchilari.</p>
   </footer>
 
 </div>
@@ -937,8 +939,9 @@ footer a:hover { text-decoration:underline; }
 <script>
 (function () {
   'use strict';
-  // --- Язык. Выбор запоминается, по умолчанию берётся из браузера: страницу
-  //     открывают из мессенджера, и лишний тап на старте не нужен.
+  // --- Язык. Основной — узбекский (владелец, 26.10): им написана сама
+  //     разметка, его видят поисковики и превью в Telegram. Выбор русского
+  //     запоминается.
   var LANGS = ['ru', 'uz'];
   function apply(lang) {
     document.documentElement.lang = lang;
@@ -951,16 +954,21 @@ footer a:hover { text-decoration:underline; }
     for (var j = 0; j < buttons.length; j++) {
       buttons[j].setAttribute('aria-pressed', String(buttons[j].dataset.set === lang));
     }
-    try { localStorage.setItem('rm-lang', lang); } catch (e) { /* приватный режим */ }
   }
+  // Ключ новый: прежняя страница записывала язык браузера каждому
+  // посетителю, и вернувшиеся застряли бы на русском. Теперь пишем только
+  // явный выбор кнопкой.
+  var KEY = 'rm-lang-choice';
   var saved = null;
-  try { saved = localStorage.getItem('rm-lang'); } catch (e) { /* нет доступа */ }
-  var initial = saved || ((navigator.language || '').slice(0, 2) === 'uz' ? 'uz' : 'ru');
-  if (LANGS.indexOf(initial) < 0) { initial = 'ru'; }
-  if (initial !== 'ru') { apply(initial); } else { apply('ru'); }
+  try { saved = localStorage.getItem(KEY); } catch (e) { /* нет доступа */ }
+  var initial = saved || 'uz';
+  if (LANGS.indexOf(initial) < 0) { initial = 'uz'; }
+  apply(initial);
   document.getElementById('lang').addEventListener('click', function (event) {
     var button = event.target.closest('button');
-    if (button) { apply(button.dataset.set); }
+    if (!button) { return; }
+    apply(button.dataset.set);
+    try { localStorage.setItem(KEY, button.dataset.set); } catch (e) { /* приватный режим */ }
   });
 
   // --- Липкая шапка. Показываем её ровно тогда, когда кнопка героя ушла

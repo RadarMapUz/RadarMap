@@ -2493,5 +2493,84 @@ class ServerAuditTest(ServerTestBase):
         self.assertEqual(status, 400)
 
 
+class MineTest(ServerTestBase):
+    """POST /api/mine — польза своих отметок в «Итогах» (31E): только свои
+    отметки, только число независимых подтверждений, ничего о месте и времени."""
+
+    def report(self, device, ip, lat=41.31, lon=69.25, rtype="radar"):
+        status, body = _call(self.port, "POST", "/api/report",
+                             {"lat": lat, "lon": lon, "device": device, "type": rtype}, ip=ip)
+        self.assertEqual(status, 200)
+        return body["id"]
+
+    def vote(self, rid, device, ip, value=1):
+        status, _ = _call(self.port, "POST", "/api/vote",
+                          {"id": rid, "device": device, "value": value}, ip=ip)
+        self.assertEqual(status, 200)
+
+    def mine(self, device, ip="10.30.0.9"):
+        return _call(self.port, "POST", "/api/mine", {"device": device}, ip=ip)
+
+    def test_counts_independent_confirmations_of_own_reports(self):
+        rid = self.report("me", "10.30.1.1")
+        self.vote(rid, "a", "10.30.1.2")
+        self.vote(rid, "b", "10.30.1.3")
+        status, body = self.mine("me")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["reports"], [{"id": rid, "confirmers": 2}])
+
+    def test_foreign_reports_are_not_visible(self):
+        """Чужие отметки не видны: ни по своему UUID, ни перебором чужих."""
+        mine_id = self.report("me", "10.30.2.1", lat=41.31)
+        other = self.report("someone", "10.30.2.2", lat=41.40)
+        self.vote(other, "x", "10.30.2.3")
+        _, body = self.mine("me")
+        self.assertEqual([item["id"] for item in body["reports"]], [mine_id])
+        _, nobody = self.mine("stranger-uuid")
+        self.assertEqual(nobody["reports"], [], "незнакомый UUID получил чужие отметки")
+
+    def test_answer_has_no_coordinates_or_times(self):
+        rid = self.report("me", "10.30.3.1")
+        self.vote(rid, "a", "10.30.3.2")
+        _, body = self.mine("me")
+        self.assertEqual(set(body), {"reports"})
+        for item in body["reports"]:
+            self.assertEqual(set(item), {"id", "confirmers"})
+        raw = json.dumps(body)
+        for word in ("lat", "lon", "created", "expires", "type", "device", "ip", "41.31"):
+            self.assertNotIn(word, raw, f"в ответе /api/mine есть {word}")
+
+    def test_same_ip_and_rotated_uuid_do_not_count(self):
+        """Ротация UUID с того же адреса и голоса одного адреса — не водители."""
+        rid = self.report("me", "10.30.4.1")
+        self.vote(rid, "rot1", "10.30.4.1")     # тот же адрес, что у автора
+        self.vote(rid, "a", "10.30.4.2")
+        self.vote(rid, "b", "10.30.4.2")        # второй UUID того же адреса
+        self.vote(rid, "c", "10.30.4.3", value=-1)
+        _, body = self.mine("me")
+        self.assertEqual(body["reports"][0]["confirmers"], 1)
+
+    def test_merge_by_other_driver_counts(self):
+        rid = self.report("me", "10.30.5.1")
+        merged = self.report("driver2", "10.30.5.2", lat=41.3101, lon=69.2501)
+        self.assertEqual(merged, rid)
+        _, body = self.mine("me")
+        self.assertEqual(body["reports"][0]["confirmers"], 1)
+
+    def test_bad_requests(self):
+        self.assertEqual(_call(self.port, "POST", "/api/mine", {})[0], 400)
+        self.assertEqual(_call(self.port, "POST", "/api/mine", {"device": ""})[0], 400)
+        self.assertEqual(_call(self.port, "POST", "/api/mine", {"device": ["x"]})[0], 400)
+
+    def test_daily_cap_per_address(self):
+        api.IP_DAILY_CAPS["mine"], saved = 2, api.IP_DAILY_CAPS["mine"]
+        try:
+            self.assertEqual(self.mine("me", ip="10.30.6.1")[0], 200)
+            self.assertEqual(self.mine("me", ip="10.30.6.1")[0], 200)
+            self.assertEqual(self.mine("me", ip="10.30.6.1")[0], 429)
+        finally:
+            api.IP_DAILY_CAPS["mine"] = saved
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

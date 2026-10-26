@@ -14,7 +14,7 @@
 <meta property="og:url" content="https://soulmed.uz/radarmap/">
 <!-- Ссылку шлют в мессенджеры — без картинки Telegram и WhatsApp рисуют голую
      текстовую строку, и приложение выглядит как случайная ссылка. -->
-<meta property="og:image" content="https://soulmed.uz/radarmap/og.jpg">
+<meta property="og:image" content="https://soulmed.uz/radarmap/og.jpg?v=uz1">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
@@ -435,6 +435,14 @@ section { padding:72px 0; }
 .stage .cap b { color:var(--text); }
 
 /* --- Карточки --- */
+/* Скриншоты: лента с прокруткой на телефоне, сетка в ряд на широком экране. */
+.shots { padding-top:8px; }
+.shots .strip { display:flex; gap:14px; overflow-x:auto; scroll-snap-type:x mandatory;
+  padding:4px 2px 14px; -webkit-overflow-scrolling:touch; scrollbar-width:thin; }
+.shots img { flex:none; width:min(62vw,230px); height:auto; border-radius:22px;
+  border:1px solid var(--stroke); background:var(--surface); scroll-snap-align:center; }
+@media (min-width:1100px) { .shots .strip { overflow:visible; justify-content:center; }
+  .shots img { width:calc((100% - 70px)/6); } }
 .grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
 .card { background:var(--surface); border:1px solid var(--stroke); border-radius:18px;
         padding:22px; transition:transform .3s var(--ease), border-color .3s; }
@@ -647,6 +655,18 @@ footer a:hover { text-decoration:underline; }
       iPhone · iOS 18 va undan yuqori · CarPlay va Apple Watch</p>
   </header>
 
+  <!-- ===== Скриншоты: настоящие экраны приложения, на языке страницы ===== -->
+  <section class="shots rise" aria-label="Skrinshotlar / Скриншоты">
+    <div class="strip">
+      <img src="shots/uz/01.jpg" data-src-uz="shots/uz/01.jpg" data-src-ru="shots/ru/01.jpg" width="540" height="1173" loading="lazy" decoding="async" alt="">
+      <img src="shots/uz/02.jpg" data-src-uz="shots/uz/02.jpg" data-src-ru="shots/ru/02.jpg" width="540" height="1173" loading="lazy" decoding="async" alt="">
+      <img src="shots/uz/03.jpg" data-src-uz="shots/uz/03.jpg" data-src-ru="shots/ru/03.jpg" width="540" height="1173" loading="lazy" decoding="async" alt="">
+      <img src="shots/uz/04.jpg" data-src-uz="shots/uz/04.jpg" data-src-ru="shots/ru/04.jpg" width="540" height="1173" loading="lazy" decoding="async" alt="">
+      <img src="shots/uz/05.jpg" data-src-uz="shots/uz/05.jpg" data-src-ru="shots/ru/05.jpg" width="540" height="1173" loading="lazy" decoding="async" alt="">
+      <img src="shots/uz/06.jpg" data-src-uz="shots/uz/06.jpg" data-src-ru="shots/ru/06.jpg" width="540" height="1173" loading="lazy" decoding="async" alt="">
+    </div>
+  </section>
+
   <!-- ===== Сцена 1: сам момент предупреждения ===== -->
   <section class="demo rise">
     <div>
@@ -830,11 +850,39 @@ footer a:hover { text-decoration:underline; }
     <h2 data-ru="Что ещё умеет" data-uz="Yana nima qila oladi">Yana nima qila oladi</h2>
     <div class="grid">
       <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V9a4 4 0 014-4h8"/><path d="M14 2l3 3-3 3"/></svg></div>
+        <h3 data-ru="Ведёт по маршруту" data-uz="Marshrut bo‘yicha boshlab boradi">Marshrut bo‘yicha boshlab boradi</h3>
+        <p data-ru="Подскажет поворот голосом, покажет нужную полосу, а камеры на пути покажет прямо на линии маршрута."
+           data-uz="Burilishni ovoz bilan aytadi, kerakli qatorni ko‘rsatadi, yo‘ldagi kameralarni esa marshrut chizig‘ining o‘zida ko‘rsatadi.">
+          Burilishni ovoz bilan aytadi, kerakli qatorni ko‘rsatadi, yo‘ldagi kameralarni esa marshrut chizig‘ining o‘zida ko‘rsatadi.</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h4M10 18h4M16 18h4"/><path d="M4 12h16"/><path d="M4 6h7"/></svg></div>
+        <h3 data-ru="Пробки от самих водителей" data-uz="Tirbandlik — haydovchilarning o‘zidan">Tirbandlik — haydovchilarning o‘zidan</h3>
+        <p data-ru="Скорость на дорогах считается из обезличенных отрезков пути. Если впереди пробка — скажу и предложу объезд."
+           data-uz="Yo‘llardagi tezlik shaxssiz yo‘l bo‘laklaridan hisoblanadi. Oldinda tirbandlik bo‘lsa — aytaman va aylanib o‘tishni taklif qilaman.">
+          Yo‘llardagi tezlik shaxssiz yo‘l bo‘laklaridan hisoblanadi. Oldinda tirbandlik bo‘lsa — aytaman va aylanib o‘tishni taklif qilaman.</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/></svg></div>
+        <h3 data-ru="Близкие видят, когда вы будете" data-uz="Yaqinlaringiz qachon yetishingizni ko‘radi">Yaqinlaringiz qachon yetishingizni ko‘radi</h3>
+        <p data-ru="Одна ссылка — и дома видят время прибытия. Без координат и адреса, ссылка гаснет сама."
+           data-uz="Bitta havola — uydagilar yetib kelish vaqtini ko‘radi. Koordinata va manzilsiz, havola o‘zi o‘chadi.">
+          Bitta havola — uydagilar yetib kelish vaqtini ko‘radi. Koordinata va manzilsiz, havola o‘zi o‘chadi.</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+        <h3 data-ru="Дорога на работу" data-uz="Ishga yo‘l">Ishga yo‘l</h3>
+        <p data-ru="Сколько обычно занимает дорога и когда лучше выехать — считается в телефоне и никуда не уходит."
+           data-uz="Yo‘l odatda qancha vaqt olishi va qachon chiqqan ma’qulligi — telefonda hisoblanadi va hech qayerga yuborilmaydi.">
+          Yo‘l odatda qancha vaqt olishi va qachon chiqqan ma’qulligi — telefonda hisoblanadi va hech qayerga yuborilmaydi.</p>
+      </div>
+      <div class="card">
         <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div>
         <h3 data-ru="Работает без сети" data-uz="Tarmoqsiz ishlaydi">Tarmoqsiz ishlaydi</h3>
-        <p data-ru="База камер лежит в телефоне. На трассе карта может не открыться — предупреждения продолжают работать."
-           data-uz="Kameralar bazasi telefon xotirasida. Yo‘lda xarita ochilmasligi mumkin, lekin ogohlantirishlar ishlayveradi.">
-          Kameralar bazasi telefon xotirasida. Yo‘lda xarita ochilmasligi mumkin, lekin ogohlantirishlar ishlayveradi.</p>
+        <p data-ru="База из 3 600 с лишним камер лежит в телефоне. На трассе карта может не открыться — предупреждения продолжают работать."
+           data-uz="3 600 dan ortiq kameralar bazasi telefon xotirasida. Yo‘lda xarita ochilmasligi mumkin, lekin ogohlantirishlar ishlayveradi.">
+          3 600 dan ortiq kameralar bazasi telefon xotirasida. Yo‘lda xarita ochilmasligi mumkin, lekin ogohlantirishlar ishlayveradi.</p>
       </div>
       <div class="card">
         <div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M5 11V8a7 7 0 0114 0v3"/></svg></div>
@@ -877,28 +925,45 @@ footer a:hover { text-decoration:underline; }
   <!-- ===== Приватность ===== -->
   <section class="rise">
     <h2 data-ru="Что уходит на сервер" data-uz="Serverga nima yuboriladi">Serverga nima yuboriladi</h2>
-    <p class="lead" data-ru="Полный список. Больше ничего нет — ни истории поездок, ни маршрутов, ни адресов."
-       data-uz="To‘liq ro‘yxat. Bundan boshqa hech narsa yuborilmaydi — na safarlar tarixi, na marshrutlar, na manzillar.">
-      To‘liq ro‘yxat. Bundan boshqa hech narsa yuborilmaydi — na safarlar tarixi, na marshrutlar, na manzillar.</p>
+    <p class="lead" data-ru="Всё, что приложение отправляет. Истории поездок, дома и работы, адресов на сервере нет."
+       data-uz="Ilova yuboradigan hamma narsa shu. Safarlar tarixi, uy va ish joyi, manzillar serverga yuborilmaydi.">
+      Ilova yuboradigan hamma narsa shu. Safarlar tarixi, uy va ish joyi, manzillar serverga yuborilmaydi.</p>
     <div class="priv">
       <ul>
         <li><span class="out">→</span><div><b data-ru="Отметки радаров" data-uz="Radar belgilari">Radar belgilari</b>
-          <div data-ru="Только когда вы сами нажали кнопку: координата точки и случайный номер устройства."
-               data-uz="Faqat o‘zingiz tugmani bosganingizda: belgi koordinatasi va tasodifiy qurilma raqami.">
-            Faqat o‘zingiz tugmani bosganingizda: belgi koordinatasi va tasodifiy qurilma raqami.</div></div></li>
+          <div data-ru="Только когда вы сами нажали кнопку или ответили на вопрос: координата точки и случайный номер устройства."
+               data-uz="Faqat o‘zingiz tugmani bosganingizda yoki savolga javob berganingizda: belgi koordinatasi va tasodifiy qurilma raqami.">
+            Faqat o‘zingiz tugmani bosganingizda yoki savolga javob berganingizda: belgi koordinatasi va tasodifiy qurilma raqami.</div></div></li>
         <li><span class="out">→</span><div><b data-ru="Запрос маршрута" data-uz="Marshrut so‘rovi">Marshrut so‘rovi</b>
           <div data-ru="Точки «откуда» и «куда» в момент построения. Не сохраняются."
                data-uz="Marshrut qurilayotgan paytdagi boshlanish va tugash nuqtalari. Saqlanmaydi.">
             Marshrut qurilayotgan paytdagi boshlanish va tugash nuqtalari. Saqlanmaydi.</div></div></li>
+        <li><span class="out">→</span><div><b data-ru="Отрезки пути для пробок" data-uz="Tirbandlik uchun yo‘l bo‘laklari">Tirbandlik uchun yo‘l bo‘laklari</b>
+          <div data-ru="Во время поездки — куски около километра: точки и скорость, без номера устройства и времени суток. Начало и конец поездки и 300 м вокруг дома и работы не уходят никогда. Выключается в настройках."
+               data-uz="Safar paytida — taxminan bir kilometrlik bo‘laklar: nuqtalar va tezlik, qurilma raqami va kun vaqtisiz. Safarning boshi va oxiri hamda uy va ish atrofidagi 300 m hech qachon yuborilmaydi. Sozlamalarda o‘chirib qo‘yiladi.">
+            Safar paytida — taxminan bir kilometrlik bo‘laklar: nuqtalar va tezlik, qurilma raqami va kun vaqtisiz. Safarning boshi va oxiri hamda uy va ish atrofidagi 300 m hech qachon yuborilmaydi. Sozlamalarda o‘chirib qo‘yiladi.</div></div></li>
+        <li><span class="out">→</span><div><b data-ru="Время прибытия для близких" data-uz="Yaqinlar uchun yetib borish vaqti">Yaqinlar uchun yetib borish vaqti</b>
+          <div data-ru="Только если вы сами отправили ссылку: время прибытия и оставшееся расстояние — без координат и адреса."
+               data-uz="Faqat o‘zingiz havola yuborganingizda: yetib borish vaqti va qolgan masofa — koordinata va manzilsiz.">
+            Faqat o‘zingiz havola yuborganingizda: yetib borish vaqti va qolgan masofa — koordinata va manzilsiz.</div></div></li>
         <li><span class="out">→</span><div><b data-ru="Счётчики за сутки" data-uz="Kunlik hisoblagichlar">Kunlik hisoblagichlar</b>
           <div data-ru="Сколько поездок и километров — только числа, без координат и времени. Выключается в настройках."
                data-uz="Nechta safar va necha kilometr — faqat raqamlar, koordinata va vaqtsiz. Sozlamalarda o‘chirib qo‘yiladi.">
             Nechta safar va necha kilometr — faqat raqamlar, koordinata va vaqtsiz. Sozlamalarda o‘chirib qo‘yiladi.</div></div></li>
+        <li><span class="out">→</span><div><b data-ru="Отчёты о сбоях" data-uz="Nosozlik hisobotlari">Nosozlik hisobotlari</b>
+          <div data-ru="Раз в сутки iOS присылает отчёт о падениях и расходе батареи — без координат."
+               data-uz="Kuniga bir marta iOS ilova to‘xtab qolishi va batareya sarfi haqida hisobot yuboradi — koordinatasiz.">
+            Kuniga bir marta iOS ilova to‘xtab qolishi va batareya sarfi haqida hisobot yuboradi — koordinatasiz.</div></div></li>
+        <li><span class="out">→</span><div><b data-ru="Сообщения разработчику" data-uz="Dasturchiga xabarlar">Dasturchiga xabarlar</b>
+          <div data-ru="Только то, что вы сами написали в форме, и контакт — если оставили. Нажали «Не предупредила» — ещё место и скорость того проезда."
+               data-uz="Faqat formada o‘zingiz yozgan matn va — agar qoldirsangiz — kontakt. Kamera ogohlantirmaganini bildirsangiz — o‘sha o‘tishning joyi va tezligi ham.">
+            Faqat formada o‘zingiz yozgan matn va — agar qoldirsangiz — kontakt. Kamera ogohlantirmaganini bildirsangiz — o‘sha o‘tishning joyi va tezligi ham.</div></div></li>
       </ul>
       <div class="foot"
            data-ru="Номер устройства случайный и обновляется каждые 30 дней — связать ваши поездки в одну длинную историю невозможно даже нам."
            data-uz="Qurilma raqami tasodifiy va har 30 kunda yangilanadi — safarlaringizni bitta uzun tarixga bog‘lash bizning ham qo‘limizdan kelmaydi.">
         Qurilma raqami tasodifiy va har 30 kunda yangilanadi — safarlaringizni bitta uzun tarixga bog‘lash bizning ham qo‘limizdan kelmaydi.</div>
+      <p class="note"><a href="privacy.html" data-ru="Подробно — в политике конфиденциальности" data-uz="Batafsil — maxfiylik siyosatida">Batafsil — maxfiylik siyosatida</a></p>
     </div>
   </section>
 
@@ -949,6 +1014,10 @@ footer a:hover { text-decoration:underline; }
     for (var i = 0; i < nodes.length; i++) {
       var value = nodes[i].getAttribute('data-' + lang);
       if (value) { nodes[i].textContent = value; }
+    }
+    var pics = document.querySelectorAll('[data-src-' + lang + ']');
+    for (var p = 0; p < pics.length; p++) {
+      pics[p].setAttribute('src', pics[p].getAttribute('data-src-' + lang));
     }
     var buttons = document.querySelectorAll('#lang button');
     for (var j = 0; j < buttons.length; j++) {

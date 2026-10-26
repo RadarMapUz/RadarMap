@@ -415,12 +415,18 @@ struct TripDetailContent: View {
         if points.count >= 2 {
             // Картинка, а не живая карта: жестов здесь не было и раньше, а
             // полсотни SwiftUI-кружков с цифрами стоили прокрутке как карта.
-            MapPictureView(key: "trip|\(record.id)|\(record.passed.count)",
-                           picture: tripPicture(points), height: 230)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
-                    .strokeBorder(Theme.stroke, lineWidth: 1))
-                .overlay(alignment: .bottomLeading) { mapLegend.padding(10) }
+            // Легенда — под картинкой, а не на ней: капсулой в углу она
+            // накрывала подписи самой карты («…ашкент», снимок этапа 31), а
+            // подписи снимка рисует MapKit, и отодвинуть их нельзя.
+            VStack(alignment: .leading, spacing: 8) {
+                MapPictureView(key: "trip|\(record.id)|\(record.passed.count)",
+                               picture: tripPicture(points), height: 230)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
+                        .strokeBorder(Theme.stroke, lineWidth: 1))
+                mapLegend
+                    .padding(.horizontal, 4)
+            }
         } else {
             HStack(spacing: 10) {
                 Image(systemName: "point.bottomleft.forward.to.point.topright.scurvepath")
@@ -485,9 +491,6 @@ struct TripDetailContent: View {
                     legendDot(Theme.textTertiary, String(format: String(localized: "лимит неизвестен: %lld"), unknown))
                 }
             }
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(Theme.surface.opacity(0.92), in: Capsule())
-            .overlay(Capsule().strokeBorder(Theme.stroke, lineWidth: 1))
         }
     }
 
@@ -765,7 +768,7 @@ struct TripShareCard: View {
                             tint: Theme.success)
                 ShareMetricDivider()
                 ShareMetric(value: "\(record.camerasPassed)",
-                            label: String(localized: "камер"),
+                            label: Formatting.camerasLabel(record.camerasPassed),
                             icon: "camera.fill", tint: Theme.Types.camera)
                 // Максимальной скорости здесь больше нет: карточкой хвастаются,
                 // а «104 км/ч» — это не достижение приложения про штрафы.

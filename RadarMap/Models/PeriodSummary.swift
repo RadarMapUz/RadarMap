@@ -233,13 +233,9 @@ nonisolated struct PeriodSummary: Equatable {
     /// отличается в разы. Иначе — километры: «+18 км» правдивее «+178 %».
     var distanceChange: DistanceChange? {
         guard previousDistance > 500 else { return nil }
-        let ratio = distance / previousDistance
-        let comparable = periodComplete
-            && previousDistance >= AppConfig.deltaPercentMinMeters
-            && ratio <= AppConfig.deltaPercentMaxRatio
-            && ratio >= 1 / AppConfig.deltaPercentMaxRatio
         return DistanceChange(meters: distance - previousDistance,
-                              percent: comparable ? Int(((ratio - 1) * 100).rounded()) : nil)
+                              percent: WidgetWeek.comparablePercent(distance: distance, previous: previousDistance,
+                                                                    periodComplete: periodComplete))
     }
 
     /// Доля пути выше лимита вне камер, 0…1 (nil — данных мало).

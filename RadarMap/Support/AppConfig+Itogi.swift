@@ -13,14 +13,8 @@ import CoreLocation
 
 extension AppConfig {
 
-    // MARK: - Сравнение с прошлым периодом (31E)
-
-    /// Процент к прошлому периоду — только если прошлый был не меньше этого:
-    /// «+178 %» от 9 км прошлой недели — арифметика, а не новость.
-    nonisolated static let deltaPercentMinMeters: CLLocationDistance = 20_000
-    /// …и периоды соизмеримы: отношение в этих пределах. За ними процент
-    /// перестаёт что-то значить («+300 %»), и честнее назвать километры.
-    nonisolated static let deltaPercentMaxRatio = 2.0
+    // Процент к прошлому периоду — WidgetWeek.comparablePercent (Shared/):
+    // одно правило с виджетом, а виджет AppConfig не видит.
 
     // MARK: - Время в пробках (TrafficTime, 31E)
 

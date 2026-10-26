@@ -294,4 +294,24 @@ final class WidgetSnapshotTests: XCTestCase {
         XCTAssertEqual(WidgetWeek.nextRefresh(after: evening, updatedAt: snapshotAt, calendar: calendar),
                        snapshotAt.addingTimeInterval(WidgetWeek.staleAfter + 60))
     }
+
+    // MARK: - Процент к прошлой неделе (31E)
+
+    /// Одно правило с «Итогами»: идущая неделя процента не получает, крошечная
+    /// прошлая и «в разы» — тоже; сопоставимые целые недели — да.
+    func testDeltaPercentFollowsTheItogiRule() {
+        XCTAssertNil(WidgetWeek.comparablePercent(distance: 40_000, previous: 100_000, periodComplete: false),
+                     "среда против целой недели — «−60 %»")
+        XCTAssertNil(WidgetWeek.comparablePercent(distance: 25_000, previous: 9_000, periodComplete: true),
+                     "«+178 %» от девяти километров")
+        XCTAssertNil(WidgetWeek.comparablePercent(distance: 350_000, previous: 100_000, periodComplete: true))
+        XCTAssertEqual(WidgetWeek.comparablePercent(distance: 120_000, previous: 100_000, periodComplete: true), 20)
+        var summary = PeriodSummary()
+        summary.distance = 120_000
+        summary.previousDistance = 100_000
+        summary.periodComplete = true
+        XCTAssertEqual(summary.distanceChange?.percent,
+                       WidgetWeek.comparablePercent(distance: 120_000, previous: 100_000, periodComplete: true),
+                       "виджет и «Итоги» разошлись в правиле")
+    }
 }

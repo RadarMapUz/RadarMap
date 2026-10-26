@@ -385,22 +385,6 @@
         }
       }
     },
-    "Выгрузить период": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Выгрузить период"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Davrni eksport qilish"
-          }
-        }
-      }
-    },
     "Документ PDF": {
       "localizations": {
         "ru": {
@@ -26310,22 +26294,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tashqariga faqat shu yigʻindilar ketadi. Hisobotga na kameralar koordinatalari, na oʻtish vaqtlari tushadi."
-          }
-        }
-      }
-    },
-    "Пожизненные цифры, охват предупреждений, достижения": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Пожизненные цифры, охват предупреждений, достижения"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Butun vaqtdagi raqamlar, ogohlantirishlar qamrovi, yutuqlar"
           }
         }
       }

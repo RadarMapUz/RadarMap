@@ -1704,7 +1704,9 @@ final class AppEnvironment {
             weekTrips: week.trips,
             weekRating: week.rating ?? -1,
             weekFineRisk: week.fineRisk,
-            weekDeltaPercent: week.distanceDeltaPercent,
+            // То же правило, что в «Итогах» (31E): процент — только у
+            // сопоставимых целых недель, идущая неделя его не получает.
+            weekDeltaPercent: week.distanceChange?.percent,
             dayDistances: distances,
             dayOverspeed: overspeed,
             topRiskPlace: week.topOverLocation,

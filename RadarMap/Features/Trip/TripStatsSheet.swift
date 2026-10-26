@@ -266,18 +266,6 @@ struct TripStatsSheet: View {
                     // разных углах.
                     ToolbarItemGroup(placement: .primaryAction) {
                         Menu {
-                            // Выгрузка периода (31E): служебные км, отчёт таксиста.
-                            if !summary.isEmpty {
-                                Section("Выгрузить период") {
-                                    Button("Таблица CSV", systemImage: "tablecells") {
-                                        export(.csv, summary: summary)
-                                    }
-                                    Button("Документ PDF", systemImage: "doc.richtext") {
-                                        export(.pdf, summary: summary)
-                                    }
-                                }
-                                .disabled(exporting)
-                            }
                             Button("Очистить историю", systemImage: "trash", role: .destructive) {
                                 confirmsClear = true
                             }

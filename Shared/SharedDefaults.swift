@@ -171,6 +171,25 @@ nonisolated enum WidgetState: Equatable {
 
 nonisolated enum WidgetWeek {
 
+    // MARK: - Процент к прошлому периоду (31E)
+
+    /// Процент — только если прошлый период был не меньше этого: «+178 %»
+    /// от девяти километров — арифметика, а не новость.
+    static let percentMinPreviousMeters = 20_000.0
+    /// …и периоды соизмеримы: отношение не дальше этого множителя.
+    static let percentMaxRatio = 2.0
+
+    /// Изменение километров процентом — одно правило на «Итоги», карточку
+    /// «Поделиться» и виджет: оба окна целые (идущая неделя против целой в
+    /// среду всегда «−60 %»), прошлое не крошечное и не отличается в разы.
+    /// nil — процент здесь врал бы; тогда говорят километрами или молчат.
+    static func comparablePercent(distance: Double, previous: Double, periodComplete: Bool) -> Int? {
+        guard periodComplete, previous >= percentMinPreviousMeters else { return nil }
+        let ratio = distance / previous
+        guard ratio <= percentMaxRatio, ratio >= 1 / percentMaxRatio else { return nil }
+        return Int(((ratio - 1) * 100).rounded())
+    }
+
     /// Когда виджету самому перечитать снимок: в начале следующих суток (с
     /// минутой запаса). Новые цифры приносит приложение (reloadTimelines),
     /// а сам виджет должен заметить только смену дня и недели — до 19.10 он

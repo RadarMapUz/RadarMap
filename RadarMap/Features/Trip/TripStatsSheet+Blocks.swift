@@ -145,7 +145,10 @@ extension TripStatsSheet {
         let fuel = fuelRowVisible(summary: summary)
         let maintenance = env.maintenance.attention()
         let shifts = WorkShiftsCard.shown(env.workShifts)
-        block(String(localized: "Машина и работа"), visible: fuel || !maintenance.isEmpty || !shifts.isEmpty) {
+        // Выгрузка — единственный вход (31E), поэтому блок есть у любого
+        // непустого периода, даже без расходов, обслуживания и смен.
+        block(String(localized: "Машина и работа"),
+              visible: fuel || !maintenance.isEmpty || !shifts.isEmpty || !summary.isEmpty) {
             fuelRow(summary: summary)
             // Обслуживание (18.2) — только когда что-то скоро или пора.
             if !maintenance.isEmpty {

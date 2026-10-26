@@ -81,9 +81,10 @@
      "Polygon"
     ],
     [
-     "==",
+     "in",
      "class",
-     "commercial"
+     "commercial",
+     "retail"
     ]
    ],
    "id": "landuse-commercial",
@@ -94,7 +95,16 @@
     "mapbox:group": "1444849388993.3071"
    },
    "paint": {
-    "fill-color": "#f1edef"
+    "fill-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "retail",
+     "#efeaf4",
+     "#eceef1"
+    ]
    },
    "source": "openmaptiles",
    "source-layer": "landuse",
@@ -121,7 +131,7 @@
     "visibility": "visible"
    },
    "paint": {
-    "fill-color": "#e9ebef"
+    "fill-color": "#e6e9ee"
    },
    "source": "openmaptiles",
    "source-layer": "landuse",
@@ -155,7 +165,7 @@
     "mapbox:group": "1444849388993.3071"
    },
    "paint": {
-    "fill-color": "#f4ebed"
+    "fill-color": "#f5e9ec"
    },
    "source": "openmaptiles",
    "source-layer": "landuse",
@@ -163,16 +173,20 @@
   },
   {
    "filter": [
-    "==",
+    "in",
     "class",
-    "school"
+    "school",
+    "kindergarten",
+    "college",
+    "university",
+    "education"
    ],
    "id": "landuse-school",
    "metadata": {
     "mapbox:group": "1444849388993.3071"
    },
    "paint": {
-    "fill-color": "#f1efe6"
+    "fill-color": "#f2eedf"
    },
    "source": "openmaptiles",
    "source-layer": "landuse",
@@ -9009,7 +9023,24 @@
    },
    "minzoom": 14,
    "paint": {
-    "fill-color": "#e4e6ea",
+    "fill-color": [
+     "match",
+     [
+      "get",
+      "use"
+     ],
+     "health",
+     "#f3dbe1",
+     "education",
+     "#efe6c8",
+     "religious",
+     "#cce5e7",
+     "retail",
+     "#e6dbf3",
+     "industrial",
+     "#d3d9e3",
+     "#e4e6ea"
+    ],
     "fill-outline-color": "#cfd3da"
    },
    "source": "openmaptiles",
@@ -9029,6 +9060,27 @@
    "paint": {
     "circle-blur": 0.5,
     "circle-color": "rgba(55,85,45,0.24)",
+    "circle-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     16.6,
+     [
+      "case",
+      [
+       "has",
+       "planted"
+      ],
+      0,
+      1
+     ],
+     16.8,
+     1
+    ],
     "circle-radius": [
      "interpolate",
      [
@@ -9166,11 +9218,21 @@
   },
   {
    "filter": [
-    "==",
+    "all",
     [
-     "geometry-type"
+     "==",
+     [
+      "geometry-type"
+     ],
+     "Point"
     ],
-    "Point"
+    [
+     "!",
+     [
+      "has",
+      "planted"
+     ]
+    ]
    ],
    "id": "radar-tree",
    "maxzoom": 17.1,
@@ -9298,11 +9360,21 @@
   },
   {
    "filter": [
-    "==",
+    "all",
     [
-     "geometry-type"
+     "==",
+     [
+      "geometry-type"
+     ],
+     "Point"
     ],
-    "Point"
+    [
+     "!",
+     [
+      "has",
+      "planted"
+     ]
+    ]
    ],
    "id": "radar-tree-light",
    "maxzoom": 17.1,
@@ -12923,7 +12995,24 @@
       0
      ]
     ],
-    "fill-extrusion-color": "#e4e6ea",
+    "fill-extrusion-color": [
+     "match",
+     [
+      "get",
+      "use"
+     ],
+     "health",
+     "#f3dbe1",
+     "education",
+     "#efe6c8",
+     "religious",
+     "#cce5e7",
+     "retail",
+     "#e6dbf3",
+     "industrial",
+     "#d3d9e3",
+     "#e4e6ea"
+    ],
     "fill-extrusion-height": [
      "interpolate",
      [

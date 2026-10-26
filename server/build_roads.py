@@ -50,6 +50,7 @@ import sys
 from collections import Counter, OrderedDict, defaultdict
 
 import surface_check
+import tree_planting
 
 # Что рисуем. Пешеходное, тропы и велодорожки не берём: схема про то, где
 # едет машина, а лишние линии превращают её в паутину.
@@ -7386,10 +7387,14 @@ def main():
         # ступенчатый на стыках кусков с полосами из тега и без.
         widths = {id(piece): street[4]
                   for street, chain in street_chains(roads) for piece in chain}
+        # Деревья OSM и досаженные в парках и скверах (tree_planting, 30.A).
+        osm_trees = collect_trees(args.trees)
+        planted = tree_planting.plant_from_files(args.areas, args.source, args.houses, osm_trees)
+        print(f"деревья: OSM {len(osm_trees)}, досажено в парках {len(planted)}")
         made = build_mvt.build_mvt(roads, args.tiles_dir, areas=areas,
                                    points=mvt_points, far=far,
                                    far_areas=far_areas, places=places,
-                                   trees=collect_trees(args.trees),
+                                   trees=osm_trees, planted=planted,
                                    parking=collect_parking_areas(args.areas),
                                    widths=widths, crossings=crossings)
         del widths

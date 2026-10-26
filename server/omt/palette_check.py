@@ -55,6 +55,14 @@ PAINT_MIN = 1.4
 NEAR_HOUSE_DE_MIN = 5
 # Альфа белой штриховки островка в спрайте (make_arrows.hatch: 235/255).
 HATCH_ALPHA = 235 / 255
+# Дома по назначению (30.A): оттенок виден рядом с обычным домом и отличает
+# назначения друг от друга (ΔE76 ≥ 5 — заметно глазу рядом), но остаётся
+# мягким — тише дороги и далеко от красного камеры.
+USE_DE_MIN = 5
+USE_CAMERA_DE_MIN = 40
+# … и при дейтеранопии назначения не сливаются совсем (оттенок у них мягкий,
+# различает в основном светлота).
+USE_DEUTAN_MIN = 2
 
 
 def rgb(colour):
@@ -140,8 +148,9 @@ def measure(theme, p=None):
     route, traffic, calm = ROUTE[theme], TRAFFIC[theme], CALM[theme]
     asphalt = [p[k] for k in ASPHALT_KEYS]
     far = [p[k] for k in FAR_KEYS]
+    uses = p["building_use"]
     ground = [p["bg"], p["landuse"], p["building"], p["park"], p["wood"], p["water"],
-              *p["landuse_kind"].values()]
+              *p["landuse_kind"].values(), *uses.values()]
     kerbs = [p["kerb"], p["kerb_trunk"]]
     surfaces = asphalt + ground
     m = {
@@ -153,6 +162,18 @@ def measure(theme, p=None):
         # До 15-го зума дорога тонкая, имя лежит на фоновом ореоле.
         "имя улицы / фон": contrast(p["street_label"], p["bg"]),
         "номер дома / дом": contrast(p["housenumber"], p["building"]),
+        # Дома по назначению (30.A): подпись места и номер дома ложатся и на
+        # цветной дом.
+        "подпись места / дом по назначению (мин)": min(contrast(p["label"], c) for c in uses.values()),
+        "номер дома / дом по назначению (мин)": min(contrast(p["housenumber"], c) for c in uses.values()),
+        "ΔE дом по назначению / обычный дом (мин)": min(delta_e(c, p["building"]) for c in uses.values()),
+        "ΔE назначения между собой (мин)": min(delta_e(a, b) for i, a in enumerate(uses.values())
+                                               for b in list(uses.values())[i + 1:]),
+        "ΔE назначения между собой, дейтеранопия (мин)": min(
+            delta_e(a, b, True) for i, a in enumerate(uses.values()) for b in list(uses.values())[i + 1:]),
+        "ΔE дом по назначению / красная камера (мин)": min(delta_e(c, CAMERA_TYPES["camera"])
+                                                         for c in uses.values()),
+        "ΔE дом по назначению / фон (макс)": max(delta_e(c, p["bg"]) for c in uses.values()),
         # Цветная подпись места лежит на своём ореоле (text-halo, ширина 1,4):
         # читается против ореола, а не против земли.
         "подписи мест цветом / ореол (мин)": min(contrast(c, p["halo"])
@@ -221,6 +242,13 @@ def measure(theme, p=None):
     need(m["имя улицы / асфальт (мин)"] >= TEXT_MIN, "имя улицы на асфальте < 4,5:1")
     need(m["имя улицы / фон"] >= TEXT_MIN, "имя улицы на фоне < 4,5:1")
     need(m["номер дома / дом"] >= HOUSENUMBER_MIN, "номер дома < 3:1")
+    need(m["подпись места / дом по назначению (мин)"] >= TEXT_MIN, "подпись места на цветном доме < 4,5:1")
+    need(m["номер дома / дом по назначению (мин)"] >= HOUSENUMBER_MIN, "номер дома на цветном доме < 3:1")
+    need(m["ΔE дом по назначению / обычный дом (мин)"] >= USE_DE_MIN, "назначение дома не видно")
+    need(m["ΔE назначения между собой (мин)"] >= USE_DE_MIN, "назначения домов не различить")
+    need(m["ΔE назначения между собой, дейтеранопия (мин)"] >= USE_DEUTAN_MIN,
+         "назначения домов не различить при дейтеранопии")
+    need(m["ΔE дом по назначению / красная камера (мин)"] >= USE_CAMERA_DE_MIN, "дом по назначению похож на камеру")
     need(m["подписи мест цветом / ореол (мин)"] >= POI_MIN, "цветная подпись места < 3:1")
     need(m["линия маршрута / асфальт и фон (мин)"] >= GRAPHIC_MIN, "линия маршрута на асфальте < 3:1")
     need(m["ΔE линия маршрута / магистраль"] >= ROUTE_TRUNK_DE_MIN, "линия маршрута похожа на магистраль")
@@ -251,6 +279,11 @@ def measure(theme, p=None):
                                                        contrast(p["minor"], p["bg"]))
     need(m["контраст двора / фон (кромка или полотно)"] > m["контраст дом / фон"], "дом заметнее двора")
     need(m["ΔE дорога / фон"] > m["ΔE дом / фон"], "дом заметнее дороги")
+    need(m["ΔE дорога / фон"] > m["ΔE дом по назначению / фон (макс)"], "цветной дом заметнее дороги")
+    # Ночью дом по назначению, как и обычный, темнее любой улицы (двор —
+    # самая тёмная): иначе кварталы спорят с дорогой.
+    if theme == "dark":
+        need(all(luminance(c) < luminance(p["minor"]) for c in uses.values()), "цветной дом светлее двора")
     ground_light = max(luminance(c) for c in ground)
     m["светлота двора / самая светлая земля"] = (luminance(p["minor"]) + 0.05) / (ground_light + 0.05)
     need(luminance(p["minor"]) > ground_light and luminance(p["near_minor"]) > ground_light,
@@ -300,6 +333,15 @@ def measure_drive(theme, p=None):
                                                        for a in drive),
         "поездка: ΔE пробки / асфальт (мин)": min(delta_e(c, a) for c in traffic.values() for a in drive),
         "поездка: ΔE «медленно» / жёлтая кромка": delta_e(traffic["slow"], d["kerb_trunk"]),
+        # Дома по назначению в поездке (30.A) — спокойнее, но камера на них
+        # видна, а подпись читается.
+        "поездка: камера не видна на доме (пар)": float(sum(not _camera_visible(c, s)
+                                                           for c in CAMERA_TYPES.values()
+                                                           for s in d["building_use"].values())),
+        "поездка: подпись места / дом по назначению (мин)": min(contrast(p["label"], c)
+                                                               for c in d["building_use"].values()),
+        "поездка: ΔE дом по назначению / дом (макс)": max(delta_e(c, d["building"])
+                                                          for c in d["building_use"].values()),
     }
     failures = []
 
@@ -316,6 +358,11 @@ def measure_drive(theme, p=None):
     need(m["поездка: спокойная камера / асфальт (мин)"] >= GRAPHIC_MIN, "поездка: спокойная камера < 3:1")
     need(m["поездка: ΔE пробки / асфальт (мин)"] >= TRAFFIC_DE_MIN, "поездка: пробка сливается с асфальтом")
     need(m["поездка: ΔE «медленно» / жёлтая кромка"] >= SLOW_KERB_DE_MIN, "поездка: «медленно» похоже на кромку")
+    need(m["поездка: камера не видна на доме (пар)"] == 0, "поездка: камера сливается с домом")
+    need(m["поездка: подпись места / дом по назначению (мин)"] >= TEXT_MIN, "поездка: подпись на цветном доме < 4,5:1")
+    # Спокойнее, чем вне поездки: оттенок дома в поездке не ярче обычного.
+    plain = max(delta_e(c, p["building"]) for c in p["building_use"].values())
+    need(m["поездка: ΔE дом по назначению / дом (макс)"] <= plain, "поездка: цветной дом ярче, чем вне поездки")
     if theme == "light":
         # Днём кромка — светлая линия края тёмного полотна (как у Amap).
         need(m["поездка: кромка / асфальт (мин)"] >= DRIVE_KERB_MIN, "поездка: кромка не светлее асфальта")

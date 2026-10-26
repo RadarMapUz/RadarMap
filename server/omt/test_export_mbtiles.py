@@ -32,6 +32,22 @@ class ExportTests(unittest.TestCase):
         export_mbtiles.export(self.db, self.dir)
         self.assertEqual(first, open(os.path.join(self.dir, "omt_index_payload.json"), "rb").read())
 
+    def test_z14_buildings_get_their_use_and_the_index_covers_it(self):
+        # 30.A: школа на школьном дворе — свойство use в тайле, sha — по нему.
+        import building_use as bu
+        import test_building_use as t
+        body = t.tile(t.HOUSES, t.layer("landuse", [(3, {"class": "school"},
+                                                     bu.encode_polygons([[t.square(0, 0, 4096)]]))]))
+        conn = sqlite3.connect(self.db)
+        conn.execute("UPDATE tiles SET tile_data = ?", (gzip.compress(body),))
+        conn.commit(); conn.close()
+        export_mbtiles.export(self.db, self.dir)
+        written = open(os.path.join(self.dir, "omt", "14", "11344", "6123.pbf"), "rb").read()
+        uses, _ = t.buildings_of(written)
+        self.assertEqual(set(uses), {"education"})
+        index = json.load(open(os.path.join(self.dir, "omt_index_payload.json")))
+        self.assertEqual(index["tiles"]["14/11344/6123"]["sha256"], hashlib.sha256(written).hexdigest())
+
 
 if __name__ == "__main__":
     unittest.main()

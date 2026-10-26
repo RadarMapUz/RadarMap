@@ -73,6 +73,7 @@ else
         "$(dirname "$0")/build_mvt.py" "$(dirname "$0")/mvt.py" \
         "$(dirname "$0")/surface_check.py" "$(dirname "$0")/lane_inference.py" \
         "$(dirname "$0")/road_metrics.py" "$(dirname "$0")/parking.py" \
+        "$(dirname "$0")/tree_planting.py" \
         "$HOST:/opt/radarmap/work/"
     # ТЕ ЖЕ слои, что собирает крон.
     #

@@ -34,9 +34,17 @@ echo "→ Planetiler (схема OpenMapTiles, зумы 0–14)"
     --languages=ru,uz,en \
     --output=uz.mbtiles --force --maxzoom=14 > planetiler.log 2>&1
 
-echo "→ тайлы и индекс"
+echo "→ тайлы и индекс (+ назначение домов, 30.A)"
 rm -rf "$OUT" && mkdir -p "$OUT"
-python3 "$HERE/export_mbtiles.py" uz.mbtiles "$OUT"
+# Теги самих зданий — из экстракта домов сборки дорог; без него назначение
+# берётся только из заведений и территорий в тайле.
+HOUSES="${RADARMAP_HOUSES:-$HOME/RadarMapBuild/houses.geojsonl}"
+if [ -f "$HOUSES" ]; then
+    python3 "$HERE/export_mbtiles.py" uz.mbtiles "$OUT" --houses "$HOUSES"
+else
+    echo "  (нет $HOUSES — назначение по заведениям и территориям)"
+    python3 "$HERE/export_mbtiles.py" uz.mbtiles "$OUT"
+fi
 
 echo "→ шрифты (три начертания Noto Sans — ровно те, что в стиле) и иконки"
 if [ ! -d fonts/"Noto Sans Regular" ]; then

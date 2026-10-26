@@ -16,6 +16,33 @@
 
 Наш конвейер забирает OSM раз в неделю (вс) — разметка и стрелки появятся на карте сами.
 
+## 0. Сначала: 20 мест, где число полос спорит со стрелками (26.10.2026)
+
+Здесь в OSM у одной ленты `lanes` говорит одно, а `turn:lanes` — другое (обычно короткий кусок с карманом у перекрёстка). Наш генератор такие ряды стрелок не рисует, чтобы не ставить стрелку на линию. Поправьте так, чтобы число полос в `lanes` совпадало с числом частей в `turn:lanes` (частей = число `|` + 1); если на подходе полос больше из-за кармана — разрежьте линию в месте, где карман начинается, и дайте каждому куску свои `lanes`/`turn:lanes`.
+
+- [ ] 1. [41.31892, 69.27113 (Навои × Рашидов, запад)](https://www.openstreetmap.org/edit?editor=id#map=20/41.31892/69.27113) — разметка 6 полос, `turn:lanes` 5
+- [ ] 2. [41.32072, 69.24307](https://www.openstreetmap.org/edit?editor=id#map=20/41.32072/69.24307) — разметка 4 полос, `turn:lanes` 5
+- [ ] 3. [41.35977, 69.27700](https://www.openstreetmap.org/edit?editor=id#map=20/41.35977/69.27700) — разметка 5 полос, `turn:lanes` 3
+- [ ] 4. [41.31754, 69.25424](https://www.openstreetmap.org/edit?editor=id#map=20/41.31754/69.25424) — разметка 3 полос, `turn:lanes` 5
+- [ ] 5. [41.32621, 69.24088](https://www.openstreetmap.org/edit?editor=id#map=20/41.32621/69.24088) — разметка 3 полос, `turn:lanes` 4
+- [ ] 6. [41.31133, 69.25247](https://www.openstreetmap.org/edit?editor=id#map=20/41.31133/69.25247) — разметка 4 полос, `turn:lanes` 5
+- [ ] 7. [41.31761, 69.31707](https://www.openstreetmap.org/edit?editor=id#map=20/41.31761/69.31707) — разметка 4 полос, `turn:lanes` 3
+- [ ] 8. [41.34892, 69.28723](https://www.openstreetmap.org/edit?editor=id#map=20/41.34892/69.28723) — разметка 3 полос, `turn:lanes` 4
+- [ ] 9. [41.36000, 69.33727](https://www.openstreetmap.org/edit?editor=id#map=20/41.36000/69.33727) — разметка 3 полос, `turn:lanes` 5
+- [ ] 10. [41.31734, 69.28121](https://www.openstreetmap.org/edit?editor=id#map=20/41.31734/69.28121) — разметка 3 полос, `turn:lanes` 5
+- [ ] 11. [41.31098, 69.34576](https://www.openstreetmap.org/edit?editor=id#map=20/41.31098/69.34576) — разметка 3 полос, `turn:lanes` 4
+- [ ] 12. [41.35498, 69.37587](https://www.openstreetmap.org/edit?editor=id#map=20/41.35498/69.37587) — разметка 5 полос, `turn:lanes` 4
+- [ ] 13. [41.29622, 69.26852](https://www.openstreetmap.org/edit?editor=id#map=20/41.29622/69.26852) — разметка 4 полос, `turn:lanes` 3
+- [ ] 14. [41.31768, 69.29449](https://www.openstreetmap.org/edit?editor=id#map=20/41.31768/69.29449) — разметка 4 полос, `turn:lanes` 5
+- [ ] 15. [41.32089, 69.30216](https://www.openstreetmap.org/edit?editor=id#map=20/41.32089/69.30216) — разметка 3 полос, `turn:lanes` 5
+- [ ] 16. [41.32103, 69.30405](https://www.openstreetmap.org/edit?editor=id#map=20/41.32103/69.30405) — разметка 3 полос, `turn:lanes` 4
+- [ ] 17. [41.32555, 69.19338](https://www.openstreetmap.org/edit?editor=id#map=20/41.32555/69.19338) — разметка 3 полос, `turn:lanes` 4
+- [ ] 18. [41.31112, 69.25820](https://www.openstreetmap.org/edit?editor=id#map=20/41.31112/69.25820) — разметка 5 полос, `turn:lanes` 3
+- [ ] 19. [41.32641, 69.22958](https://www.openstreetmap.org/edit?editor=id#map=20/41.32641/69.22958) — разметка 5 полос, `turn:lanes` 4
+- [ ] 20. [41.31201, 69.28122](https://www.openstreetmap.org/edit?editor=id#map=20/41.31201/69.28122) — разметка 3 полос, `turn:lanes` 5
+
+Источник: аудит дорог `docs/roads_audit_2026-10-23.md`, приложение А. После правки и ближайшей пересборки тайлов ряды стрелок появятся сами.
+
 ## 1. Kichik Halqa yo'li — магистраль, 65.0 км, без полос 57%, камер без полос: 51
 
 - [ ] камера 2144: [Kxay, piyodalar yo'lakchasi (Korzinka Kohinur)](https://www.openstreetmap.org/edit?editor=id#map=19/41.28028/69.19552)

@@ -129,11 +129,16 @@ struct ApproachAlertView: View {
                 HStack(spacing: 12) {
                     CameraIcon(kind: camera.kind, side: 46)
                     VStack(alignment: .leading, spacing: 2) {
+                        // Тип — целиком, хоть в две строки: на SE «Стационарная
+                        // ка…» обрезалось многоточием (снимок этапа 31), а тип
+                        // камеры — то, ради чего водитель смотрит на карточку.
+                        // Обрезается адрес, не тип.
                         Text(camera.kind.displayName)
                             .font(.rounded(17, .bold))
                             .foregroundStyle(Theme.textPrimary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.85)
+                            .fixedSize(horizontal: false, vertical: true)
                         if !camera.location.isEmpty {
                             Text(camera.location)
                                 .font(.rounded(13))
@@ -149,6 +154,7 @@ struct ApproachAlertView: View {
                             .liveNumber()
                         Text("м").font(.rounded(20, .bold)).foregroundStyle(Theme.textSecondary)
                     }
+                    .fixedSize()
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(accessibilitySummary)

@@ -32,6 +32,20 @@ nonisolated struct Insight: Identifiable, Equatable {
     let text: String
 }
 
+/// Что сделать: держать лимит у конкретной камеры. Текст собирает вьюха —
+/// деньги форматируются на главном акторе (Formatting.money).
+nonisolated struct ActionHint: Equatable, Sendable {
+    let location: String
+    /// Проездов с штрафуемым превышением у этой камеры.
+    let over: Int
+    /// Проездов этой камеры всего.
+    let passes: Int
+    /// Лимит, по которому там судили чаще всего (nil — только догадки).
+    let limitKmh: Int?
+    /// Ждущие ответа штрафы по этой камере, сум (0 — суммы назвать нельзя).
+    let fine: Double
+}
+
 nonisolated enum PeriodInsights {
 
     /// Выводы по сводке — от самого важного к менее важному, не больше трёх.
@@ -57,6 +71,18 @@ nonisolated enum PeriodInsights {
     }
 
     static let heroDuplicates: Set<String> = ["place", "hours", "rating.up", "rating.down"]
+
+    /// Подсказка действием (31E): не «рискуете чаще», а что сделать и где —
+    /// камера, сколько проездов из скольких выше лимита, какой лимит держать и
+    /// во что это обошлось бы. nil — штрафуемых превышений в окне нет или
+    /// камеру не назвать (запись вычищена, отметка водителей без места).
+    static func action(_ summary: PeriodSummary) -> ActionHint? {
+        guard summary.overPasses > 0, let location = summary.topOverLocation,
+              summary.topOverCount > 0 else { return nil }
+        return ActionHint(location: location, over: summary.topOverCount,
+                          passes: max(summary.topOverPasses, summary.topOverCount),
+                          limitKmh: summary.topOverLimit, fine: summary.topOverFine)
+    }
 
     // MARK: - Правила
 

@@ -43,6 +43,12 @@ nonisolated struct TripDay: Codable, Identifiable, Equatable {
     var scoreWeight: Double = 0
     /// Штрафуемые превышения по часам суток (24 корзины) — «когда рискую».
     var overByHour = [Int](repeating: 0, count: 24)
+    /// Время в пробках (31E). Опционал — ради файлов дней на дисках; nil —
+    /// в этот день не мерили ни одной поездки.
+    var jamSeconds: Double? = nil
+    /// Путь с известным лимитом и из него выше лимита вне камер (31E).
+    var limitKnownMeters: Double? = nil
+    var overLimitMeters: Double? = nil
 
     var id: Date { day }
 
@@ -75,6 +81,13 @@ nonisolated enum TripDayBook {
             let weight = max(record.distanceMeters, 500)
             day.scoreSum += score * weight
             day.scoreWeight += weight
+        }
+        // Пробки и путь выше лимита (31E) — только у мерянных записей: день,
+        // где мерили, отличается от дня до обновления (nil) — см. summary.
+        if let jam = record.jamSeconds { day.jamSeconds = (day.jamSeconds ?? 0) + jam }
+        if let tally = record.overLimit {
+            day.limitKnownMeters = (day.limitKnownMeters ?? 0) + tally.knownMeters
+            day.overLimitMeters = (day.overLimitMeters ?? 0) + tally.overMeters
         }
         for pass in record.passed {
             // Пришедшие деньги — до проверки лимита: сумма внесённого
@@ -127,6 +140,12 @@ nonisolated enum TripDayBook {
             let weight = max(record.distanceMeters, 500)
             day.scoreSum = max(0, day.scoreSum - score * weight)
             day.scoreWeight = max(0, day.scoreWeight - weight)
+        }
+        // Зеркально folded (31E).
+        if let jam = record.jamSeconds, let had = day.jamSeconds { day.jamSeconds = max(0, had - jam) }
+        if let tally = record.overLimit {
+            if let had = day.limitKnownMeters { day.limitKnownMeters = max(0, had - tally.knownMeters) }
+            if let had = day.overLimitMeters { day.overLimitMeters = max(0, had - tally.overMeters) }
         }
         for pass in record.passed {
             // Зеркально folded: вычитаем ровно то, что туда попало.
@@ -237,6 +256,9 @@ nonisolated enum TripDayBook {
             scoreSum += day.scoreSum
             scoreWeight += day.scoreWeight
             for hour in 0..<24 { result.overByHour[hour] += day.overByHour[hour] }
+            if let jam = day.jamSeconds { result.jamSeconds = (result.jamSeconds ?? 0) + jam }
+            result.limitKnownMeters += day.limitKnownMeters ?? 0
+            result.overLimitMeters += day.overLimitMeters ?? 0
             if day.distanceMeters > busiestKm {
                 busiestKm = day.distanceMeters
                 result.busiestDay = day.day

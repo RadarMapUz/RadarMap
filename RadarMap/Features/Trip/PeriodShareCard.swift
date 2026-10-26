@@ -32,11 +32,14 @@ struct PeriodShareCard: View {
                         Text(Formatting.distance(summary.distance))
                             .font(.system(size: 52, weight: .heavy, design: .rounded))
                             .foregroundStyle(.white)
-                        if let delta = summary.distanceDeltaPercent {
-                            Label("\(abs(delta))%",
-                                  systemImage: delta >= 0 ? "arrow.up.right" : "arrow.down.right")
+                        // Процент — только у сопоставимых периодов, иначе
+                        // километры (31E): «↗ 178 %» от девяти км уходило друзьям.
+                        if let change = summary.distanceChange {
+                            Label(change.percent.map { "\(abs($0))\u{00A0}%" }
+                                    ?? Formatting.distance(abs(change.meters)),
+                                  systemImage: change.isUp ? "arrow.up.right" : "arrow.down.right")
                                 .font(.system(size: 17, weight: .bold, design: .rounded))
-                                .foregroundStyle(delta >= 0 ? Theme.accent : .white.opacity(0.55))
+                                .foregroundStyle(change.isUp ? Theme.accent : .white.opacity(0.55))
                         }
                     }
                 }

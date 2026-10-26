@@ -580,7 +580,15 @@ nonisolated enum TripHistory {
             // выпадал из «Смен» и учился как своя поездка (ревью 14.1).
             work: record.work,
             // У цели кончилась только поздняя половина.
-            endedAtDestination: to == record.endedAt ? record.endedAtDestination : nil)
+            endedAtDestination: to == record.endedAt ? record.endedAtDestination : nil,
+            // Пробки и участки выше лимита (31E) — по времени, к своей ноге;
+            // путь без участков — пропорционально длине.
+            jams: record.jams.map { $0.filter { $0.at >= from && $0.at < to } },
+            overLimit: record.overLimit.map { tally in
+                tally.leg(share: record.distanceMeters > 0 ? distance / record.distanceMeters : 0.5) {
+                    $0 >= from && $0 < to
+                }
+            })
     }
 
     private static func polylineLength(_ points: [TrackPoint]) -> Double {

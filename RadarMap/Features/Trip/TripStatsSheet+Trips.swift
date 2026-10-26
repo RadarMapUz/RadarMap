@@ -114,7 +114,7 @@ extension TripStatsSheet {
                         .padding(.vertical, 10)
                         // 15 pt + 2×10 давали ~40 pt — мимо мишени пальца.
                         .frame(minHeight: Theme.controlSize)
-                        .background(Theme.accentFill.gradient, in: Capsule())
+                        .background(Theme.accentFill, in: Capsule())
                         .contentShape(Capsule())
                 }
                 .buttonStyle(PressableStyle())

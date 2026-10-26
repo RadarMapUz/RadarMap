@@ -209,8 +209,39 @@ nonisolated struct PeriodSummary: Equatable {
     var previousRating: Int?
     /// Штрафуемые превышения по часам суток — «когда именно я рискую».
     var overByHour = [Int](repeating: 0, count: 24)
+    /// Окно периода уже кончилось (31E): идущую неделю с прошлой целой
+    /// сравнивать процентом нечестно — в среду она всегда «−60 %».
+    var periodComplete = false
+    /// Зона риска подробнее (31E, подсказка действием): все проезды той же
+    /// камеры, её обычный лимит и ждущие ответа деньги по ней.
+    var topOverPasses = 0
+    var topOverLimit: Int?
+    var topOverFine: Double = 0
+    /// Время в пробках (31E, TrafficTime) — по дневным итогам. nil — в окне
+    /// нет ни одного дня, где его мерили (дни до обновления): «0 мин» было бы
+    /// неправдой о прошлом.
+    var jamSeconds: TimeInterval?
+    /// Путь с известным лимитом и из него — заметно выше лимита, вне камер
+    /// (31E, OverLimit). Ноль у дней до обновления.
+    var limitKnownMeters: Double = 0
+    var overLimitMeters: Double = 0
 
     var isEmpty: Bool { trips == 0 }
+
+    /// Изменение километров к прошлому периоду (31E). Процент — только при
+    /// сопоставимых периодах: оба окна целые, прошлое не крошечное и не
+    /// отличается в разы. Иначе — километры: «+18 км» правдивее «+178 %».
+    var distanceChange: DistanceChange? {
+        guard previousDistance > 500 else { return nil }
+        return DistanceChange(meters: distance - previousDistance,
+                              percent: WidgetWeek.comparablePercent(distance: distance, previous: previousDistance,
+                                                                    periodComplete: periodComplete))
+    }
+
+    /// Доля пути выше лимита вне камер, 0…1 (nil — данных мало).
+    var overLimitShare: Double? {
+        OverLimit.share(over: overLimitMeters, known: limitKnownMeters)
+    }
     var averageSpeedKmh: Double {
         movingDuration > 0 ? distance / movingDuration * 3.6 : 0
     }
@@ -264,6 +295,15 @@ nonisolated struct PeriodSummary: Equatable {
     }
 }
 
+/// Изменение километров к прошлому периоду: всегда метры, процент — только
+/// когда периоды сопоставимы (см. PeriodSummary.distanceChange).
+nonisolated struct DistanceChange: Equatable, Sendable {
+    let meters: Double
+    let percent: Int?
+
+    var isUp: Bool { meters >= 0 }
+}
+
 /// Пик риска по времени суток: какой четырёхчасовой блок и какая доля превышений.
 nonisolated struct PeakBlock: Equatable {
     let index: Int
@@ -285,23 +325,29 @@ extension TripHistory {
     /// превышения и рейтинг остаются честными.
     nonisolated static func summary(days: [TripDay], history: [TripRecord], period: StatsPeriod,
                         anchor: Date = Date(),
-                        calendar: Calendar = .current) -> PeriodSummary {
+                        calendar: Calendar = .current,
+                        now: Date = Date()) -> PeriodSummary {
         let interval = period.interval(containing: anchor, calendar: calendar)
         var result = TripDayBook.summary(days, in: interval)
+        result.periodComplete = interval.end <= now
         guard !result.isEmpty else { return result }
 
         // Зона риска — по тем записям, что ещё хранятся.
         var overByLocation: [String: Int] = [:]
-        for record in records(history, period: period, anchor: anchor, calendar: calendar) {
+        let window = records(history, period: period, anchor: anchor, calendar: calendar)
+        for record in window {
             for pass in record.passed {
                 guard let limit = pass.limitKmh, !pass.location.isEmpty,
                       FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) > 0 else { continue }
                 overByLocation[pass.location, default: 0] += 1
             }
         }
-        if let top = overByLocation.max(by: { $0.value < $1.value }) {
+        // Ничья — по названию: «самая частая» камера не должна прыгать между
+        // пересборками экрана из-за порядка словаря.
+        if let top = overByLocation.max(by: { ($0.value, $1.key) < ($1.value, $0.key) }) {
             result.topOverLocation = top.key
             result.topOverCount = top.value
+            fillTopDetails(&result, location: top.key, records: window)
         }
 
         // Предыдущее такое же окно — база сравнений «стало лучше/хуже».
@@ -312,6 +358,24 @@ extension TripHistory {
             result.previousRating = before.rating
         }
         return result
+    }
+
+    /// Подробности зоны риска для подсказки действием: все проезды этой камеры
+    /// за окно, лимит, по которому судили чаще всего (достоверный), и ждущие
+    /// ответа деньги — те же ворота, что у fineRisk.
+    nonisolated private static func fillTopDetails(_ result: inout PeriodSummary, location: String,
+                                                   records: [TripRecord]) {
+        var limits: [Int: Int] = [:]
+        for record in records {
+            for pass in record.passed where pass.location == location {
+                result.topOverPasses += 1
+                guard let limit = pass.limitKmh else { continue }
+                if pass.limitIsCertain { limits[limit, default: 0] += 1 }
+                let fine = FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
+                if fine > 0, pass.limitIsCertain, pass.countsTowardFines { result.topOverFine += fine }
+            }
+        }
+        result.topOverLimit = limits.max { ($0.value, -$0.key) < ($1.value, -$1.key) }?.key
     }
 
     /// Сводка только по записям — для тестов и мест, где агрегатов нет под рукой.

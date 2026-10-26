@@ -308,7 +308,12 @@ extension LocationService {
 
         // Активные оповещения (звук/голос/экран) — в поездке ИЛИ пока приложение открыто.
         if isTripActive || isForeground {
-            trip.update(coordinate: coordinate, speedKmh: speedKmh, at: lastFixTime)
+            // Лимит — достоверный и прошлого тика (лимит этого считается ниже):
+            // для «выше лимита вне камер» в «Итогах» (31E) тик разницы не играет.
+            trip.update(coordinate: coordinate, speedKmh: speedKmh, at: lastFixTime,
+                        limitKmh: speedLimits?.certainLimit,
+                        atCamera: (distanceToNearest ?? .greatestFiniteMagnitude)
+                            <= AppConfig.overLimitNearCameraMeters)
             // Лимит дороги и «превышаем устойчиво» — ДО записи проезда и
             // оповещения: фраза о камере и запись читают лимит ЭТОГО тика.
             // Здесь, а не в UI: голос должен работать со свёрнутым приложением.

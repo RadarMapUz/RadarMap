@@ -40,6 +40,8 @@ extension AppEnvironment {
         location.forgetParkedCar()
         settings.recentPlaces = []
         energyJournal.eraseAll()
+        // Память своих дорог (31E) — те же места, что в треках.
+        roadMemory.eraseRoads()
         // Копия в iCloud — тоже (27.F): поездки и сводка сразу или при
         // первой сети; журнал и недавние места уйдут надгробиями сверкой.
         cloud.historyErased()
@@ -74,6 +76,8 @@ extension AppEnvironment {
                      text: String(localized: "Где оставили машину")),
          ErasureLine(symbol: "clock.arrow.circlepath",
                      text: String(localized: "Недавние места")),
+         ErasureLine(symbol: "road.lanes",
+                     text: String(localized: "Память своих дорог и новые камеры на них")),
          ErasureLine(symbol: "list.bullet.rectangle",
                      text: String(localized: "Журнал заправок и зарядок")),
          ErasureLine(symbol: "square.grid.2x2.fill",

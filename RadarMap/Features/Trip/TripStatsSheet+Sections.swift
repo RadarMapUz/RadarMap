@@ -146,17 +146,7 @@ extension TripStatsSheet {
                                      ? String(localized: "Скрыть детали периода")
                                      : String(localized: "Показать детали периода")))
             if detailsExpanded {
-                // Календарь месяца — внутри деталей (6.1): клетки читаются
-                // одним взглядом, но нужны реже, чем деньги и поездки.
-                if period == .month {
-                    MonthCalendarCard(days: trip.days, anchor: anchor) { day in
-                        withMotion(Motion.standard) {
-                            period = .day
-                            anchor = day
-                        }
-                    }
-                    .id("calendar")
-                }
+                // Календарь месяца — в «Моих дорогах» (31E), здесь справка.
                 KPIStrip(summary: summary,
                          activeDaysText: activeDaysText(summary))
                 if let days = period.chartDays(containing: anchor) {
@@ -210,8 +200,9 @@ extension TripStatsSheet {
                                 period.rangeTitle(containing: nearest)))
                         .font(.rounded(15, .semibold))
                         .foregroundStyle(Theme.accent)
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(Theme.accent.opacity(0.12), in: Capsule())
+                        // Ссылка цветом ссылки, без пастельной капсулы (31E).
+                        .frame(minHeight: Theme.controlSize)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(PressableStyle())
             }

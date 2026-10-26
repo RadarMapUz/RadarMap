@@ -15,6 +15,9 @@ Endpoints:
   POST /api/report         {lat, lon, device, type [, course]}  -> {"id": N, "merged": bool
                                                                     [, "amended": true]}
   POST /api/vote           {id, device, value: 1|-1 [, kind: "pass"]} -> {"ok": true}
+  POST /api/mine           {device} -> {"reports": [{id, confirmers}]}
+                           (польза своих отметок в «Итогах»: только отметки ЭТОГО UUID и
+                            число независимых подтверждений — ни координат, ни времени)
   POST /api/metrics        {device, kind, payload}   -> {"ok": true}   (MetricKit)
   POST /api/camera_report  {camera_id, reason, lat, lon, db_version, device} -> {"ok": true}
   POST /api/feedback       {message, contact, app_version, device}     -> {"ok": true}
@@ -294,7 +297,13 @@ MAX_ID = 2**31               # верхняя граница id: больше �
 # а 250 — сбор метрик на месяц. CGNAT мобильных сетей помним, поэтому капы
 # щедрые: за одним адресом оператора живут десятки честных водителей.
 IP_DAILY_CAPS = {"report": 30, "vote": 100, "camera_report": 60,
-                 "feedback": 30, "metrics": 60, "stat": 60, "cng": 40}
+                 "feedback": 30, "metrics": 60, "stat": 60, "cng": 40,
+                 # /api/mine: телефон спрашивает раз в полчаса, пока открыт; за
+                 # CGNAT — десятки телефонов на адрес.
+                 "mine": 2000}
+# Своих отметок в ответе /api/mine — не больше: на устройство их и так
+# максимум три активных, а UUID живёт 30 дней.
+MINE_MAX_REPORTS = 200
 MAX_USAGE_ROWS = 2_000_000   # потолок диска на случай ротации device (срок — LIVE_MAX_DAYS)
 # Скрытие отметки требует дизлайков с РАЗНЫХ адресов: три свежих UUID с одного
 # телефона больше не снимают чужую отметку с карты.
@@ -1541,6 +1550,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._report_cancel()
         if path == "/api/vote":
             return self._vote()
+        if path == "/api/mine":
+            return self._mine()
         if path == "/api/metrics":
             return self._metrics()
         if path == "/api/camera_report":
@@ -2180,6 +2191,24 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             conn.close()
 
+    def _mine(self):
+        data = self._body()
+        if not data:
+            return self._json(400, {"error": "bad json"})
+        try:
+            device = as_str(data["device"])[:64]
+        except (KeyError, TypeError, ValueError):
+            return self._json(400, {"error": "bad fields"})
+        if not device:
+            return self._json(400, {"error": "bad fields"})
+        if ip_quota_exceeded("mine", self._ip(), IP_DAILY_CAPS["mine"]):
+            return self._json(429, {"error": "too many"})
+        conn = db()
+        try:
+            return self._json(200, {"reports": mine_confirmations(conn, device)})
+        finally:
+            conn.close()
+
     def _vote(self):
         data = self._body()
         if not data:
@@ -2269,6 +2298,28 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"ok": True, "up": up, "down": down, "active": bool(active)})
         finally:
             conn.close()
+
+def mine_confirmations(conn, device, limit=MINE_MAX_REPORTS):
+    """Подтверждения своих отметок: [{id, confirmers}] по отметкам этого UUID.
+
+    Почему по UUID, а не по списку id от телефона: id идут подряд, и ответ
+    «по любому id» раздал бы счётчики всех отметок страны любому, кто
+    переберёт номера. По UUID — только то, что этот телефон сам поставил:
+    больше, чем сервер уже знает о владельце UUID, ответ не раскрывает.
+
+    confirmers — число РАЗНЫХ адресов среди лайков с чужого устройства и
+    чужого адреса (то же «независимо», что у confirmed_independently). Адрес,
+    а не устройство: UUID ротируется бесплатно, и один телефон набирал бы
+    «трёх водителей» сам. Голоса без адреса (старые, '') — не в счёт.
+    В ответе нет координат, времени, типа и голосов — только id и число.
+    """
+    rows = conn.execute(
+        "SELECT r.id, (SELECT COUNT(DISTINCT v.ip) FROM votes v WHERE v.report_id = r.id "
+        "AND v.value = 1 AND v.device != r.device AND v.ip != '' AND v.ip != r.ip) "
+        "FROM reports r WHERE r.device = ? ORDER BY r.id DESC LIMIT ?",
+        (device, limit)).fetchall()
+    return [{"id": rid, "confirmers": int(count or 0)} for rid, count in rows]
+
 
 class BoundedHTTPServer(ThreadingHTTPServer):
     """ThreadingHTTPServer с потолком одновременных обработчиков.

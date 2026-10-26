@@ -26,6 +26,23 @@ extension MapScreen {
             env.trip.seedDemoHistory(scale: args.contains("-demoBigNumbers") ? 20 : 1)
         }
         if args.contains("-demoMergePair") { env.trip.seedDemoMergePair() }
+        // «Итоги» 31E: пробки, выше лимита вне камер, рейсы, свои отметки и
+        // новые камеры на своих дорогах — `-itogiDemo [-itogiDemoGoal] -showStats`.
+        if args.contains("-itogiDemoFew") {
+            env.trip.seedItogiFewDemo()
+            env.mobile.clearImpactDemo()
+            env.roadMemory.dismissNews()
+            env.clearWorkShifts()
+        }
+        if args.contains("-itogiDemo") {
+            env.trip.seedItogiDemo(cleanGoal: args.contains("-itogiDemoGoal"))
+            env.mobile.seedImpactDemo()
+            Task {
+                while !env.cameras.isDatabaseLoaded { await Task.pause(seconds: 0.2) }
+                let base = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)
+                env.roadMemory.seedDemo(ids: env.cameras.nearest(to: base, limit: 2).map(\.id))
+            }
+        }
         // Обслуживание во всех состояниях (18.2): `-demoMaintenance` вместе с
         // `-showStats` (карточка в Итогах) или `-showSettings -settingsPage maintenance`.
         if args.contains("-demoMaintenance") { env.maintenance.seedDemo() }

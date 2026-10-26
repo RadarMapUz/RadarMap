@@ -222,7 +222,7 @@ nonisolated enum TripExport {
     }
 
     /// Выгрузки, оставленные вылетом посреди «Поделиться»: в них вся история.
-    static func cleanUpStale(in root: URL) {
+    static func cleanUpStale(in root: URL, prefix: String = workPrefix) {
         let names: [String]
         do {
             names = try FileManager.default.contentsOfDirectory(atPath: root.path)
@@ -230,7 +230,7 @@ nonisolated enum TripExport {
             Log.trips.error("временная папка не перечислена: \(error.localizedDescription, privacy: .public)")
             return
         }
-        for name in names where name.hasPrefix(workPrefix) {
+        for name in names where name.hasPrefix(prefix) {
             remove(root.appendingPathComponent(name, isDirectory: true))
         }
     }

@@ -23,24 +23,39 @@ nonisolated struct ItogiScreen: Equatable {
     var pendingOldest: Date?
     /// Поездки окна периода, новые первыми.
     var trips: [TripRecord]
+    /// Подсказка действием в герое (31E) — заменяет вывод, когда она есть.
+    var action: ActionHint?
+    /// Пробки окна: места и часы по записям (31E); сумма — в summary.
+    var jams: TrafficTime.Period
+    /// Где чаще выше лимита вне камер (31E).
+    var overLimitPlaces: [OverLimit.Place]
+    /// Цель недели — по дням, не по окну периода (31E).
+    var goal: WeeklyGoal?
 
     static func == (a: ItogiScreen, b: ItogiScreen) -> Bool {
         a.summary == b.summary && a.insights == b.insights
             && a.pendingCount == b.pendingCount && a.pendingOldest == b.pendingOldest
             && a.trips.map(\.id) == b.trips.map(\.id)
+            && a.action == b.action && a.jams == b.jams
+            && a.overLimitPlaces == b.overLimitPlaces && a.goal == b.goal
     }
 
     /// Чистая сборка — её и проверяет тест; `screen` лишь уводит её с main.
     static func build(days: [TripDay], history: [TripRecord], period: StatsPeriod,
                       anchor: Date, now: Date) -> ItogiScreen {
         let summary = TripHistory.summary(days: days, history: history,
-                                          period: period, anchor: anchor)
+                                          period: period, anchor: anchor, now: now)
         let nudge = TripHistory.pendingFineNudge(history, now: now)
+        let trips = TripHistory.historyList(history, period: period, anchor: anchor)
         return ItogiScreen(summary: summary,
                            insights: PeriodInsights.hero(summary).map { [$0] } ?? [],
                            pendingCount: nudge?.count ?? 0,
                            pendingOldest: nudge?.oldest,
-                           trips: TripHistory.historyList(history, period: period, anchor: anchor))
+                           trips: trips,
+                           action: PeriodInsights.action(summary),
+                           jams: TrafficTime.period(trips),
+                           overLimitPlaces: OverLimit.places(trips),
+                           goal: WeeklyGoal.build(days: days, now: now))
     }
 
     @concurrent

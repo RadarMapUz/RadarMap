@@ -23,6 +23,16 @@ extension TripStatsSheet {
     /// С журналом заправок (21.6) сверху — реальные деньги периода, оценка —
     /// второй строкой, тап ведёт в журнал. Кнопка «+» рядом — записать
     /// заправку или зарядку, не уходя из «Итогов».
+    /// Есть ли что показать строкой расходов — блок «Машина и работа» без
+    /// неё и без смен не показывается вовсе (31E).
+    func fuelRowVisible(summary: PeriodSummary) -> Bool {
+        let interval = period.interval(containing: anchor)
+        let ledger = env.energyLedger
+        let use = ledger.use(of: TripDayBook.days(env.trip.days, in: interval))
+        return summary.distance > 0
+            && PeriodEnergyRow.isWorthShowing(use, model: ledger.model, journal: env.journalPeriod(interval))
+    }
+
     @ViewBuilder
     func fuelRow(summary: PeriodSummary) -> some View {
         let interval = period.interval(containing: anchor)
@@ -85,6 +95,14 @@ extension TripStatsSheet {
                                     : String(localized: "Возможные штрафы"))
                                 .font(.rounded(13, .medium))
                                 .foregroundStyle(Theme.textSecondary)
+                            if !ok {
+                                // Это оценка, а не долг (31E): сумма — если бы
+                                // каждое превышение у камеры записалось.
+                                Text("если бы все превышения записались")
+                                    .font(.rounded(13))
+                                    .foregroundStyle(Theme.textTertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                             Text(ok ? String(localized: "0 штрафов")
                                     : Formatting.money(summary.fineRisk))
                                 .font(.rounded(26, .heavy))
@@ -96,6 +114,18 @@ extension TripStatsSheet {
                                 .font(.rounded(13))
                                 .foregroundStyle(Theme.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
+                            if !ok {
+                                // Рядом с оценкой — факт (31E): сколько пришло
+                                // на деле, по отметкам «пришёл» и внесённым
+                                // постановлениям (PassedCamera.paidAmount).
+                                Text(summary.finesPaid > 0
+                                     ? String(format: String(localized: "Пришло на деле: %@"),
+                                              Formatting.money(summary.finesPaid))
+                                     : String(localized: "Пришедших пока не отмечено"))
+                                    .font(.rounded(13, .semibold))
+                                    .foregroundStyle(Theme.textPrimary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                             if !ok {
                                 // Что за проезды и «не пришёл» — на своём экране.
                                 // Ссылка — цветом ссылки, как везде в приложении.

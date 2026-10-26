@@ -6,8 +6,6 @@
 //  настоящем SwiftUI, чтобы владелец выбирал по снимкам, а не по описаниям.
 //
 //  Вариант включается DEBUG-ключом запуска, по экрану:
-//    -designTripEnd A|B|C    карточка «Поездка сохранена»
-//    -designRoute A|B        панель маршрута до старта
 //    -designOnboarding A|B   онбординг на малом экране
 //  Без ключа и в релизе — `.base`, то есть приложение как есть. После выбора
 //  владельца выбранный вариант переносится в основной код, а эта папка
@@ -21,8 +19,6 @@ nonisolated enum DesignLab {
         case base, a = "A", b = "B", c = "C"
     }
 
-    static let tripEnd = variant("-designTripEnd")
-    static let route = variant("-designRoute")
     static let onboarding = variant("-designOnboarding")
 
     private static func variant(_ key: String) -> Variant {

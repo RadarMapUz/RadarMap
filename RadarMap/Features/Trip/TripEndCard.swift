@@ -15,6 +15,12 @@
 //  записи (см. MapScreen.maybeShowTripEnd): автозавершение в кармане
 //  обслуживает уведомление, а не карточка поверх карты, которую никто не видит.
 //
+//  Облик — «балл-герой» (этап 31, выбор владельца 26.10): одна строка
+//  ≈ 100 pt — крупный балл, вердикт и «12,4 км · 18 мин · 1 камера», вся
+//  карточка — вход в подробности. Было: кольцо, заголовок в две строки на SE,
+//  «1 камер», синяя градиентная «Подробнее» (второй «главный» цвет рядом с
+//  жёлтым) и ≈ 300 pt высоты поверх «Домой» и дока.
+//
 
 import SwiftUI
 
@@ -25,18 +31,54 @@ struct TripEndCard: View {
     var onMerged: () -> Void
     var onDismiss: () -> Void
 
-    @State var shareSubject: ShareSubjectBox?
-    @State var confirmsMerge = false
+    @State private var shareSubject: ShareSubjectBox?
+    @State private var confirmsMerge = false
 
     var body: some View {
-        Group {
-            switch DesignLab.tripEnd {
-            case .base: baseCard
-            case .a: labCardA
-            case .b: labCardB
-            case .c: labCardC
+        let shape = RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
+        VStack(spacing: 10) {
+            HStack(spacing: 14) {
+                Button { onDetail(record) } label: {
+                    HStack(spacing: 14) {
+                        heroScore
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Поездка сохранена")
+                                .font(.rounded(12, .semibold))
+                                .foregroundStyle(Theme.textSecondary)
+                            Text(moneyLine)
+                                .font(.rounded(15, .bold))
+                                .foregroundStyle(moneyTint)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                            Text(verbatim: factsLine)
+                                .font(.rounded(12, .medium).monospacedDigit())
+                                .foregroundStyle(Theme.textPrimary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.rounded(12, .bold))
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableStyle())
+                .accessibilityHint(Text("Подробнее"))
+                VStack(spacing: 6) {
+                    roundButton("xmark", tint: Theme.textSecondary, action: onDismiss)
+                        .accessibilityLabel(Text("Скрыть итог поездки"))
+                    roundButton("square.and.arrow.up", tint: Theme.accent, action: share)
+                        .accessibilityLabel(Text("Поделиться поездкой"))
+                }
+            }
+            if let previous = mergeCandidate {
+                mergeRow(previous: previous)
             }
         }
+        .padding(14)
+        .liftedBackground(Theme.surface, in: shape)
+        .overlay(shape.strokeBorder(Theme.edgePanel, lineWidth: 1))
         .transition(.move(edge: .bottom).combined(with: .opacity))
         .sheet(item: $shareSubject) { box in
             SharePreviewSheet(subject: box.subject)
@@ -48,93 +90,28 @@ struct TripEndCard: View {
         }
     }
 
-    private var baseCard: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 12) {
-                scoreBadge
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Поездка сохранена")
-                        .font(.rounded(17, .bold))
-                        .foregroundStyle(Theme.textPrimary)
-                    Text(moneyLine)
-                        .font(.rounded(15, .semibold))
-                        .foregroundStyle(moneyTint)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
-                Spacer(minLength: 0)
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark")
-                        .font(.rounded(15, .bold))
-                        .foregroundStyle(Theme.textTertiary)
-                        .frame(width: 32, height: 32)
-                        .background(Theme.background, in: Circle())
-                        .tapTarget()
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text("Скрыть итог поездки"))
-            }
-
-            HStack(spacing: 0) {
-                metric(Formatting.distance(record.distanceMeters),
-                       String(localized: "путь"))
-                metricDivider
-                metric(Formatting.duration(record.movingDuration),
-                       String(localized: "в движении"))
-                metricDivider
-                metric("\(record.camerasPassed)", String(localized: "камер"))
-            }
-            .padding(.vertical, 10)
-            .background(Theme.background,
-                        in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
-
-            if let previous = mergeCandidate {
-                mergeRow(previous: previous)
-            }
-
-            HStack(spacing: 10) {
-                Button {
-                    onDetail(record)
-                } label: {
-                    HStack(spacing: 6) {
-                        Text("Подробнее")
-                            .font(.rounded(14, .bold))
-                        Image(systemName: "chevron.right")
-                            .font(.rounded(11, .bold))
-                    }
-                    // Белое на accentFill — пара токенов для текста на синем.
-                    .foregroundStyle(Theme.onAccentFill)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Theme.accentFill.gradient, in: Capsule())
-                    .contentShape(Capsule())
-                }
-                .buttonStyle(PressableStyle())
-
-                // Поделиться — здесь и сейчас: цифры свежие, и это тот самый
-                // момент, когда ими хочется похвастаться. Раньше за карточкой
-                // приходилось идти в деталку через Итоги.
-                Button(action: share) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.rounded(16, .semibold))
-                        .foregroundStyle(Theme.accent)
-                        .frame(width: 46, height: 44)
-                        .background(Theme.background, in: Capsule())
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(PressableStyle())
-                .accessibilityLabel(Text("Поделиться поездкой"))
-            }
-        }
-        .padding(16)
-        .liftedBackground(Theme.surface,
-                          in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
-            .stroke(Theme.stroke, lineWidth: 1))
+    /// «12,4 км · 18 мин · 1 камера» — склонение из каталога (`%lld камер`):
+    /// метрика «1 / камер» читалась как «1 камер».
+    private var factsLine: String {
+        [Formatting.distance(record.distanceMeters),
+         Formatting.duration(record.movingDuration),
+         String(localized: "\(record.camerasPassed) камер")].joined(separator: " · ")
     }
 
-    /// Снимок карты с треком — как в деталке; сама карточка рисуется в превью.
-    func share() {
+    /// Крестик и «поделиться» — малые круги 30 pt, мишень 44.
+    private func roundButton(_ symbol: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.rounded(12, .bold))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(Theme.background, in: Circle())
+                .tapTarget()
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func share() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         Task {
             let map = await TripMapSnapshot.render(track: record.trackPoints,
@@ -147,42 +124,35 @@ struct TripEndCard: View {
     // MARK: - Балл
 
     /// Кольцо с баллом поездки — тем же цветом, что в списках истории.
-    @ViewBuilder var scoreBadge: some View {
+    /// Балл крупно, без кольца: число и есть итог, а его цвет уже говорит
+    /// «хорошо / плохо». Без балла — печать вердикта на той же плашке.
+    @ViewBuilder private var heroScore: some View {
         if let score = record.score.map({ Int($0) }) {
             let tint = TripHistorySection.scoreColor(score)
-            ZStack {
-                Circle()
-                    .stroke(tint.opacity(0.18), lineWidth: 5)
-                Circle()
-                    .trim(from: 0, to: max(0.04, Double(score) / 100))
-                    .stroke(tint, style: StrokeStyle(lineWidth: 5, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                Text("\(score)")
-                    .font(.rounded(16, .heavy).monospacedDigit())
+            VStack(spacing: -2) {
+                Text(verbatim: "\(score)")
+                    .font(.rounded(38, .heavy).monospacedDigit())
                     .foregroundStyle(tint)
+                Text("рейтинг")
+                    .font(.rounded(12, .semibold))
+                    .foregroundStyle(Theme.textTertiary)
             }
-            .frame(width: 46, height: 46)
+            .frame(width: 70, height: 70)
+            .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(String(format: String(localized: "Балл поездки: %lld"), score)))
         } else {
-            // Без балла зелёная печать — только у чистой поездки: рядом с
-            // «Лимиты камер неизвестны» она хвалила за то, чего мы не знаем.
             let clean = record.verdict == .clean
             let tint = clean ? Theme.success : Theme.accent
             Image(systemName: clean ? "checkmark.seal.fill" : "checkmark.circle.fill")
-                .font(.rounded(22, .bold))
+                .font(.rounded(30, .bold))
                 .foregroundStyle(tint)
-                .frame(width: 46, height: 46)
-                .background(tint.opacity(0.12), in: Circle())
+                .frame(width: 70, height: 70)
+                .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
         }
     }
 
-    /// Одна честная строка про деньги и поведение (`TripRecord.verdict`):
-    /// риск, если он есть; превышения без суммы (лимит предположен) — тоже
-    /// превышения; «нет» — только когда хоть один лимит известен. Граница —
-    /// ступень ШТРАФА: балл снимает и за +3 км/ч, поэтому «штрафуемых», а не
-    /// «превышений нет» (ревью 20.10). Без числа камер: оно в плитке ниже, а
-    /// строка с ним не влезала в карточку на 375–402 pt.
-    var moneyLine: String {
+    private var moneyLine: String {
         switch record.verdict {
         case .risk(let risk):
             return String(format: String(localized: "риск ≈ %@"), Formatting.money(risk))
@@ -197,7 +167,7 @@ struct TripEndCard: View {
         }
     }
 
-    var moneyTint: Color {
+    private var moneyTint: Color {
         switch record.verdict {
         case .risk, .overspeed: return Theme.danger
         case .clean, .noCameras: return Theme.success
@@ -209,7 +179,7 @@ struct TripEndCard: View {
 
     /// Предыдущая запись, если свежая выглядит её продолжением. Считается по
     /// тем же правилам, что карточка в Итогах, — здесь просто раньше по времени.
-    var mergeCandidate: TripRecord? {
+    private var mergeCandidate: TripRecord? {
         let history = env.trip.history
         guard history.count >= 2, history[0].id == record.id else { return nil }
         let previous = history[1]
@@ -223,7 +193,7 @@ struct TripEndCard: View {
     /// и тап, промахнувшийся на пару пунктов, молча сливал две поездки в одну:
     /// карточка тут же подменялась склеенной записью, а вернуть всё назад
     /// можно было только разделением в деталке.
-    func mergeRow(previous: TripRecord) -> some View {
+    private func mergeRow(previous: TripRecord) -> some View {
         Button {
             confirmsMerge = true
         } label: {
@@ -261,26 +231,5 @@ struct TripEndCard: View {
             env.trip.mergeWithPrevious(id: record.id)
             onMerged()
         }
-    }
-
-    // MARK: - Метрики
-
-    func metric(_ value: String, _ label: String) -> some View {
-        VStack(spacing: 2) {
-            Text(value)
-                .font(.rounded(16, .heavy).monospacedDigit())
-                .foregroundStyle(Theme.textPrimary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Text(label)
-                .font(.rounded(10, .medium))
-                .foregroundStyle(Theme.textTertiary)
-        }
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .combine)
-    }
-
-    var metricDivider: some View {
-        Rectangle().fill(Theme.stroke).frame(width: 1, height: 26)
     }
 }

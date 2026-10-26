@@ -44,12 +44,14 @@ final class EngineCarDecor {
 
     private func layoutRing(at point: CGPoint, mapDirection: Double, pitchDegrees: Double,
                             shown: Bool, in view: MLNMapView) {
+        // Видимость — только на смене: сеттер isHidden у UIView не бесплатен
+        // (обход маскирующих видов), а зовётся это на каждом кадре камеры.
         guard shown else {
-            ring?.isHidden = true
+            if ring?.isHidden == false { ring?.isHidden = true }
             return
         }
         let ring = self.ring ?? makeRing(in: view)
-        ring.isHidden = false
+        if ring.isHidden { ring.isHidden = false }
         ring.update(center: point, mapDirection: mapDirection, pitchDegrees: pitchDegrees)
     }
 
@@ -188,9 +190,22 @@ final class CompassRingView: UIView {
             label.layer.shadowOpacity = 0.8
             label.layer.shadowOffset = .zero
             label.sizeToFit()
+            // Буква неизменна, меняется только место: растр с тенью собирается
+            // один раз, а не на каждом кадре, пока карта крутится (тень слоя
+            // без shadowPath — внеэкранный проход композитора).
+            label.layer.shouldRasterize = true
             addSubview(label)
             labels.append(label)
         }
+        // Размер вида постоянный — ставится один раз, не на каждом кадре.
+        let side = AppConfig.compassRadiusPoints * 2 + 24
+        bounds = CGRect(x: -side / 2, y: -side / 2, width: side, height: side)
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        let scale = window?.traitCollection.displayScale ?? traitCollection.displayScale
+        for label in labels { label.layer.rasterizationScale = max(1, scale) }
     }
 
     required init?(coder: NSCoder) { nil }
@@ -204,8 +219,6 @@ final class CompassRingView: UIView {
                                             pitchDegrees: pitchDegrees)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        let side = AppConfig.compassRadiusPoints * 2 + 24
-        bounds = CGRect(x: -side / 2, y: -side / 2, width: side, height: side)
         layer.position = center
         if pitchChanged {
             let rect = CGRect(x: -geometry.radiusX, y: -geometry.radiusY,
@@ -214,8 +227,12 @@ final class CompassRingView: UIView {
             outline.path = ellipse.path
             pool.frame = rect
         }
-        for (label, point) in zip(labels, geometry.letters) {
-            label.center = point
+        // Буквы — позицией слоя, а не `center` вида: UIKit на `center`
+        // пересчитывает поля и отступы (треть цены кольца на кадре, аудит
+        // 26.10), а у этих букв их нет. Для вида без своей раскладки это одно
+        // и то же место.
+        for index in labels.indices where index < geometry.letters.count {
+            labels[index].layer.position = geometry.letters[index]
         }
         CATransaction.commit()
     }

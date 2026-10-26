@@ -1,23 +1,6 @@
 {
   "sourceLanguage": "ru",
   "strings": {
-    "Куда едем?": {
-      "comment": "Этап 31 (варианты дизайна): поле поиска на главном экране",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Куда едем?"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Qayerga boramiz?"
-          }
-        }
-      }
-    },
     " на %@": {
       "localizations": {
         "ru": {
@@ -1740,18 +1723,18 @@
         }
       }
     },
-    "3 400+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном.": {
+    "3 600+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "3 400+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном."
+            "value": "3 600+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Oʻzbekistonning 3 400+ kamera va radarlari rasmiy maʼlumotlardan. Ovoz — kameradan 22 soniya oldin, tezlikni hisobga olib; yigʻilgan ilova va oʻchgan ekranda ham ishlaydi."
+            "value": "Oʻzbekistonning 3 600+ kamera va radarlari rasmiy maʼlumotlardan. Ovoz — kameradan 22 soniya oldin, tezlikni hisobga olib; yigʻilgan ilova va oʻchgan ekranda ham ishlaydi."
           }
         }
       }
@@ -13187,7 +13170,7 @@
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Предупредит о камере заранее"
+            "value": "Предупредит о\u00A0камере заранее"
           }
         },
         "uz": {

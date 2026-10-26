@@ -457,6 +457,11 @@ nonisolated enum EngineMapStyle {
 
     /// Цвет типа камеры для слоёв движка — те же значения, что Theme.Types
     /// (движок принимает только строку цвета).
+    /// Зона «здесь часто ставят треногу» — янтарь, не красный камеры: это
+    /// догадка о прошлом, а не камера (HotspotAlert). До 29.C2 брался цвет
+    /// треноги, теперь у треноги красный камеры.
+    static let hotspotHex = "#F2B200"
+
     static func typeHex(_ kind: CameraType) -> String {
         String(format: "#%06X", kind.markerRGB)
     }
@@ -469,11 +474,11 @@ nonisolated enum EngineMapStyle {
         // поверх настоящих точек, а решение сбросить скорость принимают вблизи.
         out.append([
             "id": "hotspot-zone", "type": "fill", "source": "hotspots", "minzoom": 13,
-            "paint": ["fill-color": typeHex(.tripod), "fill-opacity": 0.10],
+            "paint": ["fill-color": hotspotHex, "fill-opacity": 0.10],
         ])
         out.append([
             "id": "hotspot-edge", "type": "line", "source": "hotspots", "minzoom": 13,
-            "paint": ["line-color": typeHex(.tripod), "line-opacity": 0.5,
+            "paint": ["line-color": hotspotHex, "line-opacity": 0.5,
                       "line-width": 1.5, "line-dasharray": [3, 3]],
         ])
         // Перекрытия и ремонт (12б.5) — ПОД камерами и без права занимать

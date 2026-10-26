@@ -52,12 +52,11 @@ struct MapPointBar: View {
                     action("Маршрут сюда", "arrow.triangle.turn.up.right.circle.fill",
                            tint: Theme.accent, action: onRoute)
                 }
-                // Янтарь радара — заливка, а не краска текста: #F2B200 на
-                // светлой панели читался 1,9:1. Значок — на кружке цвета
-                // типа (как маркер на карте), подпись — обычным текстом.
+                // Значок камеры — на красном кружке, как маркер на карте (все
+                // камеры — один значок, 29.C2); подпись — обычным текстом.
                 action("Радар здесь", "dot.radiowaves.left.and.right",
-                       tint: Theme.textPrimary, chip: Theme.Types.radar,
-                       glyph: Theme.Types.darkGlyph, action: onRadar)
+                       tint: Theme.textPrimary, chip: Theme.Types.camera,
+                       glyph: .white, action: onRadar)
                 action("Своя камера", "plus.viewfinder",
                        tint: Theme.textPrimary, action: onOwnCamera)
             }

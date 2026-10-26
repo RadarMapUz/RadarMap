@@ -90,8 +90,18 @@ nonisolated enum CameraMarkerLook {
         return path.contains(id) ? .path : .calm
     }
 
+    /// Основа имени картинки значка в стиле: одна на глиф — у всех типов камер
+    /// одна картинка (29.C2), своя у поста, ДТП и «прочего».
+    static func imageBase(_ glyph: CameraGlyph) -> String {
+        "radar-camera-" + glyph.rawValue
+    }
+
     /// Имя картинки в стиле. Спокойная — своя на день и ночь: графит разный.
     /// Суффиксы — те же, что у `rasters`.
+    static func icon(glyph: CameraGlyph, tier: Tier, daylight: Bool) -> String {
+        icon(symbol: imageBase(glyph), tier: tier, daylight: daylight)
+    }
+
     static func icon(symbol: String, tier: Tier, daylight: Bool) -> String {
         switch tier {
         case .alert: return symbol + "-alert"

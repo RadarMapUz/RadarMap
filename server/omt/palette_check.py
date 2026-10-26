@@ -23,8 +23,9 @@ ROUTE = {"light": {"body": "#2a6ff0", "casing": "#1e4fb8",
                   "alternative": "#98acd2", "alternativeCasing": "#0e1a33"}}
 TRAFFIC = {"light": {"free": "#2ba84a", "slow": "#e8a100", "jam": "#d93025"},
            "dark": {"free": "#3cc46b", "slow": "#ffb020", "jam": "#ff5a4e"}}
-CAMERA_TYPES = {"camera": "#d93025", "radar": "#f2b200", "intelligent": "#6a3fd6",
-                "mobile": "#c2409e", "post": "#46525e"}
+# Заливки значков на карте (Theme.Types): с 29.C2 у всех камер один красный,
+# свои — у поста ДПС и ДТП.
+CAMERA_TYPES = {"camera": "#d93025", "post": "#46525e", "accident": "#c62828"}
 CAMERA_RING = "#ffffff"
 # Спокойная камера (вариант B «Спокойная карта»): заливка и кольцо по теме.
 CALM = {"light": {"fill": "#3d4652", "ring": "#ffffff"},

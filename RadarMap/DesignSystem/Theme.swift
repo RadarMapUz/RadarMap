@@ -240,23 +240,20 @@ enum Theme {
 
     // MARK: - Типы камер
     //
-    // Маркер — цветной круг с белым кольцом (читается на любой подложке),
-    // тип различает и цвет, и глиф. Подбор расчётом: камера и радар
-    // различаются СВЕТЛОТОЙ (красный с белым значком / светлый янтарь с
-    // тёмным), поэтому не сливаются и при дейтеранопии; значок на каждом
-    // круге — не ниже 4,6:1. Цвет типа — не цвет состояния: тревогу несёт
-    // ореол и размер маркера, а не его заливка.
+    // Маркер — цветной круг с белым кантом (читается на любой подложке).
+    // С 29.C2 (владелец, 26.10: «все камеры — одна иконка, они вроде все
+    // радары») у всех камер — стационарной, радара, интеллектуальной,
+    // передвижного радара и треноги — один значок и один красный; свои цвет
+    // и глиф только у того, что не камера: пост ДПС, ДТП, «прочее». Значок
+    // на каждом круге — белый, не ниже 4,5:1. Цвет типа — не цвет состояния:
+    // тревогу несёт ореол и размер маркера, а не его заливка.
 
     enum Types {
-        /// Стационарная камера.
+        /// Камера любого типа (Shared/CameraGlyph.fillRGB).
         static let camera      = Color(uiColor: rgb(0xD93025))
-        /// Стационарный радар и тренога — СВЕТЛЫЙ: глиф на нём тёмный (glyph(on:)).
-        static let radar       = Color(uiColor: rgb(0xF2B200))
-        /// Интеллектуальная камера + радар. Индиго, а не синий: синим говорит
-        /// интерфейс (accent), и маркер читался бы кнопкой (ΔE 12 → 30).
+        /// Индиго — бывший цвет интеллектуальной камеры; на маркерах с 29.C2
+        /// не используется, остался акцентом Итогов (время, плавность).
         static let intelligent = Color(uiColor: rgb(0x6A3FD6))
-        /// Передвижной радар (краудсорс). Неподтверждённая — пунктир кольца.
-        static let mobile      = Color(uiColor: rgb(0xC2409E))
         /// Пост ДПС.
         static let post        = Color(uiColor: rgb(0x46525E))
         /// ДТП — событие, а не характеристика точки: цвет опасности. На
@@ -267,8 +264,6 @@ enum Theme {
         static let other       = Color(uiColor: rgb(0x556070))
         /// Кольцо маркера.
         static let ring        = Color.white
-        /// Глиф на СВЕТЛОЙ заливке (радар, тренога) — 9:1.
-        static let darkGlyph   = Color(uiColor: rgb(0x1C1C1E))
     }
 
     // MARK: - Поверхности и текст
@@ -554,27 +549,18 @@ extension CameraType {
     /// (EngineMapStyle.typeHex) и растры значков (CameraIconArt).
     nonisolated var markerRGB: UInt32 { glyph.fillRGB }
 
+    /// Заливка значка: одна у всех камер (красный камеры), своя у поста и ДТП.
     var tint: Color {
-        switch self {
-        case .stationaryCamera: return Theme.Types.camera
-        case .stationaryRadar:  return Theme.Types.radar
-        case .intelligentRadar: return Theme.Types.intelligent
-        case .mobileRadar:      return Theme.Types.mobile
-        case .tripod:           return Theme.Types.radar
-        case .dpsPost:          return Theme.Types.post
-        case .accident:         return Theme.Types.accident
-        case .other:            return Theme.Types.other
+        switch glyph {
+        case .camera:   return Theme.Types.camera
+        case .post:     return Theme.Types.post
+        case .accident: return Theme.Types.accident
+        case .other:    return Theme.Types.other
         }
     }
 
-    /// Цвет значка НА заливке типа. Радар и тренога светлые — значок тёмный;
-    /// остальные заливки тёмные — значок белый. Контраст не ниже 4,6:1.
-    var glyphTint: Color {
-        switch self {
-        case .stationaryRadar, .tripod: return Theme.Types.darkGlyph
-        default:                        return .white
-        }
-    }
+    /// Цвет значка НА заливке типа — белый: все заливки тёмные (≥ 4,5:1).
+    var glyphTint: Color { Color(uiColor: Theme.rgb(glyph.inkRGB)) }
 }
 
 /// Цвета линии маршрута ЧИСЛАМИ: из них строятся и токены `Theme.route…`

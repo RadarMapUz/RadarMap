@@ -187,14 +187,14 @@ struct EngineCameraMarkersTests {
         }
     }
 
-    @Test("Значок каждого типа во всех обликах рисуется: без картинки тип молча пропадает")
+    @Test("Значок каждого глифа во всех обликах рисуется: без картинки тип молча пропадает")
     @MainActor func everyMarkerImageRenders() {
-        for kind in EngineMapView.Coordinator.markerKinds {
+        for glyph in EngineMapView.Coordinator.markerGlyphs {
             for look in CameraMarkerLook.rasters {
-                let image = CameraIconArt.marker(kind, look: look)
+                let image = CameraIconArt.marker(glyph, look: look)
                 let expected = look.side + 2 * Double(CameraCoin.shadowPad)
-                #expect(abs(Double(image.size.width) - expected) < 0.01, "\(kind.symbolName)\(look.suffix)")
-                #expect(abs(Double(image.size.height) - expected) < 0.01, "\(kind.symbolName)\(look.suffix)")
+                #expect(abs(Double(image.size.width) - expected) < 0.01, "\(glyph)\(look.suffix)")
+                #expect(abs(Double(image.size.height) - expected) < 0.01, "\(glyph)\(look.suffix)")
             }
         }
     }

@@ -25,11 +25,30 @@ final class CameraGlyphTests: XCTestCase {
         for kind in kinds {
             XCTAssertEqual(CameraGlyph(symbol: kind.symbolName), kind.glyph, kind.symbolName)
         }
-        XCTAssertEqual(Set(kinds.map(\.glyph)).count, CameraGlyph.allCases.count, "у каждого глифа свой тип")
+        XCTAssertEqual(Set(kinds.map(\.glyph)), Set(CameraGlyph.allCases), "у каждого глифа есть тип")
         // Состояния Live Activity — не камеры: им свой символ, не «прочее».
         XCTAssertNil(CameraGlyph(symbol: "checkmark.shield.fill"))
         XCTAssertNil(CameraGlyph(symbol: "location.slash.fill"))
         XCTAssertNil(CameraGlyph(symbol: nil))
+    }
+
+    /// Владелец, 26.10 (29.C2): «все камеры — одна иконка, они вроде все
+    /// радары». Всё, что меряет скорость или фиксирует нарушения, — один глиф
+    /// и один цвет; отдельно — только не камеры: пост ДПС, ДТП, «прочее».
+    func testEveryCameraTypeIsOneIcon() {
+        let cameras: [CameraType] = [.stationaryCamera, .stationaryRadar, .intelligentRadar, .mobileRadar, .tripod]
+        for kind in cameras {
+            XCTAssertEqual(kind.glyph, .camera, kind.symbolName)
+            XCTAssertEqual(kind.markerRGB, CameraType.stationaryCamera.markerRGB, kind.symbolName)
+            XCTAssertEqual(hex(kind.tint), hex(Theme.Types.camera), kind.symbolName)
+            XCTAssertEqual(CameraMarkerLook.icon(glyph: kind.glyph, tier: .path, daylight: true),
+                           CameraMarkerLook.icon(glyph: .camera, tier: .path, daylight: true))
+        }
+        XCTAssertEqual(CameraType.dpsPost.glyph, .post)
+        XCTAssertEqual(CameraType.accident.glyph, .accident)
+        XCTAssertEqual(CameraType.other("x").glyph, .other)
+        // Тип остаётся словом: значок один, названия — разные.
+        XCTAssertEqual(Set(cameras.map(\.displayName)).count, cameras.count)
     }
 
     func testEveryGlyphStaysOnItsGrid() {
@@ -76,33 +95,33 @@ final class CameraGlyphTests: XCTestCase {
 
     /// Глиф нарисован (не пустой круг) и не выходит за круг.
     func testGlyphIsDrawnInsideTheCoin() throws {
-        for kind in kinds {
-            let mask = try inkMask(kind, side: 24)
-            XCTAssertGreaterThan(mask.ink, mask.total / 20, "\(kind.symbolName): глифа почти нет")
-            XCTAssertEqual(mask.outside, 0, "\(kind.symbolName): глиф за кругом")
+        for glyph in CameraGlyph.allCases {
+            let mask = try inkMask(glyph, side: 24)
+            XCTAssertGreaterThan(mask.ink, mask.total / 20, "\(glyph): глифа почти нет")
+            XCTAssertEqual(mask.outside, 0, "\(glyph): глиф за кругом")
         }
     }
 
-    /// Типы различимы СИЛУЭТОМ на мелком значке: тип по цвету не читается на
-    /// графитовой спокойной камере, только по глифу.
+    /// Камера, пост ДПС, ДТП и «прочее» различимы СИЛУЭТОМ на мелком значке:
+    /// на графитовой спокойной камере цвета нет, а камера и ДТП оба красные.
     func testGlyphsAreDistinguishableBySilhouette() throws {
-        let masks = try kinds.map { try inkMask($0, side: 24).bits }
+        let glyphs = CameraGlyph.allCases
+        let masks = try glyphs.map { try inkMask($0, side: 24).bits }
         for i in masks.indices {
             for j in masks.indices where j > i {
                 let both = zip(masks[i], masks[j]).filter { $0 && $1 }.count
                 let any = zip(masks[i], masks[j]).filter { $0 || $1 }.count
                 let distance = 1 - Double(both) / Double(max(any, 1))
-                XCTAssertGreaterThan(distance, 0.35,
-                                     "\(kinds[i].symbolName) и \(kinds[j].symbolName) — одно пятно")
+                XCTAssertGreaterThan(distance, 0.35, "\(glyphs[i]) и \(glyphs[j]) — одно пятно")
             }
         }
     }
 
     // MARK: - Помощники
 
-    /// Пиксели глифа спокойной камеры (графит, белый глиф) стороной `side` в @3x.
-    private func inkMask(_ kind: CameraType, side: CGFloat) throws -> (bits: [Bool], ink: Int, total: Int, outside: Int) {
-        let image = CameraIconArt.image(kind, side: side, fill: 0x000000, ink: 0xFF0000, rim: 0x000000,
+    /// Пиксели глифа (красный на чёрном) стороной `side` в @3x.
+    private func inkMask(_ glyph: CameraGlyph, side: CGFloat) throws -> (bits: [Bool], ink: Int, total: Int, outside: Int) {
+        let image = CameraIconArt.image(glyph, side: side, fill: 0x000000, ink: 0xFF0000, rim: 0x000000,
                                         shadow: false, scale: 3)
         let cg = try XCTUnwrap(image.cgImage)
         let w = cg.width, h = cg.height

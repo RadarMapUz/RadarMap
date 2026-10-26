@@ -522,7 +522,7 @@ private struct LiveTripCard: View {
             // Итогах говорит только состояние (как KPIStrip).
             HStack(spacing: 0) {
                 metric(Formatting.distance(trip.distanceMeters), "пройдено")
-                metric("\(trip.camerasPassed)", "проездов камер")
+                metric("\(trip.camerasPassed)", LocalizedStringKey(Formatting.passesLabel(trip.camerasPassed)))
                 metric("\(Int(trip.maxSpeedKmh))", "максимум, км/ч")
                 metric("\(Int(trip.averageSpeedKmh))", "средняя, км/ч")
             }

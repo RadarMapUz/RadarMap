@@ -1,6 +1,40 @@
 {
   "sourceLanguage": "ru",
   "strings": {
+    "проезд камеры": {
+      "comment": "Подпись под числом проездов (Formatting.passesLabel): форма для 1, 21…",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "проезд камеры"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kamera oʻtishi"
+          }
+        }
+      }
+    },
+    "проезда камер": {
+      "comment": "Подпись под числом проездов (Formatting.passesLabel): форма для 2–4, 22–24…",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "проезда камер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kamera oʻtishlari"
+          }
+        }
+      }
+    },
     "камера": {
       "comment": "Подпись под числом камер в плитке метрики (Formatting.camerasLabel): форма для 1, 21…; число стоит отдельно.",
       "localizations": {

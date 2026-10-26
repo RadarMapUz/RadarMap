@@ -149,6 +149,16 @@ enum Formatting {
         }
     }
 
+    /// То же для проездов: «1 / проезд камеры», «3 / проезда камер»,
+    /// «6 / проездов камер».
+    static func passesLabel(_ count: Int) -> String {
+        switch PluralRu.form(count) {
+        case .one:  String(localized: "проезд камеры")
+        case .few:  String(localized: "проезда камер")
+        case .many: String(localized: "проездов камер")
+        }
+    }
+
     /// То же для поездок: «1 / поездка», «3 / поездки», «5 / поездок».
     static func tripsLabel(_ count: Int) -> String {
         switch PluralRu.form(count) {

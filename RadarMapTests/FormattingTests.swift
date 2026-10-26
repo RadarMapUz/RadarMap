@@ -156,6 +156,7 @@ final class FormattingTests: XCTestCase {
         for count in [0, 1, 2, 5, 11, 21, 104] {
             XCTAssertFalse(Formatting.camerasLabel(count).contains { $0.isNumber })
             XCTAssertFalse(Formatting.tripsLabel(count).contains { $0.isNumber })
+            XCTAssertFalse(Formatting.passesLabel(count).contains { $0.isNumber })
         }
         guard Bundle.main.preferredLocalizations.first == "ru" else { return }
         XCTAssertEqual(Formatting.camerasLabel(1), "камера")
@@ -164,5 +165,7 @@ final class FormattingTests: XCTestCase {
         XCTAssertEqual(Formatting.camerasLabel(21), "камера")
         XCTAssertEqual(Formatting.tripsLabel(1), "поездка")
         XCTAssertEqual(Formatting.tripsLabel(12), "поездок")
+        XCTAssertEqual(Formatting.passesLabel(1), "проезд камеры")
+        XCTAssertEqual(Formatting.passesLabel(6), "проездов камер")
     }
 }

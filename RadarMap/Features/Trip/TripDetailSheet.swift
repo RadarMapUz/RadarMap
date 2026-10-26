@@ -631,7 +631,7 @@ struct TripDetailContent: View {
                   icon: "clock"),
             .init(value: Formatting.distance(record.distanceMeters), label: String(localized: "пройдено пути"),
                   icon: "point.topleft.down.to.point.bottomright.curvepath"),
-            .init(value: "\(record.camerasPassed)", label: String(localized: "проездов камер"),
+            .init(value: "\(record.camerasPassed)", label: Formatting.passesLabel(record.camerasPassed),
                   icon: Icon.cameras),
             .init(value: "\(Int(record.maxSpeedKmh))", label: String(localized: "максимум, км/ч"),
                   icon: "gauge.with.dots.needle.100percent"),

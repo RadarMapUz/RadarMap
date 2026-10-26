@@ -144,11 +144,7 @@ extension MapScreen {
                     // рулём, где на взгляд есть доля секунды. Приоритет
                     // считается один раз (BottomHint.choose) и не
                     // оспаривается: требующее решения старше сообщающего.
-                    switch BottomHint.choose(
-                        routeError: env.route.errorMessage,
-                        isBuilding: env.route.isBuilding,
-                        isProbablyDriving: env.location.isProbablyDriving,
-                        showsQuickDestinations: mode.showsQuickDestinations) {
+                    switch bottomHint {
                     case .routeError(let error):
                         // Тап убирает ошибку — значит, это кнопка, и мишень у
                         // неё 44 pt (была капсула ~28 pt под onTapGesture).
@@ -176,11 +172,8 @@ extension MapScreen {
                             if !env.location.isTripActive { toggleTrip() }
                         }
                     case .destinations:
-                        // Куда поедем — одной строкой и только когда есть
-                        // уверенная догадка. Два круга Дом/Работа стояли здесь
-                        // всегда, и незаданные выглядели невыполненным
-                        // заданием от приложения человеку; распорядок оно
-                        // знает само (FrequentPlaces).
+                        // Куда поедем — строкой в доке (dockShowsSuggestion) и
+                        // только когда есть уверенная догадка.
                         // Разовое «Карта без интернета?» — до первого ответа.
                         // Где оставили машину — капсулой, пока отошли от неё.
                         //
@@ -191,18 +184,12 @@ extension MapScreen {
                         if env.mobile.passQuestion == nil, !MobileConfirmBar.showsDemo {
                             ParkedCarChip(map: map)
                             OfflineOfferCard(ownMap: true)
-                            // Этап 31: в вариантах подсказка «Домой» живёт в доке,
-                            // а под карточкой конца поездки не дублируется.
-                            if !homeLabActive, DesignLab.tripEnd == .base || tripEndRecord == nil {
-                                DestinationSuggestionBar { coordinate, name in
-                                    buildRoute(to: coordinate, name: name)
-                                }
-                            }
                         }
-                        if homeLabActive {
-                            labPrimaryTrip
-                        } else if DesignLab.tripEnd == .base || tripEndRecord == nil {
-                            tripButton
+                        // Запасной старт — кнопка дока; над доком — только
+                        // жёлтая «Начать поездку» при ручном старте, и не под
+                        // карточкой итога поездки.
+                        if !tripStartsByItself, tripEndRecord == nil {
+                            tripButtonPrimary
                         }
                     case .none:
                         EmptyView()
@@ -211,9 +198,10 @@ extension MapScreen {
                 // Карточка «Карта по пути» на экране — бар уступает ей место до
                 // ответа: на SE иначе ей негде встать, не загнав обязательные
                 // кнопки колонки под себя (CorridorOfferPlacement).
-                if mode.showsActionBar, !map.corridorCardShown,
-                   DesignLab.route == .base || !env.route.isActive {
-                    homeLabDock
+                // Пока выбирают маршрут, док уступает место панели маршрута:
+                // два слоя по 140 pt зажимали карту маршрута (этап 31).
+                if mode.showsActionBar, !map.corridorCardShown, !env.route.isActive {
+                    actionBar
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
                             if abs(height - map.actionBarHeight) > 0.5 { map.actionBarHeight = height }
                         }
@@ -247,6 +235,22 @@ extension MapScreen {
         // «Тронулись» — вопрос о карте по пути закрыт; там же скрытая копия
         // карточки меряет её высоту. Фоном: места в стопке не занимает.
         .background { CorridorOfferBackstage(map: map) }
+    }
+
+    /// Что показать над доком — одно решение на панель и док.
+    var bottomHint: BottomHint {
+        BottomHint.choose(routeError: env.route.errorMessage,
+                          isBuilding: env.route.isBuilding,
+                          isProbablyDriving: env.location.isProbablyDriving,
+                          showsQuickDestinations: mode.showsQuickDestinations)
+    }
+
+    /// Строка «Домой» в доке — там же, где раньше стояла карточка: в покое,
+    /// без вопроса «радар ещё стоял?» и не под карточкой итога поездки
+    /// (четыре слоя внизу на SE — проблема 2 аудита этапа 31).
+    var dockShowsSuggestion: Bool {
+        bottomHint == .destinations && env.mobile.passQuestion == nil
+            && !MobileConfirmBar.showsDemo && tripEndRecord == nil
     }
 
     var bottomLayer: some View {

@@ -53,6 +53,9 @@ struct MapLayersPanel: View {
     @Binding var sidewalks: Bool
     /// Кнопки «+ / −» в колонке. Здесь, а не только в настройках: их
     /// включают и выключают, глядя на колонку, а не на список настроек (5.8).
+    /// «Объёмный вид» — из колонки сюда (этап 31): переключают редко, а круг
+    /// «3D» занимал место у камер правого края.
+    @Binding var threeD: Bool
     @Binding var zoomButtons: Bool
     /// Сколько панели можно занять по высоте — до нижних панелей экрана.
     /// Не влезает — листается, а не уезжает под них.
@@ -83,7 +86,7 @@ struct MapLayersPanel: View {
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
             .strokeBorder(Theme.edgePanel, lineWidth: 1))
         // Таймер простоя — от любого переключения внутри (MapPopoverCard).
-        .mapPopoverCard(activity: [traffic, places, houses, sidewalks, zoomButtons], onClose: onClose)
+        .mapPopoverCard(activity: [traffic, places, houses, sidewalks, threeD, zoomButtons], onClose: onClose)
     }
 
     private var panelContent: some View {
@@ -94,6 +97,7 @@ struct MapLayersPanel: View {
             toggle("Места", Icon.placesLayer, isOn: $places)
             toggle("Дома", Icon.buildingsLayer, isOn: $houses)
             toggle("Тротуары", Icon.sidewalksLayer, isOn: $sidewalks)
+            toggle("Объёмный вид", "view.3d", isOn: $threeD)
             Text("Кнопки")
                 .font(.rounded(11, .semibold))
                 .foregroundStyle(Theme.textTertiary)

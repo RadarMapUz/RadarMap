@@ -47,31 +47,6 @@ struct MapCompassButton: View {
     }
 }
 
-/// 2D / 3D. Подпись — то, что сейчас НА ЭКРАНЕ (как у Яндекса: «3D» горит,
-/// когда карта наклонена).
-struct Map3DToggle: View {
-    @Environment(AppEnvironment.self) private var env
-    let map: MapState
-
-    var body: some View {
-        let on = env.settings.map3D
-        Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            env.settings.map3D.toggle()
-            map.prefers3D = env.settings.map3D
-        } label: {
-            (on ? Text("3D") : Text("2D"))
-                .font(.rounded(15, .heavy))
-                .foregroundStyle(on ? Theme.accent : Theme.textPrimary)
-                .controlCircle()
-        }
-        .buttonStyle(PressableStyle())
-        .tapTarget()
-        .accessibilityLabel((on ? Text("Объёмный вид, включён") : Text("Плоский вид")))
-        .onAppear { map.prefers3D = on }
-    }
-}
-
 /// «+ / −» одной капсулой. Сдвигают автозум вдвое за нажатие, а не
 /// выключают его: на скорости карта по-прежнему отодвигается сама.
 struct MapZoomButtons: View {

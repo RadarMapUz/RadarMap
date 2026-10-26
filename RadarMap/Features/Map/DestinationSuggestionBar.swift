@@ -2,7 +2,8 @@
 //  DestinationSuggestionBar.swift
 //  RadarMap
 //
-//  «Домой» / «На работу» — одна строка вместо двух пустых кругов.
+//  «Домой» / «На работу» — одна строка вместо двух пустых кругов; с этапа 31
+//  она верхняя строка дока главного экрана (MapScreen.actionBar).
 //
 //  Круги Дом и Работа стояли на экране всегда: заданные — как две иконки,
 //  незаданные — как два серых кружка с плюсом, то есть как невыполненное
@@ -47,28 +48,26 @@ struct DestinationSuggestionBar: View {
                         Text(target.kind.suggestionTitle)
                             .font(.rounded(15, .bold))
                             .foregroundStyle(Theme.textPrimary)
-                        // Две строки, а не одна: крупный шрифт и узбекское
-                        // «odatda ~35 daq (haydovchilar boʻyicha)» в одну не
-                        // помещались, и обрезалось уже само время.
                         Text(target.subtitle)
-                            .font(.rounded(11))
-                            .foregroundStyle(Theme.textTertiary)
-                            .lineLimit(2)
+                            .font(.rounded(12))
+                            .foregroundStyle(Theme.textSecondary)
+                            .lineLimit(1)
                     }
                     Spacer(minLength: 0)
-                    Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
-                        .font(.rounded(20))
-                        .foregroundStyle(Theme.accent)
+                    Image(systemName: "chevron.right")
+                        .font(.rounded(12, .bold))
+                        .foregroundStyle(Theme.textTertiary)
                         .accessibilityHidden(true)
                 }
-                .padding(.horizontal, 14)
+                .padding(.horizontal, 16)
                 .padding(.vertical, 10)
-                // Сплошная панель, как бар под ней: сквозь стекло просвечивали
-                // подписи улиц (снимок 12.10), а размытие над живой картой
-                // пересчитывается на каждом её кадре.
-                .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
-                    .strokeBorder(Theme.edgePanel, lineWidth: 1))
+                // Строка дока, а не своя карточка (этап 31): своя форма над
+                // доком была третьей формой в нижней стопке. Черта снизу
+                // отделяет её от ряда кнопок той же панели.
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(Theme.stroke).frame(height: 1)
+                        .padding(.horizontal, 16)
+                }
                 .contentShape(Rectangle())
             }
             .buttonStyle(PressableStyle())

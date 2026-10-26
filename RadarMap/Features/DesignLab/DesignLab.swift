@@ -6,7 +6,6 @@
 //  настоящем SwiftUI, чтобы владелец выбирал по снимкам, а не по описаниям.
 //
 //  Вариант включается DEBUG-ключом запуска, по экрану:
-//    -designHome A|B|C       главный экран без поездки (док, подсказка, HUD)
 //    -designTripEnd A|B|C    карточка «Поездка сохранена»
 //    -designRoute A|B        панель маршрута до старта
 //    -designOnboarding A|B   онбординг на малом экране
@@ -22,7 +21,6 @@ nonisolated enum DesignLab {
         case base, a = "A", b = "B", c = "C"
     }
 
-    static let home = variant("-designHome")
     static let tripEnd = variant("-designTripEnd")
     static let route = variant("-designRoute")
     static let onboarding = variant("-designOnboarding")

@@ -98,6 +98,11 @@ extension MapScreen {
                            places: setting(\.mapPlaces),
                            houses: setting(\.mapHouses),
                            sidewalks: setting(\.mapSidewalks),
+                           threeD: Binding(get: { env.settings.map3D },
+                                           set: { on in
+                                               env.settings.map3D = on
+                                               map.prefers3D = on
+                                           }),
                            zoomButtons: setting(\.mapZoomButtons),
                            maxPanelHeight: columnSlots.map {
                                CGFloat($0) * AppConfig.mapColumnSlotHeight - AppConfig.mapColumnSpacing

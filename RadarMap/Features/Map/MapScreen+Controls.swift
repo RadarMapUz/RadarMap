@@ -68,17 +68,22 @@ extension MapScreen {
         .transition(.scale.combined(with: .opacity))
     }
 
-    /// Покой: как было — слои, 3D, ориентация, компас, весь маршрут, масштаб, звук.
+    /// Покой — ТРИ постоянные кнопки (этап 31, 26.10): слои, «к себе» и звук.
+    /// Шесть кругов (слои, 3D, к себе, +, −, звук) накрывали камеры у правого
+    /// края. «Слои» — единственный вход в панель «Карта», и теперь в ней же
+    /// «Объёмный вид» (переключают раз в месяц, а не каждую поездку);
+    /// «к себе» нужна после каждого сдвига карты; звук — то, что
+    /// выключают на ходу. Масштаб — щипком, кнопки +/− включаются в панели
+    /// «Карта» → «Масштаб» (по умолчанию выключены). По делу появляются
+    /// компас (карта повёрнута) и «весь маршрут» (маршрут построен).
     @ViewBuilder var idleControls: some View {
-        // Обязательные — слои, «к себе» и звук (слои в покое — единственный
-        // вход в смену подложки); остальное по важности, пока есть место до
-        // нижних панелей (TripScreenLayout.columnExtras).
+        // Остальное — по важности, пока есть место до нижних панелей
+        // (TripScreenLayout.columnExtras).
         let extras = TripScreenLayout.columnExtras(
             slots: columnSlots, fixed: AppConfig.mapColumnFixedButtons,
             candidates: (map.isRotated ? [(.compass, 1)] : [])
                 + (env.route.isActive ? [(.overview, 1)] : [])
-                + (DesignLab.home == .c ? [] : [(.threeD, 1)])
-                + (env.settings.mapZoomButtons && DesignLab.home != .c ? [(.zoom, 2)] : []))
+                + (env.settings.mapZoomButtons ? [(.zoom, 2)] : []))
         // Слои карты — первой в колонке.
         //
         // Подложка лежала в десятом разделе настроек и включалась только
@@ -96,9 +101,6 @@ extension MapScreen {
         // Вид карты, как у навигаторов: 2D/3D, «моё местоположение»
         // (1-й тап — к машине, 2-й — по ходу движения), компас — только
         // когда карта повёрнута, звук.
-        if extras.contains(.threeD) {
-            Map3DToggle(map: map)
-        }
         orientationControl
         if extras.contains(.compass) {
             MapCompassButton(map: map)

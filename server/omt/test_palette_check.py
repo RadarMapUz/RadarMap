@@ -171,13 +171,25 @@ class AppColoursInSync(unittest.TestCase):
             self.assertEqual(found.group(2), make_style.PALETTES["dark"][key], name)
 
     def test_calm_markers(self):
-        view = _swift("RadarMap/Features/Map/Engine/EngineMapView.swift")
-        for suffix, theme in (("-calm-d", "light"), ("-calm-n", "dark")):
-            found = re.search(rf'suffix: "{suffix}".*?ring: 0x([0-9A-Fa-f]{{6}}),\s*fill: 0x([0-9A-Fa-f]{{6}})',
-                              view, re.S)
-            self.assertIsNotNone(found, suffix)
-            self.assertEqual(palette_check.CALM[theme]["ring"], "#" + found.group(1).lower(), suffix)
-            self.assertEqual(palette_check.CALM[theme]["fill"], "#" + found.group(2).lower(), suffix)
+        # С 29.C («Монета») спокойные значки описаны в CameraMarkerLook:
+        # заливка и кант — именованные константы, растры ссылаются на них.
+        look = _swift("RadarMap/Models/CameraMarkerLook.swift")
+
+        def rgb(name):
+            found = re.search(rf"static let {name}: UInt32 = 0x([0-9A-Fa-f]{{6}})", look)
+            self.assertIsNotNone(found, name)
+            return "#" + found.group(1).lower()
+
+        for suffix, theme, fill, rim in (("-calm-d", "light", "neutralDayRGB", None),
+                                         ("-calm-n", "dark", "neutralNightRGB", "calmNightInkRGB")):
+            raster = re.search(rf'Raster\(suffix: "{suffix}".*?fill: (\w+),.*?rim: (\w+)\)', look)
+            self.assertIsNotNone(raster, suffix)
+            self.assertEqual(raster.group(1), fill, suffix)
+            self.assertEqual(palette_check.CALM[theme]["fill"], rgb(fill), suffix)
+            ring = "#ffffff" if raster.group(2) == "0xFFFFFF" else rgb(raster.group(2))
+            if rim:
+                self.assertEqual(raster.group(2), rim, suffix)
+            self.assertEqual(palette_check.CALM[theme]["ring"], ring, suffix)
 
 
 if __name__ == "__main__":

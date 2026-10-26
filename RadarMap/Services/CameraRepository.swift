@@ -134,7 +134,7 @@ final class CameraStore: CameraRepository {
     /// Растёт только при смене чужих отметок (см. setMobileCameras).
     @ObservationIgnored private(set) var mobileRevision = 0
 
-    nonisolated private static let firstCustomID = 1_000_001
+    nonisolated static let firstCustomID = 1_000_001
 
     /// Версия активной базы (встроенная = bundledDBVersion; после OTA — версия с сервера).
     private(set) var dbVersion: Int =
@@ -458,6 +458,14 @@ final class CameraStore: CameraRepository {
         hiddenIDs.removeAll()
         dataChanged()
         persist()
+    }
+
+    /// Камеры базы для «новых на ваших дорогах» (31E): id и место, как в
+    /// файле базы, — без правок модератора, своих и отметок водителей. Правка
+    /// (скрыть, сдвинуть) новой камеры не делает: снятая правкой и потом
+    /// возвращённая камера иначе вернулась бы «новостью».
+    var basePoints: [CameraNews.Point] {
+        bundled.map { CameraNews.Point(id: $0.id, lat: $0.lat, lon: $0.lon) }
     }
 
     /// Скрытые пользователем камеры — для списка в настройках. Скрытая камера

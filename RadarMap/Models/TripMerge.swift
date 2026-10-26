@@ -183,7 +183,12 @@ nonisolated enum TripMerge {
             // (ревью 14.1). Смешанная — тоже рейс: адрес пассажира учить нельзя.
             work: previous.work == true || next.work == true ? true : nil,
             // Финиш склейки — финиш второй ноги.
-            endedAtDestination: next.endedAtDestination)
+            endedAtDestination: next.endedAtDestination,
+            // Пробки и путь выше лимита (31E) — сумма ног; пауза между ними —
+            // стоянка, а не пробка. Не мерили хоть одну ногу — сумма была бы
+            // неполной, и день после склейки потерял бы её часть молча.
+            jams: previous.jams.flatMap { a in next.jams.map { a + $0 } },
+            overLimit: previous.overLimit.flatMap { a in next.overLimit.map { a + $0 } })
     }
 
     /// Сумма дельт заряда — только когда известны обе ноги: «−2 %» за поездку,

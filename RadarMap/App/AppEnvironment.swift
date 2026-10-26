@@ -120,6 +120,8 @@ final class AppEnvironment {
     /// «Хранить поездки: только на iPhone / в iCloud» (27.F): приватная база
     /// человека в его iCloud; нам не видна. Источники — AppEnvironment+Cloud.
     let cloud = CloudSyncService()
+    /// Свои дороги и новые камеры на них (31E): память клеток и новости.
+    let roadMemory = RoadMemoryService()
 
     /// CarPlay подключён. Наблюдаемый флаг для интерфейса телефона: пока едет
     /// машина, телефонная карта уступает место дешёвому экрану передачи —
@@ -598,6 +600,9 @@ final class AppEnvironment {
         // Направление — тем же правилом, что «Дорога на работу» в Итогах.
         trip.onTrackFinished = { [weak self] record, track, times in
             guard let self else { return }
+            // Своя дорога — для «новых камер на ваших дорогах» (31E): и рейс,
+            // и личная поездка; только на телефоне.
+            self.roadMemory.note(track: track.map { ($0.lat, $0.lon) }, on: record.startedAt)
             // Рабочий рейс — не дорога на работу (12б.9).
             guard self.settings.commuteLearning, record.work != true, let ends = self.commuteEnds,
                   let direction = Commute.trips(history: [record], home: ends.home,
@@ -678,6 +683,7 @@ final class AppEnvironment {
         }
         cameras.onDatabaseLoaded = { [weak self] in
             self?.runAxisCleanupIfPossible()
+            self?.refreshCameraNews()
             // Вход в геозону, разбудивший приложение раньше базы, — сейчас.
             self?.location.processPendingRegionEnters()
         }
@@ -926,12 +932,24 @@ final class AppEnvironment {
                 guard let self else { return }
                 let mobileChanged = self.cameras.mobileRevision != self.seenMobileRevision
                 self.seenMobileRevision = self.cameras.mobileRevision
+                // Новая версия базы (OTA) — сверка «новых на ваших дорогах»;
+                // сервис сам пропускает уже сверенную версию.
+                if self.cameras.isDatabaseLoaded { self.refreshCameraNews() }
                 self.location.refreshMonitoring(evaluateNow: mobileChanged)
                 self.observeCameraRevision()
             }
         }
     }
     @ObservationIgnored private var seenMobileRevision = 0
+
+    /// Сверить базу с виденным набором (31E). Своих дорог до первой поездки
+    /// нет — подсеваем их из треков истории, что ещё лежат.
+    func refreshCameraNews() {
+        let points = cameras.basePoints
+        let version = cameras.dbVersion
+        if trip.isLoaded { roadMemory.seedIfEmpty(from: trip.history) }
+        Task { await roadMemory.refresh(points: points, version: version) }
+    }
 
     var loadError: String? { cameras.loadError }
 

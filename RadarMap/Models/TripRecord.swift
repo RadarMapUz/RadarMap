@@ -197,8 +197,17 @@ nonisolated struct TripRecord: Codable, Identifiable, Equatable {
     /// и Работы — короткая пауза ещё заезд, долгая уже «приехали»
     /// (TripMerge). nil — нет; у старых записей отсутствует.
     var endedAtDestination: Bool? = nil
+    /// Пробки поездки по сырому треку со временем (31E, TrafficTime). nil —
+    /// не мерили (запись старше поля или время трека неизвестно); пустой
+    /// массив — мерили, пробок не было.
+    var jams: [TripJam]? = nil
+    /// Путь с известным лимитом и превышения вне камер (31E, OverLimit).
+    /// nil — не мерили.
+    var overLimit: OverLimitTally? = nil
 
     var camerasPassed: Int { passed.count }
+    /// Сколько стояли и ползли в пробках (nil — не мерили).
+    var jamSeconds: TimeInterval? { jams.map { $0.reduce(0) { $0 + $1.seconds } } }
     /// Общее время от старта до финиша — включая стоянки: столько поездка заняла.
     var duration: TimeInterval { max(0, endedAt.timeIntervalSince(startedAt)) }
     /// Сумма стоянок склеенной поездки.

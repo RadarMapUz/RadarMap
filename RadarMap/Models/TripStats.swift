@@ -115,6 +115,12 @@ final class TripStats {
     /// настройках; ставит AppEnvironment. Пишется лишь в поездке.
     @ObservationIgnored var recordsTimedTrack = false
     @ObservationIgnored private var timedBuffer: [TimedPoint] = []
+    /// Путь с известным лимитом и превышения вне камер (31E, OverLimit):
+    /// копится шагами одометра, в запись уходит на финише.
+    @ObservationIgnored private var overLimitMeter = OverLimitMeter()
+    /// Пробки первой ноги склейки, когда её сырого трека со временем нет
+    /// (процесс перезапускался): пересчитать их нельзя, берём записанные.
+    @ObservationIgnored private var resumedJams: [TripJam]?
 
     // nonisolated: их читает и nonisolated-восстановление слепка (record(from:)).
     nonisolated private static let trackStepMeters = 30.0
@@ -169,6 +175,8 @@ final class TripStats {
         trackBuffer = []
         trackTimes = []
         timedBuffer = []
+        overLimitMeter = OverLimitMeter()
+        resumedJams = nil
         lastFinishedRaw = nil   // новая поездка, не склейка — прошлый трек не нужен
         resumedFrom = nil       // и не продолжение прошлой записи
         finishedDuration = 0
@@ -220,10 +228,14 @@ final class TripStats {
         if let raw = lastFinishedRaw, raw.id == record.id {
             trackBuffer = raw.track
             trackTimes = raw.times
+            resumedJams = nil
         } else {
             trackBuffer = record.trackPoints
             trackTimes = Array(repeating: .nan, count: trackBuffer.count)
+            // Времени у поднятого трека нет — пробки первой ноги не пересчитать.
+            resumedJams = record.jams
         }
+        overLimitMeter = OverLimitMeter(resuming: record.overLimit)
         lastFinishedRaw = nil
         // Склейка: подробный трек первой ноги продолжается той же записью.
         timedBuffer = TimedTrackStore.load(tripID: record.id) ?? []
@@ -240,7 +252,10 @@ final class TripStats {
         Log.trips.info("поездка продолжена: остановка \(stopSeconds, privacy: .public) с")
     }
 
-    func update(coordinate: CLLocationCoordinate2D, speedKmh: Double, at time: Date = Date()) {
+    /// `limitKmh` — достоверный лимит дороги (из OSM, не догадка по классу),
+    /// `atCamera` — рядом камера: её путь в «выше лимита вне камер» не идёт (31E).
+    func update(coordinate: CLLocationCoordinate2D, speedKmh: Double, at time: Date = Date(),
+                limitKmh: Int? = nil, atCamera: Bool = false) {
         // Вне поездки здесь делать нечего: хвост трека для схемы приборки
         // ушёл вместе со схемой (11.10), а дистанция, максимум и время точки
         // — наблюдаемые свойства, и их запись будила читателей каждый фикс
@@ -250,6 +265,8 @@ final class TripStats {
         // скорость ровно нуля не даёт): опора стоит, дрожание не километры.
         let step = odometer.advance(to: coordinate, at: time, stopped: speedKmh == 0)
         if step > 0 { distanceMeters += step }
+        overLimitMeter.step(meters: step, speedKmh: speedKmh, limitKmh: limitKmh, atCamera: atCamera,
+                            coordinate: coordinate, at: time)
         maxSpeedKmh = max(maxSpeedKmh, speedKmh)
         lastPointAt = Date()
         if recordsTimedTrack {
@@ -326,6 +343,8 @@ final class TripStats {
         stops = []
         trackBuffer = []
         trackTimes = []
+        overLimitMeter = OverLimitMeter()
+        resumedJams = nil
         startBatteryPercent = nil
         removeCheckpoint()
     }
@@ -391,7 +410,9 @@ final class TripStats {
             startLat: startPoint?.lat,
             startLon: startPoint?.lon,
             work: work ? true : nil,
-            endedAtDestination: atDestination ? true : nil
+            endedAtDestination: atDestination ? true : nil,
+            jams: measuredJams(),
+            overLimit: overLimitMeter.finish()
         )
         history.insert(record, at: 0)
         applyRetention()
@@ -432,6 +453,18 @@ final class TripStats {
         persistDays()
         persistLifetime()
         onTripFinished?()
+    }
+
+    /// Пробки поездки по сырому треку (31E). Склейка без сырого трека первой
+    /// ноги — её записанные пробки плюс посчитанные по второй (у первой
+    /// времени нет, TrafficTime её пропустит). Время разошлось с треком — не
+    /// мерили (nil), а не «пробок не было».
+    private func measuredJams() -> [TripJam]? {
+        guard trackTimes.count == trackBuffer.count else { return nil }
+        let stopRanges = stops.map { $0.from...max($0.from, $0.to) }
+        let measured = TrafficTime.jams(track: trackBuffer, times: trackTimes, stops: stopRanges)
+        guard let resumedJams else { return measured }
+        return resumedJams + measured
     }
 
     /// «Я пассажир»: поездки за рулём не было — ни записи, ни проездов, ни
@@ -1033,6 +1066,82 @@ final class TripStats {
         persistDays()
         persistLifetime()
     }
+
+    #if DEBUG
+    /// «Итоги» 31E на снимках (`-itogiDemo`): к демо-истории — пробки, путь
+    /// выше лимита вне камер и два рейса такси. `cleanGoal` (`-itogiDemoGoal`)
+    /// — неделя без превышений у камер и серия трёх прошлых чистых недель.
+    func seedItogiDemo(cleanGoal: Bool) {
+        seedDemoHistory()
+        let calendar = Calendar.current
+        let now = Date()
+        history = history.enumerated().map { index, record in
+            var record = record
+            let points = record.trackPoints
+            guard points.count >= 4 else { return record }
+            let mid = points[points.count / 2], quarter = points[points.count / 4]
+            // Две из трёх поездок — с пробкой: утро и вечер, у одного места.
+            if index % 3 != 2 {
+                record.jams = [TripJam(lat: mid.lat, lon: mid.lon, at: record.startedAt.addingTimeInterval(240),
+                                       seconds: Double(300 + index * 70))]
+            } else {
+                record.jams = []
+            }
+            let known = record.distanceMeters * 0.8
+            record.overLimit = OverLimitTally(
+                knownMeters: known, overMeters: index % 2 == 0 ? known * 0.07 : 0,
+                runs: index % 2 == 0 ? [OverLimitRun(lat: quarter.lat, lon: quarter.lon,
+                                                     at: record.startedAt.addingTimeInterval(120),
+                                                     meters: known * 0.07, limitKmh: 60, maxKmh: 78)] : [])
+            if index == 1 || index == 4 { record.work = true }
+            if cleanGoal, now.timeIntervalSince(record.startedAt) < 14 * 86_400 {
+                record.passed = record.passed.map { pass in
+                    PassedCamera(id: pass.id, cameraID: pass.cameraID, typeRaw: pass.typeRaw,
+                                 location: pass.location, speedKmh: 56, date: pass.date,
+                                 lat: pass.lat, lon: pass.lon, limitKmh: pass.limitKmh)
+                }
+            }
+            return record
+        }
+        days = TripDayBook.rebuilt(from: history)
+        if cleanGoal {
+            // Три прошлые недели: по чистому дню у камер.
+            for week in 2...4 {
+                guard let day = calendar.date(byAdding: .day, value: -7 * week, to: calendar.startOfDay(for: now))
+                else { continue }
+                var item = TripDay(day: day)
+                item.trips = 1
+                item.distanceMeters = 14_000
+                item.cameraPasses = 2
+                item.cleanPasses = 2
+                days.append(item)
+            }
+            days.sort { $0.day > $1.day }
+        }
+        lifetime = LifetimeStats.rebuilt(from: history)
+        persist()
+        persistDays()
+        persistLifetime()
+    }
+
+    /// «Мало данных» (`-itogiDemoFew`): одна поездка сегодня, без камер —
+    /// у «Итогов» остаются только «Как я езжу» и «Мои дороги».
+    func seedItogiFewDemo() {
+        let start = Date().addingTimeInterval(-2 * 3600)
+        let base = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)
+        let track = Self.demoTrack(from: base, seed: 2, km: 9.4)
+        history = [TripRecord(id: start.timeIntervalSince1970, startedAt: start, endedAt: start.addingTimeInterval(1500),
+                              distanceMeters: 9_400, maxSpeedKmh: 62, passed: [],
+                              endLat: track[track.count - 3], endLon: track[track.count - 2], track: track,
+                              score: 100, endedManually: true, jams: [], overLimit: OverLimitTally())]
+        demoReplacesDisk = true
+        days = TripDayBook.rebuilt(from: history)
+        lifetime = LifetimeStats.rebuilt(from: history)
+        persist()
+        persistDays()
+        persistLifetime()
+    }
+    #endif
 
     /// Пара «разрезанная магазином поездка» для карточки «Объединить?» в Итогах:
     /// предыдущая завершена кнопкой, новая стартует там же через двадцать минут.

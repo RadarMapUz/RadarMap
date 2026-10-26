@@ -319,6 +319,7 @@ final class MobileCameraService {
                 for confirmed in reconcileMine(live: liveConfirmations()) {
                     onMyReportConfirmed?(confirmed)
                 }
+                await refreshImpactIfDue(recentDays: 2)
                 return
             }
             lastETag = answer.etag
@@ -364,6 +365,7 @@ final class MobileCameraService {
             for confirmed in reconcileMine(live: liveConfirmations()) {
                 onMyReportConfirmed?(confirmed)
             }
+            await refreshImpactIfDue(recentDays: 2)
         } catch {
             // Сети нет или сервер не ответил — живём на последнем известном
             // списке (и снимаем истёкшее сами, pruneExpired).
@@ -603,25 +605,86 @@ final class MobileCameraService {
         var announced = false
         /// Отметка исчезла из живого списка: истекла или снята.
         var gone = false
+        /// Независимых подтверждений по словам сервера — наибольшее из
+        /// увиденных (31E, ReportImpact). nil — сервер ещё не спрашивали;
+        /// опционал — ради записей, уже лежащих на телефонах.
+        var confirmers: Int? = nil
     }
 
     @ObservationIgnored private(set) var mine: [MyReport] = Storage.decoded(
         [MyReport].self, for: .myReports) ?? []
 
-    /// Свои отметки за окно — цифра для Итогов.
-    /// Итог по своим отметкам: сколько поставил и сколько подтвердили.
-    ///
-    /// Отжившие (`gone`) в счёт не идут, и это не косметика. Флаг ставится
-    /// здесь же, в reconcileMine, когда отметка ушла из живого списка —
-    /// истекла или снята, — но `mineSummary` его не читал, и экран годами
-    /// показывал бы «N · ждут подтверждения» про точки, которых на сервере
-    /// уже нет физически: ретенция стирает их через сутки после протухания.
-    /// Строка «4 · ждут подтверждения» на снимке — ровно этот случай.
-    func mineSummary(days: Int = 30, now: Date = Date()) -> (total: Int, confirmed: Int) {
-        let since = now.addingTimeInterval(-Double(days) * 86400)
-        let window = mine.filter { $0.at >= since && !$0.gone }
-        return (window.count, window.count { $0.confirmed })
+    // MARK: - Польза отметок (31E)
+
+    /// Растёт, когда сервер сообщил новые подтверждения: `mine` вне
+    /// наблюдения (пишется на каждом опросе), а строке «Итогов» нужно знать,
+    /// что число изменилось.
+    private(set) var impactRevision = 0
+    @ObservationIgnored private var impactFetchedAt: Date?
+    @ObservationIgnored private var isFetchingImpact = false
+
+    private struct MineResponse: Decodable {
+        struct Item: Decodable { let id: Int; let confirmers: Int }
+        let reports: [Item]
     }
+
+    /// «Ваши N отметок · M подтверждений» за 30 дней.
+    func impactSummary(now: Date = Date()) -> ReportImpact.Summary {
+        ReportImpact.summary(mine.map { ReportImpact.Report(at: $0.at, confirmers: $0.confirmers,
+                                                            confirmed: $0.confirmed) },
+                             now: now)
+    }
+
+    /// Спросить сервер о подтверждениях своих отметок, если пора.
+    /// `recentDays` — насколько свежая своя отметка нужна: из опроса (радио и
+    /// так проснулось) — только пока сервер ещё помнит отметку (2 дня), с
+    /// экрана «Итогов» — за всё окно.
+    func refreshImpactIfDue(recentDays: Int = AppConfig.reportImpactDays, now: Date = Date()) async {
+        guard isEnabled, network?.isOnline ?? true, !isFetchingImpact,
+              ReportImpact.isDue(lastFetch: impactFetchedAt, now: now, newest: mine.map(\.at).max(),
+                                 days: recentDays) else { return }
+        isFetchingImpact = true
+        defer { isFetchingImpact = false }
+        impactFetchedAt = now   // попытка, а не успех: сервер без эндпоинта не долбим
+        do {
+            // Только UUID: сервер отвечает по отметкам, которые этот UUID и
+            // поставил, — ни координат, ни времени в ответе нет (server/api.py).
+            let answer = try await api.post("api/mine", json: ["device": deviceID], as: MineResponse.self)
+            let fetched = Dictionary(answer.reports.map { ($0.id, $0.confirmers) },
+                                     uniquingKeysWith: { a, b in max(a, b) })
+            var changed = false
+            for index in mine.indices {
+                let merged = ReportImpact.merged(known: mine[index].confirmers, fetched: fetched[mine[index].id])
+                if merged != mine[index].confirmers {
+                    mine[index].confirmers = merged
+                    changed = true
+                }
+            }
+            if changed {
+                saveMine()
+                impactRevision &+= 1
+            }
+        } catch {
+            // Старый сервер (404) или нет сети — счётчик остаётся прежним.
+            Log.network.notice("свои отметки: подтверждения не получены — \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    #if DEBUG
+    /// Снимки «Итогов» (`-itogiDemo`): три свои отметки за неделю, две из них
+    /// подтверждены другими водителями — в памяти, сервер не трогаем.
+    func seedImpactDemo() {
+        let now = Date()
+        mine = [MyReport(id: 900_001, kind: "radar", lat: 41.311, lon: 69.279, at: now.addingTimeInterval(-86_400),
+                         confirmed: true, announced: true, gone: true, confirmers: 3),
+                MyReport(id: 900_002, kind: "tripod", lat: 41.32, lon: 69.25, at: now.addingTimeInterval(-3 * 86_400),
+                         confirmed: true, announced: true, gone: true, confirmers: 1),
+                MyReport(id: 900_003, kind: "radar", lat: 41.30, lon: 69.24, at: now.addingTimeInterval(-5 * 86_400),
+                         gone: true)]
+        impactFetchedAt = now
+        impactRevision &+= 1
+    }
+    #endif
 
     private func noteMine(id: Int, item: PendingReport) {
         mine.append(MyReport(id: id, kind: item.kind, lat: item.lat,
@@ -663,7 +726,11 @@ final class MobileCameraService {
                 }
             }
         }
-        if changed { saveMine() }
+        if changed {
+            saveMine()
+            // «Подтвердили» в живом списке — тоже повод перерисовать «Итоги».
+            impactRevision &+= 1
+        }
         return news
     }
 

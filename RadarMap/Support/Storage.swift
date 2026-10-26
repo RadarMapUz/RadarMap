@@ -85,6 +85,8 @@ enum Storage {
         case cloudOfferAnswered     // на предложение «Сохранять поездки в iCloud?» ответили (любой ответ)
         case cloudRemoteWiped       // копию в iCloud стёрли на другом устройстве — хранение выключено (строка в настройках)
         case cloudSettingsPushed    // настройки, уже отправленные в iCloud (CloudSettingsSync, JSON) — с чем сверять свои
+        case cameraKnownIDs         // id камер базы, уже виденные телефоном (CameraNews, JSON, 31E)
+        case cameraNews             // новые камеры на своих дорогах: id и когда нашли (JSON, 31E)
     }
 
     private static var defaults: UserDefaults { .standard }

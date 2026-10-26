@@ -269,11 +269,7 @@ private struct CarPlayDashboardGauge: View {
                let distance = env.location.displayDistanceToNearest,
                distance <= AppConfig.carPlayNearestCameraMeters {
                 HStack(spacing: 4) {
-                    Image(systemName: camera.kind.symbolName)
-                        .font(.rounded(13, .bold))
-                        .foregroundStyle(camera.kind.glyphTint)
-                        .frame(width: 24, height: 24)
-                        .background(camera.kind.tint, in: Circle())
+                    CameraIcon(kind: camera.kind, side: 24)
                     Text(Formatting.distance(distance))
                         .font(.rounded(16, .bold).monospacedDigit())
                         .foregroundStyle(env.location.isApproachingCamera ? Theme.danger : Theme.textPrimary)

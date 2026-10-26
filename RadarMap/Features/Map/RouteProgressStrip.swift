@@ -124,7 +124,7 @@ struct RouteProgressStrip: View, Equatable {
                                              minGap: Double(AppConfig.routeStripCameraSize) / max(1, width)),
                     id: \.id) { mark in
                 Circle()
-                    .fill(Color(uiColor: Theme.rgb(Self.cameraHex(mark.kind))))
+                    .fill(Color(uiColor: Theme.rgb(mark.kind.markerRGB)))
                     .overlay(Circle().strokeBorder(.white, lineWidth: 1.5))
                     .frame(width: AppConfig.routeStripCameraSize, height: AppConfig.routeStripCameraSize)
                     .opacity(mark.fraction < progress ? 0.45 : 1)
@@ -155,10 +155,6 @@ struct RouteProgressStrip: View, Equatable {
         }
     }
 
-    /// Цвет типа камеры — тот же, что у значков карты (EngineMapStyle.typeHex).
-    private static func cameraHex(_ kind: CameraType) -> UInt32 {
-        UInt32(EngineMapStyle.typeHex(kind).dropFirst(), radix: 16) ?? 0x6B6B70
-    }
 }
 
 /// Треугольник «я» носом вправо (по ходу полосы).

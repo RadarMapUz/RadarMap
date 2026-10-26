@@ -199,12 +199,8 @@ struct SpeedHUDView: View {
             let near = distance <= env.location.effectiveAlertRadius
             HStack(spacing: 12) {
                 ZStack {
-                    Image(systemName: camera.kind.symbolName)
-                        .font(.rounded(16, .bold))
-                        .foregroundStyle(proximityGlyph(distance, camera))
-                        .frame(width: 38, height: 38)
-                        .background(proximityTint(distance, camera).gradient, in: Circle())
-                        .shadow(color: near ? camera.kind.tint.opacity(0.6) : .clear, radius: 6)
+                    CameraCoinView(glyph: camera.kind.glyph, fill: proximityTint(distance, camera),
+                                   ink: proximityGlyph(distance, camera), side: 38, shadow: near)
 
                     // Стрелка направления на камеру относительно курса (вверх = прямо по ходу).
                     // Мёртвая зона: почти по курсу — строго вверх, без дрожи.

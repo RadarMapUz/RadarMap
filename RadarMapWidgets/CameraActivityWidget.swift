@@ -144,11 +144,41 @@ struct CameraActivityWidget: Widget {
 
     @ViewBuilder
     private func typeIcon(_ state: CameraActivityAttributes.ContentState, isStale: Bool) -> some View {
-        Image(systemName: isStale ? "location.slash.fill"
-              : state.nearestTitle == nil ? "checkmark.shield.fill" : state.nearestSymbol)
-            .font(.system(size: 14, weight: .bold))
-            .foregroundStyle(isStale ? WTheme.secondary
-                             : state.nearestTitle == nil ? WTheme.clear : WTheme.camera)
+        // Камера — её глиф (29.C, тот же, что на карте); на чёрном острове —
+        // светлым красным камеры: графит поста на чёрном не виден.
+        if !isStale, state.nearestTitle != nil, let glyph = CameraGlyph(symbol: state.nearestSymbol) {
+            CameraGlyphView(glyph: glyph, ink: WTheme.camera, side: 17)
+        } else {
+            Image(systemName: isStale ? "location.slash.fill"
+                  : state.nearestTitle == nil ? "checkmark.shield.fill" : state.nearestSymbol)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(isStale ? WTheme.secondary
+                                 : state.nearestTitle == nil ? WTheme.clear : WTheme.camera)
+        }
+    }
+}
+
+/// Значок состояния в круге: камера — значок «Монета» её типа (29.C, как на
+/// карте и в HUD телефона), иначе — символ состояния (нет GPS, камер нет).
+private struct ActivityStatusIcon: View {
+    let state: CameraActivityAttributes.ContentState
+    let isStale: Bool
+    let side: CGFloat
+    let symbolSize: CGFloat
+
+    var body: some View {
+        if !isStale, state.nearestTitle != nil, let glyph = CameraGlyph(symbol: state.nearestSymbol) {
+            CameraCoinView(glyph: glyph, fill: SW.fixed(glyph.fillRGB), ink: SW.fixed(glyph.inkRGB), side: side)
+        } else {
+            Image(systemName: isStale ? "location.slash.fill"
+                  : state.nearestTitle == nil ? "checkmark.shield.fill" : state.nearestSymbol)
+                .font(.system(size: symbolSize, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: side, height: side)
+                .background(isStale ? WTheme.primary.opacity(0.16)
+                            : state.nearestTitle == nil ? WTheme.clearFill : WTheme.cameraFill,
+                            in: Circle())
+        }
     }
 }
 
@@ -176,14 +206,7 @@ private struct SmallActivityView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: isStale ? "location.slash.fill"
-                  : state.nearestTitle == nil ? "checkmark.shield.fill" : state.nearestSymbol)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 28, height: 28)
-                .background(isStale ? WTheme.primary.opacity(0.16)
-                            : state.nearestTitle == nil ? WTheme.clearFill : WTheme.cameraFill,
-                            in: Circle())
+            ActivityStatusIcon(state: state, isStale: isStale, side: 28, symbolSize: 13)
             VStack(alignment: .leading, spacing: 1) {
                 if isStale {
                     Text("Нет сигнала GPS")
@@ -249,14 +272,7 @@ private struct LockScreenView: View {
         HStack(spacing: 14) {
             // Без сигнала — не красная камера: цифры под ней уже неправда,
             // и значок говорит о GPS, а не о камере впереди.
-            Image(systemName: isStale ? "location.slash.fill"
-                  : state.nearestTitle == nil ? "checkmark.shield.fill" : state.nearestSymbol)
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 42, height: 42)
-                .background(isStale ? WTheme.primary.opacity(0.16)
-                            : state.nearestTitle == nil ? WTheme.clearFill : WTheme.cameraFill,
-                            in: Circle())
+            ActivityStatusIcon(state: state, isStale: isStale, side: 42, symbolSize: 18)
 
             VStack(alignment: .leading, spacing: 3) {
                 if isStale {

@@ -187,10 +187,15 @@ struct EngineCameraMarkersTests {
         }
     }
 
-    @Test("Символ каждого типа камеры есть в системе: без него тип молча пропадает")
-    @MainActor func everyMarkerSymbolExists() {
+    @Test("Значок каждого типа во всех обликах рисуется: без картинки тип молча пропадает")
+    @MainActor func everyMarkerImageRenders() {
         for kind in EngineMapView.Coordinator.markerKinds {
-            #expect(UIImage(systemName: kind.symbolName) != nil, "нет символа \(kind.symbolName)")
+            for look in CameraMarkerLook.rasters {
+                let image = CameraIconArt.marker(kind, look: look)
+                let expected = look.side + 2 * Double(CameraCoin.shadowPad)
+                #expect(abs(Double(image.size.width) - expected) < 0.01, "\(kind.symbolName)\(look.suffix)")
+                #expect(abs(Double(image.size.height) - expected) < 0.01, "\(kind.symbolName)\(look.suffix)")
+            }
         }
     }
 

@@ -120,6 +120,7 @@
 		6FA60E10BB3D788AC0A1248F /* Exceptions for "Shared" folder in "RadarWatchWidgets" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				CameraGlyph.swift,
 				Localizable.xcstrings,
 				NumberFormat.swift,
 				SharedDefaults.swift,

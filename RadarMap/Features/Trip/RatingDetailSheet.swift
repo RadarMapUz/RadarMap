@@ -485,8 +485,7 @@ struct RatingDetailSheet: View {
             path.append(.pass(trip: found.record.id, pass: found.pass.id))
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: Icon.cameras)
-                    .font(.rounded(15, .bold))
+                SymbolIcon(Icon.cameras, size: 15, weight: .bold)
                     .foregroundStyle(Theme.danger)
                     .frame(width: 32, height: 32)
                     .background(Theme.danger.opacity(0.12), in: Circle())
@@ -706,8 +705,7 @@ struct RatingDetailSheet: View {
     private func componentRow(icon: String, tint: Color, title: String,
                               text: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: icon)
-                .font(.rounded(15, .semibold))
+            SymbolIcon(icon, size: 15)
                 .foregroundStyle(tint)
                 .frame(width: 36, height: 36)
                 .background(tint.opacity(0.10),

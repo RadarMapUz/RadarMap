@@ -35,6 +35,33 @@ nonisolated enum CameraMarkerLook {
     /// на тёмной. Глиф — наоборот.
     static let neutralDay = "#3D4652"
     static let neutralNight = "#AEB6C2"
+    static let neutralDayRGB: UInt32 = 0x3D4652
+    static let neutralNightRGB: UInt32 = 0xAEB6C2
+    /// Глиф и кант спокойной ночью: белый кант на тёмной карте горел бы
+    /// ярче самой тревоги.
+    static let calmNightInkRGB: UInt32 = 0x14181D
+
+    /// Растр значка в стиле движка — значок «Монета» (CameraCoin, 29.C) одного
+    /// из обликов. `fill`/`ink` nil — цвет типа и его глиф.
+    struct Raster: Equatable, Sendable {
+        let suffix: String
+        let side: Double
+        let fill: UInt32?
+        let ink: UInt32?
+        let rim: UInt32
+    }
+
+    /// Все облики значка на карте (имя картинки = символ типа + suffix).
+    static let rasters: [Raster] = [
+        // На пути — круг цвета типа.
+        Raster(suffix: "", side: 30, fill: nil, ink: nil, rim: 0xFFFFFF),
+        // Тревога — крупнее; ореол — слой camera-halo.
+        Raster(suffix: "-alert", side: 38, fill: nil, ink: nil, rim: 0xFFFFFF),
+        // Спокойная днём — графит, белый кант и глиф.
+        Raster(suffix: "-calm-d", side: 24, fill: neutralDayRGB, ink: 0xFFFFFF, rim: 0xFFFFFF),
+        // Ночью — светлый графит, тёмный кант и глиф.
+        Raster(suffix: "-calm-n", side: 24, fill: neutralNightRGB, ink: calmNightInkRGB, rim: calmNightInkRGB),
+    ]
 
     static let ghostBadge = "radar-badge-ghost"
     static let ownBadge = "radar-badge-own"
@@ -64,6 +91,7 @@ nonisolated enum CameraMarkerLook {
     }
 
     /// Имя картинки в стиле. Спокойная — своя на день и ночь: графит разный.
+    /// Суффиксы — те же, что у `rasters`.
     static func icon(symbol: String, tier: Tier, daylight: Bool) -> String {
         switch tier {
         case .alert: return symbol + "-alert"

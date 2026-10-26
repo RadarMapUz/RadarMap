@@ -63,12 +63,20 @@ struct IconBadge: View {
     var size: CGFloat = 36
 
     var body: some View {
-        Image(systemName: symbol)
-            .font(.system(size: size * 0.44, weight: .semibold))
-            .foregroundStyle(tint)
-            .frame(width: size, height: size)
-            .background(tint.opacity(0.14), in: Circle())
-            .accessibilityHidden(true)
+        Group {
+            // Символ типа камеры — глифом камеры (29.C): «камеры» в Итогах и
+            // строках тем же значком, что на карте.
+            if let camera = CameraGlyph(symbol: symbol) {
+                CameraGlyphView(glyph: camera, ink: tint, side: size * 0.56)
+            } else {
+                Image(systemName: symbol)
+                    .font(.system(size: size * 0.44, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+        }
+        .frame(width: size, height: size)
+        .background(tint.opacity(0.14), in: Circle())
+        .accessibilityHidden(true)
     }
 }
 

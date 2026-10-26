@@ -237,11 +237,7 @@ struct FinesSheet: View {
                 selectedItem = PassMapPayload(pass: item.pass, record: item.record)
             } label: {
                 HStack(spacing: 12) {
-                    Image(systemName: item.pass.kind.symbolName)
-                        .font(.rounded(15, .bold))
-                        .foregroundStyle(item.pass.kind.glyphTint)
-                        .frame(width: 34, height: 34)
-                        .background(item.pass.kind.tint.gradient, in: Circle())
+                    CameraIcon(kind: item.pass.kind, side: 34)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(item.pass.location.isEmpty ? item.pass.kind.displayName
                                                         : item.pass.location)

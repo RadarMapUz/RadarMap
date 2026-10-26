@@ -259,8 +259,12 @@ enum Theme {
         static let mobile      = Color(uiColor: rgb(0xC2409E))
         /// Пост ДПС.
         static let post        = Color(uiColor: rgb(0x46525E))
-        /// ДТП — событие, а не характеристика точки: цвет опасности.
-        static let accident    = Theme.danger
+        /// ДТП — событие, а не характеристика точки: цвет опасности. На
+        /// маркере — постоянный (дневной danger): ночной #FF7A70 с белым
+        /// глифом не дотягивал до 4,5:1 (29.C).
+        static let accident    = Color(uiColor: rgb(0xC62828))
+        /// Неизвестный тип — графит потемнее поста, белый глиф 6:1.
+        static let other       = Color(uiColor: rgb(0x556070))
         /// Кольцо маркера.
         static let ring        = Color.white
         /// Глиф на СВЕТЛОЙ заливке (радар, тренога) — 9:1.
@@ -546,6 +550,10 @@ extension Font {
 // MARK: - Цвет/иконка для типа камеры (UI-слой, модель остаётся без SwiftUI)
 
 extension CameraType {
+    /// Цвет типа числом — один на SwiftUI (`tint`), стиль движка
+    /// (EngineMapStyle.typeHex) и растры значков (CameraIconArt).
+    nonisolated var markerRGB: UInt32 { glyph.fillRGB }
+
     var tint: Color {
         switch self {
         case .stationaryCamera: return Theme.Types.camera
@@ -555,7 +563,7 @@ extension CameraType {
         case .tripod:           return Theme.Types.radar
         case .dpsPost:          return Theme.Types.post
         case .accident:         return Theme.Types.accident
-        case .other:            return Theme.textSecondary
+        case .other:            return Theme.Types.other
         }
     }
 

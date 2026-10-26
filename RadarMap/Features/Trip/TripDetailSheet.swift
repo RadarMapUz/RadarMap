@@ -50,11 +50,7 @@ struct PassRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: pass.kind.symbolName)
-                .font(.rounded(15, .bold))
-                .foregroundStyle(pass.kind.glyphTint)
-                .frame(width: 34, height: 34)
-                .background(pass.kind.tint.gradient, in: Circle())
+            CameraIcon(kind: pass.kind, side: 34)
             VStack(alignment: .leading, spacing: 2) {
                 Text(pass.location.isEmpty ? pass.kind.displayName : pass.location)
                     .font(.rounded(14, .semibold))
@@ -593,11 +589,7 @@ struct TripDetailContent: View {
         let returned = item.points < 0
         let tint = returned ? Theme.success : Theme.danger
         return HStack(alignment: .top, spacing: 12) {
-            Image(systemName: item.icon)
-                .font(.rounded(14, .bold))
-                .foregroundStyle(tint)
-                .frame(width: 30, height: 30)
-                .background(tint.opacity(0.12), in: Circle())
+            IconBadge(symbol: item.icon, tint: tint, size: 30)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
                     .font(.rounded(15, .semibold))
@@ -818,8 +810,7 @@ struct TripShareCard: View {
         HStack(spacing: 10) {
             // Шкала Theme, а не .system(size:): подпись растёт с системным
             // кеглем, как весь остальной текст экрана (4.5).
-            Image(systemName: icon)
-                .font(.rounded(17, .bold))
+            SymbolIcon(icon, size: 17, weight: .bold)
             Text(text)
                 .font(.rounded(18, .heavy))
                 .lineLimit(1)

@@ -223,11 +223,7 @@ struct PassDetailView: View {
     private var speedSection: some View {
         VStack(spacing: 14) {
             HStack(spacing: 12) {
-                Image(systemName: pass.kind.symbolName)
-                    .font(.rounded(15, .bold))
-                    .foregroundStyle(pass.kind.glyphTint)
-                    .frame(width: 38, height: 38)
-                    .background(pass.kind.tint.gradient, in: Circle())
+                CameraIcon(kind: pass.kind, side: 38)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(pass.location.isEmpty ? pass.kind.displayName : pass.location)
                         .font(.rounded(19, .bold))

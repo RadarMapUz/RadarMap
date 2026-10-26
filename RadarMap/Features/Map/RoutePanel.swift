@@ -210,7 +210,7 @@ struct RoutePanel: View {
                     .minimumScaleFactor(0.7)
                 HStack(spacing: 4) {
                     Text(variant.distanceText)
-                    Image(systemName: Icon.cameras).font(.rounded(10, .semibold))
+                    SymbolIcon(Icon.cameras, size: 10)
                     Text("\(variant.ourCameraCount)")
                 }
                 .font(.rounded(12, .semibold))
@@ -362,8 +362,7 @@ struct RoutePanel: View {
         let route = env.route
         return Button(action: onShowCameras) {
             HStack(spacing: 10) {
-                Image(systemName: Icon.cameras)
-                    .font(.rounded(15, .bold))
+                SymbolIcon(Icon.cameras, size: 15, weight: .bold)
                     .foregroundStyle(route.ourCameraCount == 0 ? Theme.success : Theme.Types.camera)
                 Text("\(route.ourCameraCount) камер на маршруте")
                     .font(.rounded(14, .semibold))
@@ -584,11 +583,7 @@ struct RouteCamerasSheet: View {
                             .font(.rounded(13, .bold))
                             .foregroundStyle(Theme.textSecondary)
                             .frame(width: 24)
-                        Image(systemName: item.camera.kind.symbolName)
-                            .font(.rounded(13, .bold))
-                            .foregroundStyle(item.camera.kind.glyphTint)
-                            .frame(width: 34, height: 34)
-                            .background(item.camera.kind.tint.gradient, in: Circle())
+                        CameraIcon(kind: item.camera.kind, side: 34)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.camera.displayTitle)
                                 .font(.rounded(14, .semibold))

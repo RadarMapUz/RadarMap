@@ -78,7 +78,7 @@ struct MapPointBar: View {
         Button(action: action) {
             VStack(spacing: 4) {
                 if let chip {
-                    TypeChipGlyph(symbol: icon, fill: chip, glyph: glyph)
+                    TypeChipGlyph(symbol: icon, camera: CameraGlyph(symbol: icon), fill: chip, glyph: glyph)
                 } else {
                     Image(systemName: icon).font(.rounded(18, .semibold))
                         .frame(height: TypeChipGlyph.side)
@@ -142,8 +142,8 @@ struct ReportPickerBar: View {
                         // 1,9:1. Кружок с глифом — тот же язык, что маркер
                         // на карте; подпись — обычный текст.
                         VStack(spacing: 4) {
-                            TypeChipGlyph(symbol: kind.symbol, fill: kind.tint,
-                                          glyph: kind.glyphTint)
+                            TypeChipGlyph(symbol: kind.symbol, camera: kind.cameraGlyph,
+                                          fill: kind.tint, glyph: kind.glyphTint)
                             Text(kind.title)
                                 .font(.rounded(10, .medium))
                                 .lineLimit(1)
@@ -167,14 +167,21 @@ struct ReportPickerBar: View {
 private struct TypeChipGlyph: View {
     static let side: CGFloat = 26
     let symbol: String
+    /// Тип камеры — значок «Монета», как маркер на карте (29.C); nil —
+    /// событие дороги со своим символом.
+    let camera: CameraGlyph?
     let fill: Color
     let glyph: Color
 
     var body: some View {
-        Image(systemName: symbol)
-            .font(.rounded(13, .bold))
-            .foregroundStyle(glyph)
-            .frame(width: Self.side, height: Self.side)
-            .background(fill, in: Circle())
+        if let camera {
+            CameraCoinView(glyph: camera, fill: fill, ink: glyph, side: Self.side)
+        } else {
+            Image(systemName: symbol)
+                .font(.rounded(13, .bold))
+                .foregroundStyle(glyph)
+                .frame(width: Self.side, height: Self.side)
+                .background(fill, in: Circle())
+        }
     }
 }

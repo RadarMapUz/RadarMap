@@ -169,8 +169,7 @@ struct TripLiveBar: View {
                     Text(Formatting.distance(env.trip.distanceMeters))
                         .liveNumber()
                     Text(verbatim: "·")
-                    Image(systemName: "camera.fill")
-                        .font(.rounded(10, .semibold))
+                    SymbolIcon(Icon.cameras, size: 10)
                     Text(verbatim: "\(env.trip.camerasPassed)")
                         .contentTransition(.numericText())
                 }
@@ -200,11 +199,7 @@ struct TripLiveBar: View {
                                                isSignalStale: location.isSignalStale) {
             Button(action: onShowCameras) {
                 HStack(spacing: 5) {
-                    Image(systemName: next.camera.kind.symbolName)
-                        .font(.rounded(11, .bold))
-                        .foregroundStyle(next.camera.kind.glyphTint)
-                        .frame(width: 24, height: 24)
-                        .background(next.camera.kind.tint.gradient, in: Circle())
+                    CameraIcon(kind: next.camera.kind, side: 24)
                     Text(Formatting.distance(route.nextCameraDistance))
                         .font(.rounded(13, .bold).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)

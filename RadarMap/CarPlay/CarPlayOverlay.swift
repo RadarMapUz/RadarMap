@@ -236,7 +236,7 @@ struct CarPlayOverlay: View {
                         .font(.rounded(13, .semibold).monospacedDigit())
                         .foregroundStyle(Theme.textSecondary)
                     if camerasAhead > 0 {
-                        Label("\(camerasAhead)", systemImage: "camera.fill")
+                        Label { Text(verbatim: "\(camerasAhead)") } icon: { SymbolIcon(Icon.cameras, size: 13, weight: .bold) }
                             .font(.rounded(13, .bold).monospacedDigit())
                             .foregroundStyle(Theme.Types.camera)
                             .labelStyle(.titleAndIcon)

@@ -66,19 +66,11 @@ enum CarPlayBannerArt {
         let diameter = min(rect.width, rect.height)
         let circle = CGRect(x: rect.midX - diameter / 2, y: rect.midY - diameter / 2,
                             width: diameter, height: diameter)
-        let ring = max(1.5, diameter * 0.08)
-        UIColor.white.setFill()
-        UIBezierPath(ovalIn: circle).fill()
-        UIColor(type.tint).setFill()
-        UIBezierPath(ovalIn: circle.insetBy(dx: ring, dy: ring)).fill()
-        let side = diameter * 0.5
-        let config = UIImage.SymbolConfiguration(pointSize: side * 0.85, weight: .bold)
-        guard let glyph = UIImage(systemName: type.symbolName, withConfiguration: config)?
-            .withTintColor(UIColor(type.glyphTint), renderingMode: .alwaysOriginal) else { return }
-        let fit = min(side / max(glyph.size.width, 1), side / max(glyph.size.height, 1), 1)
-        let drawn = CGSize(width: glyph.size.width * fit, height: glyph.size.height * fit)
-        glyph.draw(in: CGRect(x: circle.midX - drawn.width / 2, y: circle.midY - drawn.height / 2,
-                              width: drawn.width, height: drawn.height))
+        // Значок «Монета» (29.C) — тот же, что на карте и телефоне.
+        guard let cg = UIGraphicsGetCurrentContext() else { return }
+        CameraCoin.draw(type.glyph, in: cg, disc: circle,
+                        fill: Theme.rgb(type.markerRGB).cgColor, ink: CameraIconArt.glyphColor(type),
+                        rim: UIColor.white.cgColor, shadow: false)
     }
 
     // MARK: - Баннер камеры

@@ -1021,6 +1021,25 @@ final class MobileCameraService {
     func idOffsetApplied(_ serverID: Int) -> Int { Self.idOffset + serverID }
 
     #if DEBUG
+    /// 29.C, этап 1 (`-studyCrowd`): по отметке каждого краудсорс-типа рядом —
+    /// чтобы увидеть все значки на одной карте. Без сети и без POST.
+    func seedIconStudy(near coordinate: CLLocationCoordinate2D) {
+        let looks: [(Int, CameraType, Double, Double, Bool)] = [
+            (900_011, .mobileRadar, 0.0011, 0.0004, true),
+            (900_012, .tripod, -0.0006, 0.0012, true),
+            (900_013, .dpsPost, 0.0004, -0.0013, true),
+            (900_014, .accident, -0.0013, -0.0005, true),
+            (900_015, .mobileRadar, 0.0019, -0.0010, false),
+        ]
+        reports = looks.map { id, kind, dLat, dLon, confirmed in
+            Camera(id: Self.idOffset + id, region: kind.displayName, city: "", location: kind.displayName,
+                   lat: coordinate.latitude + dLat, lon: coordinate.longitude + dLon,
+                   type: kind.sourceString, violations: Camera.defaultViolations(forType: kind.sourceString),
+                   needsReview: nil, mobileConfirmed: confirmed)
+        }
+        store?.setMobileCameras(reports)
+    }
+
     /// Скриншот-хук `-demoMobileTrust`: подтверждённая отметка и призрак на
     /// испытательном сроке плюс окно «Что это было?» с «Отменить» — без сети и
     /// без настоящего POST в общую базу (фейк на проде увидят живые водители).

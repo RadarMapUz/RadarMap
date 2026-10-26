@@ -46,8 +46,7 @@ struct OnboardingRoadScene: View {
             VStack {
                 Spacer()
                 HStack(spacing: 10) {
-                    Circle().fill(Theme.Types.camera).frame(width: 30, height: 30)
-                        .overlay(Image(systemName: "camera.fill").font(.rounded(13, .bold)).foregroundStyle(.white))
+                    CameraIcon(kind: .stationaryCamera, side: 30)
                     VStack(alignment: .leading, spacing: 0) {
                         Text("240 м").font(.rounded(20, .heavy)).foregroundStyle(Theme.danger)
                         Text("до камеры").font(.rounded(11)).foregroundStyle(Theme.textSecondary)
@@ -150,8 +149,8 @@ struct OnboardingCommunityScene: View {
 
 // MARK: - Детали сцен
 
-/// Маркер камеры как на карте (вариант B): цвет типа, белое кольцо; тревога
-/// крупнее и с ореолом; неподтверждённая — пунктир и «?».
+/// Маркер камеры как на карте (вариант B, значок «Монета» 29.C): цвет типа,
+/// белый кант; тревога крупнее и с ореолом; неподтверждённая — пунктир и «?».
 private struct CameraMark: View {
     let kind: CameraType
     var alert = false
@@ -164,14 +163,8 @@ private struct CameraMark: View {
                 if alert {
                     Circle().fill(Theme.Types.camera.opacity(0.18)).frame(width: side + 34, height: side + 34)
                 }
-                Circle().fill(kind.tint).frame(width: side, height: side)
-                    .overlay(Circle().strokeBorder(style: StrokeStyle(lineWidth: 3, dash: ghost ? [5, 4] : []))
-                        .foregroundStyle(.white))
-                    .opacity(ghost ? 0.6 : 1)
-                Image(systemName: kind.symbolName)
-                    .font(.system(size: alert ? 20 : 16, weight: .bold))
-                    .foregroundStyle(kind.glyphTint)
-                    .opacity(ghost ? 0.7 : 1)
+                CameraIcon(kind: kind, side: side, shadow: true, dashedRim: ghost)
+                    .opacity(ghost ? 0.65 : 1)
             }
             if ghost {
                 Text("?")

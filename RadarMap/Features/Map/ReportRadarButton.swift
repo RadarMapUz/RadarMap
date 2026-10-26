@@ -161,9 +161,14 @@ struct ReportRadarButton: View {
 
     private func fanRow(_ kind: ReportKind, isActive: Bool) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: kind.symbol)
-                .font(.rounded(18, .bold))
-                .frame(width: 24)
+            if let glyph = kind.cameraGlyph {
+                CameraGlyphView(glyph: glyph, ink: isActive ? Theme.onAction : Theme.textSecondary, side: 22)
+                    .frame(width: 24)
+            } else {
+                Image(systemName: kind.symbol)
+                    .font(.rounded(18, .bold))
+                    .frame(width: 24)
+            }
             Text(kind.title)
                 .font(.rounded(17, .semibold))
                 .lineLimit(1)
@@ -382,8 +387,12 @@ struct ReportRefineBar: View {
             }
         } label: {
             VStack(spacing: 2) {
-                Image(systemName: kind.symbol)
-                    .font(.rounded(15, .bold))
+                if let glyph = kind.cameraGlyph {
+                    CameraGlyphView(glyph: glyph, ink: kind.glyphTint, side: 19)
+                } else {
+                    Image(systemName: kind.symbol)
+                        .font(.rounded(15, .bold))
+                }
                 Text(kind.title)
                     .font(.rounded(9, .semibold))
                     .lineLimit(1)
@@ -412,5 +421,9 @@ extension ReportKind {
     }
     var glyphTint: Color {
         isRoadEvent ? .white : cameraType.glyphTint
+    }
+    /// Глиф камеры (29.C); nil — событие дороги со своим символом.
+    var cameraGlyph: CameraGlyph? {
+        isRoadEvent ? nil : cameraType.glyph
     }
 }

@@ -115,12 +115,9 @@ struct TripCameraChip: View {
             } else if let camera, let distance {
                 let radius = location.effectiveAlertRadius
                 let near = distance <= radius
-                Image(systemName: camera.kind.symbolName)
-                    .font(.rounded(13, .bold))
-                    .foregroundStyle(SpeedHUDView.proximityGlyph(distance, camera, radius: radius))
-                    .frame(width: 28, height: 28)
-                    .background(SpeedHUDView.proximityTint(distance, camera, radius: radius).gradient,
-                                in: Circle())
+                CameraCoinView(glyph: camera.kind.glyph,
+                               fill: SpeedHUDView.proximityTint(distance, camera, radius: radius),
+                               ink: SpeedHUDView.proximityGlyph(distance, camera, radius: radius), side: 28)
                 Text(Formatting.distance(distance))
                     .font(.rounded(17, .bold))
                     .monospacedDigit()

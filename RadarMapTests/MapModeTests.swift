@@ -89,8 +89,12 @@ final class ThemePaletteTests: XCTestCase {
     func testCameraTypeTintIsNotAlarmColor() {
         XCTAssertNotEqual(CameraType.stationaryCamera.tint, Theme.danger)
         XCTAssertNotEqual(CameraType.stationaryRadar.tint, Theme.warning)
-        // Исключение — ДТП: это событие, а не характеристика точки.
-        XCTAssertEqual(CameraType.accident.tint, Theme.danger)
+        // Исключение — ДТП: это событие, а не характеристика точки. На
+        // маркере — постоянный дневной danger (29.C): ночной светлый danger
+        // с белым глифом не дотягивал до 4,5:1.
+        let light = UITraitCollection(userInterfaceStyle: .light)
+        XCTAssertEqual(UIColor(CameraType.accident.tint).resolvedColor(with: light),
+                       UIColor(Theme.danger).resolvedColor(with: light))
     }
 
     // MARK: - Ориентация карты и старт/стоп поездки (У10)

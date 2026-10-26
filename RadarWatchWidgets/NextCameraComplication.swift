@@ -167,10 +167,20 @@ struct NextCameraView: View {
         .accessibilityLabel(Text(accessibilityText))
     }
 
+    /// Камера — её глиф (29.C, тот же, что на карте телефона), остальное — символ.
+    @ViewBuilder
+    private func symbol(size: CGFloat, color: Color) -> some View {
+        if case .camera(let camera) = face, let glyph = CameraGlyph(symbol: camera.symbol) {
+            CameraGlyphView(glyph: glyph, ink: color, side: (size * 1.25).rounded())
+        } else {
+            Image(systemName: face.symbol)
+                .font(.system(size: size, weight: .bold))
+                .foregroundStyle(color)
+        }
+    }
+
     private var disc: some View {
-        Image(systemName: face.symbol)
-            .font(.system(size: 11, weight: .bold))
-            .foregroundStyle(face.glyph)
+        symbol(size: 11, color: face.glyph)
             .frame(width: 22, height: 22)
             .background(Circle().fill(face.fill).widgetAccentable())
             .opacity(entry.isStale ? 0.45 : 1)
@@ -199,9 +209,7 @@ struct NextCameraView: View {
     }
 
     private var corner: some View {
-        Image(systemName: face.symbol)
-            .font(.system(size: 20, weight: .semibold))
-            .foregroundStyle(face.fill)
+        symbol(size: 20, color: face.fill)
             .widgetAccentable()
             .opacity(entry.isStale ? 0.45 : 1)
             .widgetLabel {
@@ -221,9 +229,7 @@ struct NextCameraView: View {
 
     private var rectangular: some View {
         HStack(spacing: 8) {
-            Image(systemName: face.symbol)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(face.glyph)
+            symbol(size: 15, color: face.glyph)
                 .frame(width: 32, height: 32)
                 .background(Circle().fill(face.fill).widgetAccentable())
                 .opacity(entry.isStale ? 0.45 : 1)

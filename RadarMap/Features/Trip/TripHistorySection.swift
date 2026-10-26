@@ -85,7 +85,7 @@ struct TripHistorySection: View {
                             .font(.rounded(15))
                             .foregroundStyle(Theme.textSecondary)
                         if record.camerasPassed > 0 {
-                            Label("\(record.camerasPassed)", systemImage: "camera.fill")
+                            Label { Text(verbatim: "\(record.camerasPassed)") } icon: { SymbolIcon(Icon.cameras, size: 11) }
                                 .font(.rounded(11, .semibold))
                                 .foregroundStyle(Theme.accent)
                                 .labelStyle(.titleAndIcon)

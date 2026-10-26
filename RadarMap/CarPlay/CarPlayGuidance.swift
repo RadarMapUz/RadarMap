@@ -923,6 +923,12 @@ final class CarPlayGuidance {
     /// один вариант под известный нам фон — варианты внутри одного ассета до
     /// машины не доезжают.
     static func symbol(_ name: String, pointSize: CGFloat, onDark: Bool) -> UIImage? {
+        // Тип камеры — глифом камеры (29.C, тот же, что на карте и телефоне).
+        if let camera = CameraGlyph(symbol: name) {
+            let side = (pointSize * 1.15).rounded()
+            return CameraIconArt.glyph(camera, side: side, ink: onDark ? .white : .black,
+                                       scale: AppConfig.carPlaySymbolScale).withRenderingMode(.alwaysOriginal)
+        }
         let configuration = UIImage.SymbolConfiguration(pointSize: pointSize, weight: .bold)
         guard let base = UIImage(systemName: name, withConfiguration: configuration)
                 ?? UIImage(systemName: "arrow.up", withConfiguration: configuration) else { return nil }

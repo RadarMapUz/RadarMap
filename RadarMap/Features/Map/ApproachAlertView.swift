@@ -127,12 +127,7 @@ struct ApproachAlertView: View {
             Spacer()
             VStack(spacing: 14) {
                 HStack(spacing: 12) {
-                    ZStack {
-                        Circle().fill(tint).frame(width: 46, height: 46)
-                        Image(systemName: camera.kind.symbolName)
-                            .font(.rounded(20, .bold))
-                            .foregroundStyle(camera.kind.glyphTint)
-                    }
+                    CameraIcon(kind: camera.kind, side: 46)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(camera.kind.displayName)
                             .font(.rounded(17, .bold))
@@ -222,10 +217,7 @@ struct ApproachAlertView: View {
                     // Несколько вдохов и покой: вечный пульс держал
                     // перерисовку на 60 Гц весь показ (аудит 11.10).
                     .motionAnimation(.easeInOut(duration: 0.9).repeatCount(5, autoreverses: true), value: pulse)
-                Circle().fill(tint).frame(width: 72, height: 72)
-                Image(systemName: camera.kind.symbolName)
-                    .font(.system(size: 32, weight: .bold))
-                    .foregroundStyle(camera.kind.glyphTint)
+                CameraIcon(kind: camera.kind, side: 72)
             }
             VStack(spacing: 4) {
                 Text(camera.kind.displayName)

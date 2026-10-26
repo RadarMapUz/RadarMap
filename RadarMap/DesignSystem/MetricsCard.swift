@@ -75,8 +75,7 @@ struct ShareMetric: View {
     var body: some View {
         VStack(spacing: 4) {
             if let icon {
-                Image(systemName: icon)
-                    .font(.system(size: 13, weight: .bold))
+                SymbolIcon(icon, size: 13, weight: .bold)
                     .foregroundStyle(tint)
             }
             Text(value)

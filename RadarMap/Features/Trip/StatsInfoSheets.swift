@@ -50,8 +50,7 @@ struct FinesExplainer: View {
             infoCard(title: String(localized: "Откуда сумма")) {
                 ForEach(sources.prefix(AppConfig.fineSourcesVisibleRows)) { source in
                     HStack(spacing: 10) {
-                        Image(systemName: Icon.cameras)
-                            .font(.rounded(15, .bold))
+                        SymbolIcon(Icon.cameras, size: 15, weight: .bold)
                             .foregroundStyle(Theme.danger)
                             .frame(width: 28, height: 28)
                             .background(Theme.danger.opacity(0.12), in: Circle())

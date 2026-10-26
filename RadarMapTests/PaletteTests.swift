@@ -106,11 +106,13 @@ final class PaletteTests: XCTestCase {
          ("post", Theme.Types.post)]
     }
 
-    /// Тип камеры → его заливка и глиф на ней (как рисует маркер).
+    /// Тип камеры → его заливка и глиф на ней (как рисует маркер). С 29.C —
+    /// и ДТП с «прочим»: у них тоже значок «Монета» с белым глифом.
     private var markers: [(String, Color, Color)] {
         [(CameraType.stationaryCamera, "camera"), (.stationaryRadar, "radar"),
          (.intelligentRadar, "intelligent"), (.mobileRadar, "mobile"), (.dpsPost, "post"),
-         (.tripod, "tripod")].map { ($0.1, $0.0.tint, $0.0.glyphTint) }
+         (.tripod, "tripod"), (.accident, "accident"), (.other(""), "other")]
+            .map { ($0.1, $0.0.tint, $0.0.glyphTint) }
     }
 
     // MARK: - Правила

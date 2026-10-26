@@ -780,11 +780,7 @@ struct HiddenCamerasPage: View {
             Section {
                 ForEach(cameras) { camera in
                     HStack(spacing: 12) {
-                        Image(systemName: camera.kind.symbolName)
-                            .font(.rounded(13, .bold))
-                            .foregroundStyle(camera.kind.glyphTint)
-                            .frame(width: 30, height: 30)
-                            .background(camera.kind.tint, in: Circle())
+                        CameraIcon(kind: camera.kind, side: 30)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(camera.displayTitle)
                                 .font(.rounded(15, .semibold))

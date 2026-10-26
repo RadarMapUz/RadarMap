@@ -135,15 +135,7 @@ struct CameraDetailSheet: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            Image(systemName: camera.kind.symbolName)
-                .font(.rounded(20, .bold))
-                .foregroundStyle(camera.kind.glyphTint)
-                .frame(width: 46, height: 46)
-                // Тень у круга, а не у значка поверх него (правило 11.10).
-                .background {
-                    Circle().fill(camera.kind.tint.gradient)
-                        .shadow(color: camera.kind.tint.opacity(0.6), radius: 8)
-                }
+            CameraIcon(kind: camera.kind, side: 46, shadow: true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(camera.kind.displayName)

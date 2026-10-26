@@ -486,32 +486,6 @@ struct EngineMapView: UIViewRepresentable {
             return image
         }
 
-        /// Три облика значка камеры (CameraMarkerLook): размер, кольцо, заливка
-        /// (nil — цвет типа) и глиф (nil — свой цвет типа).
-        private struct MarkerLook {
-            let suffix: String
-            let side: CGFloat
-            let ringWidth: CGFloat
-            let glyph: CGFloat
-            let ring: UInt32
-            let fill: UInt32?
-            let glyphColor: UInt32?
-        }
-
-        private static let markerLooks = [
-            // На пути — круг цвета типа, как был.
-            MarkerLook(suffix: "", side: 30, ringWidth: 2.5, glyph: 14, ring: 0xFFFFFF, fill: nil, glyphColor: nil),
-            // Тревога — крупнее; ореол — слой camera-halo.
-            MarkerLook(suffix: "-alert", side: 38, ringWidth: 3, glyph: 17, ring: 0xFFFFFF, fill: nil, glyphColor: nil),
-            // Спокойная днём — графит, белое кольцо, белый глиф.
-            MarkerLook(suffix: "-calm-d", side: 24, ringWidth: 2, glyph: 11, ring: 0xFFFFFF,
-                       fill: 0x3D4652, glyphColor: 0xFFFFFF),
-            // Ночью — светлый графит, тёмное кольцо и глиф: белое кольцо на
-            // тёмной карте горело бы ярче самой тревоги.
-            MarkerLook(suffix: "-calm-n", side: 24, ringWidth: 2, glyph: 11, ring: 0x14181D,
-                       fill: 0xAEB6C2, glyphColor: 0x14181D),
-        ]
-
         /// Пометка поверх значка: «?» у отметки водителей, галочка у своей.
         private static func badgeIcon(fill: UInt32, text: String?) -> UIImage {
             UIGraphicsImageRenderer(size: CGSize(width: 16, height: 16)).image { _ in
@@ -586,7 +560,7 @@ struct EngineMapView: UIViewRepresentable {
         /// (cameraAttributes → CameraMarkerLook.icon/badge). Имени, которого
         /// нет в стиле, движок не рисует вовсе — молча (EngineCameraMarkersTests).
         static var cameraImageNames: [String] {
-            markerKinds.flatMap { kind in markerLooks.map { kind.symbolName + $0.suffix } }
+            markerKinds.flatMap { kind in CameraMarkerLook.rasters.map { kind.symbolName + $0.suffix } }
                 + [CameraMarkerLook.ghostBadge, CameraMarkerLook.ownBadge]
         }
 
@@ -597,31 +571,15 @@ struct EngineMapView: UIViewRepresentable {
                 return
             }
             let kinds = Self.markerKinds
-            // Вариант B «Спокойная карта» (владелец, 12.10; CameraMarkerLook):
-            // цвет типа — только у камер на нашем пути и у тревоги, остальные
-            // — графитовый круг поменьше, тип читается по глифу. Цвет
-            // запекается в пиксели: движок не применяет к картинке стиля
-            // template-режим UIKit. Ореол тревоги рисует слой camera-halo.
+            // Значок «Монета» (29.C, CameraIconArt) в обликах «Спокойной карты»
+            // (вариант B, владелец, 12.10; CameraMarkerLook): цвет типа — только
+            // у камер на нашем пути и у тревоги, остальные — графитовый круг
+            // поменьше, тип читается по глифу. Цвет запекается в пиксели:
+            // движок не применяет к картинке стиля template-режим UIKit. Ореол
+            // тревоги рисует слой camera-halo.
             for kind in kinds {
-                for look in Self.markerLooks {
-                    let configuration = UIImage.SymbolConfiguration(pointSize: look.glyph, weight: .semibold)
-                    guard let glyph = UIImage(systemName: kind.symbolName, withConfiguration: configuration) else {
-                        // Без картинки движок не рисует камеры этого типа вовсе.
-                        Log.network.error("MapLibre: нет символа \(kind.symbolName, privacy: .public) — значки камер этого типа не встанут")
-                        continue
-                    }
-                    let side = look.side
-                    let bitmap = UIGraphicsImageRenderer(size: CGSize(width: side, height: side)).image { _ in
-                        let disc = CGRect(x: 1, y: 1, width: side - 2, height: side - 2)
-                        Theme.rgb(look.ring).setFill()
-                        UIBezierPath(ovalIn: disc).fill()
-                        (look.fill.map { Theme.rgb($0) } ?? UIColor(kind.tint)).setFill()
-                        UIBezierPath(ovalIn: disc.insetBy(dx: look.ringWidth, dy: look.ringWidth)).fill()
-                        let tint = look.glyphColor.map { Theme.rgb($0) } ?? UIColor(kind.glyphTint)
-                        glyph.withTintColor(tint, renderingMode: .alwaysOriginal)
-                            .draw(at: CGPoint(x: (side - glyph.size.width) / 2, y: (side - glyph.size.height) / 2))
-                    }
-                    style.setImage(bitmap, forName: kind.symbolName + look.suffix)
+                for look in CameraMarkerLook.rasters {
+                    style.setImage(CameraIconArt.marker(kind, look: look), forName: kind.symbolName + look.suffix)
                 }
             }
             style.setImage(Self.badgeIcon(fill: 0x46525E, text: "?"), forName: CameraMarkerLook.ghostBadge)

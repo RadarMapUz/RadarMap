@@ -199,11 +199,7 @@ extension FinesScreen {
 
     private func passHeader(_ pass: PassedCamera) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: pass.kind.symbolName)
-                .font(.rounded(15, .bold))
-                .foregroundStyle(pass.kind.glyphTint)
-                .frame(width: 34, height: 34)
-                .background(pass.kind.tint.gradient, in: Circle())
+            CameraIcon(kind: pass.kind, side: 34)
             VStack(alignment: .leading, spacing: 2) {
                 Text(pass.location.isEmpty ? pass.kind.displayName : pass.location)
                     .font(.rounded(14, .semibold))

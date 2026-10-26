@@ -46,12 +46,9 @@ struct WatchHUDView: View {
     private var cameraRow: some View {
         if let distance = session.distanceMeters {
             HStack(spacing: 8) {
-                Image(systemName: session.cameraSymbol ?? "camera.fill")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 30, height: 30)
-                    .background(WatchTheme.dangerFill, in: Circle())
-                    .accessibilityHidden(true)
+                // Значок «Монета» типа (29.C) — как на карте и в HUD телефона.
+                let glyph = CameraGlyph(symbol: session.cameraSymbol) ?? .camera
+                CameraCoinView(glyph: glyph, fill: color(glyph.fillRGB), ink: color(glyph.inkRGB), side: 30)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(distanceText(distance))
                         .font(.system(size: 26, weight: .bold, design: .rounded))
@@ -196,6 +193,11 @@ struct WatchHUDView: View {
             return String(format: String(localized: "%@ км"), km)
         }
         return String(format: String(localized: "%@ м"), String(meters))
+    }
+
+    private func color(_ hex: UInt32) -> Color {
+        Color(red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255,
+              blue: Double(hex & 0xFF) / 255)
     }
 }
 

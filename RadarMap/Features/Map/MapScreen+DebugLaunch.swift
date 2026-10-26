@@ -137,6 +137,46 @@ extension MapScreen {
                 }
             }
         }
+        // 29.C: лист значков камер (все типы × облики карты + размеры
+        // экранов) в PNG — папка следующим аргументом.
+        if let idx = args.firstIndex(of: "-dumpCameraIcons"), idx + 1 < args.count {
+            let url = URL(fileURLWithPath: args[idx + 1]).appendingPathComponent("camera_icons.png")
+            Task {
+                await Task.pause(seconds: 1)
+                let renderer = ImageRenderer(content: CameraIconSheet())
+                renderer.scale = 3
+                do { try renderer.uiImage?.pngData()?.write(to: url) } catch {
+                    Log.network.error("29.C: лист значков не записан: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+        }
+        // 29.C: оповещение камеры в размере iPhone SE (375×667) — проверка
+        // значка на малом экране без второго симулятора. Папка — аргументом.
+        if let idx = args.firstIndex(of: "-dumpSEAlert"), idx + 1 < args.count {
+            let directory = URL(fileURLWithPath: args[idx + 1])
+            Task {
+                await Task.pause(seconds: 3)
+                let cameras = env.cameras.cameras
+                let picks = [CameraType.stationaryCamera, .stationaryRadar, .intelligentRadar]
+                    .compactMap { kind in cameras.first { $0.kind == kind } }
+                for (index, camera) in picks.enumerated() {
+                    for layout in [ApproachAlertView.Layout.fullScreen, .bottomCard] {
+                        let view = ApproachAlertView(camera: camera, distance: 240, speedKmh: 67,
+                                                     relativeBearing: 12, alertRadius: 500,
+                                                     layout: layout, onDismiss: {})
+                            .environment(env)
+                            .frame(width: 375, height: 667)
+                            .background(Theme.background)
+                        let renderer = ImageRenderer(content: view)
+                        renderer.scale = 2
+                        let name = "se_alert_\(index)_\(layout == .fullScreen ? "full" : "card").png"
+                        do { try renderer.uiImage?.pngData()?.write(to: directory.appendingPathComponent(name)) } catch {
+                            Log.network.error("29.C: SE не записан: \(error.localizedDescription, privacy: .public)")
+                        }
+                    }
+                }
+            }
+        }
         // Шеринг-карточки в PNG (Documents) — визуальная проверка без share-шита.
         if args.contains("-dumpShareCards") {
             Task {
@@ -249,6 +289,31 @@ extension MapScreen {
                 if let record = env.trip.history.first {
                     withMotion(.spring(duration: 0.4)) { tripEndRecord = record }
                 }
+            }
+        }
+        // 29.C: все краудсорс-типы рядом — значки вариантов на одной карте.
+        if args.contains("-studyCrowd") {
+            Task {
+                await Task.pause(seconds: 2)
+                if let center = env.location.currentCoordinate {
+                    env.mobile.seedIconStudy(near: center)
+                }
+            }
+        }
+        // 29.C: поездка без маршрута — HUD «до камеры» на снимок (диплинк
+        // просит подтверждения системным окном, а тапов на симуляторе нет).
+        if args.contains("-studyTrip") {
+            Task {
+                await Task.pause(seconds: 4)
+                if !env.location.isTripActive { env.location.startTrip() }
+            }
+        }
+        // 29.C: сдвиг масштаба, как кнопкой «−» (`-studyZoom -2`), — больше камер в кадре.
+        if let idx = args.firstIndex(of: "-studyZoom"),
+           let delta = args.dropFirst(idx + 1).first.flatMap(Double.init) {
+            Task {
+                await Task.pause(seconds: 7)
+                map.zoomStep(delta)
             }
         }
         // Краудсорс-доверие: призрак + подтверждённая отметка и «Что это было?»

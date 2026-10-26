@@ -102,13 +102,18 @@ struct PassQuestionCard: View {
     }
 
     /// Знак отметки — украшение: смысл несёт вопрос рядом.
-    private var glyph: some View {
-        Image(systemName: symbol)
-            .font(.rounded(15, .bold))
-            .foregroundStyle(glyphTint)
-            .frame(width: 34, height: 34)
-            .background(fill.gradient, in: Circle())
-            .accessibilityHidden(true)
+    @ViewBuilder private var glyph: some View {
+        // Камера — значок «Монета» (29.C); событие дороги — свой символ.
+        if let camera = CameraGlyph(symbol: symbol) {
+            CameraCoinView(glyph: camera, fill: fill, ink: glyphTint, side: 34)
+        } else {
+            Image(systemName: symbol)
+                .font(.rounded(15, .bold))
+                .foregroundStyle(glyphTint)
+                .frame(width: 34, height: 34)
+                .background(fill.gradient, in: Circle())
+                .accessibilityHidden(true)
+        }
     }
 
     @ViewBuilder private var answers: some View {

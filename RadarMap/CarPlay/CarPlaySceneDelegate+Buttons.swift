@@ -438,6 +438,12 @@ extension CarPlaySceneDelegate {
         } else {
             limit = CGSize(width: AppConfig.carPlayGridImageMaxPoints, height: AppConfig.carPlayGridImageMaxPoints)
         }
+        // Тип камеры — глифом камеры (29.C), шаблоном: цвет даёт система.
+        if let camera = CameraGlyph(symbol: symbol) {
+            let side = min(limit.width, limit.height, 36).rounded(.down)
+            return CameraIconArt.glyph(camera, side: side, ink: .black, scale: AppConfig.carPlaySymbolScale)
+                .withRenderingMode(.alwaysTemplate)
+        }
         var pointSize: CGFloat = 36
         var image = UIImage(systemName: symbol,
                             withConfiguration: carConfiguration(pointSize: pointSize, weight: .semibold))

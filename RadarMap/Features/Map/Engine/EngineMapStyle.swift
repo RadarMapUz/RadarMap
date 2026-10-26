@@ -458,15 +458,7 @@ nonisolated enum EngineMapStyle {
     /// Цвет типа камеры для слоёв движка — те же значения, что Theme.Types
     /// (движок принимает только строку цвета).
     static func typeHex(_ kind: CameraType) -> String {
-        switch kind {
-        case .stationaryCamera:        return "#D93025"
-        case .stationaryRadar, .tripod: return "#F2B200"
-        case .intelligentRadar:        return "#6A3FD6"
-        case .mobileRadar:             return "#C2409E"
-        case .dpsPost:                 return "#46525E"
-        case .accident:                return "#D93025"
-        case .other:                   return "#6B6B70"
-        }
+        String(format: "#%06X", kind.markerRGB)
     }
 
     /// Камеры и «я» — над всем, в обоих стилях.

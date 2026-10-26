@@ -337,12 +337,12 @@ final class WatchComplicationTests: XCTestCase {
 
     /// Диск камеры на циферблате — цвет её маркера на карте (Theme.Types).
     func testCameraDiscIsTheMapMarkerColour() {
-        for type in types where type != .accident && type != .other("x") {
+        // С 29.C — все восемь: заливка значка одна (CameraGlyph.fillRGB), и
+        // ДТП на маркере — постоянный красный опасности.
+        for type in types {
             XCTAssertEqual(WidgetPalette.cameraFill(symbol: type.symbolName), hex(type.tint, .light),
                            "\(type.symbolName) разошёлся с Theme.Types")
         }
-        XCTAssertEqual(WidgetPalette.cameraFill(symbol: CameraType.accident.symbolName),
-                       WidgetPalette.dangerFill.dark, "ДТП — заливка опасности")
         XCTAssertEqual(WidgetPalette.cameraFill(symbol: nil), WidgetPalette.cameraFill(symbol: "mappin"))
     }
 

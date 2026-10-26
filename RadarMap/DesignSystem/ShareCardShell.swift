@@ -92,7 +92,7 @@ struct ShareCardShell<Content: View>: View {
     }
 }
 
-/// Подвал карточки: «RadarMap · soulmed.uz/radarmap», строка о продукте и QR
+/// Подвал карточки: «RadarMap · radarmap.uz», строка о продукте и QR
 /// на страницу установки. Тихий — данные карточки важнее; QR справа внизу,
 /// не шире ~13 % карточки, и в сторис он вместе с подвалом выше полосы
 /// интерфейса соцсети.
@@ -148,7 +148,7 @@ struct ShareInstallQR: View {
 /// Адрес установки для карточек: подпись и QR из одной константы
 /// (`AppConfig.installPageURL`).
 enum ShareInstallLink {
-    /// «soulmed.uz/radarmap» — адрес без схемы и хвостового «/».
+    /// «radarmap.uz» — адрес без схемы и хвостового «/».
     static var caption: String { caption(for: AppConfig.installPageURL) }
 
     nonisolated static func caption(for url: URL) -> String {

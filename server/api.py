@@ -1050,7 +1050,7 @@ def _eta_expired(item, now):
 # Куда ведёт «Установить» — ОДНО место: пока приложения нет в App Store,
 # это страница проекта; после публикации — ссылка App Store
 # (https://apps.apple.com/app/id…) или та же страница с плашкой Safari.
-ETA_INSTALL_URL = "https://soulmed.uz/radarmap/"
+ETA_INSTALL_URL = "https://radarmap.uz/"
 
 # Значок — те же кольца радара, что у иконки приложения; цвет — currentColor,
 # поэтому он сам следует светлой и тёмной теме страницы.

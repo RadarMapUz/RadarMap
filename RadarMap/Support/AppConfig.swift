@@ -1172,16 +1172,22 @@ nonisolated enum AppConfig {
     /// Портал открытых данных — источник камер (МВД), банкоматов (ЦБ) и
     /// гостиниц; лицензия CC BY-SA 4.0 требует ссылку на источник.
     static let openDataURL = URL(string: "https://data.egov.uz")!
-    static let projectPageURL = URL(string: "https://soulmed.uz/radarmap/")!
-    /// Куда ведут QR и подпись «soulmed.uz/radarmap» на шеринг-карточках
+    static let projectPageURL = URL(string: "https://radarmap.uz/")!
+    /// Куда ведут QR и подпись «radarmap.uz» на шеринг-карточках
     /// (28.J): картинку видит тот, у кого приложения нет. Пока его нет в App
     /// Store — страница проекта; ссылку App Store (или ту же страницу, на ней
     /// плашка Safari «Открыть») подставить здесь, одним местом. Сервер держит
     /// такую же константу для страницы прибытия — ETA_INSTALL_URL в api.py.
-    static let installPageURL = URL(string: "https://soulmed.uz/radarmap/")!
+    static let installPageURL = URL(string: "https://radarmap.uz/")!
     /// Политика конфиденциальности — прямой ссылкой из Настроек, а не через
     /// подвал страницы проекта (App Review ищет её в два касания, не в три).
-    static let privacyPolicyURL = URL(string: "https://soulmed.uz/radarmap/privacy.html")!
+    static let privacyPolicyURL = URL(string: "https://radarmap.uz/privacy.html")!
+    /// Публичный адрес для ссылок, которые видит человек без приложения
+    /// («Поделиться прибытием»): свой домен, а не чужой soulmed.uz (26.10).
+    /// Тот же сервер и те же пути `/radarmap/…`, что у `syncBaseURL`; сам
+    /// обмен с сервером остаётся на `syncBaseURL` — прямой маршрут, без
+    /// прокси Cloudflare на горячем пути.
+    static let publicBaseURL = URL(string: "https://radarmap.uz/radarmap")!
 
     // Атрибуция (28.F): адреса, на которые лицензии требуют сослаться.
     // OpenMapTiles (схема тайлов, CC BY 4.0) и OSM (ODbL) — подпись «в углу

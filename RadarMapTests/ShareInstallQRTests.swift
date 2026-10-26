@@ -24,6 +24,18 @@ final class ShareInstallQRTests: XCTestCase {
         XCTAssertEqual(ShareInstallLink.caption(for: URL(string: "https://soulmed.uz")!), "soulmed.uz")
     }
 
+    /// Карточки, QR и ссылки прибытия видят люди без приложения — на них свой
+    /// домен, не soulmed.uz, чей сервер мы делим (владелец, 26.10).
+    func testPublicLinksUseOwnDomain() {
+        XCTAssertEqual(ShareInstallLink.caption, "radarmap.uz")
+        for url in [AppConfig.installPageURL, AppConfig.projectPageURL,
+                    AppConfig.privacyPolicyURL, AppConfig.publicBaseURL] {
+            XCTAssertEqual(url.host, "radarmap.uz", url.absoluteString)
+        }
+        XCTAssertEqual(EtaShare.link(base: AppConfig.publicBaseURL, token: "t").absoluteString,
+                       "https://radarmap.uz/radarmap/api/eta/t")
+    }
+
     func testQRCarriesTheInstallPage() throws {
         let qr = try XCTUnwrap(ShareInstallLink.qr, "QR не построен")
         // Модуль на пиксель — детектору нужен крупнее и с тихой зоной.

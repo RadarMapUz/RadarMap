@@ -168,7 +168,7 @@ DEFAULT_VENUES_DIR = "/opt/radarmap/www/roads"
 DEFAULT_WEBROOT = "/opt/radarmap/www"
 #: База отметок — только чтение, для подписок на город (выборка канала).
 DEFAULT_REPORTS_DB = "/opt/radarmap/api/reports.db"
-DEFAULT_PRIVACY_URL = "https://soulmed.uz/radarmap/privacy.html"
+DEFAULT_PRIVACY_URL = "https://radarmap.uz/privacy.html"
 #: edited_message — правки живой геопозиции (трансляция, 23.4).
 ALLOWED_UPDATES = ["message", "edited_message", "callback_query"]
 API_BASE = "http://127.0.0.1:8091"

@@ -288,7 +288,7 @@ class MenuTest(Stand):
         self.assertEqual(uz["reply_markup"]["keyboard"][0][0]["text"], "📍 Joylashuvni yuborish")
 
     def test_privacy_and_app(self):
-        self.assertIn("https://soulmed.uz/radarmap/privacy.html", self.text("/privacy")["text"])
+        self.assertIn("https://radarmap.uz/privacy.html", self.text("/privacy")["text"])
         self.assertEqual(self.text("/app")["text"], bot_texts.TEXTS["ru"]["app_soon"])
         self.config["app_url"] = "https://apps.apple.com/app/id123"
         self.assertIn("https://apps.apple.com/app/id123", self.text("/app")["text"])

@@ -191,11 +191,19 @@ extension MapScreen {
                         if env.mobile.passQuestion == nil, !MobileConfirmBar.showsDemo {
                             ParkedCarChip(map: map)
                             OfflineOfferCard(ownMap: true)
-                            DestinationSuggestionBar { coordinate, name in
-                                buildRoute(to: coordinate, name: name)
+                            // Этап 31: в вариантах подсказка «Домой» живёт в доке,
+                            // а под карточкой конца поездки не дублируется.
+                            if !homeLabActive, DesignLab.tripEnd == .base || tripEndRecord == nil {
+                                DestinationSuggestionBar { coordinate, name in
+                                    buildRoute(to: coordinate, name: name)
+                                }
                             }
                         }
-                        tripButton
+                        if homeLabActive {
+                            labPrimaryTrip
+                        } else if DesignLab.tripEnd == .base || tripEndRecord == nil {
+                            tripButton
+                        }
                     case .none:
                         EmptyView()
                     }
@@ -203,8 +211,9 @@ extension MapScreen {
                 // Карточка «Карта по пути» на экране — бар уступает ей место до
                 // ответа: на SE иначе ей негде встать, не загнав обязательные
                 // кнопки колонки под себя (CorridorOfferPlacement).
-                if mode.showsActionBar, !map.corridorCardShown {
-                    actionBar
+                if mode.showsActionBar, !map.corridorCardShown,
+                   DesignLab.route == .base || !env.route.isActive {
+                    homeLabDock
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
                             if abs(height - map.actionBarHeight) > 0.5 { map.actionBarHeight = height }
                         }

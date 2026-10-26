@@ -1,6 +1,23 @@
 {
   "sourceLanguage": "ru",
   "strings": {
+    "Куда едем?": {
+      "comment": "Этап 31 (варианты дизайна): поле поиска на главном экране",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Куда едем?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qayerga boramiz?"
+          }
+        }
+      }
+    },
     " на %@": {
       "localizations": {
         "ru": {

@@ -205,6 +205,22 @@ struct OnboardingView: View {
         scrollingPage {
             VStack(alignment: .leading, spacing: 0) {
                 Spacer(minLength: 8)
+                if DesignLab.onboarding == .b {
+                    // Этап 31, вариант B: сначала мысль, потом картинка.
+                    labTitleBlock(title: title, subtitle: subtitle)
+                    labScene(scene(), scale: 0.62)
+                        .padding(.top, 4)
+                        .padding(.bottom, 16)
+                    VStack(spacing: 10) { rows() }
+                        .padding(.horizontal, 24)
+                } else if DesignLab.onboarding == .a {
+                    // Этап 31, вариант A: картинка ужата до 2/3 — на SE влезает всё.
+                    labScene(scene(), scale: 0.68)
+                        .padding(.bottom, 16)
+                    labTitleBlock(title: title, subtitle: subtitle)
+                    VStack(spacing: 10) { rows() }
+                        .padding(.horizontal, 24)
+                } else {
                 scene()
                     .padding(.horizontal, 20)
                     .padding(.bottom, 24)
@@ -222,9 +238,35 @@ struct OnboardingView: View {
                     .padding(.bottom, 18)
                 VStack(spacing: 10) { rows() }
                     .padding(.horizontal, 24)
+                }
                 Spacer(minLength: 8)
             }
         }
+    }
+
+    /// Этап 31: сцена онбординга в уменьшенном виде — масштаб, а не обрезка
+    /// (у сцены своя высота 300, и обрезанная дорога теряет камеру или стрелку).
+    private func labScene(_ scene: some View, scale: CGFloat) -> some View {
+        scene
+            .padding(.horizontal, 20)
+            .scaleEffect(scale, anchor: .top)
+            .frame(height: 300 * scale, alignment: .top)
+            .frame(maxWidth: .infinity)
+    }
+
+    private func labTitleBlock(title: LocalizedStringKey, subtitle: LocalizedStringKey) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.rounded(24, .bold))
+                .foregroundStyle(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(subtitle)
+                .font(.rounded(15))
+                .foregroundStyle(Theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 16)
     }
 
     private func row(_ icon: String, _ text: LocalizedStringKey) -> some View {
@@ -280,7 +322,7 @@ struct OnboardingView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         return Group {
-            if typeSize >= .xLarge {
+            if typeSize >= .xLarge || (DesignLab.onboarding != .base && state != .granted) {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .top, spacing: 14) {
                         IconBadge(symbol: icon, tint: Theme.accent, size: 44)

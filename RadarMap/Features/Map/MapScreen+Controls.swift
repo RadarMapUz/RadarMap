@@ -77,8 +77,8 @@ extension MapScreen {
             slots: columnSlots, fixed: AppConfig.mapColumnFixedButtons,
             candidates: (map.isRotated ? [(.compass, 1)] : [])
                 + (env.route.isActive ? [(.overview, 1)] : [])
-                + [(.threeD, 1)]
-                + (env.settings.mapZoomButtons ? [(.zoom, 2)] : []))
+                + (DesignLab.home == .c ? [] : [(.threeD, 1)])
+                + (env.settings.mapZoomButtons && DesignLab.home != .c ? [(.zoom, 2)] : []))
         // Слои карты — первой в колонке.
         //
         // Подложка лежала в десятом разделе настроек и включалась только

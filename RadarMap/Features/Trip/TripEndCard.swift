@@ -25,10 +25,30 @@ struct TripEndCard: View {
     var onMerged: () -> Void
     var onDismiss: () -> Void
 
-    @State private var shareSubject: ShareSubjectBox?
-    @State private var confirmsMerge = false
+    @State var shareSubject: ShareSubjectBox?
+    @State var confirmsMerge = false
 
     var body: some View {
+        Group {
+            switch DesignLab.tripEnd {
+            case .base: baseCard
+            case .a: labCardA
+            case .b: labCardB
+            case .c: labCardC
+            }
+        }
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .sheet(item: $shareSubject) { box in
+            SharePreviewSheet(subject: box.subject)
+        }
+        .confirmationDialog("Объединить с предыдущей поездкой?",
+                            isPresented: $confirmsMerge, titleVisibility: .visible) {
+            Button("Объединить") { merge() }
+            Button("Отмена", role: .cancel) {}
+        }
+    }
+
+    private var baseCard: some View {
         VStack(spacing: 14) {
             HStack(spacing: 12) {
                 scoreBadge
@@ -111,19 +131,10 @@ struct TripEndCard: View {
                           in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
             .stroke(Theme.stroke, lineWidth: 1))
-        .transition(.move(edge: .bottom).combined(with: .opacity))
-        .sheet(item: $shareSubject) { box in
-            SharePreviewSheet(subject: box.subject)
-        }
-        .confirmationDialog("Объединить с предыдущей поездкой?",
-                            isPresented: $confirmsMerge, titleVisibility: .visible) {
-            Button("Объединить") { merge() }
-            Button("Отмена", role: .cancel) {}
-        }
     }
 
     /// Снимок карты с треком — как в деталке; сама карточка рисуется в превью.
-    private func share() {
+    func share() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         Task {
             let map = await TripMapSnapshot.render(track: record.trackPoints,
@@ -136,7 +147,7 @@ struct TripEndCard: View {
     // MARK: - Балл
 
     /// Кольцо с баллом поездки — тем же цветом, что в списках истории.
-    @ViewBuilder private var scoreBadge: some View {
+    @ViewBuilder var scoreBadge: some View {
         if let score = record.score.map({ Int($0) }) {
             let tint = TripHistorySection.scoreColor(score)
             ZStack {
@@ -171,7 +182,7 @@ struct TripEndCard: View {
     /// ступень ШТРАФА: балл снимает и за +3 км/ч, поэтому «штрафуемых», а не
     /// «превышений нет» (ревью 20.10). Без числа камер: оно в плитке ниже, а
     /// строка с ним не влезала в карточку на 375–402 pt.
-    private var moneyLine: String {
+    var moneyLine: String {
         switch record.verdict {
         case .risk(let risk):
             return String(format: String(localized: "риск ≈ %@"), Formatting.money(risk))
@@ -186,7 +197,7 @@ struct TripEndCard: View {
         }
     }
 
-    private var moneyTint: Color {
+    var moneyTint: Color {
         switch record.verdict {
         case .risk, .overspeed: return Theme.danger
         case .clean, .noCameras: return Theme.success
@@ -198,7 +209,7 @@ struct TripEndCard: View {
 
     /// Предыдущая запись, если свежая выглядит её продолжением. Считается по
     /// тем же правилам, что карточка в Итогах, — здесь просто раньше по времени.
-    private var mergeCandidate: TripRecord? {
+    var mergeCandidate: TripRecord? {
         let history = env.trip.history
         guard history.count >= 2, history[0].id == record.id else { return nil }
         let previous = history[1]
@@ -212,7 +223,7 @@ struct TripEndCard: View {
     /// и тап, промахнувшийся на пару пунктов, молча сливал две поездки в одну:
     /// карточка тут же подменялась склеенной записью, а вернуть всё назад
     /// можно было только разделением в деталке.
-    private func mergeRow(previous: TripRecord) -> some View {
+    func mergeRow(previous: TripRecord) -> some View {
         Button {
             confirmsMerge = true
         } label: {
@@ -254,7 +265,7 @@ struct TripEndCard: View {
 
     // MARK: - Метрики
 
-    private func metric(_ value: String, _ label: String) -> some View {
+    func metric(_ value: String, _ label: String) -> some View {
         VStack(spacing: 2) {
             Text(value)
                 .font(.rounded(16, .heavy).monospacedDigit())
@@ -269,7 +280,7 @@ struct TripEndCard: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var metricDivider: some View {
+    var metricDivider: some View {
         Rectangle().fill(Theme.stroke).frame(width: 1, height: 26)
     }
 }

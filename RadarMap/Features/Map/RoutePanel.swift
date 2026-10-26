@@ -10,7 +10,7 @@ import SwiftUI
 import CoreLocation
 
 struct RoutePanel: View {
-    @Environment(AppEnvironment.self) private var env
+    @Environment(AppEnvironment.self) var env
     let onShowCameras: () -> Void
     let onTripToggle: () -> Void
     /// Убрать заезд, оставив цель.
@@ -56,6 +56,9 @@ struct RoutePanel: View {
                     .liftedBackground(Theme.surface, in: Capsule())
             }
 
+            if DesignLab.route != .base {
+                labRouteCard
+            } else {
             GlassCard(cornerRadius: Theme.cornerLarge) {
                 VStack(spacing: 12) {
                     // Куда едем + время/путь + закрыть
@@ -155,6 +158,7 @@ struct RoutePanel: View {
                     PrimaryButton(title: "Поехали", systemImage: "play.fill", action: onTripToggle)
                 }
                 .padding(14)
+            }
             }
         }
         .motionAnimation(Motion.standard, value: route.selectedID)
@@ -358,7 +362,7 @@ struct RoutePanel: View {
 
     // MARK: - Камеры
 
-    private var camerasButton: some View {
+    var camerasButton: some View {
         let route = env.route
         return Button(action: onShowCameras) {
             HStack(spacing: 10) {

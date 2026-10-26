@@ -133,6 +133,31 @@ enum Formatting {
             : String(format: String(localized: "на %lld мин быстрее обычного"), minutes))
     }
 
+    /// Подпись под числом в плитке метрики — «1 / камера», «3 / камеры»,
+    /// «12 / камер». Число стоит отдельно крупно, склоняется только слово; до
+    /// этапа 31 подпись была одна, «камер», и плитка читалась «1 камер».
+    ///
+    /// Не plural-вариацией каталога: Xcode требует, чтобы такая вариация
+    /// печатала число, а здесь оно напечатано рядом. Поэтому — три отдельные
+    /// строки и правило выбора (`PluralRu`). В узбекском у существительного
+    /// после числа формы нет, все три строки там — «kamera».
+    static func camerasLabel(_ count: Int) -> String {
+        switch PluralRu.form(count) {
+        case .one:  String(localized: "камера")
+        case .few:  String(localized: "камеры")
+        case .many: String(localized: "камер")
+        }
+    }
+
+    /// То же для поездок: «1 / поездка», «3 / поездки», «5 / поездок».
+    static func tripsLabel(_ count: Int) -> String {
+        switch PluralRu.form(count) {
+        case .one:  String(localized: "поездка")
+        case .few:  String(localized: "поездки")
+        case .many: String(localized: "поездок")
+        }
+    }
+
     /// «5 мин» / «1 ч 23 мин» (uz: daq/soat)
     static func duration(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded())
@@ -143,5 +168,21 @@ enum Formatting {
         if h > 0 { return String(format: String(localized: "%1$@ ч %2$@ мин"), String(h), String(m)) }
         if m > 0 { return String(format: String(localized: "%@ мин"), String(m)) }
         return String(format: String(localized: "%@ сек"), String(total))
+    }
+}
+
+/// Форма русского существительного после числа: 1, 21 — «камера»; 2–4,
+/// 22–24 — «камеры»; 0, 5–20, 25 — «камер» (11–14 — всегда «камер»).
+nonisolated enum PluralRu: Equatable {
+    case one, few, many
+
+    static func form(_ count: Int) -> PluralRu {
+        let n = abs(count) % 100
+        if (11...14).contains(n) { return .many }
+        switch n % 10 {
+        case 1: return .one
+        case 2...4: return .few
+        default: return .many
+        }
     }
 }

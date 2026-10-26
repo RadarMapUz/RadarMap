@@ -1,6 +1,108 @@
 {
   "sourceLanguage": "ru",
   "strings": {
+    "камера": {
+      "comment": "Подпись под числом камер в плитке метрики (Formatting.camerasLabel): форма для 1, 21…; число стоит отдельно.",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "камера"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kamera"
+          }
+        }
+      }
+    },
+    "камеры": {
+      "comment": "Подпись под числом камер в плитке метрики (Formatting.camerasLabel): форма для 2–4, 22–24…; число стоит отдельно.",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "камеры"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kamera"
+          }
+        }
+      }
+    },
+    "камер": {
+      "comment": "Подпись под числом камер в плитке метрики (Formatting.camerasLabel): форма для 0, 5–20…; число стоит отдельно.",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "камер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kamera"
+          }
+        }
+      }
+    },
+    "поездка": {
+      "comment": "Подпись под числом поездок в плитке метрики (Formatting.tripsLabel): форма для 1, 21…",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "поездка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "safar"
+          }
+        }
+      }
+    },
+    "поездки": {
+      "comment": "Подпись под числом поездок в плитке метрики (Formatting.tripsLabel): форма для 2–4, 22–24…",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "поездки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "safar"
+          }
+        }
+      }
+    },
+    "поездок": {
+      "comment": "Подпись под числом поездок в плитке метрики (Formatting.tripsLabel): форма для 0, 5–20…",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "поездок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "safar"
+          }
+        }
+      }
+    },
     " на %@": {
       "localizations": {
         "ru": {
@@ -3429,13 +3531,13 @@
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Возможные штрафы ≈ %@"
+            "value": "Возможные штрафы ≈\u00A0%@"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ehtimoliy jarimalar ≈ %@"
+            "value": "Ehtimoliy jarimalar ≈\u00A0%@"
           }
         }
       }
@@ -19552,23 +19654,6 @@
         }
       }
     },
-    "камер": {
-      "extractionState": "manual",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "камер"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "kamera"
-          }
-        }
-      }
-    },
     "камер в лимите": {
       "localizations": {
         "ru": {
@@ -20726,22 +20811,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "tasdiqlangan"
-          }
-        }
-      }
-    },
-    "поездок": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "поездок"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "safar"
           }
         }
       }

@@ -137,4 +137,32 @@ final class FormattingTests: XCTestCase {
                        + ", " + Formatting.clock(date))
         XCTAssertEqual(Formatting.clock(date), NumberFormat.clock(date))
     }
+
+    // MARK: - Подпись под числом (этап 31)
+
+    /// Русское правило: 1, 21, 101 — одна; 2–4, 22–24 — несколько; 0, 5–20,
+    /// 25–30, 111–114 — много. 11–14 — «много» при любой последней цифре.
+    func testRussianPluralRule() {
+        for n in [1, 21, 31, 101, 1001] { XCTAssertEqual(PluralRu.form(n), .one, "\(n)") }
+        for n in [2, 3, 4, 22, 34, 102] { XCTAssertEqual(PluralRu.form(n), .few, "\(n)") }
+        for n in [0, 5, 9, 10, 11, 12, 13, 14, 19, 20, 25, 111, 112, 114] {
+            XCTAssertEqual(PluralRu.form(n), .many, "\(n)")
+        }
+    }
+
+    /// Плитка «1 / камер» читалась «1 камер»: подпись склоняется по числу,
+    /// а само число в ней не печатается — оно стоит в плитке крупно.
+    func testMetricLabelsDeclineAndOmitTheNumber() {
+        for count in [0, 1, 2, 5, 11, 21, 104] {
+            XCTAssertFalse(Formatting.camerasLabel(count).contains { $0.isNumber })
+            XCTAssertFalse(Formatting.tripsLabel(count).contains { $0.isNumber })
+        }
+        guard Bundle.main.preferredLocalizations.first == "ru" else { return }
+        XCTAssertEqual(Formatting.camerasLabel(1), "камера")
+        XCTAssertEqual(Formatting.camerasLabel(3), "камеры")
+        XCTAssertEqual(Formatting.camerasLabel(5), "камер")
+        XCTAssertEqual(Formatting.camerasLabel(21), "камера")
+        XCTAssertEqual(Formatting.tripsLabel(1), "поездка")
+        XCTAssertEqual(Formatting.tripsLabel(12), "поездок")
+    }
 }

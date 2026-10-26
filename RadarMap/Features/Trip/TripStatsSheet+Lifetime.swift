@@ -61,7 +61,8 @@ extension TripStatsSheet {
     /// история чистится, а эти счётчики нет. Отсюда же вход во все поездки.
     func lifetimeStrip(trip: TripStats) -> some View {
         let cells: [(String, LocalizedStringKey, String, Color)] = [
-            ("\(trip.lifetime.trips)", "поездок", "car.side.fill", Theme.Icon.distance),
+            ("\(trip.lifetime.trips)", LocalizedStringKey(Formatting.tripsLabel(trip.lifetime.trips)),
+             "car.side.fill", Theme.Icon.distance),
             (Formatting.distance(trip.lifetime.distanceMeters), "пройдено",
              "point.topleft.down.to.point.bottomright.curvepath", Theme.Icon.distance),
             ("\(trip.lifetime.camerasInLimit)", "камер в лимите", "checkmark.shield.fill", Theme.Icon.rating),

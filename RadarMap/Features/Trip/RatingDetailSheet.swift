@@ -1016,7 +1016,7 @@ private struct AllContributionsView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Rectangle().fill(Theme.stroke).frame(height: 1)
                 HStack(spacing: 14) {
-                    dayMetric("\(day.trips)", String(localized: "поездок"))
+                    dayMetric("\(day.trips)", Formatting.tripsLabel(day.trips))
                     dayMetric(Formatting.distance(day.distanceMeters),
                               String(localized: "пройдено"))
                     dayMetric("\(day.overPasses)", String(localized: "превышений"))

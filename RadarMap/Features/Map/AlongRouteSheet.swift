@@ -40,7 +40,7 @@ struct AlongRouteSheet: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
-            .background(Theme.screenBackground)
+            .background(Theme.background)
             .safeAreaInset(edge: .top, spacing: 0) { chips }
             .navigationTitle("По пути")
             .navigationBarTitleDisplayMode(.inline)
@@ -240,7 +240,7 @@ struct AlongRouteSheet: View {
                     .font(.rounded(15, .semibold))
                     .foregroundStyle(Theme.accent)
                     .frame(width: 36, height: 36)
-                    .background(Theme.accent.opacity(0.12), in: Circle())
+                    .background(Theme.quietFill, in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
                     Text(verbatim: venue.title)
                         .font(.rounded(15, .semibold))

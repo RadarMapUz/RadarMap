@@ -49,8 +49,8 @@ enum SW {
     static let success = color(WidgetPalette.success)
     static let warning = color(WidgetPalette.warning)
 
-    static let bgTop = color(WidgetPalette.top)
-    static let bgBottom = color(WidgetPalette.bottom)
+    static let background = color(WidgetPalette.surface)
+    static let signRed = fixed(WidgetPalette.signRed)
 
     static let primary = color(WidgetPalette.primary)
     static let secondary = color(WidgetPalette.secondary)
@@ -112,8 +112,7 @@ struct RadarStatsWidget: Widget {
         StaticConfiguration(kind: "RadarStatsWidget", provider: RadarStatsProvider()) { entry in
             RadarStatsView(entry: entry)
                 .containerBackground(for: .widget) {
-                    LinearGradient(colors: [SW.bgTop, SW.bgBottom],
-                                   startPoint: .top, endPoint: .bottom)
+                    SW.background
                 }
         }
         .configurationDisplayName("RadarMap")
@@ -199,12 +198,12 @@ private struct RadarStatsView: View {
                             in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 17, weight: .heavy, design: .rounded))
+                    .font(.system(size: 17, weight: .heavy))
                     .foregroundStyle(SW.primary)
                     .lineLimit(2)
                     .minimumScaleFactor(0.7)
                 Text(detail)
-                    .font(.system(size: 12, design: .rounded))
+                    .font(.system(size: 12))
                     .foregroundStyle(SW.secondary)
                     .lineLimit(2)
             }
@@ -257,7 +256,7 @@ private struct RadarStatsView: View {
             Spacer(minLength: 4)
             if showsDates, isCurrentWeek, let weekDates {
                 Text(weekDates)
-                    .font(.system(size: 11, design: .rounded))
+                    .font(.system(size: 11))
                     .foregroundStyle(SW.tertiary)
                     .lineLimit(1)
             }
@@ -266,7 +265,7 @@ private struct RadarStatsView: View {
 
     private func headerTitle(_ text: String?) -> some View {
         Text(text ?? String(localized: "Итоги недели"))
-            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(SW.secondary)
             .lineLimit(1)
     }
@@ -321,7 +320,7 @@ private struct RadarStatsView: View {
                 Image(systemName: up ? "arrow.up.right" : "arrow.down.right")
                     .font(.system(size: 9, weight: .heavy))
                 Text("\(abs(delta))%")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .font(.system(size: 11, weight: .bold))
             }
             .foregroundStyle(tint)
             .padding(.horizontal, 6).padding(.vertical, 2)
@@ -368,7 +367,7 @@ private struct RadarStatsView: View {
 
     private func subtitle(_ size: CGFloat = 11, compact: Bool = false) -> some View {
         Text(heroSubtitle(compact: compact) ?? "")
-            .font(.system(size: size, design: .rounded))
+            .font(.system(size: size))
             .foregroundStyle(SW.secondary)
             .lineLimit(1)
             .minimumScaleFactor(0.75)
@@ -423,7 +422,7 @@ private struct RadarStatsView: View {
         let rating = snapshot.weekRating
         if rating >= 0 {
             Text(String(format: String(localized: "балл %@"), "\(rating)"))
-                .font(.system(size: size, weight: .heavy, design: .rounded))
+                .font(.system(size: size, weight: .heavy))
                 .foregroundStyle(SW.score(rating))
                 .lineLimit(1)
                 .padding(.horizontal, 7).padding(.vertical, 3)
@@ -463,7 +462,7 @@ private struct RadarStatsView: View {
             text = parts.joined(separator: " · ")
         }
         return Text(text)
-            .font(.system(size: 10, design: .rounded))
+            .font(.system(size: 10))
             .foregroundStyle(isStale ? SW.warning : SW.tertiary)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
@@ -492,8 +491,7 @@ private struct RadarStatsView: View {
                               : today == index ? SW.accent : SW.accent.opacity(0.45))
                         .frame(width: barWidth, height: max(3, heights[index] * height))
                     Text(labels[index])
-                        .font(.system(size: 9, weight: today == index ? .heavy : .regular,
-                                      design: .rounded))
+                        .font(.system(size: 9, weight: today == index ? .heavy : .regular))
                         .foregroundStyle(today == index ? SW.primary : SW.tertiary)
                 }
                 .frame(maxWidth: .infinity)
@@ -515,13 +513,13 @@ private struct RadarStatsView: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text("Неделя только началась")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(SW.primary)
                     .lineLimit(3)
                     .minimumScaleFactor(0.85)
                     .fixedSize(horizontal: false, vertical: true)
                 Text("Дни столбиками — со второго дня за рулём")
-                    .font(.system(size: 10, design: .rounded))
+                    .font(.system(size: 10))
                     .foregroundStyle(SW.secondary)
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -577,7 +575,7 @@ private struct RadarStatsView: View {
                     VStack(spacing: 4) {
                         bars(height: 52, barWidth: 11)
                         Text(averageLine)
-                            .font(.system(size: 10, design: .rounded))
+                            .font(.system(size: 10))
                             .foregroundStyle(SW.secondary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
@@ -610,7 +608,7 @@ private struct RadarStatsView: View {
                 VStack(spacing: 5) {
                     bars(height: 58, barWidth: 16)
                     Text(daysLine)
-                        .font(.system(size: 11, design: .rounded))
+                        .font(.system(size: 11))
                         .foregroundStyle(SW.secondary)
                         .lineLimit(1)
                 }
@@ -652,7 +650,7 @@ private struct RadarStatsView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             Text(label)
-                .font(.system(size: 10, design: .rounded))
+                .font(.system(size: 10))
                 .foregroundStyle(SW.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -674,10 +672,10 @@ private struct RadarStatsView: View {
                 .background(SW.cameraFill, in: Circle())
             VStack(alignment: .leading, spacing: 1) {
                 Text("Где теряете баллы")
-                    .font(.system(size: 10, design: .rounded))
+                    .font(.system(size: 10))
                     .foregroundStyle(SW.secondary)
                 Text(place)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(SW.primary)
                     .lineLimit(1)
             }
@@ -703,7 +701,7 @@ private struct RadarStatsView: View {
                 Image(systemName: "car.fill")
                     .font(.system(size: 18, weight: .bold))
                 Text("Старт")
-                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .font(.system(size: 10, weight: .semibold))
             }
         }
         .widgetURL(URL(string: "radarmap://start-trip"))
@@ -715,9 +713,9 @@ private struct RadarStatsView: View {
                 .font(.system(size: 16, weight: .bold))
             VStack(alignment: .leading, spacing: 1) {
                 Text("RadarMap")
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .font(.system(size: 13, weight: .bold))
                 Text("Начать поездку")
-                    .font(.system(size: 11, design: .rounded))
+                    .font(.system(size: 11))
                     .opacity(0.75)
             }
             Spacer(minLength: 0)

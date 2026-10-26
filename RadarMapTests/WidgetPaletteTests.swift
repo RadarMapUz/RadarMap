@@ -46,6 +46,7 @@ final class WidgetPaletteTests: XCTestCase {
             (WidgetPalette.primary, Theme.textPrimary, "textPrimary"),
             (WidgetPalette.secondary, Theme.textSecondary, "textSecondary"),
             (WidgetPalette.tertiary, Theme.textTertiary, "textTertiary"),
+            (WidgetPalette.surface, Theme.surface, "surface"),
         ]
         for (pair, theme, name) in pairs {
             XCTAssertEqual(pair.light, hex(theme, .light), "\(name) днём разошёлся с Theme")
@@ -53,8 +54,8 @@ final class WidgetPaletteTests: XCTestCase {
         }
     }
 
-    /// Каждый цвет, которым на виджете написан текст, читается на обеих
-    /// частях градиента подложки — днём и ночью.
+    /// Каждый цвет, которым на виджете написан текст, читается на подложке —
+    /// днём и ночью.
     func testTextIsReadableOnTheWholeBackground() {
         let text: [(WidgetPalette.Pair, String)] = [
             (WidgetPalette.primary, "primary"), (WidgetPalette.secondary, "secondary"),
@@ -63,10 +64,9 @@ final class WidgetPaletteTests: XCTestCase {
             (WidgetPalette.warning, "warning"),
         ]
         for (pair, name) in text {
-            for (bg, part) in [(WidgetPalette.top, "верх"), (WidgetPalette.bottom, "низ")] {
-                XCTAssertGreaterThanOrEqual(contrast(pair.light, bg.light), 4.5, "\(name) днём, \(part)")
-                XCTAssertGreaterThanOrEqual(contrast(pair.dark, bg.dark), 4.5, "\(name) ночью, \(part)")
-            }
+            let bg = WidgetPalette.surface
+            XCTAssertGreaterThanOrEqual(contrast(pair.light, bg.light), 4.5, "\(name) днём")
+            XCTAssertGreaterThanOrEqual(contrast(pair.dark, bg.dark), 4.5, "\(name) ночью")
         }
     }
 

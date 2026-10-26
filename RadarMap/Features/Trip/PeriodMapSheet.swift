@@ -151,7 +151,7 @@ struct PeriodMapSheet: View {
                 .frame(width: size, height: size)
             if marker.times > 1 {
                 Text("\(marker.times)")
-                    .font(.system(size: size * 0.42, weight: .heavy, design: .rounded))
+                    .font(.numeralFree(size * 0.42, .heavy))
                     // Заливки состояний ночью светлые — белая цифра на них не
                     // читалась бы; Theme.background контрастен в обеих темах.
                     .foregroundStyle(Theme.background)
@@ -246,7 +246,7 @@ struct PeriodMapSheet: View {
                 .foregroundStyle(Theme.textTertiary)
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
-        .background(Self.tint(marker).opacity(0.12), in: Capsule())
+        .background(Theme.quietFill, in: Capsule())
     }
 
     private func passCount(_ marker: PassMarker) -> String {

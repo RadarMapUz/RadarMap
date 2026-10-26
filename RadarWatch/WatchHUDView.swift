@@ -57,7 +57,7 @@ struct WatchHUDView: View {
                         .minimumScaleFactor(0.7)
                         .lineLimit(1)
                     Text(session.cameraTitle ?? String(localized: "до камеры"))
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(WatchTheme.secondary)
                         .lineLimit(1)
                 }
@@ -72,7 +72,7 @@ struct WatchHUDView: View {
                     .background(WatchTheme.successFill, in: Circle())
                     .accessibilityHidden(true)
                 Text("Камер рядом нет")
-                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(WatchTheme.primary)
                     .lineLimit(2)
                     .minimumScaleFactor(0.8)
@@ -95,7 +95,7 @@ struct WatchHUDView: View {
                         .layoutPriority(1)
                     // «km/soat» на 40 мм переносился и ломал базовую линию.
                     Text("км/ч")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(WatchTheme.secondary)
                         .lineLimit(1)
                         .fixedSize()
@@ -117,7 +117,7 @@ struct WatchHUDView: View {
                     .font(.system(size: 13, weight: .bold))
                     .accessibilityHidden(true)
                 reportTitle
-                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .font(.system(size: 15, weight: .heavy))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
@@ -137,12 +137,12 @@ struct WatchHUDView: View {
                 .font(.system(size: 30))
                 .foregroundStyle(WatchTheme.accent)
             Text("Поездка не идёт.")
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(WatchTheme.primary)
             Text(session.isReachable
                  ? String(localized: "Начните поездку на iPhone — скорость и камеры появятся здесь.")
                  : String(localized: "Откройте RadarMap на iPhone."))
-                .font(.system(size: 12, design: .rounded))
+                .font(.system(size: 12))
                 .foregroundStyle(WatchTheme.secondary)
                 .multilineTextAlignment(.center)
         }
@@ -214,7 +214,7 @@ private struct WatchLimitSign: View {
             .minimumScaleFactor(0.6)
             .frame(width: size, height: size)
             .background(Circle().fill(.white))
-            .overlay(Circle().stroke(Color(red: 0.86, green: 0.16, blue: 0.16), lineWidth: size * 0.12))
+            .overlay(Circle().stroke(WatchTheme.signRed, lineWidth: size * 0.12))
             .accessibilityLabel(Text(String(format: String(localized: "Ограничение %lld"), limit)))
     }
 }

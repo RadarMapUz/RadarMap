@@ -263,7 +263,7 @@ struct SearchView: View {
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
-            .background(Theme.screenBackground)
+            .background(Theme.background)
             .onAppear { env.usage.noteScreen("search") }
             .searchable(text: $model.query, prompt: "Город, улица, место")
             .navigationTitle(assigning == nil ? Text("Поиск") : Text("Выбор адреса"))
@@ -341,7 +341,7 @@ struct SearchView: View {
                     .foregroundStyle(place == nil ? Theme.textSecondary : Theme.onAccentFill)
                     .frame(width: 36, height: 36)
                     .background(place == nil ? AnyShapeStyle(Theme.stroke)
-                                             : AnyShapeStyle(Theme.accentFill.gradient), in: Circle())
+                                             : AnyShapeStyle(Theme.accentFill), in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
                     Text(slot.name)
                         .font(.rounded(15, .semibold))
@@ -403,8 +403,8 @@ struct SearchView: View {
                         .foregroundStyle(model.category == kind ? Theme.onAccentFill : Theme.textPrimary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 9)
-                        .background(model.category == kind ? AnyShapeStyle(Theme.accentFill.gradient)
-                                                           : AnyShapeStyle(Theme.screenBackground),
+                        .background(model.category == kind ? AnyShapeStyle(Theme.accentFill)
+                                                           : AnyShapeStyle(Theme.background),
                                     in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
                     }
                     .buttonStyle(.plain)
@@ -526,7 +526,7 @@ struct SearchView: View {
                     .font(.rounded(15, .bold))
                     .foregroundStyle(Theme.onAccentFill)
                     .frame(width: 36, height: 36)
-                    .background(Theme.accentFill.gradient, in: Circle())
+                    .background(Theme.accentFill, in: Circle())
                 Text(String(format: String(localized: "Найдите и выберите адрес для «%@»"), slot.name))
                     .font(.rounded(14, .semibold))
                     .foregroundStyle(Theme.textPrimary)

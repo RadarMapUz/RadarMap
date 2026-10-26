@@ -111,7 +111,7 @@ struct PassQuestionCard: View {
                 .font(.rounded(15, .bold))
                 .foregroundStyle(glyphTint)
                 .frame(width: 34, height: 34)
-                .background(fill.gradient, in: Circle())
+                .background(fill, in: Circle())
                 .accessibilityHidden(true)
         }
     }

@@ -59,11 +59,11 @@ struct ShareCardShell<Content: View>: View {
                     .font(.system(size: 22, weight: .heavy))
                     .foregroundStyle(Theme.accent)
                 Text("RadarMap")
-                    .font(.system(size: 26, weight: .heavy, design: .rounded))
+                    .font(.system(size: 26, weight: .heavy))
                     .foregroundStyle(.white)
                 Spacer()
                 Text(subtitle)
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(.white.opacity(0.55))
             }
             .padding(.horizontal, 32)
@@ -77,13 +77,8 @@ struct ShareCardShell<Content: View>: View {
                 .padding(.bottom, format == .story ? 96 : 0)
         }
         .frame(width: format.size.width, height: format.size.height)
-        .background(
-            ZStack {
-                Theme.background
-                RadialGradient(colors: [Theme.accent.opacity(0.14), .clear],
-                               center: .center, startRadius: 40, endRadius: 380)
-            }
-        )
+        // Ровный фон без синего свечения в центре (31D: ни одного градиента).
+        .background(Theme.background)
         // Карточка — картинка для чужих лент, и она ТЁМНАЯ всегда: белый
         // текст в ней местами задан прямо, а ImageRenderer рисует вне
         // окружения приложения (по умолчанию в светлой схеме), и адаптивные
@@ -102,10 +97,10 @@ struct ShareInstallFooter: View {
             VStack(alignment: .leading, spacing: 3) {
                 // Бренд и адрес не переводятся — это имя и домен.
                 Text(verbatim: "RadarMap · \(ShareInstallLink.caption)")
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.62))
                 Text("Карта камер и навигатор Узбекистана")
-                    .font(.system(size: 12.5, weight: .medium, design: .rounded))
+                    .font(.system(size: 12.5, weight: .medium))
                     .foregroundStyle(.white.opacity(0.4))
             }
             .lineLimit(1)

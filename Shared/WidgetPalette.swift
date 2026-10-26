@@ -8,8 +8,9 @@
 //  До 19.10 у виджета была своя неоновая палитра «радар-детектора» — циан
 //  и малиновый, от которых само приложение отказалось 7 октября. Виджет на
 //  домашнем экране выглядел другим приложением, а балл 67 на нём был другого
-//  жёлтого, чем в «Итогах». Теперь это палитра А «Синий навигатор»: те же
-//  значения, что у Theme, день и ночь.
+//  жёлтого, чем в «Итогах». Теперь те же значения, что у Theme, день и ночь:
+//  с 27.10 — «Строгий навигатор» (31D): тёплые нейтральные, свой синий,
+//  ровная подложка без градиента.
 //
 
 import Foundation
@@ -22,7 +23,7 @@ nonisolated enum WidgetPalette {
     }
 
     /// Theme.accent — текст и обводки (синий читается на белом, жёлтый нет).
-    static let accent = Pair(light: 0x2563D9, dark: 0x6BA3FF)
+    static let accent = Pair(light: 0x0B62D0, dark: 0x5FA2FF)
     /// Theme.danger / success / warning — цвета состояний и балла.
     static let danger = Pair(light: 0xC62828, dark: 0xFF7A70)
     static let success = Pair(light: 0x177A41, dark: 0x4CC27A)
@@ -30,7 +31,7 @@ nonisolated enum WidgetPalette {
 
     /// Заливки под белым значком (Theme.accentFill / dangerFill / successFill):
     /// ночные accent/danger светлые — белый на них 2,5:1 (ревью 19.10).
-    static let accentFill = Pair(light: 0x2563D9, dark: 0x2A62D6)
+    static let accentFill = Pair(light: 0x0B62D0, dark: 0x1E5DC4)
     static let dangerFill = Pair(light: 0xC62828, dark: 0xD0362C)
     static let successFill = Pair(light: 0x177A41, dark: 0x1A7F45)
     /// Theme.action / onAction — жёлтое главное действие («Радар!») и текст
@@ -41,15 +42,16 @@ nonisolated enum WidgetPalette {
     /// Live Activity и Dynamic Island всегда тёмные.
     static let alertSurface: UInt32 = 0x14181D
 
-    /// Подложка: верх и низ карточки (Theme.surfaceTop → surface ночью;
-    /// днём — белая с едва заметным холодным низом, как панели приложения).
-    static let top = Pair(light: 0xFFFFFF, dark: 0x252B33)
-    static let bottom = Pair(light: 0xF1F4F9, dark: 0x1A1F26)
+    /// Подложка виджета — Theme.surface, ровная: градиент «свет сверху»
+    /// ушёл из приложения вместе с остальными (31D).
+    static let surface = Pair(light: 0xFFFFFF, dark: 0x1F1F1F)
+    /// Кант знака ограничения скорости (Theme.signRed).
+    static let signRed: UInt32 = 0xD90D1A
 
     /// Theme.textPrimary / textSecondary / textTertiary.
-    static let primary = Pair(light: 0x111827, dark: 0xF1F4F8)
-    static let secondary = Pair(light: 0x556070, dark: 0xA0A9B6)
-    static let tertiary = Pair(light: 0x657080, dark: 0x8F99A6)
+    static let primary = Pair(light: 0x1D1D1B, dark: 0xF2F1EE)
+    static let secondary = Pair(light: 0x5C5B57, dark: 0xAAA9A4)
+    static let tertiary = Pair(light: 0x6A6964, dark: 0x9A9993)
 
     /// Ступень балла — те же пороги, что DrivingScore.tier (тест сверяет):
     /// виджет не имеет права красить 70 иначе, чем «Итоги».

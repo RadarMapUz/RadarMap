@@ -30,7 +30,7 @@ struct PeriodShareCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Text(Formatting.distance(summary.distance))
-                            .font(.system(size: 52, weight: .heavy, design: .rounded))
+                            .font(.numeralFree(52, .heavy))
                             .foregroundStyle(.white)
                         // Процент — только у сопоставимых периодов, иначе
                         // километры (31E): «↗ 178 %» от девяти км уходило друзьям.
@@ -38,7 +38,7 @@ struct PeriodShareCard: View {
                             Label(change.percent.map { "\(abs($0))\u{00A0}%" }
                                     ?? Formatting.distance(abs(change.meters)),
                                   systemImage: change.isUp ? "arrow.up.right" : "arrow.down.right")
-                                .font(.system(size: 17, weight: .bold, design: .rounded))
+                                .font(.system(size: 17, weight: .bold))
                                 .foregroundStyle(change.isUp ? Theme.accent : .white.opacity(0.55))
                         }
                     }
@@ -58,23 +58,23 @@ struct PeriodShareCard: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 17, weight: .bold))
                         Text(String(format: String(localized: "Зона риска: %@"), place))
-                            .font(.system(size: 18, weight: .heavy, design: .rounded))
+                            .font(.system(size: 18, weight: .heavy))
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)
                     }
                     .foregroundStyle(Theme.danger)
                     .padding(.horizontal, 22).padding(.vertical, 12)
-                    .background(Theme.danger.opacity(0.12), in: Capsule())
+                    .background(Theme.quietFill, in: Capsule())
                 } else if summary.cleanPasses > 0 {
                     HStack(spacing: 10) {
                         Image(systemName: "checkmark.seal.fill")
                             .font(.system(size: 17, weight: .bold))
                         Text("Ни одного превышения у камер")
-                            .font(.system(size: 18, weight: .heavy, design: .rounded))
+                            .font(.system(size: 18, weight: .heavy))
                     }
                     .foregroundStyle(Theme.success)
                     .padding(.horizontal, 22).padding(.vertical, 12)
-                    .background(Theme.success.opacity(0.12), in: Capsule())
+                    .background(Theme.quietFill, in: Capsule())
                 }
             }
             .padding(.top, 16)

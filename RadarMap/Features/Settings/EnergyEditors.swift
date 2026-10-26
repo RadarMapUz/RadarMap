@@ -95,7 +95,7 @@ struct EnergyNumberCard: View {
                             decimals: number.decimals, value: value, alignment: .leading) {
                     settings.update(number, to: $0)
                 }
-                    .font(.rounded(30, .bold))
+                    .font(.numeral(30, .bold))
                     .accessibilityLabel(Text(verbatim: EnergyText.spokenTitle(number, energy: energy)))
                 Text(EnergyText.unit(number))
                     .font(.rounded(15))
@@ -174,7 +174,7 @@ struct EnergyRangeEditor: View {
                     // «≈» не отрывается от числа: «≈ / 90 км» на двух строках
                     // читалось как обрыв (снимок 21.10).
                     Text(verbatim: "≈\u{00A0}" + EnergyText.km(real))
-                        .font(.rounded(30, .bold))
+                        .font(.numeral(30, .bold))
                         .foregroundStyle(Theme.textPrimary)
                     Text(EnergyText.realSource(profile))
                         .font(.rounded(13))
@@ -209,7 +209,7 @@ struct EnergyElectricityEditor: View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(verbatim: "≈\u{00A0}" + EnergyText.per100(kWh.value, .electricity))
-                    .font(.rounded(22, .bold))
+                    .font(.numeral(22, .bold))
                     .foregroundStyle(Theme.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(EnergyText.kWhSource(profile))

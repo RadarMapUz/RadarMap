@@ -258,7 +258,7 @@ struct TripStatsSheet: View {
             // «85 рейтинг» читался поверх кнопок. Жёсткий край прокрутки
             // отделяет содержимое от панели.
             .backport.scrollEdgeEffectStyle(.hard, for: .top)
-            .background(Theme.screenBackground)
+            .background(Theme.background)
             .navigationTitle("Итоги")
             .navigationBarTitleDisplayMode(.inline)
             // Тот же лист и то же удаление, что в Настройки → Поездка →
@@ -462,7 +462,7 @@ private struct LiveTripCard: View {
         VStack(spacing: 14) {
             HStack(spacing: 12) {
                 ZStack {
-                    Circle().fill(Theme.success.opacity(0.15))
+                    Circle().fill(Theme.quietFill)
                         .frame(width: 46, height: 46)
                     Image(systemName: "record.circle")
                         .font(.rounded(20, .bold))
@@ -483,7 +483,7 @@ private struct LiveTripCard: View {
                 // Живая скорость — Итоги можно держать открытыми в поездке.
                 VStack(spacing: 0) {
                     Text("\(Int(env.location.speedKmh))")
-                        .font(.rounded(26, .heavy).monospacedDigit())
+                        .font(.numeral(26, .heavy).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
                         // Скорость меняется на каждом фиксе: liveNumber, не
                         // numericText (CPU-размытие, правило 11.10).

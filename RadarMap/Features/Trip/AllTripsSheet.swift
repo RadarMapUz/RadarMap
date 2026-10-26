@@ -94,7 +94,7 @@ struct AllTripsSheet: View {
                 .padding(20)
             }
             .backport.scrollEdgeEffectStyle(.hard, for: .top)
-            .background(Theme.screenBackground)
+            .background(Theme.background)
             .onAppear { env.usage.noteScreen("allTrips") }
             // «Архив поездок», а не «Все поездки» (6.2): «Показать все
             // поездки (N)» в Итогах раскрывает поездки ПЕРИОДА, а здесь —
@@ -193,7 +193,7 @@ struct AllTripsSheet: View {
                         .font(.rounded(14, .heavy).monospacedDigit())
                         .foregroundStyle(TripHistorySection.scoreColor(Int(score)))
                         .padding(.horizontal, 9).padding(.vertical, 5)
-                        .background(TripHistorySection.scoreColor(Int(score)).opacity(0.14),
+                        .background(Theme.quietFill,
                                     in: Capsule())
                 }
                 Image(systemName: "chevron.right")

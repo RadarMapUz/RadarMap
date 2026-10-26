@@ -327,7 +327,7 @@ struct TripDetailContent: View {
         // Тот же жёсткий край прокрутки, что и в Итогах: карта поездки
         // не должна просвечивать сквозь панель с заголовком.
         .backport.scrollEdgeEffectStyle(.hard, for: .top)
-        .background(Theme.screenBackground)
+        .background(Theme.background)
         .toolbar {
             if let onRoute, let end = record.endCoordinate {
                 ToolbarItem(placement: .primaryAction) {
@@ -384,14 +384,14 @@ struct TripDetailContent: View {
                         .font(.rounded(15, .bold))
                         .foregroundStyle(Theme.danger)
                         .frame(width: 32, height: 32)
-                        .background(Theme.danger.opacity(0.12), in: Circle())
+                        .background(Theme.quietFill, in: Circle())
                     Text(String(format: String(localized: "Вклад в рейтинг %@"),
                                 rating.periodCaption))
                         .font(.rounded(15, .medium))
                         .foregroundStyle(Theme.textSecondary)
                     Spacer(minLength: 8)
                     Text(Formatting.points(item.points))
-                        .font(.rounded(20, .heavy).monospacedDigit())
+                        .font(.numeral(20, .heavy).monospacedDigit())
                         .foregroundStyle(Theme.danger)
                 }
                 Text(String(format: String(localized: "Недобор %1$lld баллов × доля %2$lld %% (%3$@ из %4$@ %5$@)"),
@@ -821,7 +821,7 @@ struct TripShareCard: View {
         }
         .foregroundStyle(tint)
         .padding(.horizontal, 22).padding(.vertical, 12)
-        .background(tint.opacity(0.12), in: Capsule())
+        .background(Theme.quietFill, in: Capsule())
     }
 
     /// Круглый бейдж рейтинга в углу карты (зелёный/жёлтый/красный по величине).
@@ -829,10 +829,10 @@ struct TripShareCard: View {
         let tint = Theme.score(score)
         return VStack(spacing: 0) {
             Text("\(score)")
-                .font(.system(size: 24, weight: .heavy, design: .rounded))
+                .font(.numeralFree(24, .heavy))
                 .foregroundStyle(.white)
             Text("рейтинг")
-                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .font(.roundedFree(9, .semibold))
                 .foregroundStyle(.white.opacity(0.75))
         }
         .frame(width: 64, height: 64)

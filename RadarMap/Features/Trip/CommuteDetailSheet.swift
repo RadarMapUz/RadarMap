@@ -52,7 +52,7 @@ struct CommuteDetailSheet: View {
                 }
                 .padding(16)
             }
-            .background(Theme.screenBackground)
+            .background(Theme.background)
             .navigationTitle(summary.direction.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

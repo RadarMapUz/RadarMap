@@ -100,16 +100,16 @@ private struct RadarWeekView: View {
     private var rectangular: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text("Неделя за рулём")
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(.system(size: 12, weight: .semibold))
             HStack(spacing: 6) {
                 Text(distance)
                     .font(.system(size: 17, weight: .heavy, design: .rounded))
                 Text(String(format: String(localized: "балл %@"), value))
-                    .font(.system(size: 13, design: .rounded))
+                    .font(.system(size: 13))
                     .opacity(0.8)
             }
             Text(usualLine)
-                .font(.system(size: 11, design: .rounded))
+                .font(.system(size: 11))
                 .opacity(0.75)
                 .lineLimit(1)
         }

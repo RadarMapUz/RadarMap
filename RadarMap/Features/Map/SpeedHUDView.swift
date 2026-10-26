@@ -114,7 +114,7 @@ struct SpeedHUDView: View {
             // Крупно: за рулём HUD читается взглядом <1 сек. На втором плане
             // цифра меньше — но остаётся читаемой.
             Text("\(Int(speed.rounded()))")
-                .font(.rounded(secondary ? 26 : 34, .bold))
+                .font(.numeral(secondary ? 26 : 34, .bold))
                 .monospacedDigit()
                 .foregroundStyle(env.speedLimits.isOverspeeding ? Theme.danger : Theme.textPrimary)
                 .liveNumber()
@@ -147,7 +147,7 @@ struct SpeedHUDView: View {
                     .foregroundStyle(Theme.warning)
                     .symbolEffect(.pulse, options: .repeating, isActive: true)
                     .frame(width: 38, height: 38)
-                    .background(Theme.warning.opacity(0.18), in: Circle())
+                    .background(Theme.quietFill, in: Circle())
                 VStack(alignment: .leading, spacing: 1) {
                     // Без доступа к геопозиции — не «спутники»: причина другая.
                     // Причину и кнопку уже показывает баннер над картой — здесь
@@ -189,7 +189,7 @@ struct SpeedHUDView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(Formatting.distance(distance))
-                        .font(.rounded(23, .bold))
+                        .font(.numeral(23, .bold))
                         .monospacedDigit()
                         // Красным — только в зоне оповещения и только по живой
                         // позиции: цифра от грубого фикса на красный не имеет права.

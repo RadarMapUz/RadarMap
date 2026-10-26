@@ -148,7 +148,7 @@ struct RouteProgressStrip: View, Equatable {
     /// «нет данных» — нейтральный серый, не зелёный.
     static func colour(_ tone: RouteProgressBar.Tone) -> Color {
         switch tone {
-        case .unknown: return Theme.adaptive(0xC9CED6, 0x4A505B)
+        case .unknown: return Theme.trafficUnknown
         case .free:    return Theme.adaptive(RouteColors.free.day, RouteColors.free.night)
         case .slow:    return Theme.adaptive(RouteColors.slow.day, RouteColors.slow.night)
         case .jam:     return Theme.adaptive(RouteColors.jam.day, RouteColors.jam.night)

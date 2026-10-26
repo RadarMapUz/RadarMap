@@ -241,7 +241,7 @@ struct GhostLatePlaque: View {
                 .font(.rounded(15, .bold))
                 .foregroundStyle(Theme.warning)
                 .frame(width: 34, height: 34)
-                .background(Theme.warning.opacity(0.14), in: Circle())
+                .background(Theme.quietFill, in: Circle())
             VStack(alignment: .leading, spacing: 1) {
                 Text(verbatim: GhostText.headline(ghost))
                     .font(.rounded(15, .semibold))

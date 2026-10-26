@@ -108,7 +108,7 @@ struct EnergyCheckView: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 NumberField(placeholder: "—", decimals: decimals, optional: value, alignment: .leading,
                             onChange: onChange)
-                    .font(.rounded(24, .bold))
+                    .font(.numeral(24, .bold))
                     .accessibilityLabel(Text(verbatim: "\(title), \(unit)"))
                 Text(unit)
                     .font(.rounded(15))

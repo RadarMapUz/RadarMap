@@ -241,13 +241,13 @@ struct NextCameraView: View {
                     .lineLimit(1)
                 if let subtitle {
                     Text(subtitle)
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Look.secondary)
                         .lineLimit(1)
                 }
                 if let staleText {
                     Text(staleText)
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Look.secondary)
                         .lineLimit(1)
                 }

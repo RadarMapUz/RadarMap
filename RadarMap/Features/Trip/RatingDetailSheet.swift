@@ -85,7 +85,7 @@ struct RatingDetailSheet: View {
                 }
             }
             .backport.scrollEdgeEffectStyle(.hard, for: .top)
-            .background(Theme.screenBackground)
+            .background(Theme.background)
             .navigationTitle("Рейтинг вождения")
             .onAppear { env.usage.noteScreen("rating") }
             .navigationBarTitleDisplayMode(.inline)
@@ -244,7 +244,7 @@ struct RatingDetailSheet: View {
                     .font(.rounded(30))
                     .foregroundStyle(Theme.accent)
                     .frame(width: 92, height: 92)
-                    .background(Theme.accent.opacity(0.12), in: Circle())
+                    .background(Theme.quietFill, in: Circle())
             }
             VStack(alignment: .leading, spacing: 5) {
                 Text(period.caption)
@@ -279,7 +279,7 @@ struct RatingDetailSheet: View {
             .font(.rounded(11, .bold).monospacedDigit())
             .foregroundStyle(tint)
             .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(tint.opacity(0.14), in: Capsule())
+            .background(Theme.quietFill, in: Capsule())
     }
 
     // MARK: - Формула и полоса вкладов
@@ -301,7 +301,7 @@ struct RatingDetailSheet: View {
                         .font(.rounded(15, .medium))
                         .foregroundStyle(Theme.textTertiary)
                     Text("\(rating)")
-                        .font(.rounded(20, .heavy).monospacedDigit())
+                        .font(.numeral(20, .heavy).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
                     Spacer(minLength: 0)
                 }
@@ -417,7 +417,7 @@ struct RatingDetailSheet: View {
                    let high = proxy.position(forY: Double(baseline.high)) {
                     let frame = geometry[plot]
                     Rectangle()
-                        .fill(Theme.accent.opacity(0.10))
+                        .fill(Theme.quietFill)
                         .frame(width: frame.width, height: max(2, abs(low - high)))
                         .position(x: frame.midX, y: frame.minY + (low + high) / 2)
                 }
@@ -488,7 +488,7 @@ struct RatingDetailSheet: View {
                 SymbolIcon(Icon.cameras, size: 15, weight: .bold)
                     .foregroundStyle(Theme.danger)
                     .frame(width: 32, height: 32)
-                    .background(Theme.danger.opacity(0.12), in: Circle())
+                    .background(Theme.quietFill, in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
                     Text(hotspot.location)
                         .font(.rounded(14, .semibold))
@@ -539,7 +539,7 @@ struct RatingDetailSheet: View {
                 .font(.rounded(15, .bold))
                 .foregroundStyle(Theme.warning)
                 .frame(width: 32, height: 32)
-                .background(Theme.warning.opacity(0.12), in: Circle())
+                .background(Theme.quietFill, in: Circle())
             VStack(alignment: .leading, spacing: 2) {
                 Text("Резкие разгоны и торможения")
                     .font(.rounded(14, .semibold))
@@ -708,7 +708,7 @@ struct RatingDetailSheet: View {
             SymbolIcon(icon, size: 15)
                 .foregroundStyle(tint)
                 .frame(width: 36, height: 36)
-                .background(tint.opacity(0.10),
+                .background(Theme.quietFill,
                             in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.rounded(14, .semibold)).foregroundStyle(Theme.textPrimary)
@@ -859,7 +859,7 @@ private struct ContributionRow: View {
                 }
             }
             .padding(.vertical, 2)
-            .background(highlighted ? Theme.accent.opacity(0.10) : .clear,
+            .background(highlighted ? Theme.quietFill : .clear,
                         in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .contentShape(Rectangle())
         }
@@ -934,7 +934,7 @@ private struct AllContributionsView: View {
             .padding(20)
         }
         .backport.scrollEdgeEffectStyle(.hard, for: .top)
-        .background(Theme.screenBackground)
+        .background(Theme.background)
         .navigationTitle("Все вклады")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -956,7 +956,7 @@ private struct AllContributionsView: View {
                             .padding(.vertical, 7)
                             .background {
                                 if selected {
-                                    Capsule().fill(Theme.accentFill.gradient)
+                                    Capsule().fill(Theme.accentFill)
                                         .matchedGeometryEffect(id: "sortPill", in: sortPill)
                                 }
                             }

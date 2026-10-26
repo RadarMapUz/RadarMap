@@ -50,7 +50,7 @@ struct MyPlacesSheet: View {
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
-            .background(Theme.screenBackground)
+            .background(Theme.background)
             .navigationTitle("Мои места")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -177,7 +177,7 @@ struct MyPlacesSheet: View {
                 // Белое на accentFill — как в строке «Мои места» поиска.
                 .foregroundStyle(isSet ? Theme.onAccentFill : Theme.textSecondary)
                 .frame(width: 36, height: 36)
-                .background(isSet ? AnyShapeStyle(Theme.accentFill.gradient)
+                .background(isSet ? AnyShapeStyle(Theme.accentFill)
                                   : AnyShapeStyle(Theme.stroke), in: Circle())
             VStack(alignment: .leading, spacing: 2) {
                 Text(slot.name)
@@ -262,7 +262,7 @@ struct MyPlacesSheet: View {
                             .font(.rounded(15, .bold))
                             .foregroundStyle(Theme.warning)
                             .frame(width: 36, height: 36)
-                            .background(Theme.warning.opacity(0.14), in: Circle())
+                            .background(Theme.quietFill, in: Circle())
                         Text(place.title)
                             .font(.rounded(15, .semibold))
                             .foregroundStyle(Theme.textPrimary)

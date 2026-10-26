@@ -174,7 +174,7 @@ struct FamilyAvatar: View {
 
     var body: some View {
         ZStack {
-            Circle().fill(Theme.accent.opacity(0.14))
+            Circle().fill(Theme.quietFill)
             if recipient.emoji.isEmpty {
                 Text(verbatim: String(recipient.name.prefix(1)).uppercased())
                     .font(.rounded(size * 0.45, .bold))

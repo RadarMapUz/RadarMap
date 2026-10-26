@@ -56,7 +56,7 @@ private struct LimitSign: View {
             .minimumScaleFactor(0.6)
             .frame(width: size, height: size)
             .background(Circle().fill(.white))
-            .overlay(Circle().stroke(Color(red: 0.86, green: 0.16, blue: 0.16), lineWidth: size * 0.12))
+            .overlay(Circle().stroke(SW.signRed, lineWidth: size * 0.12))
     }
 }
 
@@ -111,7 +111,7 @@ struct CameraActivityWidget: Widget {
                                 Text("Камер рядом нет")
                             }
                         }
-                            .font(.system(.footnote, design: .rounded))
+                            .font(.system(.footnote))
                             .foregroundStyle(WTheme.secondary)
                             .lineLimit(context.isStale ? 2 : 1)
                         if !context.isStale {
@@ -128,7 +128,7 @@ struct CameraActivityWidget: Widget {
             } compactTrailing: {
                 if !context.isStale, let distance = context.state.distanceMeters {
                     Text(format(distance))
-                        .font(.system(.caption2, design: .rounded).bold())
+                        .font(.system(.caption2).bold())
                         .foregroundStyle(WTheme.level(context.state.alertLevel))
                 }
             } minimal: {
@@ -210,7 +210,7 @@ private struct SmallActivityView: View {
             VStack(alignment: .leading, spacing: 1) {
                 if isStale {
                     Text("Нет сигнала GPS")
-                        .font(.system(.footnote, design: .rounded).weight(.semibold))
+                        .font(.system(.footnote).weight(.semibold))
                         .foregroundStyle(WTheme.primary)
                 } else if let title = state.nearestTitle, let distance = state.distanceMeters {
                     Text(format(distance))
@@ -218,12 +218,12 @@ private struct SmallActivityView: View {
                         .foregroundStyle(WTheme.level(state.alertLevel))
                         .minimumScaleFactor(0.7)
                     Text(title)
-                        .font(.system(.caption2, design: .rounded))
+                        .font(.system(.caption2))
                         .foregroundStyle(WTheme.secondary)
                         .lineLimit(1)
                 } else {
                     Text("Камер рядом нет")
-                        .font(.system(.footnote, design: .rounded).weight(.semibold))
+                        .font(.system(.footnote).weight(.semibold))
                         .foregroundStyle(WTheme.primary)
                         .lineLimit(2)
                 }
@@ -277,23 +277,23 @@ private struct LockScreenView: View {
             VStack(alignment: .leading, spacing: 3) {
                 if isStale {
                     Text("Нет сигнала GPS")
-                        .font(.system(.headline, design: .rounded))
+                        .font(.system(.headline))
                         .foregroundStyle(WTheme.primary)
                     Text("Откройте RadarMap, если поездка идёт")
-                        .font(.system(.caption, design: .rounded))
+                        .font(.system(.caption))
                         .foregroundStyle(WTheme.secondary)
                 } else if let title = state.nearestTitle, let distance = state.distanceMeters {
                     Text(format(distance))
                         .font(.system(.title3, design: .rounded).bold())
                         .foregroundStyle(WTheme.level(state.alertLevel))
                     Text(title)
-                        .font(.system(.caption, design: .rounded))
+                        .font(.system(.caption))
                         .foregroundStyle(WTheme.secondary)
                         .lineLimit(1)
                     ApproachBar(state: state)
                 } else {
                     Text("Камер рядом нет")
-                        .font(.system(.headline, design: .rounded))
+                        .font(.system(.headline))
                         .foregroundStyle(WTheme.primary)
                 }
                 if !isStale { GhostLine(state: state) }
@@ -325,7 +325,7 @@ private struct ActivityButtons: View {
                         .font(.system(size: 15, weight: .bold))
                         .accessibilityHidden(true)
                     reportTitle
-                        .font(.system(size: 15, weight: .heavy, design: .rounded))
+                        .font(.system(size: 15, weight: .heavy))
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
@@ -389,7 +389,7 @@ private struct GhostLine: View {
                     .foregroundStyle(state.etaAlert == true ? WTheme.warning : WTheme.secondary)
                     .lineLimit(1)
             }
-            .font(.system(.caption, design: .rounded).weight(.semibold))
+            .font(.system(.caption).weight(.semibold))
         }
     }
 }

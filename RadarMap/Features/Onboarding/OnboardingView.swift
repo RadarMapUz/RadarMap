@@ -45,7 +45,7 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
-            Theme.screenBackground.ignoresSafeArea()
+            Theme.background.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 TabView(selection: $page) {
@@ -340,7 +340,7 @@ struct OnboardingView: View {
                 .fixedSize()
                 .padding(.horizontal, 14)
                 .frame(minHeight: Theme.controlSize)
-                .background(tint.opacity(0.12), in: Capsule())
+                .background(Theme.quietFill, in: Capsule())
                 .contentShape(Capsule())
         }
         .buttonStyle(PressableStyle())

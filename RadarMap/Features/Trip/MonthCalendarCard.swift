@@ -140,8 +140,9 @@ struct MonthCalendarCard: View {
         }
 
         var fill: Color {
-            guard hasTrips else { return Theme.surface.opacity(0.6) }
-            return hasOverspeed ? Theme.danger.opacity(0.22) : Theme.success.opacity(0.16)
+            // Клетка с поездками — нейтральная плашка, состояние несёт цвет
+            // числа (31D: без цветного текста на цветном фоне).
+            hasTrips ? Theme.quietFill : Theme.surface.opacity(0.6)
         }
 
         var text: Color {
@@ -163,9 +164,9 @@ struct MonthCalendarCard: View {
 
     private func legendItem(_ color: Color, _ title: String) -> some View {
         HStack(spacing: 5) {
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(color.opacity(0.25))
-                .frame(width: 12, height: 12)
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
             Text(title).font(.rounded(10)).foregroundStyle(Theme.textTertiary)
         }
     }

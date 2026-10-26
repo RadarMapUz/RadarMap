@@ -131,14 +131,14 @@ struct TripEndCard: View {
             let tint = TripHistorySection.scoreColor(score)
             VStack(spacing: -2) {
                 Text(verbatim: "\(score)")
-                    .font(.rounded(38, .heavy).monospacedDigit())
+                    .font(.numeral(38, .heavy).monospacedDigit())
                     .foregroundStyle(tint)
                 Text("рейтинг")
                     .font(.rounded(12, .semibold))
                     .foregroundStyle(Theme.textTertiary)
             }
             .frame(width: 70, height: 70)
-            .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+            .background(Theme.quietFill, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(String(format: String(localized: "Балл поездки: %lld"), score)))
         } else {
@@ -148,7 +148,7 @@ struct TripEndCard: View {
                 .font(.rounded(30, .bold))
                 .foregroundStyle(tint)
                 .frame(width: 70, height: 70)
-                .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+                .background(Theme.quietFill, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
         }
     }
 
@@ -202,7 +202,7 @@ struct TripEndCard: View {
                     .font(.rounded(15, .bold))
                     .foregroundStyle(Theme.accent)
                     .frame(width: 30, height: 30)
-                    .background(Theme.accent.opacity(0.14), in: Circle())
+                    .background(Theme.quietFill, in: Circle())
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Похоже, это продолжение прошлой")
                         .font(.rounded(15, .semibold))
@@ -218,7 +218,7 @@ struct TripEndCard: View {
                     .foregroundStyle(Theme.textTertiary)
             }
             .padding(10)
-            .background(Theme.accent.opacity(0.08),
+            .background(Theme.quietFill,
                         in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
             .contentShape(Rectangle())
         }

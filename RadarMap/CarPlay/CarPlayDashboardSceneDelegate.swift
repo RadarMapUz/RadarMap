@@ -259,7 +259,7 @@ private struct CarPlayDashboardGauge: View {
     var body: some View {
         HStack(spacing: 10) {
             Text("\(Int(env.location.speedKmh.rounded()))")
-                .font(.rounded(26, .heavy).monospacedDigit())
+                .font(.numeral(26, .heavy).monospacedDigit())
                 .foregroundStyle(env.speedLimits.isOverspeeding ? Theme.danger : Theme.textPrimary)
                 .liveNumber()
             if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {

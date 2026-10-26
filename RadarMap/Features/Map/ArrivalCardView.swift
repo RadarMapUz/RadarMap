@@ -25,7 +25,7 @@ struct ArrivalCardView: View {
                     .font(.rounded(19, .bold))
                     .foregroundStyle(Theme.success)
                     .frame(width: 46, height: 46)
-                    .background(Theme.success.opacity(0.16), in: Circle())
+                    .background(Theme.quietFill, in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Вы на месте!")
                         .font(.rounded(20, .heavy))

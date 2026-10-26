@@ -287,6 +287,69 @@ final class PaletteTests: XCTestCase {
     }
 }
 
+// MARK: - «Строгий навигатор» (31D, 27.10)
+
+extension PaletteTests {
+
+    /// Красный — только камера (и штраф). Ни выделение, ни заливка, ни один
+    /// значок-смысл, кроме камеры, не читается её красным. Прежняя «серия»
+    /// (#C2410C) стояла от камеры на ΔE 15 — значок серии выглядел камерой.
+    func testOnlyTheCameraIsRed() {
+        let others: [(String, Color)] = [
+            ("accent", Theme.accent), ("accentFill", Theme.accentFill), ("action", Theme.action),
+            ("time", Theme.Icon.time), ("distance", Theme.Icon.distance), ("speed", Theme.Icon.speed),
+            ("money", Theme.Icon.money), ("rating", Theme.Icon.rating), ("home", Theme.Icon.home),
+            ("work", Theme.Icon.work), ("streak", Theme.Icon.streak), ("route", Theme.route),
+            ("settingsTile", Theme.settingsTile),
+        ]
+        inBothThemes { theme in
+            for (name, colour) in others {
+                XCTAssertGreaterThanOrEqual(deltaE(colour, Theme.Types.camera), 25,
+                                            "\(name) читается красным камеры \(theme)")
+            }
+        }
+    }
+
+    /// Плитка раздела настроек — графит под белым символом, ≥ 4,5:1.
+    func testSettingsTileCarriesWhiteGlyph() {
+        inBothThemes { theme in
+            XCTAssertGreaterThanOrEqual(contrast(Color.white, Theme.settingsTile), 4.5, theme)
+        }
+    }
+
+    /// Нейтральная плашка под значком и текстом: цвет смысла поверх неё
+    /// читается так же, как на карточке (≥ 4,5:1, обе темы). Плашка — чернила
+    /// с прозрачностью, поэтому меряем её смешанной с карточкой.
+    func testQuietFillKeepsTextReadable() {
+        inBothThemes { theme in
+            let traits = UITraitCollection(userInterfaceStyle: style)
+            let ink = UIColor(Theme.quietFill).resolvedColor(with: traits)
+            let card = UIColor(Theme.surface).resolvedColor(with: traits)
+            var ir: CGFloat = 0, ig: CGFloat = 0, ib: CGFloat = 0, ia: CGFloat = 0
+            var cr: CGFloat = 0, cg: CGFloat = 0, cb: CGFloat = 0, ca: CGFloat = 0
+            ink.getRed(&ir, green: &ig, blue: &ib, alpha: &ia)
+            card.getRed(&cr, green: &cg, blue: &cb, alpha: &ca)
+            let plate = Color(uiColor: UIColor(red: cr * (1 - ia) + ir * ia, green: cg * (1 - ia) + ig * ia,
+                                               blue: cb * (1 - ia) + ib * ia, alpha: 1))
+            for (name, colour) in [("textPrimary", Theme.textPrimary), ("textSecondary", Theme.textSecondary),
+                                   ("textTertiary", Theme.textTertiary), ("accent", Theme.accent),
+                                   ("danger", Theme.danger), ("warning", Theme.warning),
+                                   ("success", Theme.success)] {
+                XCTAssertGreaterThanOrEqual(contrast(colour, plate), 4.5, "\(name) на плашке \(theme)")
+            }
+        }
+    }
+
+    /// Свой синий: интерфейс и линия маршрута днём — один азурный тон, а не
+    /// два соседних синих (31D). Ночью линия светлее, но того же рода.
+    func testRouteIsTheInterfaceBlueByDay() {
+        style = .light
+        XCTAssertLessThan(deltaE(Theme.route, Theme.accent), 3)
+        style = .dark
+        XCTAssertLessThan(deltaE(Theme.route, Theme.accent), 10)
+    }
+}
+
 // MARK: - Линия маршрута «богаче» (25.D, 21.10)
 
 extension PaletteTests {
@@ -378,7 +441,7 @@ extension PaletteTests {
 
     /// Стиль движка берёт те же числа, что токены, — второго списка цветов нет.
     func testEngineHexMatchesTheTokens() {
-        XCTAssertEqual(RouteColors.hex(0x2A6FF0), "#2a6ff0")
+        XCTAssertEqual(RouteColors.hex(0x0B62D0), "#0b62d0")
         inBothThemes { theme in
             let day = theme == "днём"
             let (r, g, b) = components(Theme.route)

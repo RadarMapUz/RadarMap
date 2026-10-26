@@ -85,7 +85,7 @@ struct PassDetailView: View {
             .padding(20)
         }
         .backport.scrollEdgeEffectStyle(.hard, for: .top)
-        .background(Theme.screenBackground)
+        .background(Theme.background)
         .navigationTitle("Проезд камеры")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { env.usage.noteScreen("pass") }
@@ -248,12 +248,11 @@ struct PassDetailView: View {
                         .font(.rounded(12))
                         .foregroundStyle(Theme.textSecondary)
                     // Герой карточки: ради этого числа экран и открывают.
-                    // Свечение в цвет состояния — объём и второй намёк разом;
-                    // чёрная тень на почти чёрном фоне не дала бы ничего.
+                    // Цвет состояния — у самой цифры; цветное свечение вокруг
+                    // убрано вместе с остальными «ореолами» (31D).
                     Text("\(shownSpeedKmh) км/ч")
-                        .font(.rounded(30, .heavy).monospacedDigit())
+                        .font(.numeral(30, .heavy).monospacedDigit())
                         .foregroundStyle(honestyColor)
-                        .glow(honestyColor)
                         .contentTransition(.numericText())
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
@@ -303,14 +302,14 @@ struct PassDetailView: View {
             .accessibilityLabel(Text(String(format: String(localized: "превышение на %lld км/ч"),
                                             shownOverKmh ?? 0)))
             .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(Theme.danger.opacity(0.12),
+            .background(Theme.quietFill,
                         in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         } else if pass.limitKmh != nil {
             Label("в лимите", systemImage: "checkmark.shield.fill")
                 .font(.rounded(15, .bold))
                 .foregroundStyle(Theme.success)
                 .padding(.horizontal, 10).padding(.vertical, 8)
-                .background(Theme.success.opacity(0.12),
+                .background(Theme.quietFill,
                             in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         } else {
             Label("лимит неизвестен", systemImage: "questionmark.circle")
@@ -424,13 +423,10 @@ struct PassDetailView: View {
                 .font(.rounded(15, .semibold))
                 .foregroundStyle(tint)
                 .padding(.horizontal, 12).padding(.vertical, 8)
-                // Градиент и цветная кромка вместо плоской заливки: кнопка
-                // перестаёт быть подкрашенным прямоугольником и становится
-                // предметом, который можно нажать.
-                .background(LinearGradient(colors: [tint.opacity(0.22), tint.opacity(0.08)],
-                                           startPoint: .top, endPoint: .bottom),
-                            in: Capsule())
-                .overlay(Capsule().strokeBorder(tint.opacity(0.35), lineWidth: 1))
+                // Нейтральная капсула с кромкой: нажимаемый предмет, а не
+                // подкрашенный прямоугольник; цвет — у текста и значка (31D).
+                .background(Theme.quietFill, in: Capsule())
+                .overlay(Capsule().strokeBorder(Theme.stroke, lineWidth: 1))
                 // Капсула ~36 pt на глаз прежняя, мишень — 44 pt.
                 .tapTarget()
         }
@@ -443,7 +439,7 @@ struct PassDetailView: View {
                 .font(.rounded(15, .bold))
                 .foregroundStyle(tint)
                 .frame(width: 32, height: 32)
-                .background(tint.opacity(0.12), in: Circle())
+                .background(Theme.quietFill, in: Circle())
             Text(title)
                 .font(.rounded(15, .medium))
                 .foregroundStyle(Theme.textSecondary)
@@ -496,7 +492,7 @@ struct PassDetailView: View {
                 .font(.rounded(11, .bold))
                 .foregroundStyle(Theme.textTertiary)
             Text("\(to)")
-                .font(.rounded(19, .heavy).monospacedDigit())
+                .font(.numeral(19, .heavy).monospacedDigit())
                 .foregroundStyle(to > from ? Theme.success : Theme.textPrimary)
         }
         .accessibilityElement(children: .combine)

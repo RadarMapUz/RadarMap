@@ -897,7 +897,7 @@ final class CarPlayGuidance {
         if #available(iOS 27.0, *), let camera {
             let detail = CPRouteDetail(symbolName: "camera.fill", value: camera)
             // Цвет значка — только динамический (CPRouteDetail.h): красный камеры.
-            detail.symbolTintColor = Theme.adaptiveUIColor(0xC62828, 0xFF7A70)
+            detail.symbolTintColor = Theme.dangerUIColor
             return CPTravelEstimates(distanceRemaining: distance, distanceRemainingToDisplay: distance,
                                      timeRemaining: max(0, seconds), routeDetails: [detail])
         }

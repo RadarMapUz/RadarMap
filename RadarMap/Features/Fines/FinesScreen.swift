@@ -64,7 +64,7 @@ struct FinesScreen: View {
                 .padding(20)
             }
             .backport.scrollEdgeEffectStyle(.hard, for: .top)
-            .background(Theme.screenBackground)
+            .background(Theme.background)
             .navigationTitle("Штрафы")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -97,7 +97,7 @@ struct FinesScreen: View {
                     .font(.rounded(13, .medium))
                     .foregroundStyle(Theme.textSecondary)
                 Text(ledger.toPay > 0 ? FineFormat.money(ledger.toPay) : String(localized: "ничего"))
-                    .font(.rounded(28, .heavy))
+                    .font(.numeral(28, .heavy))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.55)

@@ -98,7 +98,7 @@ struct EnergyEditSheet: View {
                 .padding(16)
             }
             .scrollDismissesKeyboard(.interactively)
-            .background(Theme.screenBackground)
+            .background(Theme.background)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

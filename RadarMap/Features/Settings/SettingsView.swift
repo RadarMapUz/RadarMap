@@ -256,33 +256,10 @@ enum SettingsItem {
         }
     }
 
-    /// Системные цвета iOS — те же, что у плиток в «Настройках» iPhone:
-    /// плитка — опознавательный знак раздела, а не элемент палитры приложения.
-    var tint: Color {
-        switch self {
-        case .alerts:   return Color(uiColor: .systemRed)
-        case .speed:    return Color(uiColor: .systemOrange)
-        case .trip:     return Color(uiColor: .systemGreen)
-        case .vehicle:  return Color(uiColor: .systemCyan)
-        case .route:    return Color(uiColor: .systemBlue)
-        case .map:      return Color(uiColor: .systemTeal)
-        case .offline:  return Color(uiColor: .systemIndigo)
-        case .places:   return Color(uiColor: .systemBlue)
-        case .learning: return Color(uiColor: .systemPurple)
-        case .battery:  return Color(uiColor: .systemGreen)
-        case .privacy:  return Color(uiColor: .systemBlue)
-        case .database: return Color(uiColor: .systemGray)
-        case .backup:   return Color(uiColor: .systemIndigo)
-        case .language: return Color(uiColor: .systemBlue)
-        case .help:     return Color(uiColor: .systemOrange)
-        case .feedback: return Color(uiColor: .systemBlue)
-        case .project:  return Color(uiColor: .systemCyan)
-        case .version:  return Color(uiColor: .systemGray)
-        case .openData: return Color(uiColor: .systemGray)
-        case .licenses: return Color(uiColor: .systemGray)
-        case .about:    return Color(uiColor: .systemGray)
-        }
-    }
+    /// Плитка раздела — графит, красная только у «Оповещений» (это камера).
+    /// Пёстрые системные плитки (21 цвет мимо палитры) спорили с красным
+    /// камеры и с синим «своего» — 31D.
+    var tint: Color { self == .alerts ? Theme.Types.camera : Theme.settingsTile }
 }
 
 /// Плитка раздела: белый символ на цветном скруглённом квадрате.
@@ -295,7 +272,7 @@ struct SettingsIcon: View {
             .font(.system(size: 15, weight: .semibold))
             .foregroundStyle(.white)
             .frame(width: 29, height: 29)
-            .background(tint.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .background(tint, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             .accessibilityHidden(true)
     }
 }
@@ -337,7 +314,7 @@ extension View {
     func settingsPage(_ title: LocalizedStringKey? = nil) -> some View {
         self
             .scrollContentBackground(.hidden)
-            .background(Theme.screenBackground)
+            .background(Theme.background)
             .backport.scrollEdgeEffectStyle(.hard, for: .top)
             .modifier(SettingsTitle(title: title))
     }

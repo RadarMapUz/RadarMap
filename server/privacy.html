@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="uz">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RadarMap — Политика конфиденциальности</title>
+<title>RadarMap — Maxfiylik siyosati</title>
 <style>
   body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; max-width: 720px;
          margin: 0 auto; padding: 24px 20px 60px; line-height: 1.6; color: #1a1d24; background: #fff; }
@@ -14,7 +14,122 @@
 </style>
 </head>
 <body>
-<h1>🛰 RadarMap — Политика конфиденциальности</h1>
+<h1 id="uz">🛰 RadarMap — Maxfiylik siyosati</h1>
+<p class="muted">2026-yil 7-avgustdan kuchga kirgan · <a href="#ru">Русский</a></p>
+
+<div class="card"><strong>Qisqacha:</strong> RadarMap shaxsiy ma’lumotlarni yig‘maydi.
+Hisoblar, reklama, kuzatuv vositalari va uchinchi tomon tahlil SDK’lari yo‘q.
+Joylashuvingiz qurilmangizning o‘zida qayta ishlanadi. Tirbandliklar uchun — agar buni
+o‘chirmagan bo‘lsangiz — safar davomida shaxssizlashtirilgan yo‘l bo‘laklari yuboriladi:
+qurilmasiz, kun vaqtisiz va safarning boshi hamda oxirisiz (quyidagi «Tirbandliklar»
+bo‘limiga qarang).</div>
+
+<h2>1. Geolokatsiya</h2>
+<p>Koordinatalar qurilmada qayta ishlanadi: xaritada joylashuvingizni ko‘rsatish,
+kameralarga yaqinlashish haqida ogohlantirish va safar yakunlarini yozib borish uchun.
+Ogohlantirishlar ishlaydigan fon geolokatsiyasi serverga uzatilmaydi. Safarlar tarixi —
+jumladan, ishga va uyga boradigan yo‘l — telefoningizda saqlanadi va hisoblanadi hamda
+serverimizga hech qachon uzatilmaydi. Serverga faqat quyida sanab o‘tilgan ma’lumotlar
+yuboriladi.</p>
+
+<h2>1a. Sizning iCloud’ingiz (ixtiyoriy)</h2>
+<p>Agar ilovada «Safarlarni saqlash: iCloud’da» sozlamasini o‘zingiz yoqsangiz, treklar bilan
+birga safarlaringiz, kunlik yakunlar, joylar (uy, ish, so‘nggi manzillar), yoqilg‘i quyish
+jurnali, olingan jarimalar, avtomobil profili, yaqinlar ro‘yxati (havolalarsiz) va sozlamalar
+nusxasi telefon almashtirilganda ham tarix saqlanib qolishi uchun <strong>shaxsiy
+iCloud’ingizda</strong> — Apple ID’ingiz ostidagi xususiy CloudKit bazasida saqlanadi.
+Koordinatalar, treklar va barcha tarkib iCloud hisobingiz kaliti bilan shifrlangan.
+<strong>Biz bu ma’lumotlarni ko‘rmaymiz va ularga kirish imkonimiz yo‘q</strong>: xususiy
+iCloud bazasi dasturchi uchun yopiq, nusxa serverimizga tushmaydi. Joy sizning iCloud
+xotirangizdan olinadi. Safar davomida ilova iCloud’ga hech narsa yubormaydi. Nusxani ilovada
+(«Butun tarixni o‘chirish» — iCloud’dagi tarix ham, «Nusxani iCloud’dan o‘chirish» — hammasi)
+yoki iPhone Sozlamalari → Apple ID → iCloud bo‘limida o‘chirish mumkin. Yoqilmasa, hammasi
+faqat telefonda saqlanadi.</p>
+
+<h2>2. Serverga nima yuboriladi</h2>
+<p><strong>Ko‘chma radar belgilari.</strong> Agar radarni qo‘lda belgilasangiz yoki boshqa
+birovning belgisiga ovoz bersangiz, serverga belgining koordinatalari va qurilmaning anonim
+identifikatori (shaxsingiz bilan bog‘lanmagan tasodifiy UUID) yuboriladi. Belgilar bir necha
+soatdan keyin avtomatik ravishda o‘chiriladi.</p>
+<p><strong>Barqarorlik hisobotlari.</strong> iOS kuniga bir marta o‘sha anonim UUID bilan
+MetricKit’ning umumlashtirilgan hisobotini (ilova nosozliklari, energiya sarfi) yuborishi
+mumkin. Hisobotlarda koordinatalar, kontent yoki sizni aniqlashga imkon beradigan boshqa
+hech narsa bo‘lmaydi va ular 30 kundan ortiq saqlanmaydi.</p>
+<p><strong>Marshrut qurish.</strong> Marshrutni hisoblash uchun serverga «qayerdan» va
+«qayerga» nuqtalarining koordinatalari uzatiladi. Ular so‘rov paytida qayta ishlanadi va
+saqlanmaydi.</p>
+<p><strong>Dasturchiga xabarlar.</strong> Agar «Dasturchiga yozish» shaklida yozsangiz,
+xabar matni va — faqat o‘zingiz ko‘rsatgan bo‘lsangiz — javob uchun aloqa ma’lumoti
+yuboriladi. Agar kamera yonidan o‘tish uchun «Kamera haqida ogohlantirmadi» tugmasini bossangiz, vaziyatni
+takrorlab, xatoni tuzatishimiz uchun kamera raqami, o‘sha o‘tishning joyi, koordinatasi va
+vaqti hamda zonadagi tezlik yuboriladi. Xabarlar ko‘rib chiqilgunicha saqlanadi.</p>
+<p><strong>Tirbandliklar.</strong> Safar davom etayotganda ilova taxminan bir kilometr
+uzunlikdagi yo‘l bo‘laklarini yuboradi: nuqtalar (kenglik, uzunlik, tezlik) va bo‘lak
+boshidan o‘tgan soniyalar. Ular bo‘yicha server yo‘l qismlaridagi tezlikni hisoblaydi va
+tirbandliklarni barcha haydovchilarga ko‘rsatadi. Bo‘lakda qurilma identifikatori, safar
+raqami va kun vaqti yo‘q, shuning uchun bo‘laklarni bir-biri bilan bog‘lab bo‘lmaydi. Har
+bir safarning birinchi va oxirgi 400 metri hamda uyingiz, ishingiz va saqlangan joylaringizga
+300 metrdan yaqin bo‘lgan hamma narsa hech qachon yuborilmaydi — buni telefonning o‘zi hal
+qiladi. Serverda bo‘lak yo‘lga moslashtirilgandan so‘ng darhol o‘chiriladi (har qanday holda
+20 daqiqadan kechiktirmay); faqat hech kim bilan bog‘lanmagan yo‘l qismlaridagi tezliklar
+saqlanadi. IP-manzil yozib olinmaydi. Bu kameralar haqidagi ogohlantirishlarga ta’sir
+qilmaydi. Yuborishni Sozlamalar → Maxfiylik → «Tirbandlikni hisoblashga yordam berish» bo‘limida
+o‘chirib qo‘yish mumkin.</p>
+<p><strong>«Yetib borish vaqtini ulashish».</strong> Faqat yetib borish haqidagi havolani
+kimgadir o‘zingiz yuborgan bo‘lsangiz: marshrut davom etayotganda har daqiqada yetib borish
+vaqti, qolgan masofa va holat («yo‘ldaman», «yetib keldim», «endi kuzatilmayapti») yuboriladi
+— koordinatalarsiz, boriladigan joy manzilisiz va qurilma identifikatorisiz. Havola
+tasodifiy, faqat server xotirasida saqlanadi va o‘z-o‘zidan o‘chadi: safar tugaganidan
+30 daqiqa o‘tib yoki 2 soat davomida yangilanmasa. Ulashishni safar menyusida to‘xtatish
+mumkin.</p>
+<p><strong>Shaxssizlashtirilgan foydalanish statistikasi.</strong> Kuniga bir marta o‘tgan
+kun uchun hisoblagichlar yuboriladi: nechta safar, kilometr, ogohlantirish va kamera yonidan
+o‘tish bo‘lgani, shuningdek ilova versiyasi, iOS versiyasi, telefon modeli va geolokatsiyaga
+berilgan ruxsat darajasi. Bu <em>faqat raqamlar</em>: hisobotda koordinatalar, marshrutlar,
+manzillar yoki voqealar vaqti yo‘q va bo‘lishi ham mumkin emas. Identifikator — har 30 kunda
+almashadigan o‘sha anonim UUID, shuning uchun kunlaringizni uzoq tarixga bog‘lab bo‘lmaydi.
+Yuborishni Sozlamalar → «Ilovani yaxshilashga yordam berish» bo‘limida o‘chirib qo‘yish
+mumkin.</p>
+<p><strong>Telegram’dagi yaqinlar.</strong> Agar yaqiningiz Telegram-botimizdagi oilaviy
+havolangizga obuna bo‘lgan bo‘lsa, bot unga «uyga ketyapti — taxminan 18:40 da yetib boradi»,
+«kechikyapti» va «uyda» xabarlarini yuboradi. Serverda faqat obuna saqlanadi: havola xeshi va
+yaqiningizning chat raqami — serverda bo‘lmagan kalit bilan shifrlangan holda (kalitni
+telefoningiz yangilanish bilan birga olib keladi). Yaqinlaringiz uchun o‘zingizga qo‘ygan ism
+va yetib borish vaqti diskka yozilmaydi — yuborish navbatidagi xabarning o‘zi bundan mustasno,
+u 10 daqiqadan ortiq turmaydi. Obuna /stop buyrug‘i bilan darhol bekor qilinadi, havola
+bo‘yicha 55 kun safar bo‘lmasa — o‘z-o‘zidan bekor bo‘ladi.</p>
+<p><strong>Telegram-bot.</strong> Telegram-id’ingiz ochiq holda saqlanmaydi: uning o‘rniga
+har 30 kunda almashadigan qaytarib bo‘lmaydigan xesh saqlanadi. Botga yuborilgan geopozitsiya
+«yaqin atrofda nima bor» degan bitta javob uchun kerak va na bazaga, na jurnalga yoziladi;
+geopozitsiya translyatsiyasi paytida bot oxirgi nuqtani translyatsiya davom etguncha faqat
+xotirada saqlaydi. Shahar va dovonlarga obunalar chat xeshi, shahar yoki dovon nomi va chat
+raqamini — shifrlangan holda saqlaydi; obuna /stop buyrug‘i bilan darhol, buyruqlaringizsiz
+55 kun o‘tgach esa o‘z-o‘zidan o‘chiriladi. /lang buyrug‘i bilan tanlangan til 30 kungacha
+saqlanadi.</p>
+
+<h2>3. Biz nima QILMAYMIZ</h2>
+<ul>
+  <li>Ism, telefon raqami, email yig‘maymiz — ilovada ro‘yxatdan o‘tish yo‘q (aloqa
+  ma’lumoti faqat uni fikr-mulohaza shaklida o‘zingiz qoldirgan bo‘lsangiz yuboriladi)</li>
+  <li>Harakatlaringizni kuzatmaymiz va serverda koordinatalar tarixini saqlamaymiz:
+  tirbandlik uchun bo‘laklar yo‘ldagi tezlik hisoblangach o‘chiriladi, ulardan safarni
+  yig‘ib bo‘lmaydi</li>
+  <li>Reklama ko‘rsatmaymiz va ma’lumotlarni uchinchi shaxslarga bermaymiz</li>
+  <li>Uchinchi tomon tahlil SDK’laridan foydalanmaymiz</li>
+</ul>
+
+<h2>4. Ma’lumot manbalari</h2>
+<p>Statsionar kameralar — rasmiy ochiq ma’lumotlar.
+Xaritalar, marshrutlar va tezlik cheklovlari — ©
+<a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> ishtirokchilari ma’lumotlari.</p>
+
+<h2>5. Aloqa</h2>
+<p>Maxfiylik bo‘yicha savollar: <a href="mailto:rasul.sadullaev@gmail.com">rasul.sadullaev@gmail.com</a></p>
+
+<hr style="margin-top:40px;opacity:.2">
+
+<div lang="ru">
+<h1 id="ru" lang="ru">🛰 RadarMap — Политика конфиденциальности</h1>
 <p class="muted">Действует с 7 августа 2026 г. · <a href="#uz">O‘zbekcha</a></p>
 
 <div class="card"><strong>Коротко:</strong> RadarMap не собирает персональные данные.
@@ -112,25 +227,6 @@ iCloud разработчику недоступна, на наш сервер �
 
 <h2>5. Контакты</h2>
 <p>Вопросы по конфиденциальности: <a href="mailto:rasul.sadullaev@gmail.com">rasul.sadullaev@gmail.com</a></p>
-
-<hr style="margin-top:40px;opacity:.2">
-<h2 id="uz">O‘zbekcha (qisqacha)</h2>
-<p>RadarMap shaxsiy ma’lumotlarni yig‘maydi: hisob, reklama va kuzatuv yo‘q.
-Joylashuvingiz faqat qurilmangizda qayta ishlanadi. Serverga faqat: qo‘lda belgilangan
-ko‘chma radar koordinatalari (anonim UUID bilan), ilova barqarorligi haqidagi kunlik
-anonim hisobotlar, marshrut so‘rovi nuqtalari (saqlanmaydi), shaxssiz kunlik
-hisoblagichlar (nechta safar, kilometr, ogohlantirish — faqat raqamlar, koordinatasiz)
-va tirbandlik uchun safar davomidagi taxminan bir kilometrlik yo‘l bo‘laklari
-(qurilmasiz, kun vaqtisiz; safarning boshi va oxiri hamda uy va ishdan 300 m yaqini
-yuborilmaydi; serverda yo‘lga moslashtirilgach darhol o‘chiriladi) yuboriladi.
-«Yetib borish vaqtini ulashish»da — faqat o‘zingiz havola yuborganda — yetib borish vaqti,
-qolgan masofa va holat yuboriladi (koordinatasiz, manzilsiz); havola faqat server xotirasida
-turadi va o‘zi o‘chadi.
-Agar o‘zingiz «Safarlarni saqlash: iCloud’da»ni yoqsangiz, safarlar, joylar, yoqilg‘i
-jurnali, jarimalar va sozlamalar nusxasi sizning shaxsiy iCloud’ingizda (Apple ID ostidagi
-xususiy CloudKit bazasi) shifrlangan holda saqlanadi — biz ularni ko‘rmaymiz va ularga
-kirish imkonimiz yo‘q; serverimizga yuborilmaydi.
-Hisoblagichlar va tirbandlikka yordamni Sozlamalarda o‘chirib qo‘yish mumkin.
-Savollar: rasul.sadullaev@gmail.com</p>
+</div>
 </body>
 </html>

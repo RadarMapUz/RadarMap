@@ -385,9 +385,56 @@ struct EngineMapView: UIViewRepresentable {
         /// иначе повторный монтаж карты вписывал бы маршрут сам по старому нажатию.
         private var commandsSeen = false
 
+        /// Частота таймера кадров движка по модели и покою карты.
+        private func applyFramesPerSecond(_ model: EngineMapView, in view: MLNMapView) {
+            let fps = Self.framesPerSecond(browsing: browsing, performance: model.performance,
+                                           lowPower: model.lowPower, covered: model.covered,
+                                           cruise: model.cruise, settled: settled)
+            guard fps != lastFPS else { return }
+            lastFPS = fps
+            view.preferredFramesPerSecond = fps > 0
+                ? MLNMapViewPreferredFramesPerSecond(rawValue: fps)
+                : .default
+        }
+
+        /// Карта дорисована и стоит. Таймер кадров MapLibre при этом не
+        /// останавливается (6.29: такт идёт, кадров ноль) — редкий такт вместо
+        /// 30 пробуждений в секунду (AppConfig.engineSettledFPS).
+        private var settled = false
+
+        private func settle(_ mapView: MLNMapView) {
+            guard !settled, let current else { return }
+            settled = true
+            applyFramesPerSecond(current, in: mapView)
+        }
+
+        /// Камера тронулась (ведение, жест, команда) или движок начал кадр
+        /// (тайлы, источники) — обычная частота сразу.
+        private func wake(_ mapView: MLNMapView) {
+            guard settled else { return }
+            settled = false
+            if let current { applyFramesPerSecond(current, in: mapView) }
+        }
+
+        func mapViewDidBecomeIdle(_ mapView: MLNMapView) {
+            #if DEBUG
+            reportRendering()
+            #endif
+            settle(mapView)
+        }
+
+        func mapView(_ mapView: MLNMapView, regionWillChangeAnimated animated: Bool) {
+            wake(mapView)
+        }
+
+        func mapViewWillStartRenderingFrame(_ mapView: MLNMapView) {
+            wake(mapView)
+        }
+
         // MapLibre invokes this for every native camera gesture, including tap zoom.
         func mapView(_ mapView: MLNMapView, shouldChangeFrom oldCamera: MLNMapCamera,
                      to newCamera: MLNMapCamera) -> Bool {
+            wake(mapView)
             if !browsing {
                 browsing = true
                 current?.onBrowse()
@@ -445,8 +492,6 @@ struct EngineMapView: UIViewRepresentable {
         #if DEBUG
         private var encodingSamples: [Double] = []
         private var renderingSamples: [Double] = []
-
-        func mapViewDidBecomeIdle(_ mapView: MLNMapView) { reportRendering() }
 
         private func reportRendering() {
             guard !encodingSamples.isEmpty else { return }
@@ -1028,15 +1073,7 @@ struct EngineMapView: UIViewRepresentable {
                 || previous.lookAt?.longitude != model.lookAt?.longitude
             } ?? true
             // Частота кадров: полная — только когда водитель сам двигает карту.
-            let fps = Self.framesPerSecond(browsing: browsing, performance: model.performance,
-                                           lowPower: model.lowPower, covered: model.covered,
-                                           cruise: model.cruise)
-            if fps != lastFPS {
-                lastFPS = fps
-                view.preferredFramesPerSecond = fps > 0
-                    ? MLNMapViewPreferredFramesPerSecond(rawValue: fps)
-                    : .default
-            }
+            applyFramesPerSecond(model, in: view)
             // «Весь маршрут»: вписать линию с отступами под панели сверху и
             // снизу; дальше карта свободна до «моего местоположения».
             if !commandsSeen {
@@ -1814,7 +1851,10 @@ struct EngineMapView: UIViewRepresentable {
                 ?? CADisplayLink(target: self, selector: #selector(markerFrame))
             // Та же частота, что у карты: ход стрелки не должен будить
             // экран чаще, чем рисует сам движок (нагрев, батарея).
-            let fps = max(15, (lastFPS ?? 0) > 0 ? (lastFPS ?? 0) : AppConfig.engineFollowFPS)
+            // Редкий такт покоя карты (settled) к стрелке не относится: она
+            // едет и над стоящей картой.
+            let mapFPS = settled ? 0 : (lastFPS ?? 0)
+            let fps = max(15, mapFPS > 0 ? mapFPS : AppConfig.engineFollowFPS)
             link.preferredFrameRateRange = CAFrameRateRange(minimum: 10, maximum: Float(fps),
                                                             preferred: Float(fps))
             link.add(to: .main, forMode: .common)
@@ -1844,7 +1884,11 @@ struct EngineMapView: UIViewRepresentable {
 
         /// 0 — частота по умолчанию (движок сам выбирает, плавно для жестов).
         static func framesPerSecond(browsing: Bool, performance: PerformanceMode, lowPower: Bool,
-                                    covered: Bool = false, cruise: Bool = false) -> Int {
+                                    covered: Bool = false, cruise: Bool = false,
+                                    settled: Bool = false) -> Int {
+            // Карта стоит и дорисована — рисовать нечего, таймеру хватит
+            // редкого такта: первое же движение вернёт полную частоту.
+            if settled { return AppConfig.engineSettledFPS }
             if browsing { return performance == .full && !lowPower ? 0 : AppConfig.engineWarmFPS }
             // Под предупреждением о камере — как у горячего телефона: видна
             // лишь верхняя полоска карты сквозь градиент.

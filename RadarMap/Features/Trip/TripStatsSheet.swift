@@ -87,6 +87,12 @@ struct TripStatsSheet: View {
     @State var commuteDetail: Commute.Summary?
     /// «Заправился» / «Зарядился» из строки расходов (21.6).
     @State var journalRequest: JournalEntryRequest?
+    /// Расшифровка «Дороги»: пробки или путь выше лимита (31E).
+    @State var roadHabit: RoadHabitPayload?
+    /// Выгрузка периода (31E): готовые файлы для «Поделиться» и признак работы.
+    @State var exportShare: ShareFilesPayload?
+    @State var exporting = false
+    @State var exportFailed = false
 
     /// Сводка, выводы, напоминание о штрафах и поездки периода — посчитанные
     /// вне main на смену периода или данных (ItogiScreen, 6.4).
@@ -139,68 +145,50 @@ struct TripStatsSheet: View {
                             .entrance(0, appeared)
                     }
 
-                    // Обслуживание (18.2) — только когда что-то скоро или пора:
-                    // это дело, а не статистика, поэтому выше периода.
-                    let maintenance = env.maintenance.attention()
-                    if !maintenance.isEmpty {
-                        NavigationLink {
-                            MaintenancePage()
-                        } label: {
-                            MaintenanceCard(states: maintenance)
-                        }
-                        .buttonStyle(PressableStyle())
-                        .accessibilityHint(Text("Открыть обслуживание"))
-                        .entrance(0, appeared)
-                        .id("maintenance")
-                    }
-
-                    // «Сохранять поездки в iCloud?» (27.F) — один раз, пока
-                    // человек не ответил; молча не включается.
-                    if !active, env.cloud.shouldOffer(storedTrips: trip.storedTripCount) {
-                        CloudOfferCard()
-                            .entrance(0, appeared)
-                    }
-
                     // Пикер и стрелки — одна визуальная группа и ЛИПКАЯ:
                     // прокрутив до списка поездок, человек переставал видеть,
                     // за какое окно эти цифры, и «3–9 августа» приходилось
                     // искать обратной прокруткой. Section с pinnedViews держит
                     // её на месте (LazyVStack умеет это без своей геометрии).
+                    //
+                    // Внутри — четыре блока (31E, владелец 26.10): «Как я езжу»
+                    // → «Где теряю деньги и время» → «Мои дороги» → «Машина и
+                    // работа», внизу «Вы и сообщество» и «Подробнее». Пустой
+                    // блок не показывается вовсе — без «нет данных». Блоки и
+                    // карточки — в TripStatsSheet+Blocks.swift.
                     Section {
-                    if summary.isEmpty {
-                        // Пусто может быть по двум причинам: поездок нет вообще
-                        // или нет именно в этом периоде — это разные подсказки.
-                        if trip.history.isEmpty {
-                            if !active { emptyHint.entrance(1, appeared) }
-                        } else {
-                            emptyPeriodHint.entrance(1, appeared)
+                        if summary.isEmpty {
+                            // Пусто может быть по двум причинам: поездок нет вообще
+                            // или нет именно в этом периоде — это разные подсказки.
+                            if trip.history.isEmpty {
+                                if !active { emptyHint.entrance(1, appeared) }
+                            } else {
+                                emptyPeriodHint.entrance(1, appeared)
+                            }
                         }
-                    } else {
-                        heroCard(trip: trip, summary: summary, insights: itogi.insights)
+                        drivingBlock(trip: trip, itogi: itogi)
                             .entrance(1, appeared)
-                        // Порядок (6.1): герой → деньги (с «Ждут ответа» сразу
-                        // под ними) → карта → поездки → детали. Поездки выше
-                        // деталей: их открывают чаще, чем графики.
-                        VStack(spacing: 8) {
-                            riskCard(summary: summary)
-                            pendingNudgeRow(itogi)
-                            receivedFinesRow(summary: summary)
-                            fuelRow(summary: summary)
-                        }
-                        .entrance(2, appeared)
-                        .id("risk")
-                        mapCard
+                        lossesBlock(itogi)
+                            .entrance(2, appeared)
+                            .id("risk")
+                        roadsBlock(itogi, proxy: proxy)
                             .entrance(3, appeared)
-                            .id("map")
-                        tripsSection(all: itogi.trips, proxy: proxy)
-                            .entrance(3, appeared)
-                            .id("history")
-                        periodDetails(summary: summary, trip: trip)
+                        carBlock(summary: summary)
                             .entrance(4, appeared)
+                        // «Сохранять поездки в iCloud?» (27.F) — один раз, пока
+                        // человек не ответил; молча не включается.
+                        if !active, env.cloud.shouldOffer(storedTrips: trip.storedTripCount) {
+                            CloudOfferCard()
+                                .entrance(5, appeared)
+                        }
+                        communityBlock(trip: trip)
+                            .entrance(5, appeared)
+                            .id("contribution")
+                        moreBlock(summary: summary, trip: trip)
+                            .entrance(5, appeared)
                             .id("details")
-                    }
                     } header: {
-                        VStack(spacing: 6) {
+                        VStack(spacing: 8) {
                             periodPicker
                             periodNavigator
                         }
@@ -212,8 +200,8 @@ struct TripStatsSheet: View {
                             // не похожим на артефакт прокрутки.
                             Rectangle()
                                 .fill(Theme.background)
-                                .padding(.horizontal, -20)
-                                .padding(.top, -20)
+                                .padding(.horizontal, -16)
+                                .padding(.top, -16)
                                 .overlay(alignment: .bottom) {
                                     Rectangle()
                                         .fill(Theme.stroke)
@@ -222,40 +210,9 @@ struct TripStatsSheet: View {
                         }
                         .entrance(0, appeared)
                     }
-
-                    // Вне секции периода — своё окно у каждого (6.1): дорога на
-                    // работу (30 дней), свои отметки, всё время. Шапка периода
-                    // над ними не висит — это уже не про выбранную неделю.
-                    if !env.commute.isEmpty {
-                        commuteCards
-                            .entrance(5, appeared)
-                            .id("commute")
-                    }
-
-                    // Смены таксиста (12б.9) — из рабочих рейсов; нет их — нет блока.
-                    let shifts = WorkShiftsCard.shown(env.workShifts)
-                    if !shifts.isEmpty {
-                        WorkShiftsCard(shifts: shifts)
-                            .entrance(5, appeared)
-                            .id("shifts")
-                    }
-
-                    contributionRow
-                        .entrance(5, appeared)
-
-                    // «За всё время» — три блока в одном сворачивающемся, тем
-                    // же приёмом, что «Детали периода». Экран Итогов открывают
-                    // ради ТЕКУЩЕГО периода; пожизненные цифры, охват и
-                    // достижения читают раз в месяц, а место занимали всегда.
-                    // Не перенесено (старт до разблокировки) — в памяти лишь
-                    // вклад процесса: не показывать его как «за всё время».
-                    if !trip.lifetime.isEmpty, trip.isLifetimeTrusted {
-                        lifetimeSection(trip: trip)
-                            .entrance(5, appeared)
-                            .id("lifetime")
-                    }
                 }
-                .padding(20)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 16)
                 #if DEBUG
                 .onAppear {
                     // Скриншот-автоматизация: прокрутить к истории или календарю.
@@ -309,6 +266,18 @@ struct TripStatsSheet: View {
                     // разных углах.
                     ToolbarItemGroup(placement: .primaryAction) {
                         Menu {
+                            // Выгрузка периода (31E): служебные км, отчёт таксиста.
+                            if !summary.isEmpty {
+                                Section("Выгрузить период") {
+                                    Button("Таблица CSV", systemImage: "tablecells") {
+                                        export(.csv, summary: summary)
+                                    }
+                                    Button("Документ PDF", systemImage: "doc.richtext") {
+                                        export(.pdf, summary: summary)
+                                    }
+                                }
+                                .disabled(exporting)
+                            }
                             Button("Очистить историю", systemImage: "trash", role: .destructive) {
                                 confirmsClear = true
                             }
@@ -459,6 +428,19 @@ struct TripStatsSheet: View {
         .sheet(item: $shareSubject) { box in
             SharePreviewSheet(subject: box.subject)
         }
+        .sheet(item: $roadHabit) { payload in RoadHabitSheet(payload: payload) }
+        .sheet(item: $exportShare) { payload in
+            ActivityFilesSheet(payload: payload)
+                .presentationDetents([.medium, .large])
+        }
+        .alert("Не удалось выгрузить период", isPresented: $exportFailed) {
+            Button("Понятно", role: .cancel) {}
+        } message: {
+            Text("В этом периоде нет сохранённых поездок или не хватило места. Попробуйте ещё раз.")
+        }
+        // Подтверждения своих отметок (31E) — с открытием «Итогов», не чаще
+        // раза в полчаса (ReportImpact.isDue).
+        .task { await env.mobile.refreshImpactIfDue() }
     }
 
 }

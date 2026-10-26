@@ -31,7 +31,7 @@ extension TripStatsSheet {
                         Text("За всё время")
                             .font(.rounded(15, .semibold))
                             .foregroundStyle(Theme.textPrimary)
-                        Text("Пожизненные цифры, охват предупреждений, достижения")
+                        Text("Пожизненные цифры и охват предупреждений")
                             .font(.rounded(12))
                             .foregroundStyle(Theme.textTertiary)
                             .lineLimit(2)
@@ -52,7 +52,7 @@ extension TripStatsSheet {
             if lifetimeExpanded {
                 lifetimeStrip(trip: trip)
                 AlertRecallCard(tally: trip.alertRecall) { showRecallInfo = true }
-                achievementsSection(trip: trip)
+                // Достижения — в «Вы и сообщество» (31E).
             }
         }
     }
@@ -114,28 +114,37 @@ extension TripStatsSheet {
     // MARK: - Вклад в общую карту
 
     /// «Ваши отметки». Единственное место, где автору возвращается результат
-    /// его тапов: сколько поставил и сколько из них подтвердили другие
-    /// водители. Без этой строки краудсорс односторонний — человек отдаёт
-    /// сигнал и никогда не узнаёт, дошёл ли он.
+    /// его тапов: сколько поставил и сколько раз их подтвердили другие
+    /// водители (31E: число подтверждений с сервера, ReportImpact). Без этой
+    /// строки краудсорс односторонний — человек отдаёт сигнал и никогда не
+    /// узнаёт, дошёл ли он.
+    ///
+    /// Окно — 30 дней и названо словами: столько живёт UUID отметок, старше
+    /// сервер про нас не знает. «Подтверждений», а не «водителей»: один
+    /// водитель мог подтвердить две ваши отметки.
     ///
     /// Ничего не отмечал — строки нет вовсе: нулевой счётчик читается как
     /// упрёк, а звать в краудсорс должна кнопка на карте, а не Итоги.
     @ViewBuilder var contributionRow: some View {
-        let mine = env.mobile.mineSummary()
-        if mine.total > 0 {
+        // Ревизия — чтобы строка перерисовалась, когда сервер ответил.
+        let _ = env.mobile.impactRevision
+        let impact = env.mobile.impactSummary()
+        if impact.reports > 0 {
             HStack(spacing: 12) {
                 IconBadge(symbol: "person.2.wave.2.fill", tint: Theme.accent, size: 34)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Ваши отметки за 30 дней")
-                        .font(.rounded(15))
+                        .font(.rounded(13))
                         .foregroundStyle(Theme.textSecondary)
-                    Text(mine.confirmed > 0
-                         ? String(format: String(localized: "%lld · подтвердили другие: %lld"),
-                                  mine.total, mine.confirmed)
-                         : String(format: String(localized: "%lld · ждут подтверждения"),
-                                  mine.total))
+                    Text(String(localized: "\(impact.reports) отметок"))
                         .font(.rounded(15, .semibold).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
+                    Text(impact.confirmations > 0
+                         ? String(localized: "Их подтвердили другие водители: \(impact.confirmations) раз")
+                         : String(localized: "Пока без подтверждений других водителей"))
+                        .font(.rounded(13))
+                        .foregroundStyle(impact.confirmations > 0 ? Theme.success : Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
                 if env.mobile.pendingCount > 0 {

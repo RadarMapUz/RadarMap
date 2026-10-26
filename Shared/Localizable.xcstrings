@@ -1,6 +1,1208 @@
 {
   "sourceLanguage": "ru",
   "strings": {
+    "Как я езжу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Как я езжу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qanday haydayman"
+          }
+        }
+      }
+    },
+    "Где теряю деньги и время": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Где теряю деньги и время"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pul va vaqtni qayerda yoʻqotaman"
+          }
+        }
+      }
+    },
+    "Мои дороги": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Мои дороги"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mening yoʻllarim"
+          }
+        }
+      }
+    },
+    "Машина и работа": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Машина и работа"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina va ish"
+          }
+        }
+      }
+    },
+    "Вы и сообщество": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вы и сообщество"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Siz va hamjamiyat"
+          }
+        }
+      }
+    },
+    "Из чего сложился рейтинг: поездки и камеры": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Из чего сложился рейтинг: поездки и камеры"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reyting nimadan tashkil topdi: safarlar va kameralar"
+          }
+        }
+      }
+    },
+    "Выгрузить поездки периода": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выгрузить поездки периода"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Davr safarlarini eksport qilish"
+          }
+        }
+      }
+    },
+    "CSV или PDF: служебные километры, отчёт по сменам": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CSV или PDF: служебные километры, отчёт по сменам"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CSV yoki PDF: xizmat kilometrlari, smenalar hisoboti"
+          }
+        }
+      }
+    },
+    "Пожизненные цифры и охват предупреждений": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пожизненные цифры и охват предупреждений"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Butun davr raqamlari va ogohlantirishlar qamrovi"
+          }
+        }
+      }
+    },
+    "Память своих дорог и новые камеры на них": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Память своих дорог и новые камеры на них"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻz yoʻllaringiz xotirasi va ulardagi yangi kameralar"
+          }
+        }
+      }
+    },
+    "Новые камеры на ваших дорогах: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новые камеры на ваших дорогах: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻllaringizdagi yangi kameralar: %lld"
+          }
+        }
+      }
+    },
+    "Появились с обновлением базы там, где вы ездили за два месяца": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Появились с обновлением базы там, где вы ездили за два месяца"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Baza yangilanganda paydo boʻldi — siz ikki oyda yurgan joylarda"
+          }
+        }
+      }
+    },
+    "RadarMap. Районы — по ближайшей камере из базы; адресов и координат в файле нет.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RadarMap. Районы — по ближайшей камере из базы; адресов и координат в файле нет."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RadarMap. Tumanlar — bazadagi eng yaqin kamera boʻyicha; faylda manzil va koordinatalar yoʻq."
+          }
+        }
+      }
+    },
+    "В движении": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В движении"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Harakatda"
+          }
+        }
+      }
+    },
+    "За период поездок %1$lld, подробно хранятся %2$lld (записи живут 30 дней).": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "За период поездок %1$lld, подробно хранятся %2$lld (записи живут 30 дней)."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Davrdagi safarlar: %1$lld, batafsil saqlanadi: %2$lld (yozuvlar 30 kun saqlanadi)."
+          }
+        }
+      }
+    },
+    "Км": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Км"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Km"
+          }
+        }
+      }
+    },
+    "Откуда": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Откуда"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qayerdan"
+          }
+        }
+      }
+    },
+    "Отчёт RadarMap о поездках": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отчёт RadarMap о поездках"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RadarMap safarlar hisoboti"
+          }
+        }
+      }
+    },
+    "Поездки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarlar"
+          }
+        }
+      }
+    },
+    "Поездки: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездки: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarlar: %@"
+          }
+        }
+      }
+    },
+    "Поездок: %1$lld · %2$@ · в движении %3$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездок: %1$lld · %2$@ · в движении %3$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarlar: %1$lld · %2$@ · harakatda %3$@"
+          }
+        }
+      }
+    },
+    "Рабочие рейсы: %1$lld · %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Рабочие рейсы: %1$lld · %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ish reyslari: %1$lld · %2$@"
+          }
+        }
+      }
+    },
+    "Рейсов": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Рейсов"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reyslar"
+          }
+        }
+      }
+    },
+    "В этом периоде нет сохранённых поездок или не хватило места. Попробуйте ещё раз.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В этом периоде нет сохранённых поездок или не хватило места. Попробуйте ещё раз."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu davrda saqlangan safarlar yoʻq yoki joy yetmadi. Yana urinib koʻring."
+          }
+        }
+      }
+    },
+    "Выгрузить период": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выгрузить период"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Davrni eksport qilish"
+          }
+        }
+      }
+    },
+    "Документ PDF": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Документ PDF"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PDF hujjat"
+          }
+        }
+      }
+    },
+    "Не удалось выгрузить период": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось выгрузить период"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Davrni eksport qilib boʻlmadi"
+          }
+        }
+      }
+    },
+    "Таблица CSV": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Таблица CSV"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CSV jadval"
+          }
+        }
+      }
+    },
+    "Держите %1$lld у «%2$@»: проезды выше лимита — %3$lld из %4$lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Держите %1$lld у «%2$@»: проезды выше лимита — %3$lld из %4$lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«%2$@» yonida %1$lld bilan yuring: limitdan oshgan oʻtishlar — %4$lld tadan %3$lld ta"
+          }
+        }
+      }
+    },
+    "Сбавьте у «%1$@»: проезды выше лимита — %2$lld из %3$lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сбавьте у «%1$@»: проезды выше лимита — %2$lld из %3$lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«%1$@» yonida sekinlang: limitdan oshgan oʻtishlar — %3$lld tadan %2$lld ta"
+          }
+        }
+      }
+    },
+    "Это %@ возможных штрафов.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это %@ возможных штрафов."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu — %@ ehtimoliy jarima."
+          }
+        }
+      }
+    },
+    "Пока без подтверждений других водителей": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пока без подтверждений других водителей"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hozircha boshqa haydovchilar tasdiqlamagan"
+          }
+        }
+      }
+    },
+    "Пришедших пока не отмечено": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пришедших пока не отмечено"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kelgan jarimalar hali belgilanmagan"
+          }
+        }
+      }
+    },
+    "Пришло на деле: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пришло на деле: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haqiqatda keldi: %@"
+          }
+        }
+      }
+    },
+    "если бы все превышения записались": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "если бы все превышения записались"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "agar barcha oshirishlar qayd etilganida"
+          }
+        }
+      }
+    },
+    "%1$@ · до %2$lld км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · до %2$lld км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$lld km/soatgacha"
+          }
+        }
+      }
+    },
+    "%1$@ из %2$@ пути с известным лимитом": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ из %2$@ пути с известным лимитом"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "limiti maʼlum %2$@ yoʻldan %1$@"
+          }
+        }
+      }
+    },
+    "%@ времени в пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ времени в пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yoʻldagi vaqtning %@"
+          }
+        }
+      }
+    },
+    "Больше всего — %1$@: %2$@ всех пробок": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Больше всего — %1$@: %2$@ всех пробок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eng koʻp — %1$@: barcha tirbandliklarning %2$@"
+          }
+        }
+      }
+    },
+    "В пробках: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В пробках: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tirbandlikda: %@"
+          }
+        }
+      }
+    },
+    "Вне камер — в лимите": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вне камер — в лимите"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralardan tashqarida — limitda"
+          }
+        }
+      }
+    },
+    "Время в пробках": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Время в пробках"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tirbandlikdagi vaqt"
+          }
+        }
+      }
+    },
+    "Выше лимита вне камер": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выше лимита вне камер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralardan tashqari limitdan yuqori"
+          }
+        }
+      }
+    },
+    "Выше лимита вне камер: %@ пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выше лимита вне камер: %@ пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralardan tashqari limitdan yuqori: yoʻlning %@"
+          }
+        }
+      }
+    },
+    "Где и когда": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Где и когда"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qayerda va qachon"
+          }
+        }
+      }
+    },
+    "Где стояли дольше всего": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Где стояли дольше всего"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eng uzoq turgan joylar"
+          }
+        }
+      }
+    },
+    "Где чаще": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Где чаще"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qayerda koʻproq"
+          }
+        }
+      }
+    },
+    "На 10 км/ч и больше, где лимит дороги известен": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На 10 км/ч и больше, где лимит дороги известен"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "10 km/soat va undan koʻp, yoʻl limiti maʼlum joylarda"
+          }
+        }
+      }
+    },
+    "Стояли и ползли медленнее 10 км/ч, из %@ в пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Стояли и ползли медленнее 10 км/ч, из %@ в пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "10 km/soatdan sekin turdingiz va sudraldingiz — yoʻldagi %@ dan"
+          }
+        }
+      }
+    },
+    "Считаем по вашим трекам на телефоне: три минуты подряд медленнее 10 км/ч — пробка, короткий светофор — нет. Заезды по пути (магазин, заправка) не входят. Места и часы — по поездкам последних 30 дней.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Считаем по вашим трекам на телефоне: три минуты подряд медленнее 10 км/ч — пробка, короткий светофор — нет. Заезды по пути (магазин, заправка) не входят. Места и часы — по поездкам последних 30 дней."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefondagi treklaringiz boʻyicha hisoblaymiz: ketma-ket uch daqiqa 10 km/soatdan sekin — tirbandlik, qisqa svetofor — yoʻq. Yoʻl-yoʻlakay toʻxtashlar (doʻkon, yoqilgʻi quyish) kirmaydi. Joylar va soatlar — oxirgi 30 kunlik safarlar boʻyicha."
+          }
+        }
+      }
+    },
+    "Улица не определена": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Улица не определена"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Koʻcha aniqlanmadi"
+          }
+        }
+      }
+    },
+    "Это не про штрафы: путь у камер сюда не входит, у них своя карточка. Считаем по лимиту дороги из OpenStreetMap, когда он известен, и только заметные превышения — на 10 км/ч и больше. С телефона ничего не уходит.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это не про штрафы: путь у камер сюда не входит, у них своя карточка. Считаем по лимиту дороги из OpenStreetMap, когда он известен, и только заметные превышения — на 10 км/ч и больше. С телефона ничего не уходит."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu jarimalar haqida emas: kameralar yonidagi yoʻl bu yerga kirmaydi, ularning oʻz kartochkasi bor. OpenStreetMap dagi yoʻl limiti maʼlum boʻlganda va faqat sezilarli oshirishlarni — 10 km/soat va undan koʻp — hisoblaymiz. Telefondan hech narsa ketmaydi."
+          }
+        }
+      }
+    },
+    "лимит %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "лимит %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "limit %lld"
+          }
+        }
+      }
+    },
+    "меньше 1 %": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "меньше 1 %"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 % dan kam"
+          }
+        }
+      }
+    },
+    "чаще %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "чаще %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "koʻproq %@"
+          }
+        }
+      }
+    },
+    "На этой неделе у камер ещё не проезжали": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На этой неделе у камер ещё не проезжали"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu hafta hali kameralar yonidan oʻtmadingiz"
+          }
+        }
+      }
+    },
+    "Сорвана — превышений: %lld. Новая попытка со следующей недели": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сорвана — превышений: %lld. Новая попытка со следующей недели"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buzildi — oshirishlar: %lld. Yangi urinish — keyingi haftadan"
+          }
+        }
+      }
+    },
+    "Цель недели — без превышений у камер": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цель недели — без превышений у камер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hafta maqsadi — kameralar yonida oshirishsiz"
+          }
+        }
+      }
+    },
+    "%1$@ %% %2$@": {
+      "comment": "Изменение километров процентом: «+12 % к прошлой неделе» (только у сопоставимых периодов).",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ %% %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ %% %2$@"
+          }
+        }
+      }
+    },
+    "%1$@ %2$@": {
+      "comment": "Изменение километров: «+18 км к прошлой неделе».",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ %2$@"
+          }
+        }
+      }
+    },
+    "%lld отметок": {
+      "localizations": {
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld отметка"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld отметки"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld отметок"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld отметки"
+                }
+              }
+            }
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ta belgi"
+          }
+        }
+      }
+    },
+    "Их подтвердили другие водители: %lld раз": {
+      "localizations": {
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Их подтвердили другие водители: %lld раз"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Их подтвердили другие водители: %lld раза"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Их подтвердили другие водители: %lld раз"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Их подтвердили другие водители: %lld раза"
+                }
+              }
+            }
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boshqa haydovchilar tasdiqladi: %lld marta"
+          }
+        }
+      }
+    },
+    "%lld раз": {
+      "localizations": {
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld раз"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld раза"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld раз"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld раза"
+                }
+              }
+            }
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld marta"
+          }
+        }
+      }
+    },
+    "Вставали в пробку: %lld раз": {
+      "localizations": {
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вставали в пробку: %lld раз"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вставали в пробку: %lld раза"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вставали в пробку: %lld раз"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вставали в пробку: %lld раза"
+                }
+              }
+            }
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tirbandlikka tushdingiz: %lld marta"
+          }
+        }
+      }
+    },
+    "Пока ни одного: %lld проездов камер в лимите": {
+      "localizations": {
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Пока ни одного: %lld проезд камеры в лимите"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Пока ни одного: %lld проезда камер в лимите"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Пока ни одного: %lld проездов камер в лимите"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Пока ни одного: %lld проезда камер в лимите"
+                }
+              }
+            }
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hozircha birorta ham yoʻq: limitda %lld ta kamera oʻtishi"
+          }
+        }
+      }
+    },
+    "Серия: %lld недель подряд": {
+      "localizations": {
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Серия: %lld неделя подряд"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Серия: %lld недели подряд"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Серия: %lld недель подряд"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Серия: %lld недели подряд"
+                }
+              }
+            }
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seriya: ketma-ket %lld hafta"
+          }
+        }
+      }
+    },
     "проезд камеры": {
       "comment": "Подпись под числом проездов (Formatting.passesLabel): форма для 1, 21…",
       "localizations": {

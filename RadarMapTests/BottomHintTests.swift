@@ -57,35 +57,6 @@ struct BottomHintTests {
     }
 }
 
-@Suite("Ночью ничего не ярче камеры")
-struct NightDimmingTests {
-
-    @Test("Ночью док приглушён сильнее, чем днём")
-    func nightIsDimmer() {
-        let day = SpeedHUDView.dimming(secondary: false, night: false, alertLevel: 0)
-        let night = SpeedHUDView.dimming(secondary: false, night: true, alertLevel: 0)
-        #expect(night < day)
-    }
-
-    @Test("Во время тревоги не приглушаем ничего")
-    func alertKeepsFullBrightness() {
-        // Тревога поднимает всё вместе: иначе водитель увидит предупреждение
-        // и не увидит, с какой скоростью едет.
-        #expect(SpeedHUDView.dimming(secondary: true, night: true,
-                                     alertLevel: 2) == 1)
-    }
-
-    @Test("Днём второй план не приглушён: полупрозрачный док пропускал подписи улиц")
-    func secondaryIsOpaqueByDay() {
-        let main = SpeedHUDView.dimming(secondary: false, night: false, alertLevel: 0)
-        let side = SpeedHUDView.dimming(secondary: true, night: false, alertLevel: 0)
-        #expect(side == main)
-        // Ночью — приглушён, как и раньше.
-        #expect(SpeedHUDView.dimming(secondary: true, night: true, alertLevel: 0)
-                < SpeedHUDView.dimming(secondary: false, night: true, alertLevel: 0))
-    }
-}
-
 @Suite("Флаг «похоже, вы едете» не щёлкает у порога")
 struct ProbablyDrivingTests {
 

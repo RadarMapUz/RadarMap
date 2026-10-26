@@ -9060,6 +9060,27 @@
    "paint": {
     "circle-blur": 0.5,
     "circle-color": "rgba(55,85,45,0.24)",
+    "circle-opacity": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     16.6,
+     [
+      "case",
+      [
+       "has",
+       "planted"
+      ],
+      0,
+      1
+     ],
+     16.8,
+     1
+    ],
     "circle-radius": [
      "interpolate",
      [
@@ -9197,11 +9218,21 @@
   },
   {
    "filter": [
-    "==",
+    "all",
     [
-     "geometry-type"
+     "==",
+     [
+      "geometry-type"
+     ],
+     "Point"
     ],
-    "Point"
+    [
+     "!",
+     [
+      "has",
+      "planted"
+     ]
+    ]
    ],
    "id": "radar-tree",
    "maxzoom": 17.1,
@@ -9329,11 +9360,21 @@
   },
   {
    "filter": [
-    "==",
+    "all",
     [
-     "geometry-type"
+     "==",
+     [
+      "geometry-type"
+     ],
+     "Point"
     ],
-    "Point"
+    [
+     "!",
+     [
+      "has",
+      "planted"
+     ]
+    ]
    ],
    "id": "radar-tree-light",
    "maxzoom": 17.1,

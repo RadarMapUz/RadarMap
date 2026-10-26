@@ -2117,12 +2117,32 @@ TREE_TIERS = tuple(
     for i in range(TREE_TIER_COUNT))
 
 
-def tree_tiers(point, size):
+# Досаженное дерево парка (tree_planting, 30.A) — легче дерева OSM: их в
+# парке сотни на тайл, а каждая вершина — байты офлайн-региона. Три яруса
+# по тому же эллипсу и десять граней вместо пяти и шестнадцати, ствол
+# четырёхгранный: в роще из-под крон видно лишь его тень. Номер яруса
+# пересчитан в шкалу пяти — тон кроны в стиле тот же.
+PLANTED_TIER_COUNT = 3
+PLANTED_TIERS = tuple(
+    (round(max(0.32, math.sqrt(max(0.0, 1 - ((i + 0.5) / PLANTED_TIER_COUNT * 2 - 1) ** 2))), 3),
+     round(i / PLANTED_TIER_COUNT, 3), round((i + 1) / PLANTED_TIER_COUNT, 3))
+    for i in range(PLANTED_TIER_COUNT))
+PLANTED_SIDES = 10
+
+
+def tree_tiers(point, size, planted=False):
     """[(кольцо, свойства)] — ствол и ярусы кроны с высотами в метрах."""
     crown = TREE_CROWN_HEIGHTS[size % len(TREE_CROWN_HEIGHTS)]
-    out = [(tree_crown(point, size, radius=TREE_TRUNK_RADIUS, sides=6),
+    tiers, sides = (PLANTED_TIERS, PLANTED_SIDES) if planted else (TREE_TIERS, TREE_CROWN_SIDES)
+    out = [(tree_crown(point, size, radius=TREE_TRUNK_RADIUS, sides=4 if planted else 6),
             {"crown": True, "trunk": True, "base": 0.0, "top": TREE_TRUNK_METERS + 0.3})]
-    for index, (share, low, high) in enumerate(TREE_TIERS):
+    for index, (share, low, high) in enumerate(tiers):
+        if planted:
+            out.append((tree_crown(point, size, share, sides=sides),
+                        {"crown": True, "tier": round(index * (TREE_TIER_COUNT - 1) / (len(tiers) - 1)),
+                         "base": round(TREE_TRUNK_METERS + low * crown, 2),
+                         "top": round(TREE_TRUNK_METERS + high * crown, 2)}))
+            continue
         # Низ кроны — в тени, верх — на свету: номер яруса стиль переводит в тон.
         out.append((tree_crown(point, size, share),
                     {"crown": True, "tier": index, "base": round(TREE_TRUNK_METERS + low * crown, 2),
@@ -3322,7 +3342,7 @@ def written_areas(target_dir, set_name):
 def build_mvt(roads, target_dir, areas=(), points=(), far=(),
               zoom=ZOOM_DETAIL, far_zoom=ZOOM_FAR, handles=64,
               written_sets=("h", "d"), far_areas=(), places=(), widths=None,
-              crossings=(), trees=(), parking=()):
+              crossings=(), trees=(), parking=(), planted=()):
     """Написать .mvt под target_dir/mvt/<z>/<x>/<y>.mvt. Возвращает {путь: байты}."""
     work = os.path.join(target_dir, "_mvt")
     buckets = _Buckets(work, handles)
@@ -3381,7 +3401,8 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         kerb_cover, kerb_lines = [], []
         # Полотно — только у стрелок: вся страна в память не влезет.
         arrow_area = arrow_cells(points, _SIGNAL_CELL)
-        tree_area = {(int(t[0] / JunctionMask.CELL), int(t[1] / JunctionMask.CELL)) for t in trees}
+        tree_area = {(int(t[0] / JunctionMask.CELL), int(t[1] / JunctionMask.CELL))
+                     for t in list(trees) + list(planted)}
         asphalt_rings, tree_asphalt = [], []
         for set_name in written_sets:
             for kind, flags, shape in written_areas(target_dir, set_name):
@@ -3563,6 +3584,15 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
             # середина, сужающийся верх). Один цилиндр в наклоне читался
             # зелёной банкой (06.10.2026); ярусы дают округлый силуэт.
             for ring, props in tree_tiers(tree, size):
+                _put(buckets, zoom, LAYER_TREES, mvt.POLYGON, ring, props)
+        # Досаженные в парках (30.A): точка с planted — тень кроны (плоской
+        # кроны и блика у них нет: они видны только объёмом, с TREE_3D_FROM).
+        for tree in planted:
+            if on_road.covers(tree):
+                continue
+            size = tree_size(tree)
+            _put(buckets, zoom, LAYER_TREES, mvt.POINT, [tree], {"size": size, "planted": True})
+            for ring, props in tree_tiers(tree, size, planted=True):
                 _put(buckets, zoom, LAYER_TREES, mvt.POLYGON, ring, props)
         # Парковки — площадка и разметка мест; места на проездах (оси дорог
         # сети, включая внутренние проезды площадки) не рисуются.

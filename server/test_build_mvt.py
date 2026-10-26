@@ -795,6 +795,40 @@ class JunctionLightTests(unittest.TestCase):
         self.assertIsNone(waffles.add(second[0]), "второй центр того же узла — дубль")
 
 
+class PlantedTreeTests(unittest.TestCase):
+    """Досаженные в парках кроны (30.A): лёгкий объём и метка planted."""
+
+    def test_planted_tree_is_lighter_and_marked(self):
+        root = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, root, True)
+        road = (3, 0, [(69.28, 41.311), (69.281, 41.312)], "Навои")
+        build_mvt.build_mvt([road], root, trees=[(69.2850, 41.3150)], planted=[(69.2860, 41.3150)])
+        trees = []
+        for folder, _dirs, names in os.walk(os.path.join(root, "mvt", "15")):
+            for name in names:
+                with open(os.path.join(folder, name), "rb") as handle:
+                    layer = parse(handle.read()).get(build_mvt.LAYER_TREES)
+                if layer:
+                    for feature in layer["features"]:
+                        trees.append((feature["type"], {layer["keys"][feature["tags"][i]]:
+                                                        layer["values"][feature["tags"][i + 1]]
+                                                        for i in range(0, len(feature["tags"]), 2)}))
+        planted_points = [p for kind, p in trees if kind == mvt.POINT and p.get("planted")]
+        osm_points = [p for kind, p in trees if kind == mvt.POINT and not p.get("planted")]
+        self.assertEqual((len(planted_points), len(osm_points)), (1, 1))
+        crowns = [p for kind, p in trees if kind == mvt.POLYGON and not p.get("trunk")]
+        # OSM — пять ярусов, досаженное — три, номера по шкале пяти (0, 2, 4).
+        self.assertEqual(len(crowns), build_mvt.TREE_TIER_COUNT + build_mvt.PLANTED_TIER_COUNT)
+        self.assertEqual(sorted(p["tier"] for p in crowns), [0, 0, 1, 2, 2, 3, 4, 4])
+
+    def test_planted_tiers_follow_the_same_crown(self):
+        osm = build_mvt.tree_tiers((69.28, 41.31), 2)
+        light = build_mvt.tree_tiers((69.28, 41.31), 2, planted=True)
+        self.assertEqual(osm[-1][1]["top"], light[-1][1]["top"], "та же высота дерева")
+        self.assertEqual(len(light[1][0]), build_mvt.PLANTED_SIDES + 1)
+        self.assertEqual(len(light[0][0]), 5, "ствол четырёхгранный")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
 

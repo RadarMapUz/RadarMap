@@ -390,6 +390,9 @@ CASING_FADE_FROM = 14.6
 
 # Объёмные кроны деревьев OSM — с этого зума; ствол — TREE_TRUNK_METERS.
 TREE_3D_FROM = 16.8
+# Плоская крона и блик — только у деревьев OSM: досаженные в парках
+# (build_mvt planted, 30.A) издали — узор крон газона, вблизи — объём.
+OSM_TREE_POINT = ["all", ["==", ["geometry-type"], "Point"], ["!", ["has", "planted"]]]
 
 
 def tree_3d(p):
@@ -909,21 +912,25 @@ def _layers_in_draw_order(p):
         # Тем же приёмом, что кроны узора: тень, крона, блик слева сверху, без
         # обводки — обведённые круги рядом с узором читались наклейками.
         # Тень и блик сдвигаются в пикселях, растущих с зумом, как и крона.
+        # Досаженные в парках кроны (planted, 30.A) видны только объёмом:
+        # тень у них появляется вместе с ним, с TREE_3D_FROM.
         {"id": "radar-tree-shadow", "type": "circle", "source": "radar", "source-layer": "trees",
          "minzoom": 15.5, "filter": ["==", ["geometry-type"], "Point"],
          "paint": {"circle-color": p["tree_shadow"], "circle-radius": tree_radius(1.05),
                    "circle-blur": 0.5,
+                   "circle-opacity": ["interpolate", ["linear"], ["zoom"],
+                                      TREE_3D_FROM - 0.2, ["case", ["has", "planted"], 0, 1], TREE_3D_FROM, 1],
                    "circle-translate": ["interpolate", ["linear"], ["zoom"],
                                         16, ["literal", [0.5, 1]], 18, ["literal", [2, 3]],
                                         20, ["literal", [7, 11]]]}},
         # Плоская крона — только издали: с TREE_3D_FROM её сменяет объёмная.
         {"id": "radar-tree", "type": "circle", "source": "radar", "source-layer": "trees",
-         "minzoom": 15.5, "maxzoom": TREE_3D_FROM + 0.3, "filter": ["==", ["geometry-type"], "Point"],
+         "minzoom": 15.5, "maxzoom": TREE_3D_FROM + 0.3, "filter": OSM_TREE_POINT,
          "paint": {"circle-color": p["tree_crown"], "circle-radius": tree_radius(),
                    "circle-opacity": ["interpolate", ["linear"], ["zoom"], 15.5, 0, 16.2, 1,
                                       TREE_3D_FROM, 1, TREE_3D_FROM + 0.3, 0]}},
         {"id": "radar-tree-light", "type": "circle", "source": "radar", "source-layer": "trees",
-         "minzoom": 16.5, "maxzoom": TREE_3D_FROM + 0.3, "filter": ["==", ["geometry-type"], "Point"],
+         "minzoom": 16.5, "maxzoom": TREE_3D_FROM + 0.3, "filter": OSM_TREE_POINT,
          "paint": {"circle-color": p["tree_light"], "circle-radius": tree_radius(0.45),
                    "circle-blur": 0.4,
                    "circle-translate": ["interpolate", ["linear"], ["zoom"],

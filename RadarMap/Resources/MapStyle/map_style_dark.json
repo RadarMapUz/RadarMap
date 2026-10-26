@@ -81,9 +81,10 @@
      "Polygon"
     ],
     [
-     "==",
+     "in",
      "class",
-     "commercial"
+     "commercial",
+     "retail"
     ]
    ],
    "id": "landuse-commercial",
@@ -94,7 +95,16 @@
     "mapbox:group": "1444849388993.3071"
    },
    "paint": {
-    "fill-color": "#1e1c21"
+    "fill-color": [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "retail",
+     "#1e1b23",
+     "#1a1c20"
+    ]
    },
    "source": "openmaptiles",
    "source-layer": "landuse",
@@ -121,7 +131,7 @@
     "visibility": "visible"
    },
    "paint": {
-    "fill-color": "#1b1d21"
+    "fill-color": "#1a1d22"
    },
    "source": "openmaptiles",
    "source-layer": "landuse",
@@ -155,7 +165,7 @@
     "mapbox:group": "1444849388993.3071"
    },
    "paint": {
-    "fill-color": "#201c20"
+    "fill-color": "#211b20"
    },
    "source": "openmaptiles",
    "source-layer": "landuse",
@@ -163,16 +173,20 @@
   },
   {
    "filter": [
-    "==",
+    "in",
     "class",
-    "school"
+    "school",
+    "kindergarten",
+    "college",
+    "university",
+    "education"
    ],
    "id": "landuse-school",
    "metadata": {
     "mapbox:group": "1444849388993.3071"
    },
    "paint": {
-    "fill-color": "#1e1e1d"
+    "fill-color": "#1f1e19"
    },
    "source": "openmaptiles",
    "source-layer": "landuse",
@@ -8690,22 +8704,39 @@
    "minzoom": 14,
    "paint": {
     "fill-color": [
-     "interpolate",
+     "match",
      [
-      "linear"
+      "get",
+      "use"
      ],
+     "health",
+     "#34272e",
+     "education",
+     "#312d22",
+     "religious",
+     "#213434",
+     "retail",
+     "#2c2738",
+     "industrial",
+     "#1f2a3a",
      [
-      "coalesce",
+      "interpolate",
       [
-       "get",
-       "render_height"
+       "linear"
       ],
-      10
-     ],
-     35,
-     "#24272e",
-     110,
-     "#34322f"
+      [
+       "coalesce",
+       [
+        "get",
+        "render_height"
+       ],
+       10
+      ],
+      35,
+      "#24272e",
+      110,
+      "#34322f"
+     ]
     ],
     "fill-outline-color": "#1b1d22"
    },
@@ -12576,22 +12607,39 @@
      ]
     ],
     "fill-extrusion-color": [
-     "interpolate",
+     "match",
      [
-      "linear"
+      "get",
+      "use"
      ],
+     "health",
+     "#34272e",
+     "education",
+     "#312d22",
+     "religious",
+     "#213434",
+     "retail",
+     "#2c2738",
+     "industrial",
+     "#1f2a3a",
      [
-      "coalesce",
+      "interpolate",
       [
-       "get",
-       "render_height"
+       "linear"
       ],
-      10
-     ],
-     35,
-     "#24272e",
-     110,
-     "#34322f"
+      [
+       "coalesce",
+       [
+        "get",
+        "render_height"
+       ],
+       10
+      ],
+      35,
+      "#24272e",
+      110,
+      "#34322f"
+     ]
     ],
     "fill-extrusion-height": [
      "interpolate",

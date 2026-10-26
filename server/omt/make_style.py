@@ -112,9 +112,17 @@ PALETTES = {
         "building": "#e4e6ea", "building_wall": "#cfd3da", "landuse": "#eceef1",
         # Свой тон у вида землепользования (слой основы → цвет) — едва заметный
         # оттенок на нейтральном; жилое — земля (landuse-residential).
-        "landuse_kind": {"landuse-commercial": "#f1edef", "landuse-industrial": "#e9ebef",
-                         "landuse-hospital": "#f4ebed", "landuse-school": "#f1efe6",
-                         "landuse-cemetery": "#e0e9dc"},
+        # Территории в тон домам по назначению (30.A), вдвое бледнее их:
+        # больничный городок розоватый, школьный двор желтоватый, рынок
+        # сиреневатый, промзона серо-голубая; офисы (commercial) — нейтральные.
+        "landuse_kind": {"landuse-commercial": "#eceef1", "landuse-retail": "#efeaf4",
+                         "landuse-industrial": "#e6e9ee", "landuse-hospital": "#f5e9ec",
+                         "landuse-school": "#f2eedf", "landuse-cemetery": "#e0e9dc"},
+        # Дома по назначению (30.A, как у Яндекса): мягкие оттенки той же
+        # светлоты, что серый дом, — свет и тень объёма работают так же.
+        # Красного нет: красный на карте — только камера (palette_check).
+        "building_use": {"health": "#f3dbe1", "education": "#efe6c8", "retail": "#e6dbf3",
+                         "industrial": "#d3d9e3", "religious": "#cce5e7"},
         "boundary": "#ccd0d8", "building_shadow": "rgba(60,68,84,0.20)",
         # Подземный переход — сиреневый, но приглушённый: виден, не кричит.
         "underpass": "#c6c0ea", "underpass_edge": "#9a91cc",
@@ -163,6 +171,9 @@ PALETTES = {
         # Дома в поездке (29.F) — чуть светлее и холоднее: на тёмном асфальте
         # светлые объёмы как у Amap, без прозрачности (она просвечивала стены).
         "drive_building": "#e9ecf1",
+        # Назначение в поездке — вдвое спокойнее: дорога и камеры важнее.
+        "drive_building_use": {"health": "#efe2e6", "education": "#eeeadb", "retail": "#e8e2f1",
+                               "industrial": "#dce0e8", "religious": "#d8eaec"},
     },
     "dark": {
         "bg": "#16181c", "park": "#16271e", "wood": "#14241b", "water": "#172a40",
@@ -186,9 +197,13 @@ PALETTES = {
         # Дома — графитовые объёмы светлее земли и темнее любой улицы;
         # крыша светлее стен.
         "building": "#24272e", "building_wall": "#1b1d22", "landuse": "#1a1c20",
-        "landuse_kind": {"landuse-commercial": "#1e1c21", "landuse-industrial": "#1b1d21",
-                         "landuse-hospital": "#201c20", "landuse-school": "#1e1e1d",
-                         "landuse-cemetery": "#17211b"},
+        "landuse_kind": {"landuse-commercial": "#1a1c20", "landuse-retail": "#1e1b23",
+                         "landuse-industrial": "#1a1d22", "landuse-hospital": "#211b20",
+                         "landuse-school": "#1f1e19", "landuse-cemetery": "#17211b"},
+        # Те же оттенки, приглушённые в графите: светлее земли, темнее любой
+        # улицы — дом не спорит с дорогой.
+        "building_use": {"health": "#34272e", "education": "#312d22", "retail": "#2c2738",
+                         "industrial": "#1f2a3a", "religious": "#213434"},
         "boundary": "#3a3e47", "building_shadow": "rgba(0,0,0,0.5)",
         "underpass": "#4d4870", "underpass_edge": "#7870a8",
         "footbridge": "#3b3f47", "footbridge_edge": "#5a5f69", "steps": "#2a2d33",
@@ -220,6 +235,8 @@ PALETTES = {
         "drive_casing": "#25282e", "drive_gutter": "#1d2025", "drive_zebra_base": "#2e3137",
         "drive_paint": "#9aa0aa", "drive_street_label": "#f2f4f7",
         "drive_building": "#24272e",
+        "drive_building_use": {"health": "#34272e", "education": "#312d22", "retail": "#2c2738",
+                               "industrial": "#1f2a3a", "religious": "#213434"},
     },
 }
 
@@ -448,6 +465,10 @@ def _road_kind(layer_id):
                  if layer_id.endswith(k) or layer_id.endswith(k + "-casing")), None)
 
 
+# Классы территорий OpenMapTiles, которые красятся как школа (building_use.LANDUSE_USES).
+SCHOOL_CLASSES = ("school", "kindergarten", "college", "university", "education")
+
+
 def _base_layer(layer, p, mode, theme):
     """Слой OSM Bright, перекрашенный в палитру; None — слоя в этом режиме нет."""
     l = copy.deepcopy(layer)
@@ -477,6 +498,14 @@ def _base_layer(layer, p, mode, theme):
         # в OSM Bright — пастель, на тёмной теме каждая горела пятном.
         paint["fill-color"] = p["landuse_kind"].get(i, p["landuse"])
         paint.pop("fill-pattern", None)
+        # Территории в тон домам по назначению (30.A): двор детсада и вуза —
+        # тоже «школа», рынок (retail) — сиреневатый, офисы — нейтральные.
+        if i == "landuse-school":
+            l["filter"] = ["in", "class", *SCHOOL_CLASSES]
+        elif i == "landuse-commercial":
+            l["filter"] = ["all", ["==", "$type", "Polygon"], ["in", "class", "commercial", "retail"]]
+            paint["fill-color"] = ["match", ["get", "class"], "retail", p["landuse_kind"]["landuse-retail"],
+                                   p["landuse_kind"]["landuse-commercial"]]
     elif i in ("highway-area", "road_area_pier"):
         # Пешеходные площади и пирсы. В OSM Bright — светло-серая заливка, на
         # тёмной теме она горела пятном ярче проспекта (Аллея парадов).
@@ -686,12 +715,21 @@ BUILDING_TALL_METERS = 35
 BUILDING_TALL_FULL = 110
 
 
+# Назначение дома — свойство use тайла основы z14 (building_use.py, 30.A).
+# Порядок — как в building_use.PRIORITY; без свойства дом обычный.
+BUILDING_USES = ("health", "education", "religious", "retail", "industrial")
+
+
 def building_colour(p):
-    """Цвет дома: по высоте из тайла, если у темы свой тон высоток."""
-    if p["building_tall"] == p["building"]:
-        return p["building"]
-    return ["interpolate", ["linear"], ["coalesce", ["get", "render_height"], 10],
-            BUILDING_TALL_METERS, p["building"], BUILDING_TALL_FULL, p["building_tall"]]
+    """Цвет дома: по назначению (use), иначе по высоте, если у темы свой тон высоток."""
+    plain = p["building"]
+    if p["building_tall"] != p["building"]:
+        plain = ["interpolate", ["linear"], ["coalesce", ["get", "render_height"], 10],
+                 BUILDING_TALL_METERS, p["building"], BUILDING_TALL_FULL, p["building_tall"]]
+    out = ["match", ["get", "use"]]
+    for use in BUILDING_USES:
+        out += [use, p["building_use"][use]]
+    return out + [plain]
 
 
 def road_color(p):
@@ -781,7 +819,8 @@ DRIVE_KEYS = {"near_trunk": "drive_trunk", "near_primary": "drive_primary",
               "near_minor": "drive_minor", "kerb": "drive_kerb", "kerb_trunk": "drive_kerb_trunk",
               "minor_edge": "drive_minor_edge", "casing": "drive_casing", "gutter": "drive_gutter",
               "zebra_base": "drive_zebra_base", "paint": "drive_paint",
-              "street_label": "drive_street_label", "building": "drive_building"}
+              "street_label": "drive_street_label", "building": "drive_building",
+              "building_use": "drive_building_use"}
 # Подписи дворов и дорожек: полотно под ними в поездке не темнеет, и имя
 # остаётся тёмным на белом (общий ключ street_label перекрасил бы и их).
 DRIVE_KEEP_LAYERS = ("highway-name-minor", "highway-name-path")

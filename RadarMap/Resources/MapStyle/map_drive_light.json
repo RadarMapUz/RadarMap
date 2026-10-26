@@ -435,9 +435,43 @@
      "zoom"
     ],
     15,
-    "#e4e6ea",
+    [
+     "match",
+     [
+      "get",
+      "use"
+     ],
+     "health",
+     "#f3dbe1",
+     "education",
+     "#efe6c8",
+     "religious",
+     "#cce5e7",
+     "retail",
+     "#e6dbf3",
+     "industrial",
+     "#d3d9e3",
+     "#e4e6ea"
+    ],
     16,
-    "#e9ecf1"
+    [
+     "match",
+     [
+      "get",
+      "use"
+     ],
+     "health",
+     "#efe2e6",
+     "education",
+     "#eeeadb",
+     "religious",
+     "#d8eaec",
+     "retail",
+     "#e8e2f1",
+     "industrial",
+     "#dce0e8",
+     "#e9ecf1"
+    ]
    ]
   },
   "building-flat": {
@@ -450,9 +484,43 @@
      "zoom"
     ],
     15,
-    "#e4e6ea",
+    [
+     "match",
+     [
+      "get",
+      "use"
+     ],
+     "health",
+     "#f3dbe1",
+     "education",
+     "#efe6c8",
+     "religious",
+     "#cce5e7",
+     "retail",
+     "#e6dbf3",
+     "industrial",
+     "#d3d9e3",
+     "#e4e6ea"
+    ],
     16,
-    "#e9ecf1"
+    [
+     "match",
+     [
+      "get",
+      "use"
+     ],
+     "health",
+     "#efe2e6",
+     "education",
+     "#eeeadb",
+     "religious",
+     "#d8eaec",
+     "retail",
+     "#e8e2f1",
+     "industrial",
+     "#dce0e8",
+     "#e9ecf1"
+    ]
    ]
   },
   "highway-link": {

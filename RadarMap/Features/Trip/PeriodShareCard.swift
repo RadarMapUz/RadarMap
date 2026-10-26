@@ -83,11 +83,11 @@ struct PeriodShareCard: View {
 
             HStack(spacing: 0) {
                 ShareMetric(value: "\(summary.trips)",
-                            label: String(localized: "поездок"),
+                            label: Formatting.tripsLabel(summary.trips),
                             icon: "car.fill", tint: Theme.accent)
                 ShareMetricDivider()
                 ShareMetric(value: "\(summary.cameras)",
-                            label: String(localized: "камер"),
+                            label: Formatting.camerasLabel(summary.cameras),
                             icon: "camera.fill", tint: Theme.Types.camera)
                 ShareMetricDivider()
                 ShareMetric(value: Formatting.duration(summary.movingDuration),

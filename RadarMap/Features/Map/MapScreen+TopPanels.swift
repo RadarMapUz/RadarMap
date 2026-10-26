@@ -110,7 +110,15 @@ extension MapScreen {
             // поездке без маршрута полноразмерная карточка занимала пятую часть
             // экрана ради двух чисел. В навигации его здесь нет вовсе.
             if mode.speedPlacement == .top, !Self.screenshotHidesIdleHUD {
-                hudGestures(SpeedHUDView(secondary: true))
+                // Стоя — компактный чип камеры (44 pt вместо 76): на стоянке
+                // смотрят на карту, а не на прибор. Поехали — прежний HUD со
+                // скоростью и лимитом.
+                if SpeedHUDView.showsSpeed(isTripActive: env.location.isTripActive,
+                                           isProbablyDriving: env.location.isProbablyDriving) {
+                    hudGestures(SpeedHUDView(secondary: true))
+                } else {
+                    hudGestures(IdleCameraChip())
+                }
             }
             // Разовые подсказки по жестам и экономии — по одной, не простынёй.
             if let hint = activeHint {

@@ -139,8 +139,8 @@ struct MapScreen: View {
             map.configure(env.cameras, speedLimits: env.speedLimits, thermal: env.thermal,
                           hotspots: env.hotspots)
             map.filter = env.settings.filter
-            // 3D в поездке переключается из меню «…», где кнопки Map3DToggle
-            // нет — её onAppear мог и не случиться (старт сразу в поездке).
+            // 3D переключается из панели «Карта» и меню «…»: кнопки в колонке
+            // нет с этапа 31, и наклон берётся из настройки при старте.
             map.prefers3D = env.settings.map3D
             // Если карта уже отдала регион до конфигурации (статичный старт без геопозиции) —
             // пересчитываем принудительно, иначе аннотации не появятся до первого движения карты.

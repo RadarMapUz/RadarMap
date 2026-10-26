@@ -58,11 +58,11 @@ struct ArrivalCardView: View {
             // живая сессия (env.trip), а не свой пересчёт.
             if env.trip.distanceMeters > 0 {
                 HStack(spacing: 0) {
-                    metric(Formatting.duration(env.trip.durationSeconds), "в пути")
+                    metric(Formatting.duration(env.trip.durationSeconds), String(localized: "в пути"))
                     divider
-                    metric(Formatting.distance(env.trip.distanceMeters), "путь")
+                    metric(Formatting.distance(env.trip.distanceMeters), String(localized: "путь"))
                     divider
-                    metric("\(env.trip.camerasPassed)", "камер")
+                    metric("\(env.trip.camerasPassed)", Formatting.camerasLabel(env.trip.camerasPassed))
                 }
                 .padding(.vertical, 10)
                 .background(Theme.background, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
@@ -108,7 +108,7 @@ struct ArrivalCardView: View {
         }
     }
 
-    private func metric(_ value: String, _ label: LocalizedStringKey) -> some View {
+    private func metric(_ value: String, _ label: String) -> some View {
         VStack(spacing: 2) {
             Text(value)
                 .font(.rounded(17, .bold))

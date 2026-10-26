@@ -863,7 +863,9 @@ final class AppSettings {
             Keys.mapPlaces: true,
             Keys.mapModernStyle: true,
             Keys.map3D: true,
-            Keys.mapZoomButtons: true,
+            // Масштаб — щипком; кнопки +/− по желанию (панель «Карта»). До
+            // этапа 31 были включены и делали колонку из шести кругов.
+            Keys.mapZoomButtons: false,
         ])
         soundEnabled = store.bool(forKey: Keys.sound)
         // Миграция с трёх переключателей на один. Голос был выключен — «Молча»;

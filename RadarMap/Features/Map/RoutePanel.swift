@@ -56,109 +56,149 @@ struct RoutePanel: View {
                     .liftedBackground(Theme.surface, in: Capsule())
             }
 
-            GlassCard(cornerRadius: Theme.cornerLarge) {
-                VStack(spacing: 12) {
-                    // Куда едем + время/путь + закрыть
-                    HStack(spacing: 12) {
-                        Image(systemName: "flag.checkered")
-                            .font(.rounded(16, .bold))
-                            .foregroundStyle(Theme.onAccentFill)
-                            .frame(width: 38, height: 38)
-                            .background(Theme.accentFill, in: Circle())
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(route.destinationName)
-                                .font(.rounded(16, .bold))
-                                .foregroundStyle(Theme.textPrimary)
-                                .lineLimit(1)
-                            // Заезд по пути — видно, что цель та же, а линия
-                            // идёт через остановку.
-                            if let stop = route.stop {
-                                HStack(spacing: 6) {
-                                    Label(String(format: String(localized: "через %@"), stop.name),
-                                          systemImage: "mappin.circle.fill")
-                                        .font(.rounded(12, .semibold))
-                                        .foregroundStyle(Theme.accent)
-                                        .lineLimit(1)
-                                    Button(action: onRemoveStop) {
-                                        Image(systemName: "xmark")
-                                            .font(.rounded(10, .bold))
-                                            .foregroundStyle(Theme.textSecondary)
-                                            .frame(width: 20, height: 20)
-                                            .background(Theme.background, in: Circle())
-                                            .tapTarget()
-                                    }
-                                    .buttonStyle(.plain)
-                                    .disabled(route.isBuilding)
-                                    .accessibilityLabel(Text("Убрать заезд"))
-                                }
-                            }
-                            Text("\(route.etaText) · \(route.distanceText)")
-                                .font(.rounded(13, .medium))
-                                .foregroundStyle(Theme.textSecondary)
-                                .contentTransition(.numericText())
-                            // Пробки — словами и цветом: «+12 мин из-за пробок».
-                            // Нет данных — строки нет (не «без пробок»).
-                            if let note = route.trafficNote {
-                                Label(note, systemImage: "car.2.fill")
-                                    .font(.rounded(12, .semibold))
-                                    .foregroundStyle(Self.trafficTint(route.trafficDelay ?? 0))
-                                    .lineLimit(1)
-                            }
-                        }
-                        Spacer(minLength: 8)
-                        Button {
-                            route.clear()
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.rounded(22))
-                                .foregroundStyle(Theme.textTertiary)
-                                .tapTarget()
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(Text("Сбросить маршрут"))
-                    }
-
-                    // В поездке панель заменяется компактной TripLiveBar — здесь всегда «до старта».
-                    HStack(spacing: 10) {
-                        camerasButton
-                        if let onShareArrival, env.etaShare.isAvailable, !env.etaShare.isSharing {
-                            // Значком: подписью кнопка сжимала «2 камеры на
-                            // маршруте» в две строки.
-                            Button(action: onShareArrival) {
-                                Image(systemName: "square.and.arrow.up")
-                                    .font(.rounded(16, .semibold))
-                                    .foregroundStyle(Theme.accent)
-                                    .frame(width: Theme.controlSize, height: Theme.controlSize)
-                                    .background(Theme.accent.opacity(0.12), in: Circle())
-                            }
-                            .buttonStyle(PressableStyle())
-                            .accessibilityLabel(Text("Поделиться прибытием"))
-                        }
-                        if let onShowAlongRoute {
-                            // Значком, как «Поделиться»: подписью ряд с камерами
-                            // не помещался на SE.
-                            Button(action: onShowAlongRoute) {
-                                Image(systemName: AlongRouteText.symbol(env.settings.vehicleEnergy))
-                                    .font(.rounded(16, .semibold))
-                                    .foregroundStyle(Theme.accent)
-                                    .frame(width: Theme.controlSize, height: Theme.controlSize)
-                                    .background(Theme.accent.opacity(0.12), in: Circle())
-                            }
-                            .buttonStyle(PressableStyle())
-                            .accessibilityLabel(Text("По пути: заправки, гостиницы, кафе"))
-                        }
-                    }
-
-                    // Главное действие — жёлтое, как «Начать поездку» и «Радар!»:
-                    // было зелёное (success), то есть цвет «в лимите» на кнопке
-                    // старта, и третий облик одной и той же роли.
-                    PrimaryButton(title: "Поехали", systemImage: "play.fill", action: onTripToggle)
-                }
-                .padding(14)
-            }
+            summaryCard
         }
         .motionAnimation(Motion.standard, value: route.selectedID)
         .motionAnimation(Motion.standard, value: env.location.isTripActive)
+    }
+
+    // MARK: - Сводка и «Поехали»
+
+    /// Время — герой (этап 31, выбор владельца 26.10; как у Яндекса): первое,
+    /// что ищут глазами, — «сколько ехать». Ниже путь, флаг и время прибытия,
+    /// пробки словами; «Поехали», камеры числом и «…» — одной строкой.
+    /// Сплошная панель, а не стекло: днём стекло было белёсым, а бледные
+    /// круги «поделиться» и «по пути» читались выключенными. Док главного
+    /// экрана на это время уходит (MapScreen.bottomPanels).
+    private var summaryCard: some View {
+        let route = env.route
+        let shape = RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(route.destinationName)
+                        .font(.rounded(12, .semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                        .lineLimit(1)
+                    Text(verbatim: route.etaText)
+                        .font(.rounded(30, .heavy))
+                        .foregroundStyle(route.trafficNote == nil ? Theme.textPrimary
+                                         : Self.trafficTint(route.trafficDelay ?? 0))
+                        .lineLimit(1)
+                        .contentTransition(.numericText())
+                    HStack(spacing: 6) {
+                        Text(verbatim: route.distanceText)
+                        Text(verbatim: "·").foregroundStyle(Theme.textTertiary)
+                        Image(systemName: "flag.checkered").font(.rounded(12, .semibold))
+                            .accessibilityHidden(true)
+                        Text(route.arrivalDate, style: .time)
+                        if let note = route.trafficNote {
+                            Text(verbatim: "·").foregroundStyle(Theme.textTertiary)
+                            Text(verbatim: note).foregroundStyle(Self.trafficTint(route.trafficDelay ?? 0))
+                        }
+                    }
+                    .font(.rounded(12, .semibold).monospacedDigit())
+                    .foregroundStyle(Theme.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    // Заезд по пути — видно, что цель та же, а линия идёт
+                    // через остановку.
+                    if let stop = route.stop {
+                        stopRow(stop.name)
+                            .padding(.top, 4)
+                    }
+                }
+                Spacer(minLength: 0)
+                Button { route.clear() } label: {
+                    Image(systemName: "xmark")
+                        .font(.rounded(12, .bold))
+                        .foregroundStyle(Theme.textSecondary)
+                        .frame(width: 30, height: 30)
+                        .background(Theme.background, in: Circle())
+                        .tapTarget()
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Сбросить маршрут"))
+            }
+            // В поездке панель заменяется компактной TripLiveBar — здесь всегда «до старта».
+            HStack(spacing: 8) {
+                PrimaryButton(title: "Поехали", systemImage: "play.fill", action: onTripToggle)
+                camerasPlate
+                moreMenu
+            }
+        }
+        .padding(14)
+        .liftedBackground(Theme.surface, in: shape)
+        .overlay(shape.strokeBorder(Theme.edgePanel, lineWidth: 1))
+    }
+
+    private func stopRow(_ name: String) -> some View {
+        HStack(spacing: 6) {
+            Label(String(format: String(localized: "через %@"), name),
+                  systemImage: "mappin.circle.fill")
+                .font(.rounded(12, .semibold))
+                .foregroundStyle(Theme.accent)
+                .lineLimit(1)
+            Button(action: onRemoveStop) {
+                Image(systemName: "xmark")
+                    .font(.rounded(10, .bold))
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(width: 20, height: 20)
+                    .background(Theme.background, in: Circle())
+                    .tapTarget()
+            }
+            .buttonStyle(.plain)
+            .disabled(env.route.isBuilding)
+            .accessibilityLabel(Text("Убрать заезд"))
+        }
+    }
+
+    /// Камеры на маршруте — числом под значком, высотой с «Поехали». Нет
+    /// камер — зелёный значок и 0, как раньше.
+    private var camerasPlate: some View {
+        let route = env.route
+        return Button(action: onShowCameras) {
+            VStack(spacing: 0) {
+                SymbolIcon(Icon.cameras, size: 13, weight: .bold)
+                    .foregroundStyle(route.ourCameraCount == 0 ? Theme.success : Theme.Types.camera)
+                Text(verbatim: "\(route.ourCameraCount)")
+                    .font(.rounded(15, .heavy).monospacedDigit())
+                    .foregroundStyle(Theme.textPrimary)
+            }
+            .frame(width: 56, height: 54)
+            .background(Theme.background, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        }
+        .buttonStyle(PressableStyle())
+        .disabled(route.camerasOnRoute.isEmpty)
+        .accessibilityLabel(Text("Камеры на маршруте"))
+        .accessibilityValue(Text("\(route.ourCameraCount) камер"))
+    }
+
+    /// «По пути» и «Поделиться прибытием» — пунктами: значками в ряд они
+    /// выглядели выключенными и сжимали камеры в две строки.
+    @ViewBuilder private var moreMenu: some View {
+        let canShare = onShareArrival != nil && env.etaShare.isAvailable && !env.etaShare.isSharing
+        if onShowAlongRoute != nil || canShare {
+            Menu {
+                if let onShowAlongRoute {
+                    Button(action: onShowAlongRoute) {
+                        Label("По пути", systemImage: AlongRouteText.symbol(env.settings.vehicleEnergy))
+                    }
+                }
+                if canShare, let onShareArrival {
+                    Button(action: onShareArrival) {
+                        Label("Поделиться прибытием", systemImage: "square.and.arrow.up")
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.rounded(17, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .frame(width: 48, height: 54)
+                    .background(Theme.background, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+            }
+            .accessibilityLabel(Text("Ещё"))
+        }
     }
 
     // MARK: - Варианты маршрута
@@ -354,30 +394,6 @@ struct RoutePanel: View {
         return mine.direction == .toHome
             ? String(format: String(localized: "так вы ездите домой — обычно %@"), usual)
             : String(format: String(localized: "так вы ездите на работу — обычно %@"), usual)
-    }
-
-    // MARK: - Камеры
-
-    private var camerasButton: some View {
-        let route = env.route
-        return Button(action: onShowCameras) {
-            HStack(spacing: 10) {
-                SymbolIcon(Icon.cameras, size: 15, weight: .bold)
-                    .foregroundStyle(route.ourCameraCount == 0 ? Theme.success : Theme.Types.camera)
-                Text("\(route.ourCameraCount) камер на маршруте")
-                    .font(.rounded(14, .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                Spacer()
-                if !route.camerasOnRoute.isEmpty {
-                    Image(systemName: "chevron.right")
-                        .font(.rounded(12, .semibold))
-                        .foregroundStyle(Theme.textTertiary)
-                }
-            }
-            .padding(12)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
-        }
-        .disabled(route.camerasOnRoute.isEmpty)
     }
 
 }

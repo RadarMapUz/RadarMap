@@ -37,6 +37,11 @@ struct OnboardingView: View {
     }
 
     @Environment(\.dynamicTypeSize) private var typeSize
+    /// Размер экрана онбординга: низкий (SE) ужимает картинки, узкий ставит
+    /// кнопку разрешения под текст.
+    @State private var screen: CGSize = .zero
+    private var isCompactHeight: Bool { screen.height > 0 && screen.height < 700 }
+    private var isNarrow: Bool { screen.width > 0 && screen.width < 400 }
 
     var body: some View {
         ZStack {
@@ -77,6 +82,7 @@ struct OnboardingView: View {
         // «Пропустить» — к разрешениям, а не мимо них (7.5): три страницы
         // рассказа можно пролистать, а без доступа к геопозиции приложение
         // не предупредит ни о чём.
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { screen = $0 }
         .overlay(alignment: .topTrailing) {
             if page < lastPage {
                 Button {
@@ -98,7 +104,7 @@ struct OnboardingView: View {
 
     private var roadPage: some View {
         scenePage(title: "Предупредит о камере заранее",
-                  subtitle: "3 400+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном.") {
+                  subtitle: "3 600+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном.") {
             OnboardingRoadScene()
         } rows: {
             row("car.fill", "Сели за руль — поездка началась сама")
@@ -205,9 +211,13 @@ struct OnboardingView: View {
         scrollingPage {
             VStack(alignment: .leading, spacing: 0) {
                 Spacer(minLength: 8)
-                scene()
+                // На низком экране (SE: 647 pt без статус-бара) картинка —
+                // 2/3 своей высоты, иначе пункты уходили под затухание
+                // (этап 31). Масштаб, а не обрезка: дорога без камеры или
+                // стрелки теряет смысл. На высоких экранах — как была.
+                CompactScene(scale: isCompactHeight ? 0.68 : 1) { scene() }
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 24)
+                    .padding(.bottom, isCompactHeight ? 16 : 24)
                 Text(title)
                     .font(.rounded(26, .bold))
                     .foregroundStyle(Theme.textPrimary)
@@ -280,7 +290,10 @@ struct OnboardingView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         return Group {
-            if typeSize >= .xLarge {
+            // Кнопка — под текстом на крупном шрифте и на узком экране, пока
+            // разрешение не дано: справа она сжимала подпись в столбик
+            // «при / приближении к», а на uz рвала «Bildirishnom / alar».
+            if typeSize >= .xLarge || (isNarrow && state != .granted) {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .top, spacing: 14) {
                         IconBadge(symbol: icon, tint: Theme.accent, size: 44)
@@ -331,5 +344,22 @@ struct OnboardingView: View {
                 .contentShape(Capsule())
         }
         .buttonStyle(PressableStyle())
+    }
+}
+
+/// Сцена онбординга в масштабе: место в раскладке — по настоящей высоте
+/// сцены × масштаб (`scaleEffect` сам по себе места не освобождает).
+private struct CompactScene<Content: View>: View {
+    let scale: CGFloat
+    @ViewBuilder let content: Content
+    @State private var height: CGFloat = 0
+
+    var body: some View {
+        content
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+            .scaleEffect(scale, anchor: .top)
+            .frame(height: height > 0 ? height * scale : nil, alignment: .top)
+            .frame(maxWidth: .infinity)
     }
 }

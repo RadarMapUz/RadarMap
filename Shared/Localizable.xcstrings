@@ -1,6 +1,142 @@
 {
   "sourceLanguage": "ru",
   "strings": {
+    "проезд камеры": {
+      "comment": "Подпись под числом проездов (Formatting.passesLabel): форма для 1, 21…",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "проезд камеры"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kamera oʻtishi"
+          }
+        }
+      }
+    },
+    "проезда камер": {
+      "comment": "Подпись под числом проездов (Formatting.passesLabel): форма для 2–4, 22–24…",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "проезда камер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kamera oʻtishlari"
+          }
+        }
+      }
+    },
+    "камера": {
+      "comment": "Подпись под числом камер в плитке метрики (Formatting.camerasLabel): форма для 1, 21…; число стоит отдельно.",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "камера"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kamera"
+          }
+        }
+      }
+    },
+    "камеры": {
+      "comment": "Подпись под числом камер в плитке метрики (Formatting.camerasLabel): форма для 2–4, 22–24…; число стоит отдельно.",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "камеры"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kamera"
+          }
+        }
+      }
+    },
+    "камер": {
+      "comment": "Подпись под числом камер в плитке метрики (Formatting.camerasLabel): форма для 0, 5–20…; число стоит отдельно.",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "камер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kamera"
+          }
+        }
+      }
+    },
+    "поездка": {
+      "comment": "Подпись под числом поездок в плитке метрики (Formatting.tripsLabel): форма для 1, 21…",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "поездка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "safar"
+          }
+        }
+      }
+    },
+    "поездки": {
+      "comment": "Подпись под числом поездок в плитке метрики (Formatting.tripsLabel): форма для 2–4, 22–24…",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "поездки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "safar"
+          }
+        }
+      }
+    },
+    "поездок": {
+      "comment": "Подпись под числом поездок в плитке метрики (Formatting.tripsLabel): форма для 0, 5–20…",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "поездок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "safar"
+          }
+        }
+      }
+    },
     " на %@": {
       "localizations": {
         "ru": {
@@ -1099,46 +1235,6 @@
         }
       }
     },
-    "%lld камер на маршруте": {
-      "localizations": {
-        "ru": {
-          "variations": {
-            "plural": {
-              "one": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld камера на маршруте"
-                }
-              },
-              "few": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld камеры на маршруте"
-                }
-              },
-              "many": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld камер на маршруте"
-                }
-              },
-              "other": {
-                "stringUnit": {
-                  "state": "translated",
-                  "value": "%lld камеры на маршруте"
-                }
-              }
-            }
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "marshrutda %lld ta kamera"
-          }
-        }
-      }
-    },
     "%lld км/ч": {
       "localizations": {
         "ru": {
@@ -1723,18 +1819,18 @@
         }
       }
     },
-    "3 400+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном.": {
+    "3 600+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "3 400+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном."
+            "value": "3 600+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Oʻzbekistonning 3 400+ kamera va radarlari rasmiy maʼlumotlardan. Ovoz — kameradan 22 soniya oldin, tezlikni hisobga olib; yigʻilgan ilova va oʻchgan ekranda ham ishlaydi."
+            "value": "Oʻzbekistonning 3 600+ kamera va radarlari rasmiy maʼlumotlardan. Ovoz — kameradan 22 soniya oldin, tezlikni hisobga olib; yigʻilgan ilova va oʻchgan ekranda ham ishlaydi."
           }
         }
       }
@@ -3429,13 +3525,13 @@
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Возможные штрафы ≈ %@"
+            "value": "Возможные штрафы ≈\u00A0%@"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ehtimoliy jarimalar ≈ %@"
+            "value": "Ehtimoliy jarimalar ≈\u00A0%@"
           }
         }
       }
@@ -13170,7 +13266,7 @@
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Предупредит о камере заранее"
+            "value": "Предупредит о\u00A0камере заранее"
           }
         },
         "uz": {
@@ -18557,22 +18653,6 @@
         }
       }
     },
-    "в движении": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "в движении"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "harakatda"
-          }
-        }
-      }
-    },
     "в лимите": {
       "localizations": {
         "ru": {
@@ -19548,23 +19628,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "odatdagidek"
-          }
-        }
-      }
-    },
-    "камер": {
-      "extractionState": "manual",
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "камер"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "kamera"
           }
         }
       }
@@ -20726,22 +20789,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "tasdiqlangan"
-          }
-        }
-      }
-    },
-    "поездок": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "поездок"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "safar"
           }
         }
       }

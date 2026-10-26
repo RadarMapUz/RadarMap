@@ -30,7 +30,7 @@ final class TripScreenLayoutTests: XCTestCase {
 
     /// Покой: слои, «к себе» и звук обязательны (3 места), остальное — по важности.
     private let idleCandidates: [(TripScreenLayout.ColumnExtra, Int)] =
-        [(.overview, 1), (.threeD, 1), (.zoom, 2)]
+        [(.overview, 1), (.compass, 1), (.zoom, 2)]
 
     private func idle(room: CGFloat?) -> Set<TripScreenLayout.ColumnExtra> {
         TripScreenLayout.columnExtras(slots: TripScreenLayout.columnSlots(room: room),
@@ -54,12 +54,12 @@ final class TripScreenLayoutTests: XCTestCase {
 
     /// Первый кадр, кромки ещё не измерены: показать всё, а не пустую колонку.
     func testUnmeasuredRoomShowsEverything() {
-        XCTAssertEqual(idle(room: nil), [.overview, .threeD, .zoom])
+        XCTAssertEqual(idle(room: nil), [.overview, .compass, .zoom])
     }
 
     /// Большой экран: всё влезает.
     func testTallRoomShowsEverything() {
-        XCTAssertEqual(idle(room: 600), [.overview, .threeD, .zoom])
+        XCTAssertEqual(idle(room: 600), [.overview, .compass, .zoom])
     }
 
     /// SE в покое с маршрутом: прежде зум и звук уходили под карточку
@@ -79,8 +79,8 @@ final class TripScreenLayoutTests: XCTestCase {
     /// одно место после него — встаёт.
     func testTwoSlotButtonDoesNotBlockSmallerOnes() {
         let shown = TripScreenLayout.columnExtras(slots: 3, fixed: 2,
-                                                  candidates: [(.zoom, 2), (.threeD, 1)])
-        XCTAssertEqual(shown, [.threeD])
+                                                  candidates: [(.zoom, 2), (.compass, 1)])
+        XCTAssertEqual(shown, [.compass])
     }
 
     /// В поездке компас — единственная необязательная кнопка.

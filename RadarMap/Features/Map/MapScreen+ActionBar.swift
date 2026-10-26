@@ -12,77 +12,63 @@ import UIKit
 
 extension MapScreen {
 
-    /// «Начать поездку»: громкость кнопки решает правило, а не вёрстка.
-    @ViewBuilder
-    var tripButton: some View {
-        switch TripStartPrompt.prominence(
-            startsByItself: env.settings.tripStartMode.usesMotion) {
-        case .primary:   tripButtonPrimary
-        case .secondary: tripButtonSecondary
-        }
-    }
-
-    /// Запасной выход там, где поездка начнётся и без него. Язык тот же, что у
-    /// «Я пассажир»: серый текст на Theme.surface — видно, но не кричит.
-    var tripButtonSecondary: some View {
-        Button {
-            toggleTrip()
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "play.fill").font(.rounded(11, .semibold))
-                Text("Начать поездку").font(.rounded(13, .semibold))
-            }
-            .foregroundStyle(Theme.textSecondary)
-            .padding(.horizontal, 14)
-            .frame(minHeight: Theme.controlSize)
-            .background(Theme.surface, in: Capsule())
-        }
-        .buttonStyle(PressableStyle())
-    }
-
-    /// CTA для тех, у кого автостарт выключен: без нажатия поездки не будет
-    /// вовсе. Та же главная кнопка, что «Поехали» и «Отправить» — жёлтая
-    /// PrimaryButton; был зелёный градиент-капсула, третий облик одной роли.
+    /// «Начать поездку» там, где без нажатия поездки не будет вовсе (ручной
+    /// старт): та же главная кнопка, что «Поехали» и «Отправить», — жёлтая
+    /// PrimaryButton над доком. Где поездка начнётся и сама, отдельной кнопки
+    /// нет: старт — пятая кнопка дока (`tripStartsByItself`).
     var tripButtonPrimary: some View {
         PrimaryButton(title: "Начать поездку", systemImage: "play.fill") { toggleTrip() }
             .liftAccent()
     }
 
-    /// Док действий: стекло со световой кромкой и глубокая тень — в одном
-    /// языке с CTA и кругами (премиальный низ экрана без разнобоя).
-    /// Четыре постоянных действия — больше глазу не нужно. Редкое «добавить
-    /// свою камеру» живёт в меню «Ещё»: оно нужно раз в месяц, а место в баре
-    /// занимало всегда (plan_main_screen.md, шаг 4).
+    /// Поездка начнётся сама (автостарт или «умный»): кнопка старта —
+    /// запасной выход, ей место в доке, а не крик над картой.
+    var tripStartsByItself: Bool {
+        TripStartPrompt.prominence(startsByItself: env.settings.tripStartMode.usesMotion) == .secondary
+    }
+
+    /// Док главного экрана — ОДНА панель (этап 31, вариант A, выбор
+    /// владельца 26.10). Раньше низ был тремя формами друг над другом:
+    /// карточка «Домой», висящая над картой капсула «Начать поездку» и
+    /// четыре кнопки — на SE ≈ 330 pt из 667. Теперь подсказка «Домой» —
+    /// верхней строкой этой же панели, старт поездки — пятой кнопкой, и низ
+    /// занимает ≈ 150 pt.
+    ///
+    /// Редкое «добавить свою камеру» и «Рядом» живут в «Ещё» (plan_main_screen.md, шаг 4).
     var actionBar: some View {
-        // По верху: на крупном шрифте подпись может уйти в две строки
-        // (ActionBarLabel), и значки соседей не должны съезжать вниз.
-        HStack(alignment: .top, spacing: 4) {
-            actionButton("Поиск", "magnifyingglass") { map.showSearch = true }
-            // «Мои места» — на месте спидометра, который владелец попросил
-            // убрать («мне кажется не нужен»). Дорога домой или на работу —
-            // самое частое, что навигатор делает одним тапом; у Яндекса и
-            // Amap «Мои места» живут ровно здесь. Раньше Дом и Работа были
-            // строкой внутри «Поиска», то есть в двух тапах и под клавиатурой.
-            //
-            // «Рядом» сюда не вернулся по прежней причине: список камер
-            // поблизости открывался с экрана, который эти же камеры уже
-            // показывает на карте, — он живёт в «Ещё».
-            actionButton("Мои места", Icon.myPlaces) { showMyPlaces = true }
-            actionButton("Итоги", "chart.bar.fill") { map.showStats = true }
-            Menu {
-                moreActionItems
-            } label: {
-                actionLabel("Ещё", "ellipsis.circle.fill")
+        VStack(spacing: 0) {
+            if dockShowsSuggestion {
+                DestinationSuggestionBar { coordinate, name in
+                    buildRoute(to: coordinate, name: name)
+                }
             }
-            .accessibilityLabel(Text("Ещё"))
+            // По верху: на крупном шрифте подпись может уйти в две строки
+            // (ActionBarLabel), и значки соседей не должны съезжать вниз.
+            HStack(alignment: .top, spacing: 0) {
+                actionButton("Поиск", "magnifyingglass") { map.showSearch = true }
+                // «Мои места» — на месте спидометра, который владелец попросил
+                // убрать. Дорога домой или на работу — самое частое, что
+                // навигатор делает одним тапом; у Яндекса и Amap «Мои места»
+                // живут ровно здесь.
+                actionButton("Мои места", Icon.myPlaces) { showMyPlaces = true }
+                actionButton("Итоги", "chart.bar.fill") { map.showStats = true }
+                if tripStartsByItself {
+                    actionButton("Поездка", "play.fill") { toggleTrip() }
+                        .accessibilityLabel(Text("Начать поездку"))
+                }
+                Menu {
+                    moreActionItems
+                } label: {
+                    ActionBarLabel(title: "Ещё", icon: "ellipsis")
+                }
+                .accessibilityLabel(Text("Ещё"))
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 4)
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 8)
         // Сплошная панель, а не стекло (решение 13.10): карта под баром в
-        // покое всё равно живёт — тайлы, «я», слежение, — и стекло
-        // пересчитывало размытие на каждом её кадре; к тому же сквозь него
-        // просвечивали подписи улиц под подписями кнопок (снимок 12.10).
-        // Та же поверхность, что у панели поездки и HUD.
+        // покое всё равно живёт, и стекло пересчитывало размытие на каждом её
+        // кадре; к тому же сквозь него просвечивали подписи улиц.
         .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
             .strokeBorder(Theme.edgePanel, lineWidth: 1))
@@ -168,18 +154,12 @@ extension MapScreen {
         }
     }
 
-    func actionButton(_ title: LocalizedStringKey, _ icon: String, tint: Color = Theme.textPrimary,
-                              action: @escaping () -> Void) -> some View {
+    func actionButton(_ title: LocalizedStringKey, _ icon: String,
+                      action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            actionLabel(title, icon, tint: tint)
+            ActionBarLabel(title: title, icon: icon)
         }
         .buttonStyle(PressableStyle())
-    }
-
-    /// Общая разметка кнопки бара — её же носит меню «Ещё».
-    func actionLabel(_ title: LocalizedStringKey, _ icon: String,
-                             tint: Color = Theme.textPrimary) -> some View {
-        ActionBarLabel(title: title, icon: icon, tint: tint)
     }
 
     @ViewBuilder var permissionBanner: some View {
@@ -241,29 +221,32 @@ extension MapScreen {
     }
 }
 
-/// Подпись кнопки нижнего бара: значок и слово под ним.
+/// Подпись кнопки дока: значок и слово под ним.
 ///
-/// С крупного шрифта — до двух строк. «Mening joylarim» в четверти ширины SE
-/// не помещалось и с ужатием 0,8 — «Mening joyl…» начиная с XL (14.9). На
-/// обычном кегле — одна строка с ужатием, как было: там подпись влезает, а
-/// перенос поднял бы бар ради неё. Своей вью, а не веткой в MapScreen: кегль
-/// читает только подпись, и экран с картой не подписывается на него целиком.
+/// Значок — в рамке ОДНОЙ высоты: у звезды, лупы и столбиков разные поля, и
+/// подписи стояли на разной высоте («Мои места» на 6 px ниже «Итогов»,
+/// снимок этапа 31). «Ещё» — голое многоточие, как остальные значки: залитый
+/// круг был единственным значком другого веса.
+///
+/// Подпись — до двух строк: «Mening joylarim» в пятой части ширины SE не
+/// помещается, а ужатая до 0,75 была мельче соседей (снимок этапа 31). Две
+/// строки только у неё; ряд выровнен по верху, и значки соседей стоят на месте.
 struct ActionBarLabel: View {
     let title: LocalizedStringKey
     let icon: String
-    var tint: Color = Theme.textPrimary
-    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        VStack(spacing: 5) {
-            Image(systemName: icon).font(.rounded(19, .semibold))
+        VStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.rounded(19, .semibold))
+                .frame(height: 26)
             Text(title)
-                .font(.rounded(10, .medium))
-                .lineLimit(typeSize >= .xLarge ? 2 : 1)
+                .font(.rounded(12, .medium))
+                .lineLimit(2)
                 .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.8)
+                .minimumScaleFactor(0.9)
         }
-        .foregroundStyle(tint)
+        .foregroundStyle(Theme.textPrimary)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
         .contentShape(Rectangle())

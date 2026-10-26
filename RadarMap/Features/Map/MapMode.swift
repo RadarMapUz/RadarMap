@@ -155,7 +155,7 @@ nonisolated enum TripScreenLayout {
 
     /// Кнопка колонки справа, которую можно убрать, когда места мало.
     enum ColumnExtra: Hashable, Sendable {
-        case compass, overview, threeD, zoom
+        case compass, overview, zoom
     }
 
     /// Сколько мест колонки помещается в просвет между панелями.

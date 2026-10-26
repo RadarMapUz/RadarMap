@@ -64,7 +64,7 @@ struct KPIStrip: View {
         HStack(spacing: 0) {
             // Именно ПРОЕЗДЫ: одна камера, пройденная дважды, — это два.
             // Легенда карты считает уникальные точки — слово должно отличаться.
-            StatStripCell(value: "\(summary.cameras)", label: "проездов камер",
+            StatStripCell(value: "\(summary.cameras)", label: LocalizedStringKey(Formatting.passesLabel(summary.cameras)),
                           icon: "camera.fill", tint: Theme.Icon.camera)
             StatStripDivider()
             StatStripCell(value: activeDaysText, label: "дней за рулём", icon: "calendar",

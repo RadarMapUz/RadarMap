@@ -184,7 +184,7 @@ struct CircleControl: View {
 /// Тот же круг носит `Menu`, а меню не принимает `Button` своим label. Без
 /// этого разделения меню в колонке карты пришлось бы рисовать вторым набором
 /// тех же градиентов, и «один язык панелей» кончился бы на второй кнопке.
-/// Ровно так же в MapScreen отделён `actionLabel` от `actionButton`.
+/// Ровно так же в MapScreen отделён `ActionBarLabel` от `actionButton`.
 struct CircleControlFace: View {
     let systemName: String
     var tint: Color = Theme.textPrimary

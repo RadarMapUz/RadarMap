@@ -47,6 +47,23 @@ final class EngineFramesTests: XCTestCase {
                        AppConfig.engineWarmFPS)
     }
 
+    /// Карта дорисована и стоит — редкий такт при любом режиме (аудит 26.10:
+    /// таймер движка будил главный поток 30 раз в секунду при нуле кадров).
+    /// Ниже даже горячего телефона, но не ноль: ноль у движка значит «максимум».
+    func testSettledMapTicksRarelyInAnyMode() {
+        for browsing in [false, true] {
+            for performance in [PerformanceMode.full, .reduced, .minimal] {
+                let fps = C.framesPerSecond(browsing: browsing, performance: performance, lowPower: false,
+                                            covered: false, cruise: false, settled: true)
+                XCTAssertEqual(fps, AppConfig.engineSettledFPS)
+            }
+        }
+        XCTAssertGreaterThan(AppConfig.engineSettledFPS, 0)
+        XCTAssertLessThan(AppConfig.engineSettledFPS, AppConfig.engineHotFPS)
+        XCTAssertEqual(C.framesPerSecond(browsing: false, performance: .full, lowPower: false, settled: false),
+                       AppConfig.engineFollowFPS, "движение возвращает обычную частоту")
+    }
+
     func testCoveredAndHotPhoneAreTheLowest() {
         XCTAssertEqual(C.framesPerSecond(browsing: false, performance: .full, lowPower: false, covered: true),
                        AppConfig.engineHotFPS)

@@ -56,6 +56,14 @@ nonisolated enum UzbekSpeech {
         .speechVoices()
         .first { $0.language.lowercased().hasPrefix("uz") }
 
+    /// Голоса синтезатора для двух языков фраз — тоже по одному на процесс и
+    /// с прогревом вне главного потока (AlertPlayer.init). AVSpeechSynthesisVoice
+    /// (language:) — такой же поход к речевому демону, и до 26.10 его первый
+    /// вызов приходился на ПЕРВОЕ оповещение поездки: тик GPS с фразой о
+    /// камере стоял на главном потоке 169 мс (симулятор, аудит 26.10).
+    static let russianVoice: AVSpeechSynthesisVoice? = AVSpeechSynthesisVoice(language: "ru-RU")
+    static let turkishVoice: AVSpeechSynthesisVoice? = AVSpeechSynthesisVoice(language: voiceLanguage)
+
     /// Подготовить узбекскую фразу к произнесению турецким голосом.
     static func spoken(_ text: String) -> String {
         transliterate(spellingOutNumbers(text))

@@ -94,19 +94,25 @@ final class AlertPlayer: NSObject {
             if ProcessInfo.processInfo.arguments.contains("-voiceDemo") { self.playVoiceDemo() }
             #endif
         }
-        // Предзагрузка: сигнал должен звучать мгновенно, без чтения файла в
-        // момент оповещения. Но не в init: AppEnvironment строится до первого
-        // кадра (и на каждом фоновом пробуждении), а чтение файла с
-        // prepareToPlay и запуск тактильного движка стоили запуску десятки
-        // миллисекунд (аудит 11.10). Следующий оборот главного цикла наступает
-        // задолго до первого фикса, а beep на всякий случай готовит сам.
+        // Предзагрузка: сигнал не должен читать файл в момент оповещения.
+        // Но не в init: AppEnvironment строится до первого кадра (и на каждом
+        // фоновом пробуждении), а чтение файла и запуск тактильного движка
+        // стоили запуску десятки миллисекунд (аудит 11.10). Следующий оборот
+        // главного цикла наступает задолго до первого фикса, а beep на всякий
+        // случай готовит сам.
         Task { @MainActor [weak self] in self?.preparePlayerIfNeeded() }
         prepareHaptics()
         // Прогрев кэша голосов ВНЕ главного потока: первое перечисление
         // speechVoices() стоит сотни миллисекунд XPC, и без прогрева их платил
         // бы первый алерт — прямо в момент фразы, замораживая спидометр.
         // static let потокобезопасен (семантика dispatch_once).
-        Task.detached(priority: .utility) { _ = UzbekSpeech.nativeVoice }
+        // Голос языка фраз — туда же: AVSpeechSynthesisVoice(language:) — тот
+        // же поход к демону, и без прогрева его платило первое оповещение.
+        let uzbek = Self.speaksUzbek
+        Task.detached(priority: .utility) {
+            _ = UzbekSpeech.nativeVoice
+            _ = uzbek ? UzbekSpeech.turkishVoice : UzbekSpeech.russianVoice
+        }
     }
 
     // MARK: - Хаптика по уровням приближения
@@ -117,7 +123,13 @@ final class AlertPlayer: NSObject {
         do {
             player = try AVAudioPlayer(contentsOf: url)
             player?.delegate = self
-            player?.prepareToPlay()
+            // Без prepareToPlay (аудит 26.10). Он заводит очередь звука, и
+            // вывод (поток com.apple.audio.IOThread) крутился вхолостую с
+            // запуска до первого сигнала — на простом экране это ~1 % ядра и
+            // вдвое больше пробуждений процесса (167 → 77 переключений/с), а
+            // на телефоне — не спящий звуковой тракт. Мгновенности он не давал:
+            // playBeep начинает со stop(), а stop() снимает подготовку, и
+            // play() готовит очередь заново в любом случае.
         } catch {
             Log.alerts.error("alert.wav не загрузился: \(error.localizedDescription, privacy: .public)")
         }
@@ -561,6 +573,9 @@ final class AlertPlayer: NSObject {
     /// речевому демону, а язык меняется только сменой языка приложения.
     private static var voiceCache: [String: AVSpeechSynthesisVoice] = [:]
     private static func voice(for language: String) -> AVSpeechSynthesisVoice? {
+        // Два языка фраз — из прогретых (UzbekSpeech): первый вызов не на тике.
+        if language == "ru-RU" { return UzbekSpeech.russianVoice }
+        if language == UzbekSpeech.voiceLanguage { return UzbekSpeech.turkishVoice }
         if let cached = voiceCache[language] { return cached }
         let voice = AVSpeechSynthesisVoice(language: language)
         if let voice { voiceCache[language] = voice }

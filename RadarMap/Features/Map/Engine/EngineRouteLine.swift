@@ -300,18 +300,22 @@ final class EngineRouteLine {
         guard let layers = nearLayers(in: view) else { return }
         os_signpost(.begin, log: performanceLog, name: "Route cut paint")
         defer { os_signpost(.end, log: performanceLog, name: "Route cut paint") }
-        func set(_ layer: MLNLineStyleLayer, _ new: [RouteCut.Stop], _ old: [RouteCut.Stop]) {
-            guard new != old else { return }
-            layer.lineGradient = NSExpression(mglJSONObject: RouteCut.gradient(new))
+        // Выражение из JSON — самая дорогая часть кадра среза (аудит 26.10:
+        // половина applyPaint), поэтому одно на набор ступеней: свечение и
+        // тело красятся одним и тем же.
+        func expression(_ new: [RouteCut.Stop], _ old: [RouteCut.Stop]) -> NSExpression? {
+            new == old ? nil : NSExpression(mglJSONObject: RouteCut.gradient(new))
         }
         let old = painted
         painted = paint
-        set(layers.casing, paint.casing, old.casing)
+        if let casing = expression(paint.casing, old.casing) { layers.casing.lineGradient = casing }
         // Свечение — ступенями тела: пробка светится своим цветом.
-        set(layers.glow, paint.body, old.body)
-        set(layers.body, paint.body, old.body)
-        set(layers.maneuver, paint.maneuver, old.maneuver)
-        set(layers.core, paint.core, old.core)
+        if let body = expression(paint.body, old.body) {
+            layers.glow.lineGradient = body
+            layers.body.lineGradient = body
+        }
+        if let maneuver = expression(paint.maneuver, old.maneuver) { layers.maneuver.lineGradient = maneuver }
+        if let core = expression(paint.core, old.core) { layers.core.lineGradient = core }
     }
 
     private func nearLayers(in view: MLNMapView)

@@ -524,6 +524,10 @@ final class AppSettings {
     /// Варианты маршрута сравниваются с вашими поездками: «Знакомый», «Без
     /// ваших превышений» (RouteChoice). Считается на телефоне.
     var personalRoutes: Bool { didSet { store.set(personalRoutes, forKey: Keys.personalRoutes) } }
+    /// «Учитывать мою манеру езды» (33E): время прибытия с поправкой на свой
+    /// темп относительно потока. Считается на телефоне; выключение стирает
+    /// расчёт (RouteSettingsPage → PersonalPaceStore.erase).
+    var personalPace: Bool { didSet { store.set(personalPace, forKey: Keys.personalPace) } }
     /// Подробный трек поездки со временем (TimedTrack) — для привязки видео
     /// регистратора. По умолчанию выключено: точка каждую секунду — это уже
     /// не «упрощённая линия для итогов», а точная история передвижений.
@@ -784,6 +788,7 @@ final class AppSettings {
         static let departureRemindersAsked = "departureRemindersAsked"
         static let alternatives = "routeAlternatives"
         static let personalRoutes = "personalRoutes"
+        static let personalPace = "personalPace"
         static let timedTrack = "recordTimedTrack"
         static let turnByTurn = "turnByTurnVoice"
         static let navigationMetadata = "carPlayNavigationMetadata"
@@ -847,6 +852,7 @@ final class AppSettings {
             Keys.volume: 1.0,
             Keys.alternatives: true,
             Keys.personalRoutes: true,
+            Keys.personalPace: true,
             Keys.turnByTurn: true,
             Keys.navigationMetadata: AppConfig.carPlayNavigationMetadata,
             Keys.speedLimits: true,
@@ -905,6 +911,7 @@ final class AppSettings {
         workPlace = Self.load(store, Keys.work)
         routeAlternatives = store.bool(forKey: Keys.alternatives)
         personalRoutes = store.bool(forKey: Keys.personalRoutes)
+        personalPace = store.bool(forKey: Keys.personalPace)
         recordTimedTrack = store.bool(forKey: Keys.timedTrack)
         turnByTurnVoice = store.bool(forKey: Keys.turnByTurn)
         carPlayNavigationMetadata = store.bool(forKey: Keys.navigationMetadata)

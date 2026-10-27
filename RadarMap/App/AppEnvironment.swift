@@ -109,6 +109,8 @@ final class AppEnvironment {
     let typicalTraffic = TypicalTrafficService()
     /// Типичные пробки по часу недели (33C) — время прибытия во времени.
     let trafficProfile = TrafficProfileService()
+    /// Личный темп (33E) — поправка времени прибытия, только на телефоне.
+    let personalPace = PersonalPaceStore()
     /// Погода на перевалах (19.2): файл сервера по open-meteo, одна фраза и
     /// баннер о снеге или тумане впереди. На оповещения о камерах не влияет.
     let roadWeather: RoadWeatherService
@@ -568,6 +570,12 @@ final class AppEnvironment {
         trafficProfile.isAllowed = { [weak traffic] in traffic?.isShown ?? false }
         trafficProfile.isOnline = { [weak network] in network?.isOnline ?? false }
         route.trafficProfile = { [weak trafficProfile] in trafficProfile?.current() }
+        // Личный темп (33E): «Учитывать мою манеру езды» и пульт пробок.
+        personalPace.isEnabled = { [weak settings, weak config] in
+            (settings?.personalPace ?? false) && (config?.current.isTrafficEnabled ?? true)
+        }
+        route.paceFactor = { [weak personalPace] roadClass in personalPace?.factor(for: roadClass) ?? 1 }
+        route.onPaceSample = { [weak personalPace] sample in personalPace?.add(sample) }
         route.prefetchProfile = { [weak trafficProfile, weak route] in
             guard let trafficProfile else { return }
             Task {

@@ -87,6 +87,7 @@ enum Storage {
         case cloudSettingsPushed    // настройки, уже отправленные в iCloud (CloudSettingsSync, JSON) — с чем сверять свои
         case cameraKnownIDs         // id камер базы, уже виденные телефоном (CameraNews, JSON, 31E)
         case cameraNews             // новые камеры на своих дорогах: id и когда нашли (JSON, 31E)
+        case personalPaceSamples    // личный темп: проезды по маршруту за 30 дней (PersonalPace.Sample, JSON, 33E)
     }
 
     private static var defaults: UserDefaults { .standard }

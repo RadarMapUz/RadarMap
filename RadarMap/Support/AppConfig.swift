@@ -884,6 +884,22 @@ nonisolated enum AppConfig {
     static let trafficProfileRefreshSeconds: TimeInterval = 6 * 3600
     /// После ошибки сети или 404 (сервер ещё не выложен) — повтор не раньше, с.
     static let trafficProfileRetrySeconds: TimeInterval = 30 * 60
+    /// Личный темп (33E): наблюдения за столько дней.
+    nonisolated static let personalPaceWindowDays: Double = 30
+    /// Коэффициент годен с этой выборки (км) — по классу или в целом.
+    nonisolated static let personalPaceMinKm: Double = 50
+    /// Обрезка коэффициента: ±15 % — манера езды, больше — уже не она.
+    nonisolated static let personalPaceMin = 0.85
+    nonisolated static let personalPaceMax = 1.15
+    /// Проезд по варианту короче — не наблюдение (светофор решает больше
+    /// манеры), м.
+    nonisolated static let personalPaceMinSampleMeters: Double = 2000
+    /// Задержка пробками больше этой доли времени графа — не свободный поток.
+    nonisolated static let personalPaceJamShare = 0.05
+    /// Средняя скорость графа варианта, с которой он «трасса», км/ч.
+    nonisolated static let personalPaceHighwayKmh: Double = 60
+    /// Хранится не больше стольких наблюдений (окно 30 дней и так ограничивает).
+    nonisolated static let personalPaceMaxSamples = 300
     /// Пробка на линии маршрута (RouteTraffic): участок короче этого не
     /// перекрашивает линию — одиночное ребро на перекрёстке мигало бы пятном.
     nonisolated static let routeTrafficMinMeters: CLLocationDistance = 40

@@ -217,6 +217,19 @@ final class RouteService {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: prefetchProfile,
                                                "RouteService.prefetchProfile") }
     }
+    /// Личный темп (33E): во сколько раз своё время больше времени потока для
+    /// класса дороги варианта; nil или 1 — без поправки. Только к времени
+    /// прибытия, не к выбору пути. Ставит AppEnvironment (PersonalPaceStore).
+    @ObservationIgnored var paceFactor: ((PersonalPace.RoadClass) -> Double)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: paceFactor,
+                                               "RouteService.paceFactor") }
+    }
+    /// Закрытый проезд по варианту — наблюдение личного темпа (на телефоне).
+    @ObservationIgnored var onPaceSample: ((PersonalPace.Sample) -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onPaceSample,
+                                               "RouteService.onPaceSample") }
+    }
+    @ObservationIgnored private var paceTracker = PersonalPace.Tracker()
     /// Живые перекрытия и ремонт (12б.5) — для ярлыка «на пути перекрытие».
     /// Ставит AppEnvironment (MobileCameraService.roadEvents).
     @ObservationIgnored var roadEvents: (() -> [RoadEvent])? {
@@ -437,9 +450,22 @@ final class RouteService {
         if let personal = personalRemaining?() { return personal }
         // Последние 1–2 км — не оптимистичнее нашей средней скорости
         // (ArrivalTail): «0,7 км, прибытие сейчас» на 10 км/ч — снимок 63.
-        return ArrivalTail.remaining(engine: engineRemaining + remainingTypicalDelay,
+        return ArrivalTail.remaining(engine: engineRemaining + personalPaceCorrection + remainingTypicalDelay,
                                      remainingMeters: remainingDistance,
                                      paceMps: pace.average(now: Date()))
+    }
+
+    /// Поправка личного темпа (33E) к времени остатка по графу: (k − 1) ×
+    /// время графа остатка. В мерку объезда (`engineRemaining`) не входит.
+    private var personalPaceCorrection: TimeInterval {
+        guard let selected, selected.distance > 0, let paceFactor else { return 0 }
+        let factor = paceFactor(PersonalPace.roadClass(distance: selected.distance, travelTime: selected.travelTime))
+        return (factor - 1) * selected.travelTime * remainingDistance / selected.distance
+    }
+
+    /// Закрыть наблюдение личного темпа (прибытие, снятие маршрута).
+    private func closePaceSample() {
+        if let sample = paceTracker.finish() { onPaceSample?(sample) }
     }
 
     /// Средняя скорость за последние ~2 минуты — для прибытия на последних
@@ -767,6 +793,7 @@ final class RouteService {
     }
 
     func clear() {
+        closePaceSample()
         generation += 1   // rebuild в полёте не должен вернуть линию на карту
         resetDetour()
         variants = []
@@ -795,6 +822,7 @@ final class RouteService {
     }
 
     private func arrive() {
+        closePaceSample()
         lastArrival = ArrivalSummary(name: destinationName, at: Date(),
                                      destination: destinationCoordinate.map {
                                          ArrivalFinish.Point(lat: $0.latitude, lon: $0.longitude)
@@ -857,6 +885,16 @@ final class RouteService {
                                               allowFullScan: rerouteGate.offRouteTicks % 3 == 0,
                                               course: course)
         progressAlong = along
+        // Личный темп (33E): проезд по варианту копится, смена варианта
+        // (перестроение) закрывает прежний.
+        // Ключ — сама линия варианта: номера вариантов (0, 1, 2) повторяются
+        // от построения к построению.
+        if let sample = paceTracker.note(.init(id: ObjectIdentifier(variant.polyline).hashValue,
+                                               distance: variant.distance,
+                                               travelTime: variant.travelTime, trafficDelay: variant.trafficDelay),
+                                         along: along, at: Date()) {
+            onPaceSample?(sample)
+        }
         displaySnap = Self.displaySnap(
             deviation: deviation,
             on: deviation <= AppConfig.routeSnapMeters

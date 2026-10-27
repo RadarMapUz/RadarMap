@@ -972,14 +972,52 @@ def write_atomic(path, body):
     os.replace(tmp, path)
 
 
-def run(conn, now, matcher=osrm_match, out_path=OUT_PATH, typical_dir=TYPICAL_DIR, profile_path=PROFILE_PATH):
+# Показ пробки для проверки владельцем (27.10): пока файл есть и не истёк,
+# его рёбра добавляются в now.json поверх настоящих. Срок вшит в сам файл —
+# забытый показ гаснет сам; откат раньше срока — удалить файл. Файл скоростей
+# маршрутизатора он не трогает: только показ, ETA и «Впереди пробка».
+DEMO_PATH = "/opt/radarmap/api/traffic_demo.json"
+
+
+def demo_edges(now, path=DEMO_PATH):
+    """Рёбра показа [(ulat, ulon, vlat, vlon, level, kmh, model_kmh)] или []."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            demo = json.load(f)
+    except FileNotFoundError:
+        return []
+    except (OSError, ValueError) as error:
+        print(f"показ пробки: файл не читается — {error}", file=sys.stderr)
+        return []
+    if not isinstance(demo, dict) or float(demo.get("expires", 0)) <= now:
+        return []
+    out = []
+    for e in demo.get("edges", []):
+        if (isinstance(e, list) and len(e) == 7 and e[4] in (1, 2, 3)
+                and all(isinstance(x, (int, float)) for x in e)):
+            out.append(tuple(e))
+    return out
+
+
+def merge_demo(edges, demo):
+    """Показ поверх настоящих рёбер: то же ребро (u→v по координатам) — из показа."""
+    if not demo:
+        return edges
+    key = lambda e: (round(e[0], 5), round(e[1], 5), round(e[2], 5), round(e[3], 5))
+    taken = {key(e) for e in demo}
+    return [e for e in edges if key(e) not in taken] + list(demo)
+
+
+def run(conn, now, matcher=osrm_match, out_path=OUT_PATH, typical_dir=TYPICAL_DIR, profile_path=PROFILE_PATH,
+        demo_path=DEMO_PATH):
     """Один прогон без замка и печати (main и тесты). Возвращает (кусков,
     отрезков, рёбер в now.json, переписано файлов «обычно» или None)."""
     schema(conn)
     pieces, segments = process(conn, now, matcher=matcher)
     prune(conn, now)
     edges = aggregate(conn, now)
-    write_atomic(out_path, json.dumps(payload(edges, now), separators=(",", ":")))
+    write_atomic(out_path, json.dumps(payload(merge_demo(edges, demo_edges(now, demo_path)), now),
+                                      separators=(",", ":")))
     mark_shared(conn, now)
     typical = None
     if typical_due(conn, now):

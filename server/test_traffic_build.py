@@ -873,5 +873,34 @@ class PureTest(unittest.TestCase):
         self.assertEqual(tb.hour_of_week(1_791_775_800), 8)
 
 
+
+class DemoJamTest(unittest.TestCase):
+    """Показ пробки владельцу: живёт до срока, поверх настоящих рёбер, кривой файл — пусто."""
+
+    def write(self, body):
+        f = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+        f.write(body if isinstance(body, str) else json.dumps(body))
+        f.close()
+        self.addCleanup(os.unlink, f.name)
+        return f.name
+
+    def test_expiry_and_validation(self):
+        edge = [41.3, 69.28, 41.301, 69.281, 3, 8, 50]
+        path = self.write({"expires": 1000, "edges": [edge, [1, 2], [0, 0, 0, 0, 9, 1, 1]]})
+        self.assertEqual(tb.demo_edges(999, path), [tuple(edge)])
+        self.assertEqual(tb.demo_edges(1000, path), [])          # срок вышел — показа нет
+        self.assertEqual(tb.demo_edges(0, "/нет/такого/файла.json"), [])
+        self.assertEqual(tb.demo_edges(0, self.write("{не json")), [])
+
+    def test_demo_overrides_same_edge(self):
+        real = [(41.3, 69.28, 41.301, 69.281, 1, 45, 50), (41.31, 69.29, 41.311, 69.291, 2, 20, 50)]
+        demo = [(41.3, 69.28, 41.301, 69.281, 3, 8, 50)]
+        merged = tb.merge_demo(real, demo)
+        self.assertEqual(len(merged), 2)
+        self.assertIn(demo[0], merged)
+        self.assertNotIn(real[0], merged)
+        self.assertEqual(tb.merge_demo(real, []), real)
+
+
 if __name__ == "__main__":
     unittest.main()

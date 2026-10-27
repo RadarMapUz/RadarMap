@@ -71,6 +71,13 @@ extension MapScreen {
                 env.traffic.seedDemo()
             }
         }
+        // 33H: вечерний Ташкент из фикстуры — снимки пробок без сервера.
+        if TrafficDemo.isOn {
+            Task {
+                await Task.pause(seconds: 3)
+                if let data = TrafficDemo.fixture() { env.traffic.seedFixture(data) }
+            }
+        }
         // Снимки экранов для обзора вёрстки: -openScreen settings|search|
         // places|nearby|stats|camera|fines — открыть экран сразу после запуска.
         if let index = args.firstIndex(of: "-openScreen"), index + 1 < args.count {

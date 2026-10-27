@@ -158,6 +158,11 @@ enum Theme {
     /// Пробка и «медленно» на линии маршрута (те же, что слой пробок).
     static let routeSlow = adaptive(RouteColors.slow.day, RouteColors.slow.night)
     static let routeJam = adaptive(RouteColors.jam.day, RouteColors.jam.night)
+    /// Пробки на улицах (33H): четыре уровня выбранной палитры.
+    static let trafficFree = adaptive(TrafficPalette.active.free.day, TrafficPalette.active.free.night)
+    static let trafficSlow = adaptive(TrafficPalette.active.slow.day, TrafficPalette.active.slow.night)
+    static let trafficJam = adaptive(TrafficPalette.active.jam.day, TrafficPalette.active.jam.night)
+    static let trafficStand = adaptive(TrafficPalette.active.stand.day, TrafficPalette.active.stand.night)
     /// Другой вариант маршрута при выборе — бледнее выбранного (27.D): его
     /// цвет и на карте, и полоской у карточки варианта.
     static let routeAlternative = adaptive(RouteColors.alternative.day, RouteColors.alternative.night)
@@ -587,6 +592,120 @@ extension CameraType {
     var glyphTint: Color { Color(uiColor: Theme.rgb(glyph.inkRGB)) }
 }
 
+/// Палитра пробок на карте (33H) ЧИСЛАМИ — стиль движка, растры шевронов и
+/// токены SwiftUI берут цвет отсюда. Четыре уровня — свободно, медленно,
+/// пробка, стоят; у каждого пара день/ночь.
+///
+/// Правило проекта: красный на карте — только камера (`CameraGlyph.camera`,
+/// #D93025). До 33H «пробка» днём была побайтово этим красным (ночью — ΔE
+/// 14): пробка на улице и камера на ней читались одним знаком. Обе палитры
+/// держат пробку и «стоят» на ΔE ≥ 20 от красного камеры в обеих темах
+/// (PaletteTests), но разными путями — владелец выбирает по снимкам:
+/// • A «Бордо» — привычный язык навигаторов: пробка — вишнёво-бордовая,
+///   «стоят» — тёмное вино. Ближе к Яндексу; ночью «стоят» на графите
+///   держится шевронами и каймой, а не яркостью (контраст ~1,7:1).
+/// • B «Малина и слива» — пробка малиновая, «стоят» — слива: дальше всего
+///   от красного камеры (ΔE 47+) и лучше всех при дейтеранопии (зелёный /
+///   пробка ΔE 25–28 против 15–18 у A), но «фиолетовая пробка» непривычна.
+/// После выбора проигравший вариант удаляется вместе с ключом
+/// `-trafficPalette`.
+nonisolated enum TrafficPalette {
+    typealias Pair = RouteColors.Pair
+
+    struct Colors: Sendable {
+        let free: Pair
+        let slow: Pair
+        let jam: Pair
+        let stand: Pair
+    }
+
+    enum Variant: String, CaseIterable, Sendable {
+        case a = "A"
+        case b = "B"
+
+        var colors: Colors {
+            switch self {
+            case .a:
+                return Colors(free: (0x2BA84A, 0x3CC46B), slow: (0xE8A100, 0xFFB020),
+                              jam: (0xB3123E, 0xF25C84), stand: (0x5E0B22, 0xA81E46))
+            case .b:
+                return Colors(free: (0x2BA84A, 0x3CC46B), slow: (0xE8A100, 0xFFB020),
+                              jam: (0xC8186A, 0xFF4F9A), stand: (0x5A2275, 0xB06AE0))
+            }
+        }
+    }
+
+    /// Вариант до выбора владельца: B (рекомендация 33H — см. отчёт); в
+    /// DEBUG — `-trafficPalette A|B` для снимков сравнения.
+    static let variant: Variant = {
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        if let index = args.firstIndex(of: "-trafficPalette"), index + 1 < args.count,
+           let chosen = Variant(rawValue: args[index + 1].uppercased()) {
+            return chosen
+        }
+        #endif
+        return .b
+    }()
+
+    static var active: Colors { variant.colors }
+
+    /// Цвет уровня показа 1…4 (TrafficLines.displayLevel).
+    static func level(_ level: Int, in colors: Colors = active) -> Pair {
+        switch level {
+        case 4: return colors.stand
+        case 3: return colors.jam
+        case 2: return colors.slow
+        default: return colors.free
+        }
+    }
+
+    /// «Обычно в это время» (модель, 33G) — тот же цвет, смешанный с
+    /// полотном дороги темы: светлее днём, глуше ночью; тоньше живого.
+    /// Смешение, а не прозрачность: полупрозрачные круглые концы соседних
+    /// линий темнели бы бусинами на стыках.
+    static let modelMix = 0.45
+    static let modelRoad: Pair = (0xFFFFFF, 0x30343C)
+    static let modelWidthShare = 0.7
+
+    static func model(_ pair: Pair) -> Pair {
+        (mix(pair.day, modelRoad.day, modelMix), mix(pair.night, modelRoad.night, modelMix))
+    }
+
+    /// Тонкая кайма линии: тёмная в обеих темах — линия отделяется и от
+    /// белой улицы днём, и от светлой магистрали ночью.
+    static let casing: Pair = (0x1A1D24, 0x0B0D12)
+    static let casingOpacity: (day: Double, night: Double) = (0.35, 0.85)
+
+    /// Указатель направления на линии (наконечник шире линии): заливка —
+    /// цвет линии, на светлых уровнях затемнённый, на тёмных высветленный,
+    /// контур — кайма темы. Наконечник отличается от своей линии яркостью и
+    /// читается и на тёмной «стоят» ночью, и на светлой «свободно» днём —
+    /// второй носитель направления и уровня (дейтеранопия).
+    static func arrow(on line: UInt32, daylight: Bool) -> (fill: UInt32, rim: UInt32, rimAlpha: Double) {
+        let fill = luminance(line) > 0.25 ? mix(line, 0x000000, 0.38) : mix(line, 0xFFFFFF, 0.5)
+        return (fill, daylight ? casing.day : casing.night, daylight ? 0.6 : 0.9)
+    }
+
+    static func mix(_ a: UInt32, _ b: UInt32, _ share: Double) -> UInt32 {
+        func channel(_ value: UInt32, _ shift: UInt32) -> Double { Double((value >> shift) & 0xFF) }
+        var out: UInt32 = 0
+        for shift: UInt32 in [16, 8, 0] {
+            let v = channel(a, shift) * (1 - share) + channel(b, shift) * share
+            out |= UInt32(max(0, min(255, v.rounded()))) << shift
+        }
+        return out
+    }
+
+    static func luminance(_ rgb: UInt32) -> Double {
+        func lin(_ shift: UInt32) -> Double {
+            let c = Double((rgb >> shift) & 0xFF) / 255
+            return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * lin(16) + 0.7152 * lin(8) + 0.0722 * lin(0)
+    }
+}
+
 /// Цвета линии маршрута ЧИСЛАМИ: из них строятся и токены `Theme.route…`
 /// (SwiftUI), и строки стиля движка (EngineMapStyle.routeLayers) — один
 /// источник на оба мира. Каждая пара — день/ночь; проверены PaletteTests
@@ -614,13 +733,11 @@ nonisolated enum RouteColors {
     static let coreAlpha: (day: Double, night: Double) = (0.38, 0.32)
     /// Стрелки направления вдоль линии: белая заливка с каймой линии.
     static let arrow: UInt32 = 0xFFFFFF
-    /// Пробки: свободно / медленно / стоим.
-    static let free: Pair = (0x2BA84A, 0x3CC46B)
-    static let slow: Pair = (0xE8A100, 0xFFB020)
-    static let jam: Pair = (0xD93025, 0xFF5A4E)
-    /// «Обычно в это время» (33G): светлый коралл — не красный «пробка» и не
-    /// жёлтый, который на новой карте уже занят бордюрами главных дорог.
-    static let usual: Pair = (0xF08A5D, 0xFF9466)
+    /// Пробки: свободно / медленно / пробка — из выбранной палитры пробок
+    /// (TrafficPalette, 33H): цвет пробки на линии маршрута и на улицах один.
+    static var free: Pair { TrafficPalette.active.free }
+    static var slow: Pair { TrafficPalette.active.slow }
+    static var jam: Pair { TrafficPalette.active.jam }
     /// Другие варианты маршрута при выборе (27.D): тот же синий род, но
     /// бледнее и без насыщенности — выбранный остаётся главным предметом
     /// карты, а другой вариант всё равно читается на асфальте любого класса

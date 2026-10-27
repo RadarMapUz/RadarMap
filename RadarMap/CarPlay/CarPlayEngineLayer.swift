@@ -196,7 +196,7 @@ struct CarPlayEngineLayer: View {
             // слежение, а вернуть его там нечем.
             interactive: surface.interactive,
             healthTag: surface.healthTag,
-            trafficEdges: env.traffic.isShown ? env.traffic.snapshot?.edges ?? [] : [],
+            trafficLines: env.traffic.isShown ? env.traffic.lines : [],
             trafficRevision: env.traffic.revision * 2 + (env.traffic.isShown ? 1 : 0),
             trafficSnapshot: env.traffic.isShown ? env.traffic.snapshot : nil,
             // Обычно в это время (33G): светлее живых, под ними; тот же выключатель.

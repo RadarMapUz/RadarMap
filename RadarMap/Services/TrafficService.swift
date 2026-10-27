@@ -37,6 +37,10 @@ final class TrafficService {
     private(set) var snapshot: TrafficSnapshot?
     /// Растёт на каждом новом наборе — по нему карта перерисовывает слой.
     private(set) var revision = 0
+    /// Тот же набор, сшитый в линии улиц для карты (TrafficLines, 33H):
+    /// считается вместе с разбором, вне главного потока, раз на новый
+    /// now.json — не на тике.
+    private(set) var lines: [TrafficLines.Line] = []
 
     @ObservationIgnored private var probes = TrafficProbes()
     /// Куски, ждущие отправки, с временем их конца (на сервер оно не идёт:
@@ -218,43 +222,75 @@ final class TrafficService {
     }
 
     func refresh() async {
+        #if DEBUG
+        // Показ -trafficDemo: набор из фикстуры не заменяется сервером и не
+        // «протухает» — снимки не зависят ни от сети, ни от часов.
+        if demoPinned { return }
+        #endif
         guard isShown else {
-            if snapshot != nil { snapshot = nil; revision &+= 1 }
+            if snapshot != nil { apply(nil, lines: []) }
             return
         }
         if let current = snapshot, !current.isFresh(now: Date()) {
-            snapshot = nil
-            revision &+= 1
+            apply(nil, lines: [])
         }
         guard isOnline() else { return }
         do {
             guard let fresh = try await Self.fetch(api: feed, etag: etag) else { return }   // 304
             etag = fresh.etag
             guard let decoded = fresh.snapshot, decoded.isFresh(now: Date()) else {
-                if snapshot != nil { snapshot = nil; revision &+= 1 }
+                if snapshot != nil { apply(nil, lines: []) }
                 return
             }
-            snapshot = decoded
-            revision &+= 1
+            apply(decoded, lines: fresh.lines)
         } catch {
             Log.network.notice("пробки не загрузились: \(error.localizedDescription, privacy: .public)")
         }
     }
 
-    /// Загрузка и разбор вне главного потока: файл по городу — тысячи рёбер.
+    /// Набор и его линии — вместе, одной ревизией: карта не должна увидеть
+    /// новую ревизию со старыми линиями.
+    private func apply(_ snapshot: TrafficSnapshot?, lines: [TrafficLines.Line]) {
+        self.snapshot = snapshot
+        self.lines = lines
+        revision &+= 1
+    }
+
+    /// Загрузка, разбор и сшивка вне главного потока: файл по городу —
+    /// тысячи рёбер.
     @concurrent
     private static func fetch(api: APIClient, etag: String?) async throws
-        -> (snapshot: TrafficSnapshot?, etag: String?)? {
+        -> (snapshot: TrafficSnapshot?, lines: [TrafficLines.Line], etag: String?)? {
         guard let answer = try await api.getRawIfChanged("traffic/now.json", etag: etag) else { return nil }
-        return (TrafficSnapshot.decode(answer.data), answer.etag)
+        let snapshot = TrafficSnapshot.decode(answer.data)
+        let lines = snapshot.map { TrafficLines.lines(from: $0.edges) } ?? []
+        return (snapshot, lines, answer.etag)
     }
 
     #if DEBUG
+    @ObservationIgnored private var demoPinned = false
+
+    /// Показ `-trafficDemo` (33H): синтетический now.json вечернего Ташкента
+    /// из фикстуры (Resources/Debug, в релиз не входит) — через настоящий
+    /// разбор `TrafficSnapshot.decode`, со свежей отметкой времени.
+    func seedFixture(_ data: Data) {
+        guard let decoded = TrafficSnapshot.decode(data) else {
+            Log.network.error("пробки: фикстура показа не разобралась")
+            return
+        }
+        demoPinned = true
+        let snapshot = TrafficSnapshot(generated: Date(), edges: decoded.edges)
+        Task {
+            let lines = await TrafficLines.build(snapshot.edges)
+            apply(snapshot, lines: lines)
+            Log.network.info("пробки: показ из фикстуры, рёбер \(snapshot.edges.count, privacy: .public), линий \(lines.count, privacy: .public)")
+        }
+    }
+
     /// Скриншот-хук `-driveDemoStops -stopScene jam` (29.D): своя пробка по
     /// линии демо-маршрута — демо Амира Темура лежит в сотне метров от неё.
     func seedDemo(edges: [TrafficEdge]) {
-        snapshot = TrafficSnapshot(generated: Date(), edges: edges)
-        revision &+= 1
+        apply(TrafficSnapshot(generated: Date(), edges: edges), lines: TrafficLines.lines(from: edges))
     }
 
     /// Скриншот-хук `-demoTraffic`: пробки вдоль Амира Темура (север — юг),
@@ -274,8 +310,7 @@ final class TrafficService {
             edges.append(TrafficEdge(a: p, b: q, level: level, kmh: Double(kmh), modelKmh: 60))
             edges.append(TrafficEdge(a: q, b: p, level: max(1, level - 1), kmh: Double(kmh) + 10, modelKmh: 60))
         }
-        snapshot = TrafficSnapshot(generated: Date(), edges: edges)
-        revision &+= 1
+        apply(TrafficSnapshot(generated: Date(), edges: edges), lines: TrafficLines.lines(from: edges))
         Log.network.info("пробки: демо, рёбер \(edges.count, privacy: .public), ревизия \(self.revision, privacy: .public)")
     }
     #endif

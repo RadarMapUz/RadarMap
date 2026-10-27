@@ -128,9 +128,10 @@ struct EngineMapView: UIViewRepresentable {
     /// Метка журнала здоровья карты («машина», «плитка»): раз в 10 с строка
     /// с состоянием приложения, кадрами, поворотом и камерами. nil — молчим.
     var healthTag: String?
-    /// Пробки (TrafficService): рёбра с уровнем. Пишутся в источник только на
-    /// смене `trafficRevision` — раз в пару минут, а не на тике.
-    var trafficEdges: [TrafficEdge] = []
+    /// Пробки (TrafficService): линии улиц, сшитые из рёбер (TrafficLines,
+    /// 33H). Пишутся в источник только на смене `trafficRevision` — раз в
+    /// пару минут, а не на тике.
+    var trafficLines: [TrafficLines.Line] = []
     var trafficRevision: Int = 0
     /// Тот же набор пробок с сеткой поиска — для цвета САМОЙ линии маршрута
     /// (RouteTraffic, 25.D). nil — линия одного цвета (Theme.route).
@@ -585,6 +586,41 @@ struct EngineMapView: UIViewRepresentable {
             }
         }
 
+        /// Указатель направления пробки (33H, «у них с указателями»):
+        /// наконечник стрелы острием по ходу (+x — вдоль линии при
+        /// symbol-placement line), как у Яндекса — вдвое шире линии
+        /// (`trafficArrowScale`), светлее её и с тёмным контуром: читается и
+        /// поверх линии, и рядом с асфальтом. Сдвиг к правой стороне — В САМОМ
+        /// РАСТРЕ: растр выше наконечника, и наконечник нарисован ниже середины
+        /// на долю, равную сдвигу линии, — при любом icon-size он ложится ровно
+        /// на сдвинутую линию (icon-offset у линейной раскладки вёл себя иначе,
+        /// чем line-offset, и знак съезжал на край линии).
+        static func trafficChevronIcon(level: Int, daylight: Bool, model: Bool = false) -> UIImage {
+            let side = EngineMapStyle.trafficChevronSide
+            // Наконечник — `trafficArrowScale` толщин своей линии; сдвиг — от
+            // живой линии, поэтому у модели (линия тоньше) он больше.
+            let share = model ? TrafficPalette.modelWidthShare : 1
+            let lift = side * EngineMapStyle.trafficOffsetShare / (EngineMapStyle.trafficArrowScale * share)
+            let height = side + 2 * lift
+            let pair = model ? TrafficPalette.model(TrafficPalette.level(level)) : TrafficPalette.level(level)
+            let look = TrafficPalette.arrow(on: daylight ? pair.day : pair.night, daylight: daylight)
+            return UIGraphicsImageRenderer(size: CGSize(width: side, height: height)).image { _ in
+                let top = lift * 2
+                let head = UIBezierPath()
+                head.move(to: CGPoint(x: side * 0.16, y: top + side * 0.1))
+                head.addLine(to: CGPoint(x: side * 0.9, y: top + side * 0.5))
+                head.addLine(to: CGPoint(x: side * 0.16, y: top + side * 0.9))
+                head.addLine(to: CGPoint(x: side * 0.36, y: top + side * 0.5))
+                head.close()
+                head.lineJoinStyle = .round
+                head.lineWidth = side * 0.09
+                Theme.rgb(look.rim).withAlphaComponent(look.rimAlpha).setStroke()
+                head.stroke()
+                Theme.rgb(look.fill).setFill()
+                head.fill()
+            }
+        }
+
         /// Значок светофора: капсула 10×20 pt, графит с белой кромкой, три точки.
         static func trafficLightIcon() -> UIImage {
             UIGraphicsImageRenderer(size: CGSize(width: 10, height: 20)).image { _ in
@@ -712,7 +748,18 @@ struct EngineMapView: UIViewRepresentable {
                                forName: EngineMapStyle.routeArrowImage(daylight: daylight))
             }
             for place in EnginePlaceIcons.all { style.setImage(place.image, forName: place.name) }
-            let names = ["radar-signal", EngineModernStyle.trafficLightImage, "radar-stop", "radar-flag",
+            // Шевроны пробок (33H): по уровню, теме и источнику — цвет от линии.
+            let chevrons = [true, false].flatMap { daylight in
+                [false, true].flatMap { model in
+                    (1...4).map { level -> String in
+                        let name = EngineMapStyle.trafficChevronImage(level: level, daylight: daylight, model: model)
+                        style.setImage(Self.trafficChevronIcon(level: level, daylight: daylight, model: model),
+                                       forName: name)
+                        return name
+                    }
+                }
+            }
+            let names = chevrons + ["radar-signal", EngineModernStyle.trafficLightImage, "radar-stop", "radar-flag",
                          "radar-pin", "radar-parked", "radar-closure", "radar-roadwork",
                          EngineMapStyle.routeArrowImage(daylight: true), EngineMapStyle.routeArrowImage(daylight: false)]
                 + EnginePlaceIcons.all.map(\.name)
@@ -1232,10 +1279,14 @@ struct EngineMapView: UIViewRepresentable {
         /// украшатель кадра, но горячий телефон и так идёт плоско, а объём —
         /// лишний проход глубины. Вместо них — плоские (`hotShownLayers`).
         /// С 29.F сюда же — свечения (линии маршрута и ночной магистрали):
-        /// размытые широкие линии — украшение, а не информация.
+        /// размытые широкие линии — украшение, а не информация. С 33H —
+        /// шевроны пробок.
         static let hotHiddenLayers = ["radar-tree-3d", "radar-barrier-3d", "radar-tree-shadow",
                                       "building-ground-shadow", "building-3d", "radar-trunk-glow",
-                                      "route-glow", EngineMapStyle.routeNearLayers.glow]
+                                      "route-glow", EngineMapStyle.routeNearLayers.glow,
+                                      // Шевроны пробок (33H): цвет линии остаётся, направление
+                                      // на горячем телефоне — лишняя раскладка символов.
+                                      EngineMapStyle.trafficLayerIDs.chevrons]
         /// Видны ТОЛЬКО на горячем телефоне: плоские дома вместо объёмных —
         /// город не пустеет (в стиле выключены, make_style «building-flat»).
         static let hotShownLayers = ["building-flat"]
@@ -1379,12 +1430,12 @@ struct EngineMapView: UIViewRepresentable {
                 Log.network.error("MapLibre: источника пробок нет в стиле")
                 return
             }
-            Log.network.debug("MapLibre: пробки в источник, рёбер \(model.trafficEdges.count, privacy: .public)")
+            Log.network.debug("MapLibre: пробки в источник, линий \(model.trafficLines.count, privacy: .public)")
             lastTrafficRevision = model.trafficRevision
-            let lines = model.trafficEdges.map { edge -> MLNPolylineFeature in
-                var coordinates = [edge.a, edge.b]
-                let line = MLNPolylineFeature(coordinates: &coordinates, count: 2)
-                line.attributes = ["level": edge.level]
+            let lines = model.trafficLines.map { traffic -> MLNPolylineFeature in
+                var coordinates = traffic.coordinates
+                let line = MLNPolylineFeature(coordinates: &coordinates, count: UInt(coordinates.count))
+                line.attributes = ["level": traffic.level, "src": traffic.source.rawValue, "tier": traffic.tier]
                 return line
             }
             source.shape = MLNShapeCollectionFeature(shapes: lines)

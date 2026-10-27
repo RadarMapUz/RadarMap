@@ -28,11 +28,23 @@ nonisolated struct TrafficEdge: Equatable, Sendable {
     let level: Int
     let kmh: Double
     let modelKmh: Double
+    /// Откуда скорость: живые куски водителей или модель «обычно в это
+    /// время» (33G). В now.json — необязательная 8-я колонка; её нет у
+    /// старого сервера, и тогда это водители — как было до модели.
+    var source: Source = .drivers
+
+    /// Код колонки now.json: 0 — водители, 1 — модель. Неизвестный код —
+    /// водители: новый источник от будущего сервера не должен пропадать.
+    nonisolated enum Source: Int, Sendable {
+        case drivers = 0
+        case model = 1
+    }
 
     static func == (l: TrafficEdge, r: TrafficEdge) -> Bool {
         l.a.latitude == r.a.latitude && l.a.longitude == r.a.longitude
             && l.b.latitude == r.b.latitude && l.b.longitude == r.b.longitude
             && l.level == r.level && l.kmh == r.kmh && l.modelKmh == r.modelKmh
+            && l.source == r.source
     }
 }
 
@@ -95,7 +107,9 @@ nonisolated struct TrafficSnapshot: Sendable {
     }
 
     /// Разбор now.json. Формат версии 1:
-    /// `{"v":1,"generated":t,"edges":[[ulat,ulon,vlat,vlon,level,kmh,model]]}`.
+    /// `{"v":1,"generated":t,"edges":[[ulat,ulon,vlat,vlon,level,kmh,model(,src)]]}`.
+    /// `src` (33H/33G) — необязательная 8-я колонка: старые сборки читают
+    /// первые семь и её не замечают, поэтому версия остаётся 1.
     /// Другая версия или битое ребро — nil/пропуск: показывать догадку о
     /// формате хуже, чем не показывать пробки.
     static func decode(_ data: Data) -> TrafficSnapshot? {
@@ -106,9 +120,10 @@ nonisolated struct TrafficSnapshot: Sendable {
               let raw = object["edges"] as? [[Double]] else { return nil }
         let edges = raw.compactMap { row -> TrafficEdge? in
             guard row.count >= 7, (1...3).contains(Int(row[4])), row[6] > 0 else { return nil }
+            let source = row.count >= 8 ? TrafficEdge.Source(rawValue: Int(row[7])) ?? .drivers : .drivers
             return TrafficEdge(a: CLLocationCoordinate2D(latitude: row[0], longitude: row[1]),
                                b: CLLocationCoordinate2D(latitude: row[2], longitude: row[3]),
-                               level: Int(row[4]), kmh: max(0, row[5]), modelKmh: row[6])
+                               level: Int(row[4]), kmh: max(0, row[5]), modelKmh: row[6], source: source)
         }
         return TrafficSnapshot(generated: Date(timeIntervalSince1970: generated), edges: edges)
     }

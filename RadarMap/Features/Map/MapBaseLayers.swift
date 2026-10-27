@@ -155,7 +155,7 @@ struct EngineBaseLayer: View {
                         detail: detail.decision,
                         detailMarks: detail.marks,
                         destinationApproach: detail.approach,
-                        trafficEdges: env.traffic.isShown ? env.traffic.snapshot?.edges ?? [] : [],
+                        trafficLines: env.traffic.isShown ? env.traffic.lines : [],
                         trafficRevision: env.traffic.revision * 2 + (env.traffic.isShown ? 1 : 0),
                         trafficSnapshot: env.traffic.isShown ? env.traffic.snapshot : nil,
                         // Обычно в это время (33G): светлее живых, под ними; тот же выключатель.
@@ -254,6 +254,14 @@ struct EngineBaseLayer: View {
         let viewHeight = max(1, Double(size.height))
         guard env.location.isTripActive else {
             map.cameraSmoother.reset()
+            #if DEBUG
+            // Показ пробок 33H: ровно заданный масштаб, сверху.
+            if let zoom = TrafficDemo.zoom {
+                return (DriveCamera.span(zoom: zoom, viewHeight: viewHeight, latitude: me.latitude), 0,
+                        DriveCamera.visibleAhead(zoom: zoom, pitchDegrees: 0, viewHeight: viewHeight,
+                                                 carY: insets.meY, latitude: me.latitude))
+            }
+            #endif
             let span = AppConfig.engineOverviewSpan * pow(2, -map.zoomBias)
             let pitch = pitchAllowed ? AppConfig.engineOverviewPitchDegrees : 0
             let zoom = log2(DriveCamera.span(zoom: 0, viewHeight: viewHeight, latitude: me.latitude) / span)

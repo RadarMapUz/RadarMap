@@ -139,6 +139,128 @@ nonisolated enum EngineMapStyle {
         return out
     }
 
+    // MARK: - Пробки на улицах (33H)
+
+    /// Слои пробок: кайма, линия, шевроны направления.
+    static let trafficLayerIDs = (casing: "traffic-case", line: "traffic", chevrons: "traffic-arrows")
+    /// Имя растра шеврона уровня 1…4 в теме (EngineMapView кладёт обе темы:
+    /// цвет шеврона — от цвета линии, а он у темы свой).
+    static func trafficChevronImage(level: Int, daylight: Bool, model: Bool = false) -> String {
+        "traffic-chevron-\(level)-\(daylight ? "day" : "night")\(model ? "-model" : "")"
+    }
+
+    /// Толщина линии пробок, точки, по классу дороги (магистраль / улица /
+    /// второстепенная) на ступенях масштаба — одна таблица для линии, каймы,
+    /// сдвига и шевронов. У Яндекса на z14 магистраль ~3 pt: линия читается
+    /// цветом, а шеврон внутри неё различим.
+    static let trafficWidthStops: [(zoom: Double, widths: [Double])] = [
+        (11, [1.8, 1.2, 0.7]), (13, [3.0, 2.2, 1.4]), (15, [5.0, 3.8, 2.6]),
+        (17, [7.5, 5.8, 4.2]), (19, [10.0, 8.0, 6.0]),
+    ]
+    /// Сдвиг вправо по ходу — доля толщины: половина толщины плюс зазор в
+    /// четверть её — две встречные линии лежат рядом с видимым просветом и
+    /// не наезжают друг на друга ни на каком масштабе.
+    static let trafficOffsetShare = 0.75
+    /// Кайма шире линии на столько точек (по 0,6 с каждой стороны).
+    static let trafficCasingExtra = 1.2
+    /// Указатель — наконечник в квадрате этой стороны, точки; на карте он
+    /// масштабируется до `trafficArrowScale` толщин линии.
+    static let trafficChevronSide = 16.0
+    /// Наконечник шире линии в 2,4 раза — как у Яндекса: знак внутри линии
+    /// толщиной 4–5 pt не читался (снимки 27.10, первая проба).
+    static let trafficArrowScale = 2.4
+    /// Указатели: с какого масштаба у класса (магистраль / улица /
+    /// второстепенная); у модели — на `trafficModelArrowDelay` позже: она
+    /// покрывает весь город, и знаки на каждом переулке — шум.
+    static let trafficChevronFromZoom: [Double] = [13.5, 14.5, 16]
+    static let trafficModelArrowDelay = 1.5
+
+    /// interpolate по zoom с match по классу на каждой ступени: движок
+    /// принимает zoom только на верхнем уровне выражения.
+    static func trafficWidth(scale: Double = 1, extra: Double = 0, modelShare: Double? = nil) -> [Any] {
+        var out: [Any] = ["interpolate", ["linear"], ["zoom"]]
+        for stop in trafficWidthStops {
+            let byTier: [Any] = ["match", ["get", "tier"], 0, stop.widths[0] * scale,
+                                 1, stop.widths[1] * scale, stop.widths[2] * scale]
+            let value: [Any] = modelShare.map { ["*", byTier, ["case", ["==", ["get", "src"], 1], $0, 1]] } ?? byTier
+            out += [stop.zoom, extra == 0 ? value : ["+", value, extra]]
+        }
+        return out
+    }
+
+    static func trafficLayers(daylight: Bool) -> [[String: Any]] {
+        func hex(_ pair: RouteColors.Pair) -> String { RouteColors.pick(pair, daylight: daylight) }
+        let colours = TrafficPalette.active
+        func byLevel(_ transform: (RouteColors.Pair) -> RouteColors.Pair) -> [Any] {
+            ["match", ["get", "level"],
+             4, hex(transform(TrafficPalette.level(4, in: colours))),
+             3, hex(transform(TrafficPalette.level(3, in: colours))),
+             2, hex(transform(TrafficPalette.level(2, in: colours))),
+             hex(transform(TrafficPalette.level(1, in: colours)))]
+        }
+        let isModel: [Any] = ["==", ["get", "src"], 1]
+        let offset = trafficWidth(scale: trafficOffsetShare)
+        let round: [String: Any] = ["line-cap": "round", "line-join": "round"]
+        let casingOpacity = daylight ? TrafficPalette.casingOpacity.day : TrafficPalette.casingOpacity.night
+        // Указатели видны с масштаба своего класса; модель — позже.
+        var thresholds: [(zoom: Double, tier: Int, model: Bool)] = []
+        for (tier, zoom) in trafficChevronFromZoom.enumerated() {
+            thresholds.append((zoom, tier, false))
+            thresholds.append((zoom + trafficModelArrowDelay, tier, true))
+        }
+        thresholds.sort { $0.zoom < $1.zoom }
+        // Ступени step — строго по возрастанию: совпавшие пороги (улица и
+        // модель магистрали — оба на 15) — одной ступенью, иначе движок молча
+        // отбрасывает весь слой.
+        var chevronOpacity: [Any] = ["step", ["zoom"], 0]
+        var shown: [(tier: Int, model: Bool)] = []
+        for (index, threshold) in thresholds.enumerated() {
+            shown.append((threshold.tier, threshold.model))
+            if index + 1 < thresholds.count, thresholds[index + 1].zoom == threshold.zoom { continue }
+            var visible: [Any] = ["any"]
+            for item in shown {
+                visible.append(["all", ["==", ["get", "tier"], item.tier],
+                                [item.model ? "==" : "!=", ["get", "src"], 1]])
+            }
+            chevronOpacity += [threshold.zoom, ["case", visible, 1, 0]]
+        }
+        // Высота наконечника = trafficArrowScale толщин своей линии.
+        let chevronSize = trafficWidth(scale: trafficArrowScale / trafficChevronSide,
+                                       modelShare: TrafficPalette.modelWidthShare)
+        func chevronImage(model: Bool) -> [Any] {
+            ["match", ["get", "level"],
+             4, trafficChevronImage(level: 4, daylight: daylight, model: model),
+             3, trafficChevronImage(level: 3, daylight: daylight, model: model),
+             2, trafficChevronImage(level: 2, daylight: daylight, model: model),
+             trafficChevronImage(level: 1, daylight: daylight, model: model)]
+        }
+        return [
+            ["id": trafficLayerIDs.casing, "type": "line", "source": "traffic", "layout": round,
+             "paint": ["line-color": hex(TrafficPalette.casing),
+                       "line-width": trafficWidth(extra: trafficCasingExtra, modelShare: TrafficPalette.modelWidthShare),
+                       "line-offset": offset,
+                       "line-opacity": ["case", isModel, casingOpacity * 0.4, casingOpacity]]],
+            ["id": trafficLayerIDs.line, "type": "line", "source": "traffic", "layout": round,
+             "paint": ["line-color": ["case", isModel, byLevel(TrafficPalette.model), byLevel { $0 }],
+                       "line-width": trafficWidth(scale: 1, modelShare: TrafficPalette.modelWidthShare),
+                       "line-offset": offset]],
+            ["id": trafficLayerIDs.chevrons, "type": "symbol", "source": "traffic",
+             "minzoom": trafficChevronFromZoom[0],
+             "layout": ["symbol-placement": "line",
+                        "symbol-spacing": ["interpolate", ["linear"], ["zoom"], 12, 48, 15, 80, 18, 120],
+                        "icon-image": ["case", isModel, chevronImage(model: true), chevronImage(model: false)],
+                        "icon-size": chevronSize,
+                        // Сдвиг к правой стороне — в самом растре (trafficChevronIcon).
+                        "icon-anchor": "center",
+                        "icon-rotation-alignment": "map",
+                        "icon-pitch-alignment": "map",
+                        "icon-keep-upright": false,
+                        "icon-allow-overlap": true,
+                        "icon-ignore-placement": true],
+             "paint": ["icon-opacity": chevronOpacity]],
+        ]
+    }
+
     /// Окно линии маршрута у машины (RouteCut): срез краской каждый кадр.
     static let routeNearSource = "route-near"
     /// «Обычно в это время» (33G): профиль часа недели — водители и модель.
@@ -332,36 +454,9 @@ nonisolated enum EngineMapStyle {
         let round: [String: Any] = ["line-cap": "round", "line-join": "round"]
         var out: [[String: Any]] = []
         // Пробки по городу — ПОД линией маршрута: на самом маршруте пробку
-        // показывает его собственный цвет (route-traffic), а тонкая нитка
-        // рядом с ним только двоила бы её. На остальных дорогах видны тонкие
-        // цветные линии, каждое направление — справа по ходу (движение
-        // правостороннее): у двусторонней улицы видны обе стороны.
-        // «Обычно в это время» (33G) — под живыми: светлее и тоньше, той же
-        // стороной (справа по ходу). Цвет — светлый коралл, без красного:
-        // модель не говорит «пробка». Полный вид пробок — этап 33H.
-        out.append([
-            "id": "traffic-usual", "type": "line", "source": usualTrafficSource,
-            "layout": round,
-            "paint": ["line-color": colour(RouteColors.usual),
-                      "line-width": ["interpolate", ["linear"], ["zoom"],
-                                     11, 1, 14, 1.6, 16, 2.4, 19, 3.8],
-                      "line-offset": ["interpolate", ["linear"], ["zoom"],
-                                      11, 0.9, 14, 1.3, 16, 1.8, 19, 2.8],
-                      "line-opacity": ["match", ["get", "heavy"], 1, 0.85, 0.65]],
-        ])
-        out.append([
-            "id": "traffic", "type": "line", "source": "traffic",
-            "layout": round,
-            "paint": ["line-color": ["match", ["get", "level"],
-                                     3, colour(RouteColors.jam),
-                                     2, colour(RouteColors.slow),
-                                     colour(RouteColors.free)],
-                      "line-width": ["interpolate", ["linear"], ["zoom"],
-                                     11, 1.2, 14, 2, 16, 3, 19, 5],
-                      "line-offset": ["interpolate", ["linear"], ["zoom"],
-                                      11, 0.9, 14, 1.3, 16, 1.8, 19, 2.8],
-                      "line-opacity": ["match", ["get", "level"], 1, 0.7, 0.95]],
-        ])
+        // показывает его собственный цвет (route-traffic), а линия рядом с ним
+        // только двоила бы её. Слои — trafficLayers (33H).
+        out += trafficLayers(daylight: daylight)
         // Пройденное — той же ширины, без каймы и бледное: уже не решение.
         // Источник — ВЕСЬ маршрут, один раз на маршрут (27.A): граница
         // пройденного — это срез окна у машины поверх, а не конец этой линии.

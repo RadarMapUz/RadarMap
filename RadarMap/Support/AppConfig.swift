@@ -874,6 +874,25 @@ nonisolated enum AppConfig {
     /// для файлов «обычно» (там его нет), now.json несёт уровень сервера.
     nonisolated static let trafficJamRatio = 0.35
     nonisolated static let trafficSlowRatio = 0.6
+
+    // MARK: Пробки на карте (33H)
+
+    /// «Стоят»: пробка медленнее этого — четвёртый цвет. Сервер шлёт три
+    /// уровня; 10 км/ч — шаг пешехода с остановками, в такой пробке водитель
+    /// говорит «стоим», а не «плетёмся».
+    nonisolated static let trafficStandstillKmh = 10.0
+    /// Сшивка рёбер в линию: поворот круче — уже другая улица (на
+    /// перекрёстке прямо — 0–15°, плавный изгиб проспекта на одном узле
+    /// редко круче 30°).
+    nonisolated static let trafficStitchMaxTurnDegrees = 40.0
+    /// Сглаживание: участок другого уровня короче этого внутри улицы — шум
+    /// одного куска (одно ребро OSM — 10–60 м), а не пробка: «зебра» из
+    /// цветов читается хуже, чем ровная линия соседнего уровня.
+    nonisolated static let trafficSmoothMeters = 60.0
+    /// Толщина линии по классу дороги — через скорость графа: магистраль /
+    /// улица / второстепенная (TrafficLines.tier).
+    nonisolated static let trafficMajorModelKmh = 50.0
+    nonisolated static let trafficStreetModelKmh = 32.0
     /// Живым пробкам верим на столько вперёд по времени пути: дальше по
     /// маршруту (и для выезда позже) — обычная скорость этого часа
     /// (TrafficForecast). Пробка из now.json через полчаса уже другая, с.

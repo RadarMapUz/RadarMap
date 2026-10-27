@@ -12,7 +12,7 @@
 */2 * * * * /usr/bin/python3 /opt/radarmap/api/traffic_build.py >> /var/log/radarmap-traffic.log 2>&1
 # Пробки В МАРШРУТИЗАТОРЕ (32D): стенд MLD radarmap-osrm-mld на 127.0.0.1:8094 — файл скоростей → osrm-customize → подмена слота,
 # только когда файл изменился (server/osrm/traffic_customize.sh, server/osrm/TRAFFIC.md). Прод (8092) и nginx не трогает. ВЫКЛЮЧЕНО: включает владелец.
-# 3-59/5 * * * * /opt/radarmap/osrm-mld/bin/traffic_customize.sh >> /var/log/radarmap-osrm-mld.log 2>&1
+3-59/5 * * * * /opt/radarmap/osrm-mld/bin/traffic_customize.sh >> /var/log/radarmap-osrm-mld.log 2>&1
 # Погода на трассах: open-meteo → /radarmap/weather/roads.json (build_road_weather.py, точки — road_weather_points.json). Выкладка — deploy_road_weather.sh.
 */30 * * * * /usr/bin/python3 /opt/radarmap/api/build_road_weather.py >> /var/log/radarmap-weather.log 2>&1
 # Telegram-канал: подтверждённые треноги и посты по городам (telegram_publish.py). ВКЛЮЧИТЬ ПОСЛЕ СОЗДАНИЯ КАНАЛА:

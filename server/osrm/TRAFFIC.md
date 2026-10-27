@@ -351,7 +351,7 @@ ssh radarmap-vps '(crontab -l; echo "3-59/5 * * * * /opt/radarmap/osrm-mld/bin/t
 # журнал: /var/log/radarmap-osrm-mld.log (две строки на цикл)
 ```
 
-### Переключить приложения на стенд — решение владельца
+### Переключить приложения на стенд — решение владельца (**сделано 27.10.2026**: цикл в crontab, nginx на апстриме `radarmap_osrm`, бэкапы `.bak-32d`)
 
 nginx: OSRM ходит в двух местах — `/etc/nginx/snippets/radarmap-location.conf`
 (домен soulmed.uz) и `/etc/nginx/conf.d/radarmap.conf` (старый :8090). Апстрим

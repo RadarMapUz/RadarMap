@@ -196,12 +196,10 @@ struct CarPlayEngineLayer: View {
             // слежение, а вернуть его там нечем.
             interactive: surface.interactive,
             healthTag: surface.healthTag,
-            trafficEdges: env.traffic.isShown ? env.traffic.snapshot?.edges ?? [] : [],
+            trafficLines: env.traffic.isShown ? env.traffic.lines : [],
+            trafficLinesRevision: env.traffic.linesRevision * 2 + (env.traffic.isShown ? 1 : 0),
             trafficRevision: env.traffic.revision * 2 + (env.traffic.isShown ? 1 : 0),
             trafficSnapshot: env.traffic.isShown ? env.traffic.snapshot : nil,
-            // Обычно в это время (33G): светлее живых, под ними; тот же выключатель.
-            usualTrafficEdges: env.traffic.isShown ? env.trafficProfile.usualEdges : [],
-            usualTrafficRevision: env.trafficProfile.usualRevision * 2 + (env.traffic.isShown ? 1 : 0),
             labelLanguage: env.settings.appLanguage.mapCode,
             cursorStyle: env.settings.cursorStyle,
             // Компас вокруг машины и знак смены лимита (29.B) — на карте

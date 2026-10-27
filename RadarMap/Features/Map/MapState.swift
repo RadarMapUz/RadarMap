@@ -34,6 +34,10 @@ final class MapState {
     /// плашки внизу; читает только PhoneStreetNamePill.
     var streetName: String?
     var selectedCamera: Camera?          // открытый попап детали
+    /// Касание линии пробок — лист о ней (33H).
+    var selectedTraffic: TrafficTap?
+    /// Лист «Пробки»: легенда и балл города (касание чипа балла, 33H).
+    var showTrafficLegend = false
     var highlightedID: Int?              // подсвеченный маркер на карте
     var showNearbySheet = false
     var showSearch = false

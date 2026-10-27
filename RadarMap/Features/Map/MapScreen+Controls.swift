@@ -40,12 +40,13 @@ extension MapScreen {
     @ViewBuilder var tripControls: some View {
         let extras = TripScreenLayout.columnExtras(
             slots: columnSlots, fixed: AppConfig.mapColumnFixedButtons,
-            candidates: map.isRotated ? [(.compass, 1)] : [])
+            candidates: (map.isRotated ? [(.compass, 1)] : []) + trafficScoreCandidate)
         MapMuteButton()
         orientationControl
         if extras.contains(.compass) {
             MapCompassButton(map: map)
         }
+        if extras.contains(.trafficScore) { trafficScoreChip }
         // Семь функций, до которых в поездке было не добраться.
         //
         // Поиск, «Рядом», «Итоги», «Добавить камеру» и Настройки живут в
@@ -82,6 +83,7 @@ extension MapScreen {
         let extras = TripScreenLayout.columnExtras(
             slots: columnSlots, fixed: AppConfig.mapColumnFixedButtons,
             candidates: (map.isRotated ? [(.compass, 1)] : [])
+                + trafficScoreCandidate
                 + (env.route.isActive ? [(.overview, 1)] : [])
                 + (env.settings.mapZoomButtons ? [(.zoom, 2)] : []))
         // Слои карты — первой в колонке.
@@ -105,6 +107,7 @@ extension MapScreen {
         if extras.contains(.compass) {
             MapCompassButton(map: map)
         }
+        if extras.contains(.trafficScore) { trafficScoreChip }
         // «Весь маршрут» — пока он есть: посмотреть его целиком до старта.
         if extras.contains(.overview), env.route.isActive, let polyline = env.route.polyline {
             CircleControl(systemName: "point.topleft.down.to.point.bottomright.curvepath",
@@ -122,6 +125,19 @@ extension MapScreen {
         // Жёлтой кнопки «Радар здесь» здесь БОЛЬШЕ НЕТ: в поездке их было
         // две с разным поведением, осталась та, что в панели поездки
         // (отправка одним тапом с последующим уточнением).
+    }
+
+    /// Балл пробок города (33H, как «9» у Яндекса): только при включённых
+    /// пробках и когда балл есть; касание — лист «Пробки» с легендой.
+    var trafficScoreCandidate: [(TripScreenLayout.ColumnExtra, Int)] {
+        env.traffic.isShown && env.traffic.cityScore != nil ? [(.trafficScore, 1)] : []
+    }
+
+    @ViewBuilder var trafficScoreChip: some View {
+        if let score = env.traffic.cityScore {
+            TrafficScoreChip(score: score) { map.showTrafficLegend = true }
+                .transition(.scale.combined(with: .opacity))
+        }
     }
 
     /// Просвет для колонки справа: от нижнего края верхних панелей до

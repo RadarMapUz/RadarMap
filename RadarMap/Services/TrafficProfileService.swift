@@ -32,8 +32,14 @@ final class TrafficProfileService {
     /// Рёбра слоя «обычно в это время»; пусто — нет профиля, выключено или
     /// в этот час везде как граф (ночь).
     private(set) var usualEdges: [TrafficProfile.UsualEdge] = []
-    /// Растёт на каждом новом наборе слоя — по нему карта перерисовывает.
+    /// Растёт на каждом новом наборе слоя.
     private(set) var usualRevision = 0
+    /// Новый набор «обычно» — в TrafficService: карта рисует его вместе с
+    /// живыми пробками одним слоем линий (33H). Ставит AppEnvironment.
+    @ObservationIgnored var onUsualChanged: (([TrafficProfile.UsualEdge]) -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onUsualChanged,
+                                               "TrafficProfileService.onUsualChanged") }
+    }
 
     @ObservationIgnored private var profile: TrafficProfile?
     @ObservationIgnored private var etag: String?
@@ -133,6 +139,7 @@ final class TrafficProfileService {
             if !usualEdges.isEmpty {
                 usualEdges = []
                 usualRevision &+= 1
+                onUsualChanged?([])
             }
             return
         }
@@ -141,6 +148,7 @@ final class TrafficProfileService {
         guard edges != usualEdges else { return }
         usualEdges = edges
         usualRevision &+= 1
+        onUsualChanged?(edges)
         Log.network.info("обычно в это время: рёбер \(edges.count, privacy: .public) на \(moment.formatted(.iso8601), privacy: .public)")
     }
 

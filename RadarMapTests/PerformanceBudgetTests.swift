@@ -621,6 +621,27 @@ final class PerformanceBudgetTests: XCTestCase {
         XCTAssertLessThan(attachTime, .milliseconds(10), "слой к маршруту в 330 точек: \(attachTime)")
     }
 
+    /// Пробки на карте линиями улиц (33H): сшивка и сглаживание всего города —
+    /// фикстура вечернего Ташкента, 41 тыс. рёбер (вдвое больше, чем дал бы
+    /// весь город с моделью по магистралям), раз на новый now.json, вне
+    /// главного потока. Спецификация: < 30 мс в Debug.
+    func testTrafficStitchBudget() throws {
+        let url = try XCTUnwrap(Bundle.main.url(forResource: "traffic_demo_tashkent", withExtension: "json"))
+        let snapshot = try XCTUnwrap(TrafficSnapshot.decode(Data(contentsOf: url)))
+        XCTAssertGreaterThan(snapshot.edges.count, 30_000)
+        _ = TrafficLines.lines(from: snapshot.edges)            // прогрев
+        let clock = ContinuousClock()
+        var best = Duration.seconds(10)
+        var lines = 0
+        for _ in 0..<3 {
+            let start = clock.now
+            lines = TrafficLines.lines(from: snapshot.edges).count
+            best = min(best, clock.now - start)
+        }
+        XCTAssertGreaterThan(lines, 0)
+        XCTAssertLessThan(best, .milliseconds(30), "сшивка пробок города: \(best)")
+    }
+
     /// Пробки на линии маршрута (25.D): остаток маршрута в 30 км по городу с
     /// тысячей рёбер — пересчёт идёт на каждые 30 м прогресса (вне главного
     /// потока), и он обязан оставаться миллисекундами, а не сотнями.

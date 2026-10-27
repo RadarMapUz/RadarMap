@@ -452,3 +452,114 @@ extension PaletteTests {
         }
     }
 }
+
+// MARK: - Пробки на улицах (33H)
+
+extension PaletteTests {
+
+    private func rgb(_ value: UInt32) -> Color { Color(uiColor: Theme.rgb(value)) }
+
+    /// Палитра «Малина и слива» (выбор владельца 27.10), обе темы: (тема,
+    /// уровни 1…4, маршрут, фон и тёмные полотна темы).
+    private func trafficCases() -> [(String, [UInt32], UInt32, [UInt32])] {
+        let c = TrafficPalette.active
+        return [
+            ("днём", [c.free.day, c.slow.day, c.jam.day, c.stand.day], RouteColors.body.day, [0xF2F3F5, 0xFFFFFF]),
+            ("ночью", [c.free.night, c.slow.night, c.jam.night, c.stand.night], RouteColors.body.night,
+             [0x16181C, 0x30343C, 0x33373F]),
+        ]
+    }
+
+    /// Красный на карте — только камера: пробка и «стоят» не читаются её
+    /// красным (ΔE ≥ 20 — спецификация 33H) ни днём, ни ночью — ни живые, ни
+    /// «обычно». До 33H пробка днём была побайтово красным камеры.
+    func testTrafficJamIsNotTheCameraRed() {
+        let camera = Theme.Types.camera
+        for (name, levels, _, _) in trafficCases() {
+            for (index, level) in levels.enumerated() where index >= 2 {
+                XCTAssertGreaterThanOrEqual(deltaE(rgb(level), camera), 20, "\(name): уровень \(index + 1) ≈ камера")
+            }
+        }
+        for level in 3...4 {
+            let usual = TrafficPalette.usual(TrafficPalette.level(level))
+            XCTAssertGreaterThanOrEqual(deltaE(rgb(usual.day), camera), 20, "«обычно» \(level) днём ≈ камера")
+            XCTAssertGreaterThanOrEqual(deltaE(rgb(usual.night), camera), 20, "«обычно» \(level) ночью ≈ камера")
+        }
+        XCTAssertGreaterThanOrEqual(deltaEDeutan(Theme.trafficJam, camera), 20, "пробка ≈ камера при дейтеранопии")
+    }
+
+    /// Четыре уровня различимы между собой и при дейтеранопии (там — ниже
+    /// порог: второй носитель — яркость и наконечник направления).
+    func testTrafficLevelsAreDistinguishable() {
+        for (name, levels, _, _) in trafficCases() {
+            for i in 0..<levels.count {
+                for j in (i + 1)..<levels.count {
+                    XCTAssertGreaterThanOrEqual(deltaE(rgb(levels[i]), rgb(levels[j])), 20,
+                                                "\(name): уровни \(i + 1) и \(j + 1)")
+                    XCTAssertGreaterThanOrEqual(deltaEDeutan(rgb(levels[i]), rgb(levels[j])), 12,
+                                                "\(name): уровни \(i + 1) и \(j + 1), дейтеранопия")
+                }
+            }
+            // Главная пара для дейтеранопа — «свободно» и «пробка».
+            XCTAssertGreaterThanOrEqual(deltaEDeutan(rgb(levels[0]), rgb(levels[2])), 20, "\(name): зелёный ↔ пробка")
+        }
+    }
+
+    /// Пробки — не маршрут: линия маршрута над ними должна оставаться
+    /// главным предметом карты.
+    func testTrafficIsNotTheRoute() {
+        for (name, levels, route, _) in trafficCases() {
+            for (index, level) in levels.enumerated() {
+                XCTAssertGreaterThanOrEqual(deltaE(rgb(level), rgb(route)), 25, "\(name): уровень \(index + 1) ≈ маршрут")
+            }
+        }
+    }
+
+    /// Ночью линия видна на графите сама: свободно, медленно, пробка и
+    /// «стоят» — ≥ 3:1 (WCAG 1.4.11 для графики). Днём линию держит кайма.
+    func testTrafficLinesStandOutAtNight() {
+        let (_, levels, _, grounds) = trafficCases()[1]
+        for ground in grounds {
+            for (index, level) in levels.enumerated() {
+                XCTAssertGreaterThanOrEqual(contrast(rgb(level), rgb(ground)), 3,
+                                            "ночью: уровень \(index + 1) на #\(String(ground, radix: 16))")
+            }
+        }
+    }
+
+    /// Днём линия на белой улице держится каймой: кайма + линия ≥ 3:1.
+    func testTrafficCasingCarriesTheDayLine() {
+        let c = TrafficPalette.active
+        for level in [c.free.day, c.slow.day, c.jam.day, c.stand.day] {
+            let best = max(contrast(rgb(level), rgb(0xFFFFFF)), contrast(rgb(TrafficPalette.casing.day), rgb(0xFFFFFF)))
+            XCTAssertGreaterThanOrEqual(best, 3, "линия или кайма на белой улице")
+        }
+    }
+
+    /// «Обычно» — тот же цвет, но заметно светлее/глуше живого.
+    func testUsualIsPalerThanLive() {
+        for level in 1...4 {
+            let live = TrafficPalette.level(level)
+            let usual = TrafficPalette.usual(live)
+            XCTAssertGreaterThanOrEqual(deltaE(rgb(live.day), rgb(usual.day)), 10, "\(level) днём")
+            XCTAssertGreaterThanOrEqual(deltaE(rgb(live.night), rgb(usual.night)), 10, "\(level) ночью")
+        }
+    }
+
+    /// Наконечник направления отличается от своей линии — иначе знака нет.
+    func testTrafficArrowStandsOnItsLine() {
+        for level in 1...4 {
+            let pair = TrafficPalette.level(level)
+            for (line, day) in [(pair.day, true), (pair.night, false)] {
+                let arrow = TrafficPalette.arrow(on: line, daylight: day)
+                XCTAssertGreaterThanOrEqual(deltaE(rgb(arrow.fill), rgb(line)), 15, "\(level) \(day ? "днём" : "ночью")")
+            }
+        }
+    }
+
+    /// Пробка на линии маршрута — цвет палитры пробок (один язык с улицами).
+    func testRouteJamIsTheTrafficJam() {
+        XCTAssertEqual(RouteColors.jam.day, TrafficPalette.active.jam.day)
+        XCTAssertEqual(RouteColors.slow.night, TrafficPalette.active.slow.night)
+    }
+}

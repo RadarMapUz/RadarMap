@@ -156,6 +156,8 @@ nonisolated enum TripScreenLayout {
     /// Кнопка колонки справа, которую можно убрать, когда места мало.
     enum ColumnExtra: Hashable, Sendable {
         case compass, overview, zoom
+        /// Балл пробок города (33H) — только при включённых пробках.
+        case trafficScore
     }
 
     /// Сколько мест колонки помещается в просвет между панелями.

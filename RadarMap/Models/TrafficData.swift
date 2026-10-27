@@ -28,11 +28,24 @@ nonisolated struct TrafficEdge: Equatable, Sendable {
     let level: Int
     let kmh: Double
     let modelKmh: Double
+    /// Что это за ребро на карте (33H): живое — now.json, водители сейчас;
+    /// «обычно» — профиль часа недели (33G: поездки водителей за недели или
+    /// модель дороги), светлее и тоньше. now.json всегда живой: модель
+    /// приходит отдельным profile.json (TrafficProfileService) и в голос
+    /// (JamAhead, объезд) не попадает — там только `snapshot`.
+    var source: Source = .live
+
+    /// Код признака `src` в источнике карты: 0 — сейчас, 1 — обычно.
+    nonisolated enum Source: Int, Sendable {
+        case live = 0
+        case usual = 1
+    }
 
     static func == (l: TrafficEdge, r: TrafficEdge) -> Bool {
         l.a.latitude == r.a.latitude && l.a.longitude == r.a.longitude
             && l.b.latitude == r.b.latitude && l.b.longitude == r.b.longitude
             && l.level == r.level && l.kmh == r.kmh && l.modelKmh == r.modelKmh
+            && l.source == r.source
     }
 }
 
@@ -96,6 +109,7 @@ nonisolated struct TrafficSnapshot: Sendable {
 
     /// Разбор now.json. Формат версии 1:
     /// `{"v":1,"generated":t,"edges":[[ulat,ulon,vlat,vlon,level,kmh,model]]}`.
+    /// Лишние колонки (если сервер когда-нибудь их добавит) не читаются.
     /// Другая версия или битое ребро — nil/пропуск: показывать догадку о
     /// формате хуже, чем не показывать пробки.
     static func decode(_ data: Data) -> TrafficSnapshot? {

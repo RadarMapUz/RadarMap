@@ -1,38 +1,6 @@
 {
   "sourceLanguage": "ru",
   "strings": {
-    "Сейчас — по данным водителей": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Сейчас — по данным водителей"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Hozir — haydovchilar maʼlumoti boʻyicha"
-          }
-        }
-      }
-    },
-    "Обычно здесь медленно в это время": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Обычно здесь медленно в это время"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Odatda bu vaqtda bu yerda sekin"
-          }
-        }
-      }
-    },
     "Учитывать мою манеру езды": {
       "localizations": {
         "ru": {
@@ -33869,6 +33837,278 @@
           "stringUnit": {
             "state": "translated",
             "value": "YTH allaqachon yoʻq"
+          }
+        }
+      }
+    },
+    "Свободно": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Свободно"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erkin"
+          }
+        }
+      }
+    },
+    "Медленно": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Медленно"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sekin"
+          }
+        }
+      }
+    },
+    "Пробка": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пробка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tirbandlik"
+          }
+        }
+      }
+    },
+    "Стоят": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Стоят"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turibdi"
+          }
+        }
+      }
+    },
+    "Направление движения": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Направление движения"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Harakat yoʻnalishi"
+          }
+        }
+      }
+    },
+    "Светлее и тоньше — обычно в это время": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Светлее и тоньше — обычно в это время"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ochroq va ingichka — odatda shu vaqtda"
+          }
+        }
+      }
+    },
+    "Обычно в это время свободно": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обычно в это время свободно"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odatda shu vaqtda erkin"
+          }
+        }
+      }
+    },
+    "Обычно в это время медленно": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обычно в это время медленно"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odatda shu vaqtda sekin"
+          }
+        }
+      }
+    },
+    "Обычно в это время пробка": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обычно в это время пробка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odatda shu vaqtda tirbandlik"
+          }
+        }
+      }
+    },
+    "По прошлым неделям и модели дороги — не данные сейчас": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По прошлым неделям и модели дороги — не данные сейчас"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻtgan haftalar va yoʻl modeli boʻyicha — hozirgi maʼlumot emas"
+          }
+        }
+      }
+    },
+    "По данным водителей за последние 15 минут": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По данным водителей за последние 15 минут"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haydovchilar maʼlumoti boʻyicha, soʻnggi 15 daqiqa"
+          }
+        }
+      }
+    },
+    "обычно %lld км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "обычно %lld км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "odatda %lld km/soat"
+          }
+        }
+      }
+    },
+    "Балл пробок: %lld из 10": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Балл пробок: %lld из 10"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tirbandlik balli: 10 dan %lld"
+          }
+        }
+      }
+    },
+    "Балл города": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Балл города"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shahar balli"
+          }
+        }
+      }
+    },
+    "Обычно в это время": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обычно в это время"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odatda shu vaqtda"
+          }
+        }
+      }
+    },
+    "По данным водителей сейчас": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По данным водителей сейчас"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haydovchilar maʼlumoti boʻyicha, hozir"
+          }
+        }
+      }
+    },
+    "0 — свободно, 10 — город стоит": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "0 — свободно, 10 — город стоит"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "0 — erkin, 10 — shahar turibdi"
           }
         }
       }

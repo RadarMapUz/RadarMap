@@ -577,6 +577,8 @@ final class AppEnvironment {
         // новый — время вариантов и остатка пересчитывается.
         trafficProfile.isAllowed = { [weak traffic] in traffic?.isShown ?? false }
         trafficProfile.isOnline = { [weak network] in network?.isOnline ?? false }
+        // «Обычно в это время» — тем же слоем линий, что живые (33H).
+        trafficProfile.onUsualChanged = { [weak traffic] in traffic?.setUsual($0) }
         route.trafficProfile = { [weak trafficProfile] in trafficProfile?.current() }
         // Личный темп (33E): «Учитывать мою манеру езды» и пульт пробок.
         personalPace.isEnabled = { [weak settings, weak config] in

@@ -216,6 +216,12 @@ struct MapScreen: View {
                                   buildRoute(to: camera.coordinate, name: camera.displayTitle)
                               })
         }
+        .sheet(item: $map.selectedTraffic) { tap in
+            TrafficTapSheet(tap: tap)
+        }
+        .sheet(isPresented: $map.showTrafficLegend) {
+            TrafficLegendSheet(score: env.traffic.cityScore)
+        }
         .sheet(isPresented: $map.showNearbySheet) {
             NearbyCamerasSheet(onSelect: { map.focus(on: $0) })
         }
@@ -424,6 +430,7 @@ struct MapScreen: View {
         // схема убраны по слову владельца). Панели поверх — те же: они про
         // скорость и камеры, а не про подложку.
         EngineBaseLayer(onSelectCamera: { map.select($0) },
+                        onSelectTraffic: { map.selectedTraffic = $0 },
                         onLongPress: { selectPoint(at: $0) },
                         state: frame, map: map)
             .ignoresSafeArea()

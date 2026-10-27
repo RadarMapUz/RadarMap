@@ -17,7 +17,7 @@ import Testing
 @Suite("Линия маршрута и спокойные камеры")
 struct EngineRouteStyleTests {
 
-    private let order = ["traffic", "route-traveled", "route-glow", "route-near-glow", "route-case", "route-near-case", "route", "route-near",
+    private let order = ["traffic-case", "traffic", "traffic-arrows", "route-traveled", "route-glow", "route-near-glow", "route-case", "route-near-case", "route", "route-near",
                          "route-traffic", "route-maneuver", "route-near-maneuver", "route-core",
                          "route-near-core", "route-arrows"]
 

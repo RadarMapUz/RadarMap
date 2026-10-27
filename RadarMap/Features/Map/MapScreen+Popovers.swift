@@ -36,7 +36,7 @@ extension MapScreen {
     /// остаются диплинки (виджет, уведомление) и ключи запуска.
     var isSheetShown: Bool {
         map.selectedCamera != nil || map.showNearbySheet || map.showSearch || map.showSettings
-            || map.showStats || showRouteCameras || showAlongRoute || showMyPlaces || showsWhatsNew
+            || map.showStats || showRouteCameras || showAlongRoute || showLongTrip || showMyPlaces || showsWhatsNew
             || showFines || tripEndDetail != nil || etaSharePayload != nil || lateSharePayload != nil
     }
 

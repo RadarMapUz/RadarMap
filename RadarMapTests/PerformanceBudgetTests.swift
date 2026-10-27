@@ -684,4 +684,43 @@ final class PerformanceBudgetTests: XCTestCase {
         // Минута кадров — меньше 0,3 с на симуляторе (≤ 0,17 мс на кадр).
         XCTAssertLessThan(total, .milliseconds(300), "срез линии дорожает на кадр: \(total)")
     }
+
+    /// «Перед дальней дорогой» (12.4): маршрут 600 км (точка на 100 м),
+    /// 400 камер на нём и 3000 заправок в коридоре. Лист собирается вне
+    /// главного потока при открытии и после докачки; проекция заведений на
+    /// линию и сборка мест обязаны оставаться десятками миллисекунд, а не
+    /// секундами — возврат перебора «каждое заведение × каждый отрезок»
+    /// (18 млн пар) это и поймает.
+    func testLongTripBriefBudget() {
+        let route = (0..<6_000).map { i in
+            MKMapPoint(CLLocationCoordinate2D(latitude: 41.30 - Double(i) * 0.0006,
+                                              longitude: 69.20 - Double(i) * 0.0004 + Double(i % 50) * 0.00001))
+        }
+        let cameras = syntheticCameras(400)
+        let markers = cameras.enumerated().map { index, camera in
+            LongTripBrief.Marker(camera: camera, along: Double(index) * 1_450 + Double(index % 3) * 90)
+        }
+        let kinds: [Venue.Kind] = [.cng, .fuel, .lpg]
+        let venues = (0..<3_000).map { i -> Venue in
+            let base = route[(i * 2) % route.count].coordinate
+            return Venue(kind: kinds[i % 3], name: "",
+                         point: CLLocationCoordinate2D(latitude: base.latitude + Double(i % 7 - 3) * 0.002,
+                                                       longitude: base.longitude + Double(i % 5 - 2) * 0.002))
+        }
+        let now = Date()
+        let clock = ContinuousClock()
+        let start = clock.now
+        var rows = 0
+        for _ in 0..<5 {
+            let items = CorridorVenues.find(venues, route: route, progress: 0, kinds: Set(kinds), limit: .max)
+            let brief = LongTripBrief.make(markers: markers, venues: items, kinds: kinds, progress: 0,
+                                           routeLength: 600_000, venuesComplete: true, now: now)
+            rows += brief.checkpoints.count + brief.fuel.reduce(0) { $0 + $1.items.count }
+        }
+        let total = clock.now - start
+        XCTAssertGreaterThan(rows, 0)
+        // 5 сборок — меньше 2 с на симуляторе (замер 27.10 — 0,52 с; перебор
+        // всех пар был бы десятками секунд).
+        XCTAssertLessThan(total, .milliseconds(2_000), "лист дальней дороги дорожает: \(total)")
+    }
 }

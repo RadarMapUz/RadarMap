@@ -17,6 +17,7 @@ struct MapScreen: View {
     @State var showRouteCameras = false
     /// «По пути» (19.3): заправки, гостиницы, кафе впереди по маршруту.
     @State var showAlongRoute = false
+    @State var showLongTrip = false
     /// «Мои места» из нижнего бара: Дом, Работа, недавние — маршрут в один тап.
     @State var showMyPlaces = false
     /// Экранная модель своей схемы. Живёт всегда, а считается только когда
@@ -240,6 +241,10 @@ struct MapScreen: View {
         .sheet(isPresented: $showAlongRoute) {
             AlongRouteSheet(onPick: { venue in addStop(venue.point, name: venue.title) })
         }
+        .sheet(isPresented: $showLongTrip) {
+            LongTripSheet(onFocus: { map.focus(on: $0) },
+                          onPick: { venue in addStop(venue.point, name: venue.title) })
+        }
         .sheet(isPresented: $showMyPlaces) {
             // Те же два пути, что у поиска: с геопозицией — маршрут, без неё —
             // точка на карте с её панелью, а не мёртвая строка.
@@ -298,6 +303,7 @@ struct MapScreen: View {
             map.showSettings = false
             showRouteCameras = false
             showAlongRoute = false
+            showLongTrip = false
             showMyPlaces = false
             showsWhatsNew = false
             tripEndDetail = nil

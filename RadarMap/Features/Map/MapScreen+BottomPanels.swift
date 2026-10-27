@@ -130,6 +130,7 @@ extension MapScreen {
                         onRemoveStop: { removeStop() },
                         onShareArrival: { shareArrival() },
                         onShowAlongRoute: { showAlongRoute = true },
+                        onShowLongTrip: { showLongTrip = true },
                         onSelectVariant: { id in
                             env.route.selectVariant(id)
                             showVariantsOverview()

@@ -32809,6 +32809,685 @@
           }
         }
       }
+    },
+    "пост ДПС": {
+      "comment": "Сводка листа «Перед дальней дорогой» (LongTripText.postsLabel): форма для 1, 21…; число стоит отдельно.",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "пост ДПС"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YPX posti"
+          }
+        }
+      }
+    },
+    "поста ДПС": {
+      "comment": "Форма для 2–4, 22–24…; число стоит отдельно.",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "поста ДПС"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YPX posti"
+          }
+        }
+      }
+    },
+    "постов ДПС": {
+      "comment": "Форма для 0, 5–20…; число стоит отдельно.",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "постов ДПС"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YPX posti"
+          }
+        }
+      }
+    },
+    "отметка водителей": {
+      "comment": "Сводка листа «Перед дальней дорогой» (LongTripText.crowdLabel): форма для 1, 21…; число стоит отдельно.",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "отметка водителей"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "haydovchilar belgisi"
+          }
+        }
+      }
+    },
+    "отметки водителей": {
+      "comment": "Форма для 2–4, 22–24…; число стоит отдельно.",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "отметки водителей"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "haydovchilar belgisi"
+          }
+        }
+      }
+    },
+    "отметок водителей": {
+      "comment": "Форма для 0, 5–20…; число стоит отдельно.",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "отметок водителей"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "haydovchilar belgisi"
+          }
+        }
+      }
+    },
+    "Метан по пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Метан по пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl boʻyida metan"
+          }
+        }
+      }
+    },
+    "Пропан по пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пропан по пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl boʻyida propan"
+          }
+        }
+      }
+    },
+    "Зарядки по пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зарядки по пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl boʻyida quvvatlash stansiyalari"
+          }
+        }
+      }
+    },
+    "Заправки по пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заправки по пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl boʻyida yoqilgʻi quyish shoxobchalari"
+          }
+        }
+      }
+    },
+    "Дольше всего без метана — %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дольше всего без метана — %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metansiz eng uzun oraliq — %@"
+          }
+        }
+      }
+    },
+    "Дольше всего без пропана — %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дольше всего без пропана — %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Propansiz eng uzun oraliq — %@"
+          }
+        }
+      }
+    },
+    "Дольше всего без зарядки — %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дольше всего без зарядки — %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quvvatlashsiz eng uzun oraliq — %@"
+          }
+        }
+      }
+    },
+    "Дольше всего без заправки — %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дольше всего без заправки — %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoqilgʻi quyishsiz eng uzun oraliq — %@"
+          }
+        }
+      }
+    },
+    "весь путь": {
+      "comment": "Отрезок без заправки занимает весь маршрут.",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "весь путь"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "butun yoʻl"
+          }
+        }
+      }
+    },
+    "от старта до %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "от старта до %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "startdan %@ gacha"
+          }
+        }
+      }
+    },
+    "от %@ до конца пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "от %@ до конца пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ dan yoʻl oxirigacha"
+          }
+        }
+      }
+    },
+    "от %1$@ до %2$@ от старта": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "от %1$@ до %2$@ от старта"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "startdan %1$@ dan %2$@ gacha"
+          }
+        }
+      }
+    },
+    "Метана по пути не нашлось — заправьтесь до выезда": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Метана по пути не нашлось — заправьтесь до выезда"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl boʻyida metan topilmadi — yoʻlga chiqishdan oldin yoqilgʻi quying"
+          }
+        }
+      }
+    },
+    "Пропана по пути не нашлось — заправьтесь до выезда": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пропана по пути не нашлось — заправьтесь до выезда"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl boʻyida propan topilmadi — yoʻlga chiqishdan oldin yoqilgʻi quying"
+          }
+        }
+      }
+    },
+    "Зарядок по пути не нашлось — зарядитесь до выезда": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зарядок по пути не нашлось — зарядитесь до выезда"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl boʻyida quvvatlash stansiyasi topilmadi — yoʻlga chiqishdan oldin quvvatlang"
+          }
+        }
+      }
+    },
+    "Заправок по пути не нашлось — заправьтесь до выезда": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заправок по пути не нашлось — заправьтесь до выезда"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl boʻyida yoqilgʻi quyish shoxobchasi topilmadi — yoʻlga chiqishdan oldin yoqilgʻi quying"
+          }
+        }
+      }
+    },
+    "Собрано на телефоне из уже скачанного — о маршруте сервер ничего нового не узнаёт.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Собрано на телефоне из уже скачанного — о маршруте сервер ничего нового не узнаёт."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefonda allaqachon yuklab olingan maʼlumotlardan yigʻildi — server marshrut haqida yangi hech narsa bilmaydi."
+          }
+        }
+      }
+    },
+    "Перед дальней дорогой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перед дальней дорогой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uzoq yoʻl oldidan"
+          }
+        }
+      }
+    },
+    "Камер и постов по пути нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камер и постов по пути нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻlda kamera va postlar yoʻq"
+          }
+        }
+      }
+    },
+    "Камеры и посты по порядку": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камеры и посты по порядку"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralar va postlar tartib bilan"
+          }
+        }
+      }
+    },
+    "Отметки водителей живут несколько часов — к этому месту их может уже не быть.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отметки водителей живут несколько часов — к этому месту их может уже не быть."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haydovchilar belgilari bir necha soat turadi — siz yetib borganingizda ular boʻlmasligi mumkin."
+          }
+        }
+      }
+    },
+    "Не дальше %@ от дороги": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не дальше %@ от дороги"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻldan %@ dan uzoq emas"
+          }
+        }
+      }
+    },
+    "Часть пути без данных о заправках — скачаются кнопкой выше": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Часть пути без данных о заправках — скачаются кнопкой выше"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻlning bir qismida yoqilgʻi quyish shoxobchalari haqida maʼlumot yoʻq — yuqoridagi tugma bilan yuklanadi"
+          }
+        }
+      }
+    },
+    "Для части пути данных о заправках пока нет — список может быть неполным": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для части пути данных о заправках пока нет — список может быть неполным"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻlning bir qismi uchun yoqilgʻi quyish shoxobchalari haqida hali maʼlumot yoʻq — roʻyxat toʻliq boʻlmasligi mumkin"
+          }
+        }
+      }
+    },
+    "Ещё %@ дальше по пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ещё %@ дальше по пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻlning davomida yana %@ ta"
+          }
+        }
+      }
+    },
+    "Собираем по пути…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Собираем по пути…"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl boʻyicha yigʻilmoqda…"
+          }
+        }
+      }
+    },
+    "Считаем области по пути…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Считаем области по пути…"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl boʻyidagi viloyatlar hisoblanmoqda…"
+          }
+        }
+      }
+    },
+    "Маршрут без сети": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрут без сети"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tarmoqsiz marshrut"
+          }
+        }
+      }
+    },
+    "Нет связи — скачать сейчас не выйдет. Камеры предупреждают и без сети.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет связи — скачать сейчас не выйдет. Камеры предупреждают и без сети."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aloqa yoʻq — hozir yuklab boʻlmaydi. Kameralar tarmoqsiz ham ogohlantiradi."
+          }
+        }
+      }
+    },
+    "Сейчас мобильная сеть — проверьте тариф или дождитесь Wi-Fi.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сейчас мобильная сеть — проверьте тариф или дождитесь Wi-Fi."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hozir mobil tarmoq — tarifni tekshiring yoki Wi-Fi ni kuting."
+          }
+        }
+      }
+    },
+    "Карта всего пути на телефоне — без связи дорога не будет серой.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Карта всего пути на телефоне — без связи дорога не будет серой."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Butun yoʻl xaritasi telefonda — aloqasiz ham yoʻl kulrang boʻlmaydi."
+          }
+        }
+      }
+    },
+    "Камеры предупреждают и без сети — карта нужна, чтобы дорога не была серой.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камеры предупреждают и без сети — карта нужна, чтобы дорога не была серой."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralar tarmoqsiz ham ogohlantiradi — xarita yoʻl kulrang boʻlmasligi uchun kerak."
+          }
+        }
+      }
+    },
+    "На телефоне": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На телефоне"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefonda"
+          }
+        }
+      }
+    },
+    "Скачать недостающее · %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачать недостающее · %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yetishmayotganini yuklab olish · %@"
+          }
+        }
+      }
+    },
+    "Скачать недостающее, %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачать недостающее, %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yetishmayotganini yuklab olish, %@"
+          }
+        }
+      }
+    },
+    "Карта по пути, камеры и посты, где заправиться": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Карта по пути, камеры и посты, где заправиться"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl xaritasi, kameralar va postlar, qayerda yoqilgʻi quyish mumkin"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

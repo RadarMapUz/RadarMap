@@ -90,7 +90,23 @@ extension LocationService {
             isFamiliar: familiarCameraIDs.contains(camera.id),
             overKmh: over,
             limitKmh: speedLimits?.currentLimit,
-            isCrawling: crawling)
+            isCrawling: crawling,
+            isNight: isNightVoice)
+    }
+
+    /// Ночной голос (12.6): солнце в точке машины, а не тема интерфейса —
+    /// тёмную тему днём выбирают ради экрана, а не ради тишины в салоне, а в
+    /// фоновой поездке тема не пересчитывается вовсе. Свой расчёт — не чаще
+    /// раза в минуту: план голоса читается на тиках у камеры.
+    var isNightVoice: Bool {
+        guard settings.nightVoice else { return false }
+        let now = Date()
+        if let cached = sunForVoice, now.timeIntervalSince(cached.at) < AppConfig.nightVoiceRecheckSeconds {
+            return !cached.day
+        }
+        let day = Sun.isDaytime(at: currentCoordinate, now: now)
+        sunForVoice = (now, day)
+        return !day
     }
 
     /// Оповещения о приближении: решение принимает AlertEngine (чистый, тестируемый),

@@ -48,6 +48,9 @@ nonisolated enum VoiceDirector {
         var isCrawling = false
         /// Первое оповещение об этой камере (второе и третье — эскалация).
         var isFirst = true
+        /// После заката и «Ночной голос» включён (12.6): спокойная фраза
+        /// становится короткой. Срочную ночь не трогает.
+        var isNight = false
     }
 
     /// Насколько многословно говорить о камере.
@@ -103,7 +106,11 @@ nonisolated enum VoiceDirector {
     /// 5. Своя камера в городе — только тук: дорога дом→работа проходит одни и
     ///    те же восемь камер дважды в день, и голос на них перестаёт быть
     ///    помощью через две недели. В режиме «обо всех» говорим всё равно.
-    /// 6. Иначе: трасса — полная фраза, город — короткая.
+    /// 6. Иначе: трасса — полная фраза, город — короткая. Ночью (12.6) и на
+    ///    трассе короткая: в тёмной машине длинная фраза пугает, а «Камера,
+    ///    300 метров» говорит то же главное. Ночь только СОКРАЩАЕТ: срочная
+    ///    фраза со скоростью и лимитом звучит целиком, сирена и громкость те
+    ///    же — тише предупреждение о камере не становится никогда.
     static func decide(_ s: Situation) -> Plan {
         if s.mode == .off { return .silent }
         if s.isSudden { return Plan(voice: .urgent, speaksLimit: s.limitKmh != nil) }
@@ -121,7 +128,7 @@ nonisolated enum VoiceDirector {
         }
         if s.isCrawling { return Plan(voice: .none, postpone: true) }
         if s.isFamiliar, s.mode != .always { return .silent }
-        return s.context == .highway
+        return s.context == .highway && !s.isNight
             ? Plan(voice: .calm, speaksLimit: s.limitKmh != nil)
             : Plan(voice: .brief)
     }

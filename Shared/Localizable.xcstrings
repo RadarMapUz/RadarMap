@@ -32921,6 +32921,38 @@
           }
         }
       }
+    },
+    "Ночью короче": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ночью короче"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kechasi qisqaroq"
+          }
+        }
+      }
+    },
+    "«Ночью короче» — после заката о камере говорится коротко: «Камера, 300 метров». Громкость та же, а при превышении фраза звучит целиком.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Ночью короче» — после заката о камере говорится коротко: «Камера, 300 метров». Громкость та же, а при превышении фраза звучит целиком."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Kechasi qisqaroq» — quyosh botgandan keyin kamera haqida qisqa aytiladi: «Kamera, 300 metr». Ovoz balandligi oʻsha-oʻsha, tezlik oshganda esa ibora toʻliq yangraydi."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

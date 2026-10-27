@@ -26,12 +26,17 @@ echo "→ Заливка и проверка синтаксиса той же в
 # traffic_config.py (этап 33) — константы, которые сборщик импортирует: без
 # него traffic_build.py не запустится. Едет первым.
 "${SCP[@]}" "$DIR/traffic_config.py" "$HOST:${BUILD%/*}/traffic_config.py.new"
+# traffic_profile.py (33A) — сборщик зовёт его для profile.json; без него
+# прогон падал на ModuleNotFoundError (27.10, первая выкатка 33).
+"${SCP[@]}" "$DIR/traffic_profile.py" "$HOST:${BUILD%/*}/traffic_profile.py.new"
 "${SCP[@]}" "$DIR/traffic_build.py" "$HOST:$BUILD.new"
 "${SSH[@]}" "$HOST" "
   set -e
   python3 -c \"import ast, sys; ast.parse(open(sys.argv[1]).read())\" ${BUILD%/*}/traffic_config.py.new
+  python3 -c \"import ast, sys; ast.parse(open(sys.argv[1]).read())\" ${BUILD%/*}/traffic_profile.py.new
   python3 -c \"import ast, sys; ast.parse(open(sys.argv[1]).read())\" $BUILD.new
   mv ${BUILD%/*}/traffic_config.py.new ${BUILD%/*}/traffic_config.py
+  mv ${BUILD%/*}/traffic_profile.py.new ${BUILD%/*}/traffic_profile.py
   mv $BUILD.new $BUILD
   mkdir -p /opt/radarmap/www/traffic
   # Пробный прогон: OSRM отвечает, база создаётся, файл пишется.

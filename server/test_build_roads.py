@@ -4014,3 +4014,205 @@ class VenueTests(unittest.TestCase):
         with open(os.path.join(work, f"road2_{key}.json"), "rb") as handle:
             blob = handle.read()
         self.assertEqual(index_v2[key]["sha256"], hashlib.sha256(blob).hexdigest())
+
+
+class LargeJunctionContourTests(unittest.TestCase):
+    """32C: контуры крупных узлов на вырезках настоящих перекрёстков
+    (fixtures/junctions_32c.json — дороги OSM после generalise и правок
+    вокруг Дормона, Муминова, Навои × Рашидов и узла в 19 ног). Меры —
+    те же, что у road_metrics: внахлёст глубже метра, зубец острее 40° на
+    рёбрах от 2 м, выемка от 3 м², бордюр по асфальту подхода."""
+
+    @classmethod
+    def setUpClass(cls):
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "junctions_32c.json")
+        with open(path, encoding="utf-8") as handle:
+            cls.fixture = json.load(handle)["spots"]
+        cls.built = {}
+
+    def build(self, name):
+        if name not in self.built:
+            spot = self.fixture[name]
+            roads = [(r[0], r[1], [tuple(p) for p in r[2]], r[3]) for r in spot["roads"]]
+            chains = build_roads.street_chains(roads)
+            arms = build_roads.junction_arms(chains)
+            figures = list(build_roads.iter_junctions(arms))
+            self.built[name] = (spot["centre"], chains, arms, figures)
+        return self.built[name]
+
+    @staticmethod
+    def local(ring, origin):
+        kx = build_roads.LAT_METERS * math.cos(math.radians(origin[1]))
+        return [((p[0] - origin[0]) * kx, (p[1] - origin[1]) * build_roads.LAT_METERS) for p in ring]
+
+    def areas_near(self, name, metres=60.0):
+        (lat, lon), _chains, _arms, figures = self.build(name)
+        return [f[2] for f in figures if f[0] == build_roads.AREA_JUNCTION and not f[1] & build_roads.AREA_FLAG_STRIP
+                and any(build_roads.meters_between(p, (lon, lat)) < metres for p in f[2])]
+
+    def test_giant_node_is_not_a_pile_of_overlapping_pieces(self):
+        # Узел в 19 ног (Ташкент, 41.3261, 69.19355): пустота разделительной
+        # не даёт контура объединением, и узел строился фигурами по узлам —
+        # пять кусков внахлёст, рваный край. Слитые — без нахлёста.
+        rings = self.areas_near("giant_19")
+        self.assertLessEqual(len(rings), 3)
+        origin = rings[0][0]
+        shapes = [self.local(r, origin) for r in rings]
+        for i, ring in enumerate(shapes):
+            for j, other in enumerate(shapes):
+                if i == j:
+                    continue
+                deep = [q for q in ring if build_roads._point_in_ring(q, other)
+                        and min(build_roads._distance_to_segment(q, a, b)
+                                for a, b in zip(other, other[1:] + other[:1])) > 1.0]
+                self.assertEqual(deep, [], f"фигура {i} лежит на фигуре {j} внахлёст")
+
+    def test_outlines_have_no_teeth_and_no_notches_on_the_tile_grid(self):
+        # Выемки — у площадей объединением и слитых; у контура по устьям
+        # (Дормон, Муминова) карман между подходами — настоящий угол
+        # квартала, его мера тоже считает, но заливать его нельзя.
+        notched = ("navoi_rashidov", "giant_19")
+        for name in ("dormon", "muminova", "navoi_rashidov", "giant_19"):
+            for ring in self.areas_near(name):
+                grid = build_roads.quantized(ring)
+                pts = self.local(grid, grid[0])
+                if build_roads._ring_area(pts) < 0:
+                    pts = pts[::-1]
+                n = len(pts)
+                for k in range(n):
+                    a, b, c = pts[k - 1], pts[k], pts[(k + 1) % n]
+                    u = (a[0] - b[0], a[1] - b[1])
+                    v = (c[0] - b[0], c[1] - b[1])
+                    lu, lv = math.hypot(*u), math.hypot(*v)
+                    if lu < 2.0 or lv < 2.0:
+                        continue
+                    angle = math.degrees(math.acos(max(-1.0, min(1.0, (u[0] * v[0] + u[1] * v[1]) / (lu * lv)))))
+                    self.assertGreaterEqual(angle, 40.0, f"{name}: зубец {angle:.0f}° у {grid[k]}")
+                if name not in notched:
+                    continue
+                closed = build_roads._close_notches([(q, ("side", 0)) for q in pts])
+                gain = abs(build_roads._ring_area([q for q, _l in closed])) - abs(build_roads._ring_area(pts))
+                self.assertLess(gain, 3.0, f"{name}: выемка {gain:.1f} м² на краю")
+
+    def test_large_areas_carry_a_kerb(self):
+        for name in ("dormon", "muminova", "navoi_rashidov", "giant_19"):
+            _centre, _chains, _arms, figures = self.build(name)
+            kerbs = [f[2] for f in figures if f[0] == build_roads.AREA_KERB]
+            for ring in self.areas_near(name):
+                pts = self.local(ring, ring[0])
+                if abs(build_roads._ring_area(pts)) < 300:
+                    continue
+                near = any(min(build_roads._distance_to_segment(q, a, b)
+                               for line in kerbs for a, b in zip(self.local(line, ring[0]),
+                                                                 self.local(line, ring[0])[1:])) < 2.0
+                           for q in pts)
+                self.assertTrue(near, f"{name}: крупная площадь без бордюра")
+
+    def test_kerb_never_runs_over_the_asphalt_of_an_approach(self):
+        # Навои × Рашидов, юго-запад: съезд-дуга к Рашидова заходит в узел
+        # прямым подходом, край узла шёл по его полотну, и бордюр ложился
+        # поперёк ленты изломом; у северной ленты Навои — вдоль по асфальту.
+        (lat, lon), _chains, arms, figures = self.build("navoi_rashidov")
+        legs = [leg for key, found in arms.items() for leg in found
+                if build_roads.meters_between(found[0][0], (lon, lat)) < 80]
+        ribbons = build_roads._leg_ribbons(legs)
+        kerbs = [f[2] for f in figures if f[0] == build_roads.AREA_KERB
+                 and any(build_roads.meters_between(p, (lon, lat)) < 80 for p in f[2])]
+        self.assertTrue(kerbs)
+        for line in kerbs:
+            self.assertEqual(build_roads.kerb_off_ribbons(line, ribbons), [line],
+                             "кусок бордюра лежит на полотне подхода")
+
+    def test_median_widening_at_the_junction_is_an_island_not_a_line(self):
+        # Муминова у Дормона: зазор между лентами в среднем уже 2,5 м, но у
+        # узла раздаётся до 3–6 м. Целиком линией — по бокам линии и за её
+        # носом щель фона до самого узла. Теперь там полоса (остров).
+        (lat, lon), chains, arms, _figures = self.build("dormon")
+        outlined = set()
+        list(build_roads.iter_junctions(arms, outlined))
+        stops = build_roads.junction_index(build_roads.median_stops(arms, chains, outlined))
+        made = build_roads.build_medians(chains, stops)
+        muminov = (41.3407, 69.3363)   # лат, лон: у северо-восточного устья
+        strips = [ring for kind, _f, ring in made if kind == build_roads.AREA_MEDIAN
+                  and any(build_roads.meters_between(p, (muminov[1], muminov[0])) < 15 for p in ring)]
+        self.assertTrue(strips, "у узла раздавшийся зазор остался линией")
+        lines = [line for kind, _f, line in made if kind == build_roads.AREA_DIVIDER]
+        self.assertTrue(lines, "узкая часть дальше от узла — по-прежнему линия")
+
+
+class JunctionMergeTests(unittest.TestCase):
+    """Слияние площадей узла внахлёст (32C)."""
+
+    @staticmethod
+    def square(x0, y0, size):
+        lat0, kx = 41.3, build_roads.LAT_METERS * math.cos(math.radians(41.3))
+        pts = [(x0, y0), (x0 + size, y0), (x0 + size, y0 + size), (x0, y0 + size)]
+        return [(69.25 + x / kx, lat0 + y / build_roads.LAT_METERS) for x, y in pts]
+
+    def test_overlapping_areas_become_one_ring(self):
+        merged = build_roads.merge_junction_rings(self.square(0, 0, 20), self.square(15, 5, 20))
+        self.assertIsNotNone(merged)
+        lat0 = 41.3
+        kx = build_roads.LAT_METERS * math.cos(math.radians(lat0))
+        area = abs(build_roads._ring_area([((p[0] - 69.25) * kx, (p[1] - lat0) * build_roads.LAT_METERS)
+                                           for p in merged]))
+        self.assertGreater(area, 700)          # 400 + 400 − 75 общих
+        self.assertLess(area, 800)
+
+    def test_touching_or_apart_areas_stay_apart(self):
+        self.assertIsNone(build_roads.merge_junction_rings(self.square(0, 0, 20), self.square(30, 0, 20)))
+
+    def test_ring_around_land_is_not_merged(self):
+        # Две площади, вместе обнимающие квартал, — пустота: слияния нет.
+        u = [self.square(0, 0, 40)[0], self.square(0, 0, 40)[1]]
+        c_shape = [(0, 0), (40, 0), (40, 10), (10, 10), (10, 30), (40, 30), (40, 40), (0, 40)]
+        back = [(30, 5), (50, 5), (50, 35), (30, 35), (30, 32), (45, 32), (45, 8), (30, 8)]
+        lat0, kx = 41.3, build_roads.LAT_METERS * math.cos(math.radians(41.3))
+
+        def geo(pts):
+            return [(69.25 + x / kx, lat0 + y / build_roads.LAT_METERS) for x, y in pts]
+        self.assertTrue(u)
+        self.assertIsNone(build_roads.merge_junction_rings(geo(c_shape), geo(back)))
+
+    def test_merger_keeps_colours_apart_and_order(self):
+        merger = build_roads.JunctionMerger()
+        closed = build_roads.AREA_FLAG_CLOSED
+        coloured = build_roads.with_junction_class(closed, 2)
+        merger.add((build_roads.AREA_JUNCTION, closed, self.square(0, 0, 20)))
+        merger.add((build_roads.AREA_KERB, 0, self.square(0, 0, 20)[:2]))
+        merger.add((build_roads.AREA_JUNCTION, closed, self.square(15, 5, 20)))
+        merger.add((build_roads.AREA_JUNCTION, coloured, self.square(10, 10, 20)))
+        out = list(merger.flush(None))
+        kinds = [(f[0], f[1]) for f in out]
+        self.assertEqual(kinds, [(build_roads.AREA_JUNCTION, closed), (build_roads.AREA_KERB, 0),
+                                 (build_roads.AREA_JUNCTION, coloured)])
+
+    def test_blunt_teeth_cuts_a_needle(self):
+        ring = [((0.0, 0.0), ("side", 0)), ((30.0, 0.0), ("side", 0)), ((30.0, 30.0), ("side", 0)),
+                ((15.0, 30.0), ("side", 0)), ((0.0, 60.0), ("side", 0)), ((5.0, 30.0), ("side", 0)),
+                ((0.0, 30.0), ("side", 0))]
+        out = build_roads._blunt_teeth(ring)
+        self.assertNotIn((0.0, 60.0), [p for p, _l in out])
+        self.assertEqual(len(out), len(ring) + 1)
+
+    def test_hull_fallback_gets_a_kerb_off_the_approaches(self):
+        node = (69.25, 41.30)
+        legs = [build_roads.Leg(node, (69.26, 41.30), 10.0, 3), build_roads.Leg(node, (69.24, 41.30), 10.0, 3),
+                build_roads.Leg(node, (69.25, 41.31), 10.0, 3)]
+        kx = build_roads.LAT_METERS * math.cos(math.radians(41.30))
+        ring = [(node[0] + x / kx, node[1] + y / build_roads.LAT_METERS)
+                for x, y in ((-12, -8), (12, -8), (12, 8), (-12, 8))]
+        kind, _flags, line = build_roads._hull_kerb(legs, ring)
+        self.assertEqual(kind, build_roads.AREA_KERB)
+        pieces = build_roads.kerb_off_ribbons(line, build_roads._leg_ribbons(legs))
+        self.assertTrue(pieces)
+        # Южная кромка (по земле) остаётся целиком, устья на лентах — нет.
+        south = [(round((p[0] - node[0]) * kx), round((p[1] - node[1]) * build_roads.LAT_METERS))
+                 for piece in pieces for p in piece]
+        self.assertIn((-12, -8), south)
+        self.assertIn((12, -8), south)
+        for piece in pieces:
+            for p in piece:
+                y = (p[1] - node[1]) * build_roads.LAT_METERS
+                x = (p[0] - node[0]) * kx
+                self.assertFalse(abs(y) < 5.0 - 0.8 and abs(x) > 0.5, "бордюр поперёк устья подхода")

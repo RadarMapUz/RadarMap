@@ -1,6 +1,38 @@
 {
   "sourceLanguage": "ru",
   "strings": {
+    "Сейчас — по данным водителей": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сейчас — по данным водителей"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hozir — haydovchilar maʼlumoti boʻyicha"
+          }
+        }
+      }
+    },
+    "Обычно здесь медленно в это время": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обычно здесь медленно в это время"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Odatda bu vaqtda bu yerda sekin"
+          }
+        }
+      }
+    },
     "Учитывать мою манеру езды": {
       "localizations": {
         "ru": {

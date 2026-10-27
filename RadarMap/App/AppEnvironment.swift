@@ -235,6 +235,8 @@ final class AppEnvironment {
     func refreshTrafficWanted() {
         let wanted = isPhoneSceneActive || isCarPlayConnected || location.isTripActive
         traffic.setWanted(wanted)
+        // Слой «обычно в это время» (33G) — по тому же правилу, что живые.
+        trafficProfile.setWanted(wanted)
         // Погода на перевалах — по тому же правилу: экран, машина или поездка.
         roadWeather.setWanted(wanted)
     }

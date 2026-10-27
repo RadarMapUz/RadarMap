@@ -2593,7 +2593,7 @@ AREA_DIVIDER = 15
 # ходу линии слева. Приложение вид 16 не знает и пропускает.
 AREA_KERB = 16
 MEDIAN_LINE_BELOW_METERS = 2.5
-# Линия, у которой зазор где-то раздаётся до этого, делится: там — полоса.
+# Линия, у которой зазор где-то раздаётся до этого, получает там полосу.
 MEDIAN_SPLIT_WIDE_METERS = 3.5
 # Торец полосы, повёрнутый к соседнему поперечнику сильнее этого, — кривой.
 MEDIAN_ROW_SKEW_DEGREES = 20.0
@@ -4015,7 +4015,7 @@ class Leg(tuple):
     """
 
     def __new__(cls, node, neighbour, width, code=None, link=False, bridge=False, far=None, length=None,
-                piece=None, forward=True):
+                piece=None, forward=True, name=""):
         leg = super().__new__(cls, (node, neighbour, width))
         leg.code = code
         leg.link = link
@@ -4029,6 +4029,7 @@ class Leg(tuple):
         # узла проверяется на полотно подхода (kerb_off_ribbons).
         leg.piece = piece
         leg.forward = forward
+        leg.name = name
         return leg
 
     def path(self):
@@ -4053,7 +4054,7 @@ def junction_arms(chains):
                 arms[_node_key(node)].append(Leg(node, neighbour, width, street[0],
                                                  bool(street[1] & FLAG_LINK),
                                                  bool(street[1] & FLAG_BRIDGE),
-                                                 _node_key(far), length, points, forward))
+                                                 _node_key(far), length, points, forward, street[3] or ""))
     # Сколько ног у дальнего конца: подход к соседнему узлу не заходит за
     # середину куска, иначе площади двух узлов ложатся внахлёст (union_outline).
     for legs in arms.values():
@@ -4815,7 +4816,7 @@ def iter_junctions(arms, outlined=None, colours=None):
         if colour is None and _makes_figure(legs) and not any(getattr(leg, "bridge", False) for leg in legs):
             neutral.add(legs, None)
     merger = JunctionMerger()
-    for legs, colour in clusters:
+    for cluster, (legs, colour) in enumerate(clusters):
         if colour is not None and not any(getattr(leg, "bridge", False) for leg in legs):
             if any(neutral.near(leg[0], JUNCTION_NEIGHBOUR_METERS)[0] for leg in legs):
                 colour = None
@@ -4832,8 +4833,47 @@ def iter_junctions(arms, outlined=None, colours=None):
                 for line in kerb_off_ribbons(figure[2], ribbons):
                     merger.add((AREA_KERB, figure[1], line))
                 continue
-            merger.add(figure)
+            merger.add(figure, _names_inside(figure[2], legs) if JunctionMerger._mergeable(figure) else frozenset(),
+                       cluster)
     yield from merger.flush(None)
+
+
+NAMES_STEP_METERS = 5.0
+# Площадь узла от этого и с двумя улицами внутри режет линии полос (маска
+# разметки build_mvt, BIG_JUNCTION_M2): слияние, которое переводит площадь
+# через этот порог, стёрло бы полосы там, где их раньше было видно.
+JUNCTION_MARKING_M2 = 600.0
+
+
+def _cuts_lanes(ring, names):
+    return len(names) >= 2 and ring_area_m2(ring) >= JUNCTION_MARKING_M2
+
+
+def _names_inside(ring, legs):
+    """Имена улиц ног узла, чья ось проходит через площадь (как StreetNames
+    маски разметки build_mvt, но только по своим ногам)."""
+    lons = [p[0] for p in ring]
+    lats = [p[1] for p in ring]
+    box = (min(lons), min(lats), max(lons), max(lats))
+    found = set()
+    for leg in legs:
+        name = getattr(leg, "name", "")
+        if not name or name in found:
+            continue
+        path = (leg.path() if hasattr(leg, "path") else None) or [leg[0], leg[1]]
+        travelled = 0.0
+        for a, b in zip(path, path[1:]):
+            length = meters_between(a, b)
+            steps = max(1, int(length / NAMES_STEP_METERS))
+            if any(box[0] <= q[0] <= box[2] and box[1] <= q[1] <= box[3] and _point_in_ring(q, ring)
+                   for q in ((a[0] + (b[0] - a[0]) * k / steps, a[1] + (b[1] - a[1]) * k / steps)
+                             for k in range(steps + 1))):
+                found.add(name)
+                break
+            travelled += length
+            if travelled > KERB_RIBBON_REACH_METERS:
+                break
+    return frozenset(found)
 
 
 # Бордюр глубже этого внутри ленты своего же подхода — по асфальту: край узла
@@ -4969,60 +5009,139 @@ class JunctionMerger:
                 for y in range(int(math.floor(box[1] / c)), int(math.floor(box[3] / c)) + 1)]
 
     def _remove(self, key):
-        figure, box, _order = self._items.pop(key)
+        figure, box, _order, _names, _cluster = self._items.pop(key)
         if self._mergeable(figure):
             for cell in self._cells(box):
                 self._grid[cell].discard(key)
 
-    def _insert(self, figure, order):
+    def _insert(self, figure, order, names=frozenset(), cluster=None):
         ring = figure[2]
         box = (min(p[0] for p in ring), min(p[1] for p in ring), max(p[0] for p in ring), max(p[1] for p in ring))
         key = self._order
         self._order += 1
-        self._items[key] = (figure, box, order)
+        self._items[key] = (figure, box, order, names, cluster)
         if self._mergeable(figure):
             for cell in self._cells(box):
                 self._grid[cell].add(key)
         return key
 
-    def add(self, figure):
+    def add(self, figure, names=frozenset(), cluster=None):
         """Положить фигуру в буфер; выходят они через flush в исходном порядке
-        (слитая — на месте первой из слитых)."""
+        (слитая — на месте первой из слитых). names — улицы её узла: площадь
+        перекрёстка (две улицы и больше) с площадью вдоль одной улицы не
+        сливается — маска разметки build_mvt режет линии полос только у
+        перекрёстков, и слитая стёрла бы их вдоль проспекта у разворота.
+        Куски одного кластера (cluster) сливаются всегда: это один узел."""
         if not self._mergeable(figure):
             if figure[2]:
-                self._insert(figure, self._order)
+                self._insert(figure, self._order, names, cluster)
             return
         order = self._order
+        trims = 0
         while True:
             ring = figure[2]
             box = (min(p[0] for p in ring), min(p[1] for p in ring), max(p[0] for p in ring), max(p[1] for p in ring))
             near = sorted({key for cell in self._cells(box) for key in self._grid.get(cell, ())})
             merged = None
+            trimmed = False
             for key in near:
-                other, obox, oorder = self._items[key]
+                other, obox, oorder, onames, ocluster = self._items[key]
                 if other[1] != figure[1] or obox[0] > box[2] or box[0] > obox[2] \
                         or obox[1] > box[3] or box[1] > obox[3]:
                     continue
-                ring_union = merge_junction_rings(other[2], ring)
+                alien = cluster is None or ocluster != cluster
+                if alien and (len(onames) >= 2) != (len(names) >= 2):
+                    continue
+                ring_union = merge_junction_rings(other[2], ring, close=not alien)
+                if ring_union is not None:
+                    cuts = (_cuts_lanes(other[2], onames), _cuts_lanes(ring, names),
+                            _cuts_lanes(ring_union, names | onames))
+                    if alien and not cuts[0] == cuts[1] == cuts[2]:
+                        ring_union = None
+                    # Свой кластер: кусок вдоль одной улицы (разворот у
+                    # перекрёстка), который в слитой площади начал бы резать
+                    # линии полос, — отдельно.
+                    elif cuts[2] and ((len(onames) < 2 and not cuts[0]) or (len(names) < 2 and not cuts[1])):
+                        ring_union = None
+                    if ring_union is None and trims < JUNCTION_TRIM_MAX:
+                        # Не слились — нахлёст снимается с того куска, что
+                        # линий полос не режет (или с меньшего): маска
+                        # разметки не растёт, двойного асфальта нет.
+                        if cuts[0] != cuts[1]:
+                            mine = not cuts[1]
+                        else:
+                            mine = ring_area_m2(ring) <= ring_area_m2(other[2])
+                        rest = trim_junction_ring(ring if mine else other[2], other[2] if mine else ring)
+                        if rest:
+                            trims += 1
+                            if mine:
+                                for extra in rest[1:]:
+                                    self._insert((figure[0], figure[1], extra), order, names, cluster)
+                                figure = (figure[0], figure[1], rest[0])
+                            else:
+                                self._remove(key)
+                                for extra in rest:
+                                    self._insert((other[0], other[1], extra), oorder, onames, ocluster)
+                            trimmed = True
+                            break
                 if ring_union is not None:
                     self._remove(key)
                     merged = (figure[0], figure[1], ring_union)
                     order = min(order, oorder)
+                    names = names | onames
                     break
+            if trimmed:
+                continue
             if merged is None:
                 break
             figure = merged
-        self._insert(figure, order)
+        self._insert(figure, order, names, cluster)
 
     def flush(self, west):
-        keep = [(order, key) for key, (_f, box, order) in self._items.items() if west is None or box[2] < west]
+        keep = [(order, key) for key, (_f, box, order, _n, _c) in self._items.items() if west is None or box[2] < west]
         for _order, key in sorted(keep):
             figure = self._items[key][0]
             self._remove(key)
             yield figure
 
 
-def merge_junction_rings(one, two):
+JUNCTION_TRIM_MAX = 8
+
+
+def trim_junction_ring(subject, clip):
+    """Куски площади subject (lon/lat) вне clip или None, если разбор не вышел
+    или нахлёста нет."""
+    origin = clip[0]
+    kx = LAT_METERS * math.cos(math.radians(origin[1]))
+
+    def xy(ring):
+        pts = [((p[0] - origin[0]) * kx, (p[1] - origin[1]) * LAT_METERS) for p in ring]
+        if len(pts) > 1 and pts[0] == pts[-1]:
+            pts = pts[:-1]
+        return pts if _ring_area(pts) > 0 else pts[::-1]
+
+    a, b = xy(subject), xy(clip)
+    if len(a) < 3 or len(b) < 3:
+        return None
+    if sum(abs(_ring_area(piece)) for piece in polygon_intersection(a, b)) < JUNCTION_MERGE_MIN_M2:
+        return None
+    pieces = [piece for piece in polygon_difference(a, [b]) if abs(_ring_area(piece)) >= JUNCTION_TRIM_MIN_M2]
+    if not pieces or (len(pieces) == 1 and abs(_ring_area(pieces[0])) >= abs(_ring_area(a)) - 0.5):
+        return None
+    out = []
+    for piece in pieces:
+        ring = [p for p, _l in _blunt_teeth([(q, ("side", 0)) for q in piece])]
+        geo = [(origin[0] + p[0] / kx, origin[1] + p[1] / LAT_METERS) for p in ring]
+        if len(geo) < 3 or surface_check.defect(geo) is not None or surface_check.defect(quantized(geo)) is not None:
+            return None
+        out.append(geo)
+    return out
+
+
+JUNCTION_TRIM_MIN_M2 = 2.0
+
+
+def merge_junction_rings(one, two, close=True):
     """Одно кольцо (lon/lat) из двух площадей внахлёст или None: не
     пересекаются, объединение не одно кольцо или с пустотой."""
     origin = one[0]
@@ -5048,7 +5167,12 @@ def merge_junction_rings(one, two):
         return None
     # Там, где два контура пересеклись, край уходит выемкой — закрывается,
     # как у контура объединением лент.
-    ring = _blunt_teeth(_smooth_steps(_tidy_ring(_close_notches(_tidy_ring(outer[0])))))
+    # У площадей разных кластеров выемка на стыке — полоса между узлами, не
+    # заливается: там линии полос.
+    ring = _tidy_ring(outer[0])
+    if close:
+        ring = _tidy_ring(_close_notches(ring))
+    ring = _blunt_teeth(_smooth_steps(ring))
     out = [(origin[0] + p[0] / kx, origin[1] + p[1] / LAT_METERS) for p, _l in ring]
     if len(out) < 3 or surface_check.defect(out) is not None or surface_check.defect(quantized(out)) is not None:
         return None
@@ -5966,14 +6090,21 @@ def union_outline(legs, kerbs=None, report=None):
             return None
     parts = []
     for part in outer:
-        ring = _blunt_teeth(_tidy_ring(_fillet_ring(_smooth_steps(_tidy_ring(_close_notches(_tidy_ring(part)))),
-                                                    arms)))
+        ring = _tidy_ring(_fillet_ring(_smooth_steps(_tidy_ring(_close_notches(_tidy_ring(part)))), arms))
         if len(ring) < 3:
             return None
         out = [back(p) for p, _l in ring]
         if surface_check.defect(out) is not None or surface_check.defect(quantized(out)) is not None:
             return None
-        parts.append((settled_ring(out), _outline_kerbs(ring, arms, back)))
+        # Зубцы срезаются уже у принятого контура: срез не должен менять,
+        # каким путём строится узел (иначе контур, раньше отбракованный, лёг
+        # бы на обе ленты проспекта у разворота и стёр линии полос).
+        blunt = _blunt_teeth(ring)
+        if blunt != ring:
+            trimmed = [back(p) for p, _l in blunt]
+            if surface_check.defect(trimmed) is None and surface_check.defect(quantized(trimmed)) is None:
+                ring, out = blunt, trimmed
+        parts.append((out, _outline_kerbs(ring, arms, back)))
     if len(parts) > 1:
         # Кластер распался на куски, не связанные лентами (узлы свела близость,
         # а не общий кусок): каждый кусок — своя площадь.
@@ -6201,7 +6332,7 @@ def _junction_figures(legs, outlined, retry=True, colour=_UNSET):
             if outlined is not None:
                 outlined.update(keys)
             for ring, found in parts:
-                yield (AREA_JUNCTION, flags, ring)
+                yield (AREA_JUNCTION, flags, settled_ring(ring))
                 for major, line in found:
                     yield (AREA_KERB, FILLET_MAJOR if major else 0, line)
             return
@@ -6210,7 +6341,9 @@ def _junction_figures(legs, outlined, retry=True, colour=_UNSET):
     if outline:
         if outlined is not None:
             outlined.update(keys)
-        yield (AREA_JUNCTION, flags, outline)
+        # Чистка по сетке — у готового контура объединением, после выбора
+        # пути: иначе она меняла бы сравнение с контуром по устьям.
+        yield (AREA_JUNCTION, flags, settled_ring(outline) if way == "union" else outline)
         for major, line in kerbs:
             yield (AREA_KERB, FILLET_MAJOR if major else 0, line)
         return
@@ -6264,7 +6397,7 @@ def _junction_figures(legs, outlined, retry=True, colour=_UNSET):
         if own:
             if outlined is not None:
                 outlined.add(key)
-            yield (AREA_JUNCTION, piece_flags, own)
+            yield (AREA_JUNCTION, piece_flags, settled_ring(own))
             for major, line in found:
                 yield (AREA_KERB, FILLET_MAJOR if major else 0, line)
             continue
@@ -6969,9 +7102,11 @@ def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=
         if fills is not None:
             emit([to_axes(row) for row in rows], fills, _strip_defect)
 
-    def split_by_width(rows, gaps, sink, check):
-        """Ряды — полосой там, где зазор шире линии, остальное — линией;
-        соседние куски делят крайний ряд (полоса рисуется поверх линии)."""
+    def widened_strips(rows, gaps, sink, check):
+        """Полосы там, где зазор раздаётся шире линии; ряды с краёв — общие
+        с линией. Линия остаётся целой под ними (стиль рисует полосу поверх
+        линии): разрезанная на куски, она меняла вес тайлов вдоль всей трассы,
+        и ворота публикации видели «похудевший» тайл."""
         n = len(rows)
         start = 0
         while start < n:
@@ -6979,11 +7114,8 @@ def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=
             end = start
             while end + 1 < n and (gaps[end + 1] >= MEDIAN_LINE_BELOW_METERS) == wide:
                 end += 1
-            lo, hi = max(0, start - 1), min(n - 1, end + 1)
             if wide and max(gaps[start:end + 1]) >= MEDIAN_SPLIT_WIDE_METERS:
-                emit(rows[lo:hi + 1], sink, check, noses=True, whole=False)
-            else:
-                dividers.append([((r[0][0] + r[1][0]) / 2, (r[0][1] + r[1][1]) / 2) for r in rows[lo:hi + 1]])
+                emit(rows[max(0, start - 1):min(n - 1, end + 1) + 1], sink, check, noses=True, whole=False)
             start = end + 1
 
     def emit(rows, sink, check, noses=False, whole=True):
@@ -7010,10 +7142,9 @@ def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=
                 # раздавшийся конец оставался щелью фона по бокам линии и за
                 # её носом (Муминова у Дормона, кромки врозь на 3–6 м, 32C).
                 # Мост — нет: полоса между настилами легла бы на землю под ним.
-                if any(g >= MEDIAN_SPLIT_WIDE_METERS for g in gaps) and not one[1] & FLAG_BRIDGE:
-                    split_by_width(rows, gaps, sink, check)
-                    return
                 dividers.append([((r[0][0] + r[1][0]) / 2, (r[0][1] + r[1][1]) / 2) for r in rows])
+                if any(g >= MEDIAN_SPLIT_WIDE_METERS for g in gaps) and not one[1] & FLAG_BRIDGE:
+                    widened_strips(rows, gaps, sink, check)
                 return
         for keep_refined, with_noses in ((True, noses), (True, False), (False, False)):
             kept = [r for r in rows if keep_refined or not r[2]]
@@ -7029,7 +7160,8 @@ def _median_strips(one, other, junctions=(), fills=None, dividers=None, blocked=
             if check(ring) is None:
                 sink.append(ring)
                 return
-        if noses and dividers is not None and len(rows) >= 2:
+        # Полоса поверх линии (whole=False) ворот не прошла — линия под ней уже есть.
+        if noses and dividers is not None and whole and len(rows) >= 2:
             dividers.append([((r[0][0] + r[1][0]) / 2, (r[0][1] + r[1][1]) / 2) for r in rows])
 
     rows, fill_rows = [], []

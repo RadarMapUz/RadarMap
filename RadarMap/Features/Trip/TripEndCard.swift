@@ -21,6 +21,11 @@
 //  «1 камер», синяя градиентная «Подробнее» (второй «главный» цвет рядом с
 //  жёлтым) и ≈ 300 pt высоты поверх «Домой» и дока.
 //
+//  Если приложение промолчало о камере, мимо которой проехали, — строка
+//  «Промолчала о камере» с кнопкой «Не предупредила» (12.5): та же жалоба,
+//  что на экране проезда, только в одно касание и в момент, когда водитель
+//  ещё помнит, как это было (MissedAlertPrompt).
+//
 
 import SwiftUI
 
@@ -33,6 +38,10 @@ struct TripEndCard: View {
 
     @State private var shareSubject: ShareSubjectBox?
     @State private var confirmsMerge = false
+    /// Проезды, о тишине которых уже сказали (12.5). В памяти карточки:
+    /// она живёт до закрытия, а отправленное ушло на сервер.
+    @State private var reportedMissed: Set<UUID> = []
+    @State private var isSendingMissed = false
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
@@ -75,6 +84,7 @@ struct TripEndCard: View {
             if let previous = mergeCandidate {
                 mergeRow(previous: previous)
             }
+            missedAlertRow
         }
         .padding(14)
         .liftedBackground(Theme.surface, in: shape)
@@ -223,6 +233,89 @@ struct TripEndCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - «Не предупредила» (12.5)
+
+    /// Промолчали о камерах этой поездки — строка с одной кнопкой; после
+    /// отправки — «Спасибо — разберёмся», пока карточка на экране.
+    @ViewBuilder private var missedAlertRow: some View {
+        let missed = MissedAlertPrompt.candidates(passes: record.passed, reported: reportedMissed)
+        if !missed.isEmpty || !reportedMissed.isEmpty {
+            // Две строки, а не одна: на SE заголовок и кнопка в одну строку
+            // обрезались оба («Промолчала о ка…», «Не преду…»).
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    Image(systemName: missed.isEmpty ? "checkmark.circle.fill" : "speaker.slash.fill")
+                        .font(.rounded(14, .bold))
+                        .foregroundStyle(missed.isEmpty ? Theme.success : Theme.warning)
+                        .frame(width: 30, height: 30)
+                        .background(Theme.background, in: Circle())
+                    if missed.isEmpty {
+                        Text("Спасибо — разберёмся")
+                            .font(.rounded(15, .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                    } else {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(verbatim: MissedAlertPrompt.title(count: missed.count))
+                                .font(.rounded(15, .semibold))
+                                .foregroundStyle(Theme.textPrimary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                            if missed.count == 1, let first = missed.first {
+                                Text(verbatim: first.location.isEmpty ? first.kind.displayName : first.location)
+                                    .font(.rounded(11))
+                                    .foregroundStyle(Theme.textSecondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+                if !missed.isEmpty {
+                    Button { sendMissed(missed) } label: {
+                        Group {
+                            if isSendingMissed {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Label("Не предупредила", systemImage: "exclamationmark.bubble.fill")
+                                    .font(.rounded(15, .semibold))
+                                    .foregroundStyle(Theme.warning)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, minHeight: Theme.controlSize)
+                        .background(Theme.background,
+                                    in: RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PressableStyle())
+                    .disabled(isSendingMissed)
+                    .accessibilityHint(Text("Отправит место, скорость и лимит этого проезда"))
+                }
+            }
+            .padding(10)
+            .background(Theme.quietFill,
+                        in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+            .transition(.opacity)
+        }
+    }
+
+    /// Одно касание — жалоба на каждый проезд, о котором промолчали: у
+    /// каждого своё место и скорость, разбирать их по одному. Отправка та
+    /// же, что на экране проезда; очередь без сети — тоже успех.
+    private func sendMissed(_ passes: [PassedCamera]) {
+        guard !isSendingMissed else { return }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        isSendingMissed = true
+        let dbVersion = env.cameras.dbVersion
+        Task {
+            for pass in passes {
+                _ = await env.feedback.reportMissedAlert(pass: pass, dbVersion: dbVersion)
+            }
+            isSendingMissed = false
+            withMotion(Motion.standard) { reportedMissed.formUnion(passes.map(\.id)) }
+        }
     }
 
     private func merge() {

@@ -14895,18 +14895,18 @@
         }
       }
     },
-    "Проверьте звук — кнопка с динамиком на карте. О камерах, которые вы часто проезжаете без превышения, приложение молчит намеренно: на карте у них зелёная галочка (Настройки → Приложение учится). Скрытую камеру можно вернуть в Настройках → О приложении → База камер → Скрытые камеры. Если ничего не подошло — нажмите «Не предупредила о камере» у этого проезда в Итогах, мы разберём случай.": {
+    "Проверьте звук — кнопка с динамиком на карте. О камерах, которые вы часто проезжаете без превышения, приложение молчит намеренно: на карте у них зелёная галочка (Настройки → Приложение учится). Скрытую камеру можно вернуть в Настройках → О приложении → База камер → Скрытые камеры. Если ничего не подошло — нажмите «Не предупредила» на карточке «Поездка сохранена» сразу после стопа или у этого проезда в Итогах, мы разберём случай.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Проверьте звук — кнопка с динамиком на карте. О камерах, которые вы часто проезжаете без превышения, приложение молчит намеренно: на карте у них зелёная галочка (Настройки → Приложение учится). Скрытую камеру можно вернуть в Настройках → О приложении → База камер → Скрытые камеры. Если ничего не подошло — нажмите «Не предупредила о камере» у этого проезда в Итогах, мы разберём случай."
+            "value": "Проверьте звук — кнопка с динамиком на карте. О камерах, которые вы часто проезжаете без превышения, приложение молчит намеренно: на карте у них зелёная галочка (Настройки → Приложение учится). Скрытую камеру можно вернуть в Настройках → О приложении → База камер → Скрытые камеры. Если ничего не подошло — нажмите «Не предупредила» на карточке «Поездка сохранена» сразу после стопа или у этого проезда в Итогах, мы разберём случай."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ovozni tekshiring — xaritadagi karnay tugmasi. Tez-tez tezlikni oshirmay oʻtadigan kameralaringiz haqida ilova ataylab jim turadi: xaritada ularda yashil belgi bor (Sozlamalar → Ilova oʻrganadi). Yashirilgan kamerani Sozlamalar → Ilova haqida → Kameralar bazasi → Yashirilgan kameralar boʻlimida qaytarish mumkin. Hech biri toʻgʻri kelmasa — Natijalardagi shu oʻtish yonidagi «Kamera haqida ogohlantirmadi» tugmasini bosing, holatni koʻrib chiqamiz."
+            "value": "Ovozni tekshiring — xaritadagi karnay tugmasi. Tez-tez tezlikni oshirmay oʻtadigan kameralaringiz haqida ilova ataylab jim turadi: xaritada ularda yashil belgi bor (Sozlamalar → Ilova oʻrganadi). Yashirilgan kamerani Sozlamalar → Ilova haqida → Kameralar bazasi → Yashirilgan kameralar boʻlimida qaytarish mumkin. Hech biri toʻgʻri kelmasa — toʻxtagandan keyin «Safar saqlandi» kartochkasidagi yoki Natijalardagi shu oʻtish yonidagi «Ogohlantirmadi» tugmasini bosing, holatni koʻrib chiqamiz."
           }
         }
       }
@@ -32838,6 +32838,86 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quvvat kam: xarita tekis va soddaroq. Kamera ogohlantirishlari toʻliq ishlaydi"
+          }
+        }
+      }
+    },
+    "Промолчала о камере": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Промолчала о камере"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera haqida jim qoldi"
+          }
+        }
+      }
+    },
+    "Промолчала о %lld камере": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Промолчала о %lld камере"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ta kamera haqida jim qoldi"
+          }
+        }
+      }
+    },
+    "Промолчала о %lld камерах": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Промолчала о %lld камерах"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ta kamera haqida jim qoldi"
+          }
+        }
+      }
+    },
+    "Не предупредила": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не предупредила"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogohlantirmadi"
+          }
+        }
+      }
+    },
+    "Отправит место, скорость и лимит этого проезда": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправит место, скорость и лимит этого проезда"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ushbu oʻtishning joyi, tezligi va cheklovi yuboriladi"
           }
         }
       }

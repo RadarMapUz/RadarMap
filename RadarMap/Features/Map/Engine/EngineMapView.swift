@@ -132,15 +132,12 @@ struct EngineMapView: UIViewRepresentable {
     /// 33H). Пишутся в источник только на смене `trafficRevision` — раз в
     /// пару минут, а не на тике.
     var trafficLines: [TrafficLines.Line] = []
+    /// Ревизия линий (TrafficService.linesRevision) — живые и «обычно».
+    var trafficLinesRevision: Int = 0
     var trafficRevision: Int = 0
     /// Тот же набор пробок с сеткой поиска — для цвета САМОЙ линии маршрута
     /// (RouteTraffic, 25.D). nil — линия одного цвета (Theme.route).
     var trafficSnapshot: TrafficSnapshot?
-    /// «Обычно в это время» (33G, TrafficProfileService): где в этот час
-    /// обычно медленно — по водителям или по модели дороги. Светлее и тоньше
-    /// живых, под ними; в источник — только на смене ревизии.
-    var usualTrafficEdges: [TrafficProfile.UsualEdge] = []
-    var usualTrafficRevision: Int = 0
     /// Язык подписей новой карты («ru» / «uz»). Меняется только с языком
     /// приложения, а тот применяется после перезапуска — перезагрузка стиля
     /// ради него не нужна.
@@ -189,6 +186,8 @@ struct EngineMapView: UIViewRepresentable {
     var onHeading: (Double) -> Void = { _ in }
     var onBrowse: () -> Void = {}
     var onSelectCamera: (Camera) -> Void = { _ in }
+    /// Касание линии пробок (33H): лист «Пробка · 2,4 км · 12 км/ч · +7 мин».
+    var onSelectTraffic: (TrafficTap) -> Void = { _ in }
     /// Долгий тап по карте — координата под пальцем.
     var onLongPress: (CLLocationCoordinate2D) -> Void = { _ in }
     /// Видимая область после каждого движения карты — для крестика
@@ -595,14 +594,14 @@ struct EngineMapView: UIViewRepresentable {
         /// на долю, равную сдвигу линии, — при любом icon-size он ложится ровно
         /// на сдвинутую линию (icon-offset у линейной раскладки вёл себя иначе,
         /// чем line-offset, и знак съезжал на край линии).
-        static func trafficChevronIcon(level: Int, daylight: Bool, model: Bool = false) -> UIImage {
+        static func trafficChevronIcon(level: Int, daylight: Bool, usual: Bool = false) -> UIImage {
             let side = EngineMapStyle.trafficChevronSide
             // Наконечник — `trafficArrowScale` толщин своей линии; сдвиг — от
-            // живой линии, поэтому у модели (линия тоньше) он больше.
-            let share = model ? TrafficPalette.modelWidthShare : 1
+            // живой линии, поэтому у «обычно» (линия тоньше) он больше.
+            let share = usual ? TrafficPalette.usualWidthShare : 1
             let lift = side * EngineMapStyle.trafficOffsetShare / (EngineMapStyle.trafficArrowScale * share)
             let height = side + 2 * lift
-            let pair = model ? TrafficPalette.model(TrafficPalette.level(level)) : TrafficPalette.level(level)
+            let pair = usual ? TrafficPalette.usual(TrafficPalette.level(level)) : TrafficPalette.level(level)
             let look = TrafficPalette.arrow(on: daylight ? pair.day : pair.night, daylight: daylight)
             return UIGraphicsImageRenderer(size: CGSize(width: side, height: height)).image { _ in
                 let top = lift * 2
@@ -750,10 +749,10 @@ struct EngineMapView: UIViewRepresentable {
             for place in EnginePlaceIcons.all { style.setImage(place.image, forName: place.name) }
             // Шевроны пробок (33H): по уровню, теме и источнику — цвет от линии.
             let chevrons = [true, false].flatMap { daylight in
-                [false, true].flatMap { model in
+                [false, true].flatMap { usual in
                     (1...4).map { level -> String in
-                        let name = EngineMapStyle.trafficChevronImage(level: level, daylight: daylight, model: model)
-                        style.setImage(Self.trafficChevronIcon(level: level, daylight: daylight, model: model),
+                        let name = EngineMapStyle.trafficChevronImage(level: level, daylight: daylight, usual: usual)
+                        style.setImage(Self.trafficChevronIcon(level: level, daylight: daylight, usual: usual),
                                        forName: name)
                         return name
                     }
@@ -799,7 +798,6 @@ struct EngineMapView: UIViewRepresentable {
             hotShown = nil
             modernDrivingLayerIDs = nil
             lastTrafficRevision = -1
-            lastUsualRevision = -1
             // Источники нового стиля пусты: флаг цели, машина, треноги и
             // события дороги — заново (до этого после смены дня и ночи они
             // пропадали, пока что-то в них не менялось).
@@ -853,7 +851,38 @@ struct EngineMapView: UIViewRepresentable {
             } else if let id = routeVariants.variant(at: point, in: view), id != current.selectedVariantID {
                 // Касание линии или подписи другого варианта — выбор (27.D).
                 current.onSelectVariant(id)
+            } else if let tap = trafficTap(at: point, in: view) {
+                // Линия пробок под пальцем — лист о ней (33H). Камера и вариант
+                // маршрута главнее: они проверены выше.
+                current.onSelectTraffic(tap)
             }
+        }
+
+        /// Ближайшая к пальцу линия пробок в квадрате касания (44 pt).
+        private func trafficTap(at point: CGPoint, in view: MLNMapView) -> TrafficTap? {
+            let rect = CGRect(x: point.x - 22, y: point.y - 22, width: 44, height: 44)
+            let features = view.visibleFeatures(in: rect, styleLayerIdentifiers: [EngineMapStyle.trafficLayerIDs.line])
+            let nearest = features.compactMap { $0 as? MLNPolylineFeature }.min { a, b in
+                Self.distance(from: point, to: a, in: view) < Self.distance(from: point, to: b, in: view)
+            }
+            return nearest.flatMap { TrafficTap(attributes: $0.attributes) }
+        }
+
+        /// Расстояние на экране от точки до ломаной, pt.
+        private static func distance(from point: CGPoint, to line: MLNPolylineFeature, in view: MLNMapView) -> CGFloat {
+            let count = Int(line.pointCount)
+            guard count > 0 else { return .infinity }
+            var coordinates = [CLLocationCoordinate2D](repeating: .init(), count: count)
+            line.getCoordinates(&coordinates, range: NSRange(location: 0, length: count))
+            let points = coordinates.map { view.convert($0, toPointTo: view) }
+            var best = CGFloat.infinity
+            for (a, b) in zip(points, points.dropFirst()) {
+                let dx = b.x - a.x, dy = b.y - a.y
+                let len2 = dx * dx + dy * dy
+                let t = len2 > 0 ? max(0, min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / len2)) : 0
+                best = min(best, hypot(a.x + dx * t - point.x, a.y + dy * t - point.y))
+            }
+            return points.count == 1 ? hypot(points[0].x - point.x, points[0].y - point.y) : best
         }
 
         func loadStyle(_ model: EngineMapView, in view: MLNMapView) {
@@ -1199,7 +1228,6 @@ struct EngineMapView: UIViewRepresentable {
             updateMarks(model, in: view)
             updateCameraLabel(model.cameraLabel, in: view)
             updateTraffic(model, in: view)
-            updateUsualTraffic(model, in: view)
             // Подписи «24 мин» сторонятся значков камер: значок лежит выше и
             // съедал первую цифру (снимки App Store, 22.10).
             var spots: [EngineRouteVariants.CameraSpot] = []
@@ -1425,38 +1453,20 @@ struct EngineMapView: UIViewRepresentable {
         /// Пробки — только на новом наборе: тысяча рёбер по городу в источник
         /// раз в две минуты, а не на каждом фиксе.
         private func updateTraffic(_ model: EngineMapView, in view: MLNMapView) {
-            guard model.trafficRevision != lastTrafficRevision else { return }
+            guard model.trafficLinesRevision != lastTrafficRevision else { return }
             guard let source = view.style?.source(withIdentifier: "traffic") as? MLNShapeSource else {
                 Log.network.error("MapLibre: источника пробок нет в стиле")
                 return
             }
             Log.network.debug("MapLibre: пробки в источник, линий \(model.trafficLines.count, privacy: .public)")
-            lastTrafficRevision = model.trafficRevision
+            lastTrafficRevision = model.trafficLinesRevision
             let lines = model.trafficLines.map { traffic -> MLNPolylineFeature in
                 var coordinates = traffic.coordinates
                 let line = MLNPolylineFeature(coordinates: &coordinates, count: UInt(coordinates.count))
-                line.attributes = ["level": traffic.level, "src": traffic.source.rawValue, "tier": traffic.tier]
-                return line
-            }
-            source.shape = MLNShapeCollectionFeature(shapes: lines)
-        }
-
-        private var lastUsualRevision = -1
-        /// Слой «обычно в это время» (33G) — на смене набора (раз в 5 мин).
-        /// Признак `src` различает водителей и модель (подпись и будущий
-        /// стиль 33H), `heavy` — «обычно очень медленно».
-        private func updateUsualTraffic(_ model: EngineMapView, in view: MLNMapView) {
-            guard model.usualTrafficRevision != lastUsualRevision else { return }
-            guard let source = view.style?.source(withIdentifier: EngineMapStyle.usualTrafficSource) as? MLNShapeSource else {
-                Log.network.error("MapLibre: источника «обычно» нет в стиле")
-                return
-            }
-            lastUsualRevision = model.usualTrafficRevision
-            Log.network.debug("MapLibre: «обычно» в источник, рёбер \(model.usualTrafficEdges.count, privacy: .public), слой \(view.style?.layer(withIdentifier: EngineMapStyle.usualTrafficSource) != nil, privacy: .public)")
-            let lines = model.usualTrafficEdges.map { edge -> MLNPolylineFeature in
-                var coordinates = [edge.a, edge.b]
-                let line = MLNPolylineFeature(coordinates: &coordinates, count: 2)
-                line.attributes = ["src": edge.source == .model ? "model" : "drivers", "heavy": edge.isHeavy ? 1 : 0]
+                // Длина и скорости — для листа по касанию (TrafficTap).
+                line.attributes = ["level": traffic.level, "src": traffic.source.rawValue, "tier": traffic.tier,
+                                   "len": traffic.length.rounded(), "kmh": traffic.kmh.rounded(),
+                                   "model": traffic.modelKmh.rounded()]
                 return line
             }
             source.shape = MLNShapeCollectionFeature(shapes: lines)

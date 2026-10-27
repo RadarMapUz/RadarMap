@@ -28,16 +28,17 @@ nonisolated struct TrafficEdge: Equatable, Sendable {
     let level: Int
     let kmh: Double
     let modelKmh: Double
-    /// Откуда скорость: живые куски водителей или модель «обычно в это
-    /// время» (33G). В now.json — необязательная 8-я колонка; её нет у
-    /// старого сервера, и тогда это водители — как было до модели.
-    var source: Source = .drivers
+    /// Что это за ребро на карте (33H): живое — now.json, водители сейчас;
+    /// «обычно» — профиль часа недели (33G: поездки водителей за недели или
+    /// модель дороги), светлее и тоньше. now.json всегда живой: модель
+    /// приходит отдельным profile.json (TrafficProfileService) и в голос
+    /// (JamAhead, объезд) не попадает — там только `snapshot`.
+    var source: Source = .live
 
-    /// Код колонки now.json: 0 — водители, 1 — модель. Неизвестный код —
-    /// водители: новый источник от будущего сервера не должен пропадать.
+    /// Код признака `src` в источнике карты: 0 — сейчас, 1 — обычно.
     nonisolated enum Source: Int, Sendable {
-        case drivers = 0
-        case model = 1
+        case live = 0
+        case usual = 1
     }
 
     static func == (l: TrafficEdge, r: TrafficEdge) -> Bool {
@@ -107,9 +108,8 @@ nonisolated struct TrafficSnapshot: Sendable {
     }
 
     /// Разбор now.json. Формат версии 1:
-    /// `{"v":1,"generated":t,"edges":[[ulat,ulon,vlat,vlon,level,kmh,model(,src)]]}`.
-    /// `src` (33H/33G) — необязательная 8-я колонка: старые сборки читают
-    /// первые семь и её не замечают, поэтому версия остаётся 1.
+    /// `{"v":1,"generated":t,"edges":[[ulat,ulon,vlat,vlon,level,kmh,model]]}`.
+    /// Лишние колонки (если сервер когда-нибудь их добавит) не читаются.
     /// Другая версия или битое ребро — nil/пропуск: показывать догадку о
     /// формате хуже, чем не показывать пробки.
     static func decode(_ data: Data) -> TrafficSnapshot? {
@@ -120,10 +120,9 @@ nonisolated struct TrafficSnapshot: Sendable {
               let raw = object["edges"] as? [[Double]] else { return nil }
         let edges = raw.compactMap { row -> TrafficEdge? in
             guard row.count >= 7, (1...3).contains(Int(row[4])), row[6] > 0 else { return nil }
-            let source = row.count >= 8 ? TrafficEdge.Source(rawValue: Int(row[7])) ?? .drivers : .drivers
             return TrafficEdge(a: CLLocationCoordinate2D(latitude: row[0], longitude: row[1]),
                                b: CLLocationCoordinate2D(latitude: row[2], longitude: row[3]),
-                               level: Int(row[4]), kmh: max(0, row[5]), modelKmh: row[6], source: source)
+                               level: Int(row[4]), kmh: max(0, row[5]), modelKmh: row[6])
         }
         return TrafficSnapshot(generated: Date(timeIntervalSince1970: generated), edges: edges)
     }

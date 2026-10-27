@@ -75,7 +75,16 @@ extension MapScreen {
         if TrafficDemo.isOn {
             Task {
                 await Task.pause(seconds: 3)
-                if let data = TrafficDemo.fixture() { env.traffic.seedFixture(data) }
+                if let data = TrafficDemo.fixture(), let parts = TrafficDemo.split(data) {
+                    env.traffic.seedFixture(live: parts.live, usual: parts.usual)
+                }
+            }
+        }
+        // 33H: лист «Пробки» (балл города и легенда) без касания чипа.
+        if args.contains("-showTrafficLegend") {
+            Task {
+                await Task.pause(seconds: 8)
+                map.showTrafficLegend = true
             }
         }
         // Снимки экранов для обзора вёрстки: -openScreen settings|search|

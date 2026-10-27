@@ -32,15 +32,15 @@ final class TrafficDataTests: XCTestCase {
         XCTAssertEqual(snapshot.generated, Date(timeIntervalSince1970: 1_760_000_000))
     }
 
-    /// 33H/33G: необязательная 8-я колонка — источник. Нет колонки (старый
-    /// сервер) — водители; 1 — модель; неизвестный код — водители, а не
-    /// пропуск: новый источник будущего сервера не должен гасить пробки.
-    func testEighthColumnIsTheSource() throws {
+    /// now.json — всегда «сейчас» (33H): лишняя колонка не делает ребро
+    /// «обычным» — модель приходит только profile.json и в голос не идёт.
+    func testExtraColumnsKeepTheEdgeLive() throws {
         let json = #"{"v":1,"generated":1760000000,"edges":[[41.3,69.28,41.301,69.28,3,8,60],"#
             + #"[41.3,69.28,41.302,69.28,1,50,60,1],[41.3,69.28,41.303,69.28,2,30,60,0],"#
             + #"[41.3,69.28,41.304,69.28,2,30,60,7]]}"#
         let snapshot = try XCTUnwrap(TrafficSnapshot.decode(Data(json.utf8)))
-        XCTAssertEqual(snapshot.edges.map(\.source), [.drivers, .model, .drivers, .drivers])
+        XCTAssertEqual(snapshot.edges.count, 4)
+        XCTAssertTrue(snapshot.edges.allSatisfy { $0.source == .live })
     }
 
     func testOtherVersionIsNoData() {

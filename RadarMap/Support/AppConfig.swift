@@ -893,6 +893,20 @@ nonisolated enum AppConfig {
     /// улица / второстепенная (TrafficLines.tier).
     nonisolated static let trafficMajorModelKmh = 50.0
     nonisolated static let trafficStreetModelKmh = 32.0
+    /// Лист по касанию линии: задержка меньше минуты не печатается — «+0 мин»
+    /// звучит как ошибка, а не как «почти не мешает», с.
+    nonisolated static let trafficTapDelayFloorSeconds: TimeInterval = 60
+    /// Балл города (TrafficCityScore): по живым — только если водители дали
+    /// данные хотя бы по 20 км магистралей Ташкента (из ~1280 км в обе
+    /// стороны): по трём проездам балл города — выдумка.
+    nonisolated static let trafficScoreMinLiveKm = 20.0
+    /// Магистрали Ташкента (trunk + primary + secondary, рамка города, каждое
+    /// направление отдельно), км — замер OSM 25.10.2026: 255 + 399 + 628.
+    /// Знаменатель балла по «обычно»: профиль несёт только медленные рёбра.
+    nonisolated static let trafficScoreTashkentMajorKm = 1_280.0
+    /// Доля загруженных магистралей, при которой балл — 10: две трети сети
+    /// в пробке — это «город стоит», дальше расти некуда.
+    nonisolated static let trafficScoreFullShare = 0.66
     /// Живым пробкам верим на столько вперёд по времени пути: дальше по
     /// маршруту (и для выезда позже) — обычная скорость этого часа
     /// (TrafficForecast). Пробка из now.json через полчаса уже другая, с.

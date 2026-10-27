@@ -85,6 +85,25 @@ nonisolated enum TrafficLines {
         lines(from: edges)
     }
 
+    /// Живые рёбра и «обычно в это время» — одним слоем линий. Живое первым:
+    /// то же ребро u→v в «обычно» отбрасывается как повтор — сейчас главнее
+    /// обычного.
+    @concurrent
+    static func build(live: [TrafficEdge], usual: [TrafficProfile.UsualEdge]) async -> [Line] {
+        lines(from: live + edges(usual: usual))
+    }
+
+    /// Ребро профиля «обычно» → ребро линии: уровень — по доле скорости графа,
+    /// теми же порогами, что у живых (TrafficSnapshot.level), источник — `.usual`.
+    static func edges(usual: [TrafficProfile.UsualEdge]) -> [TrafficEdge] {
+        usual.map { edge in
+            let model = edge.modelKmh > 0 ? edge.modelKmh : AppConfig.trafficStreetModelKmh
+            let kmh = edge.ratio * model
+            return TrafficEdge(a: edge.a, b: edge.b, level: TrafficSnapshot.level(kmh: kmh, modelKmh: model),
+                               kmh: kmh, modelKmh: model, source: .usual)
+        }
+    }
+
     // MARK: - Сшивка
 
     static func lines(from edges: [TrafficEdge]) -> [Line] {
@@ -264,7 +283,7 @@ nonisolated enum TrafficLines {
                     filled = to - from + 2
                 }
                 out.append(Line(coordinates: coordinates, level: value,
-                                source: TrafficEdge.Source(rawValue: origin) ?? .drivers, tier: tier,
+                                source: TrafficEdge.Source(rawValue: origin) ?? .live, tier: tier,
                                 length: meters, kmh: meters > 0 ? kmh / meters : 0,
                                 modelKmh: meters > 0 ? model / meters : 0))
                 from = to + 1

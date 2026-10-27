@@ -37,10 +37,19 @@ final class TrafficService {
     private(set) var snapshot: TrafficSnapshot?
     /// Растёт на каждом новом наборе — по нему карта перерисовывает слой.
     private(set) var revision = 0
-    /// Тот же набор, сшитый в линии улиц для карты (TrafficLines, 33H):
-    /// считается вместе с разбором, вне главного потока, раз на новый
-    /// now.json — не на тике.
+    /// Живой набор и «обычно в это время» (33G, профиль), сшитые в линии
+    /// улиц для карты (TrafficLines, 33H): вне главного потока, раз на новый
+    /// now.json или новый набор «обычно» — не на тике.
     private(set) var lines: [TrafficLines.Line] = []
+    /// Растёт на каждом новом наборе линий — по нему карта пишет источник.
+    /// Отдельно от `revision`: «обычно» меняется раз в 5 мин и не должно
+    /// заставлять маршрут пересчитывать пробки на своей линии.
+    private(set) var linesRevision = 0
+    /// Балл пробок города 0–10 (TrafficCityScore) — с каждым набором линий.
+    private(set) var cityScore: TrafficCityScore.Score?
+    /// Рёбра «обычно в это время» от TrafficProfileService (`setUsual`).
+    @ObservationIgnored private var usual: [TrafficProfile.UsualEdge] = []
+    @ObservationIgnored private var linesGeneration = 0
 
     @ObservationIgnored private var probes = TrafficProbes()
     /// Куски, ждущие отправки, с временем их конца (на сервер оно не идёт:
@@ -228,69 +237,96 @@ final class TrafficService {
         if demoPinned { return }
         #endif
         guard isShown else {
-            if snapshot != nil { apply(nil, lines: []) }
+            if snapshot != nil || !lines.isEmpty { apply(nil) }
             return
         }
         if let current = snapshot, !current.isFresh(now: Date()) {
-            apply(nil, lines: [])
+            apply(nil)
         }
         guard isOnline() else { return }
         do {
             guard let fresh = try await Self.fetch(api: feed, etag: etag) else { return }   // 304
             etag = fresh.etag
             guard let decoded = fresh.snapshot, decoded.isFresh(now: Date()) else {
-                if snapshot != nil { apply(nil, lines: []) }
+                if snapshot != nil { apply(nil) }
                 return
             }
-            apply(decoded, lines: fresh.lines)
+            apply(decoded)
         } catch {
             Log.network.notice("пробки не загрузились: \(error.localizedDescription, privacy: .public)")
         }
     }
 
-    /// Набор и его линии — вместе, одной ревизией: карта не должна увидеть
-    /// новую ревизию со старыми линиями.
-    private func apply(_ snapshot: TrafficSnapshot?, lines: [TrafficLines.Line]) {
+    private func apply(_ snapshot: TrafficSnapshot?) {
         self.snapshot = snapshot
-        self.lines = lines
         revision &+= 1
+        rebuildLines()
     }
 
-    /// Загрузка, разбор и сшивка вне главного потока: файл по городу —
-    /// тысячи рёбер.
+    /// Новый набор «обычно в это время» (TrafficProfileService, раз в 5 мин).
+    func setUsual(_ edges: [TrafficProfile.UsualEdge]) {
+        #if DEBUG
+        if demoPinned { return }
+        #endif
+        guard edges != usual else { return }
+        usual = edges
+        rebuildLines()
+    }
+
+    /// Линии карты из живых рёбер и «обычно» — вне главного потока. Живое
+    /// идёт первым: то же ребро в «обычно» сшивка отбрасывает как повтор.
+    /// Устаревший результат (пришёл набор новее) не пишется.
+    private func rebuildLines() {
+        linesGeneration &+= 1
+        let generation = linesGeneration
+        let live = isShown ? snapshot?.edges ?? [] : []
+        let usual = isShown ? self.usual : []
+        guard !live.isEmpty || !usual.isEmpty else {
+            if !lines.isEmpty { lines = []; linesRevision &+= 1 }
+            cityScore = nil
+            return
+        }
+        Task {
+            let built = await Self.build(live: live, usual: usual)
+            guard generation == linesGeneration else { return }
+            lines = built.lines
+            cityScore = built.score
+            linesRevision &+= 1
+        }
+    }
+
+    @concurrent
+    private static func build(live: [TrafficEdge], usual: [TrafficProfile.UsualEdge]) async
+        -> (lines: [TrafficLines.Line], score: TrafficCityScore.Score?) {
+        let lines = TrafficLines.lines(from: live + TrafficLines.edges(usual: usual))
+        return (lines, TrafficCityScore.score(lines))
+    }
+
+    /// Загрузка и разбор вне главного потока: файл по городу — тысячи рёбер.
     @concurrent
     private static func fetch(api: APIClient, etag: String?) async throws
-        -> (snapshot: TrafficSnapshot?, lines: [TrafficLines.Line], etag: String?)? {
+        -> (snapshot: TrafficSnapshot?, etag: String?)? {
         guard let answer = try await api.getRawIfChanged("traffic/now.json", etag: etag) else { return nil }
-        let snapshot = TrafficSnapshot.decode(answer.data)
-        let lines = snapshot.map { TrafficLines.lines(from: $0.edges) } ?? []
-        return (snapshot, lines, answer.etag)
+        return (TrafficSnapshot.decode(answer.data), answer.etag)
     }
 
     #if DEBUG
     @ObservationIgnored private var demoPinned = false
 
-    /// Показ `-trafficDemo` (33H): синтетический now.json вечернего Ташкента
-    /// из фикстуры (Resources/Debug, в релиз не входит) — через настоящий
-    /// разбор `TrafficSnapshot.decode`, со свежей отметкой времени.
-    func seedFixture(_ data: Data) {
-        guard let decoded = TrafficSnapshot.decode(data) else {
-            Log.network.error("пробки: фикстура показа не разобралась")
-            return
-        }
+    /// Показ `-trafficDemo` (33H): синтетический вечерний Ташкент из фикстуры
+    /// (TrafficDemo) — живые рёбра со свежей отметкой времени и «обычно».
+    /// Сервер и профиль показ не перебивают.
+    func seedFixture(live: [TrafficEdge], usual: [TrafficProfile.UsualEdge]) {
+        self.usual = usual
         demoPinned = true
-        let snapshot = TrafficSnapshot(generated: Date(), edges: decoded.edges)
-        Task {
-            let lines = await TrafficLines.build(snapshot.edges)
-            apply(snapshot, lines: lines)
-            Log.network.info("пробки: показ из фикстуры, рёбер \(snapshot.edges.count, privacy: .public), линий \(lines.count, privacy: .public)")
-        }
+        apply(TrafficSnapshot(generated: Date(), edges: live))
+        Log.network.info("пробки: показ из фикстуры, живых \(live.count, privacy: .public), обычно \(usual.count, privacy: .public)")
     }
 
     /// Скриншот-хук `-driveDemoStops -stopScene jam` (29.D): своя пробка по
     /// линии демо-маршрута — демо Амира Темура лежит в сотне метров от неё.
     func seedDemo(edges: [TrafficEdge]) {
-        apply(TrafficSnapshot(generated: Date(), edges: edges), lines: TrafficLines.lines(from: edges))
+        apply(TrafficSnapshot(generated: Date(), edges: edges))
     }
 
     /// Скриншот-хук `-demoTraffic`: пробки вдоль Амира Темура (север — юг),
@@ -310,7 +346,7 @@ final class TrafficService {
             edges.append(TrafficEdge(a: p, b: q, level: level, kmh: Double(kmh), modelKmh: 60))
             edges.append(TrafficEdge(a: q, b: p, level: max(1, level - 1), kmh: Double(kmh) + 10, modelKmh: 60))
         }
-        apply(TrafficSnapshot(generated: Date(), edges: edges), lines: TrafficLines.lines(from: edges))
+        apply(TrafficSnapshot(generated: Date(), edges: edges))
         Log.network.info("пробки: демо, рёбер \(edges.count, privacy: .public), ревизия \(self.revision, privacy: .public)")
     }
     #endif

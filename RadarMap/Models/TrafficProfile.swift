@@ -192,12 +192,14 @@ nonisolated struct TrafficProfile: Sendable {
         /// Обычная скорость / скорость графа в этот момент.
         let ratio: Double
         let source: Source
+        /// Скорость графа — класс толщины линии на карте (TrafficLines, 33H).
+        var modelKmh: Double = 0
         var isHeavy: Bool { ratio < AppConfig.usualTrafficHeavyRatio }
 
         static func == (l: UsualEdge, r: UsualEdge) -> Bool {
             l.a.latitude == r.a.latitude && l.a.longitude == r.a.longitude
                 && l.b.latitude == r.b.latitude && l.b.longitude == r.b.longitude
-                && l.ratio == r.ratio && l.source == r.source
+                && l.ratio == r.ratio && l.source == r.source && l.modelKmh == r.modelKmh
         }
     }
 
@@ -210,7 +212,8 @@ nonisolated struct TrafficProfile: Sendable {
         for (index, edge) in snapshot.edges.enumerated() where edge.modelKmh > 0 {
             let ratio = speed(edge: index, mix: mix) / edge.modelKmh
             guard ratio < AppConfig.usualTrafficShowRatio else { continue }
-            out.append(UsualEdge(a: edge.a, b: edge.b, ratio: ratio, source: source(edge: index, mix: mix)))
+            out.append(UsualEdge(a: edge.a, b: edge.b, ratio: ratio, source: source(edge: index, mix: mix),
+                                 modelKmh: edge.modelKmh))
         }
         return out
     }

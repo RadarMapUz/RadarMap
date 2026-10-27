@@ -145,8 +145,8 @@ nonisolated enum EngineMapStyle {
     static let trafficLayerIDs = (casing: "traffic-case", line: "traffic", chevrons: "traffic-arrows")
     /// Имя растра шеврона уровня 1…4 в теме (EngineMapView кладёт обе темы:
     /// цвет шеврона — от цвета линии, а он у темы свой).
-    static func trafficChevronImage(level: Int, daylight: Bool, model: Bool = false) -> String {
-        "traffic-chevron-\(level)-\(daylight ? "day" : "night")\(model ? "-model" : "")"
+    static func trafficChevronImage(level: Int, daylight: Bool, usual: Bool = false) -> String {
+        "traffic-chevron-\(level)-\(daylight ? "day" : "night")\(usual ? "-usual" : "")"
     }
 
     /// Толщина линии пробок, точки, по классу дороги (магистраль / улица /
@@ -170,19 +170,19 @@ nonisolated enum EngineMapStyle {
     /// толщиной 4–5 pt не читался (снимки 27.10, первая проба).
     static let trafficArrowScale = 2.4
     /// Указатели: с какого масштаба у класса (магистраль / улица /
-    /// второстепенная); у модели — на `trafficModelArrowDelay` позже: она
+    /// второстепенная); у «обычно» — на `trafficUsualArrowDelay` позже: оно
     /// покрывает весь город, и знаки на каждом переулке — шум.
     static let trafficChevronFromZoom: [Double] = [13.5, 14.5, 16]
-    static let trafficModelArrowDelay = 1.5
+    static let trafficUsualArrowDelay = 1.5
 
     /// interpolate по zoom с match по классу на каждой ступени: движок
     /// принимает zoom только на верхнем уровне выражения.
-    static func trafficWidth(scale: Double = 1, extra: Double = 0, modelShare: Double? = nil) -> [Any] {
+    static func trafficWidth(scale: Double = 1, extra: Double = 0, usualShare: Double? = nil) -> [Any] {
         var out: [Any] = ["interpolate", ["linear"], ["zoom"]]
         for stop in trafficWidthStops {
             let byTier: [Any] = ["match", ["get", "tier"], 0, stop.widths[0] * scale,
                                  1, stop.widths[1] * scale, stop.widths[2] * scale]
-            let value: [Any] = modelShare.map { ["*", byTier, ["case", ["==", ["get", "src"], 1], $0, 1]] } ?? byTier
+            let value: [Any] = usualShare.map { ["*", byTier, ["case", ["==", ["get", "src"], 1], $0, 1]] } ?? byTier
             out += [stop.zoom, extra == 0 ? value : ["+", value, extra]]
         }
         return out
@@ -198,57 +198,57 @@ nonisolated enum EngineMapStyle {
              2, hex(transform(TrafficPalette.level(2, in: colours))),
              hex(transform(TrafficPalette.level(1, in: colours)))]
         }
-        let isModel: [Any] = ["==", ["get", "src"], 1]
+        let isUsual: [Any] = ["==", ["get", "src"], 1]
         let offset = trafficWidth(scale: trafficOffsetShare)
         let round: [String: Any] = ["line-cap": "round", "line-join": "round"]
         let casingOpacity = daylight ? TrafficPalette.casingOpacity.day : TrafficPalette.casingOpacity.night
-        // Указатели видны с масштаба своего класса; модель — позже.
-        var thresholds: [(zoom: Double, tier: Int, model: Bool)] = []
+        // Указатели видны с масштаба своего класса; «обычно» — позже.
+        var thresholds: [(zoom: Double, tier: Int, usual: Bool)] = []
         for (tier, zoom) in trafficChevronFromZoom.enumerated() {
             thresholds.append((zoom, tier, false))
-            thresholds.append((zoom + trafficModelArrowDelay, tier, true))
+            thresholds.append((zoom + trafficUsualArrowDelay, tier, true))
         }
         thresholds.sort { $0.zoom < $1.zoom }
         // Ступени step — строго по возрастанию: совпавшие пороги (улица и
-        // модель магистрали — оба на 15) — одной ступенью, иначе движок молча
+        // «обычно» магистрали — оба на 15) — одной ступенью, иначе движок молча
         // отбрасывает весь слой.
         var chevronOpacity: [Any] = ["step", ["zoom"], 0]
-        var shown: [(tier: Int, model: Bool)] = []
+        var shown: [(tier: Int, usual: Bool)] = []
         for (index, threshold) in thresholds.enumerated() {
-            shown.append((threshold.tier, threshold.model))
+            shown.append((threshold.tier, threshold.usual))
             if index + 1 < thresholds.count, thresholds[index + 1].zoom == threshold.zoom { continue }
             var visible: [Any] = ["any"]
             for item in shown {
                 visible.append(["all", ["==", ["get", "tier"], item.tier],
-                                [item.model ? "==" : "!=", ["get", "src"], 1]])
+                                [item.usual ? "==" : "!=", ["get", "src"], 1]])
             }
             chevronOpacity += [threshold.zoom, ["case", visible, 1, 0]]
         }
         // Высота наконечника = trafficArrowScale толщин своей линии.
         let chevronSize = trafficWidth(scale: trafficArrowScale / trafficChevronSide,
-                                       modelShare: TrafficPalette.modelWidthShare)
-        func chevronImage(model: Bool) -> [Any] {
+                                       usualShare: TrafficPalette.usualWidthShare)
+        func chevronImage(usual: Bool) -> [Any] {
             ["match", ["get", "level"],
-             4, trafficChevronImage(level: 4, daylight: daylight, model: model),
-             3, trafficChevronImage(level: 3, daylight: daylight, model: model),
-             2, trafficChevronImage(level: 2, daylight: daylight, model: model),
-             trafficChevronImage(level: 1, daylight: daylight, model: model)]
+             4, trafficChevronImage(level: 4, daylight: daylight, usual: usual),
+             3, trafficChevronImage(level: 3, daylight: daylight, usual: usual),
+             2, trafficChevronImage(level: 2, daylight: daylight, usual: usual),
+             trafficChevronImage(level: 1, daylight: daylight, usual: usual)]
         }
         return [
             ["id": trafficLayerIDs.casing, "type": "line", "source": "traffic", "layout": round,
              "paint": ["line-color": hex(TrafficPalette.casing),
-                       "line-width": trafficWidth(extra: trafficCasingExtra, modelShare: TrafficPalette.modelWidthShare),
+                       "line-width": trafficWidth(extra: trafficCasingExtra, usualShare: TrafficPalette.usualWidthShare),
                        "line-offset": offset,
-                       "line-opacity": ["case", isModel, casingOpacity * 0.4, casingOpacity]]],
+                       "line-opacity": ["case", isUsual, casingOpacity * 0.4, casingOpacity]]],
             ["id": trafficLayerIDs.line, "type": "line", "source": "traffic", "layout": round,
-             "paint": ["line-color": ["case", isModel, byLevel(TrafficPalette.model), byLevel { $0 }],
-                       "line-width": trafficWidth(scale: 1, modelShare: TrafficPalette.modelWidthShare),
+             "paint": ["line-color": ["case", isUsual, byLevel(TrafficPalette.usual), byLevel { $0 }],
+                       "line-width": trafficWidth(scale: 1, usualShare: TrafficPalette.usualWidthShare),
                        "line-offset": offset]],
             ["id": trafficLayerIDs.chevrons, "type": "symbol", "source": "traffic",
              "minzoom": trafficChevronFromZoom[0],
              "layout": ["symbol-placement": "line",
                         "symbol-spacing": ["interpolate", ["linear"], ["zoom"], 12, 48, 15, 80, 18, 120],
-                        "icon-image": ["case", isModel, chevronImage(model: true), chevronImage(model: false)],
+                        "icon-image": ["case", isUsual, chevronImage(usual: true), chevronImage(usual: false)],
                         "icon-size": chevronSize,
                         // Сдвиг к правой стороне — в самом растре (trafficChevronIcon).
                         "icon-anchor": "center",
@@ -263,8 +263,6 @@ nonisolated enum EngineMapStyle {
 
     /// Окно линии маршрута у машины (RouteCut): срез краской каждый кадр.
     static let routeNearSource = "route-near"
-    /// «Обычно в это время» (33G): профиль часа недели — водители и модель.
-    static let usualTrafficSource = "traffic-usual"
     /// Стрелки направления — точками с местом на линии (RouteCut.arrows).
     static let routeArrowsSource = "route-arrows"
     /// Слои окна у машины: кайма, тело, манёвр, середина — режутся одинаково.

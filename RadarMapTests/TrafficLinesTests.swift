@@ -26,7 +26,7 @@ struct TrafficLinesTests {
 
     private func edge(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D, level: Int = 1,
                       kmh: Double = 50, model: Double = 60,
-                      source: TrafficEdge.Source = .drivers) -> TrafficEdge {
+                      source: TrafficEdge.Source = .live) -> TrafficEdge {
         TrafficEdge(a: a, b: b, level: level, kmh: kmh, modelKmh: model, source: source)
     }
 
@@ -130,11 +130,11 @@ struct TrafficLinesTests {
     @Test("Модель и водители — разные линии, источник по умолчанию — водители")
     func sourceSplits() {
         var edges = street([1, 1])
-        edges.append(edge(at(200), at(300), source: .model))
-        edges.append(edge(at(300), at(400), source: .model))
+        edges.append(edge(at(200), at(300), source: .usual))
+        edges.append(edge(at(300), at(400), source: .usual))
         let lines = TrafficLines.lines(from: edges)
-        #expect(lines.map(\.source) == [.drivers, .model])
-        #expect(TrafficEdge(a: base, b: base, level: 1, kmh: 1, modelKmh: 1).source == .drivers)
+        #expect(lines.map(\.source) == [.live, .usual])
+        #expect(TrafficEdge(a: base, b: base, level: 1, kmh: 1, modelKmh: 1).source == .live)
     }
 
     @Test("Толщина одна на улицу: скорость графа колеблется — класс общий")
@@ -184,8 +184,31 @@ struct TrafficLinesTests {
         #expect(abs(edgeLength - lineLength) / edgeLength < 0.001, "рёбер \(edgeLength) м, линий \(lineLength) м")
         #expect(lines.count * 3 < snapshot.edges.count, "сшивка: \(lines.count) линий из \(snapshot.edges.count) рёбер")
         #expect(Set(lines.map(\.level)) == [1, 2, 3, 4])
-        #expect(Set(lines.map(\.source)) == [.drivers, .model])
+        #expect(Set(lines.map(\.source)) == [.live], "now.json всегда живой: лишняя колонка не делает «обычно»")
         #expect(TrafficLines.lines(from: snapshot.edges) == lines)
+    }
+
+    @Test("Живое и «обычно» одним слоем: то же ребро — только живое")
+    func liveBeatsUsualOnTheSameEdge() async {
+        let live = street([3, 3])
+        let usual = street([1, 1, 1]).map {
+            TrafficProfile.UsualEdge(a: $0.a, b: $0.b, ratio: 0.5, source: .model, modelKmh: 60)
+        }
+        let lines = await TrafficLines.build(live: live, usual: usual)
+        #expect(lines.map(\.source) == [.live, .usual])
+        #expect(lines.first?.level == 3)
+        #expect(lines.last?.level == 2, "«обычно» 0,5 графа — «медленно», теми же порогами, что живые")
+        #expect(abs((lines.last?.length ?? 0) - 100) < 1, "под живыми рёбрами «обычно» не дублируется")
+    }
+
+    @Test("Показ: фикстура делится на живые и «обычно» с порогом профиля")
+    func demoSplitsTheFixture() throws {
+        let url = try #require(Bundle.main.url(forResource: "traffic_demo_tashkent", withExtension: "json"))
+        let parts = try #require(TrafficDemo.split(Data(contentsOf: url)))
+        #expect(!parts.live.isEmpty && !parts.usual.isEmpty)
+        #expect(parts.usual.allSatisfy { $0.ratio < AppConfig.usualTrafficShowRatio })
+        let lines = TrafficLines.lines(from: parts.live + TrafficLines.edges(usual: parts.usual))
+        #expect(Set(lines.map(\.source)) == [.live, .usual])
     }
 
     @Test("Сглаживание: проход через один, соседний участок решает следующий проход")

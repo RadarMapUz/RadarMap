@@ -75,8 +75,8 @@ struct TrafficMapStyleTests {
         let layout = try #require(layer("traffic-arrows", daylight: daylight)?["layout"] as? [String: Any])
         let text = String(describing: layout["icon-image"] ?? "")
         for level in 1...4 {
-            for model in [false, true] {
-                #expect(text.contains(EngineMapStyle.trafficChevronImage(level: level, daylight: daylight, model: model)))
+            for usual in [false, true] {
+                #expect(text.contains(EngineMapStyle.trafficChevronImage(level: level, daylight: daylight, usual: usual)))
             }
         }
     }
@@ -88,7 +88,7 @@ struct TrafficMapStyleTests {
         for level in 1...4 {
             let pair = TrafficPalette.level(level)
             #expect(text.contains(RouteColors.pick(pair, daylight: daylight)))
-            #expect(text.contains(RouteColors.pick(TrafficPalette.model(pair), daylight: daylight)))
+            #expect(text.contains(RouteColors.pick(TrafficPalette.usual(pair), daylight: daylight)))
         }
         #expect(!text.contains("#d93025"), "красный камеры — не цвет пробки")
     }

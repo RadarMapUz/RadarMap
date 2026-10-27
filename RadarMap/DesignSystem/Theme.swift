@@ -592,23 +592,17 @@ extension CameraType {
     var glyphTint: Color { Color(uiColor: Theme.rgb(glyph.inkRGB)) }
 }
 
-/// Палитра пробок на карте (33H) ЧИСЛАМИ — стиль движка, растры шевронов и
+/// Палитра пробок на карте (33H) ЧИСЛАМИ — стиль движка, растры указателей и
 /// токены SwiftUI берут цвет отсюда. Четыре уровня — свободно, медленно,
-/// пробка, стоят; у каждого пара день/ночь.
+/// пробка, стоят; у каждого пара день/ночь. «Обычно в это время» (33G) — те
+/// же цвета, светлее и тоньше (`usual`): один язык на весь слой.
 ///
 /// Правило проекта: красный на карте — только камера (`CameraGlyph.camera`,
 /// #D93025). До 33H «пробка» днём была побайтово этим красным (ночью — ΔE
-/// 14): пробка на улице и камера на ней читались одним знаком. Обе палитры
-/// держат пробку и «стоят» на ΔE ≥ 20 от красного камеры в обеих темах
-/// (PaletteTests), но разными путями — владелец выбирает по снимкам:
-/// • A «Бордо» — привычный язык навигаторов: пробка — вишнёво-бордовая,
-///   «стоят» — тёмное вино. Ближе к Яндексу; ночью «стоят» на графите
-///   держится шевронами и каймой, а не яркостью (контраст ~1,7:1).
-/// • B «Малина и слива» — пробка малиновая, «стоят» — слива: дальше всего
-///   от красного камеры (ΔE 47+) и лучше всех при дейтеранопии (зелёный /
-///   пробка ΔE 25–28 против 15–18 у A), но «фиолетовая пробка» непривычна.
-/// После выбора проигравший вариант удаляется вместе с ключом
-/// `-trafficPalette`.
+/// 14). Выбор владельца 27.10 — «Малина и слива»: пробка малиновая, «стоят»
+/// — слива; от красного камеры ΔE 47+ в обеих темах, при дейтеранопии
+/// зелёный и пробка расходятся на ΔE 25–28 (PaletteTests). Вариант «Бордо»
+/// (ближе к красному, ночью «стоят» терялось на графите) снят.
 nonisolated enum TrafficPalette {
     typealias Pair = RouteColors.Pair
 
@@ -619,36 +613,8 @@ nonisolated enum TrafficPalette {
         let stand: Pair
     }
 
-    enum Variant: String, CaseIterable, Sendable {
-        case a = "A"
-        case b = "B"
-
-        var colors: Colors {
-            switch self {
-            case .a:
-                return Colors(free: (0x2BA84A, 0x3CC46B), slow: (0xE8A100, 0xFFB020),
-                              jam: (0xB3123E, 0xF25C84), stand: (0x5E0B22, 0xA81E46))
-            case .b:
-                return Colors(free: (0x2BA84A, 0x3CC46B), slow: (0xE8A100, 0xFFB020),
-                              jam: (0xC8186A, 0xFF4F9A), stand: (0x5A2275, 0xB06AE0))
-            }
-        }
-    }
-
-    /// Вариант до выбора владельца: B (рекомендация 33H — см. отчёт); в
-    /// DEBUG — `-trafficPalette A|B` для снимков сравнения.
-    static let variant: Variant = {
-        #if DEBUG
-        let args = ProcessInfo.processInfo.arguments
-        if let index = args.firstIndex(of: "-trafficPalette"), index + 1 < args.count,
-           let chosen = Variant(rawValue: args[index + 1].uppercased()) {
-            return chosen
-        }
-        #endif
-        return .b
-    }()
-
-    static var active: Colors { variant.colors }
+    static let active = Colors(free: (0x2BA84A, 0x3CC46B), slow: (0xE8A100, 0xFFB020),
+                               jam: (0xC8186A, 0xFF4F9A), stand: (0x5A2275, 0xB06AE0))
 
     /// Цвет уровня показа 1…4 (TrafficLines.displayLevel).
     static func level(_ level: Int, in colors: Colors = active) -> Pair {
@@ -660,16 +626,17 @@ nonisolated enum TrafficPalette {
         }
     }
 
-    /// «Обычно в это время» (модель, 33G) — тот же цвет, смешанный с
-    /// полотном дороги темы: светлее днём, глуше ночью; тоньше живого.
+    /// «Обычно в это время» (33G, профиль часа недели: поездки водителей за
+    /// недели или модель дороги) — тот же цвет, смешанный с полотном дороги
+    /// темы: светлее днём, глуше ночью; тоньше живого.
     /// Смешение, а не прозрачность: полупрозрачные круглые концы соседних
     /// линий темнели бы бусинами на стыках.
-    static let modelMix = 0.45
-    static let modelRoad: Pair = (0xFFFFFF, 0x30343C)
-    static let modelWidthShare = 0.7
+    static let usualMix = 0.45
+    static let usualRoad: Pair = (0xFFFFFF, 0x30343C)
+    static let usualWidthShare = 0.7
 
-    static func model(_ pair: Pair) -> Pair {
-        (mix(pair.day, modelRoad.day, modelMix), mix(pair.night, modelRoad.night, modelMix))
+    static func usual(_ pair: Pair) -> Pair {
+        (mix(pair.day, usualRoad.day, usualMix), mix(pair.night, usualRoad.night, usualMix))
     }
 
     /// Тонкая кайма линии: тёмная в обеих темах — линия отделяется и от

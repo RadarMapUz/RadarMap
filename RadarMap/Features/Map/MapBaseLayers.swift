@@ -27,6 +27,7 @@ import SwiftUI
 /// панелей (MapFrameState), наклон уходит в ноль, когда камера в охвате.
 struct EngineBaseLayer: View {
     var onSelectCamera: (Camera) -> Void = { _ in }
+    var onSelectTraffic: (TrafficTap) -> Void = { _ in }
     var onLongPress: (CLLocationCoordinate2D) -> Void = { _ in }
     @Environment(AppEnvironment.self) private var env
     let state: MapFrameState
@@ -156,11 +157,9 @@ struct EngineBaseLayer: View {
                         detailMarks: detail.marks,
                         destinationApproach: detail.approach,
                         trafficLines: env.traffic.isShown ? env.traffic.lines : [],
+                        trafficLinesRevision: env.traffic.linesRevision * 2 + (env.traffic.isShown ? 1 : 0),
                         trafficRevision: env.traffic.revision * 2 + (env.traffic.isShown ? 1 : 0),
                         trafficSnapshot: env.traffic.isShown ? env.traffic.snapshot : nil,
-                        // Обычно в это время (33G): светлее живых, под ними; тот же выключатель.
-                        usualTrafficEdges: env.traffic.isShown ? env.trafficProfile.usualEdges : [],
-                        usualTrafficRevision: env.trafficProfile.usualRevision * 2 + (env.traffic.isShown ? 1 : 0),
                         labelLanguage: env.settings.appLanguage.mapCode,
                         cursorStyle: env.settings.cursorStyle,
                         // Компас вокруг машины и знак смены лимита (29.B) — в поездке.
@@ -188,6 +187,7 @@ struct EngineBaseLayer: View {
                         onHeading: { map.noteMapDirection($0) },
                         onBrowse: { map.releaseToFree() },
                         onSelectCamera: onSelectCamera,
+                        onSelectTraffic: onSelectTraffic,
                         onLongPress: onLongPress,
                         onRegion: { map.updateVisible(for: $0) },
                         showsPosition: known != nil,

@@ -18,6 +18,12 @@
 //  Молчание — не ответ: если водитель ничего не нажал, мы НЕ шлём ничего.
 //  Голос «не знаю» испортил бы данные сильнее, чем их отсутствие.
 //
+//  Вопрос — по типу отметки (12.7). Про пост ДПС спрашивали «Радар ещё
+//  стоял?», и честный ответ «радара не было» уходил против поста, который
+//  стоит. Теперь «Пост ещё стоит?» с кнопками «Стоит» / «Пост убрали»: то
+//  же одно касание и тот же голос серверу (`kind=pass`), только вопрос о
+//  том, что водитель видел.
+//
 //  Чистая логика, покрыта MobilePassWatchTests.
 //
 
@@ -34,6 +40,40 @@ nonisolated enum MobilePassWatch {
     /// подхода с запасом — иначе на дрожании GPS у самой точки вопрос
     /// выскакивал бы прямо в момент проезда, когда смотреть надо на дорогу.
     static let departedMeters: CLLocationDistance = 180
+
+    /// Текст вопроса и ответов — по типу отметки. `yes` — «на месте»
+    /// (лайк, продлевает), `no` — «уже нет» (дизлайк, срезает срок).
+    struct Question: Equatable {
+        let title: String
+        let yes: String
+        let no: String
+        /// Ответ целиком — для VoiceOver: «Нет» само по себе не говорит, о чём.
+        let spokenYes: String
+        let spokenNo: String
+    }
+
+    static func question(for kind: CameraType) -> Question {
+        switch kind {
+        case .dpsPost:
+            return Question(title: String(localized: "Пост ещё стоит?"),
+                            yes: String(localized: "Стоит"),
+                            no: String(localized: "Пост убрали"),
+                            spokenYes: String(localized: "Да, пост ещё стоит"),
+                            spokenNo: String(localized: "Пост убрали"))
+        case .accident:
+            return Question(title: String(localized: "ДТП ещё на дороге?"),
+                            yes: String(localized: "Да"),
+                            no: String(localized: "Уже убрали"),
+                            spokenYes: String(localized: "Да, ДТП ещё на дороге"),
+                            spokenNo: String(localized: "ДТП уже убрали"))
+        default:
+            return Question(title: String(localized: "Радар ещё стоял?"),
+                            yes: String(localized: "Да"),
+                            no: String(localized: "Нет"),
+                            spokenYes: String(localized: "Да, радар ещё стоял"),
+                            spokenNo: String(localized: "Нет, радара уже не было"))
+        }
+    }
 
     /// Состояние наблюдения за одной точкой.
     struct Track: Equatable {

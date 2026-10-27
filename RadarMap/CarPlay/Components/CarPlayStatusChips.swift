@@ -88,11 +88,19 @@ struct CarPlayStatusChips: View {
                                       tint: Theme.warning,
                                       text: String(localized: "Карта не отвечает — камеры работают")))
         }
-        // Жара: бюджеты уже урезаны (маркеры карты, сеть схемы) — но молча.
-        if env.thermal.mode != .full {
+        // Жара или мало заряда (автоэконом, 12.3): бюджеты уже урезаны
+        // (маркеры, наклон, кадры) — но молча. Причина своя у каждой.
+        switch env.thermal.reason {
+        case .heat?:
             result.append(CarPlayChip(id: "thermal", symbol: "thermometer.sun.fill",
                                       tint: Theme.warning,
                                       text: String(localized: "Жарко — экономлю экран")))
+        case .battery?:
+            result.append(CarPlayChip(id: "thermal", symbol: "battery.25percent",
+                                      tint: Theme.warning,
+                                      text: String(localized: "Экономим батарею")))
+        case nil:
+            break
         }
         // Слово владельца: то же объявление, что видит телефон. В машине —
         // только заголовок: тело сообщения за рулём всё равно не прочитают,

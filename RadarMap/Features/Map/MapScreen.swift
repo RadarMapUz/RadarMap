@@ -32,6 +32,8 @@ struct MapScreen: View {
     @State var bottomPanelEdge: CGFloat = 0
     /// Верх нижней карточки предупреждения о камере (в навигации), nil — нет.
     @State var alertCardEdge: CGFloat?
+    /// Низ верхней карточки предупреждения (выбор маршрута, 28.K), nil — нет.
+    @State var alertTopEdge: CGFloat?
     /// Сколько кнопок помещается в колонку справа (TripScreenLayout.columnSlots).
     /// Отдельно от кромок и только при смене: кромки body не читает, а это
     /// число — читает, и писать его на каждый пиксель высоты панели значило
@@ -392,7 +394,7 @@ struct MapScreen: View {
     /// Одной точкой, а не двумя вызовами из двух замеров: поля приходят
     /// парой, и половина пары — это неверная проекция на один кадр.
     func applySketchInsets() {
-        frame.setPanelEdges(top: topPanelEdge,
+        frame.setPanelEdges(top: MapFrameState.topEdge(panel: topPanelEdge, overlay: alertTopEdge),
                             bottom: MapFrameState.bottomEdge(panel: bottomPanelEdge, overlay: alertCardEdge))
     }
 

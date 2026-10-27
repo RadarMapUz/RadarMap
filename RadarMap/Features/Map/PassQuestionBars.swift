@@ -46,9 +46,16 @@ struct PassQuestionCard: View {
     /// VoiceOver посреди вопроса не начинается заново.
     @State private var shownAt: Date?
 
+    /// Ответы — строкой ниже вопроса: на крупном шрифте и когда ответы
+    /// длиннее «Да / Нет». «Стоит / Пост убрали» (12.7) в одну строку с
+    /// вопросом ломались на SE в два-три слога по кнопке.
+    nonisolated static func stacksAnswers(yes: String, no: String, largeType: Bool) -> Bool {
+        largeType || yes.count + no.count > AppConfig.passQuestionInlineAnswerChars
+    }
+
     var body: some View {
         Group {
-            if typeSize >= .xLarge {
+            if Self.stacksAnswers(yes: yes.title, no: no.title, largeType: typeSize >= .xLarge) {
                 VStack(alignment: .trailing, spacing: 10) {
                     HStack(spacing: 10) {
                         glyph
@@ -129,6 +136,8 @@ struct PassQuestionCard: View {
             Text(answer.title)
                 .font(.rounded(15, .bold))
                 .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 // 44 pt — минимум Apple для пальца; за рулём это не педантизм.
                 .padding(.horizontal, 10)
                 .frame(minWidth: 62, minHeight: 44)
@@ -159,13 +168,13 @@ struct MobileConfirmBar: View {
     var body: some View {
         if let shown, !isCovered {
             let kind = shown.kind
+            // Вопрос по типу (12.7): про пост — «Пост ещё стоит?» и «Пост убрали».
+            let question = MobilePassWatch.question(for: kind)
             PassQuestionCard(
-                question: String(localized: "Радар ещё стоял?"),
+                question: question.title,
                 symbol: kind.symbolName, fill: kind.tint, glyphTint: kind.glyphTint,
-                yes: .init(title: String(localized: "Да"),
-                           spoken: String(localized: "Да, радар ещё стоял")),
-                no: .init(title: String(localized: "Нет"),
-                          spoken: String(localized: "Нет, радара уже не было")),
+                yes: .init(title: question.yes, spoken: question.spokenYes),
+                no: .init(title: question.no, spoken: question.spokenNo),
                 onAnswer: { value in
                     withMotion { env.mobile.answerConfirm(stillThere: value, for: shown.id) }
                     // Ответ должен ощущаться работой, а не тапом в пустоту:
@@ -183,18 +192,32 @@ struct MobileConfirmBar: View {
     /// Отметка, о которой спрашиваем; nil — плашки нет.
     private var shown: (id: Int, kind: CameraType)? {
         if let camera = env.mobile.pendingConfirm { return (camera.id, camera.kind) }
-        return Self.showsDemo ? (-1, .tripod) : nil
+        return Self.showsDemo ? (-1, Self.demoKind) : nil
     }
 
     /// Скриншот-хук `-demoRadarConfirm` (DEBUG): вопрос без настоящего
     /// проезда. Ответ уходит в пустоту — ждущей отметки нет, answerConfirm
-    /// ничего не отправит.
+    /// ничего не отправит. `-demoRadarConfirm post` — вопрос о посте (12.7).
     static var showsDemo: Bool {
         #if DEBUG
         ProcessInfo.processInfo.arguments.contains("-demoRadarConfirm")
         #else
         false
         #endif
+    }
+
+    private static var demoKind: CameraType {
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        if let at = args.firstIndex(of: "-demoRadarConfirm"), args.indices.contains(at + 1) {
+            switch args[at + 1] {
+            case "post":     return .dpsPost
+            case "accident": return .accident
+            default:         break
+            }
+        }
+        #endif
+        return .tripod
     }
 }
 

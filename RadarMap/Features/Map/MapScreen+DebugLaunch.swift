@@ -303,7 +303,13 @@ extension MapScreen {
             Task {
                 await Task.pause(seconds: 2)
                 env.trip.seedDemoHistory()
-                if let record = env.trip.history.first {
+                if var record = env.trip.history.first {
+                    // `-demoMissedAlert` — о камере промолчали (12.5): строка
+                    // «Не предупредила» на карточке. Только копия карточки,
+                    // история не меняется.
+                    if args.contains("-demoMissedAlert") {
+                        record.passed = record.passed.map { var pass = $0; pass.silent = true; return pass }
+                    }
                     withMotion(.spring(duration: 0.4)) { tripEndRecord = record }
                 }
             }

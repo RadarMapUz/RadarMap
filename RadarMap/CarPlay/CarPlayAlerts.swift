@@ -65,11 +65,19 @@ extension CarPlaySceneDelegate {
         let id = question.id
         let titles: [String]
         let symbolName: String
+        // Кнопки — по типу отметки (12.7): про пост «Стоит» / «Пост убрали».
+        var yesTitle = String(localized: "Да")
+        var noTitle = String(localized: "Нет")
         switch question {
         case .camera(let camera):
-            titles = [String(format: String(localized: "%@ ещё на месте?"), camera.kind.displayName),
+            let asked = MobilePassWatch.question(for: camera.kind)
+            let named = String(format: String(localized: "%@ ещё на месте?"), camera.kind.displayName)
+            // Пост и ДТП — свой вопрос, как на телефоне; радары — прежний.
+            titles = [camera.kind == .dpsPost || camera.kind == .accident ? asked.title : named,
                       String(localized: "Ещё на месте?")]
             symbolName = camera.kind.symbolName
+            yesTitle = asked.yes
+            noTitle = asked.no
         case .road(let event):
             titles = [RoadEventPassWatch.question(for: event.kind)]
             symbolName = (ReportKind(rawValue: event.kind.rawValue) ?? .closure).symbol
@@ -79,10 +87,10 @@ extension CarPlaySceneDelegate {
             subtitleVariants: [],
             image: CarPlayGuidance.symbol(symbolName, pointSize: 30,
                                           onDark: model.carIsDark ?? !model.isDaylight),
-            primaryAction: CPAlertAction(title: String(localized: "Да"), style: .default) { [weak self] _ in
+            primaryAction: CPAlertAction(title: yesTitle, style: .default) { [weak self] _ in
                 self?.env.mobile.answerPassQuestion(stillThere: true, for: id)
             },
-            secondaryAction: CPAlertAction(title: String(localized: "Нет"), style: .destructive) { [weak self] _ in
+            secondaryAction: CPAlertAction(title: noTitle, style: .destructive) { [weak self] _ in
                 self?.env.mobile.answerPassQuestion(stillThere: false, for: id)
             },
             duration: AppConfig.carPlayQuestionSeconds)

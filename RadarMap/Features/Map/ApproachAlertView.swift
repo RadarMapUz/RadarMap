@@ -27,6 +27,15 @@
 //  перекрёстке с камерой полноэкранное окно закрывало манёвр, то есть
 //  ровно тот момент, когда водителю нужнее всего, куда поворачивать.
 //
+//  При выборе маршрута — верхняя карточка (28.K, 27.10). Камера в паре
+//  десятков метров от старта, маршрут строится несколько секунд: окно
+//  вставало раньше маршрута и, когда тот приходил, накрывало панель с
+//  вариантами и «Поехали» — водитель стоял перед тёмным экраном и не мог
+//  уехать. Предупреждение при этом то же самое: звук, голос и вибрация
+//  отработали в LocationService до всякой вёрстки, окно показывается
+//  сразу, ничего не ждёт и не прячется — меняется только его место:
+//  сверху, а панель маршрута внизу остаётся видна и нажимается.
+//
 
 import SwiftUI
 
@@ -37,8 +46,27 @@ struct ApproachAlertView: View {
         case fullScreen
         /// В навигации: карточка снизу, баннер манёвра сверху остаётся виден.
         case bottomCard
+        /// Выбор маршрута (маршрут строится или построен, поездки нет):
+        /// карточка сверху — снизу панель вариантов и «Поехали» (28.K).
+        case topCard
 
-        static func choose(navigating: Bool) -> Layout { navigating ? .bottomCard : .fullScreen }
+        /// `choosingRoute` — поездки нет, а маршрут строится или построен.
+        /// Ведение старше выбора: в поездке манёвр сверху, карточка снизу.
+        static func choose(navigating: Bool, choosingRoute: Bool = false) -> Layout {
+            if navigating { return .bottomCard }
+            return choosingRoute ? .topCard : .fullScreen
+        }
+
+        /// Раскладка по живому состоянию — одна на окно и на карту под ним
+        /// (частота кадров «накрыто» обязана знать то же, что видит водитель).
+        static func current(isTripActive: Bool, hasRoute: Bool, isBuildingRoute: Bool) -> Layout {
+            choose(navigating: MapMode.current(isTripActive: isTripActive, hasRoute: hasRoute).showsManeuver,
+                   choosingRoute: !isTripActive && (hasRoute || isBuildingRoute))
+        }
+
+        /// Закрывает ли окно карту целиком: только полный экран. Под
+        /// карточками карта видна и обязана рисоваться в полную силу.
+        var coversMap: Bool { self == .fullScreen }
     }
 
     @Environment(AppEnvironment.self) private var env
@@ -51,6 +79,9 @@ struct ApproachAlertView: View {
     /// Верхняя кромка нижней карточки в пунктах окна (nil — карточки нет):
     /// карта поднимает «я» и камеру над ней (MapFrameState).
     var onCardEdge: (CGFloat?) -> Void = { _ in }
+    /// Нижняя кромка верхней карточки (nil — её нет): карта опускает «я» и
+    /// начало маршрута под неё.
+    var onTopCardEdge: (CGFloat?) -> Void = { _ in }
     let onDismiss: () -> Void
 
     @State private var pulse = false
@@ -66,7 +97,95 @@ struct ApproachAlertView: View {
         switch layout {
         case .fullScreen: fullScreen
         case .bottomCard: bottomCard
+        case .topCard:    topCard
         }
+    }
+
+    /// Верхняя карточка выбора маршрута: тип и адрес, расстояние, полоса
+    /// приближения и две кнопки — «без звука» и «Скрыть». Скорость и
+    /// «Радар!» не нужны: стоим у старта, а уехать — это «Поехали» внизу.
+    private var topCard: some View {
+        VStack {
+            VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    CameraIcon(kind: camera.kind, side: 42)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(camera.kind.displayName)
+                            .font(.rounded(16, .bold))
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.85)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if !camera.location.isEmpty {
+                            Text(camera.location)
+                                .font(.rounded(13))
+                                .foregroundStyle(Theme.textSecondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: 8)
+                    HStack(alignment: .lastTextBaseline, spacing: 4) {
+                        Text("\(Int(distance.rounded()))")
+                            .font(.numeralFree(38, .heavy))
+                            .foregroundStyle(Theme.textPrimary)
+                            .liveNumber()
+                        Text("м").font(.rounded(18, .bold)).foregroundStyle(Theme.textSecondary)
+                    }
+                    .fixedSize()
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(accessibilitySummary)
+                proximityBar
+                HStack(spacing: 10) {
+                    compactMuteButton
+                    hideButton
+                        .background(Theme.quietFill,
+                                    in: RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
+            .background {
+                // Полоса цвета типа сверху — тот же сигнал, что у полного экрана.
+                ZStack(alignment: .top) {
+                    Theme.alertSurface
+                    tint.frame(height: 5)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {}
+            .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { onTopCardEdge($0) }
+            .onDisappear { onTopCardEdge(nil) }
+            .padding(.horizontal, 12)
+            .padding(.top, 6)
+            Spacer()
+        }
+        .environment(\.colorScheme, .dark)
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    /// «Без звука» в строку высотой 44 — для верхней карточки.
+    private var compactMuteButton: some View {
+        let muted = env.settings.isMuted
+        return Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            env.settings.setMuted(!muted)
+            if !muted { env.alerts.hush() }
+        } label: {
+            Label(muted ? "Включить звук" : "Без звука",
+                  systemImage: muted ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                .font(.rounded(15, .semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, minHeight: Theme.controlSize)
+                .background(Theme.quietFill,
+                            in: RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
+        }
+        .buttonStyle(PressableStyle())
     }
 
     private var fullScreen: some View {

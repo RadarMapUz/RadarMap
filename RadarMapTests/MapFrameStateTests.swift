@@ -44,4 +44,14 @@ final class MapFrameStateTests: XCTestCase {
         XCTAssertEqual(MapFrameState.bottomEdge(panel: 0, overlay: 480), 480, "панель ещё не мерили")
         XCTAssertEqual(MapFrameState.bottomEdge(panel: 700, overlay: 0), 700)
     }
+
+    /// Верхняя карточка предупреждения при выборе маршрута (28.K): «я» и
+    /// начало маршрута — под нижней из двух кромок.
+    func testTopEdgeTakesTheLowerOfPanelAndAlertCard() {
+        XCTAssertEqual(MapFrameState.topEdge(panel: 120, overlay: nil), 120)
+        XCTAssertEqual(MapFrameState.topEdge(panel: 120, overlay: 230), 230)
+        XCTAssertEqual(MapFrameState.topEdge(panel: 260, overlay: 230), 260, "панель ниже — панель")
+        XCTAssertEqual(MapFrameState.topEdge(panel: 0, overlay: 230), 230, "панель ещё не мерили")
+        XCTAssertEqual(MapFrameState.topEdge(panel: 120, overlay: 0), 120)
+    }
 }

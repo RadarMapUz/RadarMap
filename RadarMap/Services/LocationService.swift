@@ -127,6 +127,9 @@ final class LocationService: NSObject {
     @ObservationIgnored var clusteredCameras: [Camera] = []
     /// Про эти камеры голос уже сказал групповой фразой — второй раз не надо.
     @ObservationIgnored var voicedInGroup: Set<Int> = []
+    /// Солнце для ночного голоса (12.6), с моментом расчёта: пересчёт не
+    /// чаще `nightVoiceRecheckSeconds` — план голоса читается на тиках у камеры.
+    @ObservationIgnored var sunForVoice: (at: Date, day: Bool)?
     /// Камера, о которой голос промолчал, потому что мы ползли в пробке: скажем
     /// про неё, как только поедем (пока она ещё впереди и в радиусе).
     @ObservationIgnored var postponedVoice: Int?

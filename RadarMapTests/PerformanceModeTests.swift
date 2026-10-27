@@ -55,11 +55,17 @@ final class PerformanceModeTests: XCTestCase {
         XCTAssertFalse(PerformanceMode.minimal.drawsHeatLines)
     }
 
+    /// Любая урезанная ступень — нагревом или батареей (12.3) — имеет
+    /// причину для плашки: молчаливая деградация читается как поломка.
     func testDegradationIsAlwaysExplained() {
-        XCTAssertFalse(PerformanceMode.full.explains, "в норме объяснять нечего")
-        for mode in [PerformanceMode.reduced, .minimal] {
-            XCTAssertTrue(mode.explains,
-                          "молчаливая деградация читается как поломка приложения")
+        XCTAssertNil(AutoEconomy.reason(thermal: .full, savingBattery: false), "в норме объяснять нечего")
+        for heat in [PerformanceMode.full, .reduced, .minimal] {
+            for battery in [false, true] {
+                let mode = AutoEconomy.mode(thermal: heat, savingBattery: battery)
+                guard mode != .full else { continue }
+                XCTAssertNotNil(AutoEconomy.reason(thermal: heat, savingBattery: battery),
+                                "молчаливая деградация читается как поломка приложения")
+            }
         }
     }
 }

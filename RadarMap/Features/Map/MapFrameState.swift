@@ -61,6 +61,14 @@ final class MapFrameState {
         return panel > 0 ? min(panel, overlay) : overlay
     }
 
+    /// Верхняя кромка, под которой карта держит «я»: ниже из верхней
+    /// стопки панелей и верхней карточки предупреждения о камере (28.K).
+    /// 0 у панели — «не мерили».
+    nonisolated static func topEdge(panel: CGFloat, overlay: CGFloat?) -> CGFloat {
+        guard let overlay, overlay > 0 else { return panel }
+        return max(panel, overlay)
+    }
+
     nonisolated static func insets(viewHeight: CGFloat, panelTop: CGFloat,
                                    panelBottom: CGFloat) -> MapViewport.Insets {
         guard viewHeight > 0 else { return .none }

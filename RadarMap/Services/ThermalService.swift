@@ -15,6 +15,11 @@
 //  голос важнее картинки. Поэтому под нагрузкой первыми уходят украшения карты,
 //  а оповещения о камерах не трогаются ни на одной ступени.
 //
+//  Та же ступень включается и при малом заряде без зарядки — автоэконом
+//  (12.3, AutoEconomy): `mode` — итог для карты, `heatMode` — нагрев как есть
+//  (на него смотрит опрос отметок водителей: батарея не повод узнавать о
+//  треноге позже).
+//
 
 import Foundation
 import Observation
@@ -76,19 +81,28 @@ nonisolated enum PerformanceMode: Int, Comparable, Sendable {
         case .minimal: return 4
         }
     }
-
-    /// Показывать ли пользователю, что мы себя урезали. Молчаливая деградация
-    /// читается как поломка: человек, который понимает причину, открывает окно,
-    /// а не пишет «приложение тормозит».
-    var explains: Bool { self != .full }
 }
 
 @MainActor
 @Observable
 final class ThermalService {
+    /// Ступень для карты: нагрев и автоэконом вместе (AutoEconomy.mode).
     private(set) var mode: PerformanceMode = .init(thermalState: ProcessInfo.processInfo.thermalState)
+    /// Нагрев как есть — без батареи.
+    private(set) var heatMode: PerformanceMode = .init(thermalState: ProcessInfo.processInfo.thermalState)
+    /// Мало заряда без зарядки — карта урезана ради батареи.
+    private(set) var savingBattery = false
+    /// Почему урезаны (nil — не урезаны): плашка карты и чип CarPlay.
+    /// Молчаливая деградация читается как поломка: человек, который понимает
+    /// причину, открывает окно или ищет провод, а не пишет «тормозит».
+    var reason: AutoEconomy.Reason? { AutoEconomy.reason(thermal: heatMode, savingBattery: savingBattery) }
 
     @ObservationIgnored private var observer: NSObjectProtocol?
+    @ObservationIgnored private var batteryCheckedAt: Date?
+    #if DEBUG
+    /// Снимки состояния без настоящего заряда: заряд держится, пока жив процесс.
+    @ObservationIgnored private var batteryPinned = false
+    #endif
 
     init() {
         #if DEBUG
@@ -97,7 +111,14 @@ final class ThermalService {
         // Тот же аргумент, что у плашки карты (MapStatusBanner).
         if ProcessInfo.processInfo.arguments.contains("-forceOverheated") {
             mode = .reduced
+            heatMode = .reduced
             return
+        }
+        // Мало заряда на симуляторе (там его нет вовсе): `-forceLowBattery`.
+        if ProcessInfo.processInfo.arguments.contains("-forceLowBattery") {
+            batteryPinned = true
+            savingBattery = true
+            mode = AutoEconomy.mode(thermal: heatMode, savingBattery: true)
         }
         #endif
         observer = NotificationCenter.default.addObserver(
@@ -121,6 +142,33 @@ final class ThermalService {
 
     private func update() {
         let fresh = PerformanceMode(thermalState: ProcessInfo.processInfo.thermalState)
+        guard fresh != heatMode else { return }
+        Log.app.notice("нагрев: \(String(describing: fresh), privacy: .public)")
+        heatMode = fresh
+        apply()
+    }
+
+    /// Перечитать заряд — не чаще `autoEconomyCheckSeconds`, поэтому звать
+    /// можно с каждого фикса: это сравнение двух дат, а само чтение — раз в
+    /// минуту и без постоянного мониторинга батареи (BatteryProbe).
+    func refreshBattery(now: Date = Date()) {
+        #if DEBUG
+        if batteryPinned { return }
+        #endif
+        if let at = batteryCheckedAt, now.timeIntervalSince(at) < AppConfig.autoEconomyCheckSeconds { return }
+        batteryCheckedAt = now
+        let battery = BatteryProbe.snapshot()
+        let saving = AutoEconomy.savesBattery(percent: battery.percent, isCharging: battery.isCharging,
+                                              wasSaving: savingBattery)
+        guard saving != savingBattery else { return }
+        Log.app.notice("автоэконом: \(saving ? "вкл" : "выкл", privacy: .public), заряд \(battery.percent ?? -1, privacy: .public) %")
+        savingBattery = saving
+        apply()
+    }
+
+    /// Итоговая ступень пишется только на смене: её читают карта и CarPlay.
+    private func apply() {
+        let fresh = AutoEconomy.mode(thermal: heatMode, savingBattery: savingBattery)
         guard fresh != mode else { return }
         Log.app.notice("режим производительности: \(String(describing: fresh), privacy: .public)")
         mode = fresh

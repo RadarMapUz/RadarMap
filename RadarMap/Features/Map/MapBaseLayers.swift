@@ -148,10 +148,9 @@ struct EngineBaseLayer: View {
                         // Хранимый флаг: меняется на въезде и выезде из зоны
                         // камеры, а не на каждом фиксе. Накрыта карта только
                         // полноэкранным окном: в навигации предупреждение —
-                        // карточка снизу, и карта с манёвром видна (19.10).
-                        covered: env.location.isApproachingCamera
-                            && !MapMode.current(isTripActive: env.location.isTripActive,
-                                                hasRoute: env.route.isActive).showsManeuver,
+                        // карточка снизу, при выборе маршрута — сверху, и карта
+                        // видна (19.10, 28.K).
+                        covered: approachCoversMap,
                         cruise: env.location.isCruising,
                         detail: detail.decision,
                         detailMarks: detail.marks,
@@ -219,23 +218,31 @@ struct EngineBaseLayer: View {
         }
     }
 
+    /// Окно предупреждения закрывает карту целиком — та же раскладка, что
+    /// у самого окна (ApproachAlertView.Layout.current).
+    private var approachCoversMap: Bool {
+        env.location.isApproachingCamera
+            && ApproachAlertView.Layout.current(isTripActive: env.location.isTripActive,
+                                                hasRoute: env.route.isActive,
+                                                isBuildingRoute: env.route.isBuilding).coversMap
+    }
+
+    /// Решение «что показывать» для телефона (MapDetailPolicy, 29.H). «Стоим»
+    /// — из кадра остановки (StopView); накрыта карта — тем же правилом, что
+    /// `covered` у движка.
+    private func detail(standing: Bool) -> MapDetailInput.Output {
+        let trip = env.location.isTripActive
+        let covered = approachCoversMap
+        return MapDetailInput.read(&map.detailArriving, env: env, surface: .phone, tripActive: trip,
+                                   standing: standing, night: !env.interfaceIsDaylight, covered: covered)
+    }
+
     /// Камера карты. В поездке — DriveCamera (общая с машиной): масштаб, при
     /// котором видны полосы и нужные секунды пути впереди, наклон по
     /// скорости, у развилки — вид развилки, и она в кадре; плавно во времени.
     /// Вне поездки — обзор города, как раньше. «+ / −» сдвигают масштаб на
     /// ступень за нажатие. 3D — кнопкой «3D» (по умолчанию включено); на
     /// горячем телефоне — плоско: наклон тянет к горизонту втрое больше тайлов.
-    /// Решение «что показывать» для телефона (MapDetailPolicy, 29.H). «Стоим»
-    /// — из кадра остановки (StopView); накрыта карта — тем же правилом, что
-    /// `covered` у движка.
-    private func detail(standing: Bool) -> MapDetailInput.Output {
-        let trip = env.location.isTripActive
-        let covered = env.location.isApproachingCamera
-            && !MapMode.current(isTripActive: trip, hasRoute: env.route.isActive).showsManeuver
-        return MapDetailInput.read(&map.detailArriving, env: env, surface: .phone, tripActive: trip,
-                                   standing: standing, night: !env.interfaceIsDaylight, covered: covered)
-    }
-
     private func camera(me: CLLocationCoordinate2D, size: CGSize, insets: MapViewport.Insets,
                         maneuverDistance: Double?, stop: StopViewInput.Input,
                         keepPoints: [CLLocationCoordinate2D] = []) -> (spanMeters: Double, pitchDegrees: Double,

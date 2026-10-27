@@ -45,18 +45,21 @@
 #     customize раз в 5 минут; маршрут, у которого оба конца в CITY_BBOX, идёт
 #     в городской OSRM.
 #
-# Цикл на VPS (НЕ подключён; описание для владельца):
-#   1. эталон: $OSRM/mld-pristine/ — файлы из этого скрипта, только чтение;
-#   2. раз в 5 минут: python3 traffic_speeds.py --source auto --out speeds.csv;
-#      «без изменений» — конец цикла;
-#   3. копия эталона в mld-next/ (customize переписывает файлы набора НА
-#      МЕСТЕ — .cell_metrics, .mldgr и, с файлом скоростей, обновлённые веса;
-#      рёбра, которых нет в следующем файле, сохранили бы прошлую пробку —
-#      поэтому каждый цикл начинается с эталона; --speeds ниже это проверяет);
-#   4. docker run --rm -m 900m … osrm-customize --segment-speed-file speeds.csv;
-#   5. подмена без простоя: osrm-routed --shared-memory + osrm-datastore
-#      --only-metric (метрика городского графа целиком в памяти — десятки МБ),
-#      либо два каталога A/B и перезапуск контейнера (1–2 с простоя);
+# Цикл на VPS (32D, 27.10.2026) — server/osrm/traffic_customize.sh, стенд
+# radarmap-osrm-mld на 127.0.0.1:8094 рядом с продом; замеры, риски и команды
+# переключения — server/osrm/TRAFFIC.md. Коротко:
+#   1. эталон: /opt/radarmap/osrm-mld/pristine/ — набор этого скрипта (страна);
+#   2. раз в 5 минут traffic_speeds.py --source auto --mode weight; файл не
+#      изменился — конец цикла, пустой — слот с метрикой эталона, без customize;
+#   3. запасной слот с эталона: customize переписывает .mldgr и .geometry на
+#      месте (копии, 243 МБ) и создаёт .cell_metrics/.datasource_names, прочие
+#      файлы — жёсткие ссылки на эталон (проверено: их customize не открывает
+#      на запись); каждый цикл с эталона, иначе снятая пробка осталась бы;
+#   4. docker run --rm -m 900m --memory-swap 900m --cpus 1 … osrm-customize -t 1
+#      (пик 634 МБ VmHWM, на страну, от размера файла не зависит);
+#   5. подмена — ссылка current на слот и перезапуск контейнера (--mmap,
+#      простой — секунды); --shared-memory + osrm-datastore отвергнут: набор
+#      страны в разделяемой памяти резидентен (~0,9 ГБ) и на VPS не помещается;
 #   6. ключи рёбер — id узлов OSM, они постоянны между пересборками: файл
 #      скоростей подходит к любому свежему графу.
 #
@@ -161,7 +164,7 @@ if [ "$DRY" = 0 ]; then
     ls -l "$OUT"/*.osrm* | awk '{printf "  %-48s %6.1f МБ\n", $NF, $5 / 1048576}'
     # Манифест: что за граф и чем собран — VPS сверит sha перед подменой.
     ( cd "$OUT" && { echo "image $IMAGE"; echo "pbf $(md5 -q "$PBF")"; echo "built $(date -u +%FT%TZ)";
-                     echo "algorithm $KIND"; echo "profile ${PROFILE:-/opt/car.lua} $( [ -n "$PROFILE" ] && shasum -a 256 "$PROFILE" | cut -d' ' -f1)";
+                     echo "algorithm $KIND"; echo "profile ${PROFILE:-/opt/car.lua} $( [ -n "$PROFILE" ] && shasum -a 256 "$PROFILE_ABS" | cut -d' ' -f1)";
                      shasum -a 256 "$NAME".osrm*; } > manifest.txt )
 fi
 

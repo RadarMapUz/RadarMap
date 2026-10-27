@@ -29,17 +29,34 @@ extension MapScreen {
                   let camera = env.location.currentCoordinate.flatMap({ env.cameras.nearest(to: $0, limit: 1).first })
                     ?? env.cameras.cameras.first {
             // Полноэкранное предупреждение на снимок — без поездки и движения.
+            // Раскладка — по тому же правилу, что живое окно: с `-demoRoute`
+            // это верхняя карточка над панелью маршрута (28.K).
             ApproachAlertView(camera: camera, distance: 240, speedKmh: 67, relativeBearing: 12,
                               alertRadius: 500,
                               layout: ProcessInfo.processInfo.arguments.contains("-demoAlertCard")
-                                ? .bottomCard : .fullScreen,
+                                ? .bottomCard
+                                : .current(isTripActive: env.location.isTripActive,
+                                           hasRoute: env.route.isActive,
+                                           isBuildingRoute: env.route.isBuilding),
+                              onCardEdge: setAlertCardEdge,
+                              onTopCardEdge: setAlertTopEdge,
                               onDismiss: {})
         } else {
-            ApproachOverlayGate(dismissedID: $dismissedApproachID, onCardEdge: setAlertCardEdge)
+            ApproachOverlayGate(dismissedID: $dismissedApproachID, onCardEdge: setAlertCardEdge,
+                                onTopCardEdge: setAlertTopEdge)
         }
         #else
-        ApproachOverlayGate(dismissedID: $dismissedApproachID, onCardEdge: setAlertCardEdge)
+        ApproachOverlayGate(dismissedID: $dismissedApproachID, onCardEdge: setAlertCardEdge,
+                            onTopCardEdge: setAlertTopEdge)
         #endif
+    }
+
+    /// Верхняя карточка предупреждения (выбор маршрута) — «я» и начало
+    /// маршрута опускаются под неё (28.K).
+    func setAlertTopEdge(_ edge: CGFloat?) {
+        guard edge != alertTopEdge else { return }
+        alertTopEdge = edge
+        applySketchInsets()
     }
 
     /// Карточка предупреждения закрывает низ карты — «я» и камера встают

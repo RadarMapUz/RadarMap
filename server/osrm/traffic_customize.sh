@@ -50,6 +50,8 @@ set -euo pipefail
 ROOT="${RADARMAP_OSRM_MLD:-/opt/radarmap/osrm-mld}"
 BIN="${RADARMAP_OSRM_MLD_BIN:-$ROOT/bin}"
 DB="${RADARMAP_TRAFFIC_DB:-/opt/radarmap/api/traffic.db}"
+# 33D: подтверждённые ДТП и перекрытия — только чтение (как traffic.db).
+REPORTS="${RADARMAP_REPORTS_DB:-/opt/radarmap/api/reports.db}"
 IMAGE="${RADARMAP_OSRM_IMAGE:-ghcr.io/project-osrm/osrm-backend@sha256:a7091038e39a73659767f34ef2d389909b42ea80b09bd2bdca482dce2991cbad}"
 CONTAINER="${RADARMAP_OSRM_MLD_CONTAINER:-radarmap-osrm-mld}"
 PORT="${RADARMAP_OSRM_MLD_PORT:-8094}"
@@ -120,7 +122,7 @@ else
     # (traffic_speeds.py пишет его сам), и цикл идёт дальше: стенд уходит на
     # граф без пробок, а не держит прошлую пробку.
     if ! run python3 "$BIN/traffic_speeds.py" --db "$DB" --source "$SOURCE" --mode "$MODE" --out "$ROOT/speeds.csv" \
-            --turns-out "$ROOT/turns.csv"; then
+            --turns-out "$ROOT/turns.csv" --reports-db "$REPORTS" --events-cache "$ROOT/events.json"; then
         log "расчёт скоростей упал — файлы пустые, граф без пробок"
         [ "$DRY" = 1 ] || { : > "$ROOT/speeds.csv"; : > "$ROOT/turns.csv"; }
     fi

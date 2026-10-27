@@ -94,17 +94,17 @@ struct TripLiveBar: View {
         return VStack(spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(Formatting.distance(route.remainingDistance))
-                    .font(.rounded(19, .bold).monospacedDigit())
+                    .font(.numeral(19, .bold).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .liveNumber()
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(route.arrivalDate, style: .time)
-                    .font(.rounded(21, .heavy).monospacedDigit())
+                    .font(.numeral(21, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.success)
                     .contentTransition(.numericText())
                     .fixedSize()
                 Text(Formatting.duration(route.remainingTime))
-                    .font(.rounded(19, .bold).monospacedDigit())
+                    .font(.numeral(19, .bold).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .liveNumber()
                     .frame(maxWidth: .infinity, alignment: .trailing)
@@ -137,7 +137,7 @@ struct TripLiveBar: View {
             if route.isActive {
                 // Прибытие: как в настоящих навигаторах — время на часах + остаток.
                 Text(route.arrivalDate, style: .time)
-                    .font(.rounded(22, .heavy).monospacedDigit())
+                    .font(.numeral(22, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.success)
                     .contentTransition(.numericText())
                 Text(verbatim: "\(Formatting.duration(route.remainingTime)) · \(Formatting.distance(route.remainingDistance))")
@@ -148,7 +148,7 @@ struct TripLiveBar: View {
                 // Дорога на работу без маршрута (этап 8): прибытие по своим
                 // прошлым поездкам. Меняется раз в минуту — numericText можно.
                 Text(ghost.arrival, style: .time)
-                    .font(.rounded(22, .heavy).monospacedDigit())
+                    .font(.numeral(22, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.success)
                     .contentTransition(.numericText())
                 Text(verbatim: GhostText.caption(ghost))
@@ -160,7 +160,7 @@ struct TripLiveBar: View {
                 // Свободная поездка без маршрута: таймер + путь + камеры.
                 if let started = env.trip.startedAt {
                     Text(timerInterval: started...Date.distantFuture, countsDown: false)
-                        .font(.rounded(22, .heavy).monospacedDigit())
+                        .font(.numeral(22, .heavy).monospacedDigit())
                         .foregroundStyle(Theme.success)
                 }
                 // Эмодзи-камера рендерилась чёрно-белым глифом и выбивалась

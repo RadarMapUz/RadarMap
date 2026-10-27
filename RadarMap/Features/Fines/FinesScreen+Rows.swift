@@ -226,7 +226,7 @@ extension FinesScreen {
                 .foregroundStyle(tint)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 11).padding(.vertical, 7)
-                .background(tint.opacity(0.12), in: Capsule())
+                .background(Theme.quietFill, in: Capsule())
                 .tapTarget()
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)

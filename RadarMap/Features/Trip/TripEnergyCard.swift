@@ -51,7 +51,7 @@ struct TripEnergyCard: View {
                 IconBadge(symbol: model.usesBattery ? "bolt.fill" : "fuelpump.fill", tint: Theme.Icon.money, size: 30)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(headline)
-                        .font(.rounded(20, .bold).monospacedDigit())
+                        .font(.numeral(20, .bold).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                     ForEach(fuels, id: \.self) { fuel in

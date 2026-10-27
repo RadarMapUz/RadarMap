@@ -156,7 +156,7 @@ struct MaintenancePage: View {
                             .foregroundStyle(Theme.textPrimary)
                         Spacer(minLength: 8)
                         Text(Formatting.distance(odometer * 1000))
-                            .font(.rounded(20, .bold).monospacedDigit())
+                            .font(.numeral(20, .bold).monospacedDigit())
                             .foregroundStyle(Theme.textPrimary)
                     }
                     if added >= 1 {
@@ -301,7 +301,7 @@ struct MaintenanceChip: View {
         .foregroundStyle(color)
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
-        .background(color.opacity(0.12), in: Capsule())
+        .background(Theme.quietFill, in: Capsule())
         .fixedSize()
     }
 }

@@ -98,8 +98,7 @@ struct SpeedProfileChart: View {
                         AreaMark(x: .value("км", sample.km), y: .value("км/ч", sample.speedKmh))
                             .interpolationMethod(.monotone)
                             .foregroundStyle(
-                                LinearGradient(colors: [Theme.route.opacity(0.28), .clear],
-                                               startPoint: .top, endPoint: .bottom)
+                                Theme.route.opacity(0.14)
                             )
                         LineMark(x: .value("км", sample.km), y: .value("км/ч", sample.speedKmh))
                             .interpolationMethod(.monotone)

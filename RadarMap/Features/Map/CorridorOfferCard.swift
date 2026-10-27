@@ -183,7 +183,7 @@ struct CorridorOfferCard: View {
             .font(.rounded(18, .bold))
             .foregroundStyle(Theme.accent)
             .frame(width: 36, height: 36)
-            .background(Theme.accent.opacity(0.14), in: Circle())
+            .background(Theme.quietFill, in: Circle())
             .accessibilityHidden(true)
     }
 

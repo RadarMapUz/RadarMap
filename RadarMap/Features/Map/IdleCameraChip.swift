@@ -36,7 +36,7 @@ struct IdleCameraChip: View {
                     .font(.rounded(13, .semibold))
                     .foregroundStyle(Theme.warning)
                     .frame(width: 30, height: 30)
-                    .background(Theme.warning.opacity(0.18), in: Circle())
+                    .background(Theme.quietFill, in: Circle())
                 (location.isAuthorized ? Text("Нет сигнала GPS") : Text("Оповещений нет"))
                     .font(.rounded(15, .semibold))
                     .foregroundStyle(Theme.textPrimary)
@@ -51,7 +51,7 @@ struct IdleCameraChip: View {
                                ink: SpeedHUDView.proximityGlyph(distance, camera, radius: radius),
                                side: 30, shadow: false)
                 Text(verbatim: Formatting.distance(distance))
-                    .font(.rounded(17, .bold))
+                    .font(.numeral(17, .bold))
                     .monospacedDigit()
                     .foregroundStyle(Theme.textPrimary)
                     .liveNumber()

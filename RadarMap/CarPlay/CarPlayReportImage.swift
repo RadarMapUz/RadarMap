@@ -30,8 +30,8 @@ nonisolated enum CarPlayReportImage {
                        diameter: CGFloat = AppConfig.carPlayReportButtonPoints,
                        scale: CGFloat,
                        focused: Bool = false) -> UIImage {
-        let fill = focused ? Theme.rgb(0x1C1C1E) : Theme.rgb(0xFFD43B)
-        let ink = focused ? Theme.rgb(0xFFD43B) : Theme.rgb(0x1C1C1E)
+        let fill = focused ? Theme.onActionUIColor : Theme.actionUIColor
+        let ink = focused ? Theme.actionUIColor : Theme.onActionUIColor
         let format = UIGraphicsImageRendererFormat()
         format.scale = max(1, scale)
         format.opaque = false
@@ -43,7 +43,7 @@ nonisolated enum CarPlayReportImage {
             fill.setFill()
             path.fill()
             // Кольцо отделяет жёлтый от светлого круга дневной кнопки.
-            Theme.rgb(0x1C1C1E, focused ? 1 : 0.35).setStroke()
+            Theme.onActionUIColor.withAlphaComponent(focused ? 1 : 0.35).setStroke()
             path.lineWidth = ring
             path.stroke()
 

@@ -27,7 +27,7 @@ struct TripSpeedCluster: View {
         HStack(spacing: 8) {
             VStack(spacing: -2) {
                 Text("\(speed)")
-                    .font(.rounded(24, .bold))
+                    .font(.numeral(24, .bold))
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
@@ -48,7 +48,7 @@ struct TripSpeedCluster: View {
             }
             .padding(6)
             .frame(width: 62, height: 62)
-            .liftedBackground(over ? AnyShapeStyle(Theme.danger.gradient) : AnyShapeStyle(Theme.surface),
+            .liftedBackground(over ? AnyShapeStyle(Theme.danger) : AnyShapeStyle(Theme.surface),
                               in: Circle())
             .overlay(Circle().strokeBorder(Theme.edgeControl, lineWidth: 1))
 
@@ -107,7 +107,7 @@ struct TripCameraChip: View {
                     .font(.rounded(13, .semibold))
                     .foregroundStyle(Theme.warning)
                     .frame(width: 28, height: 28)
-                    .background(Theme.warning.opacity(0.18), in: Circle())
+                    .background(Theme.quietFill, in: Circle())
                 Text(location.isAuthorized ? "Нет сигнала GPS" : "Нет доступа к геопозиции")
                     .font(.rounded(14, .semibold))
                     .foregroundStyle(Theme.textPrimary)

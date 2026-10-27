@@ -100,7 +100,7 @@ struct FinesSheet: View {
                 }
             }
             .backport.scrollEdgeEffectStyle(.hard, for: .top)
-            .background(Theme.screenBackground)
+            .background(Theme.background)
             .navigationTitle("Возможные штрафы")
             .onAppear { env.usage.noteScreen("fines") }
             .navigationBarTitleDisplayMode(.inline)
@@ -198,7 +198,7 @@ struct FinesSheet: View {
                 .font(.rounded(11, .medium))
                 .foregroundStyle(Theme.textTertiary)
             Text(sum > 0 ? Formatting.money(sum) : String(localized: "0 штрафов"))
-                .font(.rounded(30, .heavy))
+                .font(.numeral(30, .heavy))
                 .foregroundStyle(sum > 0 ? Theme.danger : Theme.success)
                 .contentTransition(.numericText())
                 .lineLimit(1)
@@ -361,7 +361,7 @@ struct FinesSheet: View {
             .foregroundStyle(tint)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 11).padding(.vertical, 7)
-            .background(tint.opacity(0.12), in: Capsule())
+            .background(Theme.quietFill, in: Capsule())
             // Капсула ~34 pt остаётся прежней на глаз, а мишень — 44:
             // «Пришёл» и «Не пришёл» стоят рядом, и промах ставит деньгам
             // не ту судьбу.

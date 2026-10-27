@@ -54,7 +54,7 @@ struct WhatsNewSheet: View {
                 // фон начался бы заново от верха полосы и лёг светлой ступенью.
                 .background(Theme.background)
         }
-        .background(Theme.screenBackground)
+        .background(Theme.background)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }

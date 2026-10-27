@@ -47,7 +47,7 @@ struct MetricsCard: View {
             IconBadge(symbol: item.icon, tint: item.tint, size: 30)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.value)
-                    .font(.rounded(20, .bold).monospacedDigit())
+                    .font(.numeral(20, .bold).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -79,10 +79,10 @@ struct ShareMetric: View {
                     .foregroundStyle(tint)
             }
             Text(value)
-                .font(.system(size: 22, weight: .heavy, design: .rounded))
+                .font(.numeralFree(22, .heavy))
                 .foregroundStyle(.white)
             Text(label)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.white.opacity(0.5))
         }
         .frame(maxWidth: .infinity)

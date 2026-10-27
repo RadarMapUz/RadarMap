@@ -22,7 +22,7 @@ import UIKit
 enum CarPlayBannerArt {
 
     /// Красный обводки знака — `SpeedLimitSign`.
-    private static let signRed = UIColor(red: 0.85, green: 0.05, blue: 0.1, alpha: 1)
+    private static let signRed = Theme.signRedUIColor
 
     // MARK: - Знак ограничения
 

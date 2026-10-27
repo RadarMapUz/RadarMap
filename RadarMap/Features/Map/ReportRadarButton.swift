@@ -197,7 +197,7 @@ struct ReportRadarButton: View {
     private var compactLabel: some View {
         ZStack {
             RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous)
-                .fill(background.gradient)
+                .fill(background)
             if isSending {
                 ProgressView().controlSize(.small).tint(foreground)
             } else {
@@ -208,7 +208,7 @@ struct ReportRadarButton: View {
                     // волнами без слова не читается кнопкой «отметить радар».
                     if showsCaption {
                         Text("Радар!")
-                            .font(.system(size: 10, weight: .heavy, design: .rounded))
+                            .font(.system(size: 10, weight: .heavy))
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }
@@ -402,7 +402,7 @@ struct ReportRefineBar: View {
             // По подписи: «Uch oyoq kamera» в 62 pt выходила кеглем 6 (4.5).
             .padding(.horizontal, 6)
             .frame(minWidth: 62, minHeight: 44)
-            .background(kind.tint.gradient,
+            .background(kind.tint,
                         in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
         }
         .buttonStyle(.plain)

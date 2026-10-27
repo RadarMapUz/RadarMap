@@ -246,7 +246,7 @@ struct PlacePickerMap: View {
                     .font(.rounded(17, .bold))
                     .foregroundStyle(Theme.onAccentFill)
                     .frame(width: Self.pinHead, height: Self.pinHead)
-                    .background(Theme.accentFill.gradient, in: Circle())
+                    .background(Theme.accentFill, in: Circle())
                     .overlay(Circle().strokeBorder(Theme.onAccentFill, lineWidth: 2))
                 Rectangle()
                     .fill(Theme.accentFill)
@@ -274,7 +274,7 @@ struct PlacePickerMap: View {
                     .font(.rounded(15, .bold))
                     .foregroundStyle(Theme.accent)
                     .frame(width: 36, height: 36)
-                    .background(Theme.accent.opacity(0.14), in: Circle())
+                    .background(Theme.quietFill, in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
                     Text(titleText)
                         .font(.rounded(15, .semibold))

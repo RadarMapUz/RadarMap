@@ -81,7 +81,7 @@ struct RoutePanel: View {
                         .foregroundStyle(Theme.textSecondary)
                         .lineLimit(1)
                     Text(verbatim: route.etaText)
-                        .font(.rounded(30, .heavy))
+                        .font(.numeral(30, .heavy))
                         .foregroundStyle(route.trafficNote == nil ? Theme.textPrimary
                                          : Self.trafficTint(route.trafficDelay ?? 0))
                         .lineLimit(1)
@@ -242,7 +242,7 @@ struct RoutePanel: View {
                         .minimumScaleFactor(0.75)
                 }
                 Text(variant.etaText)
-                    .font(.rounded(21, .heavy))
+                    .font(.numeral(21, .heavy))
                     .foregroundStyle(isSelected ? Theme.onAccentFill
                                      : delay >= AppConfig.routeTrafficNoticeSeconds
                                         ? Self.trafficTint(delay) : Theme.textPrimary)
@@ -289,7 +289,7 @@ struct RoutePanel: View {
             .background {
                 RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
                     .fill(Theme.surface)
-                    .shadow(color: Theme.cardShadow, radius: 8, y: 2)
+                    .shadow(color: Theme.panelShadow, radius: 8, y: 2)
             }
         }
         .buttonStyle(PressableStyle())
@@ -429,7 +429,7 @@ struct ManeuverBanner: View {
                 // Моноширинные цифры — как у приборки и CarPlay: дистанция
                 // тает каждый тик, и без них баннер дрожал шириной.
                 Text(Formatting.distance(distance))
-                    .font(.rounded(30, .bold).monospacedDigit())
+                    .font(.numeral(30, .bold).monospacedDigit())
                     .foregroundStyle(ink)
                     .liveNumber()
                 Text(step.text)
@@ -617,7 +617,7 @@ struct RouteCamerasSheet: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
-            .background(Theme.screenBackground)
+            .background(Theme.background)
             .navigationTitle("Камеры на маршруте")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

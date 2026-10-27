@@ -53,7 +53,7 @@ struct FinesExplainer: View {
                         SymbolIcon(Icon.cameras, size: 15, weight: .bold)
                             .foregroundStyle(Theme.danger)
                             .frame(width: 28, height: 28)
-                            .background(Theme.danger.opacity(0.12), in: Circle())
+                            .background(Theme.quietFill, in: Circle())
                         VStack(alignment: .leading, spacing: 1) {
                             Text(source.location)
                                 .font(.rounded(15, .semibold))
@@ -146,7 +146,7 @@ struct AchievementInfoSheet: View {
             VStack(spacing: 14) {
                 ZStack {
                     if badge.earned {
-                        Circle().fill(Theme.accentFill.gradient)
+                        Circle().fill(Theme.accentFill)
                     } else {
                         Circle().fill(Theme.surface)
                         Circle()
@@ -189,7 +189,7 @@ struct AchievementInfoSheet: View {
                             .font(.rounded(15, .semibold))
                             .foregroundStyle(Theme.accent)
                             .padding(.horizontal, 18).padding(.vertical, 10)
-                            .background(Theme.accent.opacity(0.12), in: Capsule())
+                            .background(Theme.quietFill, in: Capsule())
                     }
                     .buttonStyle(PressableStyle())
                     .padding(.top, 4)
@@ -210,7 +210,7 @@ struct AchievementInfoSheet: View {
             .padding(.bottom, 12)
         }
         .scrollBounceBehavior(.basedOnSize)
-        .background(Theme.screenBackground)
+        .background(Theme.background)
         .sheet(item: $shareSubject) { box in
             SharePreviewSheet(subject: box.subject)
         }
@@ -257,7 +257,7 @@ struct AlertRecallInfoSheet: View {
                 }
                 .padding(20)
             }
-            .background(Theme.screenBackground)
+            .background(Theme.background)
             .navigationTitle("Предупреждения")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

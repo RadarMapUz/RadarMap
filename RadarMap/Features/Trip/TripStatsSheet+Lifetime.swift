@@ -218,7 +218,7 @@ extension TripStatsSheet {
                         .overlay(alignment: .leading) {
                             GeometryReader { geometry in
                                 Capsule()
-                                    .fill(Theme.accent.gradient)
+                                    .fill(Theme.accent)
                                     .frame(width: max(6, geometry.size.width * badge.fraction))
                             }
                         }

@@ -13,10 +13,10 @@ import SwiftUI
 struct CameraIconSheet: View {
     /// Значок на тип: все камеры — один (29.C2), пост ДПС, ДТП, «прочее».
     private let kinds: [CameraType] = [.stationaryCamera, .dpsPost, .accident, .other("")]
-    private let day = Color(uiColor: Theme.rgb(0xEEF1F4))
-    private let night = Color(uiColor: Theme.rgb(0x1A1E24))
+    private let day = Theme.Scene.mapDay
+    private let night = Theme.Scene.mapNight
     /// Тёмный асфальт поездки (29.B) — на нём значок тоже должен читаться.
-    private let asphalt = Color(uiColor: Theme.rgb(0x3F4859))
+    private let asphalt = Theme.Scene.roadDark
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {

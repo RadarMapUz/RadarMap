@@ -19,7 +19,7 @@ struct AchievementBadge: View {
         VStack(spacing: 7) {
             ZStack {
                 if badge.earned {
-                    Circle().fill(Theme.accent.gradient)
+                    Circle().fill(Theme.accent)
                 } else {
                     Circle().fill(Theme.surface)
                     Circle()
@@ -98,7 +98,7 @@ struct StatStripCell: View {
             // оно перестаёт читаться с расстояния вытянутой руки, а ради этого
             // плитку и смотрят. Не влезает — режем подпись, а не число.
             Text(value)
-                .font(.rounded(21, .heavy).monospacedDigit())
+                .font(.numeral(21, .heavy).monospacedDigit())
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -165,7 +165,7 @@ struct RiskHoursCard: View {
                 .font(.rounded(10, .bold).monospacedDigit())
                 .foregroundStyle(isPeak ? Theme.danger : Theme.textTertiary)
             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(isPeak ? Theme.danger.gradient : Theme.accent.opacity(0.35).gradient)
+                .fill(isPeak ? Theme.danger : Theme.accent.opacity(0.35))
                 // Пустой блок оставляет тонкую риску: полоса читается как шкала
                 // суток, а не как случайный набор столбиков.
                 .frame(height: max(3, 52 * Double(count) / Double(peak)))
@@ -212,7 +212,7 @@ struct AlertRecallCard: View {
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("\(Int((recall * 100).rounded()))%")
-                        .font(.rounded(34, .heavy).monospacedDigit())
+                        .font(.numeral(34, .heavy).monospacedDigit())
                         .foregroundStyle(recall >= AppConfig.recallGoodShare
                                          ? Theme.success : Theme.warning)
                     Text(String(format: String(localized: "камер названо заранее — %1$lld из %2$lld"),
@@ -267,7 +267,7 @@ struct AlertRecallCard: View {
 
     @ViewBuilder private func segment(_ color: Color, _ width: Double) -> some View {
         if width > 0 {
-            Capsule().fill(color.gradient).frame(width: max(2, width))
+            Capsule().fill(color).frame(width: max(2, width))
         }
     }
 

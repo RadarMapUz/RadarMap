@@ -51,7 +51,8 @@ struct GlassCard<Content: View>: View {
     }
 }
 
-/// Знак-иконка: SF Symbol в цветном круге. Один язык иконок во всём
+/// Знак-иконка: цветной SF Symbol на нейтральном круге (`Theme.quietFill`;
+/// до 31D круг был пастелью того же цвета). Один язык иконок во всём
 /// приложении: глаз находит строку по цвету и форме раньше, чем прочтёт
 /// подпись. Круг — потому что так Итоги, подсказки и разделы и были
 /// нарисованы, только каждый раз руками и с разной заливкой. Цвет — по
@@ -75,7 +76,7 @@ struct IconBadge: View {
             }
         }
         .frame(width: size, height: size)
-        .background(tint.opacity(0.14), in: Circle())
+        .background(Theme.quietFill, in: Circle())
         .accessibilityHidden(true)
     }
 }
@@ -106,16 +107,11 @@ extension View {
         self.padding(padding)
             .background {
                 let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-                // Заливка градиентом, а не краской: на почти чёрном фоне объём
-                // даёт перепад светлоты, а не тень — тени там попросту не видно.
-                shape.fill(Theme.surfaceRaised)
-                    // Тень — только у ФОРМЫ карточки. До 11.10 `.shadow` висел
-                    // на всей карточке, и SwiftUI размывал каждый вложенный
-                    // элемент отдельно: под каждой цифрой и строкой лежал серый
-                    // ореол (видно на скриншотах Итогов), а прокрутка считала
-                    // сотни размытий на кадр — отсюда «лагает жёстко». Тень
-                    // формы рисуется один раз и при прокрутке только едет.
-                    .shadow(color: Theme.cardShadow, radius: 12, y: 4)
+                // Ровная заливка без тени (31D): карточку от тёплого серого
+                // фона отделяют светлота и кромка. Мягкая тень под каждой
+                // карточкой — первый признак сгенерированного интерфейса, а
+                // до 11.10 она ещё и размывала каждый вложенный элемент.
+                shape.fill(Theme.surface)
                     // Кромка — та же, что у панелей над картой (`Theme.edgePanel`).
                     .overlay(shape.strokeBorder(Theme.edgePanel, lineWidth: 1))
             }
@@ -183,7 +179,7 @@ struct CircleControl: View {
 ///
 /// Тот же круг носит `Menu`, а меню не принимает `Button` своим label. Без
 /// этого разделения меню в колонке карты пришлось бы рисовать вторым набором
-/// тех же градиентов, и «один язык панелей» кончился бы на второй кнопке.
+/// той же подложки и кромки, и «один язык панелей» кончился бы на второй кнопке.
 /// Ровно так же в MapScreen отделён `ActionBarLabel` от `actionButton`.
 struct CircleControlFace: View {
     let systemName: String
@@ -242,24 +238,14 @@ extension View {
                 // Тень панели над картой (Theme.panelShadow: днём 0,16): 0,3
                 // была подобрана под тёмную тему и днём лежала грязным
                 // пятном под каждой панелью (4.3). Все пользователи — панели
-                // над картой; карточкам контента — statCard и cardShadow.
+                // над картой; карточки контента тени не носят (statCard).
                 .shadow(color: Theme.panelShadow, radius: 14, y: 6)
         }
     }
 
-    /// Ближняя тень акцентной кнопки — та, что даёт объём под пальцем. Ходит
-    /// в паре с цветным свечением, поэтому названа отдельно от него.
+    /// Ближняя тень акцентной кнопки — та, что даёт объём под пальцем.
     func liftAccent() -> some View {
         shadow(color: .black.opacity(0.25), radius: 4, y: 2)
-    }
-
-    /// Свечение героя — цифры, ради которой экран открывают.
-    ///
-    /// Тень чёрным на почти чёрном фоне не даёт ничего; цветное свечение в
-    /// цвет СОСТОЯНИЯ даёт и объём, и второй намёк на состояние. Радиус
-    /// большой и мягкий: это ореол вокруг цифры, а не обводка под ней.
-    func glow(_ color: Color, radius: CGFloat = 26) -> some View {
-        shadow(color: color.opacity(0.55), radius: radius)
     }
 
     /// Панель состояния: блок, покрашенный целиком, а не подпись внутри него.
@@ -269,11 +255,11 @@ extension View {
     /// виден боковым зрением, и его не надо вычитывать.
     func statePanel(_ color: Color, radius: CGFloat = 20, padding: CGFloat = 16) -> some View {
         self.padding(padding)
-            .background(LinearGradient(colors: [color.opacity(0.20), color.opacity(0.05)],
-                                       startPoint: .top, endPoint: .bottom),
-                        in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+            // Нейтральная плашка и обычная кромка (31D): состояние несут
+            // значок и текст внутри, а не пастель цвета под ними.
+            .background(Theme.quietFill, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .strokeBorder(color.opacity(0.30), lineWidth: 1))
+                .strokeBorder(Theme.stroke, lineWidth: 1))
     }
 }
 
@@ -419,14 +405,14 @@ struct RatingRing: View {
             Circle().stroke(Theme.stroke.opacity(0.7), lineWidth: compact ? 5 : 7)
             Circle()
                 .trim(from: 0, to: shown ? Double(rating) / 100 : 0)
-                .stroke(color.gradient,
+                .stroke(color,
                         style: StrokeStyle(lineWidth: compact ? 5 : 7, lineCap: .round))
                 .rotationEffect(.degrees(-90))
                 // Без неонового ореола: он остался от тёмной «радарной» темы
                 // и на белой карточке читался размытым краем кольца.
             VStack(spacing: 0) {
                 Text("\(rating)")
-                    .font(.rounded(compact ? 20 : 30, .heavy).monospacedDigit())
+                    .font(.numeral(compact ? 20 : 30, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                 if !compact {
                     Text("рейтинг")

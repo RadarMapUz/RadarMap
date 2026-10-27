@@ -93,7 +93,7 @@ struct CommuteCard: View {
 
     private var lastDuration: some View {
         Text(Formatting.duration(summary.last.duration))
-            .font(.rounded(30, .heavy))
+            .font(.numeral(30, .heavy))
             .monospacedDigit()
             .foregroundStyle(Theme.textPrimary)
     }
@@ -273,7 +273,7 @@ struct CommuteDelayPill: View {
             .font(.rounded(12, .semibold))
             .foregroundStyle(tint)
             .padding(.horizontal, 9).padding(.vertical, 4)
-            .background(tint.opacity(0.12), in: Capsule())
+            .background(Theme.quietFill, in: Capsule())
             .lineLimit(1)
             .minimumScaleFactor(0.8)
             .accessibilityLabel(Text(Self.spoken(delay)))
@@ -307,7 +307,7 @@ struct CommuteAdvice: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.success.opacity(0.10),
+        .background(Theme.quietFill,
                     in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(Self.line(best, spoken: true)))

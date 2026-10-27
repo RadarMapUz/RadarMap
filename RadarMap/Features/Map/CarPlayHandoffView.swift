@@ -42,7 +42,7 @@ struct CarPlayHandoffView: View {
 
                 ZStack {
                     Circle()
-                        .fill(Theme.accent.opacity(0.16))
+                        .fill(Theme.quietFill)
                         .frame(width: 92, height: 92)
                     Image(systemName: "car.front.waves.up.fill")
                         .font(.system(size: 40, weight: .semibold))

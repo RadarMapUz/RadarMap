@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import make_style  # noqa: E402
 
 # Поверх карты — из приложения (Theme.RouteColors, Theme.Types, MarkerLook).
-ROUTE = {"light": {"body": "#2a6ff0", "casing": "#1e4fb8",
+ROUTE = {"light": {"body": "#0b62d0", "casing": "#0a3f8f",
                    "alternative": "#93b4ea", "alternativeCasing": "#46679f"},
          "dark": {"body": "#66a3ff", "casing": "#0e1a33",
                   "alternative": "#98acd2", "alternativeCasing": "#0e1a33"}}

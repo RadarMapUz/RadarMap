@@ -147,7 +147,7 @@ struct FamilyRecipientPage: View {
                         Text(verbatim: emoji)
                             .font(.system(size: 26))
                             .frame(width: 44, height: 44)
-                            .background(selected ? Theme.accent.opacity(0.18) : Color.clear, in: Circle())
+                            .background(selected ? Theme.quietFill : Color.clear, in: Circle())
                             .overlay(Circle().strokeBorder(selected ? Theme.accent : Color.clear, lineWidth: 2))
                     }
                     .buttonStyle(.plain)

@@ -136,7 +136,7 @@ struct RoadHabitSheet: View {
                 }
                 .padding(20)
             }
-            .background(Theme.screenBackground)
+            .background(Theme.background)
             .navigationTitle(payload.kind == .jams ? String(localized: "Время в пробках")
                                                    : String(localized: "Выше лимита вне камер"))
             .navigationBarTitleDisplayMode(.inline)
@@ -154,7 +154,7 @@ struct RoadHabitSheet: View {
                 .font(.rounded(13))
                 .foregroundStyle(Theme.textSecondary)
             Text(headlineValue)
-                .font(.rounded(30, .heavy))
+                .font(.numeral(30, .heavy))
                 .foregroundStyle(Theme.textPrimary)
             Text(headlineCaption)
                 .font(.rounded(13))

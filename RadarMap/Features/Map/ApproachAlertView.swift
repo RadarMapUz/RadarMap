@@ -149,7 +149,7 @@ struct ApproachAlertView: View {
                     Spacer(minLength: 8)
                     HStack(alignment: .lastTextBaseline, spacing: 4) {
                         Text("\(Int(distance.rounded()))")
-                            .font(.system(size: 44, weight: .heavy, design: .rounded))
+                            .font(.numeralFree(44, .heavy))
                             .foregroundStyle(Theme.textPrimary)
                             .liveNumber()
                         Text("м").font(.rounded(20, .bold)).foregroundStyle(Theme.textSecondary)
@@ -245,10 +245,10 @@ struct ApproachAlertView: View {
         VStack(spacing: 18) {
             HStack(alignment: .lastTextBaseline, spacing: 8) {
                 Text("\(Int(distance.rounded()))")
-                    .font(.system(size: 112, weight: .heavy, design: .rounded))
+                    .font(.numeralFree(112, .heavy))
                     .foregroundStyle(Theme.textPrimary)
                     .liveNumber()
-                Text("м").font(.rounded(34, .bold)).foregroundStyle(Theme.textSecondary)
+                Text("м").font(.numeral(34, .bold)).foregroundStyle(Theme.textSecondary)
             }
             proximityBar
                 .padding(.horizontal, 12)
@@ -275,7 +275,7 @@ struct ApproachAlertView: View {
                 }
                 HStack(alignment: .lastTextBaseline, spacing: 3) {
                     Text("\(Int(speedKmh.rounded()))")
-                        .font(.rounded(22, .heavy).monospacedDigit())
+                        .font(.numeral(22, .heavy).monospacedDigit())
                         .foregroundStyle(isOverspeeding ? Theme.danger : Theme.textPrimary)
                         .liveNumber()
                     Text("км/ч")

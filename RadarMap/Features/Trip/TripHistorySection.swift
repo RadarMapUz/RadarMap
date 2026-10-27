@@ -117,13 +117,13 @@ struct TripHistorySection: View {
                         .font(.rounded(14, .heavy).monospacedDigit())
                         .foregroundStyle(Self.scoreColor(Int(score)))
                         .padding(.horizontal, 9).padding(.vertical, 5)
-                        .background(Self.scoreColor(Int(score)).opacity(0.14), in: Capsule())
+                        .background(Theme.quietFill, in: Capsule())
                 }
                 trailingIcon(record, selected: selected)
             }
             .padding(.horizontal, 14).padding(.vertical, 12)
             // Выбранная поездка подсвечена акцентом — видно, что показано на карте.
-            .background(selected ? Theme.accent.opacity(0.08) : .clear)
+            .background(selected ? Theme.quietFill : .clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

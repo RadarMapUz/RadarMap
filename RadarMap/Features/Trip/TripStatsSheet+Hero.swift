@@ -130,7 +130,7 @@ extension TripStatsSheet {
                     .font(.rounded(13))
                     .foregroundStyle(Theme.textSecondary)
                 Text(Formatting.distance(summary.distance))
-                    .font(.rounded(30, .heavy))
+                    .font(.numeral(30, .heavy))
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
                     .lineLimit(1)

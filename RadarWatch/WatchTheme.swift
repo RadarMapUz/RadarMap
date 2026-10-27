@@ -2,7 +2,7 @@
 //  WatchTheme.swift
 //  RadarWatch
 //
-//  Палитра А «Синий навигатор» на запястье (9.3) — ночные значения, как у
+//  Палитра приложения на запястье (9.3; с 27.10 — «Строгий навигатор», 31D) — ночные значения, как у
 //  плашки поездки и окна тревоги: циферблат чёрный, а до 20.10 здесь жили
 //  циан и жёлто-оранжевая лестница «радар-детектора», от которых приложение
 //  отказалось 7 октября. Числа — из общего WidgetPalette (их сверяет тест
@@ -22,6 +22,7 @@ enum WatchTheme {
     static let secondary = color(WidgetPalette.secondary.dark)
     static let action = color(WidgetPalette.action)
     static let onAction = color(WidgetPalette.onAction)
+    static let signRed = color(WidgetPalette.signRed)
 
     /// Дистанция по уровню тревоги — та же лестница, что у плашки: ближе —
     /// горячее. Цвет не единственный носитель: уровень 3 — это и тук по

@@ -88,7 +88,7 @@ extension TripStatsSheet {
                             .font(.rounded(18, .bold))
                             .foregroundStyle(ok ? Theme.success : Theme.danger)
                             .frame(width: 40, height: 40)
-                            .background((ok ? Theme.success : Theme.danger).opacity(0.12),
+                            .background(Theme.quietFill,
                                         in: Circle())
                         VStack(alignment: .leading, spacing: 4) {
                             Text(ok ? String(localized: "Зона риска")
@@ -105,7 +105,7 @@ extension TripStatsSheet {
                             }
                             Text(ok ? String(localized: "0 штрафов")
                                     : Formatting.money(summary.fineRisk))
-                                .font(.rounded(26, .heavy))
+                                .font(.numeral(26, .heavy))
                                 .foregroundStyle(ok ? Theme.success : Theme.textPrimary)
                                 .contentTransition(.numericText())
                                 .lineLimit(1)

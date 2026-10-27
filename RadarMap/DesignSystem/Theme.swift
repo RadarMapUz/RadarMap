@@ -18,6 +18,20 @@
 //  белым текстом и один синий маршрут на всех картах. Жёлтый — по-прежнему
 //  только главное действие, один на экран.
 //
+//  ПЕРЕСМОТР 27 октября (31D, владелец: «паллитра какой то ии ный») —
+//  «Строгий навигатор». Токены были почти дословно Tailwind (accent #2563D9
+//  ≈ blue-600, текст #111827 = gray-900, холодный slate-фон #F1F4F9), кнопки
+//  и фон в градиентах, плашки — пастель цвета смысла с цветным текстом
+//  поверх, SF Pro Rounded на всём тексте, мягкая тень у каждой карточки. Так
+//  выглядит сгенерированный интерфейс, а не навигатор. Теперь как у Яндекса и
+//  Apple Maps: тёплые нейтральные поверхности (бумага, а не slate), свой
+//  азурный синий (#0B62D0, тон 213° вместо фиолетовых 221° blue-600), ни
+//  одного градиента, плашки нейтральные — цвет только у значка и текста,
+//  карточку от фона отделяют светлота и волосяная кромка, а не тень. Текст —
+//  SF Pro; Rounded остался только у крупных цифр (`Font.numeral`). Смысл
+//  цветов прежний: синий — своё и маршрут, жёлтый — одно главное действие,
+//  красный — камера и штраф. Выбран из трёх направлений (лист 31D).
+//
 //  Токены АДАПТИВНЫЕ: один и тот же `Theme.textPrimary` чёрный днём и
 //  светлый ночью, решает схема окружения (AppEnvironment.interfaceScheme;
 //  приборка и экран тревоги всегда тёмные — они задают схему себе сами).
@@ -71,17 +85,22 @@ enum Theme {
 
     /// Выделение и всё «своё»: маршрут, выбранное, ссылки, значки активного.
     /// Синий, а не жёлтый: этот цвет бывает ТЕКСТОМ, а жёлтый текст на белой
-    /// панели не читается (1,3:1). 4,9:1 днём, 5,3:1 ночью.
-    static let accent  = adaptive(0x2563D9, 0x6BA3FF)
+    /// панели не читается (1,3:1). 5,1:1 днём на фоне, 7,2:1 ночью.
+    static let accent  = adaptive(0x0B62D0, 0x5FA2FF)
     /// Главное действие — заливка кнопки («Радар!», «Поехали»). Один на экран.
     /// Текст на нём — `onAction` (11,9:1).
-    static let action  = Color(uiColor: rgb(0xFFD43B))
-    static let onAction = Color(uiColor: rgb(0x1C1C1E))
+    static let action  = Color(uiColor: actionUIColor)
+    /// `action` и `onAction` для UIKit (картинки кнопок CarPlay).
+    nonisolated static let actionUIColor = rgb(0xFFD43B)
+    nonisolated static let onActionUIColor = rgb(0x1C1C1E)
+    static let onAction = Color(uiColor: onActionUIColor)
     /// Внимание: приближение к камере, превышение в допуске, «на грани».
     static let warning = adaptive(0x9A5800, 0xFFB020)
     /// Опасность: штрафуемое превышение, камера вплотную, ошибка.
     /// nonisolated — читается кольцом камеры в MapPalette (nonisolated).
-    nonisolated static let danger  = adaptive(0xC62828, 0xFF7A70)
+    nonisolated static let danger  = Color(uiColor: dangerUIColor)
+    /// `danger` для UIKit (значок камеры в CPRouteDetail).
+    nonisolated static let dangerUIColor = adaptiveUIColor(0xC62828, 0xFF7A70)
     /// Норма: в лимите, чисто, выполнено.
     static let success = adaptive(0x177A41, 0x4CC27A)
 
@@ -96,10 +115,10 @@ enum Theme {
 
     /// Заливка под БЕЛЫМ текстом: карточка манёвра, синяя кнопка. Ночью
     /// `accent` светлый (он бывает текстом на графите), и белое на нём не
-    /// читается (2,4:1) — поэтому заливка отдельным токеном: 5,4:1 / 5,5:1.
+    /// читается (2,4:1) — поэтому заливка отдельным токеном: 5,7:1 / 6,1:1.
     static let accentFill = Color(uiColor: accentFillUIColor)
     /// `accentFill` для UIKit.
-    nonisolated static let accentFillUIColor = adaptiveUIColor(0x2563D9, 0x2A62D6)
+    nonisolated static let accentFillUIColor = adaptiveUIColor(0x0B62D0, 0x1E5DC4)
     /// Карточка манёвра CarPlay (CPManeuver.cardBackgroundColor) — синий
     /// ТЕМНЕЕ `accentFill`. CarPlay принимает фон карточки только при
     /// контрасте с белым не ниже 7:1 (замер 21.10: сеттер CPManeuver отдаёт
@@ -111,8 +130,8 @@ enum Theme {
     /// вариант всё равно не доехал бы до машины.
     nonisolated static let carPlayCardFillUIColor = adaptiveUIColor(0x124EC4, 0x124EC4)
     static let onAccentFill = Color(uiColor: rgb(0xFFFFFF))
-    /// Вторая строка на синей заливке (улица под расстоянием) — 4,8:1 / 5,0:1.
-    static let onAccentFillSecondary = adaptive(0xEAF0FD, 0xEEF3FD)
+    /// Вторая строка на синей заливке (улица под расстоянием) — ≥ 4,5:1.
+    static let onAccentFillSecondary = adaptive(0xE3ECFA, 0xE6EEFB)
 
     /// Заливки состояний под БЕЛЫМ текстом — по той же причине, что
     /// `accentFill`: ночные `danger`/`success` светлые (они бывают текстом на
@@ -150,15 +169,19 @@ enum Theme {
     /// красится одинаково на всех экранах. Глиф на своей плашке и на карточке
     /// держит ≥ 3:1 в обеих темах (PaletteTests).
     enum Icon {
+        // Четыре смысла и графит вместо девяти оттенков радуги (31D): время,
+        // путь и дом — синий, деньги и работа — янтарный, оценка — зелёный,
+        // камера — красный, скорость — графит. «Серия» была #C2410C — на ΔE 15
+        // от красного камеры, то есть читалась камерой.
         static let time     = Theme.accent
-        static let distance = adaptive(0x0B7480, 0x45C6CF)
-        static let speed    = adaptive(0x6A3FD1, 0xAE93FF)
+        static let distance = Theme.accent
+        static let speed    = Theme.textSecondary
         static let money    = Theme.warning
         static let rating   = Theme.success
         static let camera   = Theme.danger
         static let home     = Theme.accent
-        static let work     = adaptive(0x9C5300, 0xF2A54A)
-        static let streak   = adaptive(0xC2410C, 0xFF8A4C)
+        static let work     = Theme.warning
+        static let streak   = Theme.warning
     }
 
     /// Состояние объекта — единственный законный способ выбрать «смысловой»
@@ -268,8 +291,8 @@ enum Theme {
 
     // MARK: - Поверхности и текст
 
-    static let background    = adaptive(0xF1F4F9, 0x111418)
-    static let surface       = adaptive(0xFFFFFF, 0x1E232A)
+    static let background    = adaptive(0xF2F1EE, 0x121212)
+    static let surface       = adaptive(0xFFFFFF, 0x1F1F1F)
     static let stroke        = adaptive(0x000000, 0xFFFFFF, lightAlpha: 0.08, darkAlpha: 0.10)
     /// Подложка экрана тревоги — всегда графит, днём тоже: на белом фоне
     /// цифра расстояния читалась бы, но полоса цвета типа — нет (13.10).
@@ -277,87 +300,65 @@ enum Theme {
 
     // MARK: - Глубина
     //
-    // Облик выбран 25 сентября из трёх показанных вариантов. Жалоба была
-    // «плоско и серо», и плоско здесь было буквально: карточки лежали ровной
-    // заливкой на ровном фоне, все на одной высоте, и экран не расставлял
-    // ничего по важности.
+    // С 31D карточку от фона отделяют перепад светлоты (белая карточка на
+    // тёплом сером) и волосяная кромка — без мягкой тени и без градиента
+    // заливки, как в «Настройках» iOS. Тень у каждой карточки — первый
+    // признак сгенерированного интерфейса; над картой тень остаётся, потому
+    // что карта пёстрая и без неё панель тонет.
+
+    /// Тень панели над картой: днём заметнее, чем нужно карточке, ночью — отрыв
+    /// от тёмной карты.
+    static let panelShadow = adaptive(0x0B1B33, 0x000000, lightAlpha: 0.14, darkAlpha: 0.30)
+
+    static let textPrimary   = adaptive(0x1D1D1B, 0xF2F1EE)
+    static let textSecondary = adaptive(0x5C5B57, 0xAAA9A4)
+    /// Третья ступень: ≥ 4,7:1 и днём, и ночью, на фоне и на карточке —
+    /// это подписи под цифрами, которые читают на ходу, через блик.
+    static let textTertiary  = adaptive(0x6A6964, 0x9A9993)
+
+    // MARK: - Кромка
     //
-    // Языка при этом не хватало ровно наполовину: кромка (`edgePanel`) и тень
-    // (`liftPanel`) в проекте уже были — ими крашены панели ПОВЕРХ КАРТЫ. До
-    // карточек контента они просто не доехали. Ниже — недостающая половина,
-    // и дальше «глубина» это не новый стиль, а тот же, доведённый до конца.
-
-    /// Верх карточки: поверхность, поймавшая свет. Пара к `surface` — низ.
-    static let surfaceTop = adaptive(0xFFFFFF, 0x252B33)
-
-    /// Заливка карточки: светлее сверху, темнее снизу. Один градиент даёт
-    /// больше объёма, чем любая тень на почти чёрном фоне, — тень там просто
-    /// не видна, а перепад светлоты виден.
-    static let surfaceRaised = LinearGradient(colors: [surfaceTop, surface],
-                                              startPoint: .top, endPoint: .bottom)
-
-    /// Тень карточки контента. Днём — едва заметная холодная (0,07): прежние
-    /// 0,35 чёрного подбирались под тёмную тему и на белом фоне лежали серыми
-    /// пятнами вокруг каждой карточки. Ночью тень почти не видна и нужна
-    /// только как отрыв от фона — там объём даёт градиент заливки.
-    static let cardShadow = adaptive(0x0B1B33, 0x000000, lightAlpha: 0.07, darkAlpha: 0.35)
-    /// Тень панели над картой: днём заметнее карточки (карта пёстрая), но не
-    /// 0,3 тёмной темы.
-    static let panelShadow = adaptive(0x0B1B33, 0x000000, lightAlpha: 0.16, darkAlpha: 0.30)
-
-    /// Фон экрана: свет сверху, темнота к низу. Плоский `background` остаётся
-    /// для мест, где нужна именно КРАСКА (точка на карте, подложка значка), —
-    /// градиент туда класть незачем.
-    static let screenBackground = RadialGradient(
-        colors: [adaptive(0xFAFBFD, 0x1A1F26), background],
-        center: .top, startRadius: 0, endRadius: 620)
-
-    static let textPrimary   = adaptive(0x111827, 0xF1F4F8)
-    static let textSecondary = adaptive(0x556070, 0xA0A9B6)
-    /// 0.50, а не 0.38: на почти чёрном фоне приложения прежняя ступень давала
-    /// контраст 3.5:1 при пороге WCAG AA 4.5:1 — и это не абстракция, а 117
-    /// подписей под цифрами, которые читают на ходу, в машине, через блик.
-    /// 0.50 даёт 5.3:1 и всё ещё отличается от textSecondary на глаз.
-    /// Пересчитано 7 октября: 4,7:1 и днём, и ночью, на фоне и на карточке.
-    static let textTertiary  = adaptive(0x657080, 0x8F99A6)
-
-    // MARK: - Метрики
-
-    /// Радиус ПАНЕЛИ поверх карты — один на все.
-    ///
-    /// Их было три: карточка скорости 22, панель поездки 26, приборка 24.
-    /// Разница в четыре пункта не читается как замысел, читается как небрежность:
-    /// на одном экране рядом стоят три почти одинаковых, но разных угла.
-    /// Панель поверх карты — один предмет с одним углом; круглая кнопка —
-    /// второй. Больше форм на этом экране нет.
-    // MARK: - Кромка и подъём
-    //
-    // Стеклянная поверхность ловит свет сверху и отбрасывает тень вниз. Три
-    // варианта кромки — не разнобой, а разные роли: панель лежит на карте,
-    // круглая кнопка выступает над ней, CTA светится ярче всего.
-    //
-    // До этого все шесть кромок и семь теней были скопированы литералами по
-    // файлам. Значения не тронуты ни на сотую — названы ровно те, что были:
-    // задача токена не поменять вид, а сделать невозможным седьмой вариант,
-    // появившийся «потому что рядом было похожее».
+    // Волосяная линия по краю панели и круглой кнопки. До 31D она была
+    // градиентом «свет сверху» (стеклянный язык) — ровная линия того же
+    // веса читается так же и не добавляет ещё одного градиента на экран.
 
     /// Кромка панели: карточка, бар действий, панель слоёв.
-    static let edgePanel = LinearGradient(
-        colors: [adaptive(0x000000, 0xFFFFFF, lightAlpha: 0.08, darkAlpha: 0.16),
-                 adaptive(0x000000, 0xFFFFFF, lightAlpha: 0.04, darkAlpha: 0.02)],
-        startPoint: .top, endPoint: .bottom)
-
+    static let edgePanel = adaptive(0x000000, 0xFFFFFF, lightAlpha: 0.08, darkAlpha: 0.12)
     /// Кромка круглой кнопки поверх карты.
-    static let edgeControl = LinearGradient(
-        colors: [adaptive(0x000000, 0xFFFFFF, lightAlpha: 0.10, darkAlpha: 0.22),
-                 adaptive(0x000000, 0xFFFFFF, lightAlpha: 0.04, darkAlpha: 0.04)],
-        startPoint: .top, endPoint: .bottom)
+    static let edgeControl = adaptive(0x000000, 0xFFFFFF, lightAlpha: 0.10, darkAlpha: 0.16)
 
-    /// Кромка акцентной кнопки: света больше, потому что она главная.
-    static let edgeAccent = LinearGradient(
-        colors: [adaptive(0xFFFFFF, 0xFFFFFF, lightAlpha: 0.55, darkAlpha: 0.45),
-                 adaptive(0xFFFFFF, 0xFFFFFF, lightAlpha: 0.05, darkAlpha: 0.03)],
-        startPoint: .top, endPoint: .bottom)
+    // MARK: - Плашки
+
+    /// Подложка значка, чипа, выделенной строки — нейтральная. Пастель цвета
+    /// смысла с цветным текстом поверх (31D) читалась «цветное на цветном»;
+    /// теперь цвет остаётся только у значка и текста.
+    static let quietFill = adaptive(0x000000, 0xFFFFFF, lightAlpha: 0.05, darkAlpha: 0.08)
+
+    /// Плитка раздела настроек — графит под белым символом (≥ 4,5:1).
+    /// Красная только у «Оповещений»: это камера.
+    static let settingsTile = adaptive(0x6B6C6F, 0x5A5B5E)
+
+    /// Подсказка-иллюстрация (сцены онбординга, превью значков камер):
+    /// трава, асфальт, разметка, подложка сцены, бордюр.
+    enum Scene {
+        static let grass     = adaptive(0xE2E8D4, 0x1C2420)
+        static let panel     = adaptive(0xEBEAE6, 0x1C1C1C)
+        static let asphalt   = adaptive(0xCFCFCB, 0x343434)
+        static let marking   = adaptive(0xFFFFFF, 0x6E6E6E)
+        static let kerb      = adaptive(0xE3B341, 0x8C7033)
+        /// Превью значка камеры на карте дня/ночи и на полотне дороги.
+        static let mapDay    = Color(uiColor: rgb(0xEEEEEB))
+        static let mapNight  = Color(uiColor: rgb(0x1C1C1C))
+        static let roadDark  = Color(uiColor: rgb(0x3F4348))
+    }
+
+    /// Кант знака ограничения скорости — красный дорожного знака (ПДД), а не
+    /// красный камеры: знак рисуется как на столбе.
+    nonisolated static let signRedUIColor = rgb(0xD90D1A)
+    static let signRed = Color(uiColor: signRedUIColor)
+
+    /// Полоска маршрута без данных о пробках.
+    static let trafficUnknown = adaptive(0xCFCFCB, 0x4A4A4A)
 
     // MARK: - Сетка отступов
     //
@@ -372,6 +373,8 @@ enum Theme {
     // ПРАВИЛО, а не набор токенов: нечётного отступа не бывает.
     nonisolated static let spacingStep: CGFloat = 2
 
+    /// Радиус ПАНЕЛИ поверх карты — один на все. Их было три (22, 26, 24):
+    /// разница в четыре пункта читается небрежностью, а не замыслом.
     static let cornerPanel: CGFloat  = 24
     static let cornerLarge: CGFloat  = 24
     static let cornerMedium: CGFloat = 16
@@ -392,7 +395,7 @@ enum Theme {
     static let controlSize: CGFloat = 44
 }
 
-// MARK: - Типографика (rounded — «приборный» вид)
+// MARK: - Типографика (SF Pro; Rounded — только крупные цифры)
 
 extension Font {
     // MARK: - Шкала кегля
@@ -525,20 +528,41 @@ extension Font {
         #endif
     }
 
+    /// Текст интерфейса — SF Pro по шкале.
+    ///
+    /// Имя историческое: до 31D весь текст набирался SF Pro Rounded, и это
+    /// главное, что делало картинку «игрушечной» рядом с Яндексом и Apple
+    /// Maps. Переименование тронуло бы ~550 строк в каждом экране ради слова —
+    /// функция сохранила имя, но Rounded здесь больше нет.
     static func rounded(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         let step = snapType(size)
         let factor = typeFactor(raw: rawTypeFactor, size: step)
-        return .system(size: (step * CGFloat(factor)).rounded(),
-                       weight: weight, design: .rounded)
+        return .system(size: (step * CGFloat(factor)).rounded(), weight: weight)
     }
 
-    /// Кегль ВНЕ шкалы — для подписей, растущих вместе с масштабом схемы.
-    ///
-    /// Единственное исключение, и оно честное: на схеме кегль вычисляется
-    /// (`11 * strokeScale`), и прижим к ступеням превратил бы плавный зум в
-    /// скачки размера. Шкала описывает интерфейс, а не рисунок карты.
-    static func roundedFree(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+    /// Крупная цифра — скорость, расстояние, балл, время, деньги. Единственное
+    /// место, где остался SF Pro Rounded: приборная цифра читается с вытянутой
+    /// руки и отличает «число» от подписи вокруг.
+    static func numeral(_ size: CGFloat, _ weight: Font.Weight = .bold) -> Font {
+        let step = snapType(size)
+        let factor = typeFactor(raw: rawTypeFactor, size: step)
+        return .system(size: (step * CGFloat(factor)).rounded(), weight: weight, design: .rounded)
+    }
+
+    /// Цифра вне шкалы: экран тревоги, знак лимита, карточки для шеринга,
+    /// подпись балла на снимке карты.
+    nonisolated static func numeralFree(_ size: CGFloat, _ weight: Font.Weight = .bold) -> Font {
         .system(size: size, weight: weight, design: .rounded)
+    }
+
+    /// Кегль ВНЕ шкалы — для подписей, растущих вместе с масштабом схемы,
+    /// и картинок, которые рисуются вне приложения (карточки для шеринга).
+    ///
+    /// Исключение честное: на схеме кегль вычисляется (`11 * strokeScale`), и
+    /// прижим к ступеням превратил бы плавный зум в скачки размера. Шкала
+    /// описывает интерфейс, а не рисунок карты.
+    nonisolated static func roundedFree(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight)
     }
 }
 
@@ -569,8 +593,13 @@ extension CameraType {
 /// (контраст с полотном дороги обеих тем, пробка ≠ маршрут).
 nonisolated enum RouteColors {
     typealias Pair = (day: UInt32, night: UInt32)
-    static let body: Pair = (0x2A6FF0, 0x66A3FF)
-    static let casing: Pair = (0x1E4FB8, 0x0E1A33)
+    /// Днём с 27.10 (31D) — тот же азурный, что `Theme.accent` (#0B62D0):
+    /// прежний #2A6FF0 стоял рядом со своим синим интерфейса вторым, чуть
+    /// другим синим. Кайма темнее (#0A3F8F), чтобы тело и кайма различались
+    /// (ΔE 21; с прежней каймой было бы 8). Ночной не тронут — он и так в том
+    /// же тоне, что ночной accent.
+    static let body: Pair = (0x0B62D0, 0x66A3FF)
+    static let casing: Pair = (0x0A3F8F, 0x0E1A33)
     /// Пройденное (28.D): серо-синее, бледнее линии впереди, но читается на
     /// полотне любого класса. Ночной 0x4A5568 сливался с графитом улиц
     /// (ΔE 4–6 — линия позади машины просто пропадала, а не «гасла»);

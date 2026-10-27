@@ -108,7 +108,7 @@ struct SharePreviewSheet: View {
                         .foregroundStyle(selected ? Theme.onAccentFill : Theme.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 11)
-                        .background(selected ? AnyShapeStyle(Theme.accentFill.gradient)
+                        .background(selected ? AnyShapeStyle(Theme.accentFill)
                                              : AnyShapeStyle(Theme.surface),
                                     in: Capsule())
                         .contentShape(Capsule())

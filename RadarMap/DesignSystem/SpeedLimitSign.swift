@@ -31,7 +31,7 @@ struct SpeedLimitSign: View {
             Circle().fill(.white)
                 .shadow(color: glow ?? .clear, radius: glow == nil ? 0 : glowRadius)
             Circle()
-                .strokeBorder(Color(red: 0.85, green: 0.05, blue: 0.1),
+                .strokeBorder(Theme.signRed,
                               style: StrokeStyle(lineWidth: borderWidth,
                                                  dash: isAssumed ? [diameter * 0.14] : []))
             Text(isAssumed ? "≈\(limit)" : "\(limit)")

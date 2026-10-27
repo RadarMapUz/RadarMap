@@ -51,7 +51,7 @@ struct StatusBanner: View {
                             .foregroundStyle(Theme.accent)
                             .padding(.horizontal, 14)
                             .frame(minHeight: Theme.controlSize)
-                            .background(Theme.accent.opacity(0.12), in: Capsule())
+                            .background(Theme.quietFill, in: Capsule())
                             .contentShape(Capsule())
                     }
                     .buttonStyle(PressableStyle())

@@ -26,7 +26,7 @@ struct OnboardingRoadScene: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
-                .fill(Theme.adaptive(0xE4ECD8, 0x1A2420))
+                .fill(Theme.Scene.grass)
             // Дорога: полотно, кромки, пунктир осевой.
             RoadStripe()
             // Камера впереди — маркер «на пути» (цвет типа, белое кольцо, ореол).
@@ -48,12 +48,12 @@ struct OnboardingRoadScene: View {
                 HStack(spacing: 10) {
                     CameraIcon(kind: .stationaryCamera, side: 30)
                     VStack(alignment: .leading, spacing: 0) {
-                        Text("240 м").font(.rounded(20, .heavy)).foregroundStyle(Theme.danger)
+                        Text("240 м").font(.numeral(20, .heavy)).foregroundStyle(Theme.danger)
                         Text("до камеры").font(.rounded(11)).foregroundStyle(Theme.textSecondary)
                     }
                     Spacer(minLength: 0)
                     SpeedLimitSign(limit: 60, diameter: 30)
-                    Text("58").font(.rounded(20, .heavy).monospacedDigit()).foregroundStyle(Theme.textPrimary)
+                    Text("58").font(.numeral(20, .heavy).monospacedDigit()).foregroundStyle(Theme.textPrimary)
                 }
                 .padding(.horizontal, 14).padding(.vertical, 10)
                 .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
@@ -77,7 +77,7 @@ struct OnboardingVoiceScene: View {
             bubble("Превышение! Камера, 200 метров", icon: "exclamationmark.triangle.fill", tint: Theme.danger)
         }
         .padding(16)
-        .background(Theme.adaptive(0xE9EEF6, 0x1A1F26),
+        .background(Theme.Scene.panel,
                     in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
         .accessibilityHidden(true)
     }
@@ -88,7 +88,7 @@ struct OnboardingVoiceScene: View {
                 .font(.rounded(14, .semibold))
                 .foregroundStyle(tint)
                 .frame(width: 32, height: 32)
-                .background(tint.opacity(0.12), in: Circle())
+                .background(Theme.quietFill, in: Circle())
             Text(text)
                 .font(.rounded(15, quiet ? .regular : .semibold))
                 .foregroundStyle(quiet ? Theme.textSecondary : Theme.textPrimary)
@@ -121,7 +121,7 @@ struct OnboardingCommunityScene: View {
         }
         .padding(.vertical, 24).padding(.horizontal, 12)
         .frame(maxWidth: .infinity)
-        .background(Theme.adaptive(0xE9EEF6, 0x1A1F26),
+        .background(Theme.Scene.panel,
                     in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
         .accessibilityHidden(true)
     }
@@ -192,19 +192,19 @@ private struct RoadStripe: View {
                 p.addLine(to: CGPoint(x: w * (0.5 - bottom), y: h))
                 p.closeSubpath()
             }
-            .fill(Theme.adaptive(0xC9D0DA, 0x2E353F))
+            .fill(Theme.Scene.asphalt)
             Path { p in
                 p.move(to: CGPoint(x: w * 0.5, y: 0))
                 p.addLine(to: CGPoint(x: w * 0.5, y: h))
             }
-            .stroke(Theme.adaptive(0xFFFFFF, 0x6B7380), style: StrokeStyle(lineWidth: 3, dash: [14, 12]))
+            .stroke(Theme.Scene.marking, style: StrokeStyle(lineWidth: 3, dash: [14, 12]))
             ForEach([0.5 - top, 0.5 + top], id: \.self) { x0 in
                 let x1 = x0 < 0.5 ? 0.5 - bottom : 0.5 + bottom
                 Path { p in
                     p.move(to: CGPoint(x: w * x0, y: 0))
                     p.addLine(to: CGPoint(x: w * x1, y: h))
                 }
-                .stroke(Theme.adaptive(0xE3B341, 0x8C7033), lineWidth: 2)
+                .stroke(Theme.Scene.kerb, lineWidth: 2)
             }
         }
     }

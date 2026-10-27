@@ -72,7 +72,7 @@ struct CameraDetailSheet: View {
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .background(Theme.screenBackground)
+            .background(Theme.background)
             // Заголовок — где стоит, а не «Камера №2331» (5.12): номер нужен
             // модератору, а не водителю, и живёт в «…» вместе с картами и
             // координатами.
@@ -126,7 +126,7 @@ struct CameraDetailSheet: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.accent.opacity(0.1),
+            .background(Theme.quietFill,
                         in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
         }
     }
@@ -238,7 +238,7 @@ struct CameraDetailSheet: View {
             .foregroundStyle(Theme.warning)
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Theme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
+            .background(Theme.quietFill, in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
     }
 
     @ViewBuilder private var routeButton: some View {
@@ -293,7 +293,7 @@ struct CameraDetailSheet: View {
                         .foregroundStyle(Theme.success)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Theme.success.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+                        .background(Theme.quietFill, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
                 }
                 Button {
                     Task { await env.mobile.vote(cameraID: camera.id, stillThere: false) }
@@ -304,7 +304,7 @@ struct CameraDetailSheet: View {
                         .foregroundStyle(Theme.danger)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
-                        .background(Theme.danger.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+                        .background(Theme.quietFill, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
                 }
             }
             // «Радар есть, но стоит не там» — третий, отдельный ответ. Раньше
@@ -367,7 +367,7 @@ struct CameraDetailSheet: View {
                     .foregroundStyle(Theme.success)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(Theme.success.opacity(0.12),
+                    .background(Theme.quietFill,
                                 in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
                     .transition(.scale(scale: 0.9).combined(with: .opacity))
             case .sending:
@@ -429,7 +429,7 @@ struct CameraDetailSheet: View {
             .foregroundStyle(tint)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
-            .background(tint.opacity(0.10),
+            .background(Theme.quietFill,
                         in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
         }
     }
@@ -486,7 +486,7 @@ struct CameraDetailSheet: View {
                 .foregroundStyle(Theme.danger)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(Theme.danger.opacity(0.12), in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+                .background(Theme.quietFill, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
         }
     }
 }

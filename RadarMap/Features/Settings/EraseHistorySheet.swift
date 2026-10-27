@@ -55,7 +55,7 @@ struct EraseHistorySheet: View {
                         .accessibilityHidden(true)
                 }
         }
-        .background(Theme.screenBackground)
+        .background(Theme.background)
         .presentationDetents([.medium, .large], selection: $detent)
         .presentationDragIndicator(.visible)
         .onAppear {

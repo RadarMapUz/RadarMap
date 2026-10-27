@@ -162,7 +162,7 @@ extension TripStatsSheet {
     var emptyHint: some View {
         VStack(spacing: 12) {
             ZStack {
-                Circle().fill(Theme.accent.opacity(0.10)).frame(width: 72, height: 72)
+                Circle().fill(Theme.quietFill).frame(width: 72, height: 72)
                 Image(systemName: "car.side")
                     .font(.rounded(28))
                     .foregroundStyle(Theme.accent)

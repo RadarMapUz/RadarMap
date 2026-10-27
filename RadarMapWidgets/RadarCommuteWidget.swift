@@ -57,7 +57,7 @@ struct RadarCommuteWidget: Widget {
         StaticConfiguration(kind: "RadarCommuteWidget", provider: RadarCommuteProvider()) { entry in
             RadarCommuteView(entry: entry)
                 .containerBackground(for: .widget) {
-                    LinearGradient(colors: [SW.bgTop, SW.bgBottom], startPoint: .top, endPoint: .bottom)
+                    SW.background
                 }
         }
         .configurationDisplayName("Дорога на работу")
@@ -105,19 +105,19 @@ private struct RadarCommuteView: View {
                 .foregroundStyle(SW.accent)
                 .accessibilityHidden(true)
             Text(title(line))
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(SW.secondary)
         }
         Spacer(minLength: 0)
         Text(headline(line))
-            .font(.system(size: 30, weight: .heavy, design: .rounded))
+            .font(.system(size: 30, weight: .heavy))
             .foregroundStyle(SW.primary)
             .minimumScaleFactor(0.7)
             .lineLimit(1)
         // Узбекское «hozir · odatda 42 daq» в малом виджете длиннее строки —
         // ужимается, а не обрезается (14.6).
         Text(caption(line))
-            .font(.system(size: 12, design: .rounded))
+            .font(.system(size: 12))
             .foregroundStyle(SW.tertiary)
             .lineLimit(1)
             .minimumScaleFactor(0.75)
@@ -125,13 +125,13 @@ private struct RadarCommuteView: View {
             // Две строки: «tirbandlik +8 daq · 8:05 holatiga» в одну не
             // влезала и при сжатии — терялось время, ради которого строка.
             Text(jamText(jam))
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(SW.warning)
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
         } else if let hint = line.hint {
             Text(hintText(hint))
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(isAdvice(hint) ? SW.success : SW.secondary)
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
@@ -147,7 +147,7 @@ private struct RadarCommuteView: View {
             Spacer(minLength: 0)
             // Приглашение, а не ноль: «дороги» ещё нет — так и сказать.
             Text("Дорога на работу появится после трёх поездок между домом и работой")
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(SW.secondary)
                 .minimumScaleFactor(0.8)
         }
@@ -168,16 +168,16 @@ private struct RadarCommuteView: View {
                     if let other = otherDirection(line) {
                         Label(line.toWork ? String(localized: "Домой") : String(localized: "На работу"),
                               systemImage: line.toWork ? "house.fill" : "briefcase.fill")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(SW.secondary)
                         Text(String(format: String(localized: "обычно %@"), minutes(other.usualSeconds)))
-                            .font(.system(size: 17, weight: .heavy, design: .rounded))
+                            .font(.system(size: 17, weight: .heavy))
                             .foregroundStyle(SW.primary)
                     }
                     Spacer(minLength: 0)
                     if line.jam != nil, let hint = line.hint {
                         Text(hintText(hint))
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(isAdvice(hint) ? SW.success : SW.secondary)
                             .lineLimit(2)
                     }
@@ -199,28 +199,28 @@ private struct RadarCommuteView: View {
         VStack(alignment: .leading, spacing: 1) {
             if let line {
                 Text(title(line))
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.system(size: 12, weight: .semibold))
                 Text(line.nowSeconds.map { approx($0) }
                      ?? String(format: String(localized: "обычно %@"), minutes(line.usualSeconds)))
-                    .font(.system(size: 17, weight: .heavy, design: .rounded))
+                    .font(.system(size: 17, weight: .heavy))
                 if let jam = line.jam {
                     Text(jamText(jam))
-                        .font(.system(size: 11, design: .rounded))
+                        .font(.system(size: 11))
                         .opacity(0.8)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 } else if let hint = line.hint {
                     Text(hintText(hint))
-                        .font(.system(size: 11, design: .rounded))
+                        .font(.system(size: 11))
                         .opacity(0.8)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
             } else {
                 Text("Дорога на работу")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(.system(size: 12, weight: .semibold))
                 Text("после трёх поездок")
-                    .font(.system(size: 11, design: .rounded))
+                    .font(.system(size: 11))
                     .opacity(0.8)
             }
         }

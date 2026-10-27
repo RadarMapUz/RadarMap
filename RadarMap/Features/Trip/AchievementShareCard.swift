@@ -27,10 +27,10 @@ struct AchievementShareCard: View {
 
             ZStack {
                 Circle()
-                    .fill(Theme.accent.opacity(0.16))
+                    .fill(Theme.quietFill)
                     .frame(width: 210, height: 210)
                 Circle()
-                    .fill(Theme.accent.gradient)
+                    .fill(Theme.accent)
                     .frame(width: 150, height: 150)
                     .shadow(color: Theme.accent.opacity(0.55), radius: 26)
                 Image(systemName: badge.icon)
@@ -39,7 +39,7 @@ struct AchievementShareCard: View {
             }
 
             Text(badge.title)
-                .font(.system(size: 40, weight: .heavy, design: .rounded))
+                .font(.system(size: 40, weight: .heavy))
                 .foregroundStyle(.white)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
@@ -48,7 +48,7 @@ struct AchievementShareCard: View {
                 .padding(.horizontal, 32)
 
             Text("Достижение получено")
-                .font(.system(size: 17, weight: .semibold, design: .rounded))
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(Theme.accent)
                 .padding(.top, 6)
 

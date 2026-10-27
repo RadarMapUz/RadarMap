@@ -66,7 +66,7 @@ struct MaintenanceEditSheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Theme.screenBackground)
+            .background(Theme.background)
             .navigationTitle(kind.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -232,7 +232,7 @@ struct OdometerSheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Theme.screenBackground)
+            .background(Theme.background)
             .navigationTitle("Пробег")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

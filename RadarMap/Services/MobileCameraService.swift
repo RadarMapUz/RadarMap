@@ -113,6 +113,9 @@ final class MobileCameraService {
 
     @ObservationIgnored private weak var store: CameraStore?
     @ObservationIgnored private let api = APIClient()
+    /// Чтение списков отметок (api/mobile, api/road) — с корня ленты
+    /// (DEBUG `-trafficBase`, иначе тот же сервер); отправка — через `api`.
+    @ObservationIgnored private let feed = APIClient(base: AppConfig.trafficFeedBaseURL)
     @ObservationIgnored private var pollTask: Task<Void, Never>?
     /// Пульт: позволяет погасить краудсорс на сутки (волна фейковых отметок) или
     /// разредить опрос, не дожидаясь релиза. Без пульта — обычное поведение.
@@ -307,7 +310,7 @@ final class MobileCameraService {
         defer { isRefreshing = false }
         lastRefreshAt = Date()   // считаем попытку, не успех — при ошибке сети не долбим сервер
         do {
-            guard let answer = try await api.getIfChanged("api/mobile",
+            guard let answer = try await feed.getIfChanged("api/mobile",
                                                           as: MobileResponse.self,
                                                           etag: lastETag) else {
                 // 304: список тот же. Ни разбора, ни пересчёта окна камер —
@@ -377,7 +380,7 @@ final class MobileCameraService {
     /// перекрытий он не знает, и типы не предлагаются.
     private func refreshRoadEvents(skew: TimeInterval) async {
         do {
-            guard let answer = try await api.getIfChanged("api/road", as: MobileResponse.self,
+            guard let answer = try await feed.getIfChanged("api/road", as: MobileResponse.self,
                                                           etag: lastRoadETag) else {
                 if !roadEventsSupported { roadEventsSupported = true }
                 return

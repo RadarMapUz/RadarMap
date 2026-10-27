@@ -44,7 +44,7 @@ final class TypicalTrafficService {
     var isAllowed: () -> Bool = { true }
     var isOnline: () -> Bool = { true }
 
-    private let api = APIClient()
+    private let api = APIClient(base: AppConfig.trafficFeedBaseURL)
 
     /// Файл часа из памяти, без сети (маршрут считает ETA синхронно); nil —
     /// не загружен или пробки выключены.

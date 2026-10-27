@@ -248,6 +248,12 @@ final class RouteService {
     /// Пришли новые файлы «обычно» — остаток пересчитать на ближайшем фиксе.
     @ObservationIgnored private var typicalRevision = 0
     @ObservationIgnored private var typicalRevisionSeen = -1
+    /// Профиль часа недели или файлы «обычно», пришедшие, пока маршрут
+    /// собирался, — пересчитать время вариантов в конце сборки
+    /// (TrafficArrivalGate, симуляция пробок 27.10).
+    @ObservationIgnored private var trafficArrival = TrafficArrivalGate()
+    /// `apply` идёт: варианты ещё старые (или их нет), новые запишутся в конце.
+    @ObservationIgnored private var isApplying = false
 
     @ObservationIgnored var onRerouted: (() -> Void)? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onRerouted,
@@ -557,7 +563,18 @@ final class RouteService {
     /// пальцем водителя не перескакивает на другой вариант.
     func typicalTrafficArrived(now: Date = Date()) {
         typicalRevision &+= 1
-        guard !variants.isEmpty, !isBuilding, !isRebuilding else { return }
+        // Пришло во время сборки — варианты сейчас старые или пустые, пересчёт
+        // по ним пропал бы (линии сменятся), а новых он бы не увидел: профиль
+        // просит сама сборка (`prefetchProfile`), и первый маршрут после
+        // запуска показывал время без него (24 мин, в пути — 33).
+        guard trafficArrival.arrived(whileBuilding: isBuilding || isRebuilding || isApplying) else { return }
+        recomputeVariantTraffic(now: now)
+    }
+
+    /// Время вариантов по пробкам, которые есть в памяти сейчас (живые,
+    /// профиль часа недели, файлы «обычно»).
+    private func recomputeVariantTraffic(now: Date) {
+        guard !variants.isEmpty else { return }
         let live = trafficSnapshot?()
         let profile = trafficProfile?()
         let needed = TrafficForecast.buckets(departure: now, travelTime: variants.map(\.travelTime).max() ?? 0)
@@ -582,6 +599,13 @@ final class RouteService {
                 variants[index].trafficDelay = forecast?.seconds
                 variants[index].trafficSource = forecast?.source
             }
+            // Ещё не тронулись — прибытие с новым временем варианта сразу, а не
+            // с ближайшим фиксом (у стоящего телефона его может не быть минутами).
+            if progressAlong == 0, let selected {
+                let initial = Self.initialRemainingDelays(selected.trafficDelay, source: selected.trafficSource)
+                remainingTrafficDelay = initial.live
+                remainingTypicalDelay = initial.typical
+            }
         }
     }
 
@@ -596,6 +620,23 @@ final class RouteService {
         }
         return TrafficForecast.delay(along: points, baseTime: travelTime, departure: now, now: now,
                                      live: live, typical: { typical[$0] })
+    }
+
+    /// Остаток задержки сразу после выбора варианта, до первого фикса:
+    /// (живые — мерка объезда, остальное — только прибытие). Смешанное время
+    /// (33C: живые на ближние 15 мин + профиль часа недели — обычный случай)
+    /// целиком идёт в прибытие: до 27.10 оно обнулялось до ближайшего фикса, а
+    /// у стоящего телефона его нет минутами — «34 мин», а прибытие по графу
+    /// через 24 (симуляция пробок). Объезд до фикса мерится без него — с
+    /// осторожной стороны: выдуманного выигрыша нет.
+    nonisolated static func initialRemainingDelays(_ delay: TimeInterval?, source: TrafficForecast.Source?)
+        -> (live: TimeInterval, typical: TimeInterval) {
+        let total = delay ?? 0
+        switch source {
+        case .live?: return (total, 0)
+        case .typical?, .mixed?: return (0, total)
+        case nil: return (0, 0)
+        }
     }
 
     /// Точки маршрута после `along` метров от начала.
@@ -690,6 +731,10 @@ final class RouteService {
         resetDetour()
 
         lastArrival = nil   // новый маршрут — карточка прошлого прибытия неактуальна
+        // Профиль часа недели (33C) — параллельно с запросом OSRM, а не после
+        // него: успеет — ярлыки («Быстрый») и время вариантов посчитаны по нему
+        // сразу; не успеет — время досчитает конец сборки (TrafficArrivalGate).
+        prefetchProfile?()
         // Своя дорога (24.4) — только при выборе из вариантов: запрос через
         // её опорные точки идёт рядом с обычным, а не после него.
         let plan = alternatives ? myRoadPlan?(source, destination) : nil
@@ -851,9 +896,9 @@ final class RouteService {
         // её ведёт refreshTrafficDelay по ходу и по новым наборам. Живые и
         // обычные врозь (объезд меряется только живыми); смешанное время
         // варианта разложит ближайший фикс — пересчёт сразу, не через 300 м.
-        let initial = selected?.trafficDelay ?? 0
-        remainingTrafficDelay = selected?.trafficSource == .live ? initial : 0
-        remainingTypicalDelay = selected?.trafficSource == .typical ? initial : 0
+        let initial = Self.initialRemainingDelays(selected?.trafficDelay, source: selected?.trafficSource)
+        remainingTrafficDelay = initial.live
+        remainingTypicalDelay = initial.typical
         trafficRevisionSeen = -1
         typicalRevisionSeen = -1
         trafficAlong = 0
@@ -1746,6 +1791,8 @@ final class RouteService {
         // длинные маршруты не должны дёргать UI даже на старых устройствах.
         let inputs = built.filter { $0.points.count >= 2 }
         guard !inputs.isEmpty else { return }
+        isApplying = true
+        defer { isApplying = false }
         let traffic = trafficSnapshot?()
         let events = roadEvents?() ?? []
         let eventsNow = Date()
@@ -1856,6 +1903,9 @@ final class RouteService {
         // вместо поворота (CarPlay Simulator, 11.10), а телефон — пустую
         // карточку манёвра. Без голоса: озвучка — дело живого прогресса.
         if let variant = selected { updateManeuvers(variant: variant, along: 0, announce: false) }
+        // Профиль или «обычно» пришли, пока считали камеры, — время вариантов
+        // досчитать сейчас, по уже записанным линиям.
+        if trafficArrival.buildFinished() { recomputeVariantTraffic(now: Date()) }
     }
 
     // MARK: - Слой полос (20.8)

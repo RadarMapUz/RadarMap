@@ -61,6 +61,8 @@ final class TrafficService {
     @ObservationIgnored private var wanted = false
 
     private let api = APIClient()
+    /// Чтение now.json — с корня ленты пробок (DEBUG `-trafficBase`, иначе тот же сервер).
+    private let feed = APIClient(base: AppConfig.trafficFeedBaseURL)
     private let settings: AppSettings
 
     /// Дом, работа и сохранённые места — рядом с ними след не собирается.
@@ -226,7 +228,7 @@ final class TrafficService {
         }
         guard isOnline() else { return }
         do {
-            guard let fresh = try await Self.fetch(api: api, etag: etag) else { return }   // 304
+            guard let fresh = try await Self.fetch(api: feed, etag: etag) else { return }   // 304
             etag = fresh.etag
             guard let decoded = fresh.snapshot, decoded.isFresh(now: Date()) else {
                 if snapshot != nil { snapshot = nil; revision &+= 1 }

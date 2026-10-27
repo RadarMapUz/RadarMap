@@ -26,6 +26,20 @@ final class PersonalPaceStore {
         let stored = Storage.decoded([PersonalPace.Sample].self, for: .personalPaceSamples) ?? []
         samples = stored
         coefficients = PersonalPace.coefficients(stored, now: now)
+        #if DEBUG
+        // `-demoPace 1.12` — демо-история личного темпа (симуляция пробок,
+        // docs/traffic_simulation_2026-10-27.md): шесть городских проездов по
+        // 10 км за прошлую неделю с этим отношением своё/граф. Только в памяти.
+        let args = ProcessInfo.processInfo.arguments
+        if let index = args.firstIndex(of: "-demoPace"), index + 1 < args.count, let k = Double(args[index + 1]) {
+            samples = (1...6).map { day in
+                PersonalPace.Sample(date: now.addingTimeInterval(-Double(day) * 86400), roadClass: .city,
+                                    meters: 10_000, ownSeconds: 1200 * k, flowSeconds: 1200, jam: false)
+            }
+            coefficients = PersonalPace.coefficients(samples, now: now)
+            Log.app.info("личный темп: демо k \(self.coefficients.overall, privacy: .public)")
+        }
+        #endif
     }
 
     func add(_ sample: PersonalPace.Sample, now: Date = Date()) {

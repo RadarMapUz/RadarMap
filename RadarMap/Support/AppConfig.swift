@@ -1207,6 +1207,23 @@ nonisolated enum AppConfig {
     /// без возможности починить.
     static let syncBaseURL = URL(string: "https://soulmed.uz/radarmap")!
 
+    /// Откуда телефон ЧИТАЕТ пробки и отметки водителей: traffic/now.json,
+    /// traffic/profile.json, traffic/typical/*, api/mobile, api/road. В
+    /// релизе — `syncBaseURL`, те же адреса. DEBUG `-trafficBase <url>` —
+    /// тестовый вход симуляции пробок (docs/traffic_simulation_2026-10-27.md):
+    /// синтетические файлы с тем же путём под другим корнем, а отправка
+    /// (куски пробок, отметки, голоса) остаётся на `syncBaseURL`.
+    static let trafficFeedBaseURL: URL = {
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        if let index = args.firstIndex(of: "-trafficBase"), index + 1 < args.count,
+           let url = URL(string: args[index + 1]) {
+            return url
+        }
+        #endif
+        return syncBaseURL
+    }()
+
     /// Страница проекта: поддержка, политика конфиденциальности, контакты.
     /// Она же Support URL в App Store Connect.
     /// Портал открытых данных — источник камер (МВД), банкоматов (ЦБ) и

@@ -185,3 +185,45 @@ def route_edges(conn, now, previous=None, typical=tc.LAYER_TYPICAL, live=tc.LAYE
             out[edge] = speed
     stats["written"] = len(out)
     return out, graph, stats
+
+
+# --- Манёвры (33B) ----------------------------------------------------------------
+
+def turn_penalty(observations):
+    """Штраф манёвра по наблюдениям слота [(день, секунд, угол)]: (секунд,
+    оценка профиля) или None — манёвр не годен (меньше TURN_MIN_PIECES кусков
+    или TURN_MIN_DAYS дней) либо медиана не больше штрафа профиля на
+    TURN_MARGIN. Файл заменяет штраф профиля (опыт 33B), поэтому значение —
+    полная медиана, целые секунды."""
+    days = {day for day, _, _ in observations}
+    if len(observations) < tc.TURN_MIN_PIECES or len(days) < tc.TURN_MIN_DAYS:
+        return None
+    delay = min(tc.TURN_MAX_DELAY, max(0.0, median([d for _, d, _ in observations])))
+    base = tb.profile_turn_ceiling(median([a for _, _, a in observations]))
+    if delay <= base + tc.TURN_MARGIN:
+        return None
+    return int(round(delay)), base
+
+
+def turn_penalties(conn, now, enabled=tc.LAYER_TURNS):
+    """[(u, v, w, секунд, значимость)] для --turn-penalty-file в слоте часа
+    недели момента `now`, по возрастанию тройки; значимость — превышение над
+    профилем (для потолка MAX_TURNS). Только манёвры «не одного человека»:
+    въезд или выезд прошли два куска вместе за SHARED_TTL (как у профиля)."""
+    if not enabled:
+        return []
+    rows = conn.execute("""SELECT o.u, o.v, o.w, o.day, o.delay, o.angle FROM traffic_turn_obs o
+                           WHERE o.slot = ? AND o.day >= ? AND (
+                               EXISTS(SELECT 1 FROM traffic_shared s WHERE s.u = o.u AND s.v = o.v AND s.seen >= ?)
+                            OR EXISTS(SELECT 1 FROM traffic_shared s WHERE s.u = o.v AND s.v = o.w AND s.seen >= ?))""",
+                        (tb.week_slot(now), tb.day_number(now) - tc.PROFILE_KEEP_DAYS,
+                         now - tb.SHARED_TTL, now - tb.SHARED_TTL)).fetchall()
+    grouped = {}
+    for u, v, w, day, delay, angle in rows:
+        grouped.setdefault((u, v, w), []).append((day, delay, angle))
+    out = []
+    for key in sorted(grouped):
+        got = turn_penalty(grouped[key])
+        if got:
+            out.append(key + (got[0], got[0] - got[1]))
+    return out

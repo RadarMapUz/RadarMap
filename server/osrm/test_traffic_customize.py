@@ -16,7 +16,9 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(HERE, "traffic_customize.sh")
-FILES = ("mldgr", "geometry", "cell_metrics", "datasource_names", "partition", "cells", "ebg", "properties")
+FILES = ("mldgr", "geometry", "cell_metrics", "datasource_names", "partition", "cells", "ebg", "properties",
+         "turn_weight_penalties", "turn_duration_penalties")
+TURN_FILES = ("turn_weight_penalties", "turn_duration_penalties")   # переписываются со штрафами манёвров
 REWRITTEN = ("mldgr", "geometry")          # customize читает и пишет на месте
 CREATED = ("cell_metrics", "datasource_names")   # customize только пишет
 
@@ -27,12 +29,16 @@ case "$1" in
   restart) exit 0 ;;
   run)
     [ -n "${DOCKER_FAIL:-}" ] && exit 137 # предел памяти
-    data=""
+    data=""; turns=0
     while [ $# -gt 0 ]; do
-      case "$1" in -v) data="${2%%:/data}"; shift ;; esac
+      case "$1" in -v) data="${2%%:/data}"; shift ;; --turn-penalty-file) turns=1 ;; esac
       shift
     done
-    # Как osrm-customize: вход переписывается на месте, выход создаётся.
+    # Как osrm-customize: вход переписывается на месте, выход создаётся
+    # (опыт 33B: со штрафами манёвров — и файлы штрафов на месте).
+    if [ "$turns" = 1 ]; then
+      for f in turn_weight_penalties turn_duration_penalties; do printf customized > "$data/uzbekistan.osrm.$f"; done
+    fi
     for f in mldgr geometry; do printf customized > "$data/uzbekistan.osrm.$f"; done
     for f in cell_metrics datasource_names; do printf customized > "$data/uzbekistan.osrm.$f"; done
     exit 0 ;;
@@ -62,6 +68,12 @@ class CycleTest(unittest.TestCase):
 
     def speeds(self, body):
         path = os.path.join(self.root, "in.csv")
+        with open(path, "w") as f:
+            f.write(body)
+        return path
+
+    def turns(self, body):
+        path = os.path.join(self.root, "turns-in.csv")
         with open(path, "w") as f:
             f.write(body)
         return path
@@ -101,7 +113,7 @@ class CycleTest(unittest.TestCase):
             self.assertEqual(self.read("a", ext), "customized")
             self.assertNotEqual(os.stat(self.path("a", ext)).st_ino, os.stat(self.path("pristine", ext)).st_ino,
                                 f".{ext} переписывается — жёсткая ссылка испортила бы эталон")
-        for ext in set(FILES) - set(REWRITTEN) - set(CREATED):
+        for ext in set(FILES) - set(REWRITTEN) - set(CREATED) - set(TURN_FILES):
             self.assertEqual(os.stat(self.path("a", ext)).st_ino, os.stat(self.path("pristine", ext)).st_ino,
                              f".{ext} customize не трогает — общий с эталоном")
         run = [c for c in self.calls() if c.startswith("run ")]
@@ -113,6 +125,29 @@ class CycleTest(unittest.TestCase):
         self.assertEqual(len(self.last.stdout.strip().splitlines()), 1, "в журнал cron — одна строка цикла")
         self.assertIn("inspect radarmap-osrm-mld", self.calls())
         self.assertIn("контейнера radarmap-osrm-mld нет", self.last.stdout)
+
+    def test_turn_penalties_copy_the_files_customize_rewrites(self):
+        self.cycle("", "--turns", self.turns("1,2,3,40\n"))
+        self.assertEqual(self.current(), "a")
+        self.assert_pristine_intact()
+        run = [c for c in self.calls() if c.startswith("run ")]
+        self.assertEqual(len(run), 1, "манёвры без пробок — customize всё равно нужен")
+        self.assertIn("--turn-penalty-file /data/turns.csv", run[0])
+        self.assertNotIn("--segment-speed-file", run[0], "пустой файл скоростей не передаётся")
+        for ext in TURN_FILES:
+            self.assertEqual(self.read("a", ext), "customized")
+            self.assertNotEqual(os.stat(self.path("a", ext)).st_ino, os.stat(self.path("pristine", ext)).st_ino,
+                                f".{ext} переписывается со штрафами — жёсткая ссылка испортила бы эталон")
+        with open(os.path.join(self.root, "a", "turns.csv")) as f:
+            self.assertEqual(f.read(), "1,2,3,40\n")
+        # Те же файлы — без изменений; другой штраф — новый слот.
+        self.assertIn("без изменений", self.cycle("", "--turns", self.turns("1,2,3,40\n")).stdout)
+        self.cycle("", "--turns", self.turns("1,2,3,50\n"))
+        self.assertEqual(self.current(), "b")
+        # Без манёвров файлы штрафов снова общие с эталоном.
+        self.cycle("1,2,40.0,1.389\n")
+        for ext in TURN_FILES:
+            self.assertEqual(os.stat(self.path("a", ext)).st_ino, os.stat(self.path("pristine", ext)).st_ino)
 
     def test_slots_alternate_and_unchanged_file_is_skipped(self):
         self.cycle("1,2,40.0,1.389\n")

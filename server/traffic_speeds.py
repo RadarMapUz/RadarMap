@@ -45,6 +45,11 @@ server/osrm/traffic_customize.sh; в cron НЕ подключено).
     убыванию значимости (длина ребра × замедление) и «ПОТОЛОК» в журнале;
   * одна строка журнала на запуск: слоты, рёбер типичных/живых, записано,
     время шагов, итог (ок / пусто / ошибка).
+С --turns-out тот же запуск пишет файл --turn-penalty-file (33B):
+`from_osm,via_osm,to_osm,секунд` — медиана задержки манёвра в слоте часа
+недели, только где она больше штрафа профиля на 5 с (traffic_profile.
+turn_penalties); потолок MAX_TURNS по превышению над профилем. Ошибка —
+пустыми оба файла.
 Источники now/typical/auto ниже — прежние (32D), для проверки руками; цикл
 стенда берёт route.
 
@@ -156,6 +161,18 @@ def csv_body(edges, mode="weight"):
     return "".join(line + "\n" for line in lines)
 
 
+def turns_body(rows):
+    """Строки --turn-penalty-file по возрастанию тройки: `u,v,w,секунд`
+    (целые секунды — детерминизм)."""
+    return "".join(f"{u},{v},{w},{int(delay)}\n" for u, v, w, delay, *_ in sorted(rows))
+
+
+def cap_turns(rows, limit=tc.MAX_TURNS):
+    """Инвариант 5 для манёвров: самые значимые (превышение над профилем)."""
+    ranked = sorted(rows, key=lambda row: (-row[4], row[:3]))
+    return sorted(ranked[:limit]), max(0, len(rows) - limit)
+
+
 def read_previous(path):
     """{(u, v): км/ч} прошлого файла скоростей (для гистерезиса 33A): weight —
     rate × 3,6, duration — третий столбец. Нет файла или строка не та — без
@@ -231,10 +248,16 @@ def route_files(args, now, steps):
         steps["профиль"] = time.perf_counter() - started
         edges = {edge: (kmh, graph[edge]) for edge, kmh in speeds_kmh.items()}
         edges, trimmed = cap(edges, edge_lengths(conn, edges), tc.MAX_SPEED_EDGES, args.mode)
+        turns = []
+        if args.turns_out:
+            started = time.perf_counter()
+            turns, trimmed_turns = cap_turns(tp.turn_penalties(conn, now))
+            trimmed += trimmed_turns
+            steps["манёвры"] = time.perf_counter() - started
         stats["trimmed"] = trimmed
     finally:
         conn.close()
-    return edges, stats
+    return edges, turns, stats
 
 
 def main(argv=None):
@@ -246,7 +269,10 @@ def main(argv=None):
                         help="weight — пробка только в выборе пути (по умолчанию), duration — и во времени")
     parser.add_argument("--bucket", help="файл «обычно»: wd-08, off-18 (по умолчанию — текущий час)")
     parser.add_argument("--now", type=float, help="момент расчёта, для проверки (по умолчанию — сейчас)")
+    parser.add_argument("--turns-out", help="файл штрафов манёвров (33B; только с --source route)")
     args = parser.parse_args(argv)
+    if args.turns_out and args.source != "route":
+        parser.error("--turns-out — только с --source route")
     if args.bucket and args.bucket not in tb.ALL_BUCKETS:
         parser.error(f"нет такого файла «обычно»: {args.bucket}")
     now = args.now or time.time()
@@ -272,20 +298,24 @@ def main(argv=None):
         steps = {}
         started = time.perf_counter()
         try:
-            edges, stats = route_files(args, now, steps)
+            edges, turns, stats = route_files(args, now, steps)
         except Exception as error:  # noqa: BLE001 — инвариант 1: любая ошибка — граф
             write_if_changed(args.out, "")
+            if args.turns_out:
+                write_if_changed(args.turns_out, "")
             print(f"{stamp} скорости (route): ОШИБКА {type(error).__name__}: {error} — "
                   f"файл пустой (граф без пробок) → {args.out}")
             return 1
         changed = write_if_changed(args.out, csv_body(edges, args.mode))
+        if args.turns_out:
+            changed = write_if_changed(args.turns_out, turns_body(turns)) or changed
         steps["всего"] = time.perf_counter() - started
         timing = ", ".join(f"{name} {seconds * 1000:.0f} мс" for name, seconds in steps.items())
-        result = "ок" if edges else "пусто"
+        result = "ок" if edges or turns else "пусто"
         trimmed = f", ПОТОЛОК: обрезано {stats['trimmed']}" if stats.get("trimmed") else ""
         print(f"{stamp} скорости (route, {args.mode}): слоты {stats['slots']}, рёбер типичных "
               f"{stats['typical']}, живых {stats['live']}, записано {len(edges)} (гистерезис "
-              f"{stats['kept']}){trimmed}; {timing}; {result}, "
+              f"{stats['kept']}), манёвров {len(turns) if args.turns_out else '—'}{trimmed}; {timing}; {result}, "
               f"{'изменён' if changed else 'без изменений'} → {args.out}")
     return 0
 

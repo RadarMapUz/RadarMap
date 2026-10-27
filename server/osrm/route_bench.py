@@ -12,6 +12,11 @@
     # … osrm-customize с этим файлом (traffic_customize.sh --speeds jam.csv) …
     python3 route_bench.py check --base http://127.0.0.1:8094 --pair chil-yunus --jam jam.csv
 
+    # штраф манёвра (33B): левый поворот первого варианта → --turn-penalty-file
+    python3 route_bench.py turn --base http://127.0.0.1:8094 --pair chil-yunus --out turns.csv --penalty 90
+    # … traffic_customize.sh --speeds пустой --turns turns.csv …
+    python3 route_bench.py check --base http://127.0.0.1:8094 --pair chil-yunus --turns turns.csv
+
 Только чтение: ничего не пишет на сервер. stdlib, как весь server/.
 """
 import argparse
@@ -115,19 +120,58 @@ def cmd_jam(args):
           f"пробка {len(lines)} рёбер, {jammed / 1000:.1f} км по {JAM_KMH} км/ч → {args.out}")
 
 
+def route_nodes(route):
+    """Узлы OSM маршрута подряд (стыки участков — без повтора)."""
+    out = []
+    for leg in route["legs"]:
+        for node in leg["annotation"]["nodes"]:
+            if not out or out[-1] != node:
+                out.append(node)
+    return out
+
+
+def cmd_turn(args):
+    """Левый поворот первого варианта → строка --turn-penalty-file."""
+    pair = pair_by_id(args.pairs, args.pair)
+    url = (f"{args.base.rstrip('/')}/route/v1/driving/{coords(pair)}?overview=full&geometries=geojson"
+           "&steps=true&annotations=nodes")
+    route = fetch(url)["routes"][0]
+    geom = route["geometry"]["coordinates"]
+    nodes = route["legs"][0]["annotation"]["nodes"]
+    lefts = [s["maneuver"] for s in route["legs"][0]["steps"]
+             if s["maneuver"]["type"] in ("turn", "end of road") and s["maneuver"].get("modifier") in ("left", "sharp left")]
+    if len(lefts) <= args.index:
+        raise SystemExit("нет такого левого поворота")
+    loc = lefts[args.index]["location"]
+    # Геометрия overview=full: точка j ≥ 1 — узел nodes[j] (j = 0 — старт).
+    j = min(range(1, len(geom) - 1), key=lambda i: (geom[i][0] - loc[0]) ** 2 + (geom[i][1] - loc[1]) ** 2)
+    triple = (nodes[j - 1], nodes[j], nodes[j + 1])
+    with open(args.out, "w", encoding="ascii") as f:
+        f.write(f"{triple[0]},{triple[1]},{triple[2]},{args.penalty}\n")
+    print(f"{pair['name']}: левый поворот у {loc} — тройка {triple}, штраф {args.penalty} с → {args.out}; "
+          f"маршрут {route['distance'] / 1000:.2f} км, {route['duration'] / 60:.1f} мин")
+
+
 def cmd_check(args):
     pair = pair_by_id(args.pairs, args.pair)
-    with open(args.jam, encoding="ascii") as f:
-        jam = {tuple(int(x) for x in line.split(",")[:2]) for line in f if line.strip()}
+    jam, turns = set(), set()
+    if args.jam:
+        with open(args.jam, encoding="ascii") as f:
+            jam = {tuple(int(x) for x in line.split(",")[:2]) for line in f if line.strip()}
+    if args.turns:
+        with open(args.turns, encoding="ascii") as f:
+            turns = {tuple(int(x) for x in line.split(",")[:3]) for line in f if line.strip()}
     url = (f"{args.base.rstrip('/')}/route/v1/driving/{coords(pair)}?overview=false&alternatives=3"
            "&annotations=nodes,distance,duration")
     clean = True
     for k, route in enumerate(fetch(url)["routes"]):
         hit = sum((u, v) in jam for u, v, _, _ in route_edges(route))
-        clean &= k > 0 or hit == 0
+        nodes = route_nodes(route)
+        crossed = sum(tuple(nodes[i:i + 3]) in turns for i in range(len(nodes) - 2))
+        clean &= k > 0 or (hit == 0 and crossed == 0)
         print(f"вариант {k}: {route['distance'] / 1000:.2f} км, {route['duration'] / 60:.1f} мин, "
-              f"вес {route['weight']:.0f}, рёбер пробки {hit} из {len(jam)}")
-    print("объезд: да" if clean else "объезд: НЕТ — первый вариант идёт через пробку")
+              f"вес {route['weight']:.0f}, рёбер пробки {hit} из {len(jam)}, манёвров со штрафом {crossed} из {len(turns)}")
+    print("объезд: да" if clean else "объезд: НЕТ — первый вариант идёт через пробку или манёвр")
     return 0 if clean else 1
 
 
@@ -150,9 +194,17 @@ def main(argv=None):
     c.add_argument("--base", required=True)
     c.add_argument("--pair", required=True)
     c.add_argument("--pairs", default=PAIRS)
-    c.add_argument("--jam", required=True)
+    c.add_argument("--jam")
+    c.add_argument("--turns", help="файл --turn-penalty-file: тройки, которых первый вариант должен избегать")
+    u = sub.add_parser("turn")
+    u.add_argument("--base", required=True)
+    u.add_argument("--pair", required=True)
+    u.add_argument("--pairs", default=PAIRS)
+    u.add_argument("--out", required=True)
+    u.add_argument("--penalty", type=int, default=90)
+    u.add_argument("--index", type=int, default=0, help="какой по счёту левый поворот (с 0)")
     args = ap.parse_args(argv)
-    return {"time": cmd_time, "jam": cmd_jam, "check": cmd_check}[args.cmd](args) or 0
+    return {"time": cmd_time, "jam": cmd_jam, "check": cmd_check, "turn": cmd_turn}[args.cmd](args) or 0
 
 
 if __name__ == "__main__":

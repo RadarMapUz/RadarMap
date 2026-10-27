@@ -31,6 +31,7 @@ struct MapStatusBanner: View {
         case server(RemoteConfig.Message)
         case offline(OfflineNotice)
         case overheated
+        case savingBattery
         case noSpeedLimits
 
         /// Ключ для «закрыто»: у объявления свой текст, у остальных — вид.
@@ -46,6 +47,7 @@ struct MapStatusBanner: View {
                 case .serverDownRegion: return "offline:server-region"
                 }
             case .overheated:          return "overheated"
+            case .savingBattery:       return "battery"
             case .noSpeedLimits:       return "limits"
             }
         }
@@ -59,6 +61,7 @@ struct MapStatusBanner: View {
         // на плашку глазами надо — как и на скриншоты CarPlay (-hideCameraAlert).
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("-forceOverheated") { return .overheated }
+        if arguments.contains("-forceLowBattery") { return .savingBattery }
         if arguments.contains("-forceOffline") { return .offline(offlineNotice(online: false) ?? .general) }
         if arguments.contains("-forceNoLimits") { return .noSpeedLimits }
         #endif
@@ -66,12 +69,14 @@ struct MapStatusBanner: View {
         let offline = offlineNotice(online: env.network.isOnline)
         switch MapStatusPick.pick(hasServerMessage: env.config.banner != nil,
                                   isOffline: offline != nil,
-                                  isOverheated: env.thermal.mode.explains,
+                                  isOverheated: env.thermal.reason == .heat,
+                                  savingBattery: env.thermal.reason == .battery,
                                   limitsReady: env.speedLimits.isReady,
                                   inTrip: inTrip) {
         case .server?:        return env.config.banner.map { .server($0) }
         case .offline?:       return offline.map { .offline($0) }
         case .overheated?:    return .overheated
+        case .savingBattery?: return .savingBattery
         case .noSpeedLimits?: return .noSpeedLimits
         case nil:             return nil
         }
@@ -151,6 +156,12 @@ struct MapStatusBanner: View {
             shell(symbol: "thermometer.high", tint: Theme.warning,
                   title: String(localized: "Телефон перегрелся"),
                   body: String(localized: "Упростили карту, чтобы не тормозило. Оповещения работают полностью"),
+                  id: status.id)
+        case .savingBattery:
+            // Одна строка и за рулём: заголовок сам говорит главное.
+            shell(symbol: "battery.25percent", tint: Theme.warning,
+                  title: String(localized: "Экономим батарею"),
+                  body: String(localized: "Мало заряда: карта плоская и проще. Оповещения о камерах работают полностью"),
                   id: status.id)
         case .noSpeedLimits:
             shell(symbol: "speedometer", tint: Theme.textSecondary,

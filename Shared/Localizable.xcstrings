@@ -32809,6 +32809,38 @@
           }
         }
       }
+    },
+    "Экономим батарею": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Экономим батарею"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Batareyani tejayapmiz"
+          }
+        }
+      }
+    },
+    "Мало заряда: карта плоская и проще. Оповещения о камерах работают полностью": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Мало заряда: карта плоская и проще. Оповещения о камерах работают полностью"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quvvat kam: xarita tekis va soddaroq. Kamera ogohlantirishlari toʻliq ishlaydi"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

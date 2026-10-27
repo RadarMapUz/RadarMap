@@ -2605,6 +2605,19 @@ nonisolated enum AppConfig {
     /// Порог сдвига камеры на горячем телефоне, метры (на холодном — 2 м).
     static let engineCameraMoveThresholdWarm = 6.0
 
+    /// Автоэконом (12.3, AutoEconomy): ниже этого заряда без зарядки карта
+    /// переходит на ступень перегрева — плоско, 20 к/с, без декора. 20 % —
+    /// там же, где iOS сама предлагает энергосбережение: водитель уже видит
+    /// красную батарею, и упрощённая карта не застаёт его врасплох.
+    static let autoEconomyEnterPercent = 20
+    /// Выход — с этого заряда (гистерезис): на пороге 19/20 % карта не
+    /// должна мигать между двумя видами. На зарядке выход сразу.
+    static let autoEconomyExitPercent = 25
+    /// Как часто перечитывать заряд, секунды. Процент за минуту меняется на
+    /// доли, а постоянный мониторинг батареи будил бы процесс системными
+    /// уведомлениями (BatteryProbe) — разовое чтение не чаще раза в минуту.
+    static let autoEconomyCheckSeconds: TimeInterval = 60
+
     /// Live Activity: ближе этой дистанции до камеры — частые обновления
     /// (`liveActivityNearStepMeters` / `liveActivityNearInterval`); дальше —
     /// `liveActivityFarStepMeters` и не чаще `liveActivityFarInterval`.

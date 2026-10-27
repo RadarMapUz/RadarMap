@@ -264,6 +264,8 @@ final class AppEnvironment {
         refreshTrafficWanted()
         updateThemeClock()
         if active {
+            // Автоэконом: заряд мог упасть, пока экран был погашен (12.3).
+            thermal.refreshBattery()
             mobile.startPolling()
             // Ожидание склейки у близких могло выйти, пока приложение спало.
             family.update()
@@ -451,6 +453,10 @@ final class AppEnvironment {
             // числе в фоне, ради смены вопроса раз в поездку. Появление
             // вопроса анимирует сам гейт (MobileConfirmGate).
             mobile?.trackPasses(from: coordinate, course: location?.currentCourse ?? -1)
+            // Автоэконом (12.3): заряд перечитывается не чаще раза в минуту —
+            // на фиксе это сравнение дат. С фикса, а не с экрана: CarPlay
+            // рисует карту и с погашенным телефоном.
+            self?.thermal.refreshBattery()
             if let self, !self.themeHadPosition {
                 self.themeHadPosition = true
                 self.refreshInterfaceAppearance()
@@ -647,7 +653,9 @@ final class AppEnvironment {
         // Расписание опроса смотрит на скорость и на нагрев: чаще на трассе,
         // где чужая отметка устаревает за минуту, реже на стоянке и на жаре.
         mobile.drivingContext = { [weak location, weak thermal] in
-            (speedKmh: location?.speedKmh ?? 0, thermal: thermal?.mode ?? .full)
+            // Нагрев, а не итоговая ступень: автоэконом батареи не повод
+            // узнавать о треноге позже (AutoEconomy).
+            (speedKmh: location?.speedKmh ?? 0, thermal: thermal?.heatMode ?? .full)
         }
         mobile.onMyReportConfirmed = { [weak notifications] report in
             let kind = ReportKind(rawValue: report.kind)?.title

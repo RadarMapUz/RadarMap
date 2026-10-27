@@ -11,9 +11,24 @@ import XCTest
 
 final class MapStatusPickTests: XCTestCase {
     private func pick(server: Bool = false, offline: Bool = false, hot: Bool = false,
+                      battery: Bool = false,
                       limits: Bool = true, trip: Bool) -> MapStatusPick? {
         MapStatusPick.pick(hasServerMessage: server, isOffline: offline, isOverheated: hot,
-                           limitsReady: limits, inTrip: trip)
+                           savingBattery: battery, limitsReady: limits, inTrip: trip)
+    }
+
+    /// Автоэконом (12.3): на стоянке — после перегрева, до лимитов.
+    func testParkedBatteryGoesAfterHeatBeforeLimits() {
+        XCTAssertEqual(pick(hot: true, battery: true, trip: false), .overheated)
+        XCTAssertEqual(pick(battery: true, limits: false, trip: false), .savingBattery)
+    }
+
+    /// За рулём «Экономим батарею» — одной строкой после сети: карта на
+    /// глазах становится плоской, и молчать об этом значит «сломалось».
+    func testDrivingBatteryLineYieldsOnlyToNetwork() {
+        XCTAssertEqual(pick(battery: true, trip: true), .savingBattery)
+        XCTAssertEqual(pick(offline: true, battery: true, trip: true), .offline)
+        XCTAssertEqual(pick(server: true, hot: true, battery: true, trip: true), .savingBattery)
     }
 
     func testParkedOrderIsServerNetworkHeatLimits() {

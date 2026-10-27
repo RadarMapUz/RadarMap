@@ -696,7 +696,8 @@ class MigrationTest(unittest.TestCase):
                              (now, json.dumps(FIXTURE["points"])))
             conn.commit()
             return tb.run(conn, now, matcher=lambda pts: FIXTURE["response"],
-                          out_path=self.out, typical_dir=self.typical)
+                          out_path=self.out, typical_dir=self.typical,
+                          profile_path=os.path.join(self.typical, "profile.json"))
         finally:
             conn.close()
 

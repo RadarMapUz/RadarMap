@@ -869,6 +869,21 @@ nonisolated enum AppConfig {
     /// маршруту (и для выезда позже) — обычная скорость этого часа
     /// (TrafficForecast). Пробка из now.json через полчаса уже другая, с.
     nonisolated static let trafficLiveHorizonSeconds: TimeInterval = 30 * 60
+    /// Время прибытия во времени (33C, docs/spec_traffic_33.md): живой
+    /// пробке на участке верим, только если доедем до него не позже этого;
+    /// дальше — типичная слота часа недели прибытия (profile.json). 15 мин —
+    /// окно, за которое сервер вообще считает кусок живым, с.
+    nonisolated static let trafficTimeAheadLiveSeconds: TimeInterval = 15 * 60
+    /// profile.json старше — «нет данных»: сервер переписывает его раз в
+    /// сутки, 36 ч — сутки и запас на сбой одной ночной пересборки, с.
+    nonisolated static let trafficProfileMaxAgeSeconds: TimeInterval = 36 * 3600
+    /// Версия формата profile.json (traffic_config.PROFILE_JSON_VERSION).
+    nonisolated static let trafficProfileVersion = 1
+    /// profile.json перепроверяется (ETag) не чаще этого: пересборка раз в
+    /// сутки, а маршрут строят много раз за день, с.
+    static let trafficProfileRefreshSeconds: TimeInterval = 6 * 3600
+    /// После ошибки сети или 404 (сервер ещё не выложен) — повтор не раньше, с.
+    static let trafficProfileRetrySeconds: TimeInterval = 30 * 60
     /// Пробка на линии маршрута (RouteTraffic): участок короче этого не
     /// перекрашивает линию — одиночное ребро на перекрёстке мигало бы пятном.
     nonisolated static let routeTrafficMinMeters: CLLocationDistance = 40

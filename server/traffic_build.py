@@ -135,6 +135,7 @@ TASHKENT_UTC_OFFSET = 5 * 3600
 OUTPUT_VERSION = 1
 
 TYPICAL_DIR = "/opt/radarmap/www/traffic/typical"
+PROFILE_PATH = "/opt/radarmap/www/traffic/profile.json"   # 33C: профиль часа недели для телефона
 TYPICAL_MIN_PIECES = 5       # кусков на ребро в этот класс дня и час
 TYPICAL_EVERY = 60 * 60      # «обычно» пересобирается не чаще раза в час
 TYPICAL_VERSION = 1
@@ -936,6 +937,23 @@ def write_typical(conn, now, directory=TYPICAL_DIR):
     return written
 
 
+def profile_due(conn, now):
+    row = conn.execute("SELECT value FROM traffic_meta WHERE key = 'profile_json_built'").fetchone()
+    return row is None or now - row[0] >= tc.PROFILE_JSON_EVERY
+
+
+def write_profile_json(conn, now, path=PROFILE_PATH):
+    """profile.json (33C) — раз в PROFILE_JSON_EVERY, переписывается всегда:
+    телефон считает файл старше 36 ч «нет данных», и неизменный профиль
+    должен получить свежую метку. Возвращает (рёбер, обрезано)."""
+    import traffic_profile   # там формулы 33A; он сам импортирует этот модуль
+    body, count, trimmed = traffic_profile.profile_body(conn, now)
+    write_atomic(path, body)
+    conn.execute("INSERT OR REPLACE INTO traffic_meta(key, value) VALUES('profile_json_built', ?)", (now,))
+    conn.commit()
+    return count, trimmed
+
+
 def payload(edges, now):
     return {
         "v": OUTPUT_VERSION,
@@ -954,7 +972,7 @@ def write_atomic(path, body):
     os.replace(tmp, path)
 
 
-def run(conn, now, matcher=osrm_match, out_path=OUT_PATH, typical_dir=TYPICAL_DIR):
+def run(conn, now, matcher=osrm_match, out_path=OUT_PATH, typical_dir=TYPICAL_DIR, profile_path=PROFILE_PATH):
     """Один прогон без замка и печати (main и тесты). Возвращает (кусков,
     отрезков, рёбер в now.json, переписано файлов «обычно» или None)."""
     schema(conn)
@@ -967,6 +985,11 @@ def run(conn, now, matcher=osrm_match, out_path=OUT_PATH, typical_dir=TYPICAL_DI
     if typical_due(conn, now):
         maintain_profile(conn, now)
         typical = write_typical(conn, now, directory=typical_dir)
+    if profile_due(conn, now):
+        count, trimmed = write_profile_json(conn, now, profile_path)
+        if trimmed:
+            print(f"profile.json: ПОТОЛОК {tc.PROFILE_JSON_MAX_GZIP // 1024} КБ gzip — обрезано рёбер {trimmed}",
+                  file=sys.stderr)
     return pieces, segments, len(edges), typical
 
 

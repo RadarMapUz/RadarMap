@@ -40,15 +40,58 @@ nonisolated struct TrafficSnapshot: Sendable {
     let generated: Date
     let edges: [TrafficEdge]
     private let grid: [Int64: [Int32]]
+    /// Направление каждого ребра — посчитано один раз: проверка направления
+    /// дешевле расстояния и идёт первой (33C, маршрут на 300 км).
+    private let bearings: [Double]
+    /// Концы рёбер на плоскости, метры (x — по долготе с косинусом средней
+    /// широты набора, y — по широте): отбор кандидатов отрезка маршрута —
+    /// одна арифметика, без косинуса на каждое сравнение (33C).
+    private let planar: [(ax: Double, ay: Double, bx: Double, by: Double)]
+    private let planarK: Double
+    /// Размер ячейки сетки, градусы. now.json — ~550 м (`defaultCell`);
+    /// профиль часа недели (33C) — мельче: его рёбра лежат плотно по всему
+    /// городу, а маршрут на 300 км проверяет кандидатов на каждом отрезке.
+    private let cellDegrees: Double
 
-    init(generated: Date, edges: [TrafficEdge]) {
+    nonisolated static let defaultCell = 0.005
+    /// Грубая сетка покрытия (~5,5 км): кусок маршрута, в рамке которого нет
+    /// ни одной её ячейки, проходится без шагов и без кандидатов (33C).
+    private let coarse: Set<Int64>
+    private static let coarseCell = 0.05
+
+    init(generated: Date, edges: [TrafficEdge], cellDegrees: Double = TrafficSnapshot.defaultCell) {
         self.generated = generated
         self.edges = edges
+        self.cellDegrees = cellDegrees
         var grid: [Int64: [Int32]] = [:]
         for (index, edge) in edges.enumerated() {
-            for key in Self.cells(edge.a, edge.b) { grid[key, default: []].append(Int32(index)) }
+            for key in Self.cells(edge.a, edge.b, cell: cellDegrees) { grid[key, default: []].append(Int32(index)) }
         }
         self.grid = grid
+        self.bearings = edges.map { GeoMath.bearing(from: $0.a, to: $0.b) }
+        let meanLat = edges.isEmpty ? 41.3 : edges.reduce(0) { $0 + $1.a.latitude } / Double(edges.count)
+        let k = cos(meanLat * .pi / 180) * 111_320
+        self.planarK = k
+        self.planar = edges.map { ($0.a.longitude * k, $0.a.latitude * 111_320, $0.b.longitude * k, $0.b.latitude * 111_320) }
+        var coarse = Set<Int64>()
+        for edge in edges {
+            for key in Self.cells(edge.a, edge.b, cell: Self.coarseCell) { coarse.insert(key) }
+        }
+        self.coarse = coarse
+    }
+
+    /// Могут ли рёбра лежать в рамке (по грубой сетке; запас — как у сетки).
+    func mayCover(minLat: Double, minLon: Double, maxLat: Double, maxLon: Double) -> Bool {
+        guard !coarse.isEmpty else { return false }
+        let pad = 0.0003
+        let x0 = Int64(((minLon - pad) / Self.coarseCell).rounded(.down))
+        let x1 = Int64(((maxLon + pad) / Self.coarseCell).rounded(.down))
+        let y0 = Int64(((minLat - pad) / Self.coarseCell).rounded(.down))
+        let y1 = Int64(((maxLat + pad) / Self.coarseCell).rounded(.down))
+        for x in x0...x1 {
+            for y in y0...y1 where coarse.contains(x << 32 | (y & 0xFFFF_FFFF)) { return true }
+        }
+        return false
     }
 
     /// Разбор now.json. Формат версии 1:
@@ -123,27 +166,80 @@ nonisolated struct TrafficSnapshot: Sendable {
     /// Ребро под точкой маршрута: ближайшее в пределах trafficMatchMeters с
     /// направлением не дальше trafficMatchDegrees.
     func matchingEdge(at point: CLLocationCoordinate2D, course: Double) -> TrafficEdge? {
-        var best: (edge: TrafficEdge, distance: Double)?
-        for key in Self.cells(point, point) {
-            for index in grid[key] ?? [] {
+        matchingIndex(at: point, course: course).map { edges[$0] }
+    }
+
+    /// Номер ребра под точкой (то же правило, что `matchingEdge`) — для
+    /// данных, лежащих рядом с рёбрами по номеру (TrafficProfile, 33C).
+    func matchingIndex(at point: CLLocationCoordinate2D, course: Double) -> Int? {
+        var best: (index: Int, distance: Double)?
+        for key in Self.cells(point, point, cell: cellDegrees) {
+            for index in grid[key] ?? [] where
+                GeoMath.angleDifference(bearings[Int(index)], course) <= AppConfig.trafficMatchDegrees {
                 let edge = edges[Int(index)]
                 let distance = Self.distance(point, toSegment: edge.a, edge.b)
-                guard distance <= AppConfig.trafficMatchMeters,
-                      GeoMath.angleDifference(GeoMath.bearing(from: edge.a, to: edge.b), course)
-                        <= AppConfig.trafficMatchDegrees else { continue }
-                if best == nil || distance < best!.distance { best = (edge, distance) }
+                guard distance <= AppConfig.trafficMatchMeters else { continue }
+                if best == nil || distance < best!.distance { best = (Int(index), distance) }
             }
         }
-        return best?.edge
+        return best?.index
+    }
+
+    /// Рёбра, которые могут лечь под шаги отрезка маршрута p→q с курсом
+    /// `course`: в ячейках отрезка и по направлению (33C). Пусто — по этому
+    /// отрезку шагать незачем; иначе шаги проверяют только этот короткий
+    /// список (`matchingIndex(at:among:)`), а не все рёбра ячеек.
+    func candidates(_ p: CLLocationCoordinate2D, _ q: CLLocationCoordinate2D, course: Double) -> [Int32] {
+        guard !edges.isEmpty else { return [] }
+        let pad = 0.0003
+        let x0 = Int64(((min(p.longitude, q.longitude) - pad) / cellDegrees).rounded(.down))
+        let x1 = Int64(((max(p.longitude, q.longitude) + pad) / cellDegrees).rounded(.down))
+        let y0 = Int64(((min(p.latitude, q.latitude) - pad) / cellDegrees).rounded(.down))
+        let y1 = Int64(((max(p.latitude, q.latitude) + pad) / cellDegrees).rounded(.down))
+        var out: [Int32] = []
+        let px = p.longitude * planarK, py = p.latitude * 111_320
+        let qx = q.longitude * planarK, qy = q.latitude * 111_320
+        for x in x0...x1 {
+            for y in y0...y1 {
+                guard let list = grid[x << 32 | (y & 0xFFFF_FFFF)] else { continue }
+                for index in list where GeoMath.angleDifference(bearings[Int(index)], course)
+                    <= AppConfig.trafficMatchDegrees && !out.contains(index) {
+                    // Кандидат — ребро ближе допуска к самому отрезку (между
+                    // почти параллельными отрезками ближайшая пара — концы):
+                    // соседняя параллельная улица в 40 м шагам не достаётся.
+                    // Плоскость с одним косинусом на набор — с запасом 10 %
+                    // (страна — 37–46° широты); точное расстояние считают шаги.
+                    let e = planar[Int(index)]
+                    let limit = AppConfig.trafficMatchMeters * 1.1
+                    let near = Self.planarDistance(px, py, e.ax, e.ay, e.bx, e.by) <= limit
+                        || Self.planarDistance(qx, qy, e.ax, e.ay, e.bx, e.by) <= limit
+                        || Self.planarDistance(e.ax, e.ay, px, py, qx, qy) <= limit
+                        || Self.planarDistance(e.bx, e.by, px, py, qx, qy) <= limit
+                    if near { out.append(index) }
+                }
+            }
+        }
+        return out
+    }
+
+    /// `matchingIndex` по готовому списку кандидатов отрезка (направление уже
+    /// проверено в `candidates`).
+    func matchingIndex(at point: CLLocationCoordinate2D, among candidates: [Int32]) -> Int? {
+        var best: (index: Int, distance: Double)?
+        for index in candidates {
+            let edge = edges[Int(index)]
+            let distance = Self.distance(point, toSegment: edge.a, edge.b)
+            guard distance <= AppConfig.trafficMatchMeters else { continue }
+            if best == nil || distance < best!.distance { best = (Int(index), distance) }
+        }
+        return best?.index
     }
 
     // MARK: - Сетка
 
     /// Ячейка ~550 м; отрезок кладётся во все ячейки своей рамки (рёбра OSM
     /// короткие — обычно одна-две).
-    private static let cellDegrees = 0.005
-
-    private static func cells(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> [Int64] {
+    private static func cells(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D, cell cellDegrees: Double) -> [Int64] {
         let pad = 0.0003   // ~30 м: точка у границы ячейки видит соседнюю
         let x0 = Int64(((min(a.longitude, b.longitude) - pad) / cellDegrees).rounded(.down))
         let x1 = Int64(((max(a.longitude, b.longitude) + pad) / cellDegrees).rounded(.down))
@@ -152,6 +248,16 @@ nonisolated struct TrafficSnapshot: Sendable {
         var out: [Int64] = []
         for x in x0...x1 { for y in y0...y1 { out.append(x << 32 | (y & 0xFFFF_FFFF)) } }
         return out
+    }
+
+    /// Расстояние от точки (x, y) до отрезка a–b на плоскости, метры.
+    private static func planarDistance(_ x: Double, _ y: Double, _ ax: Double, _ ay: Double,
+                                       _ bx: Double, _ by: Double) -> Double {
+        let dx = bx - ax, dy = by - ay
+        let len2 = dx * dx + dy * dy
+        let t = len2 > 0 ? max(0, min(1, ((x - ax) * dx + (y - ay) * dy) / len2)) : 0
+        let cx = ax + dx * t - x, cy = ay + dy * t - y
+        return (cx * cx + cy * cy).squareRoot()
     }
 
     /// Расстояние от точки до отрезка в метрах (плоское приближение — рёбра

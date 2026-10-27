@@ -227,3 +227,71 @@ def turn_penalties(conn, now, enabled=tc.LAYER_TURNS):
         if got:
             out.append(key + (got[0], got[0] - got[1]))
     return out
+
+
+# --- profile.json для телефона (33C) -------------------------------------------------
+
+def profile_edges(conn, now):
+    """Рёбра профиля для телефона: [[ulat, ulon, vlat, vlon, км/ч графа,
+    [[слот, км/ч], …]]] — только годные слоты медленнее WRITE_RATIO графа (та
+    же типичная, что идёт в маршрутизатор), только рёбра «не одного
+    человека». Ни дней, ни кусков, ни времени наблюдений — слот часа недели и
+    скорость."""
+    rows = conn.execute("""SELECT o.u, o.v, o.slot, o.day, o.kmh, e.model_kmh, a.lat, a.lon, b.lat, b.lon
+                           FROM traffic_slot_obs o
+                           JOIN traffic_shared s ON s.u = o.u AND s.v = o.v
+                           JOIN traffic_edges e ON e.u = o.u AND e.v = o.v
+                           JOIN traffic_nodes a ON a.id = o.u
+                           JOIN traffic_nodes b ON b.id = o.v
+                           WHERE o.day >= ? AND s.seen >= ? AND e.model_kmh > 0""",
+                        (tb.day_number(now) - tc.PROFILE_KEEP_DAYS, now - tb.SHARED_TTL)).fetchall()
+    grouped = {}
+    for u, v, slot, day, kmh, model, alat, alon, blat, blon in rows:
+        entry = grouped.setdefault((u, v), {"model": model, "coords": (alat, alon, blat, blon), "slots": {}})
+        entry["slots"].setdefault(slot, []).append((day, kmh))
+    out = []
+    for edge in sorted(grouped):
+        entry = grouped[edge]
+        slots = []
+        for slot in sorted(entry["slots"]):
+            v = slot_typical(entry["slots"][slot], entry["model"])
+            if v is not None and round(v) < tc.WRITE_RATIO * entry["model"]:
+                slots.append([slot, int(max(tc.SPEED_FLOOR_KMH, round(v)))])
+        if slots:
+            a, b, c, d = entry["coords"]
+            out.append([round(a, 5), round(b, 5), round(c, 5), round(d, 5), int(round(entry["model"])), slots])
+    return out
+
+
+def profile_payload(edges, now):
+    return {"v": tc.PROFILE_JSON_VERSION, "generated": int(now), "edges": edges}
+
+
+def profile_body(conn, now, max_gzip=tc.PROFILE_JSON_MAX_GZIP):
+    """(тело profile.json, рёбер, обрезано). Больше max_gzip в gzip — рёбра
+    по убыванию значимости (длина × среднее замедление по слотам), пока не
+    влезет."""
+    import gzip
+    import json
+    edges = profile_edges(conn, now)
+
+    def body(items):
+        return json.dumps(profile_payload(items, now), separators=(",", ":"))
+
+    text = body(edges)
+    if len(gzip.compress(text.encode(), 6)) <= max_gzip:
+        return text, len(edges), 0
+
+    def weight(edge):
+        k = math.cos(math.radians(edge[0])) * 111320.0
+        length = math.hypot((edge[1] - edge[3]) * k, (edge[0] - edge[2]) * 111320.0)
+        slow = sum(1 - kmh / edge[4] for _, kmh in edge[5]) / len(edge[5])
+        return -length * slow
+    ranked = sorted(edges, key=weight)
+    keep = len(ranked)
+    while keep > 0:
+        keep = int(keep * 0.9)
+        text = body(sorted(ranked[:keep]))
+        if len(gzip.compress(text.encode(), 6)) <= max_gzip:
+            break
+    return text, keep, len(edges) - keep

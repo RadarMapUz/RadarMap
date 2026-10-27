@@ -260,5 +260,46 @@ class RouteDbTest(unittest.TestCase):
         self.assertEqual(set(kept), {(1, 2), (5, 6)}, "100 м × 0,8 и 30 м × 0,9 значимее 100 м × 0,2")
 
 
+class ProfileJsonTest(RouteDbTest):
+    """33C, сервер: profile.json — годные медленные слоты для телефона."""
+
+    def test_only_valid_slow_slots_of_shared_edges(self):
+        self.evening_jam()                       # 1→2: слот 18 годен, медленный
+        self.evening_jam(3, 4, days=2)           # 3→4: два дня — не годен
+        self.evening_jam(5, 6, kmh=48.0)         # 5→6: годен, но почти граф
+        import json
+        body, count, trimmed = tp.profile_body(self.conn, at(0, 18, 10))
+        data = json.loads(body)
+        self.assertEqual((data["v"], data["generated"], count, trimmed), (1, at(0, 18, 10), 1, 0))
+        [edge] = data["edges"]
+        self.assertEqual(edge[:5], [41.3, 69.28, 41.301, 69.28, 50])
+        self.assertEqual(edge[5], [[18, round((6 * 12 + 3 * 50) / 9)]], "та же типичная, что у маршрутизатора")
+
+    def test_carries_nothing_personal(self):
+        self.evening_jam()
+        body, _, _ = tp.profile_body(self.conn, at(0, 18, 10))
+        for word in ("device", "ip", "piece", "day", "ts", "seen"):
+            self.assertNotIn(word, body)
+
+    def test_too_big_is_trimmed_by_significance(self):
+        self.evening_jam()
+        self.evening_jam(5, 6, kmh=8.0)
+        import json
+        full, _, _ = tp.profile_body(self.conn, at(0, 18, 10))
+        import gzip
+        limit = len(gzip.compress(full.encode(), 6)) - 1
+        body, count, trimmed = tp.profile_body(self.conn, at(0, 18, 10), max_gzip=limit)
+        self.assertEqual((count, trimmed), (1, 1))
+        self.assertEqual(json.loads(body)["edges"][0][5][0][1], round((6 * 8 + 3 * 50) / 9), "медленнее — значимее")
+
+    def test_written_daily_with_a_fresh_stamp(self):
+        self.evening_jam()
+        path = os.path.join(os.path.dirname(self.out), "profile.json")
+        self.assertTrue(tb.profile_due(self.conn, at(0, 18)))
+        tb.write_profile_json(self.conn, at(0, 18), path)
+        self.assertFalse(tb.profile_due(self.conn, at(0, 23)))
+        self.assertTrue(tb.profile_due(self.conn, at(1, 18)), "раз в сутки — с новой меткой")
+
+
 if __name__ == "__main__":
     unittest.main()

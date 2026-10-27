@@ -204,6 +204,19 @@ final class RouteService {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: prefetchTypical,
                                                "RouteService.prefetchTypical") }
     }
+    /// Типичные пробки по часу недели (33C, profile.json) из памяти; nil — нет
+    /// файла, он старше 36 ч или пробки выключены. Есть — время вариантов и
+    /// остатка считается во времени (TrafficTimeAhead), нет — прежний прогноз.
+    @ObservationIgnored var trafficProfile: (() -> TrafficProfile?)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: trafficProfile,
+                                               "RouteService.trafficProfile") }
+    }
+    /// Попросить profile.json, если пора; пришёл — AppEnvironment зовёт
+    /// `typicalTrafficArrived`. Маршрут его не ждёт.
+    @ObservationIgnored var prefetchProfile: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: prefetchProfile,
+                                               "RouteService.prefetchProfile") }
+    }
     /// Живые перекрытия и ремонт (12б.5) — для ярлыка «на пути перекрытие».
     /// Ставит AppEnvironment (MobileCameraService.roadEvents).
     @ObservationIgnored var roadEvents: (() -> [RoadEvent])? {
@@ -474,7 +487,19 @@ final class RouteService {
         trafficAlong = progressAlong
         let remaining = Self.remaining(selected.points, after: progressAlong)
         var live: TimeInterval = 0, typical: TimeInterval = 0
-        if let snapshot = trafficSnapshot?() {
+        let snapshot = trafficSnapshot?()
+        if let profile = trafficProfile?(), selected.distance > 0 {
+            // 33C: остаток во времени — живое на ближние 15 минут пути,
+            // дальше типичная часа недели прибытия. Мерка объезда
+            // (engineRemaining) — по-прежнему только живые, разница идёт в
+            // прибытие поправкой (может быть и отрицательной: пробка в
+            // получасе впереди к нашему приезду обычно уже рассосётся).
+            live = snapshot?.delay(along: remaining) ?? 0
+            let baseTime = selected.travelTime * remainingDistance / selected.distance
+            let ahead = TrafficTimeAhead.delay(along: remaining, baseTime: baseTime, departure: now, now: now,
+                                               live: snapshot, profile: profile)?.seconds ?? live
+            typical = ahead - live
+        } else if let snapshot {
             live = snapshot.delay(along: remaining)
         } else if selected.distance > 0 {
             // Живых нет (сборщик стоит, now.json старый) — обычная пробка
@@ -508,16 +533,17 @@ final class RouteService {
         typicalRevision &+= 1
         guard !variants.isEmpty, !isBuilding, !isRebuilding else { return }
         let live = trafficSnapshot?()
+        let profile = trafficProfile?()
         let needed = TrafficForecast.buckets(departure: now, travelTime: variants.map(\.travelTime).max() ?? 0)
         let files = typicalFiles(needed)
-        guard !files.isEmpty else { return }
+        guard !files.isEmpty || profile != nil else { return }
         let lines = variants.map { $0.polyline }
         let inputs = variants.map { (points: $0.points.map(\.coordinate), travelTime: $0.travelTime) }
         Task {
             let forecasts = await offMain {
                 inputs.map { input in
-                    TrafficForecast.delay(along: input.points, baseTime: input.travelTime, departure: now, now: now,
-                                          live: live, typical: { files[$0] })
+                    Self.variantDelay(points: input.points, travelTime: input.travelTime, now: now,
+                                      live: live, profile: profile, typical: files)
                 }
             }
             // Пока считали, маршрут могли перестроить или снять.
@@ -531,6 +557,19 @@ final class RouteService {
                 variants[index].trafficSource = forecast?.source
             }
         }
+    }
+
+    /// Задержка пробками варианта: во времени по профилю часа недели (33C),
+    /// когда он есть, иначе прежний прогноз по живым и файлам «обычно» (27.E).
+    nonisolated static func variantDelay(points: [CLLocationCoordinate2D], travelTime: TimeInterval, now: Date,
+                                         live: TrafficSnapshot?, profile: TrafficProfile?,
+                                         typical: [TypicalTraffic.Bucket: TrafficSnapshot]) -> TrafficForecast.Delay? {
+        if profile != nil, let ahead = TrafficTimeAhead.delay(along: points, baseTime: travelTime, departure: now,
+                                                              now: now, live: live, profile: profile) {
+            return ahead
+        }
+        return TrafficForecast.delay(along: points, baseTime: travelTime, departure: now, now: now,
+                                     live: live, typical: { typical[$0] })
     }
 
     /// Точки маршрута после `along` метров от начала.
@@ -1678,6 +1717,8 @@ final class RouteService {
                                                     travelTime: inputs.map(\.travelTime).max() ?? 0)
         let typicalFiles = typicalFiles(neededTypical)
         if typicalFiles.count < neededTypical.count { prefetchTypical?(neededTypical) }
+        let profile = trafficProfile?()
+        prefetchProfile?()
         // Своя дорога — только когда её план передан: при выборе вариантов
         // (если «Учитывать мои поездки» включено) и при перестроении своей
         // дорогой — там ярлык и время по своей истории сохраняются.
@@ -1697,9 +1738,8 @@ final class RouteService {
             // с пробками, а не по пустым дорогам графа. Живые — на ближние
             // полчаса пути, дальше и без них — обычные для часа (27.E).
             let forecasts = inputs.map { variant in
-                TrafficForecast.delay(along: variant.points.map(\.coordinate), baseTime: variant.travelTime,
-                                      departure: eventsNow, now: eventsNow, live: traffic,
-                                      typical: { typicalFiles[$0] })
+                Self.variantDelay(points: variant.points.map(\.coordinate), travelTime: variant.travelTime,
+                                  now: eventsNow, live: traffic, profile: profile, typical: typicalFiles)
             }
             let delays = forecasts.map { $0?.seconds }
             // Своя дорога — со временем по своим поездкам этого часа (24.4).

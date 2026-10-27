@@ -18,14 +18,27 @@ import traffic_build as tb
 import traffic_speeds as ts
 
 LINE = re.compile(r"^(\d+),(\d+),(\d+)$")
+WEIGHT_LINE = re.compile(r"^(\d+),(\d+),(\d+\.\d),(\d+\.\d{3})$")
 
 
 def parse(body):
+    """Режим duration: (u, v, км/ч)."""
     rows = []
     for line in body.splitlines():
         match = LINE.match(line)
         assert match, f"строка не в формате OSRM: {line!r}"
         rows.append(tuple(int(x) for x in match.groups()))
+    return rows
+
+
+def parse_weight(body):
+    """Режим weight: (u, v, км/ч графа, rate м/с)."""
+    rows = []
+    for line in body.splitlines():
+        match = WEIGHT_LINE.match(line)
+        assert match, f"строка не в формате OSRM (speed,rate): {line!r}"
+        u, v, speed, rate = match.groups()
+        rows.append((int(u), int(v), float(speed), float(rate)))
     return rows
 
 
@@ -44,10 +57,11 @@ class SpeedFileTest(fixture.ProfileFixture, unittest.TestCase):
         live = ts.speeds(self.conn, self.now, "now")
         self.assertTrue(live)
         published = {(row[0], row[1]): row for row in tb.live_edges(self.conn, self.now)}
-        for edge, kmh in live.items():
+        for edge, (kmh, model) in live.items():
             self.assertIn(edge, published, "только рёбра now.json")
             self.assertGreaterEqual(published[edge][6], 2, "свободный поток в граф не пишется")
-            self.assertEqual(kmh, published[edge][7])
+            self.assertEqual(kmh, max(ts.SPEED_FLOOR_KMH, published[edge][7]))
+            self.assertEqual(model, published[edge][8])
         free = {edge for edge, row in published.items() if row[6] == 1}
         self.assertFalse(free & set(live))
 
@@ -60,7 +74,7 @@ class SpeedFileTest(fixture.ProfileFixture, unittest.TestCase):
 
     def test_format_is_osrm_csv_sorted_and_never_zero(self):
         self.pieces(2, slower=40)       # почти стоим — темп упирается в пол
-        body = ts.csv_body(ts.speeds(self.conn, self.now, "now"))
+        body = ts.csv_body(ts.speeds(self.conn, self.now, "now"), "duration")
         rows = parse(body)
         self.assertTrue(rows)
         self.assertEqual(rows, sorted(rows))
@@ -76,8 +90,9 @@ class SpeedFileTest(fixture.ProfileFixture, unittest.TestCase):
         typical = ts.speeds(self.conn, self.now, "typical")
         self.assertTrue(typical)
         rows = {(r[1], r[2]): r for r in tb.typical_rows(self.conn, self.now)}
-        for edge, kmh in typical.items():
+        for edge, (kmh, model) in typical.items():
             self.assertLess(kmh, rows[edge][8] * tb.SLOW_RATIO)
+            self.assertEqual(model, rows[edge][8])
 
     def test_typical_without_graph_speed_writes_nothing(self):
         self.pieces(tb.TYPICAL_MIN_PIECES, slower=4)
@@ -102,9 +117,50 @@ class SpeedFileTest(fixture.ProfileFixture, unittest.TestCase):
         self.pieces(2, slower=8)
         merged = ts.speeds(self.conn, self.now, "auto")
         live = ts.speeds(self.conn, self.now, "now")
-        for edge, kmh in live.items():
-            self.assertEqual(merged[edge], kmh)
+        for edge, value in live.items():
+            self.assertEqual(merged[edge], value)
         self.assertTrue(set(typical) <= set(merged) | set(live))
+
+    def test_never_faster_than_the_graph_and_never_below_the_floor(self):
+        self.assertEqual(ts.bounded(30, 60), 30)
+        self.assertEqual(ts.bounded(1, 60), ts.SPEED_FLOOR_KMH, "стояние у светофора — пол, не 1 км/ч")
+        self.assertEqual(ts.bounded(80, 60), 60, "быстрее графа файл ребро не делает")
+        self.assertEqual(ts.bounded(2, 4), 4, "пол не поднимает ребро выше его скорости графа")
+        self.assertIsNone(ts.bounded(10, 0), "без скорости графа — не пишем")
+        self.assertIsNone(ts.bounded(10, None))
+
+    def test_rounding_never_lifts_an_edge_above_the_graph(self):
+        edges = {(1, 2): (60.4, 60.4), (3, 4): (4.6, 4.6), (5, 6): (12.2, 50.0)}
+        self.assertEqual(parse(ts.csv_body(edges, "duration")), [(1, 2, 60), (3, 4, 4), (5, 6, 12)])
+        weight = parse_weight(ts.csv_body(edges, "weight"))
+        for (_u, _v, speed, rate), (kmh, model) in zip(weight, edges.values()):
+            self.assertEqual(speed, round(model, 1), "время в пути — скорость графа")
+            self.assertLessEqual(rate * 3.6, model + 0.01, "вес не легче графа")
+
+    def test_weight_mode_keeps_graph_time_and_puts_the_jam_into_the_rate(self):
+        self.pieces(2, slower=4)
+        live = ts.speeds(self.conn, self.now, "now")
+        rows = parse_weight(ts.csv_body(live, "weight"))
+        self.assertEqual(len(rows), len(live))
+        for u, v, speed, rate in rows:
+            kmh, model = live[(u, v)]
+            self.assertAlmostEqual(speed, model, delta=0.05, msg="duration по графу: телефон сам прибавит пробку")
+            self.assertAlmostEqual(rate, round(kmh) / 3.6, places=3, msg="rate — м/с пробки, как forward_rate в car.lua")
+            self.assertLess(rate * 3.6, speed, "пробка медленнее графа")
+            self.assertGreaterEqual(rate * 3.6, ts.SPEED_FLOOR_KMH - 0.01)
+        for word in ("lat", "lon", "piece", "device"):
+            self.assertNotIn(word, ts.csv_body(live, "weight"))
+
+    def test_duration_mode_is_the_plain_osrm_format(self):
+        self.pieces(2, slower=4)
+        live = ts.speeds(self.conn, self.now, "now")
+        rows = parse(ts.csv_body(live, "duration"))
+        self.assertEqual({(u, v): kmh for u, v, kmh in rows},
+                         {edge: int(round(kmh)) for edge, (kmh, _m) in live.items()})
+
+    def test_bad_mode_is_refused(self):
+        with self.assertRaises(ValueError):
+            ts.csv_body({}, "guess")
 
     def test_bad_source_is_refused(self):
         with self.assertRaises(ValueError):
@@ -136,7 +192,7 @@ class MainTest(fixture.ProfileFixture, unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("записано", text)
         with open(self.path, encoding="ascii") as f:
-            self.assertTrue(parse(f.read()))
+            self.assertTrue(parse_weight(f.read()), "по умолчанию — режим weight")
         before = os.stat(self.path).st_mtime_ns
         code, text = self.run_main("--source", "now")
         self.assertIn("без изменений", text)

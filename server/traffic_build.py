@@ -98,8 +98,9 @@ traffic/now.json для телефонов.
      эффективных кусков у неё может хватать.
 
 Единица — направленное ребро OSM (u, v): ключ постоянен между обновлениями
-графа, и это тот же формат, что `--segment-speed-file` у OSRM (следующий
-шаг — MLD + customize, маршрут прямо с учётом пробок).
+графа, и это тот же формат, что `--segment-speed-file` у OSRM: по нему
+traffic_speeds.py пишет файл скоростей для стенда MLD + customize, где
+маршрут сам объезжает пробку (32D, server/osrm/TRAFFIC.md).
 """
 import datetime
 import fcntl

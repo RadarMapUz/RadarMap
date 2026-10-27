@@ -849,22 +849,6 @@
         }
       }
     },
-    "Считаем по вашим трекам на телефоне: три минуты подряд медленнее 10 км/ч — пробка, короткий светофор — нет. Заезды по пути (магазин, заправка) не входят. Места и часы — по поездкам последних 30 дней.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Считаем по вашим трекам на телефоне: три минуты подряд медленнее 10 км/ч — пробка, короткий светофор — нет. Заезды по пути (магазин, заправка) не входят. Места и часы — по поездкам последних 30 дней."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Telefondagi treklaringiz boʻyicha hisoblaymiz: ketma-ket uch daqiqa 10 km/soatdan sekin — tirbandlik, qisqa svetofor — yoʻq. Yoʻl-yoʻlakay toʻxtashlar (doʻkon, yoqilgʻi quyish) kirmaydi. Joylar va soatlar — oxirgi 30 kunlik safarlar boʻyicha."
-          }
-        }
-      }
-    },
     "Улица не определена": {
       "localizations": {
         "ru": {
@@ -12668,22 +12652,6 @@
         }
       }
     },
-    "Отмечать «не пришёл» можно только по сохранённым поездкам — история хранит последние 50.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Отмечать «не пришёл» можно только по сохранённым поездкам — история хранит последние 50."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "«Kelmadi» belgisini faqat saqlangan safarlarga qoʻyish mumkin — tarixda oxirgi 50 tasi saqlanadi."
-          }
-        }
-      }
-    },
     "Отмечен водителями, исчезнет ~%@": {
       "localizations": {
         "ru": {
@@ -13834,22 +13802,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Saqlanganlar orasida oshirishli safarlar yoʻq"
-          }
-        }
-      }
-    },
-    "Поездок: %1$lld · %2$@": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Поездок: %1$lld · %2$@"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Safarlar: %1$lld · %2$@"
           }
         }
       }
@@ -22091,22 +22043,6 @@
         }
       }
     },
-    "потеряно %lld": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "потеряно %lld"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "yoʻqotildi %lld"
-          }
-        }
-      }
-    },
     "правее": {
       "localizations": {
         "ru": {
@@ -22424,22 +22360,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "bosib oʻtildi"
-          }
-        }
-      }
-    },
-    "пройдено пути": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "пройдено пути"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "bosib oʻtilgan yoʻl"
           }
         }
       }
@@ -23190,22 +23110,6 @@
         }
       }
     },
-    "удержано %lld": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "удержано %lld"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "saqlab qolindi %lld"
-          }
-        }
-      }
-    },
     "уточняем положение": {
       "localizations": {
         "ru": {
@@ -23266,22 +23170,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ dan keyin, yoʻl yonida"
-          }
-        }
-      }
-    },
-    "чистая серия: %lld подряд": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "чистая серия: %lld подряд"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "toza seriya: ketma-ket %lld"
           }
         }
       }
@@ -34109,6 +33997,134 @@
           "stringUnit": {
             "state": "translated",
             "value": "0 — erkin, 10 — shahar turibdi"
+          }
+        }
+      }
+    },
+    "Не на графике — выезды в другое время: %1$lld (%2$@)": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не на графике — выезды в другое время: %1$lld (%2$@)"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grafikda yoʻq — boshqa vaqtdagi joʻnashlar: %1$lld (%2$@)"
+          }
+        }
+      }
+    },
+    "Отмечать «не пришёл» можно только по сохранённым поездкам — у самых старых остались лишь итоги дня.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отмечать «не пришёл» можно только по сохранённым поездкам — у самых старых остались лишь итоги дня."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Kelmadi» belgisini faqat saqlangan safarlarga qoʻyish mumkin — eng eskilaridan faqat kunlik yakunlar qolgan."
+          }
+        }
+      }
+    },
+    "проездов: %1$lld за %2$lld дней": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "проездов: %1$lld за %2$lld дней"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$lld kunda oʻtishlar: %1$lld"
+          }
+        }
+      }
+    },
+    "к тем же дням прошлой недели": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "к тем же дням прошлой недели"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oʻtgan haftaning shu kunlariga nisbatan"
+          }
+        }
+      }
+    },
+    "к тем же дням прошлого месяца": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "к тем же дням прошлого месяца"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oʻtgan oyning shu kunlariga nisbatan"
+          }
+        }
+      }
+    },
+    "Считаем по вашим трекам на телефоне: три минуты подряд медленнее 10 км/ч — пробка, короткий светофор — нет. Заезды по пути (магазин, заправка) не входят. Места и часы — по поездкам этого периода.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Считаем по вашим трекам на телефоне: три минуты подряд медленнее 10 км/ч — пробка, короткий светофор — нет. Заезды по пути (магазин, заправка) не входят. Места и часы — по поездкам этого периода."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telefondagi treklaringiz boʻyicha hisoblaymiz: ketma-ket uch daqiqa 10 km/soatdan sekin — tirbandlik, qisqa svetofor — yoʻq. Yoʻl-yoʻlakay toʻxtashlar (doʻkon, yoqilgʻi quyish) kirmaydi. Joylar va soatlar — shu davrdagi safarlar boʻyicha."
+          }
+        }
+      }
+    },
+    "удержано": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "удержано"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "saqlab qolindi"
+          }
+        }
+      }
+    },
+    "потеряно": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "потеряно"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yoʻqotildi"
           }
         }
       }

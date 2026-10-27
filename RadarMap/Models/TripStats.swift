@@ -1009,7 +1009,9 @@ final class TripStats {
     static let demoHome = CLLocationCoordinate2D(latitude: 41.2930, longitude: 69.2150)
     static let demoWork = CLLocationCoordinate2D(latitude: 41.3285, longitude: 69.3010)
 
-    func seedDemoCommutes() {
+    /// `outliers` (`-demoCommuteOutliers`, 34): два дневных выезда домой в
+    /// 11:30 — снимок владельца, где они растягивали ось графика на полдня.
+    func seedDemoCommutes(outliers: Bool = false) {
         // Не там, где стартует остальная демо-история (41.3110, 69.2790): её
         // утренние выезды сделали бы «работу» домом, и дорога не выучилась бы.
         let home = Self.demoHome
@@ -1050,6 +1052,19 @@ final class TripStats {
             if back2.addingTimeInterval(e.2 * 60) < now {
                 seeded.append(TripRecord(id: back2.timeIntervalSince1970, startedAt: back2,
                                          endedAt: back2.addingTimeInterval(e.2 * 60),
+                                         distanceMeters: 12_300, maxSpeedKmh: 70, passed: [],
+                                         endLat: home.latitude, endLon: home.longitude,
+                                         track: line(work, home), score: 99, endedManually: true,
+                                         startLat: work.latitude, startLon: work.longitude))
+            }
+        }
+        if outliers {
+            for (back, hour, minute, minutes) in [(3, 11, 32, 46.0), (10, 11, 48, 52.0)] {
+                guard let day = calendar.date(byAdding: .day, value: -back, to: calendar.startOfDay(for: now))
+                else { continue }
+                let start = day.addingTimeInterval(Double(hour * 3600 + minute * 60))
+                seeded.append(TripRecord(id: start.timeIntervalSince1970, startedAt: start,
+                                         endedAt: start.addingTimeInterval(minutes * 60),
                                          distanceMeters: 12_300, maxSpeedKmh: 70, passed: [],
                                          endLat: home.latitude, endLon: home.longitude,
                                          track: line(work, home), score: 99, endedManually: true,

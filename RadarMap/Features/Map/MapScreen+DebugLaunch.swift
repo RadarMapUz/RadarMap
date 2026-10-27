@@ -127,7 +127,7 @@ extension MapScreen {
                 // После чтения истории с диска: прочитанное позже вливается
                 // поверх демо, и строки профиля не совпали бы с поездками.
                 while !env.trip.isLoaded { await Task.pause(seconds: 0.2) }
-                env.trip.seedDemoCommutes()
+                env.trip.seedDemoCommutes(outliers: args.contains("-demoCommuteOutliers"))
                 env.commuteProfiles.seedDemo(home: TripStats.demoHome, work: TripStats.demoWork,
                                              trips: env.trip.history)
                 env.refreshLearnedPlaces()

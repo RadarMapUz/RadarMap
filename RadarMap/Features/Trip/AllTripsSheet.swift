@@ -170,15 +170,16 @@ struct AllTripsSheet: View {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        Text(record.startedAt.formatted(.dateTime.day().month(.abbreviated)
-                                                          .hour().minute()
-                                                          .locale(NumberFormat.locale)))
+                        // Время — тем же форматом, что во всех «Итогах» (34):
+                        // «26 окт., 09:00» здесь против «Вчера, 9:00» в разборе.
+                        Text(Formatting.dateAndClock(record.startedAt, .dateTime.day().month(.abbreviated)))
                             .font(.rounded(14, .semibold))
                             .foregroundStyle(Theme.textPrimary)
                         // Куда приехали — «→ Работа»: строку узнают по цели,
                         // а не по времени старта.
                         if let finish {
-                            Text(finish == .home ? "→ Дом" : "→ Работа")
+                            // Две строки каталога, не тернарник литералов (правило 7).
+                            Text(finish == .home ? String(localized: "→ Дом") : String(localized: "→ Работа"))
                                 .font(.rounded(12, .semibold))
                                 .foregroundStyle(Theme.accent)
                         }

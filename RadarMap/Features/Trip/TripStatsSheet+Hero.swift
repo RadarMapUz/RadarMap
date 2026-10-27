@@ -153,18 +153,10 @@ extension TripStatsSheet {
                     .font(.rounded(13))
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                if trip.isLifetimeTrusted, trip.lifetime.cleanStreak >= 2 {
-                    // Огонёк цветной, подпись — обычным вторичным текстом:
-                    // коричневая строка читалась как предупреждение, а это похвала.
-                    HStack(spacing: 4) {
-                        Image(systemName: "flame.fill")
-                            .foregroundStyle(Theme.warning)
-                        Text(String(format: String(localized: "чистая серия: %lld подряд"),
-                                    trip.lifetime.cleanStreak))
-                            .foregroundStyle(Theme.textSecondary)
-                    }
-                    .font(.rounded(13))
-                }
+                // «Чистая серия: N подряд» ушла (34): пожизненный счётчик
+                // проездов в карточке «за неделю» (правило 14) и четвёртая
+                // «серия» на листе — рядом «Серия: N недель» цели недели и
+                // «5 чистых подряд» ближайшего достижения.
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.right")
@@ -216,7 +208,7 @@ extension TripStatsSheet {
     /// «+18 км к прошлой неделе» или «+12 % к прошлой неделе» — процент
     /// только у сопоставимых периодов (PeriodSummary.distanceChange).
     func distanceChangeText(_ change: DistanceChange) -> String {
-        let versus = period.versusPrevious
+        let versus = change.soFar ? period.versusPreviousSoFar : period.versusPrevious
         if let percent = change.percent {
             return String(format: String(localized: "%1$@ %% %2$@"), Formatting.signed(percent), versus)
         }
@@ -234,7 +226,10 @@ extension TripStatsSheet {
     /// «Держите 60 у «Ц-1, Амир Темур»: проезды выше лимита — 2 из 3. Это
     /// 1,1 млн сум возможных штрафов». Сумма — только достоверная (ActionHint.fine), лимит —
     /// только известный; без них фраза короче, а не с выдуманным числом.
-    func actionText(_ hint: ActionHint) -> String {
+    /// `periodRisk` — сумма карточки «Возможные штрафы» прямо над подсказкой:
+    /// если вся она от этой камеры, «Это 2,2 млн сум» повторяло бы ту же
+    /// цифру второй раз подряд (34) — тогда фраза без суммы.
+    func actionText(_ hint: ActionHint, periodRisk: Double = 0) -> String {
         // Счётное слово — перед числами: «проезды выше лимита — 2 из 3» не
         // зависит от формы числа ни в русском, ни в узбекском.
         var text = hint.limitKmh.map {
@@ -242,7 +237,7 @@ extension TripStatsSheet {
                    $0, hint.location, hint.over, hint.passes)
         } ?? String(format: String(localized: "Сбавьте у «%1$@»: проезды выше лимита — %2$lld из %3$lld"),
                     hint.location, hint.over, hint.passes)
-        if hint.fine > 0 {
+        if hint.fine > 0, abs(hint.fine - periodRisk) >= 1 {
             text += ". " + String(format: String(localized: "Это %@ возможных штрафов."), Formatting.money(hint.fine))
         }
         return text

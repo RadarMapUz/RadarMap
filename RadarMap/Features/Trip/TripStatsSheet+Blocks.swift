@@ -95,7 +95,7 @@ extension TripStatsSheet {
     /// превышений нет — вывод разбора («стали ездить чище», оговорка о лимитах).
     func hintLine(_ itogi: ItogiScreen) -> (symbol: String, tint: Color, text: String)? {
         if let action = itogi.action {
-            return ("hand.raised.fill", Theme.warning, actionText(action))
+            return ("hand.raised.fill", Theme.warning, actionText(action, periodRisk: itogi.summary.fineRisk))
         }
         if let insight = itogi.insights.first {
             return (insight.icon, Self.insightTint(insight.kind), insight.text)

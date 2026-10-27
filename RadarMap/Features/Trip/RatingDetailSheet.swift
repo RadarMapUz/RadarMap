@@ -260,10 +260,8 @@ struct RatingDetailSheet: View {
                 if let delta = summary.ratingDelta {
                     deltaBadge(delta)
                 }
-                Text(String(format: String(localized: "Поездок: %1$lld · %2$@"),
-                            summary.trips, Formatting.distance(summary.distance)))
-                    .font(.rounded(15))
-                    .foregroundStyle(Theme.textSecondary)
+                // «Поездок: 2 · 20,5 км» ушло (34): это герой «Итогов» под
+                // этим же листом, слово в слово.
             }
             Spacer(minLength: 0)
         }
@@ -315,12 +313,11 @@ struct RatingDetailSheet: View {
                     }
                 }
 
+                // Легенда — цветами, без чисел (34): «удержано 65 · потеряно
+                // 35» под «100 − 35 = 65» было тем же рейтингом в третий раз.
                 HStack(spacing: 14) {
-                    legendDot(TripHistorySection.scoreColor(rating),
-                              String(format: String(localized: "удержано %lld"), rating))
-                    legendDot(Theme.danger,
-                              String(format: String(localized: "потеряно %lld"),
-                                     Int((100 - Double(rating)).rounded())))
+                    legendDot(TripHistorySection.scoreColor(rating), String(localized: "удержано"))
+                    legendDot(Theme.danger, String(localized: "потеряно"))
                     Spacer(minLength: 0)
                 }
 
@@ -359,6 +356,14 @@ struct RatingDetailSheet: View {
                      delta, baseline.median)
             : String(format: String(localized: "На %1$lld балла ниже вашей нормы (обычно %2$lld)."),
                      -delta, baseline.median)
+    }
+
+    /// Дни для подписей оси: не больше четырёх, все — полночь дня точки.
+    private var dayAxisValues: [Date] {
+        let days = data.daily.map(\.day)
+        guard days.count > 4 else { return days }
+        let step = Int((Double(days.count) / 4).rounded(.up))
+        return days.enumerated().filter { $0.offset % step == 0 }.map(\.element)
     }
 
     private var ratingChart: some View {
@@ -402,8 +407,11 @@ struct RatingDetailSheet: View {
                 AxisValueLabel().font(.rounded(9)).foregroundStyle(Theme.textTertiary)
             }
         }
+        // Подписи — только целыми днями (34): «automatic» на двух соседних днях
+        // ставил метки через 12 часов, и ось читалась «26 окт., 26 окт.,
+        // 27 окт., 27 окт.». Мало точек — подпись у каждой, много — шагом.
         .chartXAxis {
-            AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+            AxisMarks(values: dayAxisValues) { _ in
                 AxisValueLabel(format: .dateTime.day().month(.abbreviated))
                     .font(.rounded(9)).foregroundStyle(Theme.textTertiary)
             }
@@ -490,14 +498,16 @@ struct RatingDetailSheet: View {
                     .frame(width: 32, height: 32)
                     .background(Theme.quietFill, in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
+                    // Переносится, а не режется (34): «27 окт. 19:06 · 88 при ли…»
+                    // на SE обрезало ровно лимит — то, ради чего строка.
                     Text(hotspot.location)
                         .font(.rounded(14, .semibold))
                         .foregroundStyle(Theme.textPrimary)
-                        .lineLimit(1)
+                        .lineLimit(2)
                     Text(hotspotDetail(hotspot))
                         .font(.rounded(11))
                         .foregroundStyle(Theme.textTertiary)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
                 Text(Formatting.points(hotspot.points))
@@ -611,21 +621,25 @@ struct RatingDetailSheet: View {
                             points: rest.reduce(0) { $0 + $1.points })
                 }
 
-                Button {
-                    path.append(.allContributions)
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(String(format: String(localized: "Все вклады (%lld)"), items.count))
-                            .font(.rounded(15, .semibold))
-                        Image(systemName: "chevron.right")
-                            .font(.rounded(10, .bold))
+                // «Все вклады (2)» под двумя показанными строками вёл на тот
+                // же список (34) — ссылка только когда что-то скрыто.
+                if !rest.isEmpty {
+                    Button {
+                        path.append(.allContributions)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(String(format: String(localized: "Все вклады (%lld)"), items.count))
+                                .font(.rounded(15, .semibold))
+                            Image(systemName: "chevron.right")
+                                .font(.rounded(10, .bold))
+                        }
+                        .foregroundStyle(Theme.accent)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 2)
+                        .contentShape(Rectangle())
                     }
-                    .foregroundStyle(Theme.accent)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 2)
-                    .contentShape(Rectangle())
+                    .buttonStyle(PressableStyle())
                 }
-                .buttonStyle(PressableStyle())
 
                 if data.unrated > 0 {
                     Text(String(localized: "Ещё \(data.unrated) поездок без известных лимитов и трека — в рейтинг они не вошли"))

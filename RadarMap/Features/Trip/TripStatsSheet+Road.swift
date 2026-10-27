@@ -68,8 +68,10 @@ extension TripStatsSheet {
                                 Self.percentText(min(1, jam / summary.movingDuration))))
         }
         if let peak = jams.peakBlock, peak.share >= AppConfig.insightPeakShare {
-            parts.append(String(format: String(localized: "чаще %@"),
-                                PeakBlock(index: peak.index, count: 0, share: peak.share).title))
+            // Связки вокруг тире (34): «чаще 08:00–» / «12:00» рвалось на SE.
+            let hours = PeakBlock(index: peak.index, count: 0, share: peak.share).title
+                .replacingOccurrences(of: "–", with: "\u{2060}–\u{2060}")
+            parts.append(String(format: String(localized: "чаще %@"), hours))
         }
         return parts.joined(separator: " · ")
     }
@@ -123,7 +125,10 @@ struct RoadHabitSheet: View {
     let payload: RoadHabitPayload
 
     /// Улицы мест — по индексу места; nil — улицу не назвать.
-    @State private var streets: [Int: String] = [:]
+    /// Строки мест с подписью улицы — после адресника, слитые по улице (34):
+    /// две пробки на одной улице были двумя строками «улица Навои» подряд.
+    /// nil — адресник ещё читается, показываем места без слияния.
+    @State private var named: [PlaceRow]?
 
     var body: some View {
         NavigationStack {
@@ -189,7 +194,7 @@ struct RoadHabitSheet: View {
 
     @ViewBuilder
     private var placesCard: some View {
-        let rows = placeRows
+        let rows = named ?? placeRows
         if !rows.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
                 SectionHeader(payload.kind == .jams ? String(localized: "Где стояли дольше всего")
@@ -198,17 +203,17 @@ struct RoadHabitSheet: View {
                     ForEach(rows.indices, id: \.self) { index in
                         if index > 0 { Divider().overlay(Theme.stroke) }
                         HStack(alignment: .firstTextBaseline) {
-                            Text(streets[index] ?? String(localized: "Улица не определена"))
+                            Text(rows[index].street ?? String(localized: "Улица не определена"))
                                 .font(.rounded(15, .semibold))
                                 .foregroundStyle(Theme.textPrimary)
                                 .fixedSize(horizontal: false, vertical: true)
                             Spacer(minLength: 8)
-                            Text(rows[index].value)
+                            Text(rows[index].value(payload.kind))
                                 .font(.rounded(15, .bold).monospacedDigit())
                                 .foregroundStyle(Theme.textPrimary)
                         }
                         .padding(.vertical, 10)
-                        Text(rows[index].caption)
+                        Text(rows[index].caption(payload.kind))
                             .font(.rounded(13))
                             .foregroundStyle(Theme.textSecondary)
                             .padding(.bottom, 10)
@@ -220,25 +225,45 @@ struct RoadHabitSheet: View {
         }
     }
 
+    /// Место — числами, а подписи собираются при показе: так два места одной
+    /// улицы складываются честно (секунды и разы — суммой, скорость — максимумом).
     private struct PlaceRow {
         let coordinate: CLLocationCoordinate2D
-        let value: String
-        let caption: String
+        var street: String?
+        var seconds: TimeInterval = 0
+        var times: Int
+        var limitKmh = 0
+        var maxKmh: Double = 0
+
+        func value(_ kind: RoadHabitPayload.Kind) -> String {
+            kind == .jams ? Formatting.duration(seconds)
+                          : String(format: String(localized: "лимит %lld"), limitKmh)
+        }
+
+        func caption(_ kind: RoadHabitPayload.Kind) -> String {
+            kind == .jams
+                ? String(localized: "Вставали в пробку: \(times) раз")
+                : String(format: String(localized: "%1$@ · до %2$lld км/ч"),
+                         String(localized: "\(times) раз"), Int(maxKmh.rounded()))
+        }
+
+        /// Ключ слияния: улица, а для «выше лимита» — ещё и лимит: «лимит 60»
+        /// и «лимит 80» одной длинной улицы — разные места.
+        func key(_ kind: RoadHabitPayload.Kind) -> String? {
+            guard let street else { return nil }
+            return kind == .jams ? street : "\(street)|\(limitKmh)"
+        }
     }
 
     private var placeRows: [PlaceRow] {
         switch payload.kind {
         case .jams:
-            return payload.jams.places.map { place in
-                PlaceRow(coordinate: place.coordinate, value: Formatting.duration(place.seconds),
-                         caption: String(localized: "Вставали в пробку: \(place.times) раз"))
+            return payload.jams.places.map {
+                PlaceRow(coordinate: $0.coordinate, seconds: $0.seconds, times: $0.times)
             }
         case .overLimit:
-            return payload.places.map { place in
-                PlaceRow(coordinate: place.coordinate,
-                         value: String(format: String(localized: "лимит %lld"), place.limitKmh),
-                         caption: String(format: String(localized: "%1$@ · до %2$lld км/ч"),
-                                         String(localized: "\(place.times) раз"), Int(place.maxKmh.rounded())))
+            return payload.places.map {
+                PlaceRow(coordinate: $0.coordinate, times: $0.times, limitKmh: $0.limitKmh, maxKmh: $0.maxKmh)
             }
         }
     }
@@ -261,9 +286,11 @@ struct RoadHabitSheet: View {
         }
     }
 
+    /// «по поездкам этого периода», а не «последних 30 дней» (34): места и
+    /// часы строятся из записей выбранного окна (ItogiScreen.jams).
     private var explanation: some View {
         Text(payload.kind == .jams
-             ? String(localized: "Считаем по вашим трекам на телефоне: три минуты подряд медленнее 10 км/ч — пробка, короткий светофор — нет. Заезды по пути (магазин, заправка) не входят. Места и часы — по поездкам последних 30 дней.")
+             ? String(localized: "Считаем по вашим трекам на телефоне: три минуты подряд медленнее 10 км/ч — пробка, короткий светофор — нет. Заезды по пути (магазин, заправка) не входят. Места и часы — по поездкам этого периода.")
              : String(localized: "Это не про штрафы: путь у камер сюда не входит, у них своя карточка. Считаем по лимиту дороги из OpenStreetMap, когда он известен, и только заметные превышения — на 10 км/ч и больше. С телефона ничего не уходит."))
             .font(.rounded(13))
             .foregroundStyle(Theme.textSecondary)
@@ -272,14 +299,25 @@ struct RoadHabitSheet: View {
 
     /// Улица ближайшего дома — свой адресник, один файл на клетку за проход.
     private func loadStreets() async {
-        var found: [Int: String] = [:]
-        for (index, row) in placeRows.enumerated() {
-            guard let book = await env.roads.addressBook(for: row.coordinate),
-                  let address = book.nearest(to: row.coordinate, within: AppConfig.commuteLossNameMeters),
+        var rows = placeRows
+        for index in rows.indices {
+            let point = rows[index].coordinate
+            guard let book = await env.roads.addressBook(for: point),
+                  let address = book.nearest(to: point, within: AppConfig.commuteLossNameMeters),
                   !address.street.isEmpty else { continue }
             if Task.isCancelled { return }
-            found[index] = StreetName.display(address.street, language: env.settings.appLanguage.mapCode)
+            rows[index].street = StreetName.display(address.street, language: env.settings.appLanguage.mapCode)
         }
-        streets = found
+        let kind = payload.kind
+        let merged = PlaceMerge.byStreet(rows, street: { $0.key(kind) }) { lhs, rhs in
+            var sum = lhs
+            sum.seconds += rhs.seconds
+            sum.times += rhs.times
+            sum.maxKmh = max(lhs.maxKmh, rhs.maxKmh)
+            return sum
+        }
+        // Порядок — как у движка: пробки — по времени, «выше лимита» — по разам.
+        named = kind == .jams ? merged.sorted { $0.seconds > $1.seconds }
+                              : merged.sorted { $0.times > $1.times }
     }
 }

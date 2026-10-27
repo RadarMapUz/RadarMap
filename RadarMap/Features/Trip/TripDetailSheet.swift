@@ -629,7 +629,7 @@ struct TripDetailContent: View {
         var items: [MetricsCard.Item] = [
             .init(value: Formatting.duration(record.duration), label: String(localized: "в пути"),
                   icon: "clock"),
-            .init(value: Formatting.distance(record.distanceMeters), label: String(localized: "пройдено пути"),
+            .init(value: Formatting.distance(record.distanceMeters), label: String(localized: "пройдено"),
                   icon: "point.topleft.down.to.point.bottomright.curvepath"),
             .init(value: "\(record.camerasPassed)", label: Formatting.passesLabel(record.camerasPassed),
                   icon: Icon.cameras),

@@ -89,8 +89,10 @@ struct PeriodShareCard: View {
                             label: Formatting.tripsLabel(summary.trips),
                             icon: "car.fill", tint: Theme.accent)
                 ShareMetricDivider()
+                // Проезды, не камеры (34): одна камера дважды была «2 камеры»,
+                // а в «Итогах» то же число — «проезда камер».
                 ShareMetric(value: "\(summary.cameras)",
-                            label: Formatting.camerasLabel(summary.cameras),
+                            label: Formatting.passesLabel(summary.cameras),
                             icon: "camera.fill", tint: Theme.Types.camera)
                 ShareMetricDivider()
                 ShareMetric(value: Formatting.duration(summary.movingDuration),

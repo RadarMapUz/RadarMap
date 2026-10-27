@@ -24,10 +24,12 @@ extension FinesScreen {
                     IconBadge(symbol: fine.isPaid ? "checkmark.seal.fill" : "doc.text.fill",
                               tint: fine.isPaid ? Theme.success : Theme.Icon.money, size: 34)
                     VStack(alignment: .leading, spacing: 2) {
+                        // Три строки (34): «Toshkent sh., Chilonzor tu…» на SE
+                        // обрезало адрес до района — по нему постановление и узнают.
                         Text(fine.place ?? String(localized: "Место не указано"))
                             .font(.rounded(14, .semibold))
                             .foregroundStyle(Theme.textPrimary)
-                            .lineLimit(2)
+                            .lineLimit(3)
                         if let at = fine.violationAt {
                             Text(FineFormat.moment(at, withTime: fine.timeKnown == true))
                                 .font(.rounded(11))

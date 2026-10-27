@@ -27,9 +27,27 @@ struct CommuteDetailSheet: View {
         let id: Int
         /// Улица; nil — в адреснике рядом ничего (подписью станет расстояние).
         let street: String?
-        /// Середина отрезка от начала пути, м.
-        let fromStart: Double
-        let lostMinutes: Int
+        /// Начало и конец места по пути, м от начала (после слияния по
+        /// улице — от первого отрезка до последнего).
+        let startMeters: Double
+        let endMeters: Double
+        let lostSeconds: Double
+
+        /// Середина места от начала пути, м.
+        var fromStart: Double { (startMeters + endMeters) / 2 }
+        var lostMinutes: Int { max(1, Int((lostSeconds / 60).rounded())) }
+
+        /// Два медленных отрезка одной улицы — одно место (34): время
+        /// складывается, протяжённость — от первого до последнего.
+        static func merged(_ places: [LossPlace]) -> [LossPlace] {
+            PlaceMerge.byStreet(places, street: \.street) { lhs, rhs in
+                LossPlace(id: lhs.id, street: lhs.street,
+                          startMeters: min(lhs.startMeters, rhs.startMeters),
+                          endMeters: max(lhs.endMeters, rhs.endMeters),
+                          lostSeconds: lhs.lostSeconds + rhs.lostSeconds)
+            }
+            .sorted { $0.lostSeconds > $1.lostSeconds }
+        }
     }
 
     var body: some View {
@@ -38,7 +56,7 @@ struct CommuteDetailSheet: View {
                 VStack(alignment: .leading, spacing: 16) {
                     CommuteCard(summary: summary, showsChevron: false,
                                 monthlyCost: env.energyLedger.monthly(summary.trips, now: Date()),
-                                crowdUsual: env.crowdUsual(summary.direction))
+                                crowdUsual: env.crowdUsual(summary.direction), inDetail: true)
                     chartCard
                     if let accuracy = env.commuteProfiles.accuracyStats(summary.direction) {
                         CommuteAccuracyCard(stats: accuracy)
@@ -147,19 +165,29 @@ struct CommuteDetailSheet: View {
             for stretch in list {
                 places.append(LossPlace(id: stretch.segments.lowerBound,
                                         street: await name(at: stretch.midpoint),
-                                        fromStart: (stretch.startMeters + stretch.endMeters) / 2,
-                                        lostMinutes: stretch.lostMinutes))
+                                        startMeters: stretch.startMeters, endMeters: stretch.endMeters,
+                                        lostSeconds: stretch.lostSeconds))
             }
             if Task.isCancelled { return }
-            found[id] = places
+            found[id] = LossPlace.merged(places)
             // Карточка последней поездки не ждёт весь список.
             if id == summary.last.id { losses = found }
         }
         losses = found
     }
 
+    /// Ось графика (34): по основной массе выездов, шаг подписей — по ширине.
+    private var axis: CommuteChartAxis.Layout {
+        let window = summary.best.map { $0.startMinute...($0.startMinute + AppConfig.commuteBucketMinutes) }
+        return CommuteChartAxis.layout(departures: summary.trips.map { Commute.minuteOfDay($0.departure) },
+                                       window: window)
+    }
+
     private var chartCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let axis = self.axis
+        let outside = Set(axis.outside)
+        let shown = summary.trips.enumerated().filter { !outside.contains($0.offset) }.map(\.element)
+        return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
                 IconBadge(symbol: "clock.fill", tint: Theme.Icon.time, size: 28)
                 Text("Когда выезжали и сколько ехали")
@@ -183,7 +211,7 @@ struct CommuteDetailSheet: View {
                                 .foregroundStyle(Theme.textTertiary)
                         }
                 }
-                ForEach(summary.trips) { trip in
+                ForEach(shown) { trip in
                     PointMark(
                         x: .value("Выезд", Self.today(Commute.minuteOfDay(trip.departure))),
                         y: .value("Минут", trip.duration / 60))
@@ -191,11 +219,12 @@ struct CommuteDetailSheet: View {
                         .symbolSize(trip.id == summary.last.id ? 90 : 50)
                 }
             }
-            // Ось — ровные получасы, с запасом под окно-совет: от данных она
-            // начиналась с «18:12» и обрезала окно справа.
-            .chartXScale(domain: Self.today(xDomain.lowerBound)...Self.today(xDomain.upperBound))
+            // Ось — ровные часы по основной массе выездов, с окном-советом;
+            // шаг подписей по ширине (CommuteChartAxis): подписи каждые
+            // полчаса через семь часов слипались в «11:3012:00…».
+            .chartXScale(domain: Self.today(axis.domain.lowerBound)...Self.today(axis.domain.upperBound))
             .chartXAxis {
-                AxisMarks(values: .stride(by: .minute, count: 30)) { value in
+                AxisMarks(values: .stride(by: .minute, count: axis.stride)) { value in
                     AxisGridLine().foregroundStyle(Theme.stroke)
                     AxisValueLabel(format: .dateTime.hour().minute())
                 }
@@ -210,6 +239,14 @@ struct CommuteDetailSheet: View {
             }
             .frame(height: 200)
             .accessibilityLabel(Text("График: время выезда и время в пути"))
+            if !axis.outside.isEmpty {
+                // Редкий выезд в другое время — словами, а не точкой, ради
+                // которой ось растягивалась на полдня.
+                Text(Self.outsideLine(axis.outside.map { summary.trips[$0] }))
+                    .font(.rounded(11))
+                    .foregroundStyle(Theme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .statCard()
     }
@@ -266,16 +303,13 @@ struct CommuteDetailSheet: View {
         .statCard()
     }
 
-    /// Минуты от полуночи, в которые укладываются все выезды и окно-совет,
-    /// округлённые до получаса наружу.
-    private var xDomain: ClosedRange<Int> {
-        var minutes = summary.trips.map { Commute.minuteOfDay($0.departure) }
-        if let best = summary.best {
-            minutes += [best.startMinute, best.startMinute + AppConfig.commuteBucketMinutes]
-        }
-        let low = ((minutes.min() ?? 0) / 30) * 30
-        let high = (((minutes.max() ?? 30) + 29) / 30) * 30
-        return low...max(high, low + 30)
+    /// «Не на графике: 2 поездки в другое время — 11:32, 11:48» (до трёх времён).
+    static func outsideLine(_ trips: [Commute.Trip]) -> String {
+        let times = trips.sorted { Commute.minuteOfDay($0.departure) < Commute.minuteOfDay($1.departure) }
+            .prefix(3).map { Formatting.clock($0.departure) }
+            .joined(separator: ", ") + (trips.count > 3 ? "…" : "")
+        return String(format: String(localized: "Не на графике — выезды в другое время: %1$lld (%2$@)"),
+                      trips.count, times)
     }
 
     /// «+12 мин» / «−6 мин» / «≈» — коротко в строке списка.

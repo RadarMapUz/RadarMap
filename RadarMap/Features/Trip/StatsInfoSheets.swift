@@ -45,8 +45,10 @@ struct FinesExplainer: View {
     /// общему риску за то же окно — блок можно проверить сложением.
     /// Данные из .task, не из body: полный перебор истории со всеми проездами
     /// на каждый пересчёт вьюхи — ровно то, от чего ушёл RatingDetailSheet.
+    /// Одна камера — та же сумма, что шапка листа и строка проезда над ней:
+    /// «Откуда сумма» говорило её третий раз подряд (34). Список — с двух.
     @ViewBuilder private var sourcesSection: some View {
-        if !sources.isEmpty {
+        if sources.count >= 2 {
             infoCard(title: String(localized: "Откуда сумма")) {
                 ForEach(sources.prefix(AppConfig.fineSourcesVisibleRows)) { source in
                     HStack(spacing: 10) {

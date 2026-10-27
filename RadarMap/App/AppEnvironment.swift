@@ -107,6 +107,10 @@ final class AppEnvironment {
     /// «Обычно по водителям» (8.8.16): файлы traffic/typical по запросу — для
     /// дороги на работу, пока своих поездок меньше трёх.
     let typicalTraffic = TypicalTrafficService()
+    /// Типичные пробки по часу недели (33C) — время прибытия во времени.
+    let trafficProfile = TrafficProfileService()
+    /// Личный темп (33E) — поправка времени прибытия, только на телефоне.
+    let personalPace = PersonalPaceStore()
     /// Погода на перевалах (19.2): файл сервера по open-meteo, одна фраза и
     /// баннер о снеге или тумане впереди. На оповещения о камерах не влияет.
     let roadWeather: RoadWeatherService
@@ -566,6 +570,24 @@ final class AppEnvironment {
         // Обычная пробка часа в ETA любого маршрута (27.E): маршрут берёт
         // файлы из памяти и просит недостающие; пришли — досчитывает время.
         route.typicalTraffic = { [weak typicalTraffic] bucket in typicalTraffic?.cached(bucket)?.snapshot }
+        // Профиль часа недели (33C): те же выключатели (пульт `features.traffic`
+        // и «Пробки»), маршрут берёт его из памяти и просит обновить; пришёл
+        // новый — время вариантов и остатка пересчитывается.
+        trafficProfile.isAllowed = { [weak traffic] in traffic?.isShown ?? false }
+        trafficProfile.isOnline = { [weak network] in network?.isOnline ?? false }
+        route.trafficProfile = { [weak trafficProfile] in trafficProfile?.current() }
+        // Личный темп (33E): «Учитывать мою манеру езды» и пульт пробок.
+        personalPace.isEnabled = { [weak settings, weak config] in
+            (settings?.personalPace ?? false) && (config?.current.isTrafficEnabled ?? true)
+        }
+        route.paceFactor = { [weak personalPace] roadClass in personalPace?.factor(for: roadClass) ?? 1 }
+        route.onPaceSample = { [weak personalPace] sample in personalPace?.add(sample) }
+        route.prefetchProfile = { [weak trafficProfile, weak route] in
+            guard let trafficProfile else { return }
+            Task {
+                if await trafficProfile.refreshIfDue() { route?.typicalTrafficArrived() }
+            }
+        }
         route.prefetchTypical = { [weak typicalTraffic, weak route] buckets in
             guard let typicalTraffic else { return }
             // Досчитывать — только если что-то пришло или сменилось: часа,

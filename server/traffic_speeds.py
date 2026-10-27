@@ -9,6 +9,7 @@ server/osrm/traffic_customize.sh; в cron НЕ подключено).
 пересчитывает веса по этому файлу раз в несколько минут, и маршрут сам
 обходит пробку. Схема сборки и выкладки — в шапке build_osrm_mld.sh.
 
+    python3 traffic_speeds.py --source route    # 33A: профиль часа недели + живые (для customize)
     python3 traffic_speeds.py --source now      [--db …] [--out speeds.csv]
     python3 traffic_speeds.py --source typical  [--bucket wd-08]
     python3 traffic_speeds.py --source auto     # now, где он есть, иначе «обычно» часа
@@ -32,8 +33,38 @@ server/osrm/traffic_customize.sh; в cron НЕ подключено).
     profile»). Время маршрута уже с пробкой — годится, только когда телефон
     перестанет прибавлять свою задержку к такому ответу.
 
-Правила — те же, что у телефона, и по той же причине (честность важнее
-частоты):
+Источник `route` (33A, docs/spec_traffic_33.md) — то, что идёт в
+маршрутизатор: типичная скорость слота часа недели по медиане и числу
+разных дней, сжатая к графу, живые куски поверх с весом по их числу и
+возрасту, гистерезис против дребезга — формулы в traffic_profile.py,
+константы в traffic_config.py. Инварианты этого источника:
+  * отказ = граф: любая ошибка — файл пишется ПУСТЫМ, не прошлым, и выход 1;
+  * один запуск за раз (flock на <out>.lock), второй выходит с журналом;
+  * итог в [5 км/ч, граф], пишется только < 0,85 графа;
+  * потолки: MAX_SPEED_EDGES строк и MAX_FILE_BYTES; сверх — обрезка по
+    убыванию значимости (длина ребра × замедление) и «ПОТОЛОК» в журнале;
+  * одна строка журнала на запуск: слоты, рёбер типичных/живых, записано,
+    время шагов, итог (ок / пусто / ошибка).
+С --turns-out тот же запуск пишет файл --turn-penalty-file (33B):
+`from_osm,via_osm,to_osm,секунд` — медиана задержки манёвра в слоте часа
+недели, только где она больше штрафа профиля на 5 с (traffic_profile.
+turn_penalties); потолок MAX_TURNS по превышению над профилем. Ошибка —
+пустыми оба файла.
+С --reports-db (33D) в тот же файл ложатся события водителей: ДТП и
+перекрытия, подтверждённые независимыми водителями (перекрытие — двумя,
+ДТП — одним; другое устройство И другой адрес, правило api.
+confirmed_independently), — на время жизни отметки, не дольше
+EVENT_MAX_AGE: перекрытие — 5 км/ч на рёбрах в 30 м от точки (по курсу
+отметившего, без курса — в обе стороны), ДТП — 0,6 графа в обе стороны. На
+общем ребре с пробкой берётся меньшая скорость. Рёбра отметки — путь OSRM
+стенда на ±30 м вдоль дороги; ответ кэшируется по id отметки (--events-cache)
+и считается один раз, до того как штраф попал в граф: иначе следующий цикл
+искал бы путь в объезд собственного штрафа. Неподтверждённые — только показ.
+Источники now/typical/auto ниже — прежние (32D), для проверки руками; цикл
+стенда берёт route.
+
+Правила прежних источников — те же, что у телефона, и по той же причине
+(честность важнее частоты):
   * now — ровно рёбра now.json (traffic_build.live_edges: MIN_PIECES
     свидетелей за SAMPLE_WINDOW), и ТОЛЬКО медленные (уровень ≥ 2). Свободный
     поток в граф не пишется: «быстрее car.lua» по двум машинам — догадка, а
@@ -60,15 +91,22 @@ server/osrm/traffic_customize.sh; в cron НЕ подключено).
 скорость; лежит рядом с графом.
 """
 import argparse
+import fcntl
+import json
+import math
 import os
 import sqlite3
 import sys
 import time
+import urllib.error
+import urllib.request
 
 import traffic_build as tb
+import traffic_config as tc
+import traffic_profile as tp
 
 SPEED_FLOOR_KMH = 5          # «стоим», но не «закрыто» (см. шапку)
-SOURCES = ("now", "typical", "auto")
+SOURCES = ("now", "typical", "auto", "route")
 MODES = ("weight", "duration")
 
 
@@ -108,6 +146,9 @@ def speeds(conn, now, source="now", bucket=None):
         return live_speeds(conn, now)
     if source == "typical":
         return typical_speeds(conn, now, bucket)
+    if source == "route":
+        edges, graph, _stats = tp.route_edges(conn, now)
+        return {edge: (kmh, graph[edge]) for edge, kmh in edges.items()}
     merged = typical_speeds(conn, now, bucket)
     merged.update(live_speeds(conn, now))
     return merged
@@ -133,6 +174,209 @@ def csv_body(edges, mode="weight"):
     return "".join(line + "\n" for line in lines)
 
 
+# --- События водителей (33D) ----------------------------------------------------
+
+EVENT_OSRM = "http://127.0.0.1:8094"   # стенд: та же нумерация узлов OSM, что у прода
+EVENT_TYPES = ("accident", "closure")
+
+
+def confirmed_events(reports_db, now):
+    """[(id, lat, lon, тип, курс)] живых ДТП и перекрытий с нужным числом
+    независимых подтверждений (разные адреса среди лайков с чужого
+    устройства и чужого адреса), не старше EVENT_MAX_AGE. Только чтение."""
+    if not reports_db or not os.path.exists(reports_db):
+        return []
+    conn = sqlite3.connect(f"file:{reports_db}?mode=ro", uri=True, timeout=5)
+    try:
+        rows = conn.execute(
+            """SELECT r.id, r.lat, r.lon, r.type, r.course,
+                      (SELECT COUNT(DISTINCT v.ip) FROM votes v WHERE v.report_id = r.id AND v.value = 1
+                         AND v.device != r.device AND v.ip != '' AND v.ip != r.ip)
+               FROM reports r
+               WHERE r.active = 1 AND r.expires > ? AND r.created >= ? AND r.type IN (?, ?)
+               ORDER BY r.id""", (now, now - tc.EVENT_MAX_AGE, *EVENT_TYPES)).fetchall()
+    finally:
+        conn.close()
+    need = {"closure": tc.CLOSURE_MIN_CONFIRMERS, "accident": tc.ACCIDENT_MIN_CONFIRMERS}
+    return [(rid, lat, lon, rtype, course) for rid, lat, lon, rtype, course, confirmers in rows
+            if confirmers >= need[rtype]]
+
+
+def event_bearings(rtype, course):
+    """[(курс, допуск)] путей OSRM для отметки: перекрытие с курсом — своя
+    сторона; ДТП и всё без курса — обе стороны (без курса — четыре стороны
+    света с допуском 50°: ось дороги неизвестна, а 4 × 50° покрывают круг)."""
+    known = course is not None and 0 <= course < 360
+    if rtype == "closure" and known:
+        return [(course, 30)]
+    if known:
+        return [(course, 30), ((course + 180) % 360, 30)]
+    return [(b, 50) for b in (0, 90, 180, 270)]
+
+
+def offset_point(lat, lon, course, meters):
+    """Точка в `meters` м по курсу (плоское приближение — десятки метров)."""
+    rad = math.radians(course)
+    return (lat + meters * math.cos(rad) / 111320.0,
+            lon + meters * math.sin(rad) / (111320.0 * math.cos(math.radians(lat))))
+
+
+def event_route_url(lat, lon, course, tolerance, base=EVENT_OSRM):
+    a = offset_point(lat, lon, (course + 180) % 360, tc.EVENT_REACH)
+    b = offset_point(lat, lon, course, tc.EVENT_REACH)
+    c = int(round(course)) % 360
+    return (f"{base.rstrip('/')}/route/v1/driving/{a[1]:.6f},{a[0]:.6f};{b[1]:.6f},{b[0]:.6f}"
+            f"?overview=false&annotations=nodes,distance,duration&bearings={c},{tolerance};{c},{tolerance}"
+            "&radiuses=25;25&continue_straight=true")
+
+
+def event_edges_from_route(body):
+    """Рёбра ответа `route`: {(u, v): (км/ч графа, метров)}; путь длиннее
+    прямой в EVENT_MAX_DETOUR раз (развязка, разворот) — не та дорога: {}."""
+    routes = (body.get("routes") or []) if body.get("code") == "Ok" else []
+    if not routes or routes[0].get("distance", 0) > 2 * tc.EVENT_REACH * tc.EVENT_MAX_DETOUR:
+        return {}
+    out = {}
+    for leg in routes[0].get("legs") or []:
+        ann = leg.get("annotation") or {}
+        nodes, dist, dur = ann.get("nodes") or [], ann.get("distance") or [], ann.get("duration") or []
+        for i in range(min(len(dist), len(dur), len(nodes) - 1)):
+            if dist[i] > 0 and dur[i] > 0 and nodes[i] != nodes[i + 1]:
+                out[(nodes[i], nodes[i + 1])] = (dist[i] / dur[i] * 3.6, dist[i])
+    return out
+
+
+def osrm_event_edges(lat, lon, rtype, course, base=EVENT_OSRM, timeout=10):
+    """{(u, v): (км/ч графа, метров)} отметки по всем её сторонам."""
+    out = {}
+    for bearing, tolerance in event_bearings(rtype, course):
+        with urllib.request.urlopen(event_route_url(lat, lon, bearing, tolerance, base), timeout=timeout) as resp:
+            out.update(event_edges_from_route(json.loads(resp.read())))
+    return out
+
+
+def event_speed(rtype, model):
+    """Скорость ребра под отметкой: перекрытие — CLOSURE_KMH, ДТП —
+    ACCIDENT_RATIO графа; в [пол, граф], целые км/ч."""
+    kmh = tc.CLOSURE_KMH if rtype == "closure" else model * tc.ACCIDENT_RATIO
+    return min(model, max(tc.SPEED_FLOOR_KMH, float(round(kmh))))
+
+
+def event_speeds(events, cache, resolver=osrm_event_edges):
+    """({(u, v): (км/ч, км/ч графа)}, {(u, v): метров}, новый кэш).
+
+    Кэш — {str(id): {"key": [lat, lon, тип, курс], "edges": [[u, v, граф, метров]]}}:
+    путь отметки считается один раз (шапка), сдвинутая или переписанная
+    отметка — заново, ушедшие из кэша выпадают. Отказ OSRM — отметки в этом
+    цикле нет (граф без штрафа — меньшее зло, чем выдуманный)."""
+    speeds, lengths, fresh = {}, {}, {}
+    for rid, lat, lon, rtype, course in events:
+        key = [round(lat, 6), round(lon, 6), rtype, None if course is None else round(course, 1)]
+        cached = cache.get(str(rid))
+        if cached and cached.get("key") == key:
+            edges = {(u, v): (model, length) for u, v, model, length in cached.get("edges") or []}
+        else:
+            try:
+                edges = resolver(lat, lon, rtype, course)
+            except (urllib.error.URLError, OSError, ValueError) as error:
+                print(f"событие {rid}: OSRM не ответил ({error}) — без штрафа в этом цикле", file=sys.stderr)
+                continue
+        fresh[str(rid)] = {"key": key, "edges": sorted([u, v, round(m, 1), round(d, 1)]
+                                                       for (u, v), (m, d) in edges.items())}
+        for edge, (model, length) in edges.items():
+            kmh = event_speed(rtype, model)
+            if edge not in speeds or kmh < speeds[edge][0]:
+                speeds[edge] = (kmh, round(model, 1))
+                lengths[edge] = length
+    return speeds, lengths, fresh
+
+
+def merge_slowest(base, extra):
+    """Объединение двух слоёв: на общем ребре — меньшая скорость."""
+    merged = dict(base)
+    for edge, value in extra.items():
+        if edge not in merged or value[0] < merged[edge][0]:
+            merged[edge] = value
+    return merged
+
+
+def load_cache(path):
+    if not path:
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as error:
+        print(f"кэш событий {path} не прочитан ({error}) — заново", file=sys.stderr)
+        return {}
+
+
+def turns_body(rows):
+    """Строки --turn-penalty-file по возрастанию тройки: `u,v,w,секунд`
+    (целые секунды — детерминизм)."""
+    return "".join(f"{u},{v},{w},{int(delay)}\n" for u, v, w, delay, *_ in sorted(rows))
+
+
+def cap_turns(rows, limit=tc.MAX_TURNS):
+    """Инвариант 5 для манёвров: самые значимые (превышение над профилем)."""
+    ranked = sorted(rows, key=lambda row: (-row[4], row[:3]))
+    return sorted(ranked[:limit]), max(0, len(rows) - limit)
+
+
+def read_previous(path):
+    """{(u, v): км/ч} прошлого файла скоростей (для гистерезиса 33A): weight —
+    rate × 3,6, duration — третий столбец. Нет файла или строка не та — без
+    неё (гистерезис просто не сработает: это безопасная сторона)."""
+    out = {}
+    try:
+        with open(path, encoding="ascii") as f:
+            for line in f:
+                parts = line.strip().split(",")
+                try:
+                    if len(parts) == 4:
+                        out[(int(parts[0]), int(parts[1]))] = float(round(float(parts[3]) * 3.6))
+                    elif len(parts) == 3:
+                        out[(int(parts[0]), int(parts[1]))] = float(parts[2])
+                except ValueError:
+                    continue
+    except (FileNotFoundError, UnicodeDecodeError):
+        pass
+    return out
+
+
+def edge_lengths(conn, edges):
+    """{(u, v): метров} по координатам узлов traffic_nodes; неизвестно — 1 м."""
+    coords = {}
+    for node, lat, lon in conn.execute("SELECT id, lat, lon FROM traffic_nodes"):
+        coords[node] = (lat, lon)
+    out = {}
+    for u, v in edges:
+        a, b = coords.get(u), coords.get(v)
+        if a and b:
+            k = math.cos(math.radians(a[0])) * 111320.0
+            out[(u, v)] = max(1.0, math.hypot((a[1] - b[1]) * k, (a[0] - b[0]) * 111320.0))
+        else:
+            out[(u, v)] = 1.0
+    return out
+
+
+def cap(edges, lengths, limit, mode="weight", max_bytes=tc.MAX_FILE_BYTES):
+    """Инвариант 5: не больше `limit` рёбер и `max_bytes` файла; лишние —
+    наименее значимые (длина × замедление). (рёбра, обрезано)."""
+    def weight(item):
+        (edge, (kmh, model)) = item
+        return (-(lengths.get(edge, 1.0) * (1 - kmh / model)), edge)
+    ranked = sorted(edges.items(), key=weight)
+    kept = dict(ranked[:limit])
+    while kept and len(csv_body(kept, mode).encode()) > max_bytes:
+        ranked = ranked[:max(1, int(len(kept) * 0.9))]
+        kept = dict(ranked)
+    return kept, len(edges) - len(kept)
+
+
 def write_if_changed(path, body):
     """True — файл переписан. Неизменный не трогаем: по mtime cron решает,
     гонять ли customize."""
@@ -146,7 +390,44 @@ def write_if_changed(path, body):
     return True
 
 
-def main(argv=None):
+def route_files(args, now, steps, resolver=None):
+    """Шаги источника route: (рёбра, счётчики). Исключение — наружу (main
+    пишет пустой файл)."""
+    resolver = resolver or osrm_event_edges
+    previous = read_previous(args.out)
+    conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True, timeout=5)
+    try:
+        started = time.perf_counter()
+        speeds_kmh, graph, stats = tp.route_edges(conn, now, previous)
+        steps["профиль"] = time.perf_counter() - started
+        edges = {edge: (kmh, graph[edge]) for edge, kmh in speeds_kmh.items()}
+        lengths = edge_lengths(conn, edges)
+        stats["events"] = 0
+        if args.reports_db and tc.LAYER_EVENTS:
+            started = time.perf_counter()
+            events = confirmed_events(args.reports_db, now)
+            event_kmh, event_lengths, cache = event_speeds(events, load_cache(args.events_cache), resolver=resolver)
+            if args.events_cache:
+                write_if_changed(args.events_cache, json.dumps(cache, sort_keys=True))
+            edges = merge_slowest(edges, event_kmh)
+            lengths.update(event_lengths)
+            stats["events"] = len(cache)
+            stats["event_edges"] = len(event_kmh)
+            steps["события"] = time.perf_counter() - started
+        edges, trimmed = cap(edges, lengths, tc.MAX_SPEED_EDGES, args.mode)
+        turns = []
+        if args.turns_out:
+            started = time.perf_counter()
+            turns, trimmed_turns = cap_turns(tp.turn_penalties(conn, now))
+            trimmed += trimmed_turns
+            steps["манёвры"] = time.perf_counter() - started
+        stats["trimmed"] = trimmed
+    finally:
+        conn.close()
+    return edges, turns, stats
+
+
+def main(argv=None, resolver=None):
     parser = argparse.ArgumentParser(description="Скорости рёбер для osrm-customize")
     parser.add_argument("--db", default=tb.DB_PATH)
     parser.add_argument("--out", default="/opt/radarmap/osrm-mld/speeds.csv")
@@ -155,19 +436,56 @@ def main(argv=None):
                         help="weight — пробка только в выборе пути (по умолчанию), duration — и во времени")
     parser.add_argument("--bucket", help="файл «обычно»: wd-08, off-18 (по умолчанию — текущий час)")
     parser.add_argument("--now", type=float, help="момент расчёта, для проверки (по умолчанию — сейчас)")
+    parser.add_argument("--turns-out", help="файл штрафов манёвров (33B; только с --source route)")
+    parser.add_argument("--reports-db", help="reports.db: подтверждённые ДТП и перекрытия (33D; только route)")
+    parser.add_argument("--events-cache", help="кэш путей отметок (JSON рядом с файлом скоростей)")
     args = parser.parse_args(argv)
+    if (args.turns_out or args.reports_db) and args.source != "route":
+        parser.error("--turns-out и --reports-db — только с --source route")
     if args.bucket and args.bucket not in tb.ALL_BUCKETS:
         parser.error(f"нет такого файла «обычно»: {args.bucket}")
     now = args.now or time.time()
-    # Только чтение: сборщик пробок пишет в эту базу каждые 2 минуты.
-    conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True, timeout=5)
-    try:
-        edges = speeds(conn, now, args.source, args.bucket)
-    finally:
-        conn.close()
-    changed = write_if_changed(args.out, csv_body(edges, args.mode))
-    print(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} скорости ({args.source}, {args.mode}): рёбер {len(edges)}, "
-          f"{'записано' if changed else 'без изменений'} → {args.out}")
+    stamp = time.strftime('%Y-%m-%dT%H:%M:%S')
+    if args.source != "route":
+        # Только чтение: сборщик пробок пишет в эту базу каждые 2 минуты.
+        conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True, timeout=5)
+        try:
+            edges = speeds(conn, now, args.source, args.bucket)
+        finally:
+            conn.close()
+        changed = write_if_changed(args.out, csv_body(edges, args.mode))
+        print(f"{stamp} скорости ({args.source}, {args.mode}): рёбер {len(edges)}, "
+              f"{'записано' if changed else 'без изменений'} → {args.out}")
+        return 0
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+    with open(args.out + ".lock", "w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print(f"{stamp} скорости (route): прошлый запуск ещё идёт — пропуск")
+            return 0
+        steps = {}
+        started = time.perf_counter()
+        try:
+            edges, turns, stats = route_files(args, now, steps, resolver)
+        except Exception as error:  # noqa: BLE001 — инвариант 1: любая ошибка — граф
+            write_if_changed(args.out, "")
+            if args.turns_out:
+                write_if_changed(args.turns_out, "")
+            print(f"{stamp} скорости (route): ОШИБКА {type(error).__name__}: {error} — "
+                  f"файл пустой (граф без пробок) → {args.out}")
+            return 1
+        changed = write_if_changed(args.out, csv_body(edges, args.mode))
+        if args.turns_out:
+            changed = write_if_changed(args.turns_out, turns_body(turns)) or changed
+        steps["всего"] = time.perf_counter() - started
+        timing = ", ".join(f"{name} {seconds * 1000:.0f} мс" for name, seconds in steps.items())
+        result = "ок" if edges or turns else "пусто"
+        trimmed = f", ПОТОЛОК: обрезано {stats['trimmed']}" if stats.get("trimmed") else ""
+        print(f"{stamp} скорости (route, {args.mode}): слоты {stats['slots']}, рёбер типичных "
+              f"{stats['typical']}, живых {stats['live']}, событий {stats['events']}, записано {len(edges)} "
+              f"(гистерезис {stats['kept']}), манёвров {len(turns) if args.turns_out else '—'}{trimmed}; {timing}; {result}, "
+              f"{'изменён' if changed else 'без изменений'} → {args.out}")
     return 0
 
 

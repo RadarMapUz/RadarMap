@@ -878,6 +878,37 @@ nonisolated enum AppConfig {
     /// маршруту (и для выезда позже) — обычная скорость этого часа
     /// (TrafficForecast). Пробка из now.json через полчаса уже другая, с.
     nonisolated static let trafficLiveHorizonSeconds: TimeInterval = 30 * 60
+    /// Время прибытия во времени (33C, docs/spec_traffic_33.md): живой
+    /// пробке на участке верим, только если доедем до него не позже этого;
+    /// дальше — типичная слота часа недели прибытия (profile.json). 15 мин —
+    /// окно, за которое сервер вообще считает кусок живым, с.
+    nonisolated static let trafficTimeAheadLiveSeconds: TimeInterval = 15 * 60
+    /// profile.json старше — «нет данных»: сервер переписывает его раз в
+    /// сутки, 36 ч — сутки и запас на сбой одной ночной пересборки, с.
+    nonisolated static let trafficProfileMaxAgeSeconds: TimeInterval = 36 * 3600
+    /// Версия формата profile.json (traffic_config.PROFILE_JSON_VERSION).
+    nonisolated static let trafficProfileVersion = 1
+    /// profile.json перепроверяется (ETag) не чаще этого: пересборка раз в
+    /// сутки, а маршрут строят много раз за день, с.
+    static let trafficProfileRefreshSeconds: TimeInterval = 6 * 3600
+    /// После ошибки сети или 404 (сервер ещё не выложен) — повтор не раньше, с.
+    static let trafficProfileRetrySeconds: TimeInterval = 30 * 60
+    /// Личный темп (33E): наблюдения за столько дней.
+    nonisolated static let personalPaceWindowDays: Double = 30
+    /// Коэффициент годен с этой выборки (км) — по классу или в целом.
+    nonisolated static let personalPaceMinKm: Double = 50
+    /// Обрезка коэффициента: ±15 % — манера езды, больше — уже не она.
+    nonisolated static let personalPaceMin = 0.85
+    nonisolated static let personalPaceMax = 1.15
+    /// Проезд по варианту короче — не наблюдение (светофор решает больше
+    /// манеры), м.
+    nonisolated static let personalPaceMinSampleMeters: Double = 2000
+    /// Задержка пробками больше этой доли времени графа — не свободный поток.
+    nonisolated static let personalPaceJamShare = 0.05
+    /// Средняя скорость графа варианта, с которой он «трасса», км/ч.
+    nonisolated static let personalPaceHighwayKmh: Double = 60
+    /// Хранится не больше стольких наблюдений (окно 30 дней и так ограничивает).
+    nonisolated static let personalPaceMaxSamples = 300
     /// Пробка на линии маршрута (RouteTraffic): участок короче этого не
     /// перекрашивает линию — одиночное ребро на перекрёстке мигало бы пятном.
     nonisolated static let routeTrafficMinMeters: CLLocationDistance = 40

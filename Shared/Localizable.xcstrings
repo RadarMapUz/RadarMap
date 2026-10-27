@@ -1,6 +1,86 @@
 {
   "sourceLanguage": "ru",
   "strings": {
+    "Учитывать мою манеру езды": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Учитывать мою манеру езды"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haydash uslubimni hisobga olish"
+          }
+        }
+      }
+    },
+    "Приложение сравнивает, за сколько вы проезжаете маршрут, со временем, которое считает навигатор, — только по свободной дороге, без пробок.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приложение сравнивает, за сколько вы проезжаете маршрут, со временем, которое считает навигатор, — только по свободной дороге, без пробок."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ilova marshrutni qancha vaqtda bosib oʻtishingizni navigator hisoblagan vaqt bilan solishtiradi — faqat boʻsh yoʻlda, tirbandliksiz."
+          }
+        }
+      }
+    },
+    "Город и трасса считаются отдельно; поправка — не больше 15 % и появляется после 50 км поездок.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Город и трасса считаются отдельно; поправка — не больше 15 % и появляется после 50 км поездок."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shahar va trassa alohida hisoblanadi; tuzatish 15 % dan oshmaydi va 50 km safardan keyin paydo boʻladi."
+          }
+        }
+      }
+    },
+    "Влияет только на время прибытия, не на выбор пути. Всё считается на телефоне и никуда не отправляется; выключение стирает расчёт.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Влияет только на время прибытия, не на выбор пути. Всё считается на телефоне и никуда не отправляется; выключение стирает расчёт."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faqat yetib borish vaqtiga taʼsir qiladi, yoʻl tanloviga emas. Hammasi telefonda hisoblanadi va hech qayerga yuborilmaydi; oʻchirilsa, hisob oʻchib ketadi."
+          }
+        }
+      }
+    },
+    "Время прибытия — с поправкой на то, как быстро вы обычно едете.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Время прибытия — с поправкой на то, как быстро вы обычно едете."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yetib borish vaqti odatda qanchalik tez yurishingizga qarab tuzatiladi."
+          }
+        }
+      }
+    },
     "Как я езжу": {
       "localizations": {
         "ru": {

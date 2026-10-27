@@ -644,6 +644,62 @@ final class PerformanceBudgetTests: XCTestCase {
         XCTAssertLessThan(total, .milliseconds(500), "пробки на линии деградировали: \(total)")
     }
 
+    /// Время прибытия во времени (33C): маршрут на 300 км с профилем города
+    /// и живыми пробками — «Быстрый» считает его на каждый вариант, и он
+    /// обязан оставаться в пределах 2 мс (docs/spec_traffic_33.md).
+    func testTrafficTimeAheadBudget() {
+        // 300 км на северо-восток, точка каждые 100 м; первые 20 км — город.
+        let route = (0...3_000).map { i in
+            CLLocationCoordinate2D(latitude: 41.25 + Double(i) * 0.0006, longitude: 69.20 + Double(i) * 0.0006)
+        }
+        // Город на первых 20 км: наш путь в обе стороны, поперечные улицы
+        // каждые ~400 м (обе стороны, по 300 м) и ещё 1 500 рёбер города в
+        // стороне от пути — профиль часа пик ~3 000 рёбер.
+        func edge(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> [Any] {
+            [a.latitude, a.longitude, b.latitude, b.longitude, 60, [[18, 20], [19, 30]]]
+        }
+        var city: [[Any]] = []
+        for i in 0..<200 {
+            city.append(edge(route[i], route[i + 1]))
+            city.append(edge(route[i + 1], route[i]))
+            if i % 5 == 0 {
+                for k in 0..<3 {
+                    let a = CLLocationCoordinate2D(latitude: route[i].latitude + Double(k) * 0.0009,
+                                                   longitude: route[i].longitude - Double(k) * 0.0009)
+                    let b = CLLocationCoordinate2D(latitude: a.latitude + 0.0009, longitude: a.longitude - 0.0009)
+                    city.append(edge(a, b))
+                    city.append(edge(b, a))
+                }
+            }
+        }
+        for i in 0..<1_500 {
+            let a = CLLocationCoordinate2D(latitude: 41.30 + Double(i % 50) * 0.002,
+                                           longitude: 69.10 + Double(i / 50) * 0.002)
+            city.append(edge(a, CLLocationCoordinate2D(latitude: a.latitude + 0.0009, longitude: a.longitude)))
+        }
+        let monday = TypicalTraffic.tashkent.date(from: DateComponents(year: 2026, month: 10, day: 26, hour: 17,
+                                                                       minute: 40))!
+        let object: [String: Any] = ["v": 1, "generated": monday.timeIntervalSince1970, "edges": city]
+        let profile = TrafficProfile.decode(try! JSONSerialization.data(withJSONObject: object))!
+        let live = TrafficSnapshot(generated: monday, edges: (0..<150).map { i in
+            TrafficEdge(a: route[i], b: route[i + 1], level: 2, kmh: 25, modelKmh: 60)
+        })
+        let clock = ContinuousClock()
+        var total = 0.0
+        let start = clock.now
+        for _ in 0..<10 {
+            total += TrafficTimeAhead.delay(along: route, baseTime: 300 * 60, departure: monday, now: monday,
+                                            live: live, profile: profile)?.seconds ?? 0
+        }
+        let each = (clock.now - start) / 10
+        XCTAssertGreaterThan(total, 0)
+        // Спецификация — < 2 мс на маршрут. Тесты собираются без оптимизаций
+        // (-Onone): на симуляторе 27.10 сам проход 3 000 точек без данных — 0,7 мс,
+        // этот маршрут — 3,2 мс. Потолок здесь — 5 мс: регрессию на порядок он
+        // ловит, а 2 мс относятся к оптимизированной сборке (TRAFFIC.md, 33C).
+        XCTAssertLessThan(each, .milliseconds(5), "время прибытия во времени на 300 км: \(each)")
+    }
+
     /// Срез линии под значком (27.A): на КАЖДОМ кадре стрелки (до 30 в
     /// секунду всю поездку) — проекция точки, краска окна с пробками и
     /// манёвром, выражение line-gradient и порог стрелок. Обязан быть

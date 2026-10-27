@@ -114,6 +114,8 @@ import time
 import urllib.error
 import urllib.request
 
+import traffic_config as tc
+
 DB_PATH = "/opt/radarmap/api/traffic.db"
 OSRM = "http://127.0.0.1:8092"
 OUT_PATH = "/opt/radarmap/www/traffic/now.json"
@@ -133,6 +135,7 @@ TASHKENT_UTC_OFFSET = 5 * 3600
 OUTPUT_VERSION = 1
 
 TYPICAL_DIR = "/opt/radarmap/www/traffic/typical"
+PROFILE_PATH = "/opt/radarmap/www/traffic/profile.json"   # 33C: профиль часа недели для телефона
 TYPICAL_MIN_PIECES = 5       # кусков на ребро в этот класс дня и час
 TYPICAL_EVERY = 60 * 60      # «обычно» пересобирается не чаще раза в час
 TYPICAL_VERSION = 1
@@ -192,6 +195,22 @@ def schema(conn):
     add_column(conn, "traffic_shared", "seen", "REAL NOT NULL DEFAULT 0")
     conn.execute("""CREATE TABLE IF NOT EXISTS traffic_meta(
         key TEXT PRIMARY KEY, value REAL NOT NULL)""")
+    # Профиль часа недели для маршрутизатора (33A, docs/spec_traffic_33.md):
+    # одно наблюдение — кусок, прошедший ребро насквозь, — со слотом часа
+    # недели и НОМЕРОМ ДНЯ (не временем): медиане нужен список скоростей, а
+    # доверию — число разных дней. Ни куска, ни устройства, ни минуты; строка
+    # живёт PROFILE_KEEP_DAYS и наружу не уходит.
+    conn.execute("""CREATE TABLE IF NOT EXISTS traffic_slot_obs(
+        u INTEGER NOT NULL, v INTEGER NOT NULL, slot INTEGER NOT NULL,
+        day INTEGER NOT NULL, kmh REAL NOT NULL)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS traffic_slot_obs_slot ON traffic_slot_obs(slot, u, v)")
+    # Задержки манёвров (33B): одно наблюдение — кусок, прошедший перекрёсток;
+    # тройка узлов, слот часа недели, номер дня (для «разных дней»), секунды
+    # и угол. Живёт PROFILE_KEEP_DAYS, наружу не уходит.
+    conn.execute("""CREATE TABLE IF NOT EXISTS traffic_turn_obs(
+        u INTEGER NOT NULL, v INTEGER NOT NULL, w INTEGER NOT NULL, slot INTEGER NOT NULL,
+        day INTEGER NOT NULL, delay REAL NOT NULL, angle REAL NOT NULL)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS traffic_turn_obs_slot ON traffic_turn_obs(slot, u, v, w)")
     conn.commit()
 
 
@@ -211,7 +230,7 @@ def match_url(points, base=OSRM):
     radii = ";".join(str(MATCH_RADIUS) for _ in points)
     return (f"{base}/match/v1/driving/{coords}?timestamps={times}&radiuses={radii}"
             "&annotations=nodes,distance,duration&overview=full&geometries=geojson"
-            "&tidy=true&gaps=split")
+            "&tidy=true&gaps=split&steps=true")
 
 
 def osrm_match(points, base=OSRM, timeout=10):
@@ -293,6 +312,200 @@ def edges_from_match(response, points):
     return samples, nodes, models
 
 
+# --- Задержки манёвров (33B, docs/spec_traffic_33.md) -------------------------------
+#
+# Налево у светофора и прямо через тот же узел — разное время, а граф знает
+# только «узел со светофором — 8 с» и угол поворота (car_radarmap.lua). Кусок
+# следа это время видит: когда машина вошла в последние TURN_APPROACH м ребра
+# въезда и когда вышла из первых TURN_EXIT м ребра выезда. Задержка манёвра —
+# это время минус время тех же 60 м по скорости графа, в пределах
+# 0…TURN_MAX_DELAY.
+#
+# Узел — перекрёсток из шагов `match` (steps=true): 3+ направления
+# (bearings); узел с одной парой рёбер — не манёвр. Окно должно целиком
+# лежать внутри совпадения с запасом PIECE_END_GUARD: кусок, оборвавшийся у
+# узла, не считается (стоянка у дома — не светофор).
+#
+# Сверх спецификации — перекрёсток проспекта с разделительной: два узла в
+# 15–25 м, и их окна по 30 м перекрываются — одно ожидание у светофора
+# писалось бы обоим манёврам. Узлы ближе TURN_CLUSTER — один перекрёсток:
+# окно от первого − 30 до последнего + 30, задержка — манёвру с самым крутым
+# углом (там решается, налево мы или прямо).
+#
+# Ключ — тройка узлов OSM (откуда, через, куда), ровно формат
+# --turn-penalty-file. Опыт на v26.7.3 (TRAFFIC.md, 33B): значение из файла
+# ЗАМЕНЯЕТ штраф профиля и во времени, и в весе — поэтому в файл идёт полная
+# медиана задержки, а не прибавка, и только там, где она больше оценки
+# штрафа профиля (profile_turn_ceiling) больше чем на TURN_MARGIN.
+
+def bearing(lat1, lon1, lat2, lon2):
+    """Азимут, градусы 0–360 (плоское приближение — отрезки короткие)."""
+    k = math.cos(math.radians((lat1 + lat2) / 2))
+    return math.degrees(math.atan2((lon2 - lon1) * k, lat2 - lat1)) % 360
+
+
+def turn_angle(prev, via, nxt):
+    """Угол манёвра −180…180: плюс — направо, минус — налево (как turn.angle
+    в профиле OSRM); prev/via/nxt — (lat, lon)."""
+    a = bearing(prev[0], prev[1], via[0], via[1])
+    b = bearing(via[0], via[1], nxt[0], nxt[1])
+    return (b - a + 180) % 360 - 180
+
+
+def match_chains(response, points):
+    """Совпадения `match` как цепочки для мер у узла: [{chain, marks, segments,
+    crossings}] по совпадению с достаточной уверенностью.
+
+      chain     — [(id узла, метры вдоль, (lat, lon))] внутренних узлов
+                  участков по порядку (те же узлы, что ключи рёбер);
+      marks     — [(метры вдоль, секунды следа)] точек следа;
+      segments  — [(от, до, секунд графа)] отрезков рёбер вдоль совпадения;
+      crossings — {(lon, lat) с точностью 1e-6} перекрёстков из шагов (3+
+                  направления; пусто, если ответ без steps).
+    """
+    out = []
+    if response.get("code") != "Ok":
+        return out
+    tracepoints = response.get("tracepoints") or []
+    for index, matching in enumerate(response.get("matchings") or []):
+        if (matching.get("confidence") or 0) < MIN_CONFIDENCE:
+            continue
+        ends = sorted((tp["waypoint_index"], i) for i, tp in enumerate(tracepoints)
+                      if tp and tp.get("matchings_index") == index)
+        legs = matching.get("legs") or []
+        if len(ends) != len(legs) + 1:
+            continue
+        geometry = (matching.get("geometry") or {}).get("coordinates") or []
+        chain, marks, segments, crossings = [], [], [], set()
+        along, offset = 0.0, 0
+        for k, leg in enumerate(legs):
+            marks.append((along, points[ends[k][1]][2]))
+            for step in leg.get("steps") or []:
+                for crossing in step.get("intersections") or []:
+                    if len(crossing.get("bearings") or []) >= 3 and crossing.get("location"):
+                        lon, lat = crossing["location"]
+                        crossings.add((round(lon, 6), round(lat, 6)))
+            annotation = leg.get("annotation") or {}
+            ids = annotation.get("nodes") or []
+            dist = annotation.get("distance") or []
+            dur = annotation.get("duration") or []
+            m = len(dist)
+            if m == 0 or len(ids) != m + 1:
+                offset += m
+                along += leg_length(leg)
+                continue
+            position = along
+            for j in range(m):
+                if j >= 1 and offset + j < len(geometry):
+                    lon, lat = geometry[offset + j]
+                    if not chain or chain[-1][0] != ids[j]:
+                        chain.append((ids[j], position, (lat, lon)))
+                length = max(0.0, dist[j])
+                if length > 0:
+                    segments.append((position, position + length, dur[j] if j < len(dur) else 0.0))
+                position += length
+            offset += m
+            along += leg_length(leg)
+        marks.append((along, points[ends[-1][1]][2]))
+        out.append({"chain": chain, "marks": marks, "segments": segments, "crossings": crossings})
+    return out
+
+
+def time_at(marks, x):
+    """Секунда следа, когда машина впервые дошла до метра `x` (по точкам
+    следа, линейно между ними). Стоянка — несколько точек на одном месте:
+    время до неё и после неё разведено, и окно вокруг узла его включает."""
+    for (a0, t0), (a1, t1) in zip(marks, marks[1:]):
+        if a1 >= x and a1 > a0:
+            if x <= a0:
+                return t0
+            return t0 + (t1 - t0) * (x - a0) / (a1 - a0)
+    return marks[-1][1]
+
+
+def time_after(marks, x):
+    """Секунда, когда машина ушла дальше метра `x` (последняя точка на нём или
+    до него — конец стоянки)."""
+    for (a0, t0), (a1, t1) in zip(marks, marks[1:]):
+        if a1 > x and a1 > a0:
+            if x <= a0:
+                return t0
+            return t0 + (t1 - t0) * (x - a0) / (a1 - a0)
+    return marks[-1][1]
+
+
+def graph_time(segments, start, end):
+    """Секунд графа на отрезке [start, end] совпадения (доля каждого ребра)."""
+    total = 0.0
+    for a, b, dur in segments:
+        overlap = min(b, end) - max(a, start)
+        if overlap > 0 and b > a:
+            total += dur * overlap / (b - a)
+    return total
+
+
+def maneuver(angle):
+    """Класс манёвра по углу: прямо (|угол| < TURN_STRAIGHT_DEG), направо,
+    налево, разворот (|угол| > TURN_UTURN_DEG). Плюс — направо, как turn.angle."""
+    if abs(angle) > tc.TURN_UTURN_DEG:
+        return "uturn"
+    if abs(angle) < tc.TURN_STRAIGHT_DEG:
+        return "straight"
+    return "right" if angle > 0 else "left"
+
+
+def turns_from_match(response, points):
+    """Задержки у перекрёстков: [(u, v, w, секунд, угол)], один манёвр на
+    перекрёсток (шапка раздела)."""
+    out = []
+    for item in match_chains(response, points):
+        chain, marks, segments, crossings = (item["chain"], item["marks"], item["segments"],
+                                             item["crossings"])
+        if len(chain) < 3 or len(marks) < 2 or not crossings:
+            continue
+        first, last = marks[0][0], marks[-1][0]
+        at_crossing = [i for i in range(1, len(chain) - 1)
+                       if (round(chain[i][2][1], 6), round(chain[i][2][0], 6)) in crossings]
+        clusters = []
+        for i in at_crossing:
+            if clusters and chain[i][1] - chain[clusters[-1][-1]][1] < tc.TURN_CLUSTER:
+                clusters[-1].append(i)
+            else:
+                clusters.append([i])
+        for cluster in clusters:
+            start = chain[cluster[0]][1] - tc.TURN_APPROACH
+            end = chain[cluster[-1]][1] + tc.TURN_EXIT
+            if start < first + PIECE_END_GUARD or end > last - PIECE_END_GUARD:
+                continue
+            spent = time_after(marks, end) - time_at(marks, start)
+            graph = graph_time(segments, start, end)
+            if spent <= 0 or graph <= 0:
+                continue
+            delay = min(tc.TURN_MAX_DELAY, max(0.0, spent - graph))
+            angles = [(abs(turn_angle(chain[i - 1][2], chain[i][2], chain[i + 1][2])), i) for i in cluster]
+            _, via = max(angles)
+            angle = turn_angle(chain[via - 1][2], chain[via][2], chain[via + 1][2])
+            out.append((chain[via - 1][0], chain[via][0], chain[via + 1][0], delay, angle))
+    return out
+
+
+def profile_turn_ceiling(angle):
+    """Верхняя оценка штрафа манёвра в car_radarmap.lua (process_turn): угол
+    по сигмоиде (до turn_penalty 7,5 с) + светофор 8 с ИЛИ налево с главной без
+    светофора 15 с + разворот 20 с. Файл штрафов ЗАМЕНЯЕТ штраф профиля, а
+    признака «есть светофор» в ответе match нет — поэтому пишем манёвр, только
+    если измерено больше этой оценки: манёвр никогда не становится дешевле, чем
+    его считает граф (то же правило, что «не быстрее графа» у рёбер)."""
+    turn_penalty, bias = 7.5, 1.075
+    if angle >= 0:
+        base = turn_penalty / (1 + math.exp(-((13 / bias) * angle / 180 - 6.5 * bias)))
+    else:
+        base = turn_penalty / (1 + math.exp(-((13 * bias) * -angle / 180 - 6.5 / bias)))
+    left = angle < -40            # left_turn_min_degrees профиля
+    uturn = maneuver(angle) == "uturn"
+    return base + (15.0 if left else 8.0) + (20.0 if uturn else 0.0)
+
+
 def hour_of_week(ts):
     """Час недели по Ташкенту: 0 — понедельник 00:00."""
     t = time.gmtime(ts + TASHKENT_UTC_OFFSET)
@@ -354,6 +567,21 @@ def profile_slot(ts):
     return how + HOLIDAY_SLOT if is_holiday(ts) else how
 
 
+def week_slot(ts):
+    """Слот профиля маршрутизатора (33A): час недели 0–167 по Ташкенту
+    (понедельник 00:00 = 0). Праздник — как воскресенье в тот же час: в
+    Навруз дороги как в выходной (то же правило, что у файлов «обычно» и
+    UzHolidays на телефоне), а 168 слотов праздников по одному дню в году не
+    набрали бы трёх разных дней никогда."""
+    hour = hour_of_week(ts) % 24
+    return 6 * 24 + hour if is_holiday(ts) else hour_of_week(ts)
+
+
+def day_number(ts):
+    """Номер ташкентского дня (дни от 1970-01-01) — для «разных дней» слота."""
+    return int((ts + TASHKENT_UTC_OFFSET) // 86400)
+
+
 def profile_epoch(conn, now):
     """Метка весов профиля (п. 6 шапки). Нет метки — ставится `now`: строки,
     накопленные до старения (8.8.16), считаются снятыми в первом прогоне
@@ -371,9 +599,18 @@ def decay_scale(epoch, now):
     return 2.0 ** ((now - epoch) / PROFILE_HALF_LIFE)
 
 
-def store(conn, piece_id, samples, nodes, models, now):
+def store(conn, piece_id, samples, nodes, models, now, turns=()):
     how = profile_slot(now)
     weight = decay_scale(profile_epoch(conn, now), now)
+    # 33A: кусок — одно наблюдение слота на каждом ребре, которое прошёл
+    # насквозь (темп по длине своих отрезков, как piece_profile).
+    passed = [sample for sample in samples if sample[4]]
+    slot, day = week_slot(now), day_number(now)
+    conn.executemany("INSERT INTO traffic_slot_obs(u, v, slot, day, kmh) VALUES(?, ?, ?, ?, ?)",
+                     [(u, v, slot, day, min(MAX_KMH, 3600.0 / pace))
+                      for (u, v), (_c, _t, pace) in sorted(piece_profile(passed).items())])
+    conn.executemany("INSERT INTO traffic_turn_obs(u, v, w, slot, day, delay, angle) VALUES(?, ?, ?, ?, ?, ?, ?)",
+                     [(u, v, w, slot, day, delay, angle) for u, v, w, delay, angle in turns])
     conn.executemany("""INSERT INTO traffic_samples(u, v, kmh, weight, ts, piece, passed)
                         VALUES(?, ?, ?, ?, ?, ?, ?)""",
                      [(u, v, kmh, w, now, piece_id, int(passed)) for u, v, kmh, w, passed in samples])
@@ -422,7 +659,7 @@ def process(conn, now, matcher=osrm_match):
             print(f"OSRM недоступен: {error}", file=sys.stderr)
             break
         samples, nodes, models = edges_from_match(response, points)
-        store(conn, piece_id, samples, nodes, models, now)
+        store(conn, piece_id, samples, nodes, models, now, turns_from_match(response, points))
         conn.execute("DELETE FROM traffic_pieces WHERE id = ?", (piece_id,))
         done += 1
         matched += len(samples)
@@ -491,7 +728,8 @@ def live_edges(conn, now):
             entry["pieces"].add(piece)
     out = []
     for (u, v), entry in grouped.items():
-        if len(entry["pieces"]) < MIN_PIECES:
+        # Порог карты (33F) — свой, отдельно от порога пути (traffic_profile).
+        if len(entry["pieces"]) < tc.MAP_MIN_PIECES:
             continue
         kmh = weighted_median(entry["pairs"])
         lvl = level(kmh, entry["model"]) if kmh is not None else None
@@ -649,6 +887,8 @@ def maintain_profile(conn, now):
     conn.execute("DELETE FROM traffic_profile WHERE pieces < ? AND n < ?",
                  (PROFILE_DROP * scale, PROFILE_DROP * scale))
     conn.execute("DELETE FROM traffic_shared WHERE seen < ?", (now - SHARED_TTL,))
+    conn.execute("DELETE FROM traffic_slot_obs WHERE day < ?", (day_number(now) - tc.PROFILE_KEEP_DAYS,))
+    conn.execute("DELETE FROM traffic_turn_obs WHERE day < ?", (day_number(now) - tc.PROFILE_KEEP_DAYS,))
     if now - epoch >= PROFILE_RENORM_AFTER:
         # Одна транзакция с новой меткой: числа и метка меняются разом.
         factor = 1.0 / scale
@@ -697,6 +937,23 @@ def write_typical(conn, now, directory=TYPICAL_DIR):
     return written
 
 
+def profile_due(conn, now):
+    row = conn.execute("SELECT value FROM traffic_meta WHERE key = 'profile_json_built'").fetchone()
+    return row is None or now - row[0] >= tc.PROFILE_JSON_EVERY
+
+
+def write_profile_json(conn, now, path=PROFILE_PATH):
+    """profile.json (33C) — раз в PROFILE_JSON_EVERY, переписывается всегда:
+    телефон считает файл старше 36 ч «нет данных», и неизменный профиль
+    должен получить свежую метку. Возвращает (рёбер, обрезано)."""
+    import traffic_profile   # там формулы 33A; он сам импортирует этот модуль
+    body, count, trimmed = traffic_profile.profile_body(conn, now)
+    write_atomic(path, body)
+    conn.execute("INSERT OR REPLACE INTO traffic_meta(key, value) VALUES('profile_json_built', ?)", (now,))
+    conn.commit()
+    return count, trimmed
+
+
 def payload(edges, now):
     return {
         "v": OUTPUT_VERSION,
@@ -715,7 +972,7 @@ def write_atomic(path, body):
     os.replace(tmp, path)
 
 
-def run(conn, now, matcher=osrm_match, out_path=OUT_PATH, typical_dir=TYPICAL_DIR):
+def run(conn, now, matcher=osrm_match, out_path=OUT_PATH, typical_dir=TYPICAL_DIR, profile_path=PROFILE_PATH):
     """Один прогон без замка и печати (main и тесты). Возвращает (кусков,
     отрезков, рёбер в now.json, переписано файлов «обычно» или None)."""
     schema(conn)
@@ -728,6 +985,11 @@ def run(conn, now, matcher=osrm_match, out_path=OUT_PATH, typical_dir=TYPICAL_DI
     if typical_due(conn, now):
         maintain_profile(conn, now)
         typical = write_typical(conn, now, directory=typical_dir)
+    if profile_due(conn, now):
+        count, trimmed = write_profile_json(conn, now, profile_path)
+        if trimmed:
+            print(f"profile.json: ПОТОЛОК {tc.PROFILE_JSON_MAX_GZIP // 1024} КБ gzip — обрезано рёбер {trimmed}",
+                  file=sys.stderr)
     return pieces, segments, len(edges), typical
 
 

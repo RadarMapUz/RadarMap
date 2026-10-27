@@ -16,6 +16,7 @@ import time
 import unittest
 
 import traffic_build as tb
+import traffic_config as tc
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FIXTURE = json.load(open(os.path.join(HERE, "fixtures", "osrm_match_amir_temur.json"), encoding="utf-8"))
@@ -391,6 +392,38 @@ class TypicalTest(ProfileFixture, unittest.TestCase):
 H = tb.PROFILE_HALF_LIFE
 
 
+class SlotObservationTest(ProfileFixture, unittest.TestCase):
+    """33A: наблюдения слота часа недели для маршрутизатора."""
+
+    def test_piece_is_one_observation_per_passed_edge(self):
+        self.pieces(2)
+        rows = self.conn.execute("SELECT u, v, slot, day, kmh FROM traffic_slot_obs").fetchall()
+        self.assertTrue(rows)
+        passed = {(u, v) for u, v in self.conn.execute(
+            "SELECT DISTINCT u, v FROM traffic_samples WHERE passed = 1")}
+        self.assertEqual({(u, v) for u, v, *_ in rows}, passed, "только рёбра, пройденные насквозь")
+        self.assertEqual(len(rows), 2 * len(passed), "кусок — одно наблюдение ребра")
+        for _u, _v, slot, day, kmh in rows:
+            self.assertEqual(slot, tb.week_slot(self.now))
+            self.assertEqual(day, tb.day_number(self.now))
+            self.assertGreater(kmh, 0)
+
+    def test_week_slot_is_tashkent_and_holiday_is_sunday(self):
+        monday = 1_792_954_800      # понедельник 26.10.2026 00:00 Ташкент
+        self.assertEqual(tb.week_slot(monday), 0)
+        self.assertEqual(tb.week_slot(monday + 6 * 86400 + 23 * 3600), 167)
+        navruz = 1_774_033_200 + 8 * 3600   # суббота 21.03.2026 08:00 — праздник в выходной
+        self.assertEqual(tb.week_slot(navruz), 6 * 24 + 8)
+        tuesday_holiday = 1_788_202_800 + 9 * 3600   # вторник 01.09.2026 09:00 — День независимости
+        self.assertEqual(tb.week_slot(tuesday_holiday), 6 * 24 + 9, "праздник — как воскресенье")
+
+    def test_old_observations_are_dropped_by_maintenance(self):
+        self.pieces(1)
+        later = self.now + (tc.PROFILE_KEEP_DAYS + 2) * 86400
+        tb.maintain_profile(self.conn, later)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM traffic_slot_obs").fetchone()[0], 0)
+
+
 class TypicalModelTest(ProfileFixture, unittest.TestCase):
     """27.E: шестой столбец «обычно» — скорость графа; старое ребро без неё — 0."""
 
@@ -663,7 +696,8 @@ class MigrationTest(unittest.TestCase):
                              (now, json.dumps(FIXTURE["points"])))
             conn.commit()
             return tb.run(conn, now, matcher=lambda pts: FIXTURE["response"],
-                          out_path=self.out, typical_dir=self.typical)
+                          out_path=self.out, typical_dir=self.typical,
+                          profile_path=os.path.join(self.typical, "profile.json"))
         finally:
             conn.close()
 

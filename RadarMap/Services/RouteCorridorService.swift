@@ -58,10 +58,16 @@ final class RouteCorridorService {
     @ObservationIgnored private(set) var consented: Set<String> = []
     /// Линия, для которой файлы заведений уже положены по Wi-Fi.
     @ObservationIgnored private var prefetchedLine: ObjectIdentifier?
+    /// Растёт, когда загрузка по согласию положила файлы заведений на диск:
+    /// лист «Перед дальней дорогой» по нему пересобирает заправки.
+    private(set) var cellsRevision = 0
 
     #if DEBUG
     /// Скриншот-хук: заведения вдоль демо-маршрута вместо файлов клеток.
     @ObservationIgnored var demoVenues: [Venue]?
+    /// Скриншот-хук: посты ДПС вдоль демо-маршрута (отметок с сервера в
+    /// симуляторе может не быть).
+    @ObservationIgnored var demoPosts: [LongTripBrief.Marker] = []
     #endif
 
     // MARK: - Коридор маршрута
@@ -132,6 +138,7 @@ final class RouteCorridorService {
                 graphBytes = await graph?.ensureGraph(force: true)
             }
             await prefetchCells(points: points)
+            cellsRevision += 1
         }
     }
 
@@ -166,7 +173,10 @@ final class RouteCorridorService {
     }
 
     /// Заведения `kinds` впереди по выбранному маршруту. nil — маршрута нет.
-    func venues(route: RouteService, kinds: [Venue.Kind]) async -> Found? {
+    /// `allowFetch: false` — только файлы, что уже на телефоне: ни одного
+    /// запроса о коридоре сверх уже сделанных («Перед дальней дорогой»).
+    func venues(route: RouteService, kinds: [Venue.Kind], allowFetch: Bool = true,
+                limit: Int = AppConfig.corridorVenueLimit) async -> Found? {
         guard let variant = route.selected, let destination = route.destinationCoordinate else { return nil }
         let key = RouteCorridor.routeKey(destination: destination)
         let points = variant.points
@@ -183,7 +193,7 @@ final class RouteCorridorService {
             cells = await offMain {
                 RouteCorridor.venueCells(route: RouteService.remaining(points, after: progress))
             }
-            let fetch = RouteCorridor.mayFetchCells(online: network?.isOnline ?? false,
+            let fetch = allowFetch && RouteCorridor.mayFetchCells(online: network?.isOnline ?? false,
                                                     expensiveNetwork: network?.isExpensive ?? true,
                                                     consented: consented.contains(key))
             for cell in cells {
@@ -202,13 +212,80 @@ final class RouteCorridorService {
         let loaded = books
         let items = await offMain {
             CorridorVenues.find(loaded.flatMap { $0.venues.filter { wanted.contains($0.kind) } },
-                                route: points, progress: progress, kinds: wanted)
+                                route: points, progress: progress, kinds: wanted, limit: limit)
         }
         return Found(items: items, missingCells: missing, missingBytes: missingBytes,
                      unpublishedCells: unpublished, totalCells: cells.count)
     }
 
+    // MARK: - «Перед дальней дорогой» (12.4)
+
+    /// Лист целиком: камеры и посты по порядку и заправки своего топлива с
+    /// самым длинным отрезком без них. Только из того, что на телефоне —
+    /// камеры из посчитанного варианта, заведения из файлов клеток на диске.
+    /// nil — маршрута нет.
+    func brief(route: RouteService, kinds: [Venue.Kind]) async -> LongTrip? {
+        guard let variant = route.selected else { return nil }
+        let line = ObjectIdentifier(variant.polyline)
+        // Все найденные, без предела строк: отрезок без заправки честен,
+        // только если посчитан по всем (предел — дело листа).
+        guard let found = await venues(route: route, kinds: kinds, allowFetch: false, limit: .max) else {
+            return nil
+        }
+        var markers = route.camerasOnRoute.map {
+            LongTripBrief.Marker(camera: $0.camera, along: $0.distanceAlong, oncoming: $0.provenOncoming)
+        }
+        #if DEBUG
+        markers += demoPosts
+        #endif
+        let brief = await LongTripBrief.build(markers: markers, venues: found.items, kinds: kinds,
+                                              progress: route.progressAlong, routeLength: variant.distance,
+                                              venuesComplete: found.missingCells == 0 && found.unpublishedCells == 0,
+                                              now: Date())
+        // Пока считали, вариант сменился — ответ уже не про него (правило 12).
+        guard route.selected.map({ ObjectIdentifier($0.polyline) }) == line else { return nil }
+        return LongTrip(brief: brief, missingCells: found.missingCells, missingBytes: found.missingBytes)
+    }
+
+    /// Лист и счёт файлов заведений, которых для пути впереди нет на телефоне
+    /// (опубликованы, но не скачаны) — их докачивает «Скачать» листа.
+    struct LongTrip: Equatable {
+        let brief: LongTripBrief.Brief
+        let missingCells: Int
+        let missingBytes: Int
+    }
+
+    /// Области коридора с состоянием каждой — для текущего маршрута. nil —
+    /// коридор ещё не посчитан или каталога нет.
+    func regionPlan(route: RouteService) -> LongTripBrief.Regions? {
+        guard let plan, let maps, let destination = route.destinationCoordinate,
+              plan.key == RouteCorridor.routeKey(destination: destination), !plan.regions.isEmpty else { return nil }
+        return LongTripBrief.regions(plan.regions) { region in
+            switch maps.state(for: region) {
+            case .ready:                    return .ready
+            case .updateAvailable:          return .updateAvailable
+            case .downloading(let share):   return .downloading(share)
+            case .notDownloaded, .failed:   return .missing
+            }
+        }
+    }
+
     #if DEBUG
+    /// Посты ДПС на демо-маршруте (`-demoLongRoute`) — на 18-м и 142-м км,
+    /// второй рядом с камерами, чтобы снять строку-группу.
+    func seedDemoPosts(route: RouteService) {
+        guard let variant = route.selected else { return }
+        let pts = variant.points
+        let cum = RouteService.cumulative(of: pts)
+        demoPosts = [(18_000.0, 9_001), (142_000.0, 9_002)].compactMap { along, id in
+            guard let base = RouteService.pointAndCourse(along: along, pts: pts, cum: cum) else { return nil }
+            let camera = Camera(id: id, region: "", city: "", location: "M39",
+                                lat: base.coordinate.latitude, lon: base.coordinate.longitude,
+                                type: "Пост ДПС", violations: [], needsReview: nil, mobileConfirmed: true)
+            return LongTripBrief.Marker(camera: camera, along: along)
+        }
+    }
+
     /// Демо-заведения вдоль выбранного маршрута (`-demoLongRoute`): по обе
     /// стороны, на разном удалении, с дублем у одной колонки.
     func seedDemoVenues(route: RouteService) -> [Venue] {

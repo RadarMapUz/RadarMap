@@ -20,6 +20,9 @@ struct RoutePanel: View {
     var onShareArrival: (() -> Void)?
     /// «По пути» (19.3): заправки, гостиницы, кафе впереди — лист со списком.
     var onShowAlongRoute: (() -> Void)?
+    /// «Перед дальней дорогой» (12.4): маршрут длиннее 100 км — карта по
+    /// пути, камеры и посты по порядку, где заправиться.
+    var onShowLongTrip: (() -> Void)?
     /// Выбран вариант карточкой: хозяин экрана выбирает его и возвращает кадр
     /// «весь маршрут» (27.D) — карточка говорит «покажи этот», и карту, которую
     /// человек перед этим отодвинул, надо вернуть.
@@ -120,6 +123,9 @@ struct RoutePanel: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("Сбросить маршрут"))
             }
+            if let onShowLongTrip, let selected = route.selected, RouteCorridor.isLong(selected.distance) {
+                longTripRow(onShowLongTrip)
+            }
             // В поездке панель заменяется компактной TripLiveBar — здесь всегда «до старта».
             HStack(spacing: 8) {
                 PrimaryButton(title: "Поехали", systemImage: "play.fill", action: onTripToggle)
@@ -130,6 +136,35 @@ struct RoutePanel: View {
         .padding(14)
         .liftedBackground(Theme.surface, in: shape)
         .overlay(shape.strokeBorder(Theme.edgePanel, lineWidth: 1))
+    }
+
+    /// Строка «Перед дальней дорогой» — видна сразу, а не в «…»: на трассе без
+    /// связи её содержимое уже не узнать, и спрашивать надо до «Поехали».
+    private func longTripRow(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: "road.lanes")
+                    .font(.rounded(15, .semibold))
+                    .foregroundStyle(Theme.accent)
+                    .accessibilityHidden(true)
+                Text("Перед дальней дорогой")
+                    .font(.rounded(15, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.rounded(13, .bold))
+                    .foregroundStyle(Theme.textTertiary)
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 12)
+            .frame(minHeight: Theme.controlSize)
+            .background(Theme.background, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        }
+        .buttonStyle(PressableStyle())
+        .accessibilityHint(Text("Карта по пути, камеры и посты, где заправиться"))
     }
 
     private func stopRow(_ name: String) -> some View {

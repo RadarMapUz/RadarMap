@@ -391,6 +391,12 @@ extension MapScreen {
                     await Task.pause(seconds: 1.5)
                     showAlongRoute = true
                 }
+                // «Перед дальней дорогой» (12.4): демо-посты ДПС и лист.
+                if args.contains("-openLongTrip") {
+                    env.corridor.seedDemoPosts(route: env.route)
+                    await Task.pause(seconds: 1.5)
+                    showLongTrip = true
+                }
             }
         }
         // «Моя дорога» (24.4): выбор вариантов домой без сети.

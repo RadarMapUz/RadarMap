@@ -30,7 +30,7 @@ final class TrafficProfileService {
     var isAllowed: () -> Bool = { true }
     var isOnline: () -> Bool = { true }
 
-    private let api = APIClient()
+    private let api = APIClient(base: AppConfig.trafficFeedBaseURL)
     static let path = "traffic/profile.json"
 
     /// Профиль из памяти, без сети; nil — не загружен, выключен или старше 36 ч.

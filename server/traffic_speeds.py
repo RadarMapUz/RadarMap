@@ -9,6 +9,7 @@ server/osrm/traffic_customize.sh; в cron НЕ подключено).
 пересчитывает веса по этому файлу раз в несколько минут, и маршрут сам
 обходит пробку. Схема сборки и выкладки — в шапке build_osrm_mld.sh.
 
+    python3 traffic_speeds.py --source route    # 33A: профиль часа недели + живые (для customize)
     python3 traffic_speeds.py --source now      [--db …] [--out speeds.csv]
     python3 traffic_speeds.py --source typical  [--bucket wd-08]
     python3 traffic_speeds.py --source auto     # now, где он есть, иначе «обычно» часа
@@ -32,8 +33,23 @@ server/osrm/traffic_customize.sh; в cron НЕ подключено).
     profile»). Время маршрута уже с пробкой — годится, только когда телефон
     перестанет прибавлять свою задержку к такому ответу.
 
-Правила — те же, что у телефона, и по той же причине (честность важнее
-частоты):
+Источник `route` (33A, docs/spec_traffic_33.md) — то, что идёт в
+маршрутизатор: типичная скорость слота часа недели по медиане и числу
+разных дней, сжатая к графу, живые куски поверх с весом по их числу и
+возрасту, гистерезис против дребезга — формулы в traffic_profile.py,
+константы в traffic_config.py. Инварианты этого источника:
+  * отказ = граф: любая ошибка — файл пишется ПУСТЫМ, не прошлым, и выход 1;
+  * один запуск за раз (flock на <out>.lock), второй выходит с журналом;
+  * итог в [5 км/ч, граф], пишется только < 0,85 графа;
+  * потолки: MAX_SPEED_EDGES строк и MAX_FILE_BYTES; сверх — обрезка по
+    убыванию значимости (длина ребра × замедление) и «ПОТОЛОК» в журнале;
+  * одна строка журнала на запуск: слоты, рёбер типичных/живых, записано,
+    время шагов, итог (ок / пусто / ошибка).
+Источники now/typical/auto ниже — прежние (32D), для проверки руками; цикл
+стенда берёт route.
+
+Правила прежних источников — те же, что у телефона, и по той же причине
+(честность важнее частоты):
   * now — ровно рёбра now.json (traffic_build.live_edges: MIN_PIECES
     свидетелей за SAMPLE_WINDOW), и ТОЛЬКО медленные (уровень ≥ 2). Свободный
     поток в граф не пишется: «быстрее car.lua» по двум машинам — догадка, а
@@ -60,15 +76,19 @@ server/osrm/traffic_customize.sh; в cron НЕ подключено).
 скорость; лежит рядом с графом.
 """
 import argparse
+import fcntl
+import math
 import os
 import sqlite3
 import sys
 import time
 
 import traffic_build as tb
+import traffic_config as tc
+import traffic_profile as tp
 
 SPEED_FLOOR_KMH = 5          # «стоим», но не «закрыто» (см. шапку)
-SOURCES = ("now", "typical", "auto")
+SOURCES = ("now", "typical", "auto", "route")
 MODES = ("weight", "duration")
 
 
@@ -108,6 +128,9 @@ def speeds(conn, now, source="now", bucket=None):
         return live_speeds(conn, now)
     if source == "typical":
         return typical_speeds(conn, now, bucket)
+    if source == "route":
+        edges, graph, _stats = tp.route_edges(conn, now)
+        return {edge: (kmh, graph[edge]) for edge, kmh in edges.items()}
     merged = typical_speeds(conn, now, bucket)
     merged.update(live_speeds(conn, now))
     return merged
@@ -133,6 +156,57 @@ def csv_body(edges, mode="weight"):
     return "".join(line + "\n" for line in lines)
 
 
+def read_previous(path):
+    """{(u, v): км/ч} прошлого файла скоростей (для гистерезиса 33A): weight —
+    rate × 3,6, duration — третий столбец. Нет файла или строка не та — без
+    неё (гистерезис просто не сработает: это безопасная сторона)."""
+    out = {}
+    try:
+        with open(path, encoding="ascii") as f:
+            for line in f:
+                parts = line.strip().split(",")
+                try:
+                    if len(parts) == 4:
+                        out[(int(parts[0]), int(parts[1]))] = float(round(float(parts[3]) * 3.6))
+                    elif len(parts) == 3:
+                        out[(int(parts[0]), int(parts[1]))] = float(parts[2])
+                except ValueError:
+                    continue
+    except (FileNotFoundError, UnicodeDecodeError):
+        pass
+    return out
+
+
+def edge_lengths(conn, edges):
+    """{(u, v): метров} по координатам узлов traffic_nodes; неизвестно — 1 м."""
+    coords = {}
+    for node, lat, lon in conn.execute("SELECT id, lat, lon FROM traffic_nodes"):
+        coords[node] = (lat, lon)
+    out = {}
+    for u, v in edges:
+        a, b = coords.get(u), coords.get(v)
+        if a and b:
+            k = math.cos(math.radians(a[0])) * 111320.0
+            out[(u, v)] = max(1.0, math.hypot((a[1] - b[1]) * k, (a[0] - b[0]) * 111320.0))
+        else:
+            out[(u, v)] = 1.0
+    return out
+
+
+def cap(edges, lengths, limit, mode="weight", max_bytes=tc.MAX_FILE_BYTES):
+    """Инвариант 5: не больше `limit` рёбер и `max_bytes` файла; лишние —
+    наименее значимые (длина × замедление). (рёбра, обрезано)."""
+    def weight(item):
+        (edge, (kmh, model)) = item
+        return (-(lengths.get(edge, 1.0) * (1 - kmh / model)), edge)
+    ranked = sorted(edges.items(), key=weight)
+    kept = dict(ranked[:limit])
+    while kept and len(csv_body(kept, mode).encode()) > max_bytes:
+        ranked = ranked[:max(1, int(len(kept) * 0.9))]
+        kept = dict(ranked)
+    return kept, len(edges) - len(kept)
+
+
 def write_if_changed(path, body):
     """True — файл переписан. Неизменный не трогаем: по mtime cron решает,
     гонять ли customize."""
@@ -144,6 +218,23 @@ def write_if_changed(path, body):
         pass
     tb.write_atomic(path, body)
     return True
+
+
+def route_files(args, now, steps):
+    """Шаги источника route: (рёбра, счётчики). Исключение — наружу (main
+    пишет пустой файл)."""
+    previous = read_previous(args.out)
+    conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True, timeout=5)
+    try:
+        started = time.perf_counter()
+        speeds_kmh, graph, stats = tp.route_edges(conn, now, previous)
+        steps["профиль"] = time.perf_counter() - started
+        edges = {edge: (kmh, graph[edge]) for edge, kmh in speeds_kmh.items()}
+        edges, trimmed = cap(edges, edge_lengths(conn, edges), tc.MAX_SPEED_EDGES, args.mode)
+        stats["trimmed"] = trimmed
+    finally:
+        conn.close()
+    return edges, stats
 
 
 def main(argv=None):
@@ -159,15 +250,43 @@ def main(argv=None):
     if args.bucket and args.bucket not in tb.ALL_BUCKETS:
         parser.error(f"нет такого файла «обычно»: {args.bucket}")
     now = args.now or time.time()
-    # Только чтение: сборщик пробок пишет в эту базу каждые 2 минуты.
-    conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True, timeout=5)
-    try:
-        edges = speeds(conn, now, args.source, args.bucket)
-    finally:
-        conn.close()
-    changed = write_if_changed(args.out, csv_body(edges, args.mode))
-    print(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} скорости ({args.source}, {args.mode}): рёбер {len(edges)}, "
-          f"{'записано' if changed else 'без изменений'} → {args.out}")
+    stamp = time.strftime('%Y-%m-%dT%H:%M:%S')
+    if args.source != "route":
+        # Только чтение: сборщик пробок пишет в эту базу каждые 2 минуты.
+        conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True, timeout=5)
+        try:
+            edges = speeds(conn, now, args.source, args.bucket)
+        finally:
+            conn.close()
+        changed = write_if_changed(args.out, csv_body(edges, args.mode))
+        print(f"{stamp} скорости ({args.source}, {args.mode}): рёбер {len(edges)}, "
+              f"{'записано' if changed else 'без изменений'} → {args.out}")
+        return 0
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+    with open(args.out + ".lock", "w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print(f"{stamp} скорости (route): прошлый запуск ещё идёт — пропуск")
+            return 0
+        steps = {}
+        started = time.perf_counter()
+        try:
+            edges, stats = route_files(args, now, steps)
+        except Exception as error:  # noqa: BLE001 — инвариант 1: любая ошибка — граф
+            write_if_changed(args.out, "")
+            print(f"{stamp} скорости (route): ОШИБКА {type(error).__name__}: {error} — "
+                  f"файл пустой (граф без пробок) → {args.out}")
+            return 1
+        changed = write_if_changed(args.out, csv_body(edges, args.mode))
+        steps["всего"] = time.perf_counter() - started
+        timing = ", ".join(f"{name} {seconds * 1000:.0f} мс" for name, seconds in steps.items())
+        result = "ок" if edges else "пусто"
+        trimmed = f", ПОТОЛОК: обрезано {stats['trimmed']}" if stats.get("trimmed") else ""
+        print(f"{stamp} скорости (route, {args.mode}): слоты {stats['slots']}, рёбер типичных "
+              f"{stats['typical']}, живых {stats['live']}, записано {len(edges)} (гистерезис "
+              f"{stats['kept']}){trimmed}; {timing}; {result}, "
+              f"{'изменён' if changed else 'без изменений'} → {args.out}")
     return 0
 
 

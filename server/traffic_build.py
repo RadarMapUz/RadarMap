@@ -114,6 +114,8 @@ import time
 import urllib.error
 import urllib.request
 
+import traffic_config as tc
+
 DB_PATH = "/opt/radarmap/api/traffic.db"
 OSRM = "http://127.0.0.1:8092"
 OUT_PATH = "/opt/radarmap/www/traffic/now.json"
@@ -192,6 +194,15 @@ def schema(conn):
     add_column(conn, "traffic_shared", "seen", "REAL NOT NULL DEFAULT 0")
     conn.execute("""CREATE TABLE IF NOT EXISTS traffic_meta(
         key TEXT PRIMARY KEY, value REAL NOT NULL)""")
+    # Профиль часа недели для маршрутизатора (33A, docs/spec_traffic_33.md):
+    # одно наблюдение — кусок, прошедший ребро насквозь, — со слотом часа
+    # недели и НОМЕРОМ ДНЯ (не временем): медиане нужен список скоростей, а
+    # доверию — число разных дней. Ни куска, ни устройства, ни минуты; строка
+    # живёт PROFILE_KEEP_DAYS и наружу не уходит.
+    conn.execute("""CREATE TABLE IF NOT EXISTS traffic_slot_obs(
+        u INTEGER NOT NULL, v INTEGER NOT NULL, slot INTEGER NOT NULL,
+        day INTEGER NOT NULL, kmh REAL NOT NULL)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS traffic_slot_obs_slot ON traffic_slot_obs(slot, u, v)")
     conn.commit()
 
 
@@ -354,6 +365,21 @@ def profile_slot(ts):
     return how + HOLIDAY_SLOT if is_holiday(ts) else how
 
 
+def week_slot(ts):
+    """Слот профиля маршрутизатора (33A): час недели 0–167 по Ташкенту
+    (понедельник 00:00 = 0). Праздник — как воскресенье в тот же час: в
+    Навруз дороги как в выходной (то же правило, что у файлов «обычно» и
+    UzHolidays на телефоне), а 168 слотов праздников по одному дню в году не
+    набрали бы трёх разных дней никогда."""
+    hour = hour_of_week(ts) % 24
+    return 6 * 24 + hour if is_holiday(ts) else hour_of_week(ts)
+
+
+def day_number(ts):
+    """Номер ташкентского дня (дни от 1970-01-01) — для «разных дней» слота."""
+    return int((ts + TASHKENT_UTC_OFFSET) // 86400)
+
+
 def profile_epoch(conn, now):
     """Метка весов профиля (п. 6 шапки). Нет метки — ставится `now`: строки,
     накопленные до старения (8.8.16), считаются снятыми в первом прогоне
@@ -374,6 +400,13 @@ def decay_scale(epoch, now):
 def store(conn, piece_id, samples, nodes, models, now):
     how = profile_slot(now)
     weight = decay_scale(profile_epoch(conn, now), now)
+    # 33A: кусок — одно наблюдение слота на каждом ребре, которое прошёл
+    # насквозь (темп по длине своих отрезков, как piece_profile).
+    passed = [sample for sample in samples if sample[4]]
+    slot, day = week_slot(now), day_number(now)
+    conn.executemany("INSERT INTO traffic_slot_obs(u, v, slot, day, kmh) VALUES(?, ?, ?, ?, ?)",
+                     [(u, v, slot, day, min(MAX_KMH, 3600.0 / pace))
+                      for (u, v), (_c, _t, pace) in sorted(piece_profile(passed).items())])
     conn.executemany("""INSERT INTO traffic_samples(u, v, kmh, weight, ts, piece, passed)
                         VALUES(?, ?, ?, ?, ?, ?, ?)""",
                      [(u, v, kmh, w, now, piece_id, int(passed)) for u, v, kmh, w, passed in samples])
@@ -491,7 +524,8 @@ def live_edges(conn, now):
             entry["pieces"].add(piece)
     out = []
     for (u, v), entry in grouped.items():
-        if len(entry["pieces"]) < MIN_PIECES:
+        # Порог карты (33F) — свой, отдельно от порога пути (traffic_profile).
+        if len(entry["pieces"]) < tc.MAP_MIN_PIECES:
             continue
         kmh = weighted_median(entry["pairs"])
         lvl = level(kmh, entry["model"]) if kmh is not None else None
@@ -649,6 +683,7 @@ def maintain_profile(conn, now):
     conn.execute("DELETE FROM traffic_profile WHERE pieces < ? AND n < ?",
                  (PROFILE_DROP * scale, PROFILE_DROP * scale))
     conn.execute("DELETE FROM traffic_shared WHERE seen < ?", (now - SHARED_TTL,))
+    conn.execute("DELETE FROM traffic_slot_obs WHERE day < ?", (day_number(now) - tc.PROFILE_KEEP_DAYS,))
     if now - epoch >= PROFILE_RENORM_AFTER:
         # Одна транзакция с новой меткой: числа и метка меняются разом.
         factor = 1.0 / scale

@@ -23,10 +23,15 @@ echo "→ Локальные тесты сборщика…"
 python3 -W ignore -m unittest discover -s "$DIR" -p 'test_traffic_build.py' >/dev/null
 
 echo "→ Заливка и проверка синтаксиса той же версией Python, что на сервере…"
+# traffic_config.py (этап 33) — константы, которые сборщик импортирует: без
+# него traffic_build.py не запустится. Едет первым.
+"${SCP[@]}" "$DIR/traffic_config.py" "$HOST:${BUILD%/*}/traffic_config.py.new"
 "${SCP[@]}" "$DIR/traffic_build.py" "$HOST:$BUILD.new"
 "${SSH[@]}" "$HOST" "
   set -e
+  python3 -c \"import ast, sys; ast.parse(open(sys.argv[1]).read())\" ${BUILD%/*}/traffic_config.py.new
   python3 -c \"import ast, sys; ast.parse(open(sys.argv[1]).read())\" $BUILD.new
+  mv ${BUILD%/*}/traffic_config.py.new ${BUILD%/*}/traffic_config.py
   mv $BUILD.new $BUILD
   mkdir -p /opt/radarmap/www/traffic
   # Пробный прогон: OSRM отвечает, база создаётся, файл пишется.

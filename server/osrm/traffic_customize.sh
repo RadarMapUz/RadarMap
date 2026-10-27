@@ -18,8 +18,9 @@
 #                customize переписывает (они копируются или создаются заново);
 #   current      относительная ссылка на рабочий слот («a» или «b»); контейнер
 #                смонтировал $ROOT и открывает /data/current/uzbekistan.osrm;
-#   bin/         traffic_speeds.py + traffic_build.py (копии из репо: стенд не
-#                зависит от того, что выложено в /opt/radarmap/api);
+#   bin/         traffic_speeds.py, traffic_profile.py, traffic_build.py,
+#                traffic_config.py (копии из репо: стенд не зависит от того,
+#                что выложено в /opt/radarmap/api);
 #   speeds.csv   последний файл скоростей.
 #
 # Почему так (замер 27.10, TRAFFIC.md):
@@ -48,7 +49,7 @@ IMAGE="${RADARMAP_OSRM_IMAGE:-ghcr.io/project-osrm/osrm-backend@sha256:a7091038e
 CONTAINER="${RADARMAP_OSRM_MLD_CONTAINER:-radarmap-osrm-mld}"
 PORT="${RADARMAP_OSRM_MLD_PORT:-8094}"
 DOCKER="${RADARMAP_DOCKER:-docker}"
-SOURCE="${RADARMAP_SPEEDS_SOURCE:-auto}"
+SOURCE="${RADARMAP_SPEEDS_SOURCE:-route}"   # 33A: профиль часа недели + живые
 MODE="${RADARMAP_SPEEDS_MODE:-weight}"
 NAME=uzbekistan
 MEMORY=900m
@@ -103,7 +104,13 @@ if [ -n "$SPEEDS" ]; then
     [ "$DRY" = 1 ] || [ -f "$SPEEDS" ] || { echo "нет файла $SPEEDS" >&2; exit 1; }
     run cp "$SPEEDS" "$ROOT/speeds.csv"
 else
-    run python3 "$BIN/traffic_speeds.py" --db "$DB" --source "$SOURCE" --mode "$MODE" --out "$ROOT/speeds.csv"
+    # Инвариант 1 (docs/spec_traffic_33.md): ошибка расчёта — пустой файл
+    # (traffic_speeds.py пишет его сам), и цикл идёт дальше: стенд уходит на
+    # граф без пробок, а не держит прошлую пробку.
+    if ! run python3 "$BIN/traffic_speeds.py" --db "$DB" --source "$SOURCE" --mode "$MODE" --out "$ROOT/speeds.csv"; then
+        log "расчёт скоростей упал — файл пустой, граф без пробок"
+        [ "$DRY" = 1 ] || : > "$ROOT/speeds.csv"
+    fi
 fi
 
 CURRENT="$(readlink "$ROOT/current" 2>/dev/null || true)"

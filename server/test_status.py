@@ -453,5 +453,83 @@ class AlertTests(unittest.TestCase):
             shutil.rmtree(folder)
 
 
+class TrafficTest(unittest.TestCase):
+    """33F: пробки — покрытие, свежесть, стенд."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.root, "api"))
+        os.makedirs(os.path.join(self.root, "www", "traffic"))
+        import traffic_build as tb
+        conn = sqlite3.connect(os.path.join(self.root, "api", "traffic.db"))
+        tb.schema(conn)
+        for piece in (1, 2):
+            conn.execute("INSERT INTO traffic_samples(u, v, kmh, weight, ts, piece, passed) "
+                         "VALUES(1, 2, 10, 50, ?, ?, 1)", (NOW - 60, piece))
+        conn.commit()
+        conn.close()
+        self.now_json(NOW - 60)
+
+    def tearDown(self):
+        shutil.rmtree(self.root)
+
+    def now_json(self, generated):
+        with open(os.path.join(self.root, "www", "traffic", "now.json"), "w") as f:
+            json.dump({"v": 1, "generated": generated, "edges": []}, f)
+
+    def stand(self, cycle_age, jam_rows=0):
+        stand = os.path.join(self.root, "osrm-mld")
+        os.makedirs(os.path.join(stand, "pristine"))
+        os.makedirs(os.path.join(stand, "b"))
+        os.symlink("b", os.path.join(stand, "current"))
+        with open(os.path.join(stand, "b", "speeds.csv"), "w") as f:
+            f.write("1,2,50.0,2.778\n" * jam_rows)
+        for name, age in (("cycle.stamp", cycle_age), ("customize.ok", cycle_age), ("speeds.csv", 3600)):
+            path = os.path.join(stand, name)
+            open(path, "a").close()
+            os.utime(path, (NOW - age, NOW - age))
+
+    def check(self, probe=lambda: (True, 12)):
+        return st.check_traffic(st.Context(now=NOW, root=self.root), probe=probe)
+
+    def test_coverage_counts(self):
+        got = self.check()
+        self.assertEqual(got["state"], st.OK)
+        self.assertIn("кусков за час 2", got["summary"])
+        self.assertIn("карта 1, путь 1", got["summary"])
+
+    def test_no_database_is_idle(self):
+        os.unlink(os.path.join(self.root, "api", "traffic.db"))
+        self.assertEqual(self.check()["state"], st.IDLE)
+
+    def test_stale_now_json_warns(self):
+        self.now_json(NOW - 11 * 60)
+        got = self.check()
+        self.assertEqual(got["state"], st.WARN)
+        self.assertIn("сборщик стоит", got["summary"])
+
+    def test_speeds_file_older_than_15_minutes_warns(self):
+        self.stand(cycle_age=16 * 60, jam_rows=3)
+        got = self.check()
+        self.assertEqual(got["state"], st.WARN)
+        self.assertIn("старше 15 мин — стенд держит прошлую пробку", got["summary"])
+
+    def test_fresh_cycle_and_healthy_stand(self):
+        self.stand(cycle_age=4 * 60)
+        got = self.check()
+        self.assertEqual(got["state"], st.OK)
+        self.assertIn("стенд 8094: строит за 12 мс", got["details"])
+        self.assertTrue(any("удачный customize" in d for d in got["details"]))
+
+    def test_dead_stand_warns(self):
+        self.stand(cycle_age=60)
+        self.assertEqual(self.check(probe=lambda: (False, 10000))["state"], st.WARN)
+
+    def test_stand_without_cycle_is_said(self):
+        self.stand(cycle_age=60)
+        os.unlink(os.path.join(self.root, "osrm-mld", "cycle.stamp"))
+        self.assertIn("цикл не включён", self.check()["summary"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

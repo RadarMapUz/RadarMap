@@ -113,6 +113,11 @@ else
     fi
 fi
 
+# Метка цикла (33F): status.py бьёт тревогу, если ей больше 15 минут — цикл
+# стоит, и стенд держит прошлую пробку. speeds.csv по ней не судят: его
+# переписывают только при изменении.
+[ "$DRY" = 1 ] || touch "$ROOT/cycle.stamp"
+
 CURRENT="$(readlink "$ROOT/current" 2>/dev/null || true)"
 if [ "$FORCE" = 0 ] && [ -n "$CURRENT" ] && [ "$DRY" = 0 ] \
         && cmp -s "$ROOT/speeds.csv" "$ROOT/$CURRENT/speeds.csv"; then
@@ -179,6 +184,7 @@ fi
 if ! "$DOCKER" inspect "$CONTAINER" >/dev/null 2>&1; then
     # Первый цикл до `docker run` стенда (TRAFFIC.md, «Стенд»): слот готов.
     log "слот $NEXT, рёбер $ROWS; контейнера $CONTAINER нет — не перезапускался"
+    touch "$ROOT/customize.ok"
     exit 0
 fi
 
@@ -199,4 +205,5 @@ if [ "$ok" = 0 ]; then
     log "ОШИБКА: стенд не ответил после подмены на $NEXT — возврат на ${CURRENT:-?}"
     exit 1
 fi
+touch "$ROOT/customize.ok"     # последний удачный customize (status.py)
 log "слот $NEXT, рёбер $ROWS, customize ${CUSTOMIZE} с, простой ${DOWN} с"

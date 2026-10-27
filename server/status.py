@@ -744,6 +744,134 @@ def check_cert(ctx, days_left=cert_days_left):
                   "Истёк сертификат — телефоны не достучатся ни до чего.")
 
 
+# --- Пробки (33F, docs/spec_traffic_33.md) --------------------------------------
+#
+# Константы порогов — из traffic_config.py (лежит рядом на VPS после
+# deploy_traffic.sh); нет файла — те же числа здесь, пульт не должен падать
+# из-за порядка выкладки.
+try:
+    import traffic_config as _tc
+except ImportError:  # pragma: no cover — старая выкладка без этапа 33
+    _tc = None
+TRAFFIC_STALE = getattr(_tc, "SPEEDS_STALE_SECONDS", 900)
+TRAFFIC_MAP_MIN = getattr(_tc, "MAP_MIN_PIECES", 2)
+TRAFFIC_ROUTE_MIN = getattr(_tc, "ROUTE_MIN_PIECES", 2)
+TRAFFIC_SLOT_DAYS = getattr(_tc, "SLOT_MIN_DAYS", 3)
+TRAFFIC_SLOT_PIECES = getattr(_tc, "SLOT_MIN_PIECES", 5)
+TRAFFIC_KEEP_DAYS = getattr(_tc, "PROFILE_KEEP_DAYS", 56)
+TRAFFIC_NOW_STALE = 10 * 60          # телефон считает now.json старше — «нет данных»
+STAND_PROBE = "http://127.0.0.1:8094/route/v1/driving/69.19617,41.28151;69.28866,41.36612?overview=false"
+
+
+def probe_stand(url=STAND_PROBE, timeout=10):
+    """(отвечает ли стенд MLD, мс)."""
+    started = time.time()
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            ok = b'"code":"Ok"' in resp.read()
+    except (OSError, ValueError):
+        ok = False
+    return ok, int((time.time() - started) * 1000)
+
+
+def traffic_counts(path, now):
+    """Покрытие из traffic.db (только чтение, только счётчики)."""
+    conn = sqlite3.connect("file:%s?mode=ro" % path, uri=True, timeout=5)
+    out = {}
+    try:
+        out["pieces"] = conn.execute("SELECT COUNT(DISTINCT piece) FROM traffic_samples WHERE ts >= ?",
+                                     (now - 3600,)).fetchone()[0]
+        for key, minimum in (("map", TRAFFIC_MAP_MIN), ("route", TRAFFIC_ROUTE_MIN)):
+            out[key] = conn.execute(
+                "SELECT COUNT(*) FROM (SELECT 1 FROM traffic_samples WHERE ts >= ? AND passed = 1 "
+                "GROUP BY u, v HAVING COUNT(DISTINCT piece) >= ?)", (now - 900, minimum)).fetchone()[0]
+        local = time.gmtime(now + 5 * 3600)
+        slot = local.tm_wday * 24 + local.tm_hour
+        day = int((now + 5 * 3600) // DAY)
+        try:
+            out["typical"] = conn.execute(
+                "SELECT COUNT(*) FROM (SELECT 1 FROM traffic_slot_obs WHERE slot = ? AND day >= ? "
+                "GROUP BY u, v HAVING COUNT(DISTINCT day) >= ? AND COUNT(*) >= ?)",
+                (slot, day - TRAFFIC_KEEP_DAYS, TRAFFIC_SLOT_DAYS, TRAFFIC_SLOT_PIECES)).fetchone()[0]
+        except sqlite3.OperationalError:
+            out["typical"] = None        # сборщик до этапа 33
+        try:
+            out["turns"] = conn.execute("SELECT COUNT(DISTINCT u || ',' || v || ',' || w) FROM traffic_turn_obs"
+                                        ).fetchone()[0]
+        except sqlite3.OperationalError:
+            out["turns"] = None
+    finally:
+        conn.close()
+    return out
+
+
+def rows_in(path):
+    try:
+        with open(path, "rb") as f:
+            return sum(1 for line in f if line.strip())
+    except OSError:
+        return None
+
+
+def check_traffic(ctx, probe=probe_stand):
+    """Пробки: покрытие данных, свежесть now.json и файла скоростей стенда,
+    последний удачный customize, здоровье стенда (33F)."""
+    meaning = ("Пробки — только показ и выбор пути: камеры не задеты. Устаревший файл "
+               "скоростей — стенд держит прошлую пробку; now.json старше 10 минут — "
+               "телефоны не видят пробок.")
+    db = os.path.join(ctx.root, "api", "traffic.db")
+    if not os.path.exists(db):
+        return result("traffic", "Пробки", IDLE, "traffic.db нет — сборщик не выложен", meaning)
+    state, parts, details = OK, [], []
+    counts = traffic_counts(db, ctx.now)
+    parts.append("кусков за час %d · рёбер: карта %d, путь %d, типичных %s, манёвров %s" % (
+        counts["pieces"], counts["map"], counts["route"],
+        "—" if counts["typical"] is None else counts["typical"],
+        "—" if counts["turns"] is None else counts["turns"]))
+    if counts["pieces"] == 0:
+        state = IDLE
+    now_json = os.path.join(ctx.root, "www", "traffic", "now.json")
+    try:
+        with open(now_json, encoding="utf-8") as f:
+            generated = json.load(f).get("generated") or 0
+        age = ctx.now - generated
+        details.append("now.json: %d мин назад" % (age // 60))
+        if age > TRAFFIC_NOW_STALE:
+            state = worst(state, WARN)
+            parts.append("now.json старше 10 мин — сборщик стоит")
+    except (OSError, ValueError):
+        state = worst(state, WARN)
+        parts.append("now.json не читается")
+    stand = os.path.join(ctx.root, "osrm-mld")
+    if os.path.isdir(os.path.join(stand, "pristine")):
+        stamp = os.path.join(stand, "cycle.stamp")
+        ok_stamp = os.path.join(stand, "customize.ok")
+        current = os.path.join(stand, "current")
+        jam_rows = rows_in(os.path.join(current, "speeds.csv"))
+        turn_rows = rows_in(os.path.join(current, "turns.csv"))
+        sizes = ["%s %d КБ" % (name, os.path.getsize(os.path.join(stand, name)) // 1024)
+                 for name in ("speeds.csv", "turns.csv") if os.path.exists(os.path.join(stand, name))]
+        if os.path.exists(stamp):
+            age = ctx.now - os.path.getmtime(stamp)
+            parts.append("стенд: цикл %d мин назад, в слоте рёбер %s, манёвров %s" % (
+                age // 60, "—" if jam_rows is None else jam_rows, "—" if turn_rows is None else turn_rows))
+            if age > TRAFFIC_STALE:
+                state = worst(state, WARN)
+                parts.append("файл скоростей старше 15 мин%s" % (
+                    " — стенд держит прошлую пробку" if jam_rows else ""))
+        else:
+            parts.append("стенд: цикл не включён")
+        if os.path.exists(ok_stamp):
+            details.append("последний удачный customize: %d мин назад" % ((ctx.now - os.path.getmtime(ok_stamp)) // 60))
+        details.extend(sizes)
+        alive, ms = probe()
+        details.append("стенд 8094: %s за %d мс" % ("строит" if alive else "не отвечает", ms))
+        if not alive:
+            state = worst(state, WARN)
+            parts.append("стенд не отвечает")
+    return result("traffic", "Пробки", state, " · ".join(parts), meaning, details)
+
+
 DELIVERY_NAMES = {"cameras": "база камер", "limits": "лимиты", "roads": "дороги",
                   "mvt": "своя карта"}
 
@@ -801,7 +929,7 @@ def check_delivery(ctx):
 
 
 CHECKS = (check_api, check_cameras, check_registry, check_limits, check_roads, check_mvt, check_omt, check_overrides,
-          check_hotspots, check_config, check_osrm, check_crowd, check_backup, check_disk,
+          check_hotspots, check_config, check_osrm, check_traffic, check_crowd, check_backup, check_disk,
           check_cert, check_delivery)
 
 

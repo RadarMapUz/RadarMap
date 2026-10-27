@@ -17,6 +17,10 @@
     # … traffic_customize.sh --speeds пустой --turns turns.csv …
     python3 route_bench.py check --base http://127.0.0.1:8094 --pair chil-yunus --turns turns.csv
 
+    # модель обычных пробок (33G): граф без пробок против графа с файлом
+    # скоростей модели — где первый вариант ушёл в объезд и что он выиграл
+    python3 route_bench.py compare --base http://127.0.0.1:5794 --with http://127.0.0.1:5795 --speeds speeds-1810.csv
+
 Только чтение: ничего не пишет на сервер. stdlib, как весь server/.
 """
 import argparse
@@ -175,6 +179,84 @@ def cmd_check(args):
     return 0 if clean else 1
 
 
+def load_rates(path):
+    """{(u, v): (км/ч графа, км/ч пробки)} файла скоростей: weight —
+    `u,v,граф,rate м/с`; duration — `u,v,км/ч` (граф неизвестен — None)."""
+    out = {}
+    if not path:
+        return out
+    with open(path, encoding="ascii") as f:
+        for line in f:
+            parts = line.strip().split(",")
+            if len(parts) == 4:
+                out[(int(parts[0]), int(parts[1]))] = (float(parts[2]), float(parts[3]) * 3.6)
+            elif len(parts) == 3:
+                out[(int(parts[0]), int(parts[1]))] = (None, float(parts[2]))
+    return out
+
+
+def jam_extra(edges, rates):
+    """На сколько файл утяжеляет путь против графа, с: длина / пробка −
+    длина / граф по рёбрам файла (время манёвров в аннотации не трогаем)."""
+    extra = 0.0
+    for u, v, dist, dur in edges:
+        graph, jam = rates.get((u, v), (None, None))
+        if jam and jam > 0:
+            extra += max(0.0, dist / (jam / 3.6) - (dist / (graph / 3.6) if graph else dur))
+    return extra
+
+
+def jam_time(edges, rates):
+    """Время пути по скоростям файла (где их нет — по графу), с."""
+    return sum(dur for _, _, _, dur in edges) + jam_extra(edges, rates)
+
+
+def cmd_compare(args):
+    """33G: те же пары на графе без пробок (--base) и на графе с файлом
+    скоростей (--with, --speeds): первый вариант каждого — длина, время графа,
+    время по файлу, доля общего пути. Объезд — общий путь < 90 % длины."""
+    rates = load_rates(args.speeds)
+    detours = 0
+    for pair in load_pairs(args.pairs):
+        if args.pair and pair["id"] not in args.pair:
+            continue
+        got, weights = [], []
+        for base in (args.base, args.with_):
+            url = (f"{base.rstrip('/')}/route/v1/driving/{coords(pair)}?overview=false"
+                   "&annotations=nodes,distance,duration")
+            route = fetch(url)["routes"][0]
+            got.append(route_edges(route))
+            weights.append(route["weight"])
+        plain, model = got
+        # Остался ли прямой путь среди вариантов графа с файлом (приложение
+        # просит три и само выбирает «Быстрый» по своему времени).
+        alt_url = (f"{args.with_.rstrip('/')}/route/v1/driving/{coords(pair)}?overview=false&alternatives=3"
+                   "&annotations=nodes,distance,duration")
+        plain_total = sum(e[2] for e in plain) or 1.0
+        kept = any(sum(e[2] for e in plain if (e[0], e[1]) in {(x[0], x[1]) for x in route_edges(alt)})
+                   / plain_total >= 0.9 for alt in fetch(alt_url)["routes"])
+        # Вес прямого пути на графе с файлом: его вес без файла плюс то, на
+        # что файл утяжеляет его рёбра. Выигрыш объезда — в той же мере, что
+        # выбирает маршрутизатор.
+        plain_heavy = weights[0] + jam_extra(plain, rates)
+        plain_set = {(u, v) for u, v, _, _ in plain}
+        length = sum(e[2] for e in model) or 1.0
+        shared = sum(e[2] for e in model if (e[0], e[1]) in plain_set) / length
+        tp, tm = jam_time(plain, rates), jam_time(model, rates)
+        eta = load_rates(args.eta) if args.eta else None
+        detour = shared < 0.9
+        detours += detour
+        print(f"{pair['id']:14s} граф: {sum(e[2] for e in plain) / 1000:6.2f} км {sum(e[3] for e in plain) / 60:5.1f} мин "
+              f"(по файлу {tp / 60:5.1f}) | с файлом: {length / 1000:6.2f} км {sum(e[3] for e in model) / 60:5.1f} мин "
+              f"(по файлу {tm / 60:5.1f}) | общий путь {shared * 100:3.0f} %"
+              + (f" — ОБЪЕЗД, вес {plain_heavy:.0f} → {weights[1]:.0f} ({(weights[1] - plain_heavy) / plain_heavy * 100:+.1f} %), "
+                 f"прямой путь среди вариантов: {'да' if kept else 'нет'}" if detour else "")
+              + (f" | полная модель: прямой {jam_time(plain, eta) / 60:.1f} мин (+{jam_extra(plain, eta) / max(1, sum(e[3] for e in plain)) * 100:.0f} %), "
+                 f"выбранный {jam_time(model, eta) / 60:.1f}" if eta is not None else ""))
+    print(f"объездов: {detours}")
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -203,8 +285,16 @@ def main(argv=None):
     u.add_argument("--out", required=True)
     u.add_argument("--penalty", type=int, default=90)
     u.add_argument("--index", type=int, default=0, help="какой по счёту левый поворот (с 0)")
+    m = sub.add_parser("compare", help="33G: путь без пробок и с файлом скоростей на тех же парах")
+    m.add_argument("--base", required=True, help="граф без пробок")
+    m.add_argument("--with", dest="with_", required=True, help="граф после customize с --speeds")
+    m.add_argument("--speeds", required=True)
+    m.add_argument("--pairs", default=PAIRS)
+    m.add_argument("--pair", action="append", help="только эти пары (по умолчанию все)")
+    m.add_argument("--eta", help="файл скоростей полной модели (вес 1) — время, которое покажет телефон")
     args = ap.parse_args(argv)
-    return {"time": cmd_time, "jam": cmd_jam, "check": cmd_check, "turn": cmd_turn}[args.cmd](args) or 0
+    return {"time": cmd_time, "jam": cmd_jam, "check": cmd_check, "turn": cmd_turn,
+            "compare": cmd_compare}[args.cmd](args) or 0
 
 
 if __name__ == "__main__":

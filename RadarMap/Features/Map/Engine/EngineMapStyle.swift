@@ -141,6 +141,8 @@ nonisolated enum EngineMapStyle {
 
     /// Окно линии маршрута у машины (RouteCut): срез краской каждый кадр.
     static let routeNearSource = "route-near"
+    /// «Обычно в это время» (33G): профиль часа недели — водители и модель.
+    static let usualTrafficSource = "traffic-usual"
     /// Стрелки направления — точками с местом на линии (RouteCut.arrows).
     static let routeArrowsSource = "route-arrows"
     /// Слои окна у машины: кайма, тело, манёвр, середина — режутся одинаково.
@@ -334,6 +336,19 @@ nonisolated enum EngineMapStyle {
         // рядом с ним только двоила бы её. На остальных дорогах видны тонкие
         // цветные линии, каждое направление — справа по ходу (движение
         // правостороннее): у двусторонней улицы видны обе стороны.
+        // «Обычно в это время» (33G) — под живыми: светлее и тоньше, той же
+        // стороной (справа по ходу). Цвет — светлый коралл, без красного:
+        // модель не говорит «пробка». Полный вид пробок — этап 33H.
+        out.append([
+            "id": "traffic-usual", "type": "line", "source": usualTrafficSource,
+            "layout": round,
+            "paint": ["line-color": colour(RouteColors.usual),
+                      "line-width": ["interpolate", ["linear"], ["zoom"],
+                                     11, 1, 14, 1.6, 16, 2.4, 19, 3.8],
+                      "line-offset": ["interpolate", ["linear"], ["zoom"],
+                                      11, 0.9, 14, 1.3, 16, 1.8, 19, 2.8],
+                      "line-opacity": ["match", ["get", "heavy"], 1, 0.85, 0.65]],
+        ])
         out.append([
             "id": "traffic", "type": "line", "source": "traffic",
             "layout": round,

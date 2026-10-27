@@ -135,6 +135,11 @@ struct EngineMapView: UIViewRepresentable {
     /// Тот же набор пробок с сеткой поиска — для цвета САМОЙ линии маршрута
     /// (RouteTraffic, 25.D). nil — линия одного цвета (Theme.route).
     var trafficSnapshot: TrafficSnapshot?
+    /// «Обычно в это время» (33G, TrafficProfileService): где в этот час
+    /// обычно медленно — по водителям или по модели дороги. Светлее и тоньше
+    /// живых, под ними; в источник — только на смене ревизии.
+    var usualTrafficEdges: [TrafficProfile.UsualEdge] = []
+    var usualTrafficRevision: Int = 0
     /// Язык подписей новой карты («ru» / «uz»). Меняется только с языком
     /// приложения, а тот применяется после перезапуска — перезагрузка стиля
     /// ради него не нужна.
@@ -747,6 +752,7 @@ struct EngineMapView: UIViewRepresentable {
             hotShown = nil
             modernDrivingLayerIDs = nil
             lastTrafficRevision = -1
+            lastUsualRevision = -1
             // Источники нового стиля пусты: флаг цели, машина, треноги и
             // события дороги — заново (до этого после смены дня и ночи они
             // пропадали, пока что-то в них не менялось).
@@ -1146,6 +1152,7 @@ struct EngineMapView: UIViewRepresentable {
             updateMarks(model, in: view)
             updateCameraLabel(model.cameraLabel, in: view)
             updateTraffic(model, in: view)
+            updateUsualTraffic(model, in: view)
             // Подписи «24 мин» сторонятся значков камер: значок лежит выше и
             // съедал первую цифру (снимки App Store, 22.10).
             var spots: [EngineRouteVariants.CameraSpot] = []
@@ -1378,6 +1385,27 @@ struct EngineMapView: UIViewRepresentable {
                 var coordinates = [edge.a, edge.b]
                 let line = MLNPolylineFeature(coordinates: &coordinates, count: 2)
                 line.attributes = ["level": edge.level]
+                return line
+            }
+            source.shape = MLNShapeCollectionFeature(shapes: lines)
+        }
+
+        private var lastUsualRevision = -1
+        /// Слой «обычно в это время» (33G) — на смене набора (раз в 5 мин).
+        /// Признак `src` различает водителей и модель (подпись и будущий
+        /// стиль 33H), `heavy` — «обычно очень медленно».
+        private func updateUsualTraffic(_ model: EngineMapView, in view: MLNMapView) {
+            guard model.usualTrafficRevision != lastUsualRevision else { return }
+            guard let source = view.style?.source(withIdentifier: EngineMapStyle.usualTrafficSource) as? MLNShapeSource else {
+                Log.network.error("MapLibre: источника «обычно» нет в стиле")
+                return
+            }
+            lastUsualRevision = model.usualTrafficRevision
+            Log.network.debug("MapLibre: «обычно» в источник, рёбер \(model.usualTrafficEdges.count, privacy: .public), слой \(view.style?.layer(withIdentifier: EngineMapStyle.usualTrafficSource) != nil, privacy: .public)")
+            let lines = model.usualTrafficEdges.map { edge -> MLNPolylineFeature in
+                var coordinates = [edge.a, edge.b]
+                let line = MLNPolylineFeature(coordinates: &coordinates, count: 2)
+                line.attributes = ["src": edge.source == .model ? "model" : "drivers", "heavy": edge.isHeavy ? 1 : 0]
                 return line
             }
             source.shape = MLNShapeCollectionFeature(shapes: lines)

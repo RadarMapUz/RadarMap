@@ -893,6 +893,15 @@ nonisolated enum AppConfig {
     static let trafficProfileRefreshSeconds: TimeInterval = 6 * 3600
     /// После ошибки сети или 404 (сервер ещё не выложен) — повтор не раньше, с.
     static let trafficProfileRetrySeconds: TimeInterval = 30 * 60
+    /// Слой «обычно в это время» (33G): ребро профиля рисуется, когда в этот
+    /// час по нему обычно едут медленнее 0,7 скорости графа. Мельче — не
+    /// повод для линии: светофоры и так в графе, а слой о часах пик.
+    nonisolated static let usualTrafficShowRatio = 0.7
+    /// Ниже 0,55 графа — «обычно очень медленно» (плотнее та же светлая линия).
+    nonisolated static let usualTrafficHeavyRatio = 0.55
+    /// Слой «обычно» пересчитывается раз в 5 мин: смесь слотов по минуте
+    /// меняется плавно, а пересборка — 30 тыс. рёбер вне главного потока, с.
+    static let usualTrafficRecomputeSeconds: TimeInterval = 5 * 60
     /// Личный темп (33E): наблюдения за столько дней.
     nonisolated static let personalPaceWindowDays: Double = 30
     /// Коэффициент годен с этой выборки (км) — по классу или в целом.

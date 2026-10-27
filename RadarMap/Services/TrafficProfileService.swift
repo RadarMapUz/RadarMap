@@ -12,25 +12,41 @@
 //  Выключатели те же, что у пробок: «Пробки» в настройках и пульт
 //  (`features.traffic`) — `isAllowed`. Выключено — файл забывается.
 //
+//  Слой «обычно в это время» (33G): пока на карту смотрят (`setWanted`, те же
+//  экран, машина и поездка, что у живых пробок), раз в
+//  `usualTrafficRecomputeSeconds` — рёбра, где в этот час обычно медленно
+//  (TrafficProfile.usual, вне главного потока). Только показ и ETA: голосу
+//  (JamAhead, объезд) этот слой не виден.
+//
 
 import Foundation
+import Observation
 import os
 
 @MainActor
+@Observable
 final class TrafficProfileService {
     /// Снос без прыжка на актор — тот же обход бага рантайма, что у моделей.
     nonisolated deinit {}
 
-    private var profile: TrafficProfile?
-    private var etag: String?
-    private var checkedAt: Date?
-    private var loading: Task<Void, Never>?
+    /// Рёбра слоя «обычно в это время»; пусто — нет профиля, выключено или
+    /// в этот час везде как граф (ночь).
+    private(set) var usualEdges: [TrafficProfile.UsualEdge] = []
+    /// Растёт на каждом новом наборе слоя — по нему карта перерисовывает.
+    private(set) var usualRevision = 0
+
+    @ObservationIgnored private var profile: TrafficProfile?
+    @ObservationIgnored private var etag: String?
+    @ObservationIgnored private var checkedAt: Date?
+    @ObservationIgnored private var loading: Task<Void, Never>?
+    @ObservationIgnored private var wanted = false
+    @ObservationIgnored private var usualTask: Task<Void, Never>?
 
     /// Пробки включены в настройках и пультом; ставит AppEnvironment.
-    var isAllowed: () -> Bool = { true }
-    var isOnline: () -> Bool = { true }
+    @ObservationIgnored var isAllowed: () -> Bool = { true }
+    @ObservationIgnored var isOnline: () -> Bool = { true }
 
-    private let api = APIClient(base: AppConfig.trafficFeedBaseURL)
+    @ObservationIgnored private let api = APIClient(base: AppConfig.trafficFeedBaseURL)
     static let path = "traffic/profile.json"
 
     /// Профиль из памяти, без сети; nil — не загружен, выключен или старше 36 ч.
@@ -63,6 +79,15 @@ final class TrafficProfileService {
     }
 
     private func load(now: Date) async {
+        #if DEBUG
+        // Снимки без сервера: `-trafficProfileFile /путь/profile.json`.
+        if let path = UserDefaults.standard.string(forKey: "trafficProfileFile"),
+           let data = FileManager.default.contents(atPath: path) {
+            profile = TrafficProfile.decode(data)
+            Log.network.info("профиль пробок из файла: рёбер \(self.profile?.slots.count ?? 0, privacy: .public)")
+            return
+        }
+        #endif
         do {
             if let fresh = try await Self.fetch(api: api, etag: etag) {
                 guard isAllowed() else { return }
@@ -80,6 +105,64 @@ final class TrafficProfileService {
                                                - AppConfig.trafficProfileRefreshSeconds)
             Log.network.notice("профиль пробок не загрузился: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    // MARK: - Слой «обычно в это время» (33G)
+
+    /// Кто-то смотрит на карту (экран, машина, поездка) — слой нужен. Ставит
+    /// AppEnvironment вместе с живыми пробками.
+    func setWanted(_ wanted: Bool) {
+        guard wanted != self.wanted else { return }
+        self.wanted = wanted
+        usualTask?.cancel()
+        usualTask = nil
+        guard wanted else { return }
+        usualTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                await self.refreshIfDue()
+                await self.recomputeUsual()
+                await Task.pause(seconds: AppConfig.usualTrafficRecomputeSeconds)
+            }
+        }
+    }
+
+    /// Пересчитать слой на «сейчас» (или на момент DEBUG-хука `-usualTrafficAt`).
+    func recomputeUsual(now: Date = Date()) async {
+        guard isAllowed(), let profile = current(now: now) else {
+            if !usualEdges.isEmpty {
+                usualEdges = []
+                usualRevision &+= 1
+            }
+            return
+        }
+        let moment = Self.layerMoment(now)
+        let edges = await Self.usual(profile, at: moment)
+        guard edges != usualEdges else { return }
+        usualEdges = edges
+        usualRevision &+= 1
+        Log.network.info("обычно в это время: рёбер \(edges.count, privacy: .public) на \(moment.formatted(.iso8601), privacy: .public)")
+    }
+
+    @concurrent
+    private static func usual(_ profile: TrafficProfile, at moment: Date) async -> [TrafficProfile.UsualEdge] {
+        profile.usual(at: moment)
+    }
+
+    /// Момент слоя: сейчас; в DEBUG — `-usualTrafficAt 2026-10-26T18:30`
+    /// (ташкентское время) для снимков карты в часы пик без ожидания вечера.
+    private static func layerMoment(_ now: Date) -> Date {
+        #if DEBUG
+        if let date = UserDefaults.standard.object(forKey: "usualTrafficAt") as? Date { return date }
+        if let text = UserDefaults.standard.string(forKey: "usualTrafficAt") {
+            let format = DateFormatter()
+            format.locale = Locale(identifier: "en_US_POSIX")
+            format.timeZone = TypicalTraffic.tashkent.timeZone
+            format.dateFormat = "yyyy-MM-dd'T'HH:mm"
+            if let date = format.date(from: text) { return date }
+        }
+        #endif
+        return now
     }
 
     /// Загрузка и разбор вне главного потока.

@@ -103,6 +103,7 @@ import urllib.request
 
 import traffic_build as tb
 import traffic_config as tc
+import traffic_model as tm
 import traffic_profile as tp
 
 SPEED_FLOOR_KMH = 5          # «стоим», но не «закрыто» (см. шапку)
@@ -347,9 +348,13 @@ def read_previous(path):
     return out
 
 
-def edge_lengths(conn, edges):
-    """{(u, v): метров} по координатам узлов traffic_nodes; неизвестно — 1 м."""
+def edge_lengths(conn, edges, model=None):
+    """{(u, v): метров} по координатам узлов traffic_nodes, а рёбер модели
+    (33G) — по её координатам; неизвестно — 1 м."""
     coords = {}
+    for (u, v), (_g, _curve, (ulat, ulon, vlat, vlon)) in (model or {}).items():
+        coords.setdefault(u, (ulat, ulon))
+        coords.setdefault(v, (vlat, vlon))
     for node, lat, lon in conn.execute("SELECT id, lat, lon FROM traffic_nodes"):
         coords[node] = (lat, lon)
     out = {}
@@ -395,13 +400,16 @@ def route_files(args, now, steps, resolver=None):
     пишет пустой файл)."""
     resolver = resolver or osrm_event_edges
     previous = read_previous(args.out)
+    started = time.perf_counter()
+    model = tm.load_model(args.model) if args.model else {}
+    steps["модель"] = time.perf_counter() - started
     conn = sqlite3.connect(f"file:{args.db}?mode=ro", uri=True, timeout=5)
     try:
         started = time.perf_counter()
-        speeds_kmh, graph, stats = tp.route_edges(conn, now, previous)
+        speeds_kmh, graph, stats = tp.route_edges(conn, now, previous, model=model)
         steps["профиль"] = time.perf_counter() - started
         edges = {edge: (kmh, graph[edge]) for edge, kmh in speeds_kmh.items()}
-        lengths = edge_lengths(conn, edges)
+        lengths = edge_lengths(conn, edges, model)
         stats["events"] = 0
         if args.reports_db and tc.LAYER_EVENTS:
             started = time.perf_counter()
@@ -439,6 +447,8 @@ def main(argv=None, resolver=None):
     parser.add_argument("--turns-out", help="файл штрафов манёвров (33B; только с --source route)")
     parser.add_argument("--reports-db", help="reports.db: подтверждённые ДТП и перекрытия (33D; только route)")
     parser.add_argument("--events-cache", help="кэш путей отметок (JSON рядом с файлом скоростей)")
+    parser.add_argument("--model", default=tc.MODEL_PATH if tc.LAYER_MODEL else "",
+                        help="файл модели обычных пробок (33G; пусто — без модели)")
     args = parser.parse_args(argv)
     if (args.turns_out or args.reports_db) and args.source != "route":
         parser.error("--turns-out и --reports-db — только с --source route")
@@ -483,7 +493,7 @@ def main(argv=None, resolver=None):
         result = "ок" if edges or turns else "пусто"
         trimmed = f", ПОТОЛОК: обрезано {stats['trimmed']}" if stats.get("trimmed") else ""
         print(f"{stamp} скорости (route, {args.mode}): слоты {stats['slots']}, рёбер типичных "
-              f"{stats['typical']}, живых {stats['live']}, событий {stats['events']}, записано {len(edges)} "
+              f"{stats['typical']}, модели {stats['model']}, живых {stats['live']}, событий {stats['events']}, записано {len(edges)} "
               f"(гистерезис {stats['kept']}), манёвров {len(turns) if args.turns_out else '—'}{trimmed}; {timing}; {result}, "
               f"{'изменён' if changed else 'без изменений'} → {args.out}")
     return 0

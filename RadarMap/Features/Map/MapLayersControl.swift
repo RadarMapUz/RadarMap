@@ -40,6 +40,40 @@ struct MapLayersButton: View {
     }
 }
 
+/// Легенда пробок под тумблером (33G): живые — по водителям сейчас; светлые
+/// тонкие — «обычно в это время» (поездки водителей за недели или модель
+/// дороги). Модель не говорит «пробка» — только «обычно здесь медленно».
+struct TrafficLegend: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            row(Text("Сейчас — по данным водителей"),
+                colour: Theme.adaptive(RouteColors.jam.day, RouteColors.jam.night), width: 4.5, opacity: 0.95)
+            row(Text("Обычно здесь медленно в это время"),
+                colour: Theme.adaptive(RouteColors.usual.day, RouteColors.usual.night), width: 2.5, opacity: 0.75)
+        }
+        .padding(.leading, 6)
+        .padding(.bottom, 6)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func row(_ title: Text, colour: Color, width: CGFloat, opacity: Double) -> some View {
+        HStack(spacing: 10) {
+            Capsule()
+                .fill(colour.opacity(opacity))
+                .frame(width: 26, height: width)
+                .frame(width: 32)
+            // Ширина подписи ограничена: панель берёт идеальную ширину
+            // содержимого, и длинная строка («…maʼlumoti boʻyicha») иначе
+            // раздвигала бы её за край и обрезалась — пусть переносится.
+            title
+                .font(.rounded(12))
+                .foregroundStyle(Theme.textSecondary)
+                .frame(width: 168, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
 /// Панель «Карта»: слои и кнопки масштаба.
 struct MapLayersPanel: View {
     /// Пробки от водителей (TrafficService) — первым: это то, что смотрят
@@ -93,6 +127,7 @@ struct MapLayersPanel: View {
         VStack(alignment: .leading, spacing: 2) {
             MapPopoverHeader(title: "Карта", onClose: onClose)
             toggle("Пробки", Icon.trafficLayer, isOn: $traffic)
+            if traffic { TrafficLegend() }
             // «Места» прячут кафе и банки, заправки и парковки остаются всегда.
             toggle("Места", Icon.placesLayer, isOn: $places)
             toggle("Дома", Icon.buildingsLayer, isOn: $houses)

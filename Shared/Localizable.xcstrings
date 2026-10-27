@@ -32953,6 +32953,134 @@
           }
         }
       }
+    },
+    "Пост ещё стоит?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пост ещё стоит?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Post hali ham turibdimi?"
+          }
+        }
+      }
+    },
+    "Стоит": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Стоит"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turibdi"
+          }
+        }
+      }
+    },
+    "Пост убрали": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пост убрали"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Post ketib qolgan"
+          }
+        }
+      }
+    },
+    "Да, пост ещё стоит": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Да, пост ещё стоит"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ha, post hali ham turibdi"
+          }
+        }
+      }
+    },
+    "ДТП ещё на дороге?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ДТП ещё на дороге?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YTH hali ham yoʻldami?"
+          }
+        }
+      }
+    },
+    "Уже убрали": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Уже убрали"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allaqachon yoʻq"
+          }
+        }
+      }
+    },
+    "Да, ДТП ещё на дороге": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Да, ДТП ещё на дороге"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ha, YTH hali ham yoʻlda"
+          }
+        }
+      }
+    },
+    "ДТП уже убрали": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ДТП уже убрали"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YTH allaqachon yoʻq"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

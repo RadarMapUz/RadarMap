@@ -696,6 +696,38 @@ class APITest(ServerTestBase):
         self.assertEqual(kinds["v1"], "pass")
         self.assertEqual(kinds["v2"], "")
 
+    def test_post_removed_after_pass(self):
+        """«Пост убрали» (12.7) — тот же голос после проезда, что «радара
+        уже не было»: value=-1, kind="pass". Первый с нового адреса срезает
+        срок, три разных адреса снимают пост из /api/mobile. Отдельной
+        серверной части для поста не нужно."""
+        _, body = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.33, "lon": 69.27, "device": "owner", "type": "post"},
+                        ip="10.2.9.1")
+        rid = body["id"]
+        conn = sqlite3.connect(api.DB_PATH)
+        start = conn.execute("SELECT expires FROM reports WHERE id = ?", (rid,)).fetchone()[0]
+        conn.close()
+        status, _ = _call(self.port, "POST", "/api/vote",
+                          {"id": rid, "device": "gone1", "value": -1, "kind": "pass"},
+                          ip="10.2.9.2")
+        self.assertEqual(status, 200)
+        conn = sqlite3.connect(api.DB_PATH)
+        expires = conn.execute("SELECT expires FROM reports WHERE id = ?", (rid,)).fetchone()[0]
+        kind = conn.execute("SELECT kind FROM votes WHERE report_id = ? AND device = 'gone1'",
+                            (rid,)).fetchone()[0]
+        conn.close()
+        self.assertAlmostEqual(expires, start - api.DOWN_PENALTY, delta=5,
+                               msg="«убрали» с нового адреса срезает срок поста")
+        self.assertEqual(kind, "pass", "модератор видит голос после проезда")
+        for index, ip in enumerate(("10.2.9.3", "10.2.9.4")):
+            _, voted = _call(self.port, "POST", "/api/vote",
+                             {"id": rid, "device": f"gone{index + 2}", "value": -1, "kind": "pass"},
+                             ip=ip)
+        self.assertFalse(voted["active"], "три разных адреса — пост снят")
+        _, live = _call(self.port, "GET", "/api/mobile")
+        self.assertNotIn(rid, [r["id"] for r in live["reports"]])
+
     # --- камеры и фидбек ---
 
     def test_camera_report_dedup_per_device(self):

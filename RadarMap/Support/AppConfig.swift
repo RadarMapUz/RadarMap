@@ -1144,6 +1144,13 @@ nonisolated enum AppConfig {
     nonisolated static let commuteLossNameMeters: Double = 150
     /// Строк в «Последних поездках» экрана дороги.
     nonisolated static let commuteDetailTripRows = 12
+    /// График выездов (34): выезд дальше этого от медианы — отдельный случай
+    /// (обед, забрать ребёнка), он подписывается под графиком и не растягивает
+    /// ось: два выезда в 11:30 сжимали сорок вечерних точек к правому краю.
+    nonisolated static let commuteChartCoreSpanMinutes = 120
+    /// Подписей на оси графика выездов — не больше: на SE шесть «18:30» в
+    /// строку уже слипались в «11:3012:00…».
+    nonisolated static let commuteChartMaxLabels = 5
     /// Пробел посреди пробки (стояние дольше двух минут на границе участков)
     /// не рвёт отрезок, если он не длиннее двух участков (~400 м).
     nonisolated static let commuteLossBridgeSegments = 2

@@ -23,6 +23,11 @@ struct CommuteCard: View {
     var monthlyCost: Double? = nil
     /// «Обычно ~35 мин (по водителям)» (8.8.16) — пока своего «обычно» нет.
     var crowdUsual: TimeInterval? = nil
+    /// Шапка листа «Дорога домой» (34): название уже в навбаре, а «обычно» —
+    /// пунктиром на графике под карточкой. Владелец, 27.10: «Дорога домой»
+    /// дважды и «обычно 53 мин» трижды на одном экране — одно и то же разными
+    /// словами. Здесь карточка — только про последнюю поездку.
+    var inDetail = false
 
     var body: some View {
         let monthly = monthlyCost
@@ -46,7 +51,9 @@ struct CommuteCard: View {
                     }
                 }
             }
-            if let usual = summary.usual {
+            if inDetail, summary.usual != nil {
+                // «Обычно» — подписанная линия графика ниже; здесь только поездка.
+            } else if let usual = summary.usual {
                 // Фразой, а не сеткой цифр: «Обычно 39 мин, выезжаете около
                 // 18:37» читается за один взгляд, три подписанные клетки — за три.
                 Text(Self.usualLine(usual: usual, departure: summary.usualDepartureMinute))
@@ -119,7 +126,18 @@ struct CommuteCard: View {
         return parts.joined(separator: ". ")
     }
 
-    private var header: some View {
+    @ViewBuilder private var header: some View {
+        if inDetail {
+            Text(Self.whenLine(summary.last))
+                .font(.rounded(13))
+                .foregroundStyle(Theme.textSecondary)
+                .monospacedDigit()
+        } else {
+            titleHeader
+        }
+    }
+
+    private var titleHeader: some View {
         HStack(spacing: 12) {
             IconBadge(symbol: summary.direction.symbol,
                       tint: summary.direction == .toWork ? Theme.Icon.work : Theme.Icon.home)

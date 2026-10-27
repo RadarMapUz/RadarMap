@@ -383,7 +383,10 @@ struct FinesSheet: View {
                 .font(.rounded(14, .semibold))
                 .foregroundStyle(Theme.textPrimary)
                 .multilineTextAlignment(.center)
-            Text("Отмечать «не пришёл» можно только по сохранённым поездкам — история хранит последние 50.")
+            // Не «последние 50» (34): с 27.F поездки хранятся без срока, и
+            // старая цифра была неправдой — пустой список бывает только у
+            // дней, от которых до перехода остались одни дневные итоги.
+            Text("Отмечать «не пришёл» можно только по сохранённым поездкам — у самых старых остались лишь итоги дня.")
                 .font(.rounded(15))
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)

@@ -27,11 +27,45 @@ final class ItogiFixesTests: XCTestCase {
         XCTAssertEqual(change?.meters ?? 0, 16_000, accuracy: 0.1)
     }
 
-    func testRunningWeekGivesKilometres() {
-        let change = summary(km: 40, previousKm: 100, complete: false).distanceChange
-        XCTAssertNil(change?.percent, "идущая неделя против целой — всегда «−60 %»")
-        XCTAssertEqual(change?.meters ?? 0, -60_000, accuracy: 0.1)
-        XCTAssertEqual(change?.isUp, false)
+    /// Идущая неделя (34) сравнивается с теми же днями прошлой, не с целой:
+    /// во вторник «−60 км к прошлой неделе» было минусом у каждого.
+    func testRunningWeekComparesSameDays() {
+        var running = summary(km: 40, previousKm: 100, complete: false)
+        XCTAssertNil(running.distanceChange, "без тех же дней прошлой — сравнения нет")
+        running.previousSoFarDistance = 30_000
+        let change = running.distanceChange
+        XCTAssertNil(change?.percent, "процент виджет читает как «к целой неделе»")
+        XCTAssertEqual(change?.meters ?? 0, 10_000, accuracy: 0.1)
+        XCTAssertEqual(change?.isUp, true)
+        XCTAssertEqual(change?.soFar, true)
+        XCTAssertEqual(summary(km: 40, previousKm: 100, complete: true).distanceChange?.soFar, false)
+    }
+
+    /// Вторник: прошлая неделя режется до понедельника и вторника.
+    func testSoFarDistanceCutsPreviousWindow() {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        utc.firstWeekday = 2
+        func day(_ d: Int) -> Date { utc.date(from: DateComponents(year: 2026, month: 10, day: d))! }
+        let days = [(19, 10_000.0), (20, 5_000.0), (21, 70_000.0), (26, 20_000.0)].map { d, meters -> TripDay in
+            var row = TripDay(day: day(d))
+            row.trips = 1
+            row.distanceMeters = meters
+            return row
+        }
+        let now = day(27).addingTimeInterval(9 * 3600)
+        let current = StatsPeriod.week.interval(containing: now, calendar: utc)
+        let previous = StatsPeriod.week.previousInterval(containing: now, calendar: utc)!
+        let soFar = TripHistory.soFarDistance(days, period: .week, current: current, previous: previous,
+                                              calendar: utc, now: now)
+        XCTAssertEqual(soFar ?? 0, 15_000, accuracy: 0.1, "пн + вт прошлой недели, без среды")
+        XCTAssertNil(TripHistory.soFarDistance(days, period: .day,
+                                               current: StatsPeriod.day.interval(containing: now, calendar: utc),
+                                               previous: StatsPeriod.day.previousInterval(containing: now, calendar: utc)!,
+                                               calendar: utc, now: now), "сутки на часы не делятся")
+        let later = now.addingTimeInterval(30 * 86400)
+        XCTAssertNil(TripHistory.soFarDistance(days, period: .week, current: current, previous: previous,
+                                               calendar: utc, now: later), "неделя кончилась")
     }
 
     func testComparablePeriodsKeepPercent() {

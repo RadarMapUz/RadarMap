@@ -116,8 +116,12 @@ struct FinesScreen: View {
                            : nil)
                 figure(title: String(localized: "Ожидаются"),
                        value: ledger.expectedSum > 0 ? "≈ " + Formatting.money(ledger.expectedSum) : "0",
+                       // Окно названо (34, правило 14): без него «≈ 11 млн» здесь
+                       // спорило с «2,2 млн за неделю» в «Итогах» — два разных
+                       // окна под одним словом.
                        caption: ledger.expected.isEmpty ? nil
-                           : String(format: String(localized: "проездов: %lld"), ledger.expected.count))
+                           : String(format: String(localized: "проездов: %1$lld за %2$lld дней"),
+                                    ledger.expected.count, AppConfig.fineExpiresDays))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -135,11 +139,12 @@ struct FinesScreen: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             if let caption {
+                // Переносится (34): «проездов: 5 за 60 дней» в половине
+                // ширины SE ужималось до нечитаемого.
                 Text(caption)
                     .font(.rounded(11))
                     .foregroundStyle(Theme.textTertiary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

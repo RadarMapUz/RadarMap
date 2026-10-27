@@ -93,6 +93,16 @@ nonisolated enum StatsPeriod: String, CaseIterable, Identifiable {
         }
     }
 
+    /// «к тем же дням прошлой недели» — идущий период сравнивается не с
+    /// целым прошлым, а с тем же числом его первых дней (34).
+    var versusPreviousSoFar: String {
+        switch self {
+        case .day:   return versusPrevious
+        case .week:  return String(localized: "к тем же дням прошлой недели")
+        case .month: return String(localized: "к тем же дням прошлого месяца")
+        }
+    }
+
     /// «к прошлой» — короткая форма для тесной строки: период уже назван
     /// подписью «за неделю» над числом, а голая метка «↘ 73 %» не говорила,
     /// с чем сравнили (узбекский на узком экране, ревью 20.10).
@@ -212,6 +222,11 @@ nonisolated struct PeriodSummary: Equatable {
     /// Окно периода уже кончилось (31E): идущую неделю с прошлой целой
     /// сравнивать процентом нечестно — в среду она всегда «−60 %».
     var periodComplete = false
+    /// Прошлое окно, обрезанное до того же числа дней, что прошло в идущем
+    /// (34): во вторник «−63,8 км к прошлой неделе» сравнивало два дня с
+    /// семью и было минусом у каждого, каждую неделю. nil — период закончен
+    /// или это сутки (дневной итог на часы не делится — сравнения нет).
+    var previousSoFarDistance: CLLocationDistance?
     /// Зона риска подробнее (31E, подсказка действием): все проезды той же
     /// камеры, её обычный лимит и ждущие ответа деньги по ней.
     var topOverPasses = 0
@@ -231,11 +246,23 @@ nonisolated struct PeriodSummary: Equatable {
     /// Изменение километров к прошлому периоду (31E). Процент — только при
     /// сопоставимых периодах: оба окна целые, прошлое не крошечное и не
     /// отличается в разы. Иначе — километры: «+18 км» правдивее «+178 %».
+    ///
+    /// Идущий период (34) сравнивается с теми же днями прошлого
+    /// (`previousSoFarDistance`, `soFar`), процента у него нет — виджет и
+    /// карточка «Поделиться» читают процент как «к целой прошлой неделе».
     var distanceChange: DistanceChange? {
-        guard previousDistance > 500 else { return nil }
-        return DistanceChange(meters: distance - previousDistance,
-                              percent: WidgetWeek.comparablePercent(distance: distance, previous: previousDistance,
-                                                                    periodComplete: periodComplete))
+        let base: CLLocationDistance
+        if periodComplete {
+            base = previousDistance
+        } else {
+            guard let soFar = previousSoFarDistance else { return nil }
+            base = soFar
+        }
+        guard base > 500 else { return nil }
+        return DistanceChange(meters: distance - base,
+                              percent: WidgetWeek.comparablePercent(distance: distance, previous: base,
+                                                                    periodComplete: periodComplete),
+                              soFar: !periodComplete)
     }
 
     /// Доля пути выше лимита вне камер, 0…1 (nil — данных мало).
@@ -300,6 +327,8 @@ nonisolated struct PeriodSummary: Equatable {
 nonisolated struct DistanceChange: Equatable, Sendable {
     let meters: Double
     let percent: Int?
+    /// Сравнили с теми же днями прошлого периода, а не с целым (34).
+    var soFar = false
 
     var isUp: Bool { meters >= 0 }
 }
@@ -356,8 +385,24 @@ extension TripHistory {
             result.previousDistance = before.distance
             result.previousOverPasses = before.overPasses
             result.previousRating = before.rating
+            result.previousSoFarDistance = soFarDistance(days, period: period, current: interval,
+                                                         previous: previous, calendar: calendar, now: now)
         }
         return result
+    }
+
+    /// Километры прошлого окна за столько же дней, сколько прошло в идущем
+    /// (сегодня — целым днём). Сутки и законченный период — nil.
+    nonisolated static func soFarDistance(_ days: [TripDay], period: StatsPeriod, current: DateInterval,
+                                          previous: DateInterval, calendar: Calendar,
+                                          now: Date) -> CLLocationDistance? {
+        guard period != .day, current.end > now, current.start <= now,
+              let elapsed = calendar.dateComponents([.day], from: current.start,
+                                                    to: calendar.startOfDay(for: now)).day,
+              let cut = calendar.date(byAdding: .day, value: elapsed + 1, to: previous.start)
+        else { return nil }
+        let end = min(cut, previous.end)
+        return TripDayBook.summary(days, in: DateInterval(start: previous.start, end: end)).distance
     }
 
     /// Подробности зоны риска для подсказки действием: все проезды этой камеры

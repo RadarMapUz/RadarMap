@@ -29,8 +29,8 @@ extension AppEnvironment {
         context.screenVisible = isPhoneSceneActive
         let home = familyHome
         if route.isActive {
-            // Время маршрута — с пробками (RouteService.remainingTime).
-            context.routeArrival = route.arrivalDate
+            // Время маршрута — та же минута, что на панели (RouteService.arrival).
+            context.routeArrival = route.arrival
             context.routeToHome = FamilyShare.isNearHome(route.destinationCoordinate, home: home)
         }
         // В смене таксиста призрака нет, и старт у «работы» не значит «домой»

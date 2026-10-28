@@ -232,7 +232,7 @@ struct CarPlayOverlay: View {
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
                 HStack(spacing: 6) {
-                    Text(verbatim: "\(Formatting.clock(env.route.arrivalDate)) · \(Formatting.distance(env.route.remainingDistance))")
+                    Text(verbatim: "\(env.route.arrivalText) · \(Formatting.distance(env.route.remainingDistance))")
                         .font(.rounded(13, .semibold).monospacedDigit())
                         .foregroundStyle(Theme.textSecondary)
                     if camerasAhead > 0 {
@@ -252,7 +252,7 @@ struct CarPlayOverlay: View {
         HStack(spacing: 10) {
             glyphTile(GhostText.symbol(ghost), fill: Theme.quietFill, glyph: Theme.accent)
             VStack(alignment: .leading, spacing: 1) {
-                Text(ghost.arrival, style: .time)
+                Text(verbatim: Formatting.clock(ghost.arrival))
                     .font(.numeral(24, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())

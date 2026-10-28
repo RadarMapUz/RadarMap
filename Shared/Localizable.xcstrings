@@ -24087,34 +24087,34 @@
         }
       }
     },
-    "Едем домой: %@, камер на пути — %lld.": {
+    "Едем домой: %@, прибытие в %@, камер на пути — %lld.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Едем домой: %@, камер на пути — %lld."
+            "value": "Едем домой: %@, прибытие в %@, камер на пути — %lld."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Uyga ketyapmiz: %@, yoʻlda kameralar — %lld."
+            "value": "Uyga ketyapmiz: %@, %@ da yetib boramiz, yoʻlda kameralar — %lld."
           }
         }
       }
     },
-    "Едем на работу: %@, камер на пути — %lld.": {
+    "Едем на работу: %@, прибытие в %@, камер на пути — %lld.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Едем на работу: %@, камер на пути — %lld."
+            "value": "Едем на работу: %@, прибытие в %@, камер на пути — %lld."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ishga ketyapmiz: %@, yoʻlda kameralar — %lld."
+            "value": "Ishga ketyapmiz: %@, %@ da yetib boramiz, yoʻlda kameralar — %lld."
           }
         }
       }

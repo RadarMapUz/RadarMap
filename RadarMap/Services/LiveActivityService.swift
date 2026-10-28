@@ -190,12 +190,14 @@ final class LiveActivityService {
         guard let old else { return true }
         if new.nearestTitle != old.nearestTitle || new.nearestSymbol != old.nearestSymbol
             || new.distanceMeters != old.distanceMeters { return true }
-        // Призрак (8.8.3б): прибытие сдвинулось на 2+ мин, появилось или ушло,
-        // или сменилась тревожность. Стоя в пробке прибытие и «+N мин» растут
-        // каждую минуту — слать это раз в минуту значило бы тратить бюджет
-        // плашки на то же «стоим»; подпись обновится вместе с ближайшей отправкой.
+        // Прибытие (маршрут — 9.1, призрак — 8.8.3б) сменило минуту, появилось
+        // или ушло, или сменилась тревожность. До 28.10 порог был 2 мин ради
+        // бюджета плашки — и плашка спорила с панелью и машиной на минуту
+        // (37: «время на телефоне другое»). Минута маршрута меняется не чаще
+        // раза в полминуты (ArrivalClock удерживает её), так что и стоя в
+        // пробке это не больше отправки в минуту.
         switch (old.etaClock, new.etaClock) {
-        case let (was?, now?) where abs(now.timeIntervalSince(was)) >= 120: return true
+        case let (was?, now?) where abs(now.timeIntervalSince(was)) >= AppConfig.liveActivityEtaStepSeconds: return true
         case (nil, .some), (.some, nil): return true
         default: break
         }

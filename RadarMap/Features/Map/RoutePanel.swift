@@ -148,7 +148,7 @@ struct RoutePanel: View {
         Text(verbatim: "·").foregroundStyle(Theme.textTertiary)
         Image(systemName: "flag.checkered").font(.rounded(12, .semibold))
             .accessibilityHidden(true)
-        Text(env.route.arrivalDate, style: .time)
+        Text(verbatim: env.route.arrivalText)
     }
 
     private func trafficNoteText(_ note: String) -> some View {

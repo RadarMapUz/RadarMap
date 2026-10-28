@@ -152,7 +152,8 @@ struct EngineBaseLayer: View {
                         // карточка снизу, при выборе маршрута — сверху, и карта
                         // видна (19.10, 28.K).
                         covered: approachCoversMap,
-                        cruise: env.location.isCruising,
+                        // Ровный ход и развилка — частота кадров (EngineFrames, 36A).
+                        maneuverMeters: maneuverDistance,
                         detail: detail.decision,
                         detailMarks: detail.marks,
                         destinationApproach: detail.approach,

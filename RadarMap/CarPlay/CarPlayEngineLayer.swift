@@ -188,7 +188,7 @@ struct CarPlayEngineLayer: View {
             // Приборка — малая частота кадров всегда (CarPlaySurface.lowFrameRate):
             // тот же режим, что под полноэкранной тревогой.
             covered: surface.lowFrameRate,
-            cruise: env.location.isCruising,
+            maneuverMeters: maneuverDistance,
             detail: detail.decision,
             detailMarks: detail.marks,
             destinationApproach: detail.approach,

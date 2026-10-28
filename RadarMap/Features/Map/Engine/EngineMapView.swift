@@ -109,9 +109,9 @@ struct EngineMapView: UIViewRepresentable {
     /// Карту накрыло полноэкранное предупреждение о камере (градиент до 96 %):
     /// рисовать её на полной частоте незачем (аудит 11.10).
     var covered: Bool = false
-    /// Крейсер вдали от камер и манёвра (EngineMapView.isCruise): кадров
-    /// меньше — картинка на трассе почти неподвижна (аудит энергии 19.10).
-    var cruise: Bool = false
+    /// Метров до следующего манёвра маршрута (nil — нет): у развилки карта
+    /// рисует на полной частоте (EngineFrames, 36A).
+    var maneuverMeters: Double?
     /// Что показывать сейчас (MapDetailPolicy, 29.H): декор, заведения,
     /// номера домов, заправки и парковки — видимостью слоёв, на смене
     /// решения; вне поездки на телефоне — всё, как было.
@@ -268,7 +268,8 @@ struct EngineMapView: UIViewRepresentable {
         }
         // Система предупреждает о памяти ПЕРЕД тем, как убить приложение;
         // до сих пор это предупреждение не слушал никто (см. MemoryPressure).
-        MemoryPressure.onWarning(context.coordinator) { $0.releaseMemory() }
+        // С 36A — ещё уход телефона в фон с поездкой и потолок следа.
+        MemoryPressure.onTrim(context.coordinator) { $0.releaseMemory($1) }
         // Стиль сразу (живые слои рисуются и без тайлов), а подписанный
         // индекс нужного стиля догружается и перезагружает стиль сам —
         // в обход сторожа тайлы не грузятся никогда (prepareTiles).
@@ -373,6 +374,23 @@ struct EngineMapView: UIViewRepresentable {
         /// работаем как прежняя карта — со своим индексом, а не пустой.
         private var modernBroken = false
         private var lastFPS: Int?
+        /// Ровный ход (EngineFrames.Pace, 36A): решение о частоте в поездке.
+        private var pace = EngineFrames.Pace()
+        private var steady = false
+        /// Почему ход не ровный (журнал смены частоты, 36A).
+        private var paceReason = ""
+        private var lastBusyStep: EngineFrames.CameraStep?
+        /// Кадров движка на текущей частоте и с какого момента (журнал 36A).
+        private var framesAtRate = 0
+        private var rateSince: CFTimeInterval = 0
+        /// Последний шаг следящей камеры заметно менял картинку (поворот,
+        /// масштаб, наклон) — держится до следующего шага.
+        private var cameraBusy = false
+        /// Что отдали движку прошлым шагом камеры: масштаб, наклон, поворот, когда.
+        private var lastStep: (zoom: Double, pitch: Double, heading: Double, at: CFTimeInterval)?
+        /// Режим карты и когда он сменился (первые секунды — полная частота).
+        private var modeKey: ModeKey?
+        private var modeChangedAt: CFTimeInterval = 0
         private var lastZoomCommand = 0
         private var lastOverviewCommand = 0
         /// Варианты маршрута на экране выбора (27.D).
@@ -390,16 +408,73 @@ struct EngineMapView: UIViewRepresentable {
         /// иначе повторный монтаж карты вписывал бы маршрут сам по старому нажатию.
         private var commandsSeen = false
 
-        /// Частота таймера кадров движка по модели и покою карты.
+        /// Частота таймера кадров движка по модели, покою карты и ровному
+        /// ходу (EngineFrames, 36A).
         private func applyFramesPerSecond(_ model: EngineMapView, in view: MLNMapView) {
-            let fps = Self.framesPerSecond(browsing: browsing, performance: model.performance,
-                                           lowPower: model.lowPower, covered: model.covered,
-                                           cruise: model.cruise, settled: settled)
+            let fps = EngineFrames.framesPerSecond(EngineFrames.Situation(
+                browsing: browsing, settled: settled, covered: model.covered,
+                performance: model.performance, lowPower: model.lowPower,
+                driving: model.driving, steady: steady))
             guard fps != lastFPS else { return }
+            // Только на смене (несколько раз в минуту): журнал замера 36A —
+            // сколько кадров движок на деле нарисовал на прежней частоте и
+            // что подняло частоту (debug: в журнал не пишется, пока не смотрят).
+            let now = CACurrentMediaTime()
+            let step = paceReason == "камера" ? lastBusyStep : nil
+            Log.app.debug("карта \(model.healthTag ?? "телефон", privacy: .public): кадров/с \(self.lastFPS ?? -1, privacy: .public) → \(fps, privacy: .public) [\(self.paceReason, privacy: .public)\(step.map { String(format: " масштаб %.2f наклон %.1f° поворот %.1f° за %.2f с", $0.zoom, $0.pitch, $0.heading, $0.seconds) } ?? "", privacy: .public)], нарисовано \(self.framesAtRate, privacy: .public) за \(now - self.rateSince, format: .fixed(precision: 1), privacy: .public) с")
+            framesAtRate = 0
+            rateSince = now
             lastFPS = fps
             view.preferredFramesPerSecond = fps > 0
                 ? MLNMapViewPreferredFramesPerSecond(rawValue: fps)
                 : .default
+            syncMarkerLink()
+        }
+
+        /// Режим карты: его смена — первые секунды на полной частоте.
+        struct ModeKey: Equatable {
+            var driving: Bool
+            var browsing: Bool
+            var covered: Bool
+            var northUp: Bool
+            var route: Bool
+            var lookAt: Bool
+        }
+
+        /// Ровный ли ход сейчас (EngineFrames.Pace): пишется на каждом
+        /// применении модели, читается частотой кадров.
+        private func updatePace(_ model: EngineMapView, now: CFTimeInterval) {
+            let key = ModeKey(driving: model.driving, browsing: browsing, covered: model.covered,
+                              northUp: model.northUp, route: !model.route.isEmpty, lookAt: model.lookAt != nil)
+            if key != modeKey {
+                if modeKey != nil { modeChangedAt = now }
+                modeKey = key
+            }
+            let signals = EngineFrames.Signals(
+                cameraBusy: cameraBusy, maneuverMeters: model.maneuverMeters,
+                speedMps: model.markerMotion?.speedMps ?? 0,
+                sinceModeChange: modeChangedAt > 0 ? now - modeChangedAt : nil,
+                entering: entryUntil > now)
+            let busy = !model.driving || EngineFrames.busy(signals)
+            steady = pace.steady(busy: busy, now: now)
+            paceReason = !model.driving ? "не поездка"
+                : signals.cameraBusy ? "камера"
+                : signals.entering ? "вход"
+                : (signals.sinceModeChange ?? .infinity) < AppConfig.engineSteadyModeSeconds ? "режим"
+                : busy ? "манёвр"
+                : steady ? "ровно" : "выдержка"
+        }
+
+        /// Шаг следящей камеры: заметно ли он меняет картинку.
+        private func noteCameraStep(zoom: Double, pitch: Double, heading: Double, at now: CFTimeInterval) {
+            if let last = lastStep {
+                let step = EngineFrames.CameraStep(
+                    zoom: zoom - last.zoom, pitch: pitch - last.pitch,
+                    heading: GeoMath.angleDifference(last.heading, heading), seconds: now - last.at)
+                cameraBusy = EngineFrames.cameraBusy(step)
+                if cameraBusy { lastBusyStep = step }
+            }
+            lastStep = (zoom, pitch, heading, now)
         }
 
         /// Карта дорисована и стоит. Таймер кадров MapLibre при этом не
@@ -486,6 +561,7 @@ struct EngineMapView: UIViewRepresentable {
         func mapViewDidFinishRenderingFrame(_ mapView: MLNMapView, fullyRendered: Bool,
                                            frameEncodingTime: Double, frameRenderingTime: Double) {
             framesRendered &+= 1
+            framesAtRate &+= 1
             #if DEBUG
             guard frameEncodingTime.isFinite, frameRenderingTime.isFinite else { return }
             encodingSamples.append(frameEncodingTime)
@@ -770,13 +846,44 @@ struct EngineMapView: UIViewRepresentable {
         /// заново из живых данных: выборка камер видимой области и разобранные
         /// слои темы. Ни стиль, ни подписанный индекс, ни окно слежения за
         /// камерами не трогаются — от них зависит предупреждение.
-        func releaseMemory() {
+        ///
+        /// Тайлы движка (36A): кэш тайлов в памяти (виденные, но не на
+        /// экране) — это мегабайты разобранной геометрии, которые движок
+        /// поднимет заново из своей базы на диске, без сети и без сторожа
+        /// (тайл в базе уже прошёл sha256 при скачивании). Отдаём его на
+        /// потолке и когда наша карта не видна; на системное предупреждение
+        /// движок отвечает сам (MLNMapView слушает то же уведомление).
+        func releaseMemory(_ reason: MemoryPressure.Reason) {
+            let hidden = isHidden
+            // Карта на экране машины при уходе телефона в фон — на виду:
+            // ей ничего не отдаём, она едет.
+            if reason == .background && !hidden { return }
             cachedCameras = []
             cachedLimits = [:]
             cameraWindow = nil          // следующий кадр соберёт выборку заново
             themeLayers = []            // перечитается из EngineMapStyle при смене темы
             // Корзины индекса выпуска поднимутся с диска, не с сети.
             Task { await TileReleaseStore.shared.releaseMemory() }
+            if reason != .warning, let view { Self.trimEngine(view) }
+        }
+
+        /// Карту не видно: окна нет или её сцена в фоне.
+        private var isHidden: Bool {
+            guard let scene = view?.window?.windowScene else { return true }
+            return scene.activationState == .background
+        }
+
+        /// Попросить движок отдать кэш тайлов и неиспользуемые ресурсы GPU —
+        /// тот же путь, которым MLNMapView отвечает на предупреждение системы
+        /// (`didReceiveMemoryWarning` → reduceMemoryUse). Публичного вызова у
+        /// 6.29 нет; селектор проверяется, как KVC в строке здоровья.
+        static func trimEngine(_ view: MLNMapView) {
+            let selector = NSSelectorFromString("didReceiveMemoryWarning")
+            guard view.responds(to: selector) else {
+                Log.app.error("карта: у движка нет didReceiveMemoryWarning — кэш тайлов не отдан")
+                return
+            }
+            view.perform(selector)
         }
 
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
@@ -1056,6 +1163,7 @@ struct EngineMapView: UIViewRepresentable {
             applyHiddenLayers(model, in: view)
             applyCount &+= 1
             logHealthIfDue(model, in: view)
+            checkMemoryIfDue(model)
             if lastRecenterToken != model.recenterToken {
                 lastRecenterToken = model.recenterToken
                 // Из обзора или осмотра — к машине одним плавным ходом
@@ -1154,7 +1262,13 @@ struct EngineMapView: UIViewRepresentable {
                 || previous.lookAt?.latitude != model.lookAt?.latitude
                 || previous.lookAt?.longitude != model.lookAt?.longitude
             } ?? true
-            // Частота кадров: полная — только когда водитель сам двигает карту.
+            // Частота кадров по ситуации (EngineFrames, 36A): шаг камеры,
+            // который сейчас уйдёт движку, уже входит в решение — поворот
+            // поднимает частоту в тот же кадр, а не фиксом позже.
+            if !browsing && changed {
+                noteCameraStep(zoom: zoom, pitch: model.pitchDegrees, heading: heading, at: followNow)
+            }
+            updatePace(model, now: followNow)
             applyFramesPerSecond(model, in: view)
             // «Весь маршрут»: вписать линию с отступами под панели сверху и
             // снизу; дальше карта свободна до «моего местоположения».
@@ -1395,7 +1509,18 @@ struct EngineMapView: UIViewRepresentable {
             }
         }
 
-        // MARK: - Здоровье карты (журнал)
+        // MARK: - Память и здоровье карты (журнал)
+
+        /// Потолок следа в поездке (36A): на своём такте применения модели,
+        /// не чаще engineMemoryCheckSeconds — таймера для этого нет.
+        private var lastMemoryCheck: CFTimeInterval = 0
+        private func checkMemoryIfDue(_ model: EngineMapView) {
+            guard model.driving else { return }
+            let now = CACurrentMediaTime()
+            guard now - lastMemoryCheck >= AppConfig.engineMemoryCheckSeconds else { return }
+            lastMemoryCheck = now
+            MemoryPressure.checkCeiling(now: now)
+        }
 
         private var applyCount = 0
         private var followCount = 0
@@ -1938,16 +2063,28 @@ struct EngineMapView: UIViewRepresentable {
             // не тикала, и стрелка стояла, пока камера уезжала.
             let link = view.window?.screen.displayLink(withTarget: self, selector: #selector(markerFrame))
                 ?? CADisplayLink(target: self, selector: #selector(markerFrame))
-            // Та же частота, что у карты: ход стрелки не должен будить
-            // экран чаще, чем рисует сам движок (нагрев, батарея).
-            // Редкий такт покоя карты (settled) к стрелке не относится: она
-            // едет и над стоящей картой.
-            let mapFPS = settled ? 0 : (lastFPS ?? 0)
-            let fps = max(15, mapFPS > 0 ? mapFPS : AppConfig.engineFollowFPS)
-            link.preferredFrameRateRange = CAFrameRateRange(minimum: 10, maximum: Float(fps),
-                                                            preferred: Float(fps))
+            link.preferredFrameRateRange = markerFrameRange()
             link.add(to: .main, forMode: .common)
             markerLink = link
+        }
+
+        /// Та же частота, что у карты: ход стрелки не должен будить экран
+        /// чаще, чем рисует сам движок (нагрев, батарея), и не должен идти
+        /// РЕЖЕ или чаще карты — на 20 к/с под картой 30 к/с стрелка
+        /// дрожала бы относительно дороги. Редкий такт покоя карты (settled)
+        /// к стрелке не относится: она едет и над стоящей картой.
+        private func markerFrameRange() -> CAFrameRateRange {
+            let mapFPS = settled ? 0 : (lastFPS ?? 0)
+            let fps = max(15, mapFPS > 0 ? mapFPS : AppConfig.engineFollowFPS)
+            return CAFrameRateRange(minimum: 10, maximum: Float(fps), preferred: Float(fps))
+        }
+
+        /// Частота карты сменилась на ходу стрелки (ровный ход, поворот) —
+        /// стрелка переходит на неё же сразу, а не со следующего старта.
+        private func syncMarkerLink() {
+            guard let markerLink else { return }
+            let range = markerFrameRange()
+            if markerLink.preferredFrameRateRange.preferred != range.preferred { markerLink.preferredFrameRateRange = range }
         }
 
         @objc private func markerFrame() {
@@ -1969,37 +2106,6 @@ struct EngineMapView: UIViewRepresentable {
         func stopMarkerLink() {
             markerLink?.invalidate()
             markerLink = nil
-        }
-
-        /// 0 — частота по умолчанию (движок сам выбирает, плавно для жестов).
-        static func framesPerSecond(browsing: Bool, performance: PerformanceMode, lowPower: Bool,
-                                    covered: Bool = false, cruise: Bool = false,
-                                    settled: Bool = false) -> Int {
-            // Карта стоит и дорисована — рисовать нечего, таймеру хватит
-            // редкого такта: первое же движение вернёт полную частоту.
-            if settled { return AppConfig.engineSettledFPS }
-            if browsing { return performance == .full && !lowPower ? 0 : AppConfig.engineWarmFPS }
-            // Под предупреждением о камере — как у горячего телефона: видна
-            // лишь верхняя полоска карты сквозь градиент.
-            if covered { return AppConfig.engineHotFPS }
-            switch performance {
-            case .minimal: return AppConfig.engineHotFPS
-            case .reduced: return AppConfig.engineWarmFPS
-            case .full:    return lowPower || cruise ? AppConfig.engineWarmFPS : AppConfig.engineFollowFPS
-            }
-        }
-
-        /// Крейсер: поездка на скорости трассы, камера не близко, манёвр
-        /// далеко. В городе и у камеры/поворота — полные 30 к/с: там картинка
-        /// меняется и «рывками» замечают (поле 12.10). С гистерезисом по
-        /// скорости (вход 70, выход ниже 60): на пороге частота не должна
-        /// мигать от шума спидометра. Хранится флагом LocationService.isCruising
-        /// — пишется только на смене, как isApproachingCamera.
-        static func isCruise(was: Bool, tripActive: Bool, speedKmh: Double, approachingCamera: Bool,
-                             maneuverMeters: Double?) -> Bool {
-            guard tripActive, !approachingCamera,
-                  (maneuverMeters ?? .infinity) > AppConfig.engineCruiseManeuverMeters else { return false }
-            return speedKmh >= (was ? AppConfig.engineCruiseExitKmh : AppConfig.engineCruiseMinKmh)
         }
 
         static func zoom(spanMeters: Double, height: Double, latitude: Double) -> Double {

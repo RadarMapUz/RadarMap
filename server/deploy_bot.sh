@@ -34,6 +34,14 @@ if [ -n "${RADARMAP_SSH_KEY:-}" ]; then
     SSH=(ssh -i "$RADARMAP_SSH_KEY"); SCP=(scp -i "$RADARMAP_SSH_KEY")
 fi
 DIR="$(cd "$(dirname "$0")" && pwd)"
+MODULES="telegram_bot.py bot_texts.py bot_near.py bot_subs.py family_notify.py telegram_publish.py"
+
+# Ворота ДО всего: горячую правку на сервере выкатка не затирает (drift.sh
+# --gate; обход — RADARMAP_ALLOW_DRIFT=1). Юнит тоже перезаписывается — он в списке.
+echo "→ Ворота: сервер не разошёлся с репо по файлам этой выкатки…"
+# shellcheck disable=SC2086
+RADARMAP_HOST="$HOST" bash "$DIR/drift.sh" --gate $MODULES radarmap-bot.service || {
+    echo "✗ Выкатка остановлена до заливки: боевые файлы не тронуты."; exit 1; }
 
 echo "→ Тесты бота и близких локально…"
 (cd "$DIR" && python3 -W ignore -m unittest -q test_telegram_bot test_bot_features test_family_notify)
@@ -47,7 +55,7 @@ echo "→ Python на сервере: hashlib.scrypt…"
 echo "→ Заливка…"
 # Модули бота (23.x) и то, что он берёт у канала (telegram_publish.py — его же
 # возит deploy_api.sh; здесь тот же файл, чтобы бот и крон не разошлись).
-MODULES="telegram_bot.py bot_texts.py bot_near.py bot_subs.py family_notify.py telegram_publish.py"
+# Список — MODULES в начале скрипта (по нему же ворота).
 for f in $MODULES; do
     "${SCP[@]}" "$DIR/$f" "$HOST:/opt/radarmap/api/$f.new"
 done
@@ -57,4 +65,6 @@ done
     && for f in $MODULES; do mv \$f.new \$f; done \
     && systemctl daemon-reload && systemctl enable radarmap-bot >/dev/null \
     && systemctl restart radarmap-bot && sleep 2 && systemctl --no-pager --lines=5 status radarmap-bot || true"
+echo "→ Сверка сервера с репо (drift.sh)…"
+RADARMAP_HOST="$HOST" bash "$DIR/drift.sh" --quiet || echo "  ⚠ сервер разошёлся с репо — см. строки выше"
 echo "✓ Готово. Нет конфига — в статусе будет «нет конфига», это не ошибка."

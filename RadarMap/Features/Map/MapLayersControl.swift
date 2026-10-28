@@ -92,8 +92,9 @@ struct MapLayersPanel: View {
     private var panelContent: some View {
         VStack(alignment: .leading, spacing: 2) {
             MapPopoverHeader(title: "Карта", onClose: onClose)
+            // Легенды под тумблером нет (владелец 28.10: «подсказку убери, там
+            // не нужно»): цвета объясняет лист балла города (чип справа).
             toggle("Пробки", Icon.trafficLayer, isOn: $traffic)
-            if traffic { TrafficLegend() }
             // «Места» прячут кафе и банки, заправки и парковки остаются всегда.
             toggle("Места", Icon.placesLayer, isOn: $places)
             toggle("Дома", Icon.buildingsLayer, isOn: $houses)

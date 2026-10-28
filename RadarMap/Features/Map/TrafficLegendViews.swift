@@ -114,29 +114,27 @@ struct TrafficTapSheet: View {
     let tap: TrafficTap
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                TrafficSwatch(level: tap.level, usual: tap.usual, arrow: true, width: 34, thickness: 7)
-                Text(title)
-                    .font(.rounded(20, .semibold))
+        // Общий короткий лист над картой (MapShortSheet): заголовок по
+        // центру, «Готово», высота по содержимому.
+        MapShortSheet(title: "Пробки") {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    TrafficSwatch(level: tap.level, usual: tap.usual, arrow: true, width: 34, thickness: 7)
+                    Text(title)
+                        .font(.rounded(20, .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text(details)
+                    .font(.rounded(17))
                     .foregroundStyle(Theme.textPrimary)
+                Text(tap.usual ? "По прошлым неделям и модели дороги — не данные сейчас"
+                               : "По данным водителей за последние 15 минут")
+                    .font(.rounded(13))
+                    .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text(details)
-                .font(.rounded(17))
-                .foregroundStyle(Theme.textPrimary)
-            Text(tap.usual ? "По прошлым неделям и модели дороги — не данные сейчас"
-                           : "По данным водителей за последние 15 минут")
-                .font(.rounded(13))
-                .foregroundStyle(Theme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Theme.surface)
-        .presentationDetents([.height(190)])
-        .presentationDragIndicator(.visible)
     }
 
     private var title: String {
@@ -198,34 +196,27 @@ struct TrafficLegendSheet: View {
     let score: TrafficCityScore.Score?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Пробки")
-                .font(.rounded(20, .semibold))
-                .foregroundStyle(Theme.textPrimary)
-            if let score {
-                HStack(spacing: 14) {
-                    TrafficScoreChip(score: score) {}
-                        .allowsHitTesting(false)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Балл города")
-                            .font(.rounded(15, .semibold))
-                            .foregroundStyle(Theme.textPrimary)
-                        Text(score.usual ? "Обычно в это время" : "По данным водителей сейчас")
-                            .font(.rounded(13))
-                            .foregroundStyle(Theme.textSecondary)
-                        Text("0 — свободно, 10 — город стоит")
-                            .font(.rounded(13))
-                            .foregroundStyle(Theme.textSecondary)
+        MapShortSheet(title: "Пробки") {
+            VStack(alignment: .leading, spacing: 16) {
+                if let score {
+                    HStack(spacing: 14) {
+                        TrafficScoreChip(score: score) {}
+                            .allowsHitTesting(false)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Балл города")
+                                .font(.rounded(15, .semibold))
+                                .foregroundStyle(Theme.textPrimary)
+                            Text(score.usual ? "Обычно в это время" : "По данным водителей сейчас")
+                                .font(.rounded(13))
+                                .foregroundStyle(Theme.textSecondary)
+                            Text("0 — свободно, 10 — город стоит")
+                                .font(.rounded(13))
+                                .foregroundStyle(Theme.textSecondary)
+                        }
                     }
                 }
+                TrafficLegend()
             }
-            TrafficLegend()
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Theme.surface)
-        .presentationDetents([.height(score == nil ? 196 : 258)])
-        .presentationDragIndicator(.visible)
     }
 }

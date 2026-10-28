@@ -104,12 +104,20 @@ final class TrafficModelTests: XCTestCase {
     func testUsualLayerIsThereInPeaksAndNotAtNight() throws {
         let p = try profile(drivers: [[18, 54]])
         // 18:10: водители 54 км/ч в слоте 18, модель 30 в слоте 19 → 50 из 60.
+        // С 28.10 рисуется всё покрытое (usualTrafficShowRatio 1,0): вне пика
+        // те же рёбра есть, но свободные — зелёные, а не пустота.
+        func slow(_ edges: [TrafficProfile.UsualEdge]) -> [TrafficProfile.UsualEdge] {
+            TrafficLines.edges(usual: edges).enumerated().filter { $0.element.level >= 2 }.map { edges[$0.offset] }
+        }
         let evening = p.usual(at: at(hour: 18, minute: 10))
-        XCTAssertEqual(evening.count, 10, "проспект модели виден, водительское ребро — нет")
-        XCTAssertTrue(evening.allSatisfy { $0.source == .model && $0.isHeavy })
-        XCTAssertEqual(p.usual(at: at(hour: 8, minute: 30)).count, 11)
-        XCTAssertTrue(p.usual(at: at(hour: 3)).isEmpty, "ночью пусто")
-        XCTAssertTrue(p.usual(at: at(hour: 12, day: 25)).isEmpty, "воскресенье днём пусто")
+        XCTAssertEqual(evening.count, 11)
+        XCTAssertEqual(slow(evening).count, 10, "проспект модели медленный, водительское ребро — свободно")
+        XCTAssertTrue(slow(evening).allSatisfy { $0.source == .model && $0.isHeavy })
+        XCTAssertEqual(slow(p.usual(at: at(hour: 8, minute: 30))).count, 11)
+        let night = p.usual(at: at(hour: 3)), sunday = p.usual(at: at(hour: 12, day: 25))
+        XCTAssertEqual(night.count, 11, "ночью — тоже линии")
+        XCTAssertTrue(slow(night).isEmpty, "ночью всё зелёное")
+        XCTAssertTrue(slow(sunday).isEmpty, "воскресенье днём всё зелёное")
     }
 
     func testUsualLayerLabelsDrivers() throws {
@@ -120,13 +128,17 @@ final class TrafficModelTests: XCTestCase {
     }
 
     func testUsualLayerThreshold() throws {
-        // 75 % графа — не «медленно» для слоя; 69 % — да.
-        let mild = (0..<168).map { _ in 75 }, slow = (0..<168).map { _ in 69 }
-        for (curve, expected) in [(mild, 0), (slow, 10)] {
+        // С 28.10 слой рисует всё, что покрывает модель: свободное (100 % графа)
+        // — тоже линия, и она зелёная; пусто остаётся только «нет данных».
+        let free = (0..<168).map { _ in 100 }, mild = (0..<168).map { _ in 75 }, slow = (0..<168).map { _ in 69 }
+        for curve in [free, mild, slow] {
             let p = try XCTUnwrap(TrafficProfile.decode(profileData(curves: [curve])))
-            XCTAssertEqual(p.usual(at: at(hour: 12)).count, expected)
+            XCTAssertEqual(p.usual(at: at(hour: 12)).count, 10)
         }
-        XCTAssertEqual(AppConfig.usualTrafficShowRatio, 0.7)
+        let p = try XCTUnwrap(TrafficProfile.decode(profileData(curves: [free])))
+        let edges = TrafficLines.edges(usual: p.usual(at: at(hour: 12)))
+        XCTAssertTrue(edges.allSatisfy { $0.level == 1 && $0.source == .usual })
+        XCTAssertEqual(AppConfig.usualTrafficShowRatio, 1.0)
     }
 
     // MARK: - ETA через 33C

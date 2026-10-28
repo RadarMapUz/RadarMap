@@ -206,7 +206,7 @@ struct TrafficLinesTests {
         let url = try #require(Bundle.main.url(forResource: "traffic_demo_tashkent", withExtension: "json"))
         let parts = try #require(TrafficDemo.split(Data(contentsOf: url)))
         #expect(!parts.live.isEmpty && !parts.usual.isEmpty)
-        #expect(parts.usual.allSatisfy { $0.ratio < AppConfig.usualTrafficShowRatio })
+        #expect(parts.usual.allSatisfy { $0.ratio <= AppConfig.usualTrafficShowRatio })
         let lines = TrafficLines.lines(from: parts.live + TrafficLines.edges(usual: parts.usual))
         #expect(Set(lines.map(\.source)) == [.live, .usual])
     }

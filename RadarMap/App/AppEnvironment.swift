@@ -593,6 +593,7 @@ final class AppEnvironment {
             guard location?.isTripActive != true else { return }
             route?.liveTrafficArrived()
         }
+        route.isTripActive = { [weak location] in location?.isTripActive ?? false }
         route.onPaceSample = { [weak personalPace] sample in personalPace?.add(sample) }
         route.prefetchProfile = { [weak trafficProfile, weak route] in
             guard let trafficProfile else { return }

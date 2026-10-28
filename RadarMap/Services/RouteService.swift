@@ -284,6 +284,13 @@ final class RouteService {
     @ObservationIgnored private var choiceBasis: (inputs: [RouteChoice.Input], history: RouteChoice.History?)?
     /// Касался ли водитель панели выбора с показа набора (решение 28.10).
     @ObservationIgnored private var choiceGate = ChoiceRelabelGate()
+    /// Идёт ли поездка (LocationService) — ставит AppEnvironment. Набор,
+    /// построенный в пути (новая цель из поиска), выбран сразу: поздние
+    /// пробки не уводят машину на другой вариант.
+    @ObservationIgnored var isTripActive: (() -> Bool)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: isTripActive,
+                                               "RouteService.isTripActive") }
+    }
     /// `apply` идёт: варианты ещё старые (или их нет), новые запишутся в конце.
     @ObservationIgnored private var isApplying = false
 
@@ -1979,6 +1986,7 @@ final class RouteService {
         // водитель не коснулся выбора (ChoiceRelabelGate, решение 28.10).
         choiceBasis = (choiceInputs, history)
         choiceGate.shown()
+        if isTripActive?() == true { choiceGate.touch() }
         // Одна строка на маршрут — для разбора реальной поездки: сколько
         // рядов дал OSRM, сколько слой и где остался только край.
         if laneStats.indices.contains(selectedID) {

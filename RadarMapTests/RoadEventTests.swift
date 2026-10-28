@@ -21,11 +21,13 @@ final class RoadEventTests: XCTestCase {
     }
 
     private func event(_ kind: RoadEvent.Kind = .closure, at meters: Double = 1000, side: Double = 0,
-                       course: Double = 0, confirmed: Bool = true, id: Int = 1) -> RoadEvent {
+                       course: Double = 0, confirmed: Bool = true, confirmers: Int? = 2,
+                       id: Int = 1) -> RoadEvent {
         let along = GeoMath.destination(from: start, bearing: 0, distanceMeters: meters)
         let point = GeoMath.destination(from: along, bearing: 90, distanceMeters: side)
         return RoadEvent(id: id, kind: kind, lat: point.latitude, lon: point.longitude, course: course,
-                         expires: now.addingTimeInterval(3600), confirmed: confirmed)
+                         expires: now.addingTimeInterval(3600), confirmed: confirmed,
+                         confirmers: confirmed ? confirmers : 0)
     }
 
     func testClosureOnOurSideBlocksTheVariant() {
@@ -42,8 +44,30 @@ final class RoadEventTests: XCTestCase {
                        "ремонт маршрут не двигает — только голос")
         var expired = event()
         expired = RoadEvent(id: 1, kind: .closure, lat: expired.lat, lon: expired.lon, course: 0,
-                            expires: now.addingTimeInterval(-1), confirmed: true)
+                            expires: now.addingTimeInterval(-1), confirmed: true, confirmers: 2)
         XCTAssertEqual(RoadEventRules.closures(on: northPath, events: [expired], now: now), 0)
+    }
+
+    /// Один порог «2 независимых» с маршрутизатором (решение 28.10): одно
+    /// подтверждение — отметка и голос, но не выбор пути; старый сервер без
+    /// числа — путь не трогаем.
+    func testOnlyTwoIndependentConfirmersMoveTheRoute() {
+        XCTAssertEqual(AppConfig.roadClosureRouteConfirmers, 2)
+        XCTAssertEqual(RoadEventRules.closures(on: northPath, events: [event(confirmed: false)], now: now), 0,
+                       "0 подтверждений")
+        XCTAssertEqual(RoadEventRules.closures(on: northPath, events: [event(confirmers: 1)], now: now), 0,
+                       "1 подтверждение: сервер через перекрытие строит — телефон не спорит")
+        XCTAssertEqual(RoadEventRules.closures(on: northPath, events: [event(confirmers: 2)], now: now), 1)
+        XCTAssertEqual(RoadEventRules.closures(on: northPath, events: [event(confirmers: 3)], now: now), 1)
+        XCTAssertEqual(RoadEventRules.closures(on: northPath, events: [event(confirmers: nil)], now: now), 0,
+                       "старый сервер без поля — неподтверждённое не влияет на путь (33D)")
+        XCTAssertEqual(RoadEventRules.closures(on: northPath, events: [event(.roadwork, confirmers: 5)], now: now), 0,
+                       "ремонт путь не двигает и с подтверждениями")
+        // Голос и отметка — по confirmed, как раньше: одно подтверждение
+        // уже «Впереди перекрытие дороги», а не «отметка водителей».
+        let single = event(at: 300, confirmers: 1)
+        XCTAssertEqual(RoadEventRules.ahead(of: start, course: 0, events: [single], voiced: [], now: now)?.id, 1)
+        XCTAssertEqual(RoadEventRules.phrase(for: single), String(localized: "Впереди перекрытие дороги"))
     }
 
     func testBlockedVariantIsNotRecommended() {

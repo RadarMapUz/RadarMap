@@ -388,6 +388,8 @@ final class AppEnvironment {
             // iCloud в поездке молчит; после — отправит с паузой.
             self.cloud.tripStateChanged(active: active)
             if active { self.traffic.tripStarted() } else { self.traffic.tripEnded() }
+            // Поехали — выбор сделан: ярлыки вариантов больше не двигаются.
+            if active { self.route.noteChoiceTouched() }
             if active { self.roadWeather.tripStarted() } else { self.roadWeather.tripEnded() }
             self.commuteGhostPending = active
             if active { self.tryStartCommuteGhost() } else { self.commuteLive.stop() }
@@ -585,6 +587,13 @@ final class AppEnvironment {
             (settings?.personalPace ?? false) && (config?.current.isTrafficEnabled ?? true)
         }
         route.paceFactor = { [weak personalPace] roadClass in personalPace?.factor(for: roadClass) ?? 1 }
+        // Свежий now.json, пока варианты выбирают, — их время и (до касания
+        // панели) ярлыки по нему; в пути остаток ведёт refreshTrafficDelay.
+        traffic.onSnapshotChanged = { [weak route, weak location] in
+            guard location?.isTripActive != true else { return }
+            route?.liveTrafficArrived()
+        }
+        route.isTripActive = { [weak location] in location?.isTripActive ?? false }
         route.onPaceSample = { [weak personalPace] sample in personalPace?.add(sample) }
         route.prefetchProfile = { [weak trafficProfile, weak route] in
             guard let trafficProfile else { return }

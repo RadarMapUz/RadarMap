@@ -97,6 +97,43 @@ final class TrafficTimeAheadTests: XCTestCase {
                        accuracy: 0.001)
     }
 
+    /// Решение 28.10: смешанная задержка делится на живую часть и «обычно»;
+    /// свежий, но пустой на нашем пути now.json не делает задержку профиля
+    /// «пробками» (симуляция 27.10: «+10 мин из-за пробок» из профиля).
+    func testLivePartIsSplitFromUsualForTheCaption() throws {
+        let jam = try XCTUnwrap(profile(slots: [18: 20]))
+        let departure = at(hour: 17, minute: 40)
+        let free = live(level: 1, kmh: 60, generated: departure)
+        let usual = try XCTUnwrap(delay(km: 30, departure: departure, live: free, profile: jam))
+        XCTAssertEqual(usual.source, .mixed)
+        XCTAssertEqual(usual.liveSeconds, 0, accuracy: 0.001, "живые есть, но свободны — живой задержки нет")
+        XCTAssertEqual(TrafficForecast.cause(total: usual.seconds, live: usual.liveSeconds), .usual)
+        // Живая пробка на ближних 5 км (10 км/ч; в 15-минутный горизонт
+        // попадает ~2,5 км, ~750 с) и вечер чуть медленнее графа дальше
+        // (50 км/ч, ~300 с): живое — больше половины, это пробки сейчас.
+        let nearJam = live(level: 3, kmh: 10, to: 5_000, generated: departure)
+        let mild = try XCTUnwrap(profile(slots: [18: 50]))
+        let mixed = try XCTUnwrap(delay(km: 30, departure: departure, live: nearJam, profile: mild))
+        XCTAssertEqual(mixed.source, .mixed)
+        XCTAssertGreaterThan(mixed.liveSeconds, 0)
+        XCTAssertLessThanOrEqual(mixed.liveSeconds, mixed.seconds)
+        XCTAssertEqual(TrafficForecast.cause(total: mixed.seconds, live: mixed.liveSeconds), .jams)
+        // Только живые — вся задержка живая.
+        let onlyLive = try XCTUnwrap(delay(km: 2, departure: at(hour: 12), live: live(level: 3, kmh: 10,
+                                                                                     generated: at(hour: 12)),
+                                           profile: nil))
+        XCTAssertEqual(onlyLive.liveSeconds, onlyLive.seconds)
+    }
+
+    func testCaptionCauseIsHalfTheDelay() {
+        XCTAssertEqual(TrafficForecast.cause(total: 600, live: 300), .jams, "ровно половина — пробки")
+        XCTAssertEqual(TrafficForecast.cause(total: 600, live: 299), .usual)
+        XCTAssertEqual(TrafficForecast.cause(total: 600, live: 0), .usual)
+        XCTAssertEqual(TrafficForecast.cause(total: 600, live: 600), .jams)
+        XCTAssertEqual(TrafficForecast.Delay(seconds: 120, source: .live).liveSeconds, 120)
+        XCTAssertEqual(TrafficForecast.Delay(seconds: 120, source: .typical).liveSeconds, 0)
+    }
+
     func testDelayGrowsTowardTheJamHour() throws {
         // Пробка весь вечер (слоты 18 и 19): к 18:00 задержка растёт до полной.
         let jam = try XCTUnwrap(profile(slots: [18: 20, 19: 20]))

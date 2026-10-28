@@ -8,8 +8,13 @@
 //  ремонт стал бы для них передвижным радаром со звуком.
 //
 //  Правила здесь, чистые и с тестами (RoadEventTests):
-//    * маршрут: вариант, идущий ≤ 30 м от ПОДТВЕРЖДЁННОГО перекрытия в ту же
-//      сторону, — «на пути перекрытие», первым не предлагается. Сторона —
+//    * маршрут: вариант, идущий ≤ 30 м от перекрытия с ДВУМЯ независимыми
+//      подтверждениями в ту же сторону, — «на пути перекрытие», первым не
+//      предлагается. Порог тот же, что у маршрутизатора сервера
+//      (CLOSURE_MIN_CONFIRMERS, 33D; решение 28.10): одно подтверждение —
+//      отметка и голос, но не выбор пути, иначе телефон и OSRM расходились
+//      (сервер строил через перекрытие, телефон вешал на этот путь ярлык).
+//      Старый сервер числа не шлёт — путь не трогаем. Сторона —
 //      курс отметившего: перекрыта может быть одна половина проспекта, и
 //      отметка на встречке не мешает. Курс неизвестен — считаем, что
 //      перекрыто всё: цена ошибки — вариант чуть медленнее, а не тупик;
@@ -38,14 +43,24 @@ nonisolated struct RoadEvent: Equatable, Identifiable, Sendable {
     let course: Double
     let expires: Date
     let confirmed: Bool
+    /// Число независимых подтверждений (разное устройство И адрес) из
+    /// `/api/road`, 28.10. nil — старый сервер: на путь такое не влияет.
+    var confirmers: Int? = nil
+
+    /// Влияет ли на выбор пути: перекрытие с `roadClosureRouteConfirmers`
+    /// независимыми подтверждениями. `confirmed` (одно) — только отметка и голос.
+    var affectsRoute: Bool {
+        kind == .closure && (confirmers ?? 0) >= AppConfig.roadClosureRouteConfirmers
+    }
 
     var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: lat, longitude: lon) }
 }
 
 nonisolated enum RoadEventRules {
-    /// Перекрытий на пути варианта (подтверждённых, в нашу сторону).
+    /// Перекрытий на пути варианта (годных для выбора пути — `affectsRoute`,
+    /// в нашу сторону).
     static func closures(on path: [CLLocationCoordinate2D], events: [RoadEvent], now: Date) -> Int {
-        events.filter { $0.kind == .closure && $0.confirmed && $0.expires > now && blocks(path: path, event: $0) }
+        events.filter { $0.affectsRoute && $0.expires > now && blocks(path: path, event: $0) }
             .count
     }
 

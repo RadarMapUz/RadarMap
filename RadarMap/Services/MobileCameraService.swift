@@ -263,6 +263,9 @@ final class MobileCameraService {
         /// Старый сервер поля не шлёт — nil трактуем как «подтверждена», чтобы
         /// не рисовать призраками всю карту до обновления сервера.
         let confirmed: Bool?
+        /// Число независимых подтверждений — только в /api/road (28.10).
+        /// Старый сервер не шлёт: nil, и перекрытие на выбор пути не влияет.
+        let confirmers: Int?
     }
     private struct MobileResponse: Decodable { let reports: [APIReport] }
 
@@ -392,7 +395,8 @@ final class MobileCameraService {
                 return RoadEvent(id: Self.idOffset + report.id, kind: kind, lat: report.lat, lon: report.lon,
                                  course: report.course ?? -1,
                                  expires: Date(timeIntervalSince1970: report.expires + skew),
-                                 confirmed: report.confirmed ?? true)
+                                 confirmed: report.confirmed ?? true,
+                                 confirmers: report.confirmers)
             }
             if fresh != roadEvents { roadEvents = fresh }
             // Событие сняли (кворум «нет», модератор, срок) — вопрос о нём

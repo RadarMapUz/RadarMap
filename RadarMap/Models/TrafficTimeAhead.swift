@@ -89,7 +89,7 @@ nonisolated enum TrafficTimeAhead {
             return TrafficProfile.Mix(current: slotCache!.current, next: slotCache!.next, alpha: (t - hour) / 3600)
         }
 
-        var total: TimeInterval = 0
+        var total: TimeInterval = 0, liveTotal: TimeInterval = 0
         var travelled = 0.0
         var usedLive = false, usedTypical = false
         for (b, box) in boxes.enumerated() {
@@ -137,7 +137,9 @@ nonisolated enum TrafficTimeAhead {
                         usedLive = true
                         let edge = liveSnapshot.edges[index]
                         if edge.level >= 2, edge.modelKmh > 0 {
-                            total += max(0, step / (max(3, edge.kmh) / 3.6) - step / (edge.modelKmh / 3.6))
+                            let delay = max(0, step / (max(3, edge.kmh) / 3.6) - step / (edge.modelKmh / 3.6))
+                            total += delay
+                            liveTotal += delay
                         }
                     } else if let profileFile {
                         usedTypical = true
@@ -151,7 +153,7 @@ nonisolated enum TrafficTimeAhead {
             }
         }
         switch (usedLive, usedTypical) {
-        case (true, true):  return TrafficForecast.Delay(seconds: total, source: .mixed)
+        case (true, true):  return TrafficForecast.Delay(seconds: total, source: .mixed, liveSeconds: liveTotal)
         case (true, false): return TrafficForecast.Delay(seconds: total, source: .live)
         case (false, true): return TrafficForecast.Delay(seconds: total, source: .typical)
         case (false, false): return nil

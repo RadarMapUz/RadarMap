@@ -2,8 +2,9 @@
 //  DetourAdvisorTests.swift
 //  RadarMapTests
 //
-//  Объезд пробки: ищем только при подтверждённой задержке на своём пути,
-//  предлагаем только настоящий выигрыш по другому пути, не надоедаем.
+//  Объезд пробки: ищем только когда подтверждённая задержка на своём пути
+//  делает предложение достижимым (решение 28.10), предлагаем только
+//  настоящий выигрыш по другому пути, не надоедаем.
 //
 
 import CoreLocation
@@ -31,29 +32,74 @@ final class DetourAdvisorTests: XCTestCase {
 
     // MARK: - Когда искать
 
-    func testSearchesOnlyOnConfirmedDelay() {
-        XCTAssertTrue(Advisor.shouldSearch(remainingDistance: 8_000, delayAhead: 420, crawl: 0,
-                                           sinceLastSearch: nil, sinceDecline: nil, offersOnRoute: 0))
-        XCTAssertFalse(Advisor.shouldSearch(remainingDistance: 8_000, delayAhead: 0, crawl: 900,
+    func testSearchesOnlyWhenAnOfferIsReachable() {
+        // Порог выигрыша max(3 мин, 15 % остатка) + цена перестроения 60 с.
+        XCTAssertEqual(Advisor.neededSaving(currentRemaining: 20 * 60), 180)
+        XCTAssertEqual(Advisor.neededSaving(currentRemaining: 40 * 60), 360, accuracy: 1e-6)
+        XCTAssertEqual(Advisor.searchTrigger(currentRemaining: 20 * 60), 240)
+        XCTAssertTrue(Advisor.shouldSearch(remainingDistance: 8_000, delayAhead: 300, currentRemaining: 20 * 60,
+                                           sinceLastSearch: nil, sinceDecline: nil, offersOnRoute: 0),
+                      "5 мин при 20-минутном остатке: выиграть 3 мин после перестроения ещё можно")
+        XCTAssertFalse(Advisor.shouldSearch(remainingDistance: 8_000, delayAhead: 300, currentRemaining: 40 * 60,
+                                            sinceLastSearch: nil, sinceDecline: nil, offersOnRoute: 0),
+                       "5 мин при 40-минутном остатке: нужен выигрыш 6 мин — объезд столько не даст, поиск впустую")
+        XCTAssertFalse(Advisor.shouldSearch(remainingDistance: 8_000, delayAhead: 210, currentRemaining: 20 * 60,
+                                            sinceLastSearch: nil, sinceDecline: nil, offersOnRoute: 0),
+                       "3,5 мин при 20-минутном остатке: 3,5 − 1 < 3")
+        XCTAssertFalse(Advisor.shouldSearch(remainingDistance: 8_000, delayAhead: 0, currentRemaining: 20 * 60,
                                             sinceLastSearch: nil, sinceDecline: nil, offersOnRoute: 0),
                        "ползём без данных — длина пробки неизвестна, объезд не посчитать")
-        XCTAssertTrue(Advisor.shouldSearch(remainingDistance: 8_000, delayAhead: 150, crawl: 200,
-                                           sinceLastSearch: nil, sinceDecline: nil, offersOnRoute: 0),
-                       "ползём и данные подтверждают — ищем раньше")
-        XCTAssertFalse(Advisor.shouldSearch(remainingDistance: 8_000, delayAhead: 150, crawl: 60,
+    }
+
+    /// Ветка «ползём 3+ мин» (2 мин задержки) больше не ищет: при текущем
+    /// быстрейшем пути выигрыш не больше «задержка − 60 с», и предложения не
+    /// было бы никогда — а поиск повторялся бы каждые 3 минуты всей пробки.
+    func testShortDelayWhileCrawlingNoLongerSearches() {
+        XCTAssertFalse(Advisor.shouldSearch(remainingDistance: 8_000, delayAhead: 150, currentRemaining: 15 * 60,
                                             sinceLastSearch: nil, sinceDecline: nil, offersOnRoute: 0))
+        // Любой путь, который поиск ещё запускает, способен дать предложение:
+        // вариант без задержки выигрывает ровно «задержка − цена» ≥ порога.
+        for remaining in stride(from: 10.0 * 60, through: 90 * 60, by: 5 * 60) {
+            let trigger = Advisor.searchTrigger(currentRemaining: remaining)
+            XCTAssertTrue(Advisor.shouldSearch(remainingDistance: 8_000, delayAhead: trigger,
+                                               currentRemaining: remaining, sinceLastSearch: nil,
+                                               sinceDecline: nil, offersOnRoute: 0))
+            // Полсекунды запаса — от округления 15 % в Double.
+            let free = Advisor.Candidate(points: around, expectedTime: remaining - trigger - 0.5, steps: [])
+            XCTAssertNotNil(Advisor.decide(currentRemaining: remaining, current: current, candidates: [free]),
+                            "остаток \(Int(remaining / 60)) мин: поиск запущен — предложение достижимо")
+        }
+    }
+
+    /// Симуляция 27.10: пробка +9 мин впереди, 25 мин до цели. Объезд,
+    /// выигрывающий порог, предлагается; 176 с из той же пробки — нет.
+    func testNineMinutesOfJamOffersADetourAboveTheThreshold() throws {
+        let remaining: TimeInterval = 25 * 60
+        XCTAssertTrue(Advisor.shouldSearch(remainingDistance: 6_000, delayAhead: 9 * 60, currentRemaining: remaining,
+                                           sinceLastSearch: nil, sinceDecline: nil, offersOnRoute: 0))
+        let needed = Advisor.neededSaving(currentRemaining: remaining)            // 225 с
+        XCTAssertEqual(needed, 225, accuracy: 1e-6)
+        let good = Advisor.Candidate(points: around,
+                                     expectedTime: remaining - needed - AppConfig.detourSwitchCostSeconds - 0.5,
+                                     steps: [])
+        let offer = try XCTUnwrap(Advisor.decide(currentRemaining: remaining, current: current, candidates: [good]))
+        XCTAssertEqual(offer.saving, needed + 0.5, accuracy: 0.001)
+        let weak = Advisor.Candidate(points: around, expectedTime: remaining - 176 - AppConfig.detourSwitchCostSeconds,
+                                     steps: [])
+        XCTAssertNil(Advisor.decide(currentRemaining: remaining, current: current, candidates: [weak]),
+                     "176 с — ниже порога 225 с")
     }
 
     func testDoesNotNag() {
-        XCTAssertFalse(Advisor.shouldSearch(remainingDistance: 1_500, delayAhead: 900, crawl: 0,
+        XCTAssertFalse(Advisor.shouldSearch(remainingDistance: 1_500, delayAhead: 900, currentRemaining: 30 * 60,
                                             sinceLastSearch: nil, sinceDecline: nil, offersOnRoute: 0),
                        "почти приехали")
-        XCTAssertFalse(Advisor.shouldSearch(remainingDistance: 8_000, delayAhead: 900, crawl: 0,
+        XCTAssertFalse(Advisor.shouldSearch(remainingDistance: 8_000, delayAhead: 900, currentRemaining: 30 * 60,
                                             sinceLastSearch: 60, sinceDecline: nil, offersOnRoute: 0))
-        XCTAssertFalse(Advisor.shouldSearch(remainingDistance: 8_000, delayAhead: 900, crawl: 0,
+        XCTAssertFalse(Advisor.shouldSearch(remainingDistance: 8_000, delayAhead: 900, currentRemaining: 30 * 60,
                                             sinceLastSearch: nil, sinceDecline: 300, offersOnRoute: 0),
                        "отказался — 10 минут тишины")
-        XCTAssertFalse(Advisor.shouldSearch(remainingDistance: 8_000, delayAhead: 900, crawl: 0,
+        XCTAssertFalse(Advisor.shouldSearch(remainingDistance: 8_000, delayAhead: 900, currentRemaining: 30 * 60,
                                             sinceLastSearch: nil, sinceDecline: nil,
                                             offersOnRoute: AppConfig.detourMaxOffersPerRoute))
     }
@@ -71,9 +117,9 @@ final class DetourAdvisorTests: XCTestCase {
     }
 
     func testSmallSavingIsNotWorthTheSwitch() {
-        let detour = Advisor.Candidate(points: around, expectedTime: 26 * 60, steps: [])
+        let detour = Advisor.Candidate(points: around, expectedTime: 25 * 60, steps: [])
         XCTAssertNil(Advisor.decide(currentRemaining: 30 * 60, current: current, candidates: [detour]),
-                     "4 мин минус цена перестроения — меньше порога")
+                     "5 мин минус цена перестроения — меньше 15 % от 30 мин (4,5 мин)")
     }
 
     func testSamePathIsNotADetour() {
@@ -154,11 +200,12 @@ final class DetourAdvisorTests: XCTestCase {
         // против 50 — около 21 минуты.
         let delayAhead = snapshot.delay(along: current)
         XCTAssertEqual(delayAhead, 3_340 / (8 / 3.6) - 3_340 / (50 / 3.6), accuracy: 60)
-        XCTAssertTrue(Advisor.shouldSearch(remainingDistance: 4_400, delayAhead: delayAhead, crawl: 0,
-                                           sinceLastSearch: nil, sinceDecline: nil, offersOnRoute: 0))
         // Варианты оценены той же меркой, что в RouteService.considerDetour:
         // время OSRM + пробки по тому же снимку.
         let currentRemaining = 6 * 60 + delayAhead
+        XCTAssertTrue(Advisor.shouldSearch(remainingDistance: 4_400, delayAhead: delayAhead,
+                                           currentRemaining: currentRemaining,
+                                           sinceLastSearch: nil, sinceDecline: nil, offersOnRoute: 0))
         let candidates = [(throughTheJam, 10.0 * 60), (around, 8.0 * 60)].map { points, osrm in
             Advisor.Candidate(points: points, expectedTime: osrm + snapshot.delay(along: points), steps: [])
         }
@@ -176,7 +223,8 @@ final class DetourAdvisorTests: XCTestCase {
         let oncoming = try XCTUnwrap(TrafficSnapshot.decode(nowJSON(generated: now, southbound: true)))
         XCTAssertEqual(oncoming.delay(along: current), 0)
         XCTAssertFalse(Advisor.shouldSearch(remainingDistance: 4_400, delayAhead: oncoming.delay(along: current),
-                                            crawl: 0, sinceLastSearch: nil, sinceDecline: nil, offersOnRoute: 0))
+                                            currentRemaining: 6 * 60, sinceLastSearch: nil, sinceDecline: nil,
+                                            offersOnRoute: 0))
         // Снимок старше 10 минут — RouteService.considerDetour объезд не ищет.
         let stale = try XCTUnwrap(TrafficSnapshot.decode(nowJSON(generated: now.addingTimeInterval(-11 * 60))))
         XCTAssertFalse(stale.isFresh(now: now))

@@ -66,6 +66,13 @@ final class TrafficService {
                                                "TrafficService.intervalProvider") }
     }
     private var interval: TimeInterval { intervalProvider?() ?? AppConfig.trafficRefreshInterval }
+    /// Новый живой набор (или его снятие) — маршрут, чьи варианты ещё
+    /// выбирают, пересчитывает их время и, до касания, ярлыки (решение 28.10).
+    /// Ставит AppEnvironment.
+    @ObservationIgnored var onSnapshotChanged: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onSnapshotChanged,
+                                               "TrafficService.onSnapshotChanged") }
+    }
     /// Отправки идут по одной: такт, «радио проснулось» и финиш поездки могли
     /// взять одну и ту же голову очереди — кусок ушёл бы дважды и сервер
     /// принял бы его за второго независимого водителя (ревью 19.10).
@@ -261,6 +268,7 @@ final class TrafficService {
         self.snapshot = snapshot
         revision &+= 1
         rebuildLines()
+        onSnapshotChanged?()
     }
 
     /// Новый набор «обычно в это время» (TrafficProfileService, раз в 5 мин).

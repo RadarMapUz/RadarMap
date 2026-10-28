@@ -1555,6 +1555,50 @@ class RoadEventsTest(ServerTestBase):
         finally:
             api._probation_cache = (0.0, None)
 
+    def test_road_list_counts_independent_confirmers_like_the_router(self):
+        """/api/road отдаёт ЧИСЛО независимых подтверждений (28.10): телефон
+        пускает перекрытие в выбор пути только с двух — как маршрутизатор
+        (CLOSURE_MIN_CONFIRMERS). Свой адрес, свой UUID и второй UUID за
+        чужим уже посчитанным адресом не в счёт; confirmed — как был."""
+        import traffic_speeds
+        _, made = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.31, "lon": 69.25, "device": "owner", "type": "closure", "course": 90},
+                        ip="10.7.0.1")
+        rid = made["id"]
+        item = self.road_item(rid)
+        self.assertEqual(item["confirmers"], 0)
+        self.assertFalse(item["confirmed"])
+        self.vote(rid, "same-wifi", 1, ip="10.7.0.1")        # свой адрес
+        self.assertEqual(self.road_item(rid)["confirmers"], 0)
+        self.vote(rid, "stranger", 1, ip="10.7.0.2")
+        item = self.road_item(rid)
+        self.assertEqual(item["confirmers"], 1)
+        self.assertTrue(item["confirmed"], "отметка и голос — с одного независимого, как раньше")
+        self.vote(rid, "stranger-rotated", 1, ip="10.7.0.2")  # ротация UUID за тем же адресом
+        self.assertEqual(self.road_item(rid)["confirmers"], 1)
+        # Маршрутизатор на той же базе с одним подтверждением перекрытие не штрафует.
+        self.assertEqual(traffic_speeds.confirmed_events(api.DB_PATH, time.time()), [])
+        self.vote(rid, "second", 1, ip="10.7.0.3")
+        self.assertEqual(self.road_item(rid)["confirmers"], 2)
+        self.assertEqual([e[0] for e in traffic_speeds.confirmed_events(api.DB_PATH, time.time())], [rid],
+                         "тот же счёт: с двумя — и в /api/road, и у маршрутизатора")
+        # Старые поля на месте, в /api/mobile поле не появилось.
+        self.assertTrue({"id", "lat", "lon", "created", "expires", "up", "down", "type",
+                         "confirmed", "course"} <= set(item))
+        self.report("radar", device="r1", lat=41.40)
+        _, mobile = _call(self.port, "GET", "/api/mobile")
+        self.assertNotIn("confirmers", mobile["reports"][0])
+
+    def test_phone_closure_threshold_equals_the_router(self):
+        """Один порог «2 независимых» везде: AppConfig.roadClosureRouteConfirmers
+        на телефоне — то же число, что CLOSURE_MIN_CONFIRMERS маршрутизатора."""
+        import traffic_config
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "RadarMap", "Support", "AppConfig.swift")
+        with open(path, encoding="utf-8") as f:
+            match = re.search(r"static let roadClosureRouteConfirmers\s*=\s*(\d+)", f.read())
+        self.assertIsNotNone(match, "константа порога пропала из AppConfig.swift")
+        self.assertEqual(int(match.group(1)), traffic_config.CLOSURE_MIN_CONFIRMERS)
+
     def test_pass_noes_cut_life_and_hide_road_event(self):
         """«Нет» с нового адреса срезает срок, три разных адреса снимают
         событие из /api/road — как у радара."""

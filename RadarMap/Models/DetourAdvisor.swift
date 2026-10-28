@@ -10,12 +10,18 @@
 //  Честность здесь важнее частоты. Набор пробок (TrafficSnapshot) несёт
 //  только МЕДЛЕННЫЕ рёбра: «свободно» и «никто там не ехал» в нём неотличимы.
 //  Поэтому:
-//    * искать объезд — только когда задержка на НАШЕМ пути подтверждена
-//      данными (≥ 5 мин впереди, или ≥ 2 мин, а мы сами ползём 3+ минуты);
-//      своя ползучая скорость без данных не говорит, далеко ли тянется пробка;
-//    * предлагать — только когда вариант быстрее на max(5 мин, 15 %) с учётом
-//      цены перестроения, а время варианта посчитано по тем же пробкам:
-//      вариант через ту же пробку выигрыша не даст и предложен не будет;
+//    * предлагать — только когда вариант быстрее на max(3 мин, 15 %
+//      оставшегося времени по текущему пути) с учётом цены перестроения
+//      (60 с), а время варианта посчитано по тем же пробкам: вариант через
+//      ту же пробку выигрыша не даст и предложен не будет;
+//    * искать — только когда такое предложение ДОСТИЖИМО: подтверждённая
+//      данными задержка на НАШЕМ пути не меньше порога выигрыша + цены
+//      перестроения. Текущий путь обычно быстрейший по графу, и объезд не
+//      может выиграть больше, чем «задержка − цена»; поиск ниже этого —
+//      три альтернативы OSRM каждые 3 минуты всей пробки впустую (симуляция
+//      27.10, решение 28.10). Своя ползучая скорость порога не снижает: без
+//      данных она не говорит, далеко ли тянется пробка, а с данными
+//      достижимость та же — счёт «ползём» остался только в журнале;
 //    * вариант, который почти повторяет текущий путь, — не объезд;
 //    * после отказа — 10 минут тишины, не больше трёх предложений за маршрут.
 //  Маршрут без нажатия водителя не меняется никогда.
@@ -46,9 +52,13 @@ nonisolated enum DetourAdvisor {
 
     // MARK: - Когда искать
 
+    /// - Parameters:
+    ///   - delayAhead: подтверждённая живыми данными задержка на нашем пути впереди.
+    ///   - currentRemaining: время до цели по текущему пути той же меркой, что
+    ///     в `decide` (движок + живые пробки).
     static func shouldSearch(remainingDistance: CLLocationDistance,
                              delayAhead: TimeInterval,
-                             crawl: TimeInterval,
+                             currentRemaining: TimeInterval,
                              sinceLastSearch: TimeInterval?,
                              sinceDecline: TimeInterval?,
                              offersOnRoute: Int) -> Bool {
@@ -56,8 +66,19 @@ nonisolated enum DetourAdvisor {
               offersOnRoute < AppConfig.detourMaxOffersPerRoute else { return false }
         if let sinceLastSearch, sinceLastSearch < AppConfig.detourSearchIntervalSeconds { return false }
         if let sinceDecline, sinceDecline < AppConfig.detourDeclineQuietSeconds { return false }
-        if delayAhead >= AppConfig.detourDelayTriggerSeconds { return true }
-        return crawl >= AppConfig.detourCrawlSeconds && delayAhead >= AppConfig.detourCrawlDelaySeconds
+        return delayAhead >= searchTrigger(currentRemaining: currentRemaining)
+    }
+
+    /// Порог выигрыша объезда после цены перестроения: max(3 мин, 15 %
+    /// оставшегося времени по текущему пути).
+    static func neededSaving(currentRemaining: TimeInterval) -> TimeInterval {
+        max(AppConfig.detourMinSavingSeconds, max(0, currentRemaining) * AppConfig.detourMinSavingShare)
+    }
+
+    /// С какой задержки впереди предложение вообще достижимо: объезд не
+    /// выиграет больше задержки, а из выигрыша ещё вычтется цена перестроения.
+    static func searchTrigger(currentRemaining: TimeInterval) -> TimeInterval {
+        neededSaving(currentRemaining: currentRemaining) + AppConfig.detourSwitchCostSeconds
     }
 
     // MARK: - Что предлагать
@@ -68,7 +89,7 @@ nonisolated enum DetourAdvisor {
     ///   - current: точки текущего пути от машины до цели.
     static func decide(currentRemaining: TimeInterval, current: [CLLocationCoordinate2D],
                        candidates: [Candidate]) -> Offer? {
-        let needed = max(AppConfig.detourMinSavingSeconds, currentRemaining * AppConfig.detourMinSavingShare)
+        let needed = neededSaving(currentRemaining: currentRemaining)
         var best: Offer?
         for (index, candidate) in candidates.enumerated() {
             guard candidate.points.count >= 2,
@@ -123,7 +144,8 @@ nonisolated enum DetourAdvisor {
 
     /// Сколько секунд машина ползёт (ниже `detourCrawlKmh`). Короткий рывок
     /// между стоянками (до `detourCrawlBurstSeconds` быстрее `detourFreeKmh`)
-    /// ползание не прерывает — так и выглядит пробка.
+    /// ползание не прерывает — так и выглядит пробка. С 28.10 — только
+    /// журнал поиска («ползём N с»): порог поиска от него не зависит.
     struct CrawlWatch: Equatable, Sendable {
         private var since: Date?
         private var fastSince: Date?

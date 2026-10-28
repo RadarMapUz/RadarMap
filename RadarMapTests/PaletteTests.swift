@@ -459,7 +459,7 @@ extension PaletteTests {
 
     private func rgb(_ value: UInt32) -> Color { Color(uiColor: Theme.rgb(value)) }
 
-    /// Палитра «Малина и слива» (выбор владельца 27.10), обе темы: (тема,
+    /// Палитра «Сигнал» (выбор владельца 28.10), обе темы: (тема,
     /// уровни 1…4, маршрут, фон и тёмные полотна темы).
     private func trafficCases() -> [(String, [UInt32], UInt32, [UInt32])] {
         let c = TrafficPalette.active
@@ -564,7 +564,7 @@ extension PaletteTests {
     }
 }
 
-// MARK: - Кандидаты палитры пробок (33H3)
+// MARK: - Палитра пробок «Сигнал» (33H3)
 
 extension PaletteTests {
 
@@ -584,7 +584,7 @@ extension PaletteTests {
     }
 
     /// Все условия 33H3 для одной палитры в обеих темах.
-    private func checkCandidate(_ name: String, _ c: TrafficPalette.Colors) {
+    private func checkPalette(_ name: String, _ c: TrafficPalette.Colors) {
         let camera = Theme.Types.camera
         let levels: [TrafficPalette.Pair] = [c.free, c.slow, c.jam, c.stand]
         for day in [true, false] {
@@ -672,10 +672,30 @@ extension PaletteTests {
         }
     }
 
-    func testTrafficCandidatesHoldEveryRule() {
-        XCTAssertEqual(TrafficPalette.candidates.count, 3)
-        for (number, candidate) in TrafficPalette.candidates.enumerated() {
-            checkCandidate("\(number + 1) «\(candidate.name)»", candidate.colors)
+    /// «Сигнал» (выбор владельца 28.10) держит каждое правило 33H3.
+    func testTrafficPaletteHoldsEveryRule() {
+        checkPalette("«Сигнал»", TrafficPalette.active)
+    }
+
+    /// Асфальт поездки (make_style.py PALETTES drive_trunk / drive_primary /
+    /// drive_tertiary — тёмный и днём). Слой пробок там красится ночным
+    /// набором, как линия маршрута (DriveAsphalt.routeDaylight): каждый
+    /// уровень — и «стоят» прежде всего — держит ≥ 3:1 к асфальту или к своей
+    /// кайме (кайма — с её прозрачностью, поверх того же асфальта). Дневной
+    /// баклажан здесь давал 1,3–1,5:1 — линия «стоят» пропадала.
+    func testTrafficStandsOutOnTheDriveAsphalt() {
+        XCTAssertFalse(DriveAsphalt.routeDaylight(daylight: true, active: true),
+                       "в поездке слой пробок и маршрут — ночным набором")
+        let c = TrafficPalette.active
+        style = .dark
+        for asphalt: UInt32 in [0x4B4F5A, 0x3F4859, 0x434C5E] {
+            let casing = TrafficPalette.mix(TrafficPalette.casing.night, asphalt,
+                                            1 - TrafficPalette.casingOpacity.night)
+            for (name, line) in [("свободно", c.free.night), ("медленно", c.slow.night),
+                                 ("пробка", c.jam.night), ("стоят", c.stand.night)] {
+                let best = max(contrast(rgb(line), rgb(asphalt)), contrast(rgb(line), rgb(casing)))
+                XCTAssertGreaterThanOrEqual(best, 3, "\(name) на асфальте #\(String(asphalt, radix: 16))")
+            }
         }
     }
 }

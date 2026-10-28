@@ -87,7 +87,7 @@ extension MapScreen {
                 map.showTrafficLegend = true
             }
         }
-        // 33H3 (временно): лист по касанию линии без касания —
+        // 33H3: лист по касанию линии пробок без касания (снимки) —
         // `-trafficTapDemo L` (уровень 1…4), с `-trafficTapUsual` — «обычно».
         if let index = args.firstIndex(of: "-trafficTapDemo"), index + 1 < args.count,
            let level = Int(args[index + 1]) {

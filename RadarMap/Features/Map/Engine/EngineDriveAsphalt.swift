@@ -7,7 +7,8 @@
 //  стиль не перезагружается. Прежние значения запоминаются при первой
 //  правке и возвращаются как были. Тут же — тема линии маршрута: в поездке
 //  её постоянные слои (остаток линии, кайма, пройденное, середина, стрелки)
-//  берут ночной набор и днём (DriveAsphalt.routeDaylight).
+//  берут ночной набор и днём (DriveAsphalt.routeDaylight); с 33H3 — и слой
+//  пробок на улицах.
 //
 //  Пишется только на смене режима или стиля — на тике ничего.
 //
@@ -121,6 +122,38 @@ final class EngineDriveAsphalt {
         }
         (style.layer(withIdentifier: "route-arrows") as? MLNSymbolStyleLayer)?.iconImageName =
             NSExpression(forConstantValue: EngineMapStyle.routeArrowImage(daylight: daylight))
+        paintTraffic(daylight: daylight, in: style)
+    }
+
+    /// Пробки на улицах (33H3) — той же темой, что линия маршрута: на тёмном
+    /// асфальте поездки дневные гранат и баклажан с тёмной каймой не держали
+    /// и 1,5:1, ночной набор с ночной каймой держит ≥ 3:1 (PaletteTests).
+    /// Выражения — те же, что стиль собирает в EngineMapStyle.trafficLayers:
+    /// второго списка цветов нет. Растры шевронов обеих тем уже в стиле.
+    /// Цвет из JSON стиля в выражение. Голая строка «#rrggbb» через
+    /// mglJSONObject становится СТРОКОЙ, и движок падает на `mgl_color`
+    /// (снимок 28.10); строки внутри match/case он разбирает сам.
+    private static func colourExpression(_ json: Any) -> NSExpression {
+        if let hex = json as? String, hex.hasPrefix("#"), let value = UInt32(hex.dropFirst(), radix: 16) {
+            return NSExpression(forConstantValue: Theme.rgb(value))
+        }
+        return NSExpression(mglJSONObject: json)
+    }
+
+    private func paintTraffic(daylight: Bool, in style: MLNStyle) {
+        let ids = EngineMapStyle.trafficLayerIDs
+        for layer in EngineMapStyle.trafficLayers(daylight: daylight) {
+            guard let id = layer["id"] as? String else { continue }
+            let paint = layer["paint"] as? [String: Any] ?? [:]
+            let layout = layer["layout"] as? [String: Any] ?? [:]
+            if id == ids.casing || id == ids.line, let line = style.layer(withIdentifier: id) as? MLNLineStyleLayer {
+                if let colour = paint["line-color"] { line.lineColor = Self.colourExpression(colour) }
+                if let opacity = paint["line-opacity"] { line.lineOpacity = NSExpression(mglJSONObject: opacity) }
+            } else if id == ids.chevrons, let symbols = style.layer(withIdentifier: id) as? MLNSymbolStyleLayer,
+                      let image = layout["icon-image"] {
+                symbols.iconImageName = NSExpression(mglJSONObject: image)
+            }
+        }
     }
 }
 #endif

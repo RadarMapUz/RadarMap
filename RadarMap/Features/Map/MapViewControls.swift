@@ -71,8 +71,9 @@ struct MapZoomButtons: View {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             map.zoomStep(delta)
         } label: {
+            // Вес глифа — как у всех кругов колонки (CircleControlFace).
             Image(systemName: symbol)
-                .font(.rounded(17, .bold))
+                .font(.rounded(17, .semibold))
                 .foregroundStyle(Theme.textPrimary)
                 .frame(width: Theme.controlSize, height: Theme.controlSize)
                 .contentShape(Rectangle())

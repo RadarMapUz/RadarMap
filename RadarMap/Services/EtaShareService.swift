@@ -94,26 +94,17 @@ final class EtaShareService {
         sentRemaining = nil
         sentAt = nil
         Log.network.notice("прибытие: делимся")
+        // Первое время — сразу (водитель только что отправил ссылку), дальше
+        // планировщик сети (NetScheduler, 36B) везёт обновления в такте
+        // отметок: раньше этот цикл слал POST раз в минуту своим пробуждением
+        // радио, между тактами опроса (70 с в городе).
+        Task { await sendUpdateIfDue() }
         loop?.cancel()
+        // Цикл — только «маршрут кончился», без сети до самого финиша.
         loop = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self, let route = self.route else { return }
-                if route.isActive {
-                    let arrival = route.arrivalDate, remaining = route.remainingDistance
-                    if EtaShare.shouldSend(lastArrival: self.sentArrival, lastRemaining: self.sentRemaining,
-                                           lastSentAt: self.sentAt, arrival: arrival,
-                                           remaining: remaining, now: Date()) {
-                        // Запоминаем только доставленное — иначе после сбоя
-                        // ссылка молчала бы до 10 минут; и не после «Перестать»
-                        // (finish уже обнулил, отмена не прерывает отправку).
-                        let delivered = await self.send(.driving, arrival: arrival, remaining: remaining)
-                        if delivered, !Task.isCancelled {
-                            self.sentArrival = arrival
-                            self.sentRemaining = remaining
-                            self.sentAt = Date()
-                        }
-                    }
-                } else {
+                if !route.isActive {
                     let arrived = route.lastArrival.map {
                         Date().timeIntervalSince($0.at) < AppConfig.etaShareArrivalFreshSeconds
                     } ?? false
@@ -122,6 +113,28 @@ final class EtaShareService {
                 }
                 await Task.pause(seconds: AppConfig.etaShareIntervalSeconds)
             }
+        }
+    }
+
+    /// Пора ли отправить новое время (без сети): ссылка живая, маршрут
+    /// идёт, и цифры сдвинулись (EtaShare.shouldSend).
+    var isUpdateDue: Bool {
+        guard isSharing, let route, route.isActive else { return false }
+        return EtaShare.shouldSend(lastArrival: sentArrival, lastRemaining: sentRemaining, lastSentAt: sentAt,
+                                   arrival: route.arrivalDate, remaining: route.remainingDistance, now: Date())
+    }
+
+    /// Отправить новое время, если пора.
+    func sendUpdateIfDue() async {
+        guard isUpdateDue, let route else { return }
+        let arrival = route.arrivalDate, remaining = route.remainingDistance
+        // Запоминаем только доставленное — иначе после сбоя ссылка молчала бы
+        // до 10 минут; и не после «Перестать» (finish уже обнулил).
+        let delivered = await send(.driving, arrival: arrival, remaining: remaining)
+        if delivered, isSharing {
+            sentArrival = arrival
+            sentRemaining = remaining
+            sentAt = Date()
         }
     }
 

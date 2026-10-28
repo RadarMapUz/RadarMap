@@ -37,7 +37,7 @@ final class RemoteConfigService {
     /// Действующие значения. До первой удачной загрузки — дефолты сборки.
     private(set) var current: RemoteConfig = .default
 
-    @ObservationIgnored private let api = APIClient(timeout: 10, resourceTimeout: 20)
+    @ObservationIgnored private let api = APIClient(timeout: 10)
     @ObservationIgnored private var isRefreshing = false
 
     private static var cacheURL: URL {
@@ -54,10 +54,18 @@ final class RemoteConfigService {
         }
     }
 
+    /// Пора ли проверить пульт (без сети) — раз в `remoteConfigCheckInterval`.
+    /// Спрашивает планировщик сети (NetScheduler, 36B): в окне активации и
+    /// прицепом к такту поездки — первым в окне.
+    var isCheckDue: Bool {
+        guard !isRefreshing else { return false }
+        guard let last = Storage.date(.remoteConfigCheck) else { return true }
+        return Date().timeIntervalSince(last) >= AppConfig.remoteConfigCheckInterval
+    }
+
     /// Тихая проверка — не чаще, чем раз в `remoteConfigCheckInterval`.
     func refreshIfNeeded() async {
-        if let last = Storage.date(.remoteConfigCheck),
-           Date().timeIntervalSince(last) < AppConfig.remoteConfigCheckInterval { return }
+        guard isCheckDue else { return }
         await refresh()
     }
 

@@ -133,19 +133,32 @@ final class LaneOverlayService {
     /// Раз в неделю (без слоя на сервере — раз в сутки): подписанный индекс;
     /// новый файл — скачать, сверить, разобрать, положить рядом и только
     /// потом индекс. Пульт выключил слой — снять его и не ходить в сеть.
+    /// Пора ли за индексом (без сети) — те же сроки и правило «обновление
+    /// не по сотовой», что ниже. Спрашивает планировщик сети (NetScheduler).
+    func isDue(now: Date = Date()) -> Bool {
+        guard isAllowed, !isRefreshing, network?.isOnline ?? true,
+              now.timeIntervalSince(lastAttempt) >= AppConfig.laneOverlayRetrySeconds else { return false }
+        if let last = Storage.date(.laneOverlayLastCheck), last <= now,
+           now.timeIntervalSince(last) < (hasFiles ? AppConfig.laneOverlayIndexInterval
+                                                   : AppConfig.laneOverlayMissingRecheckSeconds) { return false }
+        // Обновление — не по сотовой; первый файл — любой связью.
+        if hasFiles, network?.isExpensive ?? true { return false }
+        return true
+    }
+
+    /// Пульт выключил слой — снять его, без сети.
+    func dropIfDisallowed() {
+        guard !isAllowed else { return }
+        dropForConfig()
+    }
+
     func refreshIfDue(now: Date = Date()) async {
         guard isAllowed else {
             dropForConfig()
             return
         }
-        guard !isRefreshing, network?.isOnline ?? true,
-              now.timeIntervalSince(lastAttempt) >= AppConfig.laneOverlayRetrySeconds else { return }
-        if let last = Storage.date(.laneOverlayLastCheck), last <= now,
-           now.timeIntervalSince(last) < (hasFiles ? AppConfig.laneOverlayIndexInterval
-                                                   : AppConfig.laneOverlayMissingRecheckSeconds) { return }
+        guard isDue(now: now) else { return }
         let haveFiles = hasFiles
-        // Обновление — не по сотовой; первый файл — любой связью.
-        if haveFiles, network?.isExpensive ?? true { return }
         isRefreshing = true
         defer { isRefreshing = false }
         lastAttempt = now

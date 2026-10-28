@@ -163,12 +163,19 @@ final class OfflineRouteService {
 
     /// Раз в неделю: подписанный индекс; новый файл — скачать, сверить,
     /// положить рядом и только потом индекс.
-    func refreshIfDue(now: Date = Date()) async {
+    /// Пора ли за индексом графа (без сети) — те же сроки и «обновление не
+    /// по сотовой». Спрашивает планировщик сети (NetScheduler, 36B).
+    func isDue(now: Date = Date()) -> Bool {
         guard now.timeIntervalSince(lastIndexCheck) >= AppConfig.offlineGraphIndexInterval,
-              network?.isOnline ?? true else { return }
-        let haveGraph = FileManager.default.fileExists(atPath: envelopeURL.path)
+              network?.isOnline ?? true else { return false }
         // Обновление — не по сотовой; первый файл — любой связью.
-        if haveGraph, network?.isExpensive ?? true { return }
+        if FileManager.default.fileExists(atPath: envelopeURL.path), network?.isExpensive ?? true { return false }
+        return true
+    }
+
+    func refreshIfDue(now: Date = Date()) async {
+        guard isDue(now: now) else { return }
+        let haveGraph = FileManager.default.fileExists(atPath: envelopeURL.path)
         lastIndexCheck = now
         do {
             let raw = try await api.getData(Self.indexPath, cachePolicy: .reloadIgnoringLocalCacheData)

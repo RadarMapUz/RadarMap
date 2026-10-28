@@ -154,9 +154,7 @@ final class SpeedLimitService {
     /// SwiftUI-подписчиков этой записью было бы ежесекундной перерисовкой.
     @ObservationIgnored private(set) var currentRoadHit: LimitIndex.RoadHit?
 
-    /// Один клиент на сервис: APIClient держит собственную URLSession, а та
-    /// живёт до инвалидации — создавать её на вызов значит оставлять по сессии
-    /// на каждую проверку.
+    /// Один клиент на сервис (сессия у всех клиентов общая — APIClient).
     @ObservationIgnored private let api = APIClient(timeout: 30)
 
     // MARK: - Загрузка базы
@@ -167,8 +165,27 @@ final class SpeedLimitService {
         started = true
         Task {
             await loadLocal()
+            localLoaded = true
             await refreshFromServerIfNeeded()
         }
+    }
+
+    /// Локальный кэш прочитан: до этого «индекса нет» не значит «пора качать».
+    @ObservationIgnored private var localLoaded = false
+
+    /// Пора ли спросить сервер (без сети): нет данных или прошла неделя.
+    /// Спрашивает планировщик сети (NetScheduler, 36B) — прицепом к такту,
+    /// активации или возврату связи; первая проверка — в `start`.
+    var isServerCheckDue: Bool {
+        guard localLoaded, !isDownloading else { return false }
+        let weekAgo = Date().timeIntervalSince1970 - 7 * 24 * 3600
+        return index == nil || Storage.double(.speedLimitsLastCheck) < weekAgo
+    }
+
+    /// Проверка сервера по сроку — те же индекс, подпись и храповик.
+    func refreshIfDue() async {
+        guard isServerCheckDue else { return }
+        await refreshFromServerIfNeeded()
     }
 
     /// Кэш с диска — по тем же правилам доверия, что ответ сервера

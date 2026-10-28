@@ -4,9 +4,10 @@
 //
 //  Краудсорсинг передвижных радаров: пользователи отмечают радар на карте,
 //  сервер объединяет отметки (TTL ~3 ч, продление подтверждениями, скрытие
-//  дизлайками), приложение опрашивает список каждые 3 минуты на переднем плане
-//  и каждые 75 секунд в поездке — включая погашенный экран, потому что именно
-//  тогда чужая отметка и должна доехать до водителя (см. setTripActive).
+//  дизлайками), приложение опрашивает список тактом планировщика сети
+//  (NetScheduler/SyncPlan, 36B): 150 с при открытом экране и 40/70/150 с по
+//  скорости в поездке — включая погашенный экран, потому что именно тогда
+//  чужая отметка и должна доехать до водителя (см. setTripActive).
 //  Анонимность: случайный UUID устройства, никакой привязки к личности. Своё
 //  положение телефон серверу НЕ сообщает: забирает все живые отметки (их
 //  единицы на страну) и решает сам, что из них по пути.
@@ -116,7 +117,6 @@ final class MobileCameraService {
     /// Чтение списков отметок (api/mobile, api/road) — с корня ленты
     /// (DEBUG `-trafficBase`, иначе тот же сервер); отправка — через `api`.
     @ObservationIgnored private let feed = APIClient(base: AppConfig.trafficFeedBaseURL)
-    @ObservationIgnored private var pollTask: Task<Void, Never>?
     /// Пульт: позволяет погасить краудсорс на сутки (волна фейковых отметок) или
     /// разредить опрос, не дожидаясь релиза. Без пульта — обычное поведение.
     @ObservationIgnored weak var config: RemoteConfigService?
@@ -139,90 +139,30 @@ final class MobileCameraService {
 
     // MARK: - Опрос
 
-    /// Идёт ли поездка. Меняет две вещи: опрос учащается и продолжается с
-    /// погашенным экраном — именно за рулём чужая отметка и нужна.
+    /// Идёт ли поездка. Сам опрос ведёт планировщик сети (NetScheduler,
+    /// 36B): в поездке он продолжается с погашенным экраном — именно за рулём
+    /// чужая отметка и нужна; старт поездки — внеочередной опрос, потому что
+    /// отметка, сделанная кем-то пару минут назад, актуальна прямо сейчас.
     @ObservationIgnored private(set) var isTripActive = false
-
-    /// Скорость и нагрев — у владельца, а не здесь: они меняются каждую
-    /// секунду, а нужны раз в минуту, на планирование следующего опроса.
-    /// Ссылки слабые внутри самого замыкания (см. AppEnvironment).
-    @ObservationIgnored var drivingContext: (() -> (speedKmh: Double, thermal: PerformanceMode))?
-
-    /// Интервал опроса по расписанию (см. PollSchedule): чаще на трассе, реже
-    /// на стоянке и на жаре. Пульт остаётся главнее в одну сторону.
-    private var pollInterval: TimeInterval {
-        let context = drivingContext?() ?? (speedKmh: 0, thermal: PerformanceMode.full)
-        return PollSchedule.interval(isTripActive: isTripActive,
-                                     speedKmh: context.speedKmh,
-                                     thermal: context.thermal,
-                                     remoteBaseline: config?.pollInterval)
-    }
 
     /// Ставит LocationService на старте и финише поездки (через AppEnvironment).
     func setTripActive(_ active: Bool) {
-        guard active != isTripActive else { return }
         isTripActive = active
-        // Цикл спит с прежним интервалом — пересоздаём, иначе учащение начнётся
-        // только через три минуты, то есть к середине первой поездки.
-        if pollTask != nil {
-            stopPolling()
-            startPolling()
-        }
-        if active {
-            startPolling()
-            // Отметка, сделанная кем-то пару минут назад, актуальна прямо
-            // сейчас — стартовать поездку со списком получасовой давности
-            // означает пропустить ровно тот случай, ради которого всё это.
-            Task { await refresh() }
-        }
     }
 
     /// Краудсорс целиком выключается пультом — на случай волны фейковых отметок.
     var isEnabled: Bool { config?.areMobileReportsEnabled ?? true }
 
-    func startPolling() {
-        guard pollTask == nil else { return }
-        pollTask = Task { [weak self] in
-            while !Task.isCancelled {
-                // Частые пары inactive→active (Face ID, шторка, переключатель
-                // приложений) перезапускают цикл — интервал держим и между ними,
-                // иначе каждый возврат в приложение будил бы радио лишним GET.
-                guard let self else { return }
-                let interval = self.pollInterval
-                if !self.isEnabled {
-                    self.clearAll()   // выключили краудсорс — убираем и то, что уже на карте
-                } else if Date().timeIntervalSince(self.lastRefreshAt) >= interval {
-                    // Сначала досылаем накопленное: чужая отметка подождёт
-                    // секунду, своя ждала связи и может протухнуть.
-                    await self.flushPending()
-                    await self.refresh()
-                    // Радио проснулось — пробки, чей срок близок, идут сейчас же.
-                    self.onRadioAwake?()
-                }
-                // Срок отметки вышел, а сервер молчит (нет сети, лёг) —
-                // снимаем сами: «тренога впереди» часами после срока хуже,
-                // чем её отсутствие (сценарий S5, 20.10). После опроса: свежий
-                // список не ждёт лишний тик.
-                if self.isEnabled { self.pruneExpired(now: Date()) }
-                // Спим короткими шагами, а не на весь интервал: расписание
-                // зависит от скорости, и заснувший на стоянке цикл проспал бы
-                // то, что машина уже полторы минуты как едет по трассе.
-                await Task.pause(seconds: PollSchedule.tick(for: interval))
-            }
-        }
+    /// Такт планировщика: сначала досылаем накопленное (чужая отметка
+    /// подождёт секунду, своя ждала связи и может протухнуть), потом свежий
+    /// список. true — список получен (304 тоже), false — сбой: пауза службы.
+    func syncTick() async -> Bool {
+        await flushPending()
+        return await refresh()
     }
 
-    @ObservationIgnored private var lastRefreshAt: Date = .distantPast
-    /// Опрос отметок только что сходил в сеть (NetworkRhythm). Ставит AppEnvironment.
-    @ObservationIgnored var onRadioAwake: (() -> Void)? {
-        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onRadioAwake,
-                                               "MobileCameraService.onRadioAwake") }
-    }
-
-    func stopPolling() {
-        pollTask?.cancel()
-        pollTask = nil
-    }
+    /// Пульт выключил краудсорс — убрать и то, что уже на карте (без сети).
+    func applyDisabled() { clearAll() }
 
     /// Убрать отметки с карты (пульт погасил краудсорс). Идемпотентно.
     private func clearAll() {
@@ -294,8 +234,9 @@ final class MobileCameraService {
 
     func confirmation(for cameraID: Int) -> Confirmation? { confirmations[cameraID] }
 
-    func refresh() async {
-        guard !isRefreshing else { return }
+    @discardableResult
+    func refresh() async -> Bool {
+        guard !isRefreshing else { return true }
         // Связи нет — не будим радио впустую.
         //
         // Чужие отметки нужны в дороге, а дорога между городами — это как раз
@@ -304,14 +245,13 @@ final class MobileCameraService {
         // в 40 секунд в мёртвую сеть не приносит ничего и стоит пробуждения
         // радио с ожиданием таймаута — до девяноста раз в час.
         //
-        // `lastRefreshAt` при этом НЕ трогаем намеренно: как только связь
-        // вернётся, список приедет первым же тиком цикла, а не через интервал.
+        // Попытку при этом не считаем: как только связь вернётся, список
+        // приедет в окне «связь вернулась», а не через интервал.
         // Отправка своих отметок эту проверку делает давно (flushPending),
         // опрос — не делал.
-        guard network?.isOnline ?? true else { return }
+        guard network?.isOnline ?? true else { return false }
         isRefreshing = true
         defer { isRefreshing = false }
-        lastRefreshAt = Date()   // считаем попытку, не успех — при ошибке сети не долбим сервер
         do {
             guard let answer = try await feed.getIfChanged("api/mobile",
                                                           as: MobileResponse.self,
@@ -326,7 +266,7 @@ final class MobileCameraService {
                     onMyReportConfirmed?(confirmed)
                 }
                 await refreshImpactIfDue(recentDays: 2)
-                return
+                return true
             }
             lastETag = answer.etag
             let decoded = answer.value
@@ -372,10 +312,12 @@ final class MobileCameraService {
                 onMyReportConfirmed?(confirmed)
             }
             await refreshImpactIfDue(recentDays: 2)
+            return true
         } catch {
             // Сети нет или сервер не ответил — живём на последнем известном
             // списке (и снимаем истёкшее сами, pruneExpired).
             Log.network.notice("отметки водителей: опрос не удался — \(error.localizedDescription, privacy: .public)")
+            return false
         }
     }
 

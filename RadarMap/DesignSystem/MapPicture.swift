@@ -203,6 +203,9 @@ struct MapPictureView: View {
     private static let cache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = AppConfig.mapPictureCacheLimit
+        // Снимки собираются заново по ключу (36A): на тесной памяти и в фоне
+        // с поездкой — отдаём все.
+        MemoryPressure.onTrim { _ in cache.removeAllObjects() }
         return cache
     }()
 

@@ -218,6 +218,10 @@ struct RootView: View {
                 env.location.setForeground(false)   // в поездке непрерывный GPS продолжит работать
                 env.setPhoneSceneActive(false)       // опрос гаснет, если и CarPlay нет
                 snapshotForWidget()
+                // Поездка в кармане или экран машины (36A): карта телефона не
+                // видна — её тайлы в памяти и снимки отдаём, процесс, который
+                // продолжает работать, должен быть тонким.
+                MemoryPressure.phoneSceneLeft(keepsWorking: env.location.isTripActive || env.isCarPlayConnected)
             case .inactive:
                 // Шторка, Пункт управления, Face ID, переключатель приложений:
                 // .inactive прилетает на каждое мелкое прерывание и дважды на

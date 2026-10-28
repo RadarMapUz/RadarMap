@@ -26,8 +26,19 @@
 //  Подписчики регистрируются сами и снимаются вместе со своим объектом —
 //  списка «кого чистить» в одном месте нет намеренно: он бы устарел первым.
 //
+//  С 36A чистка — не только по предупреждению системы. Ещё два повода:
+//  телефонная сцена ушла в фон, а процесс работает (поездка, экран машины) —
+//  карта телефона не видна, её кэш тайлов в памяти — чистый вес; и потолок
+//  следа в поездке
+//  (`AppConfig.engineMemoryCeilingBytes`, сверяет карта на своём такте).
+//  Предупреждение ждать поздно: на SE в фоне рядом с CarPlay система чаще
+//  выгружает молча, чем предупреждает, а выгрузка — это поездка без
+//  оповещений. Повод передаётся подписчику: видимая карта машины на уход
+//  телефона в фон ничего не отдаёт.
+//
 
 import os
+import Darwin
 import Foundation
 #if canImport(UIKit)
 import UIKit
@@ -36,23 +47,59 @@ import UIKit
 @MainActor
 enum MemoryPressure {
 
+    /// Почему чистим.
+    enum Reason: Sendable {
+        /// Система предупредила (didReceiveMemoryWarning).
+        case warning
+        /// Телефонная сцена ушла в фон, а процесс работает дальше (поездка,
+        /// CarPlay; 36A): карта на телефоне не видна, а процесс живёт часами —
+        /// и на SE рядом с CarPlay первым кандидатом на выгрузку (jetsam)
+        /// становится самый толстый. Выгрузка = нет оповещений.
+        case background
+        /// Поездка, след процесса выше потолка (AppConfig.engineMemoryCeilingBytes).
+        case ceiling
+
+        /// Память на самом деле тесная, а не «экран не виден»: только тогда
+        /// отдаём то, что нужно видимому экрану машины (книги поиска).
+        var isTight: Bool { self != .background }
+    }
+
     /// Сколько раз система просила освободить память за сеанс. Идёт в
     /// суточный отчёт: без этого числа «приложение вылетает» остаётся
     /// ощущением, а не событием, у которого есть частота.
     private(set) static var warnings = 0
 
-    /// Кого будить на предупреждение. Слабые ссылки: подписчик уходит вместе
-    /// со своим экраном, отписываться вручную не нужно.
-    private static var subscribers: [() -> Bool] = []
+    /// Кого будить. Слабые ссылки: подписчик уходит вместе со своим экраном,
+    /// отписываться вручную не нужно.
+    private static var subscribers: [(Reason) -> Bool] = []
 
-    /// Зарегистрировать уборку. Замыкание возвращает false, когда его хозяин
-    /// уже мёртв, — тогда запись выбрасывается.
+    /// Зарегистрировать уборку на ТЕСНУЮ память (предупреждение, потолок).
+    /// Замыкание возвращает false, когда его хозяин уже мёртв, — тогда
+    /// запись выбрасывается.
     static func onWarning<Owner: AnyObject>(_ owner: Owner,
                                             _ clean: @escaping (Owner) -> Void) {
+        onTrim(owner) { owner, reason in
+            if reason.isTight { clean(owner) }
+        }
+    }
+
+    /// Зарегистрировать уборку на любую причину — хозяин сам решает, что
+    /// отдать (карта в фоне отдаёт тайлы, карта на экране машины — нет).
+    static func onTrim<Owner: AnyObject>(_ owner: Owner,
+                                         _ clean: @escaping (Owner, Reason) -> Void) {
         start()
-        subscribers.append { [weak owner] in
+        subscribers.append { [weak owner] reason in
             guard let owner else { return false }
-            clean(owner)
+            clean(owner, reason)
+            return true
+        }
+    }
+
+    /// Кэш на весь процесс без хозяина (статический): живёт вечно.
+    static func onTrim(_ clean: @escaping (Reason) -> Void) {
+        start()
+        subscribers.append { reason in
+            clean(reason)
             return true
         }
     }
@@ -73,13 +120,63 @@ enum MemoryPressure {
     private static func start() {}
     #endif
 
-    /// Освободить всё, что можно построить заново.
+    /// Системное предупреждение: освободить всё, что можно построить заново.
     static func relieve() {
         warnings += 1
+        trim(.warning)
+    }
+
+    /// Телефонная сцена ушла в фон. Чистим, только если процесс продолжает
+    /// работать (поездка, экран машины): иначе он засыпает, и возврат к
+    /// карте не должен перечитывать тайлы.
+    static func phoneSceneLeft(keepsWorking: Bool) {
+        guard keepsWorking else { return }
+        trim(.background)
+    }
+
+    static func trim(_ reason: Reason) {
         // Кэш сетевых ответов: любая его строка берётся из сети повторно, и
         // ни одна не нужна для предупреждения о камере.
         URLCache.shared.removeAllCachedResponses()
-        subscribers = subscribers.filter { $0() }
-        Log.app.notice("память: система просила освободить, чистка выполнена (\(warnings, privacy: .public)-й раз за сеанс)")
+        subscribers = subscribers.filter { $0(reason) }
+        Log.app.notice("память: чистка (\(String(describing: reason), privacy: .public)), предупреждений за сеанс \(warnings, privacy: .public)")
+    }
+
+    // MARK: - Потолок в поездке
+
+    private static var lastCeilingTrim: TimeInterval?
+
+    /// Проверить след процесса и почистить, если он выше потолка. Зовёт
+    /// карта на своём редком такте (не чаще AppConfig.engineMemoryCheckSeconds),
+    /// своего таймера здесь нет — лишних пробуждений тоже.
+    static func checkCeiling(now: TimeInterval) {
+        guard let footprint = footprintBytes(),
+              shouldTrim(footprint: footprint, ceiling: AppConfig.engineMemoryCeilingBytes,
+                         lastTrim: lastCeilingTrim, now: now) else { return }
+        lastCeilingTrim = now
+        Log.app.notice("память: след \(footprint / 1_048_576, privacy: .public) МБ выше потолка")
+        trim(.ceiling)
+    }
+
+    /// Пора ли чистить по потолку: выше него и не чаще раза в
+    /// `engineMemoryTrimIntervalSeconds` — иначе на рабочем наборе выше
+    /// потолка движок перечитывал бы тайлы с диска каждые полминуты.
+    nonisolated static func shouldTrim(footprint: UInt64, ceiling: UInt64,
+                                       lastTrim: TimeInterval?, now: TimeInterval) -> Bool {
+        guard footprint > ceiling else { return false }
+        guard let lastTrim else { return true }
+        return now - lastTrim >= AppConfig.engineMemoryTrimIntervalSeconds
+    }
+
+    /// След процесса (phys_footprint — то, по чему судит jetsam), байты.
+    nonisolated static func footprintBytes() -> UInt64? {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        return result == KERN_SUCCESS ? info.phys_footprint : nil
     }
 }

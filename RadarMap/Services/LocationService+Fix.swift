@@ -14,17 +14,6 @@ import UIKit
 
 extension LocationService {
 
-    func refreshCruise() {
-        #if canImport(MapLibre)
-        let maneuver = route?.isActive == true && route?.nextStep != nil ? route?.nextStepDistance : nil
-        let next = EngineMapView.Coordinator.isCruise(was: isCruising, tripActive: isTripActive,
-                                                      speedKmh: speedKmh,
-                                                      approachingCamera: isApproachingCamera,
-                                                      maneuverMeters: maneuver)
-        if next != isCruising { isCruising = next }
-        #endif
-    }
-
     func handleFix(_ fix: LocationFilter.Fix) {
         noteQuietFix(fix)
         switch locationFilter.accept(fix) {
@@ -460,7 +449,6 @@ extension LocationService {
                     path: standstill.isStopped ? [] : markerPath)
             }
             tuneAdaptiveAccuracy()
-            refreshCruise()
             // Умный режим: детектор города/трассы (дёшево — пара сравнений).
             contextDetector.update(roadLimitKmh: speedLimits?.certainLimit,
                                    camerasWithin3km: cameraDensity3km,

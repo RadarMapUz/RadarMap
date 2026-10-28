@@ -52,10 +52,8 @@ final class AutoEconomyTests: XCTestCase {
     func testEconomyStepIsFlatTwentyFramesNoDecor() {
         let mode = AutoEconomy.mode(thermal: .full, savingBattery: true)
         XCTAssertFalse(CarPlaySurface.car.pitchAllowed(performance: mode), "2D")
-        #if canImport(MapLibre)
-        XCTAssertEqual(EngineMapView.Coordinator.framesPerSecond(browsing: false, performance: mode,
-                                                                 lowPower: false), AppConfig.engineWarmFPS)
-        #endif
+        XCTAssertEqual(EngineFrames.framesPerSecond(EngineFrames.Situation(performance: mode, driving: true)),
+                       AppConfig.engineWarmFPS)
         XCTAssertTrue((15...20).contains(AppConfig.engineWarmFPS), "15–20 к/с по плану 12.3")
         XCTAssertNotEqual(mode, .full, "декор прячется при performance != .full")
     }

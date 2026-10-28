@@ -201,7 +201,9 @@ enum EnergyText {
     static func formula(_ use: EnergySplit.Use, model: EnergySplit.Model) -> [String] {
         fuels(of: use).compactMap { fuel in
             guard let per100 = model.per100[fuel] else { return nil }
-            let distance = km(use.meters(fuel) / 1_000)
+            // С десятой, как строкой выше (34): «12 км × …» под «12,4 км на
+            // электричестве» читалось другим числом.
+            let distance = Formatting.unbreakable(Formatting.distance(use.meters(fuel)))
             let rate = per100Short(per100, fuel)
             let highway = fuel == .electricity && use.highwayMeters >= AppConfig.energyHighwayNoteMinMeters
             let line: String

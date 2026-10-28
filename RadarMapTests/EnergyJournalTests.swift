@@ -327,6 +327,33 @@ final class EnergyJournalTests: XCTestCase {
         XCTAssertTrue(PeriodEnergyRow.isWorthShowing(EnergySplit.Use(), model: model, journal: journal))
     }
 
+    /// Строка раздела «Расходы» (34b, Н8): число — во что обошлись поездки
+    /// (расчёт), купленное по журналу — подписью и другими словами; без цены —
+    /// число из журнала, без журнала и цены — без числа.
+    @MainActor
+    func testItogiCompactRowSeparatesBoughtFromDriven() {
+        var profile = FuelProfile()
+        profile.rates[.petrol] = FuelRate(per100Km: 6, price: 13_000)
+        let model = EnergySplit.model(profile: profile, energy: .fuel)
+        var use = EnergySplit.Use()
+        use.meters[.petrol] = 100_000
+        use.amount[.petrol] = 6
+        use.money = 78_000
+        let entries = [fill(3, 30, 390_000, km: 10_000, full: true)]
+        let journal = EnergyJournal.period(entries, in: DateInterval(start: date(1, 0), end: date(1, 0, month: 11)))
+
+        let driven = PeriodEnergyRow.compact(use, model: model, journal: journal)
+        XCTAssertEqual(driven.value, "≈ " + Formatting.money(FuelCost.rounded(78_000)))
+        XCTAssertTrue(driven.caption.contains(Formatting.unbreakable(Formatting.money(390_000))),
+                      "купленное — подписью: \(driven.caption)")
+
+        let noPrice = PeriodEnergyRow.compact(EnergySplit.Use(), model: model, journal: journal)
+        XCTAssertEqual(noPrice.value, Formatting.money(390_000))
+
+        let nothing = PeriodEnergyRow.compact(EnergySplit.Use(), model: model, journal: nil)
+        XCTAssertNil(nothing.value)
+    }
+
     /// Гибрид с розеткой: бензин по факту — на весь путь вместе с
     /// электрическими км, и подпись говорит это словами, а не «л/100 км»,
     /// который читается как расход двигателя (ревью 21.6).

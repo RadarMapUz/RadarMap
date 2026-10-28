@@ -2,36 +2,40 @@
 //  TripStatsSheet.swift
 //  RadarMap
 //
-//  «Итоги» — единый экран статистики. Фильтр периода (День / Неделя / Месяц)
-//  правит ВСЕМ разделом до разделителя «За всё время»: герой, разбор, зона
-//  риска, карта, KPI, график и список поездок читают одну и ту же PeriodSummary.
-//  Никаких двух источников правды: раньше рядом жили «Штрафы за 30 дней»,
-//  недельная карточка истории и отдельный отчёт — три пересчёта одного и того же,
-//  а расшифровки по тапу показывали своё окно (85 в шапке против 82 внутри).
+//  «Итоги» — вариант Г-A «Ответ и разделы» (34b, выбор владельца 28.10).
+//  До 34 лист был лентой из 18 карточек на 7 экранов SE: сумма возможных
+//  штрафов стояла в восьми местах, камера-лидер — в девяти, а на главный
+//  вопрос «как я съездил и что с этим делать» отвечали три разных блока.
 //
-//  Периоды КАЛЕНДАРНЫЕ и листаются стрелками (см. anchor и StatsPeriod):
-//  «5–11 августа», а не «последние 168 часов», которые менялись сами по себе.
-//  Сегмента «Всё время» нет: он врал — история чистится, и «всё время»
-//  показывало последние записи. Пожизненная правда живёт в блоке «За всё время»
-//  (LifetimeStats) плюс отдельный экран «Архив поездок».
+//  Теперь три слоя, и каждое число живёт в одном месте:
+//    1. карточка-ответ — рейтинг, километры, уровень, сдвиг к прошлому и одна
+//       строка денег (тап — «Штрафы» на вкладке «Могут прийти»);
+//    2. «Сделать» — до трёх дел по важности: сбавить у камеры, оплатить
+//       пришедший штраф, отметить, пришёл ли старый;
+//    3. «Разделы» — строки с одним числом: новые камеры, дорога на работу и
+//       домой, пробки и лимит, расходы, поездки, машина, смены, сообщество,
+//       за всё время. Подробности — на страницах разделов (стек: «Назад»
+//       возвращает сюда, а не на карту).
 //
-//  Порядок блоков отвечает на вопросы в том порядке, в каком их задаёт водитель:
-//  «как я езжу» (герой) → «сколько рискую и где» (зона риска) → «покажи на
-//  карте» → детали (плитки, график) → пожизненное (достижения, история).
-//  Раньше зона риска стояла под картой высотой 230 pt и уезжала за сгиб.
-//
-//  Каждый блок нажимается: герой → как считается рейтинг; карта и зона риска →
-//  полноэкранная карта проездов (риск — сразу с фокусом на «своей» камере);
-//  достижение → его условия; поездка → деталка.
-//
-//  Все цифры приходят готовыми из TripHistory/PeriodSummary — вьюха не считает
-//  ничего (ARCHITECTURE.md: данные в модели).
+//  Периоды КАЛЕНДАРНЫЕ и листаются стрелками (anchor, StatsPeriod), шапка
+//  с периодом липкая. Все цифры приходят готовыми из ItogiScreen (вне main)
+//  и моделей — вьюха не считает (ARCHITECTURE.md: данные в модели).
 //
 
 import SwiftUI
 import Charts
 import MapKit
 import CoreLocation
+
+/// Куда проваливаться из «Итогов». Путь — идентификаторы: записи достаются
+/// из истории в момент показа.
+enum ItogiRoute: Hashable {
+    case trips, lifetime, shifts, expenses, expensesJournal, expensesSettings, cameraNews, maintenance
+    case trip(Double)
+    case pass(trip: Double, pass: UUID)
+    /// DEBUG: сетка значков раздела (`-itogiIcons`); в релизе пусто.
+    case iconGallery
+}
 
 struct TripStatsSheet: View {
     @Environment(AppEnvironment.self) var env
@@ -43,41 +47,27 @@ struct TripStatsSheet: View {
     /// Какое именно окно показываем: любая дата внутри него. Стрелки листают
     /// якорь, а не «сдвигают окно на N дней» — периоды календарные.
     @State var anchor = Date()
-    @State var selectedRecord: TripRecord?
-    /// Каскадное появление секций при открытии (одноразовое).
+    @State var path: [ItogiRoute] = []
+    /// Каскадное появление при открытии (одноразовое).
     @State var appeared = false
     @State var shareSubject: ShareSubjectBox?
-    /// «Очистить историю» стирает все поездки разом и безвозвратно — только
-    /// после вопроса. Раньше хватало одного касания в меню «Ещё».
+    /// «Очистить историю» стирает все поездки разом — только после вопроса.
     @State var confirmsClear = false
     @State var showRatingInfo = false
-    @State var showFinesInfo = false
-    /// Расшифровка охвата предупреждений: что именно считается промахом.
-    @State var showRecallInfo = false
-    /// Экран «Возможные штрафы» со строками проездов и пометкой «не пришёл».
-    @State var showFines = false
-    /// «Штрафы» — пришедшие постановления, сроки, оплата (этап 17).
-    @State var showReceivedFines = false
+    /// Один экран «Штрафы» (Ш-A) — окно и вкладка задаются входом.
+    @State var finesRequest: FinesRequest?
     @State var selectedBadge: Achievement?
-    /// Вся сохранённая история отдельным экраном — вместо сегмента «Всё время»,
-    /// который обещал показать всё, а показывал последние записи.
+    /// Вся сохранённая история отдельным экраном.
     @State var showAllTrips = false
     /// Список поездок показан целиком (иначе — первые statsTripsPreview).
     @State var tripsExpanded = false
-    /// Раскрыты ли «Детали периода» (KPI, график по дням, часы риска).
-    @State var detailsExpanded = false
-    /// «За всё время» свёрнут по умолчанию: экран открывают ради текущего
-    /// периода, а пожизненные цифры смотрят раз в месяц.
-    @State var lifetimeExpanded = false
     /// «Это разные» по карточке склейки — прячем её сразу (Storage не observable).
     @State var mergeSuggestionHidden = false
-    /// Полноэкранная карта проездов (item — чтобы передать фокус зоны риска).
+    /// Полноэкранная карта проездов (item — чтобы передать фокус камеры).
     @State var mapPayload: PeriodMapPayload?
     /// Треки, маркеры и слой частоты — считаются на смену периода, а не в body.
     @State var mapData = PeriodMapData()
-    /// Чьи это данные карты: ключ кэша картинки. Ставится вместе с mapData —
-    /// иначе картинка нового периода нарисовалась бы по данным старого и
-    /// легла бы в кэш под чужим ключом.
+    /// Чьи это данные карты: ключ кэша картинки (ставится вместе с mapData).
     @State var mapStamp = ""
     /// Поездка, «применённая» к карте тапом по списку (nil — весь период).
     @State var mapSelection: TripRecord?
@@ -85,9 +75,9 @@ struct TripStatsSheet: View {
     @Namespace var periodPill
     /// Открытая «Дорога на работу/домой».
     @State var commuteDetail: Commute.Summary?
-    /// «Заправился» / «Зарядился» из строки расходов (21.6).
+    /// «Заправился» / «Зарядился» со страницы расходов (21.6).
     @State var journalRequest: JournalEntryRequest?
-    /// Расшифровка «Дороги»: пробки или путь выше лимита (31E).
+    /// «Пробки и лимит» (31E) — лист с вкладками.
     @State var roadHabit: RoadHabitPayload?
     /// Выгрузка периода (31E): готовые файлы для «Поделиться» и признак работы.
     @State var exportShare: ShareFilesPayload?
@@ -110,8 +100,8 @@ struct TripStatsSheet: View {
     }
 
     /// Готовый экран; синхронно — только в кадр, когда ключ уже сменился, а
-    /// фоновый пересчёт ещё не вернулся (первое открытие, смена периода):
-    /// иначе шапка показала бы новый период над цифрами старого.
+    /// фоновый пересчёт ещё не вернулся: иначе шапка показала бы новый период
+    /// над цифрами старого.
     var current: ItogiScreen {
         if let screen, screenKey == currentKey { return screen }
         return ItogiScreen.build(days: env.trip.days, history: env.trip.history,
@@ -132,63 +122,49 @@ struct TripStatsSheet: View {
         let itogi = current
         let summary = itogi.summary
 
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
                 ScrollViewReader { proxy in
                 LazyVStack(spacing: 16, pinnedViews: [.sectionHeaders]) {
-                    // Живая поездка — вне периодов: таймер, скорость, живые метрики.
-                    // Отдельная вью: она читает скорость (меняется каждый тик GPS),
-                    // и пока жила в body листа, каждый тик пересчитывал сводку
-                    // всего периода по всей истории.
+                    // Живая поездка — вне периодов. Отдельная вью: она читает
+                    // скорость (каждый тик GPS), а в body листа это пересчитывало
+                    // бы сводку периода ежесекундно.
                     if active {
                         LiveTripCard()
                             .entrance(0, appeared)
                     }
-
-                    // Пикер и стрелки — одна визуальная группа и ЛИПКАЯ:
-                    // прокрутив до списка поездок, человек переставал видеть,
-                    // за какое окно эти цифры, и «3–9 августа» приходилось
-                    // искать обратной прокруткой. Section с pinnedViews держит
-                    // её на месте (LazyVStack умеет это без своей геометрии).
-                    //
-                    // Внутри — четыре блока (31E, владелец 26.10): «Как я езжу»
-                    // → «Где теряю деньги и время» → «Мои дороги» → «Машина и
-                    // работа», внизу «Вы и сообщество» и «Подробнее». Пустой
-                    // блок не показывается вовсе — без «нет данных». Блоки и
-                    // карточки — в TripStatsSheet+Blocks.swift.
+                    // Пикер и стрелки — ЛИПКАЯ шапка: окно цифр видно всегда.
                     Section {
                         if summary.isEmpty {
-                            // Пусто может быть по двум причинам: поездок нет вообще
-                            // или нет именно в этом периоде — это разные подсказки.
+                            // Поездок нет вообще или нет именно в этом периоде —
+                            // это разные подсказки.
                             if trip.history.isEmpty {
                                 if !active { emptyHint.entrance(1, appeared) }
                             } else {
                                 emptyPeriodHint.entrance(1, appeared)
                             }
                         }
-                        drivingBlock(trip: trip, itogi: itogi)
-                            .entrance(1, appeared)
-                        lossesBlock(itogi)
-                            .entrance(2, appeared)
-                            .id("risk")
-                        roadsBlock(itogi, proxy: proxy)
-                            .entrance(3, appeared)
-                            .id("roads")
-                        carBlock(summary: summary)
-                            .entrance(4, appeared)
-                            .id("car")
-                        // «Сохранять поездки в iCloud?» (27.F) — один раз, пока
-                        // человек не ответил; молча не включается.
+                        // «Сохранять поездки в iCloud?» (27.F) — вопрос, а не
+                        // цифра: над ответом, один раз.
                         if !active, env.cloud.shouldOffer(storedTrips: trip.storedTripCount) {
                             CloudOfferCard()
-                                .entrance(5, appeared)
+                                .entrance(1, appeared)
                         }
-                        communityBlock(trip: trip)
-                            .entrance(5, appeared)
-                            .id("contribution")
-                        moreBlock(summary: summary, trip: trip)
-                            .entrance(5, appeared)
-                            .id("details")
+                        if !summary.isEmpty {
+                            answerCard(trip: trip, itogi: itogi)
+                                .entrance(1, appeared)
+                        }
+                        if let goal = itogi.goal, showsGoal {
+                            WeeklyGoalCard(goal: goal)
+                                .entrance(2, appeared)
+                                .id("goal")
+                        }
+                        todoSection(itogi)
+                            .entrance(2, appeared)
+                            .id("todo")
+                        sectionsList(itogi, trip: trip)
+                            .entrance(3, appeared)
+                            .id("sections")
                     } header: {
                         VStack(spacing: 8) {
                             periodPicker
@@ -196,10 +172,8 @@ struct TripStatsSheet: View {
                         }
                         .padding(.vertical, 8)
                         .background {
-                            // Под шапкой проезжают карточки — ей нужен свой
-                            // фон, иначе цифры наезжают на цифры. Волосяная
-                            // линия снизу делает срез карточки намеренным, а
-                            // не похожим на артефакт прокрутки.
+                            // Под шапкой проезжают карточки — свой фон и
+                            // волосяная линия снизу, чтобы срез был намеренным.
                             Rectangle()
                                 .fill(Theme.background)
                                 .padding(.horizontal, -16)
@@ -217,184 +191,122 @@ struct TripStatsSheet: View {
                 .padding(.vertical, 16)
                 #if DEBUG
                 .onAppear {
-                    // Скриншот-автоматизация: прокрутить к истории или календарю.
+                    // `-scrollTo todo|sections` — снимки «сверху донизу».
                     let args = ProcessInfo.processInfo.arguments
-                    if args.contains("-scrollHistory") {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            withMotion { proxy.scrollTo("history", anchor: .top) }
-                        }
-                    }
-                    if args.contains("-scrollCalendar") {
-                        // Календарь живёт в «Деталях» (6.1) — раскрыть, потом
-                        // прокрутить к ним.
-                        period = .month
-                        detailsExpanded = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            withMotion { proxy.scrollTo("details", anchor: .top) }
-                        }
-                    }
-                    // `-scrollTo risk|map|details|history|lifetime` — любой раздел.
                     if let index = args.firstIndex(of: "-scrollTo"), index + 1 < args.count {
                         let target = args[index + 1]
-                        if args.contains("-expandAll") {
-                            detailsExpanded = true
-                            lifetimeExpanded = true
-                        }
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            // `-scrollAnchor bottom|center` — снимки «сверху
-                            // донизу» без дыр под липкой шапкой (31E).
-                            let anchorArg = args.firstIndex(of: "-scrollAnchor").map { args[$0 + 1] }
-                            // «lead» — верх блока чуть ниже липкой шапки (высокий блок).
-                            proxy.scrollTo(target, anchor: anchorArg == "bottom" ? .bottom
-                                           : anchorArg == "center" ? .center
-                                           : anchorArg == "lead" ? UnitPoint(x: 0.5, y: -0.15) : .top)
+                            proxy.scrollTo(target, anchor: UnitPoint(x: 0.5, y: -0.2))
                         }
                     }
                 }
                 #endif
                 }
             }
-            // Карточки уезжали под прозрачный бар и просвечивали сквозь него:
-            // «85 рейтинг» читался поверх кнопок. Жёсткий край прокрутки
-            // отделяет содержимое от панели.
+            // Жёсткий край прокрутки: карточки не просвечивают сквозь бар.
             .backport.scrollEdgeEffectStyle(.hard, for: .top)
             .background(Theme.background)
             .navigationTitle("Итоги")
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: ItogiRoute.self) { destination($0) }
             // Тот же лист и то же удаление, что в Настройки → Поездка →
-            // «История поездок»: с производным (дорога, смены, места, машина,
-            // виджет) и списками «Удалится» / «Останется» (15.3, 15.6).
+            // «История поездок» (15.3, 15.6).
             .sheet(isPresented: $confirmsClear) { EraseHistorySheet() }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }
                 if !trip.history.isEmpty {
-                    // Справа, рядом с «Готово», — как в деталке поездки. Слева
-                    // (cancellationAction) «Поделиться» стояло на месте кнопки
-                    // отмены, и один и тот же жест на двух экранах жил в
-                    // разных углах.
                     ToolbarItemGroup(placement: .primaryAction) {
+                        // «…» — действия над историей, а не цифры: выгрузка
+                        // (была строкой в блоке «Машина и работа») и очистка.
                         Menu {
+                            if !summary.isEmpty {
+                                Button("Выгрузить период — CSV", systemImage: "tablecells") {
+                                    export(.csv, summary: summary)
+                                }
+                                Button("Выгрузить период — PDF", systemImage: "doc.richtext") {
+                                    export(.pdf, summary: summary)
+                                }
+                            }
+                            Button("Архив поездок", systemImage: Icon.archive) { showAllTrips = true }
                             Button("Очистить историю", systemImage: "trash", role: .destructive) {
                                 confirmsClear = true
                             }
                             // До чтения истории и переноса старых счётчиков
                             // очистка отклоняется (S9).
                             .disabled(!trip.isLoaded || !trip.isLifetimeTrusted)
-                        } label: { Image(systemName: "ellipsis.circle") }
-                            .accessibilityLabel(Text("Ещё"))
-                        // Похвастаться периодом: карта + рейтинг + зона риска одной картинкой.
+                        } label: {
+                            if exporting { ProgressView() } else { Image(systemName: "ellipsis.circle") }
+                        }
+                        .accessibilityLabel(Text("Ещё"))
                         if !summary.isEmpty {
                             Button { share(summary: summary) } label: {
-                                Image(systemName: "square.and.arrow.up")
+                                Image(systemName: Icon.export)
                             }
                             .accessibilityLabel(Text("Поделиться итогами"))
                         }
                     }
                 }
             }
-            // Цифры экрана — один пересчёт вне main на смену периода/данных.
-            .task(id: currentKey) {
-                let key = currentKey
-                let built = await ItogiScreen.screen(days: env.trip.days, history: env.trip.history,
-                                                     period: key.period, anchor: key.anchor, now: Date())
-                guard key == currentKey else { return }
-                screen = built
-                screenKey = key
+        }
+        // Цифры экрана — один пересчёт вне main на смену периода/данных.
+        .task(id: currentKey) {
+            let key = currentKey
+            let built = await ItogiScreen.screen(days: env.trip.days, history: env.trip.history,
+                                                 period: key.period, anchor: key.anchor, now: Date())
+            guard key == currentKey else { return }
+            screen = built
+            screenKey = key
+        }
+        // Треки и слой частоты — один пересчёт на смену периода/истории.
+        .task(id: MapDataKey(period: period, anchor: anchor, count: trip.history.count,
+                             latest: trip.history.first?.id)) {
+            let window = period.interval(containing: anchor).start.timeIntervalSince1970
+            let stamp = "\(period)|\(Int(window))|\(trip.history.count)|\(trip.history.first?.id ?? 0)"
+            let data = await TripHistory.mapData(trip.history, period: period, anchor: anchor)
+            mapData = data
+            mapStamp = stamp
+        }
+        .onChange(of: period) {
+            withMotion(Motion.standard) {
+                clearMapSelection()
+                tripsExpanded = false
             }
-            // Треки и слой частоты — один пересчёт на смену периода/истории.
-            // В body это делать нельзя: пересчёт шёл бы на каждый кадр прокрутки.
-            .task(id: MapDataKey(period: period, anchor: anchor, count: trip.history.count,
-                                 latest: trip.history.first?.id)) {
-                let window = period.interval(containing: anchor).start.timeIntervalSince1970
-                let stamp = "\(period)|\(Int(window))|\(trip.history.count)|\(trip.history.first?.id ?? 0)"
-                let data = await TripHistory.mapData(trip.history, period: period, anchor: anchor)
-                mapData = data
-                mapStamp = stamp
+        }
+        .onChange(of: anchor) {
+            withMotion(Motion.standard) {
+                clearMapSelection()
+                tripsExpanded = false
             }
-            .onChange(of: period) {
-                // Выбранная поездка могла не попасть в новый период; раскрытый
-                // список — тоже атрибут конкретного окна.
-                withMotion(Motion.standard) {
-                    clearMapSelection()
-                    tripsExpanded = false
-                }
+        }
+        .onAppear {
+            appeared = true
+            // Дневная воронка: какие экраны вообще открывают. Только имя.
+            env.usage.noteScreen("stats")
+            // Понедельник утром текущая неделя пуста — открываем там, где
+            // поездки есть; к пустой текущей неделе вернуться можно стрелкой.
+            if TripHistory.summary(days: env.trip.days, history: env.trip.history,
+                                   period: period, anchor: anchor).isEmpty,
+               let nearest = nearestNonEmptyAnchor() {
+                anchor = nearest
             }
-            .onChange(of: anchor) {
-                withMotion(Motion.standard) {
-                    clearMapSelection()
-                    tripsExpanded = false
-                }
-            }
-            .onAppear {
-                appeared = true
-                // Дневная воронка: какие экраны вообще открывают. Только имя
-                // экрана и счётчик — ни времени, ни содержимого.
-                env.usage.noteScreen("stats")
-                // Понедельник утром текущая неделя пуста, и экран открывался
-                // с «В этом периоде поездок не было» — у каждого, каждую
-                // неделю. Открываем там, где поездки есть; стрелки периода
-                // на месте, к пустой текущей неделе вернуться можно.
-                if TripHistory.summary(days: env.trip.days, history: env.trip.history,
-                                       period: period, anchor: anchor).isEmpty,
-                   let nearest = nearestNonEmptyAnchor() {
-                    anchor = nearest
-                }
-                #if DEBUG
-                // Скриншот-автоматизация: открыть вложенные экраны (с паузой —
-                // sheet поверх ещё анимирующегося sheet молча не показывается).
-                let args = ProcessInfo.processInfo.arguments
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
-                    if args.contains("-showMonth") { period = .month }
-                    if args.contains("-openFirstTrip") { selectedRecord = env.trip.history.first }
-                    if args.contains("-openLongestTrip") {
-                        selectedRecord = env.trip.history.max { $0.distanceMeters < $1.distanceMeters }
-                    }
-                    if args.contains("-showRatingInfo") { showRatingInfo = true }
-                    if args.contains("-showSavingsInfo") { showFinesInfo = true }
-                    if args.contains("-showFines") { showFines = true }
-                    if args.contains("-showReceivedFines") { showReceivedFines = true }
-                    if args.contains("-showPeriodMap") { openMap(focus: nil) }
-                    if args.contains("-showAllTrips") { showAllTrips = true }
-                    if args.contains("-shareStats") {
-                        share(summary: TripHistory.summary(days: env.trip.days,
-                                                          history: env.trip.history,
-                                                          period: period, anchor: anchor))
-                    }
-                }
-                #endif
-            }
+            #if DEBUG
+            debugOpen()
+            #endif
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .sheet(item: $selectedRecord) { record in
-            TripDetailSheet(record: record, onRoute: onRoute.map { route in
-                { coord, name in
-                    dismiss()
-                    route(coord, name)
-                }
-            })
-        }
         .sheet(item: $mapPayload) { payload in
             PeriodMapSheet(data: payload.data, focus: payload.focus,
                            periodTitle: period.rangeTitle(containing: anchor))
         }
-        // Шиты получают ТУ ЖЕ сводку, что показала карточка: расшифровка
-        // обязана объяснять именно то число, по которому тапнули.
+        // Расшифровка получает ТУ ЖЕ сводку, что показала карточка-ответ.
         .sheet(isPresented: $showRatingInfo) {
             RatingDetailSheet(summary: current.summary,
                               period: period,
                               interval: period.interval(containing: anchor),
                               anchor: anchor)
         }
-        .sheet(isPresented: $showFinesInfo) {
-            // Один экран штрафов (6.9): вход через (i) раскрывает «Откуда сумма».
-            FinesSheet(period: period, anchor: anchor, explainsFirst: true,
-                       periodRisk: current.summary.fineRisk)
-        }
-        .sheet(isPresented: $showFines) {
-            FinesSheet(period: period, anchor: anchor, periodRisk: current.summary.fineRisk)
-        }
-        .sheet(isPresented: $showReceivedFines) { FinesScreen() }
+        .sheet(item: $finesRequest) { request in FinesScreen(request: request) }
         .sheet(item: $journalRequest) { request in
             JournalEntrySheet(request: request,
                               kinds: request.mode == .charge ? env.journalChargeKinds : env.journalFillKinds)
@@ -404,18 +316,7 @@ struct TripStatsSheet: View {
             CommuteDetailSheet(summary: commute)
                 .presentationDetents([.large])
         }
-        #if DEBUG
-        // Скриншот-хук: `-showCommute` сразу открывает дорогу (первую по времени суток).
-        .task {
-            guard ProcessInfo.processInfo.arguments.contains("-showCommute") else { return }
-            await Task.pause(seconds: 0.8)
-            commuteDetail = env.commute.first
-        }
-        #endif
-        .sheet(isPresented: $showRecallInfo) {
-            AlertRecallInfoSheet(tally: env.trip.alertRecall)
-        }
-        // Поездки открываются внутри своего стека «Всех поездок» (6.10).
+        // Поездки открываются внутри своего стека «Архива» (6.10).
         .sheet(isPresented: $showAllTrips) {
             AllTripsSheet(onRepeat: onRoute.map { route in
                 { coord, name in dismiss(); route(coord, name) }
@@ -439,6 +340,97 @@ struct TripStatsSheet: View {
         .task { await env.mobile.refreshImpactIfDue() }
     }
 
+    /// Цель недели — про ТЕКУЩУЮ неделю: на «Месяце» и на прошлых неделях она
+    /// висела под чужим окном (П3 плана 34).
+    var showsGoal: Bool {
+        period == .week && period.interval(containing: anchor).contains(Date())
+    }
+
+    // MARK: - Страницы
+
+    @ViewBuilder func destination(_ route: ItogiRoute) -> some View {
+        switch route {
+        case .trips: tripsPage
+        case .lifetime: lifetimePage
+        case .shifts: shiftsPage
+        case .expenses: expensesPage
+        case .expensesJournal: EnergyJournalPage()
+        case .expensesSettings: EnergySettingsPage()
+        case .cameraNews: CameraNewsPage(items: env.roadMemory.news)
+        case .maintenance: MaintenancePage()
+        case .trip(let id):
+            if let record = env.trip.history.first(where: { $0.id == id }) {
+                TripDetailContent(record: record,
+                                  onRoute: onRoute.map { route in
+                                      { coord, name in dismiss(); route(coord, name) }
+                                  },
+                                  onOpenPass: { path.append(.pass(trip: id, pass: $0.id)) })
+                    .navigationTitle(Formatting.tripTitle(record.startedAt))
+                    .navigationBarTitleDisplayMode(.inline)
+            }
+        case .iconGallery:
+            #if DEBUG
+            ItogiIconGallery()
+                .navigationTitle(Text(verbatim: "Значки «Итогов»"))
+                .navigationBarTitleDisplayMode(.inline)
+            #else
+            EmptyView()
+            #endif
+        case .pass(let tripID, let passID):
+            if let record = env.trip.history.first(where: { $0.id == tripID }),
+               let pass = record.passed.first(where: { $0.id == passID }) {
+                PassDetailView(pass: pass, track: record.trackPoints, record: record,
+                               days: env.trip.days, interval: period.interval(containing: anchor),
+                               period: period)
+            }
+        }
+    }
+
+    #if DEBUG
+    /// Скриншот-автоматизация: открыть вложенные экраны и страницы (с паузой —
+    /// sheet поверх ещё анимирующегося sheet молча не показывается).
+    /// `-itogiPage trips|lifetime|shifts|expenses|news|trip`.
+    func debugOpen() {
+        let args = ProcessInfo.processInfo.arguments
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+            if args.contains("-showMonth") || args.contains("-scrollCalendar") { period = .month }
+            if args.contains("-showDay") { period = .day }
+            if args.contains("-openFirstTrip"), let first = env.trip.history.first {
+                path = [.trips, .trip(first.id)]
+            }
+            if args.contains("-openLongestTrip"),
+               let longest = env.trip.history.max(by: { $0.distanceMeters < $1.distanceMeters }) {
+                path = [.trips, .trip(longest.id)]
+            }
+            if args.contains("-scrollHistory") || args.contains("-scrollCalendar") { path = [.trips] }
+            if let index = args.firstIndex(of: "-itogiPage"), index + 1 < args.count {
+                switch args[index + 1] {
+                case "trips": path = [.trips]
+                case "lifetime": path = [.lifetime]
+                case "shifts": path = [.shifts]
+                case "expenses": path = [.expenses]
+                case "news": path = [.cameraNews]
+                case "icons": path = [.iconGallery]
+                default: break
+                }
+            }
+            if args.contains("-showRatingInfo") { showRatingInfo = true }
+            if args.contains("-showSavingsInfo") || args.contains("-showFines") {
+                finesRequest = FinesRequest(window: .period(period, anchor), tab: .possible,
+                                            periodRisk: current.summary.fineRisk)
+            }
+            if args.contains("-showReceivedFines") { finesRequest = FinesRequest(tab: .received) }
+            if args.contains("-showPeriodMap") { openMap(focus: nil) }
+            if args.contains("-showAllTrips") { showAllTrips = true }
+            if args.contains("-showCommute") { commuteDetail = env.commute.first }
+            if args.contains("-showRoads") { roadHabit = payload(.jams, current) }
+            if args.contains("-shareStats") {
+                share(summary: TripHistory.summary(days: env.trip.days, history: env.trip.history,
+                                                  period: period, anchor: anchor))
+            }
+        }
+    }
+    #endif
 }
 
 /// Слепок данных для полноэкранной карты: собирается в момент тапа, чтобы sheet

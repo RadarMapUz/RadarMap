@@ -15,7 +15,7 @@ struct WeeklyGoalCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                IconBadge(symbol: "target", tint: tint, size: 30)
+                IconBadge(symbol: Icon.goal, tint: tint, size: 30)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Цель недели — без превышений у камер")
                         .font(.rounded(14, .semibold))

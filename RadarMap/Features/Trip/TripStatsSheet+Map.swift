@@ -163,7 +163,7 @@ extension TripStatsSheet {
                 .buttonStyle(PressableStyle())
                 Spacer(minLength: 0)
                 Button {
-                    selectedRecord = selected
+                    path.append(.trip(selected.id))
                 } label: {
                     HStack(spacing: 4) {
                         Text("Подробнее")

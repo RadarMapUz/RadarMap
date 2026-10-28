@@ -64,17 +64,16 @@ struct KPIStrip: View {
         HStack(spacing: 0) {
             // Именно ПРОЕЗДЫ: одна камера, пройденная дважды, — это два.
             // Легенда карты считает уникальные точки — слово должно отличаться.
-            StatStripCell(value: "\(summary.cameras)", label: LocalizedStringKey(Formatting.passesLabel(summary.cameras)),
-                          icon: "camera.fill", tint: Theme.Icon.camera)
-            StatStripDivider()
-            StatStripCell(value: activeDaysText, label: "дней за рулём", icon: "calendar",
-                          tint: Theme.Icon.time)
+            // Без «проездов камер» (10.3 плана 34): это число — в строке денег
+            // карточки-ответа. Значки нейтральные, словарь Icon.
+            StatStripCell(value: activeDaysText, label: "дней за рулём", icon: Icon.byDays,
+                          tint: Theme.textSecondary)
             StatStripDivider()
             StatStripCell(value: "\(Int(summary.averageSpeedKmh))", label: "средняя, км/ч",
-                          icon: "gauge.with.dots.needle.33percent", tint: Theme.Icon.speed)
+                          icon: "gauge.with.dots.needle.33percent", tint: Theme.textSecondary)
             StatStripDivider()
             StatStripCell(value: "\(Int(summary.maxSpeedKmh))", label: "максимум, км/ч",
-                          icon: "gauge.with.dots.needle.100percent", tint: Theme.Icon.speed)
+                          icon: "gauge.with.dots.needle.100percent", tint: Theme.textSecondary)
         }
         .statCard(padding: 14)
     }
@@ -179,105 +178,5 @@ struct RiskHoursCard: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(String(format: String(localized: "С %1$02d до %2$02d часов: превышений %3$lld"),
                                         hour, (hour + 4) % 24, count)))
-    }
-}
-
-// MARK: - Охват предупреждений
-
-/// «О скольких камерах приложение успело сказать» — единственная цифра, по
-/// которой вопрос «умно ли работает алгоритм» решается не спором.
-///
-/// Показывается человеку намеренно, а не прячется в телеметрию. Антирадар —
-/// это обещание, и обещание положено проверять: если охват просел, владелец
-/// телефона узнаёт об этом тогда же, когда и мы, а не из отзыва в App Store.
-/// Тон при этом ровный — карточка сообщает результат, а не хвалит себя.
-struct AlertRecallCard: View {
-    let tally: AlertRecall.Tally
-    var onExplain: () -> Void = {}
-
-    var body: some View {
-        // Знаменатель — камеры НАШЕЙ дороги: верная тишина о камере встречной
-        // стороны или поперечной улицы (гейт доказал) промахом не считается.
-        if let recall = tally.recall, tally.ours >= AppConfig.recallMinPassesToShow {
-            VStack(alignment: .leading, spacing: 12) {
-                SectionHeader(title: String(localized: "Предупреждения")) {
-                    Button(action: onExplain) {
-                        // Голый значок — ~18 pt мишени; растим область касания,
-                        // не глиф.
-                        Image(systemName: "info.circle")
-                            .font(.rounded(15, .semibold))
-                            .foregroundStyle(Theme.textTertiary)
-                            .tapTarget()
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(String(localized: "Как считаем охват"))
-                }
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text("\(Int((recall * 100).rounded()))%")
-                        .font(.numeral(34, .heavy).monospacedDigit())
-                        .foregroundStyle(recall >= AppConfig.recallGoodShare
-                                         ? Theme.success : Theme.warning)
-                    Text(String(format: String(localized: "камер названо заранее — %1$lld из %2$lld"),
-                                tally.warned, tally.ours))
-                        .font(.rounded(15))
-                        .foregroundStyle(Theme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                bar(recall: recall)
-                // Осечки перечисляем поимённо и без смягчений: строка «о двух
-                // промолчал» — это и есть то, ради чего карточка существует.
-                // Ноль осечек не печатаем вовсе — хвастаться нечем.
-                if tally.late > 0 {
-                    footnote(String(format: String(localized:
-                        "о %lld сказал уже вплотную — среагировать было негде"), tally.late),
-                        tint: Theme.warning)
-                }
-                if tally.silent > 0 {
-                    footnote(String(format: String(localized: "о %lld промолчал"), tally.silent),
-                             tint: Theme.danger)
-                }
-                if tally.unused > 0 {
-                    // Интерполяция, не String(format:): только так каталог
-                    // выбирает форму числа («1 предупреждение», 6.11).
-                    footnote(String(localized:
-                        "\(tally.unused) предупреждений — о камерах, мимо которых вы не проехали"),
-                             tint: Theme.textTertiary)
-                }
-            }
-            .statCard()
-        }
-    }
-
-    /// Полоса: названо заранее / вплотную / молчание. Доли те же, что в цифрах
-    /// выше, — второй источник правды тут завёлся бы мгновенно.
-    private func bar(recall: Double) -> some View {
-        GeometryReader { geometry in
-            let width = geometry.size.width
-            let total = Double(max(tally.ours, 1))
-            HStack(spacing: 2) {
-                segment(Theme.success, width * Double(tally.warned) / total)
-                segment(Theme.warning, width * Double(tally.late) / total)
-                segment(Theme.danger, width * Double(tally.silent) / total)
-            }
-        }
-        .frame(height: 8)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(String(format: String(localized:
-            "Названо заранее %1$lld, вплотную %2$lld, без предупреждения %3$lld"),
-            tally.warned, tally.late, tally.silent)))
-    }
-
-    @ViewBuilder private func segment(_ color: Color, _ width: Double) -> some View {
-        if width > 0 {
-            Capsule().fill(color).frame(width: max(2, width))
-        }
-    }
-
-    private func footnote(_ text: String, tint: Color) -> some View {
-        Text(text)
-            .font(.rounded(11, .medium))
-            .foregroundStyle(tint)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

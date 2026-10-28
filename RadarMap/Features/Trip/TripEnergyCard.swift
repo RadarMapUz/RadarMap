@@ -48,7 +48,7 @@ struct TripEnergyCard: View {
         let notes = EnergyText.notes(use, model: model)
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
-                IconBadge(symbol: model.usesBattery ? "bolt.fill" : "fuelpump.fill", tint: Theme.Icon.money, size: 30)
+                IconBadge(symbol: model.usesBattery ? Icon.charge : Icon.fuel, tint: Theme.textSecondary, size: 30)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(headline)
                         .font(.numeral(20, .bold).monospacedDigit())
@@ -128,11 +128,14 @@ struct PeriodEnergyRow: View {
     /// Журнал заправок за период (21.6): есть записи — сверху реальные
     /// деньги, расчёт — второй строкой. nil или пусто — как было.
     var journal: EnergyJournal.Period? = nil
+    /// Шеврон — только там, где карточка ведёт дальше (страница «Расходы»
+    /// «Итогов» — сама конец пути, 34b).
+    var showsChevron = true
 
     var body: some View {
         let lines = Self.lines(use, model: model, current: atCurrentPrice, journal: journal)
         HStack(spacing: 12) {
-            IconBadge(symbol: model.usesBattery ? "bolt.fill" : "fuelpump.fill", tint: Theme.Icon.money, size: 30)
+            IconBadge(symbol: model.usesBattery ? Icon.charge : Icon.fuel, tint: Theme.textSecondary, size: 30)
             VStack(alignment: .leading, spacing: 2) {
                 Text(lines.title)
                     .font(.rounded(15, .semibold))
@@ -150,10 +153,12 @@ struct PeriodEnergyRow: View {
                 }
             }
             Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.rounded(12, .semibold))
-                .foregroundStyle(Theme.textTertiary)
-                .accessibilityHidden(true)
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.rounded(12, .semibold))
+                    .foregroundStyle(Theme.textTertiary)
+                    .accessibilityHidden(true)
+            }
         }
         .statCard(padding: 14, radius: Theme.cornerMedium)
         .accessibilityElement(children: .ignore)
@@ -169,6 +174,38 @@ struct PeriodEnergyRow: View {
         if let journal, !journal.isEmpty { return true }
         guard use.totalMeters > 0 else { return false }
         return use.cost != nil || (model.usesBattery && use.electricShare != nil)
+    }
+
+    /// Строка раздела «Итогов» (34b): одно число и подпись. Число — во что
+    /// обошлись поездки периода (расчёт), подпись — купленное по журналу:
+    /// «Потрачено 1,3 млн» рядом с «по расчёту ≈ 25 000» читалось ошибкой в
+    /// 50 раз (Н8 плана 34) — это разные величины, и слова у них разные.
+    /// Цены нет — число из журнала («куплено»), нет и журнала — километры.
+    struct Compact: Equatable {
+        var value: String?
+        var caption: String
+    }
+
+    static func compact(_ use: EnergySplit.Use, model: EnergySplit.Model,
+                        journal: EnergyJournal.Period? = nil) -> Compact {
+        let bought = journal.flatMap { $0.isEmpty ? nil : $0.spending }
+        if let cost = use.cost {
+            // Подпись короткая (строка раздела): «≈» у числа уже говорит
+            // «расчёт», подпись — откуда второе число.
+            let caption = bought.map {
+                String(format: String(localized: "куплено на %@"),
+                       Formatting.unbreakable(Formatting.money($0.amount)))
+            } ?? String(localized: "по расчёту за поездки")
+            return Compact(value: "≈ " + Formatting.money(FuelCost.rounded(cost)), caption: caption)
+        }
+        if let bought {
+            return Compact(value: Formatting.money(bought.amount),
+                           caption: String(localized: "куплено топлива и заряда") + " · " + JournalText.counts(bought))
+        }
+        let share = model.usesBattery ? use.electricShare : nil
+        return Compact(value: share.map { EnergyText.percent($0) },
+                       caption: share == nil ? Formatting.distance(use.totalMeters)
+                                             : String(localized: "пути на электричестве"))
     }
 
     struct Lines: Equatable {

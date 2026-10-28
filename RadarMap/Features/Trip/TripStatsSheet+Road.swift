@@ -2,8 +2,8 @@
 //  TripStatsSheet+Road.swift
 //  RadarMap
 //
-//  Итоги (31E): «Дорога» — время в пробках и путь выше лимита вне камер.
-//  Две строки под деньгами периода; тап — расшифровка «где и когда».
+//  Итоги (31E, 34b): «Пробки и лимит» — время в пробках и путь выше лимита
+//  вне камер. Одна строка раздела; тап — лист «где и когда» с вкладками.
 //
 //  Всё здесь — своё, с телефона: пробки — по собственным трекам
 //  (TrafficTime), превышения — по лимиту дороги, который и так считается в
@@ -27,104 +27,29 @@ struct RoadHabitPayload: Identifiable {
 
 extension TripStatsSheet {
 
-    /// Строки «Дороги» — только когда есть что сказать: пробок за период
-    /// меньше пяти минут или пути с известным лимитом меньше пяти километров
-    /// — строки нет, а не «0».
-    @ViewBuilder
-    func roadRows(_ itogi: ItogiScreen) -> some View {
-        let summary = itogi.summary
-        if let jam = summary.jamSeconds, jam >= AppConfig.jamMinPeriodSeconds {
-            compactRow(symbol: Icon.trafficLayer, tint: Theme.warning,
-                       title: String(format: String(localized: "В пробках: %@"), Formatting.duration(jam)),
-                       caption: jamCaption(summary: summary, jams: itogi.jams)) {
-                roadHabit = payload(.jams, itogi)
-            }
-            .accessibilityHint(Text("Где и когда"))
-        }
-        if let share = summary.overLimitShare {
-            let clean = summary.overLimitMeters < 1
-            compactRow(symbol: "gauge.with.dots.needle.67percent",
-                       tint: clean ? Theme.success : Theme.warning,
-                       title: clean ? String(localized: "Вне камер — в лимите")
-                                    : String(format: String(localized: "Выше лимита вне камер: %@ пути"),
-                                             Self.percentText(share)),
-                       caption: String(localized: "На 10 км/ч и больше, где лимит дороги известен")) {
-                roadHabit = payload(.overLimit, itogi)
-            }
-            .accessibilityHint(Text("Где чаще"))
-        }
-    }
-
-    private func payload(_ kind: RoadHabitPayload.Kind, _ itogi: ItogiScreen) -> RoadHabitPayload {
+    /// Данные листа «Пробки и лимит» — с той же сводкой, что строка раздела.
+    func payload(_ kind: RoadHabitPayload.Kind, _ itogi: ItogiScreen) -> RoadHabitPayload {
         RoadHabitPayload(kind: kind, summary: itogi.summary, jams: itogi.jams, places: itogi.overLimitPlaces,
                          periodTitle: period.rangeTitle(containing: anchor))
     }
 
-    /// «8 % времени в пути · чаще 08:00–12:00».
-    private func jamCaption(summary: PeriodSummary, jams: TrafficTime.Period) -> String {
-        var parts: [String] = []
-        if summary.movingDuration > 0, let jam = summary.jamSeconds {
-            parts.append(String(format: String(localized: "%@ времени в пути"),
-                                Self.percentText(min(1, jam / summary.movingDuration))))
-        }
-        if let peak = jams.peakBlock, peak.share >= AppConfig.insightPeakShare {
-            // Связки вокруг тире (34): «чаще 08:00–» / «12:00» рвалось на SE.
-            let hours = PeakBlock(index: peak.index, count: 0, share: peak.share).title
-                .replacingOccurrences(of: "–", with: "\u{2060}–\u{2060}")
-            parts.append(String(format: String(localized: "чаще %@"), hours))
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    /// «6 %», «<1 %»: доля целыми процентами, а ноль с хвостом — не ноль.
+    /// «36 %», «меньше 1 %» — неразрывно с процентом.
     nonisolated static func percentText(_ share: Double) -> String {
         let percent = Int((share * 100).rounded())
         if percent == 0, share > 0 { return String(localized: "меньше 1 %") }
         return "\(percent)\u{00A0}%"
     }
-
-    /// Компактная строка-кнопка «Итогов» — как «Ждут ответа» и «Штрафы».
-    func compactRow(symbol: String, tint: Color, title: String, caption: String,
-                    action: @escaping () -> Void) -> some View {
-        Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            action()
-        } label: {
-            HStack(spacing: 12) {
-                IconBadge(symbol: symbol, tint: tint, size: 30)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.rounded(14, .semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if !caption.isEmpty {
-                        Text(caption)
-                            .font(.rounded(11))
-                            .foregroundStyle(Theme.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.rounded(15, .bold))
-                    .foregroundStyle(Theme.textTertiary)
-            }
-            .statCard(padding: 12, radius: Theme.cornerMedium)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-    }
 }
 
-/// Расшифровка строки «Дороги»: места с названием улицы из своего адресника
-/// (без сети, если файл клетки уже скачан), часы и как считали.
+/// Лист «Пробки и лимит» (34b): одна строка раздела — один лист, две
+/// вкладки, если есть и то, и другое. Раньше это были две строки и два входа.
 struct RoadHabitSheet: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     let payload: RoadHabitPayload
+    @State private var kind: RoadHabitPayload.Kind = .jams
+    @State private var chosen = false
 
-    /// Улицы мест — по индексу места; nil — улицу не назвать.
     /// Строки мест с подписью улицы — после адресника, слитые по улице (34):
     /// две пробки на одной улице были двумя строками «улица Навои» подряд.
     /// nil — адресник ещё читается, показываем места без слияния.
@@ -134,28 +59,52 @@ struct RoadHabitSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    if hasJams && hasOverLimit {
+                        Picker("", selection: $kind) {
+                            Text("Пробки").tag(RoadHabitPayload.Kind.jams)
+                            Text("Выше лимита").tag(RoadHabitPayload.Kind.overLimit)
+                        }
+                        .pickerStyle(.segmented)
+                    }
                     headline
                     placesCard
-                    if payload.kind == .jams { hoursCard }
+                    if kind == .jams { hoursCard }
                     explanation
                 }
                 .padding(20)
             }
             .background(Theme.background)
-            .navigationTitle(payload.kind == .jams ? String(localized: "Время в пробках")
-                                                   : String(localized: "Выше лимита вне камер"))
+            .navigationTitle("Пробки и лимит")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }
             }
-            .task { await loadStreets() }
+            .task(id: kind) {
+                named = nil
+                await loadStreets()
+            }
         }
         .presentationDetents([.large])
+        .onAppear {
+            guard !chosen else { return }
+            chosen = true
+            kind = kind
+        }
+    }
+
+    private var hasJams: Bool {
+        (payload.summary.jamSeconds ?? 0) >= AppConfig.jamMinPeriodSeconds
+    }
+    private var hasOverLimit: Bool { payload.summary.overLimitShare != nil }
+
+    /// Подпись листа — то, что раньше было названием: «Время в пробках».
+    private var kindTitle: String {
+        kind == .jams ? String(localized: "Время в пробках") : String(localized: "Выше лимита вне камер")
     }
 
     private var headline: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(payload.periodTitle)
+            Text(kindTitle + " · " + payload.periodTitle)
                 .font(.rounded(13))
                 .foregroundStyle(Theme.textSecondary)
             Text(headlineValue)
@@ -172,7 +121,7 @@ struct RoadHabitSheet: View {
     }
 
     private var headlineValue: String {
-        switch payload.kind {
+        switch kind {
         case .jams:
             return Formatting.duration(payload.summary.jamSeconds ?? 0)
         case .overLimit:
@@ -181,7 +130,7 @@ struct RoadHabitSheet: View {
     }
 
     private var headlineCaption: String {
-        switch payload.kind {
+        switch kind {
         case .jams:
             return String(format: String(localized: "Стояли и ползли медленнее 10 км/ч, из %@ в пути"),
                           Formatting.duration(payload.summary.movingDuration))
@@ -197,7 +146,7 @@ struct RoadHabitSheet: View {
         let rows = named ?? placeRows
         if !rows.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                SectionHeader(payload.kind == .jams ? String(localized: "Где стояли дольше всего")
+                SectionHeader(kind == .jams ? String(localized: "Где стояли дольше всего")
                                                     : String(localized: "Где чаще"))
                 VStack(spacing: 0) {
                     ForEach(rows.indices, id: \.self) { index in
@@ -208,12 +157,12 @@ struct RoadHabitSheet: View {
                                 .foregroundStyle(Theme.textPrimary)
                                 .fixedSize(horizontal: false, vertical: true)
                             Spacer(minLength: 8)
-                            Text(rows[index].value(payload.kind))
+                            Text(rows[index].value(kind))
                                 .font(.rounded(15, .bold).monospacedDigit())
                                 .foregroundStyle(Theme.textPrimary)
                         }
                         .padding(.vertical, 10)
-                        Text(rows[index].caption(payload.kind))
+                        Text(rows[index].caption(kind))
                             .font(.rounded(13))
                             .foregroundStyle(Theme.textSecondary)
                             .padding(.bottom, 10)
@@ -256,7 +205,7 @@ struct RoadHabitSheet: View {
     }
 
     private var placeRows: [PlaceRow] {
-        switch payload.kind {
+        switch kind {
         case .jams:
             return payload.jams.places.map {
                 PlaceRow(coordinate: $0.coordinate, seconds: $0.seconds, times: $0.times)
@@ -272,7 +221,7 @@ struct RoadHabitSheet: View {
     private var hoursCard: some View {
         if let peak = payload.jams.peakBlock {
             HStack(spacing: 12) {
-                IconBadge(symbol: "clock.fill", tint: Theme.Icon.time, size: 30)
+                IconBadge(symbol: "clock.fill", tint: Theme.textSecondary, size: 30)
                 Text(String(format: String(localized: "Больше всего — %1$@: %2$@ всех пробок"),
                             PeakBlock(index: peak.index, count: 0, share: peak.share).title,
                             TripStatsSheet.percentText(peak.share)))
@@ -289,7 +238,7 @@ struct RoadHabitSheet: View {
     /// «по поездкам этого периода», а не «последних 30 дней» (34): места и
     /// часы строятся из записей выбранного окна (ItogiScreen.jams).
     private var explanation: some View {
-        Text(payload.kind == .jams
+        Text(kind == .jams
              ? String(localized: "Считаем по вашим трекам на телефоне: три минуты подряд медленнее 10 км/ч — пробка, короткий светофор — нет. Заезды по пути (магазин, заправка) не входят. Места и часы — по поездкам этого периода.")
              : String(localized: "Это не про штрафы: путь у камер сюда не входит, у них своя карточка. Считаем по лимиту дороги из OpenStreetMap, когда он известен, и только заметные превышения — на 10 км/ч и больше. С телефона ничего не уходит."))
             .font(.rounded(13))
@@ -308,7 +257,7 @@ struct RoadHabitSheet: View {
             if Task.isCancelled { return }
             rows[index].street = StreetName.display(address.street, language: env.settings.appLanguage.mapCode)
         }
-        let kind = payload.kind
+        let kind = self.kind
         let merged = PlaceMerge.byStreet(rows, street: { $0.key(kind) }) { lhs, rhs in
             var sum = lhs
             sum.seconds += rhs.seconds

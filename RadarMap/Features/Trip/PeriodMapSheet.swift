@@ -64,8 +64,12 @@ struct PeriodMapSheet: View {
                                 if onlyViolations, selected?.hasViolation == false { selected = nil }
                             }
                         } label: {
-                            Image(systemName: onlyViolations ? "exclamationmark.triangle.fill"
-                                                             : "exclamationmark.triangle")
+                            // Фильтр словом (34): голый треугольник читался
+                            // «опасностью», а не переключателем списка.
+                            Label("Превышения", systemImage: onlyViolations
+                                  ? "line.3.horizontal.decrease.circle.fill"
+                                  : "line.3.horizontal.decrease.circle")
+                                .labelStyle(.titleAndIcon)
                         }
                         .accessibilityLabel(Text("Только превышения"))
                         .accessibilityAddTraits(onlyViolations ? .isSelected : [])

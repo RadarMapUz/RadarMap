@@ -47,6 +47,9 @@ struct PassRow: View {
     let pass: PassedCamera
     /// Стрелка-подсказка: тап по строке открывает карту проезда.
     var showsChevron = false
+    /// «риск ≈ …» у строки. Камера со штрафом в поездке одна — сумма уже
+    /// стоит в карточке балла над списком (34: та же цифра второй раз).
+    var showsRisk = true
 
     var body: some View {
         HStack(spacing: 12) {
@@ -84,7 +87,7 @@ struct PassRow: View {
                 // на экране возможных штрафов.
                 if let limit = pass.limitKmh {
                     let fine = FineSchedule.fine(overKmh: pass.speedKmh - Double(limit))
-                    if fine > 0 {
+                    if fine > 0, showsRisk || pass.fineOutcome != .pending {
                         switch pass.fineOutcome {
                         case .pending:
                             Text(String(format: String(localized: "риск ≈ %@"),
@@ -120,16 +123,17 @@ struct PassRow: View {
 struct PassRowButton: View {
     let pass: PassedCamera
     var onTap: ((PassedCamera) -> Void)?
+    var showsRisk = true
 
     var body: some View {
         if pass.coordinate != nil, let onTap {
             Button { onTap(pass) } label: {
-                PassRow(pass: pass, showsChevron: true)
+                PassRow(pass: pass, showsChevron: true, showsRisk: showsRisk)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         } else {
-            PassRow(pass: pass)
+            PassRow(pass: pass, showsRisk: showsRisk)
         }
     }
 }
@@ -543,7 +547,7 @@ struct TripDetailContent: View {
                 }
                 if !items.isEmpty {
                     Divider().overlay(Theme.stroke)
-                    Text("Из чего сложился балл")
+                    Text("Из чего сложился балл поездки")
                         .font(.rounded(13, .semibold))
                         .foregroundStyle(Theme.textSecondary)
                     ForEach(items) { item in
@@ -692,7 +696,8 @@ struct TripDetailContent: View {
         LazyVStack(spacing: 0) {
             ForEach(Array(passes.enumerated()), id: \.element.id) { index, pass in
                 if index > 0 { Divider().overlay(Theme.stroke).padding(.leading, 58) }
-                PassRowButton(pass: pass, onTap: onOpenPass)
+                PassRowButton(pass: pass, onTap: onOpenPass,
+                              showsRisk: record.passed.filter(Self.isFined).count > 1)
             }
         }
         .statCard(padding: 0, radius: Theme.cornerMedium)

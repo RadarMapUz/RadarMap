@@ -87,6 +87,18 @@ extension MapScreen {
                 map.showTrafficLegend = true
             }
         }
+        // 33H3 (временно): лист по касанию линии без касания —
+        // `-trafficTapDemo L` (уровень 1…4), с `-trafficTapUsual` — «обычно».
+        if let index = args.firstIndex(of: "-trafficTapDemo"), index + 1 < args.count,
+           let level = Int(args[index + 1]) {
+            let usual = args.contains("-trafficTapUsual")
+            Task {
+                await Task.pause(seconds: 8)
+                map.selectedTraffic = TrafficTap(level: level, usual: usual, length: 2400,
+                                                 kmh: usual ? 25 : [52, 31, 14, 6][min(3, max(0, level - 1))],
+                                                 modelKmh: 55)
+            }
+        }
         // Снимки экранов для обзора вёрстки: -openScreen settings|search|
         // places|nearby|stats|camera|fines — открыть экран сразу после запуска.
         if let index = args.firstIndex(of: "-openScreen"), index + 1 < args.count {

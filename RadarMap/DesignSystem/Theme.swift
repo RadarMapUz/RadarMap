@@ -613,8 +613,45 @@ nonisolated enum TrafficPalette {
         let stand: Pair
     }
 
-    static let active = Colors(free: (0x2BA84A, 0x3CC46B), slow: (0xE8A100, 0xFFB020),
-                               jam: (0xC8186A, 0xFF4F9A), stand: (0x5A2275, 0xB06AE0))
+    /// «Малина и слива» (33H, 27.10) — как есть до выбора владельцем 33H3.
+    static let current = Colors(free: (0x2BA84A, 0x3CC46B), slow: (0xE8A100, 0xFFB020),
+                                jam: (0xC8186A, 0xFF4F9A), stand: (0x5A2275, 0xB06AE0))
+
+    /// 33H3 (28.10, владелец: «палитра как у ИИ») — три кандидата на выбор.
+    /// Общая логика всех трёх — та же, что у токенов состояний Theme: днём
+    /// глубокие тона, ночью светлые, но без неона (OKLCH C ≤ 0,15 против
+    /// 0,16–0,22 у «Малины»), и ЛЕСТНИЦА: днём чем тяжелее, тем темнее
+    /// (читается и без цвета), ночью «свободно» — самое тихое по насыщенности,
+    /// пробка и «стоят» — самые насыщенные. Зелёный — не тон парка, медленно —
+    /// не жёлтая кайма магистрали и не `action`, ничто — не синий маршрута,
+    /// пробка — не красный камеры (PaletteTests, `candidates`).
+    /// ВРЕМЕННО: после выбора остаётся один, ключ `-trafficPalette` уходит.
+    static let candidates: [(name: String, colors: Colors)] = [
+        // 1 «Сигнал»: тона — те же, что у success и warning (153° и 64–75°),
+        // но светлее днём и тише ночью; пробка — гранат, «стоят» — баклажан.
+        ("Сигнал", Colors(free: (0x7BAC89, 0x8ED3A0), slow: (0xBB731E, 0xFCBE62),
+                          jam: (0x993357, 0xD86691), stand: (0x562353, 0xB06AAD))),
+        // 2 «Тихая шкала»: свободная дорога почти нейтральный шалфей — город
+        // спокоен, цвет только там, где медленно; охра, вино, тёмная слива.
+        ("Тихая шкала", Colors(free: (0x9AAF96, 0xB8C6B6), slow: (0xAD7138, 0xF2B778),
+                               jam: (0x8C3444, 0xCF6C76), stand: (0x4A233C, 0xAC6F94))),
+        // 3 «Сумерки»: холодный старт — бирюза, цитрин, роза, индиго; самая
+        // большая разница при дейтеранопии (ось синий—жёлтый).
+        ("Сумерки", Colors(free: (0x5AB2B2, 0x70C1C1), slow: (0xA1942F, 0xE3D372),
+                           jam: (0x9D3265, 0xDB6689), stand: (0x45266E, 0x9871C2))),
+    ]
+
+    /// Палитра слоя. DEBUG: `-trafficPalette 1|2|3` — кандидат 33H3.
+    static let active: Colors = {
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        if let index = args.firstIndex(of: "-trafficPalette"), index + 1 < args.count,
+           let number = Int(args[index + 1]), candidates.indices.contains(number - 1) {
+            return candidates[number - 1].colors
+        }
+        #endif
+        return current
+    }()
 
     /// Цвет уровня показа 1…4 (TrafficLines.displayLevel).
     static func level(_ level: Int, in colors: Colors = active) -> Pair {

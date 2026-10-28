@@ -563,3 +563,119 @@ extension PaletteTests {
         XCTAssertEqual(RouteColors.slow.night, TrafficPalette.active.slow.night)
     }
 }
+
+// MARK: - Кандидаты палитры пробок (33H3)
+
+extension PaletteTests {
+
+    /// Тона нашей карты, с которыми пробки не должны путаться
+    /// (server/omt/make_style.py PALETTES): парки и кроны деревьев; тёплая
+    /// магистраль, её кромка и ночное свечение; кайма линии пробок ночью.
+    private var mapParks: (day: [UInt32], night: [UInt32]) {
+        ([0xCDEAC0, 0xC1E3B0, 0xB3DB9C, 0x93C77C], [0x16271E, 0x14241B, 0x1D3628, 0x2A4A37])
+    }
+    private var mapTrunk: (day: [UInt32], night: [UInt32]) {
+        ([0xFFE2A8, 0xEEB65E, 0xE9AB55, 0xECD096, 0xFFD896, 0xF0C46E], [0x9A8352, 0xA88C55])
+    }
+
+    private func chroma(_ color: Color) -> Double {
+        let (_, a, b) = lab(color)
+        return (a * a + b * b).squareRoot()
+    }
+
+    /// Все условия 33H3 для одной палитры в обеих темах.
+    private func checkCandidate(_ name: String, _ c: TrafficPalette.Colors) {
+        let camera = Theme.Types.camera
+        let levels: [TrafficPalette.Pair] = [c.free, c.slow, c.jam, c.stand]
+        for day in [true, false] {
+            let theme = "\(name) \(day ? "днём" : "ночью")"
+            style = day ? .light : .dark
+            let live = levels.map { rgb(day ? $0.day : $0.night) }
+            let usual = levels.map { pair -> Color in
+                let u = TrafficPalette.usual(pair)
+                return rgb(day ? u.day : u.night)
+            }
+            // Уровни различимы между собой, и при дейтеранопии.
+            for i in 0..<4 {
+                for j in (i + 1)..<4 {
+                    XCTAssertGreaterThanOrEqual(deltaE(live[i], live[j]), 20, "\(theme): \(i + 1)/\(j + 1)")
+                    XCTAssertGreaterThanOrEqual(deltaEDeutan(live[i], live[j]), 12, "\(theme): \(i + 1)/\(j + 1) дейт.")
+                    XCTAssertGreaterThanOrEqual(deltaE(usual[i], usual[j]), 12, "\(theme): «обычно» \(i + 1)/\(j + 1)")
+                }
+            }
+            XCTAssertGreaterThanOrEqual(deltaEDeutan(live[0], live[2]), 20, "\(theme): свободно ↔ пробка, дейт.")
+            XCTAssertGreaterThanOrEqual(deltaE(live[1], live[2]), 25, "\(theme): медленно ↔ пробка")
+            // Красный — только камера (и штраф): ни пробка, ни «стоят», ни их «обычно».
+            let danger = rgb(day ? 0xC62828 : 0xFF7A70)
+            for index in 2...3 {
+                XCTAssertGreaterThanOrEqual(deltaE(live[index], camera), 20, "\(theme): \(index + 1) ≈ камера")
+                XCTAssertGreaterThanOrEqual(deltaE(usual[index], camera), 20, "\(theme): «обычно» \(index + 1) ≈ камера")
+                XCTAssertGreaterThanOrEqual(deltaE(live[index], danger), 20, "\(theme): \(index + 1) ≈ штраф")
+            }
+            XCTAssertGreaterThanOrEqual(deltaEDeutan(live[2], camera), 20, "\(theme): пробка ≈ камера, дейт.")
+            // Лестница: днём тяжелее — темнее; ночью «свободно» — самое тихое.
+            if day {
+                for i in 0..<3 {
+                    XCTAssertGreaterThanOrEqual(lab(live[i]).0 - lab(live[i + 1]).0, 4,
+                                                "\(theme): уровень \(i + 2) не темнее \(i + 1)")
+                }
+            } else {
+                for i in 1..<4 {
+                    XCTAssertLessThan(chroma(live[0]), chroma(live[i]), "\(theme): свободно насыщеннее \(i + 1)")
+                }
+                for ground: UInt32 in [0x16181C, 0x30343C, 0x33373F, TrafficPalette.casing.night] {
+                    for (index, line) in live.enumerated() {
+                        XCTAssertGreaterThanOrEqual(contrast(line, rgb(ground)), 3,
+                                                    "\(theme): \(index + 1) на #\(String(ground, radix: 16))")
+                    }
+                }
+            }
+            // Без неона: насыщенность не выше тонов состояний Theme.
+            for (index, line) in live.enumerated() {
+                XCTAssertLessThanOrEqual(chroma(line), 60, "\(theme): \(index + 1) — неон")
+            }
+            // Зелёный — не парк; медленно — не магистраль и не главное действие.
+            for park in day ? mapParks.day : mapParks.night {
+                XCTAssertGreaterThanOrEqual(deltaE(live[0], rgb(park)), 20, "\(theme): свободно ≈ парк")
+                XCTAssertGreaterThanOrEqual(deltaE(usual[0], rgb(park)), 12, "\(theme): «обычно» свободно ≈ парк")
+            }
+            for trunk in (day ? mapTrunk.day : mapTrunk.night) + [0xFFD43B] {
+                XCTAssertGreaterThanOrEqual(deltaE(live[1], rgb(trunk)), 20,
+                                            "\(theme): медленно ≈ #\(String(trunk, radix: 16))")
+            }
+            // Ничто не синий маршрута / интерфейса / другого варианта.
+            let route = rgb(day ? RouteColors.body.day : RouteColors.body.night)
+            let alternative = rgb(day ? RouteColors.alternative.day : RouteColors.alternative.night)
+            let casing = rgb(day ? RouteColors.casing.day : RouteColors.casing.night)
+            for index in 0..<4 {
+                for (ref, refName) in [(route, "маршрут"), (Theme.accent, "accent"), (alternative, "вариант")] {
+                    XCTAssertGreaterThanOrEqual(deltaE(live[index], ref), 25, "\(theme): \(index + 1) ≈ \(refName)")
+                    XCTAssertGreaterThanOrEqual(deltaE(usual[index], ref), 20, "\(theme): «обычно» \(index + 1) ≈ \(refName)")
+                }
+                XCTAssertGreaterThanOrEqual(deltaEDeutan(live[index], route), 15, "\(theme): \(index + 1) ≈ маршрут, дейт.")
+                // «Обычно» отличимо от живого — и своего уровня, и чужого.
+                XCTAssertGreaterThanOrEqual(deltaE(live[index], usual[index]), 10, "\(theme): «обычно» \(index + 1)")
+                for other in 0..<4 where other != index {
+                    XCTAssertGreaterThanOrEqual(deltaE(usual[index], live[other]), 12,
+                                                "\(theme): «обычно» \(index + 1) ≈ живое \(other + 1)")
+                }
+                let line = day ? levels[index].day : levels[index].night
+                XCTAssertGreaterThanOrEqual(deltaE(rgb(TrafficPalette.arrow(on: line, daylight: day).fill), live[index]),
+                                            15, "\(theme): наконечник \(index + 1)")
+            }
+            // На линии маршрута: медленно и пробка — свой цвет внутри синей каймы.
+            for index in 1...2 {
+                XCTAssertGreaterThanOrEqual(deltaE(live[index], route), 40, "\(theme): \(index + 1) на маршруте")
+                XCTAssertGreaterThanOrEqual(deltaE(live[index], casing), 40, "\(theme): \(index + 1) на кайме")
+                XCTAssertGreaterThanOrEqual(deltaE(live[index], alternative), 40, "\(theme): \(index + 1) ≈ вариант")
+            }
+        }
+    }
+
+    func testTrafficCandidatesHoldEveryRule() {
+        XCTAssertEqual(TrafficPalette.candidates.count, 3)
+        for (number, candidate) in TrafficPalette.candidates.enumerated() {
+            checkCandidate("\(number + 1) «\(candidate.name)»", candidate.colors)
+        }
+    }
+}

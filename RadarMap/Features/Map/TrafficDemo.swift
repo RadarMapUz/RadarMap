@@ -41,7 +41,7 @@ enum TrafficDemo {
         for row in rows where row.count >= 7 && row[6] > 0 {
             if row.count >= 8, row[7] == 1 {
                 let ratio = row[5] / row[6]
-                guard ratio < AppConfig.usualTrafficShowRatio else { continue }
+                guard ratio <= AppConfig.usualTrafficShowRatio else { continue }
                 usual.append(TrafficProfile.UsualEdge(
                     a: CLLocationCoordinate2D(latitude: row[0], longitude: row[1]),
                     b: CLLocationCoordinate2D(latitude: row[2], longitude: row[3]),

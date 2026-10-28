@@ -203,15 +203,15 @@ nonisolated struct TrafficProfile: Sendable {
         }
     }
 
-    /// Рёбра, где в момент `date` обычно медленнее `usualTrafficShowRatio`
+    /// Рёбра, где в момент `date` обычно не быстрее `usualTrafficShowRatio`
     /// графа (смесь слотов по минуте, как у ETA). Ночью и в воскресенье днём —
-    /// почти пусто: так и должно быть.
+    /// почти всё зелёное: так и должно быть.
     func usual(at date: Date, calendar: Calendar = TypicalTraffic.tashkent) -> [UsualEdge] {
         let mix = Self.mix(at: date, calendar: calendar)
         var out: [UsualEdge] = []
         for (index, edge) in snapshot.edges.enumerated() where edge.modelKmh > 0 {
             let ratio = speed(edge: index, mix: mix) / edge.modelKmh
-            guard ratio < AppConfig.usualTrafficShowRatio else { continue }
+            guard ratio <= AppConfig.usualTrafficShowRatio else { continue }
             out.append(UsualEdge(a: edge.a, b: edge.b, ratio: ratio, source: source(edge: index, mix: mix),
                                  modelKmh: edge.modelKmh))
         }

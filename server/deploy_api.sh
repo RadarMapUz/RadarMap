@@ -47,6 +47,18 @@ report_drift() {
         echo "  ⚠ сервер разошёлся с репо — см. строки выше"
 }
 
+# Ворота ДО заливки: если серверная копия любого из файлов ниже не из истории
+# этой ветки (правка руками на сервере, выкатка с другой ветки), выкатка её
+# затёрла бы. Обход — только явный: RADARMAP_ALLOW_DRIFT=1.
+GATE_FILES="admin.py admin_auth.py notify.py family_notify.py map_edits.py osm_queue.py status.py
+  static/moderate.js static/editor.js static/editor_gl.js static/vendor/maplibre-gl.js
+  static/vendor/maplibre-gl.css telegram_publish.py"
+[ "$ONLY" = "panel" ] || GATE_FILES="api.py $GATE_FILES"
+echo "→ Ворота: сервер не разошёлся с репо по файлам этой выкатки (drift.sh --gate)…"
+# shellcheck disable=SC2086
+RADARMAP_HOST="$HOST" bash "$DIR/drift.sh" --gate $GATE_FILES || {
+    echo "✗ Выкатка остановлена до заливки: боевые файлы не тронуты."; exit 1; }
+
 echo "→ Бэкап текущей версии и заливка новой…"
 if [ "$ONLY" = "panel" ]; then
     echo "  только панель: api.py не трогаем"

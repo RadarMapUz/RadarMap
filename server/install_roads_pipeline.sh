@@ -77,6 +77,15 @@ if [ "$STATUS" = "1" ]; then
     exit 0
 fi
 
+# Ворота ДО заливки: горячую правку на сервере выкатка не затирает (drift.sh
+# --gate; обход — RADARMAP_ALLOW_DRIFT=1).
+echo "→ Ворота: сервер не разошёлся с репо по файлам этой выкатки…"
+# shellcheck disable=SC2086
+RADARMAP_HOST="$HOST" bash "$DIR/drift.sh" --gate build_roads.py update_roads.sh mvt.py build_mvt.py \
+    surface_check.py lane_inference.py road_metrics.py junction_worklist.py parking.py \
+    tree_planting.py ml_candidates.py fetch_candidates.sh || {
+    echo "✗ Выкатка остановлена до заливки: файлы на сервере не тронуты."; exit 1; }
+
 # Файл подкачки — отдельным ключом и по решению владельца.
 #
 # Замерено: сборка страны держит 2,0 КБ на дорогу, то есть 1,2–1,4 ГБ на

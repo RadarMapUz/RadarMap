@@ -22,7 +22,7 @@ postgres (и в Docker `medicalnode_db_1`), minio, wg-easy, xray, openvpn. Outli
 | Бэкапы | `/opt/radarmap/backups`, 7 последних, cron 03:17; копия на мак владельца — `pull_backup.sh`, launchd 11:00 → `~/RadarMapBackups`, 3 недели |
 | Сроки хранения | `RETENTION.md` — что и сколько хранится (потолок 90 дней вместе с копиями); чистит `api.py` при старте и раз в час |
 | Пульт состояния | `/opt/radarmap/api/status.py`, cron каждые 5 мин (заменил `healthcheck.sh`); страница `/status` в панели, цвета наружу — `/radarmap/status.json` |
-| Сверка с репо | `bash server/drift.sh` — md5 всего, что лежит на VPS; `deploy_api.sh` зовёт её сам |
+| Сверка с репо | `bash server/drift.sh` — md5 всего, что лежит на VPS, и причина каждого расхождения (сервер старее / другая ветка / правка на сервере); deploy-скрипты до заливки зовут `drift.sh --gate` по своим файлам и не затирают правку на сервере (обход — `RADARMAP_ALLOW_DRIFT=1`) |
 | Реестр МВД | `update_cameras.py`, cron пн 05:00 — только замечает изменение, базу сливает владелец |
 | Защита | SSH только по ключу (`sshd-00-hardening.conf`); `docker-user-firewall.service` закрывает :51821; песочница API/панели — `systemd-radarmap-sandbox.conf` |
 | Дороги, кандидат | `/opt/radarmap/update_roads.sh`, cron вс 04:17 — свежий OSM, сборка, отчёт; НЕ публикует |

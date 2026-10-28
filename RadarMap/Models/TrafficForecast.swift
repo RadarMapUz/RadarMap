@@ -48,6 +48,31 @@ nonisolated enum TrafficForecast {
     struct Delay: Equatable, Sendable {
         let seconds: TimeInterval
         let source: Source
+        /// Часть `seconds` от живых пробок (now.json); остальное — «обычно»
+        /// (профиль часа недели или файл часа). Не задана — по источнику:
+        /// живые — вся задержка, иначе ноль.
+        let liveSeconds: TimeInterval
+
+        init(seconds: TimeInterval, source: Source, liveSeconds: TimeInterval? = nil) {
+            self.seconds = seconds
+            self.source = source
+            self.liveSeconds = liveSeconds ?? (source == .live ? seconds : 0)
+        }
+    }
+
+    /// Чем подписать задержку варианта (решение 28.10): «+N мин из-за пробок»
+    /// или «обычно +N мин в это время».
+    enum Cause: Equatable, Sendable {
+        case jams, usual
+    }
+
+    /// Живая часть — не меньше половины задержки: это пробки сейчас; иначе —
+    /// обычная картина часа. Смешанный источник со свежим, но пустым на
+    /// нашем пути now.json — «обычно», а не живые пробки (симуляция 27.10:
+    /// «+10 мин из-за пробок» почти целиком из профиля).
+    static func cause(total: TimeInterval, live: TimeInterval) -> Cause {
+        guard total > 0 else { return .jams }
+        return max(0, live) * 2 >= total ? .jams : .usual
     }
 
     /// Файлы «обычно», которые понадобятся маршруту: час выезда и каждый
@@ -104,7 +129,7 @@ nonisolated enum TrafficForecast {
             return file
         }
 
-        var total: TimeInterval = 0
+        var total: TimeInterval = 0, liveTotal: TimeInterval = 0
         var travelled = 0.0
         var usedLive = false, usedTypical = false
         for (p, q) in zip(route, route.dropFirst()) {
@@ -121,7 +146,9 @@ nonisolated enum TrafficForecast {
                 travelled += step
                 if liveFresh, let live, moment <= liveUntil {
                     usedLive = true
-                    total += live.stepDelay(at: point, course: course, length: step)
+                    let delay = live.stepDelay(at: point, course: course, length: step)
+                    total += delay
+                    liveTotal += delay
                 } else if let file = typicalFile(at: moment) {
                     usedTypical = true
                     total += file.stepDelay(at: point, course: course, length: step)
@@ -129,12 +156,14 @@ nonisolated enum TrafficForecast {
                     // Файла часа нет — дальняя часть по живым, как до 27.E:
                     // пробка сорокаминутной давности ближе к правде, чем ничего.
                     usedLive = true
-                    total += live.stepDelay(at: point, course: course, length: step)
+                    let delay = live.stepDelay(at: point, course: course, length: step)
+                    total += delay
+                    liveTotal += delay
                 }
             }
         }
         switch (usedLive, usedTypical) {
-        case (true, true):  return Delay(seconds: total, source: .mixed)
+        case (true, true):  return Delay(seconds: total, source: .mixed, liveSeconds: liveTotal)
         case (true, false): return Delay(seconds: total, source: .live)
         case (false, true): return Delay(seconds: total, source: .typical)
         case (false, false): return nil

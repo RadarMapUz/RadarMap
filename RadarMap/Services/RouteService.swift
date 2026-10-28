@@ -74,6 +74,15 @@ final class RouteService {
         var trafficDelay: TimeInterval?
         /// Откуда `trafficDelay`: живые пробки, обычные для часа или обе.
         var trafficSource: TrafficForecast.Source?
+        /// Часть `trafficDelay` от живых пробок (now.json); остальное — профиль
+        /// «обычно». По ней подпись решает, «из-за пробок» это или «обычно в
+        /// это время» (решение 28.10).
+        var trafficLiveDelay: TimeInterval?
+        /// Личный темп (33E) для класса дороги варианта: показанное время —
+        /// время графа × темп + пробки (решение 28.10: одно время везде —
+        /// крупная цифра, флажок, остаток, машина, «Поделиться прибытием»).
+        /// 1 — без поправки. Выбор и ярлыки по нему не считаются.
+        var paceFactor: Double = 1
         /// Где рисовать камеры маршрута — на его линии (CameraOnLine, 27.B).
         /// ТОЛЬКО для карты: оповещения и проезды читают `cameras` с
         /// настоящими координатами.
@@ -82,12 +91,18 @@ final class RouteService {
         /// Время в пути с пробками — его и показываем, и сравниваем. У своей
         /// дороги (24.4) — по своим поездкам в этот час, если их хватает.
         var expectedTime: TimeInterval { assessment.myRoad?.seconds ?? travelTime + (trafficDelay ?? 0) }
+        /// Время, которое видит водитель: `expectedTime` с личным темпом.
+        /// Сравнения вариантов (выбор, «Быстрый», объезд) — по `expectedTime`;
+        /// своя дорога уже по своим поездкам — темп к ней не прикладывается.
+        var shownTime: TimeInterval {
+            assessment.myRoad?.seconds ?? travelTime * paceFactor + (trafficDelay ?? 0)
+        }
         /// Камеры, которые этот путь вправе назвать своими (29.E): доказанно
         /// встречные (27.J) на проспекте с разделительной лежат в коридоре,
         /// но снимают другую сторону — в плашке «📷 5» и в «Меньше камер»
         /// они раздували счёт пути по проспекту против пути переулками.
         var ourCameraCount: Int { cameras.reduce(0) { $0 + ($1.countsAsOurs ? 1 : 0) } }
-        var etaText: String { Formatting.duration(expectedTime) }
+        var etaText: String { Formatting.duration(shownTime) }
         var distanceText: String { Formatting.distance(distance) }
         /// Задержка пробками, которую показываем: у своей дороги со своим
         /// временем — только пробки сверх своего обычного (обычная пробка
@@ -109,12 +124,23 @@ final class RouteService {
             if delay < 60 {
                 return assessment.myRoad?.seconds != nil ? nil : String(localized: "без пробок")
             }
-            if trafficSource == .typical, assessment.myRoad?.seconds == nil {
-                return String(format: String(localized: "+%@ — обычно в этот час"),
-                              Formatting.unbreakable(Formatting.duration(delay)))
+            let text = Formatting.unbreakable(Formatting.duration(delay))
+            // У своей дороги показана только пробка сверх своего обычного —
+            // она живая по определению.
+            guard assessment.myRoad?.seconds == nil else {
+                return String(format: String(localized: "+%@ из-за пробок"), text)
             }
-            return String(format: String(localized: "+%@ из-за пробок"),
-                          Formatting.unbreakable(Formatting.duration(delay)))
+            switch TrafficForecast.cause(total: trafficDelay ?? delay, live: liveShare) {
+            case .jams:
+                return String(format: String(localized: "+%@ из-за пробок"), text)
+            case .usual:
+                return String(format: String(localized: "обычно +%@ в это время"), text)
+            }
+        }
+        /// Живая часть задержки: у старых записей без разбивки — по источнику.
+        private var liveShare: TimeInterval {
+            if let trafficLiveDelay { return trafficLiveDelay }
+            return trafficSource == .live ? (trafficDelay ?? 0) : 0
         }
     }
 
@@ -218,8 +244,9 @@ final class RouteService {
                                                "RouteService.prefetchProfile") }
     }
     /// Личный темп (33E): во сколько раз своё время больше времени потока для
-    /// класса дороги варианта; nil или 1 — без поправки. Только к времени
-    /// прибытия, не к выбору пути. Ставит AppEnvironment (PersonalPaceStore).
+    /// класса дороги варианта; nil или 1 — без поправки. Ко всем показанным
+    /// временам варианта (`Variant.paceFactor`, решение 28.10), не к выбору
+    /// пути. Ставит AppEnvironment (PersonalPaceStore).
     @ObservationIgnored var paceFactor: ((PersonalPace.RoadClass) -> Double)? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: paceFactor,
                                                "RouteService.paceFactor") }
@@ -252,6 +279,11 @@ final class RouteService {
     /// собирался, — пересчитать время вариантов в конце сборки
     /// (TrafficArrivalGate, симуляция пробок 27.10).
     @ObservationIgnored private var trafficArrival = TrafficArrivalGate()
+    /// Из чего выбирались ярлыки показанного набора (без пробок — они
+    /// подставляются заново) — чтобы пересчитать их на поздних данных.
+    @ObservationIgnored private var choiceBasis: (inputs: [RouteChoice.Input], history: RouteChoice.History?)?
+    /// Касался ли водитель панели выбора с показа набора (решение 28.10).
+    @ObservationIgnored private var choiceGate = ChoiceRelabelGate()
     /// `apply` идёт: варианты ещё старые (или их нет), новые запишутся в конце.
     @ObservationIgnored private var isApplying = false
 
@@ -456,17 +488,24 @@ final class RouteService {
         if let personal = personalRemaining?() { return personal }
         // Последние 1–2 км — не оптимистичнее нашей средней скорости
         // (ArrivalTail): «0,7 км, прибытие сейчас» на 10 км/ч — снимок 63.
-        return ArrivalTail.remaining(engine: engineRemaining + personalPaceCorrection + remainingTypicalDelay,
+        guard let selected else { return 0 }
+        return ArrivalTail.remaining(engine: Self.remainingEstimate(selected, remainingDistance: remainingDistance,
+                                                                    liveDelay: remainingTrafficDelay,
+                                                                    typicalDelay: remainingTypicalDelay),
                                      remainingMeters: remainingDistance,
                                      paceMps: pace.average(now: Date()))
     }
 
-    /// Поправка личного темпа (33E) к времени остатка по графу: (k − 1) ×
-    /// время графа остатка. В мерку объезда (`engineRemaining`) не входит.
-    private var personalPaceCorrection: TimeInterval {
-        guard let selected, selected.distance > 0, let paceFactor else { return 0 }
-        let factor = paceFactor(PersonalPace.roadClass(distance: selected.distance, travelTime: selected.travelTime))
-        return (factor - 1) * selected.travelTime * remainingDistance / selected.distance
+    /// Остаток по маршруту до хвоста последних километров: доля времени графа
+    /// с личным темпом варианта (33E) + пробки остатка. На старте (весь путь,
+    /// задержки из `initialRemainingDelays`) — ровно `Variant.shownTime`:
+    /// флажок прибытия и крупная цифра — одно время (решение 28.10). Мерка
+    /// объезда (`engineRemaining`) темпа не знает.
+    static func remainingEstimate(_ variant: Variant, remainingDistance: CLLocationDistance,
+                                  liveDelay: TimeInterval, typicalDelay: TimeInterval) -> TimeInterval {
+        guard variant.distance > 0 else { return 0 }
+        let share = min(1, max(0, remainingDistance / variant.distance))
+        return variant.travelTime * variant.paceFactor * share + liveDelay + typicalDelay
     }
 
     /// Закрыть наблюдение личного темпа (прибытие, снятие маршрута).
@@ -557,16 +596,25 @@ final class RouteService {
         return out
     }
 
-    /// Пришли файлы «обычно» (27.E): время вариантов, у которых не было
-    /// живых пробок на всём пути, пересчитать, а остаток пути — на
-    /// ближайшем фиксе. Ярлыки выбора не пересматриваются: «Быстрый» под
-    /// пальцем водителя не перескакивает на другой вариант.
+    /// Пришли файлы «обычно» (27.E) или профиль часа недели (33C): время
+    /// вариантов пересчитать, а остаток пути — на ближайшем фиксе. Ярлыки
+    /// выбора — только пока водитель не коснулся панели (ChoiceRelabelGate,
+    /// решение 28.10): после касания «Быстрый» под пальцем не перескакивает.
     func typicalTrafficArrived(now: Date = Date()) {
         typicalRevision &+= 1
         // Пришло во время сборки — варианты сейчас старые или пустые, пересчёт
         // по ним пропал бы (линии сменятся), а новых он бы не увидел: профиль
         // просит сама сборка (`prefetchProfile`), и первый маршрут после
         // запуска показывал время без него (24 мин, в пути — 33).
+        guard trafficArrival.arrived(whileBuilding: isBuilding || isRebuilding || isApplying) else { return }
+        recomputeVariantTraffic(now: now)
+    }
+
+    /// Пришёл новый now.json, пока варианты ещё выбирают (до «Поехали»):
+    /// время вариантов — по нему, ярлыки — до касания панели (решение 28.10).
+    /// В пути остаток ведёт `refreshTrafficDelay`, варианты не трогаем.
+    func liveTrafficArrived(now: Date = Date()) {
+        guard isActive, progressAlong == 0 else { return }
         guard trafficArrival.arrived(whileBuilding: isBuilding || isRebuilding || isApplying) else { return }
         recomputeVariantTraffic(now: now)
     }
@@ -579,15 +627,29 @@ final class RouteService {
         let profile = trafficProfile?()
         let needed = TrafficForecast.buckets(departure: now, travelTime: variants.map(\.travelTime).max() ?? 0)
         let files = typicalFiles(needed)
-        guard !files.isEmpty || profile != nil else { return }
+        guard live != nil || !files.isEmpty || profile != nil else { return }
         let lines = variants.map { $0.polyline }
         let inputs = variants.map { (points: $0.points.map(\.coordinate), travelTime: $0.travelTime) }
+        // Ярлыки — заново, только пока водитель не касался выбора: база
+        // выбора та же, время — с новыми пробками, перекрытия — текущие.
+        let basis = choiceGate.touched || variants.count < 2 ? nil : choiceBasis
+        let events = roadEvents?() ?? []
         Task {
-            let forecasts = await offMain {
-                inputs.map { input in
+            let (forecasts, verdict) = await offMain { () -> ([TrafficForecast.Delay?], RouteChoice.Verdict?) in
+                let forecasts = inputs.map { input in
                     Self.variantDelay(points: input.points, travelTime: input.travelTime, now: now,
                                       live: live, profile: profile, typical: files)
                 }
+                guard let basis, basis.inputs.count == inputs.count else { return (forecasts, nil) }
+                let relabeled = basis.inputs.indices.map { index in
+                    let base = basis.inputs[index]
+                    return RouteChoice.Input(path: base.path, distance: base.distance,
+                                             travelTime: inputs[index].travelTime + (forecasts[index]?.seconds ?? 0),
+                                             cameraIDs: base.cameraIDs, hardManeuvers: base.hardManeuvers,
+                                             closures: RoadEventRules.closures(on: base.path, events: events, now: now),
+                                             personal: base.personal)
+                }
+                return (forecasts, RouteChoice.decide(relabeled, history: basis.history))
             }
             // Пока считали, маршрут могли перестроить или снять.
             guard variants.count == lines.count,
@@ -595,9 +657,22 @@ final class RouteService {
             for index in variants.indices {
                 let forecast = forecasts[index]
                 guard forecast?.seconds != variants[index].trafficDelay
-                        || forecast?.source != variants[index].trafficSource else { continue }
+                        || forecast?.source != variants[index].trafficSource
+                        || forecast?.liveSeconds != variants[index].trafficLiveDelay else { continue }
                 variants[index].trafficDelay = forecast?.seconds
                 variants[index].trafficSource = forecast?.source
+                variants[index].trafficLiveDelay = forecast?.liveSeconds
+            }
+            // Касание могло случиться, пока считали, — проверяем снова.
+            if let verdict, let fresh = choiceGate.relabel(verdict, variantCount: variants.count) {
+                for index in variants.indices where variants[index].assessment != fresh.assessments[index] {
+                    variants[index].assessment = fresh.assessments[index]
+                }
+                if fresh.selected != selectedID {
+                    Log.route.notice("варианты: ярлыки по поздним пробкам, выбран \(fresh.selected, privacy: .public)")
+                    selectedID = fresh.selected
+                    resetProgress()
+                }
             }
             // Ещё не тронулись — прибытие с новым временем варианта сразу, а не
             // с ближайшим фиксом (у стоящего телефона его может не быть минутами).
@@ -832,13 +907,22 @@ final class RouteService {
     }
 
     func selectVariant(_ id: Int) {
+        // Выбор водителя — даже того же варианта: ярлыки больше не двигаются.
+        choiceGate.touch()
         guard id != selectedID, variants.contains(where: { $0.id == id }) else { return }
         selectedID = id
         resetProgress()
     }
 
+    /// Водитель коснулся панели выбора (жест по карточкам) или поехал:
+    /// ярлыки вариантов замерзают до следующего набора (ChoiceRelabelGate).
+    func noteChoiceTouched() {
+        if !choiceGate.touched { choiceGate.touch() }
+    }
+
     func clear() {
         closePaceSample()
+        choiceBasis = nil
         generation += 1   // rebuild в полёте не должен вернуть линию на карту
         resetDetour()
         variants = []
@@ -1811,7 +1895,7 @@ final class RouteService {
 
         // Там же — выбор варианта по своим поездкам: сравнение с сотней
         // треков стоит десятки миллисекунд, главному потоку они не нужны.
-        let (variantCameras, verdict, trafficForecasts, variantSpots) = await offMain {
+        let (variantCameras, verdict, trafficForecasts, variantSpots, choiceInputs) = await offMain {
             let found = inputs.map { variant -> [RouteCamera] in
                 var bbox = MKMapRect.null
                 for p in variant.points { bbox = bbox.union(MKMapRect(origin: p, size: MKMapSize())) }
@@ -1833,7 +1917,7 @@ final class RouteService {
                 return RouteChoice.Personal(direction: mine.plan.direction, trips: mine.plan.trips,
                                             seconds: estimate?.seconds, jamSeconds: estimate?.jamSeconds ?? 0)
             }
-            let choice = RouteChoice.decide(inputs.indices.map { index in
+            let choiceInputs = inputs.indices.map { index in
                 RouteChoice.Input(path: inputs[index].points.map(\.coordinate),
                                   distance: inputs[index].distance,
                                   travelTime: inputs[index].travelTime + (delays[index] ?? 0),
@@ -1844,13 +1928,14 @@ final class RouteService {
                                   closures: RoadEventRules.closures(on: inputs[index].points.map(\.coordinate),
                                                                     events: events, now: eventsNow),
                                   personal: index == mine?.index ? personal : nil)
-            }, history: history)
+            }
+            let choice = RouteChoice.decide(choiceInputs, history: history)
             // Где рисовать камеры на линии — тем же проходом, раз на маршрут.
             let spots = inputs.indices.map { index in
                 CameraOnLine.routeSpots(points: inputs[index].points,
                                         cameras: found[index].map { ($0.camera, $0.distanceAlong) })
             }
-            return (found, choice, forecasts, spots)
+            return (found, choice, forecasts, spots, choiceInputs)
         }
 
         // Второй раз, и это не дублирование проверки у вызывающего: тот
@@ -1884,9 +1969,16 @@ final class RouteService {
                            isOffline: variant.offline,
                            trafficDelay: trafficForecasts[index]?.seconds,
                            trafficSource: trafficForecasts[index]?.source,
+                           trafficLiveDelay: trafficForecasts[index]?.liveSeconds,
+                           paceFactor: paceFactor?(PersonalPace.roadClass(distance: variant.distance,
+                                                                          travelTime: variant.travelTime)) ?? 1,
                            cameraSpots: variantSpots[index])
         }
         selectedID = verdict.recommended
+        // Новый набор: ярлыки могут подвинуться за поздними пробками, пока
+        // водитель не коснулся выбора (ChoiceRelabelGate, решение 28.10).
+        choiceBasis = (choiceInputs, history)
+        choiceGate.shown()
         // Одна строка на маршрут — для разбора реальной поездки: сколько
         // рядов дал OSRM, сколько слой и где остался только край.
         if laneStats.indices.contains(selectedID) {

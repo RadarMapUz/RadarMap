@@ -2212,18 +2212,18 @@
         }
       }
     },
-    "+%@ — обычно в этот час": {
+    "обычно +%@ в это время": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "+%@ — обычно в этот час"
+            "value": "обычно +%@ в это время"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "odatda shu soatda +%@"
+            "value": "odatda shu vaqtda +%@"
           }
         }
       }

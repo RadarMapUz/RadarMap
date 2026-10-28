@@ -89,15 +89,19 @@ struct RoutePanel: View {
                                          : Self.trafficTint(route.trafficDelay ?? 0))
                         .lineLimit(1)
                         .contentTransition(.numericText())
-                    HStack(spacing: 6) {
-                        Text(verbatim: route.distanceText)
-                        Text(verbatim: "·").foregroundStyle(Theme.textTertiary)
-                        Image(systemName: "flag.checkered").font(.rounded(12, .semibold))
-                            .accessibilityHidden(true)
-                        Text(route.arrivalDate, style: .time)
-                        if let note = route.trafficNote {
-                            Text(verbatim: "·").foregroundStyle(Theme.textTertiary)
-                            Text(verbatim: note).foregroundStyle(Self.trafficTint(route.trafficDelay ?? 0))
+                    // Подпись пробок не влезла в строку (SE, «обычно +12 мин в
+                    // это время») — своей строкой ниже, а не многоточием.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 6) {
+                            pathAndArrival
+                            if let note = route.trafficNote {
+                                Text(verbatim: "·").foregroundStyle(Theme.textTertiary)
+                                trafficNoteText(note)
+                            }
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) { pathAndArrival }
+                            if let note = route.trafficNote { trafficNoteText(note) }
                         }
                     }
                     .font(.rounded(12, .semibold).monospacedDigit())
@@ -136,6 +140,19 @@ struct RoutePanel: View {
         .padding(14)
         .liftedBackground(Theme.surface, in: shape)
         .overlay(shape.strokeBorder(Theme.edgePanel, lineWidth: 1))
+    }
+
+    /// «8,2 км · 🏁 15:56» — путь и прибытие (тем же временем, что крупная цифра).
+    @ViewBuilder private var pathAndArrival: some View {
+        Text(verbatim: env.route.distanceText)
+        Text(verbatim: "·").foregroundStyle(Theme.textTertiary)
+        Image(systemName: "flag.checkered").font(.rounded(12, .semibold))
+            .accessibilityHidden(true)
+        Text(env.route.arrivalDate, style: .time)
+    }
+
+    private func trafficNoteText(_ note: String) -> some View {
+        Text(verbatim: note).foregroundStyle(Self.trafficTint(env.route.trafficDelay ?? 0))
     }
 
     /// Строка «Перед дальней дорогой» — видна сразу, а не в «…»: на трассе без
@@ -249,6 +266,10 @@ struct RoutePanel: View {
                 variantChip(variant, labeled: labeled, traffic: traffic)
             }
         }
+        // Любое касание карточек (и жест мимо кнопки) — выбор начался: ярлыки
+        // по поздним пробкам больше не двигаются (ChoiceRelabelGate, 28.10).
+        // Одновременный жест кнопкам не мешает; повтор — без записи.
+        .simultaneousGesture(DragGesture(minimumDistance: 0).onChanged { _ in env.route.noteChoiceTouched() })
     }
 
     /// Карточка варианта (27.D — крупнее и яснее): ярлык, время с пробками
@@ -408,7 +429,8 @@ struct RoutePanel: View {
                 break
             }
         }
-        let extra = variant.expectedTime - fastest.expectedTime
+        // Разница тех чисел, что на карточках (с личным темпом).
+        let extra = variant.shownTime - fastest.shownTime
         if variant.id != fastest.id, extra >= 60 {
             parts.append(String(format: String(localized: "+%@ к быстрому"), Formatting.duration(extra)))
         }

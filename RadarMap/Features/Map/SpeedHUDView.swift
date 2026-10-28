@@ -43,8 +43,8 @@ struct SpeedHUDView: View {
                         .padding(.horizontal, 4)
                 }
 
-                nearestBlock(camera: location.displayNearestCamera,
-                             distance: location.displayDistanceToNearest)
+                // «До камеры» — тот же облик, что у чипа на стоянке (33H3).
+                NearestCameraReadout()
             }
             .padding(.horizontal, secondary ? 12 : 18)
             .padding(.vertical, secondary ? 8 : 12)
@@ -133,110 +133,12 @@ struct SpeedHUDView: View {
         .frame(width: 74)
     }
 
-    @ViewBuilder
-    private func nearestBlock(camera: Camera?, distance: Double?) -> some View {
-        if env.location.isSignalStale {
-            // Фиксов нет: показывать старое расстояние как живое — врать водителю.
-            HStack(spacing: 12) {
-                // Антенна без сигнала — в кружке на месте значка камеры, как
-                // клетка статуса в CarPlay. Перечёркнутая стрелка геопозиции
-                // здесь читалась как перечёркнутый самолёт (владелец, 21.10);
-                // её место — нет ДОСТУПА к геопозиции, другая причина.
-                Image(systemName: env.location.isAuthorized ? Icon.noGPSSignal : Icon.noLocationAccess)
-                    .font(.rounded(16, .semibold))
-                    .foregroundStyle(Theme.warning)
-                    .symbolEffect(.pulse, options: .repeating, isActive: true)
-                    .frame(width: 38, height: 38)
-                    .background(Theme.quietFill, in: Circle())
-                VStack(alignment: .leading, spacing: 1) {
-                    // Без доступа к геопозиции — не «спутники»: причина другая.
-                    // Причину и кнопку уже показывает баннер над картой — здесь
-                    // то, что работает и без позиции (12в A10: до 20.10 карточка
-                    // слово в слово повторяла баннер).
-                    (env.location.isAuthorized ? Text("Нет сигнала GPS") : Text("Оповещений нет"))
-                        .font(.rounded(14, .semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                    (env.location.isAuthorized ? Text("Оповещения ждут спутники") : Text("Камеры на карте видны и без позиции"))
-                        .font(.rounded(11))
-                        .foregroundStyle(Theme.textSecondary)
-                }
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, 6)
-        } else if let camera, let distance {
-            // Тот же радиус, по которому поднимается тревога: с базовым
-            // значок на трассе оставался «далёким» уже после того, как
-            // голос о камере сказал.
-            let near = distance <= env.location.effectiveAlertRadius
-            HStack(spacing: 12) {
-                ZStack {
-                    CameraCoinView(glyph: camera.kind.glyph, fill: proximityTint(distance, camera),
-                                   ink: proximityGlyph(distance, camera), side: 38, shadow: near)
-
-                    // Стрелка направления на камеру относительно курса (вверх = прямо по ходу).
-                    // Мёртвая зона: почти по курсу — строго вверх, без дрожи.
-                    if let rel = env.location.relativeBearingToNearest {
-                        let angle = CameraDirection.arrowAngle(relativeBearing: rel)
-                        Image(systemName: "arrowtriangle.up.fill")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(camera.kind.tint)
-                            .offset(y: -27)
-                            .rotationEffect(.degrees(angle))
-                            .motionAnimation(.easeOut(duration: 0.3), value: Int(angle / 10))
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(Formatting.distance(distance))
-                        .font(.numeral(23, .bold))
-                        .monospacedDigit()
-                        // Красным — только в зоне оповещения и только по живой
-                        // позиции: цифра от грубого фикса на красный не имеет права.
-                        .foregroundStyle(near && !env.location.isPositionCoarse
-                                         ? Theme.danger : Theme.textPrimary)
-                        .liveNumber()
-                    Self.caption(for: camera, location: env.location)
-                        .font(.rounded(11, .medium))
-                        .lineLimit(1)
-                    // Полоска приближения: заполняется к камере и «греется» —
-                    // боковым зрением читается быстрее цифр.
-                    if let progress = env.location.approachProgress {
-                        approachBar(progress)
-                    }
-                }
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } else {
-            HStack(spacing: 10) {
-                Image(systemName: "checkmark.shield.fill")
-                    .font(.rounded(16, .semibold))
-                    .foregroundStyle(Theme.success)
-                Text("Камер рядом нет")
-                    .font(.rounded(15, .medium))
-                    .foregroundStyle(Theme.textSecondary)
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, 6)
-        }
-    }
-
     /// Цвет значка по БЛИЗОСТИ, а не по типу камеры. Красный кружок при камере в
     /// десяти километрах читается как тревога, хотя ехать до неё двадцать минут:
     /// далеко — спокойный серый, на подходе — приглушённый цвет типа, в зоне
     /// оповещения — полный цвет со свечением.
     /// Значок поверх `proximityTint`: на цвете типа — его glyphTint (тёмный на
     /// светлом радаре), на сером «далеко» — контрастный фону темы.
-    private func proximityGlyph(_ distance: Double, _ camera: Camera) -> Color {
-        Self.proximityGlyph(distance, camera, radius: env.location.effectiveAlertRadius)
-    }
-
-    private func proximityTint(_ distance: Double, _ camera: Camera) -> Color {
-        Self.proximityTint(distance, camera, radius: env.location.effectiveAlertRadius)
-    }
-
     /// Одно правило цвета на HUD и на чип камеры в навигации: камера не может
     /// быть «далёкой» в одном месте экрана и «тревожной» в другом.
     static func proximityGlyph(_ distance: Double, _ camera: Camera, radius: Double) -> Color {
@@ -274,22 +176,5 @@ struct SpeedHUDView: View {
             Text(camera.kind.genitivePhrase)
                 .foregroundStyle(Theme.textSecondary)
         }
-    }
-
-    private func approachBar(_ progress: Double) -> some View {
-        // Полоска приближения «греется» по состоянию, а не произвольными
-        // системными цветами: те же три роли, что и везде.
-        let tint = Theme.role(progress > 0.66 ? .alarm : progress > 0.33 ? .attention : .neutral)
-        return Capsule()
-            .fill(Theme.stroke)
-            .overlay(alignment: .leading) {
-                Capsule()
-                    .fill(tint)
-                    .scaleEffect(x: max(progress, 0.04), y: 1, anchor: .leading)
-            }
-            .clipShape(Capsule())
-            .frame(height: 3)
-            .padding(.top, 4)
-            .motionAnimation(.easeOut(duration: 0.3), value: progress)
     }
 }

@@ -39,7 +39,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 # Каталог в вебруте. Свой, как limits/ и routes/: сюда пишет только этот
 # скрипт, и чистить его можно, не задевая чужого. Отдаёт его общий location
 # /radarmap/; отдельный блок nginx (индекс no-cache, данные навсегда) —
-# в nginx-radarmap-location.conf, ставится руками.
+# в nginx-radarmap-location.pending.conf (на сервер не поставлен), ставится руками.
 LANES="lanes"
 INDEX_NAME="lanes_index.json"
 

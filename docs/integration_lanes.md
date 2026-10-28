@@ -16,7 +16,7 @@
 | Публикация | `server/publish_lanes.sh` | сборка здесь, подпись ключом владельца, выкладка, уборка |
 | Очередь разметки | `server/lanes_gaps.py` | какие подходы размечать первыми (по пробкам и/или маршрутам) |
 | Шаблон обхода | `server/lanes/lanes_template.csv` | столбцы и три строки-образца |
-| nginx | блоки `/radarmap/lanes/` в `server/nginx-radarmap-location.conf` | индекс без кэша, данные навсегда; ставится руками (п. 5) |
+| nginx | блоки `/radarmap/lanes/` в `server/nginx-radarmap-location.pending.conf` | индекс без кэша, данные навсегда; ставится руками (п. 5) |
 | Тесты | `server/test_build_lane_overlay.py`, `server/test_lanes_gaps.py` | контракт, каждый дефект, детерминизм, `--check` без ключа, приватность очереди |
 
 Как телефон выбирает ряд перед манёвром: полосы OSRM → запись слоя (в 25 м от точки
@@ -224,16 +224,12 @@ python3 server/build_lane_overlay.py /tmp/lanes.json --report     # тот же 
 
 Блоки `location /radarmap/lanes/` (данные: кэш на год — имя от содержимого) и
 `location = /radarmap/lanes/lanes_index.json` (`no-cache` — откат доезжает сразу) — в
-`server/nginx-radarmap-location.conf`. Без них всё работает через общий `/radarmap/` с
-кэшем 5 минут, так что ставить можно и после первой публикации:
-
-```
-scp server/nginx-radarmap-location.conf root@45.130.148.94:/etc/nginx/snippets/radarmap-location.conf
-ssh root@45.130.148.94 'nginx -t && systemctl reload nginx'
-```
-
-До установки `server/drift.sh` показывает этот файл как расхождение репо и сервера — это
-ожидаемо.
+`server/nginx-radarmap-location.pending.conf`: с 28.10.2026 `nginx-radarmap-location.conf`
+хранит байт в байт то, что стоит на сервере, а не поставленное лежит отдельно. Без этих
+блоков всё работает через общий `/radarmap/` с кэшем 5 минут, так что ставить можно и
+после первой публикации. Порядок установки (вставка перед `location /radarmap/ {`,
+`nginx -t`, снять файл обратно в репо) — в шапке pending-файла; сниппет целиком из репо
+на сервер не копировать — домен чужой, правда о нём та, что на сервере.
 
 ## 6. Что размечать первым — `lanes_gaps.py`
 

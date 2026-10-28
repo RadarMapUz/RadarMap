@@ -14,9 +14,9 @@
 # Откат: каждый заменённый файл остаётся рядом как <имя>.bak-<метка> (метка —
 # в выводе скрипта); вернуть — `bash server/deploy_traffic.sh --rollback <метка>`.
 #
-# nginx: раздел /radarmap/traffic/ из nginx-radarmap-location.conf ставится
-# руками (как и весь сниппет: drift.sh покажет расхождение), затем
-# `nginx -t && systemctl reload nginx`.
+# nginx: раздел /radarmap/traffic/ стоит (nginx-radarmap-location.conf — байт в
+# байт серверный сниппет); новый комментарий к нему ждёт владельца в
+# nginx-radarmap-location.pending.conf. nginx ставится только руками.
 set -euo pipefail
 
 HOST=root@45.130.148.94
@@ -53,6 +53,13 @@ if [ "${1:-}" = "--rollback" ]; then
     echo "✓ Откат на выкладку до $STAMP."
     exit 0
 fi
+
+# Ворота ДО заливки: горячую правку на сервере выкатка не затирает (drift.sh
+# --gate; обход — RADARMAP_ALLOW_DRIFT=1).
+echo "→ Ворота: сервер не разошёлся с репо по файлам этой выкатки…"
+# shellcheck disable=SC2086
+RADARMAP_HOST="$HOST" bash "$DIR/drift.sh" --gate "${STAND_FILES[@]}" osrm/route_bench.py || {
+    echo "✗ Выкатка остановлена до заливки: файлы на сервере не тронуты."; exit 1; }
 
 STAMP=$(date +%Y%m%d%H%M%S)
 echo "→ Локальные тесты сборщика и модели…"

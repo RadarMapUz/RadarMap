@@ -8,13 +8,16 @@
 40 4 2 * * /opt/radarmap/api/update_speed_limits.sh >> /opt/radarmap/osrm/limits.log 2>&1
 # Реестр МВД: только ЗАМЕЧАЕТ изменение (кандидат + update.log), базу сливает владелец — merge_cameras.py. Включено 27.09.2026.
 0 5 * * 1 /usr/bin/python3 /opt/radarmap/api/update_cameras.py >/dev/null 2>&1
-# Пробки: куски следа → OSRM match → /radarmap/traffic/now.json, раз в час typical/<wd|off>-<час>.json (traffic_build.py). Выкладка — deploy_traffic.sh.
-*/2 * * * * /usr/bin/python3 /opt/radarmap/api/traffic_build.py >> /var/log/radarmap-traffic.log 2>&1
+# Порядок строк — как на сервере (crontab -l, 28.10.2026): deploy_traffic.sh и
+# deploy_road_weather.sh переписывают свою строку в конец и стирают её комментарий.
+# drift.sh сверяет только действующие строки, комментарии здесь — документация.
+# Погода на трассах: open-meteo → /radarmap/weather/roads.json (build_road_weather.py, точки — road_weather_points.json). Выкладка — deploy_road_weather.sh.
+*/30 * * * * /usr/bin/python3 /opt/radarmap/api/build_road_weather.py >> /var/log/radarmap-weather.log 2>&1
 # Пробки В МАРШРУТИЗАТОРЕ (32D): стенд MLD radarmap-osrm-mld на 127.0.0.1:8094 — файл скоростей → osrm-customize → подмена слота,
 # только когда файл изменился (server/osrm/traffic_customize.sh, server/osrm/TRAFFIC.md). Прод (8092) не трогает. ВКЛЮЧЕНО 27.10.2026 (решение владельца), nginx ходит в MLD с CH в резерве.
 3-59/5 * * * * /opt/radarmap/osrm-mld/bin/traffic_customize.sh >> /var/log/radarmap-osrm-mld.log 2>&1
-# Погода на трассах: open-meteo → /radarmap/weather/roads.json (build_road_weather.py, точки — road_weather_points.json). Выкладка — deploy_road_weather.sh.
-*/30 * * * * /usr/bin/python3 /opt/radarmap/api/build_road_weather.py >> /var/log/radarmap-weather.log 2>&1
+# Пробки: куски следа → OSRM match → /radarmap/traffic/now.json, раз в час typical/<wd|off>-<час>.json (traffic_build.py). Выкладка — deploy_traffic.sh.
+*/2 * * * * /usr/bin/python3 /opt/radarmap/api/traffic_build.py >> /var/log/radarmap-traffic.log 2>&1
 # Telegram-канал: подтверждённые треноги и посты по городам (telegram_publish.py). ВКЛЮЧИТЬ ПОСЛЕ СОЗДАНИЯ КАНАЛА:
 # завести канал, сделать бота его администратором, положить /opt/radarmap/telegram.conf (token=, chat_id=@канал) и раскомментировать.
 # Без конфига скрипт выходит с кодом 0 — строку можно включить и раньше, он просто молчит.

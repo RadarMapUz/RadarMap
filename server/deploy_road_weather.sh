@@ -7,8 +7,8 @@
 # Перед выкладкой владелец проверяет точки (поле check у каждой — «проверить»):
 # координата на оси трассы, участок верный.
 #
-# nginx: раздел /radarmap/weather/ из nginx-radarmap-location.conf ставится
-# руками (как и весь сниппет: drift.sh покажет расхождение), затем
+# nginx: раздел /radarmap/weather/ лежит в nginx-radarmap-location.pending.conf
+# (на сервер не поставлен, ставит владелец руками), затем
 # `nginx -t && systemctl reload nginx`. Без него файл отдаёт общий
 # /radarmap/ с кэшем на 5 минут — работает, но ETag проверяется реже.
 set -euo pipefail
@@ -24,6 +24,13 @@ BUILD=$API_DIR/build_road_weather.py
 POINTS=$API_DIR/road_weather_points.json
 OUT=/opt/radarmap/www/weather/roads.json
 CRON='*/30 * * * * /usr/bin/python3 /opt/radarmap/api/build_road_weather.py >> /var/log/radarmap-weather.log 2>&1'
+
+# Ворота ДО заливки: горячую правку на сервере выкатка не затирает (drift.sh
+# --gate; обход — RADARMAP_ALLOW_DRIFT=1).
+echo "→ Ворота: сервер не разошёлся с репо по файлам этой выкатки…"
+# shellcheck disable=SC2086
+RADARMAP_HOST="$HOST" bash "$DIR/drift.sh" --gate build_road_weather.py road_weather_points.json || {
+    echo "✗ Выкатка остановлена до заливки: файлы на сервере не тронуты."; exit 1; }
 
 echo "→ Локальные тесты сборщика и проверка списка точек…"
 python3 -W ignore -m unittest discover -s "$DIR" -p 'test_build_road_weather.py' >/dev/null

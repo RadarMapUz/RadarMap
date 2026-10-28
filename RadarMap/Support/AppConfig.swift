@@ -3110,6 +3110,13 @@ nonisolated enum AppConfig {
 
     /// Вариант маршрута ближе этого к перекрытию — «на пути перекрытие».
     static let roadEventRouteMeters = 30.0
+    /// Перекрытие влияет на выбор пути (ярлык «Перекрытие», не первым) только
+    /// со стольких независимых подтверждений (разное устройство И адрес,
+    /// поле `confirmers` в /api/road). Равно `CLOSURE_MIN_CONFIRMERS`
+    /// маршрутизатора (server/traffic_config.py) — сверяет
+    /// test_api.test_phone_closure_threshold_equals_the_router: при одном
+    /// телефон уводил с пути, через который OSRM строил (28.10).
+    static let roadClosureRouteConfirmers = 2
     /// Та же сторона дороги: курс пути против курса отметившего, не больше.
     static let roadEventSameSideDegrees = 45.0
     /// Голос — за столько метров впереди…

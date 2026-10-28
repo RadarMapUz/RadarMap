@@ -8,7 +8,8 @@ Endpoints:
   GET  /api/health         -> {"ok": true}
   GET  /api/mobile         -> {"reports": [{id, lat, lon, created, expires, up, down,
                                             type, confirmed}]}   (без перекрытий и ремонта)
-  GET  /api/road           -> {"reports": [... то же + course]}  (только closure/roadwork)
+  GET  /api/road           -> {"reports": [... то же + course, confirmers]}  (только closure/roadwork;
+                              confirmers — число независимых подтверждений, путь — от 2)
   GET  /api/cng            -> {"stations": [{lat, lon, status, status_age, queue, queue_age, confirmed}]}
   POST /api/cng            {lat, lon, kind: gas|nogas|queue15|queue30|queue60, device} -> {"ok": true}
                            (метан на АГНКС; см. «Метан» ниже)
@@ -1491,10 +1492,18 @@ class Handler(BaseHTTPRequestHandler):
             # confirmed — по разным устройству И адресу (см.
             # confirmed_independently): клиент рисует неподтверждённые
             # полупрозрачными и говорит «возможно, радар», а не «радар».
+            # confirmers (только /api/road, 28.10) — ЧИСЛО независимых
+            # подтверждений: разные адреса среди лайков с чужого устройства и
+            # чужого адреса, тот же счёт, что у confirmed_events маршрутизатора
+            # (traffic_speeds.py). Телефон по нему решает, влияет ли перекрытие
+            # на выбор пути (порог — CLOSURE_MIN_CONFIRMERS = 2, и на телефоне
+            # то же число), а confirmed оставляет отметке и голосу.
             rows = conn.execute(
                 "SELECT r.id, r.lat, r.lon, r.created, r.expires, r.up, r.down, r.type, "
                 "EXISTS(SELECT 1 FROM votes v WHERE v.report_id = r.id AND v.value = 1 "
-                "AND v.device != r.device AND v.ip != '' AND v.ip != r.ip), r.course "
+                "AND v.device != r.device AND v.ip != '' AND v.ip != r.ip), r.course, "
+                "(SELECT COUNT(DISTINCT v.ip) FROM votes v WHERE v.report_id = r.id AND v.value = 1 "
+                "AND v.device != r.device AND v.ip != '' AND v.ip != r.ip) "
                 "FROM reports r WHERE r.active = 1 AND r.expires > ? "
                 "AND (r.type IN (?, ?)) = ?",
                 (now, ROAD_TYPES[0], ROAD_TYPES[1], 1 if road else 0)).fetchall()
@@ -1507,6 +1516,7 @@ class Handler(BaseHTTPRequestHandler):
                     "confirmed": bool(r[8])}
             if road:
                 item["course"] = r[9] if r[9] is not None else -1
+                item["confirmers"] = int(r[10] or 0)
             items.append(item)
         body = json.dumps({"reports": items}).encode()
         # Отпечаток — по СОДЕРЖИМОМУ, а не по времени сборки: пока список

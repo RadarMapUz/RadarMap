@@ -2023,7 +2023,8 @@ final class RouteService {
               !isBuilding, !isRebuilding, detourOffer == nil, !detourSearching,
               let snapshot = trafficSnapshot?(), snapshot.isFresh(now: now),
               DetourAdvisor.shouldSearch(remainingDistance: remainingDistance,
-                                         delayAhead: remainingTrafficDelay, crawl: crawl,
+                                         delayAhead: remainingTrafficDelay,
+                                         currentRemaining: engineRemaining,
                                          sinceLastSearch: detourSearchAt.map { now.timeIntervalSince($0) },
                                          sinceDecline: detourDeclinedAt.map { now.timeIntervalSince($0) },
                                          offersOnRoute: detourOffers) else { return }

@@ -172,7 +172,8 @@ final class TrafficModelTests: XCTestCase {
         XCTAssertNil(JamAhead.detect(edges: p.snapshot.edges, position: north(-300), course: 0))
         XCTAssertEqual(p.snapshot.delay(along: route), 0, "живая мерка объезда по профилю — ноль")
         XCTAssertFalse(DetourAdvisor.shouldSearch(remainingDistance: 10_000, delayAhead: p.snapshot.delay(along: route),
-                                                  crawl: 0, sinceLastSearch: nil, sinceDecline: nil, offersOnRoute: 0),
+                                                  currentRemaining: 10 * 60, sinceLastSearch: nil, sinceDecline: nil,
+                                                  offersOnRoute: 0),
                        "объезд ищется только по живой задержке")
         // А ETA модель получает (тот же профиль, 18:00) — догадка в цифре, не в голосе.
         let eta = TrafficTimeAhead.delay(along: route, baseTime: 120, departure: at(hour: 18), now: at(hour: 18),

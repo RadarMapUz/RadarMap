@@ -2089,11 +2089,12 @@ nonisolated enum AppConfig {
 
     // MARK: - Объезд пробки (DetourAdvisor)
 
-    /// Искать объезд: задержка пробками впереди не меньше этой — сразу; если
-    /// машина ползёт дольше `detourCrawlSeconds` — уже от `detourCrawlDelaySeconds`.
-    static let detourDelayTriggerSeconds: TimeInterval = 300
-    static let detourCrawlSeconds: TimeInterval = 180
-    static let detourCrawlDelaySeconds: TimeInterval = 120
+    /// Искать объезд — только когда предложение достижимо: подтверждённая
+    /// задержка впереди ≥ порога выигрыша (`detourMinSavingSeconds` /
+    /// `detourMinSavingShare`) + `detourSwitchCostSeconds`
+    /// (`DetourAdvisor.searchTrigger`, решение 28.10). Отдельных порогов «5 мин»
+    /// и «2 мин, если ползём 3+ мин» больше нет: ниже достижимости поиск шёл
+    /// впустую каждые 3 минуты всей пробки.
     /// Ползём — ниже этой скорости; «поехали» — быстрее `detourFreeKmh` дольше
     /// `detourCrawlBurstSeconds` (короткий рывок между стоянками — ещё пробка).
     static let detourCrawlKmh: Double = 12
@@ -2106,8 +2107,12 @@ nonisolated enum AppConfig {
     static let detourSearchIntervalSeconds: TimeInterval = 180
     static let detourDeclineQuietSeconds: TimeInterval = 600
     static let detourMaxOffersPerRoute = 3
-    /// Выигрыш: не меньше max(5 мин, 15 % оставшегося) после цены перестроения.
-    static let detourMinSavingSeconds: TimeInterval = 300
+    /// Выигрыш: не меньше max(3 мин, 15 % оставшегося времени по текущему пути)
+    /// после цены перестроения (решение 28.10; было 5 мин — из самой пробки
+    /// объезд редко выигрывал столько: в симуляции 27.10 при +9,4 мин впереди
+    /// лучший вариант давал 176 с, предложение пришло только при +24 мин).
+    /// 15 % держит длинную поездку от перестроений ради пары минут.
+    static let detourMinSavingSeconds: TimeInterval = 180
     static let detourMinSavingShare = 0.15
     static let detourSwitchCostSeconds: TimeInterval = 60
     /// Вариант, лежащий в 30 м от текущего пути на 70 %+ своей длины, —

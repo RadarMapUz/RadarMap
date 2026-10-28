@@ -87,8 +87,8 @@ struct TripLiveBar: View {
 
     /// Маршрут: три числа одной строкой и полоса хода под ними. Цифры не
     /// переносятся никогда — в крайнем случае (SE, крупный шрифт) строка
-    /// ужимается целиком; прибытие — крупное зелёное на том же месте, что и
-    /// без маршрута.
+    /// ужимается целиком; прибытие — крупное на том же месте, что и без
+    /// маршрута.
     private var routeSummary: some View {
         let route = env.route
         return VStack(spacing: 4) {
@@ -100,7 +100,7 @@ struct TripLiveBar: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(route.arrivalDate, style: .time)
                     .font(.numeral(21, .heavy).monospacedDigit())
-                    .foregroundStyle(Theme.success)
+                    .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
                     .fixedSize()
                 Text(Formatting.duration(route.remainingTime))
@@ -129,7 +129,11 @@ struct TripLiveBar: View {
 
     /// С маршрутом — время прибытия крупно и остаток мелко; без — таймер
     /// крупно и «км · камеры» мелко. Одна вёрстка на оба случая: глаз ищет
-    /// крупную зелёную цифру на одном и том же месте.
+    /// крупную цифру на одном и том же месте.
+    ///
+    /// Цвет цифры — `textPrimary`, не `success` (33H3, 28.10): зелёный в
+    /// приложении значит «в лимите, чисто», а время поездки и прибытия —
+    /// нейтральный факт. Зелёный таймер читался оценкой, которой нет.
     @ViewBuilder
     private var summary: some View {
         let route = env.route
@@ -138,7 +142,7 @@ struct TripLiveBar: View {
                 // Прибытие: как в настоящих навигаторах — время на часах + остаток.
                 Text(route.arrivalDate, style: .time)
                     .font(.numeral(22, .heavy).monospacedDigit())
-                    .foregroundStyle(Theme.success)
+                    .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
                 Text(verbatim: "\(Formatting.duration(route.remainingTime)) · \(Formatting.distance(route.remainingDistance))")
                     .font(.rounded(12, .medium).monospacedDigit())
@@ -149,7 +153,7 @@ struct TripLiveBar: View {
                 // прошлым поездкам. Меняется раз в минуту — numericText можно.
                 Text(ghost.arrival, style: .time)
                     .font(.numeral(22, .heavy).monospacedDigit())
-                    .foregroundStyle(Theme.success)
+                    .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
                 Text(verbatim: GhostText.caption(ghost))
                     .font(.rounded(12, .medium).monospacedDigit())
@@ -161,7 +165,7 @@ struct TripLiveBar: View {
                 if let started = env.trip.startedAt {
                     Text(timerInterval: started...Date.distantFuture, countsDown: false)
                         .font(.numeral(22, .heavy).monospacedDigit())
-                        .foregroundStyle(Theme.success)
+                        .foregroundStyle(Theme.textPrimary)
                 }
                 // Эмодзи-камера рендерилась чёрно-белым глифом и выбивалась
                 // из всего интерфейса — здесь тот же SF Symbol, что везде.

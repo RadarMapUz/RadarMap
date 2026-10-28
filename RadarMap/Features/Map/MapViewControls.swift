@@ -97,7 +97,9 @@ struct MapMuteButton: View {
         } label: {
             Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
                 .font(.rounded(17, .semibold))
-                .foregroundStyle(muted ? Theme.danger : Theme.textPrimary)
+                // Охра `warning`, а не красный (33H3): красный на карте — только
+                // камера и штраф; выключенный звук — «внимание», не «опасность».
+                .foregroundStyle(muted ? Theme.warning : Theme.textPrimary)
                 .controlCircle()
         }
         .buttonStyle(PressableStyle())

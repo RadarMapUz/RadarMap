@@ -77,6 +77,17 @@ final class RemoteSyncService {
         Storage.date(.lastSyncCheck)
     }
 
+    /// Пора ли проверить правки модератора или базу (без сети). Спрашивает
+    /// планировщик сети (NetScheduler, 36B).
+    var isCheckDue: Bool {
+        guard state != .checking, state != .downloading else { return false }
+        if let last = Storage.date(.overridesCheck),
+           Date().timeIntervalSince(last) < AppConfig.overridesCheckInterval,
+           let base = lastCheckDate,
+           Date().timeIntervalSince(base) < AppConfig.syncCheckInterval { return false }
+        return true
+    }
+
     /// Тихая автопроверка при запуске — не чаще, чем раз в `syncCheckInterval`.
     func autoCheckIfNeeded() async {
         // Правки модератора идут своим темпом и не зависят от того, вышла ли

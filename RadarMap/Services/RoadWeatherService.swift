@@ -42,8 +42,6 @@ final class RoadWeatherService {
     @ObservationIgnored private(set) var snapshot: RoadWeatherSnapshot?
 
     @ObservationIgnored private var etag: String?
-    @ObservationIgnored private var wanted = false
-    @ObservationIgnored private var loop: Task<Void, Never>?
     @ObservationIgnored private var fetchedAt = Date.distantPast
     @ObservationIgnored private var failedAt = Date.distantPast
     /// О каких перевалах уже сказали в этой поездке (группы точек).
@@ -71,26 +69,17 @@ final class RoadWeatherService {
 
     // MARK: - Приём
 
-    /// Кто-то смотрит или едет — погода нужна. Ставит AppEnvironment.
-    func setWanted(_ wanted: Bool) {
-        guard wanted != self.wanted else { return }
-        self.wanted = wanted
-        loop?.cancel()
-        loop = nil
-        guard wanted else { return }
-        loop = Task { [weak self] in
-            while !Task.isCancelled {
-                guard let self else { return }
-                let wait = self.untilNextFetch(now: Date())
-                if wait <= 0 {
-                    await self.refresh()
-                } else {
-                    // Спим до срока, а не шагами: файл меняется раз в полчаса,
-                    // и будить телефон чаще незачем (ARCHITECTURE.md, правило 8).
-                    await Task.pause(seconds: wait)
-                }
-            }
-        }
+    /// Пора ли за файлом (без сети). Когда смотрят или едут — ходит
+    /// планировщик сети (NetScheduler, 36B), прицепом к такту отметок:
+    /// файл меняется раз в полчаса, своё пробуждение радио ему не нужно.
+    var isFetchDue: Bool { untilNextFetch(now: Date()) <= 0 }
+
+    /// Выключено (настройка или пульт): забыть набор и баннер, без сети.
+    func clearIfDisabled() {
+        guard !isEnabled, snapshot != nil || banner != nil || etag != nil else { return }
+        snapshot = nil
+        etag = nil
+        hideBanner()
     }
 
     /// Сколько ждать до следующей загрузки.

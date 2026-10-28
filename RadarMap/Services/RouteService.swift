@@ -1369,10 +1369,15 @@ final class RouteService {
     /// NetworkMonitor.onOnline тогда не придёт никогда — приблизительный
     /// маршрут без манёвров оставался до конца поездки (ревью 14.2). Зовётся
     /// на уже проснувшемся радио, не чаще `offlineRouteRetrySeconds`.
+    /// Маршрут без сети и срок новой попытки серверного подошёл (без сети) —
+    /// для планировщика сети (NetScheduler, 36B).
+    func isOfflineRetryDue(now: Date = Date()) -> Bool {
+        isOfflineRoute && now.timeIntervalSince(offlineReplaceAttemptAt) >= AppConfig.offlineRouteRetrySeconds
+    }
+
     func retryOfflineRouteIfDue(from coordinate: CLLocationCoordinate2D?, heading: CLLocationDirection?,
                                 cameras: [Camera], now: Date = Date()) {
-        guard isOfflineRoute,
-              now.timeIntervalSince(offlineReplaceAttemptAt) >= AppConfig.offlineRouteRetrySeconds else { return }
+        guard isOfflineRetryDue(now: now) else { return }
         replaceOfflineRoute(from: coordinate, heading: heading, cameras: cameras)
     }
 

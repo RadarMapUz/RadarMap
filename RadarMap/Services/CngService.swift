@@ -8,7 +8,7 @@
 //
 //  Только для машины на метане (Настройки → Поездка → «Машина»): остальным
 //  статусы не нужны, и радио ради них не будится. Опрос — вместе с опросом
-//  отметок водителей (onRadioAwake), не своим таймером. Файл заведений — с
+//  отметок водителей (NetScheduler, 36B), не своим таймером. Файл заведений — с
 //  диска, один раз на клетку за сессию: на каждом светофоре его не читаем и
 //  ради вопроса в поездке не скачиваем (ревью 12б.4).
 //
@@ -75,18 +75,25 @@ final class CngService {
 
     // MARK: - Статусы
 
-    /// Зовётся, когда радио и так проснулось (опрос отметок): не чаще
-    /// `cngPollSeconds`. Выключено — список пуст.
-    func refreshIfDue(now: Date = Date()) {
-        guard isActive else {
-            if !fetched.isEmpty { fetched = [] }
-            etag = nil
-            return
-        }
-        guard now.timeIntervalSince(lastRefreshAt) >= AppConfig.cngPollSeconds,
-              network?.isOnline ?? true else { return }
+    /// Пора ли за статусами (без сети): только машина на метане и не чаще
+    /// `cngPollSeconds`. Ходит планировщик сети (NetScheduler, 36B) — в
+    /// такте отметок, когда радио и так проснулось.
+    func isRefreshDue(now: Date = Date()) -> Bool {
+        isActive && now.timeIntervalSince(lastRefreshAt) >= AppConfig.cngPollSeconds
+    }
+
+    /// Такт планировщика: срок сдвигается на попытку, не на успех — сбой
+    /// не повторяется раньше `cngPollSeconds`.
+    func syncTick(now: Date = Date()) async {
         lastRefreshAt = now
-        Task { await refresh() }
+        await refresh()
+    }
+
+    /// Выключено (не метан или пульт погасил краудсорс) — список пуст.
+    func clearIfInactive() {
+        guard !isActive else { return }
+        if !fetched.isEmpty { fetched = [] }
+        etag = nil
     }
 
     private struct Response: Decodable { let stations: [CngStation] }

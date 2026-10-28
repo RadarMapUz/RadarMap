@@ -64,12 +64,4 @@ final class PollScheduleTests: XCTestCase {
         // когда спрашивать чаще.
         XCTAssertEqual(interval(speed: 110, remote: 90), AppConfig.mobilePollTripFast)
     }
-
-    func testTickIsShortEnoughToNoticeTheCarMovingAgain() {
-        // Заснув на весь интервал, цикл проспал бы, что машина уже полторы
-        // минуты как едет.
-        XCTAssertLessThanOrEqual(PollSchedule.tick(for: AppConfig.mobilePollTripIdle),
-                                 AppConfig.mobilePollTickSeconds)
-        XCTAssertEqual(PollSchedule.tick(for: 5), 5, "короткий интервал не удлиняем тиком")
-    }
 }

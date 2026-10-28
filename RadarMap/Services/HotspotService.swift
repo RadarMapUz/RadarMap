@@ -44,7 +44,7 @@ final class HotspotService {
     /// Действующий список. До первой удачной загрузки — пусто.
     private(set) var spots: [TripodHotspots.Spot] = []
 
-    @ObservationIgnored private let api = APIClient(timeout: 10, resourceTimeout: 30)
+    @ObservationIgnored private let api = APIClient(timeout: 10)
     @ObservationIgnored private var isRefreshing = false
 
     private static var cacheURL: URL {
@@ -63,12 +63,17 @@ final class HotspotService {
         }
     }
 
+    /// Пора ли проверить (без сети) — раз в неделю. Спрашивает планировщик
+    /// сети (NetScheduler, 36B).
+    var isCheckDue: Bool {
+        guard !isRefreshing else { return false }
+        let last = Storage.double(.hotspotsLastCheck)
+        return last <= 0 || Date().timeIntervalSince1970 - last >= AppConfig.hotspotRefreshInterval
+    }
+
     /// Тихая проверка — не чаще раза в неделю.
     func refreshIfNeeded() async {
-        let last = Storage.double(.hotspotsLastCheck)
-        if last > 0, Date().timeIntervalSince1970 - last < AppConfig.hotspotRefreshInterval {
-            return
-        }
+        guard isCheckDue else { return }
         await refresh()
     }
 

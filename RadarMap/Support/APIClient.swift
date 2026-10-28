@@ -16,14 +16,22 @@ nonisolated struct APIClient {
 
     private let session: URLSession
     private let base: URL
+    private let timeout: TimeInterval
 
     /// `timeout` — на запрос; для тяжёлых загрузок (база камер) ставим больше.
+    ///
+    /// Сессия — ОБЩАЯ для всех клиентов (36B, 28.10). До этого каждый сервис
+    /// заводил свою `URLSession`, а у каждой сессии свой пул соединений: такт
+    /// планировщика, в котором отметки, дорога и пробки уходят вместе, открывал
+    /// к одному soulmed.uz три TCP+TLS вместо одного HTTP/2 с тремя потоками —
+    /// и рукопожатия держали радио дольше самих ответов. Таймаут запроса
+    /// ставится на сам запрос (`URLRequest.timeoutInterval`), таймаут ресурса —
+    /// свойство сессии, поэтому всё до минуты делит одну сессию с минутным
+    /// потолком, а загрузки областей (полчаса) живут в своей.
     init(timeout: TimeInterval = 10, resourceTimeout: TimeInterval = 60,
          base: URL = AppConfig.syncBaseURL) {
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = timeout
-        config.timeoutIntervalForResource = resourceTimeout
-        session = URLSession(configuration: config)
+        session = SessionPool.session(resourceTimeout: resourceTimeout)
+        self.timeout = timeout
         self.base = base
     }
 
@@ -115,6 +123,8 @@ nonisolated struct APIClient {
     func download(_ path: String, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
         let watcher = DownloadProgress(progress)
         let (temporary, response): (URL, URLResponse)
+        NetActivity.began(path, at: Date())
+        defer { NetActivity.ended(at: Date()) }
         do {
             (temporary, response) = try await session.download(for: request(path), delegate: watcher)
         } catch {
@@ -205,7 +215,7 @@ nonisolated struct APIClient {
     // MARK: - Построение запроса
 
     private func request(_ path: String) -> URLRequest {
-        URLRequest(url: base.appendingPathComponent(path))
+        URLRequest(url: base.appendingPathComponent(path), timeoutInterval: timeout)
     }
 
     private func jsonRequest(_ path: String, body: [String: Any]) -> URLRequest {
@@ -227,6 +237,9 @@ nonisolated struct APIClient {
     /// нигде (ARCHITECTURE.md, правило 3). Без сети — `notice`: это обычное
     /// состояние в дороге, а не ошибка программы.
     private func transport(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        let started = Date()
+        NetActivity.began(request.url?.path ?? "?", at: started)
+        defer { NetActivity.ended(at: Date()) }
         do {
             return try await session.data(for: request)
         } catch {
@@ -249,6 +262,29 @@ nonisolated struct APIClient {
         guard (200..<300).contains(http.statusCode) else {
             Log.network.error("\(path, privacy: .public): HTTP \(http.statusCode)")
             throw Failure.badStatus(http.statusCode)
+        }
+    }
+}
+
+/// Общие сессии клиентов: одна на потолок времени ресурса. Всё, что
+/// укладывается в минуту, — в одной (один пул соединений, HTTP/2 к одному
+/// серверу), долгие загрузки областей — в своей. Эфемерные: ни кук, ни
+/// дискового кэша, как и прежде.
+private nonisolated enum SessionPool {
+    private static let sessions = OSAllocatedUnfairLock(initialState: [TimeInterval: URLSession]())
+
+    static func session(resourceTimeout: TimeInterval) -> URLSession {
+        let ceiling = max(resourceTimeout, AppConfig.netSharedResourceTimeout)
+        return sessions.withLock { pool in
+            if let ready = pool[ceiling] { return ready }
+            let config = URLSessionConfiguration.ephemeral
+            // Потолок ожидания — у самого запроса (`timeoutInterval`); здесь
+            // только верхняя граница, чтобы она не обрезала его раньше.
+            config.timeoutIntervalForRequest = ceiling
+            config.timeoutIntervalForResource = ceiling
+            let session = URLSession(configuration: config)
+            pool[ceiling] = session
+            return session
         }
     }
 }

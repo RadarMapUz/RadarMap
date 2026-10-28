@@ -61,6 +61,20 @@ final class TrafficProfileService {
         return profile.flatMap { $0.isFresh(now: now) ? $0 : nil }
     }
 
+    /// Пора ли за файлом (без сети) — для планировщика сети.
+    func isRefreshDue(now: Date = Date()) -> Bool {
+        guard loading == nil, isAllowed(), isOnline() else { return false }
+        guard let checkedAt else { return true }
+        return now.timeIntervalSince(checkedAt) >= AppConfig.trafficProfileRefreshSeconds
+    }
+
+    /// Пробки выключены — забыть профиль, без сети.
+    func clearIfDisallowed() {
+        guard !isAllowed(), profile != nil || etag != nil else { return }
+        profile = nil
+        etag = nil
+    }
+
     /// Обновить, если пора. true — профиль сменился (маршрут пересчитает время).
     @discardableResult
     func refreshIfDue(now: Date = Date()) async -> Bool {
@@ -123,10 +137,12 @@ final class TrafficProfileService {
         usualTask?.cancel()
         usualTask = nil
         guard wanted else { return }
+        // Цикл — только пересчёт слоя на «сейчас», без сети: сам файл
+        // приносит планировщик сети (NetScheduler, 36B) в такте отметок,
+        // а не этот цикл в свою минуту.
         usualTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                await self.refreshIfDue()
                 await self.recomputeUsual()
                 await Task.pause(seconds: AppConfig.usualTrafficRecomputeSeconds)
             }

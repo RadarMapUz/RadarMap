@@ -114,6 +114,9 @@ final class AppEnvironment {
     /// Погода на перевалах (19.2): файл сервера по open-meteo, одна фраза и
     /// баннер о снеге или тумане впереди. На оповещения о камерах не влияет.
     let roadWeather: RoadWeatherService
+    /// Один такт сети на всё приложение (36B): службы своих таймеров не
+    /// держат, план — SyncPlan, исполнитель — здесь.
+    @ObservationIgnored let netScheduler = NetScheduler()
     /// Обслуживание машины (18): пробег, масло, документы — только на телефоне.
     let maintenance: MaintenanceService
     /// Пришедшие штрафы (этап 17): только на телефоне; сверка и сроки — AppEnvironment+Fines.
@@ -160,11 +163,9 @@ final class AppEnvironment {
         carLink.setCarPlay(connected)
         refreshTrafficWanted()
         updateThemeClock()
-        if connected {
-            mobile.startPolling()
-        } else if !isPhoneSceneActive, !mobile.isTripActive {
-            mobile.stopPolling()
-        }
+        // Машина — экран: такт сети идёт и без телефонной сцены.
+        netScheduler.modeChanged()
+        if connected { netScheduler.kick(.activation) }
     }
 
     /// Тема интерфейса: днём светлая, ночью тёмная — по той же настройке, что
@@ -231,36 +232,118 @@ final class AppEnvironment {
     }
 
     /// Пробки нужны, пока на них кто-то смотрит: экран телефона, машина или
-    /// идущая поездка (её время в пути).
+    /// идущая поездка (её время в пути). Сами загрузки (живые пробки, профиль,
+    /// погода на перевалах) ведёт планировщик сети по режиму; здесь — только
+    /// пересчёт слоя «обычно в это время» (33G), без сети.
     func refreshTrafficWanted() {
         let wanted = isPhoneSceneActive || isCarPlayConnected || location.isTripActive
-        traffic.setWanted(wanted)
-        // Слой «обычно в это время» (33G) — по тому же правилу, что живые.
         trafficProfile.setWanted(wanted)
-        // Погода на перевалах — по тому же правилу: экран, машина или поездка.
-        roadWeather.setWanted(wanted)
     }
 
-    /// Ритм сети в поездке (NetworkRhythm): пробки — одним тактом и вместе с
-    /// опросом отметок, реже при погашенном экране без маршрута.
-    private func wireNetworkRhythm() {
-        traffic.intervalProvider = { [weak self] in
-            guard let self else { return AppConfig.trafficRefreshInterval }
-            return NetworkRhythm.trafficInterval(screenOn: self.isPhoneSceneActive || self.isCarPlayConnected,
-                                                 hasRoute: self.route.isActive)
+    /// Планировщик сети (36B): кто сейчас смотрит и едет, что выключено, и
+    /// какие службы ходят в его окна. До 28.10 у каждой службы был свой
+    /// таймер, а пробки и метан «примыкали» к опросу отметок (NetworkRhythm).
+    private func wireNetScheduler() {
+        netScheduler.situation = { [weak self] in
+            guard let self else { return SyncPlan.Situation(now: Date(), mode: .idle) }
+            let screenOn = self.isPhoneSceneActive || self.isCarPlayConnected
+            let mode: SyncPlan.Mode = self.location.isTripActive ? .trip : (screenOn ? .watching : .idle)
+            var disabled: Set<SyncPlan.Job> = []
+            if !self.mobile.isEnabled { disabled.insert(.mobile) }
+            if !self.traffic.isSyncWanted { disabled.insert(.traffic) }
+            if !self.roadWeather.isEnabled { disabled.insert(.roadWeather) }
+            if !self.traffic.isShown { disabled.insert(.trafficProfile) }
+            if !self.cng.isActive { disabled.insert(.cng) }
+            if !self.settings.tripodHints { disabled.insert(.hotspots) }
+            if !self.config.current.isLaneOverlayEnabled { disabled.insert(.laneOverlay) }
+            if !self.config.current.isEtaShareEnabled { disabled.insert(.etaShare) }
+            return SyncPlan.Situation(
+                now: Date(), mode: mode, isOnline: self.network.isOnline, screenOn: screenOn,
+                hasRoute: self.route.isActive,
+                // Нагрев, а не итоговая ступень: автоэконом батареи не повод
+                // узнавать о треноге позже (AutoEconomy).
+                speedKmh: self.location.speedKmh, thermal: self.thermal.heatMode,
+                remotePollInterval: self.config.pollInterval, disabled: disabled)
         }
-        // Метан — тем же тактом радио, своим интервалом (только машина на метане).
-        mobile.onRadioAwake = { [weak self, weak traffic, weak cng] in
-            traffic?.radioIsAwake()
-            cng?.refreshIfDue()
-            // Маршрут без сети — серверным, даже если связь для системы не
-            // пропадала и onOnline не придёт (ревью 14.2). Свой срок — внутри.
-            if let self, self.network.isOnline {
-                self.route.retryOfflineRouteIfDue(from: self.location.currentCoordinate,
-                                                  heading: self.location.routeHeading,
-                                                  cameras: self.cameras.cameras)
+        // Срок отметки вышел, а сервер молчит (нет сети, лёг) — снимаем сами:
+        // «тренога впереди» часами после срока хуже, чем её отсутствие (S5).
+        netScheduler.onStep = { [weak mobile] in
+            guard let mobile, mobile.isEnabled else { return }
+            mobile.pruneExpired(now: Date())
+        }
+        let scheduler = netScheduler
+        // Ведущие.
+        scheduler.register(.mobile, .init(run: { [weak mobile] in await mobile?.syncTick() ?? true },
+                                          whenDisabled: { [weak mobile] in mobile?.applyDisabled() }))
+        scheduler.register(.traffic, .init(run: { [weak traffic] in await traffic?.syncTick() ?? true },
+                                           whenDisabled: { [weak traffic] in traffic?.clearIfHidden() }))
+        // Попутные частые.
+        scheduler.register(.roadWeather, .init(run: { [weak roadWeather] in
+            await roadWeather?.refresh()
+            return true
+        }, isDue: { [weak roadWeather] in roadWeather?.isFetchDue ?? false },
+           whenDisabled: { [weak roadWeather] in roadWeather?.clearIfDisabled() }))
+        scheduler.register(.trafficProfile, .init(run: { [weak trafficProfile, weak route] in
+            guard let trafficProfile else { return true }
+            if await trafficProfile.refreshIfDue() {
+                await trafficProfile.recomputeUsual()
+                route?.typicalTrafficArrived()
             }
-        }
+            return true
+        }, isDue: { [weak trafficProfile] in trafficProfile?.isRefreshDue() ?? false },
+           whenDisabled: { [weak trafficProfile] in trafficProfile?.clearIfDisallowed() }))
+        // Метан — только машина на метане, свой интервал.
+        scheduler.register(.cng, .init(run: { [weak cng] in
+            await cng?.syncTick()
+            return true
+        }, isDue: { [weak cng] in cng?.isRefreshDue() ?? false },
+           whenDisabled: { [weak cng] in cng?.clearIfInactive() }))
+        // Маршрут без сети — серверным, даже если связь для системы не
+        // пропадала и onOnline не придёт (ревью 14.2). Свой срок — внутри.
+        scheduler.register(.offlineRoute, .init(run: { [weak self] in
+            guard let self else { return true }
+            self.route.retryOfflineRouteIfDue(from: self.location.currentCoordinate,
+                                              heading: self.location.routeHeading,
+                                              cameras: self.cameras.cameras)
+            return true
+        }, isDue: { [weak route] in route?.isOfflineRetryDue() ?? false }))
+        // «Поделиться прибытием»: новое время — в такте отметок; не ушло —
+        // следующий такт, без паузы (ссылку смотрят прямо сейчас).
+        scheduler.register(.etaShare, .init(run: { [weak etaShare] in
+            await etaShare?.sendUpdateIfDue()
+            return true
+        }, isDue: { [weak etaShare] in etaShare?.isUpdateDue ?? false }, pausesOnFailure: false))
+        // Попутные редкие: подпись, храповик и fail-closed — внутри служб.
+        scheduler.register(.remoteConfig, .init(run: { [weak config] in
+            await config?.refreshIfNeeded()
+            return true
+        }, isDue: { [weak config] in config?.isCheckDue ?? false }))
+        scheduler.register(.cameraDB, .init(run: { [weak sync] in
+            await sync?.autoCheckIfNeeded()
+            return true
+        }, isDue: { [weak sync] in sync?.isCheckDue ?? false }))
+        scheduler.register(.hotspots, .init(run: { [weak hotspots] in
+            await hotspots?.refreshIfNeeded()
+            return true
+        }, isDue: { [weak hotspots] in hotspots?.isCheckDue ?? false },
+           whenDisabled: { [weak hotspots] in hotspots?.clear() }))
+        scheduler.register(.speedLimits, .init(run: { [weak speedLimits] in
+            await speedLimits?.refreshIfDue()
+            return true
+        }, isDue: { [weak speedLimits] in speedLimits?.isServerCheckDue ?? false }))
+        scheduler.register(.roads, .init(run: { [weak roads] in
+            await roads?.refreshIfDue()
+            return true
+        }, isDue: { [weak roads] in roads?.isIndexCheckDue ?? false }))
+        scheduler.register(.laneOverlay, .init(run: { [weak laneOverlay] in
+            await laneOverlay?.refreshIfDue()
+            return true
+        }, isDue: { [weak laneOverlay] in laneOverlay?.isDue() ?? false },
+           whenDisabled: { [weak laneOverlay] in laneOverlay?.dropIfDisallowed() }))
+        scheduler.register(.offlineGraph, .init(run: { [weak offlineRoutes] in
+            await offlineRoutes?.refreshIfDue()
+            return true
+        }, isDue: { [weak offlineRoutes] in offlineRoutes?.isDue() ?? false }))
     }
 
     /// Ставит RootView по scenePhase телефона.
@@ -269,19 +352,16 @@ final class AppEnvironment {
         if !active { cloud.sceneEnteredBackground() }
         refreshTrafficWanted()
         updateThemeClock()
+        // Экран погас, но человек едет — такт продолжается: это и есть
+        // единственный момент, когда чужая отметка чего-то стоит. Без
+        // поездки и машины таймер гаснет (сеть — только на активации).
+        netScheduler.modeChanged()
         if active {
             // Автоэконом: заряд мог упасть, пока экран был погашен (12.3).
             thermal.refreshBattery()
-            mobile.startPolling()
             // Ожидание склейки у близких могло выйти, пока приложение спало.
             family.update()
-            Task { await offlineRoutes.refreshIfDue() }
-            Task { await laneOverlay.refreshIfDue() }
             cloud.sceneBecameActive()
-        } else if !isCarPlayConnected, !mobile.isTripActive {
-            // Экран погас, но человек едет — опрос продолжается: это и есть
-            // единственный момент, когда чужая отметка чего-то стоит.
-            mobile.stopPolling()
         }
     }
 
@@ -385,6 +465,11 @@ final class AppEnvironment {
         location.onTripStateChanged = { [weak self] active in
             guard let self else { return }
             self.mobile.setTripActive(active)
+            // Такт сети — по поездке, а не по экрану; старт — внеочередной
+            // опрос отметок (список получасовой давности пропустил бы ровно
+            // тот случай, ради которого всё это).
+            self.netScheduler.modeChanged()
+            if active { self.netScheduler.kick(.tripStart) }
             // iCloud в поездке молчит; после — отправит с паузой.
             self.cloud.tripStateChanged(active: active)
             if active { self.traffic.tripStarted() } else { self.traffic.tripEnded() }
@@ -411,9 +496,6 @@ final class AppEnvironment {
             // Обслуживание: в поездке поставленное снять, после — машина стоит.
             self.refreshMaintenanceReminders(moment: .parked)
             self.refreshTrafficWanted()
-            if !active, !self.isPhoneSceneActive, !self.isCarPlayConnected {
-                self.mobile.stopPolling()
-            }
         }
         wireCommuteVoice()
         wireCarLink()
@@ -561,8 +643,8 @@ final class AppEnvironment {
             self.route.replaceOfflineRoute(from: self.location.currentCoordinate,
                                            heading: self.location.routeHeading,
                                            cameras: self.cameras.cameras)
-            Task { await self.offlineRoutes.refreshIfDue() }
-            Task { await self.laneOverlay.refreshIfDue() }
+            // Всё, что ждало связи, — одним окном.
+            self.netScheduler.kick(.online)
         }
         traffic.isOnline = { [weak network] in network?.isOnline ?? false }
         // Погода на перевалах: пульт (`features.roadWeather`) и сеть.
@@ -687,11 +769,6 @@ final class AppEnvironment {
         // краудсорса: она отвечает на вопрос «работает ли мой тап вообще».
         // Расписание опроса смотрит на скорость и на нагрев: чаще на трассе,
         // где чужая отметка устаревает за минуту, реже на стоянке и на жаре.
-        mobile.drivingContext = { [weak location, weak thermal] in
-            // Нагрев, а не итоговая ступень: автоэконом батареи не повод
-            // узнавать о треноге позже (AutoEconomy).
-            (speedKmh: location?.speedKmh ?? 0, thermal: thermal?.heatMode ?? .full)
-        }
         mobile.onMyReportConfirmed = { [weak notifications] report in
             let kind = ReportKind(rawValue: report.kind)?.title
                 ?? String(localized: "отметка")
@@ -852,7 +929,7 @@ final class AppEnvironment {
         observeCameraRevision()
         observeAppearanceSetting()
         observeCommuteSettings()
-        wireNetworkRhythm()
+        wireNetScheduler()
         wireCloud()
         startCoreServices()
     }
@@ -1006,30 +1083,24 @@ final class AppEnvironment {
     /// ничего не дублирует.
     func startDrivingServices() {
         refreshLearnedPlaces()
-        // Пульт — первым: он может отменить всё, что запускается следом.
-        Task { await config.refreshIfNeeded() }
         // Досылаем вчерашние счётчики (сегодняшние ещё не полны).
         Task { await usage.flush() }
-        // Тихая проверка обновлений базы (не чаще раза в сутки), не блокирует UI.
-        Task { await sync.autoCheckIfNeeded() }
         // Дослать репорты/фидбек, не ушедшие в прошлый раз (офлайн-очередь).
         Task { await feedback.flushPending() }
         speedLimits.start()   // база лимитов: локально сразу, сервер раз в неделю
-        roads.start()         // дорожные тайлы: индекс локально сразу, сервер раз в неделю
-        // Слой полос: индекс раз в неделю (и из машины — телефонной сцены
-        // может не быть вовсе); в память — первым маршрутом.
-        Task { await laneOverlay.refreshIfDue() }
-        // Горячие точки треног: кэш поднят в init, с сервера — раз в неделю.
-        // Настройка выключена — не тянем вовсе и чистим то, что уже лежит.
-        if settings.tripodHints {
-            Task { await hotspots.refreshIfNeeded() }
-        } else {
-            hotspots.clear()
-        }
+        roads.start()         // дорожные тайлы: индекс локально сразу, сервер раз в трое суток
+        // Горячие точки треног: кэш поднят в init. Настройка выключена — не
+        // тянем вовсе и чистим то, что уже лежит.
+        if !settings.tripodHints { hotspots.clear() }
         metrics.start()       // MetricKit: суточные отчёты о батарее/крашах
+        // Окно активации (36B): пульт первым, дальше разом всё, чей срок
+        // подошёл, — база камер и правки, треноги, слой полос, граф трасс,
+        // профиль пробок. Каждая служба держит СВОЙ срок (6 ч, 3 ч, сутки,
+        // неделя), поэтому частые возвраты в приложение сеть не будят.
+        netScheduler.kick(.activation)
         guard Storage.bool(.hasCompletedOnboarding) else { return }
         location.bootstrap()
-        mobile.startPolling()
+        netScheduler.modeChanged()
         motion.start()
     }
 
@@ -1572,7 +1643,12 @@ final class AppEnvironment {
         // (refreshDepartureEstimates) — тогда этот результат опоздал.
         departureEstimatesGeneration &+= 1
         let generation = departureEstimatesGeneration
+        // Радио всё равно проснулось — лёгкие файлы, чей срок подошёл (пульт,
+        // правки, база, треноги), едут тем же окном. Тяжёлые — нет: фоновое
+        // окно системы короткое (SyncPlan.Job.isHeavy).
+        async let riders: Void = netScheduler.window(.background)
         await traffic.refresh()
+        await riders
         let now = Date()
         let next = await Self.departureEstimates(book: commuteProfiles.book, snapshot: traffic.snapshot,
                                                  accuracy: commuteProfiles.accuracy, now: now)
@@ -1678,11 +1754,8 @@ final class AppEnvironment {
     /// только в холодном старте — а телефон работает неделями без него, и
     /// стоп-кран, включённый вчера, до такого пользователя не доезжал.
     func refreshRemoteIfNeeded() {
-        Task { await config.refreshIfNeeded() }
-        Task { await sync.autoCheckIfNeeded() }
-        if settings.tripodHints {
-            Task { await hotspots.refreshIfNeeded() }
-        }
+        // Одно окно планировщика сети: пульт первым, остальное разом (36B).
+        netScheduler.kick(.activation)
     }
 
     /// Снимок для домашнего виджета: текущая неделя целиком, включая форму по

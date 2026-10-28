@@ -6,7 +6,7 @@
 //
 //  Отправка. Во время поездки принятые фиксы режет TrafficProbes (концы
 //  поездки и места у дома/работы не уходят никогда), готовые куски уходят
-//  пачкой на POST /api/traffic — тем же тактом, что и приём (NetworkRhythm):
+//  пачкой на POST /api/traffic — тем же тактом, что и приём (SyncPlan):
 //  одно пробуждение радио вместо двух. Без сети куски
 //  копятся (не больше `trafficQueueCap`, старые выбрасываются — пробка
 //  часовой давности серверу не нужна). Выключатель — «Помогать с пробками»
@@ -57,15 +57,6 @@ final class TrafficService {
     /// кусков, и они уходили часы спустя как «сейчас» — ложные пробки в
     /// now.json и в чужих ETA (S21, 20.10).
     @ObservationIgnored private var queue: [(piece: TrafficProbes.Piece, releasedAt: Date, endedAt: Date, slow: Bool)] = []
-    @ObservationIgnored private var refreshTask: Task<Void, Never>?
-    /// Последний такт сети (отправка + приём).
-    @ObservationIgnored private var lastTickAt = Date.distantPast
-    /// Интервал такта — ставит AppEnvironment (экран, маршрут).
-    @ObservationIgnored var intervalProvider: (() -> TimeInterval)? {
-        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: intervalProvider,
-                                               "TrafficService.intervalProvider") }
-    }
-    private var interval: TimeInterval { intervalProvider?() ?? AppConfig.trafficRefreshInterval }
     /// Новый живой набор (или его снятие) — маршрут, чьи варианты ещё
     /// выбирают, пересчитывает их время и, до касания, ярлыки (решение 28.10).
     /// Ставит AppEnvironment.
@@ -78,7 +69,6 @@ final class TrafficService {
     /// принял бы его за второго независимого водителя (ревью 19.10).
     @ObservationIgnored private var uploadChain: Task<Void, Never>?
     @ObservationIgnored private var etag: String?
-    @ObservationIgnored private var wanted = false
 
     private let api = APIClient()
     /// Чтение now.json — с корня ленты пробок (DEBUG `-trafficBase`, иначе тот же сервер).
@@ -120,6 +110,18 @@ final class TrafficService {
         #endif
     }
     var isShown: Bool { settings.trafficShown && allowedByConfig() }
+    /// Такт пробок нужен: их показывают или водитель помогает их считать.
+    /// Иначе планировщик в сеть за ними не ходит (SyncPlan.disabled).
+    var isSyncWanted: Bool { isShown || contributes }
+
+    /// Пробки выключены (настройка или пульт) — снять показанное, без сети.
+    func clearIfHidden() {
+        #if DEBUG
+        if demoPinned { return }
+        #endif
+        guard !isShown, snapshot != nil || !lines.isEmpty else { return }
+        apply(nil)
+    }
 
     // MARK: - Поездка (отправка)
 
@@ -197,70 +199,42 @@ final class TrafficService {
 
     // MARK: - Показ (приём)
 
-    /// Кто-то смотрит на карту или едет — пробки нужны. Ставит AppEnvironment
-    /// по экрану телефона, машине и поездке.
-    func setWanted(_ wanted: Bool) {
-        guard wanted != self.wanted else { return }
-        self.wanted = wanted
-        refreshTask?.cancel()
-        refreshTask = nil
-        guard wanted else { return }
-        refreshTask = Task { [weak self] in
-            while !Task.isCancelled {
-                guard let self else { return }
-                if Date().timeIntervalSince(self.lastTickAt) >= self.interval { await self.tick() }
-                // Короткими шагами: интервал зависит от экрана и маршрута, а
-                // такт мог уже пройти вместе с опросом отметок (radioIsAwake).
-                await Task.pause(seconds: AppConfig.trafficLoopStepSeconds)
-            }
-        }
-    }
-
-    /// Такт сети: досылка кусков и свежие пробки — одним пробуждением радио.
-    private func tick() async {
-        lastTickAt = Date()
+    /// Такт планировщика сети (NetScheduler, 36B): досылка кусков и свежие
+    /// пробки — одним пробуждением радио, вместе с отметками водителей.
+    /// Когда — решает SyncPlan (150 с при экране или маршруте, иначе 300).
+    /// true — получилось (или делать нечего), false — сбой: пауза службы.
+    func syncTick() async -> Bool {
         await upload()
-        await refresh()
+        return await refresh()
     }
 
-    /// Радио только что проснулось ради другого запроса (опрос отметок):
-    /// если срок пробок почти подошёл — сходить сейчас, вместе с ним.
-    func radioIsAwake() {
-        guard wanted, NetworkRhythm.joinsAwakeRadio(sinceLast: Date().timeIntervalSince(lastTickAt),
-                                                     interval: interval) else { return }
-        // Срок — сразу, до запуска задачи: иначе цикл в этот промежуток сам
-        // прошёл бы проверку и такт случился бы дважды.
-        lastTickAt = Date()
-        Task {
-            await upload()
-            await refresh()
-        }
-    }
-
-    func refresh() async {
+    @discardableResult
+    func refresh() async -> Bool {
         #if DEBUG
         // Показ -trafficDemo: набор из фикстуры не заменяется сервером и не
         // «протухает» — снимки не зависят ни от сети, ни от часов.
-        if demoPinned { return }
+        if demoPinned { return true }
         #endif
         guard isShown else {
             if snapshot != nil || !lines.isEmpty { apply(nil) }
-            return
+            return true
         }
         if let current = snapshot, !current.isFresh(now: Date()) {
             apply(nil)
         }
-        guard isOnline() else { return }
+        guard isOnline() else { return false }
         do {
-            guard let fresh = try await Self.fetch(api: feed, etag: etag) else { return }   // 304
+            guard let fresh = try await Self.fetch(api: feed, etag: etag) else { return true }   // 304
             etag = fresh.etag
             guard let decoded = fresh.snapshot, decoded.isFresh(now: Date()) else {
                 if snapshot != nil { apply(nil) }
-                return
+                return true
             }
             apply(decoded)
+            return true
         } catch {
             Log.network.notice("пробки не загрузились: \(error.localizedDescription, privacy: .public)")
+            return false
         }
     }
 

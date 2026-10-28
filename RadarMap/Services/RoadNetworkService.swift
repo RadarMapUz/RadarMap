@@ -125,8 +125,27 @@ final class RoadNetworkService {
         excludeFromBackup()
         Task {
             await loadLocalIndex()
+            localLoaded = true
             await refreshIndexIfNeeded()
         }
+    }
+
+    /// Локальный индекс прочитан: до этого «индекса нет» не значит «пора качать».
+    @ObservationIgnored private var localLoaded = false
+    @ObservationIgnored private var indexChecking = false
+
+    /// Пора ли спросить сервер об индексе (без сети): нет индекса или прошли
+    /// трое суток. Спрашивает планировщик сети (NetScheduler, 36B).
+    var isIndexCheckDue: Bool {
+        guard localLoaded, !indexChecking else { return false }
+        let deadline = Date().timeIntervalSince1970 - 3 * 24 * 3600
+        return index == nil || Storage.double(.roadsIndexLastCheck) < deadline
+    }
+
+    /// Проверка индекса по сроку — та же подпись, те же sha.
+    func refreshIfDue() async {
+        guard isIndexCheckDue else { return }
+        await refreshIndexIfNeeded()
     }
 
     /// Тайлы — ВНЕ резервной копии, и это не гигиена, а правило платформы.
@@ -204,6 +223,8 @@ final class RoadNetworkService {
         let lastCheck = Storage.double(.roadsIndexLastCheck)
         let deadline = Date().timeIntervalSince1970 - 3 * 24 * 3600
         guard force || index == nil || lastCheck < deadline else { return }
+        indexChecking = true
+        defer { indexChecking = false }
 
         // Недельная фоновая проверка: сбой сети не критичен, попробуем позже.
         // Новый формат спрашиваем первым; сервер отдаёт оба, пока в проде есть

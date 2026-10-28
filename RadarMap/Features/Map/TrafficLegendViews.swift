@@ -2,7 +2,7 @@
 //  TrafficLegendViews.swift
 //  RadarMap
 //
-//  Понятность пробок (33H): легенда в панели «Карта», лист по касанию линии,
+//  Понятность пробок (33H): лист по касанию линии,
 //  чип балла города в колонке и лист «Пробки» по касанию чипа. Цвета — из
 //  TrafficPalette (те же числа, что у стиля движка), образец линии рисуется
 //  так же, как на карте: кайма, тело и наконечник по ходу.
@@ -62,12 +62,14 @@ struct TrafficArrowShape: Shape {
 
 // MARK: - Легенда
 
-/// Легенда под тумблером «Пробки»: четыре уровня, указатель направления и
-/// «светлее — обычно в это время».
+/// Легенда листа «Пробки» (касание чипа балла; с 28.10 — её единственное
+/// место, из панели «Карта» она ушла): четыре уровня, указатель направления
+/// и «светлее — обычно в это время». Кегли — те же, что у остального листа
+/// (15 подпись, 13 пояснение), а не 12 панели, под которую она рисовалась.
 struct TrafficLegend: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
+            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 10) {
                 GridRow {
                     item(1, Text("Свободно"))
                     item(2, Text("Медленно"))
@@ -78,19 +80,18 @@ struct TrafficLegend: View {
                 }
             }
             row(TrafficSwatch(level: 3, arrow: true), Text("Направление движения"))
-            row(TrafficSwatch(level: 2, usual: true), Text("Светлее и тоньше — обычно в это время"))
+            // Образец «обычно» — зелёный: с 33H2 это почти весь слой.
+            row(TrafficSwatch(level: 1, usual: true), Text("Светлее и тоньше — обычно в это время"))
         }
-        .padding(.leading, 6)
-        .padding(.bottom, 6)
         .accessibilityElement(children: .combine)
     }
 
     private func item(_ level: Int, _ title: Text) -> some View {
-        HStack(spacing: 6) {
-            TrafficSwatch(level: level, width: 20)
+        HStack(spacing: 8) {
+            TrafficSwatch(level: level)
             title
-                .font(.rounded(12))
-                .foregroundStyle(Theme.textSecondary)
+                .font(.rounded(15))
+                .foregroundStyle(Theme.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
         }
@@ -98,14 +99,10 @@ struct TrafficLegend: View {
 
     private func row(_ swatch: TrafficSwatch, _ title: Text) -> some View {
         HStack(spacing: 8) {
-            swatch.frame(width: 30)
-            // Ширина подписи ограничена: панель берёт идеальную ширину
-            // содержимого, и длинная узбекская строка иначе раздвигала бы её
-            // за край — пусть переносится.
+            swatch
             title
-                .font(.rounded(12))
+                .font(.rounded(13))
                 .foregroundStyle(Theme.textSecondary)
-                .frame(width: 168, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -117,29 +114,27 @@ struct TrafficTapSheet: View {
     let tap: TrafficTap
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                TrafficSwatch(level: tap.level, usual: tap.usual, arrow: true, width: 34, thickness: 7)
-                Text(title)
-                    .font(.rounded(20, .semibold))
+        // Общий короткий лист над картой (MapShortSheet): заголовок по
+        // центру, «Готово», высота по содержимому.
+        MapShortSheet(title: "Пробки") {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    TrafficSwatch(level: tap.level, usual: tap.usual, arrow: true, width: 34, thickness: 7)
+                    Text(title)
+                        .font(.rounded(20, .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text(details)
+                    .font(.rounded(17))
                     .foregroundStyle(Theme.textPrimary)
+                Text(tap.usual ? "По прошлым неделям и модели дороги — не данные сейчас"
+                               : "По данным водителей за последние 15 минут")
+                    .font(.rounded(13))
+                    .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text(details)
-                .font(.rounded(17))
-                .foregroundStyle(Theme.textPrimary)
-            Text(tap.usual ? "По прошлым неделям и модели дороги — не данные сейчас"
-                           : "По данным водителей за последние 15 минут")
-                .font(.rounded(13))
-                .foregroundStyle(Theme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Theme.surface)
-        .presentationDetents([.height(190)])
-        .presentationDragIndicator(.visible)
     }
 
     private var title: String {
@@ -180,7 +175,7 @@ struct TrafficScoreChip: View {
     var body: some View {
         Button(action: action) {
             Text(verbatim: "\(score.value)")
-                .font(.rounded(19, .bold))
+                .font(.numeral(17, .bold))
                 .foregroundStyle(Theme.textPrimary)
                 .controlCircle()
                 .overlay {
@@ -201,34 +196,27 @@ struct TrafficLegendSheet: View {
     let score: TrafficCityScore.Score?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Пробки")
-                .font(.rounded(20, .semibold))
-                .foregroundStyle(Theme.textPrimary)
-            if let score {
-                HStack(spacing: 14) {
-                    TrafficScoreChip(score: score) {}
-                        .allowsHitTesting(false)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Балл города")
-                            .font(.rounded(15, .semibold))
-                            .foregroundStyle(Theme.textPrimary)
-                        Text(score.usual ? "Обычно в это время" : "По данным водителей сейчас")
-                            .font(.rounded(13))
-                            .foregroundStyle(Theme.textSecondary)
-                        Text("0 — свободно, 10 — город стоит")
-                            .font(.rounded(13))
-                            .foregroundStyle(Theme.textSecondary)
+        MapShortSheet(title: "Пробки") {
+            VStack(alignment: .leading, spacing: 16) {
+                if let score {
+                    HStack(spacing: 14) {
+                        TrafficScoreChip(score: score) {}
+                            .allowsHitTesting(false)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Балл города")
+                                .font(.rounded(15, .semibold))
+                                .foregroundStyle(Theme.textPrimary)
+                            Text(score.usual ? "Обычно в это время" : "По данным водителей сейчас")
+                                .font(.rounded(13))
+                                .foregroundStyle(Theme.textSecondary)
+                            Text("0 — свободно, 10 — город стоит")
+                                .font(.rounded(13))
+                                .foregroundStyle(Theme.textSecondary)
+                        }
                     }
                 }
+                TrafficLegend()
             }
-            TrafficLegend()
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Theme.surface)
-        .presentationDetents([.height(score == nil ? 230 : 320)])
-        .presentationDragIndicator(.visible)
     }
 }

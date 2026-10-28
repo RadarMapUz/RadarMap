@@ -15,59 +15,15 @@
 import SwiftUI
 
 struct IdleCameraChip: View {
-    @Environment(AppEnvironment.self) private var env
-
     var body: some View {
-        let location = env.location
-        content(location)
-            .padding(.leading, 7).padding(.trailing, 14)
+        // Содержимое — тот же NearestCameraReadout, что в HUD поездки (33H3):
+        // одна цифра, одна подпись, красный и полоса — только в оповещении.
+        NearestCameraReadout(compact: true)
+            .padding(.leading, 7).padding(.trailing, 14).padding(.vertical, 5)
             .frame(minHeight: Theme.controlSize)
             .liftedBackground(Theme.surface, in: Capsule())
             .overlay(Capsule().strokeBorder(Theme.edgePanel, lineWidth: 1))
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
-    }
-
-    @ViewBuilder
-    private func content(_ location: LocationService) -> some View {
-        if location.isSignalStale {
-            HStack(spacing: 8) {
-                Image(systemName: location.isAuthorized ? Icon.noGPSSignal : Icon.noLocationAccess)
-                    .font(.rounded(13, .semibold))
-                    .foregroundStyle(Theme.warning)
-                    .frame(width: 30, height: 30)
-                    .background(Theme.quietFill, in: Circle())
-                (location.isAuthorized ? Text("Нет сигнала GPS") : Text("Оповещений нет"))
-                    .font(.rounded(15, .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(1)
-            }
-        } else if let camera = location.displayNearestCamera,
-                  let distance = location.displayDistanceToNearest {
-            let radius = location.effectiveAlertRadius
-            HStack(spacing: 8) {
-                CameraCoinView(glyph: camera.kind.glyph,
-                               fill: SpeedHUDView.proximityTint(distance, camera, radius: radius),
-                               ink: SpeedHUDView.proximityGlyph(distance, camera, radius: radius),
-                               side: 30, shadow: false)
-                Text(verbatim: Formatting.distance(distance))
-                    .font(.numeral(17, .bold))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.textPrimary)
-                    .liveNumber()
-                SpeedHUDView.caption(for: camera, location: location)
-                    .font(.rounded(12, .medium))
-                    .lineLimit(1)
-            }
-        } else {
-            HStack(spacing: 6) {
-                Image(systemName: "checkmark.shield.fill")
-                    .foregroundStyle(Theme.success)
-                Text("Камер рядом нет")
-                    .foregroundStyle(Theme.textSecondary)
-            }
-            .font(.rounded(12, .semibold))
-            .padding(.leading, 7)
-        }
     }
 }

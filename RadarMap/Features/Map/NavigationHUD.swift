@@ -90,7 +90,7 @@ struct TripCameraChip: View {
                                                      isSignalStale: location.isSignalStale)
         ZStack {
             if shown {
-                chip(camera: camera, distance: distance)
+                chip
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
@@ -98,43 +98,13 @@ struct TripCameraChip: View {
         .motionAnimation(Motion.standard, value: shown)
     }
 
-    private func chip(camera: Camera?, distance: Double?) -> some View {
-        let location = env.location
-        return HStack(spacing: 8) {
-            if location.isSignalStale {
-                // Фиксов нет: старое расстояние как живое — враньё водителю.
-                Image(systemName: location.isAuthorized ? Icon.noGPSSignal : Icon.noLocationAccess)
-                    .font(.rounded(13, .semibold))
-                    .foregroundStyle(Theme.warning)
-                    .frame(width: 28, height: 28)
-                    .background(Theme.quietFill, in: Circle())
-                Text(location.isAuthorized ? "Нет сигнала GPS" : "Нет доступа к геопозиции")
-                    .font(.rounded(14, .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(1)
-            } else if let camera, let distance {
-                let radius = location.effectiveAlertRadius
-                let near = distance <= radius
-                CameraCoinView(glyph: camera.kind.glyph,
-                               fill: SpeedHUDView.proximityTint(distance, camera, radius: radius),
-                               ink: SpeedHUDView.proximityGlyph(distance, camera, radius: radius), side: 28)
-                Text(Formatting.distance(distance))
-                    .font(.rounded(17, .bold))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .fixedSize()
-                    .foregroundStyle(near && !location.isPositionCoarse
-                                     ? Theme.danger : Theme.textPrimary)
-                    .liveNumber()
-                SpeedHUDView.caption(for: camera, location: location)
-                    .font(.rounded(12, .medium))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-        }
-        .padding(.leading, 6).padding(.trailing, 14).padding(.vertical, 6)
-        .liftedBackground(Theme.surface, in: Capsule())
-        .overlay(Capsule().strokeBorder(Theme.stroke, lineWidth: 1))
-        .accessibilityElement(children: .combine)
+    /// Тот же облик «до камеры» и та же капсула, что у чипа на стоянке (33H3).
+    private var chip: some View {
+        NearestCameraReadout(compact: true)
+            .padding(.leading, 7).padding(.trailing, 14).padding(.vertical, 5)
+            .frame(minHeight: Theme.controlSize)
+            .liftedBackground(Theme.surface, in: Capsule())
+            .overlay(Capsule().strokeBorder(Theme.edgePanel, lineWidth: 1))
+            .accessibilityElement(children: .combine)
     }
 }

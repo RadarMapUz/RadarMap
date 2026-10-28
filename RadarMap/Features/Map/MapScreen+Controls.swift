@@ -32,21 +32,31 @@ extension MapScreen {
         .motionAnimation(Motion.standard, value: mode.keepsMapToolsInMenu)
     }
 
-    /// В поездке — три кнопки: звук, ориентация, «…». Слои, 3D, «весь
+    /// В поездке — три кнопки: «…», ориентация, звук. Слои, 3D, «весь
     /// маршрут» и разделы приложения — пунктами меню. Семь кругов столбиком закрывали
     /// треть карты справа, а на ходу из них нажимают звук и «к машине»
     /// (docs/plan_drive_ux_2026-10-07.md, п. 4). Компас — только когда карту
     /// повернули руками.
+    ///
+    /// Порядок — ТОТ ЖЕ, что в покое (33H3, 28.10): сверху «Слои» в покое и
+    /// «…» в поездке на том же месте, потом «к себе», то, что по делу, и звук
+    /// внизу. Раньше звук в поездке прыгал наверх, а «к себе» — на второе
+    /// место с третьего: рука искала кнопку там, где её только что не было.
     @ViewBuilder var tripControls: some View {
         let extras = TripScreenLayout.columnExtras(
             slots: columnSlots, fixed: AppConfig.mapColumnFixedButtons,
             candidates: (map.isRotated ? [(.compass, 1)] : []) + trafficScoreCandidate)
-        MapMuteButton()
+        tripMenu
         orientationControl
         if extras.contains(.compass) {
             MapCompassButton(map: map)
         }
         if extras.contains(.trafficScore) { trafficScoreChip }
+        MapMuteButton()
+    }
+
+    /// «…» поездки — на месте «Слоёв».
+    @ViewBuilder var tripMenu: some View {
         // Семь функций, до которых в поездке было не добраться.
         //
         // Поиск, «Рядом», «Итоги», «Добавить камеру» и Настройки живут в

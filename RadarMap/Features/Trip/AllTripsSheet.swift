@@ -106,8 +106,11 @@ struct AllTripsSheet: View {
                     Button {
                         withMotion(Motion.standard) { onlyFined.toggle() }
                     } label: {
-                        Image(systemName: onlyFined ? "exclamationmark.triangle.fill"
-                                                    : "exclamationmark.triangle")
+                        // Фильтр словом (34), как на карте проездов.
+                        Label("Превышения", systemImage: onlyFined
+                              ? "line.3.horizontal.decrease.circle.fill"
+                              : "line.3.horizontal.decrease.circle")
+                            .labelStyle(.titleAndIcon)
                     }
                     .accessibilityLabel(Text("Только с превышениями"))
                     .accessibilityAddTraits(onlyFined ? .isSelected : [])
@@ -145,7 +148,7 @@ struct AllTripsSheet: View {
     }
 
     private var retentionNote: some View {
-        Label(String(localized: "Поездки хранятся на телефоне без срока, треки — неделю. Итоги за месяцы считаются по дневным сводкам."),
+        Label(String(localized: "Поездки хранятся на телефоне без срока, треки — неделю: у старых поездок остаются итоги без карты."),
               systemImage: "internaldrive")
             .font(.rounded(11))
             .foregroundStyle(Theme.textTertiary)

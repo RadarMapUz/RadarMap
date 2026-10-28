@@ -26,11 +26,11 @@ extension TripStatsSheet {
                 mergeSuggestionCard(pair)
             }
             TripHistorySection(
-                title: period.tripsTitle,
+                title: "",
                 records: shown,
                 selectedID: mapSelection?.id,
                 onShowOnMap: { showOnMap($0, proxy: proxy) },
-                onOpenDetail: { selectedRecord = $0 },
+                onOpenDetail: { path.append(.trip($0.id)) },
                 onRepeat: onRoute.map { route in
                     { coord, name in dismiss(); route(coord, name) }
                 },
@@ -89,7 +89,7 @@ extension TripStatsSheet {
         let gap = pair.next.startedAt.timeIntervalSince(pair.previous.endedAt)
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                IconBadge(symbol: "arrow.triangle.merge", tint: Theme.accent, size: 34)
+                IconBadge(symbol: "arrow.triangle.merge", tint: Theme.textSecondary, size: 30)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Похоже, это одна поездка")
                         .font(.rounded(14, .bold))

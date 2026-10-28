@@ -2,9 +2,10 @@
 //  CommuteCard.swift
 //  RadarMap
 //
-//  «Дорога на работу» и «Дорога домой» в Итогах — ответ на вопрос, который
+//  Шапка листа «Дорога на работу / домой» — ответ на вопрос, который
 //  водитель задаёт себе каждый день: сколько я сегодня ехал, это нормально,
-//  и когда надо было выехать.
+//  и когда надо было выехать. В самих «Итогах» дорога — строкой раздела
+//  (34b), сюда ведёт тап по ней.
 //
 //  Карточка говорит словами, а не средними: «Вчера · 8:22 → 9:17 · 55 мин ·
 //  на 12 мин дольше обычного», «Обычно 44 мин, выезд около 8:20», и совет —
@@ -16,18 +17,11 @@ import SwiftUI
 
 struct CommuteCard: View {
     let summary: Commute.Summary
-    /// Стрелка «подробнее» — только там, где карточка ведёт дальше (Итоги).
-    var showsChevron = true
     /// Дорога этого направления за 30 дней в сумах (EnergySplit — по
     /// поездкам, с зарядом дня); nil — суммы нет.
     var monthlyCost: Double? = nil
     /// «Обычно ~35 мин (по водителям)» (8.8.16) — пока своего «обычно» нет.
     var crowdUsual: TimeInterval? = nil
-    /// Шапка листа «Дорога домой» (34): название уже в навбаре, а «обычно» —
-    /// пунктиром на графике под карточкой. Владелец, 27.10: «Дорога домой»
-    /// дважды и «обычно 53 мин» трижды на одном экране — одно и то же разными
-    /// словами. Здесь карточка — только про последнюю поездку.
-    var inDetail = false
 
     var body: some View {
         let monthly = monthlyCost
@@ -51,16 +45,9 @@ struct CommuteCard: View {
                     }
                 }
             }
-            if inDetail, summary.usual != nil {
-                // «Обычно» — подписанная линия графика ниже; здесь только поездка.
-            } else if let usual = summary.usual {
-                // Фразой, а не сеткой цифр: «Обычно 39 мин, выезжаете около
-                // 18:37» читается за один взгляд, три подписанные клетки — за три.
-                Text(Self.usualLine(usual: usual, departure: summary.usualDepartureMinute))
-                    .font(.rounded(13))
-                    .foregroundStyle(Theme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
+            // «Обычно» есть — оно подписано пунктиром графика под карточкой
+            // (34: «обычно 53 мин» стояло на экране трижды); нет — подсказка.
+            if summary.usual == nil {
                 if let crowdUsual {
                     // Чужое «обычно» — с названным источником, своё его сменит.
                     Text(Self.crowdLine(crowdUsual))
@@ -126,37 +113,13 @@ struct CommuteCard: View {
         return parts.joined(separator: ". ")
     }
 
-    @ViewBuilder private var header: some View {
-        if inDetail {
-            Text(Self.whenLine(summary.last))
-                .font(.rounded(13))
-                .foregroundStyle(Theme.textSecondary)
-                .monospacedDigit()
-        } else {
-            titleHeader
-        }
-    }
-
-    private var titleHeader: some View {
-        HStack(spacing: 12) {
-            IconBadge(symbol: summary.direction.symbol,
-                      tint: summary.direction == .toWork ? Theme.Icon.work : Theme.Icon.home)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(summary.direction.title)
-                    .font(.rounded(15, .bold))
-                    .foregroundStyle(Theme.textPrimary)
-                Text(Self.whenLine(summary.last))
-                    .font(.rounded(12))
-                    .foregroundStyle(Theme.textSecondary)
-                    .monospacedDigit()
-            }
-            Spacer(minLength: 0)
-            if showsChevron {
-                Image(systemName: "chevron.right")
-                    .font(.rounded(13, .semibold))
-                    .foregroundStyle(Theme.textTertiary)
-            }
-        }
+    /// Шапка листа «Дорога домой»: название — в навбаре, здесь только когда
+    /// (34: «Дорога домой» стояло дважды подряд).
+    private var header: some View {
+        Text(Self.whenLine(summary.last))
+            .font(.rounded(13))
+            .foregroundStyle(Theme.textSecondary)
+            .monospacedDigit()
     }
 
     /// «Обычно 39 мин, выезжаете около 18:37». `spoken` — для VoiceOver:
@@ -228,7 +191,7 @@ struct ArrivalTargetQuestion: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
-                IconBadge(symbol: "clock.fill", tint: Theme.Icon.work)
+                IconBadge(symbol: "clock.fill", tint: Theme.textSecondary, size: 30)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(String(format: String(localized: "Вам нужно быть на работе к %@?"),
                                 Formatting.clock(minuteOfDay: minute)))
@@ -258,7 +221,7 @@ struct DepartureReminderOffer: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
-                IconBadge(symbol: "bell.fill", tint: Theme.Icon.time)
+                IconBadge(symbol: "bell.fill", tint: Theme.textSecondary, size: 30)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Напоминать, когда выезжать?")
                         .font(.rounded(15, .bold))
@@ -315,7 +278,7 @@ struct CommuteAdvice: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            IconBadge(symbol: "lightbulb.fill", tint: Theme.Icon.rating, size: 28)
+            IconBadge(symbol: "lightbulb.fill", tint: Theme.textSecondary, size: 30)
             // Число не отрывается от «мин» (unbreakable): «на 7 / мин» через
             // перенос читалось как две разные вещи.
             Text(Self.line(best))

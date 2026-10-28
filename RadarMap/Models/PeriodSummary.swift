@@ -136,15 +136,6 @@ nonisolated enum StatsPeriod: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Заголовок списка поездок — список подчиняется тому же фильтру.
-    var tripsTitle: String {
-        switch self {
-        case .day:   return String(localized: "Поездки за день")
-        case .week:  return String(localized: "Поездки за неделю")
-        case .month: return String(localized: "Поездки за месяц")
-        }
-    }
-
     /// Человеческая подпись конкретного окна: «сегодня», «5–11 августа»,
     /// «август 2026». Без неё стрелки листания бессмысленны — непонятно, где ты.
     /// Месяцы и дни недели — на языке приложения (`locale`), не системы.

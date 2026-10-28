@@ -54,9 +54,21 @@ struct CommuteDetailSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    CommuteCard(summary: summary, showsChevron: false,
+                    CommuteCard(summary: summary,
                                 monthlyCost: env.energyLedger.monthly(summary.trips, now: Date()),
-                                crowdUsual: env.crowdUsual(summary.direction), inDetail: true)
+                                crowdUsual: env.crowdUsual(summary.direction))
+                    // Вопросы о распорядке (быть к 9:00? напоминать?) — здесь,
+                    // у самой дороги на работу, а не лентой в «Итогах» (34b).
+                    if summary.direction == .toWork, let minute = env.workTargetSuggestion,
+                       env.settings.workArrivalTarget == nil, !env.settings.workTargetAsked {
+                        ArrivalTargetQuestion(minute: minute) { yes in
+                            env.settings.workTargetAsked = true
+                            if yes { env.settings.workArrivalTarget = ArrivalTarget(minute: minute) }
+                        }
+                    } else if summary.direction == .toWork, env.departureReminderAvailable,
+                              !env.settings.departureReminders, !env.settings.departureRemindersAsked {
+                        DepartureReminderOffer { env.setDepartureReminders($0) }
+                    }
                     chartCard
                     if let accuracy = env.commuteProfiles.accuracyStats(summary.direction) {
                         CommuteAccuracyCard(stats: accuracy)
@@ -90,7 +102,7 @@ struct CommuteDetailSheet: View {
         if let places = losses[summary.last.id], !places.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
-                    IconBadge(symbol: "hourglass", tint: Theme.warning, size: 28)
+                    IconBadge(symbol: "hourglass", tint: Theme.textSecondary, size: 30)
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Где ушло время")
                             .font(.rounded(14, .bold))
@@ -189,7 +201,7 @@ struct CommuteDetailSheet: View {
         let shown = summary.trips.enumerated().filter { !outside.contains($0.offset) }.map(\.element)
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                IconBadge(symbol: "clock.fill", tint: Theme.Icon.time, size: 28)
+                IconBadge(symbol: "clock.fill", tint: Theme.textSecondary, size: 30)
                 Text("Когда выезжали и сколько ехали")
                     .font(.rounded(14, .bold))
                     .foregroundStyle(Theme.textPrimary)

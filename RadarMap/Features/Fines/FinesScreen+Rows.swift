@@ -2,8 +2,9 @@
 //  FinesScreen+Rows.swift
 //  RadarMap
 //
-//  Строки экрана «Штрафы»: пришедший штраф (срок, сверка, «Оплатить»),
-//  проезд, отмеченный «пришёл» без постановления, и ожидаемый проезд.
+//  Строки вкладки «Пришли» экрана «Штрафы»: пришедший штраф (срок, сверка,
+//  «Оплатить») и проезд, отмеченный «пришёл» без постановления. Строки
+//  «Могут прийти» — в FinesScreen+Possible.swift.
 //  Кнопки — РЯДОМ с кнопкой строки, не внутри: вложенные кнопки в SwiftUI
 //  ненадёжны (как в «Возможных штрафах»).
 //
@@ -21,8 +22,10 @@ extension FinesScreen {
                 entry = FineEntryRequest(editing: fine)
             } label: {
                 HStack(alignment: .top, spacing: 12) {
-                    IconBadge(symbol: fine.isPaid ? "checkmark.seal.fill" : "doc.text.fill",
-                              tint: fine.isPaid ? Theme.success : Theme.Icon.money, size: 34)
+                    // Штраф — тем же значком, что везде в «Итогах» (Icon.fines);
+                    // оплаченный — зелёной печатью, неоплаченный — красным.
+                    IconBadge(symbol: fine.isPaid ? "checkmark.seal.fill" : Icon.fines,
+                              tint: fine.isPaid ? Theme.success : Theme.danger, size: 30)
                     VStack(alignment: .leading, spacing: 2) {
                         // Три строки (34): «Toshkent sh., Chilonzor tu…» на SE
                         // обрезало адрес до района — по нему постановление и узнают.
@@ -171,29 +174,6 @@ extension FinesScreen {
             actionButton(String(localized: "Внести постановление"), symbol: "square.and.pencil",
                          tint: Theme.accent) {
                 entry = FineEntryRequest(pass: item.pass, tripID: item.tripID)
-            }
-        }
-        .statCard(padding: 14, radius: Theme.cornerMedium)
-    }
-
-    /// Ожидаемый: оценка по ступени и та же судьба, что в «Возможных
-    /// штрафах», только «Пришёл» ведёт в форму — с суммой и сроком.
-    func expectedRow(_ item: FineLedger.Expected) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            passHeader(item.pass)
-            Text(String(format: String(localized: "риск ≈ %@"), Formatting.money(item.estimate)))
-                .font(.rounded(14, .bold))
-                .foregroundStyle(Theme.danger)
-            HStack(spacing: 8) {
-                actionButton(String(localized: "Пришёл"), symbol: "envelope.badge", tint: Theme.warning) {
-                    entry = FineEntryRequest(pass: item.pass, tripID: item.tripID)
-                }
-                actionButton(String(localized: "Не пришёл"), symbol: "checkmark.circle", tint: Theme.success) {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    withMotion(Motion.standard) {
-                        env.trip.setFineOutcome(.dismissed, passID: item.pass.id, tripID: item.tripID)
-                    }
-                }
             }
         }
         .statCard(padding: 14, radius: Theme.cornerMedium)

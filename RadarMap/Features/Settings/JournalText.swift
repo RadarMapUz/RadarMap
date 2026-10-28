@@ -88,9 +88,11 @@ enum JournalText {
         return parts.joined(separator: ", ")
     }
 
-    /// «Потрачено 412 000 сум».
+    /// «Куплено на 412 000 сум» — заправки и зарядки по журналу. Не
+    /// «потрачено»: рядом стоит расчёт поездок, и два «расхода» разной
+    /// природы читались одним числом с ошибкой (Н8 плана 34).
     static func spent(_ spending: EnergyJournal.Spending) -> String {
-        String(format: String(localized: "Потрачено %@"), Formatting.money(spending.amount))
+        String(format: String(localized: "Куплено на %@"), Formatting.money(spending.amount))
     }
 
     /// «5,8 л/100 км · 16 кВт·ч/100 км» — расход по факту, топливо за топливом.
@@ -103,7 +105,9 @@ enum JournalText {
             guard mixedPetrol, item.fuel == .petrol else { return EnergyText.per100Short(item.per100, item.fuel) }
             return perTrip100(item.per100)
         }.joined(separator: " · ")
-        return String(format: String(localized: "по факту %@"), values)
+        // «по журналу», а не «по факту» (34): в поездке рядом расход по
+        // паспорту, и источник обязан быть назван.
+        return String(format: String(localized: "по журналу %@"), values)
     }
 
     /// «4,5 л на 100 км пути» — бензин гибрида с розеткой на весь пробег.
@@ -115,9 +119,10 @@ enum JournalText {
     /// Подпись под бензином в журнале у машины с батареей.
     static var wholeTripNote: String { String(localized: "на весь пробег, вместе с электричеством") }
 
-    /// «по расчёту ≈ 380 000 сум» — оценка вторым планом.
+    /// «на поездки ≈ 380 000 сум» — оценка вторым планом: во что обошлись
+    /// километры периода, а не сколько купили.
     static func estimate(_ cost: Double) -> String {
-        String(format: String(localized: "по расчёту ≈ %@"), Formatting.money(FuelCost.rounded(cost)))
+        String(format: String(localized: "на поездки ≈ %@"), Formatting.money(FuelCost.rounded(cost)))
     }
 
     /// Строка записи: «30 л · 12 500 сум за л · 87 240 км · до полного».

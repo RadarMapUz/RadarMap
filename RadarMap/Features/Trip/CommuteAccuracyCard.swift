@@ -16,7 +16,7 @@ struct CommuteAccuracyCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                IconBadge(symbol: "scope", tint: Theme.accent, size: 28)
+                IconBadge(symbol: "scope", tint: Theme.textSecondary, size: 30)
                 Text("Точность прогноза")
                     .font(.rounded(14, .bold))
                     .foregroundStyle(Theme.textPrimary)

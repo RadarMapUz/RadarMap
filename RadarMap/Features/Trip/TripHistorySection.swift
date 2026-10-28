@@ -35,7 +35,11 @@ struct TripHistorySection: View {
         VStack(alignment: .leading, spacing: 10) {
             // Без «Всего: N»: число поездок уже сказано в герое («Поездок: 8»),
             // а обрезанный список называет его на кнопке «Показать все (N)» (6.2).
-            SectionHeader(title: title) { EmptyView() }
+            // Пустой заголовок — на странице «Поездки» (34b): навбар и строка
+            // окна над списком уже говорят «поездки за неделю».
+            if !title.isEmpty {
+                SectionHeader(title: title) { EmptyView() }
+            }
 
             ForEach(TripHistory.dayGroups(records), id: \.day) { group in
                 Text(Formatting.dayTitle(group.day))
@@ -85,9 +89,11 @@ struct TripHistorySection: View {
                             .font(.rounded(15))
                             .foregroundStyle(Theme.textSecondary)
                         if record.camerasPassed > 0 {
+                            // Счётчик проездов — нейтральным (34b): синий в
+                            // «Итогах» значит «своё и маршрут», а не камеру.
                             Label { Text(verbatim: "\(record.camerasPassed)") } icon: { SymbolIcon(Icon.cameras, size: 11) }
                                 .font(.rounded(11, .semibold))
-                                .foregroundStyle(Theme.accent)
+                                .foregroundStyle(Theme.textSecondary)
                                 .labelStyle(.titleAndIcon)
                         }
                     }

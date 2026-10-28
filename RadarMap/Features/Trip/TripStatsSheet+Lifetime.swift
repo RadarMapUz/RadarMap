@@ -12,61 +12,18 @@ import CoreLocation
 
 extension TripStatsSheet {
 
-    // MARK: - Детали периода (свёрнуты по умолчанию)
+    // MARK: - За всё время (страница, 34b)
 
-    /// KPI-плитки, график по дням и «Когда рискуете» — под одной раскрывашкой.
-    /// Главную историю экран рассказывает выше (рейтинг → выводы → деньги →
-    /// карта); эти три блока — справка для любопытных, и развёрнутые всегда они
-    /// уводили список поездок за два экрана прокрутки. Свёрнутые они ещё и
-    /// бесплатны: dailyKm не считается, пока раскрывашку не открыли.
-    /// Пожизненный хвост Итогов одним сворачиваемым блоком.
-    func lifetimeSection(trip: TripStats) -> some View {
-        VStack(spacing: 16) {
-            Button {
-                withMotion(Motion.standard) { lifetimeExpanded.toggle() }
-            } label: {
-                HStack(spacing: 12) {
-                    IconBadge(symbol: "infinity", tint: Theme.accent, size: 30)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("За всё время")
-                            .font(.rounded(15, .semibold))
-                            .foregroundStyle(Theme.textPrimary)
-                        Text("Пожизненные цифры и охват предупреждений")
-                            .font(.rounded(12))
-                            .foregroundStyle(Theme.textTertiary)
-                            .lineLimit(2)
-                    }
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.down")
-                        .font(.rounded(15, .bold))
-                        .foregroundStyle(Theme.textTertiary)
-                        .rotationEffect(.degrees(lifetimeExpanded ? 180 : 0))
-                }
-                .statCard(padding: 14, radius: Theme.cornerMedium)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text(lifetimeExpanded
-                                     ? String(localized: "Скрыть цифры за всё время")
-                                     : String(localized: "Показать цифры за всё время")))
-            if lifetimeExpanded {
-                lifetimeStrip(trip: trip)
-                AlertRecallCard(tally: trip.alertRecall) { showRecallInfo = true }
-                // Достижения — в «Вы и сообщество» (31E).
-            }
-        }
-    }
-
-    /// Пожизненные цифры — единственная честная правда «за всё время»:
-    /// история чистится, а эти счётчики нет. Отсюда же вход во все поездки.
     func lifetimeStrip(trip: TripStats) -> some View {
         let cells: [(String, LocalizedStringKey, String, Color)] = [
+            // Значки — словарь Icon, нейтральные (34b); красная — только
+            // камера, тот же глиф, что на карте.
             ("\(trip.lifetime.trips)", LocalizedStringKey(Formatting.tripsLabel(trip.lifetime.trips)),
-             "car.side.fill", Theme.Icon.distance),
+             Icon.trips, Theme.textSecondary),
             (Formatting.distance(trip.lifetime.distanceMeters), "пройдено",
-             "point.topleft.down.to.point.bottomright.curvepath", Theme.Icon.distance),
-            ("\(trip.lifetime.camerasInLimit)", "камер в лимите", "checkmark.shield.fill", Theme.Icon.rating),
-            ("\(trip.lifetime.bestStreak)", "лучшая серия", "flame.fill", Theme.Icon.streak),
+             "point.topleft.down.to.point.bottomright.curvepath", Theme.textSecondary),
+            ("\(trip.lifetime.camerasInLimit)", "камер в лимите", Icon.cameras, Theme.Icon.camera),
+            ("\(trip.lifetime.bestStreak)", "лучшая серия чистых проездов", "flame.fill", Theme.textSecondary),
         ]
         return VStack(spacing: 12) {
             // Две на две, а не четыре в ряд. Четыре колонки на 390 pt дают по
@@ -92,79 +49,14 @@ extension TripStatsSheet {
                                   tint: cells[3].3)
                 }
             }
-            Button {
-                showAllTrips = true
-            } label: {
-                HStack(spacing: 6) {
-                    Text("Архив поездок")
-                        .font(.rounded(15, .semibold))
-                    Image(systemName: "chevron.right")
-                        .font(.rounded(10, .bold))
-                }
-                .foregroundStyle(Theme.accent)
-                // Строка 15 pt — около 20 pt в высоту; мишень — полные 44.
-                .frame(maxWidth: .infinity, minHeight: Theme.controlSize)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(PressableStyle())
         }
         .statCard(padding: 14)
-    }
-
-    // MARK: - Вклад в общую карту
-
-    /// «Ваши отметки». Единственное место, где автору возвращается результат
-    /// его тапов: сколько поставил и сколько раз их подтвердили другие
-    /// водители (31E: число подтверждений с сервера, ReportImpact). Без этой
-    /// строки краудсорс односторонний — человек отдаёт сигнал и никогда не
-    /// узнаёт, дошёл ли он.
-    ///
-    /// Окно — 30 дней и названо словами: столько живёт UUID отметок, старше
-    /// сервер про нас не знает. «Подтверждений», а не «водителей»: один
-    /// водитель мог подтвердить две ваши отметки.
-    ///
-    /// Ничего не отмечал — строки нет вовсе: нулевой счётчик читается как
-    /// упрёк, а звать в краудсорс должна кнопка на карте, а не Итоги.
-    @ViewBuilder var contributionRow: some View {
-        // Ревизия — чтобы строка перерисовалась, когда сервер ответил.
-        let _ = env.mobile.impactRevision
-        let impact = env.mobile.impactSummary()
-        if impact.reports > 0 {
-            HStack(spacing: 12) {
-                IconBadge(symbol: "person.2.wave.2.fill", tint: Theme.accent, size: 34)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Ваши отметки за 30 дней")
-                        .font(.rounded(13))
-                        .foregroundStyle(Theme.textSecondary)
-                    Text(String(localized: "\(impact.reports) отметок"))
-                        .font(.rounded(15, .semibold).monospacedDigit())
-                        .foregroundStyle(Theme.textPrimary)
-                    Text(impact.confirmations > 0
-                         ? String(localized: "Их подтвердили другие водители: \(impact.confirmations) раз")
-                         : String(localized: "Пока без подтверждений других водителей"))
-                        .font(.rounded(13))
-                        .foregroundStyle(impact.confirmations > 0 ? Theme.success : Theme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
-                if env.mobile.pendingCount > 0 {
-                    // Честно про очередь: иначе «отправлю позже» звучит один
-                    // раз в поездке и больше нигде не подтверждается.
-                    Text(String(format: String(localized: "%lld ждёт связи"),
-                                env.mobile.pendingCount))
-                        .font(.rounded(11, .semibold))
-                        .foregroundStyle(Theme.warning)
-                }
-            }
-            .statCard()
-            .accessibilityElement(children: .combine)
-        }
     }
 
     // MARK: - Достижения
 
     func achievementsSection(trip: TripStats) -> some View {
-        // Без своего заголовка (31E): живёт в блоке «Вы и сообщество».
+        // Без своего заголовка: живёт на странице «За всё время» (34b).
         VStack(alignment: .leading, spacing: 16) {
             // Лента бейджей показывает всё сразу и не отвечает «а что дальше» —
             // ближайшая цель с прогрессом отвечает.
@@ -195,7 +87,7 @@ extension TripStatsSheet {
             selectedBadge = badge
         } label: {
             HStack(spacing: 12) {
-                IconBadge(symbol: badge.icon, tint: Theme.accent, size: 38)
+                IconBadge(symbol: badge.icon, tint: Theme.textSecondary, size: 30)
                 VStack(alignment: .leading, spacing: 5) {
                     // Подпись и название — в столбик: на узбекском «Eng yaqin
                     // maqsad» и «Ketma-ket 5 toza» вставали вплотную и читались

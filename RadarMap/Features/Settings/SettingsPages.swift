@@ -15,6 +15,7 @@ import UIKit
 
 struct AlertSettingsPage: View {
     @Environment(AppEnvironment.self) private var env
+    @State private var showsRecall = false
 
     var body: some View {
         @Bindable var settings = env.settings
@@ -177,8 +178,34 @@ struct AlertSettingsPage: View {
             } header: {
                 Text("Уведомления")
             }
+
+            // Охват предупреждений — про работу приложения, не про вождение:
+            // переехал сюда из «Итогов» (П5 плана 34).
+            let tally = env.trip.alertRecall
+            if let recall = tally.recall, tally.ours >= AppConfig.recallMinPassesToShow {
+                Section {
+                    Button {
+                        showsRecall = true
+                    } label: {
+                        HStack {
+                            Text("Камер названо заранее")
+                                .foregroundStyle(Theme.textPrimary)
+                            Spacer()
+                            Text(String(format: String(localized: "%1$lld %% · %2$lld из %3$lld"),
+                                        Int((recall * 100).rounded()), tally.warned, tally.ours))
+                                .monospacedDigit()
+                                .foregroundStyle(recall >= AppConfig.recallGoodShare ? Theme.success : Theme.warning)
+                        }
+                    }
+                } header: {
+                    Text("Как сработали предупреждения")
+                } footer: {
+                    Text("За всё время: о скольких камерах на вашей дороге приложение сказало дальше 80 метров.")
+                }
+            }
         }
         .settingsPage("Оповещения и звук")
+        .sheet(isPresented: $showsRecall) { AlertRecallInfoSheet(tally: env.trip.alertRecall) }
     }
 }
 

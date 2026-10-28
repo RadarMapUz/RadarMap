@@ -34,7 +34,9 @@ extension TripStatsSheet {
         let hasOverspeed = daily.contains(where: \.hasOverspeed)
         return VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title: String(localized: "Километры по дням")) {
-                if let busiest = summary.busiestDay, summary.busiestDayKm > 0 {
+                // «Больше всего» — только когда есть из чего выбирать (34):
+                // при одном дне с поездками «больше всего — вчера» пусто.
+                if let busiest = summary.busiestDay, summary.busiestDayKm > 0, summary.activeDays >= 2 {
                     Text(String(format: String(localized: "Больше всего — %@"),
                                 Formatting.dayTitle(busiest)))
                         .font(.rounded(15, .semibold))
@@ -54,7 +56,6 @@ extension TripStatsSheet {
                 // величину, которую уже кодирует сама высота. Это двойное
                 // кодирование, и оно мешает сравнивать столбики между собой.
                 .foregroundStyle(item.hasOverspeed ? Theme.danger : Theme.accent)
-                .opacity(Calendar.current.isDateInToday(item.day) ? 1 : 0.6)
                 .cornerRadius(4)
                 // Подпись ТОЛЬКО у пика. Ось Y здесь скрыта намеренно — на
                 // полосе в 96 pt она съела бы треть ширины, — но график без
@@ -89,88 +90,15 @@ extension TripStatsSheet {
         .statCard()
     }
 
-    /// «Дорога на работу» и «Дорога домой». Двумя карточками в столбик они
-    /// занимали полэкрана над периодом; теперь — внизу, по одной в ряд.
-    var commuteCards: some View {
-        VStack(spacing: 10) {
-            ForEach(env.commute) { commute in
-                Button { commuteDetail = commute } label: {
-                    CommuteCard(summary: commute, monthlyCost: env.energyLedger.monthly(commute.trips, now: Date()),
-                                crowdUsual: env.crowdUsual(commute.direction))
-                }
-                .buttonStyle(PressableStyle())
-                .accessibilityHint(Text("Открыть подробности"))
-                // Срок прибытия выученный — только вопросом и один раз (8.6),
-                // под той карточкой, о которой он.
-                if commute.direction == .toWork, let minute = env.workTargetSuggestion,
-                   env.settings.workArrivalTarget == nil, !env.settings.workTargetAsked {
-                    ArrivalTargetQuestion(minute: minute) { yes in
-                        env.settings.workTargetAsked = true
-                        if yes { env.settings.workArrivalTarget = ArrivalTarget(minute: minute) }
-                    }
-                } else if commute.direction == .toWork, env.departureReminderAvailable,
-                          !env.settings.departureReminders, !env.settings.departureRemindersAsked {
-                    // «Выезжайте раньше» — предложением и один раз (8.8.7).
-                    DepartureReminderOffer { env.setDepartureReminders($0) }
-                }
-            }
-        }
-    }
-
-    func periodDetails(summary: PeriodSummary, trip: TripStats) -> some View {
-        VStack(spacing: 16) {
-            Button {
-                withMotion(Motion.standard) { detailsExpanded.toggle() }
-            } label: {
-                HStack(spacing: 12) {
-                    IconBadge(symbol: "chart.bar.xaxis", tint: Theme.accent, size: 30)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Детали периода")
-                            .font(.rounded(14, .semibold))
-                            .foregroundStyle(Theme.textPrimary)
-                        Text("Средние, график по дням, часы риска")
-                            .font(.rounded(11))
-                            .foregroundStyle(Theme.textTertiary)
-                    }
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.down")
-                        .font(.rounded(15, .bold))
-                        .foregroundStyle(Theme.textTertiary)
-                        .rotationEffect(.degrees(detailsExpanded ? 180 : 0))
-                }
-                .statCard(padding: 14, radius: Theme.cornerMedium)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text(detailsExpanded
-                                     ? String(localized: "Скрыть детали периода")
-                                     : String(localized: "Показать детали периода")))
-            if detailsExpanded {
-                // Календарь месяца — в «Моих дорогах» (31E), здесь справка.
-                KPIStrip(summary: summary,
-                         activeDaysText: activeDaysText(summary))
-                if let days = period.chartDays(containing: anchor) {
-                    dailyChart(days: days, summary: summary)
-                }
-                RiskHoursCard(summary: summary)
-            }
-        }
-    }
-
-    // MARK: - Пустые состояния
-
     var emptyHint: some View {
         VStack(spacing: 12) {
-            ZStack {
-                Circle().fill(Theme.quietFill).frame(width: 72, height: 72)
-                Image(systemName: "car.side")
-                    .font(.rounded(28))
-                    .foregroundStyle(Theme.accent)
-            }
+            IconBadge(symbol: Icon.trips, tint: Theme.textSecondary, size: 72)
             Text("Здесь появятся ваши поездки")
                 .font(.rounded(16, .bold))
                 .foregroundStyle(Theme.textPrimary)
-            Text("Нажмите «Начать поездку» на карте — соберём трек, скорость у каждой камеры и статистику.")
+            // По режиму старта (Н13 плана 34): при «Авто» поездка начинается
+            // сама, и «нажмите» было неправдой о приложении.
+            Text(emptyHintText)
                 .font(.rounded(15))
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
@@ -184,11 +112,20 @@ extension TripStatsSheet {
     /// уйти туда, где данные есть.
     /// Пустое окно — не тупик: сразу предлагаем ближайший период, где поездки
     /// есть, одной кнопкой (искать его стрелками вслепую — работа для водителя).
+    var emptyHintText: String {
+        switch env.settings.tripStartMode {
+        case .auto, .smart:
+            return String(localized: "Поездка запишется сама, когда поедете: трек, скорость у каждой камеры и статистика.")
+        case .carOnly:
+            return String(localized: "Поездка запишется сама, когда телефон подключится к вашей машине.")
+        case .manual:
+            return String(localized: "Нажмите «Поездка» внизу карты — соберём трек, скорость у каждой камеры и статистику.")
+        }
+    }
+
     var emptyPeriodHint: some View {
         VStack(spacing: 10) {
-            Image(systemName: "calendar.badge.clock")
-                .font(.rounded(26))
-                .foregroundStyle(Theme.textTertiary)
+            IconBadge(symbol: Icon.byDays, tint: Theme.textSecondary, size: 44)
             Text("В этом периоде поездок не было")
                 .font(.rounded(15, .bold))
                 .foregroundStyle(Theme.textPrimary)

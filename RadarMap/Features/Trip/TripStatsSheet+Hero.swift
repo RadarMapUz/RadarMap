@@ -107,8 +107,9 @@ extension TripStatsSheet {
         Button {
             showRatingInfo = true
         } label: {
+            // Без своей карточки: герой — верх карточки-ответа (34b).
             heroTopRow(trip: trip, summary: summary)
-                .statCard()
+                .padding(16)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -125,10 +126,8 @@ extension TripStatsSheet {
                 RatingRing(rating: rating)
                     .frame(width: 88, height: 88)
             }
+            // Без подписи «за неделю» (34b): окно — в липкой шапке над листом.
             VStack(alignment: .leading, spacing: 4) {
-                Text(period.caption)
-                    .font(.rounded(13))
-                    .foregroundStyle(Theme.textSecondary)
                 Text(Formatting.distance(summary.distance))
                     .font(.numeral(30, .heavy))
                     .foregroundStyle(Theme.textPrimary)
@@ -221,26 +220,6 @@ extension TripStatsSheet {
         let amount = change.percent.map { "\(abs($0)) %" } ?? Formatting.distance(abs(change.meters))
         return (change.isUp ? String(localized: "Больше, чем в прошлый период")
                             : String(localized: "Меньше, чем в прошлый период")) + ": " + amount
-    }
-
-    /// «Держите 60 у «Ц-1, Амир Темур»: проезды выше лимита — 2 из 3. Это
-    /// 1,1 млн сум возможных штрафов». Сумма — только достоверная (ActionHint.fine), лимит —
-    /// только известный; без них фраза короче, а не с выдуманным числом.
-    /// `periodRisk` — сумма карточки «Возможные штрафы» прямо над подсказкой:
-    /// если вся она от этой камеры, «Это 2,2 млн сум» повторяло бы ту же
-    /// цифру второй раз подряд (34) — тогда фраза без суммы.
-    func actionText(_ hint: ActionHint, periodRisk: Double = 0) -> String {
-        // Счётное слово — перед числами: «проезды выше лимита — 2 из 3» не
-        // зависит от формы числа ни в русском, ни в узбекском.
-        var text = hint.limitKmh.map {
-            String(format: String(localized: "Держите %1$lld у «%2$@»: проезды выше лимита — %3$lld из %4$lld"),
-                   $0, hint.location, hint.over, hint.passes)
-        } ?? String(format: String(localized: "Сбавьте у «%1$@»: проезды выше лимита — %2$lld из %3$lld"),
-                    hint.location, hint.over, hint.passes)
-        if hint.fine > 0, abs(hint.fine - periodRisk) >= 1 {
-            text += ". " + String(format: String(localized: "Это %@ возможных штрафов."), Formatting.money(hint.fine))
-        }
-        return text
     }
 
     // MARK: - Строка вывода (живёт в герой-карточке)

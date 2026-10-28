@@ -15,13 +15,9 @@ struct WorkShiftsCard: View {
     let shifts: [WorkShift]
 
     var body: some View {
-        // Заголовок — внутри карточки (31E): над ней уже стоит заголовок
-        // блока «Машина и работа», второй заголовок раздела был бы лишним.
+        // Без своего заголовка (34b): карточка живёт на странице «Смены»
+        // «Итогов», и «Смены» под навбаром «Смены» было бы повтором.
         VStack(alignment: .leading, spacing: 4) {
-            Text("Смены")
-                .font(.rounded(14, .semibold))
-                .foregroundStyle(Theme.textPrimary)
-                .accessibilityAddTraits(.isHeader)
             ForEach(Array(shifts.prefix(AppConfig.workShiftsShown).enumerated()), id: \.element.id) { index, shift in
                 if index > 0 { Divider().overlay(Theme.stroke) }
                 row(shift)

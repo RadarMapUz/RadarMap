@@ -76,9 +76,11 @@ struct RatingDetailSheet: View {
                             }
                         }
                         .statCard()
+                        // Р-A (34b, выбор владельца): один разбор — по
+                        // причинам; разрез по поездкам — строкой дальше.
                         sourcesCard
+                        byTripsRow
                         normAndTrendCard
-                        contributionsCard
                         understandCard
                     }
                     .padding(20)
@@ -443,6 +445,15 @@ struct RatingDetailSheet: View {
         if !sources.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeader(String(localized: "Где теряете баллы"))
+                // Единица названа (Н11 плана 34): «−15» здесь — баллы рейтинга
+                // периода, а «−25» в поездке — баллы самой поездки.
+                if let rating = summary.rating {
+                    Text(String(format: String(localized: "В баллах рейтинга %1$@ — вместе −%2$lld"),
+                                period.caption, Int((100 - Double(rating)).rounded())))
+                        .font(.rounded(12))
+                        .foregroundStyle(Theme.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 // Плавность встаёт в общий порядок по величине, а не отдельной
                 // строкой снизу: блок обещает «где теряете больше всего», и
                 // −20 за рваную езду под −6 за камеру этому обещанию врёт.
@@ -493,10 +504,7 @@ struct RatingDetailSheet: View {
             path.append(.pass(trip: found.record.id, pass: found.pass.id))
         } label: {
             HStack(spacing: 12) {
-                SymbolIcon(Icon.cameras, size: 15, weight: .bold)
-                    .foregroundStyle(Theme.danger)
-                    .frame(width: 32, height: 32)
-                    .background(Theme.quietFill, in: Circle())
+                IconBadge(symbol: Icon.cameras, tint: Theme.Icon.camera, size: 32)
                 VStack(alignment: .leading, spacing: 2) {
                     // Переносится, а не режется (34): «27 окт. 19:06 · 88 при ли…»
                     // на SE обрезало ровно лимит — то, ради чего строка.
@@ -543,28 +551,37 @@ struct RatingDetailSheet: View {
         return head + " · " + speed
     }
 
+    /// Плавность — тем же цветом потерь, что камеры (34b: −20 янтарным рядом
+    /// с −15 красным читались разными единицами); тап — разрез по поездкам,
+    /// где видно, какая поездка была рваной.
     private func smoothnessRow(_ points: Double) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: "waveform.path.ecg")
-                .font(.rounded(15, .bold))
-                .foregroundStyle(Theme.warning)
-                .frame(width: 32, height: 32)
-                .background(Theme.quietFill, in: Circle())
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Резкие разгоны и торможения")
-                    .font(.rounded(14, .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                Text("по трекам поездок периода")
-                    .font(.rounded(11))
+        Button {
+            path.append(.allContributions)
+        } label: {
+            HStack(spacing: 12) {
+                IconBadge(symbol: Icon.smoothness, tint: Theme.textSecondary, size: 32)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Резкие разгоны и торможения")
+                        .font(.rounded(14, .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text("по трекам поездок периода")
+                        .font(.rounded(11))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+                Spacer(minLength: 8)
+                Text(Formatting.points(points))
+                    .font(.rounded(16, .heavy).monospacedDigit())
+                    .foregroundStyle(Theme.danger)
+                Image(systemName: "chevron.right")
+                    .font(.rounded(11, .semibold))
                     .foregroundStyle(Theme.textTertiary)
             }
-            Spacer(minLength: 8)
-            Text(Formatting.points(points))
-                .font(.rounded(16, .heavy).monospacedDigit())
-                .foregroundStyle(Theme.warning)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
     }
+
 
     private func restRow(title: String, points: Double) -> some View {
         HStack {
@@ -593,69 +610,25 @@ struct RatingDetailSheet: View {
 
     // MARK: - Вклады поездок
 
-    /// Превью крупных вкладов; полный список — отдельным экраном с сортировкой
-    /// и фильтром. Двадцать строк по −0,1 балла на первом экране объясняют
-    /// ровно ничего, но и прятать их насовсем нельзя — сумма должна сходиться.
-    @ViewBuilder private var contributionsCard: some View {
+    /// Разрез по поездкам — строкой (Р-A): тот же −35, что «Где теряете
+    /// баллы», только по поездкам; два разбора подряд читались одним,
+    /// нарисованным дважды.
+    @ViewBuilder private var byTripsRow: some View {
         let items = data.contributions
         if !items.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                SectionHeader(String(localized: "Из чего сложился ваш рейтинг"))
-                let shown = Array(items.prefix(AppConfig.breakdownVisibleRows))
-                    .filter { $0.points >= AppConfig.breakdownMinPoints }
-                if let first = shown.first { ContributionFormula(item: first) }
-                ForEach(shown) { item in
-                    ContributionRow(item: item, highlighted: highlighted == item.id) {
-                        open(item)
-                    }
-                    .id(item.id)
-                }
-                // Хвост считаем по ТЕМ ЖЕ строкам, что показали: иначе мелкая
-                // строка внутри первой пятёрки съезжала бы в оба списка сразу
-                // и блок переставал сходиться к 100 − рейтинг.
-                let shownIDs = Set(shown.map(\.id))
-                let rest = items.filter { !shownIDs.contains($0.id) }
-                if !rest.isEmpty {
-                    restRow(title: String(format: String(localized: "Остальные поездки: %lld"),
-                                          rest.count),
-                            points: rest.reduce(0) { $0 + $1.points })
-                }
-
-                // «Все вклады (2)» под двумя показанными строками вёл на тот
-                // же список (34) — ссылка только когда что-то скрыто.
-                if !rest.isEmpty {
-                    Button {
-                        path.append(.allContributions)
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(String(format: String(localized: "Все вклады (%lld)"), items.count))
-                                .font(.rounded(15, .semibold))
-                            Image(systemName: "chevron.right")
-                                .font(.rounded(10, .bold))
-                        }
-                        .foregroundStyle(Theme.accent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 2)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(PressableStyle())
-                }
-
-                if data.unrated > 0 {
-                    Text(String(localized: "Ещё \(data.unrated) поездок без известных лимитов и трека — в рейтинг они не вошли"))
-                        .font(.rounded(11))
-                        .foregroundStyle(Theme.textTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .statCard()
+            ItogiRowGroup(items: [
+                ItogiRowItem(id: "byTrips", symbol: Icon.byTrips,
+                             title: String(localized: "По поездкам"),
+                             caption: data.unrated > 0
+                                 ? String(localized: "Ещё \(data.unrated) поездок без известных лимитов и трека — в рейтинг они не вошли")
+                                 : String(localized: "Вклад каждой поездки: недобор балла × доля пути"),
+                             value: "\(items.count)",
+                             action: { path.append(.allContributions) }),
+            ])
         }
     }
 
-    private func open(_ item: RatingContribution) {
-        guard item.isTrip else { return }
-        path.append(.trip(item.id))
-    }
+
 
     // MARK: - Понять данные
 
@@ -949,7 +922,7 @@ private struct AllContributionsView: View {
         }
         .backport.scrollEdgeEffectStyle(.hard, for: .top)
         .background(Theme.background)
-        .navigationTitle("Все вклады")
+        .navigationTitle("По поездкам")
         .navigationBarTitleDisplayMode(.inline)
     }
 

@@ -66,4 +66,59 @@ nonisolated enum Icon {
     /// Нет ДОСТУПА к геопозиции — системный значок служб геолокации; причина
     /// другая, чем у потерянного сигнала, и значок другой.
     static let noLocationAccess = "location.slash.fill"
+
+    // MARK: «Итоги» (34b)
+    //
+    // Один смысл — один символ на всех экранах раздела: строка раздела,
+    // «Сделать», шапка листа и пустое состояние берут значок отсюда. Все —
+    // не новее iOS 17 (минимум приложения — iOS 18; проверено по
+    // name_availability.plist, ItogiIconsTests держит, что символ есть).
+
+    /// Штрафы — и возможные, и пришедшие: документ-постановление.
+    static let fines = "doc.text.fill"
+    /// Поездки периода: карта и список.
+    static let trips = "map.fill"
+    /// Обслуживание машины.
+    static let maintenance = "wrench.and.screwdriver.fill"
+    /// Смены такси (рабочие рейсы) — руль, не портфель: портфель — «на работу».
+    static let shifts = "steeringwheel"
+    /// Свои отметки и подтверждения других водителей.
+    static let community = "person.2.fill"
+    /// За всё время: пожизненные цифры и достижения.
+    static let lifetime = "infinity"
+    /// Архив поездок.
+    static let archive = "archivebox.fill"
+    /// Цель недели.
+    static let goal = "target"
+    /// Путь выше лимита вне камер.
+    static let overLimit = "gauge.with.dots.needle.67percent"
+    /// Резкие разгоны и торможения.
+    static let smoothness = "waveform.path.ecg"
+    /// Расходы: бензин / электричество (по машине водителя).
+    static let fuel = "fuelpump.fill"
+    static let charge = "bolt.fill"
+    /// Разбор по поездкам.
+    static let byTrips = "list.bullet"
+    /// По дням: график и календарь месяца.
+    static let byDays = "calendar"
+    /// Выгрузка периода.
+    static let export = "square.and.arrow.up"
+    /// Журнал заправок и зарядок.
+    static let journal = "book.closed.fill"
+    /// Машина: профиль расходов («Машина и расходы»).
+    static let car = "car.fill"
+
+    /// Все символы раздела «Итоги» — для проверки (ItogiIconsTests: символ
+    /// есть в системе) и листа-сетки DEBUG `-itogiIcons`. Новый значок в
+    /// «Итогах» — сначала сюда.
+    static let itogiSymbols: [String] = [
+        fines, cameras, trips, maintenance, shifts, community, lifetime, archive, goal,
+        trafficLayer, overLimit, smoothness, fuel, charge, byTrips, byDays, export, journal, car,
+        "house.fill", "briefcase.fill", "hourglass", "clock.fill", "scope", "lightbulb.fill",
+        "bell.fill", "arrow.triangle.merge", "info.circle.fill", "checkmark.shield.fill",
+        "checkmark.seal.fill", "gauge.with.dots.needle.33percent", "gauge.with.dots.needle.100percent",
+        "point.topleft.down.to.point.bottomright.curvepath", "flame.fill",
+        "tablecells", "doc.richtext", "trash", "ellipsis.circle",
+        "line.3.horizontal.decrease.circle", "envelope.badge", "chevron.right",
+    ]
 }

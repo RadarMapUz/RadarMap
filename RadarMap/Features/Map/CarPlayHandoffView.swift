@@ -164,7 +164,7 @@ private struct HandoffArrival: View {
             if scenePhase != .background {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(String(format: String(localized: "Прибытие в %@"),
-                                Formatting.clock(env.route.arrivalDate)))
+                                env.route.arrivalText))
                         .foregroundStyle(Theme.textPrimary)
                     Text([env.route.destinationName, Formatting.duration(env.route.remainingTime)]
                         .filter { !$0.isEmpty }.joined(separator: " · "))

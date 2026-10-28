@@ -397,13 +397,21 @@ final class AppEnvironment {
         self.location.liveActivity = liveActivity
         // Маршрут по своей дороге на работу — остаток по призраку (8.8.11).
         self.route.personalRemaining = { [weak self] in self?.commuteLive.routeRemaining(now: Date()) }
+        // Минута прибытия сменилась (37) — и стоя в пробке, без фиксов: плашка
+        // и близкие узнают её сразу, а не с ближайшим фиксом. CarPlay и экраны
+        // наблюдают `route.arrival` сами.
+        self.route.onArrivalChanged = { [weak self] in
+            guard let self else { return }
+            self.location.refreshLiveActivity()
+            self.family.update()
+        }
         // Плашка Live Activity — прибытие: по маршруту (9.1) — время и остаток
         // до места; без маршрута — строка призрака (8.8.3б), те же слова, что
         // на панели поездки.
         self.location.activityGhost = { [weak self] in
             guard let self else { return nil }
-            if self.route.isActive {
-                let arrival = Date(timeIntervalSince1970: (self.route.arrivalDate.timeIntervalSince1970 / 60).rounded() * 60)
+            // Минута — та же, что на панели и в машине (RouteService.arrival).
+            if self.route.isActive, let arrival = self.route.arrival {
                 let left = Formatting.distance(self.route.remainingDistance)
                 let name = self.route.destinationName
                 return (arrival, name.isEmpty ? left : "\(name) · \(left)", false)

@@ -284,7 +284,7 @@ private struct CarPlayDashboardGauge: View {
                     Text(Formatting.duration(env.route.remainingTime))
                         .font(.rounded(16, .heavy).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
-                    Text(Formatting.clock(env.route.arrivalDate))
+                    Text(verbatim: env.route.arrivalText)
                         .font(.rounded(11, .semibold).monospacedDigit())
                         .foregroundStyle(Theme.textSecondary)
                 }
@@ -293,7 +293,7 @@ private struct CarPlayDashboardGauge: View {
                 // своим поездкам и хвост подписи — на плитке тесно для места.
                 Rectangle().fill(Theme.stroke).frame(width: 1, height: 24)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(ghost.arrival, style: .time)
+                    Text(verbatim: Formatting.clock(ghost.arrival))
                         .font(.rounded(16, .heavy).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
                     Text(verbatim: GhostText.tail(ghost))

@@ -98,7 +98,7 @@ struct TripLiveBar: View {
                     .foregroundStyle(Theme.textPrimary)
                     .liveNumber()
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text(route.arrivalDate, style: .time)
+                Text(verbatim: route.arrivalText)
                     .font(.numeral(21, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
@@ -140,7 +140,7 @@ struct TripLiveBar: View {
         VStack(alignment: .leading, spacing: 0) {
             if route.isActive {
                 // Прибытие: как в настоящих навигаторах — время на часах + остаток.
-                Text(route.arrivalDate, style: .time)
+                Text(verbatim: route.arrivalText)
                     .font(.numeral(22, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
@@ -151,7 +151,7 @@ struct TripLiveBar: View {
             } else if let ghost = env.commuteLive.display {
                 // Дорога на работу без маршрута (этап 8): прибытие по своим
                 // прошлым поездкам. Меняется раз в минуту — numericText можно.
-                Text(ghost.arrival, style: .time)
+                Text(verbatim: Formatting.clock(ghost.arrival))
                     .font(.numeral(22, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())

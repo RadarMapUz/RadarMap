@@ -2200,16 +2200,39 @@ nonisolated enum AppConfig {
     /// Как часто пробовать дорогу впереди.
     static let limitAheadCheckSeconds: TimeInterval = 3
 
+    // MARK: - Часы прибытия (ArrivalClock, 37)
+
+    /// Плашка Live Activity освежает прибытие на смене минуты — той же, что
+    /// на панели и в машине. Меньше минуты сдвиг не бывает: время на минуте.
+    static let liveActivityEtaStepSeconds: TimeInterval = 60
+
+    /// Показанная минута держится, пока сырое прибытие не ушло от неё на
+    /// столько: больше полминуты (иначе у границы 15:56:29 ↔ 15:56:31 минута
+    /// мигала бы на каждом фиксе), но меньше минуты — после смены честная
+    /// ошибка не больше этих 40 с.
+    static let arrivalClockHoldSeconds: TimeInterval = 40
+    /// Пересчёт прибытия, пока маршрут есть, и без фиксов: стоя в пробке
+    /// телефон фиксов не получает (distanceFilter), а прибытие съезжает
+    /// минута в минуту. Полминуты — смена минуты видна не позже чем через 30 с
+    /// и стоит одного пересчёта остатка (микросекунды), без сети и GPS.
+    static let arrivalClockTickSeconds: TimeInterval = 30
+    /// Запас к остатку, который машина прибавляет к своим часам (CarPlay):
+    /// меньше полминуты — любое правило минуты в машине даёт ту же минуту.
+    static let arrivalClockCarMarginSeconds: TimeInterval = 5
+
     // MARK: - «Поделиться прибытием» (EtaShare)
 
     /// Обновление ссылки раз в минуту; «на месте» — если прибытие было не
     /// раньше двух минут назад, иначе маршрут сняли — «больше не отслеживается».
     static let etaShareIntervalSeconds: TimeInterval = 60
-    /// Обновление ссылки — только при сдвиге прибытия на 2 мин, остатка на
-    /// 500 м или раз в 10 мин (ссылка живёт 2 ч без обновлений). Стоя в
-    /// пробке прибытие честно съезжает на минуту в минуту — знакомому
-    /// хватит шага в две.
-    static let etaShareArrivalStepSeconds: TimeInterval = 120
+    /// Обновление ссылки — при смене минуты прибытия, сдвиге остатка на
+    /// 500 м или раз в 10 мин (ссылка живёт 2 ч без обновлений). Минута — та
+    /// же, что на телефоне (ArrivalClock): до 28.10 шаг был две минуты, и
+    /// страница знакомого отставала от панели водителя на минуту. Своего
+    /// таймера нет: решение «пора» (`EtaShareService.isUpdateDue`) едет на
+    /// такте планировщика сети (NetScheduler, 36B), а минута меняется не
+    /// чаще раза в полминуты (ArrivalClock).
+    static let etaShareArrivalStepSeconds: TimeInterval = 60
     static let etaShareRemainingStepMeters: Double = 500
     static let etaShareKeepAliveSeconds: TimeInterval = 10 * 60
     static let etaShareArrivalFreshSeconds: TimeInterval = 120

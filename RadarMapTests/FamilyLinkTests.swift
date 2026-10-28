@@ -232,25 +232,41 @@ final class FamilyLinkTests: XCTestCase {
         var context = FamilyShare.Context(isTripActive: true, routeToHome: true, routeArrival: route,
                                           ghostArrival: ghost, typicalArrival: typical)
         XCTAssertEqual(FamilyShare.arrival(context, headingHome: true, now: now), route, "маршрут домой — с пробками")
+        XCTAssertEqual(FamilyShare.arrival(context, headingHome: false, now: now), route,
+                       "«каждая поездка» не домой — время к цели маршрута")
         context.routeToHome = false
-        XCTAssertEqual(FamilyShare.arrival(context, headingHome: true, now: now), ghost,
-                       "маршрут в магазин — не время прибытия домой")
+        // 37: при живом маршруте призрак не спорит с панелью водителя.
+        XCTAssertNil(FamilyShare.arrival(context, headingHome: true, now: now),
+                     "маршрут в магазин — не время прибытия домой, а призрак о заезде не знает")
+        XCTAssertEqual(FamilyShare.arrival(context, headingHome: false, now: now), route)
+        context.routeArrival = nil
+        XCTAssertEqual(FamilyShare.arrival(context, headingHome: true, now: now), ghost, "без маршрута — призрак")
         context.ghostArrival = nil
         XCTAssertEqual(FamilyShare.arrival(context, headingHome: true, now: now), typical, "«обычно»")
         context.typicalArrival = now.addingTimeInterval(-60)
         XCTAssertNil(FamilyShare.arrival(context, headingHome: true, now: now), "«обычно» уже прошло — без цифры")
-        XCTAssertEqual(FamilyShare.arrival(context, headingHome: false, now: now), route,
-                       "«каждая поездка» не домой — время к цели маршрута")
-        context.routeArrival = nil
         XCTAssertNil(FamilyShare.arrival(context, headingHome: false, now: now))
+    }
+
+    /// 37: маршрут домой — время маршрута, даже когда призрак знает другое:
+    /// у близкого в Telegram та же минута, что у водителя на панели.
+    func testRouteHomeBeatsGhost() {
+        let route = now.addingTimeInterval(1500)
+        let context = FamilyShare.Context(isTripActive: true, routeToHome: true, commuteToHome: true,
+                                          routeArrival: route, ghostArrival: now.addingTimeInterval(900),
+                                          typicalArrival: now.addingTimeInterval(1200))
+        XCTAssertEqual(FamilyShare.arrival(context, headingHome: true, now: now), route)
     }
 
     func testSendRhythm() {
         let arrival = now.addingTimeInterval(1500)
         XCTAssertTrue(FamilyShare.shouldSend(last: nil, arrival: nil, home: true, now: now))
         let last = FamilyShare.Sent(arrival: arrival, home: true, at: now)
-        XCTAssertFalse(FamilyShare.shouldSend(last: last, arrival: arrival.addingTimeInterval(60), home: true,
-                                              now: now.addingTimeInterval(30)), "минута — не повод")
+        XCTAssertFalse(FamilyShare.shouldSend(last: last, arrival: arrival.addingTimeInterval(30), home: true,
+                                              now: now.addingTimeInterval(30)), "полминуты — не повод")
+        XCTAssertTrue(FamilyShare.shouldSend(last: last, arrival: arrival.addingTimeInterval(60), home: true,
+                                             now: now.addingTimeInterval(30)),
+                      "смена минуты — повод (37): сервер решает сам, писать ли близкому")
         XCTAssertTrue(FamilyShare.shouldSend(last: last, arrival: arrival.addingTimeInterval(180), home: true,
                                              now: now.addingTimeInterval(30)), "сдвиг на 3 мин")
         XCTAssertTrue(FamilyShare.shouldSend(last: last, arrival: arrival, home: true,

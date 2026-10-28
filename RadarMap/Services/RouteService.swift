@@ -500,7 +500,70 @@ final class RouteService {
                                                                     liveDelay: remainingTrafficDelay,
                                                                     typicalDelay: remainingTypicalDelay),
                                      remainingMeters: remainingDistance,
-                                     paceMps: pace.average(now: Date()))
+                                     paceMps: pace.average(now: clock()))
+    }
+
+    // MARK: - Часы прибытия (ArrivalClock, 37)
+
+    /// Прибытие на часах — ОДНО для всех выходов: панели, плашки, CarPlay,
+    /// «Поделиться прибытием», близких, Siri. Ровно на минуте (ArrivalClock),
+    /// пишется только при смене минуты: зрители не будятся каждые 30 с ради
+    /// той же цифры. nil — маршрута нет.
+    ///
+    /// Хранимое, а не вычисляемое: `Date() + remainingTime` в body
+    /// обновлялось только с перерисовкой, и стоя в пробке (фиксов нет)
+    /// прибытие застывало, пока часы шли.
+    private(set) var arrival: Date?
+
+    /// Часы сервиса — подменяются в тестах (сквозной тест прибытия).
+    @ObservationIgnored var clock: () -> Date = { Date() }
+
+    /// Минута сменилась — для выходов, которые сами не наблюдают (плашка
+    /// Live Activity, близкие): ставит AppEnvironment.
+    @ObservationIgnored var onArrivalChanged: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onArrivalChanged,
+                                               "RouteService.onArrivalChanged") }
+    }
+
+    /// Линия, для которой показана минута: на новой линии удерживать нечего.
+    @ObservationIgnored private var arrivalLine: ObjectIdentifier?
+    @ObservationIgnored private var arrivalTicker: Task<Void, Never>?
+
+    /// Пересчитать прибытие: на каждом фиксе, на смене маршрута и пробок и
+    /// по таймеру `arrivalClockTickSeconds`, пока маршрут есть.
+    func refreshArrival() {
+        let line = selected.map { ObjectIdentifier($0.polyline) }
+        let raw = selected == nil ? nil : ArrivalClock.raw(now: clock(), remaining: remainingTime)
+        let next = ArrivalClock.next(shown: arrival, raw: raw, sameRoute: line != nil && line == arrivalLine)
+        arrivalLine = line
+        if next == nil {
+            arrivalTicker?.cancel()
+            arrivalTicker = nil
+        } else if arrivalTicker == nil {
+            // Таймер — только пока маршрут есть; без GPS и сети, один
+            // пересчёт остатка раз в полминуты (правило 8).
+            arrivalTicker = Task { [weak self] in
+                while !Task.isCancelled {
+                    await Task.pause(seconds: AppConfig.arrivalClockTickSeconds)
+                    guard !Task.isCancelled, let self else { return }
+                    self.refreshArrival()
+                }
+            }
+        }
+        guard next != arrival else { return }
+        arrival = next
+        onArrivalChanged?()
+    }
+
+    /// «15:56» — прибытие одним форматом на всех экранах (Formatting.clock).
+    var arrivalText: String {
+        arrival.map(Formatting.clock) ?? "—"
+    }
+
+    /// Остаток до показанной минуты — для машины (CarPlay прибавляет его к
+    /// своим часам) и для времени до манёвра.
+    func arrivalSeconds(now: Date = Date()) -> TimeInterval {
+        arrival.map { ArrivalClock.secondsUntil($0, now: now) } ?? 0
     }
 
     /// Остаток по маршруту до хвоста последних километров: доля времени графа
@@ -558,6 +621,7 @@ final class RouteService {
             if remainingTypicalDelay != 0 { remainingTypicalDelay = 0 }
             return
         }
+        defer { refreshArrival() }
         guard revision != trafficRevisionSeen || typicalRevision != typicalRevisionSeen
                 || abs(progressAlong - trafficAlong) >= AppConfig.routeTrafficRecomputeMeters else { return }
         trafficRevisionSeen = revision
@@ -688,6 +752,7 @@ final class RouteService {
                 remainingTrafficDelay = initial.live
                 remainingTypicalDelay = initial.typical
             }
+            refreshArrival()
         }
     }
 
@@ -731,7 +796,6 @@ final class RouteService {
         }
         return []
     }
-    var arrivalDate: Date { Date().addingTimeInterval(remainingTime) }
 
     /// Путь впереди от машины до `meters` (для проб лимита): от текущей
     /// точки по линии маршрута. nil — маршрута нет.
@@ -993,6 +1057,7 @@ final class RouteService {
         trafficRevisionSeen = -1
         typicalRevisionSeen = -1
         trafficAlong = 0
+        refreshArrival()
     }
 
     // MARK: - Прогресс: прибытие, следующая камера, манёвры, перестроение
@@ -1005,6 +1070,9 @@ final class RouteService {
     func updateProgress(coordinate: CLLocationCoordinate2D, cameras: [Camera], announce: Bool,
                         course: CLLocationDirection = -1, speedKmh: Double = 0,
                         cameraHolds: Bool = false, accuracy: CLLocationAccuracy? = nil) {
+        // Прибытие — на каждом фиксе, на любом выходе отсюда (и после
+        // прибытия: маршрут снят — часов нет).
+        defer { refreshArrival() }
         guard let variant = selected, !isBuilding, !isRebuilding,
               let destination = destinationCoordinate else { return }
         let point = MKMapPoint(coordinate)
@@ -2254,6 +2322,19 @@ final class RouteService {
         await apply(merged.variants, name: name, destination: destination, cameras: cameras, gen: gen,
                     history: personalHistory?() ?? RouteChoice.History(tracks: [], overspeedCameraIDs: []),
                     myRoad: merged.index.map { ($0, plan) })
+    }
+
+    /// Тестовый хук (37): маршрут по готовой линии без сети — тот же `apply`,
+    /// что у настоящего построения. Сквозной тест часов прибытия.
+    func seedRoute(name: String, path: [CLLocationCoordinate2D], seconds: TimeInterval) async {
+        let points = path.map(MKMapPoint.init)
+        let length = zip(points, points.dropFirst()).reduce(0) { $0 + $1.0.distance(to: $1.1) }
+        let arrive = RouteStep(distanceAlong: length, text: String(localized: "Вы на месте"),
+                               icon: "flag.checkered", kind: .arrive)
+        generation += 1
+        await apply([BuiltVariant(points: points, distance: length, travelTime: seconds, steps: [arrive])],
+                    name: name, destination: path.last ?? path[0], cameras: [], gen: generation,
+                    history: nil, myRoad: nil)
     }
     #endif
 

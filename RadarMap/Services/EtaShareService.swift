@@ -67,7 +67,7 @@ final class EtaShareService {
     /// всё равно полезно, а мёртвая ссылка — нет.
     func messageWithoutLink() -> String? {
         guard isAvailable, let route else { return nil }
-        let clock = Formatting.clock(route.arrivalDate)
+        let clock = route.arrivalText
         return String(format: String(localized: "Буду примерно в %1$@ (через %2$@)."),
                       clock, Formatting.duration(route.remainingTime))
     }
@@ -80,7 +80,7 @@ final class EtaShareService {
         let write = self.write ?? .secret(EtaShare.makeToken())
         self.write = write
         let url = EtaShare.link(base: AppConfig.publicBaseURL, token: write.address)
-        let clock = Formatting.clock(route.arrivalDate)
+        let clock = route.arrivalText
         let message = String(format: String(localized: "Буду примерно в %1$@ (через %2$@). Следить через RadarMap: %3$@"),
                              clock, Formatting.duration(route.remainingTime), url.absoluteString)
         return (url, message)
@@ -117,17 +117,19 @@ final class EtaShareService {
     }
 
     /// Пора ли отправить новое время (без сети): ссылка живая, маршрут
-    /// идёт, и цифры сдвинулись (EtaShare.shouldSend).
+    /// идёт, и цифры сдвинулись (EtaShare.shouldSend) — минута прибытия та
+    /// же, что на панели водителя (RouteService.arrival, 37): её смена —
+    /// повод, мельче минуты сдвигов не бывает.
     var isUpdateDue: Bool {
-        guard isSharing, let route, route.isActive else { return false }
+        guard isSharing, let route, route.isActive, let arrival = route.arrival else { return false }
         return EtaShare.shouldSend(lastArrival: sentArrival, lastRemaining: sentRemaining, lastSentAt: sentAt,
-                                   arrival: route.arrivalDate, remaining: route.remainingDistance, now: Date())
+                                   arrival: arrival, remaining: route.remainingDistance, now: Date())
     }
 
     /// Отправить новое время, если пора.
     func sendUpdateIfDue() async {
-        guard isUpdateDue, let route else { return }
-        let arrival = route.arrivalDate, remaining = route.remainingDistance
+        guard isUpdateDue, let route, let arrival = route.arrival else { return }
+        let remaining = route.remainingDistance
         // Запоминаем только доставленное — иначе после сбоя ссылка молчала бы
         // до 10 минут; и не после «Перестать» (finish уже обнулил).
         let delivered = await send(.driving, arrival: arrival, remaining: remaining)

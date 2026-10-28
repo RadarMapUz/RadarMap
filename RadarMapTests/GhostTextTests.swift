@@ -39,8 +39,9 @@ final class GhostTextTests: XCTestCase {
                        "со сроком решает запас, а не отклонение")
     }
 
-    /// Плашка: прибытие сдвинулось на 2+ мин или сменилась тревожность —
-    /// повод обновить; минута в пробке и та же строка — нет (бюджет плашки).
+    /// Плашка: прибытие сменило минуту или сменилась тревожность — повод
+    /// обновить (37: плашка не спорит с панелью и машиной на минуту); сдвиг
+    /// меньше минуты — нет.
     func testLiveActivityUpdatesOnlyOnRealGhostChanges() {
         var old = CameraActivityAttributes.ContentState(nearestTitle: nil, nearestSymbol: "checkmark.shield.fill",
                                                         distanceMeters: nil, arrivesAt: nil, since: nil)
@@ -50,7 +51,11 @@ final class GhostTextTests: XCTestCase {
         var minute = old
         minute.etaClock = arrival.addingTimeInterval(60)
         minute.etaCaption = "Работа · +1 мин к обычному"
-        XCTAssertFalse(LiveActivityService.differs(minute, from: old, now: arrival), "минута в пробке — не повод")
+        XCTAssertTrue(LiveActivityService.differs(minute, from: old, now: arrival),
+                      "смена минуты — повод: плашка показывает ту же минуту, что панель")
+        var seconds = old
+        seconds.etaClock = arrival.addingTimeInterval(30)
+        XCTAssertFalse(LiveActivityService.differs(seconds, from: old, now: arrival), "полминуты — не повод")
         var shifted = old
         shifted.etaClock = arrival.addingTimeInterval(120)
         XCTAssertTrue(LiveActivityService.differs(shifted, from: old, now: arrival))

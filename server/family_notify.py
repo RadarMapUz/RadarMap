@@ -28,10 +28,14 @@
   * время появилось посреди поездки (построили маршрут домой) — одно
     «🕒 будет дома примерно в 18:40», сразу: первое «едет домой» было без
     времени, и ждать с ним десять минут незачем;
-  * время прибытия сдвинулось на DELAY_STEP и больше ПОЗЖЕ последнего
-    объявленного, и с прошлого сообщения прошло NOTICE_GAP — «⏱ Зафар
-    задерживается — теперь около 18:52». Раньше — не пишем: близкий ждёт к
-    объявленному, «дома» придёт само;
+  * время прибытия сдвинулось на CHANGE_STEP и больше от последнего
+    объявленного, и с прошлого сообщения прошло NOTICE_GAP: позже — «⏱ Зафар
+    задерживается — теперь около 18:52», раньше — «🕒 Зафар будет раньше —
+    теперь примерно в 18:31». До 28.10 писали только о сдвиге позже на 5 мин
+    и не чаще раза в 10 мин: пробка рассосалась — у близкого в Telegram
+    оставалось прежнее время, а у водителя на панели уже другое (37: «как-то
+    не связанные»). Порог в 3 мин — меньше этого телефон и машина спорят с
+    сообщением на минуту-две, и писать об этом незачем;
   * «на месте» — «🏠 Зафар дома, 18:47», один раз: повтор в течение
     ARRIVED_HOLD молчит;
   * поездка кончилась не дома (ended) — ТИШИНА. «Не едет домой» тревожит
@@ -41,7 +45,9 @@
     ссылки и так скажет «сейчас не в пути».
   Обновлений нет TRIP_TTL — поездка забыта, следующее «в пути» — новая.
   Времена — по Ташкенту (UTC+5 круглый год) и так же, как на странице
-  (секунды отбрасываются): сообщение и страница не спорят.
+  (секунды отбрасываются): сообщение и страница не спорят. Телефон шлёт
+  время ровно на минуте (ArrivalClock) — отбрасывать нечего, и сообщение
+  называет ту же минуту, что панель водителя.
 
 КОНТРАКТ С ТЕЛЕФОНОМ (поля записи, которую eta_put кладёт в память)
   status — driving / arrived / ended; eta — секунды Unix или нет (без
@@ -122,9 +128,10 @@ TRIP_TTL = 2 * 3600
 RESUME_WINDOW = 30 * 60
 #: = api.ETA_ARRIVED_TTL: «дома» повторно не пишем столько.
 ARRIVED_HOLD = 30 * 60
-#: «Задерживается»: сдвиг позже объявленного и промежуток между сообщениями.
-DELAY_STEP = 5 * 60
-NOTICE_GAP = 10 * 60
+#: «Задерживается» / «будет раньше»: сдвиг от объявленного в любую сторону
+#: и промежуток между сообщениями (37: было 5 мин только позже и 10 мин).
+CHANGE_STEP = 3 * 60
+NOTICE_GAP = 5 * 60
 #: Сообщение, не ушедшее за столько, снимается: «едет домой» через
 #: полчаса — уже неправда.
 OUTBOX_TTL = 10 * 60
@@ -199,6 +206,8 @@ NOTICES = {
         "eta_away": "🕒 {name} будет на месте примерно в {time}",
         "delayed": "⏱ {name} задерживается — теперь около {time}",
         "delayed_away": "⏱ {name} задерживается — теперь около {time}",
+        "earlier": "🕒 {name} будет раньше — теперь примерно в {time}",
+        "earlier_away": "🕒 {name} будет раньше — теперь примерно в {time}",
         "arrived": "🏠 {name} дома, {time}",
         "arrived_away": "📍 {name} на месте, {time}",
     },
@@ -212,6 +221,8 @@ NOTICES = {
         "eta_away": "🕒 {name} taxminan {time} da yetib boradi",
         "delayed": "⏱ {name} kechikyapti — endi taxminan {time} da",
         "delayed_away": "⏱ {name} kechikyapti — endi taxminan {time} da",
+        "earlier": "🕒 {name} ertaroq yetib keladi — endi taxminan {time} da",
+        "earlier_away": "🕒 {name} ertaroq yetib boradi — endi taxminan {time} da",
         "arrived": "🏠 {name} uyda, {time}",
         "arrived_away": "📍 {name} yetib keldi, {time}",
     },
@@ -384,15 +395,16 @@ def decide(trip, status, eta, now):
     trip — Trip(фаза driving|paused|arrived, последнее объявленное время,
     когда было последнее сообщение, когда было последнее обновление) или
     None; eta — время прибытия или None. Извещение — (вид, время): departed
-    (время или None), eta, delayed, arrived (время приезда)."""
+    (время или None), eta, delayed / earlier (сдвиг позже / раньше), arrived
+    (время приезда)."""
     trip = trip if _alive(trip, now) else None
     if status == "driving":
         if trip is None or trip.phase == "arrived":
             return Trip("driving", eta, now, now), ("departed", eta)
         if eta is not None and trip.eta is None:
             return Trip("driving", eta, now, now), ("eta", eta)
-        if eta is not None and eta - trip.eta >= DELAY_STEP and now - trip.noticed >= NOTICE_GAP:
-            return Trip("driving", eta, now, now), ("delayed", eta)
+        if eta is not None and abs(eta - trip.eta) >= CHANGE_STEP and now - trip.noticed >= NOTICE_GAP:
+            return Trip("driving", eta, now, now), ("delayed" if eta > trip.eta else "earlier", eta)
         return trip._replace(phase="driving", updated=now), None
     if status == "arrived":
         if trip is not None and trip.phase == "arrived":

@@ -166,36 +166,45 @@ class DecideTest(unittest.TestCase):
         self.assertEqual((trip.phase, trip.eta, trip.noticed), ("driving", self.ETA, NOW))
         self.assertEqual(self.drive(None, None, NOW)[1], ("departed", None))
 
+    def test_constants_are_three_minutes_and_five_between_messages(self):
+        """37: телефон, машина и Telegram спорят не больше чем на 3 минуты."""
+        self.assertEqual((fam.CHANGE_STEP, fam.NOTICE_GAP), (3 * 60, 5 * 60))
+
     def test_next_updates_are_silent(self):
         trip, _ = self.drive(None, self.ETA, NOW)
         for step in range(1, 20):
-            trip, notice = self.drive(trip, self.ETA + 60 * (step % 4), NOW + 30 * step)
-            self.assertIsNone(notice, f"шаг {step}: сдвиг меньше 5 минут — молчим")
+            shift = 60 * (step % 3) * (1 if step % 2 else -1)
+            trip, notice = self.drive(trip, self.ETA + shift, NOW + 30 * step)
+            self.assertIsNone(notice, f"шаг {step}: сдвиг меньше 3 минут — молчим")
 
-    def test_delay_needs_five_minutes_and_ten_since_the_last_notice(self):
+    def test_delay_needs_three_minutes_and_five_since_the_last_notice(self):
         trip, _ = self.drive(None, self.ETA, NOW)
-        _, notice = self.drive(trip, self.ETA + fam.DELAY_STEP, NOW + fam.NOTICE_GAP - 1)
-        self.assertIsNone(notice, "сдвиг есть, но десяти минут не прошло")
-        _, notice = self.drive(trip, self.ETA + fam.DELAY_STEP - 1, NOW + fam.NOTICE_GAP)
-        self.assertIsNone(notice, "десять минут прошли, но сдвиг меньше пяти")
-        trip, notice = self.drive(trip, self.ETA + fam.DELAY_STEP, NOW + fam.NOTICE_GAP)
-        self.assertEqual(notice, ("delayed", self.ETA + fam.DELAY_STEP))
+        _, notice = self.drive(trip, self.ETA + fam.CHANGE_STEP, NOW + fam.NOTICE_GAP - 1)
+        self.assertIsNone(notice, "сдвиг есть, но пяти минут не прошло")
+        _, notice = self.drive(trip, self.ETA + fam.CHANGE_STEP - 1, NOW + fam.NOTICE_GAP)
+        self.assertIsNone(notice, "пять минут прошли, но сдвиг меньше трёх")
+        trip, notice = self.drive(trip, self.ETA + fam.CHANGE_STEP, NOW + fam.NOTICE_GAP)
+        self.assertEqual(notice, ("delayed", self.ETA + fam.CHANGE_STEP))
         # Дальше порог — от НОВОГО объявленного времени, промежуток — от этого сообщения.
         later = NOW + 2 * fam.NOTICE_GAP
-        _, notice = self.drive(trip, self.ETA + fam.DELAY_STEP + 4 * 60, later)
+        _, notice = self.drive(trip, self.ETA + fam.CHANGE_STEP + 2 * 60, later)
         self.assertIsNone(notice)
-        _, notice = self.drive(trip, self.ETA + 2 * fam.DELAY_STEP, later - 60)
-        self.assertIsNone(notice, "с прошлого «задерживается» меньше десяти минут")
-        _, notice = self.drive(trip, self.ETA + 2 * fam.DELAY_STEP, later)
+        _, notice = self.drive(trip, self.ETA + 2 * fam.CHANGE_STEP, later - 60)
+        self.assertIsNone(notice, "с прошлого «задерживается» меньше пяти минут")
+        _, notice = self.drive(trip, self.ETA + 2 * fam.CHANGE_STEP, later)
         self.assertEqual(notice[0], "delayed")
 
-    def test_earlier_arrival_is_not_announced_and_does_not_move_the_bar(self):
+    def test_earlier_arrival_is_announced_too(self):
+        """37: пробка рассосалась — близкий узнаёт новое время, а не ждёт к
+        старому, пока у водителя на панели уже другое."""
         trip, _ = self.drive(None, self.ETA, NOW)
-        trip, notice = self.drive(trip, self.ETA - 15 * 60, NOW + 20 * 60)
-        self.assertIsNone(notice)
-        self.assertEqual(trip.eta, self.ETA, "сравниваем с объявленным, а не с последним")
-        _, notice = self.drive(trip, self.ETA + 3 * 60, NOW + 30 * 60)
-        self.assertIsNone(notice, "позже объявленного всего на 3 минуты")
+        _, notice = self.drive(trip, self.ETA - fam.CHANGE_STEP + 1, NOW + fam.NOTICE_GAP)
+        self.assertIsNone(notice, "раньше меньше чем на три минуты — молчим")
+        trip, notice = self.drive(trip, self.ETA - 15 * 60, NOW + fam.NOTICE_GAP)
+        self.assertEqual(notice, ("earlier", self.ETA - 15 * 60))
+        self.assertEqual(trip.eta, self.ETA - 15 * 60, "порог дальше — от нового объявленного")
+        _, notice = self.drive(trip, self.ETA - 12 * 60, NOW + 2 * fam.NOTICE_GAP)
+        self.assertEqual(notice, ("delayed", self.ETA - 12 * 60), "снова позже — тоже скажем")
 
     def test_time_that_appears_mid_trip_is_said_once_and_at_once(self):
         trip, _ = self.drive(None, None, NOW)
@@ -265,6 +274,7 @@ class RenderTest(unittest.TestCase):
             ("departed", None): "🚗 Зафар едет домой",
             ("eta", self.ETA): "🕒 Зафар будет дома примерно в 13:45",
             ("delayed", self.ETA): "⏱ Зафар задерживается — теперь около 13:45",
+            ("earlier", self.ETA): "🕒 Зафар будет раньше — теперь примерно в 13:45",
             ("arrived", NOW): "🏠 Зафар дома, 13:20",
         }
         for notice, text in cases.items():
@@ -276,6 +286,7 @@ class RenderTest(unittest.TestCase):
             ("departed", None): "🚗 Zafar uyga ketyapti",
             ("eta", self.ETA): "🕒 Zafar taxminan 13:45 da uyda boʻladi",
             ("delayed", self.ETA): "⏱ Zafar kechikyapti — endi taxminan 13:45 da",
+            ("earlier", self.ETA): "🕒 Zafar ertaroq yetib keladi — endi taxminan 13:45 da",
             ("arrived", NOW): "🏠 Zafar uyda, 13:20",
         }
         for notice, text in cases.items():
@@ -305,7 +316,7 @@ class RenderTest(unittest.TestCase):
     def test_every_text_has_both_languages_and_formats(self):
         self.assertEqual(set(fam.NOTICES["ru"]), set(fam.NOTICES["uz"]))
         self.assertEqual(set(fam.REPLIES["ru"]), set(fam.REPLIES["uz"]))
-        for kind in ("departed", "eta", "delayed", "arrived"):
+        for kind in ("departed", "eta", "delayed", "earlier", "arrived"):
             for home in (True, False):
                 for at in (self.ETA, None) if kind == "departed" else (self.ETA,):
                     for lang in ("ru", "uz"):
@@ -874,6 +885,62 @@ class ApiHookTest(unittest.TestCase):
         finally:
             fam.on_update = saved
         self.assertEqual(seen, [False])
+
+
+class PhoneClockTest(TempDb):
+    """37: телефон → api.eta_put → family_notify — одно время. Телефон шлёт
+    прибытие ровно на минуте (ArrivalClock: ближайшая минута с удержанием), и
+    сообщение близкого, и страница ссылки называют ту же минуту, что панель
+    водителя. Поездка: движение, шесть минут в пробке, пробка рассосалась."""
+
+    def setUp(self):
+        super().setUp()
+        with api._eta_lock:
+            api._eta_links.clear()
+
+    def tearDown(self):
+        with api._eta_lock:
+            api._eta_links.clear()
+        super().tearDown()
+
+    @staticmethod
+    def phone_minute(raw):
+        """Минута телефона: ближайшая (ArrivalClock.rounded)."""
+        return round(raw / 60) * 60
+
+    def put(self, raw, now):
+        """То, что шлёт телефон (EtaShare/FamilyShare.payload), — через
+        настоящий разбор и запись api.py. Возвращает минуту телефона."""
+        minute = self.phone_minute(raw)
+        cleaned = api.clean_eta({"key": KEY, "token": ADDRESS, "eta": float(minute), "left_m": 8000,
+                                 "status": "driving", "home": True, "name": NAME}, now)
+        self.assertIsNotNone(cleaned)
+        address, record = cleaned
+        self.assertTrue(api.eta_put(address, record, now))
+        return minute
+
+    def test_one_time_from_phone_to_message_and_page(self):
+        self.subscribe(lang="ru")
+        # Телефон: 13:45:29 → 13:45 (а не 13:46 — округление, не отбрасывание).
+        minute = self.put(NOW + 25 * 60 + 29, NOW)
+        self.assertEqual(fam.clock(minute), "13:45")
+        self.assertEqual(self.outbox(), [(CHAT, "🚗 Зафар едет домой — будет примерно в 13:45")])
+        page = api.eta_page(api.eta_get(ADDRESS, NOW), NOW)
+        self.assertIn("13:45", page, "страница — та же минута")
+        self.conn.execute("DELETE FROM family_outbox")
+        # Пробка: шесть минут стоим, прибытие едет минута в минуту.
+        for step in range(1, 7):
+            now = NOW + 60 * step
+            self.put(NOW + 25 * 60 + 29 + 60 * step, now)
+        self.assertEqual(self.outbox(), [(CHAT, "⏱ Зафар задерживается — теперь около 13:50")],
+                         "одно сообщение: на пятой минуте сдвиг 5 мин, шестая — мельче порога")
+        page = api.eta_page(api.eta_get(ADDRESS, NOW + 360), NOW + 360)
+        self.assertIn("13:51", page, "страница — последняя минута телефона")
+        self.conn.execute("DELETE FROM family_outbox")
+        # Поехали: пробка рассосалась, прибытие вернулось к 13:46.
+        minute = self.put(NOW + 26 * 60, NOW + 11 * 60)
+        self.assertEqual(self.outbox(), [(CHAT, "🕒 Зафар будет раньше — теперь примерно в 13:46")])
+        self.assertIn(fam.clock(minute), api.eta_page(api.eta_get(ADDRESS, NOW + 660), NOW + 660))
 
 
 class LogPrivacyTest(TempDb):

@@ -387,7 +387,13 @@ extension CarPlaySceneDelegate {
     func updatePreviewEstimates(_ variant: RouteService.Variant?) {
         guard let trip = previewTrip, let variant, let mapTemplate else { return }
         // Показанное время — с личным темпом, как на телефоне (решение 28.10).
-        let estimates = CarPlayGuidance.tripEstimates(meters: variant.distance, seconds: variant.shownTime)
+        // Машина прибавляет остаток к своим часам — остаток до той же минуты,
+        // что на панели телефона (ArrivalClock, 37): выбранный вариант — по
+        // `route.arrival`, остальные — тем же правилом минуты.
+        let seconds = variant.id == env.route.selectedID && env.route.arrival != nil
+            ? env.route.arrivalSeconds()
+            : ArrivalClock.secondsUntil(remaining: variant.shownTime, now: Date())
+        let estimates = CarPlayGuidance.tripEstimates(meters: variant.distance, seconds: seconds)
         let color: CPTimeRemainingColor = switch CarPlayTripPreview.timeColor(trafficDelay: variant.shownTrafficDelay) {
         case .standard: .default
         case .green: .green

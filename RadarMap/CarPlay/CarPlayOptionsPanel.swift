@@ -89,7 +89,7 @@ final class CarPlayOptionsPanel: NSObject {
     }
 
     private func estimates() -> CPTravelEstimates {
-        CarPlayGuidance.tripEstimates(meters: env.route.remainingDistance, seconds: env.route.remainingTime)
+        CarPlayGuidance.tripEstimates(meters: env.route.remainingDistance, seconds: env.route.arrivalSeconds())
     }
 
     @available(iOS 27.0, *)

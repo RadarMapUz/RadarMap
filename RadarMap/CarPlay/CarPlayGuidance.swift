@@ -225,6 +225,11 @@ final class CarPlayGuidance {
     private var sentStepTime = Date.distantPast
     private var sentTripDistance: Double?
     private var sentTripTime = Date.distantPast
+    /// Минута прибытия, ушедшая в оценки поездки и манёвра (37): стоя в пробке
+    /// расстояние не меняется, а прибытие едет — без этого машина отставала
+    /// от телефона, пока не тронемся.
+    private var sentTripArrival: Date?
+    private var sentStepArrival: Date?
     /// Строка «📷 400 м» в оценках поездки (iOS 27), что ушла последней.
     private var sentCameraDetail: String?
     /// Баннеры поверх карты — общая очередь подключения (CarPlayBanners).
@@ -617,7 +622,7 @@ final class CarPlayGuidance {
             meters: distance,
             seconds: CarPlayGuidanceMapping.timeToManeuver(stepDistance: distance,
                                                            remainingDistance: env.route.remainingDistance,
-                                                           remainingTime: env.route.remainingTime))
+                                                           remainingTime: env.route.arrivalSeconds()))
         let laneRow = card.laneRow
         // Улика на случай пустой карточки: что именно ушло в машину.
         let carDark = model.carIsDark ?? !model.isDaylight
@@ -837,15 +842,26 @@ final class CarPlayGuidance {
                 session.maneuverState = state
             }
         }
+        // Минута прибытия — та же, что на телефоне (RouteService.arrival):
+        // машина сама прибавляет остаток к своим часам, поэтому остаток —
+        // до этой минуты (ArrivalClock.secondsUntil), а не сырой. Её смена —
+        // повод для отправки, как и смена расстояния: стоя в пробке машина
+        // иначе так и показывала бы прежнее прибытие. Чаще раза в 30 с минута
+        // не меняется (ArrivalClock удерживает её), так что стоя это не
+        // больше отправки в полминуты.
+        let arrival = route.arrival
+        let remaining = route.arrivalSeconds(now: now)
         if let session, let maneuver, maneuverStep != nil {
             let distance = route.nextStepDistance
-            if CarPlayGuidanceMapping.shouldUpdate(previous: sentStepDistance, current: distance,
-                                                   elapsed: now.timeIntervalSince(sentStepTime)) {
+            if arrival != sentStepArrival
+                || CarPlayGuidanceMapping.shouldUpdate(previous: sentStepDistance, current: distance,
+                                                       elapsed: now.timeIntervalSince(sentStepTime)) {
                 sentStepDistance = distance
                 sentStepTime = now
+                sentStepArrival = arrival
                 let time = CarPlayGuidanceMapping.timeToManeuver(stepDistance: distance,
                                                                  remainingDistance: route.remainingDistance,
-                                                                 remainingTime: route.remainingTime)
+                                                                 remainingTime: remaining)
                 session.updateEstimates(Self.estimates(meters: distance, seconds: time), for: maneuver)
             }
         }
@@ -856,12 +872,14 @@ final class CarPlayGuidance {
             let camera = Self.cameraDetail()
             let cameraChanged = camera != sentCameraDetail
                 && now.timeIntervalSince(sentTripTime) >= AppConfig.carPlayCameraLabelUpdateSeconds
-            if cameraChanged || CarPlayGuidanceMapping.shouldUpdate(previous: sentTripDistance, current: distance,
-                                                                    elapsed: now.timeIntervalSince(sentTripTime)) {
+            if cameraChanged || arrival != sentTripArrival
+                || CarPlayGuidanceMapping.shouldUpdate(previous: sentTripDistance, current: distance,
+                                                       elapsed: now.timeIntervalSince(sentTripTime)) {
                 sentTripDistance = distance
                 sentTripTime = now
+                sentTripArrival = arrival
                 sentCameraDetail = camera
-                template.updateEstimates(Self.tripEstimates(meters: distance, seconds: route.remainingTime,
+                template.updateEstimates(Self.tripEstimates(meters: distance, seconds: remaining,
                                                             camera: camera),
                                          for: trip)
             }

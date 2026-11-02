@@ -158,6 +158,7 @@ final class AppEnvironment {
     /// Ставит сцена CarPlay при подключении/отключении.
     func setCarPlayConnected(_ connected: Bool) {
         isCarPlayConnected = connected
+        MemoryPressure.isCarPlayConnected = connected
         location.setCarPlayConnected(connected)
         if connected { Storage.set(true, for: .carPlaySeen) }
         carLink.setCarPlay(connected)

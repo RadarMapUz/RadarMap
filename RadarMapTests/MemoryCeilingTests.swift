@@ -44,4 +44,43 @@ final class MemoryCeilingTests: XCTestCase {
         XCTAssertNotNil(bytes)
         XCTAssertGreaterThan(bytes ?? 0, 1024 * 1024)
     }
+
+    // MARK: - Машина подключена (40I)
+
+    /// Замер 11.10 с машиной: 278 МБ стоя, 302–310 в езде, 326 на осмотре.
+    /// Потолок с машиной выше всего замера — иначе чистка каждые 2 мин всю
+    /// поездку; без машины — прежний.
+    func testCarCeilingSitsAboveTheMeasuredCarWorkingSet() {
+        let mb: UInt64 = 1024 * 1024
+        let car = MemoryPressure.ceiling(carConnected: true)
+        XCTAssertEqual(MemoryPressure.ceiling(carConnected: false), AppConfig.engineMemoryCeilingBytes)
+        for measured: UInt64 in [278, 310, 326] {
+            XCTAssertFalse(MemoryPressure.shouldTrim(footprint: measured * mb, ceiling: car, lastTrim: nil, now: 0),
+                           "\(measured) МБ — рабочий набор карты машины, не повод чистить")
+            XCTAssertTrue(MemoryPressure.shouldTrim(footprint: measured * mb,
+                                                    ceiling: MemoryPressure.ceiling(carConnected: false),
+                                                    lastTrim: nil, now: 0),
+                          "без машины столько — прогрев кэша, чистим как раньше")
+        }
+        XCTAssertLessThan(car, 512 * mb, "потолок — не отказ от потолка")
+    }
+
+    /// Видимая карта машины на потолке не отдаёт ничего; скрытая карта
+    /// телефона рядом с ней чистится как раньше.
+    func testVisibleCarMapKeepsItsWorkingSetOnTheCeiling() {
+        XCTAssertEqual(MemoryPressure.release(.ceiling, hidden: false, inCar: true), .nothing)
+        XCTAssertEqual(MemoryPressure.release(.ceiling, hidden: true, inCar: false), .selectionAndEngine,
+                       "карта телефона в кармане")
+        XCTAssertEqual(MemoryPressure.release(.ceiling, hidden: true, inCar: true), .selectionAndEngine,
+                       "машина на чужом навигаторе — нашей карты не видно")
+        XCTAssertEqual(MemoryPressure.release(.ceiling, hidden: false, inCar: false), .selectionAndEngine,
+                       "открытая карта телефона в поездке — как в 36A")
+    }
+
+    func testBackgroundAndWarningAreUnchanged() {
+        XCTAssertEqual(MemoryPressure.release(.background, hidden: false, inCar: true), .nothing)
+        XCTAssertEqual(MemoryPressure.release(.background, hidden: true, inCar: false), .selectionAndEngine)
+        XCTAssertEqual(MemoryPressure.release(.warning, hidden: false, inCar: true), .selection,
+                       "система предупредила — тесно на самом деле; движок отвечает сам")
+    }
 }

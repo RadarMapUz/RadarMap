@@ -13,8 +13,9 @@ Endpoints:
   GET  /api/cng            -> {"stations": [{lat, lon, status, status_age, queue, queue_age, confirmed}]}
   POST /api/cng            {lat, lon, kind: gas|nogas|queue15|queue30|queue60, device} -> {"ok": true}
                            (метан на АГНКС; см. «Метан» ниже)
-  POST /api/report         {lat, lon, device, type [, course]}  -> {"id": N, "merged": bool
+  POST /api/report         {lat, lon, device, type [, course, amend_id]}  -> {"id": N, "merged": bool
                                                                     [, "amended": true]}
+                           (amend_id не своей или ушедшей точки -> 409 "nothing to amend")
   POST /api/vote           {id, device, value: 1|-1 [, kind: "pass"]} -> {"ok": true}
   POST /api/mine           {device} -> {"reports": [{id, confirmers}]}
                            (польза своих отметок в «Итогах»: только отметки ЭТОГО UUID и
@@ -49,9 +50,11 @@ Endpoints:
   * полный срок (3 ч / 6 ч) даёт только НЕЗАВИСИМОЕ подтверждение — другое
     устройство И другой адрес: ротация UUID не превращает слух в факт
   * подтверждение (+1) продлевает на 30 мин (максимум 6 ч от создания)
-  * новая отметка в 300 м от активной того же типа — подтверждение (merge)
-  * та же точка от того же устройства с ДРУГИМ типом в 400 м / 10 мин —
-    уточнение типа своей отметки (amend), а не вторая точка
+  * новая отметка в радиусе класса дороги от активной той же семьи —
+    подтверждение (merge) ближайшей; радар и тренога — одна семья, тип
+    остаётся точный (тренога)
+  * уточнение типа своей отметки (amend): с amend_id — ровно названная своя
+    точка (400 м / 10 мин); без него — только своя точка не старше 60 с в 150 м
   * дизлайк с нового адреса срезает 30 мин жизни; полное скрытие — по кворуму:
     3+ дизлайков, больше лайков, с >=3 разных адресов
   * на устройство: максимум 3 активных отметки, минимум 120 с между отметками;
@@ -130,6 +133,26 @@ ROAD_VOTE_FRESH = 6 * 3600
 
 def is_road(rtype):
     return rtype in ROAD_TYPES
+
+
+# Семьи слияния: радар и тренога — один объект на дороге. Быстрый тап, CarPlay,
+# Siri и часы шлют «радар», веер — «тренога», и одна тренога давала две точки-
+# призрака, а второе нажатие не засчитывалось подтверждением первой. Пост, ДТП,
+# перекрытие и ремонт — каждый своя семья (build_hotspots.KINDS — та же пара).
+MERGE_FAMILIES = {"radar": "speed", "tripod": "speed"}
+# Внутри семьи побеждает более точный тип: «тренога» говорит больше, чем «радар».
+MERGE_PRECISION = {"radar": 0, "tripod": 1}
+
+
+def merge_family(rtype):
+    return MERGE_FAMILIES.get(rtype, rtype)
+
+
+def merged_type(existing, incoming):
+    """Тип точки после слияния двух отметок одной семьи."""
+    if MERGE_PRECISION.get(incoming, 0) > MERGE_PRECISION.get(existing, 0):
+        return incoming
+    return existing
 
 
 # --- Метан (12б.4) -----------------------------------------------------------
@@ -271,6 +294,12 @@ DOWN_FLOOR = 300
 # (ReportGuard, 400 м); окно шире клиентских секунд — уточнить можно и из меню.
 AMEND_WINDOW = 10 * 60
 AMEND_METERS = 400
+# Неявное уточнение (свой другой тип рядом, БЕЗ amend_id) — только только что
+# поставленной точки: старая плашка «Что это было?» шлёт тип без id. Шире
+# окно — и пост, выбранный в веере через 300 м после своего радара, переписывал
+# радар в пост: у засады «тренога, за ней пост» на карте оставался один пост.
+IMPLICIT_AMEND_WINDOW = 60
+IMPLICIT_AMEND_METERS = 150
 MERGE_METERS = 300
 # Радиус слияния зависит от дороги, а не один на страну. На трассе две
 # настоящие треноги в 300 м — это две разные засады, и схлопывать их нельзя;
@@ -2106,6 +2135,11 @@ class Handler(BaseHTTPRequestHandler):
         now = time.time()
         conn = db()
         try:
+            # Проверка → вставка — одна транзакция с блокировкой записи сразу:
+            # без неё два водителя у одной треноги в одну секунду оба не видели
+            # точки друг друга и ставили две, а телефон с CarPlay обходили
+            # «120 с между отметками» и кап трёх активных (ловец багов, 39).
+            conn.execute("BEGIN IMMEDIATE")
             # Уточнение типа СВОЕЙ свежей отметки. «Радар!» уходит сразу, тип
             # человек выбирает следующим тапом — раньше второй тап с другим
             # типом рождал ВТОРУЮ точку рядом. Проверка стоит ДО лимитов:
@@ -2117,16 +2151,35 @@ class Handler(BaseHTTPRequestHandler):
             # своего свежего «Радар!», переписывал ЖИВОЙ радар в ремонт — и
             # радар пропадал у всех, старых сборок тоже. Через границу — только
             # явно: «Что это было? → Перекрыто» присылает amend_id той точки.
+            #
+            # С amend_id уточняется РОВНО названная своя точка: раньше брали
+            # первую свою из выборки, и «Тренога» о свежей точке B перекрашивала
+            # точку A четырьмя минутами раньше в 250 м. Без amend_id (старая
+            # плашка) — только только что поставленная и рядом
+            # (IMPLICIT_AMEND_*): тип из веера через квартал — новая засада.
             own = conn.execute(
                 "SELECT id, lat, lon, type, created, expires, ip FROM reports "
                 "WHERE device = ? AND active = 1 AND expires > ? AND created > ?",
                 (device, now, now - AMEND_WINDOW)).fetchall()
-            for r in own:
-                if r[3] == rtype or haversine(lat, lon, r[1], r[2]) > AMEND_METERS:
-                    continue
+            if amend_id:
+                named = [r for r in own if r[0] == amend_id
+                         and haversine(lat, lon, r[1], r[2]) <= AMEND_METERS]
+                if not named:
+                    # Уточнять нечего (истекла, снята, чужая, далеко): новую
+                    # точку из уточнения не рожаем — это была бы выдуманная засада.
+                    return self._json(409, {"error": "nothing to amend"})
+                if named[0][3] == rtype:
+                    return self._json(200, {"id": amend_id, "merged": True, "amended": True})
+                candidates = named
+            else:
+                candidates = sorted(
+                    (r for r in own
+                     if r[3] != rtype and is_road(r[3]) == is_road(rtype)
+                     and now - r[4] <= IMPLICIT_AMEND_WINDOW
+                     and haversine(lat, lon, r[1], r[2]) <= IMPLICIT_AMEND_METERS),
+                    key=lambda r: haversine(lat, lon, r[1], r[2]))[:1]
+            for r in candidates:
                 crossing = is_road(r[3]) != is_road(rtype)
-                if crossing and r[0] != amend_id:
-                    continue
                 if crossing:
                     # Перевод через границу уводит точку из её списка у всех —
                     # для /api/mobile это то же, что отзыв. Отзыв подтверждённой
@@ -2204,9 +2257,17 @@ class Handler(BaseHTTPRequestHandler):
                 "WHERE active = 1 AND expires > ?", (now,)).fetchall()
             # Радиус берём максимальный из двух классов: если хоть одна из
             # точек стоит на трассе, «рядом» здесь измеряется по-трассовому.
+            # Семья, а не тип: «радар» у чужой «треноги» — та же засада.
+            # Ближайшая подходящая, а не первая в выборке: две треноги в 250 м
+            # на трассе — две засады, и голос должен уйти той, у которой стоим.
+            near = []
             for r in active_rows:
                 radius = max(merge_radius(cls), merge_radius(r[8]))
-                if r[5] == rtype and haversine(lat, lon, r[1], r[2]) <= radius:
+                gap = haversine(lat, lon, r[1], r[2])
+                if merge_family(r[5]) == merge_family(rtype) and gap <= radius:
+                    near.append((gap, r))
+            near.sort(key=lambda pair: pair[0])
+            for _, r in near[:1]:
                     # Подтверждение — через votes, как обычный лайк: _vote
                     # пересчитывает up/down только из votes, инкремент в
                     # reports первый же голос стёр бы.
@@ -2222,9 +2283,10 @@ class Handler(BaseHTTPRequestHandler):
                     # Wi-Fi) засчитывается голосом, но испытательный срок не
                     # снимает — иначе фейк продлевал бы сам себя ротацией.
                     confirmed = confirmed_independently(conn, r[0], r[6], r[7])
-                    new_exp = lifecycle_expires(r[3], r[4], rtype, confirmed, now)
-                    conn.execute("UPDATE reports SET up = ?, expires = ? WHERE id = ?",
-                                 (up, new_exp, r[0]))
+                    kind = merged_type(r[5], rtype)
+                    new_exp = lifecycle_expires(r[3], r[4], kind, confirmed, now)
+                    conn.execute("UPDATE reports SET up = ?, expires = ?, type = ? WHERE id = ?",
+                                 (up, new_exp, kind, r[0]))
                     conn.commit()
                     bump_mobile_version()
                     return self._json(200, {"id": r[0], "merged": True})
@@ -2351,6 +2413,9 @@ class Handler(BaseHTTPRequestHandler):
         now = time.time()
         conn = db()
         try:
+            # Проверка «не подтверждена другими» и снятие — одной транзакцией:
+            # иначе лайк, пришедший между ними, снимался вместе с точкой.
+            conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
                 "SELECT device, created, active FROM reports WHERE id = ?", (rid,)).fetchone()
             if not row:
@@ -2412,6 +2477,9 @@ class Handler(BaseHTTPRequestHandler):
         now = time.time()
         conn = db()
         try:
+            # Срок пересчитывается «прочитал → посчитал → записал»: без
+            # блокировки записи сразу одновременный голос терял обновление.
+            conn.execute("BEGIN IMMEDIATE")
             voted = conn.execute(
                 "SELECT COUNT(*) FROM votes WHERE device = ? AND ts > ?",
                 (device, now - 86400)).fetchone()[0]

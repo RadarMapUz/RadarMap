@@ -26,6 +26,10 @@ nonisolated struct Venue: Sendable, Equatable, Identifiable {
         /// бензина (13.10): большинство машин на газу, и «АЗС» в поиске
         /// отвечала всеми заправками подряд. Коды — контракт с build_roads.py.
         case hotel = 11, cng = 12, lpg = 13
+        /// Станции метро и населённые пункты/районы города (40G): «метро
+        /// хамза», «Чорсу», «Юнусабад». Только для поиска — на карту и в
+        /// плитки не идут.
+        case metro = 14, place = 15
 
         var title: String {
             switch self {
@@ -42,6 +46,8 @@ nonisolated struct Venue: Sendable, Equatable, Identifiable {
             case .hotel:       return String(localized: "Гостиница")
             case .cng:         return String(localized: "Метан")
             case .lpg:         return String(localized: "Пропан")
+            case .metro:       return String(localized: "Метро")
+            case .place:       return String(localized: "Местность")
             }
         }
 
@@ -62,6 +68,8 @@ nonisolated struct Venue: Sendable, Equatable, Identifiable {
             case .hotel:       return "bed.double.fill"
             case .cng:         return "flame.fill"
             case .lpg:         return "flame"
+            case .metro:       return "tram.fill.tunnel"
+            case .place:       return "mappin.and.ellipse"
             }
         }
 
@@ -83,8 +91,18 @@ nonisolated struct Venue: Sendable, Equatable, Identifiable {
             case .pharmacy:    return ["аптека", "dorixona", "apteka"]
             case .atm:         return ["банкомат", "банк", "bankomat", "bank"]
             case .supermarket: return ["супермаркет", "магазин", "supermarket", "do'kon"]
+            case .metro:       return ["метро", "metro", "metrosi", "м", "станция", "stansiya", "stantsiya",
+                                       "bekat", "bekati", "station", "subway"]
+            case .place:       return ["город", "shahar", "shahri", "шахар", "район", "rayon", "tuman", "махалля", "mahalla", "mahallasi", "mfy", "мфй",
+                                       "квартал", "kvartal", "massiv", "массив", "mavze", "mavzesi",
+                                       "посёлок", "поселок", "кишлак", "qishloq"]
             }
         }
+
+        /// Ищется ли вид по НАЧАЛУ слова («запр» — заправка). У метро и
+        /// местности — только целым словом: «мах» — начало «Махтумкули», а
+        /// «шах» — «Шахристана», и список махаллей вместо улицы был бы ошибкой.
+        var matchesPrefix: Bool { self != .metro && self != .place }
 
         /// Плитки на пустом экране поиска — то, что ищут из машины.
         static let quick: [Kind] = [.fuel, .cng, .lpg, .parking, .carWash, .tyres, .charging, .pharmacy, .atm, .food]
@@ -93,6 +111,10 @@ nonisolated struct Venue: Sendable, Equatable, Identifiable {
     let kind: Kind
     let name: String
     let point: CLLocationCoordinate2D
+    /// Другие нынешние имена и старые («Хамза» у «Новзы») — для поиска
+    /// (SearchIndex). Пятый и шестой элемент записи клетки, у старых файлов нет.
+    var aliases: [String] = []
+    var oldNames: [String] = []
 
     /// Безымянная парковка подписывается видом, а не пустой строкой.
     var title: String { name.isEmpty ? kind.title : name }
@@ -137,7 +159,9 @@ nonisolated struct VenueBook: Sendable {
                   let lon = (row[3] as? NSNumber)?.doubleValue else { continue }
             out.append(Venue(kind: kind, name: name,
                              point: CLLocationCoordinate2D(latitude: lat / RoadTiles.scale,
-                                                           longitude: lon / RoadTiles.scale)))
+                                                           longitude: lon / RoadTiles.scale),
+                             aliases: row.count > 4 ? row[4] as? [String] ?? [] : [],
+                             oldNames: row.count > 5 ? row[5] as? [String] ?? [] : []))
         }
         return VenueBook(venues: out)
     }
@@ -188,13 +212,15 @@ nonisolated struct VenueBook: Sendable {
         if let exact = foldedKindWords.first(where: { $0.words.contains(folded) }) {
             return exact.kind
         }
-        return foldedKindWords.first { $0.words.contains { $0.hasPrefix(folded) } }?.kind
+        return foldedKindWords.first { entry in
+            entry.kind.matchesPrefix && entry.words.contains { $0.hasPrefix(folded) }
+        }?.kind
     }
 
     /// Слова видов, уже приведённые: раньше каждая буква запроса заново
     /// приводила все ~70 слов, до двух раз (аудит 11.10). Порядок видов —
     /// как в allCases: первый по порядку вид побеждает при равенстве.
-    private static let foldedKindWords: [(kind: Venue.Kind, words: [String])] =
+    static let foldedKindWords: [(kind: Venue.Kind, words: [String])] =
         Venue.Kind.allCases.map { kind in (kind, kind.searchWords.map { AddressBook.fold($0) }) }
 
     /// Как спросить Apple о виде: категорией POI, где она есть (не зависит
@@ -214,6 +240,8 @@ nonisolated struct VenueBook: Sendable {
         case .hotel:       return ([.hotel], "гостиница")
         case .cng:         return ([.gasStation], "метан заправка")
         case .lpg:         return ([.gasStation], "пропан заправка")
+        case .metro:       return ([.publicTransport], "метро")
+        case .place:       return ([], "район")
         }
     }
 

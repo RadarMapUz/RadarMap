@@ -101,6 +101,54 @@ class AmendTest(_Helpers, ServerTestBase):
         self.assertEqual(self._type(foreign), "radar")
 
 
+class FreshClientTest(_Helpers, ServerTestBase):
+
+    def test_new_client_never_gets_an_implicit_amend(self):
+        """Новый клиент уточняет только явно (amend_id): «Тренога» из веера
+        через 10 с после своего «Радар!» — не перекраска радара."""
+        radar = self._put(41.3100, 69.2500, ago=10)
+        _, body = self._post(41.3102, 69.2500, "tripod", fresh=True)
+        self.assertNotIn("amended", body)
+        self.assertEqual(self._type(radar), "radar")
+
+    def test_old_client_radar_is_still_refined(self):
+        """Старая сборка шлёт тип без amend_id сразу после «Радар!» — это её
+        плашка уточнения, она работает как раньше."""
+        radar = self._put(41.3100, 69.2500, ago=10)
+        _, body = self._post(41.3102, 69.2500, "tripod")
+        self.assertTrue(body.get("amended"))
+        self.assertEqual(self._type(radar), "tripod")
+
+
+class StaleVoteTest(_Helpers, ServerTestBase):
+
+    def _expires(self, rid):
+        conn = sqlite3.connect(api.DB_PATH)
+        value = conn.execute("SELECT expires FROM reports WHERE id = ?", (rid,)).fetchone()[0]
+        conn.close()
+        return value
+
+    def test_old_yes_vote_does_not_extend(self):
+        """«Да, стоит» о проезде 20 минут назад (вопрос и связь ждали) —
+        голос учтён, срок треноги не продлён."""
+        rid = self._put(41.3100, 69.2500, ago=70 * 60, rtype="tripod", device="a", ip="10.42.0.1")
+        before = self._expires(rid)
+        status, _ = _call(self.port, "POST", "/api/vote",
+                          {"id": rid, "device": "b", "value": 1, "kind": "pass", "age": 20 * 60},
+                          ip="10.42.0.2")
+        self.assertEqual(status, 200)
+        self.assertEqual(self._expires(rid), before)
+        _, mobile = _call(self.port, "GET", "/api/mobile")
+        self.assertFalse(mobile["reports"][0]["confirmed"], "старый голос — не подтверждение «сейчас»")
+
+    def test_fresh_yes_vote_still_extends(self):
+        rid = self._put(41.3100, 69.2500, ago=70 * 60, rtype="tripod", device="a", ip="10.42.1.1")
+        before = self._expires(rid)
+        _call(self.port, "POST", "/api/vote",
+              {"id": rid, "device": "b", "value": 1, "kind": "pass", "age": 30}, ip="10.42.1.2")
+        self.assertGreater(self._expires(rid), before)
+
+
 class FamilyMergeTest(_Helpers, ServerTestBase):
 
     def test_radar_next_to_a_tripod_confirms_it(self):

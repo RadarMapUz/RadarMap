@@ -16,7 +16,8 @@ Endpoints:
   POST /api/report         {lat, lon, device, type [, course, amend_id]}  -> {"id": N, "merged": bool
                                                                     [, "amended": true]}
                            (amend_id не своей или ушедшей точки -> 409 "nothing to amend")
-  POST /api/vote           {id, device, value: 1|-1 [, kind: "pass"]} -> {"ok": true}
+  POST /api/vote           {id, device, value: 1|-1 [, kind: "pass", age]} -> {"ok": true}
+                           («на месте» старше 10 мин — голос без продления)
   POST /api/mine           {device} -> {"reports": [{id, confirmers}]}
                            (польза своих отметок в «Итогах»: только отметки ЭТОГО UUID и
                             число независимых подтверждений — ни координат, ни времени)
@@ -146,6 +147,23 @@ MERGE_PRECISION = {"radar": 0, "tripod": 1}
 
 def merge_family(rtype):
     return MERGE_FAMILIES.get(rtype, rtype)
+
+
+def implicit_amend_allowed(old, new):
+    """Неявное уточнение (без amend_id) — только из «радара», его шлёт быстрый
+    тап старой сборки, и никогда в «радар»: тренога не понижается до радара и
+    не переписывается в пост из веера. События дороги — внутри своей категории."""
+    if is_road(old) or is_road(new):
+        return is_road(old) and is_road(new)
+    return old == "radar" and new != "radar"
+
+
+def courses_diverge(a, b):
+    """Оба курса известны и расходятся больше MERGE_MAX_COURSE_DIFF."""
+    if a is None or b is None or a < 0 or b < 0:
+        return False
+    diff = abs(a - b) % 360
+    return min(diff, 360 - diff) > MERGE_MAX_COURSE_DIFF
 
 
 def merged_type(existing, incoming):
@@ -300,6 +318,13 @@ AMEND_METERS = 400
 # радар в пост: у засады «тренога, за ней пост» на карте оставался один пост.
 IMPLICIT_AMEND_WINDOW = 60
 IMPLICIT_AMEND_METERS = 150
+# Подтверждение (слияние или «на месте») старше этого записывается голосом, но
+# срок не продлевает: тренога — это «сейчас», и наблюдение сорокаминутной
+# давности из очереди телефона не держит её ещё полчаса.
+CONFIRM_FRESH_MAX = 10 * 60
+# Курсы двух отметок расходятся сильнее — это встречная сторона дороги, и
+# слить их значит предупреждать едущих навстречу о чужой засаде.
+MERGE_MAX_COURSE_DIFF = 90
 MERGE_METERS = 300
 # Радиус слияния зависит от дороги, а не один на страну. На трассе две
 # настоящие треноги в 300 м — это две разные засады, и схлопывать их нельзя;
@@ -570,6 +595,12 @@ def init_db():
     # Нужен радиусу слияния: 300 м на трассе — соседние треноги, 300 м в
     # квартале — та же самая.
     migrate(conn, "reports", "cls TEXT DEFAULT ''")
+    # Когда отметку ПОСТАВИЛИ (приём минус age из очереди телефона); 0 — как
+    # created. По нему «120 с между отметками»: отметка, досланная из очереди,
+    # не запирает живой тап у новой засады.
+    migrate(conn, "reports", "observed REAL DEFAULT 0")
+    # Голос старше CONFIRM_FRESH_MAX: учтён, но не подтверждение «сейчас».
+    migrate(conn, "votes", "stale INTEGER DEFAULT 0")
 
     # Метан на АГНКС (12б.4): «газ есть / нет / очередь». Станция — точка
     # заведения из файла заведений телефона, округлённая до ~10 м: сервер
@@ -952,7 +983,7 @@ def confirmed_independently(conn, rid, owner_device, owner_ip):
     эта цена ниже, чем самоподтверждение фейков ротацией UUID.
     """
     return conn.execute(
-        "SELECT 1 FROM votes WHERE report_id = ? AND value = 1 "
+        "SELECT 1 FROM votes WHERE report_id = ? AND value = 1 AND stale = 0 "
         "AND device != ? AND ip != '' AND ip != ? LIMIT 1",
         (rid, owner_device, owner_ip)).fetchone() is not None
 
@@ -1703,10 +1734,10 @@ class Handler(BaseHTTPRequestHandler):
             # то же число), а confirmed оставляет отметке и голосу.
             rows = conn.execute(
                 "SELECT r.id, r.lat, r.lon, r.created, r.expires, r.up, r.down, r.type, "
-                "EXISTS(SELECT 1 FROM votes v WHERE v.report_id = r.id AND v.value = 1 "
+                "EXISTS(SELECT 1 FROM votes v WHERE v.report_id = r.id AND v.value = 1 AND v.stale = 0 "
                 "AND v.device != r.device AND v.ip != '' AND v.ip != r.ip), r.course, "
                 "(SELECT COUNT(DISTINCT v.ip) FROM votes v WHERE v.report_id = r.id AND v.value = 1 "
-                "AND v.device != r.device AND v.ip != '' AND v.ip != r.ip) "
+                "AND v.stale = 0 AND v.device != r.device AND v.ip != '' AND v.ip != r.ip) "
                 "FROM reports r WHERE r.active = 1 AND r.expires > ? "
                 "AND (r.type IN (?, ?)) = ?",
                 (now, ROAD_TYPES[0], ROAD_TYPES[1], 1 if road else 0)).fetchall()
@@ -2128,11 +2159,18 @@ class Handler(BaseHTTPRequestHandler):
             amend_id = int(data.get("amend_id") or 0)
         except (TypeError, ValueError, OverflowError):   # OverflowError — Infinity
             amend_id = 0
+        # Новый клиент уточняет только явно (amend_id) — неявного уточнения
+        # для него нет вовсе: тип из веера — всегда новая засада.
+        fresh_client = data.get("fresh") is True
         ip = self._ip()
         if ip_quota_exceeded("report", ip, IP_DAILY_CAPS["report"]):
             return self._json(429, {"error": "too many"})
 
         now = time.time()
+        # Отметка из очереди телефона (не было связи): срок и пауза — от
+        # момента, когда её поставили, а не от приёма (S25).
+        age = report_age(data)
+        observed = now - age
         conn = db()
         try:
             # Проверка → вставка — одна транзакция с блокировкой записи сразу:
@@ -2171,10 +2209,12 @@ class Handler(BaseHTTPRequestHandler):
                 if named[0][3] == rtype:
                     return self._json(200, {"id": amend_id, "merged": True, "amended": True})
                 candidates = named
+            elif fresh_client:
+                candidates = []
             else:
                 candidates = sorted(
                     (r for r in own
-                     if r[3] != rtype and is_road(r[3]) == is_road(rtype)
+                     if r[3] != rtype and implicit_amend_allowed(r[3], rtype)
                      and now - r[4] <= IMPLICIT_AMEND_WINDOW
                      and haversine(lat, lon, r[1], r[2]) <= IMPLICIT_AMEND_METERS),
                     key=lambda r: haversine(lat, lon, r[1], r[2]))[:1]
@@ -2241,19 +2281,22 @@ class Handler(BaseHTTPRequestHandler):
 
             # rate limits per device
             road = rtype in ROAD_TYPES
-            recent = conn.execute(
-                "SELECT COUNT(*), MAX(created) FROM reports WHERE device = ? AND active = 1 "
-                "AND expires > ? AND (type IN (?, ?)) = ?",
-                (device, now, ROAD_TYPES[0], ROAD_TYPES[1], 1 if road else 0)).fetchone()
-            if recent[0] >= 3:
+            # Пауза — между моментами ОТМЕТОК, а не приёма: досланная из
+            # очереди отметка десятиминутной давности не запирает живой тап у
+            # новой засады, и наоборот (ловец багов, 40a).
+            recent = [row[0] for row in conn.execute(
+                "SELECT CASE WHEN observed > 0 THEN observed ELSE created END FROM reports "
+                "WHERE device = ? AND active = 1 AND expires > ? AND (type IN (?, ?)) = ?",
+                (device, now, ROAD_TYPES[0], ROAD_TYPES[1], 1 if road else 0)).fetchall()]
+            if len(recent) >= 3:
                 return self._json(429, {"error": "too many active reports"})
-            if recent[1] and now - recent[1] < 120:
+            if any(abs(observed - at) < 120 for at in recent):
                 return self._json(429, {"error": "too fast"})
 
             # dedupe: nearby active report of the SAME type -> treat as confirmation
             # (пост ДПС и радар в 100 м друг от друга — разные сущности)
             active_rows = conn.execute(
-                "SELECT id, lat, lon, created, expires, type, device, ip, cls FROM reports "
+                "SELECT id, lat, lon, created, expires, type, device, ip, cls, course FROM reports "
                 "WHERE active = 1 AND expires > ?", (now,)).fetchall()
             # Радиус берём максимальный из двух классов: если хоть одна из
             # точек стоит на трассе, «рядом» здесь измеряется по-трассовому.
@@ -2264,17 +2307,22 @@ class Handler(BaseHTTPRequestHandler):
             for r in active_rows:
                 radius = max(merge_radius(cls), merge_radius(r[8]))
                 gap = haversine(lat, lon, r[1], r[2])
-                if merge_family(r[5]) == merge_family(rtype) and gap <= radius:
+                # Встречная сторона (курсы расходятся) — своя засада.
+                if merge_family(r[5]) == merge_family(rtype) and gap <= radius \
+                        and not courses_diverge(course, r[9]):
                     near.append((gap, r))
             near.sort(key=lambda pair: pair[0])
             for _, r in near[:1]:
                     # Подтверждение — через votes, как обычный лайк: _vote
                     # пересчитывает up/down только из votes, инкремент в
                     # reports первый же голос стёр бы.
+                    # Отметка из очереди старше CONFIRM_FRESH_MAX — голос без
+                    # продления: тренога — это «сейчас» (ловец багов, 40a).
+                    stale = age > CONFIRM_FRESH_MAX
                     conn.execute(
-                        "INSERT OR REPLACE INTO votes(report_id, device, value, ts, ip, kind) "
-                        "VALUES(?,?,1,?,?,'merge')",
-                        (r[0], device, now, ip))
+                        "INSERT OR REPLACE INTO votes(report_id, device, value, ts, ip, kind, stale) "
+                        "VALUES(?,?,1,?,?,'merge',?)",
+                        (r[0], device, now, ip, 1 if stale else 0))
                     up = conn.execute(
                         "SELECT COUNT(*) FROM votes WHERE report_id = ? AND value = 1",
                         (r[0],)).fetchone()[0]
@@ -2284,7 +2332,7 @@ class Handler(BaseHTTPRequestHandler):
                     # снимает — иначе фейк продлевал бы сам себя ротацией.
                     confirmed = confirmed_independently(conn, r[0], r[6], r[7])
                     kind = merged_type(r[5], rtype)
-                    new_exp = lifecycle_expires(r[3], r[4], kind, confirmed, now)
+                    new_exp = r[4] if stale else lifecycle_expires(r[3], r[4], kind, confirmed, now)
                     conn.execute("UPDATE reports SET up = ?, expires = ?, type = ? WHERE id = ?",
                                  (up, new_exp, kind, r[0]))
                     conn.commit()
@@ -2318,12 +2366,12 @@ class Handler(BaseHTTPRequestHandler):
             # Отметка из очереди телефона (не было связи): срок — от момента,
             # когда её поставили, а не от приёма — иначе тренога, отмеченная
             # сорок минут назад, жила бы полный срок с этой минуты (S25).
-            observed = now - report_age(data)
             cur = conn.execute(
                 "INSERT INTO reports(lat, lon, created, expires, device, type, ip, cls, "
-                "active, closed, course) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                "active, closed, course, observed) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                 (lat, lon, now, max(now + 60, observed + ttl), device, rtype, ip, cls,
-                 0 if blocked else 1, "blocked" if blocked else "", course))
+                 0 if blocked else 1, "blocked" if blocked else "", course,
+                 observed if age > 0 else 0))
             conn.commit()
             bump_mobile_version()
             return self._json(200, {"id": cur.lastrowid, "merged": False})
@@ -2510,9 +2558,12 @@ class Handler(BaseHTTPRequestHandler):
             prior = conn.execute(
                 "SELECT value FROM votes WHERE report_id = ? AND device = ?",
                 (rid, device)).fetchone()
-            conn.execute("INSERT OR REPLACE INTO votes(report_id, device, value, ts, ip, kind) "
-                         "VALUES(?,?,?,?,?,?)",
-                         (rid, device, value, now, ip, kind))
+            # «На месте» о проезде минут десять назад (вопрос ждал, голос ждал
+            # связи) — учтён, но срок не продлевает: тренога — это «сейчас».
+            stale = value == 1 and report_age(data) > CONFIRM_FRESH_MAX
+            conn.execute("INSERT OR REPLACE INTO votes(report_id, device, value, ts, ip, kind, stale) "
+                         "VALUES(?,?,?,?,?,?,?)",
+                         (rid, device, value, now, ip, kind, 1 if stale else 0))
             up, down = conn.execute(
                 "SELECT COALESCE(SUM(value = 1), 0), COALESCE(SUM(value = -1), 0) "
                 "FROM votes WHERE report_id = ?", (rid,)).fetchone()
@@ -2520,10 +2571,11 @@ class Handler(BaseHTTPRequestHandler):
             # (ROAD_VOTE_FRESH), у камер — все голоса, как было.
             since = now - ROAD_VOTE_FRESH if is_road(rtype) else 0
             if value == 1:
-                # Продление и полный срок — только за независимое подтверждение
-                # (другое устройство И другой адрес): см. lifecycle_expires.
-                confirmed = confirmed_independently(conn, rid, owner_device, owner_ip)
-                expires = lifecycle_expires(created, expires, rtype, confirmed, now)
+                if not stale:
+                    # Продление и полный срок — только за независимое подтверждение
+                    # (другое устройство И другой адрес): см. lifecycle_expires.
+                    confirmed = confirmed_independently(conn, rid, owner_device, owner_ip)
+                    expires = lifecycle_expires(created, expires, rtype, confirmed, now)
             elif ip and (prior is None or prior[0] != -1):
                 # Первый дизлайк с НОВОГО адреса срезает жизнь: два честных
                 # «Нет» после проезда снимают пустышку задолго до кворума.

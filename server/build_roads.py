@@ -49,6 +49,7 @@ import shutil
 import sys
 from collections import Counter, OrderedDict, defaultdict
 
+import search_names
 import surface_check
 import tree_planting
 
@@ -1401,6 +1402,17 @@ def fuel_kind(properties):
 VENUE_DUPLICATE_METERS = 30.0
 
 
+# Станции метро (14) — отдельным видом с явным словом «метро»: «метро
+# хамза» ищут именно станцию. Вид решает search_names.is_metro.
+VENUE_METRO = search_names.VENUE_METRO
+# Населённые пункты и районы города (15) — из places.geojsonl, тем же файлом
+# клетки: «Чорсу», «Юнусабад», «Тошкент шахри».
+VENUE_PLACE = search_names.VENUE_PLACE
+# Точка и контур одной станции или города стоят дальше 30 м друг от друга:
+# у Ташкента середина рамки границы — в 3,5 км от узла места.
+VENUE_DUPLICATE_METERS_BY_KIND = {VENUE_METRO: 500.0, VENUE_PLACE: 5000.0}
+
+
 def venue_kind(properties):
     """Код вида заведения или None — не наше."""
     for code, key, values in VENUE_KINDS:
@@ -1408,14 +1420,20 @@ def venue_kind(properties):
             if code == 1:
                 return fuel_kind(properties) or code
             return code
+    if search_names.is_metro(properties):
+        return VENUE_METRO
     return None
 
 
-def collect_venues(source_path):
-    """geojsonl заведений → [(код, имя, lon, lat)].
+def collect_venues(source_path, places=False):
+    """geojsonl заведений → [(код, имя, lon, lat[, другие имена, старые])].
 
     Имя — по-русски, иначе как есть, иначе бренд; без имени (парковки чаще
     всего безымянны) — пустое: клиент подпишет видом. Контур — серединой рамки.
+    Остальные имена (языки, alt_name, old_name) — для поиска, search_names.
+
+    `places=True` — файл населённых пунктов (places.geojsonl): вид 15, без
+    имени запись не нужна.
     """
     out = []
     if not source_path or not os.path.exists(source_path):
@@ -1430,15 +1448,25 @@ def collect_venues(source_path):
             except ValueError:
                 continue
             properties = feature.get("properties") or {}
-            code = venue_kind(properties)
+            if places:
+                code = VENUE_PLACE if search_names.is_place(properties) else None
+            else:
+                code = venue_kind(properties)
             if code is None:
                 continue
             spot = feature_center(feature.get("geometry") or {})
             if spot is None:
                 continue
-            name = (properties.get("name:ru") or properties.get("name")
-                    or properties.get("brand") or "").strip()
-            out.append((code, name, spot[0], spot[1]))
+            if code == VENUE_METRO:
+                name = search_names.metro_display(properties)
+            else:
+                name = (properties.get("name:ru") or properties.get("name")
+                        or properties.get("brand") or "").strip()
+            if code in (VENUE_METRO, VENUE_PLACE) and not name:
+                continue
+            alts, olds = search_names.names_from(properties, name,
+                                                 parenthetical=code == VENUE_METRO)
+            out.append(search_names.venue_row(code, name, spot[0], spot[1], alts, olds))
     return out
 
 
@@ -1459,39 +1487,56 @@ def merge_venues(primary, extra, meters=VENUE_DUPLICATE_METERS):
     # это 14 миллионов расстояний на каждый вид.
     step = 0.001
     index = defaultdict(list)
-    for code, _name, lon, lat in primary:
+    for code, _name, lon, lat in (r[:4] for r in primary):
         index[(code, int(lat // step), int(lon // step))].append((lon, lat))
     merged = list(primary)
-    for code, name, lon, lat in extra:
+    for record in extra:
+        code, _name, lon, lat = record[:4]
         row, column = int(lat // step), int(lon // step)
         taken = any(
             meters_between((lon, lat), other) < meters
             for dr in (-1, 0, 1) for dc in (-1, 0, 1)
             for other in index.get((code, row + dr, column + dc), ()))
         if not taken:
-            merged.append((code, name, lon, lat))
+            merged.append(record)
     return merged
 
 
 def venues_by_cell(rows):
     """Заведения → {ключ клетки: полезная нагрузка файла}.
 
-    Запись — [код, имя, lat, lon] целыми 1e-5°. Порядок — сортировкой, а не
-    порядком строк экстракта: иначе sha256 файла менялся бы от перестановки, и
-    телефоны перекачивали бы то, в чём не изменилось ничего.
+    Запись — [код, имя, lat, lon] целыми 1e-5°, с другими и старыми именами —
+    ещё два списка (search_names.payload_row; старый клиент их не читает).
+    Порядок — сортировкой, а не порядком строк экстракта: иначе sha256 файла
+    менялся бы от перестановки, и телефоны перекачивали бы то, в чём не
+    изменилось ничего.
     """
     cells = {}
     kept = defaultdict(list)   # (код, имя) → уже взятые точки
-    for code, name, lon, lat in sorted(rows, key=lambda r: (r[0], r[1], r[3], r[2])):
+    for record in sorted(rows, key=lambda r: (r[0], r[1], r[3], r[2], json.dumps(r[4:], ensure_ascii=False))):
+        code, name, lon, lat = record[:4]
         # Расстоянием, а не округлением в ячейку: два конца одного здания по
         # разные стороны границы ячейки остались бы двумя АЗС.
-        if any(meters_between((lon, lat), other) < VENUE_DUPLICATE_METERS
+        limit = VENUE_DUPLICATE_METERS_BY_KIND.get(code, VENUE_DUPLICATE_METERS)
+        if any(meters_between((lon, lat), other) < limit
                for other in kept[(code, name)]):
             continue
         kept[(code, name)].append((lon, lat))
         cells.setdefault(address_key(lat, lon), []).append(
-            [code, name, round(lat * SCALE), round(lon * SCALE)])
+            search_names.payload_row(record, SCALE))
     return {key: {"version": 1, "venues": rows} for key, rows in cells.items()}
+
+
+def alias_paths(given):
+    """Реестры старых имён: заданные флагом, иначе все server/poi/aliases_*.tsv
+    рядом со сборкой — чтобы команда сборки страны не менялась."""
+    if given:
+        return list(given)
+    folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "poi")
+    if not os.path.isdir(folder):
+        return []
+    return [os.path.join(folder, name) for name in sorted(os.listdir(folder))
+            if name.startswith("aliases_") and name.endswith(".tsv")]
 
 
 def addresses_by_cell(rows):
@@ -7724,6 +7769,9 @@ def main():
                         default=[],
                         help="ещё geojsonl заведений (реестры портала, import_poi_egov.py); "
                              "точка ближе 30 м к OSM того же вида не дублируется")
+    parser.add_argument("--aliases", dest="aliases", action="append", default=[],
+                        help="TSV старых имён (kind, name_now, name_old, lang, osm_id, lat, lon, "
+                             "source, source_date); без флага — server/poi/aliases_*.tsv")
     parser.add_argument("--places", dest="places", default=None,
                         help="geojsonl населённых пунктов (необязателен)")
     parser.add_argument("--trees", dest="trees", default=None,
@@ -7836,6 +7884,11 @@ def main():
     del lights, raw_points
     address_rows = collect_addresses(args.addresses) + drawn_addresses(edits)
     addresses = addresses_by_cell(address_rows)
+    # Все имена улицы — с самих дорог (name:ru, old_name…): адрес знает улицу
+    # одной строкой addr:street.
+    named = search_names.attach_street_names(
+        addresses, search_names.street_names(args.source, ADDRESS_DEGREES))
+    print(f"адреса: улиц с другими именами {named}")
     address_count = len(address_rows)
     address_streets = len({street for street, _, _, _ in address_rows})
     del address_rows
@@ -7859,7 +7912,18 @@ def main():
         venue_rows = merge_venues(venue_rows, extra_rows)
         print(f"заведения из {os.path.basename(extra_path)}: {len(extra_rows)}, "
               f"новых {len(venue_rows) - before}")
+    place_rows = collect_venues(args.places, places=True)
+    venue_rows += place_rows
     venues = venues_by_cell(venue_rows)
+    alias_rows = [row for path in alias_paths(args.aliases)
+                  for row in search_names.read_aliases(path)]
+    if alias_rows:
+        applied, missed = search_names.apply_aliases(addresses, venues, alias_rows,
+                                                     ADDRESS_DEGREES, SCALE)
+        print(f"старые имена из реестров: {len(alias_rows)}, приклеено {applied}, "
+              f"не нашли записи {len(missed)}")
+        for row in missed[:20]:
+            print(f"        не легло: {row.get('kind')} «{row['name_now']}» ← «{row['name_old']}»")
     index, index_v2 = write_tiles(roads, args.tiles_dir, args.grid, areas, points,
                                   far_points, far, addresses, houses,
                                   args.surface, places, islands, venues)

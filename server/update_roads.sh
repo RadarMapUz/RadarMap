@@ -191,12 +191,14 @@ osmium export places.osm.pbf -f geojsonseq \
 echo "    мест в экстракте: $(wc -l < places.geojsonl)"
 
 # Заведения для поиска: АЗС, парковки, мойки, шиномонтаж, зарядки, еда,
-# аптеки, банкоматы, супермаркеты (build_roads.VENUE_KINDS). Узлы и контуры:
-# АЗС и парковки в OSM чаще рисуют площадью.
+# аптеки, банкоматы, супермаркеты (build_roads.VENUE_KINDS), станции метро
+# (вид 14, search_names.is_metro). Узлы и контуры: АЗС и парковки в OSM чаще
+# рисуют площадью.
 osmium tags-filter uzbekistan.osm.pbf \
     nwa/amenity=fuel,parking,car_wash,charging_station,restaurant,cafe,fast_food,pharmacy,atm,bank \
     nwa/shop=car_repair,tyres,supermarket \
     nwa/tourism=hotel,motel,guest_house,hostel \
+    nwa/station=subway \
     -o venues.osm.pbf --overwrite
 osmium export venues.osm.pbf -f geojsonseq \
     --geometry-types=point,polygon -o venues.geojsonl --overwrite

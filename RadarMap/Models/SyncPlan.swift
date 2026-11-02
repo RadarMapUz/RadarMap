@@ -49,6 +49,9 @@ nonisolated enum SyncPlan {
     enum Job: String, CaseIterable, Sendable, Hashable, Comparable {
         // Ведущие: открывают окно по времени.
         case mobile, traffic
+        // Своя очередь отметок без сети: попутная без зрителя — обещанное
+        // «отправлю позже» уходит и после поездки, с телефоном в кармане.
+        case reports
         // Попутные частые: нужны тому, кто смотрит или едет.
         case roadWeather, trafficProfile, cng, offlineRoute, etaShare
         // Попутные редкие файлы.
@@ -176,6 +179,19 @@ nonisolated enum SyncPlan {
     /// трассе превратился бы в раз в 30).
     static func joinSlack(_ interval: TimeInterval) -> TimeInterval {
         min(AppConfig.radioJoinSlackSeconds, interval / 4)
+    }
+
+    /// Пауза после сбоев отметок снимается, когда связь вернулась или
+    /// человек открыл приложение: она меряла мёртвую сеть, а не сервер. Без
+    /// этого после трёх таймаутов «связь есть» опрос шёл раз в 320 с (а при
+    /// открытом экране — в 1200), и ни чужих треног, ни досылки своей.
+    static func forgiven(_ tracks: [Job: Track], trigger: Trigger) -> [Job: Track] {
+        guard trigger == .online || trigger == .activation else { return tracks }
+        var result = tracks
+        for (job, track) in tracks where (job.isDriver || job == .reports) && track.failures > 0 {
+            result[job]?.failures = 0
+        }
+        return result
     }
 
     /// Пауза ведущей после n сбоев подряд.

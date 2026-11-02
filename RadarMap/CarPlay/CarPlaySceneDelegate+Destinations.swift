@@ -676,8 +676,7 @@ extension CarPlaySceneDelegate {
         env.mobile.dismissRefine()
         Task { @MainActor [weak self] in
             guard let self else { return }
-            let text = await env.mobile.refine(to: kind, offer: offer)
-                ? kind.title : String(localized: "Не отправилось, нет связи")
+            let text = await env.mobile.refine(to: kind, offer: offer)?.spoken ?? kind.title
             env.alerts.speak(text)
             showToast(text)
         }
@@ -689,8 +688,7 @@ extension CarPlaySceneDelegate {
         guard let id = env.mobile.cancellableReportID() else { return }
         Task { @MainActor [weak self] in
             guard let self else { return }
-            let text = await env.mobile.cancelReport(id: id)
-                ? String(localized: "Отметка убрана") : String(localized: "Не отправилось, нет связи")
+            let text = await env.mobile.cancelReport(id: id)?.spoken ?? String(localized: "Отметка убрана")
             env.alerts.speak(text)
             showToast(text)
         }

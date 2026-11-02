@@ -135,6 +135,7 @@ final class NetScheduler {
 
     private func perform(_ trigger: SyncPlan.Trigger) async {
         let now = Date()
+        tracks = SyncPlan.forgiven(tracks, trigger: trigger)
         var s = currentSituation(now: now)
         applyDisabled(s.disabled)
         var jobs = SyncPlan.plan(s, tracks: tracks, trigger: trigger).jobs

@@ -33,6 +33,9 @@ nonisolated enum ReportGuard {
         var latitude: Double
         var longitude: Double
         var at: Date
+        /// Серверный id этой точки: уточнение и отзыв идут ровно в неё, а не в
+        /// «последнюю отправленную» — ту могла подменить досылка из очереди.
+        var serverID: Int? = nil
 
         var coordinate: CLLocationCoordinate2D {
             CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
@@ -73,6 +76,39 @@ nonisolated enum ReportGuard {
         case deliberate
     }
 
+    /// Насколько можно верить своей точке для слепой отметки.
+    ///
+    /// `currentCoordinate` пишет не только принятый фикс: при долгом браке
+    /// (телефон под стеклом, сотовые 100–300 м) туда ложится грубая точка для
+    /// картинки, а в тихом фоне — фикс значимого перемещения, сделанный, может
+    /// быть, километры назад. Отметка по такой точке встаёт в сотнях метров от
+    /// засады — у всех, — а там, где тренога стоит на самом деле, её нет.
+    struct Fix: Equatable {
+        /// Точка из отброшенного фильтром фикса (`isPositionCoarse`).
+        var isCoarse: Bool
+        /// Сторож сигнала: едем, а фиксов нет дольше нормы.
+        var isSignalStale: Bool
+        /// Погрешность последнего принятого фикса, м; ≤ 0 — неизвестна.
+        var accuracy: Double
+        /// Сколько секунд назад принят последний годный фикс; nil — не было.
+        var age: TimeInterval?
+        /// Непрерывный GPS (поездка, открытый экран, машина). Стоя фиксы не
+        /// приходят из-за фильтра расстояния, и минутной давности фикс в пробке
+        /// у поста — ещё правда; в тихом фоне — нет.
+        var isContinuous: Bool
+    }
+
+    /// Годится ли точка для слепой отметки. Сомневаешься — не отправляй:
+    /// «Ждём спутники» стоит одного повторного нажатия, точка не там — карты
+    /// всех, кто едет следом.
+    static func isTrusted(_ fix: Fix) -> Bool {
+        guard !fix.isCoarse, !fix.isSignalStale, let age = fix.age else { return false }
+        if fix.accuracy > AppConfig.reportMaxFixAccuracyMeters { return false }
+        let maxAge = fix.isContinuous ? AppConfig.reportMaxFixAgeContinuousSeconds
+                                      : AppConfig.reportMaxFixAgeSeconds
+        return age <= maxAge
+    }
+
     /// Ниже этой скорости считаем, что водитель не едет. Порог низкий (3 км/ч)
     /// намеренно: в пробке рядом с постом отметить НАДО, а вот из кресла дома —
     /// нет.
@@ -83,16 +119,20 @@ nonisolated enum ReportGuard {
     /// `isTripActive` пропускает вперёд скорость: в активной поездке водитель
     /// стоит в пробке ровно там, где стоит и патруль, — глушить его отметку
     /// значило бы терять самые ценные точки.
+    /// `fix` — качество своей точки; нужно только слепому тапу: точку,
+    /// показанную пальцем на карте, выбрали, а не взяли из GPS.
     static func check(kind: ReportKind,
                       coordinate: CLLocationCoordinate2D?,
                       speedKmh: Double,
                       isTripActive: Bool,
                       placement: Placement = .blind,
+                      fix: Fix?,
                       lastSent: Sent?,
                       now: Date) -> Refusal? {
         guard let coordinate, CLLocationCoordinate2DIsValid(coordinate),
               !(coordinate.latitude == 0 && coordinate.longitude == 0)
         else { return .noPosition }
+        if placement == .blind, !(fix.map(isTrusted) ?? false) { return .noPosition }
 
         if placement == .blind, !isTripActive, speedKmh < minSpeedKmh { return .notDriving }
 
@@ -104,5 +144,13 @@ nonisolated enum ReportGuard {
             return .duplicate
         }
         return nil
+    }
+
+    /// Последняя своя отметка после ответа сервера. Досылка из очереди её не
+    /// подменяет: связь вернулась, ушла старая точка A, водитель тут же
+    /// отметил B — и если ответ по A приходил позже, «Перекрыто», «Отменить»
+    /// и защита от дублей работали с A (ловец багов, 39).
+    static func lastAfterDelivery(current: Sent?, delivered: Sent, isLive: Bool) -> Sent? {
+        isLive ? delivered : current
     }
 }

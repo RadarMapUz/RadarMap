@@ -64,6 +64,9 @@ final class MobileCameraService {
             case disabled
             /// Ответ пришёл, но разобрать его не вышло.
             case badAnswer
+            /// 409: уточнять или отзывать уже нечего — время вышло или точку
+            /// подтвердили другие водители (она больше не только ваша).
+            case tooLate
 
             /// Стоит ли класть отметку в очередь и обещать доставку.
             ///
@@ -73,7 +76,7 @@ final class MobileCameraService {
             var isWorthRetrying: Bool {
                 switch self {
                 case .offline, .serverBroken: return true
-                case .tooOften, .refused, .disabled, .badAnswer: return false
+                case .tooOften, .refused, .disabled, .badAnswer, .tooLate: return false
                 }
             }
 
@@ -92,6 +95,7 @@ final class MobileCameraService {
                 case .serverBroken: return String(localized: "Сервер не отвечает")
                 case .disabled:     return String(localized: "Отметки сейчас выключены")
                 case .badAnswer:    return String(localized: "Странный ответ сервера")
+                case .tooLate:      return String(localized: "Уже нельзя изменить")
                 }
             }
         }
@@ -153,12 +157,12 @@ final class MobileCameraService {
     /// Краудсорс целиком выключается пультом — на случай волны фейковых отметок.
     var isEnabled: Bool { config?.areMobileReportsEnabled ?? true }
 
-    /// Такт планировщика: сначала досылаем накопленное (чужая отметка
-    /// подождёт секунду, своя ждала связи и может протухнуть), потом свежий
-    /// список. true — список получен (304 тоже), false — сбой: пауза службы.
+    /// Такт планировщика: свежий список. true — получен (304 тоже), false —
+    /// сбой: пауза службы. Своя очередь — отдельная попутная служба
+    /// (`SyncPlan.Job.reports`): ей нужен и тот выход в сеть, где списка
+    /// никто не ждёт (после поездки, телефон в кармане).
     func syncTick() async -> Bool {
-        await flushPending()
-        return await refresh()
+        await refresh()
     }
 
     /// Пульт выключил краудсорс — убрать и то, что уже на карте (без сети).
@@ -237,6 +241,9 @@ final class MobileCameraService {
     @discardableResult
     func refresh() async -> Bool {
         guard !isRefreshing else { return true }
+        // Пульт погасил краудсорс — список не возвращаем на карту даже
+        // после своей отметки или голоса (до окна планировщика — 150 с).
+        guard isEnabled else { return true }
         // Связи нет — не будим радио впустую.
         //
         // Чужие отметки нужны в дороге, а дорога между городами — это как раз
@@ -431,13 +438,15 @@ final class MobileCameraService {
         return await send(PendingReport(kind: kind.rawValue, lat: point.latitude,
                                         lon: point.longitude, cls: cls, at: Date(),
                                         course: course >= 0 ? course : nil),
-                          queueOnFailure: true)
+                          live: true)
     }
 
     /// Один POST. Общий путь для живой отметки и для отложенной — иначе
-    /// очередь неминуемо разъедется с основным путём.
+    /// очередь неминуемо разъедется с основным путём. `live` — тап прямо
+    /// сейчас: только он становится «последней отметкой» (уточнение, отзыв,
+    /// защита от дублей) и только он ложится в очередь при сбое.
     @discardableResult
-    private func send(_ item: PendingReport, queueOnFailure: Bool) async -> ReportResult {
+    private func send(_ item: PendingReport, live: Bool) async -> ReportResult {
         struct Response: Decodable { let id: Int; let merged: Bool; let amended: Bool? }
         let kind = ReportKind(rawValue: item.kind) ?? .radar
         do {
@@ -450,9 +459,10 @@ final class MobileCameraService {
             if !item.cls.isEmpty { payload["cls"] = item.cls }
             if let course = item.course { payload["course"] = (course * 10).rounded() / 10 }
             let response = try await api.post("api/report", json: payload, as: Response.self)
-            lastSent = ReportGuard.Sent(kind: kind, latitude: item.lat,
-                                        longitude: item.lon, at: item.at)
-            lastSentID = response.id
+            let delivered = ReportGuard.Sent(kind: kind, latitude: item.lat, longitude: item.lon,
+                                             at: item.at, serverID: response.id)
+            lastSent = ReportGuard.lastAfterDelivery(current: lastSent, delivered: delivered, isLive: live)
+            if live { lastSentID = response.id }
             if response.merged != true { noteMine(id: response.id, item: item) }
             // Маркеры — отдельно, не задерживая ответ: водитель ждёт «принято»
             // (голос, плашка, часы), а не второго запроса за картой — на
@@ -472,7 +482,7 @@ final class MobileCameraService {
             // сервера («слишком часто», блокировка) повтором не лечится, а
             // очередь, копящая заведомо мёртвые отметки, однажды выстрелит
             // залпом и получит блокировку уже за дело.
-            if queueOnFailure, failure.isWorthRetrying {
+            if live, failure.isWorthRetrying {
                 pending = ReportQueue.enqueued(item, into: pending)
                 savePending()
             }
@@ -490,6 +500,7 @@ final class MobileCameraService {
             switch code {
             case 429:        return .tooOften
             case 401, 403:   return .refused
+            case 409:        return .tooLate
             case 500...599:  return .serverBroken
             default:         return .badAnswer
             }
@@ -499,33 +510,85 @@ final class MobileCameraService {
     // MARK: - Очередь без сети
 
     /// Отметки, ждущие связи. Треноги стоят ровно там, где её нет.
-    @ObservationIgnored private var pending: [PendingReport] = Storage.decoded(
+    /// Наблюдаемо: «Поездка сохранена» честно говорит, что ещё ждёт сети.
+    private var pending: [PendingReport] = Storage.decoded(
         [PendingReport].self, for: .pendingReports) ?? []
 
     private func savePending() { Storage.encode(pending, for: .pendingReports) }
+
+    /// Голоса, ждущие связи (VoteQueue).
+    @ObservationIgnored private var pendingVotes: [PendingVote] = Storage.decoded(
+        [PendingVote].self, for: .pendingVotes) ?? []
+
+    private func savePendingVotes() { Storage.encode(pendingVotes, for: .pendingVotes) }
+
+    /// Отметок протухло в очереди, а водителю ещё не сказали. «Отправлю
+    /// позже» — обещание, и не выполненное оно не должно пропадать молча:
+    /// водитель на него рассчитывал и второй раз не отметил.
+    private(set) var undeliveredCount = Storage.int(.undeliveredReports)
+
+    /// Сказали — счётчик в ноль.
+    func acknowledgeUndelivered() {
+        guard undeliveredCount != 0 else { return }
+        undeliveredCount = 0
+        Storage.set(0, for: .undeliveredReports)
+    }
+
+    /// Протухшие в очереди отметки — убрать и запомнить, без сети. Зовётся
+    /// перед отправкой и в конце поездки: там итог говорит водителю правду.
+    /// `notify: false` — вызывающий скажет сам (конец поездки).
+    func dropExpiredPending(now: Date = Date(), notify: Bool = true) {
+        let (_, expired) = ReportQueue.split(pending, now: now)
+        let (_, staleVotes) = VoteQueue.split(pendingVotes, now: now)
+        if !staleVotes.isEmpty {
+            Log.network.notice("голосов протухло в очереди: \(staleVotes.count, privacy: .public)")
+            pendingVotes.removeAll { staleVotes.contains($0) }
+            savePendingVotes()
+        }
+        guard !expired.isEmpty else { return }
+        Log.network.notice("отметок протухло в очереди: \(expired.count, privacy: .public)")
+        pending.removeAll { expired.contains($0) }
+        savePending()
+        undeliveredCount += expired.count
+        Storage.set(undeliveredCount, for: .undeliveredReports)
+        if notify { onReportsUndelivered?(expired.count) }
+    }
+
+    /// Отметки протухли в очереди — сказать водителю (уведомлением, если не
+    /// в поездке и экран не открыт). Решает вызывающий: голоса у сервиса нет.
+    @ObservationIgnored var onReportsUndelivered: ((Int) -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onReportsUndelivered,
+                                               "MobileCameraService.onReportsUndelivered") }
+    }
+
+    /// Срок попутной службы очереди (планировщик сети): есть что досылать.
+    var isQueueDue: Bool { isEnabled && (!pending.isEmpty || !pendingVotes.isEmpty) }
 
     /// Отправить накопленное. Дёргается на каждом опросе: отдельного таймера
     /// очередь не заслуживает — она пуста в подавляющем большинстве запусков.
     /// Отметка уходит из очереди только ПОСЛЕ ответа: раньше очередь
     /// очищалась до отправки, и убитый посреди неё процесс терял все (S25).
     func flushPending() async {
-        guard isEnabled, !pending.isEmpty, network?.isOnline ?? true, !isFlushing else { return }
+        guard isEnabled, !pending.isEmpty || !pendingVotes.isEmpty,
+              network?.isOnline ?? true, !isFlushing else { return }
         isFlushing = true
         defer { isFlushing = false }
-        let (_, expired) = ReportQueue.split(pending, now: Date())
-        if !expired.isEmpty {
-            Log.network.notice("отметок протухло в очереди: \(expired.count, privacy: .public)")
-            pending.removeAll { expired.contains($0) }
-            savePending()
-        }
+        dropExpiredPending()
         while let item = pending.first {
-            let result = await send(item, queueOnFailure: false)
+            let result = await send(item, live: false)
             // Сеть или сервер снова подвели — отметка остаётся, попробуем позже.
             if case .failed(let why) = result, why.isWorthRetrying { return }
+            // Дошла позже — в воронке это такая же отметка, как живая.
+            if result == .created || result == .confirmed { onReportSent?() }
             // Ушла или отвергнута навсегда — из очереди (по ней самой: пока
             // ждали ответа, очередь могла сдвинуться).
             if let index = pending.firstIndex(of: item) { pending.remove(at: index) }
             savePending()
+        }
+        while let vote = pendingVotes.first {
+            if let why = await postVote(vote), why.isWorthRetrying { return }
+            if let index = pendingVotes.firstIndex(of: vote) { pendingVotes.remove(at: index) }
+            savePendingVotes()
         }
     }
 
@@ -753,19 +816,31 @@ final class MobileCameraService {
     /// (пять отметок на один пост), дневной счётчик воронки, окно уточнения
     /// типа и курс (без него посадка на ось дороги кладёт отметку на встречную
     /// полосу — тем, кто едет навстречу, а не за тобой).
+    ///
+    /// `fix` — качество своей точки (`LocationService.reportFix`): слепой тап
+    /// по грубой, потерянной или давней точке — «Ждём спутники», а не
+    /// «Принято» с засадой в сотнях метров от настоящей.
     func quickReport(kind: ReportKind = .radar,
                      coordinate: CLLocationCoordinate2D?,
                      speedKmh: Double,
                      isTripActive: Bool,
                      placement: ReportGuard.Placement = .blind,
+                     fix: ReportGuard.Fix?,
                      course: Double = -1) async -> QuickOutcome {
+        // Одна отметка в полёте на все входы: кнопка в панели и в оповещении,
+        // CarPlay, Siri и плашка не видели полёта друг друга, а защита от
+        // дублей узнаёт об отметке только после ответа — второе нажатие
+        // уходило второй точкой.
+        guard !isReporting else { return .refused(.duplicate) }
         if let refusal = ReportGuard.check(kind: kind, coordinate: coordinate,
                                            speedKmh: speedKmh, isTripActive: isTripActive,
-                                           placement: placement,
+                                           placement: placement, fix: fix,
                                            lastSent: lastSent, now: Date()) {
             return .refused(refusal)
         }
         guard let coordinate else { return .refused(.noPosition) }
+        isReporting = true
+        defer { isReporting = false }
         // Скорость передаём только слепому тапу: точку, показанную пальцем на
         // карте, двигать назад не за что — её не «вспомнили», её выбрали.
         let result = await report(at: coordinate, kind: kind, course: course,
@@ -776,9 +851,10 @@ final class MobileCameraService {
         // очередь. Отказ сервера туда не кладётся — обещать доставку было бы
         // враньём, а водитель на него рассчитывает и второй раз не отметит.
         if case .failed(let why) = result, why.isWorthRetrying, pendingCount > 0 { return .queued(why) }
-        // Считаем только созданную отметку, и только здесь: уточнение типа
-        // (refine) переписывает ту же точку и второй отметкой не является.
-        onReportSent?()
+        // Считаем только дошедшую отметку: отказ — не отметка, а уточнение
+        // типа (amend) переписывает ту же точку и второй не является. Из
+        // очереди её посчитает flushPending, когда дойдёт.
+        if result == .created || result == .confirmed { onReportSent?() }
         // Окно уточнения типа — только для СВОЕЙ свежесозданной точки:
         // merged-точка чужая, и «уточнение» родило бы рядом вторую сущность.
         if kind == .radar, result == .created, placement == .blind {
@@ -788,6 +864,8 @@ final class MobileCameraService {
     }
 
     // MARK: - «Что это было?» после быстрой отметки
+
+    @ObservationIgnored private var isReporting = false
 
     /// Водитель отметил радар — дневной счётчик воронки. Хук, а не прямая
     /// ссылка на статистику: сервис отметок о ней знать не должен.
@@ -816,21 +894,24 @@ final class MobileCameraService {
 
     /// Второй тап: «это была тренога/пост/ДТП». Сервер переписывает тип ТОЙ ЖЕ
     /// точки (amend) — новая не создаётся, срок жизни не продлевается.
-    func refine(to kind: ReportKind, offer: ReportGuard.Sent) async -> Bool {
+    /// nil — уточнено; иначе причина, чтобы голос не говорил «нет связи»
+    /// там, где сервер просто отказал.
+    func refine(to kind: ReportKind, offer: ReportGuard.Sent) async -> ReportResult.Failure? {
         struct Response: Decodable { let id: Int; let merged: Bool; let amended: Bool? }
-        guard isEnabled else { return false }
+        guard isEnabled else { return .disabled }
         // Вне окна сервера (10 мин / 400 м) это уже не уточнение, а новая
         // отметка в старой точке — отказ, а не выдуманная засада.
         guard Date().timeIntervalSince(offer.at) <= AppConfig.reportAmendWindowSeconds else {
             Log.network.notice("уточнение типа отклонено: отметка старше окна сервера")
-            return false
+            return .tooLate
         }
         do {
             var payload = ["lat": offer.latitude, "lon": offer.longitude,
                            "device": deviceID, "type": kind.rawValue] as [String: Any]
-            // Через границу камера/дорога («Радар!» → «Перекрыто») сервер
-            // уточняет только точку, названную явно (12б.5).
-            if let id = lastSentID { payload["amend_id"] = id }
+            // Уточняется ровно точка из предложения: «последнюю отправленную»
+            // могла подменить другая отметка. Через границу камера/дорога
+            // сервер и так уточняет только названную явно (12б.5).
+            if let id = offer.serverID ?? lastSentID { payload["amend_id"] = id }
             let response = try await api.post("api/report", json: payload, as: Response.self)
             // «Ваша отметка подтверждена» должна назвать то, что на карте
             // теперь, а не первый тап.
@@ -839,14 +920,18 @@ final class MobileCameraService {
                 saveMine()
             }
             // Дубль-гейту важен итоговый тип, а время оставляем исходное:
-            // окно «а вдруг не нажалось» считается от первого тапа.
-            lastSent = ReportGuard.Sent(kind: kind, latitude: offer.latitude,
-                                        longitude: offer.longitude, at: offer.at)
+            // окно «а вдруг не нажалось» считается от первого тапа. Только
+            // если последняя — всё ещё эта точка.
+            if lastSent?.serverID == offer.serverID {
+                lastSent = ReportGuard.Sent(kind: kind, latitude: offer.latitude,
+                                            longitude: offer.longitude, at: offer.at,
+                                            serverID: offer.serverID)
+            }
             await refresh()
-            return response.amended == true || response.merged
+            return response.amended == true || response.merged ? nil : .badAnswer
         } catch {
             Log.network.error("уточнение типа не ушло: \(error.localizedDescription, privacy: .public)")
-            return false
+            return Self.failure(for: error)
         }
     }
 
@@ -865,23 +950,25 @@ final class MobileCameraService {
         return id
     }
 
-    /// Убрать свою отметку с карты. `true` — её там больше нет.
-    func cancelReport(id: Int) async -> Bool {
+    /// Убрать свою отметку с карты. nil — её там больше нет; иначе причина.
+    @discardableResult
+    func cancelReport(id: Int) async -> ReportResult.Failure? {
         struct Response: Decodable { let ok: Bool? }
+        guard isEnabled else { return .disabled }
         do {
             let payload = ["id": id, "device": deviceID] as [String: Any]
             let response = try await api.post("api/report/cancel", json: payload,
                                               as: Response.self)
-            guard response.ok == true else { return false }
+            guard response.ok == true else { return .badAnswer }
             mine.removeAll { $0.id == id }
             saveMine()
             if lastSentID == id { lastSentID = nil; lastSent = nil }
             storedRefineOffer = nil
             await refresh()
-            return true
+            return nil
         } catch {
             Log.network.error("отметку не удалось отозвать: \(error.localizedDescription, privacy: .public)")
-            return false
+            return Self.failure(for: error)
         }
     }
 
@@ -919,10 +1006,13 @@ final class MobileCameraService {
         // висит до пяти минут, и без этого все отметки, мимо которых проехали
         // за это время, пропадали из наблюдения.
         // Свои отметки не спрашиваем — как у событий дороги.
+        // Пока висит прежний вопрос, о следующей точке не спрашиваем — но и
+        // не помечаем её «спрошенной»: иначе она терялась навсегда.
         let askID = MobilePassWatch.update(tracks: &passTracks,
                                            mobileCameras: reports,
                                            from: coordinate,
-                                           excluded: ownReportIDs)
+                                           excluded: ownReportIDs,
+                                           canAsk: pendingConfirm == nil)
         if pendingConfirm == nil, let askID {
             pendingConfirm = reports.first { $0.id == askID }
             pendingConfirmAt = pendingConfirm == nil ? nil : now
@@ -1029,13 +1119,36 @@ final class MobileCameraService {
     /// value: true = «радар на месте» (продлевает жизнь), false = «радара нет».
     /// `origin` — происхождение голоса ("pass" — после проезда), уходит серверу.
     func vote(cameraID: Int, stillThere: Bool, origin: String = "") async {
-        struct Response: Decodable { let ok: Bool }
-        var payload = ["id": cameraID - Self.idOffset, "device": deviceID,
-                       "value": stillThere ? 1 : -1] as [String: Any]
-        if !origin.isEmpty { payload["kind"] = origin }
-        // Голос — best-effort: не дошёл — не страшно, сервер дедуплицирует повторы.
-        let _: Response? = try? await api.post("api/vote", json: payload, as: Response.self)
+        // Пульт погасил краудсорс — голос из открытой карточки не уходит.
+        guard isEnabled else { return }
+        let vote = PendingVote(reportID: cameraID - Self.idOffset, value: stillThere ? 1 : -1,
+                               kind: origin, at: Date())
+        // Сеть подвела — голос ждёт её в очереди (как отметка): «Нет, радара
+        // не было» в мёртвой зоне — то, что снимает пустышку раньше срока.
+        if let why = await postVote(vote) {
+            if why.isWorthRetrying {
+                pendingVotes = VoteQueue.enqueued(vote, into: pendingVotes)
+                savePendingVotes()
+            }
+            return
+        }
         await refresh()
+    }
+
+    /// Один POST голоса. nil — дошёл (или отметки уже нет — 404, голосовать
+    /// не за что); иначе причина.
+    private func postVote(_ vote: PendingVote) async -> ReportResult.Failure? {
+        struct Response: Decodable { let ok: Bool }
+        var payload = ["id": vote.reportID, "device": deviceID, "value": vote.value] as [String: Any]
+        if !vote.kind.isEmpty { payload["kind"] = vote.kind }
+        do {
+            _ = try await api.post("api/vote", json: payload, as: Response.self)
+            return nil
+        } catch {
+            Log.network.error("голос по отметке не ушёл: \(error.localizedDescription, privacy: .public)")
+            if case .badStatus(404)? = error as? APIClient.Failure { return nil }
+            return Self.failure(for: error)
+        }
     }
 
     func isMobile(_ camera: Camera) -> Bool { camera.id >= Self.idOffset }
@@ -1086,7 +1199,7 @@ final class MobileCameraService {
         ]
         store?.setMobileCameras(reports)
         let sent = ReportGuard.Sent(kind: .radar, latitude: coordinate.latitude,
-                                    longitude: coordinate.longitude, at: Date())
+                                    longitude: coordinate.longitude, at: Date(), serverID: 900_003)
         lastSent = sent
         // Свежая своя отметка — иначе «Отменить» в панели не показать на
         // скриншотах, а именно её и надо смотреть глазами.

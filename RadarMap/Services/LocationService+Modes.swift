@@ -47,13 +47,37 @@ extension LocationService {
         await awaitPosition(timeout: timeout, precise: false)
     }
 
+    /// Качество своей точки для слепой отметки водителя (`ReportGuard.isTrusted`):
+    /// грубая, потерянная или давняя точка ставит засаду не там — у всех.
+    var reportFix: ReportGuard.Fix {
+        ReportGuard.Fix(isCoarse: isPositionCoarse, isSignalStale: isSignalStale,
+                        accuracy: horizontalAccuracy,
+                        age: lastAcceptedAt.map { Date().timeIntervalSince($0) },
+                        isContinuous: isTripActive || isForeground)
+    }
+
+    /// Точка для отметки из Siri, плашки и часов: ждём годную по
+    /// `ReportGuard.isTrusted`, а не первую попавшуюся. В тихом фоне последняя
+    /// точка — значимое перемещение, сделанное, может быть, километры назад;
+    /// одноразовый фикс приходит за секунды. nil — честное «жду GPS».
+    func awaitReportCoordinate(timeout: TimeInterval = 6) async -> CLLocationCoordinate2D? {
+        await awaitPosition(timeout: timeout) {
+            ReportGuard.isTrusted(self.reportFix) ? self.currentCoordinate : nil
+        }
+    }
+
     /// Одноразовый фикс и ожидание его до `timeout` — общий цикл обеих
     /// просьб выше. `precise` — грубая точка (фоновый режим) не годится:
     /// маршрут от неё начинается за километры.
     func awaitPosition(timeout: TimeInterval, precise: Bool) async -> CLLocationCoordinate2D? {
-        func ready() -> CLLocationCoordinate2D? {
-            precise && isPositionCoarse ? nil : currentCoordinate
+        await awaitPosition(timeout: timeout) {
+            precise && self.isPositionCoarse ? nil : self.currentCoordinate
         }
+    }
+
+    /// Общий цикл ожидания: `ready` — годна ли точка сейчас.
+    private func awaitPosition(timeout: TimeInterval,
+                               ready: () -> CLLocationCoordinate2D?) async -> CLLocationCoordinate2D? {
         if let point = ready() { return point }
         guard isAuthorized else { return nil }
         manager.requestLocation()

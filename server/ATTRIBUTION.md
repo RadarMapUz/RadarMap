@@ -16,6 +16,9 @@
 | Значки POI (`*_11` в спрайте) | [Maki](https://github.com/mapbox/maki) (Mapbox) через спрайт OSM Bright | CC0 1.0 (упоминание не требуется, но указано) | `server/omt/sprite/base*.{json,png}`; стрелки полос, светофор, асфальт, деревья, штриховка — наши (`make_arrows.py`) |
 | Шрифты подписей (глифы) | Noto Sans Regular/Bold/Italic из [openmaptiles/fonts](https://github.com/openmaptiles/fonts) v2.0, Copyright 2012 Google Inc. | [SIL OFL 1.1](https://openfontlicense.org/) | `server/omt/build_omt.sh` → `glyphs/` на сервере (`glyph_subset.py` — подмножество для офлайна); текст OFL — в приложении |
 | Движок карты | [MapLibre Native](https://github.com/maplibre/maplibre-native) 6.31.0 (SPM `maplibre-gl-native-distribution`), © MapLibre contributors, © MapTiler.com, © Mapbox | BSD 2-Clause + уведомления вшитых библиотек (Boost, RapidJSON, Metal-cpp — Apache 2.0, FreeType — FTL, HarfBuzz, FastPFOR — Apache 2.0, …) | бинарь в приложении; тексты — `RadarMap/Resources/Licenses/` |
+| Прежние названия станций метро, районов и жилых массивов Ташкента (с датами) | Русская Википедия: [«Список станций Ташкентского метрополитена»](https://ru.wikipedia.org/wiki/Список_станций_Ташкентского_метрополитена) и статьи районов Ташкента, © авторы Википедии | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) | `server/poi/aliases_tashkent.tsv`, `server/poi/metro_tashkent.tsv` (`build_aliases.py`) → старые имена в клетках поиска |
+| Узбекские подписи и координаты станций метро | [Wikidata](https://www.wikidata.org/) | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) (упоминание не требуется, но указано) | те же файлы (`build_aliases.py`) |
+| Официальные погодные предупреждения (ветер, гололёд, туман, пыль, сели, лавины) — **прототип, в приложение пока не идёт** | Узгидромет, CAP-лента из реестра WMO Alerting Authorities (`meteoalert.meteoinfo.ru/uzbekistan/cap-feed/`) | в ленте указано «public domain»; источник называем | `build_weather_alerts.py` → JSON (без cron и выкладки) |
 | Погода на перевалах и трассах (прогноз по часам: температура, осадки, снег, видимость, ветер) | [Open-Meteo.com](https://open-meteo.com/) — «Weather data by Open-Meteo.com» | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); бесплатный API — для некоммерческого использования | `weather/roads.json` (`build_road_weather.py`, точки — `road_weather_points.json`); подпись — «Источники данных» |
 
 ## Где это видно в приложении (28.F)
@@ -84,6 +87,17 @@
   вызовов в сутки. Приложение бесплатное и без рекламы; сборщик делает один
   запрос на все точки раз в 30 минут (13 точек — 624 вызова в сутки). Если
   приложение станет коммерческим — нужен платный ключ API.
+
+## Что требует CC BY-SA 4.0 (Википедия)
+
+- Из Википедии берутся только факты «как место называлось раньше и до
+  какой даты» и узбекское написание; текст статей не переносится. Строка
+  атрибуции — первая строка `aliases_tashkent.tsv` и `metro_tashkent.tsv`.
+- ShareAlike: производные файлы старых имён распространяются под CC BY-SA
+  4.0 и в «Источниках данных» идут отдельной строкой «Википедия».
+- Изменения указываются: проектные названия станций отброшены (они никогда
+  не были названием действующей станции), узбекская кириллица — наша
+  транслитерация латиницы по алфавиту 1995 г.
 
 ## Что НЕ берётся
 

@@ -1050,6 +1050,39 @@ class AccountTests(unittest.TestCase):
         sessions = admin_auth.Sessions(secret="тест")
         self.assertEqual(sessions.name_of(sessions.issue()), "")
 
+    def test_removed_moderator_is_out_at_once(self):
+        # Кука сверяется со списком учёток на каждом запросе: убранный человек
+        # не сидит в панели ещё 12 часов, остальные из неё не вылетают (M-6).
+        admin_auth.write_account("иван", "пароль-ивана-1234", self.conf)
+        admin_auth.write_account("пётр", "пароль-петра-1234", self.conf)
+        sessions = admin_auth.Sessions()
+        ivan, petr, owner = sessions.issue(name="иван"), sessions.issue(name="пётр"), sessions.issue()
+        self.assertTrue(sessions.valid(ivan))
+        admin_auth.drop_account("иван", self.conf)
+        self.assertFalse(sessions.valid(ivan), "убранный модератор выходит сразу")
+        self.assertEqual(sessions.name_of(ivan), "")
+        self.assertTrue(sessions.valid(petr), "соседа удаление не задевает")
+        self.assertTrue(sessions.valid(owner))
+        # Вернули под тем же именем — старая кука всё равно мертва: новый хэш.
+        admin_auth.write_account("иван", "пароль-ивана-1234", self.conf)
+        self.assertFalse(sessions.valid(ivan))
+
+    def test_password_change_of_a_moderator_kills_only_his_cookies(self):
+        admin_auth.write_account("иван", "пароль-ивана-1234", self.conf)
+        admin_auth.write_account("пётр", "пароль-петра-1234", self.conf)
+        sessions = admin_auth.Sessions()
+        ivan, petr = sessions.issue(name="иван"), sessions.issue(name="пётр")
+        admin_auth.write_account("иван", "новый-пароль-ивана-1", self.conf)
+        self.assertFalse(sessions.valid(ivan), "уведённая кука не переживает смену пароля")
+        self.assertTrue(sessions.valid(petr))
+
+    def test_cookie_for_an_unknown_name_is_refused(self):
+        sessions = admin_auth.Sessions(secret="тест", people={admin_auth.OWNER: "h"})
+        self.assertFalse(sessions.valid(sessions.issue(name="никто")))
+        self.assertTrue(sessions.valid(sessions.issue()))
+        self.assertFalse(admin_auth.Sessions(secret="тест", people={}).valid(sessions.issue()),
+                         "учёток не осталось — не пускаем никого")
+
 
 class PaletteTests(AdminTest):
     """Палитра конструктора.

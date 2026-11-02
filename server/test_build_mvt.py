@@ -864,6 +864,18 @@ class KerbMaskTests(unittest.TestCase):
         self.assertEqual(len(kept), 1)
         self.assertEqual((kept[0][0], kept[0][-1]), (edge[0], edge[-1]))
 
+    def test_kerb_on_the_seam_of_two_areas_is_cut(self):
+        # Площади встык после среза нахлёста (40C): бордюр по общему краю лежит
+        # на асфальте с обеих сторон — его нет; внешний край остаётся.
+        west = [self.p(-20, -20), self.p(0, -20), self.p(0, 20), self.p(-20, 20)]
+        east = [self.p(0, -20), self.p(20, -20), self.p(20, 20), self.p(0, 20)]
+        mask = build_mvt.KerbMask([west, east])
+        self.assertEqual(mask.clip_kerb([self.p(0, -15), self.p(0, 15)]), [])
+        outer = [self.p(-15, -20), self.p(15, -20)]
+        kept = mask.clip_kerb(outer)
+        self.assertEqual(len(kept), 1)
+        self.assertEqual((kept[0][0], kept[0][-1]), (outer[0], outer[-1]))
+
     def test_median_island_stops_at_the_junction_and_the_crossing(self):
         # Навои × Фуркат: остров разделительной шёл через зебру; Навои ×
         # Рашидов: кромка разделительной заходила в площадь узла.

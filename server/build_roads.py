@@ -4833,6 +4833,8 @@ def iter_junctions(arms, outlined=None, colours=None):
                 for line in kerb_off_ribbons(figure[2], ribbons):
                     merger.add((AREA_KERB, figure[1], line))
                 continue
+            if JunctionMerger._mergeable(figure):
+                figure = (figure[0], figure[1], notchless_ring(figure[2]))
             merger.add(figure, _names_inside(figure[2], legs) if JunctionMerger._mergeable(figure) else frozenset(),
                        cluster)
     yield from merger.flush(None)
@@ -5046,16 +5048,18 @@ class JunctionMerger:
             trimmed = False
             for key in near:
                 other, obox, oorder, onames, ocluster = self._items[key]
-                if other[1] != figure[1] or obox[0] > box[2] or box[0] > obox[2] \
-                        or obox[1] > box[3] or box[1] > obox[3]:
+                if obox[0] > box[2] or box[0] > obox[2] or obox[1] > box[3] or box[1] > obox[3]:
                     continue
                 alien = cluster is None or ocluster != cluster
-                if alien and (len(onames) >= 2) != (len(names) >= 2):
-                    continue
-                ring_union = merge_junction_rings(other[2], ring, close=not alien)
+                # Другой цвет или перекрёсток рядом с площадью вдоль одной
+                # улицы — не сливаются, но и внахлёст не остаются: нахлёст
+                # снимается срезом ниже (40C: 53 крупных узла Ташкента с
+                # рваным краем, у Беруни × Фаробий разворот лежал на узле).
+                apart = other[1] != figure[1] or alien and (len(onames) >= 2) != (len(names) >= 2)
+                ring_union = None if apart else merge_junction_rings(other[2], ring, close=not alien)
+                cuts = (_cuts_lanes(other[2], onames), _cuts_lanes(ring, names),
+                        None if ring_union is None else _cuts_lanes(ring_union, names | onames))
                 if ring_union is not None:
-                    cuts = (_cuts_lanes(other[2], onames), _cuts_lanes(ring, names),
-                            _cuts_lanes(ring_union, names | onames))
                     if alien and not cuts[0] == cuts[1] == cuts[2]:
                         ring_union = None
                     # Свой кластер: кусок вдоль одной улицы (разворот у
@@ -5063,27 +5067,41 @@ class JunctionMerger:
                     # линии полос, — отдельно.
                     elif cuts[2] and ((len(onames) < 2 and not cuts[0]) or (len(names) < 2 and not cuts[1])):
                         ring_union = None
-                    if ring_union is None and trims < JUNCTION_TRIM_MAX:
-                        # Не слились — нахлёст снимается с того куска, что
-                        # линий полос не режет (или с меньшего): маска
-                        # разметки не растёт, двойного асфальта нет.
-                        if cuts[0] != cuts[1]:
-                            mine = not cuts[1]
-                        else:
-                            mine = ring_area_m2(ring) <= ring_area_m2(other[2])
+                # Не слились (в том числе объединение не вышло одним кольцом
+                # или больше JUNCTION_MERGE_MAX_M2) — нахлёст снимается с того
+                # куска, что линий полос не режет, у разных цветов — с
+                # цветного (цвет класса у нейтрального узла и так уступает
+                # ему, iter_junctions), иначе с меньшего: маска разметки не
+                # растёт, двойного асфальта нет.
+                if ring_union is None and trims < JUNCTION_TRIM_MAX:
+                    if cuts[0] != cuts[1]:
+                        mine = not cuts[1]
+                    elif junction_class(figure[1]) != junction_class(other[1]) \
+                            and 0 in (junction_class(figure[1]), junction_class(other[1])):
+                        mine = junction_class(figure[1]) != 0
+                    else:
+                        mine = ring_area_m2(ring) <= ring_area_m2(other[2])
+                    rest = trim_junction_ring(ring if mine else other[2], other[2] if mine else ring)
+                    if rest is None and cuts[0] == cuts[1]:
+                        # Срез не прошёл ворота поверхности (кусок
+                        # самопересёкся на сетке тайла) — пробуем с другого.
+                        mine = not mine
                         rest = trim_junction_ring(ring if mine else other[2], other[2] if mine else ring)
-                        if rest:
-                            trims += 1
-                            if mine:
-                                for extra in rest[1:]:
-                                    self._insert((figure[0], figure[1], extra), order, names, cluster)
-                                figure = (figure[0], figure[1], rest[0])
-                            else:
-                                self._remove(key)
-                                for extra in rest:
-                                    self._insert((other[0], other[1], extra), oorder, onames, ocluster)
-                            trimmed = True
-                            break
+                    if rest is not None:
+                        trims += 1
+                        if mine:
+                            for extra in rest[1:]:
+                                self._insert((figure[0], figure[1], extra), order, names, cluster)
+                            if not rest:
+                                # Фигура целиком лежит на соседней — её нет.
+                                return
+                            figure = (figure[0], figure[1], rest[0])
+                        else:
+                            self._remove(key)
+                            for extra in rest:
+                                self._insert((other[0], other[1], extra), oorder, onames, ocluster)
+                        trimmed = True
+                        break
                 if ring_union is not None:
                     self._remove(key)
                     merged = (figure[0], figure[1], ring_union)
@@ -5108,9 +5126,82 @@ class JunctionMerger:
 JUNCTION_TRIM_MAX = 8
 
 
+# Мелкая выемка края площади узла — ступенька или клин глубиной не больше
+# своего устья (до 8 м) — закрывается прямой (40C: 4,6 % крупных узлов
+# Ташкента с выемкой на краю, порог 2 %). Глубокая щель между лентами
+# остаётся: там островок, и на нём стоят стрелки (_settle_once).
+JUNCTION_NOTCH_FILL_M2 = 150.0
+
+
+def notchless_ring(ring):
+    """Кольцо lon/lat без мелких выемок края, или исходное.
+
+    Выемка ищется на кольце, каким оно ляжет в тайл: клин между
+    расходящимися лентами с поворотом края около 150° проходит порог
+    выемки только после округления до сетки — на исходнике его не видно."""
+    grid = quantized(ring)
+    if len(grid) < 4:
+        return ring
+    origin = grid[0]
+    kx = LAT_METERS * math.cos(math.radians(origin[1]))
+    pts = [((p[0] - origin[0]) * kx, (p[1] - origin[1]) * LAT_METERS) for p in grid]
+    if len(pts) > 1 and pts[0] == pts[-1]:
+        pts = pts[:-1]
+    if _ring_area(pts) < 0:
+        pts = pts[::-1]
+    closed = _close_notches([(q, ("side", 0)) for q in pts], JUNCTION_NOTCH_FILL_M2, shallow=True)
+    if abs(_ring_area([q for q, _l in closed])) - abs(_ring_area(pts)) < NOTCH_SCORE_M2:
+        return ring
+    out = [(origin[0] + q[0] / kx, origin[1] + q[1] / LAT_METERS) for q, _l in _tidy_ring(closed)]
+    if len(out) < 3 or surface_check.defect(out) is not None or surface_check.defect(quantized(out)) is not None:
+        return ring
+    return out
+
+
+class JunctionRings:
+    """Площади узла по клеткам: середина перекрёстка (вид 10) срезается по
+    ним. Она лежала на площади узла внахлёст и выступала за её край — 17 из
+    53 рваных краёв крупных узлов Ташкента (40C)."""
+
+    def __init__(self):
+        self._grid = defaultdict(list)
+
+    def add(self, ring):
+        box = _box_of(ring)
+        entry = (box, ring)
+        c = JUNCTION_MERGE_CELL
+        for x in range(int(math.floor(box[0] / c)), int(math.floor(box[2] / c)) + 1):
+            for y in range(int(math.floor(box[1] / c)), int(math.floor(box[3] / c)) + 1):
+                self._grid[(x, y)].append(entry)
+
+    def outside(self, ring):
+        """Куски ring вне площадей узла; срез не вышел — кусок как есть."""
+        box = _box_of(ring)
+        c = JUNCTION_MERGE_CELL
+        near, seen = [], set()
+        for x in range(int(math.floor(box[0] / c)), int(math.floor(box[2] / c)) + 1):
+            for y in range(int(math.floor(box[1] / c)), int(math.floor(box[3] / c)) + 1):
+                for obox, other in self._grid.get((x, y), ()):
+                    if id(other) in seen or obox[0] > box[2] or box[0] > obox[2] \
+                            or obox[1] > box[3] or box[1] > obox[3]:
+                        continue
+                    seen.add(id(other))
+                    near.append(other)
+        pieces = [ring]
+        for other in near:
+            cut = []
+            for piece in pieces:
+                rest = trim_junction_ring(piece, other)
+                cut.extend([piece] if rest is None else rest)
+            pieces = cut
+        return pieces
+
+
 def trim_junction_ring(subject, clip):
-    """Куски площади subject (lon/lat) вне clip или None, если разбор не вышел
-    или нахлёста нет."""
+    """Куски площади subject (lon/lat) вне clip; [] — subject целиком в clip;
+    None — разбор не вышел или нахлёста нет. Осколок меньше
+    JUNCTION_TRIM_DROP_M2, не прошедший ворота поверхности, выбрасывается, а
+    не отменяет весь срез."""
     origin = clip[0]
     kx = LAT_METERS * math.cos(math.radians(origin[1]))
 
@@ -5126,19 +5217,24 @@ def trim_junction_ring(subject, clip):
     if sum(abs(_ring_area(piece)) for piece in polygon_intersection(a, b)) < JUNCTION_MERGE_MIN_M2:
         return None
     pieces = [piece for piece in polygon_difference(a, [b]) if abs(_ring_area(piece)) >= JUNCTION_TRIM_MIN_M2]
-    if not pieces or (len(pieces) == 1 and abs(_ring_area(pieces[0])) >= abs(_ring_area(a)) - 0.5):
+    if not pieces:
+        return []
+    if len(pieces) == 1 and abs(_ring_area(pieces[0])) >= abs(_ring_area(a)) - 0.5:
         return None
     out = []
     for piece in pieces:
         ring = [p for p, _l in _blunt_teeth([(q, ("side", 0)) for q in piece])]
         geo = [(origin[0] + p[0] / kx, origin[1] + p[1] / LAT_METERS) for p in ring]
         if len(geo) < 3 or surface_check.defect(geo) is not None or surface_check.defect(quantized(geo)) is not None:
+            if abs(_ring_area(piece)) < JUNCTION_TRIM_DROP_M2:
+                continue
             return None
         out.append(geo)
     return out
 
 
 JUNCTION_TRIM_MIN_M2 = 2.0
+JUNCTION_TRIM_DROP_M2 = 12.0
 
 
 def merge_junction_rings(one, two, close=True):
@@ -5574,6 +5670,9 @@ UNION_NOTCH_MAX_METERS = 8.0
 UNION_NOTCH_MAX_M2 = 600.0
 UNION_NOTCH_TURN_DEGREES = 150.0
 UNION_NOTCH_STEP_METERS = 2.0
+# Поиск выемки целиком для shallow (_close_notches): щель между лентами
+# длиннее UNION_NOTCH_MAX_M2 тоже должна найтись целиком и защититься.
+UNION_NOTCH_SEARCH_M2 = 6000.0
 
 
 # Ступенька края («Z»): вогнутый и выпуклый излом подряд через короткое
@@ -5723,13 +5822,20 @@ def _densify_ring(ring, step):
     return out
 
 
-def _close_notches(ring, max_m2=None, max_chord=None):
+def _close_notches(ring, max_m2=None, max_chord=None, shallow=False):
     """Закрыть выемки внешнего края прямой. ring — [(точка, метка ребра от неё)].
 
     Края уплотняются: устье щели между двумя лентами лежит посреди их длинных
-    кромок, а не в вершинах."""
+    кромок, а не в вершинах. shallow — только мелкие (глубина не больше
+    устья, площадь до max_m2): ступенька и клин, но не щель между лентами.
+    Выемка ищется целиком (самая большая сначала): глубокая или крупная
+    защищается вся, иначе её дно закрывалось бы по кускам."""
     limit = -math.radians(UNION_NOTCH_TURN_DEGREES)
     ring = _densify_ring(ring, UNION_NOTCH_STEP_METERS)
+    fill_m2 = UNION_NOTCH_MAX_M2 if max_m2 is None else max_m2
+    if shallow:
+        max_m2 = UNION_NOTCH_SEARCH_M2
+    protected = set()
     while len(ring) > 4:
         pts = [p for p, _l in ring]
         n = len(pts)
@@ -5776,12 +5882,17 @@ def _close_notches(ring, max_m2=None, max_chord=None):
                        for m in range(n) if m not in (i, (j - 1) % n, (i - 1) % n, j)
                        and pts[m] not in (a, b) and pts[(m + 1) % n] not in (a, b)):
                     continue
+                if protected and any(pts[(i + t) % n] in protected for t in range(1, k)):
+                    continue
                 best = (-area, i, k, chord)
         if best is None:
             return ring
         _area, i, k, chord = best
         a, b = pts[i], pts[(i + k) % n]
         depth = max(_distance_to_segment(pts[(i + t) % n], a, b) for t in range(1, k))
+        if shallow and (depth > chord or _area > fill_m2):
+            protected.update(pts[(i + t) % n] for t in range(1, k))
+            continue
         # Глубокая щель (разделительная) — устье без бордюра; ступенька на
         # краю — продолжение того же бордюра.
         label = ("bridge",) if depth > chord else ring[i][1]
@@ -6647,7 +6758,10 @@ def stream_surface(roads, target_dir, degrees, handles=64, islands=()):
             put(figure)
         outlined = set()
         colours = JunctionColours()
+        placed = JunctionRings()
         for figure in iter_junctions(arms, outlined, colours):
+            if figure[0] == AREA_JUNCTION and figure[1] & AREA_FLAG_CLOSED and len(figure[2]) >= 3:
+                placed.add(figure[2])
             put(figure)
         # Фаски подходов больше не нужны: узел строится по устьям с дугами
         # бордюра, а фаска поверх него торчала серым клином у каждого
@@ -6672,7 +6786,8 @@ def stream_surface(roads, target_dir, degrees, handles=64, islands=()):
             if islands and _covered_by_drawn(figure[2], islands):
                 continue
             if _at_junction(_centroid(figure[2]), inner):
-                put((AREA_JUNCTION_BOX, figure[1], figure[2]))
+                for piece in placed.outside(figure[2]):
+                    put((AREA_JUNCTION_BOX, figure[1], piece))
                 continue
             put(figure)
     finally:

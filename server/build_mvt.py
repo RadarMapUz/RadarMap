@@ -535,6 +535,11 @@ class JunctionMask:
 # стиль спрятал их под заливку узла (0ccf731). Свой край фигуры лежит на её
 # границе (глубина 0) и остаётся.
 KERB_INSIDE_DEPTH_METERS = 0.75
+# Шов: площади узла, у которых срезан нахлёст (build_roads.JunctionMerger,
+# 40C), лежат встык, и бордюр одной идёт по краю другой на глубине 0 — по
+# асфальту. Бордюр — только по внешней границе: асфальт узла по обе стороны
+# на этом отступе — шов, и бордюра там нет.
+KERB_SEAM_PROBE_METERS = 1.0
 KERB_CLIP_STEP_METERS = 0.5
 KERB_MIN_METERS = 1.5
 
@@ -564,8 +569,8 @@ class KerbMask(JunctionMask):
             dense.extend((a[0] + (b[0] - a[0]) * i / parts, a[1] + (b[1] - a[1]) * i / parts)
                          for i in range(1, parts + 1))
         runs, current = [], []
-        for point in dense:
-            if self._depth_inside(point):
+        for index, point in enumerate(dense):
+            if self._depth_inside(point) or self._on_seam(dense, index, kx):
                 runs.append(current)
                 current = []
             else:
@@ -580,6 +585,19 @@ class KerbMask(JunctionMask):
             if length >= KERB_MIN_METERS:
                 out.append(_simplify_straight(run))
         return out
+
+    def _on_seam(self, dense, index, kx):
+        """Асфальт узла по обе стороны бордюра — шов двух площадей, а не край."""
+        a = dense[max(0, index - 1)]
+        b = dense[min(len(dense) - 1, index + 1)]
+        dx, dy = (b[0] - a[0]) * kx, (b[1] - a[1]) * 111_320
+        length = math.hypot(dx, dy)
+        if length == 0:
+            return False
+        nx, ny = -dy / length * KERB_SEAM_PROBE_METERS, dx / length * KERB_SEAM_PROBE_METERS
+        point = dense[index]
+        return all(self._covers_area((point[0] + sign * nx / kx, point[1] + sign * ny / 111_320))
+                   for sign in (1, -1))
 
 
 # Разделительная кончается у площади узла и у перехода (29.A, отзыв

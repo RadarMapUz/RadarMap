@@ -425,6 +425,84 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(build_mvt.marked_lanes(3, flags, 4.5), 0)
         self.assertEqual(build_mvt.marked_lanes(3, flags, 17.5), 5)
 
+    def test_tag_that_does_not_fit_the_ribbon_is_marked_by_width(self):
+        # Шарафа Рашидова: lanes=5 в ленте 8,6 м (1,7 м на полосу). Линии — по
+        # ширине, полосы не уже 3 м; число помечено «по ширине» (40C).
+        flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (5 << 4)
+        self.assertEqual(build_mvt.lane_split(3, flags, 8.6), (2, True))
+        self.assertEqual(build_mvt.lane_split(3, flags, 10.5), (3, True))
+        self.assertEqual(build_mvt.lane_split(3, flags, 5.9), (0, False), "уже двух полос по 3 м — без линий")
+        self.assertEqual(build_mvt.lane_split(3, flags, 17.5), (5, False), "тег помещается — тег")
+        two_way = build_mvt.FLAG_LANES_TAGGED | (6 << 4)
+        self.assertEqual(build_mvt.lane_split(3, two_way, 10.0), (0, False), "у двусторонней — только осевая")
+        road = self.road([(69.278, 41.311), (69.282, 41.311)], flags=flags)
+        lines = list(build_mvt.lane_markings([road], {id(road): 8.6}))
+        self.assertEqual(len(lines), 1, "две полосы — одна линия посередине")
+
+    def test_row_one_lane_short_of_the_marking_hugs_its_turns(self):
+        # Размечено 4 полосы, в turn:lanes — 3 с поворотом налево слева: ряд
+        # у левой кромки, правая полоса без стрелки; номера — из turn:lanes.
+        flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (4 << 4)
+        road = (3, flags, [(69.278, 41.311), (69.282, 41.311)], "")
+        index = build_mvt.OverlapIndex([road], {id(road): 14.0})
+        point = (69.280, 41.311)
+        point_flags = lambda turns: build_roads.pack_turns(
+            build_roads.point_flags(90, 14) | build_roads.PFLAG_ONEWAY, build_roads.parse_turn_lanes(turns))
+        row = list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, point_flags("left|through|through"), point,
+                                         setback=0, carriageway=index.carriageway))
+        # Лента на восток: левая кромка — север, +7 м; полосы по 3,5 м.
+        offsets = [round((spot[1] - 41.311) * 111_320, 2) for spot, _p in row]
+        self.assertEqual(offsets, [5.25, 1.75, -1.75])
+        self.assertEqual([(p["li"], p["ln"], p["lw"]) for _s, p in row], [(0, 3, 3.5), (1, 3, 3.5), (2, 3, 3.5)])
+        right = list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, point_flags("through|through|right"),
+                                           point, setback=0, carriageway=index.carriageway))
+        self.assertEqual([round((spot[1] - 41.311) * 111_320, 2) for spot, _p in right], [1.75, -1.75, -5.25])
+        why = []
+        both = list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, point_flags("left|through|right"),
+                                          point, setback=0, carriageway=index.carriageway, why=why))
+        self.assertEqual(both, [], "повороты в обе стороны — сторона не читается")
+        self.assertEqual(why[-1][0], "полос по разметке не столько, сколько в turn:lanes")
+
+    def test_row_one_lane_short_stays_away_from_a_lane_joint(self):
+        # Тот же ряд у стыка с куском на три полосы: линии нашей ленты там
+        # сходятся к соседу, ряд встал бы мимо полос (Мирзо Улугбек, 40C).
+        flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (4 << 4)
+        three = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (3 << 4)
+        joint = (69.280, 41.311)
+        ours = (3, flags, [(69.278, 41.311), joint], "")
+        theirs = (3, three, [joint, (69.282, 41.311)], "")
+        index = build_mvt.OverlapIndex([ours, theirs], {id(ours): 14.0, id(theirs): 14.0})
+        point_flags = build_roads.pack_turns(build_roads.point_flags(90, 14) | build_roads.PFLAG_ONEWAY,
+                                             build_roads.parse_turn_lanes("left|through|through"))
+        near = (69.280 - 10 / 83_600, 41.311)
+        self.assertFalse(index.carriageway(near, 90)[6])
+        self.assertEqual(list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, point_flags, near, setback=0,
+                                                    carriageway=index.carriageway)), [])
+        far = (69.280 - 60 / 83_600, 41.311)
+        self.assertTrue(index.carriageway(far, 90)[6])
+        self.assertEqual(len(list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, point_flags, far, setback=0,
+                                                        carriageway=index.carriageway))), 3)
+
+    def test_arrows_do_not_take_the_width_count(self):
+        # Ряд из трёх стрелок на ленте, размеченной по ширине на две полосы:
+        # встал бы на линию. Ряд из двух — встаёт, номера полос из turn:lanes.
+        flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (5 << 4)
+        road = (3, flags, [(69.278, 41.311), (69.282, 41.311)], "")
+        index = build_mvt.OverlapIndex([road], {id(road): 8.6})
+        point = (69.280, 41.311)
+        found = index.carriageway(point, 90)
+        self.assertEqual((found[3], found[5]), (2, True))
+        point_flags = lambda turns: build_roads.pack_turns(
+            build_roads.point_flags(90, 9) | build_roads.PFLAG_ONEWAY, build_roads.parse_turn_lanes(turns))
+        why = []
+        self.assertEqual(list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, point_flags("left|through|right"),
+                                                    point, setback=0, carriageway=index.carriageway, why=why)), [])
+        self.assertEqual(why[-1][0], "разметка по ширине")
+        row = list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, point_flags("through|right"), point,
+                                         setback=0, carriageway=index.carriageway))
+        self.assertEqual([props["li"] for _spot, props in row], [0, 1])
+        self.assertEqual({props["ln"] for _spot, props in row}, {2})
+
     def test_yard_entrance_does_not_break_the_dashes(self):
         # Беруни: двор через каждые 80 м рвал пунктир проспекта в обрывки.
         center = (69.28, 41.311)

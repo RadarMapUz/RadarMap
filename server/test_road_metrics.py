@@ -205,6 +205,17 @@ class UnmarkedAvenueTests(unittest.TestCase):
         roads, lines = rm.lane_index([road], [([m(-60, 1.75), m(60, 1.75)], {"verified": True})])
         self.assertEqual(rm.unmarked_avenues([road], lines), 0.0)
 
+    def test_bridge_is_checked_against_its_own_lines(self):
+        # Линии моста в наземный индекс не идут: без своего индекса настил с
+        # разметкой считался голым (40C).
+        deck = ([m(-60, 0), m(60, 0)], {"cls": 3, "width": 10.5, "oneway": True, "bridge": True})
+        marks = [([m(-60, 1.75), m(60, 1.75)], {"verified": True, "bridge": True})]
+        _roads, lines = rm.lane_index([deck], marks)
+        self.assertEqual(rm.unmarked_avenues([deck], lines), 100.0, "прежняя мера")
+        self.assertEqual(rm.unmarked_avenues([deck], lines, bridge_index=rm.bridge_lines(marks)), 0.0)
+        self.assertEqual(rm.unmarked_avenues([deck], lines, bridge_index=rm.bridge_lines([])), 100.0,
+                         "голый мост остаётся голым")
+
 
 class ZebraStepMetricTests(unittest.TestCase):
     def test_side_by_side_zebras_shifted_along_are_a_step(self):

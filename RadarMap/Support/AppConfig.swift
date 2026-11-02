@@ -1528,10 +1528,11 @@ nonisolated enum AppConfig {
     static let reportSnapMaxMeters: CLLocationDistance = 40
 
     /// Слепая отметка («Радар!», CarPlay, Siri, плашка, часы) — только по
-    /// принятому фильтром фиксу не хуже этого. Снап ищет дорогу в 40 м
-    /// (`reportSnapMaxMeters`): с точкой хуже 50 м он садит отметку на
-    /// соседнюю улицу так же уверенно, как на свою.
-    static let reportMaxFixAccuracyMeters: CLLocationDistance = 50
+    /// принятому фильтром фиксу не хуже этого. Порог — тот же, что у фильтра
+    /// фиксов: строже — и честная отметка в пробке с телефоном в кармане
+    /// (Wi-Fi 55–65 м) получала «Ждём спутники»; соседнюю улицу и так режет
+    /// снап (`reportSnapMaxMeters`, 40 м).
+    static let reportMaxFixAccuracyMeters: CLLocationDistance = maxHorizontalAccuracyMeters
     /// Возраст фикса для отметки без непрерывного GPS (Siri и плашка в тихом
     /// фоне): там последний фикс — значимое перемещение, иногда километры назад.
     static let reportMaxFixAgeSeconds: TimeInterval = 15

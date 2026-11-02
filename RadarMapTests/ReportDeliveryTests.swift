@@ -73,6 +73,14 @@ final class ReportDeliveryTests: XCTestCase {
         XCTAssertEqual(queue.last?.reportID, VoteQueue.limit + 3)
     }
 
+    func testQueuedVoteFromAnOlderBuildStillDecodes() throws {
+        // Голос в очереди без курса (сборка до 40a) — не повод потерять очередь.
+        let old = #"[{"reportID":7,"value":-1,"kind":"pass","at":0}]"#.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode([PendingVote].self, from: old)
+        XCTAssertEqual(decoded.first?.reportID, 7)
+        XCTAssertNil(decoded.first?.course)
+    }
+
     func testStaleVoteIsDropped() {
         let stale = PendingVote(reportID: 1, value: -1, kind: "pass", at: t0.addingTimeInterval(-VoteQueue.maxAge - 1))
         let fresh = PendingVote(reportID: 2, value: 1, kind: "pass", at: t0.addingTimeInterval(-60))

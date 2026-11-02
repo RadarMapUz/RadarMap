@@ -23,6 +23,9 @@ nonisolated struct PendingVote: Codable, Equatable {
     /// Происхождение («pass», «misplaced» или пусто) — уходит серверу как есть.
     let kind: String
     let at: Date
+    /// Курс голосующего при проезде (0…360): «Убрали» от встречного сервер
+    /// срок не режет — через разделительную он мог не увидеть. nil — неизвестен.
+    var course: Double? = nil
 }
 
 nonisolated enum VoteQueue {

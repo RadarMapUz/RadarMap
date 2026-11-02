@@ -82,6 +82,10 @@ nonisolated enum MobilePassWatch {
         var closestMeters: CLLocationDistance
         /// Уже спрашивали — второй раз не спросим за всю сессию.
         var asked = false
+        /// Когда проезд состоялся (подошли и отъехали). Ответ уходит с этим
+        /// возрастом: вопрос мог ждать занятого слота, голос — связи, а
+        /// тренога — это «сейчас», и старое «стоит» сервер не продлевает.
+        var departedAt: Date? = nil
     }
 
     /// Обновить наблюдение и решить, пора ли спрашивать.
@@ -100,7 +104,8 @@ nonisolated enum MobilePassWatch {
                        mobileCameras: [Camera],
                        from coordinate: CLLocationCoordinate2D,
                        excluded: Set<Int> = [],
-                       canAsk: Bool = true) -> Int? {
+                       canAsk: Bool = true,
+                       now: Date = Date()) -> Int? {
         var askAbout: Int?
         for camera in mobileCameras where !excluded.contains(camera.id) {
             let distance = GeoMath.fastDistance(coordinate.latitude, coordinate.longitude,
@@ -112,6 +117,9 @@ nonisolated enum MobilePassWatch {
             var track = tracks[camera.id] ?? Track(cameraID: camera.id,
                                                    closestMeters: .greatestFiniteMagnitude)
             track.closestMeters = min(track.closestMeters, distance)
+            if track.departedAt == nil, track.closestMeters <= approachMeters, distance >= departedMeters {
+                track.departedAt = now
+            }
             if canAsk, !track.asked, track.closestMeters <= approachMeters, distance >= departedMeters {
                 track.asked = true
                 // Один вопрос за тик: две плашки подряд за рулём — это шум.

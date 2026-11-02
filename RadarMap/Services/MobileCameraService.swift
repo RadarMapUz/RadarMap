@@ -450,8 +450,10 @@ final class MobileCameraService {
         struct Response: Decodable { let id: Int; let merged: Bool; let amended: Bool? }
         let kind = ReportKind(rawValue: item.kind) ?? .radar
         do {
-            var payload = ["lat": item.lat, "lon": item.lon,
-                           "device": deviceID, "type": item.kind] as [String: Any]
+            // fresh: эта сборка уточняет только явно (amend_id) — тип из веера
+            // сервер не примет за уточнение своей прошлой точки.
+            var payload = ["lat": item.lat, "lon": item.lon, "device": deviceID,
+                           "type": item.kind, "fresh": true] as [String: Any]
             // Из очереди — сколько секунд назад отметили: срок жизни точки
             // сервер считает от этого момента (S25). Старый сервер поле не читает.
             let age = Date().timeIntervalSince(item.at)
@@ -549,9 +551,13 @@ final class MobileCameraService {
         Log.network.notice("отметок протухло в очереди: \(expired.count, privacy: .public)")
         pending.removeAll { expired.contains($0) }
         savePending()
-        undeliveredCount += expired.count
+        noteUndelivered(expired.count, notify: notify)
+    }
+
+    private func noteUndelivered(_ count: Int, notify: Bool = true) {
+        undeliveredCount += count
         Storage.set(undeliveredCount, for: .undeliveredReports)
-        if notify { onReportsUndelivered?(expired.count) }
+        if notify { onReportsUndelivered?(count) }
     }
 
     /// Отметки протухли в очереди — сказать водителю (уведомлением, если не
@@ -577,7 +583,13 @@ final class MobileCameraService {
         while let item = pending.first {
             let result = await send(item, live: false)
             // Сеть или сервер снова подвели — отметка остаётся, попробуем позже.
-            if case .failed(let why) = result, why.isWorthRetrying { return }
+            if case .failed(let why) = result {
+                if why.isWorthRetrying { return }
+                // Отказ сервера (429, 403…) — отметка не ушла и уже не уйдёт:
+                // обещание «отправлю позже» не выполнено, и молча оно не
+                // пропадает (ловец багов, 40a).
+                noteUndelivered(1)
+            }
             // Дошла позже — в воронке это такая же отметка, как живая.
             if result == .created || result == .confirmed { onReportSent?() }
             // Ушла или отвергнута навсегда — из очереди (по ней самой: пока
@@ -984,6 +996,8 @@ final class MobileCameraService {
     @ObservationIgnored private var pendingConfirmAt: Date?
 
     @ObservationIgnored private var passTracks: [Int: MobilePassWatch.Track] = [:]
+    /// Наш курс, когда задан вопрос: ответ уходит с ним (встречный / попутный).
+    @ObservationIgnored private var pendingConfirmCourse: CLLocationDegrees = -1
 
     /// Id своих отметок в пространстве карты (со сдвигом) — вопросы «ещё
     /// стоит?» о них не задаются.
@@ -1012,10 +1026,12 @@ final class MobileCameraService {
                                            mobileCameras: reports,
                                            from: coordinate,
                                            excluded: ownReportIDs,
-                                           canAsk: pendingConfirm == nil)
+                                           canAsk: pendingConfirm == nil,
+                                           now: now)
         if pendingConfirm == nil, let askID {
             pendingConfirm = reports.first { $0.id == askID }
             pendingConfirmAt = pendingConfirm == nil ? nil : now
+            pendingConfirmCourse = course
         }
         trackRoadPasses(from: coordinate, course: course, now: now)
     }
@@ -1044,12 +1060,17 @@ final class MobileCameraService {
     /// голосом против отметки B, о которой водителя не спрашивали.
     func answerConfirm(stillThere: Bool?, for id: Int? = nil) {
         guard let camera = pendingConfirm, id == nil || id == camera.id else { return }
+        // Возраст ответа — от проезда, а не от тапа: вопрос мог ждать занятого
+        // слота, а старое «стоит» сервер не продлевает (тренога — «сейчас»).
+        let passedAt = passTracks[camera.id]?.departedAt ?? pendingConfirmAt ?? Date()
+        let course = pendingConfirmCourse
         pendingConfirm = nil
         pendingConfirmAt = nil
         guard let stillThere else { return }
         // origin="pass" — голос после реального проезда: сервер хранит пометку,
         // модератор в админке отличает его от тапа в карточке с дивана.
-        Task { await vote(cameraID: camera.id, stillThere: stillThere, origin: "pass") }
+        Task { await vote(cameraID: camera.id, stillThere: stillThere, origin: "pass",
+                          observedAt: passedAt, course: course) }
     }
 
     // MARK: - «Ещё перекрыто?» после проезда события дороги
@@ -1080,10 +1101,11 @@ final class MobileCameraService {
     /// `id` — о каком событии был вопрос; ответ на сменившийся игнорируется.
     func answerRoadConfirm(stillThere: Bool?, for id: Int? = nil) {
         guard let event = pendingRoadConfirm, id == nil || id == event.id else { return }
+        let askedAt = pendingRoadConfirmAt ?? Date()
         pendingRoadConfirm = nil
         pendingRoadConfirmAt = nil
         guard let stillThere else { return }
-        Task { await vote(cameraID: event.id, stillThere: stillThere, origin: "pass") }
+        Task { await vote(cameraID: event.id, stillThere: stillThere, origin: "pass", observedAt: askedAt) }
     }
 
     /// Вопрос после проезда, как его показывают телефон и CarPlay: один за
@@ -1118,11 +1140,15 @@ final class MobileCameraService {
 
     /// value: true = «радар на месте» (продлевает жизнь), false = «радара нет».
     /// `origin` — происхождение голоса ("pass" — после проезда), уходит серверу.
-    func vote(cameraID: Int, stillThere: Bool, origin: String = "") async {
+    /// `observedAt` — когда водитель видел точку (проезд); уходит серверу
+    /// возрастом. `course` — наш курс при проезде (< 0 — неизвестен): тренога
+    /// снимает обе стороны, и «Убрали» встречного сервер срок не режет.
+    func vote(cameraID: Int, stillThere: Bool, origin: String = "", observedAt: Date = Date(),
+              course: CLLocationDegrees = -1) async {
         // Пульт погасил краудсорс — голос из открытой карточки не уходит.
         guard isEnabled else { return }
         let vote = PendingVote(reportID: cameraID - Self.idOffset, value: stillThere ? 1 : -1,
-                               kind: origin, at: Date())
+                               kind: origin, at: observedAt, course: course >= 0 ? course : nil)
         // Сеть подвела — голос ждёт её в очереди (как отметка): «Нет, радара
         // не было» в мёртвой зоне — то, что снимает пустышку раньше срока.
         if let why = await postVote(vote) {
@@ -1141,6 +1167,11 @@ final class MobileCameraService {
         struct Response: Decodable { let ok: Bool }
         var payload = ["id": vote.reportID, "device": deviceID, "value": vote.value] as [String: Any]
         if !vote.kind.isEmpty { payload["kind"] = vote.kind }
+        // Сколько секунд назад видели: «стоит» старше 10 мин сервер учтёт без
+        // продления. Старый сервер поле не читает.
+        let age = Date().timeIntervalSince(vote.at)
+        if age >= 1 { payload["age"] = Int(age) }
+        if let course = vote.course { payload["course"] = (course * 10).rounded() / 10 }
         do {
             _ = try await api.post("api/vote", json: payload, as: Response.self)
             return nil

@@ -250,6 +250,20 @@ final class ReportGuardTests: XCTestCase {
                                               from: point(metresEast: 260), canAsk: true), camera.id)
     }
 
+    func testDelayedQuestionRemembersWhenThePassHappened() {
+        // Вопрос ждал занятого слота — ответ уходит с возрастом проезда, а не
+        // тапа: старое «стоит» сервер не продлевает (ловец багов, 40a).
+        let camera = mobileCamera(id: 8, metresEast: 0)
+        var tracks: [Int: MobilePassWatch.Track] = [:]
+        _ = MobilePassWatch.update(tracks: &tracks, mobileCameras: [camera],
+                                   from: point(metresEast: -10), canAsk: false, now: now)
+        _ = MobilePassWatch.update(tracks: &tracks, mobileCameras: [camera],
+                                   from: point(metresEast: 220), canAsk: false, now: now.addingTimeInterval(20))
+        _ = MobilePassWatch.update(tracks: &tracks, mobileCameras: [camera],
+                                   from: point(metresEast: 900), canAsk: true, now: now.addingTimeInterval(300))
+        XCTAssertEqual(tracks[camera.id]?.departedAt, now.addingTimeInterval(20))
+    }
+
     func testAsksAboutOnePointPerTick() {
         // Две отметки рядом — два вопроса подряд за рулём это шум.
         let first = mobileCamera(id: 5, metresEast: 0)

@@ -222,7 +222,7 @@ struct ApproachAlertView: View {
                 Spacer()
                 HStack(spacing: 12) {
                     muteButton
-                    ReportRadarButton()
+                    ReportButton(source: .phoneAlert)
                 }
                 .padding(.horizontal, 24)
                 hideButton
@@ -281,7 +281,7 @@ struct ApproachAlertView: View {
                 detailsRow
                 HStack(spacing: 12) {
                     muteButton
-                    ReportRadarButton()
+                    ReportButton(source: .phoneAlert)
                 }
                 hideButton
             }

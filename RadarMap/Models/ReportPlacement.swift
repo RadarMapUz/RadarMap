@@ -78,6 +78,12 @@ nonisolated enum ReportPlacement {
 
     /// Снап на ось ближайшей проезжей части.
     ///
+    /// Одностороннее полотно против курса — не наше (картограф, A5): на
+    /// проспекте с разделительной оба полотна идут «по оси», и побеждала
+    /// ближайшая — встречная в 2–17 % случаев. Курса нет — направление не
+    /// проверяем, как и ось. При почти равном расстоянии земля бьёт мост и
+    /// тоннель: отметку ставят с дороги, а не с эстакады над ней.
+    ///
     /// - Parameter course: курс движения в градусах или отрицательное значение,
     ///   если ему нельзя верить (см. `LocationFilter`). Недоверенный курс
     ///   отключает выбор по направлению целиком, а не подставляет ноль.
@@ -89,10 +95,14 @@ nonisolated enum ReportPlacement {
                         roads: [RoadLine],
                         maxMeters: CLLocationDistance) -> Placement? {
         var best: (distance: CLLocationDistance, point: CLLocationCoordinate2D,
-                   kind: RoadClass, alongCourse: Bool)?
+                   kind: RoadClass, alongCourse: Bool, ground: Bool)?
         for road in roads where road.kind.isVehicleRoad && road.points.count >= 2 {
             for index in 0..<(road.points.count - 1) {
                 let a = road.points[index], b = road.points[index + 1]
+                let bearing = GeoMath.bearing(from: a, to: b)
+                // Встречное одностороннее полотно — не наше, как бы близко ни было.
+                if road.isOneWay, course >= 0,
+                   GeoMath.angleDifference(course, bearing) > maxOneWayAngle { continue }
                 let point = nearestPoint(to: coordinate, a: a, b: b)
                 let distance = GeoMath.fastDistance(coordinate.latitude, coordinate.longitude,
                                                     point.latitude, point.longitude)
@@ -100,20 +110,21 @@ nonisolated enum ReportPlacement {
                 // Ось сегмента ненаправленная: «по курсу» значит и туда, и
                 // обратно — сторону дороги мы всё равно не знаем.
                 let alongCourse = course >= 0
-                    && GeoMath.axisDifference(course: course,
-                                              axis: GeoMath.bearing(from: a, to: b))
-                        <= maxAxisAngle
+                    && GeoMath.axisDifference(course: course, axis: bearing) <= maxAxisAngle
+                let candidate = (distance, point, road.kind, alongCourse, road.level == 0)
                 guard let current = best else {
-                    best = (distance, point, road.kind, alongCourse)
+                    best = candidate
                     continue
                 }
                 // Дорога по курсу бьёт более близкую поперечную: на развязке и
                 // на разделённой трассе именно это отличает своё полотно от
                 // чужого.
-                if alongCourse && !current.alongCourse {
-                    best = (distance, point, road.kind, alongCourse)
-                } else if alongCourse == current.alongCourse, distance < current.distance {
-                    best = (distance, point, road.kind, alongCourse)
+                if alongCourse != current.alongCourse {
+                    if alongCourse { best = candidate }
+                } else if abs(distance - current.distance) <= levelTieMeters, candidate.4 != current.ground {
+                    if candidate.4 { best = candidate }
+                } else if distance < current.distance {
+                    best = candidate
                 }
             }
         }
@@ -124,6 +135,12 @@ nonisolated enum ReportPlacement {
     /// Курс и ось расходятся больше — дорога считается поперечной. Порог тот
     /// же, что у гейта оси камеры: шум курса плюс кривые подъезды.
     static let maxAxisAngle: Double = 55
+    /// Одностороннее полотно подходит, только если его ход расходится с
+    /// курсом не больше этого: дальше — встречное (картограф, A5).
+    static let maxOneWayAngle: Double = 90
+    /// «Почти равно» для выбора земли перед мостом: шум GPS не различает
+    /// полотна в паре метров друг над другом.
+    static let levelTieMeters: CLLocationDistance = 3
 
     /// Ближайшая точка отрезка к заданной. Плоская геометрия: на сотне метров
     /// кривизна Земли не важна, а долгота сжимается по широте точки.

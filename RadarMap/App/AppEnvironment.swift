@@ -53,8 +53,9 @@ final class AppEnvironment {
     let route = RouteService()
     let speedLimits: SpeedLimitService
     let liveActivity = LiveActivityService()
-    /// «Радар!» с плашки или часов в пути (`remoteRadarReport`).
-    @ObservationIgnored var remoteReportInFlight = false
+    /// Отметка водителя от касания до «Отменить» — один черновик на телефон,
+    /// машину, часы, плашку и Siri (вариант B, 02.11).
+    let reports = ReportFlow()
     /// Мост на Apple Watch: HUD поездки + тук на запястье.
     let watchBridge = WatchBridgeService()
     let metrics = MetricsService()
@@ -486,11 +487,16 @@ final class AppEnvironment {
         self.location.hotspots = hotspots
         self.location.roadWeather = roadWeather
         self.location.watchBridge = watchBridge
-        // «Радар!» с часов (9.3) — та же дверь, что у плашки.
+        // «Отметить» с часов (9.3) — та же дверь, что у плашки; «Отменить» — 8 с.
+        reports.mobile = mobile
+        reports.location = location
+        reports.alerts = alerts
         watchBridge.onReport = { [weak self] in
             guard let self else { return false }
-            return await self.remoteRadarReport()?.pointExists
+            return await self.remoteRadarReport(from: .watch)
         }
+        watchBridge.canUndoReport = { [weak self] in self?.reports.canUndo() ?? false }
+        watchBridge.onCancelReport = { [weak self] in await self?.reports.undo() }
         self.location.motion = motion     // «стоим» — сигнал не потерян
 
         // Пульт раздаём тем, кого он имеет право глушить. Список намеренно

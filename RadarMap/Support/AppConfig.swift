@@ -1546,6 +1546,42 @@ nonisolated enum AppConfig {
     /// и получает отказ.
     static let reportCancelWindow: TimeInterval = 10 * 60
 
+    // MARK: - Отметка: выбор типа и «Отменить» (вариант B, 02.11)
+
+    /// Отсчёт выбора после «Отметить»: молчание столько секунд — тренога.
+    /// Три — столько водитель держит в голове «я нажал»; дольше — плитки
+    /// закрывают низ карты, а точка касания уезжает назад.
+    nonisolated static let reportChooseSeconds: TimeInterval = 3
+    /// Окно «Отменить» после отправки (спецификация владельца).
+    nonisolated static let reportUndoSeconds: TimeInterval = 8
+    /// Сетка «Пост ДПС / ДТП» в машине до iOS 27: без выбора столько —
+    /// закрыть, ничего не отправив (водитель уже сказал «не тренога»).
+    static let reportGridIdleSeconds: TimeInterval = 10
+    /// Крестик баннера и кнопка приходят одним `didDismiss(.userDismissed)`,
+    /// а порядок с обработчиком кнопки не описан: отмену откладываем на столько.
+    static let reportChooseTapGraceSeconds: TimeInterval = 0.3
+    /// Нет годной точки в момент касания — ждём столько (кнопка, машина).
+    nonisolated static let reportNoFixWaitSeconds: TimeInterval = 3
+    /// То же для часов, плашки и Siri: они будят приложение из фона.
+    nonisolated static let reportRemoteFixWaitSeconds: TimeInterval = 6
+    /// «Увидел → нажал» для кнопки, машины и часов (картограф, A4; модель —
+    /// 2–4 с после треноги). Сдвиг — по своему треку, не по прямой.
+    nonisolated static let reportReactionSeconds: TimeInterval = 3.5
+    /// Siri сверх того: фраза и распознавание (оценка ~3 с, замерить в машине).
+    nonisolated static let reportSiriExtraSeconds: TimeInterval = 3
+    /// Сколько трека держим для сдвига: реакция Siri с запасом.
+    nonisolated static let reportTrackSeconds: TimeInterval = 15
+    /// Потолок сдвига по треку: дальше — уже не треногу вспоминают.
+    nonisolated static let reportMaxBackMeters: CLLocationDistance = 150
+    /// Баннер «отмечена · Отменить» в машине после вытеснения камерой
+    /// возвращается, только если от окна осталось не меньше системного
+    /// минимума показа баннера (CPNavigationAlertMinimumDuration = 5).
+    static let reportUndoBannerMinSeconds: TimeInterval = 5
+    /// Наш курс и ось хода отметившего расходятся больше — мы на поперечной
+    /// улице и треногу не видели: вопрос «Тренога ещё стоит?» не задаём.
+    /// Попутный и встречный спрашиваются оба (владелец, 02.11).
+    nonisolated static let mobilePassSameAxisDegrees: Double = 50
+
     // MARK: - Удалённый конфиг («пульт»)
 
     /// Файл-пульт рядом с version.json. Позволяет чинить без релиза то, что

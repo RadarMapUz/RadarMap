@@ -40,6 +40,8 @@ final class LiveActivityService {
     /// Ответ на «Радар!» с плашки (9.1б) — накладывается на каждое состояние,
     /// пока не снят: `activityState` о нажатии не знает.
     private var reportFlash: Bool?
+    /// Под вспышкой ✓ — «Отменить» (окно отмены отметки).
+    private var reportUndo = false
     /// Номер последней вспышки: снятие от прошлого нажатия не гасит новую.
     private var reportFlashID = 0
 
@@ -95,6 +97,7 @@ final class LiveActivityService {
         // ограниченный бюджет обновлений.
         var quantized = Self.quantize(state, nearMeters: nearMeters)
         quantized.reportFlash = reportFlash
+        quantized.reportUndo = reportUndo ? true : nil
         let now = Date()
         // Полоса — от начала подъезда к ЭТОЙ камере, а не от прошлой отправки:
         // иначе каждое обновление обнуляло бы её (ревью 19.10).
@@ -117,8 +120,9 @@ final class LiveActivityService {
 
     /// Показать ответ на «Радар!»; отправка — следующим `update`, его зовёт
     /// тот, кто нажал. Возвращает номер для `clearReportFlash`.
-    func flashReport(_ ok: Bool) -> Int {
+    func flashReport(_ ok: Bool, undo: Bool = false) -> Int {
         reportFlash = ok
+        reportUndo = ok && undo
         reportFlashID += 1
         return reportFlashID
     }
@@ -127,12 +131,21 @@ final class LiveActivityService {
     func clearReportFlash(_ id: Int) {
         guard id == reportFlashID else { return }
         reportFlash = nil
+        reportUndo = false
+    }
+
+    /// Отметку отменили — «Отменить» с плашки уходит сразу, не дожидаясь срока.
+    func clearReport() {
+        reportFlash = nil
+        reportUndo = false
+        reportFlashID += 1
     }
 
     func end() {
         self.activity = nil
         lastSentState = nil
         reportFlash = nil
+        reportUndo = false
         // Все плашки этого типа, а не только своя: осиротевшая от прошлого
         // процесса не должна пережить конец поездки (S14).
         for activity in Activity<CameraActivityAttributes>.activities {
@@ -221,6 +234,7 @@ final class LiveActivityService {
                            from old: CameraActivityAttributes.ContentState?) -> Bool {
         guard let old else { return false }
         return (new.muted ?? false) != (old.muted ?? false) || new.reportFlash != old.reportFlash
+            || new.reportUndo != old.reportUndo
     }
 
     /// Граница частых обновлений — по настоящей зоне оповещения, а не одна

@@ -182,6 +182,9 @@ final class MobileCameraService {
         guard !reports.isEmpty else { return }
         reports = []
         confirmations = [:]
+        reportCourses = [:]
+        expiryTask?.cancel()
+        expiryTask = nil
         passTracks = [:]
         pendingConfirm = nil
         pendingConfirmAt = nil
@@ -199,7 +202,8 @@ final class MobileCameraService {
         let lon: Double
         let expires: Double
         let type: String?      // старый сервер поля не шлёт — трактуем как радар
-        /// Курс отметившего — только в /api/road; < 0 или нет — неизвестен.
+        /// Курс отметившего; < 0 или нет — неизвестен. В /api/mobile — с
+        /// 02.11 (вопрос «ещё стоит?» только едущим в ту же сторону).
         let course: Double?
         let up: Int?
         let created: Double?
@@ -283,12 +287,14 @@ final class MobileCameraService {
             let skew = Self.clockSkew(serverDate: answer.serverDate, localNow: Date())
             lastSkew = skew
             var fresh: [Int: Confirmation] = [:]
+            var courses: [Int: Double] = [:]
             // Перекрытие и ремонт в общем списке не приходят (у них свой) —
             // а пришли бы, камерой не становятся: это не засада, а дорога.
             reports = decoded.reports.filter { !(ReportKind(rawValue: $0.type ?? "")?.isRoadEvent ?? false) }
                 .map { report in
                 let kind = ReportKind(rawValue: report.type ?? "") ?? .radar
                 let id = Self.idOffset + report.id
+                if let course = report.course, course >= 0 { courses[id] = course }
                 fresh[id] = Confirmation(upvotes: report.up ?? 0,
                                          created: Date(timeIntervalSince1970: (report.created ?? 0) + skew),
                                          confirmed: report.confirmed ?? true)
@@ -308,12 +314,14 @@ final class MobileCameraService {
                 )
             }
             confirmations = fresh
+            reportCourses = courses
             // Окно ближайших камер пересоберёт наблюдатель ревизии базы
             // (AppEnvironment.observeCameraRevision) — сразу, и без экрана.
             store?.setMobileCameras(reports)
             // Свои отметки сверяются с ОБОИМИ списками: своё «перекрыто»
             // живёт в списке дороги, и по одному списку камер оно числилось
             // бы пропавшим сразу после постановки.
+            scheduleExpiry()
             await refreshRoadEvents(skew: skew)
             for confirmed in reconcileMine(live: liveConfirmations()) {
                 onMyReportConfirmed?(confirmed)
@@ -383,7 +391,10 @@ final class MobileCameraService {
         }
         guard !gone.isEmpty else { return false }
         reports.removeAll { gone.contains($0.id) }
-        for id in gone { confirmations[id] = nil }
+        for id in gone {
+            confirmations[id] = nil
+            reportCourses[id] = nil
+        }
         // «Радар ещё стоял?» о снятой отметке — не спрашиваем: «нет» голосовал
         // бы за истёкшую и возвращал её на сервере (ревью S5).
         if let asked = pendingConfirm, gone.contains(asked.id) {
@@ -391,8 +402,39 @@ final class MobileCameraService {
             pendingConfirmAt = nil
         }
         store?.setMobileCameras(reports)
+        refreshOwnFresh()
+        scheduleExpiry()
         Log.network.notice("отметки водителей: сняты по сроку без сервера — \(gone.count, privacy: .public)")
         return true
+    }
+
+    // MARK: - Срок отметки — сразу, а не тактом сети
+
+    /// Курсы отметивших по id отметки — для вопроса «ещё стоит?» (A10.4).
+    @ObservationIgnored private var reportCourses: [Int: Double] = [:]
+
+    /// Снятие по ближайшему сроку. Правило владельца (02.11): истёкшая
+    /// тренога исчезает с карты и из голоса СРАЗУ. Такт сети (40–150 с) снимал
+    /// её до двух с половиной минут после срока — на карте, в голосе и в
+    /// баннере машины. Один таймер на ближайший срок, переставляется при
+    /// каждом новом списке; батарее это одно пробуждение на отметку.
+    @ObservationIgnored private var expiryTask: Task<Void, Never>?
+
+    private func scheduleExpiry(now: Date = Date()) {
+        expiryTask?.cancel()
+        expiryTask = nil
+        guard let next = Self.nextExpiry(reports.compactMap(\.mobileExpires), now: now) else { return }
+        expiryTask = Task { [weak self] in
+            // Ошибка sleep — только отмена задачи: таймер переставлен новым списком.
+            try? await Task.sleep(for: .seconds(max(0, next.timeIntervalSince(Date())) + 0.5))
+            guard !Task.isCancelled, let self else { return }
+            self.pruneExpired(now: Date())
+        }
+    }
+
+    /// Ближайший срок впереди (чистая — под тестом). Уже прошедший — сразу.
+    nonisolated static func nextExpiry(_ expiries: [Date], now: Date) -> Date? {
+        expiries.min().map { max($0, now) }
     }
 
     /// Чьи сроки вышли (чистая функция — под тестом).
@@ -423,20 +465,22 @@ final class MobileCameraService {
 
     /// Приватный намеренно: снаружи есть ровно один вход — `quickReport`.
     /// Иначе очередной путь снова унесёт отметку мимо защиты от дублей.
+    ///
+    /// Координата приходит уже сдвинутой на время реакции — по своему треку
+    /// от момента касания (ReportTrack, ReportFlow); здесь только посадка на
+    /// ось: снап обязан работать по той точке, где объект стоит, а не по той,
+    /// где о нём вспомнили. `touchedAt` — время касания: от него сервер
+    /// считает срок жизни, а очередь — свежесть.
     private func report(at coordinate: CLLocationCoordinate2D,
-                        kind: ReportKind = .radar,
-                        course: Double = -1,
-                        speedKmh: Double = 0) async -> ReportResult {
+                        kind: ReportKind,
+                        course: Double,
+                        touchedAt: Date) async -> ReportResult {
         // Краудсорс погашен пультом — отправлять некуда, и честнее сказать это
         // сразу, чем ждать таймаута сети.
         guard isEnabled else { return .failed(.disabled) }
-        // Сначала назад на время реакции, потом уже на ось: снап обязан
-        // работать по той точке, где объект стоит, а не по той, где о нём
-        // вспомнили. На разделённой трассе это ещё и разные сегменты оси.
-        let origin = ReportPlacement.backdated(coordinate, course: course, speedKmh: speedKmh)
-        let (point, cls) = placed(origin, course: course)
+        let (point, cls) = placed(coordinate, course: course)
         return await send(PendingReport(kind: kind.rawValue, lat: point.latitude,
-                                        lon: point.longitude, cls: cls, at: Date(),
+                                        lon: point.longitude, cls: cls, at: touchedAt,
                                         course: course >= 0 ? course : nil),
                           live: true)
     }
@@ -728,6 +772,17 @@ final class MobileCameraService {
                              lon: item.lon, at: item.at))
         trimMine()
         saveMine()
+        refreshOwnFresh()
+    }
+
+    /// Свои живые отметки (id карты) — рисуются без «?» (спецификация 02.11):
+    /// водитель только что видел треногу сам, а карта рисовала её сомнением,
+    /// как чужой слух. Только картинка — голос и запись проездов не меняются.
+    private(set) var ownFreshIDs: Set<Int> = []
+
+    private func refreshOwnFresh() {
+        let ids = Set(mine.filter { !$0.gone }.map { Self.idOffset + $0.id })
+        if ids != ownFreshIDs { ownFreshIDs = ids }
     }
 
     /// Своя история — не архив: держим окно, которое показываем, плюс запас.
@@ -768,6 +823,7 @@ final class MobileCameraService {
             // «Подтвердили» в живом списке — тоже повод перерисовать «Итоги».
             impactRevision &+= 1
         }
+        refreshOwnFresh()
         return news
     }
 
@@ -824,30 +880,32 @@ final class MobileCameraService {
         }
     }
 
-    /// Один тап: проверить, отправить, ответить. Вся кнопка «Радар!» — здесь,
-    /// чтобы телефон, CarPlay и Siri вели себя одинаково.
+    /// Одна отметка: проверить, отправить, ответить. Дверь для всех входов —
+    /// черновика (ReportFlow: кнопка, машина, часы, плашка, Siri) и точки,
+    /// показанной пальцем на карте.
     ///
     /// ЕДИНСТВЕННАЯ дверь наружу: `report(at:kind:course:)` приватный. Раньше
     /// три пути из шести — долгое нажатие на карте, прицел в «Ещё» и Siri —
     /// звали его напрямую и теряли по дороге всё сразу: защиту от дублей
-    /// (пять отметок на один пост), дневной счётчик воронки, окно уточнения
-    /// типа и курс (без него посадка на ось дороги кладёт отметку на встречную
-    /// полосу — тем, кто едет навстречу, а не за тобой).
+    /// (пять отметок на один пост), дневной счётчик воронки и курс (без него
+    /// посадка на ось дороги кладёт отметку на встречную полосу).
     ///
-    /// `fix` — качество своей точки (`LocationService.reportFix`): слепой тап
-    /// по грубой, потерянной или давней точке — «Ждём спутники», а не
-    /// «Принято» с засадой в сотнях метров от настоящей.
-    func quickReport(kind: ReportKind = .radar,
+    /// `fix` — качество своей точки (`LocationService.reportFix`) в момент
+    /// касания: слепая отметка по грубой, потерянной или давней точке — «Ждём
+    /// спутники», а не «Принято» с засадой в сотнях метров от настоящей.
+    /// `coordinate` слепой отметки уже сдвинута на время реакции
+    /// (ReportTrack); `touchedAt` — момент касания, а не отправки.
+    func quickReport(kind: ReportKind,
                      coordinate: CLLocationCoordinate2D?,
                      speedKmh: Double,
                      isTripActive: Bool,
                      placement: ReportGuard.Placement = .blind,
                      fix: ReportGuard.Fix?,
-                     course: Double = -1) async -> QuickOutcome {
-        // Одна отметка в полёте на все входы: кнопка в панели и в оповещении,
-        // CarPlay, Siri и плашка не видели полёта друг друга, а защита от
-        // дублей узнаёт об отметке только после ответа — второе нажатие
-        // уходило второй точкой.
+                     course: Double = -1,
+                     touchedAt: Date = Date()) async -> QuickOutcome {
+        // Одна отметка в полёте на все входы: черновик держит свою, а точка с
+        // карты и досылка не должны пройти мимо — защита от дублей узнаёт об
+        // отметке только после ответа, и второе нажатие уходило второй точкой.
         guard !isReporting else { return .refused(.duplicate) }
         if let refusal = ReportGuard.check(kind: kind, coordinate: coordinate,
                                            speedKmh: speedKmh, isTripActive: isTripActive,
@@ -858,98 +916,39 @@ final class MobileCameraService {
         guard let coordinate else { return .refused(.noPosition) }
         isReporting = true
         defer { isReporting = false }
-        // Скорость передаём только слепому тапу: точку, показанную пальцем на
-        // карте, двигать назад не за что — её не «вспомнили», её выбрали.
-        let result = await report(at: coordinate, kind: kind, course: course,
-                                  speedKmh: placement == .blind ? speedKmh : 0)
-        // Сеть подвела, но тап не пропал: отметка легла в очередь и уйдёт, как
+        let result = await report(at: coordinate, kind: kind, course: course, touchedAt: touchedAt)
+        // Сеть подвела, но отметка не пропала: она легла в очередь и уйдёт, как
         // только связь вернётся, — если не протухнет раньше.
         // «Отправлю позже» говорим, только если отметка ДЕЙСТВИТЕЛЬНО легла в
         // очередь. Отказ сервера туда не кладётся — обещать доставку было бы
         // враньём, а водитель на него рассчитывает и второй раз не отметит.
-        if case .failed(let why) = result, why.isWorthRetrying, pendingCount > 0 { return .queued(why) }
-        // Считаем только дошедшую отметку: отказ — не отметка, а уточнение
-        // типа (amend) переписывает ту же точку и второй не является. Из
-        // очереди её посчитает flushPending, когда дойдёт.
+        if case .failed(let why) = result, why.isWorthRetrying,
+           pending.contains(where: { $0.at == touchedAt }) { return .queued(why) }
+        // Считаем только дошедшую отметку: отказ — не отметка. Из очереди её
+        // посчитает flushPending, когда дойдёт.
         if result == .created || result == .confirmed { onReportSent?() }
-        // Окно уточнения типа — только для СВОЕЙ свежесозданной точки:
-        // merged-точка чужая, и «уточнение» родило бы рядом вторую сущность.
-        if kind == .radar, result == .created, placement == .blind {
-            storedRefineOffer = lastSent
-        }
         return .sent(result)
     }
 
-    // MARK: - «Что это было?» после быстрой отметки
-
     @ObservationIgnored private var isReporting = false
 
-    /// Водитель отметил радар — дневной счётчик воронки. Хук, а не прямая
+    /// Водитель отметил — дневной счётчик воронки. Хук, а не прямая
     /// ссылка на статистику: сервис отметок о ней знать не должен.
     @ObservationIgnored var onReportSent: (() -> Void)? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onReportSent,
                                                "MobileCameraService.onReportSent") }
     }
 
-    /// Предложение уточнить тип только что созданной отметки. Показывается
-    /// несколько секунд (AppConfig.reportRefineSeconds); молчание оставляет
-    /// «радар» — он покрывает почти все случаи.
-    ///
-    /// Срок — в самой модели, а не только в таймере плашки телефона: отметку
-    /// с плашки, часов или машины ставят при запертом телефоне, и открытая
-    /// через сорок минут карта предлагала «Что это было?» о давней точке —
-    /// а уточнение вне окна сервера родило бы новую треногу там, где ничего
-    /// нет (ревью 20.10).
-    var refineOffer: ReportGuard.Sent? {
-        guard let offer = storedRefineOffer,
-              Date().timeIntervalSince(offer.at) <= AppConfig.reportRefineMaxAgeSeconds else { return nil }
-        return offer
-    }
-    private var storedRefineOffer: ReportGuard.Sent?
-
-    func dismissRefine() { storedRefineOffer = nil }
-
-    /// Второй тап: «это была тренога/пост/ДТП». Сервер переписывает тип ТОЙ ЖЕ
-    /// точки (amend) — новая не создаётся, срок жизни не продлевается.
-    /// nil — уточнено; иначе причина, чтобы голос не говорил «нет связи»
-    /// там, где сервер просто отказал.
-    func refine(to kind: ReportKind, offer: ReportGuard.Sent) async -> ReportResult.Failure? {
-        struct Response: Decodable { let id: Int; let merged: Bool; let amended: Bool? }
-        guard isEnabled else { return .disabled }
-        // Вне окна сервера (10 мин / 400 м) это уже не уточнение, а новая
-        // отметка в старой точке — отказ, а не выдуманная засада.
-        guard Date().timeIntervalSince(offer.at) <= AppConfig.reportAmendWindowSeconds else {
-            Log.network.notice("уточнение типа отклонено: отметка старше окна сервера")
-            return .tooLate
-        }
-        do {
-            var payload = ["lat": offer.latitude, "lon": offer.longitude,
-                           "device": deviceID, "type": kind.rawValue] as [String: Any]
-            // Уточняется ровно точка из предложения: «последнюю отправленную»
-            // могла подменить другая отметка. Через границу камера/дорога
-            // сервер и так уточняет только названную явно (12б.5).
-            if let id = offer.serverID ?? lastSentID { payload["amend_id"] = id }
-            let response = try await api.post("api/report", json: payload, as: Response.self)
-            // «Ваша отметка подтверждена» должна назвать то, что на карте
-            // теперь, а не первый тап.
-            if response.amended == true, let index = mine.firstIndex(where: { $0.id == response.id }) {
-                mine[index].kind = kind.rawValue
-                saveMine()
-            }
-            // Дубль-гейту важен итоговый тип, а время оставляем исходное:
-            // окно «а вдруг не нажалось» считается от первого тапа. Только
-            // если последняя — всё ещё эта точка.
-            if lastSent?.serverID == offer.serverID {
-                lastSent = ReportGuard.Sent(kind: kind, latitude: offer.latitude,
-                                            longitude: offer.longitude, at: offer.at,
-                                            serverID: offer.serverID)
-            }
-            await refresh()
-            return response.amended == true || response.merged ? nil : .badAnswer
-        } catch {
-            Log.network.error("уточнение типа не ушло: \(error.localizedDescription, privacy: .public)")
-            return Self.failure(for: error)
-        }
+    /// «Отменить» отметки, ждущей связи: убрать из очереди, не отправляя.
+    /// Ключ — время касания (`touchedAt`). true — была и убрана.
+    @discardableResult
+    func cancelQueued(touchedAt: Date) -> Bool {
+        let before = pending.count
+        pending.removeAll { $0.at == touchedAt }
+        guard pending.count != before else { return false }
+        savePending()
+        if lastSent?.at == touchedAt { lastSent = nil }
+        return true
     }
 
     // MARK: - Отзыв своей отметки
@@ -980,7 +979,7 @@ final class MobileCameraService {
             mine.removeAll { $0.id == id }
             saveMine()
             if lastSentID == id { lastSentID = nil; lastSent = nil }
-            storedRefineOffer = nil
+            refreshOwnFresh()
             await refresh()
             return nil
         } catch {
@@ -1015,8 +1014,8 @@ final class MobileCameraService {
     /// включённом экране: в поездке с телефоном в кармане или под CarPlay без
     /// карты на телефоне проезд мимо треноги не замечался вовсе, и вопрос
     /// «радар ещё стоял?» — то, что держит данные свежими, — не задавался.
-    /// `course` — наш курс (−1 — недостоверен): событию дороги нужен проезд
-    /// по его ходу (RoadEventPassWatch); радару курс не нужен.
+    /// `course` — наш курс (−1 — недостоверен): и событию дороги, и треноге
+    /// нужен проезд в ту же сторону, что у отметившего (MobilePassWatch).
     func trackPasses(from coordinate: CLLocationCoordinate2D, course: CLLocationDegrees = -1,
                      now: Date = Date()) {
         expireStaleConfirm(now: now)
@@ -1030,6 +1029,8 @@ final class MobileCameraService {
         let askID = MobilePassWatch.update(tracks: &passTracks,
                                            mobileCameras: reports,
                                            from: coordinate,
+                                           course: course,
+                                           courses: reportCourses,
                                            excluded: ownReportIDs,
                                            canAsk: pendingConfirm == nil,
                                            now: now)
@@ -1214,7 +1215,7 @@ final class MobileCameraService {
     }
 
     /// Скриншот-хук `-demoMobileTrust`: подтверждённая отметка и призрак на
-    /// испытательном сроке плюс окно «Что это было?» с «Отменить» — без сети и
+    /// испытательном сроке плюс своя свежая отметка — без сети и
     /// без настоящего POST в общую базу (фейк на проде увидят живые водители).
     func seedTrustDemo(near coordinate: CLLocationCoordinate2D) {
         func demo(_ id: Int, dLat: Double, dLon: Double, confirmed: Bool) -> Camera {
@@ -1240,7 +1241,6 @@ final class MobileCameraService {
         // Свежая своя отметка — иначе «Отменить» в панели не показать на
         // скриншотах, а именно её и надо смотреть глазами.
         lastSentID = 900_003
-        storedRefineOffer = sent
     }
     #endif
 
@@ -1264,7 +1264,7 @@ final class MobileCameraService {
 
 /// Тип отметки водителя: у каждого свой вид на карте и время жизни на сервере
 /// (радар/тренога — часы, пост стоит дольше, ДТП рассасывается за час).
-enum ReportKind: String, CaseIterable, Identifiable {
+nonisolated enum ReportKind: String, CaseIterable, Identifiable, Sendable {
     case radar, tripod, post, accident
     /// Перекрытие и ремонт (12б.5): события дороги, не камеры — свой список
     /// на сервере, свой вид, в оповещения о камерах не входят.

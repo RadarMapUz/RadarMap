@@ -162,15 +162,14 @@ struct CameraDetailSheet: View {
                             .font(.rounded(12, .semibold))
                             .foregroundStyle(Theme.textSecondary)
                     }
-                    // Возраст отметки — половина её ценности: тренога стоит
-                    // час-полтора, и «10 минут назад» против «два часа назад»
-                    // меняет решение водителя сильнее, чем число голосов.
-                    // Старый сервер поля created не шлёт: там эпоха, и вместо
-                    // возраста получилось бы «55 лет назад» — молчим.
-                    if trust.created.timeIntervalSince1970 > 0 {
-                        Text(trust.created.formatted(Date.RelativeFormatStyle(presentation: .named, locale: Formatting.numberLocale)))
-                            .font(.rounded(11))
-                            .foregroundStyle(Theme.textTertiary)
+                    // Возраст отметки — половина её ценности: тренога — это
+                    // «сейчас» (владелец, 02.11), и «отмечена 10 мин назад»
+                    // против «в 12:40» меняет решение водителя сильнее, чем
+                    // число голосов. Подтверждённая — «с 14:05» (ReportAge).
+                    if let age = ReportAge.card(created: trust.created, confirmed: trust.confirmed, now: Date()) {
+                        Text(age)
+                            .font(.rounded(12, .medium))
+                            .foregroundStyle(Theme.textSecondary)
                     }
                 }
             }

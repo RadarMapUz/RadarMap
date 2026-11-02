@@ -19,27 +19,30 @@ final class MobilePassQuestionTests: XCTestCase {
         let q = MobilePassWatch.question(for: .dpsPost)
         XCTAssertEqual(q.title, "Пост ещё стоит?")
         XCTAssertEqual(q.yes, "Стоит")
-        XCTAssertEqual(q.no, "Пост убрали")
+        XCTAssertEqual(q.no, "Убрали")
         XCTAssertFalse(q.title.contains("Радар"))
     }
 
-    /// Радары и треноги — прежний вопрос, слово в слово.
-    func testRadarsKeepTheOldQuestion() {
-        for kind in [CameraType.mobileRadar, .tripod] {
-            let q = MobilePassWatch.question(for: kind)
-            XCTAssertEqual(q.title, "Радар ещё стоял?")
-            XCTAssertEqual(q.yes, "Да")
-            XCTAssertEqual(q.no, "Нет")
+    /// Словарь (02.11): тренога — «Тренога ещё стоит?», радар — «Радар ещё
+    /// стоит?», и у обоих «Стоит» / «Убрали». Настоящее время: тренога —
+    /// это «сейчас», и сервер понимает ответ как «стоит сейчас».
+    func testTripodAndRadarAskInThePresent() {
+        let tripod = MobilePassWatch.question(for: .tripod)
+        XCTAssertEqual(tripod.title, "Тренога ещё стоит?")
+        XCTAssertEqual(tripod.yes, "Стоит")
+        XCTAssertEqual(tripod.no, "Убрали")
+        let radar = MobilePassWatch.question(for: .mobileRadar)
+        XCTAssertEqual(radar.title, "Радар ещё стоит?")
+        XCTAssertEqual(radar.no, "Убрали")
+        for kind in [CameraType.mobileRadar, .tripod, .dpsPost, .accident] {
+            XCTAssertFalse(MobilePassWatch.question(for: kind).title.contains("стоял"), "\(kind)")
         }
     }
 
-    /// «Стоит / Пост убрали» не помещаются рядом с вопросом на SE — ответы
-    /// строкой ниже; «Да / Нет» остаются рядом, как были.
+    /// Длинные ответы — строкой ниже вопроса на SE; «Да / Нет» остаются рядом.
     func testLongAnswersGoBelowTheQuestion() {
-        let post = MobilePassWatch.question(for: .dpsPost)
-        XCTAssertTrue(PassQuestionCard.stacksAnswers(yes: post.yes, no: post.no, largeType: false))
-        let radar = MobilePassWatch.question(for: .mobileRadar)
-        XCTAssertFalse(PassQuestionCard.stacksAnswers(yes: radar.yes, no: radar.no, largeType: false))
+        XCTAssertTrue(PassQuestionCard.stacksAnswers(yes: "Стоит", no: "Пост убрали", largeType: false))
+        XCTAssertFalse(PassQuestionCard.stacksAnswers(yes: "Да", no: "Нет", largeType: false))
         XCTAssertFalse(PassQuestionCard.stacksAnswers(yes: "Ha", no: "Yoʻq", largeType: false))
         XCTAssertTrue(PassQuestionCard.stacksAnswers(yes: "Да", no: "Нет", largeType: true))
     }
@@ -59,9 +62,9 @@ final class MobilePassQuestionTests: XCTestCase {
         var tracks: [Int: MobilePassWatch.Track] = [:]
         let near = CLLocationCoordinate2D(latitude: 41.3003, longitude: 69.3)   // ~33 м
         let away = CLLocationCoordinate2D(latitude: 41.3025, longitude: 69.3)   // ~280 м
-        XCTAssertNil(MobilePassWatch.update(tracks: &tracks, mobileCameras: [post], from: near))
-        XCTAssertEqual(MobilePassWatch.update(tracks: &tracks, mobileCameras: [post], from: away), post.id)
-        XCTAssertNil(MobilePassWatch.update(tracks: &tracks, mobileCameras: [post], from: away),
+        XCTAssertNil(passWatch(tracks: &tracks, mobileCameras: [post], from: near, course: 0))
+        XCTAssertEqual(passWatch(tracks: &tracks, mobileCameras: [post], from: away, course: 0), post.id)
+        XCTAssertNil(passWatch(tracks: &tracks, mobileCameras: [post], from: away, course: 0),
                      "второй раз о том же посте не спрашиваем")
     }
 }

@@ -44,6 +44,10 @@ final class WatchSession: NSObject {
         /// итог скажет голос телефона.
         case pending
         case done(ok: Bool)
+        /// Отмечено, и ещё можно отменить (8 с): кнопка — «Отменить».
+        case undoable
+        /// «Отменить» ушла — ждём ответа телефона.
+        case cancelling
     }
 
     /// Сброс ответа через 3 с — один на нажатие: новое нажатие отменяет
@@ -149,8 +153,9 @@ extension WatchSession {
             return
         }
         session.sendMessage(["action": "report"], replyHandler: { reply in
-            let state: ReportState = reply["pending"] as? Bool == true
-                ? .pending : .done(ok: reply["ok"] as? Bool ?? false)
+            let ok = reply["ok"] as? Bool ?? false
+            let state: ReportState = reply["pending"] as? Bool == true ? .pending
+                : ok && reply["undo"] as? Bool == true ? .undoable : .done(ok: ok)
             Task { @MainActor in self.finish(state) }
         }, errorHandler: { _ in
             Task { @MainActor in self.finish(.done(ok: false)) }
@@ -164,17 +169,38 @@ extension WatchSession {
         }
     }
 
+    /// «Отменить» с запястья, пока окно открыто: телефон отзывает отметку
+    /// той же дверью, что кнопка на карте (ReportFlow.undo), и говорит итог.
+    func cancelReport() {
+        guard report == .undoable else { return }
+        clearTask?.cancel()
+        report = .cancelling
+        WKInterfaceDevice.current().play(.click)
+        WCSession.default.sendMessage(["action": "cancelReport"], replyHandler: { _ in
+            Task { @MainActor in self.settle(nil) }
+        }, errorHandler: { _ in
+            Task { @MainActor in self.settle(nil) }
+        })
+    }
+
+    private func settle(_ state: ReportState?) {
+        guard report == .cancelling else { return }
+        report = state
+    }
+
     private func finish(_ state: ReportState) {
         guard report == .sending else { return }   // поздний ответ после тайм-аута
         report = state
         switch state {
-        case .done(ok: true): WKInterfaceDevice.current().play(.success)
+        case .done(ok: true), .undoable: WKInterfaceDevice.current().play(.success)
         case .done(ok: false): WKInterfaceDevice.current().play(.failure)
-        case .pending, .sending: WKInterfaceDevice.current().play(.click)
+        case .pending, .sending, .cancelling: WKInterfaceDevice.current().play(.click)
         }
         clearTask?.cancel()
+        // «Отменить» живёт окно отмены телефона (8 с), остальное — 3 с.
+        let seconds: Double = state == .undoable ? 8 : 3
         clearTask = Task {
-            try? await Task.sleep(for: .seconds(3))
+            try? await Task.sleep(for: .seconds(seconds))
             guard !Task.isCancelled else { return }
             self.report = nil
         }

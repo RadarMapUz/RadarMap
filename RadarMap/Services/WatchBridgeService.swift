@@ -61,6 +61,17 @@ final class WatchBridgeService: NSObject {
                                                "WatchBridgeService.onReport") }
     }
 
+    /// Окно «Отменить» после отметки с часов открыто (ReportFlow.canUndo).
+    var canUndoReport: (() -> Bool)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: canUndoReport,
+                                               "WatchBridgeService.canUndoReport") }
+    }
+    /// «Отменить» с часов — отзыв последней отметки.
+    var onCancelReport: (() async -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onCancelReport,
+                                               "WatchBridgeService.onCancelReport") }
+    }
+
     override init() {
         super.init()
         guard WCSession.isSupported() else { return }
@@ -268,7 +279,16 @@ extension WatchBridgeService: WCSessionDelegate {
     /// него на запястье не узнать, ушла ли отметка.
     nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any],
                              replyHandler: @escaping ([String: Any]) -> Void) {
-        guard message["action"] as? String == "report" else {
+        let action = message["action"] as? String
+        if action == "cancelReport" {
+            let reply = WatchReply(send: replyHandler)
+            Task { @MainActor in
+                await self.onCancelReport?()
+                reply.send(["ok": true])
+            }
+            return
+        }
+        guard action == "report" else {
             replyHandler([:])
             return
         }
@@ -287,7 +307,9 @@ extension WatchBridgeService: WCSessionDelegate {
             let answer = await onReport()
             Log.network.info("часы: «Радар!» — \(answer.map { $0 ? "принято" : "отказ" } ?? "уже в пути", privacy: .public)")
             // nil — отметка с прошлого нажатия ещё в пути: не «✕», а «в пути».
-            once.send(answer.map { ["ok": $0] } ?? ["pending": true])
+            // «Отменить» на запястье — пока открыто окно (8 с, спецификация 02.11).
+            once.send(answer.map { ["ok": $0, "undo": $0 && (self.canUndoReport?() ?? false)] }
+                      ?? ["pending": true])
         }
     }
 }

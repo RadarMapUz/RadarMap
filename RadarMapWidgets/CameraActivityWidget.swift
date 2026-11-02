@@ -307,7 +307,8 @@ private struct LockScreenView: View {
     }
 }
 
-/// Кнопки плашки (9.1б): «Радар!» — широкая жёлтая, по ней бьют не глядя;
+/// Кнопки плашки (9.1б): «Отметить» — широкая жёлтая, по ней бьют не глядя
+/// (тренога по умолчанию, 02.11); после отметки 8 с на её месте «Отменить»;
 /// «Звук» — узкая, со значком нынешнего состояния. Намерения выполняет
 /// приложение (Shared/ActivityIntents), ответ приходит следующим состоянием:
 /// ✓ «Отмечено» или ✕ «Не отправлено» (причину говорит голос).
@@ -319,21 +320,28 @@ private struct ActivityButtons: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Button(intent: ActivityReportIntent()) {
-                HStack(spacing: 6) {
-                    Image(systemName: reportSymbol)
-                        .font(.system(size: 15, weight: .bold))
-                        .accessibilityHidden(true)
-                    reportTitle
-                        .font(.system(size: 15, weight: .heavy))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+            // Отметка ушла и её ещё можно отменить (8 с) — на месте
+            // «Отметить» встаёт «Отменить»: та же широкая кнопка под пальцем.
+            if state.reportUndo == true {
+                Button(intent: ActivityCancelReportIntent()) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.uturn.backward")
+                            .font(.system(size: 15, weight: .bold))
+                            .accessibilityHidden(true)
+                        Text("Отменить")
+                            .font(.system(size: 15, weight: .heavy))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: height)
+                    .background(WTheme.primary.opacity(0.22), in: Capsule())
                 }
-                .foregroundStyle(state.reportFlash == nil ? WTheme.onAction : .white)
-                .frame(maxWidth: .infinity, minHeight: height)
-                .background(reportFill, in: Capsule())
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Отменить мою отметку"))
+            } else {
+                reportButton
             }
-            .buttonStyle(.plain)
 
             Button(intent: ActivitySoundIntent()) {
                 Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
@@ -345,6 +353,24 @@ private struct ActivityButtons: View {
             .buttonStyle(.plain)
             .accessibilityLabel(muted ? Text("Включить звук") : Text("Выключить звук"))
         }
+    }
+
+    private var reportButton: some View {
+        Button(intent: ActivityReportIntent()) {
+            HStack(spacing: 6) {
+                Image(systemName: reportSymbol)
+                    .font(.system(size: 15, weight: .bold))
+                    .accessibilityHidden(true)
+                reportTitle
+                    .font(.system(size: 15, weight: .heavy))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(state.reportFlash == nil ? WTheme.onAction : .white)
+            .frame(maxWidth: .infinity, minHeight: height)
+            .background(reportFill, in: Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     private var reportSymbol: String {
@@ -360,7 +386,7 @@ private struct ActivityButtons: View {
         switch state.reportFlash {
         case true?: Text("Отмечено")
         case false?: Text("Не отправлено")
-        case nil: Text("Радар!")
+        case nil: Text("Отметить")
         }
     }
 

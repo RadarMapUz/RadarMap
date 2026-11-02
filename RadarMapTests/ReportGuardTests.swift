@@ -177,13 +177,13 @@ final class ReportGuardTests: XCTestCase {
         var tracks: [Int: MobilePassWatch.Track] = [:]
 
         // Подъезжаем — рано: водитель ещё не видел, что там.
-        XCTAssertNil(MobilePassWatch.update(tracks: &tracks, mobileCameras: [camera],
+        XCTAssertNil(passWatch(tracks: &tracks, mobileCameras: [camera],
                                             from: point(metresEast: -300)))
         // Вплотную — тоже рано: сейчас надо смотреть на дорогу.
-        XCTAssertNil(MobilePassWatch.update(tracks: &tracks, mobileCameras: [camera],
+        XCTAssertNil(passWatch(tracks: &tracks, mobileCameras: [camera],
                                             from: point(metresEast: -20)))
         // Отъехали — вот теперь ответ достоверен.
-        XCTAssertEqual(MobilePassWatch.update(tracks: &tracks, mobileCameras: [camera],
+        XCTAssertEqual(passWatch(tracks: &tracks, mobileCameras: [camera],
                                               from: point(metresEast: 250)),
                        camera.id)
     }
@@ -193,21 +193,21 @@ final class ReportGuardTests: XCTestCase {
         // водитель не мог, и его «нет» удалило бы честную точку.
         let camera = mobileCamera(id: 2, metresEast: 0)
         var tracks: [Int: MobilePassWatch.Track] = [:]
-        _ = MobilePassWatch.update(tracks: &tracks, mobileCameras: [camera],
+        _ = passWatch(tracks: &tracks, mobileCameras: [camera],
                                    from: point(metresEast: -320))
-        XCTAssertNil(MobilePassWatch.update(tracks: &tracks, mobileCameras: [camera],
+        XCTAssertNil(passWatch(tracks: &tracks, mobileCameras: [camera],
                                             from: point(metresEast: 320)))
     }
 
     func testAsksOnlyOncePerPoint() {
         let camera = mobileCamera(id: 3, metresEast: 0)
         var tracks: [Int: MobilePassWatch.Track] = [:]
-        _ = MobilePassWatch.update(tracks: &tracks, mobileCameras: [camera],
+        _ = passWatch(tracks: &tracks, mobileCameras: [camera],
                                    from: point(metresEast: -10))
-        XCTAssertEqual(MobilePassWatch.update(tracks: &tracks, mobileCameras: [camera],
+        XCTAssertEqual(passWatch(tracks: &tracks, mobileCameras: [camera],
                                               from: point(metresEast: 200)), camera.id)
         // Дальше по дороге — второй раз о том же не спрашиваем.
-        XCTAssertNil(MobilePassWatch.update(tracks: &tracks, mobileCameras: [camera],
+        XCTAssertNil(passWatch(tracks: &tracks, mobileCameras: [camera],
                                             from: point(metresEast: 400)))
     }
 
@@ -217,12 +217,12 @@ final class ReportGuardTests: XCTestCase {
         let own = mobileCamera(id: 5, metresEast: 0)
         let other = mobileCamera(id: 6, metresEast: 30)
         var tracks: [Int: MobilePassWatch.Track] = [:]
-        _ = MobilePassWatch.update(tracks: &tracks, mobileCameras: [own, other],
+        _ = passWatch(tracks: &tracks, mobileCameras: [own, other],
                                    from: point(metresEast: -10), excluded: [own.id])
-        XCTAssertEqual(MobilePassWatch.update(tracks: &tracks, mobileCameras: [own, other],
+        XCTAssertEqual(passWatch(tracks: &tracks, mobileCameras: [own, other],
                                               from: point(metresEast: 250), excluded: [own.id]),
                        other.id)
-        XCTAssertNil(MobilePassWatch.update(tracks: &tracks, mobileCameras: [own, other],
+        XCTAssertNil(passWatch(tracks: &tracks, mobileCameras: [own, other],
                                             from: point(metresEast: 300), excluded: [own.id]))
     }
 
@@ -231,9 +231,9 @@ final class ReportGuardTests: XCTestCase {
         // всю поездку.
         let camera = mobileCamera(id: 4, metresEast: 0)
         var tracks: [Int: MobilePassWatch.Track] = [:]
-        _ = MobilePassWatch.update(tracks: &tracks, mobileCameras: [camera], from: me)
+        _ = passWatch(tracks: &tracks, mobileCameras: [camera], from: me)
         XCTAssertEqual(tracks.count, 1)
-        _ = MobilePassWatch.update(tracks: &tracks, mobileCameras: [], from: me)
+        _ = passWatch(tracks: &tracks, mobileCameras: [], from: me)
         XCTAssertTrue(tracks.isEmpty)
     }
 
@@ -242,11 +242,11 @@ final class ReportGuardTests: XCTestCase {
         // когда слот освободится, а не никогда (ловец багов, 39).
         let camera = mobileCamera(id: 7, metresEast: 0)
         var tracks: [Int: MobilePassWatch.Track] = [:]
-        _ = MobilePassWatch.update(tracks: &tracks, mobileCameras: [camera],
+        _ = passWatch(tracks: &tracks, mobileCameras: [camera],
                                    from: point(metresEast: -10), canAsk: false)
-        XCTAssertNil(MobilePassWatch.update(tracks: &tracks, mobileCameras: [camera],
+        XCTAssertNil(passWatch(tracks: &tracks, mobileCameras: [camera],
                                             from: point(metresEast: 220), canAsk: false))
-        XCTAssertEqual(MobilePassWatch.update(tracks: &tracks, mobileCameras: [camera],
+        XCTAssertEqual(passWatch(tracks: &tracks, mobileCameras: [camera],
                                               from: point(metresEast: 260), canAsk: true), camera.id)
     }
 
@@ -255,11 +255,11 @@ final class ReportGuardTests: XCTestCase {
         // тапа: старое «стоит» сервер не продлевает (ловец багов, 40a).
         let camera = mobileCamera(id: 8, metresEast: 0)
         var tracks: [Int: MobilePassWatch.Track] = [:]
-        _ = MobilePassWatch.update(tracks: &tracks, mobileCameras: [camera],
+        _ = passWatch(tracks: &tracks, mobileCameras: [camera],
                                    from: point(metresEast: -10), canAsk: false, now: now)
-        _ = MobilePassWatch.update(tracks: &tracks, mobileCameras: [camera],
+        _ = passWatch(tracks: &tracks, mobileCameras: [camera],
                                    from: point(metresEast: 220), canAsk: false, now: now.addingTimeInterval(20))
-        _ = MobilePassWatch.update(tracks: &tracks, mobileCameras: [camera],
+        _ = passWatch(tracks: &tracks, mobileCameras: [camera],
                                    from: point(metresEast: 900), canAsk: true, now: now.addingTimeInterval(300))
         XCTAssertEqual(tracks[camera.id]?.departedAt, now.addingTimeInterval(20))
     }
@@ -269,13 +269,13 @@ final class ReportGuardTests: XCTestCase {
         let first = mobileCamera(id: 5, metresEast: 0)
         let second = mobileCamera(id: 6, metresEast: 30)
         var tracks: [Int: MobilePassWatch.Track] = [:]
-        _ = MobilePassWatch.update(tracks: &tracks, mobileCameras: [first, second],
+        _ = passWatch(tracks: &tracks, mobileCameras: [first, second],
                                    from: point(metresEast: 10))
-        let asked = MobilePassWatch.update(tracks: &tracks, mobileCameras: [first, second],
+        let asked = passWatch(tracks: &tracks, mobileCameras: [first, second],
                                            from: point(metresEast: 260))
         XCTAssertNotNil(asked)
         // Обе отмечены как спрошенные — второй вопрос не выскочит следом.
-        XCTAssertNil(MobilePassWatch.update(tracks: &tracks, mobileCameras: [first, second],
+        XCTAssertNil(passWatch(tracks: &tracks, mobileCameras: [first, second],
                                             from: point(metresEast: 300)))
     }
     // MARK: - Откуда взялась координата

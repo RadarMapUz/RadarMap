@@ -110,6 +110,14 @@ nonisolated enum CameraMarkerLook {
         }
     }
 
+    /// Рисовать ли отметку водителей «призраком» (полупрозрачной, с «?»).
+    /// Своя свежая — нет (02.11): водитель только что видел треногу сам, а
+    /// карта рисовала её сомнением, как чужой слух. Голос и запись проездов
+    /// это не трогает — только картинка.
+    static func isGhost(unconfirmed: Bool, own: Bool) -> Bool {
+        unconfirmed && !own
+    }
+
     /// Пометка поверх значка или пусто.
     static func badge(tier: Tier, unconfirmed: Bool, familiar: Bool) -> String {
         if unconfirmed { return ghostBadge }

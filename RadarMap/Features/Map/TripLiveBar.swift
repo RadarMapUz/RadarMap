@@ -72,7 +72,7 @@ struct TripLiveBar: View {
             // читается боковым зрением.
             StopTripButton(action: onStop)
                 .padding(.trailing, 4)
-            ReportRadarButton()
+            ReportButton()
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
         // Сплошная панель, как у кластера скорости и чипа камеры: под ней

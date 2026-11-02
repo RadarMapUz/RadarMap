@@ -139,50 +139,58 @@ struct RouteWorkIntent: AppIntent {
 
 /// Общая работа всех голосовых отметок.
 ///
-/// Раньше голосом можно было поставить только радар, и это делало Siri
-/// бесполезной ровно там, где она нужнее всего: тренога и патруль — те самые
-/// вещи, ради которых водитель тянется к телефону, а руки заняты рулём. Теперь
-/// у каждого типа своя фраза: «отметь треногу», «здесь ДПС» — одно
-/// высказывание, без уточняющих вопросов Siri посреди дороги.
+/// У каждого типа своя фраза: «отметь треногу», «здесь ДПС» — одно
+/// высказывание, без уточняющих вопросов Siri посреди дороги. Дверь — та же,
+/// что у кнопки (ReportFlow): одна отметка в полёте на все входы, точка — по
+/// своему треку с поправкой на фразу Siri, а тип, названный голосом, закрывает
+/// открытый на экране выбор. Ответ говорит сама Siri — свой голос молчит.
 @MainActor
 private func reportBySiri(_ kind: ReportKind) async -> IntentDialog {
     let env = AppEnvironment.shared
-    // Холодный старт из Siri: GPS ещё не тикал — просим одноразовый фикс и
-    // ждём ГОДНЫЙ: в тихом фоне последняя точка — значимое перемещение, иногда
-    // километры назад, и отметка по ней ставила засаду не там (ловец багов, 39).
-    guard let coordinate = await env.location.awaitReportCoordinate() else {
-        return IntentDialog("Не вижу геопозицию — попробуйте ещё раз.")
+    let answer = await env.reports.report(kind, from: .siri, speak: false)
+    switch answer {
+    case .busy:
+        return IntentDialog("Отметка уже отправляется.")
+    case .choosing, .cancelled:
+        return IntentDialog(stringLiteral: ReportWords.notMarked)
+    case .done(let outcome):
+        switch outcome {
+        case .sent(.created):
+            // «Тренога отмечена. Отменить — «Отмени отметку»» — отмена голосом
+            // есть (CancelReportIntent), и её надо назвать.
+            return IntentDialog(stringLiteral:
+                String(format: String(localized: "%@. Отменить — «Отмени отметку в RadarMap»"),
+                       ReportWords.marked(kind)))
+        case .sent(.confirmed):
+            return IntentDialog(stringLiteral:
+                String(format: String(localized: "Здесь уже отмечено — подтвердили: %@"), ReportWords.title(kind)))
+        case .sent(.amended):
+            return IntentDialog("Тип отметки уточнён.")
+        case .queued(.serverBroken):
+            return IntentDialog("Сервер не отвечает — отправлю, как только ответит.")
+        case .queued:
+            return IntentDialog("Связи нет — отправлю, как только появится.")
+        case .sent(.failed), .refused:
+            // Причина уже разложена на человеческую фразу — Siri произносит её как
+            // есть, а не «нет связи» поверх «слишком часто» или «выключено».
+            return IntentDialog(stringLiteral: outcome.spoken)
+        }
     }
-    // Через ту же дверь, что и кнопка: интент шёл мимо и терял защиту от
-    // дублей — «Привет Siri, радар здесь» на том же посту через квартал
-    // ставило вторую точку, а дневной счётчик отметок его не видел вовсе.
-    let outcome = await env.mobile.quickReport(
-        kind: kind,
-        coordinate: coordinate,
-        speedKmh: env.location.speedKmh,
-        isTripActive: env.location.isTripActive,
-        fix: env.location.reportFix,
-        course: env.location.currentCourse)
-    switch outcome {
-    case .sent(.created):
-        return IntentDialog(stringLiteral:
-            String(format: String(localized: "Отмечено: %@. Спасибо, что предупредили!"),
-                   kind.title))
-    case .sent(.confirmed):
-        return IntentDialog(stringLiteral:
-            String(format: String(localized: "Здесь уже отмечено — подтвердили: %@"), kind.title))
-    case .sent(.amended):
-        // Своя свежая отметка другого типа рядом превращает эту в уточнение:
-        // сервер переписал тип той же точки, а не создал вторую.
-        return IntentDialog("Тип отметки уточнён.")
-    case .queued(.serverBroken):
-        return IntentDialog("Сервер не отвечает — отправлю, как только ответит.")
-    case .queued:
-        return IntentDialog("Связи нет — отправлю, как только появится.")
-    case .sent(.failed), .refused:
-        // Причина уже разложена на человеческую фразу — Siri произносит её как
-        // есть, а не «нет связи» поверх «слишком часто» или «выключено».
-        return IntentDialog(stringLiteral: outcome.spoken)
+}
+
+/// «Отмени отметку» — то же «Отменить», что на экране, часах и плашке, пока
+/// открыто окно отмены.
+struct CancelReportIntent: AppIntent {
+    static let title: LocalizedStringResource = "Отменить отметку"
+    static let description = IntentDescription("Убирает только что поставленную отметку.")
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let env = AppEnvironment.shared
+        guard env.reports.canUndo() else {
+            return .result(dialog: IntentDialog("Отменять нечего."))
+        }
+        return .result(dialog: IntentDialog(stringLiteral: await env.reports.undo(speak: false)))
     }
 }
 
@@ -241,49 +249,39 @@ extension AppEnvironment {
             Log.alerts.info("Плашка: звук \(self.settings.isMuted ? "выключен" : "включён", privacy: .public)")
             location.refreshLiveActivity()
         case .report:
-            guard let outcome = await remoteRadarReport() else { return }
+            guard let ok = await remoteRadarReport(from: .liveActivity) else { return }
             // Повтор на том же месте — точка уже стоит: ✓, а не «✕ Не
             // отправлено» поверх голоса «Уже отметили здесь» (ревью 20.10).
-            let flash = liveActivity.flashReport(outcome.pointExists)
+            // Ушла новая — 8 с на месте кнопки «Отменить» (02.11).
+            let undo = ok && reports.canUndo()
+            let flash = liveActivity.flashReport(ok, undo: undo)
             location.refreshLiveActivity()
             // Снять отметку — отдельной задачей: намерению плашки система даёт
             // секунды, и ждать внутри него незачем.
             Task { [weak self] in
-                await Task.pause(seconds: AppConfig.liveActivityReportFlashSeconds)
+                await Task.pause(seconds: undo ? AppConfig.reportUndoSeconds
+                                                : AppConfig.liveActivityReportFlashSeconds)
                 self?.liveActivity.clearReportFlash(flash)
                 self?.location.refreshLiveActivity()
             }
+        case .cancelReport:
+            await reports.undo()
+            liveActivity.clearReport()
+            location.refreshLiveActivity()
         }
     }
 }
 
 extension AppEnvironment {
-    /// «Радар!» без взгляда на телефон — с плашки (и с часов, 9.3). Та же
-    /// дверь, что у кнопки на карте: защита от дублей, «с дивана» и курс для
-    /// снапа — в quickReport, не здесь. Итог произносится: на экран за рулём
-    /// не смотрят.
+    /// «Отметить» без взгляда на телефон — с плашки и с часов. Та же дверь,
+    /// что у кнопки на карте (ReportFlow): тренога по умолчанию, точка по
+    /// своему треку от момента касания, одна отметка в полёте на все входы.
+    /// Итог произносится: на экран за рулём не смотрят.
     ///
-    /// nil — отметка с прошлого нажатия ещё в пути: на слабой связи ответ
-    /// идёт секунды, водитель жмёт ещё раз, и второе нажатие проходило мимо
-    /// защиты от дублей (она узнаёт об отметке только после ответа сервера) —
-    /// кнопка на карте держит для этого `isSending` (ревью 20.10).
-    func remoteRadarReport() async -> MobileCameraService.QuickOutcome? {
-        guard !remoteReportInFlight else { return nil }
-        remoteReportInFlight = true
-        defer { remoteReportInFlight = false }
-        // Плашка и часы поднимают приложение и из выгруженного состояния —
-        // точки тогда ещё нет или она грубая; ждём годную, как у Siri. Не
-        // дождались — quickReport честно скажет «Ждём спутники».
-        let coordinate = await location.awaitReportCoordinate() ?? location.currentCoordinate
-        let outcome = await mobile.quickReport(
-            kind: .radar,
-            coordinate: coordinate,
-            speedKmh: location.speedKmh,
-            isTripActive: location.isTripActive,
-            fix: location.reportFix,
-            course: location.currentCourse)
-        alerts.speak(outcome.spoken)
-        return outcome
+    /// true/false — точка есть (ушла, в очереди или уже стояла) или нет;
+    /// nil — прошлая отметка ещё в пути: не «✕», а «в пути».
+    func remoteRadarReport(from source: ReportDraft.Source) async -> Bool? {
+        await reports.begin(from: source).pointExists
     }
 }
 
@@ -359,6 +357,15 @@ struct RadarShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "Пост ДПС здесь",
             systemImageName: "figure.wave"
+        )
+        AppShortcut(
+            intent: CancelReportIntent(),
+            phrases: [
+                "Отмени отметку в \(.applicationName)",
+                "Cancel report in \(.applicationName)",
+            ],
+            shortTitle: "Отменить отметку",
+            systemImageName: "arrow.uturn.backward"
         )
         AppShortcut(
             intent: ReportAccidentIntent(),

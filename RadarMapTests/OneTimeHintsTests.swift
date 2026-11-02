@@ -17,6 +17,21 @@ final class OneTimeHintsTests: XCTestCase {
         XCTAssertEqual(OneTimeHints.next(shown: [.toggles], radarVisible: true), .radar)
     }
 
+    /// В поездке «Радар!» впереди переключателей: кнопка уже на экране (40D).
+    func testRadarComesFirstInTrip() {
+        XCTAssertEqual(OneTimeHints.next(shown: [], radarVisible: true), .radar)
+        XCTAssertEqual(OneTimeHints.next(shown: [.radar], radarVisible: true), .toggles)
+    }
+
+    /// До первой поездки подсказка за запуск не тратится на переключатели —
+    /// иначе запуск первой поездки оставался без «Радар!».
+    func testFirstTripKeepsLaunchForRadar() {
+        XCTAssertNil(OneTimeHints.next(shown: [], radarVisible: false, hasDriven: false))
+        XCTAssertEqual(OneTimeHints.next(shown: [], radarVisible: true, hasDriven: false), .radar)
+        XCTAssertEqual(OneTimeHints.next(shown: [.radar], radarVisible: false, hasDriven: false), .toggles)
+        XCTAssertEqual(OneTimeHints.next(shown: [], radarVisible: false, hasDriven: true), .toggles)
+    }
+
     /// Подсказывать про жёлтую кнопку, когда её нет на экране (вне поездки), —
     /// значит путать, а не помогать: ждём поездки.
     func testRadarHintWaitsForVisibleButton() {

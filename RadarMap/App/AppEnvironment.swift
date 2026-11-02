@@ -129,6 +129,11 @@ final class AppEnvironment {
     let cloud = CloudSyncService()
     /// Свои дороги и новые камеры на них (31E): память клеток и новости.
     let roadMemory = RoadMemoryService()
+    /// Первая отметка «Радар!» уже была (40D): до неё под жёлтой кнопкой
+    /// подпись — без слова квадрат с волнами не читается кнопкой «отметить».
+    private(set) var hasReportedRadar = Storage.bool(.radarReportedOnce) {
+        didSet { Storage.set(hasReportedRadar, for: .radarReportedOnce) }
+    }
 
     /// CarPlay подключён. Наблюдаемый флаг для интерфейса телефона: пока едет
     /// машина, телефонная карта уступает место дешёвому экрану передачи —
@@ -522,7 +527,12 @@ final class AppEnvironment {
         // История приезжает с диска уже после первого кадра, поэтому всё,
         // что из неё выводится, пересчитывается по этому сигналу, а не один
         // раз на старте сцены.
-        mobile.onReportSent = { [weak usage] in usage?.noteReport() }
+        mobile.onReportSent = { [weak usage, weak self] in
+            usage?.noteReport()
+            if self?.hasReportedRadar == false { self?.hasReportedRadar = true }
+        }
+        // Отметки до 40D флага не ставили: свои в списке — подпись уже не нужна.
+        if !hasReportedRadar, !mobile.mine.isEmpty { hasReportedRadar = true }
         // Счётчик оповещений уходил на сервер вечным нулём: метод существовал,
         // а звать его было некому. Главная цифра воронки — «сколько раз в день
         // приложение реально предупредило» — была ложью.

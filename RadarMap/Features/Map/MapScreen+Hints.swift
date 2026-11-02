@@ -45,6 +45,7 @@ extension MapScreen {
         guard let hint = OneTimeHints.next(
             shown: shown,
             radarVisible: mode.showsReportButton,
+            hasDriven: env.trip.lifetime.trips > 0 || env.location.isTripActive,
             hasFamiliarCameras: !env.location.familiarCameraIDs.isEmpty,
             // Не за рулём: подсказка ведёт в настройки.
             offersCarOnly: env.offersCarOnlyMode && !env.location.isTripActive

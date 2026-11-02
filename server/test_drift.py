@@ -211,7 +211,7 @@ class DeployScriptsTest(unittest.TestCase):
     по своим файлам ДО первой заливки и останавливается, когда они закрыты."""
 
     SCRIPTS = ("deploy_api.sh", "deploy_bot.sh", "deploy_traffic.sh",
-               "deploy_road_weather.sh", "install_roads_pipeline.sh")
+               "deploy_road_weather.sh", "install_roads_pipeline.sh", "migrate_api_user.sh")
 
     def read(self, name):
         with open(os.path.join(HERE, name), encoding="utf-8") as f:
@@ -267,6 +267,12 @@ class DeployScriptsTest(unittest.TestCase):
 
     def test_deploy_bot_stops_before_upload(self):
         code, out, log = self.run_blocked("deploy_bot.sh", "/opt/radarmap/api/telegram_bot.py")
+        self.assertNotEqual(code, 0, out)
+        self.assertNotIn("scp ", log)
+
+    def test_migrate_api_user_stops_before_upload(self):
+        code, out, log = self.run_blocked("migrate_api_user.sh",
+                                          "/etc/systemd/system/radarmap-api.service.d/user.conf")
         self.assertNotEqual(code, 0, out)
         self.assertNotIn("scp ", log)
 

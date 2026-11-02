@@ -26293,12 +26293,12 @@
         }
       }
     },
-    "Да. Начните поездку в RadarMap (или она начнётся сама), затем откройте Яндекс. RadarMap предупреждает о камерах голосом поверх Яндекса и музыки — для этого нужен доступ к геопозиции «Всегда», и приложение нельзя закрывать смахиванием. В CarPlay на экране будет Яндекс: голос RadarMap звучит, а баннер о камере поверх чужого навигатора CarPlay может не показать. Пробки и объезды — у того, кто ведёт маршрут.": {
+    "Да. Начните поездку в RadarMap (или она начнётся сама), затем откройте Яндекс. RadarMap предупреждает о камерах голосом поверх Яндекса и музыки — для этого нужен доступ к геопозиции «Всегда», и приложение нельзя закрывать смахиванием. В CarPlay на экране будет Яндекс: голос RadarMap звучит, а баннер о камере поверх Яндекса появляется, только если маршрут ведёт и RadarMap. Без нашего маршрута о камере предупредит только голос. Пробки и объезды — у того, кто ведёт маршрут.": {
       "localizations": {
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ha. Safarni RadarMapʼda boshlang (yoki u oʻzi boshlanadi), soʻng Yandexni oching. RadarMap kameralar haqida Yandex va musiqa ustidan ovoz bilan ogohlantiradi — buning uchun joylashuvga «Doim» ruxsati kerak va ilovani surib yopmaslik kerak. CarPlayʼda ekranda Yandex boʻladi: RadarMap ovozi eshitiladi, lekin CarPlay boshqa navigator ustidan kamera bannerini koʻrsatmasligi mumkin. Tirbandlik va aylanib oʻtish — yoʻnalishni boshqarayotgan navigatorda."
+            "value": "Ha. Safarni RadarMapʼda boshlang (yoki u oʻzi boshlanadi), soʻng Yandexni oching. RadarMap kameralar haqida Yandex va musiqa ustidan ovoz bilan ogohlantiradi — buning uchun joylashuvga «Doim» ruxsati kerak va ilovani surib yopmaslik kerak. CarPlayʼda ekranda Yandex boʻladi: RadarMap ovozi eshitiladi, kamera banneri esa Yandex ustidan faqat yoʻnalishni RadarMap ham boshqarayotgan boʻlsa chiqadi. Bizning yoʻnalishimiz boʻlmasa, kamera haqida faqat ovoz ogohlantiradi. Tirbandlik va aylanib oʻtish — yoʻnalishni boshqarayotgan navigatorda."
           }
         }
       }

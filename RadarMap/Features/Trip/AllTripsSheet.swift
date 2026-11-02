@@ -75,7 +75,7 @@ struct AllTripsSheet: View {
                         // «Итогах»: без тени у каждой строки.
                         VStack(spacing: 0) {
                             ForEach(Array(month.records.enumerated()), id: \.element.id) { index, record in
-                                if index > 0 { Divider().overlay(Theme.stroke).padding(.leading, 14) }
+                                if index > 0 { Divider().overlay(Theme.stroke).padding(.leading, 70) }
                                 row(record)
                             }
                         }
@@ -170,44 +170,16 @@ struct AllTripsSheet: View {
         return Button {
             path.append(.trip(record.id))
         } label: {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        // Время — тем же форматом, что во всех «Итогах» (34):
-                        // «26 окт., 09:00» здесь против «Вчера, 9:00» в разборе.
-                        Text(Formatting.dateAndClock(record.startedAt, .dateTime.day().month(.abbreviated)))
-                            .font(.rounded(14, .semibold))
-                            .foregroundStyle(Theme.textPrimary)
-                        // Куда приехали — «→ Работа»: строку узнают по цели,
-                        // а не по времени старта.
-                        if let finish {
-                            // Две строки каталога, не тернарник литералов (правило 7).
-                            Text(finish == .home ? String(localized: "→ Дом") : String(localized: "→ Работа"))
-                                .font(.rounded(12, .semibold))
-                                .foregroundStyle(Theme.accent)
-                        }
-                    }
-                    Text("\(Formatting.distance(record.distanceMeters)) · \(Formatting.duration(record.duration))")
-                        .font(.rounded(13))
-                        .foregroundStyle(Theme.textSecondary)
-                }
-                Spacer(minLength: 8)
-                if let score = record.score {
-                    Text("\(Int(score))")
-                        .font(.rounded(14, .heavy).monospacedDigit())
-                        .foregroundStyle(TripHistorySection.scoreColor(Int(score)))
-                        .padding(.horizontal, 9).padding(.vertical, 5)
-                        .background(Theme.quietFill,
-                                    in: Capsule())
-                }
-                Image(systemName: "chevron.right")
-                    .font(.rounded(13, .semibold))
-                    .foregroundStyle(Theme.textTertiary)
-            }
-            .padding(.horizontal, 14).padding(.vertical, 12)
-            .contentShape(Rectangle())
+            // Та же строка, что в списке периода (38C): превью трека, камеры,
+            // «почему не 100». Время — тем же форматом, что во всех «Итогах»
+            // (34): архив идёт по месяцам, поэтому с датой.
+            TripListRow(record: record,
+                        title: Formatting.dateAndClock(record.startedAt, .dateTime.day().month(.abbreviated)),
+                        finish: finish)
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(Text("Открыть подробности"))
         .contextMenu {
             if let onRepeat, let end = record.endCoordinate {
                 Button {

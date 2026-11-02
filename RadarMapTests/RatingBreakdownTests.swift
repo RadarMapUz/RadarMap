@@ -153,6 +153,63 @@ final class RatingBreakdownTests: XCTestCase {
         XCTAssertGreaterThan(top?.points ?? 0, sources.cameras.last?.points ?? .infinity)
     }
 
+    // MARK: - Причины в целых
+
+    /// «−20,0» и «−7,2» под итогом «вместе −27» (38C): строки обязаны быть
+    /// целыми и складываться ровно в показанный итог.
+    func testWholePointsSumToTotal() {
+        XCTAssertEqual(RatingBreakdown.wholePoints([20.0, 7.2], total: 27), [20, 7])
+        // Каждая строка округляется вверх — сумма убежала бы в −28.
+        XCTAssertEqual(RatingBreakdown.wholePoints([13.5, 13.5], total: 27), [14, 13])
+        // Три по трети — недостающий балл получает одна строка, а не все.
+        XCTAssertEqual(RatingBreakdown.wholePoints([3.4, 3.3, 3.3], total: 10), [4, 3, 3])
+        // Части расходятся с итогом (рейтинг округлён) — делится итог.
+        XCTAssertEqual(RatingBreakdown.wholePoints([20.0, 7.2], total: 28).reduce(0, +), 28)
+        XCTAssertEqual(RatingBreakdown.wholePoints([0.3, 0.3, 0.4], total: 1), [0, 0, 1])
+        XCTAssertEqual(RatingBreakdown.wholePoints([], total: 5), [])
+        XCTAssertEqual(RatingBreakdown.wholePoints([0, 0], total: 5), [0, 0])
+        XCTAssertEqual(RatingBreakdown.wholePoints([4, 2], total: 0), [0, 0])
+        XCTAssertEqual(RatingBreakdown.wholePoints([-1, 6], total: 6), [0, 6])
+    }
+
+    /// Порядок по величине не переворачивается: бо́льшая часть никогда не
+    /// получает меньше баллов, чем меньшая, а сумма всегда сходится.
+    func testWholePointsKeepOrderAndSum() {
+        var generator = SystemRandomNumberGenerator()
+        for _ in 0..<500 {
+            let parts = (0..<Int.random(in: 1...7, using: &generator))
+                .map { _ in Double.random(in: 0...30, using: &generator) }
+            let total = Int.random(in: 0...60, using: &generator)
+            let whole = RatingBreakdown.wholePoints(parts, total: total)
+            XCTAssertEqual(whole.reduce(0, +), parts.reduce(0, +) > 0 ? total : 0)
+            for a in parts.indices { for b in parts.indices where parts[a] > parts[b] {
+                XCTAssertGreaterThanOrEqual(whole[a], whole[b], "\(parts) → \(whole)")
+            } }
+        }
+    }
+
+    /// Строки блока: видимые камеры и плавность по величине, остальные камеры
+    /// одной строкой в конце, сумма — итог; плавность, округлившаяся в ноль,
+    /// не показывается.
+    func testSourceLinesAreWholeAndSumToTotal() {
+        func camera(_ id: Int, _ points: Double) -> RatingHotspot {
+            RatingHotspot(id: id, location: "К\(id)", times: 1, points: points, worstSpeedKmh: 80,
+                          worstDate: now, limitKmh: 60, lat: nil, lon: nil)
+        }
+        let sources = RatingSources(cameras: [camera(1, 7.2), camera(2, 3.1), camera(3, 0.4)],
+                                    smoothness: 16.3)
+        let lines = sources.lines(visible: 2, total: 27)
+        XCTAssertEqual(lines.map(\.id), [-1, 1, 2, -2])
+        XCTAssertEqual(lines.map(\.points).reduce(0, +), 27)
+        XCTAssertEqual(lines.map(\.points), [16, 7, 3, 1])
+        XCTAssertEqual(lines.last?.kind, .rest(count: 1))
+
+        let quiet = RatingSources(cameras: [camera(1, 12.8)], smoothness: 0.2)
+        let quietLines = quiet.lines(visible: 4, total: 13)
+        XCTAssertEqual(quietLines.map(\.id), [1])
+        XCTAssertEqual(quietLines.first?.points, 13)
+    }
+
     /// Записи вычищены — названий камер взять неоткуда, и выдумывать их нельзя.
     func testSourcesEmptyWhenRecordsPruned() {
         let history = (1...10).map { record(daysAgo: Double($0), km: 10, score: 70) }

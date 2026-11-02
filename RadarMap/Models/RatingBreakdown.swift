@@ -95,6 +95,54 @@ nonisolated struct RatingSources: Equatable {
 
     var isEmpty: Bool { cameras.isEmpty && smoothness < 0.05 }
     var total: Double { cameras.reduce(smoothness) { $0 + $1.points } }
+
+    /// Строки разбора «по причинам» в целых баллах, сумма которых равна
+    /// показанному итогу `total` («вместе −27»): «−20,0» и «−7,2» под целым
+    /// итогом читались как две разные арифметики. Видны первые `visible`
+    /// камер и плавность, остальные камеры — одной строкой в конце. Плавность,
+    /// округлившаяся до нуля, не показывается — её доля уже ушла в остаток.
+    func lines(visible: Int, total: Int) -> [RatingSourceLine] {
+        let shown = Array(cameras.prefix(visible))
+        let rest = cameras.dropFirst(visible)
+        var parts = shown.map(\.points) + [smoothness]
+        if !rest.isEmpty { parts.append(rest.reduce(0) { $0 + $1.points }) }
+        let whole = RatingBreakdown.wholePoints(parts, total: total)
+
+        var lines = zip(shown, whole).map { camera, points in
+            (exact: camera.points, line: RatingSourceLine(kind: .camera(camera), points: points))
+        }
+        if whole[shown.count] > 0 {
+            lines.append((smoothness, RatingSourceLine(kind: .smoothness, points: whole[shown.count])))
+        }
+        // По величине — как и было: плавность встаёт в общий порядок.
+        var result = lines.sorted { $0.exact > $1.exact }.map(\.line)
+        if !rest.isEmpty {
+            result.append(RatingSourceLine(kind: .rest(count: rest.count), points: whole[shown.count + 1]))
+        }
+        return result
+    }
+}
+
+/// Одна строка разбора рейтинга по причинам — уже в целых баллах.
+nonisolated struct RatingSourceLine: Identifiable, Equatable {
+    enum Kind: Equatable {
+        case camera(RatingHotspot)
+        case smoothness
+        /// «Остальные камеры: N».
+        case rest(count: Int)
+    }
+
+    let kind: Kind
+    /// Сколько баллов рейтинга периода, целым числом.
+    let points: Int
+
+    var id: Int {
+        switch kind {
+        case .camera(let hotspot): return hotspot.id
+        case .smoothness:          return -1
+        case .rest:                return -2
+        }
+    }
 }
 
 /// «Ваша норма»: каким рейтинг бывает у этого водителя обычно.
@@ -289,6 +337,32 @@ nonisolated enum RatingBreakdown {
 
         return RatingSources(cameras: byCamera.values.sorted { $0.points > $1.points },
                              smoothness: smoothness)
+    }
+
+    // MARK: - Целые баллы
+
+    /// Делит целый итог `total` между частями пропорционально `parts` методом
+    /// наибольших остатков: каждая часть получает целую долю своей квоты,
+    /// оставшиеся баллы — части с самыми большими дробными остатками (при
+    /// равенстве — бо́льшая часть, затем более ранняя). Сумма результата
+    /// всегда равна `total`, порядок частей по величине сохраняется.
+    /// Отрицательные части считаются нулём; все нули — все нули.
+    static func wholePoints(_ parts: [Double], total: Int) -> [Int] {
+        let values = parts.map { max(0, $0) }
+        let sum = values.reduce(0, +)
+        guard total > 0, sum > 0 else { return values.map { _ in 0 } }
+        let quotas = values.map { $0 * Double(total) / sum }
+        var whole = quotas.map { Int($0.rounded(.down)) }
+        let left = total - whole.reduce(0, +)
+        let order = quotas.indices.sorted { a, b in
+            let ra = quotas[a] - Double(whole[a])
+            let rb = quotas[b] - Double(whole[b])
+            if abs(ra - rb) > 1e-9 { return ra > rb }
+            if quotas[a] != quotas[b] { return quotas[a] > quotas[b] }
+            return a < b
+        }
+        for index in order.prefix(left) { whole[index] += 1 }
+        return whole
     }
 
     // MARK: - «А если бы в лимите»

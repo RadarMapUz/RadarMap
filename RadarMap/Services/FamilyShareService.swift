@@ -17,9 +17,12 @@ import os
 final class FamilyShareService {
     nonisolated deinit {}
 
-    private(set) var circle: FamilyCircle = FamilyShareService.load() {
+    private(set) var circle: FamilyCircle {
         didSet { if !Self.isDemo { save() } }
     }
+    /// Ключи записи — в связке (FamilyKeys); что в ней точно лежит.
+    @ObservationIgnored private var knownKeys: [UUID: String]
+    @ObservationIgnored private let keyStore: any SecretStore
     /// Кому поездка видна прямо сейчас: «в пути» доставлено и не закрыто.
     private(set) var liveIDs: Set<UUID> = []
     /// Пауза на эту поездку (один тап); снимается стартом следующей —
@@ -51,6 +54,13 @@ final class FamilyShareService {
     /// срока не придёт ни поездки, ни update.
     @ObservationIgnored private var holdTask: Task<Void, Never>?
     @ObservationIgnored private var noticeTask: Task<Void, Never>?
+
+    init(keyStore: any SecretStore = KeychainSecretStore(service: AppConfig.familyKeychainService)) {
+        self.keyStore = keyStore
+        let loaded = Self.load(keyStore: keyStore)
+        circle = loaded.circle
+        knownKeys = loaded.known
+    }
 
     /// Имена тех, кто видит сейчас, — для капсулы «Видят: Мама, Дилноза».
     var liveNames: [String] {
@@ -220,7 +230,7 @@ final class FamilyShareService {
                 guard let recipient = recipient(id) else { trip.failed(id, now: Date()); continue }
                 sendDriving(recipient, arrival: arrival, home: home)
             case let .close(id, status, home):
-                guard let recipient = recipient(id) else { continue }
+                guard let recipient = recipient(id).flatMap({ writable($0) }) else { continue }
                 generation[id, default: 0] &+= 1
                 enqueue(FamilyShare.payload(write: recipient.write, status: status, arrival: nil, home: home,
                                             name: circle.sentName, now: Date()))
@@ -236,7 +246,33 @@ final class FamilyShareService {
         if isHeadingHome != trip.headingHome { isHeadingHome = trip.headingHome }
     }
 
+    /// Ключ из связки, если при запуске она его не отдала (FamilyKeys). Нет и
+    /// сейчас — nil: писать адресом вместо ключа нельзя.
+    private func writable(_ recipient: FamilyRecipient) -> FamilyRecipient? {
+        guard recipient.isKeyLocked else { return recipient }
+        do {
+            guard let key = try keyStore.read(account: recipient.id.uuidString) else { return nil }
+            knownKeys[recipient.id] = key
+            // Ключ — только в память: файл и так помнит, что он в связке.
+            circle.recipients = circle.recipients.map { $0.id == recipient.id ? Self.withKey(key, $0) : $0 }
+            return Self.withKey(key, recipient)
+        } catch {
+            Log.app.error("близкие: связка ключей всё ещё недоступна (\(String(describing: error), privacy: .public))")
+            return nil
+        }
+    }
+
+    private static func withKey(_ key: String, _ recipient: FamilyRecipient) -> FamilyRecipient {
+        var copy = recipient
+        copy.key = key
+        return copy
+    }
+
     private func sendDriving(_ recipient: FamilyRecipient, arrival: Date?, home: Bool) {
+        guard let recipient = writable(recipient) else {
+            trip.failed(recipient.id, now: Date())
+            return
+        }
         let id = recipient.id
         let started = generation[id, default: 0]
         let request = enqueue(FamilyShare.payload(write: recipient.write, status: .driving, arrival: arrival,
@@ -263,6 +299,9 @@ final class FamilyShareService {
     private func revoke(_ recipient: FamilyRecipient, now: Date) {
         let id = recipient.id
         guard recipient.linkSentAt != nil || trip.open.contains(id) else { return }
+        // Ключ так и не отдан — закрыть ссылку нечем; она погаснет сама
+        // («сейчас не в пути» по сроку на сервере).
+        guard let recipient = writable(recipient) else { return }
         let home = trip.forget(id)
         generation[id, default: 0] &+= 1
         enqueue(FamilyShare.payload(write: recipient.write, status: .ended, arrival: nil, home: home,
@@ -345,8 +384,13 @@ final class FamilyShareService {
     #endif
 
     private func save() {
+        let disk = FamilyKeys.persisted(circle, in: keyStore, known: &knownKeys)
+        Self.write(disk)
+    }
+
+    private static func write(_ disk: FamilyCircle) {
         do {
-            Storage.set(try JSONEncoder().encode(circle), for: .familyCircle)
+            Storage.set(try JSONEncoder().encode(disk), for: .familyCircle)
         } catch {
             Log.app.error("близкие не записались: \(error.localizedDescription, privacy: .public)")
         }
@@ -354,29 +398,40 @@ final class FamilyShareService {
 
     /// Круг близких; нет — ссылка до 22.1 становится первым близким (тот же
     /// адрес и ключ — у мамы ссылка не меняется), старый ключ стирается.
-    private static func load() -> FamilyCircle {
+    /// Ключи записи — в связку (FamilyKeys); файл переписывается без них
+    /// только после того, как связка их приняла.
+    private static func load(keyStore: any SecretStore) -> FamilyKeys.Loaded {
         #if DEBUG
-        if isDemo { return demoCircle() }
+        if isDemo { return FamilyKeys.Loaded(circle: demoCircle(), known: [:], needsResave: false) }
         #endif
         if let data = Storage.data(.familyCircle) {
             do {
-                return try JSONDecoder().decode(FamilyCircle.self, from: data)
+                let disk = try JSONDecoder().decode(FamilyCircle.self, from: data)
+                var loaded = FamilyKeys.restored(disk, from: keyStore)
+                if loaded.needsResave {
+                    write(FamilyKeys.persisted(loaded.circle, in: keyStore, known: &loaded.known))
+                    Log.app.notice("близкие: ключи ссылок перенесены в связку ключей")
+                }
+                return loaded
             } catch {
                 Log.app.error("близкие не прочитались: \(error.localizedDescription, privacy: .public)")
-                return FamilyCircle()
+                return FamilyKeys.Loaded(circle: FamilyCircle(), known: [:], needsResave: false)
             }
         }
-        guard let data = Storage.data(.familyLink) else { return FamilyCircle() }
+        guard let data = Storage.data(.familyLink) else {
+            return FamilyKeys.Loaded(circle: FamilyCircle(), known: [:], needsResave: false)
+        }
         do {
             let legacy = try JSONDecoder().decode(FamilyLink.self, from: data)
             let circle = FamilyCircle.migrated(from: legacy)
-            Storage.set(try JSONEncoder().encode(circle), for: .familyCircle)
+            var known: [UUID: String] = [:]
+            write(FamilyKeys.persisted(circle, in: keyStore, known: &known))
             Storage.remove(.familyLink)
             Log.app.notice("семейная ссылка перенесена в список близких (22.1)")
-            return circle
+            return FamilyKeys.Loaded(circle: circle, known: known, needsResave: false)
         } catch {
             Log.app.error("семейная ссылка не прочиталась: \(error.localizedDescription, privacy: .public)")
-            return FamilyCircle()
+            return FamilyKeys.Loaded(circle: FamilyCircle(), known: [:], needsResave: false)
         }
     }
 }

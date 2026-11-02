@@ -1547,6 +1547,9 @@ nonisolated enum AppConfig {
     /// Границы интервала опроса из пульта: присланное вне их — мусор.
     nonisolated static let remoteConfigPollRange: ClosedRange<TimeInterval> = 60...3600
 
+    /// Служба связки ключей для ключей записи семейных ссылок (FamilyKeys).
+    nonisolated static let familyKeychainService = "uz.radarmap.ios.family"
+
     // MARK: - Правки базы камер (overrides.json)
 
     /// Подписанный журнал правок модератора поверх базы. 2 КБ против мегабайта

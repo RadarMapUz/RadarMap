@@ -66,71 +66,12 @@ struct TripHistorySection: View {
         }
     }
 
-    /// «1 остановка» / «3 остановки» — русские формы через словарь каталога.
-    private func stopsLabel(_ count: Int) -> String {
-        String(format: String(localized: "Остановок в пути: %lld"), count)
-    }
-
     private func row(_ record: TripRecord) -> some View {
-        let selected = selectedID == record.id
-        return Button {
+        Button {
             onOpenDetail(record)
         } label: {
-            HStack(spacing: 12) {
-                trackThumbnail(record)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(Formatting.clock(record.startedAt))
-                        .font(.rounded(14, .semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                    // Километры, время и камеры одной строкой: справа остаются
-                    // только балл и шеврон — раньше там теснились три элемента.
-                    HStack(spacing: 6) {
-                        Text("\(Formatting.distance(record.distanceMeters)) · \(Formatting.duration(record.duration))")
-                            .font(.rounded(15))
-                            .foregroundStyle(Theme.textSecondary)
-                        if record.camerasPassed > 0 {
-                            // Счётчик проездов — нейтральным (34b): синий в
-                            // «Итогах» значит «своё и маршрут», а не камеру.
-                            Label { Text(verbatim: "\(record.camerasPassed)") } icon: { SymbolIcon(Icon.cameras, size: 11) }
-                                .font(.rounded(11, .semibold))
-                                .foregroundStyle(Theme.textSecondary)
-                                .labelStyle(.titleAndIcon)
-                        }
-                    }
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                    // «Почему не 100» — прямо в строке: самая дорогая камера
-                    // поездки. Раньше балл 55 объяснялся только в деталке.
-                    if let worst = Self.worstPenalty(record) {
-                        // «−25 баллов · Юнусабад»: голое «−25» читалось
-                        // чем угодно — км/ч, минутами (6.3).
-                        Text(verbatim: "−" + String(localized: "\(worst.points) баллов") + " · " + worst.place)
-                            .font(.rounded(11, .medium))
-                            .foregroundStyle(Theme.danger)
-                            .lineLimit(1)
-                    }
-                    // Склеенная поездка: сразу видно, что внутри был заезд по пути.
-                    if let stops = record.stops, !stops.isEmpty {
-                        Label(stopsLabel(stops.count), systemImage: "pause.circle.fill")
-                            .font(.rounded(11, .medium))
-                            .foregroundStyle(Theme.textTertiary)
-                    }
-                }
-                Spacer(minLength: 8)
-                // Балл поездки — цвет по зоне, поездки сравниваешь с одного взгляда.
-                if let score = record.score {
-                    Text("\(Int(score))")
-                        .font(.rounded(14, .heavy).monospacedDigit())
-                        .foregroundStyle(Self.scoreColor(Int(score)))
-                        .padding(.horizontal, 9).padding(.vertical, 5)
-                        .background(Theme.quietFill, in: Capsule())
-                }
-                trailingIcon(record, selected: selected)
-            }
-            .padding(.horizontal, 14).padding(.vertical, 12)
-            // Выбранная поездка подсвечена акцентом — видно, что показано на карте.
-            .background(selected ? Theme.quietFill : .clear)
-            .contentShape(Rectangle())
+            TripListRow(record: record, title: Formatting.clock(record.startedAt),
+                        selected: selectedID == record.id)
         }
         .buttonStyle(.plain)
         // «Проявления» строк при прокрутке (scrollTransition) больше нет: оно
@@ -173,37 +114,6 @@ struct TripHistorySection: View {
         }
     }
 
-    /// Справа шеврон — тап открывает деталку. У поездки, «применённой» к карте
-    /// периода (через контекстное меню), вместо него залитая карта: видно, чей
-    /// трек сейчас наверху.
-    private func trailingIcon(_ record: TripRecord, selected: Bool) -> some View {
-        Image(systemName: selected ? "map.fill" : "chevron.right")
-            .font(.rounded(selected ? 14 : 12, .semibold))
-            .foregroundStyle(selected ? Theme.accent : Theme.textTertiary)
-            .frame(width: 20)
-    }
-
-    /// Мини-силуэт трека — поездку узнаёшь с одного взгляда.
-    @ViewBuilder private func trackThumbnail(_ record: TripRecord) -> some View {
-        Group {
-            // hasTrack существует ровно для этого: trackPoints разбирает
-            // плоский массив заново, и без него строка списка делала это
-            // дважды — на проверку и на отрисовку.
-            if record.hasTrack {
-                TrackCanvas(points: TrackCanvas.thinned(record.trackPoints,
-                                                        to: AppConfig.trackThumbnailPoints),
-                            lineWidth: 2, endpointSize: 7)
-            } else {
-                Image(systemName: "car.side")
-                    .font(.rounded(15))
-                    .foregroundStyle(Theme.textTertiary)
-            }
-        }
-        .frame(width: 44, height: 44)
-        .background(Theme.background.opacity(0.6),
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-    }
-
     /// Самая дорогая камера поездки — короткий ответ на «почему не 100».
     /// Считается по проездам (их единицы), трек не разбирается: строка списка
     /// не имеет права стоить дороже, чем она читается.
@@ -234,3 +144,140 @@ struct TripHistorySection: View {
 
     static func scoreColor(_ score: Int) -> Color { Theme.score(score) }
 }
+
+
+/// Строка поездки — одна на список периода и «Архив поездок» (38C): архив
+/// показывал свою строку, без превью трека, камер и «почему не 100», и одна
+/// и та же поездка выглядела в двух списках по-разному. Заголовок задаёт
+/// список: в дне — время, в архиве (по месяцам) — дата и время.
+struct TripListRow: View {
+    let record: TripRecord
+    let title: String
+    /// «→ Дом» / «→ Работа» — куда приехали (архив).
+    var finish: TripArchive.Finish? = nil
+    /// Поездка «применена» к карте периода.
+    var selected = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            trackThumbnail
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(.rounded(14, .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    // Куда приехали — «→ Работа»: строку узнают по цели,
+                    // а не по времени старта.
+                    if let finish {
+                        // Две строки каталога, не тернарник литералов (правило 7).
+                        Text(finish == .home ? String(localized: "→ Дом") : String(localized: "→ Работа"))
+                            .font(.rounded(12, .semibold))
+                            .foregroundStyle(Theme.accent)
+                    }
+                }
+                // Километры, время и камеры одной строкой: справа остаются
+                // только балл и шеврон — раньше там теснились три элемента.
+                HStack(spacing: 6) {
+                    Text("\(Formatting.distance(record.distanceMeters)) · \(Formatting.duration(record.duration))")
+                        .font(.rounded(15))
+                        .foregroundStyle(Theme.textSecondary)
+                    if record.camerasPassed > 0 {
+                        // Счётчик проездов — нейтральным (34b): синий в
+                        // «Итогах» значит «своё и маршрут», а не камеру.
+                        Label { Text(verbatim: "\(record.camerasPassed)") } icon: { SymbolIcon(Icon.cameras, size: 11) }
+                            .font(.rounded(11, .semibold))
+                            .foregroundStyle(Theme.textSecondary)
+                            .labelStyle(.titleAndIcon)
+                    }
+                }
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                // «Почему не 100» — прямо в строке: самая дорогая камера
+                // поездки. Раньше балл 55 объяснялся только в деталке.
+                if let worst = TripHistorySection.worstPenalty(record) {
+                    // «−25 баллов · Юнусабад»: голое «−25» читалось
+                    // чем угодно — км/ч, минутами (6.3).
+                    Text(verbatim: "−" + String(localized: "\(worst.points) баллов") + " · " + worst.place)
+                        .font(.rounded(11, .medium))
+                        .foregroundStyle(Theme.danger)
+                        .lineLimit(1)
+                }
+                // Склеенная поездка: сразу видно, что внутри был заезд по пути.
+                if let stops = record.stops, !stops.isEmpty {
+                    Label(String(format: String(localized: "Остановок в пути: %lld"), stops.count),
+                          systemImage: "pause.circle.fill")
+                        .font(.rounded(11, .medium))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+            }
+            Spacer(minLength: 8)
+            // Балл поездки — цвет по зоне, поездки сравниваешь с одного взгляда.
+            if let score = record.score {
+                Text("\(Int(score))")
+                    .font(.rounded(14, .heavy).monospacedDigit())
+                    .foregroundStyle(TripHistorySection.scoreColor(Int(score)))
+                    .padding(.horizontal, 9).padding(.vertical, 5)
+                    .background(Theme.quietFill, in: Capsule())
+            }
+            trailingIcon
+        }
+        .padding(.horizontal, 14).padding(.vertical, 12)
+        // Выбранная поездка подсвечена акцентом — видно, что показано на карте.
+        .background(selected ? Theme.quietFill : .clear)
+        .contentShape(Rectangle())
+    }
+
+    /// Справа шеврон — тап открывает деталку. У поездки, «применённой» к карте
+    /// периода (через контекстное меню), вместо него залитая карта: видно, чей
+    /// трек сейчас наверху.
+    private var trailingIcon: some View {
+        Image(systemName: selected ? "map.fill" : "chevron.right")
+            .font(.rounded(selected ? 14 : 12, .semibold))
+            .foregroundStyle(selected ? Theme.accent : Theme.textTertiary)
+            .frame(width: 20)
+    }
+
+    /// Мини-силуэт трека — поездку узнаёшь с одного взгляда.
+    private var trackThumbnail: some View {
+        Group {
+            // hasTrack существует ровно для этого: trackPoints разбирает
+            // плоский массив заново, и без него строка списка делала это
+            // дважды — на проверку и на отрисовку.
+            if record.hasTrack {
+                TrackCanvas(points: TrackCanvas.thinned(record.trackPoints,
+                                                        to: AppConfig.trackThumbnailPoints),
+                            lineWidth: 2, endpointSize: 7)
+            } else {
+                Image(systemName: "car.side")
+                    .font(.rounded(15))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+        }
+        .frame(width: 44, height: 44)
+        .background(Theme.background.opacity(0.6),
+                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+#if DEBUG
+#Preview("Строка поездки · список и архив · SE") {
+    let start = Date().addingTimeInterval(-86_400)
+    let pass = PassedCamera(id: UUID(), cameraID: 1, typeRaw: "Стационар радар",
+                            location: "Юнусабад", speedKmh: 88, date: start.addingTimeInterval(600),
+                            lat: 41.31, lon: 69.28, limitKmh: 60)
+    let record = TripRecord(id: start.timeIntervalSince1970, startedAt: start,
+                            endedAt: start.addingTimeInterval(1_080), distanceMeters: 12_400,
+                            maxSpeedKmh: 88, passed: [pass], score: 55)
+    return VStack(spacing: 0) {
+        TripListRow(record: record, title: Formatting.clock(record.startedAt))
+        Divider().overlay(Theme.stroke).padding(.leading, 70)
+        TripListRow(record: record,
+                    title: Formatting.dateAndClock(record.startedAt, .dateTime.day().month(.abbreviated)),
+                    finish: .work)
+    }
+    .statCard(padding: 0, radius: Theme.cornerMedium)
+    .padding(20)
+    .frame(width: 375)
+    .background(Theme.background)
+}
+#endif

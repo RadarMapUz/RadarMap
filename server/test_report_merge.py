@@ -141,6 +141,51 @@ class FamilyMergeTest(_Helpers, ServerTestBase):
         self.assertEqual(body["id"], second, f"голос ушёл точке {first}, а не ближайшей")
 
 
+class ExpiredStaysExpiredTest(_Helpers, ServerTestBase):
+    """Тренога — это «сейчас»: истёкшая точка не оживает ни от новой отметки
+    на том же месте, ни от голоса «на месте» (spec tripod-report, правило 5)."""
+
+    def _expired(self, rtype="tripod"):
+        conn = sqlite3.connect(api.DB_PATH)
+        now = time.time()
+        cur = conn.execute(
+            "INSERT INTO reports(lat, lon, created, expires, device, type, ip, cls, active) "
+            "VALUES(?,?,?,?,?,?,?,?,1)",
+            (41.3100, 69.2500, now - 7200, now - 60, "a", rtype, "10.41.0.1", "residential"))
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return rid
+
+    def _expires(self, rid):
+        conn = sqlite3.connect(api.DB_PATH)
+        value = conn.execute("SELECT expires FROM reports WHERE id = ?", (rid,)).fetchone()[0]
+        conn.close()
+        return value
+
+    def test_report_on_an_expired_point_makes_a_new_one(self):
+        old = self._expired()
+        before = self._expires(old)
+        _, body = self._post(41.3100, 69.2500, "radar", device="b", ip="10.41.0.2")
+        self.assertFalse(body["merged"], "истёкшая точка ожила от новой отметки")
+        self.assertNotEqual(body["id"], old)
+        self.assertEqual(self._expires(old), before)
+
+    def test_vote_never_revives_an_expired_point(self):
+        old = self._expired()
+        before = self._expires(old)
+        status, _ = _call(self.port, "POST", "/api/vote",
+                          {"id": old, "device": "b", "value": 1}, ip="10.41.0.3")
+        self.assertEqual(status, 404)
+        self.assertEqual(self._expires(old), before, "«на месте» продлило истёкшую точку")
+
+    def test_own_expired_point_is_not_amended(self):
+        old = self._expired()
+        status, _ = self._post(41.3100, 69.2500, "post", device="a", ip="10.41.0.1", amend_id=old)
+        self.assertEqual(status, 409)
+        self.assertEqual(self._type(old), "tripod")
+
+
 class RaceTest(ServerTestBase):
 
     def test_two_drivers_at_once_make_one_point(self):

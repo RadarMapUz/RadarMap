@@ -2485,9 +2485,12 @@ class Handler(BaseHTTPRequestHandler):
                 (device, now - 86400)).fetchone()[0]
             if voted >= MAX_VOTES_PER_DAY:
                 return self._json(429, {"error": "too many"})
+            # Только живая точка: истёкшая (чистка снимает её не сразу) от
+            # «на месте» не оживает — тренога — это «сейчас», и новый день —
+            # новая отметка (docs/team/specs/tripod-report.md).
             row = conn.execute(
                 "SELECT created, expires, device, ip, type FROM reports "
-                "WHERE id = ? AND active = 1", (rid,)).fetchone()
+                "WHERE id = ? AND active = 1 AND expires > ?", (rid, now)).fetchone()
             if not row:
                 return self._json(404, {"error": "no report"})
             created, expires, owner_device, owner_ip, rtype = row

@@ -33,8 +33,7 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
         didSet {
             answered = false
             completer.queryFragment = query
-            mine = book?.lookup(query, near: near) ?? []
-            places = venues?.search(query, near: near) ?? []
+            refreshOwn()
             if !query.isEmpty, category != nil {
                 cancelCategory()
                 category = nil
@@ -59,6 +58,13 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
     /// Свои заведения клетки (АЗС, парковки…) и найденные в них по запросу.
     private var venues: VenueBook?
     private(set) var places: [Venue] = []
+    /// Свой поиск по всем именам (40G): старые имена, опечатки, транслит.
+    /// Пока строится — старый поиск по одному имени, чтобы ответ был сразу.
+    private var index: SearchIndex?
+    /// id строки → старое имя, по которому она нашлась («бывш. Хамза»).
+    private(set) var formerNames: [String: String] = [:]
+    /// Лучший свой ответ — место (метро, махалля), а не улица.
+    private(set) var placesFirst = true
 
     /// Выбранная плитка категории и её ответ: свой индекс, а пока клетка не
     /// опубликована или пуста — Apple (`categoryFromApple`).
@@ -138,8 +144,36 @@ final class SearchModel: NSObject, MKLocalSearchCompleterDelegate {
         let cell = coordinate ?? fallback ?? AppConfig.searchFallbackCenter
         book = await roads.addressBook(for: cell)
         venues = await roads.venueBook(for: cell)
-        mine = book?.lookup(query, near: near) ?? []
-        places = venues?.search(query, near: near) ?? []
+        refreshOwn()
+        index = await SearchIndex.make(book: book, venues: venues)
+        refreshOwn()
+    }
+
+    /// Свои ответы на текущий запрос — индексом, а пока его нет, как раньше.
+    private func refreshOwn() {
+        if let index {
+            let answer = index.search(query, near: near)
+            mine = answer.addresses
+            places = answer.venues
+            formerNames = answer.formerNames
+            placesFirst = answer.venuesFirst
+        } else {
+            mine = book?.lookup(query, near: near) ?? []
+            places = venues?.search(query, near: near) ?? []
+            formerNames = [:]
+            placesFirst = true
+        }
+    }
+
+    /// Подпись под строкой своего ответа: вид места, по какому старому имени
+    /// нашлось, расстояние — «Метро · бывш. Хамза · 2,1 км».
+    func caption(id: String, kind: Venue.Kind?, point: CLLocationCoordinate2D) -> String? {
+        let parts = [
+            kind.flatMap { $0 == .metro || $0 == .place ? $0.title : nil },
+            formerNames[id].map { String(format: String(localized: "бывш. %@"), $0) },
+            distance(to: point).map { Formatting.distance($0) },
+        ].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     /// Плитка категории: ближайшие такого вида, а с маршрутом — по пути.
@@ -257,8 +291,13 @@ struct SearchView: View {
                         recentsSection
                     }
                 }
-                placesFoundSection
-                mineSection
+                if model.placesFirst {
+                    placesFoundSection
+                    mineSection
+                } else {
+                    mineSection
+                    placesFoundSection
+                }
                 resultsSection
             }
             .listStyle(.insetGrouped)
@@ -472,10 +511,11 @@ struct SearchView: View {
                             Text(String(format: String(localized: "через %@ по пути"), Formatting.distance(ahead)))
                                 .font(.rounded(12))
                                 .foregroundStyle(Theme.accent)
-                        } else if let distance = model.distance(to: venue.point) {
-                            Text(Formatting.distance(distance))
+                        } else if let caption = model.caption(id: venue.id, kind: venue.kind, point: venue.point) {
+                            Text(caption)
                                 .font(.rounded(12))
                                 .foregroundStyle(Theme.textSecondary)
+                                .lineLimit(1)
                         }
                         if venue.kind == .cng, env.cng.isActive,
                            let station = env.cng.station(for: venue.point),
@@ -671,10 +711,11 @@ struct SearchView: View {
                             .font(.rounded(15, .semibold))
                             .foregroundStyle(Theme.textPrimary)
                             .lineLimit(1)
-                        if let distance = model.distance(to: address.point) {
-                            Text(Formatting.distance(distance))
+                        if let caption = model.caption(id: address.id, kind: nil, point: address.point) {
+                            Text(caption)
                                 .font(.rounded(12))
                                 .foregroundStyle(Theme.textSecondary)
+                                .lineLimit(1)
                         }
                     }
                 }

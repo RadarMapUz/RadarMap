@@ -29,6 +29,8 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
     private var lastResults: [(SavedPlace, String)] = []
     private var book: AddressBook?
     private var venues: VenueBook?
+    /// Поиск по всем именам клетки (40G) — строится, когда загружены оба файла.
+    private var index: SearchIndex?
     /// Клетка, для которой загружены адреса и заведения. Подключение длится
     /// часами: выехали из Ташкента в Самарканд — нужна клетка Самарканда, а
     /// не ташкентские АЗС «в 310 км».
@@ -74,6 +76,7 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
         loadTask = nil
         book = nil
         venues = nil
+        index = nil
         loadedCell = nil
     }
 
@@ -194,9 +197,10 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
             loadedCell = cell
             book = nil
             venues = nil
+            index = nil
             loadTask = nil
         }
-        guard book == nil || venues == nil else { return }
+        guard book == nil || venues == nil || index == nil else { return }
         if loadTask == nil {
             // Пишем, только если клетка та же: пока грузилась старая, машина
             // могла уехать в новую — и в Самарканде отвечали ташкентские
@@ -208,11 +212,18 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
                     let book = await self.env.roads.addressBook(for: center)
                     guard self.loadedCell == cell else { return }
                     self.book = book
+                    if book != nil { self.index = nil }   // дозагрузилось — индекс заново
                 }
                 if self.venues == nil {
                     let venues = await self.env.roads.venueBook(for: center)
                     guard self.loadedCell == cell else { return }
                     self.venues = venues
+                    if venues != nil { self.index = nil }
+                }
+                if self.index == nil, self.book != nil || self.venues != nil {
+                    let index = await SearchIndex.make(book: self.book, venues: self.venues)
+                    guard self.loadedCell == cell else { return }
+                    self.index = index
                 }
                 self.loadTask = nil
             }
@@ -236,21 +247,26 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
             await self.ensureLoaded(near: near)
             guard !Task.isCancelled else { return }
             let language = self.env.settings.appLanguage.mapCode
-            // Заведения — первыми: «азс» за рулём значит «ближайшая заправка».
-            var places: [(SavedPlace, String)] = (self.venues?.search(query, near: near,
-                                                                      limit: AppConfig.carPlaySearchOwnLimit) ?? [])
-                .map { venue in
-                    (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),
-                     Self.detail(near: near, point: venue.point, offline: true))
-                }
-            places += (self.book?.lookup(query, near: near,
-                                                                    limit: AppConfig.carPlaySearchOwnLimit) ?? [])
-                .map { address in
-                    let street = StreetName.display(address.street, language: language)
-                    let title = address.house.isEmpty ? street : "\(street), \(address.house)"
-                    return (SavedPlace(title: title, lat: address.point.latitude, lon: address.point.longitude),
-                            Self.detail(near: near, point: address.point, offline: true))
-                }
+            // Свой индекс: по всем именам, со старыми («метро хамза»). Пока
+            // он строится — как раньше, по одному имени.
+            let own = AppConfig.carPlaySearchOwnLimit
+            let answer = self.index?.search(query, near: near, streetLimit: own, venueLimit: own)
+                ?? SearchIndex.Answer(addresses: self.book?.lookup(query, near: near, limit: own) ?? [],
+                                      venues: self.venues?.search(query, near: near, limit: own) ?? [])
+            let found: [(SavedPlace, String)] = answer.venues.map { venue in
+                (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),
+                 Self.detail(near: near, point: venue.point, offline: true, former: answer.formerNames[venue.id]))
+            }
+            let streets: [(SavedPlace, String)] = answer.addresses.map { address in
+                let street = StreetName.display(address.street, language: language)
+                let title = address.house.isEmpty ? street : "\(street), \(address.house)"
+                return (SavedPlace(title: title, lat: address.point.latitude, lon: address.point.longitude),
+                        Self.detail(near: near, point: address.point, offline: true,
+                                    former: answer.formerNames[address.id]))
+            }
+            // Заведения — первыми, если лучший ответ — место: «азс» за рулём
+            // значит «ближайшая заправка», «метро хамза» — станция.
+            var places = answer.venuesFirst ? found + streets : streets + found
             // Apple — вторым и только со связью: без неё запрос лишь задержит
             // ответ, а свои адреса уже готовы.
             if self.env.network.isOnline {
@@ -293,11 +309,12 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
 
     /// Подпись строки: расстояние и откуда ответ («без сети» — свой индекс).
     private static func detail(near: CLLocationCoordinate2D?, point: CLLocationCoordinate2D,
-                               offline: Bool) -> String {
+                               offline: Bool, former: String? = nil) -> String {
         let distance = near.map {
             Formatting.distance(GeoMath.fastDistance($0.latitude, $0.longitude, point.latitude, point.longitude))
         }
         let source = offline ? String(localized: "своя карта") : nil
-        return [distance, source].compactMap { $0 }.joined(separator: " · ")
+        let was = former.map { String(format: String(localized: "бывш. %@"), $0) }
+        return [was, distance, source].compactMap { $0 }.joined(separator: " · ")
     }
 }

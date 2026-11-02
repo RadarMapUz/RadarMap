@@ -119,4 +119,119 @@ final class CarPlayTripPreviewTests: XCTestCase {
         XCTAssertFalse(watch.update(speedKmh: 22, at: t0 + 4))
         XCTAssertTrue(watch.update(speedKmh: 25, at: t0 + 2 + AppConfig.carPlayPreviewAutoStartSeconds))
     }
+
+    // MARK: - Карточка выбора не расходится с линией (40I, дефект 35)
+
+    private func texts(_ variants: [RouteService.Variant]) -> [Int: CarPlayTripPreview.ChoiceText] {
+        Dictionary(uniqueKeysWithValues: variants.map { ($0.id, CarPlayTripPreview.text(for: $0, among: variants)) })
+    }
+
+    /// Пробки пришли поздно и сменили время в строках: пока водитель не
+    /// трогал выбор — пересоздать (строки CPRouteChoice после показа не
+    /// меняются); после его касания — только оценки, фокус крутилки не прыгает.
+    func testLateTrafficRebuildsUntilTheDriverPicksInTheCar() {
+        let fast = variant(id: 0, minutes: 25, km: 12, labels: [.fastest])
+        let calm = variant(id: 1, minutes: 27, km: 13, labels: [.fewerCameras])
+        var shown = CarPlayTripPreview.Shown(order: [0, 1], texts: texts([fast, calm]))
+        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 0, texts: texts([fast, calm])), .estimates,
+                       "ничего не сменилось — только минута прибытия")
+        var jammed = fast
+        jammed.trafficDelay = 9 * 60
+        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 0, texts: texts([jammed, calm])), .rebuild,
+                       "«25 мин» на карточке при 34 в пути — устаревшая строка")
+        shown.picked(1)
+        shown.picked(0)
+        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 0, texts: texts([jammed, calm])), .estimates,
+                       "водитель крутит выбор — время выделенного идёт оценками")
+    }
+
+    /// Выбор сменился не в машине (на телефоне) — карточка обязана выделить
+    /// то, чем поедем, даже после касаний в машине.
+    func testSelectionFromElsewhereAlwaysRebuilds() {
+        let fast = variant(id: 0, minutes: 25, km: 12, labels: [.fastest])
+        let calm = variant(id: 1, minutes: 27, km: 13, labels: [.fewerCameras])
+        var shown = CarPlayTripPreview.Shown(order: [0, 1], texts: texts([fast, calm]))
+        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 1, texts: texts([fast, calm])), .rebuild)
+        shown.picked(1)
+        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 1, texts: texts([fast, calm])), .estimates,
+                       "выбрал в машине — карточка уже его выделяет")
+        let third = variant(id: 2, minutes: 30, km: 14)
+        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 1, texts: texts([fast, calm, third])), .rebuild,
+                       "другой набор вариантов")
+    }
+
+    /// Система может сообщить выделенный вариант при первом показе — это не
+    /// выбор водителя, время в строках по-прежнему обновляется пересозданием.
+    func testSystemEchoOfTheHighlightedChoiceIsNotAPick() {
+        let fast = variant(id: 0, minutes: 25, km: 12, labels: [.fastest])
+        let calm = variant(id: 1, minutes: 27, km: 13, labels: [.fewerCameras])
+        var shown = CarPlayTripPreview.Shown(order: [0, 1], texts: texts([fast, calm]))
+        shown.picked(0)
+        XCTAssertFalse(shown.pickedInCar)
+        var jammed = fast
+        jammed.trafficDelay = 9 * 60
+        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 0, texts: texts([jammed, calm])), .rebuild)
+    }
+}
+
+/// Показ выбора в машине замораживает метки и выбор на настоящем
+/// RouteService: поздние пробки меняют время вариантов, но не «Быстрый» и не
+/// вариант, которым поведёт автостарт на ходу (40I, дефект 35).
+@MainActor
+final class CarPlayChoiceFreezeTests: XCTestCase {
+
+    /// Две параллельные прямые на север по ~6 км.
+    private func line(longitude: Double) -> [CLLocationCoordinate2D] {
+        (0...60).map { CLLocationCoordinate2D(latitude: 41.30 + Double($0) * 0.0009, longitude: longitude) }
+    }
+
+    /// Пробка «стоим» по всей первой прямой, в нашу сторону.
+    private func jam(on path: [CLLocationCoordinate2D]) -> TrafficSnapshot {
+        TrafficSnapshot(generated: Date(), edges: zip(path, path.dropFirst()).map {
+            TrafficEdge(a: $0.0, b: $0.1, level: 3, kmh: 5, modelKmh: 60)
+        })
+    }
+
+    private func seeded() async -> (RouteService, [CLLocationCoordinate2D]) {
+        let route = RouteService()
+        let first = line(longitude: 69.24)
+        await route.seedRoutes(name: "Работа", variants: [(first, 24 * 60), (line(longitude: 69.30), 27 * 60)])
+        return (route, first)
+    }
+
+    private func waitForTraffic(_ route: RouteService) async {
+        for _ in 0..<200 where route.variants.first?.trafficDelay == nil {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    func testShownInTheCarLateJamKeepsLabelsAndChoiceButUpdatesTime() async {
+        let (route, first) = await seeded()
+        XCTAssertEqual(route.variants.count, 2)
+        XCTAssertEqual(route.selectedID, 0)
+        let labels = route.variants.map(\.assessment)
+        // Выбор встал на экран машины.
+        route.noteChoiceTouched()
+        let snapshot = jam(on: first)
+        route.trafficSnapshot = { snapshot }
+        route.liveTrafficArrived()
+        await waitForTraffic(route)
+        XCTAssertNotNil(route.variants[0].trafficDelay, "время вариантов живёт дальше")
+        XCTAssertEqual(route.selectedID, 0, "выбор не уходит из-под карточки машины")
+        XCTAssertEqual(route.variants.map(\.assessment), labels, "метки заморожены")
+    }
+
+    /// Контроль: без показа в машине тот же поздний затор переносит выбор —
+    /// значит, тест выше проверяет именно заморозку.
+    func testUntouchedChoiceStillFollowsLateJam() async {
+        let (route, first) = await seeded()
+        let snapshot = jam(on: first)
+        route.trafficSnapshot = { snapshot }
+        route.liveTrafficArrived()
+        await waitForTraffic(route)
+        for _ in 0..<200 where route.selectedID == 0 {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(route.selectedID, 1)
+    }
 }

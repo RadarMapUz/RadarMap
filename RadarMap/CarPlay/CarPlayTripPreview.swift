@@ -73,6 +73,62 @@ enum CarPlayTripPreview {
         !(speedKmh.isFinite && speedKmh >= AppConfig.carPlayPreviewMaxKmh)
     }
 
+    /// Что сейчас на карточке выбора в машине (40I, дефект 35).
+    ///
+    /// `CPRouteChoice` после показа не меняется: ни текст, ни порядок, ни
+    /// выделенный вариант. До 40I выбор строился один раз, а поздние пробки
+    /// двигали «Быстрый» и выбор на телефоне — линия в машине уходила на
+    /// новый вариант, карточка выделяла старый с чужой меткой, и автостарт
+    /// на ходу вёл не тем, что видел водитель. Теперь показ выбора в машине —
+    /// касание (`RouteService.noteChoiceTouched`): метки и выбор заморожены,
+    /// а время вариантов живёт дальше — этим правилом.
+    struct Shown: Equatable {
+        /// Варианты в порядке карточки (выбранный — первым).
+        let order: [Int]
+        /// Строки каждого варианта: в них время, оно меняется с пробками.
+        let texts: [Int: ChoiceText]
+        /// Выделенный в машине вариант.
+        private(set) var highlighted: Int
+        /// Водитель сам перевёл выделение в машине (крутилкой или касанием).
+        private(set) var pickedInCar = false
+
+        init(order: [Int], texts: [Int: ChoiceText]) {
+            self.order = order
+            self.texts = texts
+            highlighted = order.first ?? 0
+        }
+
+        /// Система сообщила выделенный вариант. Тот же, что выделен, — не
+        /// выбор водителя: система может прислать его и при первом показе.
+        mutating func picked(_ id: Int) {
+            if id != highlighted { pickedInCar = true }
+            highlighted = id
+        }
+    }
+
+    enum Refresh: Equatable {
+        /// Только оценки выделенного варианта (`update(_:for:with:)`).
+        case estimates
+        /// Пересоздать выбор: карточка показывает не то, чем поедем, или
+        /// устарело время в строках.
+        case rebuild
+    }
+
+    /// Что сделать с выбором в машине, когда у маршрута что-то сменилось.
+    /// `selected` — вариант, которым поедем (`RouteService.selectedID`);
+    /// `texts` — строки вариантов сейчас.
+    static func refresh(_ shown: Shown, selected: Int, texts: [Int: ChoiceText]) -> Refresh {
+        // Другой набор или выбор сделан не здесь (на телефоне) — карточка
+        // обязана выделять то, чем поедем, иначе «Поехали» и автостарт на
+        // ходу поведут не тем, что видно.
+        guard Set(texts.keys) == Set(shown.order), selected == shown.highlighted else { return .rebuild }
+        // Время в строках устарело. Пересоздание сбрасывает фокус крутилки,
+        // поэтому — только пока водитель не трогал выбор; потом время
+        // выделенного варианта идёт оценками, которые машина печатает сама.
+        if texts != shown.texts, !shown.pickedInCar { return .rebuild }
+        return .estimates
+    }
+
     /// Тронулись, пока выбор на экране: принять его, когда скорость держится
     /// `carPlayPreviewAutoStartSeconds` — один всплеск GPS не считается.
     struct MovingWatch: Equatable {

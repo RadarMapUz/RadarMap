@@ -133,6 +133,7 @@ extension CarPlaySceneDelegate {
     func mapTemplate(_ mapTemplate: CPMapTemplate, selectedPreviewFor trip: CPTrip,
                      using routeChoice: CPRouteChoice) {
         guard trip === previewTrip, let id = routeChoice.userInfo as? Int else { return }
+        previewShown?.picked(id)
         env.route.selectVariant(id)
         updatePreviewEstimates(env.route.selected)
         model.showOverview()

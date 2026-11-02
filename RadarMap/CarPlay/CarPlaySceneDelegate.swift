@@ -222,6 +222,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         previewWatch = nil
         previewTrip = nil
         previewDestination = nil
+        previewShown = nil
+        previewEstimateKey = nil
         flowPhase = nil
         model.isPreviewing = false
         offerTask?.cancel()
@@ -373,6 +375,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Цель, выбор к которой на экране: маршрут заменили на телефоне —
     /// выбор показывает новый.
     var previewDestination: CLLocationCoordinate2D?
+    /// Имя цели на карточке — для пересоздания выбора (40I).
+    var previewName = ""
+    /// Что на карточке выбора сейчас (CarPlayTripPreview.Shown, 40I).
+    var previewShown: CarPlayTripPreview.Shown?
+    /// Последние отправленные оценки выбора: вариант, минута, путь, цвет.
+    var previewEstimateKey: String?
 
     // MARK: - Объезд пробки
 

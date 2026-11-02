@@ -16,8 +16,9 @@ Endpoints:
   POST /api/report         {lat, lon, device, type [, course, amend_id]}  -> {"id": N, "merged": bool
                                                                     [, "amended": true]}
                            (amend_id не своей или ушедшей точки -> 409 "nothing to amend")
-  POST /api/vote           {id, device, value: 1|-1 [, kind: "pass", age]} -> {"ok": true}
-                           («на месте» старше 10 мин — голос без продления)
+  POST /api/vote           {id, device, value: 1|-1 [, kind: "pass", age, course]} -> {"ok": true}
+                           («на месте» старше 10 мин — голос без продления; «убрали»
+                           от встречного по курсу срок не режет)
   POST /api/mine           {device} -> {"reports": [{id, confirmers}]}
                            (польза своих отметок в «Итогах»: только отметки ЭТОГО UUID и
                             число независимых подтверждений — ни координат, ни времени)
@@ -323,8 +324,12 @@ IMPLICIT_AMEND_METERS = 150
 # давности из очереди телефона не держит её ещё полчаса.
 CONFIRM_FRESH_MAX = 10 * 60
 # Курсы двух отметок расходятся сильнее — это встречная сторона дороги, и
-# слить их значит предупреждать едущих навстречу о чужой засаде.
+# слить их значит предупреждать едущих навстречу о чужой засаде. Но многие
+# треноги снимают обе стороны (владелец, 02.11): ближе MERGE_SAME_POINT_METERS
+# это одна тренога, и курс не смотрим вовсе — раздельные точки только дальше
+# (разные полотна проспекта). spec tripod-report, п. 6.
 MERGE_MAX_COURSE_DIFF = 90
+MERGE_SAME_POINT_METERS = 60
 MERGE_METERS = 300
 # Радиус слияния зависит от дороги, а не один на страну. На трассе две
 # настоящие треноги в 300 м — это две разные засады, и схлопывать их нельзя;
@@ -601,6 +606,10 @@ def init_db():
     migrate(conn, "reports", "observed REAL DEFAULT 0")
     # Голос старше CONFIRM_FRESH_MAX: учтён, но не подтверждение «сейчас».
     migrate(conn, "votes", "stale INTEGER DEFAULT 0")
+    # «Убрали» от встречного (курс голосующего против курса точки): через
+    # разделительную он мог треногу не увидеть — срок не режет, в кворум
+    # скрытия не входит (spec tripod-report, п. 6).
+    migrate(conn, "votes", "oncoming INTEGER DEFAULT 0")
 
     # Метан на АГНКС (12б.4): «газ есть / нет / очередь». Станция — точка
     # заведения из файла заведений телефона, округлённая до ~10 м: сервер
@@ -2307,9 +2316,10 @@ class Handler(BaseHTTPRequestHandler):
             for r in active_rows:
                 radius = max(merge_radius(cls), merge_radius(r[8]))
                 gap = haversine(lat, lon, r[1], r[2])
-                # Встречная сторона (курсы расходятся) — своя засада.
-                if merge_family(r[5]) == merge_family(rtype) and gap <= radius \
-                        and not courses_diverge(course, r[9]):
+                # Встречное полотно (курсы расходятся, и дальше одной точки) —
+                # своя засада; вплотную — одна тренога на обе стороны.
+                other_side = gap > MERGE_SAME_POINT_METERS and courses_diverge(course, r[9])
+                if merge_family(r[5]) == merge_family(rtype) and gap <= radius and not other_side:
                     near.append((gap, r))
             near.sort(key=lambda pair: pair[0])
             for _, r in near[:1]:
@@ -2537,11 +2547,21 @@ class Handler(BaseHTTPRequestHandler):
             # «на месте» не оживает — тренога — это «сейчас», и новый день —
             # новая отметка (docs/team/specs/tripod-report.md).
             row = conn.execute(
-                "SELECT created, expires, device, ip, type FROM reports "
+                "SELECT created, expires, device, ip, type, course FROM reports "
                 "WHERE id = ? AND active = 1 AND expires > ?", (rid, now)).fetchone()
             if not row:
                 return self._json(404, {"error": "no report"})
-            created, expires, owner_device, owner_ip, rtype = row
+            created, expires, owner_device, owner_ip, rtype, report_course = row
+            # Курс голосующего: «Стоит» от встречного — полное подтверждение
+            # (тренога снимает обе стороны), «Убрали» от встречного срок не
+            # режет. Нет курса — как раньше.
+            try:
+                voter_course = float(data.get("course", -1))
+            except (TypeError, ValueError, OverflowError):
+                voter_course = -1.0
+            if not math.isfinite(voter_course) or not 0 <= voter_course < 360:
+                voter_course = -1.0
+            oncoming = value == -1 and courses_diverge(voter_course, report_course)
             # kind="pass" — голос после реального проезда (MobilePassWatch).
             # Вес не меняет (проезд сервер проверить не может), но модератор
             # видит, какому сигналу верить. Мусор в поле не убивает сам голос.
@@ -2561,9 +2581,9 @@ class Handler(BaseHTTPRequestHandler):
             # «На месте» о проезде минут десять назад (вопрос ждал, голос ждал
             # связи) — учтён, но срок не продлевает: тренога — это «сейчас».
             stale = value == 1 and report_age(data) > CONFIRM_FRESH_MAX
-            conn.execute("INSERT OR REPLACE INTO votes(report_id, device, value, ts, ip, kind, stale) "
-                         "VALUES(?,?,?,?,?,?,?)",
-                         (rid, device, value, now, ip, kind, 1 if stale else 0))
+            conn.execute("INSERT OR REPLACE INTO votes(report_id, device, value, ts, ip, kind, stale, "
+                         "oncoming) VALUES(?,?,?,?,?,?,?,?)",
+                         (rid, device, value, now, ip, kind, 1 if stale else 0, 1 if oncoming else 0))
             up, down = conn.execute(
                 "SELECT COALESCE(SUM(value = 1), 0), COALESCE(SUM(value = -1), 0) "
                 "FROM votes WHERE report_id = ?", (rid,)).fetchone()
@@ -2576,7 +2596,9 @@ class Handler(BaseHTTPRequestHandler):
                     # (другое устройство И другой адрес): см. lifecycle_expires.
                     confirmed = confirmed_independently(conn, rid, owner_device, owner_ip)
                     expires = lifecycle_expires(created, expires, rtype, confirmed, now)
-            elif ip and (prior is None or prior[0] != -1):
+            elif not oncoming and ip and (prior is None or prior[0] != -1):
+                # (встречный мог не увидеть треногу через разделительную —
+                # его «Убрали» срок не режет)
                 # Первый дизлайк с НОВОГО адреса срезает жизнь: два честных
                 # «Нет» после проезда снимают пустышку задолго до кворума.
                 # Повтор с того же устройства или адреса не режет второй раз.
@@ -2591,10 +2613,10 @@ class Handler(BaseHTTPRequestHandler):
             # лучше передержать отметку, чем дать её снять анонимной ротацией.
             down_ips = conn.execute(
                 "SELECT COUNT(DISTINCT ip) FROM votes "
-                "WHERE report_id = ? AND value = -1 AND ip != '' AND ts >= ?",
+                "WHERE report_id = ? AND value = -1 AND oncoming = 0 AND ip != '' AND ts >= ?",
                 (rid, since)).fetchone()[0]
             q_up, q_down = conn.execute(
-                "SELECT COALESCE(SUM(value = 1), 0), COALESCE(SUM(value = -1), 0) "
+                "SELECT COALESCE(SUM(value = 1), 0), COALESCE(SUM(value = -1 AND oncoming = 0), 0) "
                 "FROM votes WHERE report_id = ? AND ts >= ?", (rid, since)).fetchone()
             active = 0 if (q_down >= 3 and q_down > q_up and down_ips >= HIDE_DISTINCT_IPS) else 1
             conn.execute("UPDATE reports SET up = ?, down = ?, expires = ?, active = ?, "

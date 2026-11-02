@@ -234,6 +234,81 @@ class ExpiredStaysExpiredTest(_Helpers, ServerTestBase):
         self.assertEqual(self._type(old), "tripod")
 
 
+class BothSidesTest(_Helpers, ServerTestBase):
+    """Многие треноги снимают обе стороны (владелец, 02.11; spec п. 6)."""
+
+    def _put_course(self, course, device="a", ip="10.43.0.1", cls="primary"):
+        conn = sqlite3.connect(api.DB_PATH)
+        now = time.time()
+        cur = conn.execute(
+            "INSERT INTO reports(lat, lon, created, expires, device, type, ip, cls, active, course) "
+            "VALUES(?,?,?,?,?,?,?,?,1,?)",
+            (41.3100, 69.2500, now - 600, now + 3600, device, "tripod", ip, cls, course))
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return rid
+
+    def _expires(self, rid):
+        conn = sqlite3.connect(api.DB_PATH)
+        value = conn.execute("SELECT expires FROM reports WHERE id = ?", (rid,)).fetchone()[0]
+        conn.close()
+        return value
+
+    def test_oncoming_report_close_by_is_the_same_tripod(self):
+        """Встречный отмечает ту же треногу в 40 м — одна точка, курс не важен."""
+        rid = self._put_course(0.0)
+        _, body = self._post(41.31036, 69.2500, "radar", device="b", ip="10.43.0.2",
+                             cls="primary", course=180.0)
+        self.assertTrue(body["merged"])
+        self.assertEqual(body["id"], rid)
+
+    def test_oncoming_report_far_away_is_the_other_carriageway(self):
+        """Дальше 60 м и курсы противоположны — разные полотна, две точки."""
+        rid = self._put_course(0.0)
+        _, body = self._post(41.3110, 69.2500, "tripod", device="b", ip="10.43.1.2",
+                             cls="primary", course=180.0)
+        self.assertFalse(body["merged"], f"слито в {rid}")
+
+    def test_same_direction_far_away_still_merges(self):
+        rid = self._put_course(0.0)
+        _, body = self._post(41.3110, 69.2500, "tripod", device="b", ip="10.43.2.2",
+                             cls="primary", course=10.0)
+        self.assertTrue(body["merged"])
+        self.assertEqual(body["id"], rid)
+
+    def test_oncoming_yes_is_a_full_confirmation(self):
+        rid = self._put_course(0.0)
+        before = self._expires(rid)
+        _call(self.port, "POST", "/api/vote",
+              {"id": rid, "device": "b", "value": 1, "kind": "pass", "course": 180}, ip="10.43.3.2")
+        self.assertGreater(self._expires(rid), before, "«Стоит» от встречного не подтвердило")
+
+    def test_oncoming_gone_does_not_shorten(self):
+        rid = self._put_course(0.0)
+        before = self._expires(rid)
+        for i in range(3):
+            _, body = _call(self.port, "POST", "/api/vote",
+                            {"id": rid, "device": f"x{i}", "value": -1, "kind": "pass", "course": 175},
+                            ip=f"10.43.4.{i + 2}")
+        self.assertEqual(self._expires(rid), before, "«Убрали» встречного срезало срок")
+        self.assertTrue(body["active"], "встречные «Убрали» сняли треногу кворумом")
+
+    def test_same_direction_gone_shortens(self):
+        rid = self._put_course(0.0)
+        before = self._expires(rid)
+        _call(self.port, "POST", "/api/vote",
+              {"id": rid, "device": "b", "value": -1, "kind": "pass", "course": 5}, ip="10.43.5.2")
+        self.assertLess(self._expires(rid), before)
+
+    def test_vote_without_course_works_as_before(self):
+        rid = self._put_course(0.0)
+        before = self._expires(rid)
+        _call(self.port, "POST", "/api/vote",
+              {"id": rid, "device": "b", "value": -1}, ip="10.43.6.2")
+        self.assertLess(self._expires(rid), before)
+
+
 class RaceTest(ServerTestBase):
 
     def test_two_drivers_at_once_make_one_point(self):

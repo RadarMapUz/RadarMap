@@ -21,43 +21,7 @@ extension FinesScreen {
             Button {
                 entry = FineEntryRequest(editing: fine)
             } label: {
-                HStack(alignment: .top, spacing: 12) {
-                    // Штраф — тем же значком, что везде в «Итогах» (Icon.fines);
-                    // оплаченный — зелёной печатью, неоплаченный — красным.
-                    IconBadge(symbol: fine.isPaid ? "checkmark.seal.fill" : Icon.fines,
-                              tint: fine.isPaid ? Theme.success : Theme.danger, size: 30)
-                    VStack(alignment: .leading, spacing: 2) {
-                        // Три строки (34): «Toshkent sh., Chilonzor tu…» на SE
-                        // обрезало адрес до района — по нему постановление и узнают.
-                        Text(fine.place ?? String(localized: "Место не указано"))
-                            .font(.rounded(14, .semibold))
-                            .foregroundStyle(Theme.textPrimary)
-                            .lineLimit(3)
-                        if let at = fine.violationAt {
-                            Text(FineFormat.moment(at, withTime: fine.timeKnown == true))
-                                .font(.rounded(11))
-                                .foregroundStyle(Theme.textTertiary)
-                        }
-                        // Номер постановления — своей строкой: рядом с датой
-                        // он обрезался до «№ QR 7…», а его сверяют с квитанцией.
-                        if let resolution = fine.resolution {
-                            Text(String(format: String(localized: "№ %@"), resolution))
-                                .font(.rounded(11))
-                                .foregroundStyle(Theme.textTertiary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                        }
-                    }
-                    Spacer(minLength: 8)
-                    Text(fine.amount.map { FineFormat.money($0) } ?? String(localized: "сумма не указана"))
-                        .font(.rounded(fine.amount == nil ? 12 : 15, .bold))
-                        .foregroundStyle(fine.amount == nil ? Theme.textTertiary : Theme.textPrimary)
-                        .multilineTextAlignment(.trailing)
-                    Image(systemName: "chevron.right")
-                        .font(.rounded(11, .semibold))
-                        .foregroundStyle(Theme.textTertiary)
-                }
-                .contentShape(Rectangle())
+                ReceivedFineHeader(fine: fine)
             }
             .buttonStyle(.plain)
             .accessibilityHint(Text("Открыть штраф"))
@@ -216,3 +180,76 @@ extension FinesScreen {
         .buttonStyle(PressableStyle())
     }
 }
+
+/// Шапка пришедшего штрафа: адрес, когда, номер постановления, сумма.
+///
+/// Адрес — во всю ширину строки, до трёх строк, а сумма — справа на строке
+/// даты (38C): рядом с суммой адресу на SE оставалось ~140 pt, и
+/// «Toshkent sh., Chilonzor tumani, …» всё равно резалось до района, хотя
+/// по адресу постановление и узнают.
+struct ReceivedFineHeader: View {
+    let fine: ReceivedFine
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            // Штраф — тем же значком, что везде в «Итогах» (Icon.fines);
+            // оплаченный — зелёной печатью, неоплаченный — красным.
+            IconBadge(symbol: fine.isPaid ? "checkmark.seal.fill" : Icon.fines,
+                      tint: fine.isPaid ? Theme.success : Theme.danger, size: 30)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(fine.place ?? String(localized: "Место не указано"))
+                    .font(.rounded(14, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if let at = fine.violationAt {
+                        Text(FineFormat.moment(at, withTime: fine.timeKnown == true))
+                            .font(.rounded(11))
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                    Spacer(minLength: 0)
+                    Text(fine.amount.map { FineFormat.money($0) } ?? String(localized: "сумма не указана"))
+                        .font(.rounded(fine.amount == nil ? 12 : 15, .bold))
+                        .foregroundStyle(fine.amount == nil ? Theme.textTertiary : Theme.textPrimary)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                }
+                // Номер постановления — своей строкой: рядом с датой
+                // он обрезался до «№ QR 7…», а его сверяют с квитанцией.
+                if let resolution = fine.resolution {
+                    Text(String(format: String(localized: "№ %@"), resolution))
+                        .font(.rounded(11))
+                        .foregroundStyle(Theme.textTertiary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+            }
+            Image(systemName: "chevron.right")
+                .font(.rounded(11, .semibold))
+                .foregroundStyle(Theme.textTertiary)
+                .padding(.top, 2)
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+#if DEBUG
+#Preview("Пришедший штраф · SE") {
+    var fine = ReceivedFine(addedAt: Date())
+    fine.place = "Toshkent sh., Chilonzor tumani, Bunyodkor shoh ko‘chasi, 12-uy oldi"
+    fine.violationAt = Date().addingTimeInterval(-12 * 86_400)
+    fine.timeKnown = true
+    fine.amount = 2_200_000
+    fine.resolution = "QR 7741203"
+    var bare = ReceivedFine(addedAt: Date())
+    bare.place = "г. Ташкент, ул. Мукими"
+    return VStack(spacing: 12) {
+        ReceivedFineHeader(fine: fine).statCard(padding: 14, radius: Theme.cornerMedium)
+        ReceivedFineHeader(fine: bare).statCard(padding: 14, radius: Theme.cornerMedium)
+    }
+    .padding(20)
+    .frame(width: 375)
+    .background(Theme.background)
+}
+#endif

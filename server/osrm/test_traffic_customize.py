@@ -46,7 +46,8 @@ esac
 """
 
 
-class CycleTest(unittest.TestCase):
+class Stand(unittest.TestCase):
+    """Корень стенда во временном каталоге и заглушка docker."""
 
     def setUp(self):
         self.root = tempfile.mkdtemp()
@@ -104,6 +105,9 @@ class CycleTest(unittest.TestCase):
     def assert_pristine_intact(self):
         for ext in FILES:
             self.assertEqual(self.read("pristine", ext), f"pristine {ext}", f"эталон .{ext} испорчен")
+
+
+class CycleTest(Stand):
 
     def test_jam_cycle_customizes_a_slot_built_from_pristine(self):
         self.cycle("1,2,40.0,1.389\n")
@@ -215,6 +219,94 @@ class CycleTest(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.root, "current")))
         self.assertFalse(os.path.exists(os.path.join(self.root, "a")))
         self.assertEqual(self.calls(), [])
+
+
+# traffic_speeds.py стенда для цикла без --speeds: расчёт подменён (пишет файл
+# из FAKE_SPEEDS и сведения из FAKE_META), а --decide — настоящий.
+SPEEDS_WRAPPER = r"""
+import os, sys
+sys.path.insert(0, os.environ["SERVER_DIR"])
+import traffic_speeds as ts
+argv = sys.argv[1:]
+if "--decide" in argv:
+    sys.exit(ts.main(argv))
+out = argv[argv.index("--out") + 1]
+turns = argv[argv.index("--turns-out") + 1]
+with open(os.environ["FAKE_SPEEDS"]) as f:
+    body = f.read()
+with open(out, "w") as f:
+    f.write(body)
+with open(turns, "w") as f:
+    pass
+with open(out + ".meta", "w") as f:
+    f.write(os.environ["FAKE_META"])
+"""
+
+
+class GateTest(Stand):
+    """38A: цикл cron (без --speeds) спрашивает traffic_speeds.py --decide и
+    пропускает customize при малом дрейфе в том же часе недели."""
+
+    def setUp(self):
+        super().setUp()
+        self.bin = os.path.join(self.root, "bin")
+        os.makedirs(self.bin)
+        with open(os.path.join(self.bin, "traffic_speeds.py"), "w") as f:
+            f.write(SPEEDS_WRAPPER)
+
+    def auto(self, rows, slot=104, live=0):
+        body = "".join(f"{u},{u + 1},50.0,{rate}\n" for u, rate in rows)
+        path = self.speeds(body)
+        env = dict(os.environ, RADARMAP_OSRM_MLD=self.root, RADARMAP_DOCKER=self.stub, DOCKER_LOG=self.log,
+                   RADARMAP_OSRM_MLD_BIN=self.bin, SERVER_DIR=os.path.dirname(HERE), FAKE_SPEEDS=path,
+                   FAKE_META='{"slot": %d, "live": %d, "events": 0}' % (slot, live))
+        done = subprocess.run(["bash", SCRIPT], capture_output=True, text=True, env=env, timeout=60)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout
+
+    def runs(self):
+        return len([c for c in self.calls() if c.startswith("run ")])
+
+    def test_small_drift_is_skipped_and_said_so(self):
+        base = [(u, "5.000") for u in range(0, 2000, 2)]          # 1000 рёбер
+        self.auto(base)
+        self.assertEqual((self.current(), self.runs()), ("a", 1))
+        with open(os.path.join(self.root, "a", "speeds.csv.meta")) as f:
+            self.assertIn('"slot": 104', f.read(), "сведения расчёта — в слоте")
+        drift = [(u, "4.000") for u, _ in base[:30]] + base[30:]  # 3 %
+        out = self.auto(drift)
+        self.assertIn("пропущено:", out)
+        self.assertIn("ниже порога", out)
+        self.assertEqual((self.current(), self.runs()), ("a", 1), "ни слота, ни customize")
+        more = [(u, "4.000") for u, _ in base[:120]] + base[120:]  # 12 % от загруженного
+        out = self.auto(more)
+        self.assertEqual((self.current(), self.runs()), ("b", 2))
+        self.assertIn("изменено 120 из 1000", out)
+
+    def test_new_hour_live_edges_and_clearing_always_run(self):
+        base = [(u, "5.000") for u in range(0, 2000, 2)]
+        self.auto(base)
+        drift = [(u, "4.000") for u, _ in base[:5]] + base[5:]
+        out = self.auto(drift, slot=105)
+        self.assertIn("104 → 105", out)
+        self.assertEqual(self.current(), "b")
+        drift2 = [(u, "3.000") for u, _ in base[:5]] + base[5:]
+        self.assertIn("живых рёбер 1", self.auto(drift2, slot=105, live=1))
+        self.assertEqual(self.current(), "a")
+        self.assertIn("сняты", self.auto([], slot=105))
+        self.assertEqual(self.current(), "b")
+
+    def test_gate_failure_runs_as_before(self):
+        base = [(u, "5.000") for u in range(0, 200, 2)]
+        self.auto(base)
+        # Старый traffic_speeds.py без --decide: argparse — код 2, цикл как раньше.
+        with open(os.path.join(self.bin, "traffic_speeds.py")) as f:
+            body = f.read()
+        with open(os.path.join(self.bin, "traffic_speeds.py"), "w") as f:
+            f.write(body.replace('    sys.exit(ts.main(argv))', '    sys.exit(2)'))
+        out = self.auto([(u, "4.000") for u, _ in base[:1]] + base[1:])
+        self.assertIn("ворота не ответили (код 2)", out)
+        self.assertEqual(self.current(), "b")
 
 
 if __name__ == "__main__":

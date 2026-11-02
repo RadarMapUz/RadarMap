@@ -395,6 +395,91 @@ def write_if_changed(path, body):
     return True
 
 
+META_SUFFIX = ".meta"     # рядом с файлом скоростей: час недели и живые (38A)
+SKIP_EXIT = 10            # --decide: customize не нужен
+
+
+def read_rows(path, key_len):
+    """{ключ: остаток строки} файла скоростей (ключ — u,v) или манёвров
+    (u,via,v). Нет файла — пусто: сравнивать не с чем."""
+    rows = {}
+    try:
+        with open(path, encoding="ascii") as f:
+            for line in f:
+                parts = line.strip().split(",")
+                if len(parts) > key_len:
+                    rows[tuple(parts[:key_len])] = ",".join(parts[key_len:])
+    except FileNotFoundError:
+        pass
+    return rows
+
+
+def read_meta(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            meta = json.load(f)
+        return meta if isinstance(meta, dict) else None
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def changed_rows(new, old):
+    """(изменено, всего): строки, которых нет в одном из файлов или у которых
+    другое значение, и размер объединения ключей."""
+    keys = set(new) | set(old)
+    return sum(1 for key in keys if new.get(key) != old.get(key)), len(keys)
+
+
+def customize_decision(new, old, new_turns, old_turns, meta, loaded_meta,
+                       min_share=tc.CUSTOMIZE_MIN_SHARE, min_edges=tc.CUSTOMIZE_MIN_EDGES):
+    """(нужен ли customize, причина) — сравнение нового расчёта с ЗАГРУЖЕННЫМ
+    слотом (а не с прошлым циклом: мелкие сдвиги копятся и в сумме проходят
+    порог). Сомнение — в сторону запуска: так работал цикл до 38A."""
+    edges, edges_total = changed_rows(new, old)
+    turns, turns_total = changed_rows(new_turns, old_turns)
+    changed, total = edges + turns, edges_total + turns_total
+    if changed == 0:
+        return False, "без изменений"
+    if not new and not new_turns:
+        return True, "пробки сняты — граф без пробок"
+    if meta is None or meta.get("error"):
+        return True, "нет сведений о расчёте — как раньше"
+    live, events = int(meta.get("live") or 0), int(meta.get("events") or 0)
+    if live or events:
+        return True, f"живых рёбер {live}, событий {events}"
+    slot = meta.get("slot")
+    loaded = (loaded_meta or {}).get("slot")
+    if slot != loaded:
+        return True, f"час недели {loaded if loaded is not None else '?'} → {slot}, изменено {changed}"
+    share = changed / total
+    if share >= min_share and changed >= min_edges:
+        return True, f"изменено {changed} из {total} ({share:.0%})"
+    return False, (f"живых нет, час недели тот же ({slot}), изменено {changed} из {total} "
+                   f"({share:.1%}) — ниже порога {min_share:.0%} и {min_edges} строк")
+
+
+def decide(slot_dir, out, turns_out):
+    """--decide: код выхода 0 — customize нужен, SKIP_EXIT — нет; причина в stdout."""
+    run, reason = customize_decision(
+        read_rows(out, 2), read_rows(os.path.join(slot_dir, os.path.basename(out)), 2),
+        read_rows(turns_out, 3) if turns_out else {},
+        read_rows(os.path.join(slot_dir, os.path.basename(turns_out)), 3) if turns_out else {},
+        read_meta(out + META_SUFFIX),
+        read_meta(os.path.join(slot_dir, os.path.basename(out) + META_SUFFIX)))
+    print(reason)
+    return 0 if run else SKIP_EXIT
+
+
+def write_meta(out, now, stats, error=False):
+    """Сведения о расчёте для решения customize: час недели, живые рёбра,
+    рёбра событий. Ни координат, ни времени отметок — только числа."""
+    meta = {"slot": tb.week_slot(now), "live": int(stats.get("live", 0)),
+            "events": int(stats.get("event_edges", 0))}
+    if error:
+        meta["error"] = True
+    write_if_changed(out + META_SUFFIX, json.dumps(meta, sort_keys=True))
+
+
 def route_files(args, now, steps, resolver=None):
     """Шаги источника route: (рёбра, счётчики). Исключение — наружу (main
     пишет пустой файл)."""
@@ -449,7 +534,12 @@ def main(argv=None, resolver=None):
     parser.add_argument("--events-cache", help="кэш путей отметок (JSON рядом с файлом скоростей)")
     parser.add_argument("--model", default=tc.MODEL_PATH if tc.LAYER_MODEL else "",
                         help="файл модели обычных пробок (33G; пусто — без модели)")
+    parser.add_argument("--decide", metavar="SLOT_DIR",
+                        help="38A: нужен ли customize — сравнить --out/--turns-out с загруженным слотом "
+                             f"(выход 0 — да, {SKIP_EXIT} — нет)")
     args = parser.parse_args(argv)
+    if args.decide:
+        return decide(args.decide, args.out, args.turns_out)
     if (args.turns_out or args.reports_db) and args.source != "route":
         parser.error("--turns-out и --reports-db — только с --source route")
     if args.bucket and args.bucket not in tb.ALL_BUCKETS:
@@ -482,12 +572,14 @@ def main(argv=None, resolver=None):
             write_if_changed(args.out, "")
             if args.turns_out:
                 write_if_changed(args.turns_out, "")
+            write_meta(args.out, now, {}, error=True)
             print(f"{stamp} скорости (route): ОШИБКА {type(error).__name__}: {error} — "
                   f"файл пустой (граф без пробок) → {args.out}")
             return 1
         changed = write_if_changed(args.out, csv_body(edges, args.mode))
         if args.turns_out:
             changed = write_if_changed(args.turns_out, turns_body(turns)) or changed
+        write_meta(args.out, now, stats)
         steps["всего"] = time.perf_counter() - started
         timing = ", ".join(f"{name} {seconds * 1000:.0f} мс" for name, seconds in steps.items())
         result = "ок" if edges or turns else "пусто"

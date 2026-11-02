@@ -111,6 +111,9 @@ logrotate-radarmap            /etc/logrotate.d/radarmap
 journald-00-size.conf         /etc/systemd/journald.conf.d/00-size.conf
 systemd-radarmap-sandbox.conf /etc/systemd/system/radarmap-api.service.d/sandbox.conf
 systemd-radarmap-sandbox.conf /etc/systemd/system/radarmap-admin.service.d/sandbox.conf
+systemd-radarmap-user-api.conf   /etc/systemd/system/radarmap-api.service.d/user.conf
+systemd-radarmap-user-admin.conf /etc/systemd/system/radarmap-admin.service.d/user.conf
+systemd-radarmap-user-bot.conf   /etc/systemd/system/radarmap-bot.service.d/user.conf
 "
 PAIRS="$(echo "$MAP" | awk 'NF==2')"
 

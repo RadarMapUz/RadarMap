@@ -16,7 +16,7 @@ postgres (и в Docker `medicalnode_db_1`), minio, wg-easy, xray, openvpn. Outli
 | OSRM (Docker) | `127.0.0.1:8092` — не 5000, контейнер проброшен docker-proxy |
 | nginx | `:8090` → `/api/`, `/osrm/`, статика из `/opt/radarmap/www` |
 | Код | `/opt/radarmap/api/{api.py,admin.py}` (рядом `.bak.<дата>`) |
-| БД | `/opt/radarmap/api/reports.db` (WAL) |
+| БД | `/opt/radarmap/api/reports.db` (WAL); после миграции 38A — `/opt/radarmap/data/*.db`, в `api/` ссылки на них |
 | Раздача | `/opt/radarmap/www` — **только** файлы приложения, 5.5 МБ |
 | Рабочие файлы снапа | `/opt/radarmap/work` — 225 МБ, наружу не отдаются |
 | Бэкапы | `/opt/radarmap/backups`, 7 последних, cron 03:17; копия на мак владельца — `pull_backup.sh`, launchd 11:00 → `~/RadarMapBackups`, 3 недели |
@@ -24,7 +24,7 @@ postgres (и в Docker `medicalnode_db_1`), minio, wg-easy, xray, openvpn. Outli
 | Пульт состояния | `/opt/radarmap/api/status.py`, cron каждые 5 мин (заменил `healthcheck.sh`); страница `/status` в панели, цвета наружу — `/radarmap/status.json` |
 | Сверка с репо | `bash server/drift.sh` — md5 всего, что лежит на VPS, и причина каждого расхождения (сервер старее / другая ветка / правка на сервере); deploy-скрипты до заливки зовут `drift.sh --gate` по своим файлам и не затирают правку на сервере (обход — `RADARMAP_ALLOW_DRIFT=1`) |
 | Реестр МВД | `update_cameras.py`, cron пн 05:00 — только замечает изменение, базу сливает владелец |
-| Защита | SSH только по ключу (`sshd-00-hardening.conf`); `docker-user-firewall.service` закрывает :51821; песочница API/панели — `systemd-radarmap-sandbox.conf` |
+| Защита | SSH только по ключу (`sshd-00-hardening.conf`); `docker-user-firewall.service` закрывает :51821; песочница API/панели — `systemd-radarmap-sandbox.conf`; с миграции 38A api, панель и бот — от пользователя `radarmap` (`systemd-radarmap-user-*.conf`, `migrate_api_user.sh`) |
 | Дороги, кандидат | `/opt/radarmap/update_roads.sh`, cron вс 04:17 — свежий OSM, сборка, отчёт; НЕ публикует |
 | Установка конвейера | `bash server/install_roads_pipeline.sh [--run] [--swap] [--status]` — сборщик, недельный скрипт, крон, подкачка |
 | Кандидаты нейросети | `bash server/fetch_candidates.sh` — руками и редко; в панели клавиша `C`. В индекс НЕ входят |
@@ -231,6 +231,72 @@ https://data.egov.uz/apiData/MainData/GetByFile?id=62735473d44f5eea297cef3d&file
 Выключить всё, кроме отметок, без выкладки — пульт:
 `bash server/publish_config.sh '{"features": {"bot": false}}'` (бот перечитывает
 `config.json` раз в 5 минут; подпись проверяет так же, как пульт состояния).
+
+## 38A: производительность и защита сервера — выкатка (02.11.2026)
+
+Три независимых шага; каждый откатывается сам по себе. Порядок — этот.
+
+**1. Код api и панели** — `bash server/deploy_api.sh` (рестарт обоих).
+Что меняется: чистка погасших отметок и проход сроков хранения ушли из
+обработчика GET `/api/mobile|road` в свой поток (раньше commit ждал
+блокировку записи до 5 с, family.db — ещё до 2 с); очередь `listen` на 8091 —
+128 вместо 5 по умолчанию; запрос дольше 500 мс — строка «медленный запрос:
+GET /api/road 1530 мс (ожидание потока …, чтение запроса …, база …, из них
+commit …; ответ 200)» без IP, без запроса и без токенов ссылок; панель отдаёт
+`X-Frame-Options: DENY` и `frame-ancestors 'none'`; api и панель ставят
+`Strict-Transport-Security: max-age=31536000` (без includeSubDomains — домен
+чужой) только когда nginx прислал `X-Forwarded-Proto: https`.
+Проверить: `ss -ltn sport = :8091` — Send-Q 128;
+`curl -s -D - -o /dev/null https://soulmed.uz/radarmap/admin/login | grep -i frame`;
+`journalctl -u radarmap-api | grep "медленный запрос"`.
+Откат: `cp api.py.bak.<метка> api.py` (и admin.py) + рестарт, как обычно.
+
+**2. customize стенда только по делу** — `bash server/deploy_traffic.sh`
+(везёт `traffic_speeds.py` и `traffic_config.py` в `api/` и в
+`osrm-mld/bin`), затем сам цикл — его ни один deploy-скрипт не везёт:
+
+```bash
+RADARMAP_HOST=root@45.130.148.94 bash server/drift.sh --gate osrm/traffic_customize.sh
+scp server/osrm/traffic_customize.sh root@45.130.148.94:/opt/radarmap/osrm-mld/bin/traffic_customize.sh.new
+ssh root@45.130.148.94 'cd /opt/radarmap/osrm-mld/bin && cp -p traffic_customize.sh traffic_customize.sh.bak-38a \
+  && chmod +x traffic_customize.sh.new && mv traffic_customize.sh.new traffic_customize.sh'
+```
+
+Порядок файлов не важен: новый цикл со старым `traffic_speeds.py` пишет
+«ворота не ответили — как раньше», старый цикл новый файл `.meta` не читает.
+Первый цикл после выкладки — один customize («час недели ? → N»: у
+загруженного слота ещё нет сведений), дальше в журнале
+`/var/log/radarmap-osrm-mld.log` строки «пропущено: живых нет, час недели тот
+же …». Пороги — `traffic_config.CUSTOMIZE_MIN_SHARE` / `CUSTOMIZE_MIN_EDGES`.
+Откат: `bash server/deploy_traffic.sh --rollback <метка>` и
+`mv traffic_customize.sh.bak-38a traffic_customize.sh`; разовый принудительный
+цикл — `traffic_customize.sh --force`.
+
+**3. Не от root** — `bash server/migrate_api_user.sh --check`, затем
+`bash server/migrate_api_user.sh` (простой api, панели и бота ~10 с; телефоны
+повторяют сами). Базы reports/traffic/family/bot уезжают в
+`/opt/radarmap/data` (radarmap 750/640), в `api/` остаются ссылки — пути в
+коде и cron прежние; `api/` — root:radarmap 750, api туда не пишет (оттуда
+cron от root исполняет status.py и traffic_build.py). admin.conf — radarmap
+600, telegram_bot.conf — root:radarmap 640, бэкапы 700/600; api держится вне
+свопа (`MemorySwapMax=0`). Здоровье не сошлось — скрипт откатывает сам.
+Откат руками — одна команда: `bash server/migrate_api_user.sh --rollback`
+(права каждого пути — из `/opt/radarmap/.migrate_api_user.state`). После:
+`bash server/drift.sh --quiet` — три `user.conf` совпадают.
+После миграции: `admin.py --set-password` при отсутствующем admin.conf
+создаст его от root — тогда `chown radarmap:radarmap /opt/radarmap/admin.conf`.
+Новую базу в `api/` заводить ссылкой в `data/`, не файлом.
+
+**4. nginx — владелец руками** (nginx общий, скрипты его не трогают):
+* `proxy_set_header X-Forwarded-Proto $scheme;` в `location /radarmap/api/` и
+  `location = /radarmap/api/metrics` сниппета — без него api HSTS не шлёт
+  (панель заголовок уже получает);
+* время в журнале: `log_format radarmap_timed '$remote_addr - [$time_local]
+  "$request" $status $body_bytes_sent rt=$request_time
+  uct=$upstream_connect_time uht=$upstream_header_time
+  urt=$upstream_response_time';` и `access_log /var/log/nginx/radarmap.log
+  radarmap_timed;` в локациях `/radarmap/` — сейчас формат combined, и
+  медленный ответ не отличить от медленного клиента.
 
 ## Когда сломалось
 

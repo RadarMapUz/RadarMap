@@ -1590,6 +1590,28 @@ class SessionEdgeTests(unittest.TestCase):
         except urllib.error.HTTPError as e:
             return e.code, dict(e.headers or {})
 
+    # --- заголовки (38A, 02.11.2026) ---
+
+    def test_panel_refuses_to_be_framed(self):
+        """Кликджекинг: панель в невидимой рамке чужой страницы — клик модератора
+        по «Скрыть камеру». Запрет — на каждом ответе, включая редиректы."""
+        cookie, _ = self.login()
+        for path, who in (("/login", None), ("/", cookie), ("/", None)):
+            status, headers = self.request(path, cookie=who)
+            self.assertEqual(headers.get("X-Frame-Options"), "DENY", (path, status))
+            csp = headers.get("Content-Security-Policy")
+            if csp:
+                self.assertIn("frame-ancestors 'none'", csp, (path, status))
+        for policy in (admin.Handler.CSP_STRICT, admin.Handler.CSP_GL, admin.Handler.CSP_MAP):
+            self.assertIn("frame-ancestors 'none'", policy)
+
+    def test_hsts_only_behind_tls(self):
+        _, plain = self.request("/login")
+        self.assertNotIn("Strict-Transport-Security", plain, "туннель по http — без HSTS")
+        _, tls = self.request("/login", headers={"X-Forwarded-Proto": "https"})
+        self.assertEqual(tls.get("Strict-Transport-Security"), "max-age=31536000")
+        self.assertNotIn("includeSubDomains", admin.Handler.HSTS, "soulmed.uz — чужой домен")
+
     # --- адрес клиента ---
 
     def test_throttle_counts_the_real_client_not_the_loopback_peer(self):

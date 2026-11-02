@@ -1466,8 +1466,22 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
 
+    # HSTS — только когда nginx подтвердил TLS; без includeSubDomains: домен
+    # soulmed.uz принадлежит другому проекту.
+    HSTS = "max-age=31536000"
+
+    def end_headers(self):
+        # Панель не встраивается ни в чью страницу (кликджекинг: невидимая
+        # рамка поверх «Скрыть камеру»). frame-ancestors — в каждой CSP ниже,
+        # X-Frame-Options — для старых браузеров и ответов без CSP (303, 204).
+        self.send_header("X-Frame-Options", "DENY")
+        headers = getattr(self, "headers", None)   # нет до разбора запроса (400)
+        if headers is not None and (headers.get("X-Forwarded-Proto") or "").lower() == "https":
+            self.send_header("Strict-Transport-Security", self.HSTS)
+        super().end_headers()
+
     # Обычная политика: панель серверная, скрипты ей не нужны ни свои, ни чужие.
-    CSP_STRICT = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'"
+    CSP_STRICT = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"
     # Послабление РОВНО для страницы переноса и ровно до доменов Яндекса.
     # Свой скрипт лежит файлом ('self'), поэтому 'unsafe-inline' для скриптов
     # не нужен — внедрить код через данные камеры нельзя.
@@ -1488,13 +1502,13 @@ class Handler(BaseHTTPRequestHandler):
     # Открыт ровно один хост и ровно для картинок: скрипты по-прежнему только
     # свои, потому что на этой странице лежит сессия модератора.
     SATELLITE = "https://server.arcgisonline.com"
-    CSP_GL = ("default-src 'none'; form-action 'self'; "
+    CSP_GL = ("default-src 'none'; form-action 'self'; frame-ancestors 'none'; "
               "script-src 'self'; worker-src blob:; child-src blob:; "
               "style-src 'self' 'unsafe-inline'; "
               f"img-src 'self' data: blob: {SATELLITE}; "
               f"connect-src 'self' {SATELLITE}; "
               "font-src 'self'")
-    CSP_MAP = ("default-src 'none'; form-action 'self'; "
+    CSP_MAP = ("default-src 'none'; form-action 'self'; frame-ancestors 'none'; "
                # yastatic.net обязателен: api-maps.yandex.ru — только загрузчик,
                # сам код карты лежит там. Без него страница открывается, а карта
                # остаётся пустой с «Failed to bundle "full"» в консоли.

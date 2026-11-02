@@ -11,7 +11,8 @@
 #              объезда: route_bench.py jam → этот ключ → route_bench.py check);
 #   --turns    готовый файл штрафов манёвров (33B, --turn-penalty-file) к
 #              --speeds; без него с --speeds манёвров нет;
-#   --force    customize и подмена, даже если файл не изменился;
+#   --force    customize и подмена, даже если файл не изменился или изменился
+#              меньше порогов (38A: traffic_speeds.py --decide);
 #   --dry-run  только напечатать, что было бы сделано.
 #
 # Раскладка ($ROOT, по умолчанию /opt/radarmap/osrm-mld):
@@ -139,6 +140,25 @@ if [ "$FORCE" = 0 ] && [ -n "$CURRENT" ] && [ "$DRY" = 0 ] \
         && cmp -s "$ROOT/turns.csv" "$ROOT/$CURRENT/turns.csv"; then
     log "без изменений (слот $CURRENT)"; exit 0
 fi
+
+# 38A: customize только по делу. Файл изменился, но без живых рёбер и событий,
+# в том же часе недели и меньше порогов (traffic_config.CUSTOMIZE_MIN_*) —
+# 33 с ядра не стоят того: граф и так ведёт по тем же путям. Решает
+# traffic_speeds.py --decide (выход 10 — пропуск); любой другой сбой ворот —
+# цикл идёт как раньше. Ручной --speeds и --force ворота не спрашивают.
+REASON=""
+if [ -z "$SPEEDS" ] && [ "$FORCE" = 0 ] && [ "$DRY" = 0 ] && [ -n "$CURRENT" ]; then
+    set +e
+    VERDICT=$(python3 "$BIN/traffic_speeds.py" --decide "$ROOT/$CURRENT" \
+        --out "$ROOT/speeds.csv" --turns-out "$ROOT/turns.csv" 2>/dev/null)
+    RC=$?
+    set -e
+    case "$RC" in
+        0) REASON="$VERDICT" ;;
+        10) log "пропущено: $VERDICT (слот $CURRENT)"; exit 0 ;;
+        *) REASON="ворота не ответили (код $RC) — как раньше" ;;
+    esac
+fi
 NEXT=$([ "$CURRENT" = a ] && echo b || echo a)
 ROWS=$([ "$DRY" = 1 ] && echo "?" || grep -c . "$ROOT/speeds.csv" || true)
 TROWS=0
@@ -166,6 +186,9 @@ for f in "$ROOT/pristine/$NAME.osrm"*; do
 done
 run cp "$ROOT/speeds.csv" "$STAGE/speeds.csv"
 if [ -f "$ROOT/turns.csv" ] || [ "$DRY" = 1 ]; then run cp "$ROOT/turns.csv" "$STAGE/turns.csv"; fi
+# Сведения о расчёте (час недели, живые) — в слот: по ним следующий цикл
+# сравнивает себя с загруженным. Ручной --speeds их не имеет.
+if [ -z "$SPEEDS" ] && [ -f "$ROOT/speeds.csv.meta" ]; then run cp "$ROOT/speeds.csv.meta" "$STAGE/speeds.csv.meta"; fi
 
 # 3. customize — только если есть пробки: пустой файл — граф эталона как есть.
 SECONDS=0
@@ -212,7 +235,7 @@ if [ "$DRY" = 1 ]; then
 fi
 if ! "$DOCKER" inspect "$CONTAINER" >/dev/null 2>&1; then
     # Первый цикл до `docker run` стенда (TRAFFIC.md, «Стенд»): слот готов.
-    log "слот $NEXT, рёбер $ROWS, манёвров $TROWS; контейнера $CONTAINER нет — не перезапускался"
+    log "слот $NEXT, рёбер $ROWS, манёвров $TROWS; контейнера $CONTAINER нет — не перезапускался${REASON:+; $REASON}"
     touch "$ROOT/customize.ok"
     exit 0
 fi
@@ -235,4 +258,4 @@ if [ "$ok" = 0 ]; then
     exit 1
 fi
 touch "$ROOT/customize.ok"     # последний удачный customize (status.py)
-log "слот $NEXT, рёбер $ROWS, манёвров $TROWS, customize ${CUSTOMIZE} с, простой ${DOWN} с"
+log "слот $NEXT, рёбер $ROWS, манёвров $TROWS, customize ${CUSTOMIZE} с, простой ${DOWN} с${REASON:+; $REASON}"

@@ -213,5 +213,129 @@ class MainTest(fixture.ProfileFixture, unittest.TestCase):
         self.assertEqual(code, 0)
 
 
+def rows(n, start=0, rate="5.000"):
+    """n строк файла скоростей weight: {(u, v): остаток}."""
+    return {(str(start + i), str(start + i + 1)): f"50.0,{rate}" for i in range(n)}
+
+
+class CustomizeDecisionTest(unittest.TestCase):
+    """38A: customize (33 с ядра) — только по делу. Чего нельзя: держать снятую
+    пробку, пропустить живые рёбра или событие, застрять на старом часе."""
+
+    META = {"slot": 104, "live": 0, "events": 0}
+
+    def decide(self, new, old, meta=None, loaded=None, new_turns=None, old_turns=None):
+        return ts.customize_decision(new, old, new_turns or {}, old_turns or {},
+                                     self.META if meta is None else meta,
+                                     self.META if loaded is None else loaded)
+
+    def test_small_model_drift_in_the_same_hour_is_skipped(self):
+        old = rows(6360)
+        new = dict(old)
+        for key in list(new)[:40]:                 # 40 строк из 6360: 0,6 %
+            new[key] = "50.0,4.000"
+        run, reason = self.decide(new, old)
+        self.assertFalse(run)
+        self.assertIn("ниже порога", reason)
+        self.assertIn("изменено 40 из 6360", reason)
+
+    def test_big_change_in_the_same_hour_runs(self):
+        old = rows(5733)
+        new = rows(5212)                           # ушло 521 ребро: 9,1 % — мало
+        self.assertFalse(self.decide(new, old)[0])
+        new = rows(5100)                           # ушло 633: 11 % — пора
+        run, reason = self.decide(new, old)
+        self.assertTrue(run, reason)
+
+    def test_share_alone_is_not_enough_on_a_tiny_night_file(self):
+        old, new = rows(20), rows(17)              # 15 %, но три ребра
+        self.assertFalse(self.decide(new, old)[0])
+
+    def test_comparison_is_against_the_loaded_slot_so_drift_accumulates(self):
+        loaded = rows(1000)
+        cycle1 = rows(1000, rate="4.000")
+        cycle1.update(dict(list(loaded.items())[60:]))      # 60 изменены: 6 %
+        self.assertFalse(self.decide(cycle1, loaded)[0])
+        cycle2 = dict(cycle1)
+        for key in list(cycle2)[60:120]:                    # ещё 60: вместе 12 %
+            cycle2[key] = "50.0,4.000"
+        self.assertTrue(self.decide(cycle2, loaded)[0])
+
+    def test_cleared_jams_always_run(self):
+        run, reason = self.decide({}, rows(3))
+        self.assertTrue(run)
+        self.assertIn("сняты", reason)
+
+    def test_live_edges_and_events_always_run(self):
+        old = rows(6360)
+        new = dict(old)
+        new[("1", "2")] = "50.0,1.389"
+        self.assertTrue(self.decide(new, old, meta={"slot": 104, "live": 1, "events": 0})[0])
+        self.assertTrue(self.decide(new, old, meta={"slot": 104, "live": 0, "events": 3})[0])
+
+    def test_new_hour_applies_any_change(self):
+        old = rows(6360)
+        new = dict(old)
+        new[("1", "2")] = "50.0,4.000"
+        run, reason = self.decide(new, old, meta={"slot": 105, "live": 0, "events": 0})
+        self.assertTrue(run)
+        self.assertIn("104 → 105", reason)
+
+    def test_unknown_or_failed_calculation_runs_as_before(self):
+        old = rows(100)
+        new = dict(old)
+        new[("0", "1")] = "50.0,4.000"
+        self.assertTrue(self.decide(new, old, meta={})[0], "час расчёта неизвестен")
+        self.assertTrue(ts.customize_decision(new, old, {}, {}, None, self.META)[0])
+        self.assertTrue(self.decide(new, old, meta={"slot": 104, "error": True})[0])
+        self.assertTrue(self.decide(new, old, loaded={})[0], "у слота нет сведений — час неизвестен")
+
+    def test_turns_count_too(self):
+        old = rows(100)
+        turns = {(str(i), "x", str(i + 1)): "40" for i in range(60)}
+        run, _ = self.decide(old, old, new_turns=turns, old_turns={})
+        self.assertTrue(run, "60 новых манёвров из 160 строк")
+
+    def test_identical_files_say_unchanged(self):
+        self.assertEqual(self.decide(rows(10), rows(10)), (False, "без изменений"))
+
+    def test_decide_reads_the_loaded_slot_and_its_meta(self):
+        root = tempfile.mkdtemp()
+        slot = os.path.join(root, "b")
+        os.makedirs(slot)
+
+        def write(path, body):
+            with open(path, "w") as f:
+                f.write(body)
+        body = "".join(f"{u},{v},{rest}\n" for (u, v), rest in sorted(rows(200).items()))
+        write(os.path.join(slot, "speeds.csv"), body)
+        write(os.path.join(slot, "turns.csv"), "")
+        write(os.path.join(slot, "speeds.csv.meta"), '{"events": 0, "live": 0, "slot": 7}')
+        write(os.path.join(root, "speeds.csv"), body.replace("0,1,50.0,5.000", "0,1,50.0,4.000"))
+        write(os.path.join(root, "turns.csv"), "")
+        write(os.path.join(root, "speeds.csv.meta"), '{"events": 0, "live": 0, "slot": 7}')
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = ts.main(["--decide", slot, "--out", os.path.join(root, "speeds.csv"),
+                            "--turns-out", os.path.join(root, "turns.csv")])
+        self.assertEqual(code, ts.SKIP_EXIT, out.getvalue())
+        write(os.path.join(root, "speeds.csv.meta"), '{"events": 0, "live": 0, "slot": 8}')
+        with redirect_stdout(io.StringIO()):
+            code = ts.main(["--decide", slot, "--out", os.path.join(root, "speeds.csv"),
+                            "--turns-out", os.path.join(root, "turns.csv")])
+        self.assertEqual(code, 0)
+
+    def test_meta_carries_numbers_only(self):
+        root = tempfile.mkdtemp()
+        out = os.path.join(root, "speeds.csv")
+        ts.write_meta(out, 1_793_000_000, {"live": 2, "event_edges": 5, "typical": 9})
+        meta = ts.read_meta(out + ts.META_SUFFIX)
+        self.assertEqual(set(meta), {"slot", "live", "events"})
+        self.assertEqual((meta["live"], meta["events"]), (2, 5))
+        self.assertTrue(0 <= meta["slot"] < 168)
+        ts.write_meta(out, 1_793_000_000, {}, error=True)
+        self.assertTrue(ts.read_meta(out + ts.META_SUFFIX)["error"])
+
+
 if __name__ == "__main__":
     unittest.main()

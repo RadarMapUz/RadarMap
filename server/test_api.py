@@ -70,6 +70,9 @@ class ServerTestBase(unittest.TestCase):
         cls.server.shutdown()
 
     def setUp(self):
+        # Чистка идёт своим потоком (api.start_maintenance): начатая прошлым
+        # тестом не должна удалять строки этого.
+        api.wait_maintenance()
         conn = sqlite3.connect(api.DB_PATH)
         for table in ("reports", "votes", "metrics", "camera_reports", "feedback",
                       "usage_stats", "blocked", "cng"):
@@ -497,6 +500,7 @@ class APITest(ServerTestBase):
         conn.execute("INSERT INTO votes(report_id, device, value, ts) VALUES(999, 'x', 1, 0)")
         conn.commit(); conn.close()
         _call(self.port, "GET", "/api/mobile")
+        api.wait_maintenance()
         conn = sqlite3.connect(api.DB_PATH)
         left = conn.execute("SELECT COUNT(*) FROM votes").fetchone()[0]
         conn.close()
@@ -1200,12 +1204,14 @@ class RetentionTest(ServerTestBase):
         with api._cleanup_lock:
             api._last_retention = 0.0
         self.assertEqual(_call(self.port, "GET", "/api/mobile")[0], 200)
+        api.wait_maintenance()
         self.assertEqual(self.count("SELECT COUNT(*) FROM feedback"), 0, "первый опрос проходит сроки")
         self.conn.execute(*insert)
         self.conn.commit()
         with api._mobile_lock:
             api._mobile_cache = None
         self.assertEqual(_call(self.port, "GET", "/api/mobile")[0], 200)
+        api.wait_maintenance()
         self.assertEqual(self.count("SELECT COUNT(*) FROM feedback"), 1,
                          "второй опрос в пределах часа базу сроков не трогает")
 
@@ -2646,6 +2652,139 @@ class MineTest(ServerTestBase):
             self.assertEqual(self.mine("me", ip="10.30.6.1")[0], 429)
         finally:
             api.IP_DAILY_CAPS["mine"] = saved
+
+
+class HardeningTest(unittest.TestCase):
+    """38A (02.11.2026): задержки и заголовки. Свой сервер BoundedHTTPServer —
+    тот же класс, что в проде, а не голый ThreadingHTTPServer базы тестов."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.saved = (api.DB_PATH, api.TRAFFIC_DB_PATH, api.ETA_BOT_CONFIG)
+        api.ETA_BOT_CONFIG = os.path.join(tempfile.gettempdir(), "radarmap-no-bot-%d.conf" % os.getpid())
+        cls.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        cls.tmp.close()
+        api.DB_PATH = cls.tmp.name
+        api.init_db()
+        cls.server = api.BoundedHTTPServer(("127.0.0.1", 0), api.Handler)
+        cls.port = cls.server.server_address[1]
+        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+        api.wait_maintenance()
+        api.DB_PATH, api.TRAFFIC_DB_PATH, api.ETA_BOT_CONFIG = cls.saved
+        os.unlink(cls.tmp.name)
+
+    def setUp(self):
+        api.wait_maintenance()
+        with api._mobile_lock:
+            api._mobile_cache = None
+            api._road_cache = None
+
+    def get(self, path, headers=None):
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}{path}", headers=headers or {})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return resp.status, dict(resp.headers), resp.read()
+        except urllib.error.HTTPError as error:
+            return error.code, dict(error.headers), error.read()
+
+    def capture_stderr(self):
+        import io
+        import sys
+        buffer, saved = io.StringIO(), sys.stderr
+        sys.stderr = buffer
+        self.addCleanup(setattr, sys, "stderr", saved)
+        return buffer
+
+    def test_listen_backlog_is_not_the_socketserver_default_of_five(self):
+        self.assertGreaterEqual(api.BoundedHTTPServer.request_queue_size, 64)
+        self.assertEqual(self.server.request_queue_size, api.LISTEN_BACKLOG)
+
+    def test_hsts_only_when_nginx_confirms_tls(self):
+        _, plain, _ = self.get("/api/health")
+        self.assertNotIn("Strict-Transport-Security", plain, "HSTS по открытому :8090 — нет")
+        _, tls, _ = self.get("/api/health", {"X-Forwarded-Proto": "https"})
+        self.assertEqual(tls.get("Strict-Transport-Security"), api.HSTS_VALUE)
+        self.assertNotIn("includeSubDomains", api.HSTS_VALUE, "soulmed.uz — чужой домен")
+        _, cached, _ = self.get("/api/road", {"X-Forwarded-Proto": "https"})
+        self.assertIn("Strict-Transport-Security", cached, "и на ответах с ETag")
+
+    def test_road_list_does_not_wait_for_maintenance(self):
+        """Чистка и проход сроков — своим потоком: раньше commit в GET ждал
+        блокировку записи до 5 с, family.db — ещё до 2 с, и телефон с ним."""
+        release = threading.Event()
+        saved = api.enforce_retention
+
+        def slow_retention(conn, now):
+            release.wait(5)
+            return {}
+        api.enforce_retention = slow_retention
+        self.addCleanup(setattr, api, "enforce_retention", saved)
+        with api._cleanup_lock:
+            api._last_cleanup = 0.0
+            api._last_retention = 0.0
+        started = time.monotonic()
+        status, _, body = self.get("/api/road")
+        spent = time.monotonic() - started
+        release.set()
+        api.wait_maintenance()
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body), {"reports": []})
+        self.assertLess(spent, 2.0, "список не ждёт прохода сроков")
+
+    def test_maintenance_still_purges_and_never_raises(self):
+        now = time.time()
+        conn = sqlite3.connect(api.DB_PATH)
+        conn.execute("INSERT INTO reports(lat, lon, created, expires, device, type, ip, active) "
+                     "VALUES(41.3, 69.2, ?, ?, 'old', 'radar', '10.0.0.1', 1)",
+                     (now - 3 * 86400, now - 2 * 86400))
+        conn.execute("INSERT INTO votes(report_id, device, value, ts) VALUES(424242, 'x', 1, 0)")
+        conn.commit()
+        api.maintenance(now)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM reports").fetchone()[0], 0)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM votes").fetchone()[0], 0)
+        conn.close()
+        saved = api.DB_PATH
+        api.DB_PATH = os.path.join(tempfile.mkdtemp(), "нет", "reports.db")
+        try:
+            log = self.capture_stderr()
+            api.maintenance(now)      # не бросает: строка в журнал
+            self.assertIn("чистка отметок", log.getvalue())
+        finally:
+            api.DB_PATH = saved
+
+    def test_slow_request_is_logged_without_address_query_or_token(self):
+        log = self.capture_stderr()
+        saved = api.SLOW_REQUEST_MS
+        api.SLOW_REQUEST_MS = 0
+        self.addCleanup(setattr, api, "SLOW_REQUEST_MS", saved)
+        self.get("/api/road?lat=41.31&lon=69.25", {"X-Real-IP": "203.0.113.7"})
+        self.get("/api/eta/AbCdEfGhIjKlMnOpQrSt12")
+        text = log.getvalue()
+        self.assertIn("медленный запрос: GET /api/road ", text)
+        self.assertIn("ответ 200", text)
+        self.assertIn("база ", text)
+        self.assertIn("/api/eta/…", text)
+        for leak in ("203.0.113.7", "127.0.0.1", "lat=", "41.31", "AbCdEfGh"):
+            self.assertNotIn(leak, text)
+
+    def test_fast_request_is_not_logged(self):
+        log = self.capture_stderr()
+        self.get("/api/health")
+        self.assertNotIn("медленный запрос", log.getvalue())
+
+    def test_slow_line_splits_the_time(self):
+        line = api.slow_request_line("GET", "/api/road/?x=1", 1.2, queued=0.3, reading=0.01,
+                                     db=1.1, commit=1.05, status=200)
+        self.assertEqual(line, "медленный запрос: GET /api/road 1500 мс (ожидание потока 300, "
+                               "чтение запроса 10, база 1100, из них commit 1050; ответ 200)")
+        self.assertIn("(другой путь)", api.slow_request_line("GET", "/wp-login.php?u=admin", 1))
+        self.assertIn("/api/eta/f/…", api.slow_request_line("GET", "/api/eta/f/secretaddr", 1))
+        self.assertIn(" ? ", api.slow_request_line("DELETE\r\nX", "/api/road", 1))
 
 
 if __name__ == "__main__":

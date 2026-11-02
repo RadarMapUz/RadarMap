@@ -73,6 +73,11 @@ enum Formatting {
         value < 0.05 ? "0" : "−" + decimal(value)
     }
 
+    /// Баллы в целых — разбор по причинам, который складывается в целый итог.
+    static func points(_ value: Int) -> String {
+        value <= 0 ? "0" : "−\(value)"
+    }
+
     static func money(_ sum: Double) -> String {
         if sum >= 1_000_000 {
             let millions = (sum / 100_000).rounded() / 10

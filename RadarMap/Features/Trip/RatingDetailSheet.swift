@@ -447,9 +447,10 @@ struct RatingDetailSheet: View {
                 SectionHeader(String(localized: "Где теряете баллы"))
                 // Единица названа (Н11 плана 34): «−15» здесь — баллы рейтинга
                 // периода, а «−25» в поездке — баллы самой поездки.
-                if let rating = summary.rating {
+                let total = sourcesTotal(sources)
+                if summary.rating != nil {
                     Text(String(format: String(localized: "В баллах рейтинга %1$@ — вместе −%2$lld"),
-                                period.caption, Int((100 - Double(rating)).rounded())))
+                                period.caption, total))
                         .font(.rounded(12))
                         .foregroundStyle(Theme.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -457,48 +458,29 @@ struct RatingDetailSheet: View {
                 // Плавность встаёт в общий порядок по величине, а не отдельной
                 // строкой снизу: блок обещает «где теряете больше всего», и
                 // −20 за рваную езду под −6 за камеру этому обещанию врёт.
-                ForEach(sourceRows(sources)) { row in
-                    switch row {
-                    case .camera(let hotspot): hotspotRow(hotspot)
-                    case .smoothness(let points): smoothnessRow(points)
+                // Строки — в целых и в сумме дают «вместе −N» (38C).
+                ForEach(sources.lines(visible: AppConfig.hotspotsVisibleRows, total: total)) { line in
+                    switch line.kind {
+                    case .camera(let hotspot): hotspotRow(hotspot, points: line.points)
+                    case .smoothness: smoothnessRow(line.points)
+                    case .rest(let count):
+                        restRow(title: String(format: String(localized: "Остальные камеры: %lld"), count),
+                                points: line.points)
                     }
-                }
-                let rest = sources.cameras.dropFirst(AppConfig.hotspotsVisibleRows)
-                if !rest.isEmpty {
-                    restRow(title: String(format: String(localized: "Остальные камеры: %lld"),
-                                          rest.count),
-                            points: rest.reduce(0) { $0 + $1.points })
                 }
             }
             .statCard()
         }
     }
 
-    private enum SourceRow: Identifiable {
-        case camera(RatingHotspot)
-        case smoothness(Double)
-
-        var id: Int {
-            switch self {
-            case .camera(let hotspot): return hotspot.id
-            case .smoothness:          return -1
-            }
-        }
-        var points: Double {
-            switch self {
-            case .camera(let hotspot): return hotspot.points
-            case .smoothness(let value): return value
-            }
-        }
+    /// Итог блока — тот же, что в подписи: недобор показанного рейтинга.
+    /// Без рейтинга — округлённая сумма самих причин.
+    private func sourcesTotal(_ sources: RatingSources) -> Int {
+        if let rating = summary.rating { return max(0, 100 - rating) }
+        return Int(sources.total.rounded())
     }
 
-    private func sourceRows(_ sources: RatingSources) -> [SourceRow] {
-        var rows = sources.cameras.prefix(AppConfig.hotspotsVisibleRows).map(SourceRow.camera)
-        if sources.smoothness >= 0.5 { rows.append(.smoothness(sources.smoothness)) }
-        return rows.sorted { $0.points > $1.points }
-    }
-
-    private func hotspotRow(_ hotspot: RatingHotspot) -> some View {
+    private func hotspotRow(_ hotspot: RatingHotspot, points: Int) -> some View {
         Button {
             guard let found = worstPass(cameraID: hotspot.id) else { return }
             path.append(.pass(trip: found.record.id, pass: found.pass.id))
@@ -518,7 +500,7 @@ struct RatingDetailSheet: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
-                Text(Formatting.points(hotspot.points))
+                Text(Formatting.points(points))
                     .font(.rounded(16, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.danger)
                 Image(systemName: "chevron.right")
@@ -554,7 +536,7 @@ struct RatingDetailSheet: View {
     /// Плавность — тем же цветом потерь, что камеры (34b: −20 янтарным рядом
     /// с −15 красным читались разными единицами); тап — разрез по поездкам,
     /// где видно, какая поездка была рваной.
-    private func smoothnessRow(_ points: Double) -> some View {
+    private func smoothnessRow(_ points: Int) -> some View {
         Button {
             path.append(.allContributions)
         } label: {
@@ -583,7 +565,7 @@ struct RatingDetailSheet: View {
     }
 
 
-    private func restRow(title: String, points: Double) -> some View {
+    private func restRow(title: String, points: Int) -> some View {
         HStack {
             Text(title)
                 .font(.rounded(15))

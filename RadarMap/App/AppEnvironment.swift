@@ -260,6 +260,7 @@ final class AppEnvironment {
             if !self.config.current.isEtaShareEnabled { disabled.insert(.etaShare) }
             return SyncPlan.Situation(
                 now: Date(), mode: mode, isOnline: self.network.isOnline, screenOn: screenOn,
+                carConnected: self.isCarPlayConnected,
                 hasRoute: self.route.isActive,
                 // Нагрев, а не итоговая ступень: автоэконом батареи не повод
                 // узнавать о треноге позже (AutoEconomy).

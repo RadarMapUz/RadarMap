@@ -69,6 +69,30 @@ final class NetSchedulerTests: XCTestCase {
         XCTAssertEqual(plan.jobs, [.mobile, .traffic])
     }
 
+    /// Машина подключена, поездки нет (ручной старт или до автостарта), едем
+    /// (40I): отметки — лестницей поездки, а не тактом экрана 150 с; пробки
+    /// идут в те же окна. Стоя — верхняя ступень, тот же такт экрана.
+    func testConnectedCarWithoutTripPollsOnTheTripLadder() {
+        func car(_ speed: Double, at seconds: TimeInterval = 0,
+                 remote: TimeInterval? = AppConfig.mobilePollInterval) -> SyncPlan.Situation {
+            var s = situation(.watching, at: seconds, speed: speed, remote: remote)
+            s.carConnected = true
+            return s
+        }
+        XCTAssertEqual(SyncPlan.interval(.mobile, car(50)), AppConfig.mobilePollTripCity)
+        XCTAssertEqual(SyncPlan.interval(.mobile, car(110)), AppConfig.mobilePollTripFast)
+        XCTAssertEqual(SyncPlan.interval(.mobile, car(0)), AppConfig.mobilePollTripIdle)
+        XCTAssertEqual(SyncPlan.interval(.mobile, situation(.watching, speed: 50)), AppConfig.netWatchInterval,
+                       "телефон без машины — прежний такт экрана")
+        XCTAssertEqual(SyncPlan.interval(.mobile, car(110, remote: 600)), 600, "разреженный пультом не сужаем")
+        XCTAssertEqual(SyncPlan.interval(.traffic, car(50)), AppConfig.trafficRefreshInterval)
+        // Город: отметки 70 с назад — окно открывается; пробкам срок — едут в нём.
+        let plan = SyncPlan.plan(car(50, at: 150), tracks: tracks([.mobile: 80, .traffic: 0]), trigger: .tick)
+        XCTAssertEqual(plan.jobs, [.mobile, .traffic])
+        let early = SyncPlan.plan(car(50, at: 100), tracks: tracks([.mobile: 80, .traffic: 0]), trigger: .tick)
+        XCTAssertEqual(early.jobs, [], "20 с из 70 — рано")
+    }
+
     func testIdleHasNoTimerAndOnlyRareFilesOnActivation() {
         let idle = situation(.idle, screenOn: false, due: [.remoteConfig, .roadWeather, .cameraDB])
         let tick = SyncPlan.plan(idle, tracks: [:], trigger: .tick)

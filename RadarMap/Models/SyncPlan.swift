@@ -19,7 +19,9 @@
 //    по скорости, ×2 на жаре — свежесть отметок прежняя), пробки — когда их
 //    срок (150 с, без экрана и маршрута 300) подошёл к ближайшему такту, то
 //    есть каждый второй такт в городе. Открытый экран без поездки — один
-//    такт 150 с для обоих.
+//    такт 150 с для обоих. Подключённая машина без поездки (ручной старт,
+//    до автостарта) — лестница поездки (40I): там едут, и тренога, дошедшая
+//    на 2–3 мин позже, уже позади.
 //  • Попутные — всё остальное. Сами окно по времени не открывают (кроме
 //    случая, когда ведущих нет вовсе), едут в окне ведущих, на активации,
 //    на возврате связи, на старте поездки и в фоновом подъёме системы.
@@ -109,6 +111,8 @@ nonisolated enum SyncPlan {
         var isOnline = true
         /// Телефон на переднем плане или подключена машина.
         var screenOn = false
+        /// Подключена машина (CarPlay).
+        var carConnected = false
         var hasRoute = false
         var speedKmh: Double = 0
         var thermal: PerformanceMode = .full
@@ -141,6 +145,12 @@ nonisolated enum SyncPlan {
         case (_, .idle):
             return nil
         case (.mobile, .trip):
+            return PollSchedule.interval(isTripActive: true, speedKmh: s.speedKmh,
+                                         thermal: s.thermal, remoteBaseline: s.remotePollInterval)
+        case (.mobile, .watching) where s.carConnected:
+            // Машина подключена, поездки нет (40I): за рулём, хоть и без
+            // «Поездки», — отметки по той же лестнице, что в поездке. Стоя —
+            // её верхняя ступень (150 с), то есть такт экрана. Пульт главнее.
             return PollSchedule.interval(isTripActive: true, speedKmh: s.speedKmh,
                                          thermal: s.thermal, remoteBaseline: s.remotePollInterval)
         case (.mobile, .watching):

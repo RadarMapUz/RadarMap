@@ -23,6 +23,8 @@ struct RootView: View {
     /// «Открыть карту на телефоне» при подключённом CarPlay (пассажиру нужны
     /// настройки и Итоги). Память сцены, не настройка: живёт до конца сессии.
     @State private var phoneMapOverride = false
+    /// radarmap://start-trip пришла не от своей кнопки — спрашиваем (TripLink).
+    @State private var askStartTrip = false
     #if DEBUG
     /// Скриншот-автоматизация: CarPlay-экран на телефоне (симулятор не даёт
     /// открыть CarPlay-дисплей без ручного клика по меню).
@@ -87,6 +89,8 @@ struct RootView: View {
         }
         // Виджет локскрина: radarmap://start-trip — поездка одним тапом с
         // заблокированного экрана. Активную поездку диплинк никогда не трогает.
+        // Ссылка без ключа своих кнопок (чужое приложение, страница) — только
+        // после «Начать» (TripLink).
         .onOpenURL { url in
             #if DEBUG
             // Учения (`xcrun simctl openurl … radarmap://end-trip`): конец
@@ -96,9 +100,22 @@ struct RootView: View {
                 return
             }
             #endif
-            guard url.scheme == "radarmap", url.host() == "start-trip",
-                  !env.location.isTripActive else { return }
-            env.location.startTrip()
+            let key = SharedDefaults.store?.string(forKey: TripLink.storeKey)
+            switch TripLink.decide(url, expectedKey: key, tripActive: env.location.isTripActive) {
+            case .start: env.location.startTrip()
+            case .confirm: askStartTrip = true
+            case .ignore, nil: break
+            }
+        }
+        .alert("Начать поездку?", isPresented: $askStartTrip) {
+            Button("Начать") {
+                // Пока вопрос висел, поездка могла начаться сама (CoreMotion).
+                guard !env.location.isTripActive else { return }
+                env.location.startTrip()
+            }
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("Ссылка из другого приложения просит начать поездку: GPS будет работать постоянно, пока она не закончится.")
         }
         #if DEBUG
         .fullScreenCover(isPresented: $carPlayPreview) {

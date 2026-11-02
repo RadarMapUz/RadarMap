@@ -33789,6 +33789,38 @@
           }
         }
       }
+    },
+    "Начать поездку?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Начать поездку?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarni boshlaymizmi?"
+          }
+        }
+      }
+    },
+    "Ссылка из другого приложения просит начать поездку: GPS будет работать постоянно, пока она не закончится.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ссылка из другого приложения просит начать поездку: GPS будет работать постоянно, пока она не закончится."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boshqa ilovadagi havola safarni boshlashni soʻrayapti: safar tugaguncha GPS doim ishlaydi."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

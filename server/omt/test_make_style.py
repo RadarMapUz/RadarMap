@@ -490,6 +490,104 @@ class DriveAsphaltTests(unittest.TestCase):
                                     "#000"])
 
 
+class CarStyleTests(unittest.TestCase):
+    """Карта машины (40J): своя разница поездки — map_car_*.json."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.normal = {theme: {l["id"]: l for l in make_style.build(make_style.APP_BASE, theme, "full",
+                                                                   tileset=make_style.APP_TILESET)["layers"]}
+                      for theme in ("light", "dark")}
+        cls.car = {(theme, variant): make_style.car_overrides(theme, variant)
+                   for _, theme, variant in make_style.CAR_FILES}
+        # Постоянная палитра машины: с неё начинается окно асфальта.
+        cls.fixed = {(theme, variant): {l["id"]: l for l in make_style.build(
+            make_style.APP_BASE, theme, "full", tileset=make_style.APP_TILESET,
+            palette=make_style.car_palettes(theme, variant)[0])["layers"]}
+            for _, theme, variant in make_style.CAR_FILES}
+
+    def test_only_known_properties_of_existing_layers_change(self):
+        for (theme, variant), diff in self.car.items():
+            layers = self.normal[theme]
+            self.assertTrue(set(diff) <= {"layers", "light"})
+            for layer_id, props in diff["layers"].items():
+                self.assertIn(layer_id, layers, (theme, variant))
+                for prop in props:
+                    self.assertIn(prop, make_style.CAR_PROPS)
+                    self.assertTrue(prop.startswith(PREFIX[layers[layer_id]["type"]]), (layer_id, prop))
+                self.assertFalse(layer_id.startswith(("camera", "route", "traffic")), layer_id)
+
+    def test_bare_strings_are_only_hex_colours(self):
+        # Приложение превращает голый «#rrggbb» в цвет (DriveAsphalt.colourHex);
+        # другая строка дошла бы до движка строкой и уронила бы его.
+        import re
+        for diff in self.car.values():
+            for layer_id, props in diff["layers"].items():
+                for prop, value in props.items():
+                    if isinstance(value, str):
+                        self.assertRegex(value, re.compile(r"^#[0-9a-f]{6}$"), (layer_id, prop))
+
+    def test_day_a_asphalt_is_dark_from_15(self):
+        roads = self.car[("light", "A")]["layers"]["radar-roads"]["line-color"]
+        self.assertEqual(roads[-2], make_style.CAR_DRIVE_ASPHALT[1])
+        self.assertEqual(roads[-1][5], make_style.PALETTES["light"]["drive_primary"])
+        self.assertEqual(roads[-1][3], make_style.CAR_WARM_TRUNK, "магистраль машины — тёплый графит")
+        # До окна — постоянный цвет машины (обзор, двор спокойнее белого).
+        fixed = self.fixed[("light", "A")]["radar-roads"]["paint"]["line-color"]
+        self.assertEqual(roads[3:5], [make_style.CAR_DRIVE_ASPHALT[0], fixed[4]])
+        name = self.car[("light", "A")]["layers"]["highway-name-major"]["text-color"]
+        self.assertEqual(name[0], "step")
+        self.assertTrue(make_style.CAR_DRIVE_ASPHALT[0] < name[3] < make_style.CAR_DRIVE_ASPHALT[1])
+
+    def test_windowed_values_keep_the_normal_stops_before_the_window(self):
+        start, end = make_style.CAR_DRIVE_ASPHALT
+        for (theme, variant), diff in self.car.items():
+            for layer_id, props in diff["layers"].items():
+                for prop, value in props.items():
+                    normal = self.fixed[(theme, variant)][layer_id]["paint"].get(prop)
+                    stops = make_style._zoom_stops(value)
+                    if not stops or stops[-2] != end or value == normal:
+                        continue
+                    own = make_style._zoom_stops(normal)
+                    kept = stops[:-2]
+                    if own is None or kept[:2] == [start, own[1]]:
+                        continue
+                    self.assertEqual(kept, own[:len(kept)], (theme, variant, layer_id, prop))
+
+    def test_houses_lower_plain_and_softer_lit(self):
+        day = self.car[("light", "A")]
+        height = day["layers"]["building-3d"]["fill-extrusion-height"]
+        self.assertEqual(height[-1][:2], ["*", 0.75])
+        self.assertEqual(day["light"], {"intensity": 0.45})
+        colour = day["layers"]["building-3d"]["fill-extrusion-color"]
+        self.assertEqual(colour[-1], "#f4f5f7")
+        self.assertNotIn("match", json.dumps(colour[-1]), "без оттенков назначения")
+        b = self.car[("light", "B")]["layers"]["building-3d"]["fill-extrusion-height"]
+        self.assertEqual(b[-1][:2], ["*", 0.4])
+
+    def test_night_n1_dims_labels_and_drops_the_trunk_glow(self):
+        night = self.car[("dark", "A")]["layers"]
+        self.assertEqual(night["radar-trunk-glow"]["line-opacity"], 0)
+        self.assertEqual(night["highway-name-major"]["text-color"], "#bfc5ce")
+        self.assertEqual(night["place-city"]["text-color"], "#a9afb9")
+        self.assertEqual(night["background"]["background-color"], "#141619")
+
+    def test_light_variant_has_no_dark_asphalt(self):
+        roads = self.car[("light", "B")]["layers"]["radar-roads"]["line-color"]
+        self.assertNotIn(make_style.PALETTES["light"]["drive_primary"], json.dumps(roads))
+
+    def test_phone_drive_is_untouched_by_the_car(self):
+        self.assertEqual(make_style.DRIVE_ASPHALT, (15, 16))
+        self.assertEqual(make_style.drive_overrides("dark"), {})
+
+    def test_file_names_match_the_app(self):
+        root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+        with open(os.path.join(root, "RadarMap", "Models", "CarMapStyle.swift"), encoding="utf-8") as handle:
+            swift = handle.read()
+        for name, _, _ in make_style.CAR_FILES:
+            self.assertIn('"' + name[:-len(".json")] + '"', swift, name)
+
+
 class PaletteTests(unittest.TestCase):
     def test_themes_define_the_same_colours(self):
         light, dark = make_style.PALETTES["light"], make_style.PALETTES["dark"]

@@ -723,12 +723,21 @@ BUILDING_TALL_FULL = 110
 BUILDING_USES = ("health", "education", "religious", "retail", "industrial")
 
 
+def building_height(p):
+    """Высота объёма; у экрана машины (CAR_PALETTES) — ниже, множителем."""
+    height = ["coalesce", ["get", "render_height"], 10]
+    scale = p.get("building_height", 1.0)
+    return height if scale == 1.0 else ["*", scale, height]
+
+
 def building_colour(p):
     """Цвет дома: по назначению (use), иначе по высоте, если у темы свой тон высоток."""
     plain = p["building"]
     if p["building_tall"] != p["building"]:
         plain = ["interpolate", ["linear"], ["coalesce", ["get", "render_height"], 10],
                  BUILDING_TALL_METERS, p["building"], BUILDING_TALL_FULL, p["building_tall"]]
+    if all(p["building_use"][use] == p["building"] for use in BUILDING_USES):
+        return plain
     out = ["match", ["get", "use"]]
     for use in BUILDING_USES:
         out += [use, p["building_use"][use]]
@@ -853,8 +862,8 @@ def _zoom_free(value):
     return "zoom" not in json.dumps(value)
 
 
-def drive_value(prop, normal, drive):
-    """Цвет слоя в поездке: обычный до DRIVE_ASPHALT[0], цвет поездки с DRIVE_ASPHALT[1]."""
+def drive_value(prop, normal, drive, window=DRIVE_ASPHALT, label_step=DRIVE_LABEL_STEP, keep_inner=False):
+    """Цвет слоя в поездке: обычный до window[0], цвет поездки с window[1]."""
     stops = _zoom_stops(drive)
     high = stops[-1] if stops else drive
     if not _zoom_free(high):
@@ -862,13 +871,19 @@ def drive_value(prop, normal, drive):
     if prop == "text-color":
         if not _zoom_free(normal):
             raise ValueError("цвет подписи уже зависит от зума — ступеньку не поставить")
-        return ["step", ["zoom"], normal, DRIVE_LABEL_STEP, high]
-    start, end = DRIVE_ASPHALT
+        return ["step", ["zoom"], normal, label_step, high]
+    start, end = window
     if _zoom_free(normal):
         return ["interpolate", ["linear"], ["zoom"], start, normal, end, high]
     own = _zoom_stops(normal)
     if own is None or not all(_zoom_free(v) for v in own[1::2]):
         raise ValueError(f"{prop}: обычный цвет — не простая интерполяция по зуму")
+    if keep_inner:
+        # Машина (окно 14→15 раньше ступеней обычного цвета): обычные
+        # ступени до конца окна остаются, к его концу — цвет поездки. Без
+        # ступеней до конца окна переход начинается с первого цвета.
+        kept = [x for z, v in zip(own[0::2], own[1::2]) if z < end for x in (z, v)]
+        return normal[:3] + (kept or [start, own[1]]) + [end, high]
     # Ступени до начала окна — как были; дальше — цвет поездки. Ступень
     # внутри окна (серый асфальт вблизи у 16-го) заменяется поездкой.
     head = [x for z, v in zip(own[0::2], own[1::2]) if z <= start for x in (z, v)]
@@ -898,6 +913,127 @@ def drive_overrides(theme):
             if was != now:
                 out.setdefault(a["id"], {})[prop] = drive_value(prop, was, now)
     return out
+
+
+# Карта машины (40J, исследование 40F): своя разница поездки для экрана
+# CarPlay и плитки панели — map_car_<тема>.json, тем же механизмом, что
+# map_drive (EngineDriveAsphalt). Телефон не меняется.
+#
+# Вариант A «Amap, доведённый» днём: тёмный асфальт с 15-го (окно 14→15 —
+# машина стоит на z15–16, и при окне 15→16 трасса весь путь оставалась
+# серединой перехода: белое имя на сером 2,27:1), земля чуть темнее, дворы
+# не горят, дома светлее земли, ниже и без оттенков назначения, магистраль —
+# тёплый графит (ΔE к проспекту ≥ 12; прежний #4b4f5a отличался на 5).
+# Ночь N1 «без засветки» у обоих вариантов: имена и места серебристые, а не
+# белые, магистраль отличается тоном и кромкой, а не светлотой, без
+# свечения магистрали. Вариант B «Светлая» — только DEBUG-ключом запуска
+# (-carMapStyle B, CarMapStyle): днём без тёмного асфальта, спокойная светлая
+# карта, ночь — та же N1.
+#
+# Ключи drive_* (и building_use поездки) идут через окно поездки машины,
+# остальные — постоянная правка: земля, подписи мест, ночные классы дорог
+# меняются на всех зумах сразу. Числа — palette_check.measure_car.
+CAR_DRIVE_ASPHALT = (14, 15)
+# Ступень имени — посередине перехода его ореола (14,5→15): ореол асфальта
+# основы стоит на 14,5, и светлое имя на белом ореоле до середины не читалось бы.
+CAR_LABEL_STEP = 14.75
+CAR_WARM_TRUNK = "#504b43"
+
+
+def _uses(colour):
+    return {use: colour for use in BUILDING_USES}
+
+
+CAR_NIGHT = {
+    "bg": "#141619", "halo": "#141619",
+    "road": "#383d46", "road_secondary": "#33373f", "road_tertiary": "#30343b",
+    "minor": "#2b2f36", "minor_far": "#2b2f36",
+    "near_primary": "#383d46", "near_secondary": "#33373f", "near_tertiary": "#30343b",
+    "near_minor": "#2b2f36", "road_trunk": CAR_WARM_TRUNK, "near_trunk": CAR_WARM_TRUNK,
+    "kerb_trunk": "#806d47", "building": "#1f2228", "building_use": _uses("#1f2228"),
+    "street_label": "#bfc5ce", "label": "#a9afb9", "paint": "#858b95", "stall": "#858b95",
+    "trunk_glow_opacity": 0,
+    "drive_primary": "#383d46", "drive_secondary": "#33373f", "drive_tertiary": "#30343b",
+    "drive_minor": "#2b2f36", "drive_trunk": CAR_WARM_TRUNK, "drive_kerb_trunk": "#806d47",
+    "drive_building": "#1f2228", "drive_building_use": _uses("#1f2228"),
+    "drive_street_label": "#bfc5ce", "drive_paint": "#858b95",
+}
+CAR_PALETTES = {
+    "A": {
+        "light": {
+            "bg": "#eceef1", "minor": "#fafbfc", "minor_far": "#fafbfc", "minor_edge": "#d3d7dd",
+            "building_height": 0.75,
+            "light": dict(PALETTES["light"]["light"], intensity=0.45),
+            # Кромка магистрали — бледный песок, а не жёлтая #f0c46e: днём в
+            # машине пробки ночным набором, и охра «медленно» с жёлтой кромкой
+            # расходилась на ΔE 9 (порог 15).
+            "drive_trunk": CAR_WARM_TRUNK, "drive_kerb_trunk": "#e6d3ad",
+            "drive_minor": "#fafbfc", "drive_minor_edge": "#d3d7dd",
+            "drive_building": "#f4f5f7", "drive_building_use": _uses("#f4f5f7"),
+        },
+        "dark": CAR_NIGHT,
+    },
+    "B": {
+        "light": {
+            "bg": "#eef0f2", "landuse": "#eef0f2",
+            "near_primary": "#d5d9df", "near_secondary": "#d5d9df", "near_tertiary": "#d5d9df",
+            "zebra_base": "#d5d9df",
+            "road_trunk": "#efd59f", "near_trunk": "#efd59f", "kerb": "#b3bac4",
+            "far_primary_edge": "#b3bac4",
+            "building": "#e6e8ec", "building_tall": "#e6e8ec", "building_use": _uses("#e6e8ec"),
+            "building_height": 0.4,
+            "street_label": "#2b2e33", "label": "#3a3e45",
+        },
+        "dark": CAR_NIGHT,
+    },
+}
+# Свойства, которые разница машины меняет: цвета, как у поездки, плюс земля,
+# высота домов и сила свечения магистрали.
+CAR_PROPS = DRIVE_COLOUR_PROPS + ("background-color", "fill-extrusion-height", "line-opacity")
+CAR_COLOUR_PROPS = DRIVE_COLOUR_PROPS + ("background-color",)
+
+
+def car_palettes(theme, variant="A"):
+    """(постоянная палитра, палитра поездки или None) варианта машины.
+
+    Постоянная — обычная тема с правками не-drive ключей. Поездки нет у
+    светлого варианта B: днём он не кладёт тёмный асфальт вовсе."""
+    own = CAR_PALETTES[variant][theme]
+    static = dict(PALETTES[theme], **{k: v for k, v in own.items() if not k.startswith("drive_")})
+    if variant == "B" and theme == "light":
+        return static, None
+    driven = dict(static, **{k: v for k, v in own.items() if k.startswith("drive_")})
+    return static, drive_palette(driven)
+
+
+def car_overrides(theme, variant="A"):
+    """{"layers": {слой: {свойство: выражение}}, "light": {...}?} — чем стиль
+    машины отличается от обычного. Постоянные правки кладутся как есть,
+    правки асфальта поездки — окном CAR_DRIVE_ASPHALT от постоянного цвета."""
+    def layers(palette):
+        return build(APP_BASE, theme, "full", tileset=APP_TILESET, palette=palette)["layers"]
+    static_p, drive_p = car_palettes(theme, variant)
+    normal, static = layers(PALETTES[theme]), layers(static_p)
+    driven = layers(drive_p) if drive_p else static
+    if not ([l["id"] for l in normal] == [l["id"] for l in static] == [l["id"] for l in driven]):
+        raise ValueError("палитра машины поменяла состав слоёв")
+    out = {}
+    for a, b, c in zip(normal, static, driven):
+        keep = a["id"] in DRIVE_KEEP_LAYERS
+        for prop in CAR_PROPS:
+            was = a.get("paint", {}).get(prop)
+            fixed = b.get("paint", {}).get(prop)
+            now = fixed if keep else c.get("paint", {}).get(prop)
+            if now == was:
+                continue
+            if prop in CAR_COLOUR_PROPS and now != fixed:
+                now = drive_value(prop, fixed, now, CAR_DRIVE_ASPHALT, CAR_LABEL_STEP, keep_inner=True)
+            out.setdefault(a["id"], {})[prop] = now
+    result = {"layers": out}
+    light = (static_p["light"] if drive_p is None else drive_p["light"])
+    if light != PALETTES[theme]["light"]:
+        result["light"] = {key: value for key, value in light.items() if PALETTES[theme]["light"].get(key) != value}
+    return result
 
 
 def _layers_in_draw_order(p):
@@ -994,7 +1130,8 @@ def _layers_in_draw_order(p):
              "minzoom": OUR_ROADS_FROM, "filter": ["all", ["!", ["has", "tunnel"]], ["<=", ["get", "cls"], 2]],
              "layout": {"line-cap": "round", "line-join": "round"},
              "paint": {"line-color": p["trunk_glow"], "line-width": measured(TRUNK_GLOW_EXTRA_PX),
-                       "line-blur": TRUNK_GLOW_EXTRA_PX, "line-opacity": TRUNK_GLOW_OPACITY}}]),
+                       "line-blur": TRUNK_GLOW_EXTRA_PX,
+                       "line-opacity": p.get("trunk_glow_opacity", TRUNK_GLOW_OPACITY)}}]),
         {"id": "radar-roads-case", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["!", ["has", "tunnel"]], ["<=", ["get", "cls"], 7],
                                               ["!", ["has", "stub"]], ["!", ["has", "inner"]]],
@@ -1286,7 +1423,7 @@ def build(base, theme="light", mode="full", tileset=None, palette=None):
                                   "paint": {"fill-extrusion-color": building_colour(p),
                                             "fill-extrusion-vertical-gradient": True,
                                             "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 15, 0, 16,
-                                                                      ["coalesce", ["get", "render_height"], 10]],
+                                                                      building_height(p)],
                                             "fill-extrusion-base": ["interpolate", ["linear"], ["zoom"], 15, 0, 16,
                                                                     ["coalesce", ["get", "render_min_height"], 0]],
                                             # Непрозрачные: сквозь 0,92 на крышах
@@ -1399,15 +1536,24 @@ def _driver_pois(out, p, theme):
 
 
 def app_styles():
-    """{имя файла: текст} — стили для бандла приложения, светлый и тёмный, и
-    разница поездки к каждому (map_drive_<тема>.json, 29.B)."""
+    """{имя файла: текст} — стили для бандла приложения, светлый и тёмный,
+    разница поездки к каждому (map_drive_<тема>.json, 29.B) и разница машины
+    (map_car_*.json, 40J)."""
     out = {f"map_style_{theme}.json": json.dumps(build(APP_BASE, theme, "full", tileset=APP_TILESET),
                                                  ensure_ascii=False, sort_keys=True, indent=1) + "\n"
            for theme in ("light", "dark")}
     for theme in ("light", "dark"):
         out[f"map_drive_{theme}.json"] = json.dumps({"layers": drive_overrides(theme)},
                                                     ensure_ascii=False, sort_keys=True, indent=1) + "\n"
+    # Машина (40J): A + N1; ночь у B та же, свой у B только день (DEBUG-ключ).
+    for name, theme, variant in CAR_FILES:
+        out[name] = json.dumps(car_overrides(theme, variant), ensure_ascii=False, sort_keys=True, indent=1) + "\n"
     return out
+
+
+# Имена ресурсов разницы машины — те же, что CarMapStyle.resource в приложении.
+CAR_FILES = (("map_car_light.json", "light", "A"), ("map_car_dark.json", "dark", "A"),
+             ("map_car_b_light.json", "light", "B"))
 
 
 def main(argv):

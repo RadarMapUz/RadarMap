@@ -1,0 +1,1737 @@
+{
+ "layers": {
+  "airport-label-major": {
+   "text-color": "#a9afb9",
+   "text-halo-color": "#141619"
+  },
+  "background": {
+   "background-color": "#141619"
+  },
+  "bridge-link": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    13,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    14.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "bridge-minor": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    14.5,
+    "#2b2f36",
+    15.5,
+    "#2b2f36"
+   ]
+  },
+  "bridge-motorway": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    13,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    14.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "bridge-motorway-link": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    13,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    14.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "bridge-secondary-tertiary": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    13,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    14.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "bridge-trunk-primary": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    13,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    14.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "building-3d": {
+   "fill-extrusion-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "coalesce",
+     [
+      "get",
+      "render_height"
+     ],
+     10
+    ],
+    35,
+    "#1f2228",
+    110,
+    "#34322f"
+   ]
+  },
+  "building-flat": {
+   "fill-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "coalesce",
+     [
+      "get",
+      "render_height"
+     ],
+     10
+    ],
+    35,
+    "#1f2228",
+    110,
+    "#34322f"
+   ]
+  },
+  "highway-link": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    13,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    14.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "highway-minor": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    14.5,
+    "#2b2f36",
+    15.5,
+    "#2b2f36"
+   ]
+  },
+  "highway-motorway": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    13,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    14.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "highway-motorway-link": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    13,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    14.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "highway-name-major": {
+   "text-color": "#bfc5ce",
+   "text-halo-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    14.5,
+    "#141619",
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "highway-name-minor": {
+   "text-color": "#bfc5ce",
+   "text-halo-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    14.5,
+    "#141619",
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "highway-name-path": {
+   "text-color": "#bfc5ce",
+   "text-halo-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    14.5,
+    "#141619",
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "highway-primary": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    13,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    14.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "highway-secondary-tertiary": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    13,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    14.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "highway-shield": {
+   "text-color": "#a9afb9",
+   "text-halo-color": "#141619"
+  },
+  "highway-shield-us-interstate": {
+   "text-color": "#a9afb9",
+   "text-halo-color": "#141619"
+  },
+  "highway-shield-us-other": {
+   "text-color": "#a9afb9",
+   "text-halo-color": "#141619"
+  },
+  "highway-trunk": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    13,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    14.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "housenumber": {
+   "text-halo-color": "#1f2228"
+  },
+  "landuse-railway": {
+   "fill-color": "#141619"
+  },
+  "landuse-residential": {
+   "fill-color": "#141619"
+  },
+  "place-city": {
+   "text-color": "#a9afb9",
+   "text-halo-color": "#141619"
+  },
+  "place-city-capital": {
+   "text-color": "#a9afb9",
+   "text-halo-color": "#141619"
+  },
+  "place-continent": {
+   "text-color": "#a9afb9",
+   "text-halo-color": "#141619"
+  },
+  "place-country-1": {
+   "text-color": "#a9afb9",
+   "text-halo-color": "#141619"
+  },
+  "place-country-2": {
+   "text-color": "#a9afb9",
+   "text-halo-color": "#141619"
+  },
+  "place-country-3": {
+   "text-color": "#a9afb9",
+   "text-halo-color": "#141619"
+  },
+  "place-country-other": {
+   "text-color": "#a9afb9",
+   "text-halo-color": "#141619"
+  },
+  "place-other": {
+   "text-color": "#a9afb9",
+   "text-halo-color": "#141619"
+  },
+  "place-state": {
+   "text-color": "#a9afb9",
+   "text-halo-color": "#141619"
+  },
+  "place-town": {
+   "text-color": "#a9afb9",
+   "text-halo-color": "#141619"
+  },
+  "place-village": {
+   "text-color": "#a9afb9",
+   "text-halo-color": "#141619"
+  },
+  "poi-level-1": {
+   "text-color": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    [
+     "restaurant",
+     "fast_food",
+     "cafe",
+     "bar",
+     "beer",
+     "ice_cream",
+     "bakery"
+    ],
+    "#f0a24f",
+    [
+     "shop",
+     "grocery",
+     "clothing_store",
+     "supermarket",
+     "department_store",
+     "mall",
+     "jewelry",
+     "electronics",
+     "furniture",
+     "hardware",
+     "mobile_phone",
+     "books",
+     "gift",
+     "alcohol_shop",
+     "convenience",
+     "shoe",
+     "florist",
+     "optician",
+     "cosmetics",
+     "bank",
+     "atm",
+     "car",
+     "car_repair",
+     "laundry",
+     "hairdresser",
+     "beauty"
+    ],
+    "#7aa5f2",
+    [
+     "hospital",
+     "pharmacy",
+     "doctors",
+     "dentist",
+     "clinic",
+     "veterinary"
+    ],
+    "#f08078",
+    [
+     "museum",
+     "theatre",
+     "cinema",
+     "art_gallery",
+     "arts_centre",
+     "library",
+     "attraction",
+     "monument",
+     "castle",
+     "college",
+     "school",
+     "university",
+     "kindergarten",
+     "place_of_worship"
+    ],
+    "#b694f0",
+    "#a9afb9"
+   ],
+   "text-halo-color": "#141619"
+  },
+  "poi-level-2": {
+   "text-color": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    [
+     "restaurant",
+     "fast_food",
+     "cafe",
+     "bar",
+     "beer",
+     "ice_cream",
+     "bakery"
+    ],
+    "#f0a24f",
+    [
+     "shop",
+     "grocery",
+     "clothing_store",
+     "supermarket",
+     "department_store",
+     "mall",
+     "jewelry",
+     "electronics",
+     "furniture",
+     "hardware",
+     "mobile_phone",
+     "books",
+     "gift",
+     "alcohol_shop",
+     "convenience",
+     "shoe",
+     "florist",
+     "optician",
+     "cosmetics",
+     "bank",
+     "atm",
+     "car",
+     "car_repair",
+     "laundry",
+     "hairdresser",
+     "beauty"
+    ],
+    "#7aa5f2",
+    [
+     "hospital",
+     "pharmacy",
+     "doctors",
+     "dentist",
+     "clinic",
+     "veterinary"
+    ],
+    "#f08078",
+    [
+     "museum",
+     "theatre",
+     "cinema",
+     "art_gallery",
+     "arts_centre",
+     "library",
+     "attraction",
+     "monument",
+     "castle",
+     "college",
+     "school",
+     "university",
+     "kindergarten",
+     "place_of_worship"
+    ],
+    "#b694f0",
+    "#a9afb9"
+   ],
+   "text-halo-color": "#141619"
+  },
+  "poi-level-3": {
+   "text-color": [
+    "match",
+    [
+     "get",
+     "class"
+    ],
+    [
+     "restaurant",
+     "fast_food",
+     "cafe",
+     "bar",
+     "beer",
+     "ice_cream",
+     "bakery"
+    ],
+    "#f0a24f",
+    [
+     "shop",
+     "grocery",
+     "clothing_store",
+     "supermarket",
+     "department_store",
+     "mall",
+     "jewelry",
+     "electronics",
+     "furniture",
+     "hardware",
+     "mobile_phone",
+     "books",
+     "gift",
+     "alcohol_shop",
+     "convenience",
+     "shoe",
+     "florist",
+     "optician",
+     "cosmetics",
+     "bank",
+     "atm",
+     "car",
+     "car_repair",
+     "laundry",
+     "hairdresser",
+     "beauty"
+    ],
+    "#7aa5f2",
+    [
+     "hospital",
+     "pharmacy",
+     "doctors",
+     "dentist",
+     "clinic",
+     "veterinary"
+    ],
+    "#f08078",
+    [
+     "museum",
+     "theatre",
+     "cinema",
+     "art_gallery",
+     "arts_centre",
+     "library",
+     "attraction",
+     "monument",
+     "castle",
+     "college",
+     "school",
+     "university",
+     "kindergarten",
+     "place_of_worship"
+    ],
+    "#b694f0",
+    "#a9afb9"
+   ],
+   "text-halo-color": "#141619"
+  },
+  "poi-railway": {
+   "text-color": "#a9afb9",
+   "text-halo-color": "#141619"
+  },
+  "radar-bridge": {
+   "line-color": [
+    "match",
+    [
+     "get",
+     "cls"
+    ],
+    [
+     1,
+     2
+    ],
+    "#504b43",
+    3,
+    "#383d46",
+    4,
+    "#33373f",
+    5,
+    "#30343b",
+    "#2b2f36"
+   ]
+  },
+  "radar-centre-dashed": {
+   "line-color": "#858b95"
+  },
+  "radar-centre-dashed-bridge": {
+   "line-color": "#858b95"
+  },
+  "radar-centre-solid": {
+   "line-color": "#858b95"
+  },
+  "radar-centre-solid-bridge": {
+   "line-color": "#858b95"
+  },
+  "radar-crossing": {
+   "line-color": "#858b95"
+  },
+  "radar-fillet": {
+   "fill-color": "#383d46"
+  },
+  "radar-junction": {
+   "fill-color": [
+    "case",
+    [
+     "has",
+     "cls"
+    ],
+    [
+     "match",
+     [
+      "get",
+      "cls"
+     ],
+     [
+      1,
+      2
+     ],
+     "#504b43",
+     3,
+     "#383d46",
+     4,
+     "#33373f",
+     5,
+     "#30343b",
+     "#2b2f36"
+    ],
+    "#383d46"
+   ]
+  },
+  "radar-markings": {
+   "line-color": "#858b95"
+  },
+  "radar-markings-bridge": {
+   "line-color": "#858b95"
+  },
+  "radar-markings-solid": {
+   "line-color": "#858b95"
+  },
+  "radar-markings-solid-bridge": {
+   "line-color": "#858b95"
+  },
+  "radar-median": {
+   "fill-color": "#383d46",
+   "fill-outline-color": "#858b95"
+  },
+  "radar-parking-stall": {
+   "line-color": "#858b95"
+  },
+  "radar-poi-fuel": {
+   "text-color": "#a9afb9",
+   "text-halo-color": "#141619"
+  },
+  "radar-roads": {
+   "line-color": [
+    "match",
+    [
+     "get",
+     "cls"
+    ],
+    [
+     1,
+     2
+    ],
+    "#504b43",
+    3,
+    "#383d46",
+    4,
+    "#33373f",
+    5,
+    "#30343b",
+    "#2b2f36"
+   ]
+  },
+  "radar-roads-case": {
+   "line-color": [
+    "case",
+    [
+     "<=",
+     [
+      "get",
+      "cls"
+     ],
+     2
+    ],
+    "#806d47",
+    [
+     "<=",
+     [
+      "get",
+      "cls"
+     ],
+     4
+    ],
+    "#575c66",
+    [
+     "<=",
+     [
+      "get",
+      "cls"
+     ],
+     5
+    ],
+    "#25282e",
+    "#1f2227"
+   ]
+  },
+  "radar-roads-stub": {
+   "line-color": [
+    "match",
+    [
+     "get",
+     "cls"
+    ],
+    [
+     1,
+     2
+    ],
+    "#504b43",
+    3,
+    "#383d46",
+    4,
+    "#33373f",
+    5,
+    "#30343b",
+    "#2b2f36"
+   ]
+  },
+  "radar-stop-line": {
+   "line-color": "#858b95"
+  },
+  "radar-trunk-glow": {
+   "line-opacity": 0
+  },
+  "radar-zebra": {
+   "line-color": "#858b95"
+  },
+  "tunnel-link": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    13,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    14.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "tunnel-minor": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    14.5,
+    "#2b2f36",
+    15.5,
+    "#2b2f36"
+   ]
+  },
+  "tunnel-motorway": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    13,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    14.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "tunnel-motorway-link": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    13,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    14.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "tunnel-secondary-tertiary": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    13,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    14.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "tunnel-service-track": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    14.5,
+    "#2b2f36",
+    15.5,
+    "#2b2f36"
+   ]
+  },
+  "tunnel-trunk-primary": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    13,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    14.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     "motorway",
+     "#6b717d",
+     "trunk",
+     "#636975",
+     "primary",
+     "#464b55",
+     "secondary",
+     "#3a3e47",
+     "#32363e"
+    ],
+    15.5,
+    [
+     "match",
+     [
+      "get",
+      "class"
+     ],
+     [
+      "motorway",
+      "trunk"
+     ],
+     "#504b43",
+     "primary",
+     "#383d46",
+     "secondary",
+     "#33373f",
+     "tertiary",
+     "#30343b",
+     "#2b2f36"
+    ]
+   ]
+  },
+  "water-name-lakeline": {
+   "text-halo-color": "#141619"
+  },
+  "water-name-ocean": {
+   "text-halo-color": "#141619"
+  },
+  "water-name-other": {
+   "text-halo-color": "#141619"
+  },
+  "waterway-name": {
+   "text-halo-color": "#141619"
+  }
+ }
+}

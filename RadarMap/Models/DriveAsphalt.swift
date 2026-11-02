@@ -18,6 +18,10 @@
 //  обзора и на земле (palette_check.measure_drive). Дневное синее тело на
 //  тёмном асфальте давало 1,8:1.
 //
+//  Экран машины и плитка панели кладут свою разницу того же вида —
+//  `map_car_<тема>.json` (CarMapStyle, 40J): кроме цветов в ней высота
+//  домов, сила свечения магистрали, земля и свет на объём.
+//
 //  Чистая логика — покрыто DriveAsphaltTests.
 //
 
@@ -46,10 +50,15 @@ nonisolated enum DriveAsphalt {
         daylight ? "map_drive_light" : "map_drive_dark"
     }
 
-    /// Ключ KVC слоя MapLibre для свойства цвета стиля. Только известные
+    /// Ключ KVC слоя MapLibre для свойства стиля. Только известные
     /// свойства: неизвестный ключ KVC уронил бы приложение исключением.
+    /// Цвета — у поездки и машины; земля, высота домов и прозрачность линии —
+    /// только у машины (map_car_*).
     static func key(for property: String) -> String? {
         switch property {
+        case "background-color":      return "backgroundColor"
+        case "fill-extrusion-height": return "fillExtrusionHeight"
+        case "line-opacity":          return "lineOpacity"
         case "line-color":           return "lineColor"
         case "fill-color":           return "fillColor"
         case "fill-outline-color":   return "fillOutlineColor"
@@ -76,6 +85,26 @@ nonisolated enum DriveAsphalt {
             }
         }
         return out
+    }
+
+    /// Сила света на объём из разницы («light»: {"intensity": …}); nil — свет
+    /// стиля как есть. Другие ключи света не поддержаны — ошибка файла.
+    static func lightIntensity(from data: Data) throws -> Double? {
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw Failure.notAnObject
+        }
+        guard let light = root["light"] else { return nil }
+        guard let props = light as? [String: Any] else { throw Failure.notAnObject }
+        for key in props.keys where key != "intensity" { throw Failure.unknownProperty("light." + key) }
+        return (props["intensity"] as? NSNumber)?.doubleValue
+    }
+
+    /// Голый цвет «#rrggbb» в разнице — число: строку движок принял бы
+    /// за строку, а не цвет, и упал бы на `mgl_color` (снимок 28.10).
+    /// Внутри выражений (match, step, interpolate) он разбирает строки сам.
+    static func colourHex(_ value: Any) -> UInt32? {
+        guard let text = value as? String, text.count == 7, text.hasPrefix("#") else { return nil }
+        return UInt32(text.dropFirst(), radix: 16)
     }
 
     /// Включён ли асфальт поездки: поездка и новая карта (у прежнего стиля

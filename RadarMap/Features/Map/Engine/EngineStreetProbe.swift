@@ -65,7 +65,7 @@ final class EngineStreetProbe {
         // через интервал и стоя: иначе первая пустая проба на стоянке
         // оставляла плашку пустой до первого сдвига машины.
         if raw == nil { lastPoint = nil }
-        send(raw.map { StreetName.display(StreetPill.cleanName($0), language: model.labelLanguage) }, report)
+        send(raw.map { StreetPill.label($0, language: model.labelLanguage, mapForm: model.carStyle != nil) }, report)
     }
 
     private func send(_ name: String?, _ report: (String?) -> Void) {

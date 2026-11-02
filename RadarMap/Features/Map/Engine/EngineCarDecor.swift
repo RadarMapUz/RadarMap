@@ -12,7 +12,9 @@
 //  стоят прямо. Знак перерисовывается картинкой только на смене цифр.
 //
 //  Буквы N/E/S/W — международные отметки сторон света, как у эталона
-//  владельца (Amap), а не слова интерфейса; поэтому без перевода.
+//  владельца (Amap), а не слова интерфейса; поэтому без перевода. В машине
+//  (40J, CarMapStyle) букв нет: 10 pt на её экране не читались, но вертелись
+//  в центре внимания, — север там синяя метка на кольце.
 //
 
 #if canImport(MapLibre)
@@ -33,30 +35,36 @@ final class EngineCarDecor {
 
     /// Расставить у машины. `point` — экранная точка значка «я».
     func layout(at point: CGPoint, coordinate: CLLocationCoordinate2D, mapDirection: Double,
-                pitchDegrees: Double, compass: Bool, limit: LimitAhead.Notice?, visible: Bool,
-                in view: MLNMapView) {
+                pitchDegrees: Double, compass: Bool, look: CompassRing.Look = .phone,
+                limit: LimitAhead.Notice?, visible: Bool, in view: MLNMapView) {
         layoutRing(at: point, mapDirection: mapDirection, pitchDegrees: pitchDegrees,
-                   shown: compass && visible, in: view)
+                   shown: compass && visible, look: look, in: view)
         layoutBadge(at: point, coordinate: coordinate, limit: visible ? limit : nil, in: view)
     }
 
     // MARK: - Компас
 
     private func layoutRing(at point: CGPoint, mapDirection: Double, pitchDegrees: Double,
-                            shown: Bool, in view: MLNMapView) {
+                            shown: Bool, look: CompassRing.Look, in view: MLNMapView) {
         // Видимость — только на смене: сеттер isHidden у UIView не бесплатен
         // (обход маскирующих видов), а зовётся это на каждом кадре камеры.
         guard shown else {
             if ring?.isHidden == false { ring?.isHidden = true }
             return
         }
-        let ring = self.ring ?? makeRing(in: view)
+        // Облик кольца у карты не меняется (телефон или машина) — смена
+        // облика означает новое кольцо, а не перестройку на кадре.
+        if let ring, ring.look != look {
+            ring.removeFromSuperview()
+            self.ring = nil
+        }
+        let ring = self.ring ?? makeRing(look: look, in: view)
         if ring.isHidden { ring.isHidden = false }
         ring.update(center: point, mapDirection: mapDirection, pitchDegrees: pitchDegrees)
     }
 
-    private func makeRing(in view: MLNMapView) -> CompassRingView {
-        let ring = CompassRingView()
+    private func makeRing(look: CompassRing.Look, in view: MLNMapView) -> CompassRingView {
+        let ring = CompassRingView(look: look)
         // Под значком «я» (engineCursorZPosition), над картой.
         ring.layer.zPosition = AppConfig.engineCursorZPosition - 20
         view.addSubview(ring)
@@ -152,10 +160,14 @@ final class CompassRingView: UIView {
     /// только со сменой наклона.
     private let pool = CAGradientLayer()
     private var labels: [UILabel] = []
+    /// Метка севера на кольце вместо букв (машина, 40J).
+    private let northMark = CAShapeLayer()
     private var shown: (center: CGPoint, direction: Double, pitch: Double)?
+    let look: CompassRing.Look
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
+    init(look: CompassRing.Look) {
+        self.look = look
+        super.init(frame: .zero)
         isUserInteractionEnabled = false
         isAccessibilityElement = false
         // Тёмная подложка кольца под светлой линией: кольцо видно и на светлой
@@ -170,19 +182,28 @@ final class CompassRingView: UIView {
         pool.startPoint = CGPoint(x: 0.5, y: 0.5)
         pool.endPoint = CGPoint(x: 1, y: 1)
         let tint = Theme.rgb(RouteColors.body.night)
-        pool.colors = [tint.withAlphaComponent(AppConfig.compassPoolAlpha).cgColor,
-                       tint.withAlphaComponent(AppConfig.compassPoolAlpha * 0.45).cgColor,
+        let poolAlpha = CGFloat(look.poolAlpha)
+        pool.colors = [tint.withAlphaComponent(poolAlpha).cgColor,
+                       tint.withAlphaComponent(poolAlpha * 0.45).cgColor,
                        tint.withAlphaComponent(0).cgColor]
         pool.locations = [0, 0.55, 1]
         layer.addSublayer(pool)
         layer.addSublayer(outline)
         layer.addSublayer(ellipse)
-        for mark in CompassRing.marks {
+        if !look.letters {
+            let side = AppConfig.compassNorthMarkPoints
+            northMark.path = UIBezierPath(ovalIn: CGRect(x: -side / 2, y: -side / 2, width: side, height: side)).cgPath
+            northMark.fillColor = Theme.rgb(CompassRing.northRGB).cgColor
+            northMark.strokeColor = UIColor(white: 0.1, alpha: 0.5).cgColor
+            northMark.lineWidth = 1
+            layer.addSublayer(northMark)
+        }
+        for mark in CompassRing.marks where look.letters {
             let label = UILabel()
             label.text = mark.letter
             label.font = .systemFont(ofSize: AppConfig.compassLetterSize, weight: .heavy)
             // Север — синим акцентом приложения (красный на этой карте — камера).
-            label.textColor = mark.isNorth ? Theme.rgb(0x6BA3FF) : .white
+            label.textColor = mark.isNorth ? Theme.rgb(CompassRing.northRGB) : .white
             label.shadowColor = UIColor(white: 0, alpha: 0.75)
             label.shadowOffset = CGSize(width: 0, height: 0.5)
             label.layer.shadowColor = UIColor.black.cgColor
@@ -233,6 +254,9 @@ final class CompassRingView: UIView {
         // и то же место.
         for index in labels.indices where index < geometry.letters.count {
             labels[index].layer.position = geometry.letters[index]
+        }
+        if !look.letters, let north = geometry.letters.first {
+            northMark.position = north
         }
         CATransaction.commit()
     }

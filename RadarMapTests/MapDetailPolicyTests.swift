@@ -244,6 +244,25 @@ final class MapDetailPolicyTests: XCTestCase {
                       "своих данных нет — значки тайлов, а не пустота")
     }
 
+    func testCarHidesPathsAlwaysAndOnewayOnTheMove() {
+        // 40J (D11–D12): переходы и дорожки в машине не мигают на светофорах,
+        // стрелки одностороннего — только стоя.
+        let moving = MapDetailLayers.carHidden(P.decide(car()))
+        let standing = MapDetailLayers.carHidden(P.decide(car(standing: true, route: false)))
+        XCTAssertTrue(moving.contains("radar-oneway"))
+        XCTAssertFalse(standing.contains("radar-oneway"))
+        for id in ["tunnel-path", "highway-path", "bridge-path"] {
+            XCTAssertTrue(moving.contains(id), id)
+            XCTAssertTrue(standing.contains(id), id)
+        }
+        XCTAssertTrue(Set(MapDetailLayers.carPaths).isSubset(of: Set(MapDetailLayers.decor)))
+        let untouchable = ["camera-icons", "camera-label", "route", "traffic", "road-events", "radar-camera-zone"]
+        for id in untouchable {
+            XCTAssertFalse(moving.contains(id), id)
+            XCTAssertFalse(MapDetailLayers.carManaged.contains(id), id)
+        }
+    }
+
     // MARK: - Значки
 
     private static let found = MapDetailPlaces.Found(

@@ -53,6 +53,29 @@ final class DriveAsphaltTests: XCTestCase {
         XCTAssertNil(DriveAsphalt.key(for: "visibility"))
     }
 
+    func testCarDifferenceKeys() {
+        // Разница машины (40J): земля, высота домов, сила свечения магистрали.
+        XCTAssertEqual(DriveAsphalt.key(for: "background-color"), "backgroundColor")
+        XCTAssertEqual(DriveAsphalt.key(for: "fill-extrusion-height"), "fillExtrusionHeight")
+        XCTAssertEqual(DriveAsphalt.key(for: "line-opacity"), "lineOpacity")
+        XCTAssertNil(DriveAsphalt.key(for: "text-size"), "кегль машины — EngineCarScale, не разница")
+    }
+
+    func testBareHexBecomesAColourOnly() {
+        XCTAssertEqual(DriveAsphalt.colourHex("#3f4859"), 0x3F4859)
+        XCTAssertNil(DriveAsphalt.colourHex("rgba(0,0,0,0.5)"))
+        XCTAssertNil(DriveAsphalt.colourHex(["step", ["zoom"], "#000000", 15, "#ffffff"]))
+        XCTAssertNil(DriveAsphalt.colourHex(0.5))
+    }
+
+    func testLightAcceptsOnlyIntensity() throws {
+        XCTAssertNil(try DriveAsphalt.lightIntensity(from: Data(##"{"layers": {}}"##.utf8)))
+        XCTAssertEqual(try DriveAsphalt.lightIntensity(from: Data(##"{"layers": {}, "light": {"intensity": 0.45}}"##.utf8)),
+                       0.45)
+        XCTAssertThrowsError(try DriveAsphalt.lightIntensity(
+            from: Data(##"{"layers": {}, "light": {"intensity": 0.4, "color": "#fff"}}"##.utf8)))
+    }
+
     func testRouteGoesNightOnlyInTheDriveMode() {
         XCTAssertTrue(DriveAsphalt.routeDaylight(daylight: true, active: false))
         XCTAssertFalse(DriveAsphalt.routeDaylight(daylight: true, active: true))

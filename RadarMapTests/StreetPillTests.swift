@@ -75,4 +75,18 @@ final class StreetPillTests: XCTestCase {
         XCTAssertEqual(hit?.bearing ?? -1, 0, accuracy: 0.5)
         XCTAssertNil(StreetPill.nearest([base], to: base))
     }
+
+    // MARK: - Подпись в машине (40J, D10)
+
+    func testCarPillUsesTheMapAbbreviation() {
+        // На карте — «ул. Фуркат», на плашке машины — то же сокращение.
+        XCTAssertEqual(StreetPill.label("Furqat ko'chasi (dublyor)", language: "ru", mapForm: true), "ул. Фуркат")
+        XCTAssertEqual(StreetPill.label("Amir Temur prospekti", language: "ru", mapForm: true), "просп. Амир Темур")
+        // Телефон — как был.
+        XCTAssertEqual(StreetPill.label("Furqat ko'chasi (dublyor)", language: "ru"), "улица Фуркат")
+        // Узбекская версия — имя не трогается.
+        XCTAssertEqual(StreetPill.label("Furqat ko'chasi", language: "uz", mapForm: true), "Furqat ko'chasi")
+        // Без узнанного типа — как есть.
+        XCTAssertEqual(StreetPill.label("Tashkent City", language: "ru", mapForm: true), "Tashkent City")
+    }
 }

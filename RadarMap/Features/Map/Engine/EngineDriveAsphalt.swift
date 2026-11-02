@@ -8,7 +8,8 @@
 //  правке и возвращаются как были. Тут же — тема линии маршрута: в поездке
 //  её постоянные слои (остаток линии, кайма, пройденное, середина, стрелки)
 //  берут ночной набор и днём (DriveAsphalt.routeDaylight); с 33H3 — и слой
-//  пробок на улицах.
+//  пробок на улицах. Экран машины и плитка (40J) кладут вместо разницы
+//  поездки разницу машины (CarMapStyle) — тем же путём.
 //
 //  Пишется только на смене режима или стиля — на тике ничего.
 //
@@ -21,68 +22,106 @@ import os
 @MainActor
 final class EngineDriveAsphalt {
 
-    /// Разобранные разницы по теме: файл читается один раз на процесс.
-    private static var cache: [Bool: [DriveAsphalt.Override]] = [:]
+    /// Разобранная разница: правки слоёв и свет на объём.
+    private struct Difference {
+        var overrides: [DriveAsphalt.Override] = []
+        var light: Double?
+    }
 
-    private var asphaltOn = false
+    /// Разобранные разницы по имени ресурса: файл читается один раз на процесс.
+    private static var cache: [String: Difference] = [:]
+
+    /// Какая разница лежит на стиле (nil — никакая).
+    private var appliedResource: String?
     /// Прежние выражения: слой, ключ KVC, значение.
     private var originals: [(layer: String, key: String, value: NSExpression?)] = []
-    /// Тема, в которой покрашены постоянные слои линии маршрута (nil — как в стиле).
-    private var routePainted: Bool?
+    /// Прежняя сила света на объём (nil — свет не трогали).
+    private var originalLight: NSExpression?
+    /// Как покрашены постоянные слои линии маршрута: тема и сила свечения
+    /// (nil — как в стиле).
+    private var routePainted: (daylight: Bool, glow: Double)?
 
     /// Новый стиль: в нём всё обычное, запомненное — от прежнего.
     func styleLoaded() {
-        asphaltOn = false
+        appliedResource = nil
         originals = []
+        originalLight = nil
         routePainted = nil
     }
 
-    func update(active: Bool, daylight: Bool, in style: MLNStyle) {
-        if active != asphaltOn {
-            asphaltOn = active
-            if active { apply(daylight: daylight, in: style) } else { restore(in: style) }
+    /// `car` — стиль машины (экран машины, плитка): своя разница вместо
+    /// разницы поездки, свои линия маршрута и подпись камеры. nil — телефон.
+    func update(active: Bool, daylight: Bool, car: CarMapStyle? = nil, in style: MLNStyle) {
+        let wanted = active ? (car?.resource(daylight: daylight) ?? DriveAsphalt.resource(daylight: daylight)) : nil
+        if wanted != appliedResource {
+            restore(in: style)
+            appliedResource = wanted
+            if let wanted { apply(resource: wanted, cameraLabel: car?.cameraLabel(daylight: daylight, active: active), in: style) }
         }
-        let routeDaylight = DriveAsphalt.routeDaylight(daylight: daylight, active: active)
+        let routeDaylight = car?.routeDaylight(daylight: daylight, active: active)
+            ?? DriveAsphalt.routeDaylight(daylight: daylight, active: active)
+        let glow = car?.glowOpacity(daylight: daylight)
+            ?? (routeDaylight ? RouteColors.glowOpacity.day : RouteColors.glowOpacity.night)
         // Стиль собран с линией темы дня; перекрашивать — только если нужна другая.
-        if routePainted ?? daylight != routeDaylight {
-            routePainted = routeDaylight
-            paintRoute(daylight: routeDaylight, in: style)
+        let painted = routePainted ?? (daylight, daylight ? RouteColors.glowOpacity.day : RouteColors.glowOpacity.night)
+        if painted.daylight != routeDaylight || painted.glow != glow {
+            routePainted = (routeDaylight, glow)
+            paintRoute(daylight: routeDaylight, glow: glow, in: style)
         }
     }
 
-    private static func overrides(daylight: Bool) -> [DriveAsphalt.Override] {
-        if let hit = cache[daylight] { return hit }
-        let name = DriveAsphalt.resource(daylight: daylight)
-        var parsed: [DriveAsphalt.Override] = []
+    private static func difference(_ name: String) -> Difference {
+        if let hit = cache[name] { return hit }
+        var parsed = Difference()
         if let url = Bundle.main.url(forResource: name, withExtension: "json")
             ?? Bundle.main.url(forResource: name, withExtension: "json", subdirectory: "MapStyle") {
             do {
-                parsed = try DriveAsphalt.overrides(from: Data(contentsOf: url))
+                let data = try Data(contentsOf: url)
+                parsed = Difference(overrides: try DriveAsphalt.overrides(from: data),
+                                    light: try DriveAsphalt.lightIntensity(from: data))
             } catch {
-                Log.app.error("асфальт поездки \(name, privacy: .public) не разобран: \(String(describing: error), privacy: .public)")
+                Log.app.error("разница стиля \(name, privacy: .public) не разобрана: \(String(describing: error), privacy: .public)")
             }
         } else {
-            Log.app.error("асфальта поездки \(name, privacy: .public) нет в бандле")
+            Log.app.error("разницы стиля \(name, privacy: .public) нет в бандле")
         }
-        cache[daylight] = parsed
+        cache[name] = parsed
         return parsed
     }
 
-    private func apply(daylight: Bool, in style: MLNStyle) {
+    private func apply(resource: String, cameraLabel: (text: UInt32, halo: UInt32)?, in style: MLNStyle) {
         originals = []
         let transition = NSValue(mlnTransition: MLNTransition(duration: AppConfig.driveAsphaltTransitionSeconds,
                                                               delay: 0))
-        for item in Self.overrides(daylight: daylight) {
+        let difference = Self.difference(resource)
+        var items = difference.overrides.map { ($0.layer, $0.key, Self.expression($0.value)) }
+        if let cameraLabel {
+            items.append(("camera-label", "textColor", NSExpression(forConstantValue: Theme.rgb(cameraLabel.text))))
+            items.append(("camera-label", "textHaloColor", NSExpression(forConstantValue: Theme.rgb(cameraLabel.halo))))
+        }
+        for (id, key, value) in items {
             // Слоя нет в стиле (выключены дома, места) — пропуск.
-            guard let layer = style.layer(withIdentifier: item.layer),
-                  layer.responds(to: NSSelectorFromString(item.key)) else { continue }
-            originals.append((item.layer, item.key, layer.value(forKey: item.key) as? NSExpression))
-            let transitionKey = item.key + "Transition"
+            guard let layer = style.layer(withIdentifier: id),
+                  layer.responds(to: NSSelectorFromString(key)) else { continue }
+            originals.append((id, key, layer.value(forKey: key) as? NSExpression))
+            let transitionKey = key + "Transition"
             if layer.responds(to: NSSelectorFromString(transitionKey)) {
                 layer.setValue(transition, forKey: transitionKey)
             }
-            layer.setValue(NSExpression(mglJSONObject: item.value), forKey: item.key)
+            layer.setValue(value, forKey: key)
         }
+        if let intensity = difference.light {
+            let light = style.light
+            originalLight = light.intensity
+            light.intensity = NSExpression(forConstantValue: intensity)
+            style.light = light
+        }
+    }
+
+    /// Выражение правки: голый «#rrggbb» — цветом (DriveAsphalt.colourHex).
+    private static func expression(_ value: Any) -> NSExpression {
+        if let hex = DriveAsphalt.colourHex(value) { return NSExpression(forConstantValue: Theme.rgb(hex)) }
+        return NSExpression(mglJSONObject: value)
     }
 
     private func restore(in style: MLNStyle) {
@@ -91,11 +130,17 @@ final class EngineDriveAsphalt {
             layer.setValue(item.value, forKey: item.key)
         }
         originals = []
+        if let originalLight {
+            let light = style.light
+            light.intensity = originalLight
+            style.light = light
+            self.originalLight = nil
+        }
     }
 
     /// Постоянные слои линии маршрута — цветами темы. Окно у машины
     /// (route-near-*) красит EngineRouteLine своей краской по той же теме.
-    private func paintRoute(daylight: Bool, in style: MLNStyle) {
+    private func paintRoute(daylight: Bool, glow glowOpacity: Double, in style: MLNStyle) {
         func colour(_ pair: RouteColors.Pair) -> NSExpression {
             NSExpression(forConstantValue: Theme.rgb(daylight ? pair.day : pair.night))
         }
@@ -116,7 +161,7 @@ final class EngineDriveAsphalt {
         // Свечение (29.F): цвет — тела, сила — по теме линии. Окно у машины
         // (route-near-glow) берёт цвет из своей краски, силу — отсюда.
         (style.layer(withIdentifier: "route-glow") as? MLNLineStyleLayer)?.lineColor = colour(RouteColors.body)
-        let glow = NSExpression(forConstantValue: daylight ? RouteColors.glowOpacity.day : RouteColors.glowOpacity.night)
+        let glow = NSExpression(forConstantValue: glowOpacity)
         for id in ["route-glow", EngineMapStyle.routeNearLayers.glow] {
             (style.layer(withIdentifier: id) as? MLNLineStyleLayer)?.lineOpacity = glow
         }

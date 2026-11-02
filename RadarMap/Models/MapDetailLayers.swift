@@ -44,6 +44,28 @@ nonisolated enum MapDetailLayers {
     /// трогает.
     static let managed: Set<String> = Set(decor + placeRows + houseNumbers + fuel + parkingAreas + parkingIcons)
 
+    /// Экран машины и плитка (40J, исследование 40F, D11–D12). Подземные
+    /// переходы и дорожки — и стоя: на каждом светофоре сиреневые полосы
+    /// поперёк проспекта появлялись и гасли при трогании.
+    static let carPaths = [
+        "tunnel-path-steps-casing", "tunnel-path-steps", "tunnel-path",
+        "bridge-path-shadow", "bridge-path-casing", "bridge-path-steps", "bridge-path",
+        "highway-path-steps-casing", "highway-path", "highway-path-steps",
+    ]
+    /// Стрелки одностороннего движения — только стоя: на ходу это мелкий
+    /// повторяющийся узор на дворах.
+    static let carMoving = ["radar-oneway"]
+    /// Слои, которыми распоряжается правило машины сверх `managed`.
+    static let carManaged: Set<String> = Set(carMoving)
+
+    /// Что ещё спрятать на экране машины. Камер, маршрута, пробок и событий
+    /// дороги здесь нет, как и во всём решении.
+    static func carHidden(_ d: MapDetailPolicy.Decision) -> Set<String> {
+        var out = Set(carPaths)
+        if !d.decor { out.formUnion(carMoving) }
+        return out
+    }
+
     /// Спрятать.
     static func hidden(_ d: MapDetailPolicy.Decision, destinationParkingsKnown: Bool = true) -> Set<String> {
         managed.subtracting(shown(d, destinationParkingsKnown: destinationParkingsKnown))

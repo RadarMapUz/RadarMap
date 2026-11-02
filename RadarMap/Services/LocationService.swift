@@ -305,6 +305,45 @@ final class LocationService: NSObject {
     /// об этой деградации интерфейс обязан говорить, а не догадываться.
     var isAlwaysAuthorized: Bool { authorizationStatus == .authorizedAlways }
 
+    /// Окно повышения до «Всегда» уже запрашивали: iOS показывает его один
+    /// раз, дальше кнопка ведёт в Настройки (LocationAccessStep). Наблюдаемое:
+    /// отказ в окне статус не меняет, а подсказка под кнопкой появиться должна.
+    private(set) var alwaysAccessAsked = Storage.bool(.alwaysAccessAsked) {
+        didSet { Storage.set(alwaysAccessAsked, for: .alwaysAccessAsked) }
+    }
+
+    /// Что сейчас сделает кнопка доступа к геопозиции.
+    var accessStep: LocationAccessStep {
+        LocationAccessStep.next(status: authorizationStatus, alwaysAsked: alwaysAccessAsked)
+    }
+
+    /// Шаг к «Всегда» по кнопке (онбординг, баннер на карте). Окна iOS
+    /// больше не будет — открываем Настройки приложения.
+    func takeAccessStep() {
+        switch accessStep {
+        case .askWhenInUse: bootstrap()   // спросит «При использовании», как и раньше
+        case .askAlways: requestAlwaysAccess()
+        case .openSettings:
+            guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+            UIApplication.shared.open(url)
+        case .done: break
+        }
+    }
+
+    /// Единственное место, где просим «Всегда»: запрос помечается, чтобы
+    /// следующее касание вело в Настройки, а не в пустоту.
+    func requestAlwaysAccess() {
+        #if DEBUG
+        // Скриншот-автоматизация: симулятор показывает диалог апгрейда «Всегда»
+        // на каждом запуске и перекрывает экран — в тестовых прогонах не просим.
+        if ProcessInfo.processInfo.arguments.contains("-skipAlwaysPrompt") { return }
+        #endif
+        // Без лишней записи: каждая будит наблюдателей, а зовут нас и на
+        // каждом запуске с «При использовании».
+        if !alwaysAccessAsked { alwaysAccessAsked = true }
+        manager.requestAlwaysAuthorization()
+    }
+
     init(repository: CameraRepository, notifier: NotificationService,
          settings: AppSettings, alerts: AlertPlayer, trip: TripStats) {
         self.repository = repository
@@ -368,15 +407,7 @@ final class LocationService: NSObject {
         case .notDetermined:
             manager.requestWhenInUseAuthorization()
         case .authorizedWhenInUse:
-            #if DEBUG
-            // Скриншот-автоматизация: симулятор показывает диалог апгрейда «Всегда»
-            // на каждом запуске и перекрывает экран — в тестовых прогонах не просим.
-            if !ProcessInfo.processInfo.arguments.contains("-skipAlwaysPrompt") {
-                manager.requestAlwaysAuthorization()
-            }
-            #else
-            manager.requestAlwaysAuthorization()
-            #endif
+            requestAlwaysAccess()
             startBackgroundMonitoring()
         case .authorizedAlways:
             startBackgroundMonitoring()

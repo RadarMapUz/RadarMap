@@ -199,8 +199,12 @@ extension MapScreen {
             return (String(localized: "Геолокация выключена. Включите «Всегда» для оповещений о камерах."),
                     String(localized: "Настройки"), openSettings)
         case .authorizedWhenInUse:
-            return (String(localized: "Для фоновых оповещений выберите доступ «Всегда»."),
-                    String(localized: "Настройки"), openSettings)
+            // Через потерю, а не выгоду (40D). «До поездки» — правда: поездка,
+            // начатая на экране, звучит и в фоне (S2), молчит свёрнутое заранее.
+            // Кнопка — тот же шаг, что в онбординге: окно iOS, пока его ещё
+            // покажут, потом Настройки.
+            return (String(localized: "Свернёте до поездки — о камерах промолчу. Нужен доступ «Всегда»."),
+                    String(localized: "Включить"), { env.location.takeAccessStep() })
         default:
             break
         }

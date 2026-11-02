@@ -2556,18 +2556,18 @@
         }
       }
     },
-    "3 600+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном.": {
+    "%@+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "3 600+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном."
+            "value": "%@+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Oʻzbekistonning 3 600+ kamera va radarlari rasmiy maʼlumotlardan. Ovoz — kameradan 22 soniya oldin, tezlikni hisobga olib; yigʻilgan ilova va oʻchgan ekranda ham ishlaydi."
+            "value": "Oʻzbekistonning %@+ kamera va radarlari rasmiy maʼlumotlardan. Ovoz — kameradan 22 soniya oldin, tezlikni hisobga olib; yigʻilgan ilova va oʻchgan ekranda ham ishlaydi."
           }
         }
       }
@@ -5792,18 +5792,34 @@
         }
       }
     },
-    "Для фоновых оповещений выберите доступ «Всегда».": {
+    "Свернёте до поездки — о камерах промолчу. Нужен доступ «Всегда».": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Для фоновых оповещений выберите доступ «Всегда»."
+            "value": "Свернёте до поездки — о камерах промолчу. Нужен доступ «Всегда»."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fonda ogohlantirishlar uchun «Doim» ruxsatini tanlang."
+            "value": "Safardan oldin yigʻsangiz — kameralar haqida jim qolaman. «Doim» kerak."
+          }
+        }
+      }
+    },
+    "Настройки → Геопозиция → Всегда": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Настройки → Геопозиция → Всегда"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sozlamalar → Joylashuv → «Всегда»"
           }
         }
       }
@@ -13646,18 +13662,18 @@
         }
       }
     },
-    "Предупреждаем о камерах, даже когда телефон в кармане, а приложение свёрнуто.": {
+    "Голос о камере — и с погашенным экраном, и поверх Яндекса.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Предупреждаем о камерах, даже когда телефон в кармане, а приложение свёрнуто."
+            "value": "Голос о камере — и с погашенным экраном, и поверх Яндекса."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Telefon choʻntakda, ilova yigʻilgan boʻlsa ham kameralar haqida ogohlantiramiz."
+            "value": "Kamera haqida ovoz — ekran oʻchiq boʻlsa ham, Yandex ustida ham."
           }
         }
       }
@@ -25447,18 +25463,18 @@
         }
       }
     },
-    "Без него iOS не даёт предупреждать о камерах, когда приложение свёрнуто или экран погашен, и поездка не начинается сама. Фоновая геопозиция обрабатывается только на телефоне.": {
+    "Без него поездка не начнётся сама, пока приложение свёрнуто, и о камерах оно промолчит. Поездка, начатая на экране, звучит и в фоне. Положение обрабатывается на телефоне, кроме обезличенных отрезков пути для пробок — их можно выключить: Настройки → Конфиденциальность → «Помогать с пробками».": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Без него iOS не даёт предупреждать о камерах, когда приложение свёрнуто или экран погашен, и поездка не начинается сама. Фоновая геопозиция обрабатывается только на телефоне."
+            "value": "Без него поездка не начнётся сама, пока приложение свёрнуто, и о камерах оно промолчит. Поездка, начатая на экране, звучит и в фоне. Положение обрабатывается на телефоне, кроме обезличенных отрезков пути для пробок — их можно выключить: Настройки → Конфиденциальность → «Помогать с пробками»."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Usiz iOS ilova yigʻilgan yoki ekran oʻchiq boʻlganda kameralar haqida ogohlantirishga ruxsat bermaydi va safar oʻzi boshlanmaydi. Fondagi joylashuv faqat telefonda qayta ishlanadi."
+            "value": "Usiz ilova yigʻilgan paytda safar oʻzi boshlanmaydi va kameralar haqida ovoz chiqmaydi. Ekranda boshlangan safar fonda ham ovoz beradi. Joylashuv telefonda qayta ishlanadi, faqat tirbandlik uchun shaxssiz yoʻl boʻlaklari yuboriladi — ularni oʻchirish mumkin: Sozlamalar → Maxfiylik → «Tirbandlikni hisoblashga yordam berish»."
           }
         }
       }

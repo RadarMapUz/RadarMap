@@ -470,14 +470,7 @@ extension LocationService {
         hasFullAccuracy = manager.accuracyAuthorization == .fullAccuracy
         switch status {
         case .authorizedWhenInUse:
-            #if DEBUG
-            // См. bootstrap(): в скриншот-прогонах симулятора диалог не показываем.
-            if !ProcessInfo.processInfo.arguments.contains("-skipAlwaysPrompt") {
-                manager.requestAlwaysAuthorization()
-            }
-            #else
-            manager.requestAlwaysAuthorization()
-            #endif
+            requestAlwaysAccess()
             startBackgroundMonitoring()
             applyLocationMode()
         case .authorizedAlways:

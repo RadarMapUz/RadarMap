@@ -129,10 +129,19 @@ nonisolated enum CameraOverrideEngine {
     /// сотни камер разом, гораздо вероятнее является опечаткой в SQL, чем
     /// решением модератора. Такому файлу мы не верим целиком: лучше остаться
     /// на устаревшей базе, чем поехать без половины предупреждений.
+    ///
+    /// Переносы считаются в ту же долю, что и скрытия: камера, уехавшая на
+    /// параллельную улицу, молчит на своём месте так же, как скрытая. Сверх
+    /// того у переносов свой, меньший предел. Считаются строки файла, а не
+    /// применённые правки: отвергнуть файл целиком — это остаться на базе,
+    /// то есть предупреждать больше, а не меньше.
     static func isSane(_ overrides: CameraOverrides, baseCount: Int) -> Bool {
         guard baseCount > 0 else { return false }
         let hides = overrides.items.count { $0.op == .hide }
-        return Double(hides) <= Double(baseCount) * AppConfig.overrideMaxHiddenShare
+        let moves = overrides.items.count { $0.op == .move }
+        let base = Double(baseCount)
+        return Double(hides + moves) <= base * AppConfig.overrideMaxHiddenShare
+            && Double(moves) <= base * AppConfig.overrideMaxMovedShare
     }
 
     private static func isPlausibleMove(from camera: Camera,

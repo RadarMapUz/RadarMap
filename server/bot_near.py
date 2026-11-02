@@ -82,6 +82,9 @@ PULT_RECHECK = 300.0
 #: uzLonRange; тест сверяет). Файл, скрывающий больше этой доли базы, —
 #: вероятнее опечатка в SQL, чем решение: не верим ему целиком.
 OVERRIDE_MAX_HIDDEN_SHARE = 0.05
+#: Переносы — в той же доле, что скрытия, и сверх того не больше этой
+#: (AppConfig.overrideMaxMovedShare): перенесённая камера молчит на своём месте.
+OVERRIDE_MAX_MOVED_SHARE = 0.03
 #: Поправка снапа — десятки метров; дальше — перепутанная камера или запятая.
 OVERRIDE_MAX_MOVE_METERS = 500.0
 UZ_LAT_RANGE = (37.0, 46.0)
@@ -252,12 +255,15 @@ def parse_overrides(payload):
 
 
 def overrides_sane(items, base_count):
-    """CameraOverrideEngine.isSane: скрытий не больше доли базы. Предохранитель
-    от опечатки в админке, не от злоумышленника (от него — подпись)."""
+    """CameraOverrideEngine.isSane: скрытий и переносов вместе не больше доли
+    базы, переносов — не больше своей. Предохранитель от опечатки в админке и
+    от подмены экспорта, который владелец подписал не глядя."""
     if base_count <= 0:
         return False
     hides = sum(1 for item in items if item["op"] == "hide")
-    return hides <= base_count * OVERRIDE_MAX_HIDDEN_SHARE
+    moves = sum(1 for item in items if item["op"] == "move")
+    return hides + moves <= base_count * OVERRIDE_MAX_HIDDEN_SHARE \
+        and moves <= base_count * OVERRIDE_MAX_MOVED_SHARE
 
 
 def _plausible_move(camera, lat, lon):

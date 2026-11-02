@@ -118,13 +118,50 @@ final class CameraOverrideTests: XCTestCase {
         XCTAssertTrue(CameraOverrideEngine.isSane(reasonable, baseCount: base.count))
     }
 
-    func testSanityCheckCountsOnlyHides() {
-        let base = (1...100).map { camera(id: $0) }
-        // Сдвиги и смены типа камеру не гасят — их количество не ограничиваем.
-        let manyMoves = overrides((1...60).map {
+    func testMassMoveIsRefusedWholesale() {
+        let base = (1...1000).map { camera(id: $0) }
+        // Сто переносов на соседнюю улицу — сто камер, молчащих на своих местах.
+        let manyMoves = overrides((1...100).map {
             .init(id: $0, op: .move, lat: 41.3101, lon: 69.2501)
         })
-        XCTAssertTrue(CameraOverrideEngine.isSane(manyMoves, baseCount: base.count))
+        XCTAssertFalse(CameraOverrideEngine.isSane(manyMoves, baseCount: base.count),
+                       "массовый перенос гасит камеры так же, как скрытие")
+        let result = CameraOverrideEngine.apply(manyMoves, to: base)
+        XCTAssertEqual(result.moved, 100, "предохранитель — в isSane, а не в apply: файл отвергается до применения")
+
+        let fewMoves = overrides((1...30).map {
+            .init(id: $0, op: .move, lat: 41.3101, lon: 69.2501)
+        })
+        XCTAssertTrue(CameraOverrideEngine.isSane(fewMoves, baseCount: base.count))
+    }
+
+    func testMovesHaveTheirOwnLimitBelowTheShare() {
+        let base = (1...1000).map { camera(id: $0) }
+        // 40 переносов — меньше общей доли (50), но больше предела переносов (30).
+        let moves = overrides((1...40).map {
+            .init(id: $0, op: .move, lat: 41.3101, lon: 69.2501)
+        })
+        XCTAssertFalse(CameraOverrideEngine.isSane(moves, baseCount: base.count))
+    }
+
+    func testHidesAndMovesShareOneLimit() {
+        let base = (1...1000).map { camera(id: $0) }
+        // По отдельности каждое в норме, вместе — 60 молчащих камер из 1000 (> 5 %).
+        let items: [CameraOverride] = (1...30).map { .init(id: $0, op: .hide) }
+            + (31...60).map { .init(id: $0, op: .move, lat: 41.3101, lon: 69.2501) }
+        XCTAssertFalse(CameraOverrideEngine.isSane(overrides(items), baseCount: base.count))
+
+        let within: [CameraOverride] = (1...25).map { .init(id: $0, op: .hide) }
+            + (26...50).map { .init(id: $0, op: .move, lat: 41.3101, lon: 69.2501) }
+        XCTAssertTrue(CameraOverrideEngine.isSane(overrides(within), baseCount: base.count))
+    }
+
+    func testRetypesDoNotCountTowardTheSilenceLimit() {
+        let base = (1...100).map { camera(id: $0) }
+        // Смена типа камеру не гасит: оповещение остаётся (молчит только у тех,
+        // кто сам отфильтровал этот тип в настройках).
+        let retypes = overrides((1...60).map { .init(id: $0, op: .retype, type: "Стационар радар") })
+        XCTAssertTrue(CameraOverrideEngine.isSane(retypes, baseCount: base.count))
     }
 
     func testEmptyBaseIsNeverSane() {

@@ -14,9 +14,12 @@ Payload правок собирает панель на VPS (`admin.py --export`
 локально после прошлой выкладки и/или скачанная с сервера. Неподписанной не
 верим — разница считается от пустого файла, то есть показывается всё.
 
+Подписывается не то, что прислал сервер, а пересборка разобранного
+(`--canonical`): показанное человеку и подписанное — одни и те же байты.
+
 Запуск:
   python3 overrides_diff.py --new payload.json --cameras cameras.json \\
-      [--prev envelope.json ...]
+      [--prev envelope.json ...] [--expect-version N] [--canonical out.json]
 Код 0 — можно подписывать (после «да» человека), 1 — нельзя.
 """
 import argparse
@@ -28,12 +31,75 @@ import bot_near
 OP_TITLES = {"hide": "скрыта", "move": "перенесена", "retype": "тип сменён"}
 
 
+#: Целые на телефоне — Int (64 бита): больше — JSONDecoder не разберёт файл.
+INT64 = 2 ** 63
+
+
+def _unique(pairs):
+    # Python берёт ПОСЛЕДНИЙ из повторённых ключей, JSONDecoder телефона —
+    # ПЕРВЫЙ: `{"items": [скрытия], "items": []}` показал бы человеку пустую
+    # разницу, а телефон применил бы скрытия. Повтор — не по контракту.
+    keys = [key for key, _ in pairs]
+    if len(keys) != len(set(keys)):
+        raise ValueError("повтор ключа")
+    return dict(pairs)
+
+
+def _finite(text):
+    value = float(text)
+    if value != value or value in (float("inf"), float("-inf")):
+        raise ValueError("число вне double")
+    return value
+
+
+def _no_constant(name):
+    raise ValueError(f"{name} — не JSON для телефона")
+
+
+def strict_loads(raw):
+    """JSON так, как его прочтёт телефон, или ValueError: без повторов ключей
+    на любом уровне, без NaN/Infinity и чисел, которые double не вмещает."""
+    return json.loads(raw, object_pairs_hook=_unique, parse_float=_finite,
+                      parse_constant=_no_constant)
+
+
 def parse_payload(raw):
-    """(version, items) или None — файл не по контракту приложения."""
-    items = bot_near.parse_overrides(raw)
+    """(version, items, updatedAt) или None — файл не по контракту приложения."""
+    try:
+        data = strict_loads(raw)
+    except (ValueError, UnicodeDecodeError):
+        return None
+    items = bot_near.parse_overrides(json.dumps(data))
     if items is None:
         return None
-    return json.loads(raw)["version"], items
+    if not -INT64 <= data["version"] < INT64 or any(not -INT64 <= item["id"] < INT64 for item in items):
+        return None
+    updated = data.get("updatedAt")
+    if updated is not None and not isinstance(updated, str):
+        return None
+    # Только поля, которые читает телефон: чего нет в CameraOverride, того
+    # нет ни в разнице, ни в подписи.
+    items = [{key: item[key] for key in ("id", "op", "lat", "lon", "type") if item.get(key) is not None}
+             for item in items]
+    return data["version"], items, updated
+
+
+def canonical(version, items, updated=None):
+    """Байты, которые подписываются: пересборка ровно того, что разобрано и
+    показано человеку, а не байты с сервера (в них могло быть что-то, что
+    телефон прочтёт иначе). Только поля CameraOverrides."""
+    rows = []
+    for item in items:
+        row = {"id": item["id"], "op": item["op"]}
+        for key in ("lat", "lon", "type"):
+            if item.get(key) is not None:
+                row[key] = item[key]
+        rows.append(row)
+    data = {"version": version}
+    if updated is not None:
+        data["updatedAt"] = updated
+    data["items"] = rows
+    return json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
 def verified_previous(envelopes, verify=None):
@@ -63,7 +129,7 @@ def verified_previous(envelopes, verify=None):
             notes.append(f"{name}: подписан, но не по контракту — не учитываю")
             continue
         if best is None or parsed[0] > best[0]:
-            best = parsed
+            best = parsed[:2]
     if best is None:
         notes.append("прошлой подписанной публикации нет — показываю все правки как новые")
         return 0, [], notes
@@ -182,14 +248,22 @@ def main(argv=None):
     parser.add_argument("--new", required=True, help="payload, собранный панелью")
     parser.add_argument("--cameras", required=True, help="локальная база (RadarMap/Resources/cameras.json)")
     parser.add_argument("--prev", action="append", default=[], help="подписанный конверт прошлой публикации")
+    parser.add_argument("--expect-version", type=int, help="версия, которую назвал человек")
+    parser.add_argument("--canonical", help="куда записать байты для подписи")
     args = parser.parse_args(argv)
 
     with open(args.new, "rb") as handle:
         parsed = parse_payload(handle.read())
     if parsed is None:
-        print("payload не по контракту приложения — не подписываю")
+        print("payload не по контракту приложения (повтор ключа, NaN, число вне Int64…) — не подписываю")
         return 1
-    version, items = parsed
+    version, items, updated = parsed
+    if args.expect_version is not None and version != args.expect_version:
+        # Вопрос «Подписать vN?» должен быть про то, что подписывается: v2^62
+        # с сервера подняла бы храповик телефонов, и следующую честную
+        # выкладку они отвергли бы как откат.
+        print(f"✗ в файле версия {version}, а публикуется v{args.expect_version} — не подписываю")
+        return 1
     envelopes = []
     for path in args.prev:
         try:
@@ -208,7 +282,12 @@ def main(argv=None):
     found = problems(version, items, prev_version, cameras)
     for problem in found:
         print(f"✗ {problem}")
-    return 1 if found else 0
+    if found:
+        return 1
+    if args.canonical:
+        with open(args.canonical, "wb") as handle:
+            handle.write(canonical(version, items, updated))
+    return 0
 
 
 if __name__ == "__main__":

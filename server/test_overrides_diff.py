@@ -107,6 +107,40 @@ class PreviousTest(unittest.TestCase):
         self.assertTrue(any("не читается" in n for n in notes))
 
 
+#: Тот же образец лежит в CameraOverrideTests.testCanonicalPublishedPayloadDecodes:
+#: телефон обязан разобрать ровно эти байты.
+CANONICAL_SAMPLE = ('{"version":3,"updatedAt":"2026-11-03","items":[{"id":1,"op":"hide"},'
+                    '{"id":2,"op":"move","lat":41.3001,"lon":69.2},'
+                    '{"id":3,"op":"retype","type":"Стационар радар"}]}')
+
+
+class StrictParseTest(unittest.TestCase):
+
+    def test_duplicate_keys_at_any_level_are_refused(self):
+        for raw in ('{"version":1,"version":2,"items":[]}',
+                    '{"version":1,"items":[{"id":1,"op":"hide","id":2}]}',
+                    '{"version":1,"items":[],"items":[{"id":1,"op":"hide"}]}'):
+            self.assertIsNone(od.parse_payload(raw), raw)
+
+    def test_numbers_the_phone_cannot_read_are_refused(self):
+        for raw in ('{"version":1,"items":[{"id":1,"op":"move","lat":NaN,"lon":69.2}]}',
+                    '{"version":1,"items":[{"id":1,"op":"move","lat":1e400,"lon":69.2}]}',
+                    '{"version":%d,"items":[]}' % 2 ** 63,
+                    '{"version":1,"items":[{"id":%d,"op":"hide"}]}' % 2 ** 70,
+                    '{"version":1,"updatedAt":5,"items":[]}'):
+            self.assertIsNone(od.parse_payload(raw), raw)
+
+    def test_canonical_bytes_are_what_was_shown(self):
+        # Лишние поля и пробелы сервера в подпись не попадают — только поля,
+        # которые читает телефон, в одном виде.
+        raw = ('{ "version": 3, "updatedAt": "2026-11-03", "extra": {"x": 1}, "items": ['
+               '{"id": 1, "op": "hide", "note": "?"}, {"id": 2, "op": "move", "lat": 41.3001, "lon": 69.2},'
+               ' {"id": 3, "op": "retype", "type": "Стационар радар"}]}')
+        version, items, updated = od.parse_payload(raw)
+        self.assertEqual(od.canonical(version, items, updated).decode("utf-8"), CANONICAL_SAMPLE)
+        self.assertEqual(od.parse_payload(CANONICAL_SAMPLE)[1], items, "пересборка читается так же")
+
+
 class CliTest(unittest.TestCase):
 
     def test_exit_code_follows_problems(self):
@@ -124,6 +158,24 @@ class CliTest(unittest.TestCase):
             with open(new, "w") as handle:
                 handle.write('{"version": 1, "items": [{"id": 1, "op": "delete"}]}')
             self.assertEqual(od.main(["--new", new, "--cameras", cams]), 1, "не по контракту")
+
+    def test_version_must_match_the_one_asked_and_canonical_is_written_only_when_clean(self):
+        with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()):
+            cams = os.path.join(tmp, "cameras.json")
+            with open(cams, "w", encoding="utf-8") as handle:
+                json.dump(list(CAMERAS.values()), handle, ensure_ascii=False)
+            new, out = os.path.join(tmp, "new.payload"), os.path.join(tmp, "signed.payload")
+            with open(new, "w") as handle:
+                json.dump({"version": 4611686018427387904, "items": [{"id": 1, "op": "hide"}]}, handle)
+            self.assertEqual(od.main(["--new", new, "--cameras", cams, "--expect-version", "5",
+                                      "--canonical", out]), 1, "сервер подменил версию")
+            self.assertFalse(os.path.exists(out), "отказ — подписывать нечего")
+            with open(new, "w") as handle:
+                json.dump({"version": 5, "items": [{"id": 1, "op": "hide"}]}, handle)
+            self.assertEqual(od.main(["--new", new, "--cameras", cams, "--expect-version", "5",
+                                      "--canonical", out]), 0)
+            with open(out, encoding="utf-8") as handle:
+                self.assertEqual(handle.read(), '{"version":5,"items":[{"id":1,"op":"hide"}]}')
 
 
 if __name__ == "__main__":

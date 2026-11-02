@@ -164,6 +164,22 @@ final class CameraOverrideTests: XCTestCase {
         XCTAssertTrue(CameraOverrideEngine.isSane(retypes, baseCount: base.count))
     }
 
+    func testCanonicalPublishedPayloadDecodes() throws {
+        // Ровно эти байты пишет overrides_diff.canonical (CANONICAL_SAMPLE в
+        // server/test_overrides_diff.py) — их подписывает publish_overrides.sh.
+        let sample = #"{"version":3,"updatedAt":"2026-11-03","items":[{"id":1,"op":"hide"},"#
+            + #"{"id":2,"op":"move","lat":41.3001,"lon":69.2},"#
+            + #"{"id":3,"op":"retype","type":"Стационар радар"}]}"#
+        let decoded = try JSONDecoder().decode(CameraOverrides.self, from: Data(sample.utf8))
+        XCTAssertEqual(decoded.version, 3)
+        XCTAssertEqual(decoded.updatedAt, "2026-11-03")
+        XCTAssertEqual(decoded.items, [
+            CameraOverride(id: 1, op: .hide),
+            CameraOverride(id: 2, op: .move, lat: 41.3001, lon: 69.2),
+            CameraOverride(id: 3, op: .retype, type: "Стационар радар"),
+        ])
+    }
+
     func testEmptyBaseIsNeverSane() {
         XCTAssertFalse(CameraOverrideEngine.isSane(overrides([.init(id: 1, op: .hide)]),
                                                    baseCount: 0),

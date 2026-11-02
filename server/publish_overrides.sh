@@ -52,7 +52,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 echo "→ Забираю решения с сервера…"
-ssh "$HOST" "python3 $ADMIN --export $VERSION" > "$WORK/overrides.payload"
+ssh "$HOST" "python3 $ADMIN --export $VERSION" > "$WORK/overrides.raw"
 
 # Проверка ДО подписи. Подписанный мусор доехал бы до всех телефонов и был
 # молча отброшен ими — то есть решения модератора не применились бы, а понять
@@ -63,8 +63,12 @@ PREV_ARGS=()
 if scp -q "$HOST:$WEBROOT/overrides.json" "$WORK/published.json" 2>/dev/null; then
     PREV_ARGS+=(--prev "$WORK/published.json")
 fi
-python3 "$HERE/overrides_diff.py" --new "$WORK/overrides.payload" \
-    --cameras "$CAMERAS" "${PREV_ARGS[@]+"${PREV_ARGS[@]}"}" \
+# Подписываются не байты с сервера, а пересборка того, что показано выше
+# (--canonical): повтор ключа в JSON Python и телефон читают по-разному, и
+# показанное не совпало бы с применённым.
+python3 "$HERE/overrides_diff.py" --new "$WORK/overrides.raw" \
+    --cameras "$CAMERAS" --expect-version "$VERSION" --canonical "$WORK/overrides.payload" \
+    "${PREV_ARGS[@]+"${PREV_ARGS[@]}"}" \
     || { echo "не подписываю: исправьте решения в панели"; exit 1; }
 
 if [ "$DRY_RUN" = "0" ] && [ "$ASSUME_YES" = "0" ]; then

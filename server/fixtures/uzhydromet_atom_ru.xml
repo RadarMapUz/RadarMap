@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <title>МетеоПредупреждения</title>
+  <link rel="alternate" href="https://meteoalert.meteoinfo.ru/uzbekistan/cap-feed/ru/atom.xml" />
+  <author>
+    <name>Узгидромет</name>
+    <email>uzhymet@meteo.uz</email>
+  </author>
+  <subtitle>Гидрометеорологические предупреждения</subtitle>
+  <id>https://meteoalert.meteoinfo.ru/uzbekistan/cap-feed/ru/atom.xml</id>
+  <rights>public domain</rights>
+  <updated>2026-11-02T17:36:01Z</updated>
+  <dc:date>2026-11-02T17:36:01Z</dc:date>
+  <dc:rights>public domain</dc:rights>
+  <entry>
+    <title>Дождь</title>
+    <link rel="alternate" href="https://meteoalert.meteoinfo.ru/uzbekistan/cap-feed/ru/20261102065218-0034885.xml" />
+    <link rel="related" type="application/cap+xml" href="https://meteoalert.meteoinfo.ru/uzbekistan/cap-feed/ru/20261102065218-0034885.xml" />
+    <author>
+      <name>Узгидромет</name>
+      <email>uzhymet@meteo.uz</email>
+    </author>
+    <id>https://meteoalert.meteoinfo.ru/uzbekistan/cap-feed/ru/20261102065218-0034885.xml</id>
+    <updated>2026-11-02T17:36:01Z</updated>
+    <published>2026-11-02T17:36:01Z</published>
+    <summary type="text">Наманганская область: Дождь (уровень опасности 1 из 3)</summary>
+    <dc:date>2026-11-02T17:36:01Z</dc:date>
+  </entry>
+  <entry>
+    <title>Дождь</title>
+    <link rel="alternate" href="https://meteoalert.meteoinfo.ru/uzbekistan/cap-feed/ru/20261102065441-0034887.xml" />
+    <link rel="related" type="application/cap+xml" href="https://meteoalert.meteoinfo.ru/uzbekistan/cap-feed/ru/20261102065441-0034887.xml" />
+    <author>
+      <name>Узгидромет</name>
+      <email>uzhymet@meteo.uz</email>
+    </author>
+    <id>https://meteoalert.meteoinfo.ru/uzbekistan/cap-feed/ru/20261102065441-0034887.xml</id>
+    <updated>2026-11-02T17:36:01Z</updated>
+    <published>2026-11-02T17:36:01Z</published>
+    <summary type="text">Республика Каракалпакстан: Дождь (уровень опасности 1 из 3)</summary>
+    <dc:date>2026-11-02T17:36:01Z</dc:date>
+  </entry>
+</feed>

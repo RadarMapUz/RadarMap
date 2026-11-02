@@ -88,6 +88,19 @@ TRAFFIC_DB_PATH = "/opt/radarmap/api/traffic.db"
 # на соединение плюс медленный клиент — и память кончается раньше, чем сработают
 # капы. Сверх потолка отвечаем 503: честный отказ лучше молчаливой очереди.
 MAX_WORKERS = 64
+# Очередь listen() на 8091. У socketserver по умолчанию 5 (видно в `ss -ltn`
+# на VPS 02.11.2026): шестой одновременный connect от nginx, пока главный поток
+# занят accept'ом предыдущих, ядро отбрасывает молча, и nginx повторяет SYN
+# через 1 с, потом через 3 с — секунды задержки при ответе api за 2 мс.
+# Ядро урезает значение до net.core.somaxconn (4096 на Ubuntu 22.04).
+LISTEN_BACKLOG = 128
+# Запрос дольше — строка в журнал: путь без запроса и без токенов, время по
+# частям (очередь потока, чтение запроса, база, commit), код ответа. Без IP и
+# без тел: журнал не должен стать вторым хранилищем адресов.
+SLOW_REQUEST_MS = 500
+# HSTS — только когда nginx подтвердил TLS (X-Forwarded-Proto: https). Без
+# includeSubDomains: домен soulmed.uz — чужой проект, его поддомены не наши.
+HSTS_VALUE = "max-age=31536000"
 BUSY_TIMEOUT_MS = 5000
 TTL = 3 * 3600
 EXTEND = 30 * 60
@@ -362,6 +375,49 @@ RETENTION_DAYS = {
     "traffic_seen": None,            # отпечаток куска, 30 мин
 }
 
+_request_stats = threading.local()
+
+
+def _stats_reset(queued=0.0):
+    _request_stats.db = 0.0
+    _request_stats.commit = 0.0
+    _request_stats.queued = queued
+
+
+def _stats_add(field, seconds):
+    if hasattr(_request_stats, field):
+        setattr(_request_stats, field, getattr(_request_stats, field) + seconds)
+
+
+class TimedConnection(sqlite3.Connection):
+    """Соединение, которое считает время в базе для журнала медленных
+    запросов. commit отдельно: там ожидание блокировки записи (busy_timeout)
+    и сброс WAL — то, что отличает «база занята» от «база медленная»."""
+
+    def execute(self, *args, **kwargs):
+        started = time.monotonic()
+        try:
+            return super().execute(*args, **kwargs)
+        finally:
+            _stats_add("db", time.monotonic() - started)
+
+    def executemany(self, *args, **kwargs):
+        started = time.monotonic()
+        try:
+            return super().executemany(*args, **kwargs)
+        finally:
+            _stats_add("db", time.monotonic() - started)
+
+    def commit(self):
+        started = time.monotonic()
+        try:
+            return super().commit()
+        finally:
+            spent = time.monotonic() - started
+            _stats_add("db", spent)
+            _stats_add("commit", spent)
+
+
 def db():
     """Соединение для обработки одного запроса.
 
@@ -373,7 +429,8 @@ def db():
     busy_timeout обязателен: без него параллельный POST во время чтения
     /api/mobile отдаёт «database is locked» мгновенным 500 вместо ожидания.
     """
-    conn = sqlite3.connect(DB_PATH, timeout=BUSY_TIMEOUT_MS / 1000)
+    conn = sqlite3.connect(DB_PATH, timeout=BUSY_TIMEOUT_MS / 1000,
+                           factory=TimedConnection)
     conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
     # NORMAL в паре с WAL: fsync на каждый коммит нам не нужен — потеря
     # последних отметок при отключении питания дешевле, чем запись в темпе диска.
@@ -600,7 +657,8 @@ UZ_LON = (55.8, 73.3)
 
 
 def traffic_db():
-    conn = sqlite3.connect(TRAFFIC_DB_PATH, timeout=BUSY_TIMEOUT_MS / 1000)
+    conn = sqlite3.connect(TRAFFIC_DB_PATH, timeout=BUSY_TIMEOUT_MS / 1000,
+                           factory=TimedConnection)
     conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
     conn.execute("PRAGMA synchronous = NORMAL")
     return conn
@@ -743,6 +801,65 @@ _mobile_cache = None          # (version, built_at, etag, body)
 _road_cache = None            # то же для GET /api/road
 _mobile_version = 0
 MOBILE_MEMO_SECONDS = 1.0
+
+_maintenance_thread = None
+
+
+def maintenance(now, purge=True, sweep=False):
+    """Чистка погасших отметок и сирот-голосов (purge) и проход сроков
+    хранения с чисткой family.db (sweep). Раньше шла прямо в обработчике GET
+    /api/mobile|road: commit ждал блокировку записи до busy_timeout (5 с),
+    family.db — ещё до 2 с, и телефон ждал вместе с ними, хотя список, который
+    он получает, от чистки не зависит (удаляется только то, что погасло
+    сутки назад). Никогда не бросает."""
+    try:
+        conn = db()
+        try:
+            if purge:
+                conn.execute("DELETE FROM reports WHERE expires < ?", (now - EXPIRED_KEEP,))
+                # голоса удалённых отметок — сироты, без чистки таблица растёт вечно
+                conn.execute("DELETE FROM votes WHERE report_id NOT IN (SELECT id FROM reports)")
+                conn.commit()
+                bump_mobile_version()
+            if sweep:
+                # Сбой прохода не должен стоить ничего, кроме строки в журнале:
+                # следующая попытка — через час.
+                try:
+                    enforce_retention(conn, now)
+                except sqlite3.Error as error:
+                    sys.stderr.write(f"сроки хранения: проход не удался — {error}\n")
+        finally:
+            conn.close()
+        if sweep:
+            # Подписки близких (family.db) — свой файл и своя чистка; её же
+            # ведёт поток очереди бота, здесь — на случай, если бот стоит.
+            family_notify.sweep_file(now)
+    except sqlite3.Error as error:
+        sys.stderr.write(f"чистка отметок: не удалась — {error}\n")
+
+
+def start_maintenance(now, purge, sweep):
+    """maintenance() в своём потоке: ответ телефону её не ждёт. Прошлая ещё
+    идёт — вторую не начинаем, следующая попытка — по своему сроку."""
+    global _maintenance_thread, _last_retention
+    with _cleanup_lock:
+        if _maintenance_thread is not None and _maintenance_thread.is_alive():
+            if sweep:
+                _last_retention = 0.0   # проход сроков не теряем на час
+            return None
+        thread = threading.Thread(target=maintenance, args=(now, purge, sweep),
+                                  name="maintenance", daemon=True)
+        _maintenance_thread = thread
+    thread.start()
+    return thread
+
+
+def wait_maintenance(timeout=10):
+    """Для тестов и остановки: дождаться начатой чистки."""
+    thread = _maintenance_thread
+    if thread is not None:
+        thread.join(timeout)
+
 
 def bump_mobile_version():
     """Список отметок изменился — мемо ответа больше не действительно."""
@@ -1355,12 +1472,83 @@ def eta_icon_png(size=180):
     return _eta_icon
 
 
+# Пути, которые попадают в журнал медленных запросов как есть. В пути ссылки
+# прибытия — токен (/api/eta/<токен>) или адрес семейной ссылки, их журнал
+# не видит; чужие пути (сканеры) — одной меткой, не текстом клиента.
+LOGGED_PATHS = {"/api/health", "/api/mobile", "/api/road", "/api/cng", "/api/report",
+                "/api/report/cancel", "/api/vote", "/api/camera_report", "/api/feedback",
+                "/api/metrics", "/api/stat", "/api/traffic", "/api/eta", "/api/mine",
+                "/api/eta/icon.png"}
+
+
+def log_path(raw):
+    path = (raw or "").split("?", 1)[0].rstrip("/")
+    if path in LOGGED_PATHS:
+        return path
+    if path.startswith("/api/eta/f/"):
+        return "/api/eta/f/…"
+    if path.startswith("/api/eta/"):
+        return "/api/eta/…"
+    return "(другой путь)"
+
+
+def slow_request_line(method, raw_path, total, queued=0.0, reading=0.0, db=0.0, commit=0.0,
+                      status=None):
+    """Строка журнала медленного запроса. Секунды на входе, мс в строке."""
+    ms = lambda seconds: int(round(seconds * 1000))   # noqa: E731
+    method = method if method in ("GET", "POST", "HEAD") else "?"
+    return (f"медленный запрос: {method} {log_path(raw_path)} {ms(total + queued)} мс "
+            f"(ожидание потока {ms(queued)}, чтение запроса {ms(reading)}, база {ms(db)}, "
+            f"из них commit {ms(commit)}; ответ {status if status is not None else '—'})")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "RadarMapAPI/1.3"
     timeout = 10  # slow-POST не должен держать поток вечно
 
     def log_message(self, fmt, *args):
         pass  # keep journald quiet; errors surface via exceptions
+
+    def end_headers(self):
+        headers = getattr(self, "headers", None)   # нет до разбора запроса (400)
+        if headers is not None and (headers.get("X-Forwarded-Proto") or "").lower() == "https":
+            self.send_header("Strict-Transport-Security", HSTS_VALUE)
+        super().end_headers()
+
+    def send_response(self, code, message=None):
+        self._status = code
+        super().send_response(code, message)
+
+    def parse_request(self):
+        parsed = super().parse_request()
+        self._parsed_at = time.monotonic()
+        return parsed
+
+    def handle_one_request(self):
+        started = time.monotonic()
+        self._parsed_at = None
+        self._status = None
+        if not hasattr(_request_stats, "queued"):
+            _stats_reset()
+        try:
+            super().handle_one_request()
+        finally:
+            self._log_if_slow(started)
+            _stats_reset()
+
+    def _log_if_slow(self, started):
+        if self._parsed_at is None:
+            return      # запроса не было: клиент закрыл соединение или таймаут
+        total = time.monotonic() - started
+        queued = getattr(_request_stats, "queued", 0.0)
+        if (total + queued) * 1000 < SLOW_REQUEST_MS:
+            return
+        sys.stderr.write(slow_request_line(
+            self.command, self.path, total, queued=queued,
+            reading=self._parsed_at - started,
+            db=getattr(_request_stats, "db", 0.0),
+            commit=getattr(_request_stats, "commit", 0.0),
+            status=self._status) + "\n")
 
     def _json(self, code, payload):
         body = json.dumps(payload).encode()
@@ -1461,34 +1649,20 @@ class Handler(BaseHTTPRequestHandler):
         if (cached and cached[0] == version
                 and now - cached[1] < MOBILE_MEMO_SECONDS):
             return self._json_cached(cached[3], cached[2])
+        # Чистку не гоняем на каждый GET: это два DELETE и commit в файле,
+        # куда параллельно пишет /api/report, — при 10 r/s с IP чтение
+        # превращалось в постоянную запись. Раз в минуту хватает.
+        with _cleanup_lock:
+            due = now - _last_cleanup >= 60
+            if due:
+                _last_cleanup = now
+            sweep = now - _last_retention >= RETENTION_SWEEP_SECONDS
+            if sweep:
+                _last_retention = now
+        if due or sweep:
+            start_maintenance(now, due, sweep)
         conn = db()
         try:
-            # Чистку не гоняем на каждый GET: это два DELETE и commit в
-            # файле, куда параллельно пишет /api/report, — при 10 r/s с IP
-            # чтение превращалось в постоянную запись. Раз в минуту хватает.
-            with _cleanup_lock:
-                due = now - _last_cleanup >= 60
-                if due:
-                    _last_cleanup = now
-                sweep = now - _last_retention >= RETENTION_SWEEP_SECONDS
-                if sweep:
-                    _last_retention = now
-            if due:
-                conn.execute("DELETE FROM reports WHERE expires < ?", (now - EXPIRED_KEEP,))
-                # голоса удалённых отметок — сироты, без чистки таблица растёт вечно
-                conn.execute("DELETE FROM votes WHERE report_id NOT IN (SELECT id FROM reports)")
-                conn.commit()
-                bump_mobile_version()
-            if sweep:
-                # Сбой прохода не должен стоить телефонам списка отметок:
-                # пишем в журнал, следующая попытка — через час.
-                try:
-                    enforce_retention(conn, now)
-                except sqlite3.Error as error:
-                    sys.stderr.write(f"сроки хранения: проход не удался — {error}\n")
-                # Подписки близких (family.db) — свой файл и своя чистка; её же
-                # ведёт поток очереди бота, здесь — на случай, если бот стоит.
-                family_notify.sweep_file(now)
             # confirmed — по разным устройству И адресу (см.
             # confirmed_independently): клиент рисует неподтверждённые
             # полупрозрачными и говорит «возможно, радар», а не «радар».
@@ -2341,9 +2515,12 @@ class BoundedHTTPServer(ThreadingHTTPServer):
     повторит позже, лучше очереди, которую никто не разгребёт.
     """
     daemon_threads = True
+    request_queue_size = LISTEN_BACKLOG
 
     def __init__(self, *args, max_workers=MAX_WORKERS, **kwargs):
         self._slots = threading.BoundedSemaphore(max_workers)
+        self._accepted = {}
+        self._accepted_lock = threading.Lock()
         super().__init__(*args, **kwargs)
 
     def process_request(self, request, client_address):
@@ -2355,15 +2532,25 @@ class BoundedHTTPServer(ThreadingHTTPServer):
                 pass  # клиент уже отвалился — отвечать некому
             self.shutdown_request(request)
             return
+        with self._accepted_lock:
+            self._accepted[id(request)] = time.monotonic()
         try:
             super().process_request(request, client_address)
         except BaseException:
+            with self._accepted_lock:
+                self._accepted.pop(id(request), None)
             # поток не стартовал (например, кончились потоки ОС) — слот вернуть,
             # иначе сервер медленно «зарастает» и перестаёт принимать вообще
             self._slots.release()
             raise
 
     def process_request_thread(self, request, client_address):
+        # Ожидание потока — от accept до старта обработчика: так в журнале
+        # медленных запросов видно, что время ушло до api.py (поток не
+        # стартовал: процесс в свопе, нет памяти), а не в нём.
+        with self._accepted_lock:
+            accepted = self._accepted.pop(id(request), None)
+        _stats_reset(time.monotonic() - accepted if accepted is not None else 0.0)
         try:
             super().process_request_thread(request, client_address)
         finally:

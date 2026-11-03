@@ -60,7 +60,7 @@ Guideline 2.3.7.
 ### ru (≈2 780 символов)
 
 ```
-RadarMap — карта камер видеофиксации Узбекистана и голосовой помощник водителя. Все 3 400+ стационарных камер и радаров из открытых данных МВД (портал data.egov.uz) хранятся в телефоне, поэтому предупреждения работают и без интернета.
+RadarMap — карта камер видеофиксации Узбекистана и голосовой помощник водителя. 3 600+ стационарных камер и радаров из открытых данных МВД (портал data.egov.uz) хранятся в телефоне, поэтому предупреждения работают и без интернета.
 
 ПРЕДУПРЕЖДАЕТ ВОВРЕМЯ
 • Расстояние считается от вашей скорости: на трассе предупреждение приходит раньше, в городе — короче и спокойнее.
@@ -109,7 +109,7 @@ RadarMap помогает соблюдать ограничения скорос
 ### en (≈2 580 символов)
 
 ```
-RadarMap is a speed-camera map and voice assistant for drivers in Uzbekistan. All 3,400+ fixed cameras and radars from the Ministry of Internal Affairs open dataset (data.egov.uz) are stored on your phone, so alerts keep working without internet.
+RadarMap is a speed-camera map and voice assistant for drivers in Uzbekistan. 3,600+ fixed cameras and radars from the Ministry of Internal Affairs open dataset (data.egov.uz) are stored on your phone, so alerts keep working without internet.
 
 ALERTS IN TIME
 • The warning distance follows your speed: earlier on the highway, short and calm in the city.
@@ -158,7 +158,7 @@ RadarMap helps you keep to speed limits; always follow traffic rules and road si
 ### uz — латиница (сайт, Telegram; ≈3 115 символов)
 
 ```
-RadarMap — Oʻzbekiston videokuzatuv kameralari xaritasi va haydovchining ovozli yordamchisi. IIV ochiq maʼlumotlaridagi (data.egov.uz portali) 3 400 dan ortiq statsionar kamera va radar telefonda saqlanadi, shuning uchun ogohlantirishlar internetsiz ham ishlaydi.
+RadarMap — Oʻzbekiston videokuzatuv kameralari xaritasi va haydovchining ovozli yordamchisi. IIV ochiq maʼlumotlaridagi (data.egov.uz portali) 3 600 dan ortiq statsionar kamera va radar telefonda saqlanadi, shuning uchun ogohlantirishlar internetsiz ham ishlaydi.
 
 OʻZ VAQTIDA OGOHLANTIRADI
 • Masofa tezligingizga qarab hisoblanadi: trassada ogohlantirish oldinroq, shaharda qisqaroq va xotirjamroq keladi.

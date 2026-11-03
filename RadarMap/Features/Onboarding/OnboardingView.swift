@@ -103,8 +103,12 @@ struct OnboardingView: View {
     // MARK: - Страницы
 
     private var roadPage: some View {
-        scenePage(title: "Предупредит о камере заранее",
-                  subtitle: "3 600+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном.") {
+        // Цифра — из AppConfig (её сторожит тест по встроенной базе), а не
+        // из текста: на витрине уже висело отставшее «3 400+».
+        let count = Formatting.unbreakable(AppConfig.cameraCountClaim.formatted(
+            .number.grouping(.automatic).locale(NumberFormat.locale)))
+        return scenePage(title: "Предупредит о камере заранее",
+                  subtitle: "\(count)+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном.") {
             OnboardingRoadScene()
         } rows: {
             row("car.fill", "Сели за руль — поездка началась сама")
@@ -146,12 +150,15 @@ struct OnboardingView: View {
                     .padding(.bottom, 20)
 
                 VStack(spacing: 12) {
+                    // Кнопка не бывает мёртвой (40D): окно «Всегда» iOS
+                    // показывает один раз, дальше — Настройки и путь в них.
                     permissionRow(
                         icon: "location.fill",
                         title: "Геолокация «Всегда»",
-                        subtitle: "Предупреждаем о камерах, даже когда телефон в кармане, а приложение свёрнуто.",
+                        subtitle: "Голос о камере — и с погашенным экраном, и поверх Яндекса.",
+                        footnote: accessHint,
                         state: locationState,
-                        action: { env.location.bootstrap() }
+                        action: { env.location.takeAccessStep() }
                     )
                     permissionRow(
                         icon: "bell.badge.fill",
@@ -275,6 +282,15 @@ struct OnboardingView: View {
         default: return .pending
         }
     }
+    /// Что выбрать в Настройках. Открывается сразу страница приложения, и
+    /// слова там — системные iOS (по-узбекски их не бывает).
+    private var accessHint: LocalizedStringKey? {
+        switch env.location.accessStep.hint {
+        case .pickAlways: return "Геопозиция → Всегда"
+        case .deviceLimited: return "Геолокация ограничена в настройках устройства"
+        case nil: return nil
+        }
+    }
     private var notificationsState: PermState {
         env.notifications.authorizationStatus == .authorized ? .granted : .pending
     }
@@ -282,12 +298,21 @@ struct OnboardingView: View {
     /// Крупный шрифт — кнопка под текстом: в строку на SE она сжимала
     /// заголовок до «Уведомлен-ия» и сама рвалась на «Разреши-ть» (12в F1).
     private func permissionRow(icon: String, title: LocalizedStringKey, subtitle: LocalizedStringKey,
+                               footnote: LocalizedStringKey? = nil,
                                state: PermState, action: @escaping () -> Void) -> some View {
         let texts = VStack(alignment: .leading, spacing: 2) {
             Text(title).font(.rounded(15, .semibold)).foregroundStyle(Theme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
             Text(subtitle).font(.rounded(12)).foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
+            // Что выбрать в Настройках: открываем их мы, выбирает человек.
+            if let footnote {
+                Label(footnote, systemImage: "gearshape.fill")
+                    .font(.rounded(12, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
+            }
         }
         return Group {
             // Кнопка — под текстом на крупном шрифте и на узком экране, пока

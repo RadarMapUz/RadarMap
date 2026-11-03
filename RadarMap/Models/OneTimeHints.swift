@@ -2,8 +2,8 @@
 //  OneTimeHints.swift
 //  RadarMap
 //
-//  Жесты главного экрана, о которых можно не узнать никогда: тап по HUD —
-//  быстрые переключатели, жёлтая кнопка — отметить радар.
+//  Жесты главного экрана, о которых можно не узнать никогда: жёлтая кнопка —
+//  отметить радар, тап по HUD — быстрые переключатели.
 //  Туториал-простыня — худший способ это рассказать: её пролистывают.
 //
 //  Подсказки про спидометр здесь нет: сначала он переехал в нижний бар
@@ -21,11 +21,12 @@ import Foundation
 
 nonisolated enum OneTimeHints {
 
-    /// Порядок объявления = порядок показа: сперва переключатели, потом
-    /// радар — он и так требует поездки.
+    /// Порядок объявления = порядок показа. Радар первым (40D): подсказка за
+    /// запуск одна, и переключатели, показанные до поездки, уносили с собой
+    /// подсказку про жёлтую кнопку на следующий запуск — а она уже на экране.
     enum Hint: CaseIterable, Equatable {
-        case toggles
         case radar
+        case toggles
         /// Появляется, только когда первая камера уже стала «своей»: объяснять
         /// тишину заранее нечего, а вот когда голос впервые пропал — нужно.
         case smartSilence
@@ -52,16 +53,27 @@ nonisolated enum OneTimeHints {
 
     /// Какую подсказку показать сейчас. `radarVisible` — жёлтая кнопка на
     /// экране (режим карты её прячет вне поездки): подсказывать про кнопку,
-    /// которой не видно, значит путать, а не помогать. `hasFamiliarCameras` —
-    /// то же правило для умной тишины: пока своих камер нет, объяснять нечего.
-    static func next(shown: Set<Hint>, radarVisible: Bool,
+    /// которой не видно, значит путать, а не помогать. `hasDriven` — поездки
+    /// уже были: до первой переключатели ждут, чтобы запуск первой поездки
+    /// достался «Радар!». `hasFamiliarCameras` — то же правило для умной
+    /// тишины: пока своих камер нет, объяснять нечего.
+    static func next(shown: Set<Hint>, radarVisible: Bool, hasDriven: Bool = true,
                      hasFamiliarCameras: Bool = false, offersCarOnly: Bool = false) -> Hint? {
         for hint in Hint.allCases where !shown.contains(hint) {
             if hint == .radar, !radarVisible { continue }
+            if hint == .toggles, !hasDriven, !shown.contains(.radar) { continue }
             if hint == .smartSilence, !hasFamiliarCameras { continue }
             if hint == .carOnlyOffer, !offersCarOnly { continue }
             return hint
         }
         return nil
+    }
+
+    /// Подпись «Радар!» под жёлтой кнопкой: до первой отметки (40D), но не
+    /// дольше `radarCaptionMaxTrips` поездок — большинство не отмечает
+    /// никогда, а навсегда слово только теснит значок. Ветеран с поездками
+    /// за порогом подписи не видит, даже если его отметки старше 90 дней.
+    static func showsRadarCaption(hasReported: Bool, trips: Int) -> Bool {
+        !hasReported && trips < AppConfig.radarCaptionMaxTrips
     }
 }

@@ -55,6 +55,8 @@ enum Storage {
         case hintRadarShown         // разовая подсказка «жёлтая кнопка — радар» показана
         case hintSilenceShown       // разовая подсказка «знакомые камеры не называю вслух» показана
         case hintCarOnlyShown       // разовая подсказка «поездка только в машине — Настройки» показана (26.2)
+        case alwaysAccessAsked      // окно повышения до «Всегда» уже запрашивали (LocationAccessStep, 40D)
+        case radarReportedOnce      // первая отметка «Радар!» ушла — подпись под кнопкой больше не нужна (40D)
         case offlineOfferAnswered   // на предложение «скачать карту области» ответили (любой ответ)
         case mergeSuggestDismissedID // id поездки, для которой «Объединить?» отклонили
         case pendingReports         // отметки, ждущие связи (ReportQueue)

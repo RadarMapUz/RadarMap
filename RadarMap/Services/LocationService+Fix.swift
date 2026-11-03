@@ -467,17 +467,12 @@ extension LocationService {
 
     func handleAuthChange(_ status: CLAuthorizationStatus) {
         authorizationStatus = status
+        // Доступ есть — значит, и Службы геолокации включены.
+        if status != .denied, status != .restricted, !locationServicesOn { locationServicesOn = true }
         hasFullAccuracy = manager.accuracyAuthorization == .fullAccuracy
         switch status {
         case .authorizedWhenInUse:
-            #if DEBUG
-            // См. bootstrap(): в скриншот-прогонах симулятора диалог не показываем.
-            if !ProcessInfo.processInfo.arguments.contains("-skipAlwaysPrompt") {
-                manager.requestAlwaysAuthorization()
-            }
-            #else
-            manager.requestAlwaysAuthorization()
-            #endif
+            requestAlwaysAccess()
             startBackgroundMonitoring()
             applyLocationMode()
         case .authorizedAlways:
@@ -497,6 +492,10 @@ extension LocationService {
             refreshDrivingFlag()
             clearNearest()
             if isTripActive { Log.location.notice("доступ к геопозиции отозван посреди поездки") }
+            Task { [weak self] in
+                let on = await LocationService.servicesEnabled()
+                if self?.locationServicesOn != on { self?.locationServicesOn = on }
+            }
         default:
             break
         }

@@ -246,6 +246,31 @@ class AliasTests(Base):
         street = next(iter(addresses.values()))["streets"][0]
         self.assertEqual(street["o"], ["улица Энгельса"])
 
+    def test_district_without_a_place_record_becomes_one(self):
+        rows = [{"kind": "district", "name_now": "Yashnobod tumani", "name_old": "Хамзинский район",
+                 "lat": 41.30, "lon": 69.33},
+                {"kind": "district", "name_now": "Yashnobod tumani", "name_old": "Hamza tumani",
+                 "lat": 41.30, "lon": 69.33}]
+        venues = {}
+        applied, missed = N.apply_aliases({}, venues, rows)
+        self.assertEqual((applied, missed), (2, []))
+        records = [r for c in venues.values() for r in c["venues"]]
+        self.assertEqual(records, [[N.VENUE_PLACE, "Yashnobod tumani", 4130000, 6933000, [],
+                                    ["Хамзинский район", "Hamza tumani"]]], "одна запись на район")
+        self.assertEqual(N.apply_aliases({}, {}, [dict(rows[0], lat=None, lon=None)])[0], 0,
+                         "без точки место не заводим")
+
+    def test_scout_file_format_with_extra_columns(self):
+        path = os.path.join(self.work, "aliases_x.tsv")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("# шапка\nkind\tname_now\tname_old\tlang\tosm_id\tlat\tlon\tsource\tsource_date\t"
+                         "renamed\tcity\twikidata\n"
+                         "metro\tOlmazor\tСабира Рахимова\tru\tnode/1777845992\t41.256672\t69.196105\t"
+                         "ruwiki\t2026-11-03\t2010-11-05\tТашкент\tQ4333950\n")
+        rows = N.read_aliases(path)
+        self.assertEqual(rows[0]["name_old"], "Сабира Рахимова")
+        self.assertEqual(rows[0]["wikidata"], "Q4333950")
+
     def test_alias_paths_default_to_poi_folder(self):
         self.assertEqual(build_roads.alias_paths(["x.tsv"]), ["x.tsv"])
         for path in build_roads.alias_paths([]):

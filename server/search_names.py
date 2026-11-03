@@ -297,7 +297,7 @@ def _set_names(street, alts, olds):
 ALIAS_COLUMNS = ("kind", "name_now", "name_old", "lang", "osm_id", "lat", "lon",
                  "source", "source_date")
 METRO_ALIAS_KINDS = {"metro", "subway", "station", "metro_station"}
-PLACE_ALIAS_KINDS = {"place", "district", "neighbourhood", "mahalla", "suburb", "city"}
+PLACE_ALIAS_KINDS = {"place", "district", "neighbourhood", "mahalla", "suburb", "city", "quarter"}
 # Насколько далеко от точки реестра может стоять запись, к которой клеим имя.
 ALIAS_STREET_METERS = 2000.0
 ALIAS_VENUE_METERS = 800.0
@@ -384,6 +384,14 @@ def apply_aliases(addresses, venues, rows, degrees=0.5, scale=1e5):
                             default=math.inf) > ALIAS_STREET_METERS:
                         continue
                     hit |= _add_old_street(street, row["name_old"])
+        if not hit and kind in PLACE_ALIAS_KINDS and lat is not None and lon is not None:
+            # Района города (туман) среди мест нет: в OSM это граница, а не
+            # place=*. Реестр знает его точку — заводим место сами, иначе
+            # «Хамзинский район» так и не найдёт «Яшнабадский».
+            payload = venues.setdefault(_cell(lat, lon, degrees), {"version": 1, "venues": []})
+            record = [VENUE_PLACE, row["name_now"], round(lat * scale), round(lon * scale)]
+            payload["venues"].append(record)
+            hit = _add_old_venue(record, row["name_old"])
         if hit:
             applied += 1
         else:

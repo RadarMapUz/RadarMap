@@ -260,6 +260,31 @@ class AliasTests(Base):
         self.assertEqual(N.apply_aliases({}, {}, [dict(rows[0], lat=None, lon=None)])[0], 0,
                          "без точки место не заводим")
 
+    def test_district_node_from_osm_gets_the_old_names_and_no_twin(self):
+        # Повторное ревью 03.11: районы Ташкента — узлы place=district со всеми
+        # именами; реестр только приклеивает старые, дубль не заводит.
+        path = self.write("p.geojsonl", [point(69.2266, 41.3621, place="district", name="Olmazor district",
+                                               **{"name:ru": "Алмазарский район", "name:uz": "Olmazor tumani"})])
+        rows = build_roads.collect_venues(path, places=True)
+        self.assertEqual(rows[0][:2], (N.VENUE_PLACE, "Алмазарский район"))
+        venues = build_roads.venues_by_cell(rows)
+        applied, missed = N.apply_aliases({}, venues, [
+            {"kind": "district", "name_now": "Olmazor district", "name_old": "Сабир-Рахимовский район",
+             "lat": 41.36215, "lon": 69.2266}])
+        self.assertEqual((applied, missed), (1, []))
+        records = [r for c in venues.values() for r in c["venues"]]
+        self.assertEqual(len(records), 1, "место из реестра не задвоено")
+        self.assertEqual(records[0][1], "Алмазарский район")
+        self.assertEqual(records[0][5], ["Сабир-Рахимовский район"])
+        self.assertIn(build_roads.PLACE_RANKS.get("district"), (None,), "на карту район не идёт")
+
+    def test_registry_moves_an_alt_name_to_old(self):
+        record = [N.VENUE_PLACE, "Мирабадский район", 4128270, 6929325, ["Mirobod Tumani", "Ленинский район"]]
+        venues = {"262_498": {"version": 1, "venues": [record]}}
+        N.apply_aliases({}, venues, [{"kind": "district", "name_now": "Mirobod Tumani",
+                                      "name_old": "Ленинский район", "lat": None, "lon": None}])
+        self.assertEqual(record[4:], [["Mirobod Tumani"], ["Ленинский район"]])
+
     def test_scout_file_format_with_extra_columns(self):
         path = os.path.join(self.work, "aliases_x.tsv")
         with open(path, "w", encoding="utf-8") as handle:

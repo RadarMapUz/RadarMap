@@ -177,14 +177,15 @@ osmium export addresses.osm.pbf -f geojsonseq \
     --geometry-types=point,linestring,polygon -o addresses.geojsonl --overwrite
 echo "    адресов в экстракте: $(wc -l < addresses.geojsonl)"
 
-# Населённые пункты. Ровно те виды, которые подписывают на карте: город,
-# посёлок, кишлак, хутор и район города. Всё остальное из `place` — это
-# страны, области и континенты, и на схеме за рулём им делать нечего.
+# Населённые пункты. Те виды, которые подписывают на карте: город, посёлок,
+# кишлак, хутор и район города, — и district (туман города): его на карту не
+# подписываем (PLACE_RANKS), он нужен поиску («Алмазарский район»). Всё
+# остальное из `place` — это страны, области и континенты.
 #
 # Берём и узлы, и границы: город в OSM бывает и тем, и другим.
 osmium tags-filter uzbekistan.osm.pbf \
-    n/place=city,town,village,hamlet,suburb,neighbourhood \
-    a/place=city,town,village,hamlet,suburb,neighbourhood \
+    n/place=city,town,village,hamlet,suburb,neighbourhood,district \
+    a/place=city,town,village,hamlet,suburb,neighbourhood,district \
     -o places.osm.pbf --overwrite
 osmium export places.osm.pbf -f geojsonseq \
     --geometry-types=point,polygon -o places.geojsonl --overwrite

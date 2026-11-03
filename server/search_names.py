@@ -195,7 +195,10 @@ def is_metro(properties):
         properties.get("railway") == "station" and properties.get("subway") == "yes")
 
 
-PLACE_KINDS = {"city", "town", "village", "hamlet", "suburb", "neighbourhood"}
+# district — районы города (туманы): в OSM у Ташкента это узлы со всеми
+# именами («Алмазарский район», «Olmazor tumani», old_name). На карту они не
+# идут (build_roads.PLACE_RANKS их не знает) — только в поиск.
+PLACE_KINDS = {"city", "town", "village", "hamlet", "suburb", "neighbourhood", "district"}
 
 
 def is_place(properties):
@@ -399,10 +402,19 @@ def apply_aliases(addresses, venues, rows, degrees=0.5, scale=1e5):
     return applied, missed
 
 
+def _as_old(alts, olds, old):
+    """Реестр говорит «это старое имя» — оно старое, даже если в OSM оно
+    лежит в alt_name («Ленинский район» у Мирабадского): иначе поиск находил
+    бы район без подписи «бывш.»."""
+    key = fold(old)
+    return [a for a in alts if fold(a) != key], olds + [old]
+
+
 def _add_old_street(street, old):
-    alts, olds = dedup(street.get("a", []), street.get("o", []) + [old], street["n"])
-    # Совпало с нынешним — не ошибка реестра, а уже известное имя: считаем
-    # приклеенным, чтобы не шуметь в отчёте.
+    alts, olds = _as_old(street.get("a", []), street.get("o", []), old)
+    alts, olds = dedup(alts, olds, street["n"])
+    # Совпало с основным именем — не ошибка реестра, а уже известное имя:
+    # считаем приклеенным, чтобы не шуметь в отчёте.
     _set_names(street, alts, olds)
     return True
 
@@ -410,7 +422,7 @@ def _add_old_street(street, old):
 def _add_old_venue(record, old):
     alts = record[4] if len(record) > 4 else []
     olds = record[5] if len(record) > 5 else []
-    alts, olds = dedup(alts, olds + [old], record[1])
+    alts, olds = dedup(*_as_old(alts, olds, old), record[1])
     del record[4:]
     if alts or olds:
         record.append(alts)

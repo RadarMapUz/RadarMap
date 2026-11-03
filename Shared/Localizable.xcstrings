@@ -34610,6 +34610,38 @@
           }
         }
       }
+    },
+    "%@ — отправляю…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — отправляю…"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — yuborilmoqda…"
+          }
+        }
+      }
+    },
+    "Отправляю…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправляю…"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yuborilmoqda…"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

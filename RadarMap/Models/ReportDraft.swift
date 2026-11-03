@@ -322,6 +322,11 @@ nonisolated enum ReportWords {
         }
     }
 
+    /// Отметка летит — на баннере машины вместо кнопок выбора.
+    static func sending(_ kind: ReportKind) -> String {
+        String(format: String(localized: "%@ — отправляю…"), title(kind))
+    }
+
     /// Открыли выбор — голосом, если на экран не смотрят.
     static var choosePrompt: String { String(localized: "Тренога? Или выберите") }
     /// Короткий вариант заголовка выбора (узкий экран машины).

@@ -65,8 +65,21 @@ extension CarPlaySceneDelegate {
             // ставим: отсчёт идёт и без баннера.
             guard reportShown?.serial != draft.serial, silence == .tripod else { return }
             presentChoice(serial: draft.serial, banners: banners)
-        case .sending:
-            break
+        case .sending(_, let kind):
+            // Отметка летит (на слабой связи — до 10 с): кнопки выбора больше
+            // ничего не значат, и живыми их оставлять нельзя — «✕» или «Пост»
+            // молча не сделали бы ничего, а ушла бы тренога (ревью 40b, Н3).
+            guard let banner = reportBanner, banners.isShowing(banner) else { return }
+            if #available(iOS 27.0, *) {
+                banner.updateTitleVariants([ReportWords.sending(kind), String(localized: "Отправляю…")],
+                                           subtitleVariants: [], avatarImage: banner.avatarImage, alert: nil,
+                                           actions: [], duration: 0)
+            } else {
+                // Кнопки баннера до iOS 27 не переписать — снимаем; «отмечена»
+                // встанет новым баннером, когда придёт ответ.
+                banners.dismiss(banner)
+                reportBanner = nil
+            }
         case .sent(let sent):
             if reportGridOpen { closeReportGrid() }
             guard reportShown.map({ $0.serial != draft.serial || !$0.sent }) ?? true else { return }

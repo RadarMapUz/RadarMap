@@ -456,8 +456,10 @@ final class MobileCameraService {
                            "type": item.kind, "fresh": true] as [String: Any]
             // Из очереди — сколько секунд назад отметили: срок жизни точки
             // сервер считает от этого момента (S25). Старый сервер поле не читает.
+            // Из очереди — всегда, с секунды: по моменту тапа сервер узнаёт
+            // повтор уже принятой отметки (ответ потерялся) и отвечает её id.
             let age = Date().timeIntervalSince(item.at)
-            if age >= 30 { payload["age"] = Int(age) }
+            if age >= (live ? 30 : 1) { payload["age"] = Int(age) }
             if !item.cls.isEmpty { payload["cls"] = item.cls }
             if let course = item.course { payload["course"] = (course * 10).rounded() / 10 }
             let response = try await api.post("api/report", json: payload, as: Response.self)
@@ -719,6 +721,9 @@ final class MobileCameraService {
     #endif
 
     private func noteMine(id: Int, item: PendingReport) {
+        // Повтор уже принятой отметки сервер отвечает её же id — второй раз
+        // в «свои» она не ложится.
+        guard !mine.contains(where: { $0.id == id }) else { return }
         mine.append(MyReport(id: id, kind: item.kind, lat: item.lat,
                              lon: item.lon, at: item.at))
         trimMine()

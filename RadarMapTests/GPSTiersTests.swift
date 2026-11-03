@@ -165,4 +165,28 @@ final class GPSTiersTests: XCTestCase {
         // «Лежачая» просьба не хуже порога фильтра фиксов: принятые фиксы возможны.
         XCTAssertLessThanOrEqual(idle.accuracy, AppConfig.maxHorizontalAccuracyMeters)
     }
+
+    // MARK: - Точка для отметки водителя (ловец багов, 40a, R1)
+
+    func testReportWaitRestoresOnlyWhenTheLadderDidNotMove() {
+        // Стояли на тире 3 (100 м), ждали точку для «Радар!» на Best, тир тот же —
+        // возвращаем 100 м: батарея в пробке.
+        XCTAssertEqual(GPSTiers.accuracyAfterReportWait(previous: kCLLocationAccuracyHundredMeters,
+                                                        current: kCLLocationAccuracyBest,
+                                                        tierBefore: 3, tierNow: 3),
+                       kCLLocationAccuracyHundredMeters)
+        // Пока ждали, тронулись у камеры: лестница поставила тир 0 (Best). Вернуть
+        // 100 м — оставить подход к камере на сотовых фиксах, которые фильтр бракует.
+        XCTAssertNil(GPSTiers.accuracyAfterReportWait(previous: kCLLocationAccuracyHundredMeters,
+                                                      current: kCLLocationAccuracyBest,
+                                                      tierBefore: 3, tierNow: 0))
+        // Лестница выставила своё (не Best) — её решение не трогаем.
+        XCTAssertNil(GPSTiers.accuracyAfterReportWait(previous: kCLLocationAccuracyHundredMeters,
+                                                      current: kCLLocationAccuracyNearestTenMeters,
+                                                      tierBefore: 3, tierNow: 3))
+        // Best и было — возвращать нечего.
+        XCTAssertNil(GPSTiers.accuracyAfterReportWait(previous: kCLLocationAccuracyBest,
+                                                      current: kCLLocationAccuracyBest,
+                                                      tierBefore: 0, tierNow: 0))
+    }
 }

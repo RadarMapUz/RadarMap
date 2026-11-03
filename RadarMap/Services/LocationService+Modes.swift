@@ -64,15 +64,21 @@ extension LocationService {
     /// На время ожидания просим лучшую точность: в поездке с телефоном в
     /// кармане стоя (тир 3) система отдаёт 100 м, и одноразовый фикс без этого
     /// так и не стал бы годным — честная отметка в пробке у поста получала бы
-    /// «Ждём спутники». Прежнюю точность возвращаем, если её не сменила
-    /// адаптивная лестница.
+    /// «Ждём спутники». Прежнюю точность возвращаем, только если ступень
+    /// лестницы за ожидание не менялась (`GPSTiers.accuracyAfterReportWait`).
     func awaitReportCoordinate(timeout: TimeInterval = 6) async -> CLLocationCoordinate2D? {
         if ReportGuard.isTrusted(reportFix), let point = currentCoordinate { return point }
         guard isAuthorized else { return nil }
         let previous = manager.desiredAccuracy
+        let tierBefore = accuracyTier
         manager.desiredAccuracy = kCLLocationAccuracyBest
         defer {
-            if manager.desiredAccuracy == kCLLocationAccuracyBest { manager.desiredAccuracy = previous }
+            if let restored = GPSTiers.accuracyAfterReportWait(previous: previous,
+                                                               current: manager.desiredAccuracy,
+                                                               tierBefore: tierBefore,
+                                                               tierNow: accuracyTier) {
+                manager.desiredAccuracy = restored
+            }
         }
         return await awaitPosition(timeout: timeout) {
             ReportGuard.isTrusted(self.reportFix) ? self.currentCoordinate : nil

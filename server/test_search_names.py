@@ -117,6 +117,32 @@ class VenueTests(Base):
         self.assertEqual(rows, [(N.VENUE_PLACE, "Ташкент", 69.2787, 41.3123, [], ["Chach"])])
         self.assertEqual(build_roads.collect_venues(None, places=True), [])
 
+    def test_city_keeps_its_node_not_the_outline_centre(self):
+        # Ревью 03.11: середина рамки границы Ташкента — в 4,5 км от центра.
+        area = {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[
+                    [69.12, 41.17], [69.53, 41.17], [69.53, 41.41], [69.12, 41.41], [69.12, 41.17]]]},
+                "properties": {"place": "city", "name": "Toshkent", "name:ru": "Ташкент", "old_name": "Chach"}}
+        path = self.write("p.geojsonl", [
+            point(69.2787, 41.3123, place="city", name="Toshkent", **{"name:ru": "Ташкент"}), area])
+        rows = build_roads.collect_venues(path, places=True)
+        self.assertEqual(rows, [(N.VENUE_PLACE, "Ташкент", 69.2787, 41.3123, [], ["Chach"])],
+                         "узел остаётся, имена контура — ему")
+        kept = [r for c in build_roads.venues_by_cell(rows).values() for r in c["venues"]]
+        self.assertEqual([(r[2], r[3]) for r in kept], [(4131230, 6927870)])
+
+    def test_outline_without_its_node_stays(self):
+        area = {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[
+                    [69.20, 41.20], [69.21, 41.20], [69.21, 41.21], [69.20, 41.21], [69.20, 41.20]]]},
+                "properties": {"place": "neighbourhood", "name": "Ялангач"}}
+        path = self.write("p.geojsonl", [point(69.30, 41.30, place="neighbourhood", name="Ялангач"), area])
+        self.assertEqual(len(build_roads.collect_venues(path, places=True)), 2,
+                         "узел не в рамке — это другое место")
+
+    def test_namesakes_kilometres_apart_are_two_places(self):
+        rows = [(N.VENUE_PLACE, "Дустлик", 69.20, 41.30), (N.VENUE_PLACE, "Дустлик", 69.2466, 41.30)]  # ~3,9 км
+        cells = build_roads.venues_by_cell(rows)
+        self.assertEqual(sum(len(c["venues"]) for c in cells.values()), 2)
+
     def test_payload_is_backward_compatible(self):
         cells = build_roads.venues_by_cell([
             (1, "A", 69.25, 41.30),
@@ -141,6 +167,16 @@ class VenueTests(Base):
         osm = [(14, "Новза", 69.2236, 41.2918, [], ["Хамза"])]
         extra = [(9, "Bank", 69.30, 41.30)]
         self.assertEqual(build_roads.merge_venues(osm, extra), osm + extra)
+
+
+class MetroCheckTests(unittest.TestCase):
+    def test_stale_extract_without_metro_is_refused(self):
+        tashkent = [(7, "Кафе", 69.28, 41.31)]
+        with self.assertRaises(SystemExit):
+            build_roads.check_metro(tashkent)
+        self.assertEqual(build_roads.check_metro(tashkent, allow_missing=True), 0)
+        self.assertEqual(build_roads.check_metro(tashkent + [(14, "Новза", 69.22, 41.29)]), 1)
+        self.assertEqual(build_roads.check_metro([(7, "Кафе", 65.0, 39.0)]), 0, "без Ташкента — не ошибка")
 
 
 class StreetNamesTests(Base):

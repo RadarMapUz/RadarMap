@@ -1408,9 +1408,10 @@ VENUE_METRO = search_names.VENUE_METRO
 # Населённые пункты и районы города (15) — из places.geojsonl, тем же файлом
 # клетки: «Чорсу», «Юнусабад», «Тошкент шахри».
 VENUE_PLACE = search_names.VENUE_PLACE
-# Точка и контур одной станции или города стоят дальше 30 м друг от друга:
-# у Ташкента середина рамки границы — в 3,5 км от узла места.
-VENUE_DUPLICATE_METERS_BY_KIND = {VENUE_METRO: 500.0, VENUE_PLACE: 5000.0}
+# Точка и контур одной станции стоят дальше 30 м друг от друга (Новза —
+# 240 м). Одноимённые места дальше 600 м — разные (Дустлик в 3,9 км от
+# Дустлика): контур города с его узлом сводит collect_venues, а не расстояние.
+VENUE_DUPLICATE_METERS_BY_KIND = {VENUE_METRO: 600.0, VENUE_PLACE: 600.0}
 
 
 def venue_kind(properties):
@@ -1436,6 +1437,7 @@ def collect_venues(source_path, places=False):
     имени запись не нужна.
     """
     out = []
+    outlines = []   # рамка контура места или None у узла (places=True)
     if not source_path or not os.path.exists(source_path):
         return out
     with open(source_path, encoding="utf-8") as handle:
@@ -1467,6 +1469,60 @@ def collect_venues(source_path, places=False):
             alts, olds = search_names.names_from(properties, name,
                                                  parenthetical=code == VENUE_METRO)
             out.append(search_names.venue_row(code, name, spot[0], spot[1], alts, olds))
+            if places:
+                outlines.append(feature_bbox(feature.get("geometry") or {}))
+    if places:
+        out = drop_outlines_with_node(out, outlines)
+    return out
+
+
+def feature_bbox(geometry):
+    """Рамка контура (min_lon, min_lat, max_lon, max_lat); у точки — None."""
+    shape = geometry.get("type")
+    if shape not in ("Polygon", "MultiPolygon"):
+        return None
+    rings = geometry.get("coordinates") or []
+    if shape == "MultiPolygon":
+        rings = [ring for polygon in rings for ring in polygon[:1]]
+    else:
+        rings = rings[:1]
+    points = [p for ring in rings for p in ring if isinstance(p, (list, tuple)) and len(p) >= 2]
+    if not points:
+        return None
+    return (min(p[0] for p in points), min(p[1] for p in points),
+            max(p[0] for p in points), max(p[1] for p in points))
+
+
+def drop_outlines_with_node(rows, outlines):
+    """Место узлом и контуром — одно, и точка у него — УЗЕЛ: у Ташкента
+    середина рамки границы в 4,5 км к юго-востоку от центра, и «Ташкент» вёл
+    туда (ревью 03.11). Контур выбрасывается, если в его рамке стоит узел с
+    тем же именем; имена контура достаются узлу. Без узла контур остаётся."""
+    nodes = defaultdict(list)
+    for index, row in enumerate(rows):
+        if outlines[index] is None:
+            nodes[row[1]].append(index)
+    merged = {index: (list(row[4]) if len(row) > 4 else [], list(row[5]) if len(row) > 5 else [])
+              for index, row in enumerate(rows)}
+    dropped = set()
+    for index, row in enumerate(rows):
+        box = outlines[index]
+        if box is None:
+            continue
+        inside = [n for n in nodes.get(row[1], ())
+                  if box[0] <= rows[n][2] <= box[2] and box[1] <= rows[n][3] <= box[3]]
+        if not inside:
+            continue
+        dropped.add(index)
+        alts, olds = merged[inside[0]]
+        alts += merged[index][0]
+        olds += merged[index][1]
+    out = []
+    for index, row in enumerate(rows):
+        if index in dropped:
+            continue
+        alts, olds = search_names.dedup(*merged[index], row[1])
+        out.append(search_names.venue_row(row[0], row[1], row[2], row[3], alts, olds))
     return out
 
 
@@ -1525,6 +1581,27 @@ def venues_by_cell(rows):
         cells.setdefault(address_key(lat, lon), []).append(
             search_names.payload_row(record, SCALE))
     return {key: {"version": 1, "venues": rows} for key, rows in cells.items()}
+
+
+# Клетка Ташкента: метро есть только здесь, и без станций в ней экстракт
+# заведений старый (до фильтра station=subway в update_roads.sh).
+METRO_CELL = "262_498"
+
+
+def check_metro(venue_rows, allow_missing=False):
+    """«метро: N» в журнал; ноль станций при заведениях Ташкента — отказ.
+
+    Сборка страны на маке берёт venues.geojsonl, который лежит рядом, и со
+    старым экстрактом молча вышла бы без вида 14 — поиск «метро хамза» снова
+    пустой, а заметить это можно только на телефоне (ревью 03.11)."""
+    metro = sum(1 for row in venue_rows if row[0] == VENUE_METRO)
+    print(f"метро: {metro} станций")
+    tashkent = any(address_key(row[3], row[2]) == METRO_CELL for row in venue_rows)
+    if metro == 0 and tashkent and not allow_missing:
+        raise SystemExit("СТОП: в заведениях Ташкента нет ни одной станции метро — venues.geojsonl "
+                         "из старого экстракта (нужен фильтр nwa/station=subway, update_roads.sh). "
+                         "Собрать без метро осознанно — флаг --allow-no-metro.")
+    return metro
 
 
 def alias_paths(given):
@@ -7769,6 +7846,8 @@ def main():
                         default=[],
                         help="ещё geojsonl заведений (реестры портала, import_poi_egov.py); "
                              "точка ближе 30 м к OSM того же вида не дублируется")
+    parser.add_argument("--allow-no-metro", dest="allow_no_metro", action="store_true", default=False,
+                        help="собрать, даже если в заведениях Ташкента нет станций метро")
     parser.add_argument("--aliases", dest="aliases", action="append", default=[],
                         help="TSV старых имён (kind, name_now, name_old, lang, osm_id, lat, lon, "
                              "source, source_date); без флага — server/poi/aliases_*.tsv")
@@ -7912,6 +7991,7 @@ def main():
         venue_rows = merge_venues(venue_rows, extra_rows)
         print(f"заведения из {os.path.basename(extra_path)}: {len(extra_rows)}, "
               f"новых {len(venue_rows) - before}")
+    check_metro(venue_rows, args.allow_no_metro)
     place_rows = collect_venues(args.places, places=True)
     venue_rows += place_rows
     venues = venues_by_cell(venue_rows)

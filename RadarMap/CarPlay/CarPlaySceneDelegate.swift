@@ -123,6 +123,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         _ = HitchWatch.drain()
         HitchWatch.setCounting(true)
         connectedAt = Date()
+        // Новая сцена выбора ещё не показала: флаг старой сцены, чей
+        // didDisconnect пришёл позже и вышел как устаревший, здесь снимается.
+        env.route.choiceShownInCar = false
 
         // День/ночь — ДО первого кадра: тема машины (датчик света) в «Авто»
         // старше солнца, и первый кадр раньше всегда был тёмным.

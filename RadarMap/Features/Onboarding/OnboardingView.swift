@@ -156,8 +156,7 @@ struct OnboardingView: View {
                         icon: "location.fill",
                         title: "Геолокация «Всегда»",
                         subtitle: "Голос о камере — и с погашенным экраном, и поверх Яндекса.",
-                        footnote: env.location.accessStep.needsSettingsHint
-                            ? "Настройки → Геопозиция → Всегда" : nil,
+                        footnote: accessHint,
                         state: locationState,
                         action: { env.location.takeAccessStep() }
                     )
@@ -281,6 +280,15 @@ struct OnboardingView: View {
         case .authorizedAlways: return .granted
         case .authorizedWhenInUse: return .partial
         default: return .pending
+        }
+    }
+    /// Что выбрать в Настройках. Открывается сразу страница приложения, и
+    /// слова там — системные iOS (по-узбекски их не бывает).
+    private var accessHint: LocalizedStringKey? {
+        switch env.location.accessStep.hint {
+        case .pickAlways: return "Геопозиция → Всегда"
+        case .deviceLimited: return "Геолокация ограничена в настройках устройства"
+        case nil: return nil
         }
     }
     private var notificationsState: PermState {

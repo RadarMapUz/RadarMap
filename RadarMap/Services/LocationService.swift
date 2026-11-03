@@ -312,9 +312,19 @@ final class LocationService: NSObject {
         didSet { Storage.set(alwaysAccessAsked, for: .alwaysAccessAsked) }
     }
 
+    /// Службы геолокации устройства включены. Проверяется вне главного потока
+    /// при отказе (выключенные iOS отдаёт как `.denied`), см. handleAuthChange.
+    var locationServicesOn = true
+
     /// Что сейчас сделает кнопка доступа к геопозиции.
     var accessStep: LocationAccessStep {
-        LocationAccessStep.next(status: authorizationStatus, alwaysAsked: alwaysAccessAsked)
+        LocationAccessStep.next(status: authorizationStatus, alwaysAsked: alwaysAccessAsked,
+                                servicesEnabled: locationServicesOn)
+    }
+
+    /// `locationServicesEnabled` на главном потоке iOS считает зависанием.
+    @concurrent nonisolated static func servicesEnabled() async -> Bool {
+        CLLocationManager.locationServicesEnabled()
     }
 
     /// Шаг к «Всегда» по кнопке (онбординг, баннер на карте). Окна iOS
@@ -323,7 +333,7 @@ final class LocationService: NSObject {
         switch accessStep {
         case .askWhenInUse: bootstrap()   // спросит «При использовании», как и раньше
         case .askAlways: requestAlwaysAccess()
-        case .openSettings:
+        case .openSettings, .deviceLimited:
             guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
             UIApplication.shared.open(url)
         case .done: break

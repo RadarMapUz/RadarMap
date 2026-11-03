@@ -23,12 +23,21 @@ final class LocationAccessStepTests: XCTestCase {
         XCTAssertEqual(LocationAccessStep.next(status: .authorizedWhenInUse, alwaysAsked: true), .openSettings)
     }
 
-    /// Отказ и ограничение: окна не будет — ведём в Настройки, а не молчим.
+    /// Отказ: окна не будет — ведём в Настройки, а не молчим.
     func testRefusalLeadsToSettings() {
         for asked in [false, true] {
             XCTAssertEqual(LocationAccessStep.next(status: .denied, alwaysAsked: asked), .openSettings)
-            XCTAssertEqual(LocationAccessStep.next(status: .restricted, alwaysAsked: asked), .openSettings)
         }
+    }
+
+    /// Родительский контроль и выключенные Службы геолокации: «Всегда» на
+    /// странице приложения не выбрать — подсказка про устройство.
+    func testDeviceLimits() {
+        XCTAssertEqual(LocationAccessStep.next(status: .restricted, alwaysAsked: false), .deviceLimited)
+        XCTAssertEqual(LocationAccessStep.next(status: .denied, alwaysAsked: true, servicesEnabled: false),
+                       .deviceLimited)
+        XCTAssertEqual(LocationAccessStep.next(status: .authorizedWhenInUse, alwaysAsked: true,
+                                               servicesEnabled: false), .openSettings)
     }
 
     func testAlwaysNeedsNothing() {
@@ -36,11 +45,13 @@ final class LocationAccessStepTests: XCTestCase {
         XCTAssertEqual(LocationAccessStep.next(status: .authorizedAlways, alwaysAsked: true), .done)
     }
 
-    /// Подсказка «что выбрать» — только там, где выбирать придётся в Настройках.
-    func testSettingsHintOnlyForSettings() {
-        XCTAssertTrue(LocationAccessStep.openSettings.needsSettingsHint)
-        XCTAssertFalse(LocationAccessStep.askWhenInUse.needsSettingsHint)
-        XCTAssertFalse(LocationAccessStep.askAlways.needsSettingsHint)
-        XCTAssertFalse(LocationAccessStep.done.needsSettingsHint)
+    /// Подсказка — только там, где выбирать придётся в Настройках, и своя
+    /// для ограничения устройства.
+    func testHints() {
+        XCTAssertEqual(LocationAccessStep.openSettings.hint, .pickAlways)
+        XCTAssertEqual(LocationAccessStep.deviceLimited.hint, .deviceLimited)
+        XCTAssertNil(LocationAccessStep.askWhenInUse.hint)
+        XCTAssertNil(LocationAccessStep.askAlways.hint)
+        XCTAssertNil(LocationAccessStep.done.hint)
     }
 }

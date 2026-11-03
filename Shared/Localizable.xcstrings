@@ -5792,34 +5792,50 @@
         }
       }
     },
-    "Свернёте до поездки — о камерах промолчу. Нужен доступ «Всегда».": {
+    "Свернёте или погасите экран до поездки — о камерах промолчу. Нужен доступ «Всегда».": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Свернёте до поездки — о камерах промолчу. Нужен доступ «Всегда»."
+            "value": "Свернёте или погасите экран до поездки — о камерах промолчу. Нужен доступ «Всегда»."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Safardan oldin yigʻsangiz — kameralar haqida jim qolaman. «Doim» kerak."
+            "value": "Safardan oldin yigʻsangiz yoki ekran oʻchsa — jim qolaman. «Doim» kerak."
           }
         }
       }
     },
-    "Настройки → Геопозиция → Всегда": {
+    "Геопозиция → Всегда": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Настройки → Геопозиция → Всегда"
+            "value": "Геопозиция → Всегда"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sozlamalar → Joylashuv → «Всегда»"
+            "value": "Геопозиция → Всегда (yoki Location → Always)"
+          }
+        }
+      }
+    },
+    "Геолокация ограничена в настройках устройства": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Геолокация ограничена в настройках устройства"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geolokatsiya qurilma sozlamalarida cheklangan"
           }
         }
       }
@@ -25463,18 +25479,18 @@
         }
       }
     },
-    "Без него поездка не начнётся сама, пока приложение свёрнуто, и о камерах оно промолчит. Поездка, начатая на экране, звучит и в фоне. Положение обрабатывается на телефоне, кроме обезличенных отрезков пути для пробок — их можно выключить: Настройки → Конфиденциальность → «Помогать с пробками».": {
+    "Без него поездка не начнётся сама, пока приложение свёрнуто, и о камерах оно промолчит. Поездка, начатая на экране, звучит и в фоне — до первой долгой остановки; доступ «Всегда» снимает это ограничение. На сервер уходят запрос маршрута, ваши отметки и «Поделиться прибытием», а в поездке — обезличенные отрезки пути для пробок; их можно выключить: Настройки → Конфиденциальность → «Помогать с пробками».": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Без него поездка не начнётся сама, пока приложение свёрнуто, и о камерах оно промолчит. Поездка, начатая на экране, звучит и в фоне. Положение обрабатывается на телефоне, кроме обезличенных отрезков пути для пробок — их можно выключить: Настройки → Конфиденциальность → «Помогать с пробками»."
+            "value": "Без него поездка не начнётся сама, пока приложение свёрнуто, и о камерах оно промолчит. Поездка, начатая на экране, звучит и в фоне — до первой долгой остановки; доступ «Всегда» снимает это ограничение. На сервер уходят запрос маршрута, ваши отметки и «Поделиться прибытием», а в поездке — обезличенные отрезки пути для пробок; их можно выключить: Настройки → Конфиденциальность → «Помогать с пробками»."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Usiz ilova yigʻilgan paytda safar oʻzi boshlanmaydi va kameralar haqida ovoz chiqmaydi. Ekranda boshlangan safar fonda ham ovoz beradi. Joylashuv telefonda qayta ishlanadi, faqat tirbandlik uchun shaxssiz yoʻl boʻlaklari yuboriladi — ularni oʻchirish mumkin: Sozlamalar → Maxfiylik → «Tirbandlikni hisoblashga yordam berish»."
+            "value": "Usiz ilova yigʻilgan paytda safar oʻzi boshlanmaydi va kameralar haqida ovoz chiqmaydi. Ekranda boshlangan safar fonda ham ovoz beradi — birinchi uzoq toʻxtashgacha; «Doim» ruxsati bu cheklovni olib tashlaydi. Serverga marshrut soʻrovi, belgilaringiz va «Yetib borish vaqtini ulashish», safar paytida esa tirbandlik uchun shaxssiz yoʻl boʻlaklari yuboriladi; ularni oʻchirish mumkin: Sozlamalar → Maxfiylik → «Tirbandlikni hisoblashga yordam berish»."
           }
         }
       }

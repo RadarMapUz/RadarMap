@@ -62,13 +62,13 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Чтобы предупреждать о камерах голосом, когда приложение свёрнуто или экран погашен. Положение обрабатывается на телефоне; в поездке для пробок уходят обезличенные отрезки пути — это можно выключить в настройках."
+            "value" : "Чтобы предупреждать о камерах голосом, когда приложение свёрнуто или экран погашен. На сервер уходят запрос маршрута, ваши отметки и «Поделиться прибытием», а в поездке — обезличенные отрезки для пробок; их можно выключить в настройках."
           }
         },
         "uz" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ilova yigʻilgan yoki ekran oʻchiq boʻlsa ham kameralar haqida ovozli ogohlantirish uchun. Joylashuv telefonda qayta ishlanadi; safar paytida tirbandlik uchun shaxssiz yoʻl boʻlaklari yuboriladi — buni sozlamalarda oʻchirish mumkin."
+            "value" : "Ilova yigʻilgan yoki ekran oʻchiq boʻlsa ham kameralar haqida ovozli ogohlantirish uchun. Serverga marshrut soʻrovi, belgilaringiz va «Yetib borish vaqtini ulashish», safar paytida esa tirbandlik uchun shaxssiz yoʻl boʻlaklari yuboriladi; ularni sozlamalarda oʻchirish mumkin."
           }
         }
       }

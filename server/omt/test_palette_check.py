@@ -68,6 +68,16 @@ class PaletteRules(unittest.TestCase):
             make_style.CAR_PALETTES = saved
         self.assertIn("машина: имя улицы ночью слепит", failures)
 
+    def test_car_rules_catch_a_calm_marker_without_its_rim(self):
+        # Графитовый значок без белого канта на тёмном асфальте машины днём.
+        saved = palette_check.CALM
+        palette_check.CALM = dict(saved, light={"fill": "#3d4652", "ring": "#3d4652"})
+        try:
+            _, failures = palette_check.measure_car("light", "A")
+        finally:
+            palette_check.CALM = saved
+        self.assertIn("машина: спокойная камера < 3:1", failures)
+
     def test_car_rules_catch_a_trunk_like_the_avenue(self):
         # Прежняя магистраль поездки днём (#4b4f5a) рядом с проспектом #3f4859 —
         # ΔE 5: на тёмном асфальте класс дороги не читался.

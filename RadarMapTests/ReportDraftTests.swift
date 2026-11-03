@@ -30,6 +30,19 @@ final class ReportDraftTests: XCTestCase {
         XCTAssertNotNil(draft.choosing)
     }
 
+    /// Ждали годную точку 2,5 с — выбор всё равно живёт свои 3 с от показа,
+    /// а точка и время остаются от касания (ревью 40b, Н2).
+    func testChoiceWindowStartsWhenShown() {
+        var draft = ReportDraft()
+        let shown = t0.addingTimeInterval(2.5)
+        XCTAssertEqual(draft.tap(touch(), refusal: nil, showsChoice: true, shownAt: shown),
+                       .choose(deadline: shown.addingTimeInterval(3)))
+        XCTAssertEqual(draft.expire(now: t0.addingTimeInterval(3)), .none, "от касания срок ещё не вышел")
+        XCTAssertEqual(draft.cancel(), .cancelled, "«✕» успевает")
+        _ = draft.tap(touch(), refusal: nil, showsChoice: true, shownAt: shown)
+        XCTAssertEqual(draft.expire(now: shown.addingTimeInterval(3)), .send(touch(), .tripod))
+    }
+
     /// Молчание 3 с — тренога, по точке касания.
     func testSilenceSendsTripod() {
         var draft = ReportDraft()

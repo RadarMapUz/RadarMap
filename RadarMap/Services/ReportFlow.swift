@@ -35,8 +35,8 @@ final class ReportFlow {
     @ObservationIgnored weak var alerts: AlertPlayer?
 
     /// Ждём годную точку после касания — второе касание в это время не
-    /// заводит второй черновик.
-    @ObservationIgnored private var awaitingFix = false
+    /// заводит второй черновик, а кнопка показывает «Ищу GPS» (до 3 с).
+    private(set) var awaitingFix = false
     @ObservationIgnored private var choiceTimer: Task<Void, Never>?
     @ObservationIgnored private var undoTimer: Task<Void, Never>?
 
@@ -81,8 +81,9 @@ final class ReportFlow {
         let touch = await snapshot(source: source, at: tappedAt)
         awaitingFix = false
         let refusal = refusalFor(touch, kind: ReportDraft.defaultKind)
+        // Три секунды выбора — от показа, а не от касания (Н2).
         let effect = draft.tap(touch, refusal: refusal,
-                               showsChoice: source.offersChoice && !choiceBlocked)
+                               showsChoice: source.offersChoice && !choiceBlocked, shownAt: Date())
         return await perform(effect, speak: speak)
     }
 

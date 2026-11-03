@@ -34594,6 +34594,22 @@
           }
         }
       }
+    },
+    "Ищу GPS": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ищу GPS"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GPS qidirilmoqda"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

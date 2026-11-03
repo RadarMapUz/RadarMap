@@ -61,6 +61,15 @@ struct ReportButton: View {
                 .fill(refusedFlash ? Theme.textTertiary : Theme.action)
             if draft.isInFlight {
                 ProgressView().controlSize(.small).tint(Theme.onAction)
+            } else if env.reports.awaitingFix {
+                // Точка ещё не годна (до 3 с): касание принято, ждём GPS.
+                VStack(spacing: 3) {
+                    ProgressView().controlSize(.mini).tint(Theme.onAction)
+                    Text(verbatim: "GPS")
+                        .font(.system(size: 10, weight: .heavy))
+                }
+                .foregroundStyle(Theme.onAction)
+                .accessibilityLabel(Text("Ищу GPS"))
             } else {
                 VStack(spacing: 2) {
                     content

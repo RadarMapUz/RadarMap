@@ -169,8 +169,12 @@ nonisolated struct ReportDraft: Equatable {
 
     /// Касание «Отметить». `showsChoice` — вход может показать выбор прямо
     /// сейчас (у машины — если на экране не камера). `refusal` — проверка
-    /// `ReportGuard` по этой же точке.
+    /// `ReportGuard` по этой же точке. `shownAt` — когда выбор встанет на
+    /// экран: точка и время касания — от касания (по ним сдвиг), а три
+    /// секунды выбора — от показа. Ожидание годной точки (до 3 с в пробке у
+    /// поста) иначе съедало окно целиком, и «✕» нажать было нельзя (ревью 40b, Н2).
     mutating func tap(_ touch: Touch, refusal: ReportGuard.Refusal?, showsChoice: Bool,
+                      shownAt: Date? = nil,
                       chooseSeconds: TimeInterval = AppConfig.reportChooseSeconds) -> Effect {
         switch phase {
         case .sending:
@@ -188,7 +192,7 @@ nonisolated struct ReportDraft: Equatable {
                 phase = .sending(touch, kind: Self.defaultKind)
                 return .send(touch, Self.defaultKind)
             }
-            let deadline = touch.at.addingTimeInterval(chooseSeconds)
+            let deadline = max(touch.at, shownAt ?? touch.at).addingTimeInterval(chooseSeconds)
             phase = .choosing(touch, deadline: deadline, silence: .tripod)
             return .choose(deadline: deadline)
         }

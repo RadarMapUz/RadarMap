@@ -153,6 +153,21 @@ final class ReportFlow {
         return text
     }
 
+    /// «Отмени отметку» голосом: последняя своя отметка в окне СЕРВЕРА
+    /// (`cancellableReportID`, 10 мин), а не в 8-секундном окне экрана. Ждущая
+    /// связи — как «Отменить» на экране. nil — отменять нечего.
+    func undoLatest(speak: Bool = true) async -> String? {
+        if canUndo() { return await undo(speak: speak) }
+        guard let mobile, let id = mobile.cancellableReportID() else { return nil }
+        if draft.sent?.serverID == id {
+            draft.undone()
+            undoTimer?.cancel()
+        }
+        let text = await mobile.cancelReport(id: id)?.spoken ?? String(localized: "Отметка убрана")
+        if speak { alerts?.speak(text) }
+        return text
+    }
+
     // MARK: - Исполнение
 
     @discardableResult

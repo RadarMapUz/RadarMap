@@ -187,10 +187,12 @@ struct CancelReportIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let env = AppEnvironment.shared
-        guard env.reports.canUndo() else {
+        // Окно сервера (10 мин), а не 8 с экрана: подсказка Siri, фраза и
+        // распознавание сами занимают 8–9 с (ревью 40b, Н5).
+        guard let text = await env.reports.undoLatest(speak: false) else {
             return .result(dialog: IntentDialog("Отменять нечего."))
         }
-        return .result(dialog: IntentDialog(stringLiteral: await env.reports.undo(speak: false)))
+        return .result(dialog: IntentDialog(stringLiteral: text))
     }
 }
 

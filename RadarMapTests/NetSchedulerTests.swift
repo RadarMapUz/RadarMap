@@ -85,6 +85,15 @@ final class NetSchedulerTests: XCTestCase {
         XCTAssertEqual(SyncPlan.interval(.mobile, situation(.watching, speed: 50)), AppConfig.netWatchInterval,
                        "телефон без машины — прежний такт экрана")
         XCTAssertEqual(SyncPlan.interval(.mobile, car(110, remote: 600)), 600, "разреженный пультом не сужаем")
+        // Пульт ужал до 60 с — с машиной не реже, чем без неё; на трассе
+        // лестница чаще — она и остаётся.
+        XCTAssertEqual(SyncPlan.interval(.mobile, car(0, remote: 60)), 60)
+        XCTAssertEqual(SyncPlan.interval(.mobile, car(50, remote: 60)), 60)
+        XCTAssertEqual(SyncPlan.interval(.mobile, car(110, remote: 60)), AppConfig.mobilePollTripFast)
+        var hot = car(0, remote: 60)
+        hot.thermal = .reduced
+        XCTAssertEqual(SyncPlan.interval(.mobile, hot), 60 * AppConfig.mobilePollThermalFactor,
+                       "на жаре — как у экрана без машины")
         XCTAssertEqual(SyncPlan.interval(.traffic, car(50)), AppConfig.trafficRefreshInterval)
         // Город: отметки 70 с назад — окно открывается; пробкам срок — едут в нём.
         let plan = SyncPlan.plan(car(50, at: 150), tracks: tracks([.mobile: 80, .traffic: 0]), trigger: .tick)

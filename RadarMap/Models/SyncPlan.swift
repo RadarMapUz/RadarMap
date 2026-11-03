@@ -150,9 +150,14 @@ nonisolated enum SyncPlan {
         case (.mobile, .watching) where s.carConnected:
             // Машина подключена, поездки нет (40I): за рулём, хоть и без
             // «Поездки», — отметки по той же лестнице, что в поездке. Стоя —
-            // её верхняя ступень (150 с), то есть такт экрана. Пульт главнее.
-            return PollSchedule.interval(isTripActive: true, speedKmh: s.speedKmh,
-                                         thermal: s.thermal, remoteBaseline: s.remotePollInterval)
+            // её верхняя ступень (150 с), то есть такт экрана. Пульт главнее
+            // в обе стороны: разредил — его интервал (это решает лестница),
+            // ужал — не реже его, как у экрана без машины.
+            let ladder = PollSchedule.interval(isTripActive: true, speedKmh: s.speedKmh,
+                                               thermal: s.thermal, remoteBaseline: s.remotePollInterval)
+            guard let remote = s.remotePollInterval, remote < AppConfig.mobilePollInterval else { return ladder }
+            let narrowed = s.thermal >= .reduced ? remote * AppConfig.mobilePollThermalFactor : remote
+            return min(ladder, narrowed)
         case (.mobile, .watching):
             let remote = s.remotePollInterval ?? AppConfig.mobilePollInterval
             // Пульт разредил — слушаемся; ужал — тоже (его право); иначе такт экрана.

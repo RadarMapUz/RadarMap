@@ -443,6 +443,10 @@ def measure_car(theme, variant="A"):
         "машина: ΔE пробки / асфальт, дейтеранопия (мин)": min(delta_e(t, a, True)
                                                                for t in traffic.values() for a in asphalt),
         "машина: ΔE «медленно» / кромка магистрали": delta_e(traffic["slow"], c["kerb_trunk"]),
+        # Спокойный графитовый значок (CameraMarkerLook) на тёмном асфальте
+        # машины днём сливается заливкой (ΔE ≈ 2 к #3f4859): его несёт кант.
+        "машина: спокойная камера / асфальт (мин)": min(
+            max(contrast(CALM[theme]["fill"], a), contrast(CALM[theme]["ring"], a)) for a in asphalt + [c["minor"]]),
         "машина: камера не видна (пар тип × поверхность)": float(sum(
             not _camera_visible(t, s) for t in CAMERA_TYPES.values() for s in asphalt + ground)),
         "машина: разметка / асфальт (мин)": min(contrast(c["paint"], a) for a in asphalt),
@@ -471,6 +475,7 @@ def measure_car(theme, variant="A"):
          "машина: пробка сливается с асфальтом при дейтеранопии")
     need(m["машина: ΔE «медленно» / кромка магистрали"] >= SLOW_KERB_DE_MIN, "машина: «медленно» похоже на кромку")
     need(m["машина: камера не видна (пар тип × поверхность)"] == 0, "машина: камера сливается с поверхностью")
+    need(m["машина: спокойная камера / асфальт (мин)"] >= GRAPHIC_MIN, "машина: спокойная камера < 3:1")
     need(all(luminance(c["paint"]) > luminance(a) for a in asphalt), "машина: разметка темнее асфальта")
     need(m["машина: разметка / асфальт (мин)"] >= PAINT_MIN, "машина: разметка на асфальте < 1,4:1")
     need(m["машина: ΔE новый цвет / красная камера (мин)"] >= USE_CAMERA_DE_MIN, "машина: новый цвет похож на камеру")

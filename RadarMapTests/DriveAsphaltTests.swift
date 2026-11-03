@@ -74,6 +74,19 @@ final class DriveAsphaltTests: XCTestCase {
                        0.45)
         XCTAssertThrowsError(try DriveAsphalt.lightIntensity(
             from: Data(##"{"layers": {}, "light": {"intensity": 0.4, "color": "#fff"}}"##.utf8)))
+        // Не число — ошибка файла, а не тихий пропуск.
+        XCTAssertThrowsError(try DriveAsphalt.lightIntensity(
+            from: Data(##"{"layers": {}, "light": {"intensity": "0.4"}}"##.utf8)))
+    }
+
+    func testFirstApplyAfterStyleLoadHasNoTransition() {
+        // Машина кладёт разницу на каждую загрузку стиля: без перехода, иначе
+        // 0,6 с телефонной палитры перетекают в машинную. Старт поездки на
+        // показанной карте — с переходом.
+        XCTAssertEqual(DriveAsphalt.transitionSeconds(firstAfterStyleLoad: true), 0)
+        XCTAssertEqual(DriveAsphalt.transitionSeconds(firstAfterStyleLoad: false),
+                       AppConfig.driveAsphaltTransitionSeconds)
+        XCTAssertGreaterThan(AppConfig.driveAsphaltTransitionSeconds, 0)
     }
 
     func testRouteGoesNightOnlyInTheDriveMode() {

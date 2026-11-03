@@ -3561,6 +3561,8 @@ nonisolated enum AppConfig {
     static let compassLetterSize: CGFloat = 10
     /// Метка севера на кольце без букв (машина, 40J), pt.
     static let compassNorthMarkPoints: CGFloat = 6
+    /// Тёмная кромка метки севера: видна и на светлой земле, и на асфальте.
+    static let compassNorthMarkRim: (white: CGFloat, alpha: CGFloat, width: CGFloat) = (0.1, 0.5, 1)
 
     // MARK: - Нужное сейчас на карте (MapDetailPolicy, 29.H)
 

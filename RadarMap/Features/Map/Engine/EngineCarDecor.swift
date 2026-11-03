@@ -194,8 +194,9 @@ final class CompassRingView: UIView {
             let side = AppConfig.compassNorthMarkPoints
             northMark.path = UIBezierPath(ovalIn: CGRect(x: -side / 2, y: -side / 2, width: side, height: side)).cgPath
             northMark.fillColor = Theme.rgb(CompassRing.northRGB).cgColor
-            northMark.strokeColor = UIColor(white: 0.1, alpha: 0.5).cgColor
-            northMark.lineWidth = 1
+            let rim = AppConfig.compassNorthMarkRim
+            northMark.strokeColor = UIColor(white: rim.white, alpha: rim.alpha).cgColor
+            northMark.lineWidth = rim.width
             layer.addSublayer(northMark)
         }
         for mark in CompassRing.marks where look.letters {

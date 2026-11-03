@@ -67,12 +67,20 @@ nonisolated enum StreetPill {
     /// Имя для плашки: без уточнения в скобках, на языке приложения
     /// (StreetName). `mapForm` — тип сокращён, как на подписи карты: в машине
     /// плашка и подпись улицы рядом, и «улица Фуркат» под «ул. Фуркат»
-    /// читались двумя разными улицами (40J, D10).
+    /// читались двумя разными улицами (40J, D10). Правила — те же два, что у
+    /// make_style.street_name: тип в конце («Фурката улица» → «ул. Фурката»)
+    /// и тип в начале.
     static func label(_ raw: String, language: String, mapForm: Bool = false) -> String {
         let name = StreetName.display(cleanName(raw), language: language)
         guard mapForm, language != "uz" else { return name }
-        for type in mapTypes where name.hasPrefix(type.word + " ") {
-            return type.short + " " + name.dropFirst(type.word.count + 1)
+        for type in mapTypes {
+            let tail = " " + type.word
+            if name.hasSuffix(tail), name.count > tail.count {
+                return type.short + " " + name.dropLast(tail.count)
+            }
+            if name.hasPrefix(type.word + " ") {
+                return type.short + " " + name.dropFirst(type.word.count + 1)
+            }
         }
         return name
     }

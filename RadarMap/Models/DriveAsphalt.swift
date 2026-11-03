@@ -96,7 +96,18 @@ nonisolated enum DriveAsphalt {
         guard let light = root["light"] else { return nil }
         guard let props = light as? [String: Any] else { throw Failure.notAnObject }
         for key in props.keys where key != "intensity" { throw Failure.unknownProperty("light." + key) }
-        return (props["intensity"] as? NSNumber)?.doubleValue
+        guard let raw = props["intensity"] else { return nil }
+        guard let number = raw as? NSNumber else { throw Failure.unknownProperty("light.intensity") }
+        return number.doubleValue
+    }
+
+    /// Переход при наложении разницы, с. Первое наложение после загрузки
+    /// стиля — сразу: в машине разница кладётся на каждую загрузку (машина
+    /// подключилась, день сменился ночью, пришёл подписанный набор), и 0,6 с
+    /// телефонной палитры перетекали в машинную на глазах. Анимация — только
+    /// для настоящего переключения на показанной карте (старт поездки).
+    static func transitionSeconds(firstAfterStyleLoad: Bool) -> TimeInterval {
+        firstAfterStyleLoad ? 0 : AppConfig.driveAsphaltTransitionSeconds
     }
 
     /// Голый цвет «#rrggbb» в разнице — число: строку движок принял бы

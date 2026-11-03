@@ -40,9 +40,13 @@ final class EngineDriveAsphalt {
     /// Как покрашены постоянные слои линии маршрута: тема и сила свечения
     /// (nil — как в стиле).
     private var routePainted: (daylight: Bool, glow: Double)?
+    /// Первое обновление после загрузки стиля ещё не прошло: разница, если
+    /// нужна, ложится без перехода (DriveAsphalt.transitionSeconds).
+    private var fresh = true
 
     /// Новый стиль: в нём всё обычное, запомненное — от прежнего.
     func styleLoaded() {
+        fresh = true
         appliedResource = nil
         originals = []
         originalLight = nil
@@ -53,10 +57,15 @@ final class EngineDriveAsphalt {
     /// разницы поездки, свои линия маршрута и подпись камеры. nil — телефон.
     func update(active: Bool, daylight: Bool, car: CarMapStyle? = nil, in style: MLNStyle) {
         let wanted = active ? (car?.resource(daylight: daylight) ?? DriveAsphalt.resource(daylight: daylight)) : nil
+        let seconds = DriveAsphalt.transitionSeconds(firstAfterStyleLoad: fresh)
+        fresh = false
         if wanted != appliedResource {
             restore(in: style)
             appliedResource = wanted
-            if let wanted { apply(resource: wanted, cameraLabel: car?.cameraLabel(daylight: daylight, active: active), in: style) }
+            if let wanted {
+                apply(resource: wanted, cameraLabel: car?.cameraLabel(daylight: daylight, active: active),
+                      seconds: seconds, in: style)
+            }
         }
         let routeDaylight = car?.routeDaylight(daylight: daylight, active: active)
             ?? DriveAsphalt.routeDaylight(daylight: daylight, active: active)
@@ -89,10 +98,10 @@ final class EngineDriveAsphalt {
         return parsed
     }
 
-    private func apply(resource: String, cameraLabel: (text: UInt32, halo: UInt32)?, in style: MLNStyle) {
+    private func apply(resource: String, cameraLabel: (text: UInt32, halo: UInt32)?, seconds: TimeInterval,
+                       in style: MLNStyle) {
         originals = []
-        let transition = NSValue(mlnTransition: MLNTransition(duration: AppConfig.driveAsphaltTransitionSeconds,
-                                                              delay: 0))
+        let transition = NSValue(mlnTransition: MLNTransition(duration: seconds, delay: 0))
         let difference = Self.difference(resource)
         var items = difference.overrides.map { ($0.layer, $0.key, Self.expression($0.value)) }
         if let cameraLabel {
@@ -113,6 +122,9 @@ final class EngineDriveAsphalt {
         if let intensity = difference.light {
             let light = style.light
             originalLight = light.intensity
+            // Свет — тем же переходом, что слои: иначе объём менял освещение
+            // скачком посреди плавной перекраски.
+            light.intensityTransition = MLNTransition(duration: seconds, delay: 0)
             light.intensity = NSExpression(forConstantValue: intensity)
             style.light = light
         }

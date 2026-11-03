@@ -86,6 +86,9 @@ final class StreetPillTests: XCTestCase {
         XCTAssertEqual(StreetPill.label("Furqat ko'chasi (dublyor)", language: "ru"), "улица Фуркат")
         // Узбекская версия — имя не трогается.
         XCTAssertEqual(StreetPill.label("Furqat ko'chasi", language: "uz", mapForm: true), "Furqat ko'chasi")
+        // Русское имя с типом в конце — как make_style.street_name.
+        XCTAssertEqual(StreetPill.label("Фурката улица", language: "ru", mapForm: true), "ул. Фурката")
+        XCTAssertEqual(StreetPill.label("улица Фурката", language: "ru", mapForm: true), "ул. Фурката")
         // Без узнанного типа — как есть.
         XCTAssertEqual(StreetPill.label("Tashkent City", language: "ru", mapForm: true), "Tashkent City")
     }

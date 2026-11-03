@@ -4187,6 +4187,78 @@ class JunctionMergeTests(unittest.TestCase):
         self.assertEqual(kinds, [(build_roads.AREA_JUNCTION, closed), (build_roads.AREA_KERB, 0),
                                  (build_roads.AREA_JUNCTION, coloured)])
 
+    def area(self, ring):
+        kx = build_roads.LAT_METERS * math.cos(math.radians(41.3))
+        return abs(build_roads._ring_area([((p[0] - 69.25) * kx, (p[1] - 41.3) * build_roads.LAT_METERS)
+                                           for p in ring]))
+
+    def common(self, one, two):
+        kx = build_roads.LAT_METERS * math.cos(math.radians(41.3))
+
+        def xy(ring):
+            pts = [((p[0] - 69.25) * kx, (p[1] - 41.3) * build_roads.LAT_METERS) for p in ring]
+            return pts if build_roads._ring_area(pts) > 0 else pts[::-1]
+        return sum(abs(build_roads._ring_area(piece)) for piece in build_roads.polygon_intersection(xy(one), xy(two)))
+
+    def test_different_colours_lie_edge_to_edge(self):
+        # 40C: цветной узел у нейтрального лежал внахлёст — не сливался из-за
+        # цвета и не срезался. Теперь нахлёст снимается с цветного.
+        merger = build_roads.JunctionMerger()
+        closed = build_roads.AREA_FLAG_CLOSED
+        coloured = build_roads.with_junction_class(closed, 3)
+        merger.add((build_roads.AREA_JUNCTION, closed, self.square(0, 0, 20)), cluster=1)
+        merger.add((build_roads.AREA_JUNCTION, coloured, self.square(10, 3, 20)), cluster=2)
+        out = list(merger.flush(None))
+        self.assertEqual([f[1] for f in out], [closed, coloured])
+        self.assertAlmostEqual(self.area(out[0][2]), 400, delta=1)
+        self.assertAlmostEqual(self.area(out[1][2]), 400 - 170, delta=8)
+        self.assertLess(self.common(out[0][2], out[1][2]), 1.0)
+
+    def test_crossroads_and_one_street_area_do_not_overlap(self):
+        # Беруни × Фаробий (40C): разворот вдоль одной улицы лежал на
+        # перекрёстке — правило имён не давало ни слить, ни срезать.
+        merger = build_roads.JunctionMerger()
+        closed = build_roads.AREA_FLAG_CLOSED
+        merger.add((build_roads.AREA_JUNCTION, closed, self.square(0, 0, 30)), frozenset({"a", "b"}), cluster=1)
+        merger.add((build_roads.AREA_JUNCTION, closed, self.square(25, 5, 20)), frozenset({"a"}), cluster=2)
+        out = list(merger.flush(None))
+        self.assertEqual(len(out), 2)
+        self.assertAlmostEqual(self.area(out[0][2]), 900, delta=1, msg="перекрёсток не тронут")
+        self.assertLess(self.common(out[0][2], out[1][2]), 1.0)
+
+    def test_area_inside_another_is_dropped(self):
+        self.assertEqual(build_roads.trim_junction_ring(self.square(5, 5, 5), self.square(0, 0, 20)), [])
+        merger = build_roads.JunctionMerger()
+        coloured = build_roads.with_junction_class(build_roads.AREA_FLAG_CLOSED, 3)
+        merger.add((build_roads.AREA_JUNCTION, build_roads.AREA_FLAG_CLOSED, self.square(0, 0, 20)), cluster=1)
+        merger.add((build_roads.AREA_JUNCTION, coloured, self.square(5, 5, 5)), cluster=2)
+        self.assertEqual(len(list(merger.flush(None))), 1)
+
+    def test_shallow_notch_is_closed_and_deep_slit_kept(self):
+        kx = build_roads.LAT_METERS * math.cos(math.radians(41.3))
+
+        def geo(pts):
+            return [(69.25 + x / kx, 41.3 + y / build_roads.LAT_METERS) for x, y in pts]
+        # Ступенька 6 м шириной и 4 м глубиной на нижнем краю квадрата 40 м.
+        step = geo([(0, 0), (17, 0), (17, 4), (23, 4), (23, 0), (40, 0), (40, 40), (0, 40)])
+        closed = build_roads.notchless_ring(step)
+        # Кольцо — на сетке тайла (1e-5°): площадь плавает на доли метра по краю.
+        self.assertAlmostEqual(self.area(step), 1576, delta=1)
+        self.assertAlmostEqual(self.area(closed), 1600, delta=15)
+        self.assertGreater(self.area(closed) - self.area(step), 20)
+        # Щель 6 м шириной и 25 м глубиной — островок между лентами: остаётся.
+        slit = geo([(0, 0), (17, 0), (17, 25), (23, 25), (23, 0), (40, 0), (40, 40), (0, 40)])
+        self.assertIs(build_roads.notchless_ring(slit), slit)
+
+    def test_junction_core_is_cut_by_the_junction_area(self):
+        rings = build_roads.JunctionRings()
+        rings.add(self.square(0, 0, 20))
+        pieces = rings.outside(self.square(15, 0, 10))
+        self.assertEqual(len(pieces), 1)
+        self.assertAlmostEqual(self.area(pieces[0]), 50, delta=3)
+        apart = self.square(40, 0, 10)
+        self.assertEqual(rings.outside(apart), [apart])
+
     def test_blunt_teeth_cuts_a_needle(self):
         ring = [((0.0, 0.0), ("side", 0)), ((30.0, 0.0), ("side", 0)), ((30.0, 30.0), ("side", 0)),
                 ((15.0, 30.0), ("side", 0)), ((0.0, 60.0), ("side", 0)), ((5.0, 30.0), ("side", 0)),

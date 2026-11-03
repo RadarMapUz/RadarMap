@@ -453,9 +453,10 @@ class ArrowRowFitsDrawnRoadTests(unittest.TestCase):
         index = build_mvt.OverlapIndex([road], {id(road): 10.6})
         found = index.carriageway(metres(0, 2.0), 90)
         self.assertIsNotNone(found)
-        axis, width, oneway, marked, heading = found
+        axis, width, oneway, marked, heading, derived, clear = found
         self.assertAlmostEqual(heading, 90.0, delta=0.5, msg="азимут оси ленты по ходу")
         self.assertEqual(marked, 3, "проспект без данных — полосы по нарисованной ширине (10,6 м / 3,25)")
+        self.assertTrue(derived, "число выведено из ширины — с признаком")
         self.assertAlmostEqual(width, 10.6, places=3)
         self.assertTrue(oneway)
         self.assertAlmostEqual((axis[1] - LAT) * sc.LAT_METERS, 0.0, delta=0.01)
@@ -504,10 +505,13 @@ class ArrowsShareLanesWithLinesTests(unittest.TestCase):
     def test_row_of_other_length_does_not_land_on_marked_lanes(self):
         # Линии делят ленту на 4 полосы, а в turn:lanes — 3: здесь ряд встал бы
         # стрелками на линии. Не рисуем его на этой ленте.
-        turns = build_roads.parse_turn_lanes("left|through|through")
+        # Короче на одну полосу с поворотами в обе стороны (40C: сторона не
+        # читается) и короче на две — ряда нет.
         carriageway = lambda centre, bearing: ((centre[0], LAT), 14.0, True, 4)
-        self.assertEqual(list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, self.point(turns),
-                                                    (LON, LAT), carriageway=carriageway)), [])
+        for value in ("left|through|right", "left|through"):
+            turns = build_roads.parse_turn_lanes(value)
+            self.assertEqual(list(build_mvt.lane_arrows(build_roads.POINT_LANE_ARROWS, self.point(turns),
+                                                        (LON, LAT), carriageway=carriageway)), [], value)
 
     def test_lanes_follow_turn_lanes_when_lanes_tag_is_missing(self):
         props = build_roads.lanes_from_turns({"oneway": "yes", "turn:lanes": "left|through||right"})

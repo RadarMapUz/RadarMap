@@ -280,6 +280,16 @@ def lane_index(roads, markings):
     return road_index, line_index
 
 
+def bridge_lines(markings):
+    """Индекс линий полос на мостах — пара к `lane_index` для `unmarked_avenues`."""
+    index = _Segments()
+    for line, props in markings:
+        if props.get("bridge"):
+            for a, b in zip(line, line[1:]):
+                index.add(a, b, props.get("centre", 0), pad_m=LANE_LINE_REACH_METERS)
+    return index
+
+
 def row_centres(arrows):
     """Центр ряда для каждой стрелки: ряд — стрелки с тем же азимутом и lw в пределах 12 м.
 
@@ -547,19 +557,25 @@ UNMARKED_MIN_WIDTH_METERS = 6.5
 UNMARKED_STEP_METERS = 10.0
 
 
-def unmarked_avenues(roads, line_index, examples=None):
+def unmarked_avenues(roads, line_index, examples=None, bridge_index=None):
     """% длины односторонних лент проспекта и выше (шире 6,5 м) без единой
-    линии полос рядом — «то есть разметка, то нет» (аудит 28.G, №9)."""
+    линии полос рядом — «то есть разметка, то нет» (аудит 28.G, №9).
+
+    bridge_index — линии полос на мостах (`bridge_lines`): лента моста
+    сверяется с ними, а не с наземными. Без него мост считался голым всегда —
+    его линии в `lane_index` не попадают (40C: 19,5 км из 58,5 «голых» км
+    Ташкента были настилами с разметкой)."""
     total = bare = 0.0
     for line, props in roads:
         if (not props.get("oneway") or props.get("cls", 9) > 3 or props.get("tunnel")
                 or float(props.get("width") or 0) < UNMARKED_MIN_WIDTH_METERS):
             continue
         half = float(props["width"]) / 2.0
+        lines = bridge_index if bridge_index is not None and props.get("bridge") else line_index
         for p in densify(line, UNMARKED_STEP_METERS)[1:-1]:
             total += UNMARKED_STEP_METERS
             marked = False
-            for a, b, _centre in line_index.near(p):
+            for a, b, _centre in lines.near(p):
                 if seg_distance_m(p, a, b) <= half - 0.3:
                     marked = True
                     break
@@ -1220,7 +1236,7 @@ def measure(tiles_dir, islands_path=None, bbox=None):
     jumps, jump_worst = marking_jumps(marking_lines, jump_examples)
     bare_examples = []
     bare = unmarked_avenues([(part, props) for parts, props in road_lines for part in parts], line_index,
-                            bare_examples)
+                            bare_examples, bridge_lines(marking_lines))
     step_examples = []
     steps = zebra_steps([part for g, parts, props in paint if props.get("kind") == 12 for part in parts],
                         step_examples)

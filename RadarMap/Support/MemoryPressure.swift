@@ -48,7 +48,7 @@ import UIKit
 enum MemoryPressure {
 
     /// Почему чистим.
-    enum Reason: Sendable {
+    enum Reason: Equatable, Sendable {
         /// Система предупредила (didReceiveMemoryWarning).
         case warning
         /// Телефонная сцена ушла в фон, а процесс работает дальше (поездка,
@@ -56,8 +56,9 @@ enum MemoryPressure {
         /// и на SE рядом с CarPlay первым кандидатом на выгрузку (jetsam)
         /// становится самый толстый. Выгрузка = нет оповещений.
         case background
-        /// Поездка, след процесса выше потолка (AppConfig.engineMemoryCeilingBytes).
-        case ceiling
+        /// Поездка, след процесса выше потолка (AppConfig.engineMemoryCeilingBytes);
+        /// `footprint` — сколько он сейчас, байты (жёсткий верх машины, 40I).
+        case ceiling(footprint: UInt64)
 
         /// Память на самом деле тесная, а не «экран не виден»: только тогда
         /// отдаём то, что нужно видимому экрану машины (книги поиска).
@@ -146,16 +147,56 @@ enum MemoryPressure {
 
     private static var lastCeilingTrim: TimeInterval?
 
+    /// Машина подключена (ставит AppEnvironment): потолок — выше (40I).
+    static var isCarPlayConnected = false
+
+    /// Потолок следа: с машиной — замеренный рабочий набор её карты (40I).
+    nonisolated static func ceiling(carConnected: Bool) -> UInt64 {
+        carConnected ? AppConfig.engineMemoryCeilingCarPlayBytes : AppConfig.engineMemoryCeilingBytes
+    }
+
+    /// Что карта отдаёт на чистку.
+    enum Release: Equatable, Sendable {
+        /// Ничего: её рабочий набор нужен на экране.
+        case nothing
+        /// Выборку камер и разобранные слои темы — движок отвечает сам
+        /// (системное предупреждение он слышит без нас).
+        case selection
+        /// И то, и кэш тайлов движка в памяти.
+        case selectionAndEngine
+    }
+
+    /// Решение для одной карты. Видимая карта машины не отдаёт ничего ни на
+    /// уход телефона в фон, ни на потолок (40I): потолок — про процесс, а её
+    /// кэш тайлов и выборка камер — то, что водитель видит сейчас; чистка
+    /// каждые 2 мин перекладывала камеры и поднимала тайлы с диска на ходу.
+    /// Но не выше жёсткого верха (`engineMemoryHardCeilingCarPlayBytes`):
+    /// след — на процесс, а видимых карт в машине до трёх (экран, плитка,
+    /// приборка); перечитать тайлы с диска дешевле, чем потерять процесс, —
+    /// выгрузка = поездка без оповещений. Скрытая карта (телефон в кармане)
+    /// отдаёт всё, как раньше.
+    nonisolated static func release(_ reason: Reason, hidden: Bool, inCar: Bool) -> Release {
+        switch reason {
+        case .background:
+            return hidden ? .selectionAndEngine : .nothing
+        case .ceiling(let footprint):
+            let keeps = !hidden && inCar && footprint <= AppConfig.engineMemoryHardCeilingCarPlayBytes
+            return keeps ? .nothing : .selectionAndEngine
+        case .warning:
+            return .selection
+        }
+    }
+
     /// Проверить след процесса и почистить, если он выше потолка. Зовёт
     /// карта на своём редком такте (не чаще AppConfig.engineMemoryCheckSeconds),
     /// своего таймера здесь нет — лишних пробуждений тоже.
     static func checkCeiling(now: TimeInterval) {
         guard let footprint = footprintBytes(),
-              shouldTrim(footprint: footprint, ceiling: AppConfig.engineMemoryCeilingBytes,
+              shouldTrim(footprint: footprint, ceiling: ceiling(carConnected: isCarPlayConnected),
                          lastTrim: lastCeilingTrim, now: now) else { return }
         lastCeilingTrim = now
         Log.app.notice("память: след \(footprint / 1_048_576, privacy: .public) МБ выше потолка")
-        trim(.ceiling)
+        trim(.ceiling(footprint: footprint))
     }
 
     /// Пора ли чистить по потолку: выше него и не чаще раза в

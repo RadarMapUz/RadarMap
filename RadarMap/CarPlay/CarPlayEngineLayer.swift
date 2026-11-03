@@ -196,6 +196,7 @@ struct CarPlayEngineLayer: View {
             // слежение, а вернуть его там нечем.
             interactive: surface.interactive,
             healthTag: surface.healthTag,
+            inCar: true,
             trafficLines: env.traffic.isShown ? env.traffic.lines : [],
             trafficLinesRevision: env.traffic.linesRevision * 2 + (env.traffic.isShown ? 1 : 0),
             trafficRevision: env.traffic.revision * 2 + (env.traffic.isShown ? 1 : 0),

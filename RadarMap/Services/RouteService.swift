@@ -284,6 +284,11 @@ final class RouteService {
     @ObservationIgnored private var choiceBasis: (inputs: [RouteChoice.Input], history: RouteChoice.History?)?
     /// Касался ли водитель панели выбора с показа набора (решение 28.10).
     @ObservationIgnored private var choiceGate = ChoiceRelabelGate()
+    /// Выбор открыт на экране машины (ставит CarPlay, 40I): новый набор,
+    /// построенный в это время (на телефоне, к той же цели), замерзает сразу
+    /// в `apply` — поздние пробки не должны успеть подвинуть его метки и
+    /// выбор раньше, чем машина покажет карточку.
+    @ObservationIgnored var choiceShownInCar = false
     /// Идёт ли поездка (LocationService) — ставит AppEnvironment. Набор,
     /// построенный в пути (новая цель из поиска), выбран сразу: поздние
     /// пробки не уводят машину на другой вариант.
@@ -2059,7 +2064,7 @@ final class RouteService {
         // водитель не коснулся выбора (ChoiceRelabelGate, решение 28.10).
         choiceBasis = (choiceInputs, history)
         choiceGate.shown()
-        if isTripActive?() == true { choiceGate.touch() }
+        if isTripActive?() == true || choiceShownInCar { choiceGate.touch() }
         // Одна строка на маршрут — для разбора реальной поездки: сколько
         // рядов дал OSRM, сколько слой и где остался только край.
         if laneStats.indices.contains(selectedID) {
@@ -2327,13 +2332,22 @@ final class RouteService {
     /// Тестовый хук (37): маршрут по готовой линии без сети — тот же `apply`,
     /// что у настоящего построения. Сквозной тест часов прибытия.
     func seedRoute(name: String, path: [CLLocationCoordinate2D], seconds: TimeInterval) async {
-        let points = path.map(MKMapPoint.init)
-        let length = zip(points, points.dropFirst()).reduce(0) { $0 + $1.0.distance(to: $1.1) }
-        let arrive = RouteStep(distanceAlong: length, text: String(localized: "Вы на месте"),
-                               icon: "flag.checkered", kind: .arrive)
+        await seedRoutes(name: name, variants: [(path, seconds)])
+    }
+
+    /// Тестовый хук (40I): несколько вариантов без сети — выбор и ярлыки тем
+    /// же `apply`; цель — конец первого.
+    func seedRoutes(name: String, variants: [(path: [CLLocationCoordinate2D], seconds: TimeInterval)]) async {
+        guard let first = variants.first?.path, !first.isEmpty else { return }
+        let built = variants.map { variant -> BuiltVariant in
+            let points = variant.path.map(MKMapPoint.init)
+            let length = zip(points, points.dropFirst()).reduce(0) { $0 + $1.0.distance(to: $1.1) }
+            let arrive = RouteStep(distanceAlong: length, text: String(localized: "Вы на месте"),
+                                   icon: "flag.checkered", kind: .arrive)
+            return BuiltVariant(points: points, distance: length, travelTime: variant.seconds, steps: [arrive])
+        }
         generation += 1
-        await apply([BuiltVariant(points: points, distance: length, travelTime: seconds, steps: [arrive])],
-                    name: name, destination: path.last ?? path[0], cameras: [], gen: generation,
+        await apply(built, name: name, destination: first.last ?? first[0], cameras: [], gen: generation,
                     history: nil, myRoad: nil)
     }
     #endif

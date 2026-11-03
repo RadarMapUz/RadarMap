@@ -327,6 +327,8 @@ extension CarPlaySceneDelegate {
                     preview = allowPreview && CarPlayTripPreview.shouldPreview(speedKmh: env.location.speedKmh)
                     if previewTrip != nil { mapTemplate?.hideTripPreviews() }
                     previewTrip = nil
+                    // Карточки на экране больше нет; новая поставит флаг сама.
+                    self.env.route.choiceShownInCar = false
                     model.isPreviewing = preview
                     return preview
                 },
@@ -353,14 +355,44 @@ extension CarPlaySceneDelegate {
     /// Варианты с нашими метками и временем с пробками; рекомендованный —
     /// первым и выбранным. Линия — целиком на экране.
     func showPreview(name: String, destination: CLLocationCoordinate2D) {
-        guard let mapTemplate else {
+        guard mapTemplate != nil else {
             return endPreview(start: true, keepRoute: true, reason: "шаблона нет")
         }
+        previewDestination = destination
+        previewName = name
+        presentChoices(reason: "показ")
+        model.showOverview()
+        watchMovingOff()
+    }
+
+    /// Строки вариантов сейчас — по ним видно, устарела ли карточка.
+    private func previewTexts() -> [Int: CarPlayTripPreview.ChoiceText] {
+        let variants = env.route.variants
+        return Dictionary(variants.map { ($0.id, CarPlayTripPreview.text(for: $0, among: variants)) },
+                          uniquingKeysWith: { first, _ in first })
+    }
+
+    /// Поставить карточку выбора по текущим вариантам: выбранный — первым и
+    /// выделенным. Обзор и слежение за «тронулись» — у `showPreview`:
+    /// пересоздание из-за времени не должно ни двигать карту, ни обнулять
+    /// отсчёт автостарта.
+    private func presentChoices(reason: String) {
+        guard let mapTemplate, let destination = previewDestination else { return }
         let route = env.route
+        // Выбор на экране машины — касание (40I, дефект 35): поздние пробки
+        // больше не двигают метки и выбранный вариант, а то карточка машины
+        // (её строки после показа не меняются) расходилась бы с линией и с
+        // тем, чем поведёт автостарт. Время вариантов обновляется дальше.
+        // Здесь, а не в showPreview: новый набор к той же цели (перестроили
+        // на телефоне) приходит сюда пересозданием. Сам такой набор
+        // замерзает ещё в `apply` (`choiceShownInCar`), до поздних пробок.
+        route.noteChoiceTouched()
+        route.choiceShownInCar = true
         let variants = route.variants
+        let texts = previewTexts()
         let ordered = variants.filter { $0.id == route.selectedID } + variants.filter { $0.id != route.selectedID }
-        let choices = ordered.map { variant -> CPRouteChoice in
-            let text = CarPlayTripPreview.text(for: variant, among: variants)
+        let choices = ordered.compactMap { variant -> CPRouteChoice? in
+            guard let text = texts[variant.id] else { return nil }
             let choice = CPRouteChoice(summaryVariants: text.summary,
                                        additionalInformationVariants: text.additional,
                                        selectionSummaryVariants: text.selection)
@@ -369,19 +401,57 @@ extension CarPlaySceneDelegate {
         }
         let origin = MKMapItem(placemark: MKPlacemark(coordinate: env.location.currentCoordinate ?? destination))
         let target = MKMapItem(placemark: MKPlacemark(coordinate: destination))
-        target.name = name
+        target.name = previewName
         let trip = CarPlayGuidance.makeTrip(origin: origin, destination: target, choices: choices)
         if previewTrip != nil { mapTemplate.hideTripPreviews() }
         previewTrip = trip
-        previewDestination = destination
+        previewShown = CarPlayTripPreview.Shown(set: CarPlayTripPreview.identity(variants),
+                                                order: ordered.map(\.id), texts: texts)
+        previewEstimateKey = nil
         let text = CPTripPreviewTextConfiguration(startButtonTitle: String(localized: "Поехали"),
                                                   additionalRoutesButtonTitle: String(localized: "Варианты"),
                                                   overviewButtonTitle: String(localized: "Обзор"))
         mapTemplate.showTripPreviews([trip], selectedTrip: trip, textConfiguration: text)
         updatePreviewEstimates(route.selected)
-        model.showOverview()
-        Log.carplay.notice("выбор маршрута: вариантов \(variants.count, privacy: .public)")
-        watchMovingOff()
+        Log.carplay.notice("выбор маршрута (\(reason, privacy: .public)): вариантов \(variants.count, privacy: .public), выбран \(route.selectedID, privacy: .public)")
+        observePreview(trip)
+    }
+
+    /// Пока выбор на экране: смена минуты прибытия (37, ArrivalClock), время
+    /// вариантов по поздним пробкам, выбор на телефоне — машина узнаёт сразу,
+    /// а не только при показе и при смене варианта.
+    private func observePreview(_ trip: CPTrip) {
+        withObservationTracking {
+            _ = env.route.arrival
+            _ = env.route.variants
+            _ = env.route.selectedID
+            _ = env.route.isBuilding
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, self.previewTrip === trip else { return }
+                self.refreshPreview()
+                // Пересоздание завело слежение за новой карточкой само.
+                if self.previewTrip === trip { self.observePreview(trip) }
+            }
+        }
+    }
+
+    private func refreshPreview() {
+        guard model.isPreviewing, let shown = previewShown else { return }
+        let route = env.route
+        // Маршрут сняли, он строится или цель другая — закроет или покажет
+        // заново syncChoice.
+        guard route.isActive, !route.isBuilding, !route.variants.isEmpty,
+              let destination = route.destinationCoordinate, let shownAt = previewDestination,
+              CarPlayGuidance.same(shownAt, destination) else { return }
+        switch CarPlayTripPreview.refresh(shown, selected: route.selectedID,
+                                          set: CarPlayTripPreview.identity(route.variants),
+                                          texts: previewTexts()) {
+        case .estimates:
+            updatePreviewEstimates(route.selected)
+        case .rebuild:
+            presentChoices(reason: "обновление")
+        }
     }
 
     func updatePreviewEstimates(_ variant: RouteService.Variant?) {
@@ -390,11 +460,18 @@ extension CarPlaySceneDelegate {
         // Машина прибавляет остаток к своим часам — остаток до той же минуты,
         // что на панели телефона (ArrivalClock, 37): выбранный вариант — по
         // `route.arrival`, остальные — тем же правилом минуты.
-        let seconds = variant.id == env.route.selectedID && env.route.arrival != nil
-            ? env.route.arrivalSeconds()
-            : ArrivalClock.secondsUntil(remaining: variant.shownTime, now: Date())
+        let now = Date()
+        let arrival = variant.id == env.route.selectedID ? env.route.arrival : nil
+        let target = arrival ?? ArrivalClock.rounded(ArrivalClock.raw(now: now, remaining: variant.shownTime))
+        let tone = CarPlayTripPreview.timeColor(trafficDelay: variant.shownTrafficDelay)
+        // Та же минута, путь и цвет — не слать: каждая отправка перерисовывает
+        // карточку на головном устройстве.
+        let key = "\(variant.id)|\(target.timeIntervalSince1970)|\(Int(variant.distance))|\(tone)"
+        guard key != previewEstimateKey else { return }
+        previewEstimateKey = key
+        let seconds = ArrivalClock.secondsUntil(target, now: now)
         let estimates = CarPlayGuidance.tripEstimates(meters: variant.distance, seconds: seconds)
-        let color: CPTimeRemainingColor = switch CarPlayTripPreview.timeColor(trafficDelay: variant.shownTrafficDelay) {
+        let color: CPTimeRemainingColor = switch tone {
         case .standard: .default
         case .green: .green
         case .orange: .orange
@@ -411,6 +488,9 @@ extension CarPlaySceneDelegate {
         if previewTrip != nil { mapTemplate?.hideTripPreviews() }
         previewTrip = nil
         previewDestination = nil
+        previewShown = nil
+        previewEstimateKey = nil
+        env.route.choiceShownInCar = false
         guard model.isPreviewing else { return }
         if !keepRoute { env.route.clear() }
         model.isPreviewing = false

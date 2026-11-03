@@ -128,6 +128,9 @@ struct EngineMapView: UIViewRepresentable {
     /// Метка журнала здоровья карты («машина», «плитка»): раз в 10 с строка
     /// с состоянием приложения, кадрами, поворотом и камерами. nil — молчим.
     var healthTag: String?
+    /// Карта в машине (экран, плитка, приборка): на потолке памяти видимая
+    /// не отдаёт ничего (MemoryPressure.release, 40I).
+    var inCar: Bool = false
     /// Пробки (TrafficService): линии улиц, сшитые из рёбер (TrafficLines,
     /// 33H). Пишутся в источник только на смене `trafficRevision` — раз в
     /// пару минут, а не на тике.
@@ -854,17 +857,17 @@ struct EngineMapView: UIViewRepresentable {
         /// потолке и когда наша карта не видна; на системное предупреждение
         /// движок отвечает сам (MLNMapView слушает то же уведомление).
         func releaseMemory(_ reason: MemoryPressure.Reason) {
-            let hidden = isHidden
-            // Карта на экране машины при уходе телефона в фон — на виду:
-            // ей ничего не отдаём, она едет.
-            if reason == .background && !hidden { return }
+            // Карта на экране машины — на виду: ни на уход телефона в фон, ни
+            // на потолок ей ничего не отдаём, она едет (MemoryPressure.release).
+            let release = MemoryPressure.release(reason, hidden: isHidden, inCar: current?.inCar ?? false)
+            guard release != .nothing else { return }
             cachedCameras = []
             cachedLimits = [:]
             cameraWindow = nil          // следующий кадр соберёт выборку заново
             themeLayers = []            // перечитается из EngineMapStyle при смене темы
             // Корзины индекса выпуска поднимутся с диска, не с сети.
             Task { await TileReleaseStore.shared.releaseMemory() }
-            if reason != .warning, let view { Self.trimEngine(view) }
+            if release == .selectionAndEngine, let view { Self.trimEngine(view) }
         }
 
         /// Карту не видно: окна нет или её сцена в фоне.

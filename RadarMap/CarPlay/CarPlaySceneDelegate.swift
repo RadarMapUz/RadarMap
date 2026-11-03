@@ -123,6 +123,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         _ = HitchWatch.drain()
         HitchWatch.setCounting(true)
         connectedAt = Date()
+        // Новая сцена выбора ещё не показала: флаг старой сцены, чей
+        // didDisconnect пришёл позже и вышел как устаревший, здесь снимается.
+        env.route.choiceShownInCar = false
 
         // День/ночь — ДО первого кадра: тема машины (датчик света) в «Авто»
         // старше солнца, и первый кадр раньше всегда был тёмным.
@@ -222,6 +225,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         previewWatch = nil
         previewTrip = nil
         previewDestination = nil
+        previewShown = nil
+        previewEstimateKey = nil
         flowPhase = nil
         model.isPreviewing = false
         offerTask?.cancel()
@@ -262,6 +267,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             return
         }
         Self.activeDelegate = nil
+        env.route.choiceShownInCar = false
         if let connectedAt {
             env.usage.noteCarPlaySession(minutes: Int(Date().timeIntervalSince(connectedAt) / 60),
                                          hitches: HitchWatch.drain())
@@ -373,6 +379,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Цель, выбор к которой на экране: маршрут заменили на телефоне —
     /// выбор показывает новый.
     var previewDestination: CLLocationCoordinate2D?
+    /// Имя цели на карточке — для пересоздания выбора (40I).
+    var previewName = ""
+    /// Что на карточке выбора сейчас (CarPlayTripPreview.Shown, 40I).
+    var previewShown: CarPlayTripPreview.Shown?
+    /// Последние отправленные оценки выбора: вариант, минута, путь, цвет.
+    var previewEstimateKey: String?
 
     // MARK: - Объезд пробки
 

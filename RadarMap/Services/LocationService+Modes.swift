@@ -47,13 +47,56 @@ extension LocationService {
         await awaitPosition(timeout: timeout, precise: false)
     }
 
+    /// Качество своей точки для слепой отметки водителя (`ReportGuard.isTrusted`):
+    /// грубая, потерянная или давняя точка ставит засаду не там — у всех.
+    var reportFix: ReportGuard.Fix {
+        ReportGuard.Fix(isCoarse: isPositionCoarse, isSignalStale: isSignalStale,
+                        accuracy: horizontalAccuracy,
+                        age: lastAcceptedAt.map { Date().timeIntervalSince($0) },
+                        isContinuous: isTripActive || isForeground)
+    }
+
+    /// Точка для отметки из Siri, плашки и часов: ждём годную по
+    /// `ReportGuard.isTrusted`, а не первую попавшуюся. В тихом фоне последняя
+    /// точка — значимое перемещение, сделанное, может быть, километры назад;
+    /// одноразовый фикс приходит за секунды. nil — честное «жду GPS».
+    ///
+    /// На время ожидания просим лучшую точность: в поездке с телефоном в
+    /// кармане стоя (тир 3) система отдаёт 100 м, и одноразовый фикс без этого
+    /// так и не стал бы годным — честная отметка в пробке у поста получала бы
+    /// «Ждём спутники». Прежнюю точность возвращаем, только если ступень
+    /// лестницы за ожидание не менялась (`GPSTiers.accuracyAfterReportWait`).
+    func awaitReportCoordinate(timeout: TimeInterval = 6) async -> CLLocationCoordinate2D? {
+        if ReportGuard.isTrusted(reportFix), let point = currentCoordinate { return point }
+        guard isAuthorized else { return nil }
+        let previous = manager.desiredAccuracy
+        let tierBefore = accuracyTier
+        manager.desiredAccuracy = kCLLocationAccuracyBest
+        defer {
+            if let restored = GPSTiers.accuracyAfterReportWait(previous: previous,
+                                                               current: manager.desiredAccuracy,
+                                                               tierBefore: tierBefore,
+                                                               tierNow: accuracyTier) {
+                manager.desiredAccuracy = restored
+            }
+        }
+        return await awaitPosition(timeout: timeout) {
+            ReportGuard.isTrusted(self.reportFix) ? self.currentCoordinate : nil
+        }
+    }
+
     /// Одноразовый фикс и ожидание его до `timeout` — общий цикл обеих
     /// просьб выше. `precise` — грубая точка (фоновый режим) не годится:
     /// маршрут от неё начинается за километры.
     func awaitPosition(timeout: TimeInterval, precise: Bool) async -> CLLocationCoordinate2D? {
-        func ready() -> CLLocationCoordinate2D? {
-            precise && isPositionCoarse ? nil : currentCoordinate
+        await awaitPosition(timeout: timeout) {
+            precise && self.isPositionCoarse ? nil : self.currentCoordinate
         }
+    }
+
+    /// Общий цикл ожидания: `ready` — годна ли точка сейчас.
+    private func awaitPosition(timeout: TimeInterval,
+                               ready: () -> CLLocationCoordinate2D?) async -> CLLocationCoordinate2D? {
         if let point = ready() { return point }
         guard isAuthorized else { return nil }
         manager.requestLocation()

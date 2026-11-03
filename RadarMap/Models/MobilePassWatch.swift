@@ -82,6 +82,10 @@ nonisolated enum MobilePassWatch {
         var closestMeters: CLLocationDistance
         /// Уже спрашивали — второй раз не спросим за всю сессию.
         var asked = false
+        /// Когда проезд состоялся (подошли и отъехали). Ответ уходит с этим
+        /// возрастом: вопрос мог ждать занятого слота, голос — связи, а
+        /// тренога — это «сейчас», и старое «стоит» сервер не продлевает.
+        var departedAt: Date? = nil
     }
 
     /// Обновить наблюдение и решить, пора ли спрашивать.
@@ -92,10 +96,16 @@ nonisolated enum MobilePassWatch {
     /// `excluded` — свои отметки водителя: отметивший сам видел, что там, а
     /// его «да» сервер всё равно не засчитает (тот же телефон — не
     /// независимое подтверждение). Вопрос был бы пустым тапом за рулём.
+    /// `canAsk` — слот вопроса свободен. Занят — проезд копится, но точку
+    /// «спрошенной» не помечаем: раньше её id выбрасывался, пока висел
+    /// прежний вопрос (до пяти минут с погашенным экраном), и о второй
+    /// отметке не спрашивали уже никогда.
     static func update(tracks: inout [Int: Track],
                        mobileCameras: [Camera],
                        from coordinate: CLLocationCoordinate2D,
-                       excluded: Set<Int> = []) -> Int? {
+                       excluded: Set<Int> = [],
+                       canAsk: Bool = true,
+                       now: Date = Date()) -> Int? {
         var askAbout: Int?
         for camera in mobileCameras where !excluded.contains(camera.id) {
             let distance = GeoMath.fastDistance(coordinate.latitude, coordinate.longitude,
@@ -107,7 +117,10 @@ nonisolated enum MobilePassWatch {
             var track = tracks[camera.id] ?? Track(cameraID: camera.id,
                                                    closestMeters: .greatestFiniteMagnitude)
             track.closestMeters = min(track.closestMeters, distance)
-            if !track.asked, track.closestMeters <= approachMeters, distance >= departedMeters {
+            if track.departedAt == nil, track.closestMeters <= approachMeters, distance >= departedMeters {
+                track.departedAt = now
+            }
+            if canAsk, !track.asked, track.closestMeters <= approachMeters, distance >= departedMeters {
                 track.asked = true
                 // Один вопрос за тик: две плашки подряд за рулём — это шум.
                 if askAbout == nil { askAbout = camera.id }

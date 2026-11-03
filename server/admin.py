@@ -3050,7 +3050,7 @@ class Handler(BaseHTTPRequestHandler):
             return None
         confirmed = conn.execute(
             "SELECT COUNT(*) FROM reports r WHERE r.created > ? AND EXISTS("
-            "  SELECT 1 FROM votes v WHERE v.report_id = r.id AND v.value = 1 "
+            "  SELECT 1 FROM votes v WHERE v.report_id = r.id AND v.value = 1 AND v.stale = 0 "
             "  AND v.device != r.device AND v.ip != '' AND v.ip != r.ip)",
             (since,)).fetchone()[0]
         by_reason = dict(conn.execute(

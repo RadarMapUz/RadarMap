@@ -33885,6 +33885,91 @@
           }
         }
       }
+    },
+    "Уже нельзя изменить": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Уже нельзя изменить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Endi oʻzgartirib boʻlmaydi"
+          }
+        }
+      }
+    },
+    "Отметка не ушла": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отметка не ушла"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belgi yuborilmadi"
+          }
+        }
+      }
+    },
+    "Не дождались связи — отметок не отправлено: %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не дождались связи — отметок не отправлено: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aloqa boʻlmadi — yuborilmagan belgilar: %lld"
+          }
+        }
+      }
+    },
+    "Не ушло отметок: %lld — связи не было": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не ушло отметок: %lld — связи не было"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yuborilmagan belgilar: %lld — aloqa boʻlmadi"
+          }
+        }
+      }
+    },
+    "Ждут связи: %lld — отправлю, когда появится": {
+      "extractionState": "manual",
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ждут связи: %lld — отправлю, когда появится"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aloqa kutilmoqda: %lld — paydo boʻlishi bilan yuboraman"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

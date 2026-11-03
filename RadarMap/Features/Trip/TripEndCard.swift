@@ -75,7 +75,11 @@ struct TripEndCard: View {
                 .buttonStyle(PressableStyle())
                 .accessibilityHint(Text("Подробнее"))
                 VStack(spacing: 6) {
-                    roundButton("xmark", tint: Theme.textSecondary, action: onDismiss)
+                    roundButton("xmark", tint: Theme.textSecondary) {
+                        // Сказали — счётчик протухших отметок в ноль.
+                        env.mobile.acknowledgeUndelivered()
+                        onDismiss()
+                    }
                         .accessibilityLabel(Text("Скрыть итог поездки"))
                     roundButton("square.and.arrow.up", tint: Theme.accent, action: share)
                         .accessibilityLabel(Text("Поделиться поездкой"))
@@ -85,6 +89,7 @@ struct TripEndCard: View {
                 mergeRow(previous: previous)
             }
             missedAlertRow
+            reportsRow
         }
         .padding(14)
         .liftedBackground(Theme.surface, in: shape)
@@ -233,6 +238,37 @@ struct TripEndCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Свои отметки без сети
+
+    /// «Отправлю позже» — обещание, и итог поездки говорит, чем оно кончилось:
+    /// отметка протухла без связи или ещё ждёт её. Молча пропадать она не
+    /// должна — водитель на обещание рассчитывал и второй раз не отметил.
+    @ViewBuilder private var reportsRow: some View {
+        let lost = env.mobile.undeliveredCount
+        let waiting = env.mobile.pendingCount
+        if lost > 0 || waiting > 0 {
+            HStack(spacing: 10) {
+                Image(systemName: lost > 0 ? "antenna.radiowaves.left.and.right.slash" : "clock.arrow.circlepath")
+                    .font(.rounded(14, .bold))
+                    .foregroundStyle(lost > 0 ? Theme.warning : Theme.textSecondary)
+                    .frame(width: 30, height: 30)
+                    .background(Theme.background, in: Circle())
+                Text(verbatim: lost > 0
+                     ? String(format: String(localized: "Не ушло отметок: %lld — связи не было"), lost)
+                     : String(format: String(localized: "Ждут связи: %lld — отправлю, когда появится"), waiting))
+                    .font(.rounded(13, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
+                Spacer(minLength: 0)
+            }
+            .padding(10)
+            .background(Theme.quietFill,
+                        in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+            .accessibilityElement(children: .combine)
+        }
     }
 
     // MARK: - «Не предупредила» (12.5)

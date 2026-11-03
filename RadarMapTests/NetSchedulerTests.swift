@@ -159,6 +159,52 @@ final class NetSchedulerTests: XCTestCase {
         }
     }
 
+    // MARK: - Своя очередь отметок (ловец багов, 39)
+
+    func testReportQueueLeavesWithoutTripOnActivationOnlineAndBackground() {
+        // «Отправлю позже» → автостоп → связь вернулась с телефоном в кармане:
+        // очередь уходит без поездки и экрана, а не ждёт следующего открытия.
+        let idle = situation(.idle, screenOn: false, due: [.reports])
+        for trigger in [SyncPlan.Trigger.activation, .online, .background] {
+            XCTAssertEqual(SyncPlan.plan(idle, tracks: [:], trigger: trigger).jobs, [.reports], "\(trigger)")
+        }
+        XCTAssertEqual(SyncPlan.plan(idle, tracks: [:], trigger: .tick).jobs, [], "своих тактов без поездки нет")
+    }
+
+    func testReportQueueRidesTheTripTick() {
+        let plan = SyncPlan.plan(situation(.trip, at: 140, due: [.reports]),
+                                 tracks: tracks([.mobile: 70, .traffic: 70]), trigger: .tick)
+        XCTAssertEqual(plan.jobs, [.mobile, .reports])
+    }
+
+    func testReportQueueIsOffWhenCrowdsourcingIs() {
+        let s = situation(.idle, screenOn: false, disabled: [.mobile, .reports], due: [.reports])
+        XCTAssertEqual(SyncPlan.plan(s, tracks: [:], trigger: .online).jobs, [])
+    }
+
+    func testReturningNetworkForgivesReportFailures() {
+        // Три таймаута при «связь есть»: пауза 70 × 8. Связь пропала и
+        // вернулась — пауза мерила мёртвую сеть, опрос и досылка идут сразу.
+        let failed = tracks([.mobile: 0, .traffic: 0, .reports: 0],
+                            failures: [.mobile: 3, .reports: 2, .traffic: 1])
+        let s = situation(.trip, at: 100, due: [.reports])
+        XCTAssertEqual(SyncPlan.plan(s, tracks: failed, trigger: .online).jobs, [],
+                       "без прощения: пауза ведущих и попутной")
+        let forgiven = SyncPlan.forgiven(failed, trigger: .online)
+        XCTAssertEqual(forgiven[.mobile]?.failures, 0)
+        XCTAssertEqual(forgiven[.reports]?.failures, 0)
+        XCTAssertEqual(SyncPlan.plan(s, tracks: forgiven, trigger: .online).jobs, [.mobile, .reports])
+        XCTAssertEqual(SyncPlan.forgiven(failed, trigger: .activation)[.mobile]?.failures, 0)
+    }
+
+    func testTimerTickForgivesNothing() {
+        let failed = tracks([.mobile: 0, .cameraDB: 0], failures: [.mobile: 3, .cameraDB: 2])
+        XCTAssertEqual(SyncPlan.forgiven(failed, trigger: .tick), failed)
+        XCTAssertEqual(SyncPlan.forgiven(failed, trigger: .background), failed)
+        XCTAssertEqual(SyncPlan.forgiven(failed, trigger: .online)[.cameraDB]?.failures, 2,
+                       "редкие файлы прощение не трогает: их сбой — сервер, а не сеть")
+    }
+
     func testDriverFailurePausesOnlyThatService() {
         // Отметки дважды не ответили: пауза 70 × 4 = 280 с; пробки идут своим сроком.
         let t = tracks([.mobile: 0, .traffic: 0], failures: [.mobile: 2])

@@ -257,7 +257,7 @@ final class AppEnvironment {
             let screenOn = self.isPhoneSceneActive || self.isCarPlayConnected
             let mode: SyncPlan.Mode = self.location.isTripActive ? .trip : (screenOn ? .watching : .idle)
             var disabled: Set<SyncPlan.Job> = []
-            if !self.mobile.isEnabled { disabled.insert(.mobile) }
+            if !self.mobile.isEnabled { disabled.formUnion([.mobile, .reports]) }
             if !self.traffic.isSyncWanted { disabled.insert(.traffic) }
             if !self.roadWeather.isEnabled { disabled.insert(.roadWeather) }
             if !self.traffic.isShown { disabled.insert(.trafficProfile) }
@@ -286,6 +286,13 @@ final class AppEnvironment {
                                           whenDisabled: { [weak mobile] in mobile?.applyDisabled() }))
         scheduler.register(.traffic, .init(run: { [weak traffic] in await traffic?.syncTick() ?? true },
                                            whenDisabled: { [weak traffic] in traffic?.clearIfHidden() }))
+        // Своя очередь без сети — попутная без зрителя: досылается на
+        // возврате связи, активации и фоновом подъёме и после поездки, а не
+        // только в такте опроса, которого без поездки и экрана нет вовсе.
+        scheduler.register(.reports, .init(run: { [weak mobile] in
+            await mobile?.flushPending()
+            return true
+        }, isDue: { [weak mobile] in mobile?.isQueueDue ?? false }))
         // Попутные частые.
         scheduler.register(.roadWeather, .init(run: { [weak roadWeather] in
             await roadWeather?.refresh()
@@ -353,6 +360,34 @@ final class AppEnvironment {
             await offlineRoutes?.refreshIfDue()
             return true
         }, isDue: { [weak offlineRoutes] in offlineRoutes?.isDue() ?? false }))
+    }
+
+    /// «Отправлю позже» не пропадает молча. Отметки, протухшие в очереди, —
+    /// в конце поездки: на экране — строкой в «Поездка сохранена» (её
+    /// снимает крестик карточки), в фоне — уведомлением; вне поездки —
+    /// уведомлением сразу, как только срок вышел.
+    private func wireUndeliveredReports() {
+        mobile.onReportsUndelivered = { [weak self] _ in
+            guard let self, !self.location.isTripActive else { return }
+            self.announceUndeliveredReports()
+        }
+    }
+
+    private func tripStateChangedForReports(active: Bool) {
+        if active {
+            // Новая поездка — итог прошлой уже не о ней.
+            mobile.acknowledgeUndelivered()
+            return
+        }
+        mobile.dropExpiredPending(notify: false)
+        if !isPhoneSceneActive { announceUndeliveredReports() }
+    }
+
+    private func announceUndeliveredReports() {
+        let count = mobile.undeliveredCount
+        guard count > 0 else { return }
+        notifications.notifyReportsUndelivered(count: count)
+        mobile.acknowledgeUndelivered()
     }
 
     /// Ставит RootView по scenePhase телефона.
@@ -495,6 +530,7 @@ final class AppEnvironment {
         location.onTripStateChanged = { [weak self] active in
             guard let self else { return }
             self.mobile.setTripActive(active)
+            self.tripStateChangedForReports(active: active)
             // Такт сети — по поездке, а не по экрану; старт — внеочередной
             // опрос отметок (список получасовой давности пропустил бы ровно
             // тот случай, ради которого всё это).
@@ -965,6 +1001,7 @@ final class AppEnvironment {
         observeAppearanceSetting()
         observeCommuteSettings()
         wireNetScheduler()
+        wireUndeliveredReports()
         wireCloud()
         startCoreServices()
     }

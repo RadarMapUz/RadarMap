@@ -70,7 +70,8 @@ extension MapScreen {
                                 coordinate: report.coordinate,
                                 speedKmh: env.location.speedKmh,
                                 isTripActive: env.location.isTripActive,
-                                placement: .deliberate)
+                                placement: .deliberate,
+                                fix: nil)
                             UINotificationFeedbackGenerator()
                                 .notificationOccurred(outcome.isSuccess ? .success : .warning)
                         }

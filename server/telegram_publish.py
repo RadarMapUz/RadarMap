@@ -125,7 +125,7 @@ def select_confirmed(conn, *, now, lookback_minutes=LOOKBACK_MINUTES,
     rows = conn.execute(
         f"""SELECT r.id, r.lat, r.lon, r.type, r.created,
                    (SELECT COUNT(DISTINCT v.ip) FROM votes v
-                     WHERE v.report_id = r.id AND v.value = 1
+                     WHERE v.report_id = r.id AND v.value = 1 AND v.stale = 0
                        AND v.device != r.device AND v.ip != '' AND v.ip != r.ip)
                    AS confirmations
             FROM reports r

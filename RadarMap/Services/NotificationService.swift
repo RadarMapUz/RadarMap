@@ -180,6 +180,20 @@ final class NotificationService: NSObject {
     }
 
     private static let reportConfirmedID = "report-confirmed"
+    private static let reportUndeliveredID = "report-undelivered"
+
+    /// «Отправлю позже» не сбылось: связи так и не было, а отметка протухла
+    /// (радар мог уехать — доставлять её поздно). Обещание было голосом, и
+    /// невыполненное оно не пропадает молча. Без звука — скорее всего, за рулём.
+    func notifyReportsUndelivered(count: Int) {
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "Отметка не ушла")
+        content.body = String(format: String(localized: "Не дождались связи — отметок не отправлено: %lld"),
+                              count)
+        content.sound = nil
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: Self.reportUndeliveredID, content: content, trigger: nil))
+    }
 
     /// «Вашу отметку подтвердил другой водитель».
     ///

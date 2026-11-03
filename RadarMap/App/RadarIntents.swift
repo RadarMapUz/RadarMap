@@ -147,8 +147,10 @@ struct RouteWorkIntent: AppIntent {
 @MainActor
 private func reportBySiri(_ kind: ReportKind) async -> IntentDialog {
     let env = AppEnvironment.shared
-    // Холодный старт из Siri: GPS ещё не тикал — просим одноразовый фикс и ждём.
-    guard let coordinate = await env.location.awaitCoordinate() else {
+    // Холодный старт из Siri: GPS ещё не тикал — просим одноразовый фикс и
+    // ждём ГОДНЫЙ: в тихом фоне последняя точка — значимое перемещение, иногда
+    // километры назад, и отметка по ней ставила засаду не там (ловец багов, 39).
+    guard let coordinate = await env.location.awaitReportCoordinate() else {
         return IntentDialog("Не вижу геопозицию — попробуйте ещё раз.")
     }
     // Через ту же дверь, что и кнопка: интент шёл мимо и терял защиту от
@@ -159,6 +161,7 @@ private func reportBySiri(_ kind: ReportKind) async -> IntentDialog {
         coordinate: coordinate,
         speedKmh: env.location.speedKmh,
         isTripActive: env.location.isTripActive,
+        fix: env.location.reportFix,
         course: env.location.currentCourse)
     switch outcome {
     case .sent(.created):
@@ -269,14 +272,15 @@ extension AppEnvironment {
         remoteReportInFlight = true
         defer { remoteReportInFlight = false }
         // Плашка и часы поднимают приложение и из выгруженного состояния —
-        // точки тогда ещё нет; одноразовый фикс, как у Siri.
-        var coordinate = location.currentCoordinate
-        if coordinate == nil { coordinate = await location.awaitCoordinate() }
+        // точки тогда ещё нет или она грубая; ждём годную, как у Siri. Не
+        // дождались — quickReport честно скажет «Ждём спутники».
+        let coordinate = await location.awaitReportCoordinate() ?? location.currentCoordinate
         let outcome = await mobile.quickReport(
             kind: .radar,
             coordinate: coordinate,
             speedKmh: location.speedKmh,
             isTripActive: location.isTripActive,
+            fix: location.reportFix,
             course: location.currentCourse)
         alerts.speak(outcome.spoken)
         return outcome

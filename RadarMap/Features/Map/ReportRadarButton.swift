@@ -268,6 +268,7 @@ struct ReportRadarButton: View {
                 coordinate: env.location.currentCoordinate,
                 speedKmh: env.location.speedKmh,
                 isTripActive: env.location.isTripActive,
+                fix: env.location.reportFix,
                 // Курс нужен снапу: на разделённой трассе без него отметка с
                 // равной вероятностью садится на встречное полотно.
                 course: env.location.currentCourse)
@@ -349,10 +350,12 @@ struct ReportRefineBar: View {
             guard let id = env.mobile.cancellableReportID() else { return }
             withMotion { env.mobile.dismissRefine() }
             Task {
-                if await env.mobile.cancelReport(id: id) {
-                    env.alerts.speak(String(localized: "Отметка убрана"))
+                // Причина — своя: «нет связи» поверх «подтвердили другие» или
+                // «выключено пультом» было неправдой (ловец багов, 39).
+                if let why = await env.mobile.cancelReport(id: id) {
+                    env.alerts.speak(why.spoken)
                 } else {
-                    env.alerts.speak(String(localized: "Не отправилось, нет связи"))
+                    env.alerts.speak(String(localized: "Отметка убрана"))
                 }
             }
         } label: {
@@ -380,10 +383,10 @@ struct ReportRefineBar: View {
             withMotion { env.mobile.dismissRefine() }
             Task {
                 // Итог звучит: молчаливый тап за рулём читается как несработавший.
-                if await env.mobile.refine(to: kind, offer: offer) {
-                    env.alerts.speak(kind.title)
+                if let why = await env.mobile.refine(to: kind, offer: offer) {
+                    env.alerts.speak(why.spoken)
                 } else {
-                    env.alerts.speak(String(localized: "Не отправилось, нет связи"))
+                    env.alerts.speak(kind.title)
                 }
             }
         } label: {

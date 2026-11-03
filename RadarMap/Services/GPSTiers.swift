@@ -155,4 +155,15 @@ nonisolated enum GPSTiers {
     static func escalatedAccuracy(from requested: CLLocationAccuracy) -> CLLocationAccuracy? {
         requested == kCLLocationAccuracyBest ? nil : kCLLocationAccuracyBest
     }
+
+    /// Ожидание точки для отметки водителя подняло точность до Best — что
+    /// вернуть после. nil — не трогать: пока ждали, лестница сменила ступень
+    /// (тронулись у камеры — тир 0) и решила сама, а возврат «прежней» оставил
+    /// бы подход к камере на 100 м: лестница при том же тире молчит.
+    static func accuracyAfterReportWait(previous: CLLocationAccuracy, current: CLLocationAccuracy,
+                                        tierBefore: Int, tierNow: Int) -> CLLocationAccuracy? {
+        guard tierNow == tierBefore, current == kCLLocationAccuracyBest,
+              previous != kCLLocationAccuracyBest else { return nil }
+        return previous
+    }
 }

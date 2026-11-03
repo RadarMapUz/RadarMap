@@ -1,0 +1,348 @@
+"""Отметки водителей: уточнение своей точки, слияние семей, гонка вставки.
+
+Первые три теста — сценарии ловца багов (цикл 39), падали на main; остальные —
+правила картографа (A1, A2)."""
+import sqlite3
+import threading
+import time
+import unittest
+
+import api
+from test_api import ServerTestBase, _call
+
+
+class _Helpers:
+
+    def _put(self, lat, lon, ago, rtype="radar", device="me", ip="10.39.0.1", cls="residential"):
+        conn = sqlite3.connect(api.DB_PATH)
+        now = time.time()
+        cur = conn.execute(
+            "INSERT INTO reports(lat, lon, created, expires, device, type, ip, cls, active) "
+            "VALUES(?,?,?,?,?,?,?,?,1)",
+            (lat, lon, now - ago, now + 3600, device, rtype, ip, cls))
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return rid
+
+    def _type(self, rid):
+        conn = sqlite3.connect(api.DB_PATH)
+        row = conn.execute("SELECT type FROM reports WHERE id = ?", (rid,)).fetchone()
+        conn.close()
+        return row[0]
+
+    def _active(self):
+        conn = sqlite3.connect(api.DB_PATH)
+        count = conn.execute("SELECT COUNT(*) FROM reports WHERE active = 1").fetchone()[0]
+        conn.close()
+        return count
+
+    def _post(self, lat, lon, rtype="radar", device="me", ip="10.39.0.1", **extra):
+        body = {"lat": lat, "lon": lon, "device": device, "type": rtype}
+        body.update(extra)
+        return _call(self.port, "POST", "/api/report", body, ip=ip)
+
+
+class AmendTest(_Helpers, ServerTestBase):
+
+    def test_refine_retypes_the_point_named_by_amend_id(self):
+        """«Что это было? → Тренога» о свежей точке B переписывает B, а не
+        свою же точку A четырьмя минутами раньше в 250 м."""
+        a = self._put(41.3100, 69.2500, ago=240)
+        status, b = self._post(41.31225, 69.2500, cls="residential")
+        self.assertEqual(status, 200)
+        self.assertFalse(b["merged"], "B должна быть новой точкой")
+        status, amended = self._post(41.31225, 69.2500, "tripod", amend_id=b["id"])
+        self.assertEqual(status, 200)
+        self.assertEqual(amended["id"], b["id"], "уточнение ушло не в ту точку")
+        self.assertEqual(self._type(b["id"]), "tripod")
+        self.assertEqual(self._type(a), "radar", "чужая для уточнения точка A перекрашена")
+
+    def test_post_after_radar_is_a_new_point(self):
+        """Радар, через 2 мин в 350 м — пост из веера: две засады, а не
+        пост поверх радара."""
+        a = self._put(41.3100, 69.2500, ago=130)
+        status, body = self._post(41.31315, 69.2500, "post")
+        self.assertEqual(status, 200)
+        self.assertNotIn("amended", body, "пост в 350 м переписал свой радар")
+        self.assertEqual(self._type(a), "radar")
+
+    def test_implicit_amend_only_for_a_fresh_point_close_by(self):
+        """Без amend_id уточняется только своя точка не старше 60 с и не дальше
+        150 м (старая плашка «Что это было?»)."""
+        fresh = self._put(41.3100, 69.2500, ago=20)
+        _, body = self._post(41.3105, 69.2500, "tripod")       # ~55 м
+        self.assertTrue(body.get("amended"))
+        self.assertEqual(body["id"], fresh)
+        self.assertEqual(self._type(fresh), "tripod")
+
+    def test_implicit_amend_window_is_sixty_seconds(self):
+        old = self._put(41.3100, 69.2500, ago=70, rtype="tripod")
+        # 70 с — ещё действует «120 с между отметками» (429), но не уточнение.
+        _, body = self._post(41.3101, 69.2500, "post")
+        self.assertNotIn("amended", body, "уточнение минутной давности")
+        self.assertEqual(self._type(old), "tripod")
+
+    def test_implicit_amend_radius_is_150_metres(self):
+        near = self._put(41.3100, 69.2500, ago=10, rtype="tripod")
+        status, body = self._post(41.3118, 69.2500, "accident")   # ~200 м
+        self.assertNotIn("amended", body)
+        self.assertEqual(self._type(near), "tripod")
+
+    def test_amend_of_a_point_that_is_not_mine_is_refused(self):
+        """Явное уточнение несуществующей, чужой или далёкой точки — 409, а не
+        новая точка: уточнение не создаёт засад."""
+        foreign = self._put(41.3100, 69.2500, ago=20, device="other", ip="10.39.0.9")
+        status, _ = self._post(41.3100, 69.2500, "tripod", amend_id=foreign)
+        self.assertEqual(status, 409)
+        status, _ = self._post(41.3100, 69.2500, "tripod", amend_id=999_999)
+        self.assertEqual(status, 409)
+        self.assertEqual(self._active(), 1)
+        self.assertEqual(self._type(foreign), "radar")
+
+
+class FreshClientTest(_Helpers, ServerTestBase):
+
+    def test_new_client_never_gets_an_implicit_amend(self):
+        """Новый клиент уточняет только явно (amend_id): «Тренога» из веера
+        через 10 с после своего «Радар!» — не перекраска радара."""
+        radar = self._put(41.3100, 69.2500, ago=10)
+        _, body = self._post(41.3102, 69.2500, "tripod", fresh=True)
+        self.assertNotIn("amended", body)
+        self.assertEqual(self._type(radar), "radar")
+
+    def test_old_client_radar_is_still_refined(self):
+        """Старая сборка шлёт тип без amend_id сразу после «Радар!» — это её
+        плашка уточнения, она работает как раньше."""
+        radar = self._put(41.3100, 69.2500, ago=10)
+        _, body = self._post(41.3102, 69.2500, "tripod")
+        self.assertTrue(body.get("amended"))
+        self.assertEqual(self._type(radar), "tripod")
+
+
+class StaleVoteTest(_Helpers, ServerTestBase):
+
+    def _expires(self, rid):
+        conn = sqlite3.connect(api.DB_PATH)
+        value = conn.execute("SELECT expires FROM reports WHERE id = ?", (rid,)).fetchone()[0]
+        conn.close()
+        return value
+
+    def test_old_yes_vote_does_not_extend(self):
+        """«Да, стоит» о проезде 20 минут назад (вопрос и связь ждали) —
+        голос учтён, срок треноги не продлён."""
+        rid = self._put(41.3100, 69.2500, ago=70 * 60, rtype="tripod", device="a", ip="10.42.0.1")
+        before = self._expires(rid)
+        status, _ = _call(self.port, "POST", "/api/vote",
+                          {"id": rid, "device": "b", "value": 1, "kind": "pass", "age": 20 * 60},
+                          ip="10.42.0.2")
+        self.assertEqual(status, 200)
+        self.assertEqual(self._expires(rid), before)
+        _, mobile = _call(self.port, "GET", "/api/mobile")
+        self.assertFalse(mobile["reports"][0]["confirmed"], "старый голос — не подтверждение «сейчас»")
+
+    def test_fresh_yes_vote_still_extends(self):
+        rid = self._put(41.3100, 69.2500, ago=70 * 60, rtype="tripod", device="a", ip="10.42.1.1")
+        before = self._expires(rid)
+        _call(self.port, "POST", "/api/vote",
+              {"id": rid, "device": "b", "value": 1, "kind": "pass", "age": 30}, ip="10.42.1.2")
+        self.assertGreater(self._expires(rid), before)
+
+
+class FamilyMergeTest(_Helpers, ServerTestBase):
+
+    def test_radar_next_to_a_tripod_confirms_it(self):
+        """Быстрый «Радар!» у чужой треноги — подтверждение, а не вторая точка;
+        тип остаётся точным."""
+        tripod = self._put(41.3100, 69.2500, ago=600, rtype="tripod", device="a", ip="10.40.0.1")
+        status, body = self._post(41.3102, 69.2500, "radar", device="b", ip="10.40.0.2")
+        self.assertEqual(status, 200)
+        self.assertTrue(body["merged"])
+        self.assertEqual(body["id"], tripod)
+        self.assertEqual(self._type(tripod), "tripod")
+        self.assertEqual(self._active(), 1)
+
+    def test_tripod_next_to_a_radar_refines_its_type(self):
+        radar = self._put(41.3100, 69.2500, ago=600, rtype="radar", device="a", ip="10.40.1.1")
+        _, body = self._post(41.3102, 69.2500, "tripod", device="b", ip="10.40.1.2")
+        self.assertTrue(body["merged"])
+        self.assertEqual(body["id"], radar)
+        self.assertEqual(self._type(radar), "tripod", "точный тип не победил")
+
+    def test_post_and_accident_stay_their_own_family(self):
+        self._put(41.3100, 69.2500, ago=600, rtype="tripod", device="a", ip="10.40.2.1")
+        _, post = self._post(41.3101, 69.2500, "post", device="b", ip="10.40.2.2")
+        _, crash = self._post(41.3101, 69.2501, "accident", device="c", ip="10.40.2.3")
+        self.assertFalse(post["merged"])
+        self.assertFalse(crash["merged"])
+        self.assertEqual(self._active(), 3)
+
+    def test_merge_goes_to_the_nearest_point(self):
+        """Две треноги на трассе в 300 м: отметка у второй подтверждает вторую,
+        а не первую в выборке."""
+        first = self._put(41.3100, 69.2500, ago=600, rtype="tripod", device="a",
+                          ip="10.40.3.1", cls="trunk")
+        second = self._put(41.3127, 69.2500, ago=600, rtype="tripod", device="b",
+                           ip="10.40.3.2", cls="trunk")
+        _, body = self._post(41.3125, 69.2500, "radar", device="c", ip="10.40.3.3", cls="trunk")
+        self.assertTrue(body["merged"])
+        self.assertEqual(body["id"], second, f"голос ушёл точке {first}, а не ближайшей")
+
+
+class ExpiredStaysExpiredTest(_Helpers, ServerTestBase):
+    """Тренога — это «сейчас»: истёкшая точка не оживает ни от новой отметки
+    на том же месте, ни от голоса «на месте» (spec tripod-report, правило 5)."""
+
+    def _expired(self, rtype="tripod"):
+        conn = sqlite3.connect(api.DB_PATH)
+        now = time.time()
+        cur = conn.execute(
+            "INSERT INTO reports(lat, lon, created, expires, device, type, ip, cls, active) "
+            "VALUES(?,?,?,?,?,?,?,?,1)",
+            (41.3100, 69.2500, now - 7200, now - 60, "a", rtype, "10.41.0.1", "residential"))
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return rid
+
+    def _expires(self, rid):
+        conn = sqlite3.connect(api.DB_PATH)
+        value = conn.execute("SELECT expires FROM reports WHERE id = ?", (rid,)).fetchone()[0]
+        conn.close()
+        return value
+
+    def test_report_on_an_expired_point_makes_a_new_one(self):
+        old = self._expired()
+        before = self._expires(old)
+        _, body = self._post(41.3100, 69.2500, "radar", device="b", ip="10.41.0.2")
+        self.assertFalse(body["merged"], "истёкшая точка ожила от новой отметки")
+        self.assertNotEqual(body["id"], old)
+        self.assertEqual(self._expires(old), before)
+
+    def test_vote_never_revives_an_expired_point(self):
+        old = self._expired()
+        before = self._expires(old)
+        status, _ = _call(self.port, "POST", "/api/vote",
+                          {"id": old, "device": "b", "value": 1}, ip="10.41.0.3")
+        self.assertEqual(status, 404)
+        self.assertEqual(self._expires(old), before, "«на месте» продлило истёкшую точку")
+
+    def test_own_expired_point_is_not_amended(self):
+        old = self._expired()
+        status, _ = self._post(41.3100, 69.2500, "post", device="a", ip="10.41.0.1", amend_id=old)
+        self.assertEqual(status, 409)
+        self.assertEqual(self._type(old), "tripod")
+
+
+class BothSidesTest(_Helpers, ServerTestBase):
+    """Многие треноги снимают обе стороны (владелец, 02.11; spec п. 6)."""
+
+    def _put_course(self, course, device="a", ip="10.43.0.1", cls="primary"):
+        conn = sqlite3.connect(api.DB_PATH)
+        now = time.time()
+        cur = conn.execute(
+            "INSERT INTO reports(lat, lon, created, expires, device, type, ip, cls, active, course) "
+            "VALUES(?,?,?,?,?,?,?,?,1,?)",
+            (41.3100, 69.2500, now - 600, now + 3600, device, "tripod", ip, cls, course))
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return rid
+
+    def _expires(self, rid):
+        conn = sqlite3.connect(api.DB_PATH)
+        value = conn.execute("SELECT expires FROM reports WHERE id = ?", (rid,)).fetchone()[0]
+        conn.close()
+        return value
+
+    def test_oncoming_report_close_by_is_the_same_tripod(self):
+        """Встречный отмечает ту же треногу в 40 м — одна точка, курс не важен."""
+        rid = self._put_course(0.0)
+        _, body = self._post(41.31036, 69.2500, "radar", device="b", ip="10.43.0.2",
+                             cls="primary", course=180.0)
+        self.assertTrue(body["merged"])
+        self.assertEqual(body["id"], rid)
+
+    def test_oncoming_report_far_away_is_the_other_carriageway(self):
+        """Дальше 60 м и курсы противоположны — разные полотна, две точки."""
+        rid = self._put_course(0.0)
+        _, body = self._post(41.3110, 69.2500, "tripod", device="b", ip="10.43.1.2",
+                             cls="primary", course=180.0)
+        self.assertFalse(body["merged"], f"слито в {rid}")
+
+    def test_same_direction_far_away_still_merges(self):
+        rid = self._put_course(0.0)
+        _, body = self._post(41.3110, 69.2500, "tripod", device="b", ip="10.43.2.2",
+                             cls="primary", course=10.0)
+        self.assertTrue(body["merged"])
+        self.assertEqual(body["id"], rid)
+
+    def test_oncoming_yes_is_a_full_confirmation(self):
+        rid = self._put_course(0.0)
+        before = self._expires(rid)
+        _call(self.port, "POST", "/api/vote",
+              {"id": rid, "device": "b", "value": 1, "kind": "pass", "course": 180}, ip="10.43.3.2")
+        self.assertGreater(self._expires(rid), before, "«Стоит» от встречного не подтвердило")
+
+    def test_oncoming_gone_does_not_shorten(self):
+        rid = self._put_course(0.0)
+        before = self._expires(rid)
+        for i in range(3):
+            _, body = _call(self.port, "POST", "/api/vote",
+                            {"id": rid, "device": f"x{i}", "value": -1, "kind": "pass", "course": 175},
+                            ip=f"10.43.4.{i + 2}")
+        self.assertEqual(self._expires(rid), before, "«Убрали» встречного срезало срок")
+        self.assertTrue(body["active"], "встречные «Убрали» сняли треногу кворумом")
+
+    def test_same_direction_gone_shortens(self):
+        rid = self._put_course(0.0)
+        before = self._expires(rid)
+        _call(self.port, "POST", "/api/vote",
+              {"id": rid, "device": "b", "value": -1, "kind": "pass", "course": 5}, ip="10.43.5.2")
+        self.assertLess(self._expires(rid), before)
+
+    def test_vote_without_course_works_as_before(self):
+        rid = self._put_course(0.0)
+        before = self._expires(rid)
+        _call(self.port, "POST", "/api/vote",
+              {"id": rid, "device": "b", "value": -1}, ip="10.43.6.2")
+        self.assertLess(self._expires(rid), before)
+
+
+class RaceTest(ServerTestBase):
+
+    def test_two_drivers_at_once_make_one_point(self):
+        """Два водителя жмут «Радар!» у одной треноги в одну секунду: одна
+        точка с подтверждением, а не две рядом."""
+        doubles = 0
+        for round_ in range(30):
+            conn = sqlite3.connect(api.DB_PATH)
+            conn.execute("DELETE FROM reports")
+            conn.execute("DELETE FROM votes")
+            conn.commit()
+            conn.close()
+            with api._ip_lock:
+                api._ip_counters.clear()
+            gate = threading.Barrier(2)
+
+            def tap(device, ip):
+                gate.wait()
+                _call(self.port, "POST", "/api/report",
+                      {"lat": 41.3100, "lon": 69.2500, "device": device}, ip=ip)
+
+            threads = [threading.Thread(target=tap, args=(f"d{round_}a", "10.39.1.1")),
+                       threading.Thread(target=tap, args=(f"d{round_}b", "10.39.1.2"))]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            conn = sqlite3.connect(api.DB_PATH)
+            count = conn.execute("SELECT COUNT(*) FROM reports WHERE active = 1").fetchone()[0]
+            conn.close()
+            if count > 1:
+                doubles += 1
+        self.assertEqual(doubles, 0, f"две точки вместо одной в {doubles} из 30 раундов")
+
+
+if __name__ == "__main__":
+    unittest.main()

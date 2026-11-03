@@ -81,14 +81,44 @@ final class ReportTrackTests: XCTestCase {
         XCTAssertEqual(placed.longitude, start.longitude, accuracy: 1e-6, "на северной улице, до поворота")
     }
 
+    /// Курс отметки — улицы треноги, а не той, куда свернули (ревью 40b, Н6):
+    /// с ним снап оставляет точку на улице A, и сервер получает её направление.
+    func testCourseIsOfTheStreetOfTheTripod() throws {
+        var track = ReportTrack()
+        var point = start
+        for second in 0...10 {
+            track.append(point, at: t0.addingTimeInterval(Double(second)))
+            point = GeoMath.destination(from: point, bearing: second < 5 ? 0 : 90, distanceMeters: 13.9)
+        }
+        let origin = ReportTrack.origin(points: track.points, touch: t0.addingTimeInterval(10), reaction: 7,
+                                        coordinate: point, course: 90, speedKmh: 50)
+        XCTAssertEqual(origin.course, 0, accuracy: 1, "курс улицы A, а не 90° улицы B")
+        let turn = GeoMath.destination(from: start, bearing: 0, distanceMeters: 13.9 * 5)
+        let streetA = RoadLine(points: [start, GeoMath.destination(from: start, bearing: 0, distanceMeters: 300)],
+                               kind: .primary)
+        let streetB = RoadLine(points: [turn, GeoMath.destination(from: turn, bearing: 90, distanceMeters: 300)],
+                               kind: .primary)
+        let snapped = try XCTUnwrap(ReportPlacement.snapped(origin.coordinate, course: origin.course,
+                                                            roads: [streetA, streetB], maxMeters: 40))
+        XCTAssertEqual(snapped.coordinate.longitude, start.longitude, accuracy: 1e-6, "осталась на улице A")
+    }
+
+    /// Стоим — пеленгу шума не верим: курс неизвестен.
+    func testStandingStillGivesUnknownCourse() {
+        var track = ReportTrack()
+        for second in 0...5 { track.append(start, at: t0.addingTimeInterval(Double(second))) }
+        XCTAssertEqual(ReportTrack.placed(in: track.points, touch: t0.addingTimeInterval(5), reaction: 3.5)?.course, -1)
+    }
+
     /// Трека нет — сдвиг по прямой на то же время, с тем же потолком.
     func testWithoutTrackFallsBackToStraightLine() {
         let now = CLLocationCoordinate2D(latitude: 41.31, longitude: 69.2)
         let placed = ReportTrack.origin(points: [], touch: t0, reaction: 3.5, coordinate: now, course: 0,
-                                        speedKmh: 50)
+                                        speedKmh: 50).coordinate
         XCTAssertEqual(meters(placed, now), 50 / 3.6 * 3.5, accuracy: 1)
         XCTAssertLessThan(placed.latitude, now.latitude, "назад по курсу")
-        let slow = ReportTrack.origin(points: [], touch: t0, reaction: 3.5, coordinate: now, course: 0, speedKmh: 5)
+        let slow = ReportTrack.origin(points: [], touch: t0, reaction: 3.5, coordinate: now, course: 0,
+                                      speedKmh: 5).coordinate
         XCTAssertEqual(slow.latitude, now.latitude, "в пробке «три секунды назад» — то же место")
     }
 

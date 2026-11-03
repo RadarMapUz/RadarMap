@@ -244,8 +244,10 @@ final class ReportFlow {
         let origin = ReportTrack.origin(points: location.reportTrack.points, touch: tappedAt,
                                         reaction: source.reactionSeconds, coordinate: raw,
                                         course: location.currentCourse, speedKmh: location.speedKmh)
+        // Курс — отрезка трека в точке сдвига, а не касания (Н6): он уходит в
+        // снап и на сервер.
         return ReportDraft.Touch(latitude: origin.latitude, longitude: origin.longitude,
-                                 speedKmh: location.speedKmh, course: location.currentCourse,
+                                 speedKmh: location.speedKmh, course: origin.course,
                                  isTripActive: location.isTripActive, fix: location.reportFix,
                                  at: tappedAt, source: source)
     }

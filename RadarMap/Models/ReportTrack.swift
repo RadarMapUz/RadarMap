@@ -57,6 +57,26 @@ nonisolated struct ReportTrack: Equatable {
         }
     }
 
+    /// Место отметки и курс НА НЁМ.
+    ///
+    /// Курс — пеленг отрезка трека в точке сдвига, а не курс в момент касания:
+    /// свернул сразу после треноги — точка на улице A, а курс касания уже от
+    /// улицы B, и снап с ним садил её на B, а сервер получал чужое направление
+    /// (ревью 40b, Н6). Отрезок короче `minBearingLegMeters` (стоим) — курс
+    /// неизвестен (-1): тогда снап по ближайшей оси, а вопрос задаётся всем.
+    struct Origin: Equatable {
+        var latitude: Double
+        var longitude: Double
+        var course: Double
+
+        var coordinate: CLLocationCoordinate2D {
+            CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+        }
+    }
+
+    /// Короче — пеленгу отрезка не верим: это шум GPS на месте.
+    static let minBearingLegMeters: CLLocationDistance = 3
+
     /// Где машина была в момент `touch − reaction`, по треку.
     ///
     /// nil — трека нет: вызывающий сдвигает по прямой (`origin`).
@@ -65,44 +85,70 @@ nonisolated struct ReportTrack: Equatable {
     static func position(in points: [Point], touch: Date, reaction: TimeInterval,
                          maxMeters: CLLocationDistance = AppConfig.reportMaxBackMeters)
         -> CLLocationCoordinate2D? {
+        placed(in: points, touch: touch, reaction: reaction, maxMeters: maxMeters)?.coordinate
+    }
+
+    /// То же с курсом отрезка, на котором встала точка.
+    static func placed(in points: [Point], touch: Date, reaction: TimeInterval,
+                       maxMeters: CLLocationDistance = AppConfig.reportMaxBackMeters) -> Origin? {
         guard let newest = points.last else { return nil }
         let target = touch.addingTimeInterval(-reaction)
-        if target >= newest.at { return newest.coordinate }
+        if target >= newest.at {
+            let course = points.count >= 2 ? bearing(from: points[points.count - 2], to: newest) : -1
+            return Origin(latitude: newest.latitude, longitude: newest.longitude, course: course)
+        }
         var walked: CLLocationDistance = 0
         var index = points.count - 1
         while index > 0 {
             let later = points[index], earlier = points[index - 1]
             let leg = GeoMath.fastDistance(later.latitude, later.longitude, earlier.latitude, earlier.longitude)
+            let course = bearing(from: earlier, to: later)
             // Нужная минута — на этом отрезке: доля по времени.
             if target >= earlier.at {
                 let span = later.at.timeIntervalSince(earlier.at)
                 let share = span > 0 ? later.at.timeIntervalSince(target) / span : 0
                 let back = min(leg * share, max(0, maxMeters - walked))
-                return Self.point(from: later, toward: earlier, meters: back, leg: leg)
+                return Self.origin(Self.point(from: later, toward: earlier, meters: back, leg: leg), course)
             }
             // Потолок наступил раньше нужной минуты — встаём на нём.
             if walked + leg >= maxMeters {
-                return Self.point(from: later, toward: earlier, meters: maxMeters - walked, leg: leg)
+                return Self.origin(Self.point(from: later, toward: earlier, meters: maxMeters - walked, leg: leg),
+                                   course)
             }
             walked += leg
             index -= 1
         }
         // Трек короче нужного — самая старая точка (раньше ничего не знаем).
-        return points[0].coordinate
+        let course = points.count >= 2 ? bearing(from: points[0], to: points[1]) : -1
+        return Origin(latitude: points[0].latitude, longitude: points[0].longitude, course: course)
     }
 
     /// Место отметки: по треку, а без трека — прежний сдвиг по прямой на
-    /// то же время реакции и с тем же потолком.
+    /// то же время реакции и с тем же потолком (курс тогда — курс касания).
     static func origin(points: [Point], touch: Date, reaction: TimeInterval,
                        coordinate: CLLocationCoordinate2D, course: Double, speedKmh: Double,
-                       maxMeters: CLLocationDistance = AppConfig.reportMaxBackMeters) -> CLLocationCoordinate2D {
-        if let onTrack = position(in: points, touch: touch, reaction: reaction, maxMeters: maxMeters) {
+                       maxMeters: CLLocationDistance = AppConfig.reportMaxBackMeters) -> Origin {
+        if let onTrack = placed(in: points, touch: touch, reaction: reaction, maxMeters: maxMeters) {
             return onTrack
         }
-        guard course >= 0, speedKmh >= ReportPlacement.minBackdateSpeedKmh, reaction > 0 else { return coordinate }
+        guard course >= 0, speedKmh >= ReportPlacement.minBackdateSpeedKmh, reaction > 0 else {
+            return Origin(latitude: coordinate.latitude, longitude: coordinate.longitude, course: course)
+        }
         let meters = min(maxMeters, speedKmh / 3.6 * reaction)
         let back = (course + 180).truncatingRemainder(dividingBy: 360)
-        return GeoMath.destination(from: coordinate, bearing: back, distanceMeters: meters)
+        let point = GeoMath.destination(from: coordinate, bearing: back, distanceMeters: meters)
+        return Origin(latitude: point.latitude, longitude: point.longitude, course: course)
+    }
+
+    private static func origin(_ point: CLLocationCoordinate2D, _ course: Double) -> Origin {
+        Origin(latitude: point.latitude, longitude: point.longitude, course: course)
+    }
+
+    /// Пеленг отрезка; короткий (стоим) — неизвестен.
+    private static func bearing(from a: Point, to b: Point) -> Double {
+        guard GeoMath.fastDistance(a.latitude, a.longitude, b.latitude, b.longitude) >= minBearingLegMeters
+        else { return -1 }
+        return GeoMath.bearing(from: a.coordinate, to: b.coordinate)
     }
 
     /// Точка на отрезке `from → toward` в `meters` от `from`.

@@ -35,6 +35,9 @@ import Foundation
 /// Источник данных: строка в «Источниках данных» со ссылкой.
 nonisolated enum DataSource: CaseIterable, Sendable {
     case openMapTiles, openStreetMap, openData, openMeteo, osmBright
+    /// Прежние имена станций метро и районов Ташкента для поиска (40G):
+    /// server/poi/aliases_tashkent.tsv из статей русской Википедии.
+    case wikipedia
 
     /// Название лицензии — как его пишет сам лицензиар, не переводится.
     var licenseName: String {
@@ -44,6 +47,7 @@ nonisolated enum DataSource: CaseIterable, Sendable {
         case .openData: return "CC BY-SA 4.0"
         case .openMeteo: return "CC BY 4.0"
         case .osmBright: return "BSD 3-Clause, CC BY 4.0"
+        case .wikipedia: return "CC BY-SA 4.0"
         }
     }
 
@@ -55,6 +59,7 @@ nonisolated enum DataSource: CaseIterable, Sendable {
         case .openData: return AppConfig.openDataURL
         case .openMeteo: return AppConfig.openMeteoURL
         case .osmBright: return AppConfig.osmBrightURL
+        case .wikipedia: return AppConfig.metroNamesSourceURL
         }
     }
 

@@ -27,6 +27,7 @@ struct DataSourcesPage: View {
             Section {
                 DataSourceRow(source: .openData)
                 DataSourceRow(source: .openMeteo)
+                DataSourceRow(source: .wikipedia)
                 DataSourceRow(source: .osmBright)
             } header: {
                 Text("Данные и стиль")
@@ -84,6 +85,7 @@ struct DataSourceRow: View {
         case .openData: Text("Портал открытых данных Республики Узбекистан")
         case .openMeteo: Text(verbatim: "Weather data by Open-Meteo.com")
         case .osmBright: Text(verbatim: "OSM Bright © MapTiler, OpenMapTiles, Mapbox")
+        case .wikipedia: Text("Википедия, © авторы статей")
         }
     }
 
@@ -94,6 +96,7 @@ struct DataSourceRow: View {
         case .openData: Text("Камеры, банкоматы и гостиницы (data.egov.uz)")
         case .openMeteo: Text("Погода на перевалах")
         case .osmBright: Text("Основа стиля карты")
+        case .wikipedia: Text("Прежние названия станций метро и районов Ташкента в поиске")
         }
     }
 }

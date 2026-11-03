@@ -800,4 +800,62 @@ final class PerformanceBudgetTests: XCTestCase {
         // всех пар был бы десятками секунд).
         XCTAssertLessThan(total, .milliseconds(2_000), "лист дальней дороги дорожает: \(total)")
     }
+
+    /// Свой поиск (40G) на клетке формы Ташкента: 3 200 улиц, у каждой
+    /// «ko'chasi» и по 36 домов (115 тысяч), и 9 000 мест, у трети — другие и
+    /// старые имена. Запрос идёт на каждую букву на главном потоке — худший из
+    /// набора обязан быть меньше 30 мс. «ka 1» / «Чи 1» — две буквы и номер:
+    /// до ревью 03.11 «ka» совпадало с «kachasi» у всех улиц, и строка id на
+    /// каждый из ~30 тысяч домов давала 170 мс на маке (после — 14 мс под
+    /// нагрузкой 60). Сборка индекса — off-main и меньше 3 с.
+    func testSearchIndexBudget() {
+        let syllables = ["ta", "shk", "ent", "cho", "rsu", "nov", "za", "ham", "mir", "zo", "ulu", "gbek",
+                         "yun", "usa", "bad", "chi", "lan", "zar", "bun", "yod", "kor", "sab", "zi", "qo",
+                         "yli", "beru", "ni", "tin", "chlik", "oy", "bek", "pax", "ta", "kor", "olm", "azor"]
+        func name(_ seed: Int, words: Int) -> String {
+            (0..<words).map { w in
+                (0..<2 + (seed + w) % 2).map { syllables[(seed * 7 + w * 13 + $0 * 5) % syllables.count] }.joined()
+            }.joined(separator: " ")
+        }
+        var addresses: [Address] = []
+        var names: [String: (aliases: [String], old: [String])] = [:]
+        for street in 0..<3_200 {
+            let title = name(street, words: 2) + " ko'chasi \(street)"
+            if street % 3 == 0 { names[title] = ([name(street + 1, words: 2) + " улица"], [name(street + 2, words: 1)]) }
+            for house in 0..<36 {
+                addresses.append(Address(street: title, house: "\(house + 1)",
+                                         point: CLLocationCoordinate2D(latitude: 41.2 + Double(street % 60) * 0.004,
+                                                                       longitude: 69.1 + Double(street / 60) * 0.004
+                                                                           + Double(house) * 0.0001)))
+            }
+        }
+        let kinds = Venue.Kind.allCases
+        let venues = (0..<9_000).map { i in
+            Venue(kind: kinds[i % kinds.count], name: name(i * 3, words: 1 + i % 3),
+                  point: CLLocationCoordinate2D(latitude: 41.2 + Double(i % 90) * 0.003,
+                                                longitude: 69.1 + Double(i / 90) * 0.003),
+                  aliases: i % 3 == 0 ? [name(i, words: 2)] : [], oldNames: i % 5 == 0 ? [name(i + 9, words: 1)] : [])
+        }
+        let clock = ContinuousClock()
+        let buildStart = clock.now
+        let index = SearchIndex(book: AddressBook(addresses: addresses, names: names), venues: VenueBook(venues: venues))
+        let build = clock.now - buildStart
+        let near = CLLocationCoordinate2D(latitude: 41.31, longitude: 69.28)
+        let queries = ["ta", "tashk", "ташкент", "чорсу", "метро хамза", "hamza metro", "mirzo ulugbek",
+                       "мирза улугбека", "yunusabad", "бунёдкор", "bunedkor", "chilanzar 5", "novza", "амира тимура",
+                       "kor ko'chasi 7", "azs", "метро", "махалля", "beruni", "tinchlikk", "oybek pahtakor",
+                       "olmazor 12", "qoyli", "nov", "z", "улица ", "zzzzzz", "a b c d",
+                       "ka 1", "ko 1", "Чи 1", "yu 1", "ta 1", "K.G‘", "chorsu 2"]
+        var worst: Duration = .zero
+        var found = 0
+        for query in queries {
+            let start = clock.now
+            let answer = index.search(query, near: near)
+            worst = max(worst, clock.now - start)
+            found += answer.addresses.count + answer.venues.count
+        }
+        XCTAssertGreaterThan(found, 0)
+        XCTAssertLessThan(worst, .milliseconds(30), "запрос поиска дорожает: худший \(worst)")
+        XCTAssertLessThan(build, .seconds(3), "сборка индекса поиска дорожает: \(build)")
+    }
 }

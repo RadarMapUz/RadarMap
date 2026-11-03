@@ -1304,6 +1304,9 @@ nonisolated enum AppConfig {
     static let openMapTilesURL = URL(string: "https://openmaptiles.org/")!
     static let osmCopyrightURL = URL(string: "https://www.openstreetmap.org/copyright")!
     static let openMeteoURL = URL(string: "https://open-meteo.com/")!
+    /// Прежние имена станций метро в поиске — статья, из которой они взяты.
+    static let metroNamesSourceURL = URL(
+        string: "https://ru.wikipedia.org/wiki/%D0%A1%D0%BF%D0%B8%D1%81%D0%BE%D0%BA_%D1%81%D1%82%D0%B0%D0%BD%D1%86%D0%B8%D0%B9_%D0%A2%D0%B0%D1%88%D0%BA%D0%B5%D0%BD%D1%82%D1%81%D0%BA%D0%BE%D0%B3%D0%BE_%D0%BC%D0%B5%D1%82%D1%80%D0%BE%D0%BF%D0%BE%D0%BB%D0%B8%D1%82%D0%B5%D0%BD%D0%B0")!
     static let osmBrightURL = URL(string: "https://github.com/openmaptiles/osm-bright-gl-style")!
     static let mapLibreURL = URL(string: "https://github.com/maplibre/maplibre-native")!
     static let notoFontsURL = URL(string: "https://github.com/openmaptiles/fonts")!

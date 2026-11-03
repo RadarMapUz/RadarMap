@@ -71,11 +71,17 @@ nonisolated struct AddressBook: Sendable {
         let houses: Range<Int>
         /// Номера в сравнимом виде (houseKey) — по одному на дом.
         let houseKeys: [String]
+        /// Другие нынешние имена улицы («Амира Темура проспект» при
+        /// «Amir Temur shoh ko'chasi») и старые («Московский проспект») —
+        /// поля `a`/`o` клетки, их ищет SearchIndex. Пусто у старых файлов.
+        var aliases: [String] = []
+        var oldNames: [String] = []
     }
 
     let streets: [Street]
 
-    init(addresses: [Address]) {
+    /// `names` — имена улиц из файла клетки (`a`/`o`) по основному имени.
+    init(addresses: [Address], names: [String: (aliases: [String], old: [String])] = [:]) {
         self.addresses = addresses
         var streets: [Street] = []
         var start = 0
@@ -84,7 +90,8 @@ nonisolated struct AddressBook: Sendable {
             var end = start + 1
             while end < addresses.count, addresses[end].street == name { end += 1 }
             streets.append(Street(name: name, tokens: Self.streetTokens(name), houses: start..<end,
-                                  houseKeys: addresses[start..<end].map { Self.houseKey($0.house) }))
+                                  houseKeys: addresses[start..<end].map { Self.houseKey($0.house) },
+                                  aliases: names[name]?.aliases ?? [], oldNames: names[name]?.old ?? []))
             start = end
         }
         self.streets = streets
@@ -99,11 +106,15 @@ nonisolated struct AddressBook: Sendable {
         else { return nil }
 
         var out: [Address] = []
+        var names: [String: (aliases: [String], old: [String])] = [:]
         for street in streets {
             guard let name = street["n"] as? String,
                   let houses = street["h"] as? [String],
                   let flat = street["p"] as? [NSNumber]
             else { continue }
+            // Необязательные имена (40G): нет или не тот тип — просто без них.
+            let aliases = street["a"] as? [String] ?? [], old = street["o"] as? [String] ?? []
+            if !aliases.isEmpty || !old.isEmpty { names[name] = (aliases, old) }
             // Номеров ровно вдвое меньше, чем чисел координат. Расхождение
             // означает, что адреса разъедутся по чужим домам, — молча брать
             // сколько влезет здесь нельзя.
@@ -125,7 +136,7 @@ nonisolated struct AddressBook: Sendable {
                         longitude: Double(lon) / RoadTiles.scale)))
             }
         }
-        return AddressBook(addresses: out)
+        return AddressBook(addresses: out, names: names)
     }
 
     /// Приведение к сравнимому виду.

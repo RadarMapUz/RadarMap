@@ -34642,6 +34642,86 @@
           }
         }
       }
+    },
+    "Метро": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Метро"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metro"
+          }
+        }
+      }
+    },
+    "Местность": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Местность"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hudud"
+          }
+        }
+      }
+    },
+    "бывш. %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "бывш. %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sobiq %@"
+          }
+        }
+      }
+    },
+    "Википедия, © авторы статей": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Википедия, © авторы статей"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vikipediya, © maqolalar mualliflari"
+          }
+        }
+      }
+    },
+    "Прежние названия станций метро и районов Ташкента в поиске": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Прежние названия станций метро и районов Ташкента в поиске"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qidiruvda Toshkent metro bekatlari va tumanlarining avvalgi nomlari"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

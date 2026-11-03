@@ -40,6 +40,7 @@ final class AttributionTests: XCTestCase {
         XCTAssertEqual(DataSource.openStreetMap.url.absoluteString, "https://www.openstreetmap.org/copyright")
         XCTAssertEqual(DataSource.openMeteo.url.host(), "open-meteo.com")
         XCTAssertEqual(DataSource.openData.url.host(), "data.egov.uz")
+        XCTAssertEqual(DataSource.wikipedia.url.host(), "ru.wikipedia.org")
     }
 
     /// В навигации угол занят кругом скорости — «i» встаёт над ним, а не под

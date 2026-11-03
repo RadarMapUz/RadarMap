@@ -197,9 +197,31 @@ final class SearchIndexTests: XCTestCase {
 
     func testInitialWithADotIsSearchedAsAPrefix() {
         let streets = AddressBook(addresses: [Address(street: "K.G'ofurov ko'chasi", house: "1", point: near)])
-        let index = SearchIndex(book: streets, venues: nil)
-        XCTAssertEqual(index.search("K.G‘", near: near).addresses.count, 1, "старый поиск находил — и этот")
+        let venues = VenueBook(venues: [Venue(kind: .place, name: "Гулистан (колхоз Правда)", point: near)])
+        let index = SearchIndex(book: streets, venues: venues)
+        let answer = index.search("K.G‘", near: near)
+        XCTAssertEqual(answer.addresses.count, 1, "старый поиск находил — и этот")
+        XCTAssertTrue(answer.venues.isEmpty, "инициал началом — только улицы, не полгорода мест")
         XCTAssertEqual(index.search("K.G‘ofurov", near: near).addresses.count, 1)
+    }
+
+    func testStreetTypeWordBeingTypedDoesNotBlankTheAnswer() {
+        // Повторное ревью 03.11: «шо», «йу», «йул» — начало «shoh», «yo'li»;
+        // посреди набора ответ пропадал до следующей буквы.
+        let streets = AddressBook(addresses: [
+            Address(street: "Amir Temur shoh ko'chasi", house: "1", point: near),
+            Address(street: "Buyuk Ipak yo'li ko'chasi", house: "2", point: near),
+        ])
+        let index = SearchIndex(book: streets, venues: nil)
+        for (query, street) in [("амир темур шо", "Amir Temur shoh ko'chasi"),
+                                ("буюк ипак йу", "Buyuk Ipak yo'li ko'chasi"),
+                                ("буюк ипак йул", "Buyuk Ipak yo'li ko'chasi"),
+                                ("амир темур шох", "Amir Temur shoh ko'chasi")] {
+            XCTAssertEqual(index.search(query, near: near).addresses.first?.street, street, query)
+        }
+        // Единственное слово и две буквы перед номером — по-прежнему не «все улицы».
+        XCTAssertTrue(index.search("ko", near: near).addresses.isEmpty)
+        XCTAssertTrue(index.search("ka 1", near: near).addresses.isEmpty)
     }
 
     func testCloserWinsWithinTheSameTier() {

@@ -285,13 +285,16 @@ nonisolated struct SearchIndex: Sendable {
 
         let query = Self.parse(text)
         // Места — с числом как словом имени: номер дома бывает только у улицы.
-        let placeQuery = query.house == nil ? query : Self.parse(text, splitHouse: false)
+        // Инициал с точкой («K.G‘») — тоже только улицы: «k» и «g» началом
+        // слова — это полгорода мест, и они вставали первыми.
+        var placeQuery = query.house == nil ? query : Self.parse(text, splitHouse: false)
+        placeQuery.initials = false
         guard !query.required.isEmpty || !placeQuery.required.isEmpty else {
             answer.venuesFirst = true
             return answer
         }
         let streetDocs = candidates(query)
-        let placeDocs = query.house == nil ? streetDocs : candidates(placeQuery)
+        let placeDocs = query.house == nil && !query.initials ? streetDocs : candidates(placeQuery)
 
         var streets: [(Int, Candidate)] = []
         var venues: [(Int, Candidate)] = []
@@ -316,6 +319,31 @@ nonisolated struct SearchIndex: Sendable {
 
     /// Документы, где есть все обязательные слова запроса, с лучшим совпадением.
     private func candidates(_ query: Query) -> [Int32: Candidate] {
+        let found = intersect(query)
+        guard found.isEmpty else { return found }
+        // «амир темур шо», «буюк ипак йу» — начало слова типа улицы посреди
+        // набора («shoh», «yo'li»): само оно с «shah…» не совпадает (так «ka 1»
+        // не значит «все улицы»), и пустой ответ мигал на каждой второй букве.
+        // Такое слово необязательно — кроме единственного слова запроса и
+        // одной-двух букв перед номером дома.
+        var relaxed = query
+        relaxed.required = query.required.enumerated().filter { position, word in
+            let isLast = position == query.required.count - 1
+            let shortBeforeHouse = query.house != nil && word.count <= 2
+            return !(isLast && query.required.count > 1 && !shortBeforeHouse && Self.isStreetWordStart(word))
+        }.map(\.element)
+        guard relaxed.required.count < query.required.count else { return [:] }
+        relaxed.optional.append(query.required[query.required.count - 1])
+        relaxed.wantsStreet = true
+        return intersect(relaxed)
+    }
+
+    /// Слово — начало слова типа улицы («sha» — «shah», «yu» — «yuli»).
+    private static func isStreetWordStart(_ word: String) -> Bool {
+        streetWords.contains { $0.hasPrefix(word) }
+    }
+
+    private func intersect(_ query: Query) -> [Int32: Candidate] {
         guard !query.required.isEmpty else { return [:] }
         // Совпадения каждого обязательного слова: имя → качество (0 — слово
         // целиком, 1 — начало или окончание, 2+ — нечёткое с d правками).

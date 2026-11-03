@@ -151,6 +151,8 @@ struct EngineMapView: UIViewRepresentable {
     var cursorStyle: CursorStyle = .arrow
     /// Кольцо компаса N/E/S/W вокруг машины (29.B) — в поездке.
     var compass: Bool = false
+    /// Облик кольца: с буквами (телефон) или с меткой севера (машина, 40J).
+    var compassLook: CompassRing.Look = .phone
     /// Смена лимита на снижение впереди — знак «200 м · 40» у машины (29.B,
     /// LimitAhead.visual); nil — знака нет. Расстояние карта считает сама.
     var limitAhead: LimitAhead.Notice?
@@ -214,9 +216,12 @@ struct EngineMapView: UIViewRepresentable {
     /// Плашка улицы (29.F): имя ленты под значком «я» в поездке, только на
     /// смене. nil — карта не спрашивает вовсе (выбор места, плитка).
     var onStreetName: ((String?) -> Void)?
-    /// Экран машины (29.F): подписи улиц и линия маршрута крупнее телефонных
-    /// (EngineCarScale) — раз на загрузку стиля.
-    var largeLabels: Bool = false
+    /// Экран машины и плитка (29.F, 40J): подписи и линия маршрута крупнее
+    /// телефонных (EngineCarScale) — раз на загрузку стиля. nil — как в стиле.
+    var carScale: CarMapStyle.Scale?
+    /// Стиль карты в машине (CarMapStyle, 40J): своя разница стиля, линия
+    /// маршрута, слои на ходу, плашка улицы. nil — телефон и приборка.
+    var carStyle: CarMapStyle?
 
     func makeUIView(context: Context) -> MLNMapView {
         // Сторож тайлов — ДО первой карты: движок начинает качать сразу, и
@@ -900,7 +905,7 @@ struct EngineMapView: UIViewRepresentable {
             driveAsphalt.styleLoaded()
             mapDetail.styleLoaded()
             streetProbe.styleLoaded()
-            if (pending ?? current)?.largeLabels == true { EngineCarScale.apply(in: style) }
+            if let scale = (pending ?? current)?.carScale { EngineCarScale.apply(scale, in: style) }
             EngineLaneArrowsOrder.raise(in: style)
             stopDetail.styleLoaded(style)
             maneuverArrow.styleLoaded()
@@ -1359,9 +1364,10 @@ struct EngineMapView: UIViewRepresentable {
                                  daylight: model.daylight, avoid: spots, in: view)
             let asphalt = DriveAsphalt.isActive(driving: model.driving, modernStyle: modernLoaded)
             if let style = view.style {
-                driveAsphalt.update(active: asphalt, daylight: model.daylight, in: style)
+                driveAsphalt.update(active: asphalt, daylight: model.daylight, car: model.carStyle, in: style)
             }
-            let routeDaylight = DriveAsphalt.routeDaylight(daylight: model.daylight, active: asphalt)
+            let routeDaylight = model.carStyle?.routeDaylight(daylight: model.daylight, active: asphalt)
+                ?? DriveAsphalt.routeDaylight(daylight: model.daylight, active: asphalt)
             routeLine.update(model, routeDaylight: routeDaylight, in: view)
             laneFocusLayers.update(model, routeDaylight: routeDaylight, in: view)
             cameraZone.update(model.cameraZone, daylight: model.daylight, in: view)
@@ -1464,7 +1470,7 @@ struct EngineMapView: UIViewRepresentable {
             // Входы решения не менялись — множества не пересчитываются: это
             // зовётся на каждом фиксе, а меняется на смене решения.
             let key = LayerKey(detail: model.detail, parkingsKnown: parkingsKnown, driving: model.driving,
-                               modern: modernLoaded, hot: model.performance != .full)
+                               modern: modernLoaded, hot: model.performance != .full, car: model.carStyle != nil)
             if key != layerKey || hiddenLayers == nil {
                 layerKey = key
                 applyLayerVisibility(model, parkingsKnown: parkingsKnown, in: style)
@@ -1482,6 +1488,7 @@ struct EngineMapView: UIViewRepresentable {
             var driving: Bool
             var modern: Bool
             var hot: Bool
+            var car: Bool
         }
         private var layerKey: LayerKey?
 
@@ -1497,11 +1504,15 @@ struct EngineMapView: UIViewRepresentable {
             // Горячий телефон — поверх решения: объёмный декор не возвращается
             // и стоя.
             if model.performance != .full { wanted.formUnion(Self.hotHiddenLayers) }
+            // Экран машины (40J): без переходов и дорожек и стоя, стрелки
+            // одностороннего — только стоя (MapDetailLayers.carHidden).
+            if model.carStyle != nil { wanted.formUnion(MapDetailLayers.carHidden(model.detail)) }
             let hot = model.performance != .full
             if wanted != hiddenLayers || hot != hotShown {
                 hiddenLayers = wanted
                 hotShown = hot
                 let managed = Set(Self.hotHiddenLayers).union(MapDetailLayers.managed)
+                    .union(MapDetailLayers.carManaged)
                     .union(drivingLayerIDs(style))
                 for id in managed {
                     style.layer(withIdentifier: id)?.isVisible = !wanted.contains(id)
@@ -1953,6 +1964,7 @@ struct EngineMapView: UIViewRepresentable {
             // до смены лимита идёт, пока стрелка стоит на месте экрана.
             carDecor.layout(at: point, coordinate: coordinate, mapDirection: view.direction,
                             pitchDegrees: pitch, compass: current?.compass ?? false,
+                            look: current?.compassLook ?? .phone,
                             limit: current?.limitAhead, visible: current?.showsPosition ?? true, in: view)
             maneuverCallout.layout(cursor: point, visible: current?.showsPosition ?? true, in: view)
             if let shown = shownPosition,

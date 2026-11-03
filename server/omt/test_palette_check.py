@@ -50,6 +50,36 @@ class PaletteRules(unittest.TestCase):
         _, failures = palette_check.measure_drive("light", p)
         self.assertIn("поездка: имя улицы на асфальте < 4,5:1", failures)
 
+    def test_car_variants_pass_every_rule(self):
+        # 40J: A + N1 и B — имена, маршрут, магистраль, пробки, камера.
+        for theme in ("light", "dark"):
+            for variant in ("A", "B"):
+                _, failures = palette_check.measure_car(theme, variant)
+                self.assertEqual(failures, [], (theme, variant))
+
+    def test_car_rules_catch_glaring_night_labels(self):
+        night = dict(make_style.CAR_PALETTES["A"]["dark"], street_label="#f2f4f7", drive_street_label="#f2f4f7")
+        cars = dict(make_style.CAR_PALETTES, A=dict(make_style.CAR_PALETTES["A"], dark=night))
+        saved = make_style.CAR_PALETTES
+        make_style.CAR_PALETTES = cars
+        try:
+            _, failures = palette_check.measure_car("dark", "A")
+        finally:
+            make_style.CAR_PALETTES = saved
+        self.assertIn("машина: имя улицы ночью слепит", failures)
+
+    def test_car_rules_catch_a_trunk_like_the_avenue(self):
+        # Прежняя магистраль поездки днём (#4b4f5a) рядом с проспектом #3f4859 —
+        # ΔE 5: на тёмном асфальте класс дороги не читался.
+        day = dict(make_style.CAR_PALETTES["A"]["light"], drive_trunk="#4b4f5a")
+        saved = make_style.CAR_PALETTES
+        make_style.CAR_PALETTES = dict(saved, A=dict(saved["A"], light=day))
+        try:
+            _, failures = palette_check.measure_car("light", "A")
+        finally:
+            make_style.CAR_PALETTES = saved
+        self.assertIn("машина: магистраль не отличить от проспекта", failures)
+
     def test_rules_catch_a_road_lost_in_the_ground(self):
         # Двор цвета земли без кромки — нарушение, а не «все правила соблюдены».
         p = dict(make_style.PALETTES["light"], minor=make_style.PALETTES["light"]["bg"],
@@ -135,8 +165,14 @@ class AppColoursInSync(unittest.TestCase):
             self.assertEqual(palette_check.ROUTE[theme_name]["casing"], pair("casing")[theme_name])
             for name in ("alternative", "alternativeCasing"):
                 self.assertEqual(palette_check.ROUTE[theme_name][name], pair(name)[theme_name], name)
-            for state in ("free", "slow", "jam"):
-                self.assertEqual(palette_check.TRAFFIC[theme_name][state], pair(state)[theme_name], state)
+        # Пробки — «Сигнал» (TrafficPalette.active).
+        active = re.search(r"static let active = Colors\((.*?)\)\s*\n", theme, re.S)
+        self.assertIsNotNone(active)
+        levels = {k: v for k, v in re.findall(r"(\w+): \((0x[0-9A-Fa-f]{6}, 0x[0-9A-Fa-f]{6})\)", active.group(1))}
+        for state in ("free", "slow", "jam", "stand"):
+            day, night = levels[state].split(", ")
+            self.assertEqual(palette_check.TRAFFIC["light"][state], "#" + day[2:].lower(), state)
+            self.assertEqual(palette_check.TRAFFIC["dark"][state], "#" + night[2:].lower(), state)
 
     def test_camera_types(self):
         theme = _swift("RadarMap/DesignSystem/Theme.swift")
@@ -169,6 +205,20 @@ class AppColoursInSync(unittest.TestCase):
             self.assertIsNotNone(found, name)
             self.assertEqual(found.group(1), make_style.PALETTES["light"][key], name)
             self.assertEqual(found.group(2), make_style.PALETTES["dark"][key], name)
+
+    def test_car_camera_label_and_pill_types(self):
+        # Подпись камеры днём в машине — на ореоле асфальта поездки (40J).
+        config = _swift("RadarMap/Support/AppConfig.swift")
+        found = re.search(r"carPlayCameraLabelDay: \(text: UInt32, halo: UInt32\) = \(0x([0-9A-F]{6}), 0x([0-9A-F]{6})\)",
+                          config)
+        self.assertIsNotNone(found)
+        light = make_style.PALETTES["light"]
+        self.assertEqual("#" + found.group(1).lower(), light["drive_street_label"])
+        self.assertEqual("#" + found.group(2).lower(), light["drive_primary"])
+        # Сокращения типа улицы на плашке машины — как у подписи карты.
+        pill = _swift("RadarMap/Models/StreetPill.swift")
+        pairs = re.findall(r'\("([^"]+)", "([^"]+)"\)', pill[pill.index("mapTypes"):pill.index("static func label")])
+        self.assertEqual(tuple(pairs), make_style.STREET_TYPES)
 
     def test_calm_markers(self):
         # С 29.C («Монета») спокойные значки описаны в CameraMarkerLook:

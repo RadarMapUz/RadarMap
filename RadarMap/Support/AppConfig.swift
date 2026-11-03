@@ -3545,6 +3545,8 @@ nonisolated enum AppConfig {
     /// машины с тенью (до 44 pt в длину) — кольцо обводит её, а не режет.
     static let compassRadiusPoints: CGFloat = 34
     static let compassLetterSize: CGFloat = 10
+    /// Метка севера на кольце без букв (машина, 40J), pt.
+    static let compassNorthMarkPoints: CGFloat = 6
 
     // MARK: - Нужное сейчас на карте (MapDetailPolicy, 29.H)
 
@@ -3632,9 +3634,28 @@ nonisolated enum AppConfig {
     /// (12 → ~15,5 pt на z16), линия маршрута чуть толще. Ленты дорог не
     /// трогаем — их ширина в метрах, и узлы перекрёстков сошлись бы с ними
     /// неровно.
-    static let carPlayLabelScale: Double = 1.3
-    static let carPlayRouteWidthScale: Double = 1.15
+    /// С 40J — подписи улиц ×1.4, маршрут ×1.35 (≈ половина полотна
+    /// проспекта: на z16,5 «нитка» в треть дороги терялась), щиты трасс,
+    /// подписи мест и заправок ×1.25 (были телефонного размера).
+    static let carPlayLabelScale: Double = 1.4
+    static let carPlaySmallLabelScale: Double = 1.25
+    static let carPlayRouteWidthScale: Double = 1.35
     /// Световое пятно под машиной в кольце компаса — плотность в центре
     /// (29.F): заметно на тёмном асфальте, не спорит со значком и камерами.
     static let compassPoolAlpha: CGFloat = 0.34
+
+    // MARK: - Стиль карты в машине (CarMapStyle, 40J)
+
+    /// Свечение линии маршрута в машине: днём на тёмном асфальте A, ночью —
+    /// N1 «без засветки» (0,55 слепило прожектором).
+    static let carPlayRouteGlow: (day: Double, night: Double) = (0.35, 0.30)
+    /// Пятно под машиной ночью (N1).
+    static let carPlayPoolAlphaNight: Double = 0.15
+    /// Подпись «400 м» у камеры днём на тёмном асфальте: светлый текст на
+    /// ореоле цвета проспекта поездки (make_style drive_primary).
+    static let carPlayCameraLabelDay: (text: UInt32, halo: UInt32) = (0xF2F4F7, 0x3F4859)
+    /// Плитка главного экрана машины: наклон не круче этого (на малой плитке
+    /// 58° и объём закрывали дорогу), подписи чуть крупнее телефонных.
+    static let carPlayDashboardMaxPitch: Double = 30
+    static let carPlayDashboardLabelScale: Double = 1.15
 }

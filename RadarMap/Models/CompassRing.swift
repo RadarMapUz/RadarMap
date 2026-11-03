@@ -25,9 +25,21 @@ nonisolated enum CompassRing {
         var isNorth: Bool { bearing == 0 }
     }
 
+    /// Север — синим акцентом приложения (красный на карте — только камера).
+    static let northRGB: UInt32 = 0x6BA3FF
+
     /// Международные отметки сторон света (не слова интерфейса).
     static let marks = [Mark(letter: "N", bearing: 0), Mark(letter: "E", bearing: 90),
                         Mark(letter: "S", bearing: 180), Mark(letter: "W", bearing: 270)]
+
+    /// Облик кольца: буквы сторон света или одна синяя метка севера (машина,
+    /// CarMapStyle), плотность светового пятна под машиной.
+    struct Look: Equatable, Sendable {
+        var letters: Bool
+        var poolAlpha: Double
+
+        static let phone = Look(letters: true, poolAlpha: Double(AppConfig.compassPoolAlpha))
+    }
 
     struct Geometry: Equatable, Sendable {
         let radiusX: CGFloat

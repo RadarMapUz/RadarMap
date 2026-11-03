@@ -45,9 +45,16 @@ nonisolated enum CarPlaySurface: Equatable, Sendable {
         self != .cluster && performance == .full
     }
 
-    /// Дома (тумблер «Дома»): на приборке — никогда.
+    /// Дома (тумблер «Дома»): на приборке и плитке — никогда (40J: на малой
+    /// плитке объём закрывал дорогу).
     func houses(setting: Bool) -> Bool {
-        self != .cluster && setting
+        self == .car && setting
+    }
+
+    /// Потолок наклона: плитка — не круче `carPlayDashboardMaxPitch` (40J),
+    /// остальные — потолок движка.
+    var maxPitch: Double {
+        self == .dashboard ? AppConfig.carPlayDashboardMaxPitch : AppConfig.engineMapPitchDegrees
     }
 
     /// Малая частота кадров (как под полноэкранной тревогой, engineHotFPS):

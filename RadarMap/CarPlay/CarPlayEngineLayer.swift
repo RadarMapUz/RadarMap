@@ -122,7 +122,8 @@ struct CarPlayEngineLayer: View {
         // (аудит 18.10, «при езде нормального вида нет»).
         let target = DriveCamera.target(
             speedKmh: env.location.speedKmh, maneuverDistance: maneuverDistance,
-            pitchAllowed: surface.pitchAllowed(performance: env.thermal.mode), screen: .car, keep: keep,
+            pitchAllowed: surface.pitchAllowed(performance: env.thermal.mode), maxPitch: surface.maxPitch,
+            screen: .car, keep: keep,
             stop: stop.state, jamEnd: stop.jamEnd,
             alsoKeep: arrivalKeep,
             viewHeight: height, latitude: me.latitude, clear: clear,
@@ -133,6 +134,7 @@ struct CarPlayEngineLayer: View {
                            also: arrivalKeep.count, target: target, frame: frame, bias: model.zoomBias)
         #endif
         let cue = CarPlayCameraCue.current(env.location)
+        let carStyle = CarMapStyle.style(for: surface)
         let cameraLine = env.cameraOnLine
         let offlineFiles: OfflineFiles? = env.network.isMapOnline
             ? nil : env.offlineMaps.offlineFiles(at: me)
@@ -205,7 +207,8 @@ struct CarPlayEngineLayer: View {
             cursorStyle: env.settings.cursorStyle,
             // Компас вокруг машины и знак смены лимита (29.B) — на карте
             // машины; плитка и приборка малы, там они закрыли бы дорогу.
-            compass: surface == .car,
+            compass: surface == .car && carStyle?.compass(daylight: model.isDaylight) != nil,
+            compassLook: carStyle?.compass(daylight: model.isDaylight) ?? .phone,
             limitAhead: surface == .car ? env.speedLimits.limitAheadCue : nil,
             // Выбор маршрута: линия целиком, слева — место под карточку
             // вариантов, справа — под кнопки карты.
@@ -236,7 +239,10 @@ struct CarPlayEngineLayer: View {
             // Плашка улицы и крупные подписи (29.F) — на карте машины;
             // плитка и приборка малы, плашка закрыла бы им дорогу.
             onStreetName: surface == .car ? { model.streetName = $0 } : nil,
-            largeLabels: surface == .car)
+            // Крупнее телефона и свой стиль (40J, CarMapStyle) — экран машины
+            // и плитка; приборка — как карта поездки.
+            carScale: CarMapStyle.scale(for: surface),
+            carStyle: carStyle)
     }
 
     /// Новая карта (вернулись из музыки, из схемы) стартует со слежения —

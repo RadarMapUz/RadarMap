@@ -21,8 +21,10 @@ ROUTE = {"light": {"body": "#0b62d0", "casing": "#0a3f8f",
                    "alternative": "#93b4ea", "alternativeCasing": "#46679f"},
          "dark": {"body": "#66a3ff", "casing": "#0e1a33",
                   "alternative": "#98acd2", "alternativeCasing": "#0e1a33"}}
-TRAFFIC = {"light": {"free": "#2ba84a", "slow": "#e8a100", "jam": "#d93025"},
-           "dark": {"free": "#3cc46b", "slow": "#ffb020", "jam": "#ff5a4e"}}
+# Пробки — «Сигнал» (TrafficPalette.active, 33H3): свободно, медленно,
+# пробка, стоят.
+TRAFFIC = {"light": {"free": "#7bac89", "slow": "#bb731e", "jam": "#993357", "stand": "#562353"},
+           "dark": {"free": "#8ed3a0", "slow": "#fcbe62", "jam": "#d86691", "stand": "#b06aad"}}
 # Заливки значков на карте (Theme.Types): с 29.C2 у всех камер один красный,
 # свои — у поста ДПС и ДТП.
 CAMERA_TYPES = {"camera": "#d93025", "post": "#46525e", "accident": "#c62828"}
@@ -370,6 +372,124 @@ def measure_drive(theme, p=None):
     return m, failures
 
 
+# Карта машины (40J): вариант и тема → цвета на рабочем зуме машины (≥ 15).
+# Ночь N1 «без засветки»: имя улицы и подпись места не ярче этой светлоты
+# (было 0,90 и 0,81 — слепили в тёмной кабине).
+CAR_NIGHT_STREET_MAX_L = 0.6
+CAR_NIGHT_PLACE_MAX_L = 0.5
+# Полоса светлоты асфальта, где линия маршрута ночным набором не держит 3:1
+# ни телом, ни каймой.
+ROUTE_DEAD_BAND = (0.083, 0.133)
+
+
+def car_effective(theme, variant="A"):
+    """Цвета машины на её рабочем зуме: асфальт классов, имена, разметка,
+    кромки, земля и дома; набор линии маршрута и пробок."""
+    static_p, drive_p = make_style.car_palettes(theme, variant)
+    near = make_style.near_palette(drive_p or static_p)
+    p = drive_p or static_p
+    dark_asphalt = drive_p is not None or theme == "dark"
+    set_name = "dark" if dark_asphalt else "light"
+    return {
+        "asphalt": {k: near[k] for k in ("road_trunk", "road", "road_secondary", "road_tertiary")},
+        "minor": near["minor"], "minor_edge": p["minor_edge"],
+        "street_label": p["street_label"], "minor_label": static_p["street_label"],
+        "label": p["label"], "halo": p["halo"], "paint": p["paint"], "zebra_base": p["zebra_base"],
+        "kerb": p["kerb"], "kerb_trunk": p["kerb_trunk"],
+        "bg": p["bg"], "building": p["building"], "water": p["water"], "park": p["park"],
+        "uses": p["building_use"],
+        "route": ROUTE[set_name], "traffic": TRAFFIC[set_name], "dark_asphalt": dark_asphalt,
+    }
+
+
+def _car_new_colours(theme, variant):
+    """Цвета, которые вводит палитра машины (без повторов обычной темы)."""
+    base = set()
+    for value in make_style.PALETTES[theme].values():
+        if isinstance(value, str) and value.startswith("#"):
+            base.add(value)
+        elif isinstance(value, dict):
+            base.update(v for v in value.values() if isinstance(v, str) and v.startswith("#"))
+    out = set()
+    for value in make_style.CAR_PALETTES[variant][theme].values():
+        values = value.values() if isinstance(value, dict) else [value]
+        out.update(v for v in values if isinstance(v, str) and v.startswith("#") and v not in base)
+    return sorted(out)
+
+
+def measure_car(theme, variant="A"):
+    """Числа и нарушения карты машины (40J): имена ≥ 4,5:1, маршрут ≥ 3:1 к
+    асфальту, магистраль ≠ проспект, пробки и камера на асфальте (и при
+    дейтеранопии), красный — только камера, ночью — без засветки."""
+    c = car_effective(theme, variant)
+    asphalt = list(c["asphalt"].values())
+    ground = [c["bg"], c["building"], c["water"], c["park"]]
+    route, traffic = c["route"], c["traffic"]
+    trunk, primary = c["asphalt"]["road_trunk"], c["asphalt"]["road"]
+    new = _car_new_colours(theme, variant)
+    m = {
+        "машина: имя улицы / асфальт (мин)": min(contrast(c["street_label"], a) for a in asphalt),
+        "машина: имя двора / двор": contrast(c["minor_label"], c["minor"]),
+        "машина: подпись места / земля, дом, вода (мин)": min(contrast(c["label"], s) for s in
+                                                             (c["bg"], c["building"], c["water"])),
+        "машина: подпись места / ореол": contrast(c["label"], c["halo"]),
+        "машина: линия маршрута / асфальт (мин)": min(max(contrast(route["body"], a), contrast(route["casing"], a))
+                                                      for a in asphalt + [c["minor"]]),
+        "машина: линия маршрута / земля": max(contrast(route["body"], c["bg"]), contrast(route["casing"], c["bg"])),
+        "машина: ΔE магистраль / проспект": delta_e(trunk, primary),
+        "машина: ΔE магистраль / проспект, дейтеранопия": delta_e(trunk, primary, True),
+        "машина: ΔE маршрут / магистраль": delta_e(route["body"], trunk),
+        "машина: ΔE пробки / асфальт (мин)": min(delta_e(t, a) for t in traffic.values() for a in asphalt),
+        "машина: ΔE пробки / асфальт, дейтеранопия (мин)": min(delta_e(t, a, True)
+                                                               for t in traffic.values() for a in asphalt),
+        "машина: ΔE «медленно» / кромка магистрали": delta_e(traffic["slow"], c["kerb_trunk"]),
+        "машина: камера не видна (пар тип × поверхность)": float(sum(
+            not _camera_visible(t, s) for t in CAMERA_TYPES.values() for s in asphalt + ground)),
+        "машина: разметка / асфальт (мин)": min(contrast(c["paint"], a) for a in asphalt),
+        "машина: ΔE новый цвет / красная камера (мин)": min((delta_e(x, CAMERA_TYPES["camera"]) for x in new),
+                                                            default=100.0),
+        "машина: ΔE новый цвет / красная камера, дейтеранопия (мин)": min(
+            (delta_e(x, CAMERA_TYPES["camera"], True) for x in new), default=100.0),
+        "машина: светлота имени улицы": luminance(c["street_label"]),
+        "машина: светлота подписи места": luminance(c["label"]),
+    }
+    failures = []
+
+    def need(ok, text):
+        if not ok:
+            failures.append(text)
+    need(m["машина: имя улицы / асфальт (мин)"] >= TEXT_MIN, "машина: имя улицы на асфальте < 4,5:1")
+    need(m["машина: имя двора / двор"] >= TEXT_MIN, "машина: имя двора < 4,5:1")
+    need(m["машина: подпись места / земля, дом, вода (мин)"] >= TEXT_MIN, "машина: подпись места < 4,5:1")
+    need(m["машина: подпись места / ореол"] >= TEXT_MIN, "машина: подпись места на ореоле < 4,5:1")
+    need(m["машина: линия маршрута / асфальт (мин)"] >= GRAPHIC_MIN, "машина: линия маршрута на асфальте < 3:1")
+    need(m["машина: линия маршрута / земля"] >= GRAPHIC_MIN, "машина: линия маршрута на земле < 3:1")
+    need(m["машина: ΔE магистраль / проспект"] >= TRUNK_PRIMARY_DE_MIN, "машина: магистраль не отличить от проспекта")
+    need(m["машина: ΔE маршрут / магистраль"] >= ROUTE_TRUNK_DE_MIN, "машина: маршрут похож на магистраль")
+    need(m["машина: ΔE пробки / асфальт (мин)"] >= TRAFFIC_DE_MIN, "машина: пробка сливается с асфальтом")
+    need(m["машина: ΔE пробки / асфальт, дейтеранопия (мин)"] >= CAMERA_DEUTAN_MIN,
+         "машина: пробка сливается с асфальтом при дейтеранопии")
+    need(m["машина: ΔE «медленно» / кромка магистрали"] >= SLOW_KERB_DE_MIN, "машина: «медленно» похоже на кромку")
+    need(m["машина: камера не видна (пар тип × поверхность)"] == 0, "машина: камера сливается с поверхностью")
+    need(all(luminance(c["paint"]) > luminance(a) for a in asphalt), "машина: разметка темнее асфальта")
+    need(m["машина: разметка / асфальт (мин)"] >= PAINT_MIN, "машина: разметка на асфальте < 1,4:1")
+    need(m["машина: ΔE новый цвет / красная камера (мин)"] >= USE_CAMERA_DE_MIN, "машина: новый цвет похож на камеру")
+    need(m["машина: ΔE новый цвет / красная камера, дейтеранопия (мин)"] >= CAMERA_DEUTAN_MIN,
+         "машина: новый цвет похож на камеру при дейтеранопии")
+    if c["dark_asphalt"]:
+        low, high = ROUTE_DEAD_BAND
+        need(all(not low <= luminance(a) <= high for a in asphalt), "машина: асфальт в мёртвой полосе маршрута")
+    if theme == "dark":
+        need(m["машина: светлота имени улицы"] <= CAR_NIGHT_STREET_MAX_L, "машина: имя улицы ночью слепит")
+        need(m["машина: светлота подписи места"] <= CAR_NIGHT_PLACE_MAX_L, "машина: подпись места ночью слепит")
+        need(luminance(trunk) <= luminance(make_style.PALETTES["dark"]["road_trunk"]),
+             "машина: магистраль ночью светлее телефонной")
+    if not c["dark_asphalt"]:
+        # Светлая машина (B): двор и дома тише проспекта, проспект несёт кромка.
+        need(contrast(c["kerb"], c["bg"]) >= 1.5, "машина: кромка проспекта не видна на земле")
+    return m, failures
+
+
 def table():
     rows = []
     for theme in ("light", "dark"):
@@ -377,6 +497,10 @@ def table():
         drive, drive_failures = measure_drive(theme)
         m.update(drive)
         failures += drive_failures
+        for variant in ("A", "B"):
+            car, car_failures = measure_car(theme, variant)
+            m.update({f"{name} [{variant}]": value for name, value in car.items()})
+            failures += [f"{text} [{variant}]" for text in car_failures]
         rows.append("день" if theme == "light" else "ночь")
         rows += [f"  {name}: {value:.2f}" for name, value in m.items()]
         rows.append("  " + ("все правила соблюдены" if not failures else "нарушено: " + "; ".join(failures)))

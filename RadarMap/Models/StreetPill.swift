@@ -57,6 +57,26 @@ nonisolated enum StreetPill {
         return pool.min { $0.distance < $1.distance }?.name
     }
 
+    /// Тип улицы впереди имени, как его сокращает подпись на карте
+    /// (make_style.py STREET_TYPES, «Фуркат улица» → «ул. Фуркат»).
+    static let mapTypes: [(word: String, short: String)] = [
+        ("улица", "ул."), ("проспект", "просп."), ("проезд", "пр-д"), ("переулок", "пер."),
+        ("тупик", "туп."), ("шоссе", "ш."), ("бульвар", "бул."), ("площадь", "пл."),
+    ]
+
+    /// Имя для плашки: без уточнения в скобках, на языке приложения
+    /// (StreetName). `mapForm` — тип сокращён, как на подписи карты: в машине
+    /// плашка и подпись улицы рядом, и «улица Фуркат» под «ул. Фуркат»
+    /// читались двумя разными улицами (40J, D10).
+    static func label(_ raw: String, language: String, mapForm: Bool = false) -> String {
+        let name = StreetName.display(cleanName(raw), language: language)
+        guard mapForm, language != "uz" else { return name }
+        for type in mapTypes where name.hasPrefix(type.word + " ") {
+            return type.short + " " + name.dropFirst(type.word.count + 1)
+        }
+        return name
+    }
+
     /// Имя для плашки: без уточнения в скобках в конце — «Furqat ko'chasi
     /// (dublyor)» не узнавался StreetName (тип улицы должен стоять в конце),
     /// и плашка писала латиницу рядом с «ул. Фуркат» на карте. Дублёр —

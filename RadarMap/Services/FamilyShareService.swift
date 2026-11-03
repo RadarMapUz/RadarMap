@@ -57,7 +57,7 @@ final class FamilyShareService {
 
     init(keyStore: any SecretStore = KeychainSecretStore(service: AppConfig.familyKeychainService)) {
         self.keyStore = keyStore
-        let loaded = Self.load(keyStore: keyStore)
+        let loaded = Self.load(keyStore: keyStore, now: Date())
         circle = loaded.circle
         knownKeys = loaded.known
     }
@@ -106,7 +106,10 @@ final class FamilyShareService {
     /// Ссылку отправили (лист «Поделиться» сообщил, что ушло): с этого
     /// момента близкому есть смысл слать поездки — и в идущей тоже.
     func markSent(_ id: UUID, now: Date = Date()) {
-        edit(id) { $0.linkSentAt = now }
+        edit(id) {
+            $0.linkSentAt = now
+            $0.linkLost = nil
+        }
         update()
     }
 
@@ -246,12 +249,21 @@ final class FamilyShareService {
         if isHeadingHome != trip.headingHome { isHeadingHome = trip.headingHome }
     }
 
-    /// Ключ из связки, если при запуске она его не отдала (FamilyKeys). Нет и
-    /// сейчас — nil: писать адресом вместо ключа нельзя.
+    /// Ключ из связки, если при запуске она его не отдала (FamilyKeys). Связка
+    /// всё ещё недоступна — nil: писать адресом вместо ключа нельзя. Записи в
+    /// ней нет — ключ потерян навсегда: новая ссылка и просьба отправить её
+    /// заново (FamilyKeys.restored), близкий выпадает из отправки.
     private func writable(_ recipient: FamilyRecipient) -> FamilyRecipient? {
         guard recipient.isKeyLocked else { return recipient }
         do {
-            guard let key = try keyStore.read(account: recipient.id.uuidString) else { return nil }
+            guard let key = try keyStore.read(account: recipient.id.uuidString) else {
+                Log.app.error("близкие: ключа нет в связке — новая ссылка, водителя просим отправить заново")
+                _ = trip.forget(recipient.id)
+                generation[recipient.id, default: 0] &+= 1
+                edit(recipient.id) { $0 = $0.relinkedAfterLoss(now: Date()) }
+                publish()
+                return nil
+            }
             knownKeys[recipient.id] = key
             // Ключ — только в память: файл и так помнит, что он в связке.
             circle.recipients = circle.recipients.map { $0.id == recipient.id ? Self.withKey(key, $0) : $0 }
@@ -400,17 +412,17 @@ final class FamilyShareService {
     /// адрес и ключ — у мамы ссылка не меняется), старый ключ стирается.
     /// Ключи записи — в связку (FamilyKeys); файл переписывается без них
     /// только после того, как связка их приняла.
-    private static func load(keyStore: any SecretStore) -> FamilyKeys.Loaded {
+    private static func load(keyStore: any SecretStore, now: Date) -> FamilyKeys.Loaded {
         #if DEBUG
         if isDemo { return FamilyKeys.Loaded(circle: demoCircle(), known: [:], needsResave: false) }
         #endif
         if let data = Storage.data(.familyCircle) {
             do {
                 let disk = try JSONDecoder().decode(FamilyCircle.self, from: data)
-                var loaded = FamilyKeys.restored(disk, from: keyStore)
+                var loaded = FamilyKeys.restored(disk, from: keyStore, now: now)
                 if loaded.needsResave {
                     write(FamilyKeys.persisted(loaded.circle, in: keyStore, known: &loaded.known))
-                    Log.app.notice("близкие: ключи ссылок перенесены в связку ключей")
+                    Log.app.notice("близкие: ключи ссылок перенесены в связку ключей или выданы заново")
                 }
                 return loaded
             } catch {

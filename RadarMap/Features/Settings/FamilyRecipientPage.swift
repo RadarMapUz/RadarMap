@@ -88,6 +88,13 @@ struct FamilyRecipientPage: View {
                                 sent.formatted(.dateTime.day().month(.wide).locale(NumberFormat.locale))))
                         .font(.rounded(14))
                         .foregroundStyle(Theme.textSecondary)
+                } else if recipient.linkLost == true {
+                    // Восстановление на новый телефон: ключ старой ссылки не
+                    // переехал, выдана новая (FamilyKeys).
+                    Text("Ссылка не перенеслась на этот телефон — отправьте её заново: старая у близкого больше не обновляется.")
+                        .font(.rounded(14, .medium))
+                        .foregroundStyle(Theme.warning)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
                     Text("Ссылка ещё не отправлена — пока ничего не видно.")
                         .font(.rounded(14, .medium))

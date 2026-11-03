@@ -12,8 +12,13 @@
 //    • из файла ключ убирается только после того, как связка его приняла;
 //    • связка не приняла — ключ остаётся в файле, как до этой версии;
 //    • ключ в файле новее связки (сбой при прошлой записи) и побеждает;
-//    • связка не отдала ключ — он не стирается ни там, ни тут: ссылка ждёт,
-//      а писать в неё до тех пор нечем (`FamilyRecipient.isKeyLocked`).
+//    • связка недоступна (до первой разблокировки) — ключ не стирается ни
+//      там, ни тут: ссылка ждёт, писать в неё до тех пор нечем
+//      (`FamilyRecipient.isKeyLocked`);
+//    • записи в связке НЕТ (восстановление на новый телефон из
+//      незашифрованной копии) — это навсегда: ключ потерян не нами, и честно
+//      — выдать новую ссылку и попросить отправить её заново
+//      (`relinkedAfterLoss`), а не повторять отправку без конца.
 //
 
 import Foundation
@@ -33,7 +38,7 @@ nonisolated enum FamilyKeys {
     /// Круг, прочитанный с диска, → круг в памяти. Ключи из файла (сборка до
     /// этой или прошлый сбой связки) переносятся в связку; ключи из связки
     /// возвращаются в память.
-    static func restored(_ disk: FamilyCircle, from store: any SecretStore) -> Loaded {
+    static func restored(_ disk: FamilyCircle, from store: any SecretStore, now: Date) -> Loaded {
         var circle = disk
         var known: [UUID: String] = [:]
         var needsResave = false
@@ -53,7 +58,9 @@ nonisolated enum FamilyKeys {
                         circle.recipients[index].key = key
                         known[id] = key
                     } else {
-                        Log.app.error("близкие: ключа нет в связке — ссылку надо сменить")
+                        Log.app.error("близкие: ключа нет в связке — новая ссылка, водителя просим отправить заново")
+                        circle.recipients[index] = circle.recipients[index].relinkedAfterLoss(now: now)
+                        needsResave = true
                     }
                 } catch {
                     Log.app.error("близкие: связка ключей недоступна (\(String(describing: error), privacy: .public))")

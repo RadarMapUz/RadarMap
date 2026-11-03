@@ -56,7 +56,7 @@ final class FamilyKeysTests: XCTestCase {
     func testMigrationMovesKeysOutOfTheFileWithoutLosingThem() throws {
         let store = FakeSecretStore()
         let disk = try roundTrip(oldDiskCircle())
-        var loaded = FamilyKeys.restored(disk, from: store)
+        var loaded = FamilyKeys.restored(disk, from: store, now: now)
         XCTAssertTrue(loaded.needsResave, "ключи из файла ушли в связку — файл переписать")
         XCTAssertEqual(loaded.circle, disk, "в памяти ничего не поменялось: те же ключи и адреса")
 
@@ -69,7 +69,7 @@ final class FamilyKeysTests: XCTestCase {
         }
 
         // Следующий запуск: ключи — из связки, ссылки те же.
-        let next = FamilyKeys.restored(rewritten, from: store)
+        let next = FamilyKeys.restored(rewritten, from: store, now: now)
         XCTAssertFalse(next.needsResave)
         XCTAssertEqual(next.circle.recipients.map(\.key), disk.recipients.map(\.key))
         XCTAssertEqual(next.circle.recipients.map(\.write), disk.recipients.map(\.write))
@@ -79,7 +79,7 @@ final class FamilyKeysTests: XCTestCase {
         let store = FakeSecretStore()
         store.failWrites = true
         let disk = try roundTrip(oldDiskCircle())
-        var loaded = FamilyKeys.restored(disk, from: store)
+        var loaded = FamilyKeys.restored(disk, from: store, now: now)
         XCTAssertFalse(loaded.needsResave, "связка не приняла — файл не трогаем")
         let rewritten = FamilyKeys.persisted(loaded.circle, in: store, known: &loaded.known)
         XCTAssertEqual(rewritten.recipients.map(\.key), disk.recipients.map(\.key),
@@ -95,7 +95,7 @@ final class FamilyKeysTests: XCTestCase {
         let id = circle.recipients[0].id
         store.items[id.uuidString] = "старый"
         circle.recipients[0].keyInKeychain = nil
-        let loaded = FamilyKeys.restored(circle, from: store)
+        let loaded = FamilyKeys.restored(circle, from: store, now: now)
         XCTAssertEqual(loaded.circle.recipients[0].key, circle.recipients[0].key)
         XCTAssertEqual(store.items[id.uuidString], circle.recipients[0].key)
     }
@@ -107,7 +107,7 @@ final class FamilyKeysTests: XCTestCase {
         let disk = try roundTrip(FamilyKeys.persisted(original, in: store, known: &known))
 
         store.failReads = true
-        var loaded = FamilyKeys.restored(disk, from: store)
+        var loaded = FamilyKeys.restored(disk, from: store, now: now)
         XCTAssertTrue(loaded.circle.recipients.allSatisfy(\.isKeyLocked),
                       "связка не отдала ключ — писать нечем, адресом вместо ключа не пишем")
         // Пока связка недоступна, круг правят и сохраняют — ключи не стираются.
@@ -118,9 +118,36 @@ final class FamilyKeysTests: XCTestCase {
         XCTAssertEqual(store.items.count, 2, "в связке оба ключа на месте")
 
         store.failReads = false
-        let back = FamilyKeys.restored(saved, from: store)
+        let back = FamilyKeys.restored(saved, from: store, now: now)
         XCTAssertEqual(back.circle.recipients.map(\.key), original.recipients.map(\.key))
         XCTAssertFalse(back.circle.recipients.contains(where: \.isKeyLocked))
+    }
+
+    func testMissingKeychainEntryIsALostLinkNotEndlessRetries() throws {
+        // Новый телефон из незашифрованной копии: файл приехал, связка — нет.
+        // `nil` — это навсегда (в отличие от ошибки «связка заперта»).
+        let original = FakeSecretStore()
+        var known: [UUID: String] = [:]
+        let old = oldDiskCircle()
+        let disk = try roundTrip(FamilyKeys.persisted(old, in: original, known: &known))
+
+        let fresh = FakeSecretStore()
+        var loaded = FamilyKeys.restored(disk, from: fresh, now: now)
+        XCTAssertTrue(loaded.needsResave, "новый ключ — в связку и в файл")
+        for (lost, before) in zip(loaded.circle.recipients, old.recipients) {
+            XCTAssertEqual(lost.linkLost, true, "«Близкие» просят отправить ссылку заново")
+            XCTAssertNil(lost.linkSentAt)
+            XCTAssertFalse(lost.isReachable, "поездки ему не шлются — и повторов нет")
+            XCTAssertFalse(lost.isKeyLocked)
+            XCTAssertNotEqual(lost.key, before.key)
+            XCTAssertEqual(lost.token, EtaShare.address(forKey: lost.key ?? ""))
+            XCTAssertEqual(lost.name, before.name)
+        }
+        let saved = try roundTrip(FamilyKeys.persisted(loaded.circle, in: fresh, known: &loaded.known))
+        XCTAssertEqual(saved.recipients.map(\.linkLost), [true, true], "пометка переживает перезапуск")
+        XCTAssertEqual(fresh.items.count, 2)
+        // Отправили заново — пометка снимается сменой ссылки или отправкой.
+        XCTAssertNil(loaded.circle.recipients[0].withNewLink(now: now).linkLost)
     }
 
     func testLegacyLinkWithoutKeyIsLeftAlone() throws {

@@ -220,10 +220,12 @@ struct ReportRadarButton: View {
         .frame(width: Self.buttonSide, height: Self.buttonSide)
     }
 
-    /// Подпись под значком до первой отметки (40D; раньше — пять поездок) и
-    /// пока кнопка в покое (отмена и вспышка результата говорят значком).
+    /// Подпись под значком (OneTimeHints.showsRadarCaption), пока кнопка в
+    /// покое (отмена и вспышка результата говорят значком).
     private var showsCaption: Bool {
-        flash == nil && fan == nil && !env.hasReportedRadar
+        flash == nil && fan == nil
+            && OneTimeHints.showsRadarCaption(hasReported: env.hasReportedRadar,
+                                              trips: env.trip.lifetime.trips)
     }
 
     private var symbol: String {

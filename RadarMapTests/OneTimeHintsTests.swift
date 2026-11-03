@@ -72,4 +72,11 @@ final class OneTimeHintsTests: XCTestCase {
                                        offersCarOnly: true))
     }
 
+    /// Подпись «Радар!»: до первой отметки, но не вечно.
+    func testRadarCaptionUntilFirstReportOrTenTrips() {
+        XCTAssertTrue(OneTimeHints.showsRadarCaption(hasReported: false, trips: 0))
+        XCTAssertTrue(OneTimeHints.showsRadarCaption(hasReported: false, trips: 9))
+        XCTAssertFalse(OneTimeHints.showsRadarCaption(hasReported: false, trips: 10))
+        XCTAssertFalse(OneTimeHints.showsRadarCaption(hasReported: true, trips: 0))
+    }
 }

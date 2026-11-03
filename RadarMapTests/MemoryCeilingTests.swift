@@ -36,7 +36,7 @@ final class MemoryCeilingTests: XCTestCase {
     func testBackgroundIsNotTight() {
         XCTAssertFalse(MemoryPressure.Reason.background.isTight)
         XCTAssertTrue(MemoryPressure.Reason.warning.isTight)
-        XCTAssertTrue(MemoryPressure.Reason.ceiling.isTight)
+        XCTAssertTrue(MemoryPressure.Reason.ceiling(footprint: 0).isTight)
     }
 
     func testFootprintIsReadable() {
@@ -68,13 +68,24 @@ final class MemoryCeilingTests: XCTestCase {
     /// Видимая карта машины на потолке не отдаёт ничего; скрытая карта
     /// телефона рядом с ней чистится как раньше.
     func testVisibleCarMapKeepsItsWorkingSetOnTheCeiling() {
-        XCTAssertEqual(MemoryPressure.release(.ceiling, hidden: false, inCar: true), .nothing)
-        XCTAssertEqual(MemoryPressure.release(.ceiling, hidden: true, inCar: false), .selectionAndEngine,
+        let over = MemoryPressure.Reason.ceiling(footprint: 380 * 1024 * 1024)
+        XCTAssertEqual(MemoryPressure.release(over, hidden: false, inCar: true), .nothing)
+        XCTAssertEqual(MemoryPressure.release(over, hidden: true, inCar: false), .selectionAndEngine,
                        "карта телефона в кармане")
-        XCTAssertEqual(MemoryPressure.release(.ceiling, hidden: true, inCar: true), .selectionAndEngine,
+        XCTAssertEqual(MemoryPressure.release(over, hidden: true, inCar: true), .selectionAndEngine,
                        "машина на чужом навигаторе — нашей карты не видно")
-        XCTAssertEqual(MemoryPressure.release(.ceiling, hidden: false, inCar: false), .selectionAndEngine,
+        XCTAssertEqual(MemoryPressure.release(over, hidden: false, inCar: false), .selectionAndEngine,
                        "открытая карта телефона в поездке — как в 36A")
+    }
+
+    /// Выше жёсткого верха отдаёт и видимая карта машины: след — на процесс
+    /// (экран, плитка и приборка вместе), выгрузка хуже перечитанных тайлов.
+    func testVisibleCarMapGivesUpAboveTheHardCeiling() {
+        let hard = AppConfig.engineMemoryHardCeilingCarPlayBytes
+        XCTAssertGreaterThan(hard, AppConfig.engineMemoryCeilingCarPlayBytes)
+        XCTAssertEqual(MemoryPressure.release(.ceiling(footprint: hard), hidden: false, inCar: true), .nothing)
+        XCTAssertEqual(MemoryPressure.release(.ceiling(footprint: hard + 1), hidden: false, inCar: true),
+                       .selectionAndEngine)
     }
 
     func testBackgroundAndWarningAreUnchanged() {

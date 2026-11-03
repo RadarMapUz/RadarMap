@@ -78,6 +78,8 @@ nonisolated struct SearchIndex: Sendable {
     private let tokenIDs: [String: Int32]
     /// Слово → имена, где оно есть.
     private let postings: [[Int32]]
+    /// Слово — тип улицы («kuchasi», «ulitsa»): началом или нечётко им не совпадаем.
+    private let streetToken: [Bool]
     /// id слов по алфавиту (байтами) — для поиска по началу слова.
     private let sortedTokens: [Int32]
     /// Триграмма (с меткой начала слова) → слова — кандидаты нечёткого.
@@ -145,6 +147,7 @@ nonisolated struct SearchIndex: Sendable {
         self.names = names
         self.tokens = tokens
         self.tokenIDs = tokenIDs
+        self.streetToken = tokens.map { Self.streetWords.contains(String(decoding: $0, as: UTF8.self)) }
         self.postings = postings
         self.sortedTokens = (0..<Int32(tokens.count)).sorted {
             Self.less(tokens[Int($0)], tokens[Int($1)])
@@ -233,13 +236,19 @@ nonisolated struct SearchIndex: Sendable {
         var house: String?
         /// Последнее слово ещё набирается — ищем и по его началу нечётко.
         var typing = true
+        /// В запросе инициал с точкой («K.G‘ofurov»): однобуквенное слово
+        /// ищется и началом слова, как у старого поиска.
+        var initials = false
     }
 
-    private static func parse(_ text: String) -> Query {
+    /// `splitHouse: false` — число остаётся словом имени: «Юнусабад 11» для
+    /// мест — это квартал «Юнусабад-11», а не дом 11.
+    private static func parse(_ text: String, splitHouse: Bool = true) -> Query {
         var query = Query()
-        let (streetPart, house) = AddressBook.splitHouse(text)
+        let (streetPart, house) = splitHouse ? AddressBook.splitHouse(text) : (text, nil)
         query.house = house
         query.typing = house == nil && !(text.last?.isWhitespace ?? true)
+        query.initials = text.range(of: #"(^|[\s.])\p{L}\."#, options: .regularExpression) != nil
         var soft: [String] = []
         for word in words(streetPart) {
             if let kind = kindWords[word] {
@@ -275,19 +284,46 @@ nonisolated struct SearchIndex: Sendable {
         }
 
         let query = Self.parse(text)
-        guard !query.required.isEmpty else {
+        // Места — с числом как словом имени: номер дома бывает только у улицы.
+        let placeQuery = query.house == nil ? query : Self.parse(text, splitHouse: false)
+        guard !query.required.isEmpty || !placeQuery.required.isEmpty else {
             answer.venuesFirst = true
             return answer
         }
+        let streetDocs = candidates(query)
+        let placeDocs = query.house == nil ? streetDocs : candidates(placeQuery)
 
+        var streets: [(Int, Candidate)] = []
+        var venues: [(Int, Candidate)] = []
+        for (doc, candidate) in streetDocs where Int(doc) < streetCount {
+            streets.append((Int(doc), candidate))
+        }
+        for (doc, candidate) in placeDocs where Int(doc) >= streetCount {
+            venues.append((Int(doc) - streetCount, candidate))
+        }
+        // Есть хоть один не нечёткий ответ — нечёткие не показываем: «лукойл»
+        // нашёл АЗС, и девять улиц «Suhayl ko'chasi» под ней — шум, который
+        // ещё и сдвигает ответы Apple вниз.
+        let precise = !answer.venues.isEmpty
+            || streets.contains { $0.1.tier != .fuzzy } || venues.contains { $0.1.tier != .fuzzy }
+        if precise {
+            streets.removeAll { $0.1.tier == .fuzzy }
+            venues.removeAll { $0.1.tier == .fuzzy }
+        }
+        return finish(answer, streets: streets, venues: venues, query: query, near: near,
+                      streetLimit: streetLimit, venueLimit: venueLimit)
+    }
+
+    /// Документы, где есть все обязательные слова запроса, с лучшим совпадением.
+    private func candidates(_ query: Query) -> [Int32: Candidate] {
+        guard !query.required.isEmpty else { return [:] }
         // Совпадения каждого обязательного слова: имя → качество (0 — слово
         // целиком, 1 — начало или окончание, 2+ — нечёткое с d правками).
         var perWord: [[Int32: UInt8]] = []
         for (position, word) in query.required.enumerated() {
             let last = position == query.required.count - 1 && query.typing
-            let found = matches(word, typing: last)
-            if found.isEmpty { return finish(answer, streets: [], venues: [], query: query, near: near,
-                                             streetLimit: streetLimit, venueLimit: venueLimit) }
+            let found = matches(word, typing: last, initial: query.initials)
+            if found.isEmpty { return [:] }
             perWord.append(found)
         }
         // Имена, где есть необязательные слова запроса: множества — один раз
@@ -316,20 +352,14 @@ nonisolated struct SearchIndex: Sendable {
             else if worst == 0, query.required.count >= name.core { tier = .exact }
             else { tier = .prefix }
             let extra = optionalNames.reduce(0) { $0 + ($1.contains(nameID) ? 1 : 0) }
+            // «бывш.» — только когда нашлось именно по старому имени, а не
+            // нечётко рядом с ним: иначе подпись выдаёт догадку за объяснение.
             let candidate = Candidate(tier: tier, extra: extra, primary: name.primary,
-                                      former: name.old ? name.text : nil)
+                                      former: tier == .oldName ? name.text : nil)
             if let current = best[name.doc], !candidate.better(than: current) { continue }
             best[name.doc] = candidate
         }
-
-        var streets: [(Int, Candidate)] = []
-        var venues: [(Int, Candidate)] = []
-        for (doc, candidate) in best {
-            if Int(doc) < streetCount { streets.append((Int(doc), candidate)) }
-            else if query.house == nil { venues.append((Int(doc) - streetCount, candidate)) }
-        }
-        return finish(answer, streets: streets, venues: venues, query: query, near: near,
-                      streetLimit: streetLimit, venueLimit: venueLimit)
+        return best
     }
 
     private struct Candidate {
@@ -375,7 +405,7 @@ nonisolated struct SearchIndex: Sendable {
                 let leftRank = Self.kindRank(left.0.kind), rightRank = Self.kindRank(right.0.kind)
                 if leftRank != rightRank { return leftRank < rightRank }
                 if left.2 != right.2 { return left.2 < right.2 }
-                return left.0.id < right.0.id
+                return left.0.name < right.0.name
             }
             var seen = Set(answer.venues.map(\.id))
             for (venue, candidate, _) in ranked where answer.venues.count < venueLimit {
@@ -391,29 +421,40 @@ nonisolated struct SearchIndex: Sendable {
         if let book, !streets.isEmpty {
             let streetHint = streetPenalty
             if let house = query.house {
-                var found: [(Address, Bool, Candidate, Double)] = []
+                // Лёгкие строки: индекс дома и расстояние. Address, его id и
+                // подпись «бывш.» — только для тех, что попадут в ответ: «ka 1»
+                // совпадает с десятками тысяч домов, и строить строку на
+                // каждый — это 170 мс на главном потоке (ревью 03.11).
+                var found: [(house: Int, exact: Bool, candidate: Candidate, distance: Double)] = []
                 for (index, candidate) in streets {
                     let street = book.streets[index]
                     for (offset, address) in street.houses.enumerated() {
                         let key = street.houseKeys[offset]
                         guard key.hasPrefix(house) else { continue }
-                        let point = book.addresses[address].point
-                        found.append((book.addresses[address], key == house, candidate,
-                                      near.map { Self.distance($0, point) } ?? 0))
+                        found.append((address, key == house, candidate,
+                                      near.map { Self.distance($0, book.addresses[address].point) } ?? 0))
                     }
                 }
                 found.sort { left, right in
-                    if left.1 != right.1 { return left.1 }
-                    if left.2.tier != right.2.tier { return left.2.tier < right.2.tier }
-                    return left.3 < right.3
+                    if left.exact != right.exact { return left.exact }
+                    if left.candidate.tier != right.candidate.tier { return left.candidate.tier < right.candidate.tier }
+                    if left.distance != right.distance { return left.distance < right.distance }
+                    return left.house < right.house
                 }
-                let distinct = AddressBook.distinct(found.map(\.0), limit: streetLimit)
-                let former = Dictionary(found.map { ($0.0.id, $0.2.former) }, uniquingKeysWith: { first, _ in first })
-                answer.addresses = distinct
-                for address in distinct { if let name = former[address.id] ?? nil { answer.formerNames[address.id] = name } }
-                if let first = found.first { bestStreet = (streetHint, first.2.tier.rawValue) }
+                for row in found where answer.addresses.count < streetLimit {
+                    let address = book.addresses[row.house]
+                    // Один адрес — одна строка (точка и контур дома в OSM).
+                    let twin = answer.addresses.contains { other in
+                        other.street == address.street && other.house == address.house
+                            && Self.distance(other.point, address.point) < AppConfig.addressDuplicateMeters
+                    }
+                    if twin { continue }
+                    answer.addresses.append(address)
+                    if let former = row.candidate.former { answer.formerNames[address.id] = former }
+                }
+                if let first = found.first { bestStreet = (streetHint, first.candidate.tier.rawValue) }
             } else {
-                var ranked: [(Address, Candidate, Double)] = []
+                var ranked: [(street: Int, pick: Int, candidate: Candidate, distance: Double)] = []
                 ranked.reserveCapacity(streets.count)
                 for (index, candidate) in streets {
                     let street = book.streets[index]
@@ -427,21 +468,22 @@ nonisolated struct SearchIndex: Sendable {
                             if distance < pickDistance { pick = house; pickDistance = distance }
                         }
                     }
-                    ranked.append((Address(street: street.name, house: "", point: book.addresses[pick].point),
-                                   candidate, pickDistance))
+                    ranked.append((index, pick, candidate, pickDistance))
                 }
                 ranked.sort { left, right in
-                    if left.1.tier != right.1.tier { return left.1.tier < right.1.tier }
-                    if left.1.extra != right.1.extra { return left.1.extra > right.1.extra }
-                    if left.1.primary != right.1.primary { return left.1.primary }
-                    if left.2 != right.2 { return left.2 < right.2 }
-                    return left.0.street < right.0.street
+                    if left.candidate.tier != right.candidate.tier { return left.candidate.tier < right.candidate.tier }
+                    if left.candidate.extra != right.candidate.extra { return left.candidate.extra > right.candidate.extra }
+                    if left.candidate.primary != right.candidate.primary { return left.candidate.primary }
+                    if left.distance != right.distance { return left.distance < right.distance }
+                    return left.street < right.street
                 }
-                for (address, candidate, _) in ranked.prefix(streetLimit) {
+                for row in ranked.prefix(streetLimit) {
+                    let address = Address(street: book.streets[row.street].name, house: "",
+                                          point: book.addresses[row.pick].point)
                     answer.addresses.append(address)
-                    if let former = candidate.former { answer.formerNames[address.id] = former }
+                    if let former = row.candidate.former { answer.formerNames[address.id] = former }
                 }
-                if let first = ranked.first { bestStreet = (streetHint, first.1.tier.rawValue) }
+                if let first = ranked.first { bestStreet = (streetHint, first.candidate.tier.rawValue) }
             }
         }
 
@@ -471,9 +513,12 @@ nonisolated struct SearchIndex: Sendable {
 
     /// Имена, где есть слово запроса: целиком (0), началом или без русского
     /// окончания (1), нечётко (2 + число правок).
-    private func matches(_ word: String, typing: Bool) -> [Int32: UInt8] {
+    private func matches(_ word: String, typing: Bool, initial: Bool = false) -> [Int32: UInt8] {
         var out: [Int32: UInt8] = [:]
         func mark(_ token: Int32, _ quality: UInt8) {
+            // Обязательное слово не бывает словом типа улицы: «ka» — не
+            // «ko'chasi», иначе «ka 1» — это все улицы города (ревью 03.11).
+            if quality > 0, streetToken[Int(token)] { return }
             for name in postings[Int(token)] {
                 if let known = out[name], known <= quality { continue }
                 out[name] = quality
@@ -481,8 +526,9 @@ nonisolated struct SearchIndex: Sendable {
         }
         let bytes = Array(word.utf8)
         if let exact = tokenIDs[word] { mark(exact, 0) }
-        // Начало слова — с двух букв: одна буква — это полгорода.
-        if bytes.count >= 2 || word.first?.isNumber == true {
+        // Начало слова — с двух букв: одна буква — это полгорода. Кроме
+        // инициала с точкой («K.G‘…») и числа.
+        if bytes.count >= 2 || word.first?.isNumber == true || initial {
             for token in prefixRange(bytes) where tokens[Int(token)].count != bytes.count {
                 mark(token, 1)
             }
@@ -506,9 +552,9 @@ nonisolated struct SearchIndex: Sendable {
         return out
     }
 
-    /// Окончания русского падежа после fold: а, я(ya→a), ы/и(i), у, е.
-    private static let endings: Set<UInt8> = [UInt8(ascii: "a"), UInt8(ascii: "i"),
-                                              UInt8(ascii: "u"), UInt8(ascii: "e")]
+    /// Окончания русского падежа после fold: а, я (ya → a), у, е. Без «и»:
+    /// у «Навои» она своя, и «Навои 12» находило «Ново-Ульяновскую».
+    private static let endings: Set<UInt8> = [UInt8(ascii: "a"), UInt8(ascii: "u"), UInt8(ascii: "e")]
 
     /// Порог правок по длине слова: до трёх букв — только точно (иначе «уч»
     /// находит пол-алфавита), 4–5 — одна правка, длиннее — две.

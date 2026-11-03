@@ -142,15 +142,64 @@ final class SearchIndexTests: XCTestCase {
 
     // MARK: - Порядок
 
-    func testTierOrderExactPrefixOldFuzzy() {
+    func testTierOrderExactPrefixOld() {
         let venues = VenueBook(venues: [
-            Venue(kind: .food, name: "Хамса", point: near),                         // нечёткое
             Venue(kind: .food, name: "Кафе", point: near, oldNames: ["Хамза"]),    // старое имя
             Venue(kind: .food, name: "Хамзаабад", point: near),                     // начало
             Venue(kind: .food, name: "Хамза", point: near),                         // точное
         ])
         let found = SearchIndex(book: nil, venues: venues).search("хамза ", near: near).venues.map(\.name)
-        XCTAssertEqual(found, ["Хамза", "Хамзаабад", "Кафе", "Хамса"])
+        XCTAssertEqual(found, ["Хамза", "Хамзаабад", "Кафе"])
+    }
+
+    func testFuzzyOnlyWhenNothingPreciseWasFound() {
+        let venues = VenueBook(venues: [Venue(kind: .food, name: "Хамса", point: near),
+                                        Venue(kind: .fuel, name: "Лукойл", point: near)])
+        let index = SearchIndex(book: nil, venues: venues)
+        XCTAssertEqual(index.search("хамза ", near: near).venues.map(\.name), ["Хамса"], "опечатка — находит")
+        // Точный ответ есть — нечёткий хвост не показываем (ревью 03.11: «лукойл»
+        // давал девять улиц «Suhayl ko'chasi» над ответами Apple).
+        let streets = AddressBook(addresses: [Address(street: "Suhayl ko'chasi", house: "1", point: near)])
+        let mixed = SearchIndex(book: streets, venues: venues).search("лукойл", near: near)
+        XCTAssertEqual(mixed.venues.map(\.name), ["Лукойл"])
+        XCTAssertTrue(mixed.addresses.isEmpty)
+    }
+
+    func testFormerCaptionOnlyForAnOldNameMatch() {
+        // Нечёткое попадание рядом со старым именем — без «бывш.»: подпись
+        // объясняет, почему нашлось, и не должна выдавать догадку за факт.
+        let venues = VenueBook(venues: [Venue(kind: .food, name: "Кафе", point: near, oldNames: ["Хамза"])])
+        let answer = SearchIndex(book: nil, venues: venues).search("хамса ", near: near)
+        XCTAssertEqual(answer.venues.count, 1)
+        XCTAssertTrue(answer.formerNames.isEmpty)
+    }
+
+    func testNumberedQuarterIsAPlaceNotAHouse() {
+        let venues = VenueBook(venues: [Venue(kind: .place, name: "Юнусабад-11", point: near),
+                                        Venue(kind: .place, name: "Чиланзар-9", point: near)])
+        let streets = AddressBook(addresses: [Address(street: "Eski Yunusobod ko'chasi", house: "11", point: near)])
+        let index = SearchIndex(book: streets, venues: venues)
+        let answer = index.search("Юнусабад 11", near: near)
+        XCTAssertEqual(answer.venues.map(\.name), ["Юнусабад-11"], "число — часть имени квартала")
+        XCTAssertEqual(answer.addresses.first?.title, "Eski Yunusobod ko'chasi, 11", "и дом с этим номером")
+        XCTAssertTrue(answer.venuesFirst)
+        XCTAssertEqual(index.search("чиланзар 9", near: near).venues.map(\.name), ["Чиланзар-9"])
+    }
+
+    func testShortWordNeverMeansStreetType() {
+        // «ka» — начало «kachasi» (так приводится «ko'chasi» без «ў») у каждой
+        // улицы: «ka 1» не должен значить «дом 1 любой улицы».
+        let streets = AddressBook(addresses: [Address(street: "Navoiy ko'chasi", house: "1", point: near),
+                                              Address(street: "Kamolon ko'chasi", house: "1", point: near)])
+        let answer = SearchIndex(book: streets, venues: nil).search("ka 1", near: near)
+        XCTAssertEqual(answer.addresses.map(\.street), ["Kamolon ko'chasi"])
+    }
+
+    func testInitialWithADotIsSearchedAsAPrefix() {
+        let streets = AddressBook(addresses: [Address(street: "K.G'ofurov ko'chasi", house: "1", point: near)])
+        let index = SearchIndex(book: streets, venues: nil)
+        XCTAssertEqual(index.search("K.G‘", near: near).addresses.count, 1, "старый поиск находил — и этот")
+        XCTAssertEqual(index.search("K.G‘ofurov", near: near).addresses.count, 1)
     }
 
     func testCloserWinsWithinTheSameTier() {

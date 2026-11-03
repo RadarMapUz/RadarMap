@@ -801,11 +801,13 @@ final class PerformanceBudgetTests: XCTestCase {
         XCTAssertLessThan(total, .milliseconds(2_000), "лист дальней дороги дорожает: \(total)")
     }
 
-    /// Свой поиск (40G) на клетке размера Ташкента: 3 200 улиц (38 тысяч
-    /// домов) и 9 000 мест, у трети — другие и старые имена. Запрос идёт на
-    /// каждую букву на главном потоке — худший из набора обязан быть меньше
-    /// 30 мс (замер на настоящем файле Ташкента 02.11 — 0,45 мс на маке),
-    /// сборка индекса — off-main и меньше 3 с.
+    /// Свой поиск (40G) на клетке формы Ташкента: 3 200 улиц, у каждой
+    /// «ko'chasi» и по 36 домов (115 тысяч), и 9 000 мест, у трети — другие и
+    /// старые имена. Запрос идёт на каждую букву на главном потоке — худший из
+    /// набора обязан быть меньше 30 мс. «ka 1» / «Чи 1» — две буквы и номер:
+    /// до ревью 03.11 «ka» совпадало с «kachasi» у всех улиц, и строка id на
+    /// каждый из ~30 тысяч домов давала 170 мс на маке (после — 14 мс под
+    /// нагрузкой 60). Сборка индекса — off-main и меньше 3 с.
     func testSearchIndexBudget() {
         let syllables = ["ta", "shk", "ent", "cho", "rsu", "nov", "za", "ham", "mir", "zo", "ulu", "gbek",
                          "yun", "usa", "bad", "chi", "lan", "zar", "bun", "yod", "kor", "sab", "zi", "qo",
@@ -820,7 +822,7 @@ final class PerformanceBudgetTests: XCTestCase {
         for street in 0..<3_200 {
             let title = name(street, words: 2) + " ko'chasi \(street)"
             if street % 3 == 0 { names[title] = ([name(street + 1, words: 2) + " улица"], [name(street + 2, words: 1)]) }
-            for house in 0..<12 {
+            for house in 0..<36 {
                 addresses.append(Address(street: title, house: "\(house + 1)",
                                          point: CLLocationCoordinate2D(latitude: 41.2 + Double(street % 60) * 0.004,
                                                                        longitude: 69.1 + Double(street / 60) * 0.004
@@ -842,7 +844,8 @@ final class PerformanceBudgetTests: XCTestCase {
         let queries = ["ta", "tashk", "ташкент", "чорсу", "метро хамза", "hamza metro", "mirzo ulugbek",
                        "мирза улугбека", "yunusabad", "бунёдкор", "bunedkor", "chilanzar 5", "novza", "амира тимура",
                        "kor ko'chasi 7", "azs", "метро", "махалля", "beruni", "tinchlikk", "oybek pahtakor",
-                       "olmazor 12", "qoyli", "nov", "z", "улица ", "zzzzzz", "a b c d"]
+                       "olmazor 12", "qoyli", "nov", "z", "улица ", "zzzzzz", "a b c d",
+                       "ka 1", "ko 1", "Чи 1", "yu 1", "ta 1", "K.G‘", "chorsu 2"]
         var worst: Duration = .zero
         var found = 0
         for query in queries {

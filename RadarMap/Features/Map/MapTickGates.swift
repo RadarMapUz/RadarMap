@@ -180,15 +180,6 @@ struct MobileConfirmGate: View {
     }
 }
 
-/// «Что это было?» на карте — та же дисциплина, что у MobileConfirmGate:
-/// пер-тиковую isApproachingCamera читает гейт, а не body MapScreen.
-struct ReportRefineGate: View {
-    @Environment(AppEnvironment.self) private var env
-
-    var body: some View {
-        ReportRefineBar(isCovered: env.location.isApproachingCamera)
-    }
-}
 
 
 

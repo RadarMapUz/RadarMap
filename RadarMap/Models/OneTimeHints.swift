@@ -40,9 +40,9 @@ nonisolated enum OneTimeHints {
             case .toggles:
                 return String(localized: "Тап по скорости — быстрые переключатели")
             case .radar:
-                // Про жест: без подсказки удержание (тренога, ДТП) не
-                // находит никто — веер виден, только когда уже открыт (5.6).
-                return String(localized: "«Радар!» — отметка для других. Удержите — тренога или ДТП")
+                // С ситуации, а не с определения (маркетолог, 02.11): веера
+                // больше нет, выбор встаёт сам после касания.
+                return String(localized: "Увидели треногу — жмите «Отметить». Через 3 с уйдёт сама")
             case .smartSilence:
                 return String(localized: "Знакомые камеры больше не называю вслух — вы их знаете")
             case .carOnlyOffer:
@@ -67,13 +67,5 @@ nonisolated enum OneTimeHints {
             return hint
         }
         return nil
-    }
-
-    /// Подпись «Радар!» под жёлтой кнопкой: до первой отметки (40D), но не
-    /// дольше `radarCaptionMaxTrips` поездок — большинство не отмечает
-    /// никогда, а навсегда слово только теснит значок. Ветеран с поездками
-    /// за порогом подписи не видит, даже если его отметки старше 90 дней.
-    static func showsRadarCaption(hasReported: Bool, trips: Int) -> Bool {
-        !hasReported && trips < AppConfig.radarCaptionMaxTrips
     }
 }

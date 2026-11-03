@@ -229,18 +229,14 @@ extension CarPlaySceneDelegate {
         }
     }
 
-    /// Отметить засаду прямо на ходу. Одно касание — сразу радар; тип
-    /// уточняет баннер (10.2, `quickRadar`); двойное касание и повтор с того
-    /// же места отсекает ReportGuard внутри.
-    ///
-    /// Словом «Радар!», а не значком (25.H3). Значок волн
-    /// (`Icon.reportRadar`) без подписи в машине читался как AirPlay или
-    /// «вещание» (владелец 21.10), а текст в баре CarPlay — штатный вид
-    /// кнопки (`CPBarButton(title:)`, рядом со значками бара допустим). Слово то же,
-    /// что на жёлтой кнопке телефона и на кнопке карты в поездке.
+    /// «Отметить» на ходу (вариант B, 02.11): касание запоминает точку и
+    /// ставит баннер выбора — тренога сама через 3 с, пост и ДТП кнопкой,
+    /// крестик — ничего (`beginReport`). Слово, а не значок (25.H3): значок
+    /// волн без подписи в машине читался как AirPlay (владелец 21.10). Слово
+    /// то же, что на кнопке телефона.
     var reportButton: CPBarButton {
-        CPBarButton(title: String(localized: "Радар!")) { [weak self] _ in
-            self?.quickRadar()
+        CPBarButton(title: String(localized: "Отметить")) { [weak self] _ in
+            self?.beginReport(source: .carBar)
         }
     }
 
@@ -256,13 +252,13 @@ extension CarPlaySceneDelegate {
         }
     }
 
-    /// «Радар!» кнопкой карты в поездке (25.H3): крупная круглая цель у края,
-    /// куда рука идёт вслепую, — бар для этого мелок. Картинка — жёлтый диск
-    /// со словом (`CarPlayReportImage`), в масштабе экрана машины. Действие —
-    /// то же, что у бара: `quickRadar`, защита от дублей — ReportGuard.
+    /// «Отметить» кнопкой карты в поездке (25.H3): крупная круглая цель у
+    /// края, куда рука идёт вслепую, — бар для этого мелок. Картинка — жёлтый
+    /// диск (`CarPlayReportImage`): со словом, если оно читается (≥ 9 pt), иначе
+    /// значком треноги. Действие — то же, что у бара.
     var reportMapButton: CPMapButton {
-        let button = CPMapButton { [weak self] _ in self?.quickRadar() }
-        let title = String(localized: "Радар!")
+        let button = CPMapButton { [weak self] _ in self?.beginReport(source: .carMap) }
+        let title = String(localized: "Отметить")
         let scale = interfaceController?.carTraitCollection.displayScale ?? 2
         button.image = CarPlayReportImage.render(title: title, scale: scale)
         button.focusedImage = CarPlayReportImage.render(title: title, scale: scale, focused: true)

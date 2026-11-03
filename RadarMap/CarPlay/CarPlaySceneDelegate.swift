@@ -50,6 +50,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Вопрос, который истёк или закрыт без ответа: это «Пропустить», и
     /// второй раз о той же отметке не спрашиваем.
     var skippedConfirmID: Int?
+    /// Баннер отметки (выбор → «отмечена · Отменить»), номер черновика и
+    /// этап, который на нём показан (CarPlaySceneDelegate+Report).
+    var reportBanner: CPNavigationAlert?
+    var reportShown: (serial: Int, sent: Bool)?
+    /// Открыта сетка «Пост ДПС / ДТП» (до iOS 27).
+    var reportGridOpen = false
     /// Вопрос ждёт остановки: скорость — не наблюдаемое событие, проверяем
     /// изредка, пока вопрос висит (CarPlayAlerts.waitToAsk).
     var confirmWatch: Task<Void, Never>?
@@ -210,6 +216,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         observeRoadWeather()
         observeJam()
         observeTripSaved()
+        observeReportDraft()
         startFreezeWatch(scene: scene)
         Log.carplay.notice("CarPlay подключён, сцена \(Self.stateName(scene), privacy: .public), метаданные приборки \(self.env.settings.carPlayNavigationMetadata ? "вкл" : "выкл", privacy: .public)")
         // Без анимации: анимированная установка корня у сцены в фоне
@@ -251,6 +258,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         session += 1   // гасим подписки syncTemplate этой сессии
         banners?.reset()
         banners = nil
+        reportBanner = nil
+        reportShown = nil
+        reportGridOpen = false
         confirmWatch?.cancel()
         confirmWatch = nil
         confirmBanner = nil

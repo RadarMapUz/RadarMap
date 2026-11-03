@@ -110,7 +110,7 @@ struct WatchHUDView: View {
 
     private var reportButton: some View {
         Button {
-            session.sendReport()
+            if session.report == .undoable { session.cancelReport() } else { session.sendReport() }
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: reportSymbol)
@@ -126,7 +126,7 @@ struct WatchHUDView: View {
             .background(reportFill, in: Capsule())
         }
         .buttonStyle(.plain)
-        .disabled(session.report == .sending)
+        .disabled(session.report == .sending || session.report == .cancelling)
     }
 
     // MARK: - Ожидание
@@ -155,7 +155,8 @@ struct WatchHUDView: View {
         switch session.report {
         case .done(ok: true): return "checkmark"
         case .done(ok: false): return "xmark"
-        case .pending: return "ellipsis"
+        case .pending, .cancelling: return "ellipsis"
+        case .undoable: return "arrow.uturn.backward"
         case .sending, nil: return "dot.radiowaves.left.and.right"
         }
     }
@@ -166,13 +167,16 @@ struct WatchHUDView: View {
         case .done(ok: true): Text("Отмечено")
         case .done(ok: false): Text("Не отправлено")
         case .pending: Text("Отправляется")
-        case .sending, nil: Text("Радар!")
+        // Тренога по умолчанию (02.11): одно касание — тренога, 8 с — «Отменить».
+        case .undoable: Text("Отменить")
+        case .cancelling: Text("Отменяем")
+        case .sending, nil: Text("Отметить")
         }
     }
 
     private var reportForeground: Color {
         switch session.report {
-        case .done?, .pending?: return .white
+        case .done?, .pending?, .undoable?, .cancelling?: return .white
         case .sending?, nil: return WatchTheme.onAction
         }
     }
@@ -180,7 +184,7 @@ struct WatchHUDView: View {
     private var reportFill: Color {
         switch session.report {
         case .done(ok: true): return WatchTheme.successFill
-        case .done(ok: false), .pending: return WatchTheme.primary.opacity(0.22)
+        case .done(ok: false), .pending, .undoable, .cancelling: return WatchTheme.primary.opacity(0.22)
         case .sending: return WatchTheme.action.opacity(0.6)
         case nil: return WatchTheme.action
         }

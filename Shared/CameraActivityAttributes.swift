@@ -47,6 +47,9 @@ nonisolated struct CameraActivityAttributes: ActivityAttributes {
         /// отказ (причину произносит голос); nil — кнопка в покое. Держится
         /// `AppConfig.liveActivityReportFlashSeconds` и снимается приложением.
         var reportFlash: Bool? = nil
+        /// Отметку ещё можно отменить: на месте «Отметить» — «Отменить»
+        /// (окно `AppConfig.reportUndoSeconds`); nil у старых состояний — нет.
+        var reportUndo: Bool? = nil
         // «Камер вокруг» убрано 19.10: строка «следит за N камерами» была шумом,
         // а неквантованный счётчик слал обновления плашки и в пробке на месте.
     }

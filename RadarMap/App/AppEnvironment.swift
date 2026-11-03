@@ -53,8 +53,9 @@ final class AppEnvironment {
     let route = RouteService()
     let speedLimits: SpeedLimitService
     let liveActivity = LiveActivityService()
-    /// «Радар!» с плашки или часов в пути (`remoteRadarReport`).
-    @ObservationIgnored var remoteReportInFlight = false
+    /// Отметка водителя от касания до «Отменить» — один черновик на телефон,
+    /// машину, часы, плашку и Siri (вариант B, 02.11).
+    let reports = ReportFlow()
     /// Мост на Apple Watch: HUD поездки + тук на запястье.
     let watchBridge = WatchBridgeService()
     let metrics = MetricsService()
@@ -129,11 +130,6 @@ final class AppEnvironment {
     let cloud = CloudSyncService()
     /// Свои дороги и новые камеры на них (31E): память клеток и новости.
     let roadMemory = RoadMemoryService()
-    /// Первая отметка «Радар!» уже была (40D): до неё под жёлтой кнопкой
-    /// подпись — без слова квадрат с волнами не читается кнопкой «отметить».
-    private(set) var hasReportedRadar = Storage.bool(.radarReportedOnce) {
-        didSet { Storage.set(hasReportedRadar, for: .radarReportedOnce) }
-    }
 
     /// CarPlay подключён. Наблюдаемый флаг для интерфейса телефона: пока едет
     /// машина, телефонная карта уступает место дешёвому экрану передачи —
@@ -486,11 +482,16 @@ final class AppEnvironment {
         self.location.hotspots = hotspots
         self.location.roadWeather = roadWeather
         self.location.watchBridge = watchBridge
-        // «Радар!» с часов (9.3) — та же дверь, что у плашки.
+        // «Отметить» с часов (9.3) — та же дверь, что у плашки; «Отменить» — 8 с.
+        reports.mobile = mobile
+        reports.location = location
+        reports.alerts = alerts
         watchBridge.onReport = { [weak self] in
             guard let self else { return false }
-            return await self.remoteRadarReport()?.pointExists
+            return await self.remoteRadarReport(from: .watch)
         }
+        watchBridge.canUndoReport = { [weak self] in self?.reports.canUndo() ?? false }
+        watchBridge.onCancelReport = { [weak self] in await self?.reports.undo() }
         self.location.motion = motion     // «стоим» — сигнал не потерян
 
         // Пульт раздаём тем, кого он имеет право глушить. Список намеренно
@@ -580,12 +581,7 @@ final class AppEnvironment {
         // История приезжает с диска уже после первого кадра, поэтому всё,
         // что из неё выводится, пересчитывается по этому сигналу, а не один
         // раз на старте сцены.
-        mobile.onReportSent = { [weak usage, weak self] in
-            usage?.noteReport()
-            if self?.hasReportedRadar == false { self?.hasReportedRadar = true }
-        }
-        // Отметки до 40D флага не ставили: свои в списке — подпись уже не нужна.
-        if !hasReportedRadar, !mobile.mine.isEmpty { hasReportedRadar = true }
+        mobile.onReportSent = { [weak usage] in usage?.noteReport() }
         // Счётчик оповещений уходил на сервер вечным нулём: метод существовал,
         // а звать его было некому. Главная цифра воронки — «сколько раз в день
         // приложение реально предупредило» — была ложью.

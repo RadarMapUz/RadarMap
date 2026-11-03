@@ -17,6 +17,22 @@
         }
       }
     },
+    "Cancel report in ${applicationName}" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel report in ${applicationName}"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da belgini bekor qil"
+          }
+        }
+      }
+    },
     "End trip in ${applicationName}" : {
       "localizations" : {
         "en" : {
@@ -195,6 +211,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "${applicationName}da safarni boshla"
+          }
+        }
+      }
+    },
+    "Отмени отметку в ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da belgini bekor qil"
           }
         }
       }

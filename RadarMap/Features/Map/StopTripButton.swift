@@ -16,9 +16,15 @@
 //  исходное. Для того, кто ДЕЙСТВИТЕЛЬНО хочет закончить, цена — одно лишнее
 //  касание по кнопке, которая в этот момент стала шире и подписана словом.
 //
-//  Шире она становится ВЛЕВО: в панели поездки она стоит перед «Радар!»
+//  Шире она становится ВЛЕВО: в панели поездки она стоит перед «Отметить»
 //  (TripLiveBar), и рост не сдвигает соседку ни на пункт — иначе взведённая
-//  кнопка сама ложилась бы под слепой тап, предназначенный «Радар!».
+//  кнопка сама ложилась бы под слепой тап, предназначенный «Отметить».
+//
+//  В панели поездки (02.11) — нейтральная кнопка с красным значком, а не
+//  залитый красный квадрат: красный на этой карте — камера, и самый громкий
+//  элемент над картой всю поездку был «Стоп». И подтверждение — при ЛЮБОЙ
+//  скорости: ниже 20 км/ч он заканчивал поездку с одного касания, а это
+//  пробка и светофор — ровно там, где жмут «Отметить» (дизайнер, A.3).
 //
 
 import SwiftUI
@@ -39,11 +45,12 @@ struct StopTripButton: View {
     /// ловушкой для следующего промаха.
     private static let armedSeconds: Duration = .seconds(3)
 
-    /// На стоянке подтверждение не нужно: тап осознанный, и лишнее касание там
-    /// только раздражает. Порог — тот же, что у экрана машины, где эта развилка
-    /// появилась раньше и уже проверена в поездках.
+    /// В панели поездки — всегда: рядом «Отметить», и промах стоя у светофора
+    /// не должен заканчивать поездку. Карточка прибытия (`wide`) — на
+    /// стоянке без подтверждения: тап там осознанный. Порог — тот же, что у
+    /// экрана машины.
     private var needsConfirm: Bool {
-        env.location.speedKmh >= AppConfig.carPlayEndTripConfirmKmh
+        !wide || env.location.speedKmh >= AppConfig.carPlayEndTripConfirmKmh
     }
 
     var body: some View {
@@ -78,20 +85,23 @@ struct StopTripButton: View {
             HStack(spacing: 6) {
                 Image(systemName: isArmed ? "questionmark" : "stop.fill")
                     .font(.rounded(16, .bold))
+                    .foregroundStyle(Theme.danger)
                     .contentTransition(.symbolEffect(.replace))
                 if isArmed {
                     Text("Точно?")
                         .font(.rounded(15, .heavy))
+                        .foregroundStyle(Theme.textPrimary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
             }
-            .foregroundStyle(.white)
             .padding(.horizontal, isArmed ? 14 : 0)
             .frame(minWidth: 44)
             .frame(height: 44)
-            .background(Theme.dangerFill,
+            .background(Theme.quietFill,
                         in: RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous)
+                .stroke(Theme.stroke, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .motionAnimation(.spring(response: 0.3, dampingFraction: 0.8), value: isArmed)

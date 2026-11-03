@@ -106,6 +106,7 @@ extension CarPlaySceneDelegate {
                 }
             }
         }
+        reportBannerDismissed(navigationAlert, context: dismissalContext)
         banners?.didDismiss(navigationAlert, context: dismissalContext)
     }
 

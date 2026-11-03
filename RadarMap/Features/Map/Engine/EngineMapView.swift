@@ -71,6 +71,8 @@ struct EngineMapView: UIViewRepresentable {
     var cameraZone: CameraZone.Band?
     /// Свои камеры — голос о них молчит, на значке галочка.
     var familiarCameraIDs: Set<Int> = []
+    /// Свои свежие отметки водителя — без «?» (CameraMarkerLook.isGhost).
+    var ownReportIDs: Set<Int> = []
     /// Подпись «400 м» у значка алерт-камеры — только в машине
     /// (CarPlayCameraCue); на телефоне nil, там расстояние в своём HUD.
     var cameraLabel: CarPlayCameraCue.Label?
@@ -320,6 +322,7 @@ struct EngineMapView: UIViewRepresentable {
         private var lastPathIDs: Set<Int> = []
         private var lastCameraPoints: [Int: CameraOnLine.Point] = [:]
         private var lastFamiliarIDs: Set<Int> = []
+        private var lastOwnReportIDs: Set<Int> = []
         /// Тема, в которой собраны точки камер (графит спокойных — свой днём и ночью).
         private var camerasDaylight: Bool?
         /// Линия маршрута и срез пройденного под значком (27.A).
@@ -1826,6 +1829,7 @@ struct EngineMapView: UIViewRepresentable {
             }
             guard cachedCameras != lastCameras || model.alertCameraID != lastAlertID || cachedLimits != lastLimits
                     || model.pathCameraIDs != lastPathIDs || model.familiarCameraIDs != lastFamiliarIDs
+                    || model.ownReportIDs != lastOwnReportIDs
                     || model.cameraPoints != lastCameraPoints
                     || model.daylight != camerasDaylight else { return }
             lastCameras = cachedCameras
@@ -1834,6 +1838,7 @@ struct EngineMapView: UIViewRepresentable {
             lastPathIDs = model.pathCameraIDs
             lastCameraPoints = model.cameraPoints
             lastFamiliarIDs = model.familiarCameraIDs
+            lastOwnReportIDs = model.ownReportIDs
             camerasDaylight = model.daylight
             let points = cachedCameras.map { camera in
                 let point = MLNPointFeature()
@@ -1842,6 +1847,7 @@ struct EngineMapView: UIViewRepresentable {
                 point.attributes = Self.cameraAttributes(camera, alert: model.alertCameraID,
                                                          path: model.pathCameraIDs,
                                                          familiar: model.familiarCameraIDs,
+                                                         own: model.ownReportIDs,
                                                          daylight: model.daylight,
                                                          limit: cachedLimits[camera.id])
                 return point
@@ -2132,17 +2138,19 @@ struct EngineMapView: UIViewRepresentable {
         /// Свойства точки камеры для слоёв стиля — облик варианта B
         /// (CameraMarkerLook): уровень, значок, пометка, цвет точки.
         static func cameraAttributes(_ camera: Camera, alert: Int?, path: Set<Int>, familiar: Set<Int>,
-                                     daylight: Bool, limit: Int?) -> [String: Any] {
+                                     own: Set<Int> = [], daylight: Bool, limit: Int?) -> [String: Any] {
             let tier = CameraMarkerLook.tier(id: camera.id, alert: alert, path: path)
+            let ghost = CameraMarkerLook.isGhost(unconfirmed: camera.isUnconfirmedMobile,
+                                                 own: own.contains(camera.id))
             return ["id": camera.id, "alert": tier == .alert, "tier": tier.rawValue,
                     "sort": CameraMarkerLook.sortKey(tier),
                     "color": CameraMarkerLook.dotColor(typeHex: EngineMapStyle.typeHex(camera.kind),
                                                        tier: tier, daylight: daylight),
                     "icon": CameraMarkerLook.icon(glyph: camera.kind.glyph, tier: tier, daylight: daylight),
-                    "badge": CameraMarkerLook.badge(tier: tier, unconfirmed: camera.isUnconfirmedMobile,
+                    "badge": CameraMarkerLook.badge(tier: tier, unconfirmed: ghost,
                                                     familiar: familiar.contains(camera.id)),
                     "limit": limit.map(String.init) ?? "",
-                    "unconfirmed": camera.isUnconfirmedMobile]
+                    "unconfirmed": ghost]
         }
 
         static func cameraFeatures(_ cameras: [Camera], alert: Int?, path: Set<Int> = [],

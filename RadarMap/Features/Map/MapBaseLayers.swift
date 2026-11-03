@@ -127,6 +127,7 @@ struct EngineBaseLayer: View {
                         cameraPoints: cameraLine.points,
                         cameraZone: env.cameraZone(line: cameraLine),
                         familiarCameraIDs: env.location.familiarCameraIDs,
+                        ownReportIDs: env.mobile.ownFreshIDs,
                         route: env.route.routeCoordinates,
                         routeObject: env.route.polyline,
                         routeProgress: env.route.progressAlong,

@@ -1764,7 +1764,11 @@ class Handler(BaseHTTPRequestHandler):
             # на выбор пути (порог — CLOSURE_MIN_CONFIRMERS = 2, и на телефоне
             # то же число), а confirmed оставляет отметке и голосу.
             rows = conn.execute(
-                "SELECT r.id, r.lat, r.lon, r.created, r.expires, r.up, r.down, r.type, "
+                # created — момент ОТМЕТКИ: у досланной из очереди это observed
+                # (тренога отмечена 40 мин назад, ушла сейчас), а возраст в
+                # карточке и баннере машины — то, по чему водитель решает (40b).
+                "SELECT r.id, r.lat, r.lon, CASE WHEN r.observed > 0 THEN r.observed ELSE r.created END, "
+                "r.expires, r.up, r.down, r.type, "
                 "EXISTS(SELECT 1 FROM votes v WHERE v.report_id = r.id AND v.value = 1 AND v.stale = 0 "
                 "AND v.device != r.device AND v.ip != '' AND v.ip != r.ip), r.course, "
                 "(SELECT COUNT(DISTINCT v.ip) FROM votes v WHERE v.report_id = r.id AND v.value = 1 "
@@ -1779,8 +1783,10 @@ class Handler(BaseHTTPRequestHandler):
             item = {"id": r[0], "lat": r[1], "lon": r[2], "created": r[3],
                     "expires": r[4], "up": r[5], "down": r[6], "type": r[7],
                     "confirmed": bool(r[8])}
+            # Курс отметившего — в обоих списках: телефон по нему не задаёт
+            # вопрос «ещё стоит?» с поперечной улицы (40b). -1 — неизвестен.
+            item["course"] = r[9] if r[9] is not None else -1
             if road:
-                item["course"] = r[9] if r[9] is not None else -1
                 item["confirmers"] = int(r[10] or 0)
             items.append(item)
         body = json.dumps({"reports": items}).encode()

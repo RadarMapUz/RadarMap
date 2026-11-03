@@ -37,7 +37,11 @@ nonisolated enum CarPlayCameraBannerText {
     /// Варианты — от длинного к короткому: машина берёт первый, что влезет.
     /// Расстояние есть в каждом заголовке: иначе на узком экране баннер
     /// говорил бы «Камера» без самого важного.
-    static func text(name: String, kind: String, distance: String, limit: Int?) -> Text {
+    /// `age` — подзаголовок отметки водителей с её возрастом (ReportAge.banner,
+    /// 02.11: тренога — это «сейчас»): «Отметка водителей · 12 мин». Заголовок
+    /// с расстоянием тот же; nil — камера базы или время неизвестно.
+    static func text(name: String, kind: String, distance: String, limit: Int?,
+                     age: [String]? = nil) -> Text {
         let limitText = limit.map {
             String(format: String(localized: "Ограничение %lld"), locale: .current, $0)
         }
@@ -45,7 +49,7 @@ nonisolated enum CarPlayCameraBannerText {
             titles: [String(format: String(localized: "%1$@ через %2$@"), locale: .current, name, distance),
                      "\(name) · \(distance)",
                      distance],
-            subtitles: [limitText.map { "\($0) · \(kind)" }, limitText, kind].compactMap { $0 })
+            subtitles: age ?? [limitText.map { "\($0) · \(kind)" }, limitText, kind].compactMap { $0 })
     }
 
     /// Пора ли переписать баннер: цифра сменилась, и прошлое обновление было
@@ -222,9 +226,14 @@ final class CarPlayCameraBanner {
         if limit?.cameraID != camera.id {
             limit = (camera.id, env.speedLimits.limit(near: camera.coordinate))
         }
+        // Минуты отметки обновляются вместе с расстоянием (не чаще раза в
+        // секунду, shouldUpdate) — отдельного таймера баннеру не нужно.
+        let age = env.mobile.confirmation(for: camera.id).flatMap {
+            ReportAge.banner(created: $0.created, confirmed: $0.confirmed, now: Date())
+        }
         return CarPlayCameraBannerText.text(name: camera.kind.shortName, kind: camera.kind.displayName,
                                             distance: Formatting.distance(distance),
-                                            limit: limit?.value)
+                                            limit: limit?.value, age: age)
     }
 
     /// Картинка баннера — только на iOS 27 (раньше у баннера её нет).

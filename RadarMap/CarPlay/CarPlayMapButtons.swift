@@ -35,7 +35,7 @@ import Foundation
 nonisolated enum CarPlayMapButtons {
 
     enum Kind: Hashable, Sendable {
-        /// «Радар!» — отметка одним касанием (`quickRadar`, ReportGuard внутри).
+        /// «Отметить» — выбор типа баннером, тренога сама через 3 с (`beginReport`).
         case report
         case zoomIn
         case zoomOut

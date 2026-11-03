@@ -164,6 +164,7 @@ struct CarPlayEngineLayer: View {
             cameraPoints: cameraLine.points,
             cameraZone: env.cameraZone(line: cameraLine),
             familiarCameraIDs: env.location.familiarCameraIDs,
+            ownReportIDs: env.mobile.ownFreshIDs,
             cameraLabel: cameraLabel(cue, line: cameraLine),
             route: env.route.routeCoordinates,
             routeObject: env.route.polyline,

@@ -44,7 +44,7 @@ struct CorridorOfferGate: View {
                 // по скорости, которую этот гейт не читает (правило 13).
                 moving: env.location.isProbablyDriving,
                 answered: false,
-                questionShown: yields || env.mobile.passQuestion != nil || env.mobile.refineOffer != nil)
+                questionShown: yields || env.mobile.passQuestion != nil || env.reports.draft.phase != .idle)
             return RouteCorridor.shouldOffer(situation, offer: pending.offer) ? (pending.offer, pending.key) : nil
         }
     }

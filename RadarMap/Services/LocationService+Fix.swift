@@ -289,6 +289,7 @@ extension LocationService {
         if speedKmh >= AppConfig.movementSeenSpeedKmh { lastMovementAt = Date() }
         if currentCourse != course { currentCourse = course }
         locationTick &+= 1
+        reportTrack.append(coordinate, at: lastFixTime)
         onAcceptedFix?(coordinate)
         if isTripActive { noteDrivenFix(coordinate) } else if parkedCar != nil { refreshParkedCar() }
         retileIfNeeded(around: coordinate)

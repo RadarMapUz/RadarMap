@@ -188,6 +188,8 @@ extension CarPlaySceneDelegate {
         syncDetourAlert()
         syncJamBanner()
         syncRoadWeatherBanner()
+        // «Отметка · Отменить», вытесненная камерой, — пока окно открыто.
+        syncReportBanner()
         presentPendingConfirmIfNeeded()
     }
 
@@ -207,6 +209,11 @@ extension CarPlaySceneDelegate {
         }
         roadWeatherBanner.forget(alert)
         jamBanner.forget(alert)
+        if alert === reportBanner {
+            reportBanner = nil
+            // Выбор не возвращаем (отсчёт идёт без него), «Отменить» — да.
+            if reportShown?.sent == true { reportShown = nil }
+        }
     }
 
     /// Поездка сохранилась — итог одной строкой, пока машина стоит и экран

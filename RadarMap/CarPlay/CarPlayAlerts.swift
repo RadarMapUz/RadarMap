@@ -70,11 +70,10 @@ extension CarPlaySceneDelegate {
         var noTitle = String(localized: "Нет")
         switch question {
         case .camera(let camera):
+            // Вопрос — тот же, что на телефоне, для всех типов (словарь
+            // 02.11): «Тренога ещё стоит?» — «Стоит» / «Убрали».
             let asked = MobilePassWatch.question(for: camera.kind)
-            let named = String(format: String(localized: "%@ ещё на месте?"), camera.kind.displayName)
-            // Пост и ДТП — свой вопрос, как на телефоне; радары — прежний.
-            titles = [camera.kind == .dpsPost || camera.kind == .accident ? asked.title : named,
-                      String(localized: "Ещё на месте?")]
+            titles = [asked.title, MobilePassWatch.shortQuestion]
             symbolName = camera.kind.symbolName
             yesTitle = asked.yes
             noTitle = asked.no

@@ -23,6 +23,8 @@ import os
 /// Что попросили с плашки.
 nonisolated enum ActivityAction: Sendable {
     case report
+    /// «Отменить» последнюю отметку, пока открыто окно (02.11).
+    case cancelReport
     case toggleSound
 }
 
@@ -44,10 +46,11 @@ enum ActivityActions {
     }
 }
 
-/// «Радар!» с плашки — та же дверь, что у кнопки на карте и в CarPlay.
+/// «Отметить» с плашки — та же дверь, что у кнопки на карте и в CarPlay:
+/// тренога по умолчанию (выбора типа на плашке нет), «Отменить» — после.
 struct ActivityReportIntent: LiveActivityIntent {
-    static let title: LocalizedStringResource = "Радар!"
-    static let description = IntentDescription("Отмечает передвижной радар в текущей точке.")
+    static let title: LocalizedStringResource = "Отметить"
+    static let description = IntentDescription("Отмечает треногу в текущей точке.")
     /// В «Командах» уже есть «Радар здесь» с фразой для Siri — второй такой
     /// пункт был бы шумом.
     static let isDiscoverable = false
@@ -57,6 +60,21 @@ struct ActivityReportIntent: LiveActivityIntent {
     @MainActor
     func perform() async throws -> some IntentResult {
         await ActivityActions.run(.report)
+        return .result()
+    }
+}
+
+/// «Отменить» на месте «Отметить» — пока открыто окно отмены.
+struct ActivityCancelReportIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Отменить"
+    static let description = IntentDescription("Убирает только что поставленную отметку.")
+    static let isDiscoverable = false
+
+    init() {}
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        await ActivityActions.run(.cancelReport)
         return .result()
     }
 }

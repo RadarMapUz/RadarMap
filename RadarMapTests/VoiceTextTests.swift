@@ -195,7 +195,8 @@ final class VoiceTextTests: XCTestCase {
         let index = VoiceText.index()
         for peak in [-1, 0, 1, 2, 3] {
             let spot = TripodHotspots.Spot(lat: 41.3, lon: 69.2, n: 5, days: 3, peak: peak)
-            XCTAssertEqual(index[HotspotAlert.phrase(for: spot)], .hotspot(VoiceEvent.Peak(hotspotPeak: peak)))
+            // Время суток в голос не идёт (02.11): фраза одна — запись без хвоста.
+            XCTAssertEqual(index[HotspotAlert.phrase(for: spot)], .hotspot(nil))
         }
         for (kind, confirmed) in [(RoadEvent.Kind.closure, true), (.closure, false), (.roadwork, true)] {
             let event = RoadEvent(id: 1, kind: kind, lat: 41.3, lon: 69.2, course: -1,

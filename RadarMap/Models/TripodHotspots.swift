@@ -127,11 +127,10 @@ nonisolated enum HotspotAlert {
 
     /// Фраза. Коротко и без числа метров: это не «камера через 300 метров»,
     /// а свойство участка, и точность здесь была бы обещанием, которого у нас
-    /// нет.
+    /// нет. И без времени суток (владелец, 02.11): треногу ставят и убирают
+    /// когда угодно, и «обычно утром» в голосе звучит выводом о присутствии
+    /// по расписанию. Время суток — только в карточке зоны (`caption`).
     static func phrase(for spot: TripodHotspots.Spot) -> String {
-        guard let peakTitle = spot.peakTitle else {
-            return String(localized: "Здесь часто ставят треногу")
-        }
-        return String(format: String(localized: "Здесь часто ставят треногу, %@"), peakTitle)
+        String(localized: "Здесь часто ставят треногу")
     }
 }

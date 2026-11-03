@@ -17273,7 +17273,7 @@
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Uch oyoq kamera"
+            "value": "Uch oyoq"
           }
         }
       }
@@ -33967,6 +33967,678 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aloqa kutilmoqda: %lld — paydo boʻlishi bilan yuboraman"
+          }
+        }
+      }
+    },
+    "Тренога отмечена": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тренога отмечена"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uch oyoq belgilandi"
+          }
+        }
+      }
+    },
+    "Пост ДПС отмечен": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пост ДПС отмечен"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YPX posti belgilandi"
+          }
+        }
+      }
+    },
+    "ДТП отмечено": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ДТП отмечено"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YTH belgilandi"
+          }
+        }
+      }
+    },
+    "Тренога? Или выберите": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тренога? Или выберите"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uch oyoq? Yoki tanlang"
+          }
+        }
+      }
+    },
+    "Тренога?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тренога?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uch oyoq?"
+          }
+        }
+      }
+    },
+    "Не отмечено": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не отмечено"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belgilanmadi"
+          }
+        }
+      }
+    },
+    "Подтверждена · с %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подтверждена · с %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasdiqlangan · %@ dan"
+          }
+        }
+      }
+    },
+    "Отмечена только что": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отмечена только что"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hozirgina belgilandi"
+          }
+        }
+      }
+    },
+    "Отмечена %lld мин назад": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отмечена %lld мин назад"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld daq oldin belgilandi"
+          }
+        }
+      }
+    },
+    "Отмечена в %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отмечена в %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Soat %@ da belgilandi"
+          }
+        }
+      }
+    },
+    "с %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "с %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ dan"
+          }
+        }
+      }
+    },
+    "Подтверждена · %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подтверждена · %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasdiqlangan · %@"
+          }
+        }
+      }
+    },
+    "только что": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "только что"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hozirgina"
+          }
+        }
+      }
+    },
+    "Отметка водителей · %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отметка водителей · %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haydovchilar belgisi · %@"
+          }
+        }
+      }
+    },
+    "Убрали": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Убрали"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ketgan"
+          }
+        }
+      }
+    },
+    "Тренога ещё стоит?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тренога ещё стоит?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uch oyoq hali turibdimi?"
+          }
+        }
+      }
+    },
+    "Да, тренога ещё стоит": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Да, тренога ещё стоит"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ha, uch oyoq hali turibdi"
+          }
+        }
+      }
+    },
+    "Нет, треноги уже нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет, треноги уже нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻq, uch oyoq ketgan"
+          }
+        }
+      }
+    },
+    "Радар ещё стоит?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Радар ещё стоит?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radar hali turibdimi?"
+          }
+        }
+      }
+    },
+    "Да, радар ещё стоит": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Да, радар ещё стоит"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ha, radar hali turibdi"
+          }
+        }
+      }
+    },
+    "Нет, радара уже нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет, радара уже нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻq, radar ketgan"
+          }
+        }
+      }
+    },
+    "Ещё стоит?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ещё стоит?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hali turibdimi?"
+          }
+        }
+      }
+    },
+    "Отметка уже отправляется.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отметка уже отправляется."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belgi allaqachon yuborilmoqda."
+          }
+        }
+      }
+    },
+    "%@. Отменить — «Отмени отметку в RadarMap»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@. Отменить — «Отмени отметку в RadarMap»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@. Bekor qilish — «RadarMap’da belgini bekor qil»"
+          }
+        }
+      }
+    },
+    "Отменить отметку": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить отметку"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belgini bekor qilish"
+          }
+        }
+      }
+    },
+    "Убирает только что поставленную отметку.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Убирает только что поставленную отметку."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hozirgina qoʻyilgan belgini olib tashlaydi."
+          }
+        }
+      }
+    },
+    "Отменять нечего.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменять нечего."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bekor qiladigan narsa yoʻq."
+          }
+        }
+      }
+    },
+    "Отмечает треногу в текущей точке.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отмечает треногу в текущей точке."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turgan joyingizda uch oyoqni belgilaydi."
+          }
+        }
+      }
+    },
+    "Отметить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отметить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belgilash"
+          }
+        }
+      }
+    },
+    "Открывает выбор: тренога, пост ДПС или ДТП. Без выбора через 3 секунды — тренога": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открывает выбор: тренога, пост ДПС или ДТП. Без выбора через 3 секунды — тренога"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tanlov ochiladi: uch oyoq, YPX posti yoki YTH. Tanlanmasa, 3 soniyadan keyin — uch oyoq"
+          }
+        }
+      }
+    },
+    "Не отмечать": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не отмечать"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belgilamaslik"
+          }
+        }
+      }
+    },
+    "Выбрано: уйдёт само через 3 секунды": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выбрано: уйдёт само через 3 секунды"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tanlangan: 3 soniyadan keyin oʻzi yuboriladi"
+          }
+        }
+      }
+    },
+    "Уйдёт, когда появится связь": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Уйдёт, когда появится связь"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aloqa paydo boʻlganda yuboriladi"
+          }
+        }
+      }
+    },
+    "Увидят другие водители": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Увидят другие водители"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boshqa haydovchilar koʻradi"
+          }
+        }
+      }
+    },
+    "Уйдёт сама через 3 с": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Уйдёт сама через 3 с"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3 soniyada oʻzi yuboriladi"
+          }
+        }
+      }
+    },
+    "Пост · ДТП…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пост · ДТП…"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Post · YTH…"
+          }
+        }
+      }
+    },
+    "Что там?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Что там?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nima bor?"
+          }
+        }
+      }
+    },
+    "Отменяем": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменяем"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bekor qilinmoqda"
+          }
+        }
+      }
+    },
+    "Увидели треногу — жмите «Отметить». Через 3 с уйдёт сама": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Увидели треногу — жмите «Отметить». Через 3 с уйдёт сама"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uch oyoq koʻrdingizmi — «Belgilash»ni bosing. 3 soniyada oʻzi ketadi"
+          }
+        }
+      }
+    },
+    "Ищу GPS": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ищу GPS"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GPS qidirilmoqda"
+          }
+        }
+      }
+    },
+    "%@ — отправляю…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — отправляю…"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — yuborilmoqda…"
+          }
+        }
+      }
+    },
+    "Отправляю…": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отправляю…"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yuborilmoqda…"
           }
         }
       }

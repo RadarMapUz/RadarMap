@@ -18,11 +18,11 @@
 //  Молчание — не ответ: если водитель ничего не нажал, мы НЕ шлём ничего.
 //  Голос «не знаю» испортил бы данные сильнее, чем их отсутствие.
 //
-//  Вопрос — по типу отметки (12.7). Про пост ДПС спрашивали «Радар ещё
-//  стоял?», и честный ответ «радара не было» уходил против поста, который
-//  стоит. Теперь «Пост ещё стоит?» с кнопками «Стоит» / «Пост убрали»: то
-//  же одно касание и тот же голос серверу (`kind=pass`), только вопрос о
-//  том, что водитель видел.
+//  Вопрос — по типу отметки (12.7): «Тренога ещё стоит?», «Пост ещё
+//  стоит?» с кнопками «Стоит» / «Убрали» — то же одно касание и тот же
+//  голос серверу (`kind=pass`), только вопрос о том, что водитель видел.
+//  Обоим направлениям — треноги снимают и встречных (владелец, 02.11);
+//  поперечной улице — нет.
 //
 //  Чистая логика, покрыта MobilePassWatchTests.
 //
@@ -52,28 +52,42 @@ nonisolated enum MobilePassWatch {
         let spokenNo: String
     }
 
+    /// Вопрос и ответы — одни на телефоне и в машине (словарь маркетолога,
+    /// 02.11): «Тренога ещё стоит?» — «Стоит» / «Убрали». Настоящее время,
+    /// а не «стоял»: сервер понимает ответ как «стоит сейчас», и тренога —
+    /// это «сейчас». Кнопки понятны и без вопроса: не дочитал — ответ всё
+    /// равно верный.
     static func question(for kind: CameraType) -> Question {
         switch kind {
         case .dpsPost:
             return Question(title: String(localized: "Пост ещё стоит?"),
                             yes: String(localized: "Стоит"),
-                            no: String(localized: "Пост убрали"),
+                            no: String(localized: "Убрали"),
                             spokenYes: String(localized: "Да, пост ещё стоит"),
                             spokenNo: String(localized: "Пост убрали"))
         case .accident:
             return Question(title: String(localized: "ДТП ещё на дороге?"),
                             yes: String(localized: "Да"),
-                            no: String(localized: "Уже убрали"),
+                            no: String(localized: "Убрали"),
                             spokenYes: String(localized: "Да, ДТП ещё на дороге"),
                             spokenNo: String(localized: "ДТП уже убрали"))
+        case .tripod:
+            return Question(title: String(localized: "Тренога ещё стоит?"),
+                            yes: String(localized: "Стоит"),
+                            no: String(localized: "Убрали"),
+                            spokenYes: String(localized: "Да, тренога ещё стоит"),
+                            spokenNo: String(localized: "Нет, треноги уже нет"))
         default:
-            return Question(title: String(localized: "Радар ещё стоял?"),
-                            yes: String(localized: "Да"),
-                            no: String(localized: "Нет"),
-                            spokenYes: String(localized: "Да, радар ещё стоял"),
-                            spokenNo: String(localized: "Нет, радара уже не было"))
+            return Question(title: String(localized: "Радар ещё стоит?"),
+                            yes: String(localized: "Стоит"),
+                            no: String(localized: "Убрали"),
+                            spokenYes: String(localized: "Да, радар ещё стоит"),
+                            spokenNo: String(localized: "Нет, радара уже нет"))
         }
     }
+
+    /// Короткий вариант вопроса для узкого баннера машины.
+    static var shortQuestion: String { String(localized: "Ещё стоит?") }
 
     /// Состояние наблюдения за одной точкой.
     struct Track: Equatable {
@@ -100,9 +114,19 @@ nonisolated enum MobilePassWatch {
     /// «спрошенной» не помечаем: раньше её id выбрасывался, пока висел
     /// прежний вопрос (до пяти минут с погашенным экраном), и о второй
     /// отметке не спрашивали уже никогда.
+    ///
+    /// Спрашиваем ОБА направления (владелец, 02.11: «некоторые треноги
+    /// снимают обе стороны»): встречный видел треногу так же, и его «Стоит» —
+    /// полноценное подтверждение. Вес «Убрали» от встречного решает сервер —
+    /// по курсу, который уходит с голосом (через разделительную он мог её не
+    /// видеть). Не засчитывается подход только с поперечной улицы, когда оба
+    /// курса известны (`crosses`): на развязке водитель сверху треногу внизу
+    /// не видел. Курс неизвестен — как раньше, спрашиваем.
     static func update(tracks: inout [Int: Track],
                        mobileCameras: [Camera],
                        from coordinate: CLLocationCoordinate2D,
+                       course: CLLocationDegrees,
+                       courses: [Int: Double],
                        excluded: Set<Int> = [],
                        canAsk: Bool = true,
                        now: Date = Date()) -> Int? {
@@ -116,7 +140,9 @@ nonisolated enum MobilePassWatch {
 
             var track = tracks[camera.id] ?? Track(cameraID: camera.id,
                                                    closestMeters: .greatestFiniteMagnitude)
-            track.closestMeters = min(track.closestMeters, distance)
+            if !crosses(course: course, reportCourse: courses[camera.id] ?? -1) {
+                track.closestMeters = min(track.closestMeters, distance)
+            }
             if track.departedAt == nil, track.closestMeters <= approachMeters, distance >= departedMeters {
                 track.departedAt = now
             }
@@ -132,5 +158,20 @@ nonisolated enum MobilePassWatch {
         let alive = Set(mobileCameras.map(\.id))
         tracks = tracks.filter { alive.contains($0.key) }
         return askAbout
+    }
+
+    /// Проезжаем поперёк хода отметившего (поперечная улица, развязка).
+    /// Попутный и встречный — не поперёк; неизвестный курс — тоже не повод
+    /// молчать.
+    static func crosses(course: CLLocationDegrees, reportCourse: Double) -> Bool {
+        guard course >= 0, reportCourse >= 0 else { return false }
+        return GeoMath.axisDifference(course: course, axis: reportCourse.truncatingRemainder(dividingBy: 180))
+            > AppConfig.mobilePassSameAxisDegrees
+    }
+
+    /// Встречный ли проезд — для голоса серверу (вес «Убрали» решает он).
+    static func oncoming(course: CLLocationDegrees, reportCourse: Double) -> Bool {
+        guard course >= 0, reportCourse >= 0 else { return false }
+        return GeoMath.angleDifference(course, reportCourse) > 90
     }
 }

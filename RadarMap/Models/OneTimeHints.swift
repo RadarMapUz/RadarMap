@@ -68,12 +68,4 @@ nonisolated enum OneTimeHints {
         }
         return nil
     }
-
-    /// Подпись «Радар!» под жёлтой кнопкой: до первой отметки (40D), но не
-    /// дольше `radarCaptionMaxTrips` поездок — большинство не отмечает
-    /// никогда, а навсегда слово только теснит значок. Ветеран с поездками
-    /// за порогом подписи не видит, даже если его отметки старше 90 дней.
-    static func showsRadarCaption(hasReported: Bool, trips: Int) -> Bool {
-        !hasReported && trips < AppConfig.radarCaptionMaxTrips
-    }
 }

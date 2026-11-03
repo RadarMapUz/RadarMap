@@ -641,9 +641,6 @@ nonisolated enum AppConfig {
 
     /// Голос называет текущую скорость, только если едем быстрее этого порога.
     static let speakSpeedThresholdKmh: Double = 20
-    /// Подпись «Радар!» под значком — до первой отметки, но не дольше стольких
-    /// поездок (OneTimeHints.showsRadarCaption).
-    nonisolated static let radarCaptionMaxTrips = 10
     /// «Избранное» (7.2): сколько мест держим и что считать тем же местом.
     nonisolated static let favoritePlacesMax = 12
     /// 40 м — та же точка; садик в 120 м от школы — уже другое место.

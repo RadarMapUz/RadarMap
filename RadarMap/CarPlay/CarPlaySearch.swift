@@ -29,8 +29,11 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
     private var lastResults: [(SavedPlace, String)] = []
     private var book: AddressBook?
     private var venues: VenueBook?
-    /// Поиск по всем именам клетки (40G) — строится, когда загружены оба файла.
+    /// Поиск по всем именам клетки (40G) — строится своей задачей после
+    /// загрузки файлов; пока его нет, отвечает старый поиск — первый запрос в
+    /// машине не ждёт сборку индекса (ревью 03.11).
     private var index: SearchIndex?
+    private var indexTask: Task<Void, Never>?
     /// Клетка, для которой загружены адреса и заведения. Подключение длится
     /// часами: выехали из Ташкента в Самарканд — нужна клетка Самарканда, а
     /// не ташкентские АЗС «в 310 км».
@@ -77,6 +80,8 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
         book = nil
         venues = nil
         index = nil
+        indexTask?.cancel()
+        indexTask = nil
         loadedCell = nil
     }
 
@@ -199,8 +204,10 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
             venues = nil
             index = nil
             loadTask = nil
+            indexTask?.cancel()
+            indexTask = nil
         }
-        guard book == nil || venues == nil || index == nil else { return }
+        guard book == nil || venues == nil else { buildIndex(cell: cell); return }
         if loadTask == nil {
             // Пишем, только если клетка та же: пока грузилась старая, машина
             // могла уехать в новую — и в Самарканде отвечали ташкентские
@@ -212,23 +219,31 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
                     let book = await self.env.roads.addressBook(for: center)
                     guard self.loadedCell == cell else { return }
                     self.book = book
-                    if book != nil { self.index = nil }   // дозагрузилось — индекс заново
+                    if book != nil { self.index = nil; self.indexTask?.cancel(); self.indexTask = nil }   // дозагрузилось — индекс заново
                 }
                 if self.venues == nil {
                     let venues = await self.env.roads.venueBook(for: center)
                     guard self.loadedCell == cell else { return }
                     self.venues = venues
-                    if venues != nil { self.index = nil }
-                }
-                if self.index == nil, self.book != nil || self.venues != nil {
-                    let index = await SearchIndex.make(book: self.book, venues: self.venues)
-                    guard self.loadedCell == cell else { return }
-                    self.index = index
+                    if venues != nil { self.index = nil; self.indexTask?.cancel(); self.indexTask = nil }
                 }
                 self.loadTask = nil
+                self.buildIndex(cell: cell)
             }
         }
         await loadTask?.value
+    }
+
+    /// Индекс клетки — в фоне, не задерживая ответ: до него — старый поиск.
+    private func buildIndex(cell: String) {
+        guard index == nil, indexTask == nil, book != nil || venues != nil else { return }
+        let book = book, venues = venues
+        indexTask = Task { [weak self] in
+            let index = await SearchIndex.make(book: book, venues: venues)
+            guard let self, self.loadedCell == cell, !Task.isCancelled else { return }
+            self.index = index
+            self.indexTask = nil
+        }
     }
 
     private func search(_ text: String, completion: @escaping ([CPListItem]) -> Void) {

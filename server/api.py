@@ -330,6 +330,13 @@ CONFIRM_FRESH_MAX = 10 * 60
 # (разные полотна проспекта). spec tripod-report, п. 6.
 MERGE_MAX_COURSE_DIFF = 90
 MERGE_SAME_POINT_METERS = 60
+# Повтор той же отметки (ответ потерялся, телефон дослал её из очереди): своя
+# точка той же семьи ближе этого и с моментом отметки в этом окне — это она
+# же. Окно с запасом над таймаутом запроса (10 с): точка создана в момент
+# ПРИЁМА, а повтор несёт момент тапа, округлённый до секунды. Две разные
+# отметки своей семьи в 30 м за 30 с — всё равно дубль (ReportGuard: 3 мин, 400 м).
+REPLAY_METERS = 30
+REPLAY_SECONDS = 30
 MERGE_METERS = 300
 # Радиус слияния зависит от дороги, а не один на страну. На трассе две
 # настоящие треноги в 300 м — это две разные засады, и схлопывать их нельзя;
@@ -610,6 +617,9 @@ def init_db():
     # разделительную он мог треногу не увидеть — срок не режет, в кворум
     # скрытия не входит (spec tripod-report, п. 6).
     migrate(conn, "votes", "oncoming INTEGER DEFAULT 0")
+    # Курс голосующего (−1 — неизвестен): модератору и будущему решению о
+    # «Убрали» без курса (сейчас оно режет срок и идёт в кворум, как раньше).
+    migrate(conn, "votes", "course REAL DEFAULT -1")
 
     # Метан на АГНКС (12б.4): «газ есть / нет / очередь». Станция — точка
     # заведения из файла заведений телефона, округлённая до ~10 м: сервер
@@ -798,13 +808,25 @@ def clean_traffic_piece(raw):
     return out
 
 
+MIGRATE_ATTEMPTS = 5
+
+
 def migrate(conn, table, column_def):
-    """ALTER TABLE ADD COLUMN, идемпотентно. Отдельной функцией, чтобы
-    «колонка уже есть» не путалась с настоящей ошибкой схемы в глазах читателя."""
-    try:
-        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column_def}")
-    except sqlite3.OperationalError:
-        pass  # колонка уже есть
+    """ALTER TABLE ADD COLUMN, идемпотентно. Глотается ТОЛЬКО «колонка уже
+    есть»: занятая база при старте раньше молча оставляла схему без новой
+    колонки, и каждая отметка и голос получали 500 до следующего рестарта.
+    Занято — повтор с ожиданием, дальше громкий отказ старта: лучше не
+    подняться, чем отвечать 500 на каждую отметку."""
+    for attempt in range(MIGRATE_ATTEMPTS):
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column_def}")
+            return
+        except sqlite3.OperationalError as error:
+            if "duplicate column" in str(error):
+                return
+            if "locked" not in str(error) or attempt == MIGRATE_ATTEMPTS - 1:
+                raise
+            time.sleep(1 + attempt)
 
 def clean_text(s):
     """Пользовательский текст идёт в терминал модератора (sqlite3 в консоли) —
@@ -2288,6 +2310,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, {"id": r[0], "merged": True,
                                         "amended": True})
 
+            # Повтор уже принятой отметки — 200 с её id, а не 429 «too fast»:
+            # иначе потерянный ответ превращался в «Отметка не ушла» при
+            # точке на карте (ловец багов, 40a, R2).
+            for r in conn.execute(
+                    "SELECT id, lat, lon, type, CASE WHEN observed > 0 THEN observed ELSE created END "
+                    "FROM reports WHERE device = ? AND active = 1 AND expires > ?",
+                    (device, now)).fetchall():
+                if merge_family(r[3]) == merge_family(rtype) \
+                        and abs(r[4] - observed) <= REPLAY_SECONDS \
+                        and haversine(lat, lon, r[1], r[2]) <= REPLAY_METERS:
+                    return self._json(200, {"id": r[0], "merged": False, "replay": True})
+
             # rate limits per device
             road = rtype in ROAD_TYPES
             # Пауза — между моментами ОТМЕТОК, а не приёма: досланная из
@@ -2582,8 +2616,9 @@ class Handler(BaseHTTPRequestHandler):
             # связи) — учтён, но срок не продлевает: тренога — это «сейчас».
             stale = value == 1 and report_age(data) > CONFIRM_FRESH_MAX
             conn.execute("INSERT OR REPLACE INTO votes(report_id, device, value, ts, ip, kind, stale, "
-                         "oncoming) VALUES(?,?,?,?,?,?,?,?)",
-                         (rid, device, value, now, ip, kind, 1 if stale else 0, 1 if oncoming else 0))
+                         "oncoming, course) VALUES(?,?,?,?,?,?,?,?,?)",
+                         (rid, device, value, now, ip, kind, 1 if stale else 0, 1 if oncoming else 0,
+                          voter_course))
             up, down = conn.execute(
                 "SELECT COALESCE(SUM(value = 1), 0), COALESCE(SUM(value = -1), 0) "
                 "FROM votes WHERE report_id = ?", (rid,)).fetchone()
@@ -2611,6 +2646,8 @@ class Handler(BaseHTTPRequestHandler):
             # ротируется бесплатно, и три свежих UUID с одного телефона гасили
             # любую отметку. Старые голоса (ip = '') в кворум не входят —
             # лучше передержать отметку, чем дать её снять анонимной ротацией.
+            # «Убрали» без курса (карточка, старая сборка, бот) идёт в кворум
+            # как раньше: иначе фейк было бы нечем снять до обновления всех.
             down_ips = conn.execute(
                 "SELECT COUNT(DISTINCT ip) FROM votes "
                 "WHERE report_id = ? AND value = -1 AND oncoming = 0 AND ip != '' AND ts >= ?",
@@ -2644,7 +2681,7 @@ def mine_confirmations(conn, device, limit=MINE_MAX_REPORTS):
     """
     rows = conn.execute(
         "SELECT r.id, (SELECT COUNT(DISTINCT v.ip) FROM votes v WHERE v.report_id = r.id "
-        "AND v.value = 1 AND v.device != r.device AND v.ip != '' AND v.ip != r.ip) "
+        "AND v.value = 1 AND v.stale = 0 AND v.device != r.device AND v.ip != '' AND v.ip != r.ip) "
         "FROM reports r WHERE r.device = ? ORDER BY r.id DESC LIMIT ?",
         (device, limit)).fetchall()
     return [{"id": rid, "confirmers": int(count or 0)} for rid, count in rows]

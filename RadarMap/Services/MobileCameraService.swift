@@ -627,7 +627,9 @@ final class MobileCameraService {
         defer { isFlushing = false }
         dropExpiredPending()
         while let item = pending.first {
+            flushingAt = item.at
             let result = await send(item, live: false)
+            flushingAt = nil
             // Сеть или сервер снова подвели — отметка остаётся, попробуем позже.
             if case .failed(let why) = result {
                 if why.isWorthRetrying { return }
@@ -939,16 +941,34 @@ final class MobileCameraService {
                                                "MobileCameraService.onReportSent") }
     }
 
-    /// «Отменить» отметки, ждущей связи: убрать из очереди, не отправляя.
-    /// Ключ — время касания (`touchedAt`). true — была и убрана.
-    @discardableResult
-    func cancelQueued(touchedAt: Date) -> Bool {
-        let before = pending.count
-        pending.removeAll { $0.at == touchedAt }
-        guard pending.count != before else { return false }
-        savePending()
-        if lastSent?.at == touchedAt { lastSent = nil }
-        return true
+    /// Время касания отметки, которую досылка шлёт прямо сейчас.
+    @ObservationIgnored private var flushingAt: Date?
+
+    /// «Отменить» отметки, отложенной без сети. Ключ — время касания
+    /// (`touchedAt`). nil — отметки нет (снята из очереди или отозвана на
+    /// сервере); иначе причина.
+    ///
+    /// Три случая, и честный ответ у каждого свой (ревью 40b, Н4):
+    /// - ждёт связи — убрать из очереди, не отправляя;
+    /// - досылка уже в полёте — дождаться ответа: удалить запись из очереди
+    ///   сейчас значит сказать «убрана», а запрос долетит, и тренога встанет у
+    ///   всех; после ответа — отзыв по id;
+    /// - уже ушла — отзыв по id своей точки (окно сервера 10 мин), а не «уже
+    ///   нельзя изменить». Влилась в чужую — своей точки нет: тогда честный отказ.
+    func cancelQueued(touchedAt: Date) async -> ReportResult.Failure? {
+        var waited: TimeInterval = 0
+        while flushingAt == touchedAt, waited < AppConfig.reportQueuedCancelWaitSeconds {
+            await Task.pause(seconds: 0.2)
+            waited += 0.2
+        }
+        if flushingAt != touchedAt, pending.contains(where: { $0.at == touchedAt }) {
+            pending.removeAll { $0.at == touchedAt }
+            savePending()
+            if lastSent?.at == touchedAt { lastSent = nil }
+            return nil
+        }
+        guard let own = mine.last(where: { $0.at == touchedAt }) else { return .tooLate }
+        return await cancelReport(id: own.id)
     }
 
     // MARK: - Отзыв своей отметки

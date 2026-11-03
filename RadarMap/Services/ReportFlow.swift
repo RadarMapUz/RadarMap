@@ -139,15 +139,15 @@ final class ReportFlow {
         guard let sent = draft.sent, canUndo(), let mobile else { return "" }
         draft.undone()
         undoTimer?.cancel()
-        let text: String
-        if sent.queued, mobile.cancelQueued(touchedAt: sent.touchedAt) {
-            text = String(localized: "Отметка убрана")
-        } else if let id = sent.serverID {
-            text = await mobile.cancelReport(id: id)?.spoken ?? String(localized: "Отметка убрана")
+        let why: MobileCameraService.ReportResult.Failure?
+        if let id = sent.serverID {
+            why = await mobile.cancelReport(id: id)
         } else {
-            // Из очереди отметка успела уйти — отозвать её уже нечем.
-            text = MobileCameraService.ReportResult.Failure.tooLate.spoken
+            // Из очереди: снять оттуда, дождаться летящей досылки или отозвать
+            // уже ушедшую по id (MobileCameraService.cancelQueued).
+            why = await mobile.cancelQueued(touchedAt: sent.touchedAt)
         }
+        let text = why?.spoken ?? String(localized: "Отметка убрана")
         Log.network.notice("отметка отменена водителем")
         if speak { alerts?.speak(text) }
         return text

@@ -154,6 +154,7 @@ struct FamilyRecipientRow: View {
     private var statusText: String {
         let mode = recipient.mode.title
         if !recipient.enabled { return String(localized: "Выключено") }
+        if recipient.linkLost == true { return String(localized: "Ссылка не перенеслась — отправьте заново") }
         if recipient.linkSentAt == nil { return String(localized: "Ссылка ещё не отправлена") }
         if isPaused { return String(format: String(localized: "%@ · пауза до завтра"), mode) }
         if isLive { return String(format: String(localized: "%@ · видит сейчас"), mode) }

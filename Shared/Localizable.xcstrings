@@ -33789,6 +33789,70 @@
           }
         }
       }
+    },
+    "Начать поездку?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Начать поездку?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarni boshlaymizmi?"
+          }
+        }
+      }
+    },
+    "Ссылка не перенеслась — отправьте заново": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ссылка не перенеслась — отправьте заново"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Havola koʻchmadi — qayta yuboring"
+          }
+        }
+      }
+    },
+    "Ссылка не перенеслась на этот телефон — отправьте её заново: старая у близкого больше не обновляется.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ссылка не перенеслась на этот телефон — отправьте её заново: старая у близкого больше не обновляется."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Havola bu telefonga koʻchmadi — uni qayta yuboring: yaqiningizdagi eski havola endi yangilanmaydi."
+          }
+        }
+      }
+    },
+    "GPS будет работать постоянно, пока поездка не закончится.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GPS будет работать постоянно, пока поездка не закончится."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar tugaguncha GPS doim ishlaydi."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

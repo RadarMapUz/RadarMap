@@ -211,6 +211,8 @@ final class AppEnvironment {
     /// Первая точка пришла — тема по солнцу ЗДЕСЬ, а не по запасному правилу
     /// 6–19 ч до следующего тика часов (холодный старт в 19:20 в июне).
     @ObservationIgnored private var themeHadPosition = false
+    /// Ключ ссылки старта проверен в этом процессе (prepareStartLinkKey).
+    @ObservationIgnored private var startLinkKeyReady = false
 
     /// Часы темы: идут, пока на экран смотрят — телефон или машина (CarPlay
     /// может подключиться без телефонной сцены вовсе, и тогда раньше закат
@@ -359,12 +361,25 @@ final class AppEnvironment {
         // поездки и машины таймер гаснет (сеть — только на активации).
         netScheduler.modeChanged()
         if active {
+            prepareStartLinkKey()
             // Автоэконом: заряд мог упасть, пока экран был погашен (12.3).
             thermal.refreshBattery()
             // Ожидание склейки у близких могло выйти, пока приложение спало.
             family.update()
             cloud.sceneBecameActive()
         }
+    }
+
+    /// Ключ своих кнопок старта (TripLink) — при показе экрана, а не в init:
+    /// фоновый запуск до первой разблокировки не читает App Group и завёл бы
+    /// новый ключ поверх настоящего. Заведён впервые — виджеты и кнопка Пункта
+    /// управления перерисовываются, иначе их ссылка так и осталась бы без ключа.
+    private func prepareStartLinkKey() {
+        guard !startLinkKeyReady, SharedDefaults.hasAppGroup else { return }
+        startLinkKeyReady = true
+        guard TripLink.prepareKey(in: SharedDefaults.store).created else { return }
+        WidgetCenter.shared.reloadAllTimelines()
+        ControlCenter.shared.reloadAllControls()
     }
 
     init() {

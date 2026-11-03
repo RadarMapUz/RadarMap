@@ -87,6 +87,8 @@ struct RootView: View {
         }
         // Виджет локскрина: radarmap://start-trip — поездка одним тапом с
         // заблокированного экрана. Активную поездку диплинк никогда не трогает.
+        // Ссылка без ключа своих кнопок (чужое приложение, страница, свой
+        // виджет до первого открытия) — только после «Начать» (TripLink).
         .onOpenURL { url in
             #if DEBUG
             // Учения (`xcrun simctl openurl … radarmap://end-trip`): конец
@@ -96,9 +98,21 @@ struct RootView: View {
                 return
             }
             #endif
-            guard url.scheme == "radarmap", url.host() == "start-trip",
-                  !env.location.isTripActive else { return }
-            env.location.startTrip()
+            let key = SharedDefaults.store?.string(forKey: TripLink.storeKey)
+            switch TripLink.decide(url, expectedKey: key, tripActive: env.location.isTripActive) {
+            case .start: env.location.startTrip()
+            case .confirm:
+                // Через ход цикла: при холодном старте с виджета окно и шиты
+                // ещё встают, и вопрос, показанный в тот же такт, теряется.
+                Task { @MainActor in
+                    StartTripPrompt.present {
+                        // Пока вопрос висел, поездка могла начаться сама (CoreMotion).
+                        guard !env.location.isTripActive else { return }
+                        env.location.startTrip()
+                    }
+                }
+            case .ignore, nil: break
+            }
         }
         #if DEBUG
         .fullScreenCover(isPresented: $carPlayPreview) {

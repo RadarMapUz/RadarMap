@@ -248,7 +248,7 @@ final class CameraStore: CameraRepository {
             return true
         }
         guard CameraOverrideEngine.isSane(fresh, baseCount: bundled.count) else {
-            Log.cameras.fault("правки отвергнуты: скрывают слишком много камер (\(fresh.items.count, privacy: .public) записей на \(self.bundled.count, privacy: .public) камер)")
+            Log.cameras.fault("правки отвергнуты: скрывают или переносят слишком много камер (\(fresh.items.count, privacy: .public) записей на \(self.bundled.count, privacy: .public) камер)")
             return false
         }
         guard fresh != overrides else { return true }

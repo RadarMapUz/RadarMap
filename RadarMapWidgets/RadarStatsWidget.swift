@@ -704,7 +704,7 @@ private struct RadarStatsView: View {
                     .font(.system(size: 10, weight: .semibold))
             }
         }
-        .widgetURL(URL(string: "radarmap://start-trip"))
+        .widgetURL(TripLink.ownStartURL)
     }
 
     private var lockRectangular: some View {
@@ -720,7 +720,7 @@ private struct RadarStatsView: View {
             }
             Spacer(minLength: 0)
         }
-        .widgetURL(URL(string: "radarmap://start-trip"))
+        .widgetURL(TripLink.ownStartURL)
     }
 
     // MARK: - Форматирование

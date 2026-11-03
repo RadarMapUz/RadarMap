@@ -46,7 +46,16 @@ nonisolated struct FamilyRecipient: Codable, Equatable, Identifiable, Sendable {
     /// копия `EtaShare.address(forKey: key)`; у ссылки до 14.12 — сам токен.
     var token: String
     /// Ключ записи (14.12); nil — ссылка до него: её адрес и есть ключ.
+    /// В памяти — всегда сам ключ; на диске — в связке ключей (FamilyKeys).
     var key: String?
+    /// Ключ лежит в связке, а не в файле. true при `key == nil` — связка ещё
+    /// не отдала ключ: писать нечем, но и ссылка не «до 14.12».
+    var keyInKeychain: Bool?
+    /// Ключ записи не переехал на этот телефон (восстановление из
+    /// незашифрованной копии: связка в ней привязана к старому устройству).
+    /// Ссылка выдана новая и ещё не отправлена — «Близкие» просят отправить
+    /// её заново. Снимается отправкой или сменой ссылки.
+    var linkLost: Bool?
     var createdAt: Date
     /// Выключатель: близкий есть, но поездок не видит.
     var enabled: Bool
@@ -69,7 +78,7 @@ nonisolated struct FamilyRecipient: Codable, Equatable, Identifiable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, emoji, mode, token, key, createdAt, enabled, linkSentAt
+        case id, name, emoji, mode, token, key, keyInKeychain, linkLost, createdAt, enabled, linkSentAt
     }
 
     /// Новые поля — с умолчаниями (ARCHITECTURE, правило 18): запись на диске
@@ -84,6 +93,8 @@ nonisolated struct FamilyRecipient: Codable, Equatable, Identifiable, Sendable {
         mode = (try? c.decodeIfPresent(Mode.self, forKey: .mode)) ?? .home
         token = try c.decode(String.self, forKey: .token)
         key = try c.decodeIfPresent(String.self, forKey: .key)
+        keyInKeychain = try c.decodeIfPresent(Bool.self, forKey: .keyInKeychain)
+        linkLost = try c.decodeIfPresent(Bool.self, forKey: .linkLost)
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         linkSentAt = try c.decodeIfPresent(Date.self, forKey: .linkSentAt)
@@ -93,6 +104,10 @@ nonisolated struct FamilyRecipient: Codable, Equatable, Identifiable, Sendable {
     var write: EtaShare.WriteKey {
         key.map { .secret($0) } ?? .legacy(token)
     }
+
+    /// Ключ в связке, но она его не отдала: писать нельзя — `write` дал бы
+    /// адрес вместо ключа, а адрес у близкого в ссылке.
+    var isKeyLocked: Bool { key == nil && keyInKeychain == true }
 
     /// Страница близкого: постоянная (`/api/eta/f/…`). Адрес — от ключа, а не
     /// из копии: ссылка и запись не разойдутся.
@@ -120,6 +135,16 @@ nonisolated struct FamilyRecipient: Codable, Equatable, Identifiable, Sendable {
         copy.token = EtaShare.address(forKey: key)
         copy.createdAt = now
         copy.linkSentAt = nil
+        copy.linkLost = nil
+        return copy
+    }
+
+    /// Ключа нет ни в файле, ни в связке — старая ссылка у близкого мертва
+    /// навсегда. Новая ссылка, не отправленная (поездки близкому не шлются,
+    /// повторов нет), и пометка для «Близких»: отправьте заново.
+    func relinkedAfterLoss(now: Date) -> FamilyRecipient {
+        var copy = withNewLink(now: now)
+        copy.linkLost = true
         return copy
     }
 

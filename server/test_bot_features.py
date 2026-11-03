@@ -951,7 +951,7 @@ class PultTest(Stand):
 # --- решения модератора поверх базы камер (23.9) ------------------------------------------
 
 #: База в 40 камер: 5 % — два скрытия, третье делает файл «массовым».
-BASE_COUNT = 40
+BASE_COUNT = 140
 
 
 class OverridesTest(Stand):
@@ -1047,15 +1047,27 @@ class OverridesTest(Stand):
         self.assertEqual(sorted(self.ids_near(self.db())), base, "нет файла — нет решений")
 
     def test_mass_hide_is_rejected_whole(self):
-        far = [{"id": 600 + i, "op": "hide"} for i in range(2)]
-        self.publish(far + [{"id": 501, "op": "hide"}])        # 3 из 40 > 5 %
+        far = [{"id": 600 + i, "op": "hide"} for i in range(7)]
+        self.publish(far + [{"id": 501, "op": "hide"}])        # 8 из 140 > 5 %
         db = self.db()
         self.assertIn(501, self.ids_near(db), "файл отвергнут целиком — и эта строка тоже")
         self.assertEqual(db.applied["hidden"], 0)
-        self.publish(far[:1] + [{"id": 501, "op": "hide"}])    # 2 из 40 = 5 % — можно
+        self.publish(far[:6] + [{"id": 501, "op": "hide"}])    # 7 из 140 = 5 % — можно
         self.clock[0] += 61
         self.assertNotIn(501, self.ids_near(db))
         self.assertFalse(bot_near.overrides_sane([], 0), "базы нет — решениям не верим")
+
+    def test_moves_count_with_hides_and_have_their_own_cap(self):
+        move = lambda cid: {"id": cid, "op": "move", "lat": 40.1, "lon": 65.0}
+        hide = lambda cid: {"id": cid, "op": "hide"}
+        self.assertTrue(bot_near.overrides_sane([move(600 + i) for i in range(4)], 140))
+        self.assertFalse(bot_near.overrides_sane([move(600 + i) for i in range(5)], 140),
+                         "5 переносов из 140 > 3 % — подмена, а не модерация")
+        self.assertFalse(bot_near.overrides_sane([move(600 + i) for i in range(4)]
+                                                 + [hide(700 + i) for i in range(4)], 140),
+                         "4 + 4 молчащих камеры из 140 > 5 %")
+        self.assertTrue(bot_near.overrides_sane([{"id": 600 + i, "op": "retype", "type": "x"}
+                                                 for i in range(30)], 140), "смена типа не гасит")
 
     def test_far_or_foreign_move_is_dropped_and_the_camera_stays(self):
         self.publish([
@@ -1167,10 +1179,12 @@ class OverridesContractTest(unittest.TestCase):
     def test_thresholds_match_app_config(self):
         config = self.read("Support", "AppConfig.swift")
         share = re.search(r"static let overrideMaxHiddenShare = ([\d.]+)", config)
+        moved = re.search(r"static let overrideMaxMovedShare = ([\d.]+)", config)
         move = re.search(r"static let overrideMaxMoveMeters: CLLocationDistance = ([\d.]+)", config)
         lat = re.search(r"static let uzLatRange: ClosedRange<Double> = ([\d.]+)\.\.\.([\d.]+)", config)
         lon = re.search(r"static let uzLonRange: ClosedRange<Double> = ([\d.]+)\.\.\.([\d.]+)", config)
         self.assertEqual(float(share.group(1)), bot_near.OVERRIDE_MAX_HIDDEN_SHARE)
+        self.assertEqual(float(moved.group(1)), bot_near.OVERRIDE_MAX_MOVED_SHARE)
         self.assertEqual(float(move.group(1)), bot_near.OVERRIDE_MAX_MOVE_METERS)
         self.assertEqual((float(lat.group(1)), float(lat.group(2))), bot_near.UZ_LAT_RANGE)
         self.assertEqual((float(lon.group(1)), float(lon.group(2))), bot_near.UZ_LON_RANGE)

@@ -230,20 +230,33 @@ class Sessions:
     """Сессии без состояния: кука — это срок годности плюс подпись.
 
     Проверка сводится к арифметике, поэтому перезапуск панели никого не
-    разлогинивает. Отозвать выданные куки можно только сменой пароля — она
-    перевыпускает секрет подписи, и все прежние куки перестают сходиться.
+    разлогинивает. Смена пароля владельца перевыпускает секрет подписи, и все
+    прежние куки перестают сходиться.
+
+    В подпись входит и ТЕКУЩИЙ хэш пароля вошедшего, а сверяется кука со
+    списком учёток на каждом запросе: убранный модератор выходит сразу, а
+    сменивший пароль теряет старые куки — раньше оба оставались в панели до
+    конца срока куки, 12 часов (аудит 38B, M-6).
     """
 
-    def __init__(self, ttl=SESSION_TTL, secret=None):
+    def __init__(self, ttl=SESSION_TTL, secret=None, people=None):
         self.ttl = ttl
         self._secret = secret          # для тестов; иначе берётся из конфига
+        self._people = people          # для тестов: {имя: хэш}; иначе — из конфига
         self._attempts = {}            # адрес → [время неудачных попыток]
 
     def _key(self):
         return (self._secret or session_secret()).encode()
 
-    def _sign(self, payload):
-        return hmac.new(self._key(), payload.encode(), hashlib.sha256).hexdigest()[:32]
+    def _stored(self, name):
+        """Хэш пароля учётки сейчас; None — учётки больше нет. Пустое имя —
+        кука владельца, выданная до появления имён."""
+        people = self._people if self._people is not None else accounts()
+        return people.get(name or OWNER)
+
+    def _sign(self, payload, stored):
+        message = (payload + "\n" + stored).encode()
+        return hmac.new(self._key(), message, hashlib.sha256).hexdigest()[:32]
 
     def issue(self, now=None, name=""):
         """Кука несёт срок И ИМЯ вошедшего.
@@ -259,18 +272,25 @@ class Sessions:
             # latin-1, и кириллическое имя роняло весь ответ на входе: человек
             # вводил верный пароль и получал оборванное соединение.
             payload += "|" + quote(name, safe="")
-        return payload + "." + self._sign(payload)
+        # Учётки нет — подпись всё равно ставится, но `valid` такую куку не
+        # пустит: сверять не с чем.
+        return payload + "." + self._sign(payload, self._stored(name) or "")
 
     def valid(self, token, now=None):
         now = now if now is not None else time.time()
         if not token or "." not in token:
             return False
         payload, _, signature = token.partition(".")
+        expiry, _, quoted = payload.partition("|")
+        stored = self._stored(unquote(quoted))
         # Сначала подпись, потом срок: сравнение постоянного времени и никакой
-        # веры содержимому куки до проверки.
-        if not hmac.compare_digest(self._sign(payload), signature):
+        # веры содержимому куки до проверки. Имя выше читается только чтобы
+        # найти хэш для подписи — подменённое имя подпись не пройдёт. Учётки
+        # нет — подпись всё равно считается: по времени ответа список людей не
+        # вычитывается (как в who_signs_in).
+        signed = hmac.compare_digest(self._sign(payload, stored or ""), signature)
+        if stored is None or not signed:
             return False
-        expiry, _, _name = payload.partition("|")
         try:
             return int(expiry) > now
         except ValueError:

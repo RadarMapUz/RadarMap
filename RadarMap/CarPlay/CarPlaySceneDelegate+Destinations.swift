@@ -327,6 +327,8 @@ extension CarPlaySceneDelegate {
                     preview = allowPreview && CarPlayTripPreview.shouldPreview(speedKmh: env.location.speedKmh)
                     if previewTrip != nil { mapTemplate?.hideTripPreviews() }
                     previewTrip = nil
+                    // Карточки на экране больше нет; новая поставит флаг сама.
+                    self.env.route.choiceShownInCar = false
                     model.isPreviewing = preview
                     return preview
                 },
@@ -382,8 +384,10 @@ extension CarPlaySceneDelegate {
         // (её строки после показа не меняются) расходилась бы с линией и с
         // тем, чем поведёт автостарт. Время вариантов обновляется дальше.
         // Здесь, а не в showPreview: новый набор к той же цели (перестроили
-        // на телефоне) приходит сюда пересозданием.
+        // на телефоне) приходит сюда пересозданием. Сам такой набор
+        // замерзает ещё в `apply` (`choiceShownInCar`), до поздних пробок.
         route.noteChoiceTouched()
+        route.choiceShownInCar = true
         let variants = route.variants
         let texts = previewTexts()
         let ordered = variants.filter { $0.id == route.selectedID } + variants.filter { $0.id != route.selectedID }
@@ -401,7 +405,8 @@ extension CarPlaySceneDelegate {
         let trip = CarPlayGuidance.makeTrip(origin: origin, destination: target, choices: choices)
         if previewTrip != nil { mapTemplate.hideTripPreviews() }
         previewTrip = trip
-        previewShown = CarPlayTripPreview.Shown(order: ordered.map(\.id), texts: texts)
+        previewShown = CarPlayTripPreview.Shown(set: CarPlayTripPreview.identity(variants),
+                                                order: ordered.map(\.id), texts: texts)
         previewEstimateKey = nil
         let text = CPTripPreviewTextConfiguration(startButtonTitle: String(localized: "Поехали"),
                                                   additionalRoutesButtonTitle: String(localized: "Варианты"),
@@ -439,7 +444,9 @@ extension CarPlaySceneDelegate {
         guard route.isActive, !route.isBuilding, !route.variants.isEmpty,
               let destination = route.destinationCoordinate, let shownAt = previewDestination,
               CarPlayGuidance.same(shownAt, destination) else { return }
-        switch CarPlayTripPreview.refresh(shown, selected: route.selectedID, texts: previewTexts()) {
+        switch CarPlayTripPreview.refresh(shown, selected: route.selectedID,
+                                          set: CarPlayTripPreview.identity(route.variants),
+                                          texts: previewTexts()) {
         case .estimates:
             updatePreviewEstimates(route.selected)
         case .rebuild:
@@ -483,6 +490,7 @@ extension CarPlaySceneDelegate {
         previewDestination = nil
         previewShown = nil
         previewEstimateKey = nil
+        env.route.choiceShownInCar = false
         guard model.isPreviewing else { return }
         if !keepRoute { env.route.clear() }
         model.isPreviewing = false

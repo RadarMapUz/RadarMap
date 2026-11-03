@@ -284,6 +284,11 @@ final class RouteService {
     @ObservationIgnored private var choiceBasis: (inputs: [RouteChoice.Input], history: RouteChoice.History?)?
     /// Касался ли водитель панели выбора с показа набора (решение 28.10).
     @ObservationIgnored private var choiceGate = ChoiceRelabelGate()
+    /// Выбор открыт на экране машины (ставит CarPlay, 40I): новый набор,
+    /// построенный в это время (на телефоне, к той же цели), замерзает сразу
+    /// в `apply` — поздние пробки не должны успеть подвинуть его метки и
+    /// выбор раньше, чем машина покажет карточку.
+    @ObservationIgnored var choiceShownInCar = false
     /// Идёт ли поездка (LocationService) — ставит AppEnvironment. Набор,
     /// построенный в пути (новая цель из поиска), выбран сразу: поздние
     /// пробки не уводят машину на другой вариант.
@@ -2059,7 +2064,7 @@ final class RouteService {
         // водитель не коснулся выбора (ChoiceRelabelGate, решение 28.10).
         choiceBasis = (choiceInputs, history)
         choiceGate.shown()
-        if isTripActive?() == true { choiceGate.touch() }
+        if isTripActive?() == true || choiceShownInCar { choiceGate.touch() }
         // Одна строка на маршрут — для разбора реальной поездки: сколько
         // рядов дал OSRM, сколько слой и где остался только край.
         if laneStats.indices.contains(selectedID) {

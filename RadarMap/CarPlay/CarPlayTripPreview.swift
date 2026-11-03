@@ -83,6 +83,11 @@ enum CarPlayTripPreview {
     /// касание (`RouteService.noteChoiceTouched`): метки и выбор заморожены,
     /// а время вариантов живёт дальше — этим правилом.
     struct Shown: Equatable {
+        /// Опознание набора: номера вариантов — индексы и совпадают между
+        /// наборами, поэтому — линии варианта (`ObjectIdentifier` полилинии),
+        /// по порядку номеров. Другой набор к той же цели (перестроили на
+        /// телефоне) — всегда пересоздание.
+        let set: [ObjectIdentifier]
         /// Варианты в порядке карточки (выбранный — первым).
         let order: [Int]
         /// Строки каждого варианта: в них время, оно меняется с пробками.
@@ -92,7 +97,8 @@ enum CarPlayTripPreview {
         /// Водитель сам перевёл выделение в машине (крутилкой или касанием).
         private(set) var pickedInCar = false
 
-        init(order: [Int], texts: [Int: ChoiceText]) {
+        init(set: [ObjectIdentifier], order: [Int], texts: [Int: ChoiceText]) {
+            self.set = set
             self.order = order
             self.texts = texts
             highlighted = order.first ?? 0
@@ -106,6 +112,11 @@ enum CarPlayTripPreview {
         }
     }
 
+    /// Опознание набора вариантов — линии по порядку номеров.
+    static func identity(_ variants: [RouteService.Variant]) -> [ObjectIdentifier] {
+        variants.sorted { $0.id < $1.id }.map { ObjectIdentifier($0.polyline) }
+    }
+
     enum Refresh: Equatable {
         /// Только оценки выделенного варианта (`update(_:for:with:)`).
         case estimates
@@ -116,12 +127,15 @@ enum CarPlayTripPreview {
 
     /// Что сделать с выбором в машине, когда у маршрута что-то сменилось.
     /// `selected` — вариант, которым поедем (`RouteService.selectedID`);
-    /// `texts` — строки вариантов сейчас.
-    static func refresh(_ shown: Shown, selected: Int, texts: [Int: ChoiceText]) -> Refresh {
+    /// `set` — опознание набора сейчас; `texts` — строки вариантов сейчас.
+    static func refresh(_ shown: Shown, selected: Int, set: [ObjectIdentifier],
+                        texts: [Int: ChoiceText]) -> Refresh {
         // Другой набор или выбор сделан не здесь (на телефоне) — карточка
         // обязана выделять то, чем поедем, иначе «Поехали» и автостарт на
-        // ходу поведут не тем, что видно.
-        guard Set(texts.keys) == Set(shown.order), selected == shown.highlighted else { return .rebuild }
+        // ходу поведут не тем, что видно. Касание в машине было по старому
+        // набору и новый не защищает.
+        guard set == shown.set, Set(texts.keys) == Set(shown.order),
+              selected == shown.highlighted else { return .rebuild }
         // Время в строках устарело. Пересоздание сбрасывает фокус крутилки,
         // поэтому — только пока водитель не трогал выбор; потом время
         // выделенного варианта идёт оценками, которые машина печатает сама.

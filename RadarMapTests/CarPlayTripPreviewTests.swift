@@ -122,6 +122,10 @@ final class CarPlayTripPreviewTests: XCTestCase {
 
     // MARK: - Карточка выбора не расходится с линией (40I, дефект 35)
 
+    private func ids(_ variants: [RouteService.Variant]) -> [ObjectIdentifier] {
+        CarPlayTripPreview.identity(variants)
+    }
+
     private func texts(_ variants: [RouteService.Variant]) -> [Int: CarPlayTripPreview.ChoiceText] {
         Dictionary(uniqueKeysWithValues: variants.map { ($0.id, CarPlayTripPreview.text(for: $0, among: variants)) })
     }
@@ -132,16 +136,16 @@ final class CarPlayTripPreviewTests: XCTestCase {
     func testLateTrafficRebuildsUntilTheDriverPicksInTheCar() {
         let fast = variant(id: 0, minutes: 25, km: 12, labels: [.fastest])
         let calm = variant(id: 1, minutes: 27, km: 13, labels: [.fewerCameras])
-        var shown = CarPlayTripPreview.Shown(order: [0, 1], texts: texts([fast, calm]))
-        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 0, texts: texts([fast, calm])), .estimates,
+        var shown = CarPlayTripPreview.Shown(set: ids([fast, calm]), order: [0, 1], texts: texts([fast, calm]))
+        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 0, set: ids([fast, calm]), texts: texts([fast, calm])), .estimates,
                        "ничего не сменилось — только минута прибытия")
         var jammed = fast
         jammed.trafficDelay = 9 * 60
-        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 0, texts: texts([jammed, calm])), .rebuild,
+        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 0, set: ids([jammed, calm]), texts: texts([jammed, calm])), .rebuild,
                        "«25 мин» на карточке при 34 в пути — устаревшая строка")
         shown.picked(1)
         shown.picked(0)
-        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 0, texts: texts([jammed, calm])), .estimates,
+        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 0, set: ids([jammed, calm]), texts: texts([jammed, calm])), .estimates,
                        "водитель крутит выбор — время выделенного идёт оценками")
     }
 
@@ -150,14 +154,29 @@ final class CarPlayTripPreviewTests: XCTestCase {
     func testSelectionFromElsewhereAlwaysRebuilds() {
         let fast = variant(id: 0, minutes: 25, km: 12, labels: [.fastest])
         let calm = variant(id: 1, minutes: 27, km: 13, labels: [.fewerCameras])
-        var shown = CarPlayTripPreview.Shown(order: [0, 1], texts: texts([fast, calm]))
-        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 1, texts: texts([fast, calm])), .rebuild)
+        var shown = CarPlayTripPreview.Shown(set: ids([fast, calm]), order: [0, 1], texts: texts([fast, calm]))
+        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 1, set: ids([fast, calm]), texts: texts([fast, calm])), .rebuild)
         shown.picked(1)
-        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 1, texts: texts([fast, calm])), .estimates,
+        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 1, set: ids([fast, calm]), texts: texts([fast, calm])), .estimates,
                        "выбрал в машине — карточка уже его выделяет")
         let third = variant(id: 2, minutes: 30, km: 14)
-        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 1, texts: texts([fast, calm, third])), .rebuild,
+        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 1, set: ids([fast, calm, third]), texts: texts([fast, calm, third])), .rebuild,
                        "другой набор вариантов")
+    }
+
+    /// Номера вариантов — индексы и совпадают между наборами. Водитель
+    /// отметил вариант 1, на телефоне ту же цель построили заново — новый
+    /// набор из двух, выбран снова 1: карточка обязана пересоздаться, иначе
+    /// в машине строки старого набора, а «Поехали» выберет вариант нового.
+    func testNewSetWithTheSameNumbersAlwaysRebuilds() {
+        let fast = variant(id: 0, minutes: 25, km: 12, labels: [.fastest])
+        let calm = variant(id: 1, minutes: 27, km: 13, labels: [.fewerCameras])
+        var shown = CarPlayTripPreview.Shown(set: ids([fast, calm]), order: [0, 1], texts: texts([fast, calm]))
+        shown.picked(1)
+        let again = [variant(id: 0, minutes: 25, km: 12, labels: [.fastest]),
+                     variant(id: 1, minutes: 27, km: 13, labels: [.fewerCameras])]
+        XCTAssertEqual(texts(again), texts([fast, calm]), "строки те же — отличает только опознание набора")
+        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 1, set: ids(again), texts: texts(again)), .rebuild)
     }
 
     /// Система может сообщить выделенный вариант при первом показе — это не
@@ -165,12 +184,12 @@ final class CarPlayTripPreviewTests: XCTestCase {
     func testSystemEchoOfTheHighlightedChoiceIsNotAPick() {
         let fast = variant(id: 0, minutes: 25, km: 12, labels: [.fastest])
         let calm = variant(id: 1, minutes: 27, km: 13, labels: [.fewerCameras])
-        var shown = CarPlayTripPreview.Shown(order: [0, 1], texts: texts([fast, calm]))
+        var shown = CarPlayTripPreview.Shown(set: ids([fast, calm]), order: [0, 1], texts: texts([fast, calm]))
         shown.picked(0)
         XCTAssertFalse(shown.pickedInCar)
         var jammed = fast
         jammed.trafficDelay = 9 * 60
-        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 0, texts: texts([jammed, calm])), .rebuild)
+        XCTAssertEqual(CarPlayTripPreview.refresh(shown, selected: 0, set: ids([jammed, calm]), texts: texts([jammed, calm])), .rebuild)
     }
 }
 
@@ -219,6 +238,22 @@ final class CarPlayChoiceFreezeTests: XCTestCase {
         XCTAssertNotNil(route.variants[0].trafficDelay, "время вариантов живёт дальше")
         XCTAssertEqual(route.selectedID, 0, "выбор не уходит из-под карточки машины")
         XCTAssertEqual(route.variants.map(\.assessment), labels, "метки заморожены")
+    }
+
+    /// Выбор открыт в машине, на телефоне ту же цель построили заново: новый
+    /// набор замерзает уже в `apply`, до того как машина его покажет.
+    func testNewSetBuiltWhileTheCarShowsTheChoiceIsFrozenAtOnce() async {
+        let (route, _) = await seeded()
+        route.choiceShownInCar = true
+        let first = line(longitude: 69.25)
+        await route.seedRoutes(name: "Работа", variants: [(first, 24 * 60), (line(longitude: 69.31), 27 * 60)])
+        XCTAssertEqual(route.selectedID, 0)
+        let snapshot = jam(on: first)
+        route.trafficSnapshot = { snapshot }
+        route.liveTrafficArrived()
+        await waitForTraffic(route)
+        XCTAssertNotNil(route.variants[0].trafficDelay)
+        XCTAssertEqual(route.selectedID, 0, "новый набор при открытом выборе в машине — заморожен")
     }
 
     /// Контроль: без показа в машине тот же поздний затор переносит выбор —

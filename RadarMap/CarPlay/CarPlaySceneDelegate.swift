@@ -264,6 +264,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             return
         }
         Self.activeDelegate = nil
+        env.route.choiceShownInCar = false
         if let connectedAt {
             env.usage.noteCarPlaySession(minutes: Int(Date().timeIntervalSince(connectedAt) / 60),
                                          hitches: HitchWatch.drain())

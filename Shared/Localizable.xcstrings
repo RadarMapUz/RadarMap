@@ -33806,18 +33806,50 @@
         }
       }
     },
-    "Ссылка из другого приложения просит начать поездку: GPS будет работать постоянно, пока она не закончится.": {
+    "Ссылка не перенеслась — отправьте заново": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ссылка из другого приложения просит начать поездку: GPS будет работать постоянно, пока она не закончится."
+            "value": "Ссылка не перенеслась — отправьте заново"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Boshqa ilovadagi havola safarni boshlashni soʻrayapti: safar tugaguncha GPS doim ishlaydi."
+            "value": "Havola koʻchmadi — qayta yuboring"
+          }
+        }
+      }
+    },
+    "Ссылка не перенеслась на этот телефон — отправьте её заново: старая у близкого больше не обновляется.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ссылка не перенеслась на этот телефон — отправьте её заново: старая у близкого больше не обновляется."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Havola bu telefonga koʻchmadi — uni qayta yuboring: yaqiningizdagi eski havola endi yangilanmaydi."
+          }
+        }
+      }
+    },
+    "GPS будет работать постоянно, пока поездка не закончится.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GPS будет работать постоянно, пока поездка не закончится."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar tugaguncha GPS doim ishlaydi."
           }
         }
       }

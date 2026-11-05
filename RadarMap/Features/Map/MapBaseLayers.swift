@@ -195,7 +195,10 @@ struct EngineBaseLayer: View {
                         showsPosition: known != nil,
                         markerMotion: env.location.markerMotion,
                         // Плашка улицы (29.F): пишет только на смене имени.
-                        onStreetName: { map.streetName = $0 })
+                        onStreetName: { map.streetName = $0 },
+                        // «Вождение 3D» (43) — только в поездке.
+                        drive3D: Drive3D.surface(enabled: env.settings.drive3D,
+                                                 phoneTrip: env.location.isTripActive))
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
                 // Подпись данных — над нижней панелью: «i» остаётся, текст

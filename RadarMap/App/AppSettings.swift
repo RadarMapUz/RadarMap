@@ -723,6 +723,10 @@ final class AppSettings {
     /// 3D-вид: карта наклонена, видно дорогу вперёд (кнопка «3D» на карте).
     /// Запоминается: выбор человека сильнее режима.
     var map3D: Bool { didSet { store.set(map3D, forKey: Keys.map3D) } }
+    /// «Вождение 3D» в поездке (43, Drive3D): светлый тихий мир, лента
+    /// маршрута во всю сторону и сужение к полосам у манёвра — на телефоне и
+    /// в машине. Включено, пока водитель сам не выключил.
+    var drive3D: Bool { didSet { store.set(drive3D, forKey: Keys.drive3D) } }
     /// Кнопки масштаба «+ / −» на карте. За рулём масштаб ведёт автозум по
     /// скорости, поэтому кнопки можно убрать в настройках.
     var mapZoomButtons: Bool { didSet { store.set(mapZoomButtons, forKey: Keys.mapZoomButtons) } }
@@ -824,6 +828,7 @@ final class AppSettings {
         static let mapSidewalks = "mapSidewalks"
         static let mapModernStyle = "mapModernStyle"
         static let map3D = "map3D"
+        static let drive3D = "drive3D"
         static let voiceBeforeMute = "voiceBeforeMute"
         static let mapZoomButtons = "mapZoomButtons"
         static let cursorStyle = "cursorStyle"
@@ -947,6 +952,7 @@ final class AppSettings {
         mapSidewalks = store.bool(forKey: Keys.mapSidewalks)
         mapModernStyle = store.bool(forKey: Keys.mapModernStyle)
         map3D = store.bool(forKey: Keys.map3D)
+        drive3D = store.object(forKey: Keys.drive3D) as? Bool ?? true
         mapZoomButtons = store.bool(forKey: Keys.mapZoomButtons)
         // Подложка одна — движок (карта Apple и схема убраны 11.10): старые
         // ключи mapBase/engineMapEnabled/sketchWhileDriving больше не читаются.
@@ -1143,7 +1149,7 @@ extension AppSettings {
         Keys.destinationHints: .bool, Keys.commuteLearningOff: .bool, Keys.smartSilence: .bool,
         Keys.tripodHints: .bool, Keys.nightVoice: .bool, Keys.workDriverMode: .bool, Keys.parkedCarHint: .bool,
         Keys.mapPlaces: .bool, Keys.mapHouses: .bool, Keys.mapSidewalks: .bool,
-        Keys.mapModernStyle: .bool, Keys.map3D: .bool, Keys.mapZoomButtons: .bool,
+        Keys.mapModernStyle: .bool, Keys.map3D: .bool, Keys.drive3D: .bool, Keys.mapZoomButtons: .bool,
         Keys.cursorStyle: .string, Keys.alertMode: .string, Keys.alertProfile: .string,
         Keys.usageStats: .bool, Keys.trafficHidden: .bool, Keys.trafficContributionOff: .bool,
         Keys.roadWeatherOff: .bool, Keys.maintenanceRemindersOff: .bool,
@@ -1212,6 +1218,7 @@ extension AppSettings {
         case (Keys.mapSidewalks, .bool(let v)): mapSidewalks = v
         case (Keys.mapModernStyle, .bool(let v)): mapModernStyle = v
         case (Keys.map3D, .bool(let v)): map3D = v
+        case (Keys.drive3D, .bool(let v)): drive3D = v
         case (Keys.mapZoomButtons, .bool(let v)): mapZoomButtons = v
         case (Keys.cursorStyle, .string(let v)): cursorStyle = CursorStyle(stored: v)
         case (Keys.alertMode, .string(let v)): if let mode = AlertMode(rawValue: v) { alertMode = mode }

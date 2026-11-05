@@ -243,7 +243,10 @@ struct CarPlayEngineLayer: View {
             // Крупнее телефона и свой стиль (40J, CarMapStyle) — экран машины
             // и плитка; приборка — как карта поездки.
             carScale: CarMapStyle.scale(for: surface),
-            carStyle: carStyle)
+            carStyle: carStyle,
+            // «Вождение 3D» (43) — та же картинка, что на телефоне, поверх
+            // масштаба машины; плитка — упрощённо, приборка — карта поездки.
+            drive3D: Drive3D.surface(enabled: env.settings.drive3D, car: surface))
     }
 
     /// Новая карта (вернулись из музыки, из схемы) стартует со слежения —

@@ -126,7 +126,6 @@ struct SharePreviewSheet: View {
             payload = ShareImagePayload(image: image)
         }
         .disabled(image == nil)
-        .opacity(image == nil ? 0.5 : 1)
     }
 
     /// Отрисовка выбранной карточки. `@MainActor` неявно (весь тип на нём):

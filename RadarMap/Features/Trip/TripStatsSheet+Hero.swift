@@ -69,7 +69,7 @@ extension TripStatsSheet {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.rounded(15, .bold))
-                .foregroundStyle(enabled ? Theme.accent : Theme.textTertiary.opacity(0.4))
+                .foregroundStyle(enabled ? Theme.accent : Theme.textTertiary)
                 // Голая стрелка: капсулы-подложки делали из строки периода
                 // третий ряд «кнопочной» мебели подряд. Мишень — полные 44 pt:
                 // при 36×32 соседний период пролистывался мимо пальца.

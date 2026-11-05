@@ -136,7 +136,6 @@ struct MaintenancePage: View {
                 if let km = firstOdometer, km > 0 { env.maintenance.setOdometer(km: km) }
             }
             .disabled(!ready)
-            .opacity(ready ? 1 : 0.45)
             .listRowInsets(EdgeInsets())
             .listRowBackground(Color.clear)
         }

@@ -1418,6 +1418,10 @@ nonisolated enum AppConfig {
     /// Вспышка ответа на «Радар!» и вопрос «Радар ещё стоял?» на телефоне.
     static let reportFlashSeconds: TimeInterval = 2
     static let mobileQuestionSeconds: TimeInterval = 20
+    /// Вытесненный вопрос на ходу (камерой или старшим вопросом) возвращается,
+    /// только если по его часам осталось столько секунд (RoadPromptPolicy):
+    /// вопрос на одну-две секунды читается как мигание, а не как вопрос.
+    nonisolated static let roadPromptMinReturnSeconds: TimeInterval = 5
     /// Тот же вопрос (и «Ещё перекрыто?») при включённом VoiceOver. Двадцати
     /// секунд хватает взгляду, но не слуху: объявление вопроса, затем
     /// пролистывание до «Да» и «Нет» и двойное касание — плашка уходила

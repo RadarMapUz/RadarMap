@@ -54,12 +54,11 @@ struct ItogiRow: View {
     var body: some View {
         if let action = item.action {
             Button {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 action()
             } label: {
                 content(chevron: true)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableStyle(.row))
             .accessibilityElement(children: .combine)
             .accessibilityHint(Text(item.accessibilityHint ?? ""))
         } else {

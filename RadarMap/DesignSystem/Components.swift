@@ -263,15 +263,6 @@ extension View {
     }
 }
 
-/// Премиальный отклик: кнопка мягко пружинит под пальцем.
-struct PressableStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.95 : 1)
-            .motionAnimation(Motion.quick, value: configuration.isPressed)
-    }
-}
-
 /// Основная акцентная кнопка (CTA). Жёлтая — ОДНА на экран: «Поехали»,
 /// «Начать поездку», «Отправить». Второе действие рядом — `SecondaryButton`:
 /// две жёлтые подряд (карточка камеры) не говорят, какая главная.
@@ -281,6 +272,9 @@ struct PrimaryButton: View {
     /// По умолчанию — жёлтое главное действие с тёмным текстом. Другой
     /// заливке (danger и т.п.) — белый текст.
     var tint: Color = Theme.action
+    /// Средняя вибрация главного действия. `.ownFeedback` — когда действие
+    /// само отвечает «успехом» (две вибрации разом сливаются в дребезг).
+    var touch: TouchRole = .primary
     let action: () -> Void
 
     var body: some View {
@@ -296,7 +290,7 @@ struct PrimaryButton: View {
             .background(tint, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
         }
-        .buttonStyle(PressableStyle())
+        .buttonStyle(PressableStyle(touch))
     }
 }
 
@@ -307,6 +301,8 @@ struct PrimaryButton: View {
 struct SecondaryButton: View {
     let title: LocalizedStringKey
     var systemImage: String? = nil
+    /// Лёгкая вибрация; «Отмена» рядом с главным — `.cancel`.
+    var touch: TouchRole = .regular
     let action: () -> Void
 
     var body: some View {
@@ -324,7 +320,7 @@ struct SecondaryButton: View {
                 .stroke(Theme.stroke, lineWidth: 1))
             .contentShape(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
         }
-        .buttonStyle(PressableStyle())
+        .buttonStyle(PressableStyle(touch))
     }
 }
 

@@ -167,6 +167,8 @@ struct ApproachAlertView: View {
     }
 
     /// «Без звука» в строку высотой 44 — для верхней карточки.
+    /// Кнопки экрана оповещения держат свой отклик (`.ownFeedback`): здесь же
+    /// звучит вибрация камеры, и стиль не добавляет к ней своей.
     private var compactMuteButton: some View {
         let muted = env.settings.isMuted
         return Button {
@@ -185,7 +187,7 @@ struct ApproachAlertView: View {
                             in: RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
                 .contentShape(RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
         }
-        .buttonStyle(PressableStyle())
+        .buttonStyle(PressableStyle(.ownFeedback))
     }
 
     private var fullScreen: some View {
@@ -327,7 +329,7 @@ struct ApproachAlertView: View {
                 .frame(maxWidth: .infinity, minHeight: Theme.controlSize)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(PressableStyle())
+        .buttonStyle(PressableStyle(.ownFeedback))
         .accessibilityHint(Text("До следующей камеры"))
     }
 
@@ -434,7 +436,7 @@ struct ApproachAlertView: View {
                     .strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
                 .contentShape(RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
         }
-        .buttonStyle(PressableStyle())
+        .buttonStyle(PressableStyle(.ownFeedback))
     }
 
     /// «Радар через 220 метров, прямо. Скорость 47 км/ч» — для VoiceOver.

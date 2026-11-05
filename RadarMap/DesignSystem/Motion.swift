@@ -69,6 +69,10 @@ enum Motion {
     static let standard: Animation = .snappy(duration: 0.3)
     /// Короткий отклик на касание: переключатель, чип, нажатая кнопка.
     static let quick: Animation = .snappy(duration: 0.22)
+    /// Палец лёг на кнопку: сжатие сразу, без раскачки.
+    static let pressIn: Animation = .snappy(duration: 0.12)
+    /// Палец отпустил: кнопка возвращается пружиной с лёгким перелётом.
+    static let release: Animation = .spring(duration: 0.32, bounce: 0.35)
 }
 
 /// Замена `withAnimation`, уважающая «Уменьшение движения».

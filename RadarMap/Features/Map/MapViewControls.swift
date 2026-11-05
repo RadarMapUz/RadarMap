@@ -22,7 +22,6 @@ struct MapCompassButton: View {
     var body: some View {
         if map.isRotated {
             Button {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 map.showNorth(coordinate: env.location.currentCoordinate,
                               inTrip: env.location.isTripActive)
             } label: {
@@ -68,7 +67,6 @@ struct MapZoomButtons: View {
 
     private func zoomButton(_ symbol: String, delta: Double, label: LocalizedStringKey) -> some View {
         Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
             map.zoomStep(delta)
         } label: {
             // Вес глифа — как у всех кругов колонки (CircleControlFace).
@@ -91,7 +89,6 @@ struct MapMuteButton: View {
     var body: some View {
         let muted = env.settings.isMuted
         Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
             env.settings.setMuted(!muted)
             if !muted { env.alerts.hush() }   // тишина сразу, а не после фразы
         } label: {

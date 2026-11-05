@@ -84,7 +84,6 @@ struct MonthCalendarCard: View {
             let record = byDay[day]
             let state = CellState(record)
             Button {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 onSelectDay(day)
             } label: {
                 Text("\(calendar.component(.day, from: day))")
@@ -116,7 +115,7 @@ struct MonthCalendarCard: View {
                     .padding(Self.cellGap / 2)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableStyle(.choice))
             .accessibilityLabel(Text(Formatting.date(day, Date.FormatStyle(date: .abbreviated, time: .omitted))))
             .accessibilityValue(state.hasTrips
                 ? (state.hasOverspeed ? Text("превышения") : Text("чисто"))

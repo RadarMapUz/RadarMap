@@ -117,7 +117,8 @@ extension TripStatsSheet {
                         .background(Theme.accentFill, in: Capsule())
                         .contentShape(Capsule())
                 }
-                .buttonStyle(PressableStyle())
+                // Средняя вибрация — в merge(): тот же путь у контекстного меню.
+                .buttonStyle(PressableStyle(.ownFeedback))
                 Button {
                     Storage.set(pair.next.id, for: .mergeSuggestDismissedID)
                     withMotion(Motion.standard) { mergeSuggestionHidden = true }
@@ -131,7 +132,7 @@ extension TripStatsSheet {
                         .background(Theme.surface, in: Capsule())
                         .contentShape(Capsule())
                 }
-                .buttonStyle(PressableStyle())
+                .buttonStyle(PressableStyle(.cancel))
             }
         }
         .statCard()

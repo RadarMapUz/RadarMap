@@ -34,6 +34,11 @@ struct RootView: View {
     @State private var carPlayPreviewModel = CarPlayMapModel()
     #endif
 
+    /// DEBUG `-designCatalog`: каталог компонентов поверх всего (задача 41).
+    #if DEBUG
+    private static let showsDesignCatalog = ProcessInfo.processInfo.arguments.contains("-designCatalog")
+    #endif
+
     /// DEBUG `-handoffPreview`: экран передачи без машины — для снимков.
     #if DEBUG
     private static let previewsHandoff = ProcessInfo.processInfo.arguments.contains("-handoffPreview")
@@ -73,6 +78,11 @@ struct RootView: View {
                 }
                 .transition(.opacity)
             }
+            #if DEBUG
+            if Self.showsDesignCatalog {
+                DesignCatalogView()
+            }
+            #endif
         }
         // Оценка App Store — на корне, а не на MapScreen: за рулём CarPlay
         // экран телефона показывает экран передачи, MapScreen не смонтирован,

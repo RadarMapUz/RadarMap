@@ -311,7 +311,8 @@ extension MapScreen {
         } else {
             env.location.startTrip()
         }
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        // Вибрацию даёт кнопка (PressableStyle): «Начать поездку» и «Поехали» —
+        // средняя, «Стоп» — свой «успех» на подтверждении.
     }
 
     /// Показать «Поездка сохранена» после стопа. Только на переднем плане

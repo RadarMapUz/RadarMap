@@ -88,7 +88,6 @@ struct QuickTogglesBar: View {
                         isOn: Binding<Bool>) -> some View {
         Button {
             isOn.wrappedValue.toggle()
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
         } label: {
             VStack(spacing: 5) {
                 // Тот же кружок, что у слоёв «Карты» (MapPopoverGlyph): белое
@@ -136,7 +135,7 @@ struct QuickTogglesBar: View {
                                  : AnyShapeStyle(Theme.background),
                         in: RoundedRectangle(cornerRadius: Theme.controlSize / 2, style: .continuous))
         }
-        .buttonStyle(PressableStyle())
+        .buttonStyle(PressableStyle(.choice))
         // Выбранный режим виден только цветом — VoiceOver должен его слышать.
         .accessibilityAddTraits(selected ? .isSelected : [])
     }

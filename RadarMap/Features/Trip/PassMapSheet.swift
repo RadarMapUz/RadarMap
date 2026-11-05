@@ -413,7 +413,6 @@ struct PassDetailView: View {
                             set outcome: PassedCamera.FineOutcome) -> some View {
         Button {
             guard let record else { return }
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
             withMotion(Motion.standard) {
                 env.trip.setFineOutcome(outcome, passID: pass.id, tripID: record.id)
                 fineOutcome = outcome

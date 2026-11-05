@@ -73,7 +73,8 @@ struct StopTripButton: View {
             .background(Theme.dangerFill, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
         }
-        .buttonStyle(PressableStyle())
+        // Взвод и подтверждение звучат по-разному — отклик ведёт сама кнопка.
+        .buttonStyle(PressableStyle(.ownFeedback))
         .motionAnimation(.spring(response: 0.3, dampingFraction: 0.8), value: isArmed)
         .accessibilityLabel((isArmed ? Text("Подтвердить завершение поездки") : Text("Завершить поездку")))
         .accessibilityHint(Text("Нажмите дважды: первое касание спрашивает подтверждение"))

@@ -73,7 +73,7 @@ struct TripHistorySection: View {
             TripListRow(record: record, title: Formatting.clock(record.startedAt),
                         selected: selectedID == record.id)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle(.row))
         // «Проявления» строк при прокрутке (scrollTransition) больше нет: оно
         // меняло прозрачность и масштаб каждой строки на каждом кадре, и
         // прокрутка перерисовывала строки целиком вместо того, чтобы их двигать.

@@ -53,7 +53,7 @@ extension MapScreen {
                 actionButton("Мои места", Icon.myPlaces) { showMyPlaces = true }
                 actionButton("Итоги", "chart.bar.fill") { map.showStats = true }
                 if tripStartsByItself {
-                    actionButton("Поездка", "play.fill") { toggleTrip() }
+                    actionButton("Поездка", "play.fill", touch: .primary) { toggleTrip() }
                         .accessibilityLabel(Text("Начать поездку"))
                 }
                 Menu {
@@ -154,12 +154,12 @@ extension MapScreen {
         }
     }
 
-    func actionButton(_ title: LocalizedStringKey, _ icon: String,
+    func actionButton(_ title: LocalizedStringKey, _ icon: String, touch: TouchRole = .regular,
                       action: @escaping () -> Void) -> some View {
         Button(action: action) {
             ActionBarLabel(title: title, icon: icon)
         }
-        .buttonStyle(PressableStyle())
+        .buttonStyle(PressableStyle(touch))
     }
 
     @ViewBuilder var permissionBanner: some View {

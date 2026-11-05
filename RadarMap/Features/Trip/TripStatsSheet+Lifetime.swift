@@ -72,7 +72,7 @@ extension TripStatsSheet {
                         } label: {
                             AchievementBadge(badge: badge)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(PressableStyle(.card))
                     }
                 }
                 .padding(.vertical, 2)
@@ -125,7 +125,7 @@ extension TripStatsSheet {
             .statCard(padding: 14, radius: Theme.cornerMedium)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle(.row))
         .accessibilityElement(children: .combine)
     }
 

@@ -296,7 +296,8 @@ struct PlacePickerMap: View {
             .frame(minHeight: Theme.controlSize)
             .accessibilityElement(children: .combine)
 
-            PrimaryButton(title: "Готово", systemImage: "checkmark") { confirm() }
+            // Отклик — «успех» в confirm(): место сохранено.
+            PrimaryButton(title: "Готово", systemImage: "checkmark", touch: .ownFeedback) { confirm() }
         }
         .padding(16)
     }

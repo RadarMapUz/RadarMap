@@ -21,7 +21,6 @@ struct ParkedCarChip: View {
     var body: some View {
         if let hint = env.location.parkedCarHint, let spot = env.location.parkedCarOnMap {
             Button {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 map.center(on: spot.coordinate)
             } label: {
                 HStack(spacing: 8) {

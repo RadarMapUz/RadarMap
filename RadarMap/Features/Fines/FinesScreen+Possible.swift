@@ -210,7 +210,6 @@ extension FinesScreen {
                             .foregroundStyle(Theme.textSecondary)
                     } else if outcome == .pending {
                         Button {
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
                             entry = FineEntryRequest(pass: item.pass, tripID: item.record.id)
                         } label: {
                             outcomeLabel(String(localized: "Пришёл"), symbol: "envelope.badge",
@@ -241,7 +240,6 @@ extension FinesScreen {
                                title: String, symbol: String, tint: Color,
                                hint: String) -> some View {
         Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
             withMotion(Motion.standard) {
                 env.trip.setFineOutcome(outcome, passID: item.pass.id, tripID: item.record.id)
             }

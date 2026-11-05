@@ -509,7 +509,7 @@ struct RatingDetailSheet: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle(.row))
         // Без .disabled по worstPass: он обходит всю историю, и в body это
         // делалось 4 раза на каждый пересчёт. Кнопка с пустым действием при
         // отсутствии проезда безвредна, а случай почти невозможен — hotspot
@@ -560,7 +560,7 @@ struct RatingDetailSheet: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle(.row))
         .accessibilityElement(children: .combine)
     }
 
@@ -832,7 +832,7 @@ private struct ContributionRow: View {
                         in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle(.row))
         .disabled(!item.isTrip)
         .accessibilityElement(children: .combine)
     }
@@ -931,7 +931,7 @@ private struct AllContributionsView: View {
                             }
                             .contentShape(Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressableStyle(.choice))
                     .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
                 }
             }
@@ -948,7 +948,7 @@ private struct AllContributionsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressableStyle(.choice))
         }
         .padding(.bottom, 4)
     }

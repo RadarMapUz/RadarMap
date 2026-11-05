@@ -38,8 +38,10 @@ struct ReportButton: View {
     private var draft: ReportDraft { env.reports.draft }
 
     var body: some View {
+        // Средняя вибрация — сразу, на срабатывании, до точки и сети:
+        // касание засчитано. Исход (ушла / отказ) — отдельным сигналом.
         Button(action: tap) { label }
-            .buttonStyle(PressableStyle())
+            .buttonStyle(PressableStyle(.primary))
             .disabled(draft.isInFlight)
             .motionAnimation(Motion.quick, value: draft.choosing != nil)
             .motionAnimation(.easeOut(duration: 0.25), value: refusedFlash)
@@ -83,7 +85,9 @@ struct ReportButton: View {
 
     @ViewBuilder private var content: some View {
         if refusedFlash {
+            // Отказ — событие: крестик вздрагивает один раз.
             Image(systemName: "xmark").font(.system(size: 18, weight: .bold))
+                .symbolEffect(.wiggle, options: .nonRepeating, isActive: !Motion.isReduced)
         } else if draft.choosing != nil {
             // Выбор открыт: второе касание — тренога сразу; кнопка это и говорит.
             CameraGlyphView(glyph: CameraType.tripod.glyph, ink: Theme.onAction, side: 20)
@@ -104,8 +108,6 @@ struct ReportButton: View {
     }
 
     private func tap() {
-        // Тактильный отклик СРАЗУ, до точки и сети: касание засчитано.
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         Task {
             let answer = await env.reports.begin(from: source)
             switch answer {

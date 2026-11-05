@@ -62,7 +62,7 @@ struct RoadHabitSheet: View {
                     if hasJams && hasOverLimit {
                         Picker("", selection: $kind) {
                             Text("Пробки").tag(RoadHabitPayload.Kind.jams)
-                            Text("Выше лимита").tag(RoadHabitPayload.Kind.overLimit)
+                            Text("Скорость вне камер").tag(RoadHabitPayload.Kind.overLimit)
                         }
                         .pickerStyle(.segmented)
                     }
@@ -74,7 +74,10 @@ struct RoadHabitSheet: View {
                 .padding(20)
             }
             .background(Theme.background)
-            .navigationTitle("Пробки и лимит")
+            // Заголовок — той строки, с которой пришли (аудит 05.11: две строки
+            // «Пробки» и «Скорость вне камер» вместо одной «Пробки и лимит»).
+            .navigationTitle(Text(kind == .jams ? String(localized: "Пробки")
+                                                : String(localized: "Скорость вне камер")))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }
@@ -88,7 +91,9 @@ struct RoadHabitSheet: View {
         .onAppear {
             guard !chosen else { return }
             chosen = true
-            kind = kind
+            // Вкладка — той строки, с которой пришли (было `kind = kind`, и
+            // «Скорость вне камер» открывалась на «Пробках»).
+            kind = payload.kind
         }
     }
 
@@ -184,16 +189,17 @@ struct RoadHabitSheet: View {
         var limitKmh = 0
         var maxKmh: Double = 0
 
+        /// Справа — то, что отличает место: время в пробке или скорость, до
+        /// которой разгонялись («до 78»); лимит и разы — подписью под ним.
         func value(_ kind: RoadHabitPayload.Kind) -> String {
             kind == .jams ? Formatting.duration(seconds)
-                          : String(format: String(localized: "лимит %lld"), limitKmh)
+                          : String(format: String(localized: "до %lld"), Int(maxKmh.rounded()))
         }
 
         func caption(_ kind: RoadHabitPayload.Kind) -> String {
             kind == .jams
-                ? String(localized: "Вставали в пробку: \(times) раз")
-                : String(format: String(localized: "%1$@ · до %2$lld км/ч"),
-                         String(localized: "\(times) раз"), Int(maxKmh.rounded()))
+                ? String(format: String(localized: "Вставали в пробку: %@"), ItogiWords.times(times))
+                : String(format: String(localized: "лимит %1$lld · %2$@"), limitKmh, ItogiWords.times(times))
         }
 
         /// Ключ слияния: улица, а для «выше лимита» — ещё и лимит: «лимит 60»

@@ -22,8 +22,10 @@ enum PassStyle {
     /// второй носитель состояния имеет смысл, только пока он говорит то же
     /// самое, что первый.
     static func level(speed: Double, limit: Int?) -> Theme.Level {
+        // Лимит известен — три состояния проезда (PassVerdict): границы у
+        // штрафной ступени и лестницы баллов, как в итогах и календаре.
         if limit != nil {
-            return Theme.speedLevel(speedKmh: speed, limitKmh: limit)
+            return PassVerdict.of(speedKmh: speed, limitKmh: limit).level
         }
         switch speed {
         case ..<90:    return .normal
@@ -90,17 +92,18 @@ struct PassRow: View {
                     if fine > 0, showsRisk || pass.fineOutcome != .pending {
                         switch pass.fineOutcome {
                         case .pending:
-                            Text(String(format: String(localized: "риск ≈ %@"),
+                            // У одного проезда — «штраф ≈» (аудит 05.11, п. 3).
+                            Text(String(format: String(localized: "штраф ≈ %@"),
                                         Formatting.money(fine)))
-                                .font(.rounded(10, .medium))
+                                .font(.rounded(12, .medium))
                                 .foregroundStyle(Theme.danger)
                         case .paid:
                             Text(String(localized: "штраф пришёл"))
-                                .font(.rounded(10, .medium))
+                                .font(.rounded(12, .medium))
                                 .foregroundStyle(Theme.warning)
                         case .dismissed:
                             Text(String(localized: "штраф не пришёл"))
-                                .font(.rounded(10, .medium))
+                                .font(.rounded(12, .medium))
                                 .foregroundStyle(Theme.textTertiary)
                         }
                     }
@@ -220,6 +223,8 @@ struct TripRatingContext {
     let periodCaption: String
     /// Километры всего окна: доля веса становится проверяемой.
     let periodDistance: Double
+    /// Окно — для «сняла с рейтинга недели / месяца».
+    var period: StatsPeriod = .week
 }
 
 /// Шит-обёртка: из истории деталка открывается ровно как раньше.
@@ -280,29 +285,30 @@ struct TripDetailContent: View {
         ScrollView {
             ScrollViewReader { proxy in
             VStack(spacing: 16) {
+                // Порядок (аудит 05.11): карта → балл → камеры → метрики →
+                // график → расходы → остановки. Камеры — сразу за баллом: это
+                // ответ на «за что сняли», а метрики — справка.
+                // «Повторить маршрут» — в шапке.
                 mapSection
-                    .entrance(0, appeared)
-                ratingCard
                     .entrance(0, appeared)
                 scoreCard
                     .entrance(1, appeared)
+                ratingCard
+                    .entrance(1, appeared)
+                if !record.passed.isEmpty {
+                    passesSection
+                        .entrance(2, appeared)
+                }
                 metricsCard
                     .entrance(2, appeared)
-                // Во что обошлась дорога (21.4): электричество и бензин по
-                // дням, «как посчитано» — раскрывается.
-                TripEnergyCard(record: record)
-                    .entrance(2, appeared)
-                    .id("energy")
-                // Порядок (6.5): метрики → скорость → камеры → остановки.
-                // «Повторить маршрут» — в шапке: жёлтая кнопка в самом низу
-                // длинного экрана была и главной, и самой далёкой.
                 SpeedProfileChart(record: record)
                     .entrance(3, appeared)
                     .id("chart")
-                if !record.passed.isEmpty {
-                    passesSection
-                        .entrance(3, appeared)
-                }
+                // Во что обошлась дорога (21.4): электричество и бензин по
+                // дням, «как посчитано» — раскрывается.
+                TripEnergyCard(record: record)
+                    .entrance(3, appeared)
+                    .id("energy")
                 TripStopsSection(record: record) { dismiss() }
                     .entrance(4, appeared)
             }
@@ -377,38 +383,41 @@ struct TripDetailContent: View {
 
     // MARK: Вклад в рейтинг периода
 
-    /// Смыкает уровни разбора: та же арифметика «недобор × доля», что в списке
-    /// вкладов, но здесь рядом с самой поездкой.
+    /// Что поездка сняла с рейтинга окна — словами, без «недобор × доля»
+    /// (формула — в «Как считаем рейтинг»). Видно, почему короткая поездка с
+    /// баллом 55 сняла меньше длинной с 70.
     @ViewBuilder private var ratingCard: some View {
         if let rating {
             let item = rating.contribution
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) {
-                    Image(systemName: "chart.pie.fill")
-                        .font(.rounded(15, .bold))
-                        .foregroundStyle(Theme.danger)
-                        .frame(width: 32, height: 32)
-                        .background(Theme.quietFill, in: Circle())
-                    Text(String(format: String(localized: "Вклад в рейтинг %@"),
+            HStack(spacing: 12) {
+                IconBadge(symbol: Icon.contribution, tint: Theme.danger, size: 30)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(Self.contributionTitle(rating.period))
+                        .font(.rounded(15, .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text(String(format: String(localized: "длинные поездки весят больше: %1$@ из %2$@ %3$@"),
+                                Formatting.distance(item.distanceMeters),
+                                Formatting.distance(rating.periodDistance),
                                 rating.periodCaption))
-                        .font(.rounded(15, .medium))
+                        .font(.rounded(13))
                         .foregroundStyle(Theme.textSecondary)
-                    Spacer(minLength: 8)
-                    Text(Formatting.points(item.points))
-                        .font(.numeral(20, .heavy).monospacedDigit())
-                        .foregroundStyle(Theme.danger)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Text(String(format: String(localized: "Недобор %1$lld баллов × доля %2$lld %% (%3$@ из %4$@ %5$@)"),
-                            item.deficit, Int((item.weightShare * 100).rounded()),
-                            Formatting.distance(item.distanceMeters),
-                            Formatting.distance(rating.periodDistance),
-                            rating.periodCaption))
-                    .font(.rounded(11))
-                    .foregroundStyle(Theme.textTertiary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
+                Text(Formatting.points(item.points))
+                    .font(.numeral(19, .heavy).monospacedDigit())
+                    .foregroundStyle(Theme.danger)
             }
             .statCard()
             .accessibilityElement(children: .combine)
+        }
+    }
+
+    static func contributionTitle(_ period: StatsPeriod) -> String {
+        switch period {
+        case .day:   return String(localized: "Сняла с рейтинга дня")
+        case .week:  return String(localized: "Сняла с рейтинга недели")
+        case .month: return String(localized: "Сняла с рейтинга месяца")
         }
     }
 
@@ -461,8 +470,9 @@ struct TripDetailContent: View {
             if pass.limitKmh == nil {
                 picture.dots.append(.init(coordinate: coordinate, diameter: 9,
                                           fill: Theme.textTertiary, ringWidth: 1.5))
-            } else if PassStyle.symbol(speed: pass.speedKmh, limit: pass.limitKmh) != nil {
-                over.append(.init(coordinate: coordinate, diameter: 24,
+            } else if pass.verdict != .clean {
+                // «На грани» и превышение — со скоростью, цветом состояния.
+                over.append(.init(coordinate: coordinate, diameter: pass.verdict == .over ? 24 : 21,
                                   fill: PassStyle.color(speed: pass.speedKmh, limit: pass.limitKmh),
                                   ringWidth: 2, label: "\(Int(pass.speedKmh.rounded()))",
                                   labelColor: Theme.background))
@@ -483,18 +493,29 @@ struct TripDetailContent: View {
     /// Легенда на самой карте: без неё зелёная точка и красный круг с числом
     /// — догадка, а не знание.
     @ViewBuilder private var mapLegend: some View {
-        let known = record.passed.filter { $0.limitKmh != nil }
-        let over = known.filter { PassStyle.symbol(speed: $0.speedKmh, limit: $0.limitKmh) != nil }.count
-        let clean = known.count - over
-        let unknown = record.passed.count - known.count
+        // Три состояния (PassVerdict) — те же слова, что в списке камер ниже:
+        // «превышений: 2» над списком «Без штрафа» читались про разное.
+        let tally = record.cameraTally
         if !record.passed.isEmpty {
-            HStack(spacing: 10) {
-                if clean > 0 { legendDot(Theme.success, String(format: String(localized: "в лимите: %lld"), clean)) }
-                if over > 0 { legendDot(Theme.danger, String(format: String(localized: "превышений: %lld"), over)) }
-                if unknown > 0 {
-                    legendDot(Theme.textTertiary, String(format: String(localized: "лимит неизвестен: %lld"), unknown))
-                }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) { legendKeys(tally) }
+                VStack(alignment: .leading, spacing: 4) { legendKeys(tally) }
             }
+        }
+    }
+
+    @ViewBuilder private func legendKeys(_ tally: PassVerdict.Tally) -> some View {
+        if tally.clean > 0 {
+            legendDot(PassVerdict.clean.tint, String(format: String(localized: "в лимите: %lld"), tally.clean))
+        }
+        if tally.edge > 0 {
+            legendDot(PassVerdict.edge.tint, String(format: String(localized: "на грани: %lld"), tally.edge))
+        }
+        if tally.over > 0 {
+            legendDot(PassVerdict.over.tint, String(format: String(localized: "превышений: %lld"), tally.over))
+        }
+        if tally.unknown > 0 {
+            legendDot(Theme.textTertiary, String(format: String(localized: "лимит неизвестен: %lld"), tally.unknown))
         }
     }
 
@@ -525,20 +546,30 @@ struct TripDetailContent: View {
                             .frame(width: 56, height: 56)
                     }
                     VStack(alignment: .leading, spacing: 4) {
+                        // «Балл поездки», не рейтинг (аудит, п. 4).
                         if let score = record.score {
-                            Text(DrivingScore.level(for: Int(score)))
-                                .font(.rounded(17, .bold))
-                                .foregroundStyle(Theme.textPrimary)
+                            Text("балл поездки")
+                                .font(.rounded(12, .medium))
+                                .foregroundStyle(Theme.textSecondary)
+                            Text(ItogiRating.Level(rating: Int(score)).title)
+                                .font(.rounded(19, .bold))
+                                .foregroundStyle(Theme.score(Int(score)))
                         }
                         if risk > 0 {
-                            Label(String(format: String(localized: "Возможные штрафы ≈ %@"),
+                            Label(String(format: String(localized: "Могут прийти ≈ %@ · оценка, не постановления"),
                                          Formatting.money(risk)),
-                                  systemImage: "exclamationmark.triangle.fill")
-                                .font(.rounded(14, .semibold))
+                                  systemImage: PassVerdict.over.symbol)
+                                .font(.rounded(13, .semibold))
                                 .foregroundStyle(Theme.danger)
+                        } else if record.cameraTally.edge > 0 {
+                            Label(String(format: String(localized: "Штрафа нет, но на грани у камер: %lld"),
+                                         record.cameraTally.edge),
+                                  systemImage: PassVerdict.edge.symbol)
+                                .font(.rounded(13, .semibold))
+                                .foregroundStyle(PassVerdict.edge.tint)
                         } else {
-                            Label("Без риска штрафов", systemImage: "checkmark.shield.fill")
-                                .font(.rounded(14, .semibold))
+                            Label("Без штрафуемых превышений", systemImage: "checkmark.shield.fill")
+                                .font(.rounded(13, .semibold))
                                 .foregroundStyle(Theme.success)
                         }
                     }
@@ -547,22 +578,14 @@ struct TripDetailContent: View {
                 }
                 if !items.isEmpty {
                     Divider().overlay(Theme.stroke)
-                    Text("Из чего сложился балл поездки")
+                    // «Сняли 10 за …» словами; формула «100 − 10 = 90» —
+                    // только в «Как считаем рейтинг» (аудит, п. 4).
+                    let taken = items.reduce(0) { $0 + $1.points }
+                    Text(taken > 0 ? String(localized: "Сняли \(taken) баллов — за что") : String(localized: "За что сняли"))
                         .font(.rounded(13, .semibold))
                         .foregroundStyle(Theme.textSecondary)
                     ForEach(items) { item in
                         penaltyRow(item)
-                    }
-                    if let score = record.score {
-                        let taken = items.reduce(0) { $0 + $1.points }
-                        // Показываем, только если сходится: неверная
-                        // арифметика на экране хуже её отсутствия.
-                        if taken > 0, 100 - taken == Int(score) {
-                            Text(verbatim: "100 − \(taken) = \(Int(score))")
-                                .font(.rounded(13, .semibold).monospacedDigit())
-                                .foregroundStyle(Theme.textTertiary)
-                                .frame(maxWidth: .infinity, alignment: .trailing)
-                        }
                     }
                 }
             }
@@ -652,30 +675,33 @@ struct TripDetailContent: View {
         return MetricsCard(items: items)
     }
 
-    /// Превышения — раскрыты, проезды без штрафа — свёрнуты одной строкой
-    /// (6.5): из двадцати камер поездки смотрят те две, что стоили баллов.
+    /// Превышения и «на грани» — раскрыты, остальные свёрнуты одной строкой
+    /// (6.5): из двадцати камер поездки смотрят те, что стоили баллов.
     /// Строки — в одной карточке, без своей тени у каждой.
     private var passesSection: some View {
         let passes = Array(record.passed.reversed())
-        let fined = passes.filter(Self.isFined)
-        let calm = passes.filter { !Self.isFined($0) }
+        let costly = passes.filter { $0.verdict == .over || $0.verdict == .edge }
+        let calm = passes.filter { $0.verdict == .clean || $0.verdict == .unknown }
+        let allClean = calm.allSatisfy { $0.verdict == .clean }
         return VStack(alignment: .leading, spacing: 10) {
             SectionHeader(String(localized: "Пройденные камеры"))
-            if !fined.isEmpty { passCard(fined) }
+            if !costly.isEmpty { passCard(costly) }
             if !calm.isEmpty {
-                // Без превышений в поездке свёрнутому списку нечего уступать.
-                if fined.isEmpty || calmExpanded {
+                // Без снятых баллов свёрнутому списку нечего уступать.
+                if costly.isEmpty || calmExpanded {
                     passCard(calm)
                 }
-                if !fined.isEmpty {
+                if !costly.isEmpty {
                     Button {
                         withMotion(Motion.standard) { calmExpanded.toggle() }
                     } label: {
                         HStack(spacing: 10) {
-                            Image(systemName: "checkmark.shield.fill")
-                                .foregroundStyle(Theme.success)
-                            Text(String(format: String(localized: "Без штрафа: %lld"), calm.count))
-                                .font(.rounded(14, .semibold))
+                            Image(systemName: allClean ? PassVerdict.clean.symbol : "list.bullet")
+                                .foregroundStyle(allClean ? PassVerdict.clean.tint : Theme.textSecondary)
+                            Text(allClean
+                                 ? String(format: String(localized: "В лимите: %lld"), calm.count)
+                                 : String(format: String(localized: "Остальные камеры: %lld"), calm.count))
+                                .font(.rounded(15, .semibold))
                                 .foregroundStyle(Theme.textPrimary)
                             Spacer(minLength: 0)
                             Image(systemName: "chevron.down")
@@ -842,8 +868,9 @@ struct TripShareCard: View {
             Text("\(score)")
                 .font(.numeralFree(24, .heavy))
                 .foregroundStyle(.white)
-            Text("рейтинг")
-                .font(.roundedFree(9, .semibold))
+            // «балл», не «рейтинг» (аудит 05.11, п. 4): рейтинг — у недели.
+            Text("балл")
+                .font(.roundedFree(11, .semibold))
                 .foregroundStyle(.white.opacity(0.75))
         }
         .frame(width: 64, height: 64)

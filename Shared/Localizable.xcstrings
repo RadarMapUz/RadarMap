@@ -34723,34 +34723,34 @@
         }
       }
     },
-    "Вид в поездке: 3D": {
+    "Объёмный вид в поездке": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Вид в поездке: 3D"
+            "value": "Объёмный вид в поездке"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Safardagi koʻrinish: 3D"
+            "value": "Safarda hajmli koʻrinish"
           }
         }
       }
     },
-    "Серый асфальт, маршрут во всю полосу и сужение к нужному ряду у поворота — на телефоне и в машине.": {
+    "Наклон, серый асфальт, маршрут во всю полосу и сужение к нужному ряду у поворота — на телефоне и в машине. Выключите — наклон вернётся прежний.": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Серый асфальт, маршрут во всю полосу и сужение к нужному ряду у поворота — на телефоне и в машине."
+            "value": "Наклон, серый асфальт, маршрут во всю полосу и сужение к нужному ряду у поворота — на телефоне и в машине. Выключите — наклон вернётся прежний."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kulrang asfalt, marshrut butun yoʻl boʻylab va burilishda kerakli qatorga torayadi — telefonda ham, mashinada ham."
+            "value": "Qiyalik, kulrang asfalt, marshrut butun yoʻl boʻylab va burilishda kerakli qatorga torayadi — telefonda ham, mashinada ham. Oʻchirsangiz — avvalgi qiyalik qaytadi."
           }
         }
       }

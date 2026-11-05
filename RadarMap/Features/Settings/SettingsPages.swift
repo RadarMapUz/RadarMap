@@ -350,11 +350,11 @@ struct TripSettingsPage: View {
             }
 
             Section {
-                Toggle("Вид в поездке: 3D", isOn: $settings.drive3D)
+                Toggle("Объёмный вид в поездке", isOn: $settings.drive3D)
             } header: {
                 Text("Карта")
             } footer: {
-                Text("Серый асфальт, маршрут во всю полосу и сужение к нужному ряду у поворота — на телефоне и в машине.")
+                Text("Наклон, серый асфальт, маршрут во всю полосу и сужение к нужному ряду у поворота — на телефоне и в машине. Выключите — наклон вернётся прежний.")
                     .fixedSize(horizontal: false, vertical: true)
             }
 

@@ -189,9 +189,10 @@ nonisolated enum CarPlayGuidanceMapping {
     /// Пора ли слать новую оценку в машину. Каждое обновление — сообщение на
     /// головное устройство: шлём, когда цифра на экране правда сменится
     /// (шаг 10 м вблизи, 5 % вдали) или раз в несколько секунд на стоянке.
-    static func shouldUpdate(previous: Double?, current: Double, elapsed: TimeInterval) -> Bool {
+    static func shouldUpdate(previous: Double?, current: Double, elapsed: TimeInterval,
+                             maxInterval: TimeInterval = AppConfig.carPlayEstimateMaxInterval) -> Bool {
         guard let previous else { return true }
-        if elapsed >= AppConfig.carPlayEstimateMaxInterval { return true }
+        if elapsed >= maxInterval { return true }
         return abs(previous - current) >= max(AppConfig.carPlayEstimateMinStepMeters, previous * 0.05)
     }
 
@@ -872,9 +873,12 @@ final class CarPlayGuidance {
             let camera = Self.cameraDetail()
             let cameraChanged = camera != sentCameraDetail
                 && now.timeIntervalSince(sentTripTime) >= AppConfig.carPlayCameraLabelUpdateSeconds
+            // Поездке хватает смены минуты прибытия и шага расстояния: стоя
+            // одинаковые оценки уходили в машину раз в 5 с (аудит 05.11, №12).
             if cameraChanged || arrival != sentTripArrival
                 || CarPlayGuidanceMapping.shouldUpdate(previous: sentTripDistance, current: distance,
-                                                       elapsed: now.timeIntervalSince(sentTripTime)) {
+                                                       elapsed: now.timeIntervalSince(sentTripTime),
+                                                       maxInterval: AppConfig.carPlayTripEstimateMaxInterval) {
                 sentTripDistance = distance
                 sentTripTime = now
                 sentTripArrival = arrival

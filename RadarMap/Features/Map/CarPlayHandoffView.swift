@@ -184,20 +184,23 @@ private struct HandoffCamera: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        if let camera = env.location.displayNearestCamera, let distance = env.location.displayDistanceToNearest,
-           distance <= AppConfig.carPlayNearestCameraMeters {
+        // Фаза — первой (аудит 05.11, №13): в кармане ближайшая камера и
+        // расстояние не читаются вовсе, и фикс этот лист не будит.
+        if scenePhase == .background {
+            Color.clear.frame(height: 0)
+        } else if let camera = env.location.displayNearestCamera,
+                  let distance = env.location.displayDistanceToNearest,
+                  distance <= AppConfig.carPlayNearestCameraMeters {
             row(symbol: camera.kind.symbolName,
                 tint: env.location.isApproachingCamera ? Theme.danger : Theme.Types.camera) {
-                if scenePhase != .background {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(String(format: String(localized: "%1$@ через %2$@"),
-                                    camera.kind.shortName, Formatting.distance(distance)))
-                            .foregroundStyle(Theme.textPrimary)
-                            .liveNumber()
-                        Text("Голос предупредит заранее")
-                            .font(.rounded(13))
-                            .foregroundStyle(Theme.textSecondary)
-                    }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(String(format: String(localized: "%1$@ через %2$@"),
+                                camera.kind.shortName, Formatting.distance(distance)))
+                        .foregroundStyle(Theme.textPrimary)
+                        .liveNumber()
+                    Text("Голос предупредит заранее")
+                        .font(.rounded(13))
+                        .foregroundStyle(Theme.textSecondary)
                 }
             }
         } else {

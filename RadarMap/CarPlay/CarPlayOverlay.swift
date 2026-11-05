@@ -47,7 +47,7 @@ struct CarPlayOverlay: View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 10) {
                 if showsManeuver, isGuiding, let step = env.route.nextStep {
-                    maneuverBanner(step: step, distance: env.route.nextStepDistance)
+                    maneuverBanner(step: step)
                 }
                 // Камеры наверху нет: до 11.10 тут стоял второй баннер той же
                 // камеры, что и в углу снизу, — одна цифра дважды на экране.
@@ -121,7 +121,7 @@ struct CarPlayOverlay: View {
             CarStreetSlot(model: street)
                 .frame(maxWidth: .infinity)
             if items.contains(.arrival) {
-                pill { etaCell }
+                pill { CarEtaCell() }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             } else if items.contains(.ghost), let ghost = env.commuteLive.display {
                 // Дорога на работу без маршрута (8.8.3б): прибытие по своим
@@ -129,57 +129,12 @@ struct CarPlayOverlay: View {
                 pill { ghostCell(ghost) }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            speedBadge
+            CarSpeedBadge()
         }
         // Левее кнопок карты: HUD уже отступил на безопасную зону и 14 pt,
         // добираем до ширины колонки кнопок и 8 pt воздуха.
         .padding(.trailing, max(0, buttonInsets.trailing + 8 - safe.trailing - 14))
         .frame(height: AppConfig.carPlayDockHeight, alignment: .bottom)
-    }
-
-    /// Скорость в круге и знак ограничения поверх его угла — сравнение
-    /// «еду / можно» одним взглядом, как на приборке. Кольцо круга греется
-    /// по превышению: цвет цифры — не единственный носитель.
-    private var speedBadge: some View {
-        let limit = env.settings.speedLimitsEnabled ? env.speedLimits.currentLimit : nil
-        return ZStack(alignment: .topTrailing) {
-            VStack(spacing: -2) {
-                Text("\(Int(env.location.speedKmh.rounded()))")
-                    .font(.numeral(30, .heavy).monospacedDigit())
-                    .foregroundStyle(speedColor)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .liveNumber()
-                Text("км/ч")
-                    .font(.rounded(12, .semibold))
-                    .foregroundStyle(Theme.textTertiary)
-            }
-            .frame(width: 78, height: 78)
-            // Тень у круга, а не у цифр: `.shadow` на составной вью размывал
-            // каждую цифру скорости отдельно и заново на каждом тике GPS.
-            .background {
-                Circle().fill(Theme.background.opacity(0.94))
-                    .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
-            }
-            .overlay(Circle().stroke(speedColor == Theme.textPrimary ? Theme.stroke : speedColor,
-                                     lineWidth: speedColor == Theme.textPrimary ? 1 : 3))
-            if let limit {
-                // Свечение — параметром знака (тень на его круге), не `.shadow`
-                // снаружи: та размывала круг, кольцо и каждую цифру отдельно
-                // и пересчитывалась над картой машины на каждом фиксе.
-                SpeedLimitSign(limit: limit, diameter: 42,
-                               isAssumed: env.speedLimits.isCurrentLimitAssumed,
-                               glow: isOver ? Theme.danger.opacity(0.8) : .black.opacity(0.3),
-                               glowRadius: isOver ? 9 : 4)
-                    .offset(x: 16, y: -12)
-                    .transition(.scale.combined(with: .opacity))
-            }
-        }
-        // Знак выступает за круг — место под него, чтобы капсула камеры не
-        // легла на знак.
-        .padding(.trailing, limit == nil ? 0 : 16)
-        .padding(.top, limit == nil ? 0 : 12)
-        .motionAnimation(Motion.standard, value: env.speedLimits.currentLimit)
     }
 
     /// Общая подложка капсулы низа: тёмное стекло темы, кромка, тень. Размер —
@@ -191,12 +146,10 @@ struct CarPlayOverlay: View {
             .fixedSize()
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            // Тень у подложки, а не у содержимого (см. круг скорости выше).
+            // Подъём без размытия (см. круг скорости выше); свечение — цветом.
             .background {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Theme.background.opacity(0.94))
-                    .shadow(color: (glow ?? .black).opacity(glow == nil ? 0.4 : 0.6),
-                            radius: glow == nil ? 10 : 16, y: 4)
+                CarPlayLift(shape: RoundedRectangle(cornerRadius: 22, style: .continuous),
+                            fill: Theme.background.opacity(0.94), glow: glow)
             }
             .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(edge, lineWidth: edgeWidth))
@@ -211,7 +164,7 @@ struct CarPlayOverlay: View {
 
     /// Значок карточки: квадрат со скруглением, глиф по центру. Один на все
     /// карточки низа — камера, состояние, прибытие читаются как семья.
-    private func glyphTile(_ symbol: String, fill: some ShapeStyle, glyph: Color) -> some View {
+    static func glyphTile(_ symbol: String, fill: some ShapeStyle, glyph: Color) -> some View {
         Image(systemName: symbol)
             .font(.rounded(17, .bold))
             .symbolRenderingMode(.hierarchical)
@@ -220,12 +173,171 @@ struct CarPlayOverlay: View {
             .background(fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
+    /// Призрак: «9:12» крупно, «Работа · +4 мин к обычному» мелко — те же
+    /// слова, что на панели поездки телефона (GhostText).
+    private func ghostCell(_ ghost: CommuteLiveService.Display) -> some View {
+        HStack(spacing: 10) {
+            Self.glyphTile(GhostText.symbol(ghost), fill: Theme.quietFill, glyph: Theme.accent)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(verbatim: Formatting.clock(ghost.arrival))
+                    .font(.numeral(24, .heavy).monospacedDigit())
+                    .foregroundStyle(Theme.textPrimary)
+                    .contentTransition(.numericText())
+                // Длинная подпись («Работа · на 12 мин позже 9:00 · пробка») не
+                // раздвигает док под кнопки карты: потолок ширины капсулы.
+                Text(verbatim: GhostText.caption(ghost))
+                    .font(.rounded(13, .semibold))
+                    .foregroundStyle(GhostText.tint(ghost))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: AppConfig.carPlayGhostCaptionMaxWidth, alignment: .leading)
+            }
+        }
+    }
+
+    // MARK: - Верхние баннеры
+
+    /// Манёвр: «через 300 м — направо на Амира Темура».
+    ///
+    /// Сама инструкция — первичный текст, дистанция — вторичный по цвету:
+    /// водитель ищет глазами «куда», а не «сколько». Раньше было наоборот —
+    /// имя улицы стояло самым мелким текстом баннера (12 pt), при том что
+    /// у Google и Apple именно оно доминирует.
+    /// Синяя карточка с белым текстом — та же, что на телефоне (вариант А,
+    /// 10.10): манёвр узнаётся одним видом на обоих экранах.
+    private func maneuverBanner(step: RouteStep) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: step.icon)
+                .font(.rounded(24, .bold))
+                .foregroundStyle(Theme.onAccentFill)
+                .frame(width: 50, height: 50)
+                .background(Theme.onAccentFill.opacity(0.18),
+                            in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                CarManeuverDistance()
+                Text(step.compactInstruction)
+                    .font(.rounded(16, .semibold))
+                    .foregroundStyle(Theme.onAccentFillSecondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: 360, alignment: .leading)
+        .layoutPriority(0)
+        // Подъём карточки без размытия (см. круг скорости).
+        .background {
+            CarPlayLift(shape: RoundedRectangle(cornerRadius: 18, style: .continuous), fill: Theme.accentFill)
+        }
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .stroke(Theme.onAccentFill.opacity(0.12), lineWidth: 1))
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+
+    // MARK: - Цвета и мелочи
+
+}
+
+/// Плашка улицы в доке машины: своя вью — имя читается только здесь.
+private struct CarStreetSlot: View {
+    let model: CarPlayMapModel?
+    var body: some View {
+        StreetNamePill(name: model?.streetName, large: true)
+            .padding(.bottom, 6)
+    }
+}
+
+// MARK: - Листья тика (аудит 05.11, №7)
+
+// Скорость, расстояние до манёвра и остаток пути меняются на каждом фиксе.
+// Пока их читало тело HUD, каждый фикс пересобирал весь HUD — док, капсулы,
+// баннер, плашку улицы и чипы состояний; теперь фикс трогает только эти листья.
+
+/// Скорость в круге со знаком ограничения.
+private struct CarSpeedBadge: View {
+    @Environment(AppEnvironment.self) private var env
+
+    /// Скорость в круге и знак ограничения поверх его угла — сравнение
+    /// «еду / можно» одним взглядом, как на приборке. Кольцо круга греется
+    /// по превышению: цвет цифры — не единственный носитель.
+    var body: some View {
+        let limit = env.settings.speedLimitsEnabled ? env.speedLimits.currentLimit : nil
+        return ZStack(alignment: .topTrailing) {
+            VStack(spacing: -2) {
+                Text("\(Int(env.location.speedKmh.rounded()))")
+                    .font(.numeral(30, .heavy).monospacedDigit())
+                    .foregroundStyle(speedColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .liveNumber()
+                Text("км/ч")
+                    .font(.rounded(12, .semibold))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            .frame(width: 78, height: 78)
+            // Подъём — без размытия (аудит 05.11, №4): тень CA без пути — проход
+            // вне экрана на каждом кадре карты машины под HUD (до 30 к/с).
+            // Сдвинутый тёмный диск и мягкое кольцо дают тот же «подъём».
+            .background { CarPlayLift(shape: Circle(), fill: Theme.background.opacity(0.94)) }
+            .overlay(Circle().stroke(speedColor == Theme.textPrimary ? Theme.stroke : speedColor,
+                                     lineWidth: speedColor == Theme.textPrimary ? 1 : 3))
+            if let limit {
+                // Свечение — кольцом без размытия (аудит 05.11, №4): тень на
+                // круге знака пересчитывалась на каждом кадре карты под ним.
+                SpeedLimitSign(limit: limit, diameter: 42,
+                               isAssumed: env.speedLimits.isCurrentLimitAssumed)
+                    .background {
+                        Circle()
+                            .stroke(isOver ? Theme.danger.opacity(0.75) : Color.black.opacity(0.28),
+                                    lineWidth: isOver ? 5 : 2)
+                            .padding(isOver ? -3 : -1)
+                    }
+                    .offset(x: 16, y: -12)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        // Знак выступает за круг — место под него, чтобы капсула камеры не
+        // легла на знак.
+        .padding(.trailing, limit == nil ? 0 : 16)
+        .padding(.top, limit == nil ? 0 : 12)
+        .motionAnimation(Motion.standard, value: env.speedLimits.currentLimit)
+    }
+
+    /// Превышение — то же правило, что у знака рядом, плитки и телефона
+    /// (`OverspeedThreshold.showsOverspeed`): до 22.10 цифра здесь красилась
+    /// по штрафной шкале, и при 64 в зоне 60 знак был красным, а цифра белой.
+    private var isOver: Bool {
+        OverspeedThreshold.showsOverspeed(
+            limitShown: env.settings.speedLimitsEnabled ? env.speedLimits.currentLimit : nil,
+            isOverspeeding: env.speedLimits.isOverspeeding)
+    }
+
+    /// Цвет скорости: обычный в рамках лимита, красный при превышении.
+    private var speedColor: Color { isOver ? Theme.danger : Theme.textPrimary }
+}
+
+/// Расстояние до манёвра в карточке манёвра.
+private struct CarManeuverDistance: View {
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        Text(Formatting.distance(env.route.nextStepDistance))
+            .font(.numeral(22, .heavy).monospacedDigit())
+            .foregroundStyle(Theme.onAccentFill)
+            .liveNumber()
+    }
+}
+
+/// Капсула прибытия: сколько ехать, во сколько и камеры впереди.
+private struct CarEtaCell: View {
+    @Environment(AppEnvironment.self) private var env
+
     /// Прибытие. Главное число — СКОЛЬКО ЕХАТЬ: это первый вопрос водителя, и
     /// именно его Apple с Google держат героем. Время прибытия и остаток —
     /// строкой ниже; камеры впереди — значком с числом.
-    private var etaCell: some View {
+    var body: some View {
         HStack(spacing: 10) {
-            glyphTile("flag.checkered", fill: Theme.quietFill, glyph: Theme.success)
+            CarPlayOverlay.glyphTile("flag.checkered", fill: Theme.quietFill, glyph: Theme.success)
             VStack(alignment: .leading, spacing: 1) {
                 Text(Formatting.duration(env.route.remainingTime))
                     .font(.numeral(24, .heavy).monospacedDigit())
@@ -246,28 +358,6 @@ struct CarPlayOverlay: View {
         }
     }
 
-    /// Призрак: «9:12» крупно, «Работа · +4 мин к обычному» мелко — те же
-    /// слова, что на панели поездки телефона (GhostText).
-    private func ghostCell(_ ghost: CommuteLiveService.Display) -> some View {
-        HStack(spacing: 10) {
-            glyphTile(GhostText.symbol(ghost), fill: Theme.quietFill, glyph: Theme.accent)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(verbatim: Formatting.clock(ghost.arrival))
-                    .font(.numeral(24, .heavy).monospacedDigit())
-                    .foregroundStyle(Theme.textPrimary)
-                    .contentTransition(.numericText())
-                // Длинная подпись («Работа · на 12 мин позже 9:00 · пробка») не
-                // раздвигает док под кнопки карты: потолок ширины капсулы.
-                Text(verbatim: GhostText.caption(ghost))
-                    .font(.rounded(13, .semibold))
-                    .foregroundStyle(GhostText.tint(ghost))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: AppConfig.carPlayGhostCaptionMaxWidth, alignment: .leading)
-            }
-        }
-    }
-
     /// Сколько камер маршрута ещё впереди (пройденные не считаем).
     private var camerasAhead: Int {
         let progress = env.route.progressAlong
@@ -277,70 +367,23 @@ struct CarPlayOverlay: View {
         return env.route.camerasOnRoute.count { $0.countsAsOurs && $0.distanceAlong > progress }
     }
 
-    // MARK: - Верхние баннеры
-
-    /// Манёвр: «через 300 м — направо на Амира Темура».
-    ///
-    /// Сама инструкция — первичный текст, дистанция — вторичный по цвету:
-    /// водитель ищет глазами «куда», а не «сколько». Раньше было наоборот —
-    /// имя улицы стояло самым мелким текстом баннера (12 pt), при том что
-    /// у Google и Apple именно оно доминирует.
-    /// Синяя карточка с белым текстом — та же, что на телефоне (вариант А,
-    /// 10.10): манёвр узнаётся одним видом на обоих экранах.
-    private func maneuverBanner(step: RouteStep, distance: CLLocationDistance) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: step.icon)
-                .font(.rounded(24, .bold))
-                .foregroundStyle(Theme.onAccentFill)
-                .frame(width: 50, height: 50)
-                .background(Theme.onAccentFill.opacity(0.18),
-                            in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(Formatting.distance(distance))
-                    .font(.numeral(22, .heavy).monospacedDigit())
-                    .foregroundStyle(Theme.onAccentFill)
-                    .liveNumber()
-                Text(step.compactInstruction)
-                    .font(.rounded(16, .semibold))
-                    .foregroundStyle(Theme.onAccentFillSecondary)
-                    .lineLimit(1)
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .frame(maxWidth: 360, alignment: .leading)
-        .layoutPriority(0)
-        // Тень у карточки, а не у расстояния до манёвра поверх неё.
-        .background {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Theme.accentFill)
-                .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
-        }
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .stroke(Theme.onAccentFill.opacity(0.12), lineWidth: 1))
-        .transition(.move(edge: .top).combined(with: .opacity))
-    }
-
-    // MARK: - Цвета и мелочи
-
-    /// Превышение — то же правило, что у знака рядом, плитки и телефона
-    /// (`OverspeedThreshold.showsOverspeed`): до 22.10 цифра здесь красилась
-    /// по штрафной шкале, и при 64 в зоне 60 знак был красным, а цифра белой.
-    private var isOver: Bool {
-        OverspeedThreshold.showsOverspeed(
-            limitShown: env.settings.speedLimitsEnabled ? env.speedLimits.currentLimit : nil,
-            isOverspeeding: env.speedLimits.isOverspeeding)
-    }
-
-    /// Цвет скорости: обычный в рамках лимита, красный при превышении.
-    private var speedColor: Color { isOver ? Theme.danger : Theme.textPrimary }
 }
 
-/// Плашка улицы в доке машины: своя вью — имя читается только здесь.
-private struct CarStreetSlot: View {
-    let model: CarPlayMapModel?
+/// Подъём панели над картой машины без размытия (аудит 05.11, №4): сдвинутая
+/// вниз тёмная копия фигуры и мягкая кромка вокруг. `.shadow` у фигуры без
+/// `shadowPath` — проход вне экрана на каждом кадре окна машины, а карта под
+/// HUD рисуется до 30 раз в секунду. Свечение (камера, превышение) — та же
+/// копия цветом свечения.
+private struct CarPlayLift<S: Shape>: View {
+    let shape: S
+    let fill: Color
+    var glow: Color? = nil
+
     var body: some View {
-        StreetNamePill(name: model?.streetName, large: true)
-            .padding(.bottom, 6)
+        ZStack {
+            shape.fill((glow ?? .black).opacity(glow == nil ? 0.32 : 0.55)).offset(y: 3)
+            shape.stroke((glow ?? .black).opacity(glow == nil ? 0.14 : 0.5), lineWidth: glow == nil ? 3 : 5)
+            shape.fill(fill)
+        }
     }
 }

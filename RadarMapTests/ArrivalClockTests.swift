@@ -55,22 +55,41 @@ final class ArrivalClockTests: XCTestCase {
         XCTAssertLessThan(AppConfig.arrivalClockCarMarginSeconds, 30)
     }
 
-    /// Машина прибавляет остаток к своим часам — и при отбрасывании секунд, и
-    /// при округлении выходит та же минута, что на телефоне; доля секунды
-    /// между расчётом и показом её не сдвигает.
+    /// Как машина печатает прибытие — каждое правило, которое снимок владельца
+    /// (05.11: телефон 22:02, машина 22:01 · 20 min) не опроверг: минута её
+    /// часов плюс минуты остатка (округлить или отбросить) и «сейчас + остаток»
+    /// с отбрасыванием секунд.
+    private func carClocks(now: Date, seconds: TimeInterval) -> [String: TimeInterval] {
+        let clock = floor(now.timeIntervalSince1970 / 60) * 60
+        return [
+            "минута часов + округлённые минуты": clock + (seconds / 60).rounded() * 60,
+            "минута часов + отброшенные минуты": clock + floor(seconds / 60) * 60,
+            "сейчас + остаток, без секунд": floor((now.timeIntervalSince1970 + seconds) / 60) * 60,
+        ]
+    }
+
+    /// Машина при любом своём правиле показывает ту же минуту, что телефон, —
+    /// на любой секунде «сейчас», а не только в первые 17 (до 48 тест знал
+    /// одно правило «сейчас + остаток», и машина показывала минутой раньше).
     func testCarSecondsLandOnTheSameMinuteEitherWay() {
         let arrival = minute.addingTimeInterval(25 * 60)
-        for lag in [0.0, 0.2, 0.9, 3] {
-            for fraction in [0.0, 0.37, 0.999, 17.4] {
-                let now = minute.addingTimeInterval(fraction)
-                let seen = now.addingTimeInterval(ArrivalClock.secondsUntil(arrival, now: now) + lag)
-                XCTAssertEqual(floor(seen.timeIntervalSince1970 / 60) * 60, arrival.timeIntervalSince1970,
-                               "отбрасывание: сейчас +\(fraction) с, задержка \(lag) с")
-                XCTAssertEqual(ArrivalClock.rounded(seen), arrival, "округление")
+        for fraction in stride(from: 0.0, to: 59, by: 0.7) {
+            let now = minute.addingTimeInterval(fraction)
+            let seconds = ArrivalClock.secondsUntil(arrival, now: now)
+            for (rule, seen) in carClocks(now: now, seconds: seconds) {
+                XCTAssertEqual(seen, arrival.timeIntervalSince1970, "\(rule): сейчас +\(fraction) с")
             }
+            XCTAssertEqual(ArrivalClock.minutesUntil(arrival, now: now), 25, "плитка: 25 мин, как «25 min» машины")
         }
+        // Старое правило «до минуты + 5 с» на снимке владельца: 21:41:40, 22:02.
+        let photo = minute.addingTimeInterval(40)
+        let shown = minute.addingTimeInterval(21 * 60)
+        let old = shown.timeIntervalSince(photo) + 5
+        XCTAssertNotEqual(carClocks(now: photo, seconds: old)["минута часов + отброшенные минуты"],
+                          shown.timeIntervalSince1970, "так машина и показывала минутой раньше")
         XCTAssertEqual(ArrivalClock.secondsUntil(minute, now: minute.addingTimeInterval(90)),
                        AppConfig.arrivalClockCarMarginSeconds, "минута в прошлом — не отрицательный остаток")
+        XCTAssertEqual(ArrivalClock.minutesUntil(minute, now: minute.addingTimeInterval(90)), 0)
     }
 
     /// Варианты маршрута в машине (выбор до «Поехали») — то же правило минуты.
@@ -173,9 +192,10 @@ final class ArrivalClockFlowTests: XCTestCase {
         // CarPlay: машина прибавляет остаток к своим часам.
         let estimates = CarPlayGuidance.tripEstimates(meters: route.remainingDistance,
                                                       seconds: route.arrivalSeconds(now: now))
-        let car = now.addingTimeInterval(estimates.timeRemaining)
-        XCTAssertEqual(floor(car.timeIntervalSince1970 / 60) * 60, arrival.timeIntervalSince1970,
-                       "машина — та же минута", file: file, line: line)
+        for (rule, car) in carClocks(now: now, seconds: estimates.timeRemaining) {
+            XCTAssertEqual(car, arrival.timeIntervalSince1970, "машина — та же минута (\(rule))",
+                           file: file, line: line)
+        }
         // «Поделиться прибытием» — тело запроса.
         let share = EtaShare.payload(write: .secret(key), arrival: arrival,
                                      remainingMeters: route.remainingDistance, status: .driving)

@@ -48,14 +48,30 @@ nonisolated enum ArrivalClock {
     }
 
     /// Остаток для того, кто сам прибавляет его к своим часам (CarPlay
-    /// `CPTravelEstimates`: машина показывает прибытие = её «сейчас» +
-    /// остаток). До показанной минуты — плюс запас `arrivalClockCarMarginSeconds`:
-    /// ровно минута, посчитанная машиной на долю секунды позже, при
-    /// отбрасывании секунд дала бы предыдущую минуту; с запасом меньше
-    /// полуминуты и округление, и отбрасывание дают ту же.
+    /// `CPTravelEstimates`). Машина берёт минуту на СВОИХ часах и прибавляет
+    /// остаток в целых минутах: снимок владельца 05.11 — телефон 22:02, а
+    /// машина «22:01 · 20 min» при остатке «до 22:02:05 от 21:41:ss», то есть
+    /// не «сейчас + остаток» (это дало бы 22:02). Поэтому остаток — от
+    /// минуты на часах до показанной минуты, ровно целые минуты, плюс запас
+    /// `arrivalClockCarMarginSeconds` (секунда): и «минута часов + минуты
+    /// остатка» (округлить или отбросить), и «сейчас + остаток» с отбрасыванием
+    /// секунд дают ту же минуту, что на телефоне, а «N min» в машине — ту же
+    /// разность, что у плитки (`minutesUntil`).
     static func secondsUntil(_ arrival: Date, now: Date,
                              margin: TimeInterval = AppConfig.arrivalClockCarMarginSeconds) -> TimeInterval {
-        max(0, arrival.timeIntervalSince(now)) + margin
+        max(0, arrival.timeIntervalSince(clockMinute(now))) + margin
+    }
+
+    /// Минута на часах: «сейчас» без секунд.
+    static func clockMinute(_ now: Date) -> Date {
+        Date(timeIntervalSince1970: floor(now.timeIntervalSince1970 / 60) * 60)
+    }
+
+    /// Сколько минут показать рядом с прибытием, чтобы сходилось с часами:
+    /// «21:41 → 22:02 — 21 мин» (плитка машины рядом с системной полосой
+    /// «22:02 · 21 min»). Сырые минуты остатка давали «20 мин 22:02».
+    static func minutesUntil(_ arrival: Date, now: Date) -> Int {
+        max(0, Int((arrival.timeIntervalSince(clockMinute(now)) / 60).rounded()))
     }
 
     /// Остаток для машины по времени варианта, которого на телефоне ещё нет

@@ -13,6 +13,9 @@
 //  (make_style.py --app, D3_FILES) кладётся вместо разницы поездки или
 //  машины тем же механизмом (EngineDriveAsphalt), украшения гасятся
 //  видимостью слоёв. Горячий телефон: без сужения, без домов, теней и дымки.
+//  Плитка главного экрана машины (48) — тот же облик со своим потолком
+//  наклона, бюджетом пересчётов и ступенями TileLevel; ленту второй карты
+//  она берёт готовой (EngineRibbonShare), а не считает заново.
 //
 //  Красный — только камера; пробки и Theme.route — прежние по смыслу.
 //  Только картинка: оповещения, гейты и голос этого не читают.
@@ -26,7 +29,8 @@ import Foundation
 
 nonisolated enum Drive3D {
 
-    /// Где карта: телефон в поездке, экран машины, плитка панели (упрощённо).
+    /// Где карта: телефон в поездке, экран машины, плитка панели (с 48 — тот
+    /// же облик, по своему бюджету и ступеням `TileLevel`).
     /// Приборка — карта поездки, как была.
     enum Surface: Equatable, Sendable {
         case phone, car, dashboard
@@ -75,19 +79,90 @@ nonisolated enum Drive3D {
         surface != nil && driving && modernStyle
     }
 
-    /// Сужение к полосам у манёвра: не на плитке (мала, полос не видно) и не
-    /// на горячем телефоне (без пересчётов к манёвру — только заливка).
-    static func narrows(surface: Surface, hot: Bool) -> Bool {
-        surface != .dashboard && !hot
-    }
+    /// Сужение к полосам у манёвра — везде, кроме горячего телефона (без
+    /// пересчётов к манёвру — только заливка). Плитка (48) сужается тоже: на
+    /// 375 точках при 45° полоса у манёвра в 110 м — 7,9 точки, три полосы →
+    /// одна читаются; на тёплом телефоне плитка рисует с `.reduced`
+    /// (`tilePerformance`) и сужения нет.
+    static func narrows(surface: Surface, hot: Bool) -> Bool { !hot }
 
-    /// Лента вообще: на плитке её нет — там палитра 3D и прежняя линия
-    /// маршрута (упрощённо: ни проб тайла, ни расчёта).
-    static func ribbon(surface: Surface) -> Bool { surface != .dashboard }
+    /// Лента вообще: везде, кроме плитки на ступени `.flat` (горячий телефон) —
+    /// там палитра 3D и прежняя линия маршрута, ни проб тайла, ни расчёта.
+    static func ribbon(surface: Surface, tile: TileLevel = .full) -> Bool {
+        surface != .dashboard || tile != .flat
+    }
 
     /// Шевроны внутри ленты — не на плитке и не на горячем телефоне (лишняя
     /// раскладка символов, как у шевронов пробок).
     static func chevrons(surface: Surface, hot: Bool = false) -> Bool { surface != .dashboard && !hot }
+
+    // MARK: - Плитка главного экрана машины (48)
+
+    /// Ступень плитки. Плитка — вторая карта рядом с музыкой и смотрится
+    /// мельком, поэтому упрощается ПЕРВОЙ, раньше экрана машины:
+    /// • `full` — наклон до carPlayDashboard3DMaxPitch, низкие дома, лента с сужением;
+    /// • `lite` — телефон тёплый (`.fair`) или режим энергосбережения: карта
+    ///   рисует как горячая (`.reduced`: плоские дома, реже кадры, без сужения),
+    ///   наклон и лента остаются; экран машины в это время — полный;
+    /// • `flat` — горячий телефон (`.serious` и выше): плоско, без ленты — как
+    ///   экран машины на горячем, только ещё и без ленты.
+    enum TileLevel: Equatable, Sendable { case full, lite, flat }
+
+    static func tileLevel(performance: PerformanceMode, warm: Bool, lowPower: Bool) -> TileLevel {
+        if performance != .full { return .flat }
+        return warm || lowPower ? .lite : .full
+    }
+
+    /// С какой ступенью рисует карта плитки.
+    static func tilePerformance(_ level: TileLevel, mode: PerformanceMode) -> PerformanceMode {
+        level == .lite && mode == .full ? .reduced : mode
+    }
+
+    /// Бюджет пересчётов ленты: экран машины и телефон — `.full`, плитка —
+    /// `.tile` (реже по пути, повторы с 3 с, срез крупнее, проб меньше).
+    struct Budget: Equatable, Sendable {
+        var recomputeMeters: Double
+        var tailMarginMeters: Double
+        var retrySeconds: Double
+        /// Шаг среза под машиной — не меньше стольких секунд пути.
+        var cutSeconds: Double
+        var probeLimit: Int
+
+        static let full = Budget(recomputeMeters: AppConfig.drive3DRecomputeMeters,
+                                 tailMarginMeters: AppConfig.drive3DTailMarginMeters,
+                                 retrySeconds: AppConfig.drive3DRetrySeconds,
+                                 cutSeconds: AppConfig.drive3DCutStepSeconds,
+                                 probeLimit: AppConfig.drive3DProbeLimit)
+        /// Экран машины: как телефон, но срез не чаще секунды пути (аудит
+        /// 05.11, №3): каждая смена фильтра — перераскладка тайлов источника
+        /// ленты на воркерах, а под значком и кольцом компаса шаг не виден.
+        static let car = Budget(recomputeMeters: AppConfig.drive3DRecomputeMeters,
+                                tailMarginMeters: AppConfig.drive3DTailMarginMeters,
+                                retrySeconds: AppConfig.drive3DRetrySeconds,
+                                cutSeconds: AppConfig.drive3DCarCutStepSeconds,
+                                probeLimit: AppConfig.drive3DProbeLimit)
+        static let tile = Budget(recomputeMeters: AppConfig.drive3DTileRecomputeMeters,
+                                 tailMarginMeters: AppConfig.drive3DTileTailMarginMeters,
+                                 retrySeconds: AppConfig.drive3DTileRetrySeconds,
+                                 cutSeconds: AppConfig.drive3DCarCutStepSeconds,
+                                 probeLimit: AppConfig.drive3DTileProbeLimit)
+    }
+
+    static func budget(surface: Surface) -> Budget {
+        switch surface {
+        case .phone: .full
+        case .car: .car
+        case .dashboard: .tile
+        }
+    }
+
+    /// Кто считает общую ленту (EngineRibbonShare). Телефон и экран машины —
+    /// всегда; плитка — только если их карта не применялась `yield` секунд:
+    /// иначе она берёт их готовый расчёт, а не щупает тайлы второй раз.
+    static func computes(surface: Surface, sincePrimary: TimeInterval,
+                         yield: TimeInterval = AppConfig.drive3DShareYieldSeconds) -> Bool {
+        surface != .dashboard || sincePrimary >= yield
+    }
 
     /// Умолчание настройки по классу телефона: на A12/A13 (iPhone11,x и
     /// iPhone12,x — XS/XR, 11, SE 2) — выключено, новее и симулятор — включено.
@@ -176,23 +251,23 @@ nonisolated enum Drive3D {
     /// перестроения перекраивал бы его под машиной. Неполный расчёт —
     /// повтор не чаще drive3DRetrySeconds.
     static func needsRecompute(last: Plan?, route: Int, car: Double, maneuver: Double?, window: Double,
-                               narrowing: Bool, sinceAttempt: TimeInterval = .infinity) -> Bool {
+                               narrowing: Bool, sinceAttempt: TimeInterval = .infinity,
+                               budget: Budget = .full) -> Bool {
         guard let last else { return true }
         if last.route != route || last.narrowing != narrowing || last.maneuver != maneuver { return true }
         if let stalled = last.stalledEnd, car < stalled + AppConfig.drive3DStallPassMeters { return false }
-        let retry = sinceAttempt >= retryDelay(attempts: last.attempts)
+        let retry = sinceAttempt >= retryDelay(attempts: last.attempts, base: budget.retrySeconds)
         if !last.complete { return retry }
-        if let end = last.verifiedEnd, car >= end - AppConfig.drive3DTailMarginMeters { return retry }
+        if let end = last.verifiedEnd, car >= end - budget.tailMarginMeters { return retry }
         if last.inWindow, let maneuver, car < maneuver { return false }
-        if car < last.from - 1 || car - last.from >= AppConfig.drive3DRecomputeMeters { return true }
+        if car < last.from - 1 || car - last.from >= budget.recomputeMeters { return true }
         if let maneuver, !last.inWindow, car >= maneuver - window { return true }
         return false
     }
 
     /// Задержка повтора: 1,5 с, удвоение на каждую неудачу, потолок 12 с.
-    static func retryDelay(attempts: Int) -> TimeInterval {
-        min(AppConfig.drive3DRetryMaxSeconds,
-            AppConfig.drive3DRetrySeconds * pow(2, Double(max(0, attempts - 1))))
+    static func retryDelay(attempts: Int, base: TimeInterval = AppConfig.drive3DRetrySeconds) -> TimeInterval {
+        min(AppConfig.drive3DRetryMaxSeconds, base * pow(2, Double(max(0, attempts - 1))))
     }
 
     /// Что делать с пришедшим расчётом. Готов и прощупал дальше прежнего (на
@@ -202,13 +277,14 @@ nonisolated enum Drive3D {
     /// Не готов без прежней ленты — неполный, повтор с удвоением задержки.
     enum Settle: Equatable, Sendable { case write, stalled, incomplete }
 
-    static func settle(_ plan: inout Plan, ready: Bool, end: Double, previousEnd: Double?, car: Double) -> Settle {
+    static func settle(_ plan: inout Plan, ready: Bool, end: Double, previousEnd: Double?, car: Double,
+                       tailMargin: Double = AppConfig.drive3DTailMarginMeters) -> Settle {
         if let previousEnd, !ready || end < previousEnd + AppConfig.drive3DStationMeters {
             plan.complete = true
             plan.verifiedEnd = previousEnd
             // Застой — только у самого конца: вдали (пересчёт раз в 250 м)
             // прежняя лента просто остаётся, а у конца её ещё попробуют нарастить.
-            if car >= previousEnd - AppConfig.drive3DTailMarginMeters { plan.stalledEnd = previousEnd }
+            if car >= previousEnd - tailMargin { plan.stalledEnd = previousEnd }
             return .stalled
         }
         guard ready else { plan.complete = false; return .incomplete }
@@ -222,10 +298,11 @@ nonisolated enum Drive3D {
         maneuver.map { car >= $0 - window } ?? false
     }
 
-    /// Шаг среза под машиной, м: не мельче 8 м и полсекунды пути, на горячем
-    /// телефоне — втрое крупнее.
-    static func cutStep(speedMps: Double, hot: Bool) -> Double {
-        let base = max(AppConfig.drive3DCutStepMeters, max(0, speedMps) * AppConfig.drive3DCutStepSeconds)
+    /// Шаг среза под машиной, м: не мельче 8 м и `seconds` пути (телефон —
+    /// полсекунды, машина и плитка — секунда, Budget), на горячем — втрое крупнее.
+    static func cutStep(speedMps: Double, hot: Bool,
+                        seconds: Double = AppConfig.drive3DCutStepSeconds) -> Double {
+        let base = max(AppConfig.drive3DCutStepMeters, max(0, speedMps) * seconds)
         return hot ? base * AppConfig.drive3DCutHotFactor : base
     }
 

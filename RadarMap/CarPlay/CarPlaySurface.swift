@@ -7,7 +7,8 @@
 //  • Экран машины (`car`) — навигатор: наклон по скорости, жесты шаблона,
 //    дома по настройке, полная частота кадров у камеры и манёвра.
 //  • Плитка главного экрана (`dashboard`) — только взгляд: без жестов, «я»
-//    по своей доле высоты.
+//    по своей доле высоты; во «Вождении 3D» — тот же облик, что у машины, с
+//    потолком 45° и упрощением первой на тёплом телефоне (Drive3D.TileLevel).
 //  • Приборка (`cluster`, 25.H2) — карта под глазами водителя, в окне
 //    кластера рядом со спидометром машины. Она идёт ВТОРОЙ картой на движке
 //    одновременно с экраном машины или плиткой (телефонная карта при
@@ -25,7 +26,7 @@ import Foundation
 nonisolated enum CarPlaySurface: Equatable, Sendable {
     case car, dashboard, cluster
 
-    /// Метка строки здоровья карты в журнале (раз в 10 с, Log.carplay).
+    /// Метка строки здоровья карты в журнале (engineHealthLogSeconds, Log.carplay).
     var healthTag: String {
         switch self {
         case .car:       "машина"
@@ -45,17 +46,28 @@ nonisolated enum CarPlaySurface: Equatable, Sendable {
         self != .cluster && performance == .full
     }
 
-    /// Дома (тумблер «Дома»): на приборке и плитке — никогда (40J: на малой
-    /// плитке объём закрывал дорогу).
-    func houses(setting: Bool) -> Bool {
-        self == .car && setting
+    /// Дома (тумблер «Дома»): на приборке — никогда; на плитке — только во
+    /// «Вождении 3D» (48): там дома низкие (×0,45, ≤ 15 м) и при 45° дорогу не
+    /// закрывают; полная высота при 58° закрывала (40J). Тёплый телефон гасит
+    /// их видимостью (Drive3D.TileLevel), а не этим флагом: его смена —
+    /// перезагрузка стиля.
+    func houses(setting: Bool, drive3D: Bool = false) -> Bool {
+        switch self {
+        case .car: setting
+        case .dashboard: setting && drive3D
+        case .cluster: false
+        }
     }
 
-    /// Потолок наклона: плитка — не круче `carPlayDashboardMaxPitch` (40J),
+    /// Потолок наклона: плитка — `carPlayDashboard3DMaxPitch` во «Вождении 3D»
+    /// (48, почему 45° — там же), иначе `carPlayDashboardMaxPitch` (40J);
     /// остальные — потолок движка.
-    var maxPitch: Double {
-        self == .dashboard ? AppConfig.carPlayDashboardMaxPitch : AppConfig.engineMapPitchDegrees
+    func maxPitch(drive3D: Bool) -> Double {
+        guard self == .dashboard else { return AppConfig.engineMapPitchDegrees }
+        return drive3D ? AppConfig.carPlayDashboard3DMaxPitch : AppConfig.carPlayDashboardMaxPitch
     }
+
+    var maxPitch: Double { maxPitch(drive3D: false) }
 
     /// Малая частота кадров (как под полноэкранной тревогой, engineHotFPS):
     /// приборку читают боковым зрением, плавность там не видна, а кадры —

@@ -81,7 +81,8 @@ final class EngineCarDecor {
         } ?? .infinity
         guard let limit, let meters = badgeTracker.meters(for: limit, distance: distance) else {
             _ = badgeTracker.meters(for: nil, distance: 0)
-            badge?.isHidden = true
+            // Сеттер isHidden не бесплатен, а без знака это каждый кадр.
+            if badge?.isHidden == false { badge?.isHidden = true }
             badgeShown = nil
             return
         }
@@ -93,12 +94,16 @@ final class EngineCarDecor {
             badge.accessibilityLabel = String(format: String(localized: "Ограничение %1$lld через %2$@"),
                                               limit.limit, Formatting.distance(Double(meters)))
         }
-        badge.isHidden = false
+        if badge.isHidden { badge.isHidden = false }
         let half = badge.bounds.width / 2
         let x = max(half + 8, point.x - AppConfig.limitBadgeGapPoints - half)
+        let target = CGPoint(x: x, y: point.y)
+        let now = badge.layer.position
+        // Позиция — только при сдвиге от четверти точки, как у стрелки.
+        guard abs(now.x - target.x) >= 0.25 || abs(now.y - target.y) >= 0.25 else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        badge.layer.position = CGPoint(x: x, y: point.y)
+        badge.layer.position = target
         CATransaction.commit()
     }
 

@@ -105,6 +105,10 @@ nonisolated enum LanePath {
         /// Метры маршрута у каждой точки — в той же мере, что прогресс и
         /// манёвры (RouteService.cumulative); nil — своя оценка.
         var cumulative: [Double]? = nil
+        /// Начало перестроения из расчёта на входе в окно подъезда (м): при
+        /// торможении к повороту окно и длина перестроения сжимаются, и новое
+        /// начало уехало бы вперёд — под машиной лента «разузилась» бы.
+        var shiftStart: Double? = nil
     }
 
     // MARK: - Выход
@@ -170,6 +174,8 @@ nonisolated enum LanePath {
         /// drive3DGapMeters подряд — там карта рисует линию, а не ленту
         /// (неизвестная эстакада не уходит под настил, встречка не закрашивается).
         let verifiedEnd: Double
+        /// Где началось перестроение (м); nil — сужения нет.
+        var shiftStart: Double? = nil
 
         var isEmpty: Bool { along.count < 2 }
 
@@ -313,7 +319,8 @@ nonisolated enum LanePath {
                       narrowing: plan.kind,
                       narrowed: narrowedLo <= narrowedHi ? narrowedLo...narrowedHi : nil,
                       row: plan.row, matchedShare: verified.map { Double(matched) / Double($0 + 1) } ?? 0,
-                      verifiedEnd: verified.map { along[$0] } ?? along[0])
+                      verifiedEnd: verified.map { along[$0] } ?? along[0],
+                      shiftStart: plan.kind == .none ? nil : plan.start)
     }
 
     // MARK: - Куски для карты
@@ -766,7 +773,8 @@ nonisolated enum LanePath {
         guard move > 0.3 else { return .none }
         let lanes = max(1, Int((move / max(1, laneWidth)).rounded()))
         let perLane = max(AppConfig.drive3DShiftMeters, input.speedMps * AppConfig.drive3DShiftSeconds)
-        let natural = max(plan.end - perLane * Double(lanes), maneuver.along - input.window)
+        let natural = input.shiftStart.map { min($0, plan.end - AppConfig.drive3DShiftMinMeters) }
+            ?? max(plan.end - perLane * Double(lanes), maneuver.along - input.window)
         var start = natural
         // Машина ещё не дошла до начала, но близко — перестроение не под ней.
         // Уже за началом (пересчёт посреди перестроения) — начало прежнее:

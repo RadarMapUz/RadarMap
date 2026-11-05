@@ -202,6 +202,34 @@ final class LanePathTests: XCTestCase {
         XCTAssertEqual(offsets(entry, at: 700).1, 5.25, accuracy: 0.05, "до перестроения — вся лента")
     }
 
+    /// Вход в окно на 72 км/ч, пересчёт на 30 км/ч (торможение к повороту):
+    /// с началом перестроения из входа сужение на том же месте.
+    func testBrakingKeepsTheShiftWhereItStarted() throws {
+        func input(car: Double, speed: Double, window: Double, shift: Double?) -> LanePath.Input {
+            var input = LanePath.Input(
+                route: [c(0, 0), c(0, 1000), c(-300, 1000)], from: car, length: 1500, car: car, speedMps: speed,
+                window: window,
+                roads: [LanePath.Road(points: [c(0, -50), c(0, 980)], width: 10.5, oneway: true, bridge: false),
+                        LanePath.Road(points: [c(-20, 1000), c(-400, 1000)], width: 10.5, oneway: true, bridge: false)],
+                arrows: [(-3.5, true), (0, false), (3.5, false)].map {
+                    LanePath.Arrow(coordinate: c($0.0, 960), bearing: 0, width: 3.5, ours: $0.1)
+                },
+                maneuver: LanePath.Maneuver(along: 1000, edge: .left, row: true), narrowing: true)
+            input.shiftStart = shift
+            return input
+        }
+        let entry = LanePath.build(input(car: 700, speed: 20, window: 300, shift: nil))
+        let start = try XCTUnwrap(entry.shiftStart)
+        let braking = LanePath.build(input(car: start + 20, speed: 30 / 3.6, window: 150, shift: start))
+        XCTAssertEqual(braking.shiftStart ?? 0, start, accuracy: 0.01)
+        for s in stride(from: start + 20, through: 1000, by: 5) {
+            XCTAssertEqual(offsets(braking, at: s).1, offsets(entry, at: s).1, accuracy: 0.3, "край у \(s) м")
+        }
+        // Без памяти начала торможение сдвинуло бы его вперёд — под машиной шире.
+        let forgot = LanePath.build(input(car: start + 20, speed: 30 / 3.6, window: 150, shift: nil))
+        XCTAssertGreaterThan(offsets(forgot, at: start + 22).1, offsets(entry, at: start + 22).1 + 0.2)
+    }
+
     /// Налево с односторонней на двустороннюю: за точкой манёвра лента не
     /// заходит левее осевой новой улицы (на встречку).
     func testTargetStaysOnOurSideAfterTheTurn() {

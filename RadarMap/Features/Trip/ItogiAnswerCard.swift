@@ -97,7 +97,7 @@ struct ItogiAnswerCard: View {
             .accessibilityHint(Text("За что сняли баллы"))
             Divider().overlay(Theme.stroke)
         case .tooFew:
-            ItogiCardRow(symbol: "gauge.with.dots.needle.33percent", tint: Theme.textSecondary,
+            ItogiCardRow(symbol: Icon.ratingPending, tint: Theme.textSecondary,
                          title: Self.tooFewTitle(period),
                          caption: String(format: String(localized: "Рейтинг появится после %1$lld поездок и %2$@"),
                                          AppConfig.itogiRatingMinTrips,
@@ -272,6 +272,12 @@ enum ItogiWords {
         case .few:  return String(localized: "превышения")
         case .many: return String(localized: "превышений")
         }
+    }
+
+    /// «по 1 проезду», «по 14 проездам».
+    static func passesDative(_ count: Int) -> String {
+        "\(count)\u{00A0}" + (PluralRu.form(count) == .one ? String(localized: "проезду")
+                                                          : String(localized: "проездам"))
     }
 
     /// После «из»: «из 1 проезда», «из 14 проездов».

@@ -233,14 +233,8 @@ struct EngineMapView: UIViewRepresentable {
     func makeUIView(context: Context) -> MLNMapView {
         // Сторож тайлов — ДО первой карты: движок начинает качать сразу, и
         // поставить проверку после значило бы пропустить первые тайлы без неё.
+        // Там же — потолок кэша, один раз за процесс (EngineTileGuard.configureCacheOnce).
         EngineTileGuard.install()
-        // Кэш тайлов — это ОФЛАЙН, а не ускорение. Связи в поездке по стране
-        // нет часами, а карта обязана рисоваться: движок держит уже виденные
-        // тайлы в своей базе и берёт их оттуда, пока они не протухли. Двести
-        // мегабайт — примерно область, по которой человек ездит каждый день;
-        // полноценные offline-паки на регион — отдельная работа.
-        MLNOfflineStorage.shared.setMaximumAmbientCacheSize(
-            UInt(AppConfig.engineMapCacheBytes)) { _ in }
         let view = EngineNativeMapView(frame: .zero)
         view.isUserInteractionEnabled = interactive
         // Осмотр не меняет GPS и маршрут; вернуться к слежению можно кнопкой.

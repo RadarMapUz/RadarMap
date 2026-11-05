@@ -255,16 +255,45 @@ nonisolated final class EngineTileGuard: URLProtocol, @unchecked Sendable {
         return lock.withLock { $0?.matches(tileKey: key, digest: digest) ?? false }
     }
 
-    /// Поставить сторожа на сессию движка. Зовётся один раз, до первой карты.
+    /// Поставить сторожа на сессию движка и потолок кэша тайлов. Зовётся до
+    /// каждой карты и снимка; работа — один раз за процесс.
     @MainActor
     static func install() {
         let configuration = MLNNetworkConfiguration.sharedManager.sessionConfiguration
             ?? URLSessionConfiguration.default
         var classes = configuration.protocolClasses ?? []
-        guard !classes.contains(where: { $0 == EngineTileGuard.self }) else { return }
-        classes.insert(EngineTileGuard.self, at: 0)
-        configuration.protocolClasses = classes
-        MLNNetworkConfiguration.sharedManager.sessionConfiguration = configuration
+        if !classes.contains(where: { $0 == EngineTileGuard.self }) {
+            classes.insert(EngineTileGuard.self, at: 0)
+            configuration.protocolClasses = classes
+            MLNNetworkConfiguration.sharedManager.sessionConfiguration = configuration
+        }
+        configureCacheOnce()
+    }
+
+    @MainActor private static var cacheConfigured = false
+
+    /// Потолок кэша тайлов — ОДИН раз за процесс, до первой карты и первого
+    /// снимка (снимок раньше карты иначе работал бы с потолком mbgl по
+    /// умолчанию). До 48 он ставился в каждом makeUIView, а карты плитки и
+    /// экрана машины пересоздаются на каждом переключении: задание потоку
+    /// базы MapLibre (`DatabaseFileSource`) считает размер базы и у потолка
+    /// вытесняет и чистит файл. Зависание 0x8BADF00D 2.2.43 — взаимная
+    /// блокировка: главный поток в `applicationDidEnterBackground` ждёт паузы
+    /// потока базы (`future::get`), а поток базы стоит в `dispatch_sync` на
+    /// главную очередь — вероятнее всего, завершение этого же вызова.
+    /// Значение — константа, повтор ничего не меняет.
+    @MainActor
+    static func configureCacheOnce() {
+        guard !cacheConfigured else { return }
+        cacheConfigured = true
+        // Кэш тайлов — это ОФЛАЙН, а не ускорение: связи в поездке по стране
+        // нет часами, а карта обязана рисоваться из виденных тайлов. Двести
+        // мегабайт — примерно область, по которой человек ездит каждый день.
+        MLNOfflineStorage.shared.setMaximumAmbientCacheSize(UInt(AppConfig.engineMapCacheBytes)) { error in
+            if let error {
+                Log.network.error("MapLibre: потолок кэша не поставлен: \(error.localizedDescription, privacy: .public)")
+            }
+        }
     }
 
     // MARK: - URLProtocol

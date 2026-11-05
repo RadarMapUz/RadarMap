@@ -162,8 +162,8 @@ extension MapScreen {
                             if !env.location.isTripActive { toggleTrip() }
                         }
                     case .destinations:
-                        // Куда поедем — строкой в доке (dockShowsSuggestion) и
-                        // только когда есть уверенная догадка.
+                        // Куда поедем — чипами дока (IdleDock), синим — при
+                        // уверенной догадке.
                         // Разовое «Карта без интернета?» — до первого ответа.
                         // Где оставили машину — капсулой, пока отошли от неё.
                         //
@@ -255,13 +255,6 @@ extension MapScreen {
                           isBuilding: env.route.isBuilding,
                           isProbablyDriving: env.location.isProbablyDriving,
                           showsQuickDestinations: mode.showsQuickDestinations)
-    }
-
-    /// Строка «Домой» в доке — там же, где раньше стояла карточка: в покое,
-    /// без вопроса «радар ещё стоял?» и не под карточкой итога поездки
-    /// (четыре слоя внизу на SE — проблема 2 аудита этапа 31).
-    var dockShowsSuggestion: Bool {
-        bottomHint == .destinations && map.roadPrompt == nil && tripEndRecord == nil
     }
 
     var bottomLayer: some View {

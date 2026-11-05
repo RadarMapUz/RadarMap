@@ -184,18 +184,12 @@ struct DesignCatalogPage: View {
                     CircleControlFace(systemName: "ellipsis")
                 }
             }
-            CatalogItem("Док действий", when: "Нижняя панель простого экрана: liftedBackground + edgePanel.") {
-                HStack(spacing: 0) {
-                    dockButton("Поиск", "magnifyingglass")
-                    dockButton("Мои места", Icon.myPlaces)
-                    dockButton("Итоги", "chart.bar.fill")
-                    dockButton("Ещё", "ellipsis")
-                }
-                .padding(4)
-                .liftedBackground(Theme.surface,
-                                  in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
-                    .strokeBorder(Theme.edgePanel, lineWidth: 1))
+            CatalogItem("IdleDock", when: "Низ простого экрана: поле «Куда едем?» 56 pt, квадрат «Итоги», чипы Дом/Работа — синим только догадка.") {
+                IdleDockContent(chips: [.init(kind: .home, place: .init(lat: 41.3, lon: 69.2, title: nil),
+                                              guessed: true, minutes: 25),
+                                        .init(kind: .work, place: nil, guessed: false, minutes: nil)],
+                                onSearch: {}, onStats: {}, onChip: { _ in }, onMyPlaces: {},
+                                onStopSuggesting: {})
             }
             CatalogItem("MapShortSheet", when: "Справка над картой на 2–5 строк: высота по содержимому.") {
                 SecondaryButton(title: "Пробки", systemImage: "rectangle.bottomhalf.inset.filled") {
@@ -203,11 +197,6 @@ struct DesignCatalogPage: View {
                 }
             }
         }
-    }
-
-    private func dockButton(_ title: LocalizedStringKey, _ icon: String) -> some View {
-        Button {} label: { ActionBarLabel(title: title, icon: icon) }
-            .buttonStyle(PressableStyle())
     }
 
     // MARK: - Отметка

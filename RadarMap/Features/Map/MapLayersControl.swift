@@ -21,24 +21,11 @@
 //  экраном (MapScreen+Popovers): только оттуда касание мимо неё закрывает
 //  её, не задевая карту и кнопки под пальцем. Кнопка отдаёт слою свою рамку
 //  (MapPopoverAnchors), и панель встаёт там же, где стояла, — сбоку от неё.
+//  С этапа 45 своей кнопки у панели нет: её открывает плитка «Карта» меню
+//  «…», и встаёт она у круга «…».
 //
 
 import SwiftUI
-
-/// Кнопка слоёв в колонке: открывает и закрывает панель «Карта».
-struct MapLayersButton: View {
-    let isOpen: Bool
-    let action: () -> Void
-
-    var body: some View {
-        CircleControl(systemName: "square.3.layers.3d",
-                      tint: isOpen ? Theme.accent : Theme.textPrimary,
-                      accessibilityLabel: "Слои карты",
-                      action: action)
-            .accessibilityAddTraits(isOpen ? .isSelected : [])
-            .anchorPreference(key: MapPopoverAnchors.self, value: .bounds) { [.layers: $0] }
-    }
-}
 
 /// Круг «…»: плитки «Ещё» над нижними панелями (этап 45). Панель «Карта»
 /// из плитки встаёт у этого же круга — рамка слоёв у него своя.

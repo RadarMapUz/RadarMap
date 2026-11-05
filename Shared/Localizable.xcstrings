@@ -35090,6 +35090,54 @@
           }
         }
       }
+    },
+    "Куда едем?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Куда едем?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qayerga boramiz?"
+          }
+        }
+      }
+    },
+    "Поиск адреса и мест": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск адреса и мест"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manzil va joylarni qidirish"
+          }
+        }
+      }
+    },
+    "Задать место": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задать место"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joyni belgilash"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

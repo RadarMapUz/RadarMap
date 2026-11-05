@@ -104,12 +104,7 @@ extension MapScreen {
                                                map.prefers3D = on
                                            }),
                            zoomButtons: setting(\.mapZoomButtons),
-                           onOverview: env.route.polyline.map { polyline in
-                               {
-                                   send(.dismissed(.layers))
-                                   map.showRouteOverview(rect: polyline.boundingMapRect)
-                               }
-                           },
+                           onOverview: routeOverviewAction,
                            maxPanelHeight: columnSlots.map {
                                CGFloat($0) * AppConfig.mapColumnSlotHeight - AppConfig.mapColumnSpacing
                            } ?? .infinity,
@@ -134,6 +129,15 @@ extension MapScreen {
                 .alignmentGuide(.leading) { _ in -rect.minX }
                 .alignmentGuide(.top) { panel in panel.height - (rect.minY - gap) }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    /// «Весь маршрут» в панели «Карта» — пока маршрут есть.
+    var routeOverviewAction: (() -> Void)? {
+        guard let polyline = env.route.polyline else { return nil }
+        return {
+            send(.dismissed(.layers))
+            map.showRouteOverview(rect: polyline.boundingMapRect)
         }
     }
 

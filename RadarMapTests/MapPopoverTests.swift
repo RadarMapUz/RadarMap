@@ -26,7 +26,8 @@ final class MapPopoverTests: XCTestCase {
 
     /// Касание мимо, лист, старт или конец поездки, фон — закрывают любую.
     func testOutsideTouchAndContextChangesCloseAnyCard() {
-        let closing: [MapPopover.Event] = [.outsideTouch, .sheetOpened, .tripStateChanged, .background]
+        let closing: [MapPopover.Event] = [.outsideTouch, .sheetOpened, .tripStateChanged, .background,
+                                           .promptShown]
         for card in MapPopover.allCases {
             for event in closing {
                 XCTAssertNil(MapPopover.next(card, on: event), "\(event) не закрыл \(card)")
@@ -56,7 +57,7 @@ final class MapPopoverTests: XCTestCase {
     /// Ни одно событие, кроме кнопки карточки, не открывает меню само.
     func testOnlyTheCardButtonOpensACard() {
         let events: [MapPopover.Event] = [.outsideTouch, .sheetOpened, .tripStateChanged, .background,
-                                          .cameraAlert, .dismissed(.layers), .dismissed(.quickToggles)]
+                                          .cameraAlert, .promptShown, .dismissed(.layers), .dismissed(.quickToggles)]
         for event in events {
             XCTAssertNil(MapPopover.next(nil, on: event))
         }

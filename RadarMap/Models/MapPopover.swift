@@ -53,6 +53,9 @@ nonisolated enum MapPopover: Hashable, CaseIterable {
         /// предупреждению. Меню сверху («Карта», «Оповещения») камере не
         /// мешают: звук выключают как раз у камеры.
         case cameraAlert
+        /// Встал вопрос на ходу (RoadPromptPolicy): любое меню закрывается —
+        /// иначе его ловушка касаний во весь экран забрала бы первое «Да».
+        case promptShown
     }
 
     /// Какая карточка открыта после события.
@@ -64,7 +67,7 @@ nonisolated enum MapPopover: Hashable, CaseIterable {
             return current == card ? nil : card
         case .dismissed(let card):
             return current == card ? nil : current
-        case .outsideTouch, .sheetOpened, .tripStateChanged, .background:
+        case .outsideTouch, .sheetOpened, .tripStateChanged, .background, .promptShown:
             return nil
         case .cameraAlert:
             return current == .tripMenu ? nil : current

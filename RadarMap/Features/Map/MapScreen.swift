@@ -352,6 +352,10 @@ struct MapScreen: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { send(.background) }
         }
+        // Встал вопрос на ходу — меню уходит, первое касание достаётся вопросу.
+        .onChange(of: map.roadPrompt) { _, prompt in
+            if prompt != nil { send(.promptShown) }
+        }
         // Проезд чужой передвижной отметки отслеживает MobileCameraService на
         // каждом фиксе (LocationService.onAcceptedFix) — не вью: вью без
         // экрана не живёт, а onChange(locationTick) прямо здесь делал бы весь

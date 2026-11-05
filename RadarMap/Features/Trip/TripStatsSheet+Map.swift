@@ -27,7 +27,7 @@ extension TripStatsSheet {
                 } label: {
                     mapPreview
                 }
-                .buttonStyle(PressableStyle())
+                .buttonStyle(PressableStyle(.card))
                 .accessibilityLabel(Text(mapSelection == nil
                                          ? "Карта проездов за период. Открыть на весь экран"
                                          : "Карта выбранной поездки. Открыть на весь экран"))

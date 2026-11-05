@@ -342,7 +342,6 @@ struct TripEndCard: View {
     /// же, что на экране проезда; очередь без сети — тоже успех.
     private func sendMissed(_ passes: [PassedCamera]) {
         guard !isSendingMissed else { return }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         isSendingMissed = true
         let dbVersion = env.cameras.dbVersion
         Task {

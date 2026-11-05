@@ -26,7 +26,7 @@ struct CarOnlyOfferSection: View {
                         .foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                     PrimaryButton(title: "Включить") { env.answerCarOnlyOffer(accept: true) }
-                    SecondaryButton(title: "Не сейчас") { env.answerCarOnlyOffer(accept: false) }
+                    SecondaryButton(title: "Не сейчас", touch: .cancel) { env.answerCarOnlyOffer(accept: false) }
                 }
                 .padding(.vertical, 6)
             }

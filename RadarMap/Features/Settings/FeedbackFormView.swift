@@ -104,7 +104,6 @@ struct FeedbackFormView: View {
         } else {
             PrimaryButton(title: "Отправить", systemImage: "paperplane.fill") { send() }
                 .disabled(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .opacity(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.5 : 1)
         }
     }
 

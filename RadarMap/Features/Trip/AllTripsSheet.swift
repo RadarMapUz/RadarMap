@@ -177,7 +177,7 @@ struct AllTripsSheet: View {
                         title: Formatting.dateAndClock(record.startedAt, .dateTime.day().month(.abbreviated)),
                         finish: finish)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle(.row))
         .accessibilityElement(children: .combine)
         .accessibilityHint(Text("Открыть подробности"))
         .contextMenu {

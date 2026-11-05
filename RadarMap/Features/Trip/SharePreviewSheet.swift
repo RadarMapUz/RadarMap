@@ -96,7 +96,6 @@ struct SharePreviewSheet: View {
             ForEach(ShareFormat.allCases) { item in
                 let selected = format == item
                 Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     withMotion(Motion.quick) { format = item }
                 } label: {
                     Label(item.title, systemImage: item.symbol)
@@ -113,7 +112,7 @@ struct SharePreviewSheet: View {
                                     in: Capsule())
                         .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableStyle(.choice))
                 .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
             }
         }
@@ -124,11 +123,9 @@ struct SharePreviewSheet: View {
     private var shareButton: some View {
         PrimaryButton(title: "Поделиться", systemImage: "square.and.arrow.up") {
             guard let image else { return }
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             payload = ShareImagePayload(image: image)
         }
         .disabled(image == nil)
-        .opacity(image == nil ? 0.5 : 1)
     }
 
     /// Отрисовка выбранной карточки. `@MainActor` неявно (весь тип на нём):

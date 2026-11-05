@@ -352,7 +352,7 @@ struct HybridPlugQuestion: View {
                     env.settings.answerHybridPlug(true)
                     onAnswer(true)
                 }
-                SecondaryButton(title: "Нет") {
+                SecondaryButton(title: "Нет", touch: .cancel) {
                     env.settings.answerHybridPlug(false)
                     onAnswer(false)
                 }

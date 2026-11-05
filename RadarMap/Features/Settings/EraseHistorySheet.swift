@@ -141,7 +141,7 @@ struct EraseHistorySheet: View {
                 onErased()
                 dismiss()
             }
-            SecondaryButton(title: "Отмена") { dismiss() }
+            SecondaryButton(title: "Отмена", touch: .cancel) { dismiss() }
         }
     }
 }

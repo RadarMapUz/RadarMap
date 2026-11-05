@@ -27,7 +27,6 @@ extension TripStatsSheet {
             if let money = moneyLine(summary) {
                 Divider().overlay(Theme.stroke)
                 Button {
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                     finesRequest = FinesRequest(window: .period(period, anchor), tab: .possible,
                                                 periodRisk: summary.fineRisk)
                 } label: {
@@ -59,7 +58,7 @@ extension TripStatsSheet {
                     .frame(minHeight: Theme.controlSize)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableStyle(.row))
                 .accessibilityElement(children: .combine)
                 .accessibilityHint(Text("Открыть штрафы"))
             }

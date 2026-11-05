@@ -38,7 +38,6 @@ struct DestinationSuggestionBar: View {
     var body: some View {
         if let target = suggestion {
             Button {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 onRoute(target.coordinate, target.title)
             } label: {
                 HStack(spacing: 12) {

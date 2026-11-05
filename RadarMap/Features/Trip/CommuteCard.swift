@@ -205,7 +205,7 @@ struct ArrivalTargetQuestion: View {
                 }
             }
             HStack(spacing: 10) {
-                SecondaryButton(title: "Нет") { onAnswer(false) }
+                SecondaryButton(title: "Нет", touch: .cancel) { onAnswer(false) }
                 SecondaryButton(title: "Да", systemImage: "checkmark") { onAnswer(true) }
             }
         }

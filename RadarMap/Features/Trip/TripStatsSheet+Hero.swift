@@ -22,7 +22,6 @@ extension TripStatsSheet {
                 let selected = period == item
                 Button {
                     withMotion(Motion.standard) { period = item }
-                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 } label: {
                     Text(item.title)
                         .font(.rounded(15, .semibold))
@@ -40,7 +39,7 @@ extension TripStatsSheet {
                         }
                         .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableStyle(.choice))
                 .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
             }
         }
@@ -70,7 +69,7 @@ extension TripStatsSheet {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.rounded(15, .bold))
-                .foregroundStyle(enabled ? Theme.accent : Theme.textTertiary.opacity(0.4))
+                .foregroundStyle(enabled ? Theme.accent : Theme.textTertiary)
                 // Голая стрелка: капсулы-подложки делали из строки периода
                 // третий ряд «кнопочной» мебели подряд. Мишень — полные 44 pt:
                 // при 36×32 соседний период пролистывался мимо пальца.
@@ -87,7 +86,6 @@ extension TripStatsSheet {
     }
 
     func step(_ direction: Int) {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         withMotion(Motion.standard) {
             anchor = period.shifted(anchor, by: direction)
         }
@@ -112,7 +110,7 @@ extension TripStatsSheet {
                 .padding(16)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle(.card))
         // combine, а не свой label: у Button собственная подпись ЗАМЕНЯЕТ
         // производную, и VoiceOver терял ровно то, ради чего сюда смотрят —
         // балл, километры, дельту и вывод. Назначение кнопки говорит hint.

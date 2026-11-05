@@ -25,22 +25,13 @@ struct ReportDraftGate: View {
             case .choosing(_, let deadline, let silence):
                 ReportChoiceTiles(deadline: deadline, total: AppConfig.reportChooseSeconds,
                                   countsDown: silence == .tripod,
-                                  onPick: { kind in
-                                      UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                      flow.choose(kind)
-                                  },
-                                  onCancel: {
-                                      UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                                      flow.cancelChoice()
-                                  })
+                                  onPick: { kind in flow.choose(kind) },
+                                  onCancel: { flow.cancelChoice() })
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             case .sent(let sent):
                 ReportUndoCard(kind: sent.kind, queued: sent.queued, until: sent.undoUntil,
                                canUndo: flow.canUndo(),
-                               onUndo: {
-                                   UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                   Task { await flow.undo() }
-                               })
+                               onUndo: { Task { await flow.undo() } })
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             case .idle, .sending:
                 EmptyView()
@@ -75,7 +66,7 @@ struct ReportChoiceTiles: View {
                     .background(Theme.quietFill,
                                 in: RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
             }
-            .buttonStyle(PressableStyle())
+            .buttonStyle(PressableStyle(.cancel))
             .accessibilityLabel(Text("Не отмечать"))
             ForEach(ReportKind.chosenOnTheGo) { kind in
                 tile(kind)
@@ -109,7 +100,8 @@ struct ReportChoiceTiles: View {
                 if isDefault { countdown }
             }
         }
-        .buttonStyle(PressableStyle())
+        // Выбор типа и есть отправка — главное действие.
+        .buttonStyle(PressableStyle(.primary))
         .accessibilityLabel(Text(kind.reportTitleKey))
         .accessibilityHint(isDefault ? Text("Выбрано: уйдёт само через 3 секунды") : Text(verbatim: ""))
     }
@@ -148,11 +140,16 @@ struct ReportUndoCard: View {
     let canUndo: Bool
     let onUndo: () -> Void
 
+    /// Отметка ушла — галочка подпрыгивает один раз при появлении плашки.
+    @State private var sentBounce = false
+
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.rounded(26, .bold))
                 .foregroundStyle(Theme.success)
+                .symbolEffect(.bounce, options: .nonRepeating, value: sentBounce)
+                .onAppear { if !Motion.isReduced { sentBounce = true } }
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(kind.markedKey)
@@ -187,7 +184,7 @@ struct ReportUndoCard: View {
                     .overlay(RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous)
                         .stroke(Theme.stroke, lineWidth: 1))
                 }
-                .buttonStyle(PressableStyle())
+                .buttonStyle(PressableStyle(.cancel))
                 .accessibilityLabel(Text("Отменить мою отметку"))
             }
         }

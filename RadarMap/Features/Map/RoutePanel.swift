@@ -285,7 +285,6 @@ struct RoutePanel: View {
             } else {
                 env.route.selectVariant(variant.id)
             }
-            UISelectionFeedbackGenerator().selectionChanged()
         } label: {
             VStack(alignment: .leading, spacing: 3) {
                 if labeled {
@@ -348,7 +347,7 @@ struct RoutePanel: View {
                     .shadow(color: Theme.panelShadow, radius: 8, y: 2)
             }
         }
-        .buttonStyle(PressableStyle())
+        .buttonStyle(PressableStyle(.choice))
         .accessibilityElement(children: .combine)
         // Выбор закодирован только цветом — VoiceOver должен его слышать (4.6).
         .accessibilityAddTraits(isSelected ? .isSelected : [])

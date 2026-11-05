@@ -145,7 +145,6 @@ struct LongTripMapSection: View {
         }
         .buttonStyle(PressableStyle())
         .disabled(!env.network.isOnline)
-        .opacity(env.network.isOnline ? 1 : 0.5)
         .listRowBackground(Theme.surface)
         .accessibilityLabel(Text(String(format: String(localized: "Скачать недостающее, %@"),
                                         CorridorOfferCard.spokenSize(total))))

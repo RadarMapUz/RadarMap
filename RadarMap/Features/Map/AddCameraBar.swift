@@ -51,10 +51,12 @@ struct AddCameraBar: View {
                     // Общая вторая кнопка: самодельная была ниже соседней
                     // PrimaryButton, другого кегля и серым текстом — пара
                     // не читалась парой.
-                    SecondaryButton(title: "Отмена", action: onCancel)
+                    SecondaryButton(title: "Отмена", touch: .cancel, action: onCancel)
+                    // Отклик — «успех» после добавления (addCamera).
                     PrimaryButton(title: "Добавить здесь",
                                   systemImage: "plus",
-                                  tint: Theme.accentFill) {
+                                  tint: Theme.accentFill,
+                                  touch: .ownFeedback) {
                         onAdd(kind, name)
                     }
                 }

@@ -305,7 +305,10 @@ struct TripEndCard: View {
     /// Факт превышения — цветом балла, без похвалы; похвала — спокойным
     /// текстом с зелёным значком.
     private func rewardFace(_ line: TripReward.Line) -> (symbol: String, tint: Color, text: String, textTint: Color) {
-        let factTint = record.score.map { Theme.score(Int($0)) } ?? Theme.danger
+        // Цвет балла, но никогда не зелёный: штрафуемое превышение при высоком
+        // балле зелёным читалось бы одобрением.
+        let factTint = record.score.map { DrivingScore.tier(for: Int($0)) >= 2 ? Theme.warning : Theme.score(Int($0)) }
+            ?? Theme.danger
         switch line {
         case .camerasClean(let clean, let total):
             let text: String

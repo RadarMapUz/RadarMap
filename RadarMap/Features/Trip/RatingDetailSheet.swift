@@ -91,10 +91,11 @@ struct RatingDetailSheet: View {
             let window = interval
             data = await RatingBreakdown.screen(records: history, days: days,
                                                 period: period, anchor: anchor)
-            cameraRating = data.sources.cameras.first.flatMap {
-                ItogiRating.ratingIfCameraClean(cameraID: $0.id, records: history, days: days, in: window)
-            }
-            roughest = ItogiRating.roughestTrip(records: history, in: window)
+            // Оба перебора истории — вне главного потока (правило 11).
+            let extras = await ItogiRating.extras(cameraID: data.sources.cameras.first?.id,
+                                                  records: history, days: days, in: window)
+            cameraRating = extras.cameraRating
+            roughest = extras.roughest
         }
     }
 
@@ -188,9 +189,10 @@ struct RatingDetailSheet: View {
     @ViewBuilder private var takenGroup: some View {
         let sources = data.sources
         if !sources.isEmpty, total > 0 {
-            let camerasExact = sources.cameras.reduce(0) { $0 + $1.points }
-            let whole = RatingBreakdown.wholePoints([sources.smoothness, camerasExact], total: total)
-            let items = takenItems(smooth: whole[0], cameras: whole[1])
+            // Одна раскладка на все экраны (ItogiRating.split): та же, что у
+            // главного листа и строк страницы камер.
+            let parts = ItogiRating.split(sources: sources, total: total)
+            let items = takenItems(smooth: parts.smoothness, cameras: parts.camerasTotal)
             if !items.isEmpty {
                 VStack(alignment: .leading, spacing: 14) {
                     ItogiGroupTitle(title: String(localized: "Из 100 сняли \(total)"))
@@ -304,15 +306,14 @@ struct RatingDetailSheet: View {
     /// проезд этой камеры за окно.
     private var camerasPage: some View {
         let hotspots = data.sources.cameras
-        let camerasExact = hotspots.reduce(0) { $0 + $1.points }
-        let whole = RatingBreakdown.wholePoints(
-            hotspots.map(\.points) + [data.sources.smoothness],
-            total: total)
-        let shown = zip(hotspots, whole).map { ($0, $1) }
+        // Строки и шапка — из одной раскладки: шапка = сумма строк, и она же
+        // стоит в строке «Камеры», с которой сюда пришли.
+        let parts = ItogiRating.split(sources: data.sources, total: total)
+        let shown = zip(hotspots, parts.cameras).map { ($0, $1) }
         return ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 Text(String(format: String(localized: "Сняли за камеры: %@ из %lld"),
-                            Formatting.points(Int(camerasExact.rounded())), total))
+                            Formatting.points(parts.camerasTotal), total))
                     .font(.rounded(13))
                     .foregroundStyle(Theme.textSecondary)
                     .padding(.horizontal, 4)

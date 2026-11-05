@@ -51,30 +51,24 @@ struct PeriodShareCard: View {
             }
             .padding(.horizontal, 32)
 
-            // Зона риска ИЛИ чистый период — честно, как на экране.
+            // Вердикт периода — честно, как на экране (ItogiRating.shareChip):
+            // зелёная печать — только без штрафов И без «на грани».
             Group {
-                if summary.overPasses > 0, let place = summary.topOverLocation {
-                    HStack(spacing: 10) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 17, weight: .bold))
-                        Text(String(format: String(localized: "Зона риска: %@"), place))
-                            .font(.system(size: 18, weight: .heavy))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                    }
-                    .foregroundStyle(Theme.danger)
-                    .padding(.horizontal, 22).padding(.vertical, 12)
-                    .background(Theme.quietFill, in: Capsule())
-                } else if summary.cleanPasses > 0 {
-                    HStack(spacing: 10) {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 17, weight: .bold))
-                        Text("Ни одного превышения у камер")
-                            .font(.system(size: 18, weight: .heavy))
-                    }
-                    .foregroundStyle(Theme.success)
-                    .padding(.horizontal, 22).padding(.vertical, 12)
-                    .background(Theme.quietFill, in: Capsule())
+                switch ItogiRating.shareChip(summary) {
+                case .risk(let place):
+                    chip(symbol: PassVerdict.over.symbol, tint: PassVerdict.over.tint,
+                         text: String(format: String(localized: "Зона риска: %@"), place))
+                case .overspeed(let count):
+                    chip(symbol: PassVerdict.over.symbol, tint: PassVerdict.over.tint,
+                         text: String(format: String(localized: "Штрафуемых превышений: %lld"), count))
+                case .edge(let count):
+                    chip(symbol: PassVerdict.edge.symbol, tint: PassVerdict.edge.tint,
+                         text: String(format: String(localized: "На грани у камер: %lld"), count))
+                case .clean:
+                    chip(symbol: "checkmark.seal.fill", tint: Theme.success,
+                         text: String(localized: "Ни одного превышения у камер"))
+                case nil:
+                    EmptyView()
                 }
             }
             .padding(.top, 16)
@@ -102,5 +96,20 @@ struct PeriodShareCard: View {
             .shareMetricsTile()
             .padding(.bottom, 4)
         }
+    }
+
+    private func chip(symbol: String, tint: Color, text: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 17, weight: .bold))
+            Text(text)
+                .font(.system(size: 18, weight: .heavy))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 22).padding(.vertical, 12)
+        .background(Theme.quietFill, in: Capsule())
+        .accessibilityElement(children: .combine)
     }
 }

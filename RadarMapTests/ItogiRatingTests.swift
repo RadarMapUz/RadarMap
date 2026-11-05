@@ -84,6 +84,51 @@ final class ItogiRatingTests: XCTestCase {
         XCTAssertNil(ItogiRating.taken(rating: 70, sources: RatingSources()), "записи вычищены — не выдумываем")
     }
 
+    /// Одна раскладка на все экраны (ревью 05.11, №2): камеры 0,7 + 0,7 и
+    /// плавность 18,6 при недоборе 20 — строки камер, итог «за камеры»,
+    /// строка «Камеры» главного листа и совет по плавности сходятся.
+    func testOneSplitEverywhere() throws {
+        let sources = RatingSources(cameras: [hotspot(1, 0.7), hotspot(2, 0.7)], smoothness: 18.6)
+        let parts = ItogiRating.split(sources: sources, total: 20)
+        XCTAssertEqual(parts.cameras, [1, 1])
+        XCTAssertEqual(parts.smoothness, 18)
+        XCTAssertEqual(parts.total, 20, "сумма — ровно 100 − рейтинг")
+        let taken = try XCTUnwrap(ItogiRating.taken(rating: 80, sources: sources))
+        XCTAssertEqual(taken.cameras, parts.camerasTotal, "главный лист = сумма строк страницы камер")
+        XCTAssertEqual(taken.smoothness, parts.smoothness)
+        XCTAssertEqual(ItogiRating.tips(rating: 80, sources: sources, cameraRating: nil),
+                       [.smoothness(rating: 98, beatsCameras: true)], "совет — из той же строки «−18»")
+    }
+
+    /// Совет и строка «резкая езда» не расходятся на единицу при остатке ровно ,5.
+    func testSmoothnessTipMatchesLine() {
+        let sources = RatingSources(cameras: [hotspot(1, 9.5)], smoothness: 10.5)
+        let parts = ItogiRating.split(sources: sources, total: 20)
+        guard case .smoothness(let rating, _)? = ItogiRating.tips(rating: 80, sources: sources,
+                                                                  cameraRating: nil).first else {
+            return XCTFail("нет совета по плавности")
+        }
+        XCTAssertEqual(rating, 80 + parts.smoothness)
+    }
+
+    // MARK: - Карточка периода
+
+    /// Наружу не уходит зелёная печать при «на грани» — и при превышениях без
+    /// названия камеры (ревью 05.11, №1).
+    func testShareChip() {
+        var summary = PeriodSummary()
+        summary.trips = 3
+        XCTAssertNil(ItogiRating.shareChip(summary), "у камер не проезжали — без строки")
+        summary.cleanPasses = 5
+        XCTAssertEqual(ItogiRating.shareChip(summary), .clean)
+        summary.edgePasses = 2
+        XCTAssertEqual(ItogiRating.shareChip(summary), .edge(2), "на грани — не «ни одного превышения»")
+        summary.overPasses = 1
+        XCTAssertEqual(ItogiRating.shareChip(summary), .overspeed(1))
+        summary.topOverLocation = "Юнусабад"
+        XCTAssertEqual(ItogiRating.shareChip(summary), .risk(place: "Юнусабад"))
+    }
+
     /// Советов не больше двух, первым — тот, что возвращает больше.
     func testTipsOrderedByGain() {
         let sources = RatingSources(cameras: [hotspot(1, 15)], smoothness: 20)

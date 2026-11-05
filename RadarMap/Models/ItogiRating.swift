@@ -105,10 +105,31 @@ nonisolated enum ItogiRating {
 
     // MARK: - За что сняли
 
-    /// «Сняли 35: камеры −15, резкая езда −20» — недобор рейтинга по двум
-    /// причинам, в целых и с суммой ровно `100 − рейтинг` (RatingBreakdown
-    /// раскладывает его по камерам и плавности точно, здесь — округление
-    /// наибольшими остатками, как в самом разборе).
+    /// Недобор рейтинга по строкам — ОДНА раскладка на главный лист, группу
+    /// «Из 100 сняли», страницу камер и совет «без резкой езды»: части
+    /// `[камера 1 … камера N, плавность]` в этом порядке, наибольшими
+    /// остатками в целый итог `total`. Итог «за камеры» — сумма строк камер,
+    /// а не своё округление: до ревью 05.11 главный лист, шапка страницы камер
+    /// и её строки давали три разных числа (0,7 + 0,7 камер при плавности
+    /// 18,6 — «−1», «1» и −1 −1), а при ничьей остатков +1 уходил разным
+    /// причинам на двух экранах.
+    struct Split: Equatable, Sendable {
+        /// Целые баллы камер — в порядке `RatingSources.cameras`.
+        let cameras: [Int]
+        let smoothness: Int
+
+        var camerasTotal: Int { cameras.reduce(0, +) }
+        var total: Int { camerasTotal + smoothness }
+    }
+
+    static func split(sources: RatingSources, total: Int) -> Split {
+        let whole = RatingBreakdown.wholePoints(sources.cameras.map(\.points) + [sources.smoothness],
+                                                total: total)
+        return Split(cameras: Array(whole.dropLast()), smoothness: whole.last ?? 0)
+    }
+
+    /// «Сняли 35: камеры −15, резкая езда −20» — та же раскладка (`split`),
+    /// сложенная по двум причинам; сумма ровно `100 − рейтинг`.
     struct Taken: Equatable, Sendable {
         let total: Int
         let cameras: Int
@@ -123,9 +144,8 @@ nonisolated enum ItogiRating {
     static func taken(rating: Int, sources: RatingSources) -> Taken? {
         let total = max(0, 100 - rating)
         guard total > 0, !sources.isEmpty else { return nil }
-        let camerasExact = sources.cameras.reduce(0) { $0 + $1.points }
-        let whole = RatingBreakdown.wholePoints([camerasExact, sources.smoothness], total: total)
-        return Taken(total: total, cameras: whole[0], smoothness: whole[1],
+        let parts = split(sources: sources, total: total)
+        return Taken(total: total, cameras: parts.camerasTotal, smoothness: parts.smoothness,
                      cameraCount: sources.cameras.count, topCamera: sources.cameras.first?.location)
     }
 
@@ -141,23 +161,54 @@ nonisolated enum ItogiRating {
 
     /// До двух советов, сначала тот, что возвращает больше. Камера — самая
     /// дорогая; её «что было бы» — пересчёт окна, будто все её проезды были в
-    /// лимите (`ratingIfCameraClean`). Плавность — весь её недобор: он и есть
-    /// остаток балла сверх камер.
+    /// лимите (`ratingIfCameraClean`). Плавность — её строка из той же
+    /// раскладки (`split`), что «Резкие разгоны −N»: совет и строка не
+    /// расходятся на единицу.
     static func tips(rating: Int, sources: RatingSources, cameraRating: Int?,
                      maxCount: Int = 2) -> [Tip] {
-        var tips: [(gain: Double, tip: Tip)] = []
+        let parts = split(sources: sources, total: max(0, 100 - rating))
+        var tips: [(gain: Int, tip: Tip)] = []
         if let top = sources.cameras.first, let improved = cameraRating, improved > rating {
-            tips.append((Double(improved - rating),
+            tips.append((improved - rating,
                          .camera(location: top.location, limitKmh: top.limitKmh, rating: improved)))
         }
-        let smooth = Int(sources.smoothness.rounded())
-        if smooth > 0 {
-            let cameras = sources.cameras.reduce(0) { $0 + $1.points }
-            tips.append((sources.smoothness,
-                         .smoothness(rating: min(100, rating + smooth),
-                                     beatsCameras: sources.smoothness > cameras)))
+        if parts.smoothness > 0 {
+            tips.append((parts.smoothness,
+                         .smoothness(rating: min(100, rating + parts.smoothness),
+                                     beatsCameras: parts.smoothness > parts.camerasTotal)))
         }
         return tips.sorted { $0.gain > $1.gain }.prefix(maxCount).map(\.tip)
+    }
+
+    /// «Что было бы» самой дорогой камеры и самая рваная поездка — оба
+    /// перебирают историю окна, поэтому вне главного потока (правило 11).
+    @concurrent
+    static func extras(cameraID: Int?, records: [TripRecord], days: [TripDay],
+                       in interval: DateInterval) async -> (cameraRating: Int?, roughest: TripRecord?) {
+        (cameraID.flatMap { ratingIfCameraClean(cameraID: $0, records: records, days: days, in: interval) },
+         roughestTrip(records: records, in: interval))
+    }
+
+    // MARK: - Карточка периода «поделиться»
+
+    /// Строка-вердикт карточки периода, которую отправляют наружу. «Ни одного
+    /// превышения» — только когда нечего сказать ни про штраф, ни про «на
+    /// грани»: до ревью 05.11 `cleanPasses > 0` включал «на грани», и наружу
+    /// уходила зелёная печать при снятых баллах (а при превышениях без
+    /// названия камеры — тоже она).
+    enum ShareChip: Equatable, Sendable {
+        case risk(place: String)
+        case overspeed(Int)
+        case edge(Int)
+        case clean
+    }
+
+    static func shareChip(_ summary: PeriodSummary) -> ShareChip? {
+        if summary.overPasses > 0 {
+            return summary.topOverLocation.map { .risk(place: $0) } ?? .overspeed(summary.overPasses)
+        }
+        if summary.edgePasses > 0 { return .edge(summary.edgePasses) }
+        return summary.cleanPasses > 0 ? .clean : nil
     }
 
     /// Поездка окна, где резкая езда сняла больше всего: остаток недобора

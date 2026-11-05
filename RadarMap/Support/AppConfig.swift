@@ -3790,6 +3790,13 @@ nonisolated enum AppConfig {
     /// повтор не чаще чем раз в столько секунд.
     static let drive3DMinProbeZoom: Double = 15
     static let drive3DRetrySeconds: Double = 1.5
+    static let drive3DRetryMaxSeconds: Double = 12
+    /// Конец прощупанного не растёт (тоннель, пробел, финиш) — следующий
+    /// расчёт, когда машина проехала его на столько метров.
+    static let drive3DStallPassMeters: Double = 20
+    /// Кеш лент тайла: позади машины не дальше этого (м), вокруг — радиус.
+    static let drive3DRoadCacheBehindMeters: Double = 500
+    static let drive3DRoadCacheRadiusMeters: Double = 1_800
     /// Пересчёт заранее, когда машина ближе этого к концу прощупанного участка, м.
     static let drive3DTailMarginMeters: Double = 150
     /// Хвост линии маршрута заходит под конец ленты на столько метров (без щели).

@@ -91,7 +91,9 @@ nonisolated enum Drive3D {
 
     /// Умолчание настройки по классу телефона: на A12/A13 (iPhone11,x и
     /// iPhone12,x — XS/XR, 11, SE 2) — выключено, новее и симулятор — включено.
+    /// iPad (приложение для iPhone в режиме совместимости) — как старый: выключено.
     static func defaultEnabled(machine: String) -> Bool {
+        if machine.hasPrefix("iPad") { return false }
         guard machine.hasPrefix("iPhone"),
               let major = Int(machine.dropFirst("iPhone".count).prefix { $0.isNumber }) else { return true }
         return major >= 13
@@ -149,6 +151,14 @@ nonisolated enum Drive3D {
         var complete = false
         /// Докуда прощупано (м); nil — ещё неизвестно.
         var verifiedEnd: Double?
+        /// Попыток подряд без готового расчёта — повтор с удвоением задержки.
+        var attempts = 1
+        /// Конец прощупанного не вырос (тоннель, пробел без лент, финиш): до
+        /// проезда за него — ни проб, ни записи источника.
+        var stalledEnd: Double?
+        /// Начало перестроения, взятое на входе в окно подъезда: торможение к
+        /// повороту не сдвигает его в последующих расчётах до манёвра.
+        var shiftStart: Double?
     }
 
     /// Считать по карте можно только при слежении (не осмотр и не панорама),
@@ -169,13 +179,43 @@ nonisolated enum Drive3D {
                                narrowing: Bool, sinceAttempt: TimeInterval = .infinity) -> Bool {
         guard let last else { return true }
         if last.route != route || last.narrowing != narrowing || last.maneuver != maneuver { return true }
-        let retry = sinceAttempt >= AppConfig.drive3DRetrySeconds
+        if let stalled = last.stalledEnd, car < stalled + AppConfig.drive3DStallPassMeters { return false }
+        let retry = sinceAttempt >= retryDelay(attempts: last.attempts)
         if !last.complete { return retry }
         if let end = last.verifiedEnd, car >= end - AppConfig.drive3DTailMarginMeters { return retry }
         if last.inWindow, let maneuver, car < maneuver { return false }
         if car < last.from - 1 || car - last.from >= AppConfig.drive3DRecomputeMeters { return true }
         if let maneuver, !last.inWindow, car >= maneuver - window { return true }
         return false
+    }
+
+    /// Задержка повтора: 1,5 с, удвоение на каждую неудачу, потолок 12 с.
+    static func retryDelay(attempts: Int) -> TimeInterval {
+        min(AppConfig.drive3DRetryMaxSeconds,
+            AppConfig.drive3DRetrySeconds * pow(2, Double(max(0, attempts - 1))))
+    }
+
+    /// Что делать с пришедшим расчётом. Готов и прощупал дальше прежнего (на
+    /// шаг станции и больше) — кладём на карту. Не дальше прежнего или не
+    /// готов, когда прежняя лента есть, — это тоннель, пробел без лент или
+    /// финиш: источник не трогаем, повторов нет до проезда прежнего конца.
+    /// Не готов без прежней ленты — неполный, повтор с удвоением задержки.
+    enum Settle: Equatable, Sendable { case write, stalled, incomplete }
+
+    static func settle(_ plan: inout Plan, ready: Bool, end: Double, previousEnd: Double?, car: Double) -> Settle {
+        if let previousEnd, !ready || end < previousEnd + AppConfig.drive3DStationMeters {
+            plan.complete = true
+            plan.verifiedEnd = previousEnd
+            // Застой — только у самого конца: вдали (пересчёт раз в 250 м)
+            // прежняя лента просто остаётся, а у конца её ещё попробуют нарастить.
+            if car >= previousEnd - AppConfig.drive3DTailMarginMeters { plan.stalledEnd = previousEnd }
+            return .stalled
+        }
+        guard ready else { plan.complete = false; return .incomplete }
+        plan.complete = true
+        plan.verifiedEnd = end
+        plan.stalledEnd = nil
+        return .write
     }
 
     static func inWindow(car: Double, maneuver: Double?, window: Double) -> Bool {

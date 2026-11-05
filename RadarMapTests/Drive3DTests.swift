@@ -164,12 +164,101 @@ final class Drive3DTests: XCTestCase {
         XCTAssertLessThanOrEqual(cuts, 130, "перестановок среза за минуту")
     }
 
+    /// Прогон по пути: на каждом фиксе — решение «пересчитать?», расчёт даёт
+    /// конец прощупанного `reach(car)` (nil — не готов), итог — Drive3D.settle.
+    private func drive(from start: Double, to end: Double, speed: Double,
+                       reach: (Double) -> Double?) -> [(car: Double, computed: Bool, wrote: Bool)] {
+        var plan: Drive3D.Plan?
+        var drawnEnd: Double?
+        var lastAttempt = -Double.infinity
+        var out: [(car: Double, computed: Bool, wrote: Bool)] = []
+        var t = 0.0
+        var car = start
+        while car <= end {
+            var computed = false, wrote = false
+            if Drive3D.needsRecompute(last: plan, route: 1, car: car, maneuver: nil, window: 200, narrowing: true,
+                                      sinceAttempt: t - lastAttempt) {
+                computed = true
+                lastAttempt = t
+                var next = Drive3D.Plan(route: 1, from: car, maneuver: nil, narrowing: true, inWindow: false,
+                                        verifiedEnd: plan?.verifiedEnd)
+                if let plan, !plan.complete || plan.stalledEnd != nil { next.attempts = plan.attempts + 1 }
+                let result = reach(car)
+                let settled = Drive3D.settle(&next, ready: result != nil, end: result ?? car, previousEnd: drawnEnd,
+                                             car: car)
+                if settled == .write { wrote = true; drawnEnd = result }
+                plan = next
+            }
+            out.append((car, computed, wrote))
+            car += speed
+            t += 1
+        }
+        return out
+    }
+
+    /// Тоннель (ленты тайла кончаются на 1000 м и вновь с 1300): у его начала
+    /// после первого «не выросло» — ни записи, ни проб до проезда; в тоннеле —
+    /// повторы с удвоением задержки и без записи.
+    func testTunnelStopsTheRecomputeLoop() {
+        let run = drive(from: 700, to: 1290, speed: 50 / 3.6) { car in
+            car < 1000 ? min(car + 600, 1000) : nil
+        }
+        XCTAssertTrue(run.first!.wrote)
+        let stall = run.firstIndex { $0.car >= 1000 - AppConfig.drive3DTailMarginMeters && $0.computed }!
+        let beforePassing = run[(stall + 1)...].filter { $0.car < 1000 + AppConfig.drive3DStallPassMeters }
+        XCTAssertFalse(beforePassing.contains { $0.computed }, "у начала тоннеля — без проб")
+        let inside = run.filter { $0.car >= 1000 + AppConfig.drive3DStallPassMeters }
+        XCTAssertFalse(inside.contains { $0.wrote }, "в тоннеле источник не пишется")
+        XCTAssertLessThanOrEqual(inside.filter(\.computed).count, 5, "повторы с удвоением, а не раз в 1,5 с")
+    }
+
+    /// Пробел без лент тайла длиной 200 м: после проезда лента нарастает снова.
+    func testGapIsLeftAfterPassing() {
+        let run = drive(from: 300, to: 1600, speed: 50 / 3.6) { car in
+            if car < 800 { return min(car + 600, 800) }
+            if car < 1000 { return nil }
+            return car + 600
+        }
+        XCTAssertTrue(run.contains { $0.car > 1000 && $0.wrote }, "за пробелом лента снова растёт")
+        let nearGap = run.filter { $0.car >= 800 - AppConfig.drive3DTailMarginMeters
+            && $0.car < 800 + AppConfig.drive3DStallPassMeters }
+        XCTAssertEqual(nearGap.filter(\.computed).count, 1, "у пробела — один расчёт")
+        XCTAssertFalse(nearGap.contains { $0.wrote }, "и без записи")
+    }
+
+    /// Финиш: последние 150 м маршрута — без повторов (конец ленты = конец маршрута).
+    func testFinishHasNoRetries() {
+        let run = drive(from: 1700, to: 2000, speed: 40 / 3.6) { car in min(car + 600, 2000) }
+        let near = run.filter { $0.car >= 2000 - AppConfig.drive3DTailMarginMeters }
+        XCTAssertLessThanOrEqual(near.filter(\.computed).count, 1, "один расчёт у финиша")
+        XCTAssertFalse(near.contains { $0.wrote }, "и тот без записи")
+    }
+
+    func testRetryDelayDoublesUpToTheCeiling() {
+        XCTAssertEqual(Drive3D.retryDelay(attempts: 1), AppConfig.drive3DRetrySeconds)
+        XCTAssertEqual(Drive3D.retryDelay(attempts: 2), AppConfig.drive3DRetrySeconds * 2)
+        XCTAssertEqual(Drive3D.retryDelay(attempts: 10), AppConfig.drive3DRetryMaxSeconds)
+    }
+
+    /// Пересчёт вдали от конца без роста — лента остаётся, застоя нет.
+    func testNoGrowthFarFromTheEndIsNotAStall() {
+        var plan = Drive3D.Plan(route: 1, from: 300, maneuver: nil, narrowing: true, inWindow: false)
+        XCTAssertEqual(Drive3D.settle(&plan, ready: true, end: 900, previousEnd: 900, car: 300), .stalled)
+        XCTAssertNil(plan.stalledEnd)
+        XCTAssertTrue(plan.complete)
+        XCTAssertEqual(Drive3D.settle(&plan, ready: true, end: 1100, previousEnd: 900, car: 320), .write)
+        XCTAssertEqual(plan.verifiedEnd, 1100)
+        var empty = Drive3D.Plan(route: 1, from: 0, maneuver: nil, narrowing: true, inWindow: false)
+        XCTAssertEqual(Drive3D.settle(&empty, ready: false, end: 0, previousEnd: nil, car: 0), .incomplete)
+    }
+
     func testDefaultByPhoneClass() {
         XCTAssertFalse(Drive3D.defaultEnabled(machine: "iPhone11,8"), "XR, A12")
         XCTAssertFalse(Drive3D.defaultEnabled(machine: "iPhone12,8"), "SE 2, A13")
         XCTAssertTrue(Drive3D.defaultEnabled(machine: "iPhone13,2"), "12, A14")
         XCTAssertTrue(Drive3D.defaultEnabled(machine: "iPhone17,1"), "16 Pro")
         XCTAssertTrue(Drive3D.defaultEnabled(machine: "arm64"), "симулятор")
+        XCTAssertFalse(Drive3D.defaultEnabled(machine: "iPad13,18"), "iPad в режиме совместимости — как старый")
     }
 
     func testDashboardHasNoRibbonAndHotPhoneNoChevrons() {

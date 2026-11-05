@@ -184,6 +184,7 @@ final class EngineDriveRibbon {
         cumulative = RouteService.cumulative(of: model.route.map(MKMapPoint.init))
         cancel()
         ribbon = nil
+        drawnKey = nil
         plan = nil
         knownRoads = [:]
         probedUntil = -.infinity
@@ -201,31 +202,47 @@ final class EngineDriveRibbon {
         attemptAt = CACurrentMediaTime()
         let from = max(0, car - 20)
         let maneuver = Self.maneuver(model)
-        let previousEnd = plan?.verifiedEnd
-        plan = Drive3D.Plan(route: routeGeneration, from: car, maneuver: model.maneuverAlong, narrowing: narrowing,
-                            inWindow: Drive3D.inWindow(car: car, maneuver: model.maneuverAlong, window: window),
-                            complete: false, verifiedEnd: previousEnd)
+        let old = plan
+        var next = Drive3D.Plan(route: routeGeneration, from: car, maneuver: model.maneuverAlong, narrowing: narrowing,
+                                inWindow: Drive3D.inWindow(car: car, maneuver: model.maneuverAlong, window: window),
+                                complete: false, verifiedEnd: old?.verifiedEnd)
+        if let old, old.route == next.route {
+            if !old.complete || old.stalledEnd != nil { next.attempts = old.attempts + 1 }
+            // Начало перестроения — из расчёта на входе в окно, до манёвра.
+            if old.maneuver == next.maneuver { next.shiftStart = old.shiftStart }
+        }
+        plan = next
+        // Тот же манёвр и сужение, что у ленты на карте: не выросший конец —
+        // застой (тоннель, пробел, финиш); иначе геометрия другая и кладётся.
+        let previousEnd = drawnKey.map { $0.maneuver == next.maneuver && $0.narrowing == narrowing } == true
+            ? ribbon?.verifiedEnd : nil
         os_signpost(.begin, log: performanceLog, name: "Лента 3D: пробы")
-        let roads = probeRoads(route: model.route, from: from, length: AppConfig.drive3DAheadMeters, in: view)
+        let roads = probeRoads(route: model.route, car: car, from: from, length: AppConfig.drive3DAheadMeters,
+                               in: view)
         let arrows = narrowing ? maneuver.map { probeArrows(near: $0.along, model: model, in: view) } ?? [] : []
         os_signpost(.end, log: performanceLog, name: "Лента 3D: пробы")
         let probeMs = Int((CACurrentMediaTime() - attemptAt) * 1000)
-        let input = LanePath.Input(route: model.route, from: from, length: AppConfig.drive3DAheadMeters, car: car,
+        var input = LanePath.Input(route: model.route, from: from, length: AppConfig.drive3DAheadMeters, car: car,
                                    speedMps: speedMps, window: window, roads: roads, arrows: arrows,
                                    maneuver: maneuver, narrowing: narrowing, cumulative: cumulative)
+        if next.inWindow { input.shiftStart = next.shiftStart }
         cancel()
         let generation = generation
         let started = CACurrentMediaTime()
         task = Task { [weak self, weak view] in
             let result = await Self.build(input)
             guard let self, let view, generation == self.generation, let style = view.style else { return }
-            self.plan?.complete = result.isReady
+            guard var plan = self.plan else { return }
+            let settled = Drive3D.settle(&plan, ready: result.isReady, end: result.verifiedEnd,
+                                         previousEnd: previousEnd, car: car)
+            if plan.inWindow, plan.shiftStart == nil { plan.shiftStart = result.shiftStart }
+            self.plan = plan
             Log.route.info("Лента 3D: \(roads.count, privacy: .public) лент, \(arrows.count, privacy: .public) стрелок, совпало \(Int(result.matchedShare * 100), privacy: .public) %, прощупано \(Int(result.verifiedEnd - car), privacy: .public) м, сужение \(String(describing: result.narrowing), privacy: .public), пробы \(probeMs, privacy: .public) мс на главном, расчёт \(Int((CACurrentMediaTime() - started) * 1000), privacy: .public) мс")
-            // Неготовый расчёт (карта без лент тайла) не сменяет готовый: тот
-            // верен до своего конца, а повтор — на ближайшем годном кадре.
-            guard result.isReady else { return }
-            self.plan?.verifiedEnd = result.verifiedEnd
+            // Неготовый (карта без лент тайла) или не выросший (тоннель, финиш)
+            // расчёт не сменяет ленту на карте и источник не трогает.
+            guard settled == .write else { return }
             self.ribbon = result
+            self.drawnKey = (next.maneuver, narrowing)
             self.chevrons = LanePath.chevrons(result, spacing: AppConfig.drive3DChevronSpacing)
                 .filter { $0.along <= result.verifiedEnd }
             self.chevronThreshold = nil
@@ -241,6 +258,8 @@ final class EngineDriveRibbon {
 
     /// Модель последнего применения — маршрут и пробки для записи готового расчёта.
     private var current: EngineMapView?
+    /// Манёвр и сужение ленты, что на карте.
+    private var drawnKey: (maneuver: Double?, narrowing: Bool)?
 
     @concurrent
     private nonisolated static func build(_ input: LanePath.Input) async -> LanePath.Ribbon {
@@ -277,9 +296,9 @@ final class EngineDriveRibbon {
     /// drive3DProbeStepMeters, не дальше уже прощупанного минус 100 м; что
     /// нащупали раньше, остаётся (кеш маршрута). За краем экрана данных нет —
     /// лента там кончается, дальше линия (verifiedEnd).
-    private func probeRoads(route: [CLLocationCoordinate2D], from: Double, length: Double,
+    private func probeRoads(route: [CLLocationCoordinate2D], car: Double, from: Double, length: Double,
                             in view: MLNMapView) -> [LanePath.Road] {
-        if knownRoads.count > 8000 { knownRoads = [:]; probedUntil = -.infinity }
+        pruneRoads(route: route, car: car)
         let bounds = view.bounds
         let half = AppConfig.drive3DProbePoints / 2
         var along = max(from, probedUntil - 100)
@@ -309,6 +328,22 @@ final class EngineDriveRibbon {
             }
         }
         return Array(knownRoads.values)
+    }
+
+    /// Ленты позади машины дальше drive3DRoadCacheBehindMeters и дальше
+    /// радиуса кеша уходят: индекс LanePath строится по тому, что впереди.
+    private func pruneRoads(route: [CLLocationCoordinate2D], car: Double) {
+        guard !knownRoads.isEmpty, let here = point(at: car, route: route),
+              let ahead = point(at: car + 30, route: route) else { return }
+        let frame = LanePath.Frame(origin: here)
+        let heading = frame.point(ahead).unit
+        let behind = AppConfig.drive3DRoadCacheBehindMeters, radius = AppConfig.drive3DRoadCacheRadiusMeters
+        knownRoads = knownRoads.filter { _, road in
+            road.points.contains { c in
+                let p = frame.point(c)
+                return p.length <= radius && p.dot(heading) >= -behind
+            }
+        }
     }
 
     /// Стрелки полос у манёвра — один запрос на манёвр: с 17-го — нарисованные
@@ -650,6 +685,7 @@ final class EngineDriveRibbon {
         probedUntil = -.infinity
         arrowsCache = nil
         current = nil
+        drawnKey = nil
         last = (0, [])
     }
 

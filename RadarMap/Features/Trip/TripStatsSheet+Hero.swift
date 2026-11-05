@@ -2,7 +2,8 @@
 //  TripStatsSheet+Hero.swift
 //  RadarMap
 //
-//  Итоги: шапка периода — выбор периода, рейтинг, подсказки, сдвиг к прошлому.
+//  Итоги: шапка периода — выбор периода, стрелки окна и подпись подменённого окна.
+//  Сама карточка-ответ — ItogiAnswerCard.
 //
 
 import SwiftUI
@@ -21,7 +22,10 @@ extension TripStatsSheet {
             ForEach(StatsPeriod.allCases) { item in
                 let selected = period == item
                 Button {
-                    withMotion(Motion.standard) { period = item }
+                    withMotion(Motion.standard) {
+                        autoShifted = false
+                        period = item
+                    }
                 } label: {
                     Text(item.title)
                         .font(.rounded(15, .semibold))
@@ -87,165 +91,31 @@ extension TripStatsSheet {
 
     func step(_ direction: Int) {
         withMotion(Motion.standard) {
+            autoShifted = false
             anchor = period.shifted(anchor, by: direction)
         }
     }
 
-    // MARK: - Герой: рейтинг + километры + вывод периода
+    // MARK: - Подменённое окно
 
-    /// Герой блока «Как я езжу»: кольцо рейтинга, километры, время за рулём и
-    /// разница к прошлому периоду. Тап — расшифровка рейтинга. Подсказка
-    /// действием и выводы живут в блоке «Где теряю деньги и время» (31E):
-    /// у карточки одна главная цифра и одно объяснение.
-    ///
-    /// Три кегля и ни одной плашки (31E): 30 — километры, 15 — уровень,
-    /// 13 — всё подписное. Дельты — цветным текстом в строке, а не капсулами:
-    /// пять кеглей и три цветных чипа читались прайс-листом (design_audit 26.10).
-    func heroCard(trip: TripStats, summary: PeriodSummary) -> some View {
-        Button {
-            showRatingInfo = true
-        } label: {
-            // Без своей карточки: герой — верх карточки-ответа (34b).
-            heroTopRow(trip: trip, summary: summary)
-                .padding(16)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(PressableStyle(.card))
-        // combine, а не свой label: у Button собственная подпись ЗАМЕНЯЕТ
-        // производную, и VoiceOver терял ровно то, ради чего сюда смотрят —
-        // балл, километры, дельту и вывод. Назначение кнопки говорит hint.
-        .accessibilityElement(children: .combine)
-        .accessibilityHint(Text("Как считается рейтинг"))
-    }
-
-    func heroTopRow(trip: TripStats, summary: PeriodSummary) -> some View {
-        HStack(spacing: 16) {
-            if let rating = summary.rating {
-                RatingRing(rating: rating)
-                    .frame(width: 88, height: 88)
-            }
-            // Без подписи «за неделю» (34b): окно — в липкой шапке над листом.
-            VStack(alignment: .leading, spacing: 4) {
-                Text(Formatting.distance(summary.distance))
-                    .font(.numeral(30, .heavy))
-                    .foregroundStyle(Theme.textPrimary)
-                    .contentTransition(.numericText())
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                if let change = summary.distanceChange {
-                    // Переносится, а не ужимается: «+18 км к прошлой неделе» на
-                    // SE в узбекском — две строки, и это честнее «↗ 178 %».
-                    Text(distanceChangeText(change))
-                        .font(.rounded(13, .semibold))
-                        .foregroundStyle(change.isUp ? Theme.accent : Theme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityLabel(Text(distanceChangeVoice(change)))
-                }
-                if let rating = summary.rating {
-                    ratingLine(rating: rating, delta: summary.ratingDelta)
-                }
-                // Переносится, а не обрезается: при крупном шрифте «за рулём»
-                // превращалось в «за ру…» — обрезанная фраза хуже второй строки.
-                Text(heroSubtitle(summary))
-                    .font(.rounded(13))
+    /// «На этой неделе поездок ещё нет — показана прошлая»: при открытии
+    /// пустое идущее окно молча менялось на прошлое, и чужие километры
+    /// читались как эти (аудит 05.11). Строка живёт, пока водитель сам не
+    /// листнул окно или не сменил период.
+    @ViewBuilder var windowNotice: some View {
+        if autoShifted, let text = ItogiWindow.notice(period: period, shown: anchor, now: Date()) {
+            HStack(spacing: 8) {
+                Image(systemName: Icon.byDays)
+                    .font(.rounded(12, .semibold))
+                    .foregroundStyle(Theme.textSecondary)
+                    .accessibilityHidden(true)
+                Text(text)
+                    .font(.rounded(13, .medium))
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
-                // «Чистая серия: N подряд» ушла (34): пожизненный счётчик
-                // проездов в карточке «за неделю» (правило 14) и четвёртая
-                // «серия» на листе — рядом «Серия: N недель» цели недели и
-                // «5 чистых подряд» ближайшего достижения.
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.rounded(15, .semibold))
-                .foregroundStyle(Theme.textTertiary)
-        }
-    }
-
-    /// «Уверенный · −8 к прошлой»: уровень и движение рейтинга одной строкой,
-    /// дельта — цветом текста, без капсулы. Не влезает — переносится.
-    @ViewBuilder
-    func ratingLine(rating: Int, delta: Int?) -> some View {
-        let level = Text(DrivingScore.level(for: rating))
-            .font(.rounded(15, .bold))
-            .foregroundStyle(Theme.textPrimary)
-        if let delta, abs(delta) >= AppConfig.insightRatingStep {
-            let versus = period.versusPrevious
-            let change = Text(period.ratingDeltaText(delta))
-                .font(.rounded(13, .semibold).monospacedDigit())
-                .foregroundStyle(delta > 0 ? Theme.success : Theme.danger)
-            // Не влезает рядом — дельта строкой ниже, а не «стиль ·» с
-            // повисшей точкой в конце строки (снимок SE, 26.10).
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    level.fixedSize()
-                    Text(verbatim: "·").font(.rounded(13)).foregroundStyle(Theme.textTertiary)
-                    change.fixedSize()
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    level.fixedSize(horizontal: false, vertical: true)
-                    change.fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text(DrivingScore.level(for: rating)) + Text(verbatim: ", ")
-                + Text(delta > 0 ? String(localized: "Рейтинг вырос на \(delta) \(versus)")
-                                 : String(localized: "Рейтинг снизился на \(abs(delta)) \(versus)")))
-        } else {
-            level.fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    /// Одна строка каталога с аргументами, а не склейка трёх: переводчик
-    /// видит фразу целиком и порядок слов в узбекском свой (6.11).
-    func heroSubtitle(_ summary: PeriodSummary) -> String {
-        String(localized: "Поездок: \(summary.trips) · \(Formatting.duration(summary.movingDuration)) за рулём")
-    }
-
-    /// «+18 км к прошлой неделе» или «+12 % к прошлой неделе» — процент
-    /// только у сопоставимых периодов (PeriodSummary.distanceChange).
-    func distanceChangeText(_ change: DistanceChange) -> String {
-        let versus = change.soFar ? period.versusPreviousSoFar : period.versusPrevious
-        if let percent = change.percent {
-            return String(format: String(localized: "%1$@ %% %2$@"), Formatting.signed(percent), versus)
-        }
-        let sign = change.meters >= 0 ? "+" : "−"
-        return String(format: String(localized: "%1$@ %2$@"),
-                      sign + Formatting.distance(abs(change.meters)), versus)
-    }
-
-    func distanceChangeVoice(_ change: DistanceChange) -> String {
-        let amount = change.percent.map { "\(abs($0)) %" } ?? Formatting.distance(abs(change.meters))
-        return (change.isUp ? String(localized: "Больше, чем в прошлый период")
-                            : String(localized: "Меньше, чем в прошлый период")) + ": " + amount
-    }
-
-    // MARK: - Строка вывода (живёт в герой-карточке)
-
-    /// Значок без кружка-подложки: строка — продолжение карточки, а не ещё
-    /// одна плашка внутри неё.
-    func heroLine(symbol: String, tint: Color, text: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: symbol)
-                .font(.rounded(15, .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 22)
-                .accessibilityHidden(true)
-            Text(text)
-                .font(.rounded(15, .medium))
-                .foregroundStyle(Theme.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    static func insightTint(_ kind: Insight.Kind) -> Color {
-        switch kind {
-        case .good:    return Theme.success
-        case .warning: return Theme.warning
-        case .bad:     return Theme.danger
-        case .neutral: return Theme.accent
+            .padding(.horizontal, 4)
         }
     }
 }

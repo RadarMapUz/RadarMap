@@ -36,6 +36,9 @@ nonisolated struct WeeklyGoal: Equatable, Sendable {
     enum Mark: Equatable, Sendable {
         case none       // у камер не проезжали
         case clean
+        /// «На грани» (PassVerdict): штрафа нет, балл снят — цель не сорвана,
+        /// но день не «чистый» зелёный.
+        case edge
         case over
         case future
     }
@@ -82,7 +85,7 @@ nonisolated struct WeeklyGoal: Equatable, Sendable {
             if key > today {
                 marks.append(.future)
             } else if let item = byDay[key], item.cleanPasses + item.overPasses > 0 {
-                marks.append(item.overPasses > 0 ? .over : .clean)
+                marks.append(item.overPasses > 0 ? .over : (item.edgePasses ?? 0) > 0 ? .edge : .clean)
             } else {
                 marks.append(.none)
             }

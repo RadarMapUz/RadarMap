@@ -140,7 +140,9 @@ struct CommuteCard: View {
             return String(format: String(localized: "Обычно около %@, по данным водителей"),
                           SpokenUnits.duration(seconds))
         }
-        return String(format: String(localized: "Обычно ~%@ (по водителям)"),
+        // «у других водителей», а не «(по водителям)» (аудит 05.11): скобка
+        // читалась как пометка о точности, а это чужая норма рядом с вашей.
+        return String(format: String(localized: "у других водителей ~%@"),
                       Formatting.unbreakable(Formatting.duration(seconds)))
     }
 

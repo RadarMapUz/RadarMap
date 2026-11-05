@@ -95,15 +95,19 @@ extension TripStatsSheet {
     }
 
     func markerDots(_ markers: [PassMarker]) -> [MapPicture.Dot] {
-        let clean = markers.filter { !$0.hasViolation }
-        let over = markers.filter(\.hasViolation)
+        let calm = markers.filter { $0.verdict == .clean || $0.verdict == .unknown }
+        let edge = markers.filter { $0.verdict == .edge }
+        let over = markers.filter { $0.verdict == .over }
         let cleanSize: CGFloat = markers.count > 60 ? 6 : 8
-        // Цвет — тот же, что на полной карте: лимит неизвестен — серая точка.
-        return clean.map {
+        // Цвет — тот же, что на полной карте (PassVerdict): лимит неизвестен —
+        // серая точка, «на грани» — жёлтая крупнее, превышение — красная поверх.
+        return calm.map {
             MapPicture.Dot(coordinate: $0.coordinate, diameter: cleanSize,
                            fill: PeriodMapSheet.tint($0), ringWidth: 1.2)
+        } + edge.map {
+            MapPicture.Dot(coordinate: $0.coordinate, diameter: 11, fill: PassVerdict.edge.tint, ringWidth: 1.6)
         } + over.map {
-            MapPicture.Dot(coordinate: $0.coordinate, diameter: 13, fill: Theme.danger, ringWidth: 2)
+            MapPicture.Dot(coordinate: $0.coordinate, diameter: 13, fill: PassVerdict.over.tint, ringWidth: 2)
         }
     }
 
@@ -201,17 +205,15 @@ extension TripStatsSheet {
         let markers = mapData.markers
         if markers.isEmpty {
             Text("Камер по пути не было")
-                .font(.rounded(11))
+                .font(.rounded(12))
                 .foregroundStyle(Theme.textTertiary)
         }
-        if markers.contains(where: { !$0.hasViolation && !$0.limitUnknown }) {
-            legendItem(Theme.success, String(localized: "в лимите"))
-        }
-        if markers.contains(where: \.hasViolation) {
-            legendItem(Theme.danger, String(localized: "с превышением"))
-        }
-        if markers.contains(where: { !$0.hasViolation && $0.limitUnknown }) {
-            legendItem(Theme.textTertiary, String(localized: "лимит неизвестен"))
+        // Три состояния одним словарём (PassVerdict): «с превышением» рядом
+        // с «Без штрафа» в списке читались про разное.
+        ForEach([PassVerdict.clean, .edge, .over, .unknown], id: \.self) { state in
+            if markers.contains(where: { $0.verdict == state }) {
+                ItogiLegendDot(color: state.tint, title: state.word)
+            }
         }
     }
 
@@ -229,13 +231,6 @@ extension TripStatsSheet {
             .tapTarget()
         }
         .buttonStyle(PressableStyle())
-    }
-
-    func legendItem(_ color: Color, _ title: String) -> some View {
-        HStack(spacing: 5) {
-            Circle().fill(color).frame(width: 8, height: 8)
-            Text(title).font(.rounded(11)).foregroundStyle(Theme.textTertiary)
-        }
     }
 
     // MARK: - Выбор поездки и переходы на карту

@@ -32,4 +32,14 @@ final class ItogiIconsTests: XCTestCase {
                         Icon.overLimit, Icon.smoothness, Icon.byTrips, Icon.byDays]
         XCTAssertEqual(Set(concepts).count, concepts.count)
     }
+
+    /// Глифы трёх состояний проезда — из словаря раздела и все разные:
+    /// форма значка — второй носитель состояния рядом с цветом (дейтеранопия).
+    func testVerdictSymbolsAreInVocabulary() {
+        let states: [PassVerdict] = [.clean, .edge, .over, .unknown]
+        for state in states {
+            XCTAssertTrue(Icon.itogiSymbols.contains(state.symbol), "\(state) → \(state.symbol)")
+        }
+        XCTAssertEqual(Set(states.map(\.symbol)).count, states.count)
+    }
 }

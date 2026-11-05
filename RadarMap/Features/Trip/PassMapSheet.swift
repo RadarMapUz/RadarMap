@@ -57,20 +57,14 @@ struct PassDetailView: View {
         PassStyle.color(speed: pass.speedKmh, limit: pass.limitKmh)
     }
 
+    /// Проезд снял баллы — «в лимите» или «на грани» решает PassVerdict.
+    private var costsPoints: Bool {
+        (overKmh.map { DrivingScore.penaltyPoints(overKmh: $0) } ?? 0) > 0
+    }
+
     /// Превышение относительно лимита дороги; nil — лимит неизвестен и судить
     /// о нарушении мы не вправе.
     private var overKmh: Double? { pass.overLimitKmh }
-
-    /// Скорость, как её ВИДИТ человек. Одно округление на весь экран: раньше
-    /// скорость печаталась усечением (66,6 → 66), а превышение округлением
-    /// (6,6 → 7), и карточка сообщала «66 км/ч» и «превышение на 7 км/ч» при
-    /// лимите 60. Арифметика на экране обязана сходиться сама с собой.
-    private var shownSpeedKmh: Int { Int(pass.speedKmh.rounded()) }
-
-    /// Превышение от ПОКАЗАННОЙ скорости — не от сырой.
-    private var shownOverKmh: Int? {
-        pass.limitKmh.map { shownSpeedKmh - $0 }
-    }
 
     var body: some View {
         ScrollView {
@@ -80,6 +74,9 @@ struct PassDetailView: View {
                 // Промолчали об этой камере — жалоба сразу под ответом (6.7):
                 // это худшая наша ошибка, и прятать её в «Подробнее» нельзя.
                 if pass.silent == true { missedAlertCard }
+                // «А если бы в лимите» открыт, когда проезд снял баллы (аудит
+                // 05.11): это и есть ответ на «за что −8», а не справка.
+                if costsPoints { whatIfCard }
                 details
             }
             .padding(20)
@@ -190,12 +187,13 @@ struct PassDetailView: View {
     /// баг, а не оформление.
     private var fullMapMarker: PassMarker? {
         guard let coordinate = pass.coordinate else { return nil }
-        let over = overKmh.map { FineSchedule.fine(overKmh: $0) > 0 } ?? false
+        let verdict = pass.verdict
         return PassMarker(cameraID: pass.cameraID, lat: coordinate.latitude,
                           lon: coordinate.longitude,
                           location: pass.location.isEmpty ? pass.kind.displayName : pass.location,
-                          times: 1, overTimes: over ? 1 : 0,
-                          maxSpeedKmh: pass.speedKmh, limitKmh: pass.limitKmh)
+                          times: 1, overTimes: verdict == .over ? 1 : 0,
+                          maxSpeedKmh: pass.speedKmh, limitKmh: pass.limitKmh,
+                          edgeTimes: verdict == .edge ? 1 : 0)
     }
 
     private var fullMapData: PeriodMapData {
@@ -250,7 +248,9 @@ struct PassDetailView: View {
                     // Герой карточки: ради этого числа экран и открывают.
                     // Цвет состояния — у самой цифры; цветное свечение вокруг
                     // убрано вместе с остальными «ореолами» (31D).
-                    Text("\(shownSpeedKmh) км/ч")
+                    // Десятые у границы вердикта (PassVerdict.speedText).
+                    Text(String(format: String(localized: "%@ км/ч"),
+                                PassVerdict.speedText(speedKmh: pass.speedKmh, limitKmh: pass.limitKmh)))
                         .font(.numeral(30, .heavy).monospacedDigit())
                         .foregroundStyle(honestyColor)
                         .contentTransition(.numericText())
@@ -265,6 +265,16 @@ struct PassDetailView: View {
                 Spacer(minLength: 0)
             }
             .statePanel(honestyColor)
+
+            // «На грани» словами: штрафа нет, а балл снят — и сколько до штрафа.
+            if pass.verdict == .edge, let over = overKmh,
+               let shown = PassVerdict.excessText(speedKmh: pass.speedKmh, limitKmh: pass.limitKmh) {
+                Text(edgeExplanation(over: over, shown: shown))
+                    .font(.rounded(13, .medium))
+                    .foregroundStyle(Theme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             // Пол фиксации сработал — говорим об этом вслух. Молча поднятый
             // лимит выглядит как «приложение перепутало знак», а мы не про
@@ -281,15 +291,32 @@ struct PassDetailView: View {
         }
     }
 
+    /// «+5 км/ч: штрафа обычно нет, но балл снят — ещё +1 км/ч, и это штраф.»
+    /// `over` — точное превышение (по нему судят), `shown` — оно же на экране.
+    private func edgeExplanation(over: Double, shown: String) -> String {
+        let toFine = max(1, Int(FineSchedule.toleranceKmh - over) + 1)
+        return String(format: String(localized: "+%1$@ км/ч: штрафа обычно нет, но балл снят — ещё +%2$lld км/ч, и это штраф."),
+                      shown, toFine)
+    }
+
     @ViewBuilder private var statusChip: some View {
         let fine = overKmh.map { FineSchedule.fine(overKmh: $0) } ?? 0
-        if fine > 0 {
+        if pass.verdict == .edge {
+            // Третье состояние (аудит 05.11): зелёное «в лимите» при снятом
+            // балле было неправдой, красное «превышение» — тоже.
+            Label(PassVerdict.edge.word, systemImage: PassVerdict.edge.symbol)
+                .font(.rounded(15, .bold))
+                .foregroundStyle(PassVerdict.edge.tint)
+                .padding(.horizontal, 10).padding(.vertical, 8)
+                .background(Theme.quietFill,
+                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        } else if fine > 0 {
             // «+28 км/ч» со знаком опасности: что это превышение, говорит
             // красная панель; слово «превышение» рядом с крупной скоростью
             // ломалось посередине — «превы / шение».
             Group {
-                if let over = shownOverKmh, over > 0 {
-                    Label(String(format: String(localized: "+%lld км/ч"), over),
+                if let shown = PassVerdict.excessText(speedKmh: pass.speedKmh, limitKmh: pass.limitKmh) {
+                    Label(String(format: String(localized: "+%@ км/ч"), shown),
                           systemImage: "exclamationmark.triangle.fill")
                 } else {
                     Label("превышение", systemImage: "exclamationmark.triangle.fill")
@@ -299,8 +326,9 @@ struct PassDetailView: View {
             .foregroundStyle(Theme.danger)
             .lineLimit(1)
             .fixedSize()
-            .accessibilityLabel(Text(String(format: String(localized: "превышение на %lld км/ч"),
-                                            shownOverKmh ?? 0)))
+            .accessibilityLabel(Text(String(format: String(localized: "превышение на %@ км/ч"),
+                                            PassVerdict.excessText(speedKmh: pass.speedKmh,
+                                                                   limitKmh: pass.limitKmh) ?? "0")))
             .padding(.horizontal, 10).padding(.vertical, 6)
             .background(Theme.quietFill,
                         in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -369,7 +397,7 @@ struct PassDetailView: View {
     private var details: some View {
         DisclosureGroup(isExpanded: $showsDetails) {
             VStack(spacing: 16) {
-                whatIfCard
+                if !costsPoints { whatIfCard }
                 methodCard
                 if pass.silent != true { missedAlertCard }
             }
@@ -385,7 +413,7 @@ struct PassDetailView: View {
 
     private var fineTitle: String {
         switch fineOutcome {
-        case .pending:   return String(localized: "Возможный штраф")
+        case .pending:   return String(localized: "Штраф ≈ (оценка)")
         case .paid:      return String(localized: "Штраф пришёл")
         case .dismissed: return String(localized: "Штраф не пришёл")
         }

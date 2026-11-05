@@ -54,6 +54,12 @@ nonisolated struct FineLedger {
 
     var isEmpty: Bool { received.isEmpty && expected.isEmpty && marked.isEmpty }
 
+    /// Сколько штрафов пришло — одно правило на шапку и вкладку «Пришли»:
+    /// внесённые постановления и отмеченные «пришёл» без постановления. До
+    /// 05.11 шапка считала только внесённые («Пришло 2»), а вкладка — оба
+    /// («Пришли · 3»), и один экран называл два числа.
+    var arrivedCount: Int { received.count + marked.count }
+
     static func build(fines: [ReceivedFine], history: [TripRecord], now: Date,
                       calendar: Calendar = .current) -> FineLedger {
         var ledger = FineLedger()

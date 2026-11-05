@@ -182,6 +182,8 @@ nonisolated struct PeriodSummary: Equatable {
     /// Проезды камер в лимите и с штрафуемым превышением.
     var cleanPasses = 0
     var overPasses = 0
+    /// Из чистых — «на грани» (PassVerdict.edge): штрафа нет, балл снят.
+    var edgePasses = 0
     var maxSpeedKmh: Double = 0
     /// Средний балл за период, взвешенный по дистанции.
     var rating: Int?
@@ -452,6 +454,7 @@ extension TripHistory {
                     if !pass.location.isEmpty { overByLocation[pass.location, default: 0] += 1 }
                 } else {
                     result.cleanPasses += 1
+                    if pass.verdict == .edge { result.edgePasses += 1 }
                 }
             }
         }
@@ -513,12 +516,9 @@ extension TripHistory {
             let day = calendar.startOfDay(for: record.startedAt)
             var bar = byDay[day] ?? DayBar(day: day)
             bar.km += record.distanceMeters / 1000
-            bar.overPasses += record.passed.reduce(0) { count, pass in
-                guard let limit = pass.limitKmh,
-                      FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) > 0
-                else { return count }
-                return count + 1
-            }
+            let tally = record.cameraTally
+            bar.overPasses += tally.over
+            bar.edgePasses += tally.edge
             byDay[day] = bar
         }
         return (0..<days).reversed().compactMap { offset in
@@ -589,12 +589,13 @@ extension TripHistory {
         for record in records {
             for pass in record.passed {
                 guard let lat = pass.lat, let lon = pass.lon else { continue }
-                let over = pass.limitKmh.map {
-                    FineSchedule.fine(overKmh: pass.speedKmh - Double($0)) > 0
-                } ?? false
+                let verdict = pass.verdict
+                let over = verdict == .over
+                let edge = verdict == .edge
                 if var existing = byCamera[pass.cameraID] {
                     existing.times += 1
                     existing.overTimes += over ? 1 : 0
+                    existing.edgeTimes += edge ? 1 : 0
                     existing.maxSpeedKmh = max(existing.maxSpeedKmh, pass.speedKmh)
                     existing.limitKmh = existing.limitKmh ?? pass.limitKmh
                     byCamera[pass.cameraID] = existing
@@ -602,7 +603,7 @@ extension TripHistory {
                     byCamera[pass.cameraID] = PassMarker(
                         cameraID: pass.cameraID, lat: lat, lon: lon,
                         location: pass.location, times: 1, overTimes: over ? 1 : 0,
-                        maxSpeedKmh: pass.speedKmh, limitKmh: pass.limitKmh)
+                        maxSpeedKmh: pass.speedKmh, limitKmh: pass.limitKmh, edgeTimes: edge ? 1 : 0)
                 }
             }
         }
@@ -770,6 +771,8 @@ nonisolated struct DayBar: Identifiable, Equatable {
     var km: Double = 0
     /// Штрафуемых превышений за этот день — столбик краснеет.
     var overPasses = 0
+    /// «На грани» (PassVerdict.edge) — день жёлтым, а не зелёным.
+    var edgePasses = 0
 
     var id: Date { day }
     var hasOverspeed: Bool { overPasses > 0 }
@@ -786,9 +789,17 @@ nonisolated struct PassMarker: Identifiable, Equatable {
     var overTimes: Int
     var maxSpeedKmh: Double
     var limitKmh: Int?
+    /// Проездов «на грани» (PassVerdict.edge): штрафа нет, балл снят.
+    var edgeTimes = 0
 
     var id: Int { cameraID }
     var hasViolation: Bool { overTimes > 0 }
+    /// Худшее состояние камеры за окно — цвет точки и слово легенды.
+    var verdict: PassVerdict {
+        if overTimes > 0 { return .over }
+        if limitKmh == nil { return .unknown }
+        return edgeTimes > 0 ? .edge : .clean
+    }
     /// Лимит не известен ни на одном проезде: «в лимите» сказать нельзя —
     /// точка рисуется нейтральной, а не зелёной.
     var limitUnknown: Bool { limitKmh == nil }

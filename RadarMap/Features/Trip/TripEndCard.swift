@@ -106,7 +106,8 @@ struct TripEndCard: View {
     }
 
     /// Трек цветом маршрута; камера в лимите — зелёная точка с галочкой,
-    /// превышение — крупная, со скоростью, поверх всего; без лимита — серая.
+    /// «на грани» и превышение — со скоростью, цветом состояния (PassVerdict),
+    /// поверх всего; без лимита — серая.
     static func picture(_ record: TripRecord) -> MapPicture {
         var picture = MapPicture()
         let points = record.trackPoints
@@ -117,11 +118,11 @@ struct TripEndCard: View {
         for pass in record.passed {
             guard let coordinate = pass.coordinate else { continue }
             if let limit = pass.limitKmh {
-                if pass.speedKmh <= Double(limit) {
+                if pass.verdict == .clean {
                     picture.dots.append(.init(coordinate: coordinate, diameter: 16, fill: Theme.success,
-                                              ringWidth: 1.5, label: "✓", labelColor: .white))
+                                              ringWidth: 1.5, labelColor: .white, symbol: "checkmark"))
                 } else {
-                    over.append(.init(coordinate: coordinate, diameter: 22,
+                    over.append(.init(coordinate: coordinate, diameter: pass.verdict == .over ? 22 : 20,
                                       fill: PassStyle.color(speed: pass.speedKmh, limit: limit),
                                       ringWidth: 2, label: "\(Int(pass.speedKmh.rounded()))",
                                       labelColor: Theme.background))
@@ -232,11 +233,15 @@ struct TripEndCard: View {
                     .font(.numeral(46, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.score(score))
                     .minimumScaleFactor(0.7)
-                Text("рейтинг")
-                    .font(.rounded(12, .semibold))
+                // «Рейтинг» — только у недели и месяца (аудит 05.11, п. 4):
+                // у поездки свой балл, и звать его надо так же, как в Итогах.
+                Text("балл поездки")
+                    .font(.rounded(11, .semibold))
                     .foregroundStyle(Theme.textTertiary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
-            .frame(width: 76, height: 72)
+            .frame(width: 84, height: 72)
             .background(Theme.quietFill, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(String(format: String(localized: "Балл поездки: %lld"), score)))
@@ -245,7 +250,7 @@ struct TripEndCard: View {
             Image(systemName: clean ? "checkmark.seal.fill" : "checkmark.circle.fill")
                 .font(.rounded(30, .bold))
                 .foregroundStyle(clean ? Theme.success : Theme.accent)
-                .frame(width: 76, height: 72)
+                .frame(width: 84, height: 72)
                 .background(Theme.quietFill, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
         }
     }
@@ -319,9 +324,18 @@ struct TripEndCard: View {
                 text = String(format: String(localized: "Камеры без превышения: %1$lld из %2$lld"), clean, total)
             }
             return ("checkmark.circle.fill", Theme.success, text, Theme.textPrimary)
+        case .camerasEdge(let clean, let edge):
+            // «На грани» (PassVerdict): балл снят, штрафа обычно нет — тем же
+            // жёлтым кругом, что точка проезда на снимке.
+            let text = clean > 0
+                ? String(format: String(localized: "Камеры: в лимите %1$lld · на грани %2$lld"), clean, edge)
+                : String(format: String(localized: "Камеры на грани: %lld — штрафа обычно нет, балл снят"), edge)
+            return (Theme.symbol(.attention) ?? "exclamationmark.circle.fill", Theme.warning, text, Theme.textPrimary)
         case .risk(let amount):
+            // Оценка, а не счёт (аудит 05.11, п. 3): «риск ≈» читалось суммой к оплате.
             return ("exclamationmark.triangle.fill", factTint,
-                    String(format: String(localized: "риск ≈ %@"), Formatting.money(amount)), factTint)
+                    String(format: String(localized: "Могут прийти ≈ %@ · оценка, не постановления"),
+                           Formatting.money(amount)), factTint)
         case .overspeed(let count):
             return ("exclamationmark.triangle.fill", factTint,
                     String(format: String(localized: "Штрафуемых превышений: %lld"), count), factTint)

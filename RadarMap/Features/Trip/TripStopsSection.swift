@@ -76,7 +76,7 @@ struct TripStopsSection: View {
             Spacer()
             Text("\(stops.count)")
                 .font(.rounded(15, .bold))
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Theme.textPrimary)
         }
     }
 

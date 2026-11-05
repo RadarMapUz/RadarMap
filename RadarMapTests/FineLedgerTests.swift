@@ -184,6 +184,8 @@ final class FineLedgerTests: XCTestCase {
         XCTAssertEqual(ledger.expected.map(\.pass.id), [pending.id])
         XCTAssertEqual(ledger.marked.map(\.pass.id), [paidByButton.id])
         XCTAssertEqual(ledger.expectedSum, 5 * FineSchedule.brv, accuracy: 0.01)
+        // Шапка и вкладка «Пришли» считают одинаково: отмеченный «пришёл» тоже пришёл.
+        XCTAssertEqual(ledger.arrivedCount, ledger.received.count + 1)
     }
 
     /// «К оплате» — только неоплаченные с известной суммой; без суммы —

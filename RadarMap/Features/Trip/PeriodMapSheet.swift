@@ -169,19 +169,24 @@ struct PeriodMapSheet: View {
         // на каждую из сотен точек при каждом сдвиге карты.
         // Цвет маркера — единственное, что говорит о превышении; имя места
         // без этого не отвечает на вопрос, ради которого открыли карту.
-        .accessibilityLabel(marker.hasViolation
-            ? Text("\(marker.location), превышений: \(marker.overTimes) из \(marker.times)")
-            : marker.limitUnknown
-                ? Text("\(marker.location), лимит неизвестен, проездов: \(marker.times)")
-                : Text("\(marker.location), без превышений, проездов: \(marker.times)"))
+        .accessibilityLabel(accessibilityText(marker))
+    }
+
+    /// VoiceOver называет то же состояние, что цвет точки (PassVerdict):
+    /// жёлтая «на грани» не может звучать «без превышений».
+    private func accessibilityText(_ marker: PassMarker) -> Text {
+        switch marker.verdict {
+        case .over:    return Text("\(marker.location), превышений: \(marker.overTimes) из \(marker.times)")
+        case .edge:    return Text("\(marker.location), на грани: \(marker.edgeTimes) из \(marker.times)")
+        case .unknown: return Text("\(marker.location), лимит неизвестен, проездов: \(marker.times)")
+        case .clean:   return Text("\(marker.location), без превышений, проездов: \(marker.times)")
+        }
     }
 
     /// Красный — превышение, зелёный — в лимите, серый — лимит неизвестен:
     /// зелёным такую точку красить нельзя, «в лимите» мы о ней не знаем.
-    static func tint(_ marker: PassMarker) -> Color {
-        if marker.hasViolation { return Theme.danger }
-        return marker.limitUnknown ? Theme.textTertiary : Theme.success
-    }
+    /// Три состояния (PassVerdict) — то же слово и цвет, что в строках проездов.
+    static func tint(_ marker: PassMarker) -> Color { marker.verdict.tint }
 
     /// Карточка выбранной камеры: место, проезды, макс скорость против лимита.
     private func markerCard(_ marker: PassMarker) -> some View {
@@ -237,7 +242,7 @@ struct PeriodMapSheet: View {
     /// «макс 82 · лимит 60» — суть проезда одним взглядом.
     private func speedBadge(_ marker: PassMarker) -> some View {
         HStack(spacing: 5) {
-            Text("\(Int(marker.maxSpeedKmh.rounded()))")
+            Text(verbatim: PassVerdict.speedText(speedKmh: marker.maxSpeedKmh, limitKmh: marker.limitKmh))
                 .font(.rounded(17, .heavy).monospacedDigit())
                 .foregroundStyle(marker.limitUnknown ? Theme.textPrimary : Self.tint(marker))
             if let limit = marker.limitKmh {

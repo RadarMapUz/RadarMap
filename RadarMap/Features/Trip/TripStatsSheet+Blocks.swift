@@ -2,8 +2,9 @@
 //  TripStatsSheet+Blocks.swift
 //  RadarMap
 //
-//  Три слоя главного листа «Итогов» (34b, Г-A): карточка-ответ, «Сделать»,
-//  «Разделы». Правила:
+//  Главный лист «Итогов» — вариант A аудита 05.11 «Неделя одним взглядом»:
+//  карточка-ответ, «Что сделать», поездки окна, «Ещё за неделю» (числа того
+//  же окна) и «Не только эта неделя» (у каждой строки своё окно). Правила:
 //    * одно число — одно место: сумма штрафов периода — только в строке денег
 //      карточки-ответа, камера-лидер — только в «Сделать», обслуживание —
 //      только строкой «Машина»;
@@ -18,91 +19,25 @@ extension TripStatsSheet {
 
     // MARK: - 1. Карточка-ответ
 
-    /// Рейтинг, километры, уровень, сдвиг к прошлому — тап открывает разбор
-    /// рейтинга; ниже одна строка денег — тап открывает «Штрафы».
-    func answerCard(trip: TripStats, itogi: ItogiScreen) -> some View {
-        let summary = itogi.summary
-        return VStack(alignment: .leading, spacing: 0) {
-            heroCard(trip: trip, summary: summary)
-            if let money = moneyLine(summary) {
-                Divider().overlay(Theme.stroke)
-                Button {
-                    finesRequest = FinesRequest(window: .period(period, anchor), tab: .possible,
-                                                periodRisk: summary.fineRisk)
-                } label: {
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Image(systemName: Icon.fines)
-                            .font(.rounded(15, .semibold))
-                            .foregroundStyle(money.tint)
-                            .frame(width: 22)
-                            .accessibilityHidden(true)
-                        // Сумма и счётчик — двумя строками: одной строкой
-                        // «· превышений: 1» переносилось с висящей точкой.
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(money.text)
-                                .font(.rounded(15, .semibold))
-                                .foregroundStyle(Theme.textPrimary)
-                            Text(money.caption)
-                                .font(.rounded(12))
-                                .foregroundStyle(Theme.textTertiary)
-                        }
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        Image(systemName: "chevron.right")
-                            .font(.rounded(13, .semibold))
-                            .foregroundStyle(Theme.textTertiary)
-                            .accessibilityHidden(true)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .frame(minHeight: Theme.controlSize)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(PressableStyle(.row))
-                .accessibilityElement(children: .combine)
-                .accessibilityHint(Text("Открыть штрафы"))
-            }
-            // Вывод периода — когда дела у камеры нет («стали ездить чище»,
-            // «у пройденных камер неизвестен лимит»): строкой ответа.
-            if itogi.action == nil, let insight = itogi.insights.first {
-                Divider().overlay(Theme.stroke)
-                heroLine(symbol: insight.icon, tint: Self.insightTint(insight.kind), text: insight.text)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-            }
-        }
-        .statCard(padding: 0)
+    /// Рейтинг «из 100» и за что сняли — тап открывает разбор; ниже факты,
+    /// неделя столбиками и «Могут прийти» — тап открывает «Штрафы».
+    func answerCard(itogi: ItogiScreen) -> some View {
+        ItogiAnswerCard(itogi: itogi, period: period,
+                        onRating: { showRatingInfo = true },
+                        onFines: {
+                            finesRequest = FinesRequest(window: .period(period, anchor), tab: .possible,
+                                                        periodRisk: itogi.summary.fineRisk)
+                        })
     }
 
-    /// Строка денег: «Возможные штрафы ≈ 2,2 млн · превышений: 1» — оценка
-    /// периода (то же число, что шапка «Штрафов» для этого окна). Без
-    /// проездов с известным лимитом — строки нет.
-    func moneyLine(_ summary: PeriodSummary) -> (text: String, caption: String, tint: Color)? {
-        guard summary.cleanPasses + summary.overPasses > 0 else { return nil }
-        let passes = String(format: String(localized: "проездов камер: %lld"), summary.cameras)
-        if summary.overPasses > 0, summary.fineRisk > 0 {
-            return (String(format: String(localized: "Возможные штрафы ≈ %@"),
-                           Formatting.unbreakable(Formatting.money(summary.fineRisk))),
-                    passes + " · " + String(format: String(localized: "с превышением: %lld"), summary.overPasses),
-                    Theme.danger)
-        }
-        if summary.overPasses > 0 {
-            // Все превышения уже отмечены «пришёл / не пришёл».
-            return (String(localized: "Штрафы периода отмечены"),
-                    passes + " · " + String(format: String(localized: "с превышением: %lld"), summary.overPasses),
-                    Theme.textSecondary)
-        }
-        return (String(localized: "Штрафуемых превышений нет"), passes, Theme.success)
-    }
-
-    // MARK: - 2. Сделать
+    // MARK: - 2. Что сделать
 
     @ViewBuilder
     func todoSection(_ itogi: ItogiScreen) -> some View {
         let items = todoItems(itogi)
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 14) {
-                ItogiGroupTitle(title: String(localized: "Сделать"))
+                ItogiGroupTitle(title: String(localized: "Что сделать"))
                 ItogiRowGroup(items: items)
             }
         }
@@ -131,15 +66,28 @@ extension TripStatsSheet {
                 action: { finesRequest = FinesRequest(tab: .received) }))
         }
         if itogi.pendingCount > 0, let oldest = itogi.pendingOldest {
+            // Вопрос, а не счётчик (аудит 05.11): «Ждут ответа: 3» не говорило,
+            // чего ждут и зачем отвечать. Окно — месяц старейшего проезда, и
+            // экран «Штрафов» подписывает его крупно.
             items.append(ItogiRowItem(
                 id: "pending", symbol: Icon.fines,
-                title: String(format: String(localized: "Ждут ответа: %lld"), itogi.pendingCount),
-                caption: String(localized: "Отметьте: штраф пришёл или нет"),
+                title: Self.pendingQuestion(itogi.pendingCount),
+                caption: String(localized: "Отметьте — сумма «могут прийти» станет точной"),
                 action: {
                     finesRequest = FinesRequest(window: .period(.month, oldest), tab: .possible)
                 }))
         }
         return items
+    }
+
+    /// «Пришёл ли старый штраф?» / «Пришли ли 3 старых штрафа?».
+    static func pendingQuestion(_ count: Int) -> String {
+        switch PluralRu.form(count) {
+        case .one where count == 1: return String(localized: "Пришёл ли старый штраф?")
+        case .one:  return String(format: String(localized: "Пришёл ли %lld старый штраф?"), count)
+        case .few:  return String(format: String(localized: "Пришли ли %lld старых штрафа?"), count)
+        case .many: return String(format: String(localized: "Пришли ли %lld старых штрафов?"), count)
+        }
     }
 
     /// «Держите 60 у «Юнусабад»» — заголовок дела.
@@ -149,10 +97,11 @@ extension TripStatsSheet {
         } ?? String(format: String(localized: "Сбавьте у «%@»"), hint.location)
     }
 
-    /// «выше лимита — 2 из 3 · ≈ 1,1 млн сум» — без суммы, если это вся сумма
-    /// строки денег над делом (34: та же цифра второй раз подряд).
+    /// «2 из 3 проездов выше лимита · ≈ 1,1 млн сум» — без суммы, если это
+    /// вся сумма «Могут прийти» над делом (та же цифра второй раз подряд).
     func actionCaption(_ hint: ActionHint, periodRisk: Double) -> String {
-        var text = String(format: String(localized: "проезды выше лимита — %1$lld из %2$lld"), hint.over, hint.passes)
+        var text = String(format: String(localized: "%1$lld из %2$lld %3$@ выше лимита"),
+                          hint.over, hint.passes, ItogiWords.passesGenitive(hint.passes))
         if hint.fine > 0, abs(hint.fine - periodRisk) >= 1 {
             text += " · ≈\u{00A0}" + Formatting.unbreakable(Formatting.money(hint.fine))
         }
@@ -169,21 +118,142 @@ extension TripStatsSheet {
         return String(format: String(localized: "Не оплачено: %lld"), dues.unpaid)
     }
 
-    // MARK: - 3. Разделы
+    // MARK: - 3. Поездки окна
 
+    /// Три последние поездки окна строками и вход на страницу «Поездки»: до
+    /// 05.11 поездки прятались строкой в списке разделов, и чтобы увидеть
+    /// вчерашнюю, нужно было знать, где она.
     @ViewBuilder
-    func sectionsList(_ itogi: ItogiScreen, trip: TripStats) -> some View {
-        let items = sectionItems(itogi, trip: trip)
+    func recentTrips(_ itogi: ItogiScreen) -> some View {
+        let all = itogi.trips
+        if !all.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                ItogiGroupTitle(title: Self.tripsTitle(period))
+                VStack(spacing: 0) {
+                    ForEach(Array(all.prefix(AppConfig.itogiRecentTrips).enumerated()), id: \.element.id) { index, record in
+                        if index > 0 {
+                            Divider().overlay(Theme.stroke).padding(.leading, 70)
+                        }
+                        Button {
+                            path.append(.trip(record.id))
+                        } label: {
+                            TripListRow(record: record, title: Formatting.tripTitle(record.startedAt))
+                        }
+                        .buttonStyle(PressableStyle(.row))
+                        .accessibilityElement(children: .combine)
+                        .accessibilityHint(Text("Открыть подробности"))
+                    }
+                    Divider().overlay(Theme.stroke)
+                    Button {
+                        path.append(.trips)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(String(format: String(localized: "Все %1$lld %2$@, карта и календарь"),
+                                        all.count, Formatting.tripsLabel(all.count)))
+                                .font(.rounded(15, .semibold))
+                                .foregroundStyle(Theme.accent)
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.right")
+                                .font(.rounded(13, .semibold))
+                                .foregroundStyle(Theme.accent)
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: Theme.controlSize)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PressableStyle(.row))
+                }
+                .clipShape(RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+                .statCard(padding: 0, radius: Theme.cornerMedium)
+            }
+        }
+    }
+
+    static func tripsTitle(_ period: StatsPeriod) -> String {
+        switch period {
+        case .day:   return String(localized: "Поездки дня")
+        case .week:  return String(localized: "Поездки недели")
+        case .month: return String(localized: "Поездки месяца")
+        }
+    }
+
+    // MARK: - 4. Ещё об окне
+
+    /// Пробки, скорость вне камер и расходы — числа ТОГО ЖЕ окна, поэтому
+    /// своей группой под заголовком окна, а не вперемешку с «за 30 дней».
+    @ViewBuilder
+    func windowSection(_ itogi: ItogiScreen) -> some View {
+        let items = windowItems(itogi)
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 14) {
-                ItogiGroupTitle(title: String(localized: "Разделы"))
+                ItogiGroupTitle(title: Self.windowTitle(period))
                 ItogiRowGroup(items: items)
             }
         }
     }
 
-    func sectionItems(_ itogi: ItogiScreen, trip: TripStats) -> [ItogiRowItem] {
+    static func windowTitle(_ period: StatsPeriod) -> String {
+        switch period {
+        case .day:   return String(localized: "Ещё за день")
+        case .week:  return String(localized: "Ещё за неделю")
+        case .month: return String(localized: "Ещё за месяц")
+        }
+    }
+
+    func windowItems(_ itogi: ItogiScreen) -> [ItogiRowItem] {
         let summary = itogi.summary
+        guard !summary.isEmpty else { return [] }
+        var items: [ItogiRowItem] = []
+        // Две строки вместо «Пробки и лимит» с подписью «в пробках · выше
+        // лимита вне камер: 4 % пути» (аудит): у каждой своё число.
+        if let jam = summary.jamSeconds, jam >= AppConfig.jamMinPeriodSeconds {
+            items.append(ItogiRowItem(
+                id: "jams", symbol: Icon.trafficLayer,
+                title: String(localized: "Пробки"),
+                caption: String(localized: "где и когда стояли"),
+                value: Formatting.duration(jam),
+                action: { roadHabit = payload(.jams, itogi) }))
+        }
+        if let share = summary.overLimitShare {
+            items.append(ItogiRowItem(
+                id: "overLimit", symbol: Icon.overLimit,
+                title: String(localized: "Скорость вне камер"),
+                caption: summary.overLimitMeters < 1
+                    ? String(localized: "весь путь с известным лимитом — не выше")
+                    : String(format: String(localized: "%@ пути выше лимита"), Self.percentText(share)),
+                value: Self.percentText(share),
+                action: { roadHabit = payload(.overLimit, itogi) }))
+        }
+        if let expenses = expensesRow(summary) {
+            items.append(expenses)
+        }
+        return items
+    }
+
+    // MARK: - 5. Не только это окно
+
+    @ViewBuilder
+    func otherWindows(trip: TripStats) -> some View {
+        let items = otherItems(trip: trip)
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                ItogiGroupTitle(title: Self.otherTitle(period))
+                ItogiRowGroup(items: items)
+            }
+        }
+    }
+
+    static func otherTitle(_ period: StatsPeriod) -> String {
+        switch period {
+        case .day:   return String(localized: "Не только этот день")
+        case .week:  return String(localized: "Не только эта неделя")
+        case .month: return String(localized: "Не только этот месяц")
+        }
+    }
+
+    /// Строки других окон — у каждой окно подписано (правило 14): «последняя
+    /// поездка», «за 30 дней», «за всё время».
+    func otherItems(trip: TripStats) -> [ItogiRowItem] {
         var items: [ItogiRowItem] = []
 
         // Новые камеры на своих дорогах — новость, пока не нажали «Понятно».
@@ -192,56 +262,22 @@ extension TripStatsSheet {
             items.append(ItogiRowItem(
                 id: "news", symbol: Icon.cameras, tint: Theme.Icon.camera,
                 title: String(localized: "Новые камеры на ваших дорогах"),
-                caption: String(localized: "Появились с обновлением базы"),
+                caption: String(localized: "с последним обновлением базы"),
                 value: "+\(news.count)",
                 action: { path.append(.cameraNews) }))
         }
 
-        // Дорога на работу и домой — по одной строке, порядок по времени суток.
+        // Дорога на работу и домой — окно «последняя поездка». Опоздание —
+        // не красным: красный здесь — штраф и камера, а не пробка.
         for commute in env.commute {
+            let delay = commute.lastDelay.map(Formatting.delayPhrase)
             items.append(ItogiRowItem(
                 id: "commute-\(commute.direction.rawValue)", symbol: commute.direction.symbol,
                 title: commute.direction.title,
-                caption: commute.lastDelay.map(Formatting.delayPhrase)
-                    ?? CommuteCard.dayLine(commute.last.departure),
+                caption: [String(localized: "последняя поездка"), delay ?? CommuteCard.dayLine(commute.last.departure)]
+                    .joined(separator: " · "),
                 value: Formatting.duration(commute.last.duration),
-                valueTint: (commute.lastDelay ?? 0) >= AppConfig.commuteNoticeableDelaySeconds
-                    ? Theme.danger : Theme.textPrimary,
                 action: { commuteDetail = commute }))
-        }
-
-        if !summary.isEmpty {
-            // Пробки и путь выше лимита — один лист с двумя вкладками.
-            let jam = (summary.jamSeconds ?? 0) >= AppConfig.jamMinPeriodSeconds ? summary.jamSeconds : nil
-            if jam != nil || summary.overLimitShare != nil {
-                var captionParts: [String] = []
-                if jam != nil { captionParts.append(String(localized: "в пробках")) }
-                if let share = summary.overLimitShare {
-                    captionParts.append(summary.overLimitMeters < 1
-                        ? String(localized: "вне камер — в лимите")
-                        : String(format: String(localized: "выше лимита вне камер: %@ пути"),
-                                 Self.percentText(share)))
-                }
-                items.append(ItogiRowItem(
-                    id: "roads", symbol: jam != nil ? Icon.trafficLayer : Icon.overLimit,
-                    title: String(localized: "Пробки и лимит"),
-                    caption: captionParts.joined(separator: " · "),
-                    value: jam.map(Formatting.duration)
-                        ?? summary.overLimitShare.map(Self.percentText),
-                    action: { roadHabit = payload(jam != nil ? .jams : .overLimit, itogi) }))
-            }
-
-            if let expenses = expensesRow(summary) {
-                items.append(expenses)
-            }
-
-            items.append(ItogiRowItem(
-                id: "trips", symbol: Icon.trips,
-                title: String(localized: "Поездки"),
-                caption: String(format: String(localized: "%@ за рулём · карта, список, по дням"),
-                                Formatting.duration(summary.movingDuration)),
-                value: "\(summary.trips)",
-                action: { path.append(.trips) }))
         }
 
         // Обслуживание — только когда что-то скоро или пора (18.2).
@@ -262,7 +298,7 @@ extension TripStatsSheet {
             items.append(ItogiRowItem(
                 id: "shifts", symbol: Icon.shifts,
                 title: String(localized: "Смены"),
-                caption: String(localized: "Рейсы, превышения и расходы по сменам"),
+                caption: String(localized: "рейсы, превышения и расходы по сменам"),
                 value: "\(shifts.count)",
                 action: { path.append(.shifts) }))
         }
@@ -273,19 +309,20 @@ extension TripStatsSheet {
         if impact.reports > 0 {
             items.append(ItogiRowItem(
                 id: "community", symbol: Icon.community,
-                title: String(localized: "Ваши отметки за 30 дней"),
+                title: String(localized: "Ваши отметки радаров"),
                 caption: impact.confirmations > 0
-                    ? String(localized: "Их подтвердили другие водители: \(impact.confirmations) раз")
-                    : String(localized: "Пока без подтверждений других водителей"),
+                    ? String(format: String(localized: "за 30 дней · подтвердили %@"),
+                             ItogiWords.times(impact.confirmations))
+                    : String(localized: "за 30 дней · пока без подтверждений"),
                 value: "\(impact.reports)"))
         }
 
-        // Пожизненное — отдельным разделом (правило 14: своё окно).
+        // Пожизненное — отдельным окном (правило 14). Архив — только отсюда.
         if !trip.lifetime.isEmpty, trip.isLifetimeTrusted {
             items.append(ItogiRowItem(
                 id: "lifetime", symbol: Icon.lifetime,
                 title: String(localized: "За всё время"),
-                caption: String(localized: "Поездки, километры, достижения"),
+                caption: String(localized: "километры, достижения, архив"),
                 value: Formatting.distance(trip.lifetime.distanceMeters),
                 action: { path.append(.lifetime) }))
         }

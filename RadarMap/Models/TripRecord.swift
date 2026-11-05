@@ -232,9 +232,14 @@ nonisolated struct TripRecord: Codable, Identifiable, Equatable {
     /// раньше риск 0 читался как «Все камеры в лимите», и такую карточку можно
     /// было отправить друзьям после превышения. Камеры без лимита — нехватка
     /// данных, а не заслуга водителя.
+    ///
+    /// `edge` — штрафуемых превышений нет, но балл снят (+2…+5 км/ч, PassVerdict):
+    /// до 05.11 такая поездка читалась «Все камеры — без превышения» рядом с
+    /// баллом 92, и водитель не понимал, за что сняли.
     enum Verdict: Equatable {
         case risk(Double)
         case overspeed(Int)
+        case edge(Int)
         case clean
         case unknownLimits
         case noCameras
@@ -243,15 +248,10 @@ nonisolated struct TripRecord: Codable, Identifiable, Equatable {
     var verdict: Verdict {
         let risk = TripHistory.fineRisk(of: passed)
         if risk > 0 { return .risk(risk) }
-        var limited = 0
-        var over = 0
-        for pass in passed {
-            guard let limit = pass.limitKmh else { continue }
-            limited += 1
-            if FineSchedule.fine(overKmh: pass.speedKmh - Double(limit)) > 0 { over += 1 }
-        }
-        if over > 0 { return .overspeed(over) }
-        if limited > 0 { return .clean }
+        let tally = cameraTally
+        if tally.over > 0 { return .overspeed(tally.over) }
+        if tally.edge > 0 { return .edge(tally.edge) }
+        if tally.judged > 0 { return .clean }
         return passed.isEmpty ? .noCameras : .unknownLimits
     }
 

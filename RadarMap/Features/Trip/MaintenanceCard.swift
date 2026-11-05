@@ -35,7 +35,8 @@ struct MaintenanceCard: View {
                     Divider().overlay(Theme.stroke)
                     Text(String(format: String(localized: "Ещё %lld — на странице обслуживания"), hidden))
                         .font(.rounded(13, .medium))
-                        .foregroundStyle(Theme.accent)
+                        // Синий — только у нажимаемого (аудит «Итогов» 05.11).
+                        .foregroundStyle(Theme.textSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 10)
                 }

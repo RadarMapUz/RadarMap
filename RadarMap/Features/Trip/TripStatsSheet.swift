@@ -33,6 +33,8 @@ enum ItogiRoute: Hashable {
     case trips, lifetime, shifts, expenses, expensesJournal, expensesSettings, cameraNews, maintenance
     case trip(Double)
     case pass(trip: Double, pass: UUID)
+    /// День из календаря месяца — уровнем ниже, а не подменой периода.
+    case day(Date)
     /// DEBUG: сетка значков раздела (`-itogiIcons`); в релизе пусто.
     case iconGallery
 }
@@ -44,6 +46,10 @@ struct TripStatsSheet: View {
     var onRoute: ((CLLocationCoordinate2D, String) -> Void)? = nil
 
     @State var period: StatsPeriod = .week
+    /// Окно открылось не идущим, потому что в идущем пусто (понедельник утром) —
+    /// над карточкой об этом строка (ItogiWindow.notice). Сбрасывает любое
+    /// листание и смена периода.
+    @State var autoShifted = false
     /// Какое именно окно показываем: любая дата внутри него. Стрелки листают
     /// якорь, а не «сдвигают окно на N дней» — периоды календарные.
     @State var anchor = Date()
@@ -63,6 +69,9 @@ struct TripStatsSheet: View {
     @State var tripsExpanded = false
     /// «Это разные» по карточке склейки — прячем её сразу (Storage не observable).
     @State var mergeSuggestionHidden = false
+    /// Удалённые свайпом — прячем сразу: строки берутся из пересчитываемого
+    /// вне main `current`, и до его возврата удалённая строка мигала обратно.
+    @State var deletedTripIDs: Set<Double> = []
     /// Полноэкранная карта проездов (item — чтобы передать фокус камеры).
     @State var mapPayload: PeriodMapPayload?
     /// Треки, маркеры и слой частоты — считаются на смену периода, а не в body.
@@ -135,6 +144,7 @@ struct TripStatsSheet: View {
                     }
                     // Пикер и стрелки — ЛИПКАЯ шапка: окно цифр видно всегда.
                     Section {
+                        windowNotice
                         if summary.isEmpty {
                             // Поездок нет вообще или нет именно в этом периоде —
                             // это разные подсказки.
@@ -151,7 +161,7 @@ struct TripStatsSheet: View {
                                 .entrance(1, appeared)
                         }
                         if !summary.isEmpty {
-                            answerCard(trip: trip, itogi: itogi)
+                            answerCard(itogi: itogi)
                                 .entrance(1, appeared)
                         }
                         if let goal = itogi.goal, showsGoal {
@@ -162,9 +172,15 @@ struct TripStatsSheet: View {
                         todoSection(itogi)
                             .entrance(2, appeared)
                             .id("todo")
-                        sectionsList(itogi, trip: trip)
+                        recentTrips(itogi)
+                            .entrance(3, appeared)
+                            .id("trips")
+                        windowSection(itogi)
                             .entrance(3, appeared)
                             .id("sections")
+                        otherWindows(trip: trip)
+                            .entrance(3, appeared)
+                            .id("other")
                     } header: {
                         VStack(spacing: 8) {
                             periodPicker
@@ -227,7 +243,6 @@ struct TripStatsSheet: View {
                                     export(.pdf, summary: summary)
                                 }
                             }
-                            Button("Архив поездок", systemImage: Icon.archive) { showAllTrips = true }
                             Button("Очистить историю", systemImage: "trash", role: .destructive) {
                                 confirmsClear = true
                             }
@@ -284,10 +299,9 @@ struct TripStatsSheet: View {
             env.usage.noteScreen("stats")
             // Понедельник утром текущая неделя пуста — открываем там, где
             // поездки есть; к пустой текущей неделе вернуться можно стрелкой.
-            if TripHistory.summary(days: env.trip.days, history: env.trip.history,
-                                   period: period, anchor: anchor).isEmpty,
-               let nearest = nearestNonEmptyAnchor() {
-                anchor = nearest
+            if let opening = ItogiWindow.openingAnchor(days: env.trip.days, period: period, now: Date()) {
+                anchor = opening
+                autoShifted = true
             }
             #if DEBUG
             debugOpen()
@@ -358,6 +372,7 @@ struct TripStatsSheet: View {
         case .expensesSettings: EnergySettingsPage()
         case .cameraNews: CameraNewsPage(items: env.roadMemory.news)
         case .maintenance: MaintenancePage()
+        case .day(let day): dayPage(day)
         case .trip(let id):
             if let record = env.trip.history.first(where: { $0.id == id }) {
                 TripDetailContent(record: record,

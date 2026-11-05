@@ -3736,6 +3736,8 @@ nonisolated enum AppConfig {
     /// Радиус скругления оси маршрута в изломе, м: узел OSRM — угол, а лента
     /// во всю сторону на нём ломалась бы внутренним краем.
     static let drive3DTurnRadius: Double = 12
+    /// Сглаживание оси после скругления: среднее по ±стольким станциям.
+    static let drive3DAxisSmoothStations = 5
     /// Лента дороги из тайла сопоставляется со станцией не дальше этого, м,
     /// и при расхождении курса не больше drive3DMatchDegrees.
     static let drive3DMatchMeters: Double = 8
@@ -3777,9 +3779,15 @@ nonisolated enum AppConfig {
     static let drive3DChevronMaxKmh: (show: Double, hide: Double) = (55, 60)
     /// Прореживание прямых участков на выходе, м (Дуглас — Пекер).
     static let drive3DSimplifyMeters: Double = 0.05
+    /// Жила середины ленты, точки: у горизонта лента в метрах тоньше точки и
+    /// рябила бы — жила держит нижний предел толщины.
+    static let drive3DSpinePoints: Double = 2
     /// Лента без данных о дороге — по оси, этой шириной.
     static let drive3DFallbackWidth: Double = 3.5
-    /// Пробы тайла вдоль маршрута на экране: шаг, м, и сторона квадрата, точки.
-    static let drive3DProbeStepMeters: Double = 25
+    /// Пробы тайла вдоль маршрута на экране: шаг, м, сторона квадрата, точки,
+    /// и не больше стольких проб за пересчёт (запрос признаков — на главном
+    /// потоке; лента тайла длинная, проба ловит её целиком).
+    static let drive3DProbeStepMeters: Double = 40
     static let drive3DProbePoints: Double = 36
+    static let drive3DProbeLimit = 30
 }

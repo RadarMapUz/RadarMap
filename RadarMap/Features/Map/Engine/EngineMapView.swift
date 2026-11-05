@@ -224,6 +224,11 @@ struct EngineMapView: UIViewRepresentable {
     /// Стиль карты в машине (CarMapStyle, 40J): своя разница стиля, линия
     /// маршрута, слои на ходу, плашка улицы. nil — телефон и приборка.
     var carStyle: CarMapStyle?
+    /// «Вождение 3D» (43, Drive3D): светлый тихий мир, лента маршрута во всю
+    /// нашу сторону и сужение к полосам у манёвра. nil — выключено (настройка,
+    /// вне поездки на телефоне, приборка). Поверх разницы машины: на экране
+    /// машины и плитке кладётся разница 3D, масштаб подписей машины остаётся.
+    var drive3D: Drive3D.Surface?
 
     func makeUIView(context: Context) -> MLNMapView {
         // Сторож тайлов — ДО первой карты: движок начинает качать сразу, и
@@ -293,6 +298,7 @@ struct EngineMapView: UIViewRepresentable {
 
     static func dismantleUIView(_ view: MLNMapView, coordinator: Coordinator) {
         coordinator.routeLine.cancel()
+        coordinator.driveRibbon.cancel()
         coordinator.stopMarkerLink()
         view.delegate = nil
         (view as? EngineNativeMapView)?.onLayout = nil
@@ -336,6 +342,8 @@ struct EngineMapView: UIViewRepresentable {
         private let maneuverCallout = EngineManeuverCallout()
         /// Асфальт поездки и тема линии маршрута (29.B).
         private let driveAsphalt = EngineDriveAsphalt()
+        /// Лента маршрута «Вождения 3D» (43).
+        fileprivate let driveRibbon = EngineDriveRibbon()
         /// Кольцо компаса и знак лимита у машины (29.B).
         private let carDecor = EngineCarDecor()
         /// Значки «нужного сейчас» и цель в режиме прибытия (29.H).
@@ -540,12 +548,14 @@ struct EngineMapView: UIViewRepresentable {
         /// вид поверх карты, и её экранную точку пересчитываем сами.
         func mapViewRegionIsChanging(_ mapView: MLNMapView) {
             layoutPositionView(in: mapView)
-            haze.update(pitchDegrees: mapView.camera.pitch, daylight: current?.daylight ?? true, in: mapView)
+            haze.update(pitchDegrees: mapView.camera.pitch, daylight: current?.daylight ?? true,
+                        hidden: hazeHidden(current), in: mapView)
         }
 
         func mapView(_ mapView: MLNMapView, regionDidChangeAnimated animated: Bool) {
             layoutPositionView(in: mapView)
-            haze.update(pitchDegrees: mapView.camera.pitch, daylight: current?.daylight ?? true, in: mapView)
+            haze.update(pitchDegrees: mapView.camera.pitch, daylight: current?.daylight ?? true,
+                        hidden: hazeHidden(current), in: mapView)
             if let current, styleReady { updateCameras(current, in: mapView) }
             // Масштаб меняет видимый ранг стрелок — и порог фильтра за срезом.
             if styleReady { routeLine.regionChanged(in: mapView) }
@@ -906,6 +916,7 @@ struct EngineMapView: UIViewRepresentable {
             laneFocusLayers.styleLoaded()
             cameraZone.styleLoaded()
             driveAsphalt.styleLoaded()
+            driveRibbon.styleLoaded()
             mapDetail.styleLoaded()
             streetProbe.styleLoaded()
             if let scale = (pending ?? current)?.carScale { EngineCarScale.apply(scale, in: style) }
@@ -1366,12 +1377,17 @@ struct EngineMapView: UIViewRepresentable {
             routeVariants.update(model.variants, selected: model.selectedVariantID,
                                  daylight: model.daylight, avoid: spots, in: view)
             let asphalt = DriveAsphalt.isActive(driving: model.driving, modernStyle: modernLoaded)
+            let threeD = drive3DActive(model)
             if let style = view.style {
-                driveAsphalt.update(active: asphalt, daylight: model.daylight, car: model.carStyle, in: style)
+                driveAsphalt.update(active: asphalt, daylight: model.daylight, car: model.carStyle,
+                                    drive3D: threeD, in: style)
             }
-            let routeDaylight = model.carStyle?.routeDaylight(daylight: model.daylight, active: asphalt)
+            let routeDaylight = threeD ? Drive3D.routeDaylight(daylight: model.daylight)
+                : model.carStyle?.routeDaylight(daylight: model.daylight, active: asphalt)
                 ?? DriveAsphalt.routeDaylight(daylight: model.daylight, active: asphalt)
             routeLine.update(model, routeDaylight: routeDaylight, in: view)
+            driveRibbon.update(model, on: threeD, cut: routeLine.paintedCutAlong, traffic: routeLine.trafficPieces,
+                               in: view)
             laneFocusLayers.update(model, routeDaylight: routeDaylight, in: view)
             cameraZone.update(model.cameraZone, daylight: model.daylight, in: view)
             mapDetail.update(EngineMapDetail.Content(
@@ -1379,9 +1395,20 @@ struct EngineMapView: UIViewRepresentable {
                 halo: model.detail.destination == .arrival ? model.destination : nil,
                 approach: model.detail.destination == .arrival ? model.destinationApproach : nil),
                 daylight: model.daylight, in: view)
-            haze.update(pitchDegrees: view.camera.pitch, daylight: model.daylight, in: view)
+            haze.update(pitchDegrees: view.camera.pitch, daylight: model.daylight, hidden: hazeHidden(model), in: view)
             streetProbe.update(model, at: displayedPosition ?? model.coordinate, in: view)
             updateManeuverMarks(model, routeDaylight: routeDaylight, in: view)
+        }
+
+        /// «Вождение 3D» на этой карте: поверхность, поездка и новая карта.
+        private func drive3DActive(_ model: EngineMapView) -> Bool {
+            Drive3D.isActive(surface: model.drive3D, driving: model.driving, modernStyle: modernLoaded)
+        }
+
+        /// Дымка гаснет на горячем телефоне в «Вождении 3D» — вместе с домами и тенями.
+        private func hazeHidden(_ model: EngineMapView?) -> Bool {
+            guard let model, drive3DActive(model) else { return false }
+            return !Drive3D.hazeShown(hot: model.performance != .full)
         }
 
         /// Стрелка манёвра на линии и выноска у точки манёвра (29.G): данные —
@@ -1473,7 +1500,8 @@ struct EngineMapView: UIViewRepresentable {
             // Входы решения не менялись — множества не пересчитываются: это
             // зовётся на каждом фиксе, а меняется на смене решения.
             let key = LayerKey(detail: model.detail, parkingsKnown: parkingsKnown, driving: model.driving,
-                               modern: modernLoaded, hot: model.performance != .full, car: model.carStyle != nil)
+                               modern: modernLoaded, hot: model.performance != .full, car: model.carStyle != nil,
+                               drive3D: drive3DActive(model))
             if key != layerKey || hiddenLayers == nil {
                 layerKey = key
                 applyLayerVisibility(model, parkingsKnown: parkingsKnown, in: style)
@@ -1492,6 +1520,7 @@ struct EngineMapView: UIViewRepresentable {
             var modern: Bool
             var hot: Bool
             var car: Bool
+            var drive3D: Bool
         }
         private var layerKey: LayerKey?
 
@@ -1510,12 +1539,15 @@ struct EngineMapView: UIViewRepresentable {
             // Экран машины (40J): без переходов и дорожек и стоя, стрелки
             // одностороннего — только стоя (MapDetailLayers.carHidden).
             if model.carStyle != nil { wanted.formUnion(MapDetailLayers.carHidden(model.detail)) }
+            // «Вождение 3D» (43): тихий мир — без украшений на ходу и стоя.
+            if drive3DActive(model) { wanted.formUnion(Drive3D.hiddenLayers) }
             let hot = model.performance != .full
             if wanted != hiddenLayers || hot != hotShown {
                 hiddenLayers = wanted
                 hotShown = hot
                 let managed = Set(Self.hotHiddenLayers).union(MapDetailLayers.managed)
                     .union(MapDetailLayers.carManaged)
+                    .union(Drive3D.hiddenLayers)
                     .union(drivingLayerIDs(style))
                 for id in managed {
                     style.layer(withIdentifier: id)?.isVisible = !wanted.contains(id)

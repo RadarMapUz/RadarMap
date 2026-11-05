@@ -102,6 +102,9 @@ nonisolated enum LanePath {
         var maneuver: Maneuver?
         /// Сужение у манёвра разрешено (на горячем телефоне и плитке — нет).
         var narrowing: Bool
+        /// Метры маршрута у каждой точки — в той же мере, что прогресс и
+        /// манёвры (RouteService.cumulative); nil — своя оценка.
+        var cumulative: [Double]? = nil
     }
 
     // MARK: - Выход
@@ -193,21 +196,26 @@ nonisolated enum LanePath {
     // MARK: - Расчёт
 
     static func build(_ input: Input) -> Ribbon {
-        guard input.route.count >= 2, input.length > 0, let first = input.route.first else {
+        guard input.route.count >= 2, input.length > 0 else {
             return .empty(Frame(origin: input.route.first ?? CLLocationCoordinate2D()))
         }
-        let frame = Frame(origin: first)
+        let rawAlong = measure(input)
+        // Плоскость — у начала участка: на маршруте в десятки километров
+        // масштаб долготы у его старта уже другой.
+        let originIndex = rawAlong.firstIndex { $0 >= input.from } ?? (input.route.count - 1)
+        let frame = Frame(origin: input.route[originIndex])
         let raw = input.route.map(frame.point)
-        var rawAlong = [0.0]
-        rawAlong.reserveCapacity(raw.count)
-        for i in 1..<raw.count { rawAlong.append(rawAlong[i - 1] + (raw[i] - raw[i - 1]).length) }
         let pad = 30.0
         let lo = max(0, input.from - pad)
         let hi = min(rawAlong.last ?? 0, input.from + input.length + pad)
         guard hi - lo > 1 else { return .empty(frame) }
         let section = cut(raw, rawAlong, from: lo, to: hi)
         let smooth = fillet(section, radius: AppConfig.drive3DTurnRadius)
-        let (points, along) = densify(smooth, step: AppConfig.drive3DStationMeters)
+        let (dense, along) = densify(smooth, step: AppConfig.drive3DStationMeters)
+        // Пологие изломы (вершины OSM через 10–20 м по 3–6°) дуга не берёт —
+        // край ленты шёл бы гранями. Скользящее среднее по ±10 м делает из
+        // них кривую; смещения краёв всё равно считаются от оси ленты тайла.
+        let points = averaged(dense, AppConfig.drive3DAxisSmoothStations)
         let n = points.count
         guard n >= 2 else { return .empty(frame) }
 
@@ -244,7 +252,7 @@ nonisolated enum LanePath {
         var plan = NarrowPlan.none
         if input.narrowing, let maneuver = input.maneuver,
            maneuver.along > along[0], maneuver.along - input.window - AppConfig.drive3DRowSearchMeters < along[n - 1] {
-            plan = narrowPlan(maneuver: maneuver, input: input, points: points, tangent: tangent,
+            plan = narrowPlan(maneuver: maneuver, input: input, frame: frame, points: points, tangent: tangent,
                               along: along, lf: lf, rf: rf)
         }
         var leftOff = lf
@@ -342,6 +350,21 @@ nonisolated enum LanePath {
     }
 
     // MARK: - Ось
+
+    /// Метры маршрута у точек: переданные (мера RouteService) или по
+    /// отрезкам с масштабом долготы на их середине.
+    static func measure(_ input: Input) -> [Double] {
+        if let cumulative = input.cumulative, cumulative.count == input.route.count { return cumulative }
+        var out = [0.0]
+        out.reserveCapacity(input.route.count)
+        for i in 1..<input.route.count {
+            let a = input.route[i - 1], b = input.route[i]
+            let kx = 111_320 * cos((a.latitude + b.latitude) / 2 * .pi / 180)
+            let dx = (b.longitude - a.longitude) * kx, dy = (b.latitude - a.latitude) * 110_540
+            out.append(out[i - 1] + (dx * dx + dy * dy).squareRoot())
+        }
+        return out
+    }
 
     /// Отрезок полилинии между двумя метрами (с концами по интерполяции).
     static func cut(_ points: [Point], _ along: [Double], from lo: Double, to hi: Double)
@@ -526,6 +549,19 @@ nonisolated enum LanePath {
         return out
     }
 
+    /// Скользящее среднее точек; концы остаются на месте (окно сужается).
+    static func averaged(_ points: [Point], _ half: Int) -> [Point] {
+        guard points.count > 2, half > 0 else { return points }
+        var out = points
+        for i in 1..<(points.count - 1) {
+            let k = min(half, i, points.count - 1 - i)
+            var sum = Point(x: 0, y: 0)
+            for j in (i - k)...(i + k) { sum = sum + points[j] }
+            out[i] = sum * (1 / Double(2 * k + 1))
+        }
+        return out
+    }
+
     static func average(_ values: [Double], _ half: Int) -> [Double] {
         guard values.count > 2 * half else { return values }
         var out = values
@@ -604,7 +640,7 @@ nonisolated enum LanePath {
         }
     }
 
-    static func narrowPlan(maneuver: Maneuver, input: Input, points: [Point], tangent: [Point],
+    static func narrowPlan(maneuver: Maneuver, input: Input, frame: Frame, points: [Point], tangent: [Point],
                            along: [Double], lf: [Double], rf: [Double]) -> NarrowPlan {
         let n = along.count
         func station(_ s: Double) -> Int {
@@ -615,7 +651,6 @@ nonisolated enum LanePath {
         // Ряд стрелок перед манёвром на нашей стороне.
         var rowArrows: [(along: Double, lateral: Double, arrow: Arrow)] = []
         if maneuver.row {
-            let frame = Frame(origin: input.route[0])
             let a0 = station(maneuver.along - AppConfig.drive3DRowSearchMeters)
             let a1 = station(maneuver.along)
             if a1 > a0 {

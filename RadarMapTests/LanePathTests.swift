@@ -223,8 +223,9 @@ final class LanePathTests: XCTestCase {
         let r = LanePath.build(leftTurn(edge: nil))
         XCTAssertEqual(r.along.last ?? 0, 900, accuracy: 0.5)
         let corner = r.along.firstIndex { $0 >= 600 }!
-        let p = r.centre[corner]
+        let p = frame.point(r.frame.coordinate(r.centre[corner]))
         XCTAssertGreaterThan(hypot(p.x - 0, p.y - 600), 1, "угол срезан дугой")
+        XCTAssertLessThan(hypot(p.x - 0, p.y - 600), 8, "но рядом с узлом")
     }
 
     /// Разворот: внутренний край длиннее радиуса не даёт петли.

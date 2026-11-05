@@ -253,6 +253,16 @@ class AppColoursInSync(unittest.TestCase):
         pairs = re.findall(r'\("([^"]+)", "([^"]+)"\)', pill[pill.index("mapTypes"):pill.index("static func label")])
         self.assertEqual(tuple(pairs), make_style.STREET_TYPES)
 
+    def test_drive3d_surface_copy_in_palette_tests(self):
+        tests = _swift("RadarMapTests/PaletteTests.swift")
+        found = re.search(r"daylight \? \(\[0x(\w{6}), 0x(\w{6})\], 0x(\w{6})\) : \(\[0x(\w{6}), 0x(\w{6})\], 0x(\w{6})\)",
+                          tests)
+        self.assertIsNotNone(found)
+        for theme, offset in (("light", 0), ("dark", 3)):
+            p = make_style.drive3d_palette(theme)
+            copy = ["#" + found.group(offset + k).lower() for k in (1, 2, 3)]
+            self.assertEqual(copy, [p["road_trunk"], p["road"], p["paint"]], theme)
+
     def test_drive3d_ribbon(self):
         # Лента «Вождения 3D» — те же числа, что Drive3D.ribbon в приложении.
         source = _swift("RadarMap/Models/Drive3D.swift")

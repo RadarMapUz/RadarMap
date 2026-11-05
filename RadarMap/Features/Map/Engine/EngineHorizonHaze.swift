@@ -22,16 +22,18 @@ final class EngineHorizonHaze {
     }
 
     private var hazeView: HazeView?
-    private var shown: (pitch: Double, daylight: Bool, size: CGSize)?
+    private var shown: (pitch: Double, daylight: Bool, size: CGSize, hidden: Bool)?
     private var paintedDaylight: Bool?
 
-    func update(pitchDegrees: Double, daylight: Bool, in view: MLNMapView) {
+    /// `hidden` — погасить совсем («Вождение 3D» на горячем телефоне, 43).
+    func update(pitchDegrees: Double, daylight: Bool, hidden: Bool = false, in view: MLNMapView) {
         let size = view.bounds.size
         guard size.width > 0, size.height > 0 else { return }
         if let shown, abs(shown.pitch - pitchDegrees) < AppConfig.hazePitchStep,
-           shown.daylight == daylight, shown.size == size { return }
-        shown = (pitchDegrees, daylight, size)
-        let look = HorizonHaze.look(pitchDegrees: pitchDegrees)
+           shown.daylight == daylight, shown.size == size, shown.hidden == hidden { return }
+        shown = (pitchDegrees, daylight, size, hidden)
+        var look = HorizonHaze.look(pitchDegrees: pitchDegrees)
+        if hidden { look.opacity = 0 }
         guard look.opacity > 0.01 || hazeView != nil else { return }
         let haze = hazeView ?? make(in: view)
         CATransaction.begin()

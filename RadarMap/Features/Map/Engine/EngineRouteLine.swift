@@ -95,6 +95,13 @@ final class EngineRouteLine {
     /// Что последним ушло в источник линии — пустое поверх пустого не пишется.
     private var lineKeys: [String: [Double]] = [:]
 
+    /// Где сейчас нарисована граница пройденного, метры маршрута: от неё
+    /// начинается лента «Вождения 3D» (EngineDriveRibbon). nil — ещё не резали.
+    var paintedCutAlong: Double? { paintedCut.isFinite ? paintedCut : nil }
+
+    /// Пробки на линии с местом в метрах — их же лента 3D кладёт поверх себя.
+    var trafficPieces: [RouteTraffic.Piece] { traffic }
+
     /// Где сейчас нарисована граница пройденного (для замера 27.A).
     var paintedCutCoordinate: CLLocationCoordinate2D? {
         guard let line, paintedCut.isFinite else { return nil }

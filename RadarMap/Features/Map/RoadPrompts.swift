@@ -231,8 +231,6 @@ struct RoadPromptDriver: View {
             // Время на ответ — с момента, когда вопрос видно (как у баннера машины).
             map.promptFrozenRemaining[shown.id] = nil
             if let offer = env.route.detourOffer { env.route.noteDetourShown(id: offer.id, now: now) }
-        case .late:
-            env.commuteLive.markLatePlaqueShown()
         default:
             break
         }

@@ -608,7 +608,7 @@ final class AppEnvironment {
             cng?.noteFix(coordinate, speedKmh: location?.speedKmh ?? -1)
             // Без withAnimation: транзакция анимации на КАЖДОМ фиксе, в том
             // числе в фоне, ради смены вопроса раз в поездку. Появление
-            // вопроса анимирует сам гейт (MobileConfirmGate).
+            // вопроса анимирует очередь вопросов (RoadPromptDriver).
             mobile?.trackPasses(from: coordinate, course: location?.currentCourse ?? -1)
             // Автоэконом (12.3): заряд перечитывается не чаще раза в минуту —
             // на фиксе это сравнение дат. С фикса, а не с экрана: CarPlay

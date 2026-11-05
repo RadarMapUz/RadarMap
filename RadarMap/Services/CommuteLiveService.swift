@@ -40,12 +40,8 @@ final class CommuteLiveService {
     /// Плашку «опаздываю — предупредить?» (8.8.14) в этой поездке уже закрыли
     /// или использовали: она одна на поездку.
     private(set) var latePlaqueDone = false
-    /// Плашку уже показали — дальше она держится, пока не закроют, не
-    /// отправят или не истечёт её время, а не мигает на каждом «стоим/едем».
-    private(set) var latePlaqueShown = false
 
     func dismissLatePlaque() { latePlaqueDone = true }
-    func markLatePlaqueShown() { if !latePlaqueShown { latePlaqueShown = true } }
 
     /// Показывать ли плашку «опаздываю» (8.8.14): только со сроком и когда
     /// показано «позже срока», стоя (лист «Поделиться» на ходу — помеха за
@@ -122,7 +118,6 @@ final class CommuteLiveService {
             lateNotice = CommuteGhost.LateNotice()
             shiftNotice = CommuteGhost.ShiftNotice()
             latePlaqueDone = false
-            latePlaqueShown = false
         }
         if !resumed || recorder?.direction != direction {
             recorder = CommuteAccuracy.Recorder(direction: direction, departure: departure, factor: bias)

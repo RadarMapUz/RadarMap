@@ -26,6 +26,8 @@ nonisolated enum MapPopover: Hashable, CaseIterable {
     case layers
     /// «Оповещения»: звук, вибро, голос — от тапа по скорости.
     case quickToggles
+    /// «Ещё»: плитки 3 × 2 над нижними панелями — от круга «…» (этап 45).
+    case tripMenu
 
     /// Что случилось вокруг карточки.
     enum Event: Equatable {
@@ -47,6 +49,10 @@ nonisolated enum MapPopover: Hashable, CaseIterable {
         case tripStateChanged
         /// Приложение ушло в фон.
         case background
+        /// Подъехали к камере: плитки «Ещё» внизу закрываются — экран отдан
+        /// предупреждению. Меню сверху («Карта», «Оповещения») камере не
+        /// мешают: звук выключают как раз у камеры.
+        case cameraAlert
     }
 
     /// Какая карточка открыта после события.
@@ -60,6 +66,8 @@ nonisolated enum MapPopover: Hashable, CaseIterable {
             return current == card ? nil : current
         case .outsideTouch, .sheetOpened, .tripStateChanged, .background:
             return nil
+        case .cameraAlert:
+            return current == .tripMenu ? nil : current
         }
     }
 }

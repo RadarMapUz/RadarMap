@@ -46,10 +46,17 @@ final class MapPopoverTests: XCTestCase {
         XCTAssertNil(MapPopover.next(nil, on: .dismissed(.layers)))
     }
 
+    /// Камера впереди закрывает плитки «Ещё» внизу, а меню сверху оставляет.
+    func testCameraClosesOnlyTheTileMenu() {
+        XCTAssertNil(MapPopover.next(.tripMenu, on: .cameraAlert))
+        XCTAssertEqual(MapPopover.next(.quickToggles, on: .cameraAlert), .quickToggles)
+        XCTAssertEqual(MapPopover.next(.layers, on: .cameraAlert), .layers)
+    }
+
     /// Ни одно событие, кроме кнопки карточки, не открывает меню само.
     func testOnlyTheCardButtonOpensACard() {
         let events: [MapPopover.Event] = [.outsideTouch, .sheetOpened, .tripStateChanged, .background,
-                                          .dismissed(.layers), .dismissed(.quickToggles)]
+                                          .cameraAlert, .dismissed(.layers), .dismissed(.quickToggles)]
         for event in events {
             XCTAssertNil(MapPopover.next(nil, on: event))
         }

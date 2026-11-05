@@ -152,7 +152,7 @@ struct OfflineOfferCard: View {
         guard OfflineOffer.shouldOffer(situation) else { return nil }
         // Догадка «Домой» считается, только если иначе предложили бы: вопрос
         // почти всегда уже отвечен, а тело перерисовывается на фиксах.
-        situation.suggestionShown = DestinationSuggestionBar.isShown(env)
+        situation.suggestionShown = IdleDock.guess(env) != nil
         return OfflineOffer.shouldOffer(situation) ? region : nil
     }
 

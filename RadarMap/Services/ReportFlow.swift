@@ -124,6 +124,20 @@ final class ReportFlow {
         armChoiceTimer(deadline)
     }
 
+    /// Экран телефона занят оповещением о камере (RoadPromptDriver): срок
+    /// выбора стоит — выбор под оповещением не виден.
+    func pauseChoice(now: Date = Date()) {
+        guard draft.pause(now: now) else { return }
+        choiceTimer?.cancel()
+    }
+
+    /// Экран освободился: выбор возвращается с остатком срока, не меньше
+    /// `reportChooseResumeSeconds`.
+    func resumeChoice(now: Date = Date()) {
+        guard let deadline = draft.resume(now: now, minimum: AppConfig.reportChooseResumeSeconds) else { return }
+        armChoiceTimer(deadline)
+    }
+
     /// Можно ли сейчас отменить ушедшую отметку.
     func canUndo(now: Date = Date()) -> Bool {
         guard let sent = draft.sent, sent.canUndo, now < sent.undoUntil else { return false }

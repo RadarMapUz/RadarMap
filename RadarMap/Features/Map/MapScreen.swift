@@ -63,6 +63,8 @@ struct MapScreen: View {
     @Environment(\.scenePhase) var scenePhase
     /// Пикер типа отметки (радар/тренога/пост/ДТП) для выбранной точки.
     @State var reportPoint: MapPoint?
+    /// Поиск сразу с плиткой заведений — «АЗС рядом» из меню «Ещё» без маршрута.
+    @State var searchCategory: Venue.Kind?
     /// Область карты для системных контролов MapKit. Своих в ней не осталось
     /// (компас убран), но scope нужен `Map(scope:)`.
 
@@ -130,6 +132,8 @@ struct MapScreen: View {
 
                 // Следование за GPS: единственный подписчик locationTick.
                 LocationFollowDriver(map: map)
+                // Камера на подходе — плитки «Ещё» уходят (экран — предупреждению).
+                CameraAlertWatch { send(.cameraAlert) }
             }
         }
         // Меню на карте — над всеми панелями, но под предупреждением о
@@ -227,13 +231,14 @@ struct MapScreen: View {
         .sheet(isPresented: $map.showNearbySheet) {
             NearbyCamerasSheet(onSelect: { map.focus(on: $0) })
         }
-        .sheet(isPresented: $map.showSearch) {
+        .sheet(isPresented: $map.showSearch, onDismiss: { searchCategory = nil }) {
             // Без геопозиции кнопки маршрута прячем, как в соседних шитах:
             // мёртвая кнопка, молча закрывающая поиск, хуже её отсутствия.
             // Выбранное место — точкой на карте с её панелью («Маршрут сюда»,
             // «Радар здесь»): раньше карта только сдвигалась, и что выбрано,
             // оставалось угадывать.
-            SearchView(onSelect: { coordinate, title in
+            SearchView(initialCategory: searchCategory,
+                       onSelect: { coordinate, title in
                            map.move(to: coordinate)
                            withMotion(Motion.standard) {
                                map.pressedPoint = MapPoint(coordinate: coordinate, title: title)
@@ -348,6 +353,10 @@ struct MapScreen: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { send(.background) }
+        }
+        // Встал вопрос на ходу — меню уходит, первое касание достаётся вопросу.
+        .onChange(of: map.roadPrompt) { _, prompt in
+            if prompt != nil { send(.promptShown) }
         }
         // Проезд чужой передвижной отметки отслеживает MobileCameraService на
         // каждом фиксе (LocationService.onAcceptedFix) — не вью: вью без

@@ -184,18 +184,12 @@ struct DesignCatalogPage: View {
                     CircleControlFace(systemName: "ellipsis")
                 }
             }
-            CatalogItem("Док действий", when: "Нижняя панель простого экрана: liftedBackground + edgePanel.") {
-                HStack(spacing: 0) {
-                    dockButton("Поиск", "magnifyingglass")
-                    dockButton("Мои места", Icon.myPlaces)
-                    dockButton("Итоги", "chart.bar.fill")
-                    dockButton("Ещё", "ellipsis")
-                }
-                .padding(4)
-                .liftedBackground(Theme.surface,
-                                  in: RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
-                    .strokeBorder(Theme.edgePanel, lineWidth: 1))
+            CatalogItem("IdleDock", when: "Низ простого экрана: поле «Куда едем?» 56 pt, квадрат «Итоги», чипы Дом/Работа — синим только догадка.") {
+                IdleDockContent(chips: [.init(kind: .home, place: .init(lat: 41.3, lon: 69.2, title: nil),
+                                              guessed: true, minutes: 25),
+                                        .init(kind: .work, place: nil, guessed: false, minutes: nil)],
+                                onSearch: {}, onStats: {}, onChip: { _ in }, onMyPlaces: {},
+                                onStopSuggesting: {})
             }
             CatalogItem("MapShortSheet", when: "Справка над картой на 2–5 строк: высота по содержимому.") {
                 SecondaryButton(title: "Пробки", systemImage: "rectangle.bottomhalf.inset.filled") {
@@ -205,23 +199,45 @@ struct DesignCatalogPage: View {
         }
     }
 
-    private func dockButton(_ title: LocalizedStringKey, _ icon: String) -> some View {
-        Button {} label: { ActionBarLabel(title: title, icon: icon) }
-            .buttonStyle(PressableStyle())
-    }
-
     // MARK: - Отметка
 
     private var reportSection: some View {
         CatalogSection("Отметка", note: "Крупные цели для касания вслепую; у временной плашки — видимый отсчёт.") {
-            CatalogItem("ReportChoiceTiles", when: "После «Отметить»: тип — .primary, «✕» — .cancel.") {
-                ReportChoiceTiles(deadline: tilesDeadline, total: 3,
-                                  onPick: { _ in tilesDeadline = Date().addingTimeInterval(3) },
-                                  onCancel: { tilesDeadline = Date().addingTimeInterval(3) })
+            CatalogItem("RoadPromptCard · выбор типа", when: "После «Отметить»: тип — .primary, «✕» — .cancel; отсчёт — в «Тренога».") {
+                RoadPromptPanel {
+                    RoadPromptCard(model: RoadPromptModel(
+                        glyph: .filled(Icon.reportRadar, fill: Theme.action, ink: Theme.onAction),
+                        question: String(localized: "Что отметить?"),
+                        silence: String(format: String(localized: "промолчите — уйдёт «%@»"),
+                                        ReportWords.title(.tripod)),
+                        actions: [RoadPromptModel.Action(id: "x", title: String(localized: "Не отмечать"),
+                                                         symbol: "xmark", touch: .cancel, narrow: true,
+                                                         perform: { tilesDeadline = Date().addingTimeInterval(3) })]
+                            + ReportKind.chosenOnTheGo.map { kind in
+                                RoadPromptModel.Action(id: kind.rawValue, title: ReportWords.title(kind),
+                                                       cameraGlyph: kind.cameraGlyph,
+                                                       style: kind == .tripod ? .agree : .quiet, touch: .primary,
+                                                       pressedBySilence: kind == .tripod,
+                                                       perform: { tilesDeadline = Date().addingTimeInterval(3) })
+                            },
+                        tiles: true,
+                        timer: .init(deadline: tilesDeadline, total: 3, ownTouch: true)))
+                }
             }
-            CatalogItem("ReportUndoCard", when: "Отметка ушла: галочка подпрыгивает раз, «Отменить» — .cancel.") {
-                ReportUndoCard(kind: .tripod, queued: false, until: Date().addingTimeInterval(6),
-                               canUndo: true, onUndo: {})
+            CatalogItem("RoadPromptCard · вопрос", when: "Синяя — согласие, тихая — второе; без красного и зелёного; «промолчите — …» всегда.") {
+                RoadPromptPanel {
+                    RoadPromptCard(model: RoadPromptModel(
+                        glyph: .coin(CameraType.tripod.glyph, fill: CameraType.tripod.tint,
+                                     ink: CameraType.tripod.glyphTint),
+                        question: String(localized: "Тренога ещё стоит?"),
+                        silence: String(localized: "промолчите — ничего не отправлю"),
+                        actions: [
+                            .init(id: "y", title: String(localized: "Стоит"), symbol: "checkmark", style: .agree,
+                                  perform: {}),
+                            .init(id: "n", title: String(localized: "Убрали"), symbol: "xmark", perform: {}),
+                        ],
+                        timer: .init(deadline: Date().addingTimeInterval(14), total: 20)))
+                }
             }
         }
     }

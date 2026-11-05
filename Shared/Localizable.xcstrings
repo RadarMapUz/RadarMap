@@ -34754,6 +34754,438 @@
           }
         }
       }
+    },
+    "%@ — объехать?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — объехать?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — aylanib oʻtamizmi?"
+          }
+        }
+      }
+    },
+    "Написать": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Написать"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yozish"
+          }
+        }
+      }
+    },
+    "Не надо": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не надо"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kerak emas"
+          }
+        }
+      }
+    },
+    "Прибытие %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Прибытие %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yetib kelish %@"
+          }
+        }
+      }
+    },
+    "Что отметить?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Что отметить?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nimani belgilaymiz?"
+          }
+        }
+      }
+    },
+    "промолчите — никому не напишу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "промолчите — никому не напишу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "javob bermasangiz — hech kimga yozmayman"
+          }
+        }
+      }
+    },
+    "промолчите — ничего не отправлю": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "промолчите — ничего не отправлю"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "javob bermasangiz — hech narsa yubormayman"
+          }
+        }
+      }
+    },
+    "промолчите — останемся на своём пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "промолчите — останемся на своём пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "javob bermasangiz — oʻz yoʻlimizda qolamiz"
+          }
+        }
+      }
+    },
+    "промолчите — отметка останется": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "промолчите — отметка останется"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "javob bermasangiz — belgi qoladi"
+          }
+        }
+      }
+    },
+    "промолчите — уйдёт «%@»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "промолчите — уйдёт «%@»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "javob bermasangiz — «%@» yuboriladi"
+          }
+        }
+      }
+    },
+    "тронетесь — не спрошу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "тронетесь — не спрошу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yursangiz — soʻramayman"
+          }
+        }
+      }
+    },
+    "уйдёт само": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "уйдёт само"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oʻzi yopiladi"
+          }
+        }
+      }
+    },
+    "Не делиться": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не делиться"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ulashmaslik"
+          }
+        }
+      }
+    },
+    "%@ рядом": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ рядом"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ yaqinida"
+          }
+        }
+      }
+    },
+    "Камера — без превышения": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камера — без превышения"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamerada tezlik oshirilmadi"
+          }
+        }
+      }
+    },
+    "Все %lld камер — без превышения": {
+      "localizations": {
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Все %lld камера — без превышения"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Все %lld камеры — без превышения"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Все %lld камер — без превышения"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Все %lld камеры — без превышения"
+                }
+              }
+            }
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ta kameraning barchasida tezlik oshirilmadi"
+          }
+        }
+      }
+    },
+    "Камеры без превышения: %1$lld из %2$lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камеры без превышения: %1$lld из %2$lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tezlik oshirilmagan kameralar: %2$lld tadan %1$lld"
+          }
+        }
+      }
+    },
+    "Вашу отметку подтвердили %lld водителей": {
+      "localizations": {
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вашу отметку подтвердил %lld водитель"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вашу отметку подтвердили %lld водителя"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вашу отметку подтвердили %lld водителей"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вашу отметку подтвердили %lld водителя"
+                }
+              }
+            }
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belgingizni %lld haydovchi tasdiqladi"
+          }
+        }
+      }
+    },
+    "%@ — скажу, когда подтвердят": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — скажу, когда подтвердят"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — tasdiqlashsa, aytaman"
+          }
+        }
+      }
+    },
+    "С прошлой поездки — новых подтверждений ваших отметок: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "С прошлой поездки — новых подтверждений ваших отметок: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻtgan safardan beri belgilaringizga yangi tasdiqlar: %lld"
+          }
+        }
+      }
+    },
+    "Куда едем?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Куда едем?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qayerga boramiz?"
+          }
+        }
+      }
+    },
+    "Поиск адреса и мест": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск адреса и мест"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manzil va joylarni qidirish"
+          }
+        }
+      }
+    },
+    "Задать место": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задать место"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joyni belgilash"
+          }
+        }
+      }
+    },
+    "отметка уходит — ничего нажимать не нужно": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "отметка уходит — ничего нажимать не нужно"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "belgi yuborilmoqda — hech narsa bosish shart emas"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

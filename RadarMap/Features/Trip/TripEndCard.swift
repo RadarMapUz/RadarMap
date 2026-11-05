@@ -6,20 +6,18 @@
 //
 //  Цифры поездки интереснее всего в момент, когда заглушён двигатель, — а
 //  приложение молчало: итог был виден, только если самому открыть Итоги.
-//  Карточка показывает главное (балл, путь, время, проезды камер и деньги)
-//  и одним тапом ведёт в деталку. Если новая запись похожа на продолжение
-//  предыдущей (заехал в магазин, по привычке нажал «Завершить») — склейка
-//  предлагается прямо здесь, в момент, а не потом карточкой в списке.
+//  Если новая запись похожа на продолжение предыдущей (заехал в магазин, по
+//  привычке нажал «Завершить») — склейка предлагается прямо здесь.
+//
+//  Облик — «путь + балл» (этап 45, вариант A, выбор владельца 05.11): снимок
+//  своего пути с камерами (картинка, не живая карта), крупный балл, «12,4 км ·
+//  18 мин» и не больше двух строк заработанного (TripReward): о вождении — «Все
+//  8 камер — без превышения» или факт превышения без похвалы, о сообществе —
+//  подтверждения своей отметки. Вся шапка — вход в подробности.
 //
 //  Показывается только на переднем плане и только для свежесохранённой
 //  записи (см. MapScreen.maybeShowTripEnd): автозавершение в кармане
 //  обслуживает уведомление, а не карточка поверх карты, которую никто не видит.
-//
-//  Облик — «балл-герой» (этап 31, выбор владельца 26.10): одна строка
-//  ≈ 100 pt — крупный балл, вердикт и «12,4 км · 18 мин · 1 камера», вся
-//  карточка — вход в подробности. Было: кольцо, заголовок в две строки на SE,
-//  «1 камер», синяя градиентная «Подробнее» (второй «главный» цвет рядом с
-//  жёлтым) и ≈ 300 pt высоты поверх «Домой» и дока.
 //
 //  Если приложение промолчало о камере, мимо которой проехали, — строка
 //  «Промолчала о камере» с кнопкой «Не предупредила» (12.5): та же жалоба,
@@ -27,6 +25,7 @@
 //  ещё помнит, как это было (MissedAlertPrompt).
 //
 
+import CoreLocation
 import SwiftUI
 
 struct TripEndCard: View {
@@ -42,48 +41,22 @@ struct TripEndCard: View {
     /// она живёт до закрытия, а отправленное ушло на сервер.
     @State private var reportedMissed: Set<UUID> = []
     @State private var isSendingMissed = false
+    /// Сколько подтверждений прежних отметок показали прошлым итогом — с
+    /// первого появления карточки (TripReward.earlierConfirmed).
+    @State private var seenConfirmations: Int?
+    @State private var baselineRead = false
+    /// Ширина карточки: на SE снимок пути ниже.
+    @State private var width: CGFloat = 0
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
-        VStack(spacing: 10) {
-            HStack(spacing: 14) {
-                Button { onDetail(record) } label: {
-                    HStack(spacing: 14) {
-                        heroScore
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Поездка сохранена")
-                                .font(.rounded(12, .semibold))
-                                .foregroundStyle(Theme.textSecondary)
-                            Text(moneyLine)
-                                .font(.rounded(15, .bold))
-                                .foregroundStyle(moneyTint)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.75)
-                            Text(verbatim: factsLine)
-                                .font(.rounded(12, .medium).monospacedDigit())
-                                .foregroundStyle(Theme.textPrimary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.8)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .font(.rounded(12, .bold))
-                            .foregroundStyle(Theme.textTertiary)
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(PressableStyle())
-                .accessibilityHint(Text("Подробнее"))
-                VStack(spacing: 6) {
-                    roundButton("xmark", tint: Theme.textSecondary) {
-                        // Сказали — счётчик протухших отметок в ноль.
-                        env.mobile.acknowledgeUndelivered()
-                        onDismiss()
-                    }
-                        .accessibilityLabel(Text("Скрыть итог поездки"))
-                    roundButton("square.and.arrow.up", tint: Theme.accent, action: share)
-                        .accessibilityLabel(Text("Поделиться поездкой"))
-                }
+        VStack(alignment: .leading, spacing: 10) {
+            if record.hasTrack {
+                picture
+            }
+            header
+            ForEach(Array(rewardLines.enumerated()), id: \.offset) { _, line in
+                rewardRow(line)
             }
             if let previous = mergeCandidate {
                 mergeRow(previous: previous)
@@ -91,9 +64,10 @@ struct TripEndCard: View {
             missedAlertRow
             reportsRow
         }
-        .padding(14)
+        .padding(12)
         .liftedBackground(Theme.surface, in: shape)
         .overlay(shape.strokeBorder(Theme.edgePanel, lineWidth: 1))
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .transition(.move(edge: .bottom).combined(with: .opacity))
         .sheet(item: $shareSubject) { box in
             SharePreviewSheet(subject: box.subject)
@@ -103,31 +77,141 @@ struct TripEndCard: View {
             Button("Объединить") { merge() }
             Button("Отмена", role: .cancel) {}
         }
+        // Подтверждения своих отметок — если пора спросить (раз в окно, не
+        // на каждом показе); отметка этой поездки обычно ещё без голосов.
+        .task { await env.mobile.refreshImpactIfDue() }
+        // Отсчёт «новых подтверждений» — всё, что этот итог уже показал.
+        .onChange(of: env.mobile.impactRevision, initial: true) { _, _ in rememberConfirmations() }
     }
 
-    /// «12,4 км · 18 мин · 1 камера» — склонение из каталога (`%lld камер`):
-    /// метрика «1 / камер» читалась как «1 камер».
+    // MARK: - Путь
+
+    /// Снимок пути с камерами — картинка, не живая карта (правило: без живой
+    /// карты поверх живой карты и в прокрутке). На SE ниже: карточка вместе
+    /// с доком не должна закрыть больше половины экрана.
+    private var picture: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
+        return MapPictureView(key: "tripend|\(record.id)|\(record.passed.count)",
+                              picture: Self.picture(record),
+                              height: width > 0 && width < AppConfig.tripEndCompactWidth ? 96 : 120)
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(Theme.stroke, lineWidth: 1))
+            .overlay(alignment: .topTrailing) {
+                HStack(spacing: 0) {
+                    shareButton
+                    closeButton
+                }
+            }
+            .accessibilityElement(children: .contain)
+    }
+
+    /// Трек цветом маршрута; камера в лимите — зелёная точка с галочкой,
+    /// превышение — крупная, со скоростью, поверх всего; без лимита — серая.
+    static func picture(_ record: TripRecord) -> MapPicture {
+        var picture = MapPicture()
+        let points = record.trackPoints
+        picture.lines = [.init(coordinates: points.map {
+            CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon)
+        }, color: Theme.route, width: 4, casing: Theme.routeCasing, casingWidth: 7)]
+        var over: [MapPicture.Dot] = []
+        for pass in record.passed {
+            guard let coordinate = pass.coordinate else { continue }
+            if let limit = pass.limitKmh {
+                if pass.speedKmh <= Double(limit) {
+                    picture.dots.append(.init(coordinate: coordinate, diameter: 16, fill: Theme.success,
+                                              ringWidth: 1.5, label: "✓", labelColor: .white))
+                } else {
+                    over.append(.init(coordinate: coordinate, diameter: 22,
+                                      fill: PassStyle.color(speed: pass.speedKmh, limit: limit),
+                                      ringWidth: 2, label: "\(Int(pass.speedKmh.rounded()))",
+                                      labelColor: Theme.background))
+                }
+            } else {
+                picture.dots.append(.init(coordinate: coordinate, diameter: 9, fill: Theme.textTertiary))
+            }
+        }
+        if let start = points.first, let finish = points.last {
+            picture.dots += TripEndpoints.dots(
+                start: CLLocationCoordinate2D(latitude: start.lat, longitude: start.lon),
+                finish: CLLocationCoordinate2D(latitude: finish.lat, longitude: finish.lon))
+        }
+        picture.dots += over
+        return picture
+    }
+
+    // MARK: - Балл и путь словами
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            Button { onDetail(record) } label: {
+                HStack(spacing: 12) {
+                    heroScore
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Поездка сохранена")
+                            .font(.rounded(12, .semibold))
+                            .foregroundStyle(Theme.textSecondary)
+                        Text(verbatim: factsLine)
+                            .font(.rounded(15, .bold).monospacedDigit())
+                            .foregroundStyle(Theme.textPrimary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.rounded(12, .bold))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableStyle(.card))
+            .accessibilityHint(Text("Подробнее"))
+            // Без снимка (короткая поездка без трека) крестик и «поделиться» — здесь.
+            if !record.hasTrack {
+                VStack(spacing: 0) {
+                    closeButton
+                    shareButton
+                }
+            }
+        }
+    }
+
+    private var closeButton: some View {
+        roundButton("xmark", tint: Theme.textSecondary, touch: .cancel) {
+            // Сказали — счётчик протухших отметок в ноль.
+            env.mobile.acknowledgeUndelivered()
+            onDismiss()
+        }
+        .accessibilityLabel(Text("Скрыть итог поездки"))
+    }
+
+    private var shareButton: some View {
+        roundButton("square.and.arrow.up", tint: Theme.accent, action: share)
+            .accessibilityLabel(Text("Поделиться поездкой"))
+    }
+
+    /// «12,4 км · 18 мин» — камеры сказаны строкой заработанного и точками
+    /// на снимке.
     private var factsLine: String {
         [Formatting.distance(record.distanceMeters),
-         Formatting.duration(record.movingDuration),
-         String(localized: "\(record.camerasPassed) камер")].joined(separator: " · ")
+         Formatting.duration(record.movingDuration)].joined(separator: " · ")
     }
 
     /// Крестик и «поделиться» — малые круги 30 pt, мишень 44.
-    private func roundButton(_ symbol: String, tint: Color, action: @escaping () -> Void) -> some View {
+    private func roundButton(_ symbol: String, tint: Color, touch: TouchRole = .regular,
+                             action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.rounded(12, .bold))
                 .foregroundStyle(tint)
                 .frame(width: 30, height: 30)
-                .background(Theme.background, in: Circle())
+                .background(Theme.surface, in: Circle())
+                .overlay(Circle().strokeBorder(Theme.stroke, lineWidth: 1))
                 .tapTarget()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle(touch))
     }
 
     private func share() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         Task {
             let map = await TripMapSnapshot.render(track: record.trackPoints,
                                                    passes: record.passed,
@@ -138,55 +222,121 @@ struct TripEndCard: View {
 
     // MARK: - Балл
 
-    /// Кольцо с баллом поездки — тем же цветом, что в списках истории.
-    /// Балл крупно, без кольца: число и есть итог, а его цвет уже говорит
-    /// «хорошо / плохо». Без балла — печать вердикта на той же плашке.
+    /// Балл крупно, без кольца: число и есть итог, а его цвет (Theme.score —
+    /// тот же, что в Итогах и на карточке «поделиться») говорит «хорошо /
+    /// плохо». Без балла — печать вердикта на той же плашке.
     @ViewBuilder private var heroScore: some View {
         if let score = record.score.map({ Int($0) }) {
-            let tint = TripHistorySection.scoreColor(score)
             VStack(spacing: -2) {
                 Text(verbatim: "\(score)")
-                    .font(.numeral(38, .heavy).monospacedDigit())
-                    .foregroundStyle(tint)
+                    .font(.numeral(46, .heavy).monospacedDigit())
+                    .foregroundStyle(Theme.score(score))
+                    .minimumScaleFactor(0.7)
                 Text("рейтинг")
                     .font(.rounded(12, .semibold))
                     .foregroundStyle(Theme.textTertiary)
             }
-            .frame(width: 70, height: 70)
+            .frame(width: 76, height: 72)
             .background(Theme.quietFill, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Text(String(format: String(localized: "Балл поездки: %lld"), score)))
         } else {
             let clean = record.verdict == .clean
-            let tint = clean ? Theme.success : Theme.accent
             Image(systemName: clean ? "checkmark.seal.fill" : "checkmark.circle.fill")
                 .font(.rounded(30, .bold))
-                .foregroundStyle(tint)
-                .frame(width: 70, height: 70)
+                .foregroundStyle(clean ? Theme.success : Theme.accent)
+                .frame(width: 76, height: 72)
                 .background(Theme.quietFill, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
         }
     }
 
-    private var moneyLine: String {
-        switch record.verdict {
-        case .risk(let risk):
-            return String(format: String(localized: "риск ≈ %@"), Formatting.money(risk))
-        case .overspeed(let count):
-            return String(format: String(localized: "Штрафуемых превышений: %lld"), count)
-        case .clean:
-            return String(localized: "Штрафуемых превышений нет")
-        case .unknownLimits:
-            return String(localized: "Лимиты камер неизвестны")
-        case .noCameras:
-            return String(localized: "Без камер и превышений")
+    // MARK: - Заработанное (TripReward)
+
+    /// Свои отметки — то, что телефон помнит о них (MobileCameraService.mine).
+    private var ownReports: [TripReward.OwnReport] {
+        env.mobile.mine.compactMap { mine in
+            ReportKind(rawValue: mine.kind).map {
+                TripReward.OwnReport(kind: $0, at: mine.at, confirmers: mine.confirmers, confirmed: mine.confirmed)
+            }
         }
     }
 
-    private var moneyTint: Color {
-        switch record.verdict {
-        case .risk, .overspeed: return Theme.danger
-        case .clean, .noCameras: return Theme.success
-        case .unknownLimits: return Theme.textSecondary
+    /// Не больше двух строк: о вождении и о сообществе.
+    private var rewardLines: [TripReward.Line] {
+        // Подписка на «пришли подтверждения»: `mine` вне наблюдения.
+        _ = env.mobile.impactRevision
+        return TripReward.pick(verdict: record.verdict,
+                               passes: record.passed.map { TripReward.Pass(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) },
+                               tripStart: record.startedAt, tripEnd: record.endedAt,
+                               reports: ownReports, seenConfirmations: seenConfirmations)
+    }
+
+    /// Запомнить, сколько подтверждений уже показано: следующий итог скажет
+    /// только о новых. Прежнее число читается один раз — до первой записи.
+    private func rememberConfirmations() {
+        if !baselineRead {
+            seenConfirmations = Storage.intIfPresent(.tripRewardSeenConfirmations)
+            baselineRead = true
+        }
+        Storage.set(TripReward.earlierConfirmations(ownReports, before: .distantFuture),
+                    for: .tripRewardSeenConfirmations)
+    }
+
+    private func rewardRow(_ line: TripReward.Line) -> some View {
+        let face = rewardFace(line)
+        return HStack(spacing: 10) {
+            Image(systemName: face.symbol)
+                .font(.rounded(14, .bold))
+                .foregroundStyle(face.tint)
+                .frame(width: 30, height: 30)
+                .background(Theme.quietFill, in: Circle())
+                .accessibilityHidden(true)
+            Text(verbatim: face.text)
+                .font(.rounded(15, .semibold))
+                .foregroundStyle(face.textTint)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Факт превышения — цветом балла, без похвалы; похвала — спокойным
+    /// текстом с зелёным значком.
+    private func rewardFace(_ line: TripReward.Line) -> (symbol: String, tint: Color, text: String, textTint: Color) {
+        // Цвет балла, но никогда не зелёный: штрафуемое превышение при высоком
+        // балле зелёным читалось бы одобрением.
+        let factTint = record.score.map { DrivingScore.tier(for: Int($0)) >= 2 ? Theme.warning : Theme.score(Int($0)) }
+            ?? Theme.danger
+        switch line {
+        case .camerasClean(let clean, let total):
+            let text: String
+            if clean == total {
+                text = total == 1 ? String(localized: "Камера — без превышения")
+                                  : String(localized: "Все \(total) камер — без превышения")
+            } else {
+                text = String(format: String(localized: "Камеры без превышения: %1$lld из %2$lld"), clean, total)
+            }
+            return ("checkmark.circle.fill", Theme.success, text, Theme.textPrimary)
+        case .risk(let amount):
+            return ("exclamationmark.triangle.fill", factTint,
+                    String(format: String(localized: "риск ≈ %@"), Formatting.money(amount)), factTint)
+        case .overspeed(let count):
+            return ("exclamationmark.triangle.fill", factTint,
+                    String(format: String(localized: "Штрафуемых превышений: %lld"), count), factTint)
+        case .reportConfirmed(let drivers):
+            return ("person.2.fill", Theme.success,
+                    String(localized: "Вашу отметку подтвердили \(drivers) водителей"), Theme.textPrimary)
+        case .reportAwaiting(let kind):
+            return ("clock", Theme.textSecondary,
+                    String(format: String(localized: "%@ — скажу, когда подтвердят"), ReportWords.marked(kind)),
+                    Theme.textPrimary)
+        case .earlierConfirmed(let count):
+            return ("person.2.fill", Theme.success,
+                    String(format: String(localized: "С прошлой поездки — новых подтверждений ваших отметок: %lld"),
+                           count),
+                    Theme.textPrimary)
         }
     }
 
@@ -237,7 +387,7 @@ struct TripEndCard: View {
                         in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableStyle())
     }
 
     // MARK: - Свои отметки без сети

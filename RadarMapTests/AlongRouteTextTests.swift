@@ -49,6 +49,6 @@ final class AlongRouteTextTests: XCTestCase {
 
     @MainActor
     func testSpokenSizeIsInWords() {
-        XCTAssertEqual(CorridorOfferCard.spokenSize(96_400_000, locale: Locale(identifier: "ru")), "96 мегабайт")
+        XCTAssertEqual(CorridorOfferText.spokenSize(96_400_000, locale: Locale(identifier: "ru")), "96 мегабайт")
     }
 }

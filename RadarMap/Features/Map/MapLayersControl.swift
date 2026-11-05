@@ -21,19 +21,22 @@
 //  экраном (MapScreen+Popovers): только оттуда касание мимо неё закрывает
 //  её, не задевая карту и кнопки под пальцем. Кнопка отдаёт слою свою рамку
 //  (MapPopoverAnchors), и панель встаёт там же, где стояла, — сбоку от неё.
+//  С этапа 45 своей кнопки у панели нет: её открывает плитка «Карта» меню
+//  «…», и встаёт она у круга «…».
 //
 
 import SwiftUI
 
-/// Кнопка слоёв в колонке: открывает и закрывает панель «Карта».
-struct MapLayersButton: View {
+/// Круг «…»: плитки «Ещё» над нижними панелями (этап 45). Панель «Карта»
+/// из плитки встаёт у этого же круга — рамка слоёв у него своя.
+struct MapMoreButton: View {
     let isOpen: Bool
     let action: () -> Void
 
     var body: some View {
-        CircleControl(systemName: "square.3.layers.3d",
+        CircleControl(systemName: "ellipsis",
                       tint: isOpen ? Theme.accent : Theme.textPrimary,
-                      accessibilityLabel: "Слои карты",
+                      accessibilityLabel: "Ещё",
                       action: action)
             .accessibilityAddTraits(isOpen ? .isSelected : [])
             .anchorPreference(key: MapPopoverAnchors.self, value: .bounds) { [.layers: $0] }
@@ -57,6 +60,8 @@ struct MapLayersPanel: View {
     /// «3D» занимал место у камер правого края.
     @Binding var threeD: Bool
     @Binding var zoomButtons: Bool
+    /// «Весь маршрут» — пока маршрут есть (плитка «Карта» меню «Ещё», этап 45).
+    var onOverview: (() -> Void)? = nil
     /// Сколько панели можно занять по высоте — до нижних панелей экрана.
     /// Не влезает — листается, а не уезжает под них.
     var maxPanelHeight: CGFloat = .infinity
@@ -100,6 +105,20 @@ struct MapLayersPanel: View {
             toggle("Дома", Icon.buildingsLayer, isOn: $houses)
             toggle("Тротуары", Icon.sidewalksLayer, isOn: $sidewalks)
             toggle("Объёмный вид", "view.3d", isOn: $threeD)
+            if let onOverview {
+                Button(action: onOverview) {
+                    HStack(spacing: 10) {
+                        MapPopoverGlyph(systemName: "point.topleft.down.to.point.bottomright.curvepath", isOn: false)
+                        Text("Весь маршрут")
+                            .font(.rounded(14, .medium))
+                            .foregroundStyle(Theme.textPrimary)
+                        Spacer(minLength: 10)
+                    }
+                    .frame(minHeight: Theme.controlSize)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableStyle(.row))
+            }
             Text("Кнопки")
                 .font(.rounded(11, .semibold))
                 .foregroundStyle(Theme.textTertiary)

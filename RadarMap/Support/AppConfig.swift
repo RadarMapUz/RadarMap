@@ -459,11 +459,6 @@ nonisolated enum AppConfig {
     /// впереди — не решение водителя, а панель и тук её всё равно показывают.
     nonisolated static let voiceMinSpeedKmh: Double = 20
 
-    /// Плашка «ещё на месте?»: ответы длиннее этого (в сумме символов) — строкой
-    /// под вопросом, а не рядом с ним. «Да» + «Нет» (5) и «Ha» + «Yoʻq» (6)
-    /// помещаются рядом с вопросом на SE; «Стоит» + «Пост убрали» (16) — нет.
-    static let passQuestionInlineAnswerChars = 8
-
     /// Ночной голос (12.6): как часто пересчитывать «солнце село», секунды.
     /// Закат за минуту не убежит, а план голоса читается на каждом тике у камеры.
     static let nightVoiceRecheckSeconds: TimeInterval = 60
@@ -1418,6 +1413,21 @@ nonisolated enum AppConfig {
     /// Вспышка ответа на «Радар!» и вопрос «Радар ещё стоял?» на телефоне.
     static let reportFlashSeconds: TimeInterval = 2
     static let mobileQuestionSeconds: TimeInterval = 20
+    /// Вытесненный вопрос на ходу (камерой или старшим вопросом) возвращается,
+    /// только если по его часам осталось столько секунд (RoadPromptPolicy):
+    /// вопрос на одну-две секунды читается как мигание, а не как вопрос.
+    nonisolated static let roadPromptMinReturnSeconds: TimeInterval = 5
+    /// Третий ряд меню «…» (Итоги, Добавить камеру, Настройки) встаёт ниже
+    /// этой скорости, а уходит от `speakSpeedThresholdKmh` (20): гистерезис,
+    /// чтобы ряд не мигал на светофоре (TripMenuSlots.parked).
+    nonisolated static let tripMenuParkedEnterKmh: Double = 15
+
+    /// Итог поездки (TripReward): отметка в эти секунды после стопа — ещё
+    /// этой поездки (поставили, тормозя у подъезда).
+    nonisolated static let tripRewardReportGraceSeconds: TimeInterval = 300
+    /// Карточка итога уже этой ширины — экран SE: снимок пути ниже (96 pt),
+    /// чтобы карточка с доком не закрыла больше половины экрана.
+    static let tripEndCompactWidth: CGFloat = 360
     /// Тот же вопрос (и «Ещё перекрыто?») при включённом VoiceOver. Двадцати
     /// секунд хватает взгляду, но не слуху: объявление вопроса, затем
     /// пролистывание до «Да» и «Нет» и двойное касание — плашка уходила
@@ -1552,6 +1562,9 @@ nonisolated enum AppConfig {
     /// Три — столько водитель держит в голове «я нажал»; дольше — плитки
     /// закрывают низ карты, а точка касания уезжает назад.
     nonisolated static let reportChooseSeconds: TimeInterval = 3
+    /// Выбор типа, переживший оповещение о камере, возвращается с остатком
+    /// срока, но не меньше этого: «✕» за полсекунды не нажать (этап 45).
+    nonisolated static let reportChooseResumeSeconds: TimeInterval = 1.5
     /// Окно «Отменить» после отправки (спецификация владельца).
     nonisolated static let reportUndoSeconds: TimeInterval = 8
     /// Сетка «Пост ДПС / ДТП» в машине до iOS 27: без выбора столько —

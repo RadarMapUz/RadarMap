@@ -204,4 +204,48 @@ final class ReportDraftTests: XCTestCase {
         XCTAssertEqual(ReportDraft.defaultKind, .tripod)
         XCTAssertEqual(ReportKind.chosenOnTheGo.map(ReportWords.title), ["Тренога", "Пост ДПС", "ДТП"])
     }
+
+    /// Оповещение о камере на 10 с посреди выбора: срок стоит, после него
+    /// выбор возвращается с остатком, тренога не уходит раньше (этап 45, Р1).
+    func testCameraAlertHoldsChoice() {
+        var draft = ReportDraft()
+        _ = draft.tap(touch(), refusal: nil, showsChoice: true)
+        XCTAssertTrue(draft.pause(now: t0.addingTimeInterval(1)))
+        XCTAssertEqual(draft.expire(now: t0.addingTimeInterval(11)), .none, "под оповещением тренога не уходит")
+        XCTAssertNotNil(draft.choosing)
+        let back = draft.resume(now: t0.addingTimeInterval(11), minimum: 1.5)
+        XCTAssertEqual(back, t0.addingTimeInterval(13), "остаток 2 с")
+        XCTAssertEqual(draft.expire(now: t0.addingTimeInterval(12.9)), .none)
+        XCTAssertEqual(draft.cancel(), .cancelled, "«✕» снова успевает")
+    }
+
+    /// Оповещение мигает три раза подряд — выбор не потерян, и после каждого
+    /// возврата на «✕» остаётся не меньше 1,5 с.
+    func testFlickeringAlertKeepsChoice() {
+        var draft = ReportDraft()
+        _ = draft.tap(touch(), refusal: nil, showsChoice: true)
+        var now = t0.addingTimeInterval(1)
+        for _ in 0..<3 {
+            XCTAssertTrue(draft.pause(now: now))
+            now = now.addingTimeInterval(0.4)
+            guard let deadline = draft.resume(now: now, minimum: 1.5) else { return XCTFail("выбор потерян") }
+            XCTAssertGreaterThanOrEqual(deadline.timeIntervalSince(now), 1.5)
+            now = now.addingTimeInterval(1.2)
+            XCTAssertEqual(draft.expire(now: now), .none)
+        }
+        XCTAssertNotNil(draft.choosing)
+        XCTAssertTrue(draft.pause(now: now))
+        XCTAssertFalse(draft.pause(now: now), "уже стоит — второй раз не останавливается")
+    }
+
+    /// Остановка вне выбора ничего не делает, а новый выбор начинает с идущих часов.
+    func testPauseOnlyWhileChoosing() {
+        var draft = ReportDraft()
+        XCTAssertFalse(draft.pause(now: t0))
+        XCTAssertNil(draft.resume(now: t0, minimum: 1.5))
+        _ = draft.tap(touch(), refusal: nil, showsChoice: true)
+        XCTAssertTrue(draft.pause(now: t0))
+        XCTAssertEqual(draft.choose(.post), .send(touch(), .post))
+        XCTAssertNil(draft.resume(now: t0.addingTimeInterval(1), minimum: 1.5))
+    }
 }

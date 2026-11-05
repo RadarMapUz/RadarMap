@@ -147,6 +147,10 @@ nonisolated struct ReportDraft: Equatable {
     /// Номер черновика: машина и плитки узнают «свой» выбор и не показывают
     /// его дважды.
     private(set) var serial = 0
+    /// Остаток срока выбора, пока экран телефона занят оповещением о камере
+    /// (этап 45); nil — часы идут. Выбор под оповещением не виден, и тренога
+    /// не должна уходить молчанием, которого водитель не мог прервать «✕».
+    private(set) var pausedLeft: TimeInterval?
 
     // MARK: - Состояние
 
@@ -194,6 +198,7 @@ nonisolated struct ReportDraft: Equatable {
             }
             let deadline = max(touch.at, shownAt ?? touch.at).addingTimeInterval(chooseSeconds)
             phase = .choosing(touch, deadline: deadline, silence: .tripod)
+            pausedLeft = nil
             return .choose(deadline: deadline)
         }
     }
@@ -235,11 +240,32 @@ nonisolated struct ReportDraft: Equatable {
     mutating func hold(until deadline: Date) {
         guard case .choosing(let touch, _, _) = phase else { return }
         phase = .choosing(touch, deadline: deadline, silence: .nothing)
+        pausedLeft = nil
+    }
+
+    /// Экран занят оповещением о камере: срок выбора встаёт с тем, что
+    /// осталось. false — останавливать нечего (не выбор или уже стоит).
+    mutating func pause(now: Date) -> Bool {
+        guard pausedLeft == nil, case .choosing(_, let deadline, _) = phase else { return false }
+        pausedLeft = max(0, deadline.timeIntervalSince(now))
+        return true
+    }
+
+    /// Экран освободился: выбор возвращается с прежним остатком, но не меньше
+    /// `minimum` — за полсекунды «✕» не нажать. nil — возвращать нечего.
+    mutating func resume(now: Date, minimum: TimeInterval) -> Date? {
+        guard let left = pausedLeft else { return nil }
+        pausedLeft = nil
+        guard case .choosing(let touch, _, let silence) = phase else { return nil }
+        let deadline = now.addingTimeInterval(max(left, minimum))
+        phase = .choosing(touch, deadline: deadline, silence: silence)
+        return deadline
     }
 
     /// Такт часов: вышел ли срок выбора.
     mutating func expire(now: Date) -> Effect {
-        guard case .choosing(let touch, let deadline, let silence) = phase, now >= deadline else { return .none }
+        guard pausedLeft == nil,
+              case .choosing(let touch, let deadline, let silence) = phase, now >= deadline else { return .none }
         switch silence {
         case .tripod:
             phase = .sending(touch, kind: Self.defaultKind)

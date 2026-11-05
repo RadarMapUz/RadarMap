@@ -66,6 +66,33 @@ final class TouchFeedbackTests: XCTestCase {
                              TouchResponse.of(.regular, reduceMotion: false).pressedScale)
     }
 
+    /// Генератор по силе: отказ — мягкий удар вполсилы, выбор — щелчок,
+    /// «без вибрации» — ничего.
+    func testGeneratorBySeverity() {
+        XCTAssertEqual(TouchHaptic.none.generator, .none)
+        XCTAssertEqual(TouchHaptic.selection.generator, .selection)
+        XCTAssertEqual(TouchHaptic.light.generator, .impact(.light, intensity: 1))
+        XCTAssertEqual(TouchHaptic.medium.generator, .impact(.medium, intensity: 1))
+        XCTAssertEqual(TouchHaptic.soft.generator, .impact(.soft, intensity: 0.6))
+    }
+
+    /// По роли до генератора: главное — средний удар, обычное — лёгкий,
+    /// `.ownFeedback` — генератор не играет вовсе.
+    func testGeneratorByRole() {
+        XCTAssertEqual(TouchResponse.of(.primary, reduceMotion: false).haptic.generator,
+                       .impact(.medium, intensity: 1))
+        XCTAssertEqual(TouchResponse.of(.regular, reduceMotion: true).haptic.generator,
+                       .impact(.light, intensity: 1))
+        XCTAssertEqual(TouchResponse.of(.row, reduceMotion: false).haptic.generator, .selection)
+        XCTAssertEqual(TouchResponse.of(.ownFeedback, reduceMotion: false).haptic.generator, .none)
+    }
+
+    /// Недоступная кнопка приглушена, но видна.
+    func testDisabledOpacity() {
+        XCTAssertGreaterThan(TouchResponse.disabledOpacity, 0.3)
+        XCTAssertLessThan(TouchResponse.disabledOpacity, 0.6)
+    }
+
     /// Системная роль отмены превращает обычную кнопку в отказ, но не
     /// переписывает роль, выбранную явно.
     func testCancelButtonRole() {

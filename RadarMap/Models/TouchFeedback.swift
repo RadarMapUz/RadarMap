@@ -45,7 +45,7 @@ nonisolated enum TouchRole: CaseIterable, Sendable {
 }
 
 /// Сила вибрации касания. Системные вибрации выключены в настройках iOS —
-/// система промолчит сама: отклик идёт через `sensoryFeedback`.
+/// генераторы промолчат сами.
 nonisolated enum TouchHaptic: Equatable, Sendable {
     case none
     /// Самый тихий щелчок — смена выбора.
@@ -54,10 +54,37 @@ nonisolated enum TouchHaptic: Equatable, Sendable {
     case medium
     /// Мягкий, «глухой» удар — отказ звучит иначе, чем согласие.
     case soft
+
+    /// Чем играть: генератор UIKit и сила удара.
+    var generator: TouchGenerator {
+        switch self {
+        case .none:      .none
+        case .selection: .selection
+        case .light:     .impact(.light, intensity: 1)
+        case .medium:    .impact(.medium, intensity: 1)
+        case .soft:      .impact(.soft, intensity: 0.6)
+        }
+    }
+}
+
+/// Генератор вибрации без UIKit — чтобы выбор проверялся тестом.
+///
+/// Играется императивно, ДО действия кнопки: `sensoryFeedback` звучал в
+/// следующем проходе обновления и молчал, когда действие убирало кнопку с
+/// экрана в том же кадре — старт поездки, выбор типа отметки, «✕».
+nonisolated enum TouchGenerator: Equatable, Sendable {
+    enum Weight: Equatable, Sendable { case light, medium, soft }
+
+    case none
+    case selection
+    case impact(Weight, intensity: Double)
 }
 
 nonisolated struct TouchResponse: Equatable, Sendable {
     let haptic: TouchHaptic
+    /// Недоступная кнопка приглушена, как системная `.plain` с `.disabled`.
+    static let disabledOpacity = 0.45
+
     /// Масштаб под пальцем; 1 — без сжатия.
     let pressedScale: Double
     /// Непрозрачность под пальцем; 1 — без затемнения.

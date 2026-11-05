@@ -61,7 +61,7 @@ nonisolated enum RoadPromptPolicy {
         /// Как возвращается вытесненный.
         var comeback: Comeback {
             switch self {
-            case .ownTouch:                          return .never
+            case .ownTouch:                          return .ownWindow
             case .detour, .passQuestion, .roadWeather: return .ifTimeLeft
             case .late:                              return .nextStop
             case .corridor:                          return .always
@@ -70,9 +70,11 @@ nonisolated enum RoadPromptPolicy {
     }
 
     enum Comeback: Equatable, Sendable {
-        /// Не возвращается: решение за ним доводит его владелец (выбор
-        /// отметки уходит треногой по сроку ReportFlow).
-        case never
+        /// Своё касание: выбор не возвращается (тренога уходит по сроку
+        /// ReportFlow), «Отменить» возвращается, пока по окну отмены осталось
+        /// не меньше порога. Снять его очередь не вправе — только ждать: окно
+        /// закрывает ReportFlow.
+        case ownWindow
         /// Возвращается, если по его часам осталось не меньше
         /// `AppConfig.roadPromptMinReturnSeconds`; иначе снимается молча.
         case ifTimeLeft
@@ -99,6 +101,15 @@ nonisolated enum RoadPromptPolicy {
         /// Вытесненные, которым не вернуться: снять так же, как по сроку
         /// без ответа (молчание — ничего не уходит).
         var expired: [String] = []
+    }
+
+    /// Оповещение о камере на экране — ровно по условию ApproachOverlayGate:
+    /// камера на подходе и её не скрыли кнопкой «Скрыть». Скрытое оповещение
+    /// экран не занимает: выбор типа и «Отменить» под ним были бы невидимы,
+    /// а тренога ушла бы по сроку без «✕».
+    static func cameraCovers(approaching: Bool, cameraID: Int?, dismissedID: Int?) -> Bool {
+        guard approaching, let cameraID else { return false }
+        return cameraID != dismissedID
     }
 
     /// - `covered`: экран занят камерой (или своим действием водителя —
@@ -128,13 +139,19 @@ nonisolated enum RoadPromptPolicy {
 
     private static func verdict(_ candidate: Candidate, standing: Bool,
                                 minReturn: TimeInterval) -> Verdict {
+        // Своё касание очередь не снимает никогда: черновик ведёт ReportFlow.
+        if candidate.kind.comeback == .ownWindow {
+            if let remaining = candidate.remaining, remaining <= 0 { return .wait }
+            guard candidate.preempted else { return .show }
+            return (candidate.remaining ?? 0) >= minReturn ? .show : .wait
+        }
         // Срок вышел целиком — не наш вопрос: его снимет владелец по своим
         // часам. Вытесненный с хвостом меньше порога — снять сейчас: секунда
         // на экране читается как сбой, а не как вопрос.
         if let remaining = candidate.remaining, remaining <= 0 { return .expire }
         guard candidate.preempted else { return .show }
         switch candidate.kind.comeback {
-        case .never:
+        case .ownWindow:
             return .wait
         case .always:
             return .show

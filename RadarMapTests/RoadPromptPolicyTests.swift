@@ -78,14 +78,36 @@ final class RoadPromptPolicyTests: XCTestCase {
         XCTAssertEqual(decide([detour]).shown?.id, "d")
     }
 
-    /// Своё касание не возвращается: выбор и «Отменить» доводит ReportFlow
-    /// (тренога уйдёт по его сроку), а снять его как «молчание» очередь не
-    /// вправе — это не её решение.
-    func testOwnTouchNeverComesBackAndIsNotExpiredByQueue() {
+    /// Выбор типа, перебитый камерой, не возвращается (тренога уходит по сроку
+    /// ReportFlow), и снять его как «молчание» очередь не вправе.
+    func testOwnChoiceNeverComesBackAndIsNotExpiredByQueue() {
         let own = Candidate(kind: .ownTouch, id: "o", preempted: true)
         let outcome = decide([own, Candidate(kind: .corridor, id: "c")])
         XCTAssertEqual(outcome.shown?.id, "c")
         XCTAssertEqual(outcome.expired, [])
+    }
+
+    /// «Отменить», перебитое камерой, возвращается, пока окно отмены открыто
+    /// не меньше порога; меньше — ждёт, но очередь его не снимает.
+    func testOwnUndoComesBackWhileWindowIsOpen() {
+        let undo = Candidate(kind: .ownTouch, id: "o-sent", remaining: 6, preempted: true)
+        XCTAssertNil(decide([undo], covered: true).shown)
+        XCTAssertEqual(decide([undo, Candidate(kind: .passQuestion, id: "q", remaining: 20)]).shown?.id, "o-sent")
+        let late = Candidate(kind: .ownTouch, id: "o-sent", remaining: 3, preempted: true)
+        let outcome = decide([late, Candidate(kind: .passQuestion, id: "q", remaining: 20)])
+        XCTAssertEqual(outcome.shown?.id, "q")
+        XCTAssertEqual(outcome.expired, [])
+        XCTAssertEqual(decide([Candidate(kind: .ownTouch, id: "o-sent", remaining: 0)]).expired, [])
+    }
+
+    /// Экран занят ровно тогда, когда оповещение на экране: скрытое кнопкой
+    /// «Скрыть» не накрывает выбор типа и «Отменить».
+    func testDismissedAlertDoesNotCover() {
+        XCTAssertTrue(Policy.cameraCovers(approaching: true, cameraID: 7, dismissedID: nil))
+        XCTAssertTrue(Policy.cameraCovers(approaching: true, cameraID: 7, dismissedID: 3))
+        XCTAssertFalse(Policy.cameraCovers(approaching: true, cameraID: 7, dismissedID: 7))
+        XCTAssertFalse(Policy.cameraCovers(approaching: false, cameraID: 7, dismissedID: nil))
+        XCTAssertFalse(Policy.cameraCovers(approaching: true, cameraID: nil, dismissedID: nil))
     }
 
     /// «Опаздываю», вытесненное на ходу, ждёт следующей остановки.

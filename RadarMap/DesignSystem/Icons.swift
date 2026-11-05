@@ -90,6 +90,18 @@ nonisolated enum Icon {
     static let archive = "archivebox.fill"
     /// Цель недели.
     static let goal = "target"
+    /// Рекорд «поездок подряд без штрафа» — не пламя: пламя — серия недель
+    /// у цели недели, а «серия» в «Итогах» — только про недели (аудит 05.11).
+    static let record = "trophy.fill"
+    /// Совет «как вернуть баллы».
+    static let tip = "lightbulb.fill"
+    /// «Как считаем» — справка.
+    static let method = "info.circle.fill"
+    /// Вклад поездки в рейтинг периода.
+    static let contribution = "chart.pie.fill"
+    /// «Пока мало поездок для рейтинга» — стрелка без делений: «средняя
+    /// скорость» уже носит циферблат с делениями.
+    static let ratingPending = "gauge.with.needle"
     /// Путь выше лимита вне камер.
     static let overLimit = "gauge.with.dots.needle.67percent"
     /// Резкие разгоны и торможения.
@@ -112,10 +124,14 @@ nonisolated enum Icon {
     /// есть в системе) и листа-сетки DEBUG `-itogiIcons`. Новый значок в
     /// «Итогах» — сначала сюда.
     static let itogiSymbols: [String] = [
-        fines, cameras, trips, maintenance, shifts, community, lifetime, archive, goal,
+        fines, cameras, trips, maintenance, shifts, community, lifetime, archive, goal, record,
+        tip, method, contribution, ratingPending, "scalemass.fill",
+        // Три состояния проезда (PassVerdict.symbol) и галочка на снимке карты.
+        "checkmark.circle.fill", "exclamationmark.circle.fill", "exclamationmark.triangle.fill",
+        "questionmark.circle", "checkmark",
         trafficLayer, overLimit, smoothness, fuel, charge, byTrips, byDays, export, journal, car,
-        "house.fill", "briefcase.fill", "hourglass", "clock.fill", "scope", "lightbulb.fill",
-        "bell.fill", "arrow.triangle.merge", "info.circle.fill", "checkmark.shield.fill",
+        "house.fill", "briefcase.fill", "hourglass", "clock.fill", "scope",
+        "bell.fill", "arrow.triangle.merge", "checkmark.shield.fill",
         "checkmark.seal.fill", "gauge.with.dots.needle.33percent", "gauge.with.dots.needle.100percent",
         "point.topleft.down.to.point.bottomright.curvepath", "flame.fill",
         "tablecells", "doc.richtext", "trash", "ellipsis.circle",

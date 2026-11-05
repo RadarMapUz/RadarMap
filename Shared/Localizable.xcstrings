@@ -37498,6 +37498,62 @@
           }
         }
       }
+    },
+    "%@, на грани: %lld из %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, на грани: %lld из %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, chegarada: %3$lld tadan %2$lld"
+          }
+        }
+      }
+    },
+    "Пока без штрафуемых превышений: %lld проездов, есть на грани": {
+      "localizations": {
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Пока без штрафуемых превышений: %lld проезд, есть на грани"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Пока без штрафуемых превышений: %lld проезда, есть на грани"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Пока без штрафуемых превышений: %lld проездов, есть на грани"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Пока без штрафуемых превышений: %lld проездов, есть на грани"
+                }
+              }
+            }
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hozircha jarimali oshirishsiz: %lld ta oʻtish, chegaradagilar bor"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

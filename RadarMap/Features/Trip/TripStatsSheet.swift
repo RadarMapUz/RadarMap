@@ -69,6 +69,9 @@ struct TripStatsSheet: View {
     @State var tripsExpanded = false
     /// «Это разные» по карточке склейки — прячем её сразу (Storage не observable).
     @State var mergeSuggestionHidden = false
+    /// Удалённые свайпом — прячем сразу: строки берутся из пересчитываемого
+    /// вне main `current`, и до его возврата удалённая строка мигала обратно.
+    @State var deletedTripIDs: Set<Double> = []
     /// Полноэкранная карта проездов (item — чтобы передать фокус камеры).
     @State var mapPayload: PeriodMapPayload?
     /// Треки, маркеры и слой частоты — считаются на смену периода, а не в body.

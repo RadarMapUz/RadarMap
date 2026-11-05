@@ -62,7 +62,8 @@ struct WeeklyGoalCard: View {
     private var tint: Color {
         switch goal.state {
         case .waiting:  return Theme.textSecondary
-        case .onTrack:  return Theme.success
+        // «На грани» в какой-то день — жёлтым: штрафа нет, но балл снят.
+        case .onTrack:  return goal.marks.contains(.edge) ? PassVerdict.edge.tint : Theme.success
         case .missed:   return Theme.danger
         }
     }
@@ -72,7 +73,9 @@ struct WeeklyGoalCard: View {
         case .waiting:
             return String(localized: "На этой неделе у камер ещё не проезжали")
         case .onTrack(let passes):
-            return String(localized: "Пока без превышений: \(passes) проездов")
+            return goal.marks.contains(.edge)
+                ? String(localized: "Пока без штрафуемых превышений: \(passes) проездов, есть на грани")
+                : String(localized: "Пока без превышений: \(passes) проездов")
         case .missed(let over):
             return String(format: String(localized: "Сорвана: %@. Новая попытка со следующей недели"),
                           "\(over)\u{00A0}" + ItogiWords.overLabel(over))

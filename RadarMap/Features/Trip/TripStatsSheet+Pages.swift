@@ -79,7 +79,7 @@ extension TripStatsSheet {
     /// неловкого жеста), долгое нажатие — карта, повтор, склейка.
     @ViewBuilder
     func tripRows(_ records: [TripRecord], proxy: ScrollViewProxy?) -> some View {
-        ForEach(TripHistory.dayGroups(records), id: \.day) { group in
+        ForEach(TripHistory.dayGroups(records.filter { !deletedTripIDs.contains($0.id) }), id: \.day) { group in
             Section {
                 ForEach(group.records) { record in
                     Button {
@@ -145,6 +145,7 @@ extension TripStatsSheet {
     }
 
     func deleteTrip(_ record: TripRecord) {
+        deletedTripIDs.insert(record.id)
         withMotion {
             if mapSelection?.id == record.id { clearMapSelection() }
             env.trip.deleteRecord(id: record.id)

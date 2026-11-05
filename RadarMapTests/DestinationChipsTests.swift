@@ -39,6 +39,19 @@ final class DestinationChipsTests: XCTestCase {
         XCTAssertNil(chips[0].minutes)
     }
 
+    /// Стоим у дома — чип «Домой» бледный, без догадки и минут: маршрут из
+    /// дома в дом не предлагаем.
+    func testChipAtThePlaceIsNotOffered() {
+        let chips = DestinationChips.make(manual: [:], learned: [learnedHome, learnedWork],
+                                          guess: (.home, 600), here: (41.3001, 69.2001), atRadius: 150)
+        XCTAssertTrue(chips[0].isHere)
+        XCTAssertFalse(chips[0].guessed)
+        XCTAssertNil(chips[0].minutes)
+        XCTAssertFalse(chips[1].isHere)
+        XCTAssertFalse(DestinationChips.make(manual: [:], learned: [learnedHome], guess: nil)[0].isHere,
+                       "без своей точки «у места» не бывает")
+    }
+
     /// Адрес, заданный рукой, старше выученного.
     func testManualOutranksLearned() {
         let manual = DestinationChips.Place(lat: 41.0, lon: 69.0, title: "ул. Нурафшон, 5")

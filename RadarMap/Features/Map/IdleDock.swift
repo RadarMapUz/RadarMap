@@ -83,7 +83,8 @@ struct IdleDock: View {
         return DestinationChips.make(
             manual: manual,
             learned: settings.destinationSuggestions ? env.learnedPlaces : [],
-            guess: guess.map { ($0.kind, $0.estimate?.seconds ?? $0.usual ?? $0.crowdUsual) })
+            guess: guess.map { ($0.kind, $0.estimate?.seconds ?? $0.usual ?? $0.crowdUsual) },
+            here: env.location.currentCoordinate.map { ($0.latitude, $0.longitude) })
     }
 
     /// Уверенная догадка «куда сейчас» — общая с машиной (DestinationGuess):
@@ -205,6 +206,8 @@ struct IdleDockContent: View {
             .contentShape(Capsule())
         }
         .buttonStyle(PressableStyle())
+        // Уже здесь — бледный, но на своём месте (бледнит стиль).
+        .disabled(chip.isHere)
         .layoutPriority(chip.guessed ? 1 : 0)
         // Голосом — словами: «Домой, сейчас около 44 минут», а не «тильда 44 мин».
         .accessibilityLabel(Text(verbatim: chip.guessed ? (guessSpoken ?? title) : title))

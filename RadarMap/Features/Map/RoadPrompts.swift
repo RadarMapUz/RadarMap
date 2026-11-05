@@ -62,8 +62,9 @@ enum RoadPromptSources {
         let serial = env.reports.draft.serial
         switch env.reports.draft.phase {
         case .choosing, .sending:
-            let id = "own-\(serial)"
-            result.append(Candidate(kind: .ownTouch, id: id, preempted: preempted(id)))
+            // Не «вытеснен» никогда: под оповещением срок выбора стоит
+            // (ReportFlow.pauseChoice), и после него выбор возвращается.
+            result.append(Candidate(kind: .ownTouch, id: "own-\(serial)"))
         case .sent(let sent):
             let id = "own-\(serial)-sent"
             result.append(Candidate(kind: .ownTouch, id: id, remaining: sent.undoUntil.timeIntervalSince(now),
@@ -175,6 +176,8 @@ struct RoadPromptDriver: View {
     /// обработчику нужна только смена «кого показать» и «кого снять».
     private struct Decision: Equatable {
         let shown: RoadPromptShown?
+        /// Экран занят: выбор типа держит срок.
+        let covered: Bool
         let expired: [Ref]
         let pending: Set<String>
     }
@@ -190,15 +193,17 @@ struct RoadPromptDriver: View {
         let candidates = RoadPromptSources.candidates(
             env: env, map: map, now: now, voiceOver: voiceOver, speedKmh: speed,
             yieldsCorridor: yieldsCorridor, freesActionBar: freesActionBar)
+        let covered = RoadPromptPolicy.cameraCovers(approaching: env.location.isApproachingCamera,
+                                                    cameraID: env.location.nearestCamera?.id,
+                                                    dismissedID: dismissedApproachID) || blocked
         let outcome = RoadPromptPolicy.decide(
             candidates,
-            covered: RoadPromptPolicy.cameraCovers(approaching: env.location.isApproachingCamera,
-                                                   cameraID: env.location.nearestCamera?.id,
-                                                   dismissedID: dismissedApproachID) || blocked,
+            covered: covered,
             standing: speed < AppConfig.commuteLatePromptMaxKmh)
         let kinds = Dictionary(candidates.map { ($0.id, $0.kind) }, uniquingKeysWith: { a, _ in a })
         let decision = Decision(
             shown: outcome.shown.map { RoadPromptShown(kind: $0.kind, id: $0.id) },
+            covered: covered,
             expired: outcome.expired.compactMap { id in kinds[id].map { Ref(kind: $0, id: id) } },
             pending: Set(candidates.map(\.id)))
         Color.clear
@@ -213,11 +218,15 @@ struct RoadPromptDriver: View {
                 // вернётся по правилу вытесненного.
                 if let current = map.roadPrompt { preempt(current, at: Date()) }
                 map.roadPrompt = nil
+                // Без экрана держать выбор некому: срок снова идёт.
+                env.reports.resumeChoice()
             }
     }
 
     private func apply(_ decision: Decision) {
         let now = Date()
+        // Выбор типа под оповещением не виден — его срок стоит, пока экран занят.
+        if decision.covered { env.reports.pauseChoice(now: now) } else { env.reports.resumeChoice(now: now) }
         for ref in decision.expired { expire(ref) }
         let expiredIDs = Set(decision.expired.map(\.id))
         if map.roadPrompt != decision.shown {

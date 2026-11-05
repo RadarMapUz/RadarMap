@@ -68,6 +68,34 @@ final class DriveAsphaltTests: XCTestCase {
         XCTAssertNil(DriveAsphalt.colourHex(0.5))
     }
 
+    func testRgbaBecomesAColourWithAlpha() throws {
+        let shadow = try XCTUnwrap(DriveAsphalt.colour("rgba(30,38,50,0.30)"))
+        XCTAssertEqual(shadow.hex, 0x1E2632)
+        XCTAssertEqual(shadow.alpha, 0.3, accuracy: 0.0001)
+        XCTAssertEqual(DriveAsphalt.colour("rgb(0, 0, 0)")?.alpha, 1)
+        XCTAssertEqual(DriveAsphalt.colour("#3f4859")?.hex, 0x3F4859)
+        XCTAssertNil(DriveAsphalt.colour("rgba(0,0,0)"))
+        XCTAssertNil(DriveAsphalt.colour("rgba(0,0,300,0.5)"))
+        XCTAssertNil(DriveAsphalt.colour("hsl(0,0%,0%)"))
+        XCTAssertTrue(DriveAsphalt.isUnsafeColourString(property: "line-color", value: "hsl(0,0%,0%)"))
+        XCTAssertFalse(DriveAsphalt.isUnsafeColourString(property: "line-color", value: ["step", ["zoom"], "#000000", 15, "#ffffff"]))
+    }
+
+    /// 2.2.43 падала в машине на rgba-тени «Вождения 3D»: ни одна строка-цвет
+    /// ни в одной разнице стиля не должна дойти до движка неразобранной.
+    func testEveryBundledDifferenceHasOnlyParsableColourStrings() throws {
+        let names = ["map_drive_light", "map_drive_dark", "map_car_light", "map_car_dark", "map_car_b_light",
+                     "map_drive3d_light", "map_drive3d_dark"]
+        for name in names {
+            let url = try XCTUnwrap(Bundle.main.url(forResource: name, withExtension: "json")
+                ?? Bundle.main.url(forResource: name, withExtension: "json", subdirectory: "MapStyle"), name)
+            for item in try DriveAsphalt.overrides(from: Data(contentsOf: url)) {
+                XCTAssertFalse(DriveAsphalt.isUnsafeColourString(property: item.property, value: item.value),
+                               "\(name): \(item.layer).\(item.property) = \(item.value)")
+            }
+        }
+    }
+
     func testLightAcceptsOnlyIntensity() throws {
         XCTAssertNil(try DriveAsphalt.lightIntensity(from: Data(##"{"layers": {}}"##.utf8)))
         XCTAssertEqual(try DriveAsphalt.lightIntensity(from: Data(##"{"layers": {}, "light": {"intensity": 0.45}}"##.utf8)),

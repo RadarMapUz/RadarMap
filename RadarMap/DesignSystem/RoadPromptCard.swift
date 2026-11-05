@@ -201,7 +201,7 @@ struct RoadPromptCard<Trailing: View>: View {
                 .frame(maxWidth: action.narrow ? nil : .infinity)
                 .frame(width: action.narrow ? Theme.controlSize : nil)
                 .frame(minHeight: model.tiles ? 72 : Self.buttonHeight)
-                .padding(.horizontal, action.narrow ? 0 : 6)
+                .padding(.horizontal, action.narrow ? 0 : (model.tiles ? 3 : 6))
                 .background {
                     ZStack(alignment: .leading) {
                         shape.fill(agree ? Theme.accentFill : Theme.quietFill)
@@ -226,9 +226,11 @@ struct RoadPromptCard<Trailing: View>: View {
         } else if model.tiles {
             VStack(spacing: 6) {
                 icon(action, ink: ink, side: 26)
-                title(action, ink: ink, lines: 1)
+                // Две строки: на SE рядом с «✕» и «Отметить» плитке ≈ 60 pt, и
+                // «YPX posti» / «Uch oyoq» в одну строку обрезались.
+                title(action, ink: ink, lines: 2, size: 15)
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, 6)
         } else {
             HStack(spacing: 6) {
                 icon(action, ink: ink, side: 20)
@@ -249,13 +251,14 @@ struct RoadPromptCard<Trailing: View>: View {
         }
     }
 
-    private func title(_ action: RoadPromptModel.Action, ink: Color, lines: Int) -> some View {
+    private func title(_ action: RoadPromptModel.Action, ink: Color, lines: Int,
+                       size: CGFloat = 16) -> some View {
         Text(verbatim: action.title)
-            .font(.rounded(16, .bold))
+            .font(.rounded(size, .bold))
             .foregroundStyle(ink)
             .multilineTextAlignment(.center)
             .lineLimit(lines)
-            .minimumScaleFactor(0.75)
+            .minimumScaleFactor(0.7)
     }
 
     /// Полоса по низу — сколько срока осталось. Раз в 0,25 с: секунды
@@ -397,12 +400,14 @@ private struct RoadPromptPreview: View {
 }
 
 extension RoadPromptPreview {
-    /// Три типа отметки плитками; молчание — тренога.
+    /// «✕» и три типа отметки плитками, как в панели на SE; молчание — тренога.
     fileprivate var typeTiles: [RoadPromptModel.Action] {
         let names: [ReportKind: String] = uz
             ? [.tripod: "Uch oyoq", .post: "YPX posti", .accident: "YTH"]
             : [.tripod: "Тренога", .post: "Пост ДПС", .accident: "ДТП"]
-        return [ReportKind.tripod, .post, .accident].map { kind in
+        let cancel = RoadPromptModel.Action(id: "x", title: uz ? "Belgilamaslik" : "Не отмечать", symbol: "xmark",
+                                            touch: .cancel, narrow: true, perform: {})
+        return [cancel] + [ReportKind.tripod, .post, .accident].map { kind in
             let isDefault = kind == .tripod
             return RoadPromptModel.Action(id: kind.rawValue, title: names[kind] ?? "",
                                           cameraGlyph: kind.cameraGlyph, style: isDefault ? .agree : .quiet,

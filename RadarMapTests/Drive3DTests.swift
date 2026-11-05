@@ -74,7 +74,8 @@ final class Drive3DTests: XCTestCase {
     }
 
     func testRecomputeOnlyOnEvents() {
-        let plan = Drive3D.Plan(route: 1, from: 100, maneuver: 900, narrowing: true, inWindow: false)
+        let plan = Drive3D.Plan(route: 1, from: 100, maneuver: 900, narrowing: true, inWindow: false,
+                                complete: true, verifiedEnd: 1500)
         func needs(route: Int = 1, car: Double = 150, maneuver: Double? = 900, narrowing: Bool = true) -> Bool {
             Drive3D.needsRecompute(last: plan, route: route, car: car, maneuver: maneuver, window: 300,
                                    narrowing: narrowing)
@@ -86,19 +87,96 @@ final class Drive3DTests: XCTestCase {
         XCTAssertTrue(needs(narrowing: false), "нагрелся телефон")
         XCTAssertTrue(needs(car: 100 + AppConfig.drive3DRecomputeMeters), "уехали от начала участка")
         XCTAssertTrue(needs(car: 610), "вошли в окно подъезда")
-        var inside = plan
-        inside.inWindow = true
-        XCTAssertFalse(Drive3D.needsRecompute(last: inside, route: 1, car: 620, maneuver: 900, window: 300,
-                                              narrowing: true), "в окне — один раз")
     }
 
-    func testCutIsWrittenByStepsNotEveryFrame() {
+    /// В окне подъезда до манёвра по пути не пересчитываем: пересчёт посреди
+    /// перестроения перекраивал его под машиной (72 км/ч, окно 300 м > 250 м).
+    func testNoDistanceRecomputeInsideTheApproachWindow() {
+        let inside = Drive3D.Plan(route: 1, from: 620, maneuver: 900, narrowing: true, inWindow: true,
+                                  complete: true, verifiedEnd: 2000)
+        for car in stride(from: 620.0, to: 900, by: 10) {
+            XCTAssertFalse(Drive3D.needsRecompute(last: inside, route: 1, car: car, maneuver: 900, window: 300,
+                                                  narrowing: true), "машина на \(car) м")
+        }
+        XCTAssertTrue(Drive3D.needsRecompute(last: inside, route: 1, car: 905 + AppConfig.drive3DRecomputeMeters,
+                                             maneuver: 900, window: 300, narrowing: true), "за манёвром — снова")
+    }
+
+    /// Неполный расчёт (карта без лент тайла) и конец прощупанного — повтор,
+    /// но не чаще drive3DRetrySeconds.
+    func testIncompleteAndEndOfProbedRetryWithThrottle() {
+        let incomplete = Drive3D.Plan(route: 1, from: 100, maneuver: nil, narrowing: true, inWindow: false)
+        XCTAssertFalse(Drive3D.needsRecompute(last: incomplete, route: 1, car: 110, maneuver: nil, window: 200,
+                                              narrowing: true, sinceAttempt: 0.5))
+        XCTAssertTrue(Drive3D.needsRecompute(last: incomplete, route: 1, car: 110, maneuver: nil, window: 200,
+                                             narrowing: true, sinceAttempt: AppConfig.drive3DRetrySeconds))
+        let short = Drive3D.Plan(route: 1, from: 100, maneuver: nil, narrowing: true, inWindow: false,
+                                 complete: true, verifiedEnd: 300)
+        XCTAssertTrue(Drive3D.needsRecompute(last: short, route: 1, car: 160, maneuver: nil, window: 200,
+                                             narrowing: true), "у конца прощупанного")
+    }
+
+    /// Щупать карту — только при слежении, с 15-го и на дорисованном кадре.
+    func testComputeOnlyOnAFollowedLoadedMap() {
+        XCTAssertTrue(Drive3D.canCompute(following: true, zoom: 16.5, tilesComplete: true))
+        XCTAssertFalse(Drive3D.canCompute(following: true, zoom: 13, tilesComplete: true), "обзор и превью")
+        XCTAssertFalse(Drive3D.canCompute(following: false, zoom: 17, tilesComplete: true), "осмотр, панорама")
+        XCTAssertFalse(Drive3D.canCompute(following: true, zoom: 17, tilesComplete: false), "тайлы не дорисованы")
+    }
+
+    func testCutStepGrowsWithSpeedAndHeat() {
+        XCTAssertEqual(Drive3D.cutStep(speedMps: 5, hot: false), AppConfig.drive3DCutStepMeters)
+        XCTAssertEqual(Drive3D.cutStep(speedMps: 28, hot: false), 14, accuracy: 0.01)
+        XCTAssertEqual(Drive3D.cutStep(speedMps: 28, hot: true), 14 * AppConfig.drive3DCutHotFactor, accuracy: 0.01)
         XCTAssertTrue(Drive3D.cutDue(last: nil, now: 10))
         XCTAssertFalse(Drive3D.cutDue(last: 100, now: 104))
         XCTAssertTrue(Drive3D.cutDue(last: 100, now: 100 + AppConfig.drive3DCutStepMeters))
         XCTAssertTrue(Drive3D.cutDue(last: 100, now: 50), "назад — сразу")
-        XCTAssertEqual(Drive3D.quantizedCut(13), 8)
-        XCTAssertEqual(Drive3D.quantizedCut(-5), 0)
+    }
+
+    /// Частота: минута на 100 км/ч, применение модели трижды в секунду. Источник
+    /// пишется только на пересчёте (не каждые 8 м), срез — шагом.
+    func testWritesPerMinuteAt100Kmh() {
+        let speed = 100 / 3.6
+        var plan: Drive3D.Plan?
+        var computes = 0, cuts = 0
+        var cut: Double?
+        var lastAttempt = -Double.infinity
+        for tick in 0..<180 {
+            let t = Double(tick) / 3
+            let car = 200 + speed * t
+            let maneuver: Double = car < 1600 ? 1600 : 3200
+            let window = LaneFocus.window(speedKmh: 100)
+            if Drive3D.needsRecompute(last: plan, route: 1, car: car, maneuver: maneuver, window: window,
+                                      narrowing: true, sinceAttempt: t - lastAttempt) {
+                computes += 1
+                lastAttempt = t
+                plan = Drive3D.Plan(route: 1, from: car, maneuver: maneuver, narrowing: true,
+                                    inWindow: Drive3D.inWindow(car: car, maneuver: maneuver, window: window),
+                                    complete: true, verifiedEnd: car + 900)
+            }
+            if Drive3D.cutDue(last: cut, now: car, step: Drive3D.cutStep(speedMps: speed, hot: false)) {
+                cuts += 1
+                cut = car
+            }
+        }
+        XCTAssertLessThanOrEqual(computes, 10, "записей источника за минуту")
+        XCTAssertLessThanOrEqual(cuts, 130, "перестановок среза за минуту")
+    }
+
+    func testDefaultByPhoneClass() {
+        XCTAssertFalse(Drive3D.defaultEnabled(machine: "iPhone11,8"), "XR, A12")
+        XCTAssertFalse(Drive3D.defaultEnabled(machine: "iPhone12,8"), "SE 2, A13")
+        XCTAssertTrue(Drive3D.defaultEnabled(machine: "iPhone13,2"), "12, A14")
+        XCTAssertTrue(Drive3D.defaultEnabled(machine: "iPhone17,1"), "16 Pro")
+        XCTAssertTrue(Drive3D.defaultEnabled(machine: "arm64"), "симулятор")
+    }
+
+    func testDashboardHasNoRibbonAndHotPhoneNoChevrons() {
+        XCTAssertFalse(Drive3D.ribbon(surface: .dashboard))
+        XCTAssertTrue(Drive3D.ribbon(surface: .car))
+        XCTAssertFalse(Drive3D.chevrons(surface: .phone, hot: true))
+        XCTAssertTrue(Drive3D.chevrons(surface: .phone, hot: false))
     }
 
     /// Разница в бандле — только известные свойства (иначе KVC уронил бы

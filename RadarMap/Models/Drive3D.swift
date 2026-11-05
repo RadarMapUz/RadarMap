@@ -81,8 +81,21 @@ nonisolated enum Drive3D {
         surface != .dashboard && !hot
     }
 
-    /// Шевроны внутри ленты — не на плитке.
-    static func chevrons(surface: Surface) -> Bool { surface != .dashboard }
+    /// Лента вообще: на плитке её нет — там палитра 3D и прежняя линия
+    /// маршрута (упрощённо: ни проб тайла, ни расчёта).
+    static func ribbon(surface: Surface) -> Bool { surface != .dashboard }
+
+    /// Шевроны внутри ленты — не на плитке и не на горячем телефоне (лишняя
+    /// раскладка символов, как у шевронов пробок).
+    static func chevrons(surface: Surface, hot: Bool = false) -> Bool { surface != .dashboard && !hot }
+
+    /// Умолчание настройки по классу телефона: на A12/A13 (iPhone11,x и
+    /// iPhone12,x — XS/XR, 11, SE 2) — выключено, новее и симулятор — включено.
+    static func defaultEnabled(machine: String) -> Bool {
+        guard machine.hasPrefix("iPhone"),
+              let major = Int(machine.dropFirst("iPhone".count).prefix { $0.isNumber }) else { return true }
+        return major >= 13
+    }
 
     /// Дымка у горизонта: на горячем телефоне гаснет вместе с домами и тенями.
     static func hazeShown(hot: Bool) -> Bool { !hot }
@@ -122,7 +135,7 @@ nonisolated enum Drive3D {
 
     /// Что лента учла при последнем расчёте.
     struct Plan: Equatable, Sendable {
-        /// Тот же маршрут (ObjectIdentifier линии или счётчик).
+        /// Тот же маршрут (счётчик смен линии).
         var route: Int
         /// Откуда участок, м от старта маршрута.
         var from: Double
@@ -131,14 +144,35 @@ nonisolated enum Drive3D {
         var narrowing: Bool
         /// Машина была в окне подъезда к манёвру.
         var inWindow: Bool
+        /// Расчёт пришёл и годен (LanePath.Ribbon.isReady); false — ждём или
+        /// карта была без лент тайла: повтор на ближайшем годном кадре.
+        var complete = false
+        /// Докуда прощупано (м); nil — ещё неизвестно.
+        var verifiedEnd: Double?
+    }
+
+    /// Считать по карте можно только при слежении (не осмотр и не панорама),
+    /// с зума, на котором видны ленты наших дорог, и на дорисованном кадре:
+    /// иначе пробы видят обзор без тайлов или чужое место, и лента ложится
+    /// запасной шириной по оси — наполовину на встречку.
+    static func canCompute(following: Bool, zoom: Double, tilesComplete: Bool) -> Bool {
+        following && zoom >= AppConfig.drive3DMinProbeZoom && tilesComplete
     }
 
     /// Пересчёт — на смене маршрута, манёвра, разрешения сужения, на входе в
-    /// окно подъезда и раз в drive3DRecomputeMeters пути; на тике — нет.
+    /// окно подъезда, у конца прощупанного и раз в drive3DRecomputeMeters
+    /// пути; на тике — нет. В окне подъезда до манёвра по пути не
+    /// пересчитываем: лента считана на 1,5 км, а пересчёт посреди
+    /// перестроения перекраивал бы его под машиной. Неполный расчёт —
+    /// повтор не чаще drive3DRetrySeconds.
     static func needsRecompute(last: Plan?, route: Int, car: Double, maneuver: Double?, window: Double,
-                               narrowing: Bool) -> Bool {
+                               narrowing: Bool, sinceAttempt: TimeInterval = .infinity) -> Bool {
         guard let last else { return true }
         if last.route != route || last.narrowing != narrowing || last.maneuver != maneuver { return true }
+        let retry = sinceAttempt >= AppConfig.drive3DRetrySeconds
+        if !last.complete { return retry }
+        if let end = last.verifiedEnd, car >= end - AppConfig.drive3DTailMarginMeters { return retry }
+        if last.inWindow, let maneuver, car < maneuver { return false }
         if car < last.from - 1 || car - last.from >= AppConfig.drive3DRecomputeMeters { return true }
         if let maneuver, !last.inWindow, car >= maneuver - window { return true }
         return false
@@ -148,16 +182,17 @@ nonisolated enum Drive3D {
         maneuver.map { car >= $0 - window } ?? false
     }
 
-    /// Срез под машиной переписывается шагом, а не на каждом кадре; назад
-    /// (новый маршрут, откат прогресса) — сразу.
-    static func cutDue(last: Double?, now: Double) -> Bool {
-        guard let last else { return true }
-        return now - last >= AppConfig.drive3DCutStepMeters || now < last - 1
+    /// Шаг среза под машиной, м: не мельче 8 м и полсекунды пути, на горячем
+    /// телефоне — втрое крупнее.
+    static func cutStep(speedMps: Double, hot: Bool) -> Double {
+        let base = max(AppConfig.drive3DCutStepMeters, max(0, speedMps) * AppConfig.drive3DCutStepSeconds)
+        return hot ? base * AppConfig.drive3DCutHotFactor : base
     }
 
-    /// Срез, кратный шагу: лента начинается у машины, хвост — под значком.
-    static func quantizedCut(_ along: Double) -> Double {
-        let step = AppConfig.drive3DCutStepMeters
-        return (max(0, along) / step).rounded(.down) * step
+    /// Срез (фильтр слоя по концу куска) переставляется шагом, а не на каждом
+    /// применении; назад (новый маршрут, откат прогресса) — сразу.
+    static func cutDue(last: Double?, now: Double, step: Double = AppConfig.drive3DCutStepMeters) -> Bool {
+        guard let last else { return true }
+        return now - last >= step || now < last - 1
     }
 }

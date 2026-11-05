@@ -101,6 +101,9 @@ final class EngineRouteLine {
 
     /// Пробки на линии с местом в метрах — их же лента 3D кладёт поверх себя.
     var trafficPieces: [RouteTraffic.Piece] { traffic }
+    /// Поколение этих пробок: меняется, когда куски уже пришли (а не ревизия
+    /// модели, которая опережает расчёт).
+    var trafficVersion: Int { trafficGeneration }
 
     /// Где сейчас нарисована граница пройденного (для замера 27.A).
     var paintedCutCoordinate: CLLocationCoordinate2D? {

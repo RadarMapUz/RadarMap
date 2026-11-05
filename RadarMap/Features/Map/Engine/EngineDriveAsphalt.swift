@@ -67,7 +67,9 @@ final class EngineDriveAsphalt {
             restore(in: style)
             appliedResource = wanted
             if let wanted {
-                apply(resource: wanted, cameraLabel: threeD ? nil : car?.cameraLabel(daylight: daylight, active: active),
+                // Подпись камеры в машине — цветами 40J и в 3D: светлый текст на
+                // ореоле асфальта читается и на сером.
+                apply(resource: wanted, cameraLabel: car?.cameraLabel(daylight: daylight, active: active),
                       seconds: seconds, in: style)
             }
         }

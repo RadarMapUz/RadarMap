@@ -381,6 +381,8 @@ struct EngineMapView: UIViewRepresentable {
         private let performanceLog = OSLog(subsystem: "uz.radarmap", category: "MapPerformance")
         fileprivate var lastCameraModel: EngineMapView?
         private var browsing = false
+        /// Последний кадр нарисован со всеми тайлами — лента 3D может щупать карту.
+        private var framesComplete = false
         private var lastRecenterToken = 0
         /// Выпуск тайлов новой карты (подписанный корень) и что сейчас в стиле.
         private var release: TileRelease?
@@ -583,6 +585,7 @@ struct EngineMapView: UIViewRepresentable {
                                            frameEncodingTime: Double, frameRenderingTime: Double) {
             framesRendered &+= 1
             framesAtRate &+= 1
+            framesComplete = fullyRendered
             #if DEBUG
             guard frameEncodingTime.isFinite, frameRenderingTime.isFinite else { return }
             encodingSamples.append(frameEncodingTime)
@@ -917,6 +920,7 @@ struct EngineMapView: UIViewRepresentable {
             cameraZone.styleLoaded()
             driveAsphalt.styleLoaded()
             driveRibbon.styleLoaded()
+            framesComplete = false
             mapDetail.styleLoaded()
             streetProbe.styleLoaded()
             if let scale = (pending ?? current)?.carScale { EngineCarScale.apply(scale, in: style) }
@@ -1386,8 +1390,13 @@ struct EngineMapView: UIViewRepresentable {
                 : model.carStyle?.routeDaylight(daylight: model.daylight, active: asphalt)
                 ?? DriveAsphalt.routeDaylight(daylight: model.daylight, active: asphalt)
             routeLine.update(model, routeDaylight: routeDaylight, in: view)
-            driveRibbon.update(model, on: threeD, cut: routeLine.paintedCutAlong, traffic: routeLine.trafficPieces,
-                               in: view)
+            // Щупать тайлы — только при слежении, с 15-го и на дорисованном
+            // кадре (Drive3D.canCompute): обзор и осмотр не дают лент дорог.
+            let probeAllowed = Drive3D.canCompute(following: !browsing, zoom: view.zoomLevel,
+                                                  tilesComplete: framesComplete)
+            driveRibbon.update(model, on: threeD, probeAllowed: probeAllowed, cut: routeLine.paintedCutAlong,
+                               traffic: routeLine.trafficPieces, trafficVersion: routeLine.trafficVersion,
+                               routeDaylight: routeDaylight, in: view)
             laneFocusLayers.update(model, routeDaylight: routeDaylight, in: view)
             cameraZone.update(model.cameraZone, daylight: model.daylight, in: view)
             mapDetail.update(EngineMapDetail.Content(

@@ -3771,8 +3771,29 @@ nonisolated enum AppConfig {
     /// когда машина ушла от начала участка на drive3DRecomputeMeters.
     static let drive3DAheadMeters: Double = 1500
     static let drive3DRecomputeMeters: Double = 250
-    /// Срез ленты под машиной переписывается шагом, м (не на каждом тике).
+    /// Срез ленты под машиной — фильтром слоя по кускам этой длины, м
+    /// (кусками — первые drive3DChunkMeters участка), шагом не реже
+    /// drive3DCutStepMeters и drive3DCutStepSeconds пути; на горячем — ×3.
+    /// Источник пишется только на пересчёте.
     static let drive3DCutStepMeters: Double = 8
+    static let drive3DCutStepSeconds: Double = 0.5
+    static let drive3DCutHotFactor: Double = 3
+    static let drive3DChunkMeters: Double = 600
+    /// Лента рисуется только на прощупанном участке: пробел без лент тайла
+    /// длиннее этого (м) кончает его; готова — от drive3DMinVerifiedMeters
+    /// прощупанного и drive3DMinMatchShare совпадения, иначе остаётся линия.
+    static let drive3DGapMeters: Double = 80
+    static let drive3DMinVerifiedMeters: Double = 100
+    static let drive3DMinMatchShare: Double = 0.6
+    /// Считать по карте можно только при слежении, с этого зума (ленты наших
+    /// дорог видны с 15-го) и на дорисованном кадре; неполный расчёт —
+    /// повтор не чаще чем раз в столько секунд.
+    static let drive3DMinProbeZoom: Double = 15
+    static let drive3DRetrySeconds: Double = 1.5
+    /// Пересчёт заранее, когда машина ближе этого к концу прощупанного участка, м.
+    static let drive3DTailMarginMeters: Double = 150
+    /// Хвост линии маршрута заходит под конец ленты на столько метров (без щели).
+    static let drive3DTailOverlapMeters: Double = 10
     /// Шевроны внутри ленты: шаг, м; видны только медленнее порога (км/ч) с
     /// гистерезисом.
     static let drive3DChevronSpacing: Double = 50
@@ -3782,6 +3803,8 @@ nonisolated enum AppConfig {
     /// Жила середины ленты, точки: у горизонта лента в метрах тоньше точки и
     /// рябила бы — жила держит нижний предел толщины.
     static let drive3DSpinePoints: Double = 2
+    /// …а до z16,5 — не тоньше линии маршрута на обзоре (25.D: ≥ 6 точек).
+    static let drive3DSpineFarPoints: Double = 6
     /// Лента без данных о дороге — по оси, этой шириной.
     static let drive3DFallbackWidth: Double = 3.5
     /// Пробы тайла вдоль маршрута на экране: шаг, м, сторона квадрата, точки,

@@ -157,11 +157,100 @@ final class LanePathTests: XCTestCase {
         XCTAssertEqual(rr, 6, accuracy: 0.05)
     }
 
-    /// Пересчёт у самого манёвра не дёргает ленту под машиной.
-    func testShiftNeverStartsUnderTheCar() {
-        let car = 520.0
-        let r = LanePath.build(leftTurn(arrows: rowArrows(row), car: car))
-        XCTAssertEqual(offsets(r, at: car + AppConfig.drive3DShiftLeadMeters - 2).1, 7, accuracy: 0.05)
+    /// Пересчёт посреди перестроения не снимает сужение под машиной: лента
+    /// там та же, что в расчёте до входа в окно (до 43-ревью прижим начала к
+    /// машине возвращал её на всю сторону и сжимал перестроение за ряд).
+    func testRecomputeMidShiftKeepsTheNarrowing() {
+        let before = LanePath.build(leftTurn(arrows: rowArrows(row), car: 100))
+        let mid = LanePath.build(leftTurn(arrows: rowArrows(row), car: 520))
+        // Станции двух расчётов сдвинуты до шага (2 м): допуск — наклон
+        // S-кривой на один шаг, ступеньки «на всю сторону» в нём нет.
+        for s in stride(from: 525.0, through: 600, by: 5) {
+            XCTAssertEqual(offsets(mid, at: s).1, offsets(before, at: s).1, accuracy: 0.3, "край у \(s) м")
+        }
+        XCTAssertEqual(offsets(mid, at: 545).1, 3.5, accuracy: 0.05, "конец — за 15 м до ряда")
+    }
+
+    /// Машина у самого начала перестроения: оно не начинается под ней.
+    func testShiftDoesNotStartUnderTheCarBeforeItsStart() {
+        let r = LanePath.build(leftTurn(arrows: rowArrows(row), car: 490))
+        XCTAssertEqual(offsets(r, at: 490 + AppConfig.drive3DShiftLeadMeters - 2).1, 7, accuracy: 0.05)
+        XCTAssertEqual(offsets(r, at: 545).1, 3.5, accuracy: 0.1)
+    }
+
+    /// 72 км/ч, окно 300 м, сдвиг на две полосы: расчёт на входе в окно и
+    /// повторный за 50 м до манёвра дают одну ленту, конец — за 15 м до ряда.
+    func testAt72KmhTheShiftSurvivesARecompute() {
+        func input(car: Double) -> LanePath.Input {
+            LanePath.Input(
+                route: [c(0, 0), c(0, 1000), c(-300, 1000)], from: car, length: 1500, car: car, speedMps: 20,
+                window: 300,
+                roads: [LanePath.Road(points: [c(0, -50), c(0, 980)], width: 10.5, oneway: true, bridge: false),
+                        LanePath.Road(points: [c(-20, 1000), c(-400, 1000)], width: 10.5, oneway: true, bridge: false)],
+                arrows: [(-3.5, true), (0, false), (3.5, false)].map {
+                    LanePath.Arrow(coordinate: c($0.0, 960), bearing: 0, width: 3.5, ours: $0.1)
+                },
+                maneuver: LanePath.Maneuver(along: 1000, edge: .left, row: true), narrowing: true)
+        }
+        let entry = LanePath.build(input(car: 700))
+        let late = LanePath.build(input(car: 950))
+        XCTAssertEqual(entry.narrowing, .arrows)
+        for s in stride(from: 950.0, through: 1000, by: 5) {
+            XCTAssertEqual(offsets(late, at: s).1, offsets(entry, at: s).1, accuracy: 0.3, "край у \(s) м")
+        }
+        XCTAssertEqual(offsets(entry, at: 945).1, -1.75, accuracy: 0.05)
+        XCTAssertEqual(offsets(entry, at: 700).1, 5.25, accuracy: 0.05, "до перестроения — вся лента")
+    }
+
+    /// Налево с односторонней на двустороннюю: за точкой манёвра лента не
+    /// заходит левее осевой новой улицы (на встречку).
+    func testTargetStaysOnOurSideAfterTheTurn() {
+        var input = leftTurn(arrows: [LanePath.Arrow(coordinate: c(-5.25, 560), bearing: 0, width: 3.5, ours: true)])
+        input.roads[0].oneway = true
+        let r = LanePath.build(input)
+        XCTAssertEqual(r.narrowing, .arrows)
+        // За узлом (лента новой улицы — с 620 м) — только своя сторона.
+        for i in r.along.indices where r.along[i] > 622 && r.along[i] < 640 {
+            XCTAssertGreaterThanOrEqual(r.leftOffset[i], -0.05, "станция \(Int(r.along[i])) м")
+        }
+    }
+
+    // MARK: - Прощупанный участок
+
+    /// Лента кончается там, где кончились ленты тайла: дальше — линия.
+    func testRibbonEndsWhereTheProbedRoadsEnd() {
+        var input = leftTurn(edge: nil)
+        input.roads = [LanePath.Road(points: [c(0, -50), c(0, 400)], width: 14, oneway: false, bridge: false)]
+        let r = LanePath.build(input)
+        XCTAssertEqual(r.verifiedEnd, 400, accuracy: AppConfig.drive3DMatchMeters)
+        XCTAssertTrue(r.isReady)
+        XCTAssertTrue(LanePath.pieces(r, from: 100, to: r.verifiedEnd).allSatisfy { $0.to <= r.verifiedEnd })
+    }
+
+    /// Карта без лент тайла (обзор, непрогруженные тайлы) — лента не готова.
+    func testNoRoadsIsNotReady() {
+        var input = leftTurn(edge: nil)
+        input.roads = []
+        XCTAssertFalse(LanePath.build(input).isReady)
+    }
+
+    /// Отрезок трассы в километр одним куском сопоставляется (не выпадает из сетки).
+    func testLongStraightSegmentStillMatches() {
+        var input = leftTurn(edge: nil)
+        input.roads[0] = LanePath.Road(points: [c(0, -600), c(0, 590)], width: 14, oneway: false, bridge: false)
+        let r = LanePath.build(input)
+        XCTAssertEqual(offsets(r, at: 300).1, 7, accuracy: 0.05)
+    }
+
+    /// Куски по 8 м у машины — для среза фильтром; дальше — целиком.
+    func testChunksNearTheCarCarryTheirMetres() {
+        let r = LanePath.build(leftTurn(edge: nil))
+        let pieces = LanePath.pieces(r, from: 120, to: 590, chunk: 8, chunkUntil: 300)
+        let near = pieces.filter { $0.from < 290 }
+        XCTAssertGreaterThan(near.count, 15)
+        XCTAssertTrue(near.allSatisfy { $0.to - $0.from <= 8 + AppConfig.drive3DStationMeters })
+        XCTAssertGreaterThan(pieces.last!.to - pieces.last!.from, 200, "дальше — одним куском")
+        for (a, b) in zip(pieces, pieces.dropFirst()) { XCTAssertEqual(a.to, b.from, accuracy: 1e-9) }
     }
 
     /// Встречные стрелки и стрелки чужой стороны — не наш ряд.

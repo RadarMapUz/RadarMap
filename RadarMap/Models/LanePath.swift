@@ -164,20 +164,36 @@ nonisolated enum LanePath {
         let narrowed: ClosedRange<Double>?
         /// Где ряд стрелок (м от старта), если найден.
         let row: Double?
-        /// Доля станций, у которых нашлась лента тайла.
+        /// Доля станций, у которых нашлась лента тайла (до `verifiedEnd`).
         let matchedShare: Double
+        /// Докуда лента прощупана: дальше станций без ленты тайла больше
+        /// drive3DGapMeters подряд — там карта рисует линию, а не ленту
+        /// (неизвестная эстакада не уходит под настил, встречка не закрашивается).
+        let verifiedEnd: Double
 
         var isEmpty: Bool { along.count < 2 }
 
+        /// Лента годится для карты: прощупано не меньше drive3DMinVerifiedMeters
+        /// и совпадение не ниже drive3DMinMatchShare — иначе остаётся линия.
+        var isReady: Bool {
+            guard let first = along.first else { return false }
+            return verifiedEnd - first >= AppConfig.drive3DMinVerifiedMeters
+                && matchedShare >= AppConfig.drive3DMinMatchShare
+        }
+
         static func empty(_ frame: Frame) -> Ribbon {
             Ribbon(frame: frame, along: [], left: [], right: [], centre: [], bridge: [], leftOffset: [],
-                   rightOffset: [], narrowing: .none, narrowed: nil, row: nil, matchedShare: 0)
+                   rightOffset: [], narrowing: .none, narrowed: nil, row: nil, matchedShare: 0, verifiedEnd: 0)
         }
     }
 
     /// Кусок ленты для источника карты: площадь, края и середина.
     struct Piece: Sendable {
         let bridge: Bool
+        /// Метры маршрута начала и конца куска: срез под машиной — фильтром
+        /// слоя по `to`, а не перезаписью источника.
+        let from: Double
+        let to: Double
         /// Замкнутое кольцо: левый край вперёд, правый назад.
         let ring: [CLLocationCoordinate2D]
         let left: [CLLocationCoordinate2D]
@@ -230,18 +246,20 @@ nonisolated enum LanePath {
         var fullL = [Double?](repeating: nil, count: n)
         var fullR = [Double?](repeating: nil, count: n)
         var bridgeRaw = [Bool?](repeating: nil, count: n)
-        var matched = 0
+        var hits = [Bool](repeating: false, count: n)
         var lastBridge: Bool?
         for i in 0..<n {
             guard let hit = index.match(points[i], tangent: tangent[i], previousBridge: lastBridge) else { continue }
+            hits[i] = true
             bridgeRaw[i] = hit.road.bridge
             lastBridge = hit.road.bridge
             guard !hit.road.inner, !hit.road.stub else { continue }
             let w = hit.road.width
             fullL[i] = (hit.road.oneway ? -w / 2 : 0) - hit.lateral
             fullR[i] = w / 2 - hit.lateral
-            matched += 1
         }
+        let verified = verifiedIndex(hits, along: along)
+        let matched = verified.map { hits[0...$0].filter { $0 }.count } ?? 0
         let half = AppConfig.drive3DFallbackWidth / 2
         var lf = fill(median(fullL, AppConfig.drive3DMedianStations), along: along, fallback: -half)
         var rf = fill(median(fullR, AppConfig.drive3DMedianStations), along: along, fallback: half)
@@ -294,13 +312,17 @@ nonisolated enum LanePath {
                       bridge: bridges(bridgeRaw), leftOffset: leftOff, rightOffset: rightOff,
                       narrowing: plan.kind,
                       narrowed: narrowedLo <= narrowedHi ? narrowedLo...narrowedHi : nil,
-                      row: plan.row, matchedShare: Double(matched) / Double(n))
+                      row: plan.row, matchedShare: verified.map { Double(matched) / Double($0 + 1) } ?? 0,
+                      verifiedEnd: verified.map { along[$0] } ?? along[0])
     }
 
     // MARK: - Куски для карты
 
-    /// Лента от среза до `end`: куски по мосту, стык — общая станция.
-    static func pieces(_ ribbon: Ribbon, from cut: Double, to end: Double = .infinity) -> [Piece] {
+    /// Лента от среза до `end`: куски по мосту, стык — общая станция. До
+    /// `chunkUntil` — ещё и куски по `chunk` метров: срез под машиной карта
+    /// делает фильтром по `to`, а источник пишет только на пересчёте.
+    static func pieces(_ ribbon: Ribbon, from cut: Double, to end: Double = .infinity,
+                       chunk: Double = 0, chunkUntil: Double = -.infinity) -> [Piece] {
         guard !ribbon.isEmpty, let start = ribbon.along.firstIndex(where: { $0 >= cut }) else { return [] }
         let last = ribbon.along.lastIndex(where: { $0 <= end }) ?? -1
         guard last > start else { return [] }
@@ -315,16 +337,29 @@ nonisolated enum LanePath {
             var ring = left + right.reversed()
             if let first = ring.first { ring.append(first) }
             let f = ribbon.frame
-            out.append(Piece(bridge: ribbon.bridge[a + 1], ring: ring.map(f.coordinate),
-                             left: left.map(f.coordinate), right: right.map(f.coordinate),
-                             centre: centre.map(f.coordinate)))
+            out.append(Piece(bridge: ribbon.bridge[a + 1], from: ribbon.along[a], to: ribbon.along[b],
+                             ring: ring.map(f.coordinate), left: left.map(f.coordinate),
+                             right: right.map(f.coordinate), centre: centre.map(f.coordinate)))
         }
-        for i in (start + 1)...last where ribbon.bridge[i] != ribbon.bridge[i - 1] {
+        func slot(_ s: Double) -> Int { chunk > 0 && s < chunkUntil ? Int((s / chunk).rounded(.down)) : Int.max }
+        for i in (start + 1)...last
+        where ribbon.bridge[i] != ribbon.bridge[i - 1] || slot(ribbon.along[i]) != slot(ribbon.along[i - 1]) {
             emit(i0, i)
             i0 = i
         }
         emit(i0, last)
         return out
+    }
+
+    /// Последняя станция прощупанного участка: до первого пробела без лент
+    /// тайла длиннее drive3DGapMeters (узлы короче — не пробел). nil — ни одной.
+    static func verifiedIndex(_ hits: [Bool], along: [Double]) -> Int? {
+        var last: Int?
+        for i in hits.indices where hits[i] {
+            if let previous = last, along[i] - along[previous] > AppConfig.drive3DGapMeters { break }
+            last = i
+        }
+        return last
     }
 
     /// Шевроны по середине ленты на постоянных метрах маршрута (кратных
@@ -463,8 +498,17 @@ nonisolated enum LanePath {
             var segments: [Segment] = []
             for (k, road) in roads.enumerated() where road.points.count >= 2 && road.width > 0 {
                 let pts = road.points.map(frame.point)
-                for j in 1..<pts.count where (pts[j] - pts[j - 1]).length > 0.2 {
-                    segments.append(Segment(a: pts[j - 1], b: pts[j], road: k))
+                for j in 1..<pts.count {
+                    let a = pts[j - 1], d = pts[j] - pts[j - 1]
+                    let length = d.length
+                    guard length > 0.2 else { continue }
+                    // Длинный отрезок трассы — частями: иначе его рамка не
+                    // влезала в сетку и магистраль не сопоставлялась.
+                    let parts = max(1, Int((length / 100).rounded(.up)))
+                    for q in 0..<parts {
+                        segments.append(Segment(a: a + d * (Double(q) / Double(parts)),
+                                                b: a + d * (Double(q + 1) / Double(parts)), road: k))
+                    }
                 }
             }
             self.segments = segments
@@ -633,9 +677,18 @@ nonisolated enum LanePath {
             return 0
         }
 
+        /// Цель на станции — всегда внутри своей стороны [lf, rf]: ряд подъезда
+        /// за точкой манёвра приложен к оси новой дороги и без прижима
+        /// уводил ленту на встречку. Не помещается — полоса у ближнего края.
         func target(lf: Double, rf: Double) -> (Double, Double) {
-            if let fixed { return fixed }
-            let lane = min(self.lane, rf - lf)
+            let side = rf - lf
+            if let fixed {
+                let a = max(fixed.0, lf), b = min(fixed.1, rf)
+                if b - a >= 1 { return (a, b) }
+                let lane = min(max(fixed.1 - fixed.0, 1), AppConfig.drive3DLaneMeters, side)
+                return (fixed.0 + fixed.1) / 2 < (lf + rf) / 2 ? (lf, lf + lane) : (rf - lane, rf)
+            }
+            let lane = min(self.lane, side)
             return edge == .left ? (lf, lf + lane) : (rf - lane, rf)
         }
     }
@@ -713,11 +766,16 @@ nonisolated enum LanePath {
         guard move > 0.3 else { return .none }
         let lanes = max(1, Int((move / max(1, laneWidth)).rounded()))
         let perLane = max(AppConfig.drive3DShiftMeters, input.speedMps * AppConfig.drive3DShiftSeconds)
-        var start = plan.end - perLane * Double(lanes)
-        start = max(start, maneuver.along - input.window, input.car + AppConfig.drive3DShiftLeadMeters)
-        if plan.end - start < AppConfig.drive3DShiftMinMeters {
-            plan.end = min(maneuver.along, start + AppConfig.drive3DShiftMinMeters)
-        }
+        let natural = max(plan.end - perLane * Double(lanes), maneuver.along - input.window)
+        var start = natural
+        // Машина ещё не дошла до начала, но близко — перестроение не под ней.
+        // Уже за началом (пересчёт посреди перестроения) — начало прежнее:
+        // прижим к машине снимал сужение прямо перед ней.
+        let lead = input.car + AppConfig.drive3DShiftLeadMeters
+        if input.car < natural, lead > natural { start = lead }
+        let minimum = AppConfig.drive3DShiftMinMeters
+        if plan.end - start < minimum { plan.end = min(maneuver.along, start + minimum) }
+        if plan.end - start < minimum { start = plan.end - minimum }
         plan.start = start
         return plan
     }

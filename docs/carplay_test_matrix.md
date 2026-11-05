@@ -107,7 +107,7 @@
 | К-1 | «Радар!» | В поездке: «Радар!» на карте или в баре | Баннер «Тренога / Пост / ДТП», тишина = «радар» | **Т+Р** `ReportGuardTests/testReportGoesThroughWhileDriving`, `ReportAgeTests/testCarChoiceLayout` | «выбор отметки: баннер» |
 | К-2 | «Радар!» двойной тап | Дважды за 1 с | Вторая отметка не уходит | **Т** `ReportGuardTests/testDoubleTapIsRefusedAsDuplicate` | — |
 | К-3 | «Дом» дважды: экран машины и плитка | «Куда» → Дом и сразу ярлык Дом на плитке | Один запрос OSRM; «Работа» в эти секунды проходит | **Т** `CSK/testDoubleTapHomeAcrossCarAndTileIsOneRequest`, `CarPlayDestinationRouteTests/testSecondTapWhileBuildingIsRefused` | «повторное касание — маршрут уже строится» |
-| К-4 | Поездка ▶/■ двойной тап | ▶ и ещё раз через 0,7 с | Второй тап пропущен, поездка идёт | **Р** (правило `carPlayTripToggleGuard` встроено в `tripButton`, см. «Что вынести») | «поездка: повторное нажатие через 0,7 с — пропускаю» |
+| К-4 | Поездка ▶/■ двойной тап | ▶ и ещё раз через 0,7 с | Второй тап не переключает, поездка идёт; баннер «Поездка уже идёт — слежу за камерами» | **Т** `CarPlayTripToggleTests` (правило вынесено в 48) | «поездка: повторное нажатие через 0,7 с — не переключаю, отвечаю баннером» |
 | К-5 | ■ на ходу | ■ на скорости ≥ 20 км/ч | Баннер «Завершить поездку?»; при камере на экране — окно | **Р** | «presentTemplate(завершение)» без ошибки, если окно |
 | К-6 | Звук | Кнопка звука → выбрать «тишина» → снова | Значок — нынешний выбор; после выхода из машины восстанавливается, если не трогали на телефоне | **Т+Р** `CarPlaySoundChoiceTests/testChoiceRoundTrips`, `…/testLeavingTheCarRestoresOnlyUntouched` | «звук в машине: …» |
 | К-7 | Осмотр: автовозврат и камера | Осмотр → сдвинуть → ждать 20 с; осмотр → камера впереди | Осмотр закрывается сам, бар возвращается, «Радар!» первой | **Т+Р** `CSK/testCameraAheadClosesPanningAndBringsTheTripButtonsBack`, `CSK/testUntouchedPanningIsClosedByACameraWithoutRecenter`, `CarPlayBrowseTests/testIdleReturnClosesPanningNotOnlyTheMap` | «карта: возврат к машине по бездействию», «осмотр закрываю: возврат к машине» |
@@ -138,8 +138,8 @@
 | Д-2 | Своя камера с галочкой | См. О-8 | Значок с галочкой, баннера нет | **Т** `CarPlayCameraCueTests/testFamiliarCameraIsOnlyAnIconWithACheck` | — |
 | Д-3 | ETA в плашке против системной полосы | Ведение: сравнить минуту на телефоне, в карточке CarPlay и на плашке | Одна и та же минута; расстояние в полосе — км, в карточке манёвра ближе 1 км — метры кратно 10 | **Т+Р** `CSD/testManeuverApproachSecondBySecond`, `ArrivalClockTests/testCarSecondsLandOnTheSameMinuteEitherWay`, `CarPlayGuidanceTests/testTripDistanceIsAlwaysKilometres` | — (снимок) |
 | Д-4 | Язык и единицы `CPTravelEstimates` | Язык телефона: русский, узбекский, английский | Единицы короткие: «км», «km», «m»; не «meter», «metr» | **Т+Р** `CarPlayGuidanceTests/testUnitsPrintShortInTheLanguagesOfOurPhones` | — |
-| Д-5 | Карточка за 995–999 м до поворота | — | **Дефект**: «1 000 м» между «1 км» и «990 м» | **Т** (XCTExpectFailure) `CSD/testCardNeverSaysOneThousandMetres` | — |
-| Д-6 | Состояние манёвра у порога 50/400 м стоя (только с метаданными) | Стоять на красном в ~50 м от поворота | **Дефект**: «выполняй ↔ готовься» на каждом фиксе в приборку | **Т** (XCTExpectFailure) `CSD/testStandingAtTheExecuteThresholdDoesNotFlickerTheClusterState` | — |
+| Д-5 | Карточка за 995–999 м до поворота | — | «1 км» и сразу «990 м» (исправлено в 48: порог по округлённому) | **Т** `CSD/testCardNeverSaysOneThousandMetres` | — |
+| Д-6 | Состояние манёвра у порога 50/400 м стоя (только с метаданными) | Стоять на красном в ~50 м от поворота | Одно состояние (исправлено в 48: гистерезис `carPlayManeuverStateHysteresisMeters`) | **Т** `CSD/testStandingAtTheExecuteThresholdDoesNotFlickerTheClusterState` | — |
 | Д-7 | Стоим в пробке | 5 мин без движения | Оценки в машину — только по часам, не потоком | **Т** `CSD/testStandingInAJamRefreshesOnlyByTheClock` | — |
 
 ## 8. Устойчивость
@@ -248,7 +248,7 @@ log show system_logs.logarchive --style compact \
 | # | Проверка | Строка журнала | Прошло | Не прошло |
 |---|---|---|---|---|
 | 1 | Подключение на переднем плане: карта и бар сразу | «CarPlay подключён, сцена на экране», «корневой шаблон на экране» | ☐ | ☐ |
-| 2 | Второе ▶ через 0,5 с пропущено | «поездка: повторное нажатие через 0,… с — пропускаю» | ☐ | ☐ |
+| 2 | Второе ▶ через 0,5 с не переключает, баннер «Поездка уже идёт» | «поездка: повторное нажатие через 0,… с — не переключаю, отвечаю баннером» | ☐ | ☐ |
 | 3 | «Радар!» дважды — одна отметка | одна «выбор отметки: баннер» | ☐ | ☐ |
 | 4 | Осмотр закрылся сам через 20 с, бар полный | «карта: возврат к машине по бездействию», «осмотр закрываю: возврат к машине» | ☐ | ☐ |
 | 5 | «Готово» → «к себе» → снова осмотр | «кнопки карты: [report, zoomIn, zoomOut, pan]» | ☐ | ☐ |

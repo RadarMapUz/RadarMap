@@ -118,6 +118,30 @@ nonisolated enum DriveAsphalt {
         return UInt32(text.dropFirst(), radix: 16)
     }
 
+    /// Голый цвет правки с прозрачностью: «#rrggbb», «rgb(r,g,b)» или
+    /// «rgba(r,g,b,a)». Строка rgba, отданная движку как есть, роняла
+    /// приложение на `mgl_color` (2.2.43: тени «Вождения 3D», в машине).
+    static func colour(_ value: Any) -> (hex: UInt32, alpha: Double)? {
+        if let hex = colourHex(value) { return (hex, 1) }
+        guard let text = (value as? String)?.replacingOccurrences(of: " ", with: ""),
+              let open = text.firstIndex(of: "("), text.hasSuffix(")") else { return nil }
+        let name = text[..<open]
+        let parts = text[text.index(after: open)..<text.index(before: text.endIndex)]
+            .split(separator: ",").compactMap { Double($0) }
+        guard (name == "rgb" && parts.count == 3) || (name == "rgba" && parts.count == 4),
+              parts.prefix(3).allSatisfy({ (0...255).contains($0) }) else { return nil }
+        let alpha = parts.count == 4 ? parts[3] : 1
+        guard (0...1).contains(alpha) else { return nil }
+        let hex = parts.prefix(3).reduce(UInt32(0)) { $0 << 8 | UInt32($1.rounded()) }
+        return (hex, alpha)
+    }
+
+    /// Строка в свойстве цвета, которую не разобрать, — мимо движка: он
+    /// падает на ней, а не отказывает.
+    static func isUnsafeColourString(property: String, value: Any) -> Bool {
+        property.hasSuffix("-color") && value is String && colour(value) == nil
+    }
+
     /// Включён ли асфальт поездки: поездка и новая карта (у прежнего стиля
     /// своих слоёв асфальта нет).
     static func isActive(driving: Bool, modernStyle: Bool) -> Bool {

@@ -110,7 +110,14 @@ final class EngineDriveAsphalt {
         originals = []
         let transition = NSValue(mlnTransition: MLNTransition(duration: seconds, delay: 0))
         let difference = Self.difference(resource)
-        var items = difference.overrides.map { ($0.layer, $0.key, Self.expression($0.value)) }
+        var items: [(String, String, NSExpression)] = []
+        for item in difference.overrides {
+            if DriveAsphalt.isUnsafeColourString(property: item.property, value: item.value) {
+                Log.app.error("цвет \(item.layer, privacy: .public).\(item.property, privacy: .public) в \(resource, privacy: .public) не разобран — пропуск")
+                continue
+            }
+            items.append((item.layer, item.key, Self.expression(item.value)))
+        }
         if let cameraLabel {
             items.append(("camera-label", "textColor", NSExpression(forConstantValue: Theme.rgb(cameraLabel.text))))
             items.append(("camera-label", "textHaloColor", NSExpression(forConstantValue: Theme.rgb(cameraLabel.halo))))
@@ -137,9 +144,11 @@ final class EngineDriveAsphalt {
         }
     }
 
-    /// Выражение правки: голый «#rrggbb» — цветом (DriveAsphalt.colourHex).
+    /// Выражение правки: голый цвет («#rrggbb», «rgba(…)») — цветом (DriveAsphalt.colour).
     private static func expression(_ value: Any) -> NSExpression {
-        if let hex = DriveAsphalt.colourHex(value) { return NSExpression(forConstantValue: Theme.rgb(hex)) }
+        if let colour = DriveAsphalt.colour(value) {
+            return NSExpression(forConstantValue: Theme.rgb(colour.hex, CGFloat(colour.alpha)))
+        }
         return NSExpression(mglJSONObject: value)
     }
 

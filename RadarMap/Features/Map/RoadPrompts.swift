@@ -18,6 +18,7 @@
 //
 
 import SwiftUI
+import os
 
 /// Вопрос, который сейчас на экране.
 struct RoadPromptShown: Equatable {

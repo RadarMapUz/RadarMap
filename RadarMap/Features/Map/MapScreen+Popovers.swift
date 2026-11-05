@@ -16,6 +16,7 @@
 //
 
 import SwiftUI
+import MapKit
 import os
 
 extension MapScreen {

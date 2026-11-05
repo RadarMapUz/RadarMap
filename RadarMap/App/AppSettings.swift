@@ -722,7 +722,42 @@ final class AppSettings {
     var mapModernStyle: Bool { didSet { store.set(mapModernStyle, forKey: Keys.mapModernStyle) } }
     /// 3D-вид: карта наклонена, видно дорогу вперёд (кнопка «3D» на карте).
     /// Запоминается: выбор человека сильнее режима.
-    var map3D: Bool { didSet { store.set(map3D, forKey: Keys.map3D) } }
+    /// Ключ этого телефона (с 43): наклон, включённый «Объёмным видом» на
+    /// новом телефоне, не приезжает на старый.
+    var map3D: Bool {
+        didSet {
+            store.set(map3D, forKey: Keys.map3D)
+            // Ручной выбор кнопки «3D», пока включён объёмный вид, — главнее
+            // возврата наклона при его выключении.
+            if drive3D, !applyingDrive3DPitch, map3D != oldValue {
+                store.set(true, forKey: Keys.drive3DPitchTouched)
+            }
+        }
+    }
+    /// Наклон меняет сам «Объёмный вид», а не кнопка.
+    @ObservationIgnored private var applyingDrive3DPitch = false
+    /// «Объёмный вид в поездке» (43, Drive3D): светлый тихий мир, лента
+    /// маршрута во всю сторону и сужение к полосам у манёвра — на телефоне и
+    /// в машине. Ключ этого телефона (не iCloud: «вкл» с нового телефона не
+    /// перекрывает «выкл» на слабом), умолчание — по классу железа
+    /// (Drive3D.defaultEnabled). Включение наклоняет карту поездки (map3D),
+    /// выключение возвращает наклон, какой был до включения.
+    var drive3D: Bool {
+        didSet {
+            store.set(drive3D, forKey: Keys.drive3D)
+            guard drive3D != oldValue else { return }
+            applyingDrive3DPitch = true
+            defer { applyingDrive3DPitch = false }
+            if drive3D {
+                store.set(map3D, forKey: Keys.drive3DPitchBefore)
+                store.set(false, forKey: Keys.drive3DPitchTouched)
+                map3D = true
+            } else if !store.bool(forKey: Keys.drive3DPitchTouched),
+                      let before = store.object(forKey: Keys.drive3DPitchBefore) as? Bool {
+                map3D = before
+            }
+        }
+    }
     /// Кнопки масштаба «+ / −» на карте. За рулём масштаб ведёт автозум по
     /// скорости, поэтому кнопки можно убрать в настройках.
     var mapZoomButtons: Bool { didSet { store.set(mapZoomButtons, forKey: Keys.mapZoomButtons) } }
@@ -824,6 +859,9 @@ final class AppSettings {
         static let mapSidewalks = "mapSidewalks"
         static let mapModernStyle = "mapModernStyle"
         static let map3D = "map3D"
+        static let drive3D = "drive3D"
+        static let drive3DPitchBefore = "drive3DPitchBefore"
+        static let drive3DPitchTouched = "drive3DPitchTouched"
         static let voiceBeforeMute = "voiceBeforeMute"
         static let mapZoomButtons = "mapZoomButtons"
         static let cursorStyle = "cursorStyle"
@@ -947,6 +985,8 @@ final class AppSettings {
         mapSidewalks = store.bool(forKey: Keys.mapSidewalks)
         mapModernStyle = store.bool(forKey: Keys.mapModernStyle)
         map3D = store.bool(forKey: Keys.map3D)
+        drive3D = store.object(forKey: Keys.drive3D) as? Bool
+            ?? Drive3D.defaultEnabled(machine: Self.hardwareMachine)
         mapZoomButtons = store.bool(forKey: Keys.mapZoomButtons)
         // Подложка одна — движок (карта Apple и схема убраны 11.10): старые
         // ключи mapBase/engineMapEnabled/sketchWhileDriving больше не читаются.
@@ -1143,7 +1183,7 @@ extension AppSettings {
         Keys.destinationHints: .bool, Keys.commuteLearningOff: .bool, Keys.smartSilence: .bool,
         Keys.tripodHints: .bool, Keys.nightVoice: .bool, Keys.workDriverMode: .bool, Keys.parkedCarHint: .bool,
         Keys.mapPlaces: .bool, Keys.mapHouses: .bool, Keys.mapSidewalks: .bool,
-        Keys.mapModernStyle: .bool, Keys.map3D: .bool, Keys.mapZoomButtons: .bool,
+        Keys.mapModernStyle: .bool, Keys.mapZoomButtons: .bool,
         Keys.cursorStyle: .string, Keys.alertMode: .string, Keys.alertProfile: .string,
         Keys.usageStats: .bool, Keys.trafficHidden: .bool, Keys.trafficContributionOff: .bool,
         Keys.roadWeatherOff: .bool, Keys.maintenanceRemindersOff: .bool,
@@ -1156,8 +1196,18 @@ extension AppSettings {
         Keys.voiceSource, Keys.voiceGender, Keys.placeholderVoice, Keys.tripStartMode, Keys.voiceBeforeMute,
         Keys.home, Keys.work, Keys.recents, Keys.favorites, Keys.fuelProfile, Keys.vehicleEnergy,
         Keys.navigationMetadata, Keys.departureReminders, Keys.departureRemindersAsked,
-        Keys.workTarget, Keys.workTargetAsked, Keys.adaptive,
+        Keys.workTarget, Keys.workTargetAsked, Keys.adaptive, Keys.drive3D, Keys.drive3DPitchBefore,
+        Keys.drive3DPitchTouched, Keys.map3D,
     ]
+
+    /// Модель железа («iPhone14,2») — для умолчаний по классу телефона.
+    static let hardwareMachine: String = {
+        var info = utsname()
+        uname(&info)
+        return withUnsafeBytes(of: &info.machine) { raw in
+            String(decoding: raw.prefix { $0 != 0 }, as: UTF8.self)
+        }
+    }()
 
     /// Свои значения из белого списка (как они лежат в UserDefaults).
     func cloudSettingsSnapshot() -> [String: CloudSettingValue] {
@@ -1211,7 +1261,6 @@ extension AppSettings {
         case (Keys.mapHouses, .bool(let v)): mapHouses = v
         case (Keys.mapSidewalks, .bool(let v)): mapSidewalks = v
         case (Keys.mapModernStyle, .bool(let v)): mapModernStyle = v
-        case (Keys.map3D, .bool(let v)): map3D = v
         case (Keys.mapZoomButtons, .bool(let v)): mapZoomButtons = v
         case (Keys.cursorStyle, .string(let v)): cursorStyle = CursorStyle(stored: v)
         case (Keys.alertMode, .string(let v)): if let mode = AlertMode(rawValue: v) { alertMode = mode }

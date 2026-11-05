@@ -495,6 +495,116 @@ def measure_car(theme, variant="A"):
     return m, failures
 
 
+# «Вождение 3D» (43): лента маршрута отличается от асфальта оттенком, а не
+# яркостью — ΔE при дейтеранопии ≥ ROUTE_TRUNK_DE_MIN и контраст ≥ 1,3;
+# разметка лежит поверх ленты и читается на ней не хуже графики (≥ 3:1, ночью
+# тоже — в 42 было 2,99); кант днём виден, ночью — еле заметен (без засветки).
+D3_RIBBON_CONTRAST_MIN = 1.3
+D3_EDGE_DAY_MIN = 1.5
+D3_EDGE_NIGHT_MAX = 1.6
+# Ночью лента — приглушённый синий: не светлее половины ночного тела линии
+# маршрута (#66a3ff, 0,36) — без «прожектора».
+D3_NIGHT_RIBBON_MAX_L = 0.18
+D3_MARKED_KEYS = ("road_trunk", "road", "road_secondary", "road_tertiary")
+D3_CAR_CAMERA_LABEL = ("#f2f4f7", "#3f4859")
+
+
+def _mix(top, under, alpha):
+    t, u = rgb(top), rgb(under)
+    return "#" + "".join(f"{round((a * alpha + b * (1 - alpha)) * 255):02x}" for a, b in zip(t, u))
+
+
+def _d3_new_colours(theme):
+    base = set()
+    for value in make_style.PALETTES[theme].values():
+        values = value.values() if isinstance(value, dict) else [value]
+        base.update(v for v in values if isinstance(v, str) and v.startswith("#"))
+    out = set()
+    for value in list(make_style.D3_PALETTES[theme].values()) + list(make_style.D3_RIBBON[theme].values()):
+        values = value.values() if isinstance(value, dict) else [value]
+        out.update(v for v in values if isinstance(v, str) and v.startswith("#") and v not in base)
+    return sorted(out)
+
+
+def measure_drive3d(theme, p=None, ribbon=None):
+    """Числа и нарушения «Вождения 3D»: разметка на асфальте и на ленте,
+    лента к асфальту по оттенку, кант, имена, камеры и пробки, красный —
+    только камера, ночью — без засветки."""
+    p = p or make_style.drive3d_palette(theme)
+    ribbon = ribbon or make_style.D3_RIBBON[theme]
+    fill = ribbon["fill"]
+    edge = _mix(ribbon["edge"], fill, ribbon["edge_opacity"])
+    asphalt = [p[k] for k in D3_MARKED_KEYS]
+    every = asphalt + [p["minor"]]
+    ground = [p["bg"], p["building"], p["water"], p["park"]]
+    route = ROUTE[theme]
+    traffic = TRAFFIC[theme]
+    new = _d3_new_colours(theme)
+    m = {
+        "3D: разметка / асфальт (мин)": min(contrast(p["paint"], a) for a in asphalt),
+        "3D: разметка / лента маршрута": contrast(p["paint"], fill),
+        "3D: лента / асфальт (контраст, мин)": min(contrast(fill, a) for a in asphalt),
+        "3D: лента / асфальт (ΔE дейт., мин)": min(delta_e(fill, a, True) for a in asphalt),
+        "3D: кант / лента": contrast(edge, fill),
+        "3D: имя улицы / асфальт (мин)": min(contrast(p["street_label"], a) for a in every),
+        "3D: подпись места / земля, дом, вода (мин)": min(contrast(p["label"], s) for s in
+                                                          (p["bg"], p["building"], p["water"])),
+        "3D: асфальт / земля (мин)": min(contrast(a, p["bg"]) for a in asphalt),
+        "3D: линия маршрута / земля": max(contrast(route["body"], p["bg"]), contrast(route["casing"], p["bg"])),
+        "3D: камера не видна (пар тип × поверхность)": float(sum(
+            not _camera_visible(c, s) for c in CAMERA_TYPES.values() for s in every + ground + [fill])),
+        "3D: спокойная камера / асфальт (мин)": min(
+            max(contrast(CALM[theme]["fill"], a), contrast(CALM[theme]["ring"], a)) for a in every),
+        "3D: ΔE пробки / асфальт (мин)": min(delta_e(t, a) for t in traffic.values() for a in asphalt),
+        "3D: ΔE пробки / асфальт, дейтеранопия (мин)": min(delta_e(t, a, True)
+                                                           for t in traffic.values() for a in asphalt),
+        "3D: ΔE пробки / лента (мин)": min(delta_e(t, fill) for t in traffic.values()),
+        "3D: ΔE новый цвет / красная камера (мин)": min((delta_e(x, CAMERA_TYPES["camera"]) for x in new),
+                                                        default=100.0),
+        "3D: ΔE новый цвет / красная камера, дейтеранопия (мин)": min(
+            (delta_e(x, CAMERA_TYPES["camera"], True) for x in new), default=100.0),
+        # Подпись «400 м» у камеры в машине — цветами 40J и в 3D (светлый текст
+        # на ореоле асфальта машины, AppConfig.carPlayCameraLabelDay).
+        "3D: подпись камеры в машине / свой ореол": contrast(D3_CAR_CAMERA_LABEL[0], D3_CAR_CAMERA_LABEL[1]),
+        "3D: светлота ленты": luminance(fill),
+        "3D: светлота имени улицы": luminance(p["street_label"]),
+        "3D: светлота подписи места": luminance(p["label"]),
+    }
+    failures = []
+
+    def need(ok, text):
+        if not ok:
+            failures.append(text)
+    need(all(luminance(p["paint"]) > luminance(a) for a in asphalt), "3D: разметка темнее асфальта")
+    need(m["3D: разметка / асфальт (мин)"] >= GRAPHIC_MIN, "3D: разметка на асфальте < 3:1")
+    need(m["3D: разметка / лента маршрута"] >= GRAPHIC_MIN, "3D: разметка на ленте < 3:1")
+    need(m["3D: лента / асфальт (контраст, мин)"] >= D3_RIBBON_CONTRAST_MIN, "3D: лента сливается с асфальтом")
+    need(m["3D: лента / асфальт (ΔE дейт., мин)"] >= ROUTE_TRUNK_DE_MIN,
+         "3D: лента не отличается от асфальта оттенком при дейтеранопии")
+    need(m["3D: имя улицы / асфальт (мин)"] >= TEXT_MIN, "3D: имя улицы на асфальте < 4,5:1")
+    need(m["3D: подпись места / земля, дом, вода (мин)"] >= TEXT_MIN, "3D: подпись места < 4,5:1")
+    need(m["3D: асфальт / земля (мин)"] >= 1.6, "3D: асфальт сливается с землёй")
+    need(m["3D: линия маршрута / земля"] >= GRAPHIC_MIN, "3D: линия маршрута на земле < 3:1")
+    need(m["3D: камера не видна (пар тип × поверхность)"] == 0, "3D: камера сливается с поверхностью")
+    need(m["3D: спокойная камера / асфальт (мин)"] >= GRAPHIC_MIN, "3D: спокойная камера < 3:1")
+    need(m["3D: ΔE пробки / асфальт (мин)"] >= TRAFFIC_DE_MIN, "3D: пробка сливается с асфальтом")
+    need(m["3D: ΔE пробки / асфальт, дейтеранопия (мин)"] >= CAMERA_DEUTAN_MIN,
+         "3D: пробка сливается с асфальтом при дейтеранопии")
+    need(m["3D: ΔE пробки / лента (мин)"] >= ALT_ROUTE_DE_MIN, "3D: пробка похожа на ленту маршрута")
+    need(m["3D: подпись камеры в машине / свой ореол"] >= TEXT_MIN, "3D: подпись камеры в машине < 4,5:1")
+    need(m["3D: ΔE новый цвет / красная камера (мин)"] >= USE_CAMERA_DE_MIN, "3D: новый цвет похож на камеру")
+    need(m["3D: ΔE новый цвет / красная камера, дейтеранопия (мин)"] >= CAMERA_DEUTAN_MIN,
+         "3D: новый цвет похож на камеру при дейтеранопии")
+    if theme == "light":
+        need(m["3D: кант / лента"] >= D3_EDGE_DAY_MIN, "3D: кант ленты днём не виден")
+    else:
+        need(m["3D: кант / лента"] <= D3_EDGE_NIGHT_MAX, "3D: кант ленты ночью слепит")
+        need(m["3D: светлота ленты"] <= D3_NIGHT_RIBBON_MAX_L, "3D: лента ночью слепит")
+        need(m["3D: светлота имени улицы"] <= CAR_NIGHT_STREET_MAX_L, "3D: имя улицы ночью слепит")
+        need(m["3D: светлота подписи места"] <= CAR_NIGHT_PLACE_MAX_L, "3D: подпись места ночью слепит")
+    return m, failures
+
+
 def table():
     rows = []
     for theme in ("light", "dark"):
@@ -502,6 +612,9 @@ def table():
         drive, drive_failures = measure_drive(theme)
         m.update(drive)
         failures += drive_failures
+        d3, d3_failures = measure_drive3d(theme)
+        m.update(d3)
+        failures += d3_failures
         for variant in ("A", "B"):
             car, car_failures = measure_car(theme, variant)
             m.update({f"{name} [{variant}]": value for name, value in car.items()})

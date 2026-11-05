@@ -34722,6 +34722,38 @@
           }
         }
       }
+    },
+    "Объёмный вид в поездке": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Объёмный вид в поездке"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarda hajmli koʻrinish"
+          }
+        }
+      }
+    },
+    "Наклон, серый асфальт, маршрут во всю полосу и сужение к нужному ряду у поворота — на телефоне и в машине. Выключите — наклон вернётся прежний.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Наклон, серый асфальт, маршрут во всю полосу и сужение к нужному ряду у поворота — на телефоне и в машине. Выключите — наклон вернётся прежний."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qiyalik, kulrang asfalt, marshrut butun yoʻl boʻylab va burilishda kerakli qatorga torayadi — telefonda ham, mashinada ham. Oʻchirsangiz — avvalgi qiyalik qaytadi."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

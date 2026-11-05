@@ -55,21 +55,28 @@ final class EngineDriveAsphalt {
 
     /// `car` — стиль машины (экран машины, плитка): своя разница вместо
     /// разницы поездки, свои линия маршрута и подпись камеры. nil — телефон.
-    func update(active: Bool, daylight: Bool, car: CarMapStyle? = nil, in style: MLNStyle) {
-        let wanted = active ? (car?.resource(daylight: daylight) ?? DriveAsphalt.resource(daylight: daylight)) : nil
+    /// `drive3D` — «Вождение 3D» (43): разница 3D вместо обеих, линия и
+    /// пробки — темой карты (асфальт днём светлый), без свечения.
+    func update(active: Bool, daylight: Bool, car: CarMapStyle? = nil, drive3D: Bool = false, in style: MLNStyle) {
+        let threeD = active && drive3D
+        let wanted = active ? (threeD ? Drive3D.resource(daylight: daylight)
+            : car?.resource(daylight: daylight) ?? DriveAsphalt.resource(daylight: daylight)) : nil
         let seconds = DriveAsphalt.transitionSeconds(firstAfterStyleLoad: fresh)
         fresh = false
         if wanted != appliedResource {
             restore(in: style)
             appliedResource = wanted
             if let wanted {
+                // Подпись камеры в машине — цветами 40J и в 3D: светлый текст на
+                // ореоле асфальта читается и на сером.
                 apply(resource: wanted, cameraLabel: car?.cameraLabel(daylight: daylight, active: active),
                       seconds: seconds, in: style)
             }
         }
-        let routeDaylight = car?.routeDaylight(daylight: daylight, active: active)
+        let routeDaylight = threeD ? Drive3D.routeDaylight(daylight: daylight)
+            : car?.routeDaylight(daylight: daylight, active: active)
             ?? DriveAsphalt.routeDaylight(daylight: daylight, active: active)
-        let glow = car?.glowOpacity(daylight: daylight)
+        let glow = threeD ? Drive3D.glowOpacity : car?.glowOpacity(daylight: daylight)
             ?? (routeDaylight ? RouteColors.glowOpacity.day : RouteColors.glowOpacity.night)
         // Стиль собран с линией темы дня; перекрашивать — только если нужна другая.
         let painted = routePainted ?? (daylight, daylight ? RouteColors.glowOpacity.day : RouteColors.glowOpacity.night)

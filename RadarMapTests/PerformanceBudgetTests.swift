@@ -858,4 +858,51 @@ final class PerformanceBudgetTests: XCTestCase {
         XCTAssertLessThan(worst, .milliseconds(30), "запрос поиска дорожает: худший \(worst)")
         XCTAssertLessThan(build, .seconds(3), "сборка индекса поиска дорожает: \(build)")
     }
+    /// Лента «Вождения 3D» (LanePath, 43): участок 1,5 км по городской
+    /// сетке (7 200 отрезков лент тайла, 300 стрелок) — пересчёт идёт при
+    /// смене маршрута, манёвра и раз в 250 м, срез — раз в 8 м. Возврат
+    /// перебора «станция × все отрезки» (5 млн пар) это и поймает.
+    func testLanePathBudget() {
+        let frame = LanePath.Frame(origin: CLLocationCoordinate2D(latitude: 41.30, longitude: 69.24))
+        func c(_ x: Double, _ y: Double) -> CLLocationCoordinate2D { frame.coordinate(.init(x: x, y: y)) }
+        var roads: [LanePath.Road] = []
+        for k in 0..<60 {
+            let a = Double(k) * 100
+            roads.append(LanePath.Road(points: (0...60).map { c(a, Double($0) * 100) }, width: 14,
+                                       oneway: false, bridge: k % 9 == 0))
+            roads.append(LanePath.Road(points: (0...60).map { c(Double($0) * 100, a) }, width: 10,
+                                       oneway: k % 2 == 0, bridge: false))
+        }
+        let arrows = (0..<300).map { (i: Int) -> LanePath.Arrow in
+            let x: Double = Double(i % 60) * 100 + 2
+            let y: Double = Double(i / 5) * 100 - 40
+            return LanePath.Arrow(coordinate: c(x, y), bearing: 0, width: 3.5, ours: i % 2 == 0)
+        }
+        // Лесенка: 300 м на север, 300 м на восток — манёвр на каждом углу.
+        var route: [CLLocationCoordinate2D] = []
+        for step in 0..<10 {
+            let a = Double(step) * 300
+            route += [c(a, a), c(a, a + 300)]
+        }
+        let clock = ContinuousClock()
+        let start = clock.now
+        var pieces = 0
+        for run in 0..<5 {
+            let car = 200 + Double(run) * 250
+            let ribbon = LanePath.build(LanePath.Input(
+                route: route, from: car, length: AppConfig.drive3DAheadMeters, car: car, speedMps: 14,
+                window: 210, roads: roads, arrows: arrows,
+                maneuver: LanePath.Maneuver(along: (car / 300).rounded(.up) * 300 + 300, edge: .left, row: true),
+                narrowing: true))
+            for cut in stride(from: car, to: car + 250, by: AppConfig.drive3DCutStepMeters) {
+                pieces += LanePath.pieces(ribbon, from: cut).count
+            }
+            _ = LanePath.chevrons(ribbon, spacing: AppConfig.drive3DChevronSpacing)
+        }
+        let total = clock.now - start
+        XCTAssertGreaterThan(pieces, 0)
+        // 5 пересчётов и 160 срезов: ~0,6 с в отладочной сборке на маке
+        // (−Onone; в релизе ~0,05 с) — потолок втрое выше.
+        XCTAssertLessThan(total, .seconds(2), "лента 3D дорожает: \(total)")
+    }
 }

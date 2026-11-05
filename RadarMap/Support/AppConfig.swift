@@ -3727,4 +3727,97 @@ nonisolated enum AppConfig {
     /// 58° и объём закрывали дорогу), подписи чуть крупнее телефонных.
     static let carPlayDashboardMaxPitch: Double = 30
     static let carPlayDashboardLabelScale: Double = 1.15
+
+    // MARK: - Вождение 3D: лента маршрута во всю сторону (LanePath, 43)
+
+    /// Шаг станций ленты вдоль маршрута, м: ширина меняется плавно, а
+    /// прямые участки потом прореживаются (drive3DSimplifyMeters).
+    static let drive3DStationMeters: Double = 2
+    /// Радиус скругления оси маршрута в изломе, м: узел OSRM — угол, а лента
+    /// во всю сторону на нём ломалась бы внутренним краем.
+    static let drive3DTurnRadius: Double = 12
+    /// Сглаживание оси после скругления: среднее по ±стольким станциям.
+    static let drive3DAxisSmoothStations = 5
+    /// Лента дороги из тайла сопоставляется со станцией не дальше этого, м,
+    /// и при расхождении курса не больше drive3DMatchDegrees.
+    static let drive3DMatchMeters: Double = 8
+    static let drive3DMatchDegrees: Double = 35
+    /// Окно медианы ширины, станций в каждую сторону: сужения `stub` у узла
+    /// и шов тайла не дёргают край ленты.
+    static let drive3DMedianStations = 5
+    /// Полосы без ряда стрелок (по ПДД) — эта ширина, если тайл не знает
+    /// своей (`width / lanes` вне 2,8…3,75 — не верим).
+    static let drive3DLaneMeters: Double = 3.5
+    static let drive3DLaneRange: ClosedRange<Double> = 2.8...3.75
+    /// Ряд стрелок ищется в этом отрезке перед манёвром, м, и курс стрелки
+    /// не дальше drive3DRowDegrees от курса подъезда.
+    static let drive3DRowSearchMeters: Double = 90
+    static let drive3DRowDegrees: Double = 25
+    /// Перестроение кончается за столько метров до ряда стрелок (сплошная),
+    /// а без ряда — за столько до точки манёвра (стоп-линия ~15 м до центра).
+    static let drive3DRowGapMeters: Double = 15
+    static let drive3DNoRowGapMeters: Double = 30
+    /// Длина перестроения на одну полосу: не короче метров и секунд пути.
+    static let drive3DShiftMeters: Double = 45
+    static let drive3DShiftSeconds: Double = 3.5
+    /// Перестроение не начинается ближе этого к машине: пересчёт у манёвра не
+    /// дёргает ленту под значком.
+    static let drive3DShiftLeadMeters: Double = 20
+    /// Короче не бывает: при недостатке места диагональ сжимается до этого.
+    static let drive3DShiftMinMeters: Double = 30
+    /// После манёвра лента возвращается во всю сторону новой дороги за столько метров.
+    static let drive3DReleaseMeters: Double = 25
+    /// Лента считается на столько вперёд от машины, м, и пересчитывается,
+    /// когда машина ушла от начала участка на drive3DRecomputeMeters.
+    static let drive3DAheadMeters: Double = 1500
+    static let drive3DRecomputeMeters: Double = 250
+    /// Срез ленты под машиной — фильтром слоя по кускам этой длины, м
+    /// (кусками — первые drive3DChunkMeters участка), шагом не реже
+    /// drive3DCutStepMeters и drive3DCutStepSeconds пути; на горячем — ×3.
+    /// Источник пишется только на пересчёте.
+    static let drive3DCutStepMeters: Double = 8
+    static let drive3DCutStepSeconds: Double = 0.5
+    static let drive3DCutHotFactor: Double = 3
+    static let drive3DChunkMeters: Double = 600
+    /// Лента рисуется только на прощупанном участке: пробел без лент тайла
+    /// длиннее этого (м) кончает его; готова — от drive3DMinVerifiedMeters
+    /// прощупанного и drive3DMinMatchShare совпадения, иначе остаётся линия.
+    static let drive3DGapMeters: Double = 80
+    static let drive3DMinVerifiedMeters: Double = 100
+    static let drive3DMinMatchShare: Double = 0.6
+    /// Считать по карте можно только при слежении, с этого зума (ленты наших
+    /// дорог видны с 15-го) и на дорисованном кадре; неполный расчёт —
+    /// повтор не чаще чем раз в столько секунд.
+    static let drive3DMinProbeZoom: Double = 15
+    static let drive3DRetrySeconds: Double = 1.5
+    static let drive3DRetryMaxSeconds: Double = 12
+    /// Конец прощупанного не растёт (тоннель, пробел, финиш) — следующий
+    /// расчёт, когда машина проехала его на столько метров.
+    static let drive3DStallPassMeters: Double = 20
+    /// Кеш лент тайла: позади машины не дальше этого (м), вокруг — радиус.
+    static let drive3DRoadCacheBehindMeters: Double = 500
+    static let drive3DRoadCacheRadiusMeters: Double = 1_800
+    /// Пересчёт заранее, когда машина ближе этого к концу прощупанного участка, м.
+    static let drive3DTailMarginMeters: Double = 150
+    /// Хвост линии маршрута заходит под конец ленты на столько метров (без щели).
+    static let drive3DTailOverlapMeters: Double = 10
+    /// Шевроны внутри ленты: шаг, м; видны только медленнее порога (км/ч) с
+    /// гистерезисом.
+    static let drive3DChevronSpacing: Double = 50
+    static let drive3DChevronMaxKmh: (show: Double, hide: Double) = (55, 60)
+    /// Прореживание прямых участков на выходе, м (Дуглас — Пекер).
+    static let drive3DSimplifyMeters: Double = 0.05
+    /// Жила середины ленты, точки: у горизонта лента в метрах тоньше точки и
+    /// рябила бы — жила держит нижний предел толщины.
+    static let drive3DSpinePoints: Double = 2
+    /// …а до z16,5 — не тоньше линии маршрута на обзоре (25.D: ≥ 6 точек).
+    static let drive3DSpineFarPoints: Double = 6
+    /// Лента без данных о дороге — по оси, этой шириной.
+    static let drive3DFallbackWidth: Double = 3.5
+    /// Пробы тайла вдоль маршрута на экране: шаг, м, сторона квадрата, точки,
+    /// и не больше стольких проб за пересчёт (запрос признаков — на главном
+    /// потоке; лента тайла длинная, проба ловит её целиком).
+    static let drive3DProbeStepMeters: Double = 40
+    static let drive3DProbePoints: Double = 36
+    static let drive3DProbeLimit = 30
 }

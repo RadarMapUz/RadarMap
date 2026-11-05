@@ -588,6 +588,57 @@ class CarStyleTests(unittest.TestCase):
             self.assertIn('"' + name[:-len(".json")] + '"', swift, name)
 
 
+class Drive3DStyleTests(unittest.TestCase):
+    """«Вождение 3D» (43): одна разница на тему, только известные свойства,
+    объём ниже и не выше 15 м, ночью — без свечения магистрали."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.diff = {theme: make_style.drive3d_overrides(theme) for theme in ("light", "dark")}
+
+    def test_only_known_properties(self):
+        for theme, diff in self.diff.items():
+            self.assertLessEqual(set(diff), {"layers", "light"}, theme)
+            self.assertEqual(set(diff.get("light", {})) - {"intensity"}, set(), theme)
+            for layer_id, props in diff["layers"].items():
+                self.assertLessEqual(set(props), set(make_style.CAR_PROPS), (theme, layer_id))
+
+    def test_grey_asphalt_and_white_paint_and_kerbs(self):
+        day = self.diff["light"]["layers"]
+        self.assertIn(make_style.D3_LIGHT_ASPHALT, json.dumps(day["radar-roads"]["line-color"]))
+        self.assertIn("#ffffff", json.dumps(day["radar-roads-case"]["line-color"]))
+        self.assertNotIn("radar-markings", day, "разметка днём и так белая")
+        night = self.diff["dark"]["layers"]
+        self.assertEqual(night["radar-markings"]["line-color"], "#cbd1d9")
+
+    def test_low_houses_softer_light(self):
+        for theme, intensity in (("light", 0.55), ("dark", 0.3)):
+            diff = self.diff[theme]
+            height = json.dumps(diff["layers"]["building-3d"]["fill-extrusion-height"])
+            self.assertIn('["min", 15, ["*", 0.45', height, theme)
+            self.assertEqual(diff["light"], {"intensity": intensity}, theme)
+
+    def test_night_has_no_trunk_glow(self):
+        self.assertEqual(self.diff["dark"]["layers"]["radar-trunk-glow"]["line-opacity"], 0)
+
+    def test_camera_and_route_layers_untouched(self):
+        for theme, diff in self.diff.items():
+            for layer_id in diff["layers"]:
+                self.assertFalse(layer_id.startswith(("camera", "route", "traffic")), (theme, layer_id))
+
+    def test_normal_palettes_unchanged(self):
+        # Ключ потолка домов есть только у 3D: обычный стиль без него.
+        for theme in ("light", "dark"):
+            self.assertNotIn("building_height_max", make_style.PALETTES[theme])
+
+    def test_file_names_match_the_app(self):
+        root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+        with open(os.path.join(root, "RadarMap", "Models", "Drive3D.swift"), encoding="utf-8") as handle:
+            swift = handle.read()
+        for name, _ in make_style.D3_FILES:
+            self.assertIn('"' + name[:-len(".json")] + '"', swift, name)
+
+
 class PaletteTests(unittest.TestCase):
     def test_themes_define_the_same_colours(self):
         light, dark = make_style.PALETTES["light"], make_style.PALETTES["dark"]

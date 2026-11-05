@@ -200,6 +200,8 @@ struct MapScreen: View {
             map.filter = newValue
             map.invalidateVisible()
         }
+        // «Объёмный вид в поездке» (43) включает и снимает наклон через map3D.
+        .onChange(of: env.settings.map3D) { _, on in map.prefers3D = on }
         .onChange(of: env.cameras.revision) { _, _ in
             // Любое изменение данных (загрузка базы, свои камеры, скрытие) —
             // карта; region-мониторинг пересобирает AppEnvironment.

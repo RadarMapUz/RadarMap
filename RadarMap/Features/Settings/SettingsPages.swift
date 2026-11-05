@@ -350,6 +350,15 @@ struct TripSettingsPage: View {
             }
 
             Section {
+                Toggle("Объёмный вид в поездке", isOn: $settings.drive3D)
+            } header: {
+                Text("Карта")
+            } footer: {
+                Text("Наклон, серый асфальт, маршрут во всю полосу и сужение к нужному ряду у поворота — на телефоне и в машине. Выключите — наклон вернётся прежний.")
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section {
                 Toggle("Не гасить экран в поездке", isOn: $settings.keepScreenOn)
                     .onChange(of: settings.keepScreenOn) { _, keepOn in
                         if env.location.isTripActive {

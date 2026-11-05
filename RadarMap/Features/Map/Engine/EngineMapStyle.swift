@@ -292,7 +292,7 @@ nonisolated enum EngineMapStyle {
     /// 2,5–3 на z11–14 в машине на отъезде линию почти теряли, а у Яндекса в
     /// той же машине линия — главный предмет кадра. Вблизи (z17–19) — 11–16:
     /// около полосы (у Яндекса линия — в полосу шириной), но уже проезжей части.
-    private static func routeWidth(extra: Double, share: Double = 1) -> [Any] {
+    static func routeWidth(extra: Double, share: Double = 1) -> [Any] {
         ["interpolate", ["linear"], ["zoom"],
          11, 6 * share + extra, 15, 7 * share + extra, 17, 11 * share + extra,
          19, 16 * share + extra, 20, 19 * share + extra]

@@ -699,3 +699,48 @@ extension PaletteTests {
         }
     }
 }
+
+// MARK: - Вождение 3D (43)
+
+extension PaletteTests {
+
+    /// Асфальт классов (магистраль, проспект) и разметка «Вождения 3D» —
+    /// копия make_style D3_* (test_palette_check сверяет её с генератором).
+    private func drive3DSurface(daylight: Bool) -> (asphalt: [UInt32], paint: UInt32) {
+        daylight ? ([0x7E8895, 0x848E9B], 0xFFFFFF) : ([0x3B4049, 0x363D48], 0xCBD1D9)
+    }
+
+    /// Разметка лежит поверх ленты и читается на ней ≥ 3:1 — и ночью (в 42
+    /// было 2,99); лента отличается от асфальта оттенком (ΔE при дейтеранопии
+    /// ≥ 30, контраст ≥ 1,3), не красная; кант днём виден, ночью еле заметен.
+    func testDrive3DRibbonHoldsEveryRule() {
+        for daylight in [true, false] {
+            let theme = daylight ? "днём" : "ночью"
+            let surface = drive3DSurface(daylight: daylight)
+            let ribbon = Drive3D.ribbon(daylight: daylight)
+            let fill = rgb(ribbon.fill), paint = rgb(surface.paint)
+            XCTAssertGreaterThanOrEqual(contrast(paint, fill), 3, "разметка на ленте \(theme)")
+            for hex in surface.asphalt {
+                let road = rgb(hex)
+                XCTAssertGreaterThanOrEqual(contrast(paint, road), 3, "разметка на асфальте \(theme)")
+                XCTAssertGreaterThanOrEqual(contrast(fill, road), 1.3, "лента на асфальте \(theme)")
+                XCTAssertGreaterThanOrEqual(deltaEDeutan(fill, road), 30, "лента ≠ асфальт, дейтеранопия \(theme)")
+            }
+            XCTAssertGreaterThanOrEqual(deltaE(fill, Theme.Types.camera), 40, "лента ≠ камера \(theme)")
+            let edge = blend(ribbon.edge, over: ribbon.fill, alpha: ribbon.edgeOpacity)
+            if daylight {
+                XCTAssertGreaterThanOrEqual(contrast(rgb(edge), fill), 1.5, "кант днём")
+            } else {
+                XCTAssertLessThanOrEqual(contrast(rgb(edge), fill), 1.6, "кант ночью без засветки")
+            }
+        }
+    }
+
+    private func blend(_ top: UInt32, over under: UInt32, alpha: Double) -> UInt32 {
+        func channel(_ shift: UInt32) -> UInt32 {
+            let a = Double((top >> shift) & 0xFF), b = Double((under >> shift) & 0xFF)
+            return UInt32((a * alpha + b * (1 - alpha)).rounded()) << shift
+        }
+        return channel(16) | channel(8) | channel(0)
+    }
+}

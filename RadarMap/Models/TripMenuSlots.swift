@@ -41,6 +41,11 @@ nonisolated enum TripMenuSlots {
         case nearbyCameras
         case shareArrival
         case stopSharing
+        /// И маршрут (прибытие), и «Еду домой» уместны — короткий выбор из
+        /// двух прямо в панели: ни один пункт прежнего меню не теряется.
+        case shareChoice(arrivalEnabled: Bool, sharing: Bool)
+        /// Назад из выбора «Поделиться» к плиткам (только внутри панели).
+        case back
         /// Без маршрута — «Еду домой» близким (22.1).
         case goingHome
         /// Слои, пробки, объёмный вид, весь маршрут.
@@ -71,6 +76,15 @@ nonisolated enum TripMenuSlots {
         var parked = false
     }
 
+    /// Третий ряд с гистерезисом: появляется ниже `enter`, уходит от `leave`.
+    /// Без него у 20 км/ч ряд мигал, и первые два ряда прыгали под пальцем
+    /// (панель прижата низом к стопке).
+    static func parked(speedKmh: Double, wasParked: Bool,
+                       enter: Double = AppConfig.tripMenuParkedEnterKmh,
+                       leave: Double = AppConfig.speakSpeedThresholdKmh) -> Bool {
+        wasParked ? speedKmh < leave : speedKmh < enter
+    }
+
     static func tiles(_ situation: Situation) -> [Tile] {
         let slots = Slot.allCases.filter { situation.parked || $0.rawValue < Slot.stats.rawValue }
         return slots.map { tile($0, situation) }
@@ -83,6 +97,11 @@ nonisolated enum TripMenuSlots {
         case .along:     return Tile(slot: slot, action: s.hasRoute ? .alongRoute : .nearbyStops, enabled: true)
         case .cameras:   return Tile(slot: slot, action: s.hasRoute ? .routeCameras : .nearbyCameras, enabled: true)
         case .share:
+            if s.offersGoingHome, s.hasRoute || s.isSharingArrival {
+                return Tile(slot: slot, action: .shareChoice(arrivalEnabled: s.canShareArrival || s.isSharingArrival,
+                                                             sharing: s.isSharingArrival),
+                            enabled: true)
+            }
             if s.isSharingArrival { return Tile(slot: slot, action: .stopSharing, enabled: true) }
             if s.hasRoute { return Tile(slot: slot, action: .shareArrival, enabled: s.canShareArrival) }
             return Tile(slot: slot, action: s.offersGoingHome ? .goingHome : .shareArrival,

@@ -68,4 +68,24 @@ final class TripMenuSlotsTests: XCTestCase {
         XCTAssertEqual(live.action, .stopSharing)
         XCTAssertTrue(live.enabled)
     }
+
+    /// С маршрутом и уместным «Еду домой» — выбор из двух: прежнее меню
+    /// давало оба пункта, и ни один не теряется.
+    func testShareChoiceKeepsGoingHomeWithRoute() {
+        let both = Slots.tiles(Slots.Situation(hasRoute: true, canShareArrival: true, offersGoingHome: true))[4]
+        XCTAssertEqual(both.action, .shareChoice(arrivalEnabled: true, sharing: false))
+        XCTAssertTrue(both.enabled)
+        let noServer = Slots.tiles(Slots.Situation(hasRoute: true, offersGoingHome: true))[4]
+        XCTAssertEqual(noServer.action, .shareChoice(arrivalEnabled: false, sharing: false))
+        let live = Slots.tiles(Slots.Situation(hasRoute: true, isSharingArrival: true, offersGoingHome: true))[4]
+        XCTAssertEqual(live.action, .shareChoice(arrivalEnabled: true, sharing: true))
+    }
+
+    /// Третий ряд не мигает у 20 км/ч: встаёт ниже 15, уходит от 20.
+    func testParkedRowHysteresis() {
+        XCTAssertFalse(Slots.parked(speedKmh: 17, wasParked: false, enter: 15, leave: 20))
+        XCTAssertTrue(Slots.parked(speedKmh: 14, wasParked: false, enter: 15, leave: 20))
+        XCTAssertTrue(Slots.parked(speedKmh: 19, wasParked: true, enter: 15, leave: 20))
+        XCTAssertFalse(Slots.parked(speedKmh: 21, wasParked: true, enter: 15, leave: 20))
+    }
 }

@@ -22,15 +22,22 @@ struct TripMenuPanel: View {
     let onPick: (TripMenuSlots.Action) -> Void
     let onClose: () -> Void
 
+    /// Открыт короткий выбор «Поделиться»: прибытием или «Еду домой».
+    @State private var shareChoice: (arrivalEnabled: Bool, sharing: Bool)?
+
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
         VStack(alignment: .leading, spacing: 6) {
-            MapPopoverHeader(title: "Ещё", onClose: onClose)
+            MapPopoverHeader(title: shareChoice == nil ? "Ещё" : "Поделиться", onClose: onClose)
                 .padding(.trailing, -6)
-            Grid(horizontalSpacing: 8, verticalSpacing: 8) {
-                ForEach(rows.indices, id: \.self) { index in
-                    GridRow {
-                        ForEach(rows[index]) { tile in tileButton(tile) }
+            if let choice = shareChoice {
+                shareChoiceRow(choice)
+            } else {
+                Grid(horizontalSpacing: 8, verticalSpacing: 8) {
+                    ForEach(rows.indices, id: \.self) { index in
+                        GridRow {
+                            ForEach(rows[index]) { tile in tileButton(tile) }
+                        }
                     }
                 }
             }
@@ -42,7 +49,25 @@ struct TripMenuPanel: View {
         // размытие каждый кадр.
         .liftedBackground(Theme.surface, in: shape)
         .overlay(shape.strokeBorder(Theme.edgePanel, lineWidth: 1))
-        .mapPopoverCard(activity: tiles.count, onClose: onClose)
+        .mapPopoverCard(activity: ActivityKey(tiles: tiles.count, choosing: shareChoice != nil), onClose: onClose)
+    }
+
+    private struct ActivityKey: Equatable {
+        let tiles: Int
+        let choosing: Bool
+    }
+
+    /// Две плитки вместо сетки: «Поделиться прибытием» (или «Не делиться») и
+    /// «Еду домой», и «Назад» к плиткам.
+    private func shareChoiceRow(_ choice: (arrivalEnabled: Bool, sharing: Bool)) -> some View {
+        let arrival: TripMenuSlots.Action = choice.sharing ? .stopSharing : .shareArrival
+        return Grid(horizontalSpacing: 8, verticalSpacing: 8) {
+            GridRow {
+                tileButton(.init(slot: .search, action: .back, enabled: true))
+                tileButton(.init(slot: .myPlaces, action: arrival, enabled: choice.arrivalEnabled))
+                tileButton(.init(slot: .along, action: .goingHome, enabled: true))
+            }
+        }
     }
 
     private var rows: [[TripMenuSlots.Tile]] {
@@ -51,7 +76,7 @@ struct TripMenuPanel: View {
 
     private func tileButton(_ tile: TripMenuSlots.Tile) -> some View {
         let face = Self.face(tile.action, stopKind: stopKind, alongSymbol: alongSymbol)
-        return Button { onPick(tile.action) } label: {
+        return Button { pick(tile.action) } label: {
             VStack(spacing: 6) {
                 Image(systemName: face.symbol)
                     .font(.rounded(21, .semibold))
@@ -76,6 +101,17 @@ struct TripMenuPanel: View {
         .accessibilityLabel(face.title)
     }
 
+    private func pick(_ action: TripMenuSlots.Action) {
+        switch action {
+        case .shareChoice(let arrivalEnabled, let sharing):
+            withMotion(Motion.standard) { shareChoice = (arrivalEnabled, sharing) }
+        case .back:
+            withMotion(Motion.standard) { shareChoice = nil }
+        default:
+            onPick(action)
+        }
+    }
+
     /// Значок и подпись плитки по её действию.
     static func face(_ action: TripMenuSlots.Action, stopKind: Venue.Kind,
                      alongSymbol: String) -> (symbol: String, title: Text) {
@@ -88,7 +124,9 @@ struct TripMenuPanel: View {
         case .nearbyStops:   return (stopKind.symbol, Text("\(stopKind.title) рядом"))
         case .routeCameras:  return (Icon.cameras, Text("Камеры впереди"))
         case .nearbyCameras: return (Icon.cameras, Text("Ближайшие камеры"))
-        case .shareArrival:  return ("square.and.arrow.up", Text("Поделиться"))
+        case .shareArrival:  return ("square.and.arrow.up", Text("Поделиться прибытием"))
+        case .shareChoice:   return ("square.and.arrow.up", Text("Поделиться"))
+        case .back:          return ("chevron.backward", Text("Назад"))
         case .stopSharing:   return ("person.crop.circle.badge.xmark", Text("Не делиться"))
         case .goingHome:     return ("house.fill", Text("Еду домой"))
         case .mapPanel:      return ("square.3.layers.3d", Text("Карта"))
@@ -106,11 +144,20 @@ struct TripMenuHost: View {
     let onPick: (TripMenuSlots.Action) -> Void
     let onClose: () -> Void
 
+    /// Третий ряд — с гистерезисом (TripMenuSlots.parked); nil — ещё не решено.
+    @State private var parked: Bool?
+
     var body: some View {
-        TripMenuPanel(tiles: tiles,
+        let speed = env.location.speedKmh
+        return TripMenuPanel(tiles: tiles,
                       stopKind: env.settings.vehicleEnergy.stops.first ?? .fuel,
                       alongSymbol: AlongRouteText.symbol(env.settings.vehicleEnergy),
                       onPick: onPick, onClose: onClose)
+            .onChange(of: speed, initial: true) { _, now in
+                let next = TripMenuSlots.parked(speedKmh: now,
+                                                wasParked: parked ?? TripScreenLayout.tripMenuShowsParkedItems(speedKmh: now))
+                if next != parked { parked = next }
+            }
     }
 
     private var tiles: [TripMenuSlots.Tile] {
@@ -125,7 +172,7 @@ struct TripMenuHost: View {
                                                          isPassenger: location.isPassengerSession,
                                                          pausedThisTrip: env.family.pausedThisTrip,
                                                          headingHome: env.family.isHeadingHome, now: Date()),
-            parked: TripScreenLayout.tripMenuShowsParkedItems(speedKmh: location.speedKmh)))
+            parked: parked ?? TripScreenLayout.tripMenuShowsParkedItems(speedKmh: location.speedKmh)))
     }
 }
 

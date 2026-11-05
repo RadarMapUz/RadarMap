@@ -1417,6 +1417,10 @@ nonisolated enum AppConfig {
     /// только если по его часам осталось столько секунд (RoadPromptPolicy):
     /// вопрос на одну-две секунды читается как мигание, а не как вопрос.
     nonisolated static let roadPromptMinReturnSeconds: TimeInterval = 5
+    /// Третий ряд меню «…» (Итоги, Добавить камеру, Настройки) встаёт ниже
+    /// этой скорости, а уходит от `speakSpeedThresholdKmh` (20): гистерезис,
+    /// чтобы ряд не мигал на светофоре (TripMenuSlots.parked).
+    nonisolated static let tripMenuParkedEnterKmh: Double = 15
 
     /// Итог поездки (TripReward): отметка в эти секунды после стопа — ещё
     /// этой поездки (поставили, тормозя у подъезда).

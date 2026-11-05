@@ -164,7 +164,7 @@ extension MapScreen {
         case .stats:         map.showStats = true
         case .addCamera:     withMotion { map.isAddingCamera = true }
         case .settings:      map.showSettings = true
-        case .mapPanel:      break
+        case .mapPanel, .shareChoice, .back: break   // решает сама панель
         }
     }
 }

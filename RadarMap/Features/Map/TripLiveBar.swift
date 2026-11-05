@@ -26,8 +26,13 @@ import SwiftUI
 
 struct TripLiveBar: View {
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+    /// Вопрос на ходу (этап 45, вариант B) — панель на его время становится им.
+    let map: MapState
     let onShowCameras: () -> Void
     let onStop: () -> Void
+    /// «Опаздываю — предупредить?» → лист «Поделиться» у экрана карты.
+    let onLateShare: (String) -> Void
 
     /// Ширина гибкой части; с неё решается, влезает ли капсула камеры.
     @State private var barWidth: CGFloat = 0
@@ -36,6 +41,39 @@ struct TripLiveBar: View {
     static let cameraCapsuleMinWidth: CGFloat = 200
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
+        Group {
+            // Вопрос на ходу — вместо содержимого панели, а не новым слоем над
+            // ней: «Стоп» на это время убран (промах по нему невозможен),
+            // «Отметить» — на своём месте у края, прибытие — в углу.
+            if let shown = map.roadPrompt,
+               let model = RoadPromptContent.model(for: shown, env: env, map: map, voiceOver: voiceOver,
+                                                   onLateShare: onLateShare) {
+                RoadPromptCard(model: model, eta: promptETA) { ReportButton() }
+                    .id(shown.id)
+                    .transition(.opacity)
+            } else {
+                tripRow
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .transition(.opacity)
+            }
+        }
+        .motionAnimation(Motion.standard, value: map.roadPrompt)
+        // Сплошная панель, как у кластера скорости и чипа камеры: под ней
+        // живая карта, и материал заставлял систему заново размывать её на
+        // каждом кадре всю поездку (аудит 11.10).
+        .liftedBackground(Theme.surface, in: shape)
+        .overlay(shape.stroke(Theme.stroke, lineWidth: 1))
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    /// Прибытие в углу вопроса: по маршруту или по своим прошлым поездкам.
+    private var promptETA: String? {
+        if env.route.isActive { return env.route.arrivalText }
+        return env.commuteLive.display.map { Formatting.clock($0.arrival) }
+    }
+
+    private var tripRow: some View {
         HStack(spacing: 10) {
             // Гибкая часть — сведения о пути. Раньше здесь стоял ViewThatFits
             // с тремя вариантами: он раскладывал все три на КАЖДОМ тике GPS
@@ -74,13 +112,6 @@ struct TripLiveBar: View {
                 .padding(.trailing, 4)
             ReportButton()
         }
-        .padding(.horizontal, 12).padding(.vertical, 8)
-        // Сплошная панель, как у кластера скорости и чипа камеры: под ней
-        // живая карта, и материал заставлял систему заново размывать её на
-        // каждом кадре всю поездку (аудит 11.10).
-        .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous).stroke(Theme.stroke, lineWidth: 1))
-        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     // MARK: - Сведения о пути

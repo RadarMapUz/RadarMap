@@ -55,6 +55,14 @@ final class MapState {
     var corridorCardShown = false
     private(set) var columnRoom: CGFloat?
     var actionBarHeight: CGFloat = 0
+    /// Вопрос на ходу, который сейчас на экране (очередь RoadPromptPolicy,
+    /// этап 45). Пишет только RoadPromptDriver; читают панель поездки и
+    /// карточка вне поездки — не тело MapScreen.
+    var roadPrompt: RoadPromptShown?
+    /// Часы вопросов со сроком экрана и остаток объезда, снятого с экрана
+    /// (RoadPromptDriver). Вне наблюдения: пишутся в обработчиках, вью их не ждут.
+    @ObservationIgnored var promptClocks: [String: RoadPromptClock] = [:]
+    @ObservationIgnored var promptFrozenRemaining: [String: TimeInterval] = [:]
 
     /// Записать просвет, только если он заметно сменился: читатели будятся
     /// на каждую запись, а кромки дрожат на долю пункта.

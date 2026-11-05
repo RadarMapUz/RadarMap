@@ -39,14 +39,6 @@ final class MobilePassQuestionTests: XCTestCase {
         }
     }
 
-    /// Длинные ответы — строкой ниже вопроса на SE; «Да / Нет» остаются рядом.
-    func testLongAnswersGoBelowTheQuestion() {
-        XCTAssertTrue(PassQuestionCard.stacksAnswers(yes: "Стоит", no: "Пост убрали", largeType: false))
-        XCTAssertFalse(PassQuestionCard.stacksAnswers(yes: "Да", no: "Нет", largeType: false))
-        XCTAssertFalse(PassQuestionCard.stacksAnswers(yes: "Ha", no: "Yoʻq", largeType: false))
-        XCTAssertTrue(PassQuestionCard.stacksAnswers(yes: "Да", no: "Нет", largeType: true))
-    }
-
     /// ДТП — не радар и не пост.
     func testAccidentIsNotAskedAsRadar() {
         XCTAssertFalse(MobilePassWatch.question(for: .accident).title.contains("Радар"))

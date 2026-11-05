@@ -34722,6 +34722,198 @@
           }
         }
       }
+    },
+    "%@ — объехать?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — объехать?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — aylanib oʻtamizmi?"
+          }
+        }
+      }
+    },
+    "Написать": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Написать"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yozish"
+          }
+        }
+      }
+    },
+    "Не надо": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не надо"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kerak emas"
+          }
+        }
+      }
+    },
+    "Прибытие %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Прибытие %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yetib kelish %@"
+          }
+        }
+      }
+    },
+    "Что отметить?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Что отметить?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nimani belgilaymiz?"
+          }
+        }
+      }
+    },
+    "промолчите — никому не напишу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "промолчите — никому не напишу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "javob bermasangiz — hech kimga yozmayman"
+          }
+        }
+      }
+    },
+    "промолчите — ничего не отправлю": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "промолчите — ничего не отправлю"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "javob bermasangiz — hech narsa yubormayman"
+          }
+        }
+      }
+    },
+    "промолчите — останемся на своём пути": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "промолчите — останемся на своём пути"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "javob bermasangiz — oʻz yoʻlimizda qolamiz"
+          }
+        }
+      }
+    },
+    "промолчите — отметка останется": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "промолчите — отметка останется"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "javob bermasangiz — belgi qoladi"
+          }
+        }
+      }
+    },
+    "промолчите — уйдёт «%@»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "промолчите — уйдёт «%@»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "javob bermasangiz — «%@» yuboriladi"
+          }
+        }
+      }
+    },
+    "тронетесь — не спрошу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "тронетесь — не спрошу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yursangiz — soʻramayman"
+          }
+        }
+      }
+    },
+    "уйдёт само": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "уйдёт само"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oʻzi yopiladi"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

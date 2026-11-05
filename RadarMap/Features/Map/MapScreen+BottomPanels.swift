@@ -80,18 +80,12 @@ extension MapScreen {
                     onCancel: { withMotion { reportPoint = nil } }
                 )
             } else {
-                // «Радар ещё стоял?» — над панелью поездки: вопрос живёт
-                // двадцать секунд и уходит сам, ничего не отправляя. Пока на
-                // экране предупреждение о камере, вопрос ждёт: камера важнее,
-                // а под оверлеем плашка сгорала невидимой.
-                // Условие «накрыто» — в гейте: isApproachingCamera читает
-                // пер-тиковые дистанцию и скорость (см. MapTickGates).
-                MobileConfirmGate()
-                // «Отметить»: выбор типа (3 с, тренога молчанием), затем
-                // «Отменить» (8 с) — над панелью поездки (вариант B, 02.11).
-                ReportDraftGate()
-                // «Опаздываю — предупредить?» — со сроком, стоя, раз за поездку.
-                GhostLateGate { text in lateSharePayload = ActivityTextPayload(text: text) }
+                // Вопрос на ходу вне поездки (покой, выбор маршрута) — на месте
+                // прежних плашек. В поездке им становится сама панель поездки
+                // (вариант B, этап 45); кого показать — RoadPromptDriver.
+                if !promptsInTripBar {
+                    RoadPromptStandalone(map: map, onLateShare: shareLate)
+                }
                 // Итог поездки — сразу после стопа, в момент, когда цифры
                 // интереснее всего (см. maybeShowTripEnd про условия показа).
                 if let record = tripEndRecord {
@@ -106,12 +100,6 @@ extension MapScreen {
                             withMotion(Motion.standard) { tripEndRecord = nil }
                         })
                 }
-                // «Карта по пути без интернета» — длинный маршрут (19.3): над
-                // панелью маршрута до «Поехали» и над строкой поездки, пока
-                // стоим. Одно место в стопке на обе фазы — карточка не
-                // пересоздаётся на «Поехали».
-                CorridorOfferGate(yields: tripEndRecord != nil || arrivalShown,
-                                  freesActionBar: mode.showsActionBar, map: map)
                 if arrivalShown, let arrival = env.route.lastArrival {
                     // «Вы на месте» — НА МЕСТЕ панели поездки, а не поверх
                     // экрана: у карточки своя «Завершить поездку», и второй
@@ -183,7 +171,7 @@ extension MapScreen {
                         // перекрыто?» (20 с), подсказки уступают ему место: на SE
                         // с крупным шрифтом вопрос, «Машина», «Домой» и бар вместе
                         // загоняли обязательные кнопки колонки под карточку.
-                        if env.mobile.passQuestion == nil, !MobileConfirmBar.showsDemo {
+                        if map.roadPrompt == nil {
                             ParkedCarChip(map: map)
                             OfflineOfferCard(ownMap: true)
                         }
@@ -226,8 +214,10 @@ extension MapScreen {
             if !map.isAddingCamera,
                TripScreenLayout.showsTripBar(mode: mode, arrivalShown: arrivalShown) {
                 TripLiveBar(
+                    map: map,
                     onShowCameras: { showRouteCameras = true },
-                    onStop: { toggleTrip() }
+                    onStop: { toggleTrip() },
+                    onLateShare: shareLate
                 )
             }
         }
@@ -237,6 +227,26 @@ extension MapScreen {
         // «Тронулись» — вопрос о карте по пути закрыт; там же скрытая копия
         // карточки меряет её высоту. Фоном: места в стопке не занимает.
         .background { CorridorOfferBackstage(map: map) }
+        // Очередь вопросов на ходу: одна на семь плашек (RoadPromptPolicy).
+        // Фоном — пер-тиковые чтения в своей маленькой вью (правило 13).
+        .background {
+            RoadPromptDriver(map: map, embedded: promptsInTripBar,
+                             blocked: map.isAddingCamera
+                                || (!promptsInTripBar && (map.pressedPoint != nil || reportPoint != nil)),
+                             yieldsCorridor: tripEndRecord != nil || arrivalShown,
+                             freesActionBar: mode.showsActionBar)
+        }
+    }
+
+    /// Вопрос на ходу встаёт в панель поездки (она на экране) или своей
+    /// карточкой на месте прежних плашек.
+    var promptsInTripBar: Bool {
+        !map.isAddingCamera && TripScreenLayout.showsTripBar(mode: mode, arrivalShown: arrivalShown)
+    }
+
+    /// «Задерживаюсь: буду в 9:07» — лист от экрана, а не от вопроса.
+    func shareLate(_ text: String) {
+        lateSharePayload = ActivityTextPayload(text: text)
     }
 
     /// Что показать над доком — одно решение на панель и док.
@@ -251,8 +261,7 @@ extension MapScreen {
     /// без вопроса «радар ещё стоял?» и не под карточкой итога поездки
     /// (четыре слоя внизу на SE — проблема 2 аудита этапа 31).
     var dockShowsSuggestion: Bool {
-        bottomHint == .destinations && env.mobile.passQuestion == nil
-            && !MobileConfirmBar.showsDemo && tripEndRecord == nil
+        bottomHint == .destinations && map.roadPrompt == nil && tripEndRecord == nil
     }
 
     var bottomLayer: some View {

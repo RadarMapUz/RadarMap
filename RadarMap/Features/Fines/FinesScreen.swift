@@ -89,12 +89,13 @@ struct FinesScreen: View {
         let ledger = FineLedger.build(fines: env.fines.fines, history: env.trip.history, now: Date())
         let items = Self.possibleItems(env.trip.history, window: request.window, now: Date())
         let possibleSum = items.filter(\.pass.countsTowardFines).reduce(0.0) { $0 + $1.fine }
-        let receivedCount = ledger.received.count + ledger.marked.count
+        let receivedCount = ledger.arrivedCount
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     header(ledger, possibleSum: possibleSum,
                            possibleCount: items.filter(\.pass.countsTowardFines).count)
+                        .motionAnimation(Motion.standard, value: tab)
                     Picker("", selection: $tab) {
                         Text(String(format: String(localized: "Могут прийти · %lld"),
                                     items.filter(\.pass.countsTowardFines).count))
@@ -156,7 +157,67 @@ struct FinesScreen: View {
         }
     }
 
+    /// Окно крупно: «3–9 ноября», «октябрь 2026», «последние 60 дней». Вход
+    /// «Пришли ли старые штрафы?» открывает месяц старейшего проезда — без
+    /// крупной подписи он читался как «эта неделя» (аудит 05.11).
+    var windowTitle: String {
+        switch request.window {
+        case .period(let period, let anchor): return period.rangeTitle(containing: anchor)
+        case .recent: return String(format: String(localized: "последние %lld дней"), AppConfig.fineExpiresDays)
+        }
+    }
+
+    /// Шапка следует за вкладкой входа: из «Могут прийти» главное — оценка
+    /// за окно, из «Пришли» — к оплате. Раньше «К оплате: ничего» стояло
+    /// крупно и над оценкой, ради которой экран открыли.
+    @ViewBuilder
     private func header(_ ledger: FineLedger, possibleSum: Double, possibleCount: Int) -> some View {
+        if tab == .possible {
+            possibleHeader(ledger, possibleSum: possibleSum, possibleCount: possibleCount)
+        } else {
+            receivedHeader(ledger, possibleSum: possibleSum, possibleCount: possibleCount)
+        }
+    }
+
+    private func possibleHeader(_ ledger: FineLedger, possibleSum: Double, possibleCount: Int) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(windowTitle)
+                    .font(.rounded(15, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                Text("Могут прийти")
+                    .font(.rounded(13, .medium))
+                    .foregroundStyle(Theme.textSecondary)
+                Text(possibleSum > 0 ? "≈ " + Formatting.money(possibleSum) : String(localized: "ничего"))
+                    .font(.numeral(30, .heavy))
+                    .foregroundStyle(possibleSum > 0 ? Theme.danger : Theme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.55)
+                Text(possibleCount > 0
+                     ? String(format: String(localized: "оценка по %@ · не постановления"),
+                              ItogiWords.passesDative(possibleCount))
+                     : String(localized: "оценка по проездам с достоверным лимитом · не постановления"))
+                    .font(.rounded(12))
+                    .foregroundStyle(Theme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Divider().overlay(Theme.stroke)
+            HStack(alignment: .top, spacing: 16) {
+                figure(title: String(localized: "К оплате"),
+                       value: ledger.toPay > 0 ? FineFormat.money(ledger.toPay) : String(localized: "ничего"),
+                       caption: nil)
+                figure(title: String(localized: "Пришли"),
+                       value: "\(ledger.arrivedCount)",
+                       caption: ledger.paidTotal > 0
+                           ? String(format: String(localized: "оплачено %@"), FineFormat.money(ledger.paidTotal))
+                           : nil)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .statCard()
+    }
+
+    private func receivedHeader(_ ledger: FineLedger, possibleSum: Double, possibleCount: Int) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("К оплате")
@@ -177,11 +238,9 @@ struct FinesScreen: View {
             HStack(alignment: .top, spacing: 16) {
                 figure(title: String(localized: "Могут прийти"),
                        value: possibleSum > 0 ? "≈ " + Formatting.money(possibleSum) : "0",
-                       caption: possibleCount > 0
-                           ? windowCaption + " · " + String(format: String(localized: "проездов: %lld"), possibleCount)
-                           : windowCaption)
-                figure(title: String(localized: "Пришло"),
-                       value: "\(ledger.received.count)",
+                       caption: windowCaption + " · " + String(localized: "оценка, не постановления"))
+                figure(title: String(localized: "Пришли"),
+                       value: "\(ledger.arrivedCount)",
                        caption: ledger.paidTotal > 0
                            ? String(format: String(localized: "оплачено %@"), FineFormat.money(ledger.paidTotal))
                            : nil)

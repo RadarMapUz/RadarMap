@@ -156,6 +156,21 @@ struct DrivingHintChip: View {
     }
 }
 
+/// Подъехали к камере — плитки «Ещё» внизу закрываются (MapPopover.cameraAlert).
+/// «Камера на подходе» читает пер-тиковые дистанцию и скорость — поэтому здесь.
+struct CameraAlertWatch: View {
+    @Environment(AppEnvironment.self) private var env
+    let onApproach: () -> Void
+
+    var body: some View {
+        Color.clear
+            .allowsHitTesting(false)
+            .onChange(of: env.location.isApproachingCamera) { _, approaching in
+                if approaching { onApproach() }
+            }
+    }
+}
+
 struct LocationFollowDriver: View {
     @Environment(AppEnvironment.self) private var env
     let map: MapState

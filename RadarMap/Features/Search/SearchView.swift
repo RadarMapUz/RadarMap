@@ -256,6 +256,8 @@ struct SearchView: View {
     /// Адрес не удалось развернуть в координату — тап отработал вхолостую, и
     /// об этом надо сказать: молчание здесь неотличимо от сломанной кнопки.
     @State private var resolveFailed = false
+    /// Открыть сразу с плиткой заведений: «АЗС рядом» из меню «Ещё» (этап 45).
+    var initialCategory: Venue.Kind? = nil
     /// Выбор места: точка и её название (для точки на карте).
     var onSelect: ((CLLocationCoordinate2D, String) -> Void)? = nil
     var onRoute: ((CLLocationCoordinate2D, String) -> Void)? = nil
@@ -318,7 +320,12 @@ struct SearchView: View {
             }
         }
         .presentationDetents([.large])
-        .onAppear { assigning = initialAssign }
+        .onAppear {
+            assigning = initialAssign
+            if let initialCategory, model.category == nil {
+                model.pick(initialCategory, route: env.route.selected.map { ($0.points, env.route.progressAlong) })
+            }
+        }
         .task {
             await model.loadBook(from: env.roads,
                                  at: env.location.currentCoordinate,

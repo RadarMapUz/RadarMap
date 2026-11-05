@@ -34914,6 +34914,38 @@
           }
         }
       }
+    },
+    "Не делиться": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не делиться"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ulashmaslik"
+          }
+        }
+      }
+    },
+    "%@ рядом": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ рядом"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ yaqinida"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

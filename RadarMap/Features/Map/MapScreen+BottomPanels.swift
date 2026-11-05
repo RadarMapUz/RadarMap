@@ -286,6 +286,8 @@ extension MapScreen {
                 }
             }
             bottomPanels
+                // Рамка стопки — плитки «Ещё» встают над ней (этап 45).
+                .anchorPreference(key: MapPopoverAnchors.self, value: .bounds) { [.tripMenu: $0] }
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: {
                     bottomPanelEdge = $0 - 8
                     applySketchInsets()

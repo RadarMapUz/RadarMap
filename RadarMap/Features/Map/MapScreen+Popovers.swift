@@ -104,6 +104,12 @@ extension MapScreen {
                                                map.prefers3D = on
                                            }),
                            zoomButtons: setting(\.mapZoomButtons),
+                           onOverview: env.route.polyline.map { polyline in
+                               {
+                                   send(.dismissed(.layers))
+                                   map.showRouteOverview(rect: polyline.boundingMapRect)
+                               }
+                           },
                            maxPanelHeight: columnSlots.map {
                                CGFloat($0) * AppConfig.mapColumnSlotHeight - AppConfig.mapColumnSpacing
                            } ?? .infinity,
@@ -120,6 +126,41 @@ extension MapScreen {
                 .alignmentGuide(.leading) { _ in -rect.minX }
                 .alignmentGuide(.top) { _ in -top }
                 .transition(.move(edge: .top).combined(with: .opacity))
+        case .tripMenu:
+            // Над нижними панелями, во всю их ширину: палец уже внизу, и
+            // плитки встают там же, где «Отметить» и панель поездки.
+            TripMenuHost(onPick: performMenu, onClose: { send(.dismissed(.tripMenu)) })
+                .frame(width: rect.width)
+                .alignmentGuide(.leading) { _ in -rect.minX }
+                .alignmentGuide(.top) { panel in panel.height - (rect.minY - gap) }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    /// Плитка выбрана: меню уходит, открывается то, что она обещала.
+    func performMenu(_ action: TripMenuSlots.Action) {
+        // «Карта» — панель слоёв у того же круга «…» вместо плиток.
+        if action == .mapPanel {
+            send(.toggle(.layers))
+            return
+        }
+        send(.dismissed(.tripMenu))
+        switch action {
+        case .search:        map.showSearch = true
+        case .myPlaces:      showMyPlaces = true
+        case .alongRoute:    showAlongRoute = true
+        case .nearbyStops:
+            searchCategory = env.settings.vehicleEnergy.stops.first ?? .fuel
+            map.showSearch = true
+        case .routeCameras:  showRouteCameras = true
+        case .nearbyCameras: map.showNearbySheet = true
+        case .shareArrival:  shareArrival()
+        case .stopSharing:   env.etaShare.stop()
+        case .goingHome:     env.family.goingHome()
+        case .stats:         map.showStats = true
+        case .addCamera:     withMotion { map.isAddingCamera = true }
+        case .settings:      map.showSettings = true
+        case .mapPanel:      break
         }
     }
 }

@@ -55,28 +55,18 @@ extension MapScreen {
         MapMuteButton()
     }
 
-    /// «…» поездки — на месте «Слоёв».
-    @ViewBuilder var tripMenu: some View {
-        // Семь функций, до которых в поездке было не добраться.
-        //
-        // Поиск, «Рядом», «Итоги», «Добавить камеру» и Настройки живут в
-        // нижнем баре, а бар показывается только в покое: стоило поездке
-        // начаться — и с главного экрана они пропадали все разом. Причина
-        // верная (за рулём экран отдан карте), следствие нет: адрес ищут и
-        // список камер смотрят именно в дороге, а единственным способом
-        // было остановить запись поездки — то есть испортить её же данные.
-        //
-        // Меню, а не пять кнопок: в колонке живёт то, чем управляют на
-        // ходу, остальное открывается одним тапом и одним взглядом
-        // (plan_app_ui.md, У6).
-        Menu {
-            Section { mapViewItems }
-            Section { tripActionItems }
-        } label: {
-            CircleControlFace(systemName: "ellipsis")
-        }
-        .accessibilityLabel(Text("Ещё"))
-        .transition(.scale.combined(with: .opacity))
+    /// «…» поездки — на месте «Слоёв»: плитки «Ещё» над нижними панелями
+    /// (этап 45, вариант A) вместо системного меню из четырнадцати строк.
+    ///
+    /// Поиск, «Итоги», «Добавить камеру» и Настройки живут в нижнем баре, а
+    /// бар показывается только в покое: стоило поездке начаться — и с
+    /// главного экрана они пропадали все разом. Адрес ищут и список камер
+    /// смотрят именно в дороге, поэтому плитки, а не пять кнопок в колонке:
+    /// в колонке живёт то, чем управляют на ходу (plan_app_ui.md, У6).
+    var tripMenu: some View {
+        MapMoreButton(isOpen: popover == .tripMenu) { send(.toggle(.tripMenu)) }
+            .onDisappear { send(.dismissed(.tripMenu)) }
+            .transition(.scale.combined(with: .opacity))
     }
 
     /// Покой — ТРИ постоянные кнопки (этап 31, 26.10): слои, «к себе» и звук.
@@ -101,7 +91,7 @@ extension MapScreen {
         // Подложка лежала в десятом разделе настроек и включалась только
         // после старта поездки; пробки и места жили в отдельной панели,
         // которой в поездке не бывало вовсе. Теперь это одна панель; в
-        // поездке та же панель — подменю «…» (mapLayersMenu).
+        // поездке та же панель — плитка «Карта» меню «…» (этап 45).
         //
         // Сама панель «Карта» — в слое меню над экраном (MapScreen+Popovers):
         // касание мимо неё закрывает её, не задевая карту. Ушла кнопка
@@ -175,45 +165,5 @@ extension MapScreen {
         let settings = env.settings
         return Binding(get: { settings[keyPath: keyPath] },
                        set: { settings[keyPath: keyPath] = $0 })
-    }
-
-    /// Вид карты в меню «…» поездки: то, что в покое стоит кнопками колонки.
-    @ViewBuilder var mapViewItems: some View {
-        mapLayersMenu
-        Toggle(isOn: Binding(get: { env.settings.map3D },
-                             set: { on in
-                                 env.settings.map3D = on
-                                 map.prefers3D = on
-                             })) {
-            Label("Объёмный вид", systemImage: "view.3d")
-        }
-        if env.route.isActive, let polyline = env.route.polyline {
-            Button {
-                map.showRouteOverview(rect: polyline.boundingMapRect)
-            } label: {
-                Label("Весь маршрут", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
-            }
-        }
-    }
-
-    /// Слои подменю: те же переключатели и те же значки, что в панели
-    /// MapLayersPanel.
-    var mapLayersMenu: some View {
-        Menu {
-            Toggle(isOn: setting(\.trafficShown)) {
-                Label("Пробки", systemImage: Icon.trafficLayer)
-            }
-            Toggle(isOn: setting(\.mapPlaces)) {
-                Label("Места", systemImage: Icon.placesLayer)
-            }
-            Toggle(isOn: setting(\.mapHouses)) {
-                Label("Дома", systemImage: Icon.buildingsLayer)
-            }
-            Toggle(isOn: setting(\.mapSidewalks)) {
-                Label("Тротуары", systemImage: Icon.sidewalksLayer)
-            }
-        } label: {
-            Label("Слои карты", systemImage: "square.3.layers.3d")
-        }
     }
 }

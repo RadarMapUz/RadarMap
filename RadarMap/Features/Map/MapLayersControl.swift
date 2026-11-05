@@ -40,6 +40,22 @@ struct MapLayersButton: View {
     }
 }
 
+/// Круг «…»: плитки «Ещё» над нижними панелями (этап 45). Панель «Карта»
+/// из плитки встаёт у этого же круга — рамка слоёв у него своя.
+struct MapMoreButton: View {
+    let isOpen: Bool
+    let action: () -> Void
+
+    var body: some View {
+        CircleControl(systemName: "ellipsis",
+                      tint: isOpen ? Theme.accent : Theme.textPrimary,
+                      accessibilityLabel: "Ещё",
+                      action: action)
+            .accessibilityAddTraits(isOpen ? .isSelected : [])
+            .anchorPreference(key: MapPopoverAnchors.self, value: .bounds) { [.layers: $0] }
+    }
+}
+
 /// Панель «Карта»: слои и кнопки масштаба.
 struct MapLayersPanel: View {
     /// Пробки от водителей (TrafficService) — первым: это то, что смотрят
@@ -57,6 +73,8 @@ struct MapLayersPanel: View {
     /// «3D» занимал место у камер правого края.
     @Binding var threeD: Bool
     @Binding var zoomButtons: Bool
+    /// «Весь маршрут» — пока маршрут есть (плитка «Карта» меню «Ещё», этап 45).
+    var onOverview: (() -> Void)? = nil
     /// Сколько панели можно занять по высоте — до нижних панелей экрана.
     /// Не влезает — листается, а не уезжает под них.
     var maxPanelHeight: CGFloat = .infinity
@@ -100,6 +118,20 @@ struct MapLayersPanel: View {
             toggle("Дома", Icon.buildingsLayer, isOn: $houses)
             toggle("Тротуары", Icon.sidewalksLayer, isOn: $sidewalks)
             toggle("Объёмный вид", "view.3d", isOn: $threeD)
+            if let onOverview {
+                Button(action: onOverview) {
+                    HStack(spacing: 10) {
+                        MapPopoverGlyph(systemName: "point.topleft.down.to.point.bottomright.curvepath", isOn: false)
+                        Text("Весь маршрут")
+                            .font(.rounded(14, .medium))
+                            .foregroundStyle(Theme.textPrimary)
+                        Spacer(minLength: 10)
+                    }
+                    .frame(minHeight: Theme.controlSize)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableStyle(.row))
+            }
             Text("Кнопки")
                 .font(.rounded(11, .semibold))
                 .foregroundStyle(Theme.textTertiary)

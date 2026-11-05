@@ -74,67 +74,6 @@ extension MapScreen {
             .strokeBorder(Theme.edgePanel, lineWidth: 1))
     }
 
-    /// Пункты меню поездки — то, что нужно В ДОРОГЕ (5.3): куда ехать, что
-    /// впереди, кому сказать время прибытия. «Итоги», «Настройки» и «Добавить
-    /// камеру» — экраны на минуту чтения или прицел на карте: в меню они
-    /// появляются, только когда стоим (нижнего бара в поездке нет).
-    @ViewBuilder var tripActionItems: some View {
-        Button { map.showSearch = true } label: {
-            Label("Поиск", systemImage: "magnifyingglass")
-        }
-        Button { showMyPlaces = true } label: {
-            Label("Мои места", systemImage: Icon.myPlaces)
-        }
-        // Число камер впереди иначе не видно нигде, кроме капсулы на подходе.
-        if env.route.isActive {
-            Button { showRouteCameras = true } label: {
-                Label("Камеры на маршруте", systemImage: Icon.cameras)
-            }
-            // Заправки (метан — со статусом), гостиницы, кафе впереди (19.3).
-            Button { showAlongRoute = true } label: {
-                Label("По пути", systemImage: AlongRouteText.symbol(env.settings.vehicleEnergy))
-            }
-        }
-        // Время прибытия знакомому — пока идёт маршрут (EtaShareService).
-        if env.etaShare.isSharing {
-            Button { env.etaShare.stop() } label: {
-                Label("Перестать делиться прибытием", systemImage: "person.crop.circle.badge.xmark")
-            }
-        } else if env.etaShare.isAvailable {
-            Button { shareArrival() } label: {
-                Label("Поделиться прибытием", systemImage: "square.and.arrow.up")
-            }
-        }
-        // «Еду домой» — одно касание (22.1): близкие в режиме «Когда еду
-        // домой» видят поездку, и в смене таксиста, где призрака нет.
-        if FamilyShare.offersGoingHome(env.family.circle, isTripActive: env.location.isTripActive,
-                                       isPassenger: env.location.isPassengerSession,
-                                       pausedThisTrip: env.family.pausedThisTrip,
-                                       headingHome: env.family.isHeadingHome, now: Date()) {
-            Button { env.family.goingHome() } label: {
-                Label("Еду домой", systemImage: "house.fill")
-            }
-        }
-        Button { map.showNearbySheet = true } label: {
-            Label("Рядом", systemImage: "list.bullet")
-        }
-        if TripScreenLayout.tripMenuShowsParkedItems(speedKmh: env.location.speedKmh) {
-            Section {
-                Button { map.showStats = true } label: {
-                    Label("Итоги", systemImage: "chart.bar.fill")
-                }
-                Button {
-                    withMotion { map.isAddingCamera = true }
-                } label: {
-                    Label("Добавить камеру", systemImage: Icon.ownCamera)
-                }
-                Button { map.showSettings = true } label: {
-                    Label("Настройки", systemImage: "gearshape.fill")
-                }
-            }
-        }
-    }
-
     /// Редкое: в баре место занимало бы всегда, а нужно раз в месяц.
     @ViewBuilder var moreActionItems: some View {
         // «Рядом» переехал сюда из бара. Не удалён: список с расстояниями

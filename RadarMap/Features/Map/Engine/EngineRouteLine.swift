@@ -72,6 +72,8 @@ final class EngineRouteLine {
         var generation: Int
         var phase: Phase
         var since: CFTimeInterval
+        /// Когда последний раз спрашивали движок о признаках источника.
+        var probedAt: CFTimeInterval = 0
     }
 
     // MARK: Краска
@@ -259,7 +261,16 @@ final class EngineRouteLine {
 
     private func advanceHandoff(in view: MLNMapView) {
         guard var step = handoff else { return }
-        let waited = CACurrentMediaTime() - step.since >= AppConfig.routeCutConfirmSeconds
+        let now = CACurrentMediaTime()
+        let waited = now - step.since >= AppConfig.routeCutConfirmSeconds
+        // Опрос признаков — синхронный запрос к рендереру на главном (аудит
+        // 05.11, №5): не на каждом кадре стрелки (до 30 в секунду), а не
+        // чаще routeCutProbeSeconds; ожидание по времени — как было.
+        if !waited {
+            guard now - step.probedAt >= AppConfig.routeCutProbeSeconds else { return }
+            step.probedAt = now
+            handoff = step
+        }
         switch step.phase {
         case .near:
             guard waited || shown(EngineMapStyle.routeNearSource, generation: step.generation, in: view)

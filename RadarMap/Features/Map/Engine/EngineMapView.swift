@@ -127,7 +127,7 @@ struct EngineMapView: UIViewRepresentable {
     /// взгляда: касание по ней открывает приложение, а случайный жест движка
     /// снимал слежение навсегда (у плитки нет «к себе»).
     var interactive: Bool = true
-    /// Метка журнала здоровья карты («машина», «плитка»): раз в 10 с строка
+    /// Метка журнала здоровья карты («машина», «плитка»): раз в 10 с (релиз — 30) строка
     /// с состоянием приложения, кадрами, поворотом и камерами. nil — молчим.
     var healthTag: String?
     /// Карта в машине (экран, плитка, приборка): на потолке памяти видимая
@@ -229,18 +229,15 @@ struct EngineMapView: UIViewRepresentable {
     /// вне поездки на телефоне, приборка). Поверх разницы машины: на экране
     /// машины и плитке кладётся разница 3D, масштаб подписей машины остаётся.
     var drive3D: Drive3D.Surface?
+    /// Лента маршрута в «Вождении 3D»: false — только палитра (плитка на
+    /// горячем телефоне, Drive3D.ribbon(surface:tile:)).
+    var drive3DRibbon = true
 
     func makeUIView(context: Context) -> MLNMapView {
         // Сторож тайлов — ДО первой карты: движок начинает качать сразу, и
         // поставить проверку после значило бы пропустить первые тайлы без неё.
+        // Там же — потолок кэша, один раз за процесс (EngineTileGuard.configureCacheOnce).
         EngineTileGuard.install()
-        // Кэш тайлов — это ОФЛАЙН, а не ускорение. Связи в поездке по стране
-        // нет часами, а карта обязана рисоваться: движок держит уже виденные
-        // тайлы в своей базе и берёт их оттуда, пока они не протухли. Двести
-        // мегабайт — примерно область, по которой человек ездит каждый день;
-        // полноценные offline-паки на регион — отдельная работа.
-        MLNOfflineStorage.shared.setMaximumAmbientCacheSize(
-            UInt(AppConfig.engineMapCacheBytes)) { _ in }
         let view = EngineNativeMapView(frame: .zero)
         view.isUserInteractionEnabled = interactive
         // Осмотр не меняет GPS и маршрут; вернуться к слежению можно кнопкой.
@@ -298,7 +295,7 @@ struct EngineMapView: UIViewRepresentable {
 
     static func dismantleUIView(_ view: MLNMapView, coordinator: Coordinator) {
         coordinator.routeLine.cancel()
-        coordinator.driveRibbon.cancel()
+        coordinator.driveRibbon.release()
         coordinator.stopMarkerLink()
         view.delegate = nil
         (view as? EngineNativeMapView)?.onLayout = nil

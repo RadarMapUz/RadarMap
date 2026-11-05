@@ -31,6 +31,20 @@ nonisolated enum CarPlayBrowse {
         Double(steps) * interval < maxSeconds
     }
 
+    /// Возврат к машине по камере впереди — по тому же признаку, что
+    /// системный баннер камеры (CarPlayCameraCue.banner): своя камера (голос
+    /// о ней молчит, баннера нет) осмотр не закрывает. Один возврат на подъезд
+    /// к камере: водитель может снова открыть осмотр, и та же камера его не
+    /// выдернет. `returnedFor` — камера, по которой эта карта уже вернулась;
+    /// новая карта (окно пересобрано посреди подъезда) начинает с nil и
+    /// закрывает осмотр. До 48 решение висело на `.onChange` вида машины:
+    /// без `initial` пересобранное окно подъезда не видело, а своя камера
+    /// закрывала осмотр без баннера (QA 05.11).
+    static func cameraReturn(_ cue: CarPlayCameraCue.Cue, returnedFor: Int?) -> (due: Bool, returnedFor: Int?) {
+        guard cue.banner, let id = cue.mapAlertID else { return (false, nil) }
+        return (id != returnedFor, id)
+    }
+
     struct State: Equatable, Sendable {
         /// Карта едет за машиной.
         var following = true

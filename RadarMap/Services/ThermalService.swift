@@ -90,6 +90,9 @@ final class ThermalService {
     private(set) var mode: PerformanceMode = .init(thermalState: ProcessInfo.processInfo.thermalState)
     /// Нагрев как есть — без батареи.
     private(set) var heatMode: PerformanceMode = .init(thermalState: ProcessInfo.processInfo.thermalState)
+    /// Телефон тёплый (`.fair` и выше): карта ещё полная, но плитка главного
+    /// экрана машины уже упрощается (Drive3D.TileLevel, 48).
+    private(set) var isWarm = ProcessInfo.processInfo.thermalState != .nominal
     /// Мало заряда без зарядки — карта урезана ради батареи.
     private(set) var savingBattery = false
     /// Почему урезаны (nil — не урезаны): плашка карты и чип CarPlay.
@@ -102,6 +105,7 @@ final class ThermalService {
     #if DEBUG
     /// Снимки состояния без настоящего заряда: заряд держится, пока жив процесс.
     @ObservationIgnored private var batteryPinned = false
+    @ObservationIgnored private var warmPinned = false
     #endif
 
     init() {
@@ -112,7 +116,13 @@ final class ThermalService {
         if ProcessInfo.processInfo.arguments.contains("-forceOverheated") {
             mode = .reduced
             heatMode = .reduced
+            isWarm = true
             return
+        }
+        // Тёплый телефон (плитка машины на ступени `lite`): `-forceWarm`.
+        if ProcessInfo.processInfo.arguments.contains("-forceWarm") {
+            warmPinned = true
+            isWarm = true
         }
         // Мало заряда на симуляторе (там его нет вовсе): `-forceLowBattery`.
         if ProcessInfo.processInfo.arguments.contains("-forceLowBattery") {
@@ -141,7 +151,13 @@ final class ThermalService {
     }
 
     private func update() {
-        let fresh = PerformanceMode(thermalState: ProcessInfo.processInfo.thermalState)
+        let state = ProcessInfo.processInfo.thermalState
+        var warm = state != .nominal
+        #if DEBUG
+        if warmPinned { warm = true }
+        #endif
+        if warm != isWarm { isWarm = warm }
+        let fresh = PerformanceMode(thermalState: state)
         guard fresh != heatMode else { return }
         Log.app.notice("нагрев: \(String(describing: fresh), privacy: .public)")
         heatMode = fresh

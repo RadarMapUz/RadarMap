@@ -75,6 +75,18 @@ nonisolated enum CarPlayCameraCue {
         return sinceLast >= interval
     }
 
+    /// Показать ли «до камеры N м» в приборе плитки. Нет — когда маршрут дал
+    /// камере ноль, а по прямой до неё далеко: камера стоит ПОЗАДИ старта
+    /// маршрута в его коридоре, её проекция прижата к первой точке линии
+    /// (RouteService.camerasAlong, t = 0), а гейт кандидатов прижимает
+    /// «позади на 0–60 м» к нулю (routePassedToleranceMeters) — снимок
+    /// владельца 05.11: стоя у дороги «0 м» до своей камеры позади.
+    /// Настоящий проезд — ноль на траверзе, рядом с камерой по прямой.
+    /// Только показ: оповещения, гейты и голос это не читают.
+    static func gaugeShows(distance: Double, straight: Double) -> Bool {
+        distance >= AppConfig.carPlayGaugeZeroMeters || straight <= AppConfig.carPlayGaugeZeroStraightMeters
+    }
+
     /// Подпись с расстоянием у значка алерт-камеры.
     struct Label: Equatable, Sendable {
         let id: Int

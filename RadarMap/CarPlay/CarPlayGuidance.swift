@@ -57,10 +57,11 @@ nonisolated enum CarPlayGuidanceMapping {
     /// у панели прибытия (`tripDistance`).
     static func distance(meters: Double) -> Measurement<UnitLength> {
         let meters = max(0, meters)
-        guard meters >= 1000 else {
-            return Measurement(value: (meters / 10).rounded() * 10, unit: .meters)
-        }
-        return Measurement(value: kilometers(meters), unit: .kilometers)
+        // Порог — по уже округлённому: 995–999 м округлялись в «1000 м»
+        // (QA 05.11), а водитель должен увидеть «1 км» и сразу «990 м».
+        let tens = (meters / 10).rounded() * 10
+        guard tens >= 1000 else { return Measurement(value: tens, unit: .meters) }
+        return Measurement(value: kilometers(max(1000, meters)), unit: .kilometers)
     }
 
     /// Остаток ПОЕЗДКИ (панель прибытия «08:29 · 1 мин · 0,8 км» и карточки
@@ -170,10 +171,17 @@ nonisolated enum CarPlayGuidanceMapping {
 
     /// Состояние манёвра по мере подъезда — как у встроенных навигаторов:
     /// «едем» вдали, «готовься» на подходе, «выполняй» у самого поворота.
-    /// Новый манёвр первые метры — «начальный».
-    static func maneuverState(distance: Double, sinceShown: TimeInterval) -> CPManeuverState {
-        if distance <= AppConfig.carPlayManeuverExecuteMeters { return .execute }
-        if distance <= AppConfig.carPlayManeuverPrepareMeters { return .prepare }
+    /// Новый манёвр первые метры — «начальный». `previous` — что ушло в
+    /// машину для этого же манёвра: назад к прежнему состоянию — только за
+    /// полосой `carPlayManeuverStateHysteresisMeters` (QA 05.11: стоя на
+    /// красном в 48–53 м от поворота приборка прыгала «выполняй ↔ готовься»).
+    static func maneuverState(distance: Double, sinceShown: TimeInterval,
+                              previous: CPManeuverState? = nil) -> CPManeuverState {
+        let band = AppConfig.carPlayManeuverStateHysteresisMeters
+        let holdsExecute = previous == .execute
+        let holdsPrepare = holdsExecute || previous == .prepare
+        if distance <= AppConfig.carPlayManeuverExecuteMeters + (holdsExecute ? band : 0) { return .execute }
+        if distance <= AppConfig.carPlayManeuverPrepareMeters + (holdsPrepare ? band : 0) { return .prepare }
         if sinceShown < AppConfig.carPlayManeuverInitialSeconds { return .initial }
         return .continue
     }
@@ -189,9 +197,22 @@ nonisolated enum CarPlayGuidanceMapping {
     /// Пора ли слать новую оценку в машину. Каждое обновление — сообщение на
     /// головное устройство: шлём, когда цифра на экране правда сменится
     /// (шаг 10 м вблизи, 5 % вдали) или раз в несколько секунд на стоянке.
-    static func shouldUpdate(previous: Double?, current: Double, elapsed: TimeInterval) -> Bool {
+    /// Слать ли оценки всей поездки (панель «22:02 · 21 min»). Повод — смена
+    /// минуты прибытия, минуты на часах (остаток считается от неё —
+    /// ArrivalClock.secondsUntil, не больше одного лишнего сообщения в
+    /// минуту), строки камеры или шаг расстояния; но не в последние секунды
+    /// минуты (ArrivalClock.carMaySend) — тогда в начале следующей.
+    enum TripSend: Equatable { case now, at(Date), no }
+
+    static func tripSend(due: Bool, now: Date) -> TripSend {
+        guard due else { return .no }
+        return ArrivalClock.carMaySend(now: now) ? .now : .at(ArrivalClock.nextCarSend(after: now))
+    }
+
+    static func shouldUpdate(previous: Double?, current: Double, elapsed: TimeInterval,
+                             maxInterval: TimeInterval = AppConfig.carPlayEstimateMaxInterval) -> Bool {
         guard let previous else { return true }
-        if elapsed >= AppConfig.carPlayEstimateMaxInterval { return true }
+        if elapsed >= maxInterval { return true }
         return abs(previous - current) >= max(AppConfig.carPlayEstimateMinStepMeters, previous * 0.05)
     }
 
@@ -230,6 +251,13 @@ final class CarPlayGuidance {
     /// от телефона, пока не тронемся.
     private var sentTripArrival: Date?
     private var sentStepArrival: Date?
+    /// Минута часов, от которой ушёл остаток поездки (ArrivalClock.clockMinute).
+    private var sentTripClock: Date?
+    /// Линия маршрута последних оценок: перестроение к той же цели — новая
+    /// линия, и её расстояние уходит сразу, а не через 30 с.
+    private var sentRouteLine: ObjectIdentifier?
+    /// Отложенная отправка оценок поездки (конец минуты, ArrivalClock.carMaySend).
+    private var deferredTrip: Task<Void, Never>?
     /// Строка «📷 400 м» в оценках поездки (iOS 27), что ушла последней.
     private var sentCameraDetail: String?
     /// Баннеры поверх карты — общая очередь подключения (CarPlayBanners).
@@ -836,7 +864,8 @@ final class CarPlayGuidance {
         let now = Date()
         if let session, maneuver != nil, maneuverStep != nil, sessionMetadata {
             let state = CarPlayGuidanceMapping.maneuverState(distance: route.nextStepDistance,
-                                                             sinceShown: now.timeIntervalSince(maneuverShownAt))
+                                                             sinceShown: now.timeIntervalSince(maneuverShownAt),
+                                                             previous: sentManeuverState)
             if state != sentManeuverState {
                 sentManeuverState = state
                 session.maneuverState = state
@@ -851,6 +880,12 @@ final class CarPlayGuidance {
         // больше отправки в полминуты.
         let arrival = route.arrival
         let remaining = route.arrivalSeconds(now: now)
+        let line = route.polyline.map(ObjectIdentifier.init)
+        if line != sentRouteLine {
+            sentRouteLine = line
+            sentStepDistance = nil
+            sentTripDistance = nil
+        }
         if let session, let maneuver, maneuverStep != nil {
             let distance = route.nextStepDistance
             if arrival != sentStepArrival
@@ -872,12 +907,25 @@ final class CarPlayGuidance {
             let camera = Self.cameraDetail()
             let cameraChanged = camera != sentCameraDetail
                 && now.timeIntervalSince(sentTripTime) >= AppConfig.carPlayCameraLabelUpdateSeconds
-            if cameraChanged || arrival != sentTripArrival
+            // Поездке хватает смены минуты прибытия и шага расстояния: стоя
+            // одинаковые оценки уходили в машину раз в 5 с (аудит 05.11, №12).
+            let clock = ArrivalClock.clockMinute(now)
+            let due = cameraChanged || arrival != sentTripArrival || clock != sentTripClock
                 || CarPlayGuidanceMapping.shouldUpdate(previous: sentTripDistance, current: distance,
-                                                       elapsed: now.timeIntervalSince(sentTripTime)) {
+                                                       elapsed: now.timeIntervalSince(sentTripTime),
+                                                       maxInterval: AppConfig.carPlayTripEstimateMaxInterval)
+            switch CarPlayGuidanceMapping.tripSend(due: due, now: now) {
+            case .no:
+                break
+            case .at(let when):
+                deferTripEstimates(until: when, on: template)
+            case .now:
+                deferredTrip?.cancel()
+                deferredTrip = nil
                 sentTripDistance = distance
                 sentTripTime = now
                 sentTripArrival = arrival
+                sentTripClock = clock
                 sentCameraDetail = camera
                 template.updateEstimates(Self.tripEstimates(meters: distance, seconds: remaining,
                                                             camera: camera),
@@ -886,11 +934,28 @@ final class CarPlayGuidance {
         }
     }
 
+    /// Конец минуты: оценки поездки — в начале следующей (стоя тика может и
+    /// не быть, поэтому своим таймером).
+    private func deferTripEstimates(until when: Date, on template: CPMapTemplate) {
+        guard deferredTrip == nil else { return }
+        let delay = max(0, when.timeIntervalSinceNow) + 0.05
+        deferredTrip = Task { @MainActor [weak self, weak template] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self, !Task.isCancelled else { return }
+            self.deferredTrip = nil
+            if let template { self.updateEstimates(on: template) }
+        }
+    }
+
     // MARK: - Камера впереди
 
     /// Баннер камеры — на каждом пересчёте (CarPlayCameraBanner). Решение
     /// «предупреждать ли» уже приняли гейты оповещений.
     private func updateCameraBanner() {
+        // Возврат карты к машине по камере — тот же признак, что у баннера
+        // (CarPlayBrowse.cameraReturn); здесь, а не во вью: ведение
+        // пересчитывается и при пересобранном окне, и вне экрана.
+        model.noteCamera(CarPlayCameraCue.current(env.location))
         guard let banners else { return }
         cameraBanner.update(banners: banners, onScreen: isOnScreen,
                             onDark: model.carIsDark ?? !model.isDaylight)

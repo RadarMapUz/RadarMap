@@ -36,12 +36,14 @@ final class Drive3DTests: XCTestCase {
         XCTAssertFalse(Drive3D.isActive(surface: nil, driving: true, modernStyle: true))
     }
 
-    /// Горячий телефон и плитка: только заливка; дымка гаснет на горячем.
-    func testHotPhoneAndDashboardDropTheNarrowing() {
+    /// Горячий телефон: только заливка; плитка (48) сужается, пока не тёплая;
+    /// дымка гаснет на горячем.
+    func testHotPhoneDropsTheNarrowingTileKeepsIt() {
         XCTAssertTrue(Drive3D.narrows(surface: .phone, hot: false))
         XCTAssertTrue(Drive3D.narrows(surface: .car, hot: false))
         XCTAssertFalse(Drive3D.narrows(surface: .phone, hot: true))
-        XCTAssertFalse(Drive3D.narrows(surface: .dashboard, hot: false))
+        XCTAssertTrue(Drive3D.narrows(surface: .dashboard, hot: false), "плитка 48 — с сужением")
+        XCTAssertFalse(Drive3D.narrows(surface: .dashboard, hot: true), "тёплый телефон рисует плитку как горячую")
         XCTAssertFalse(Drive3D.chevrons(surface: .dashboard))
         XCTAssertTrue(Drive3D.hazeShown(hot: false))
         XCTAssertFalse(Drive3D.hazeShown(hot: true))
@@ -261,11 +263,91 @@ final class Drive3DTests: XCTestCase {
         XCTAssertFalse(Drive3D.defaultEnabled(machine: "iPad13,18"), "iPad в режиме совместимости — как старый")
     }
 
-    func testDashboardHasNoRibbonAndHotPhoneNoChevrons() {
-        XCTAssertFalse(Drive3D.ribbon(surface: .dashboard))
-        XCTAssertTrue(Drive3D.ribbon(surface: .car))
+    func testDashboardRibbonByTileLevelAndHotPhoneNoChevrons() {
+        XCTAssertTrue(Drive3D.ribbon(surface: .dashboard), "плитка 48 — с лентой")
+        XCTAssertTrue(Drive3D.ribbon(surface: .dashboard, tile: .lite), "тёплый — лента без сужения")
+        XCTAssertFalse(Drive3D.ribbon(surface: .dashboard, tile: .flat), "горячий — только палитра")
+        XCTAssertTrue(Drive3D.ribbon(surface: .car, tile: .flat), "ступень плитки экран машины не трогает")
         XCTAssertFalse(Drive3D.chevrons(surface: .phone, hot: true))
         XCTAssertTrue(Drive3D.chevrons(surface: .phone, hot: false))
+    }
+
+    /// Плитка упрощается первой: тёплый телефон или энергосбережение — уже
+    /// `lite` (карта рисует как горячая), а экран машины ещё полный; горячий —
+    /// `flat`. Ступень карты плитки на горячем — та, что есть, не мягче.
+    func testTileSimplifiesFirst() {
+        XCTAssertEqual(Drive3D.tileLevel(performance: .full, warm: false, lowPower: false), .full)
+        XCTAssertEqual(Drive3D.tileLevel(performance: .full, warm: true, lowPower: false), .lite)
+        XCTAssertEqual(Drive3D.tileLevel(performance: .full, warm: false, lowPower: true), .lite)
+        XCTAssertEqual(Drive3D.tileLevel(performance: .reduced, warm: true, lowPower: false), .flat)
+        XCTAssertEqual(Drive3D.tileLevel(performance: .minimal, warm: true, lowPower: true), .flat)
+        XCTAssertEqual(Drive3D.tilePerformance(.full, mode: .full), .full)
+        XCTAssertEqual(Drive3D.tilePerformance(.lite, mode: .full), .reduced)
+        XCTAssertEqual(Drive3D.tilePerformance(.flat, mode: .minimal), .minimal)
+        // Пока плитка `lite`, экран машины — полный: наклон разрешён, сужение есть.
+        XCTAssertTrue(CarPlaySurface.car.pitchAllowed(performance: .full))
+        XCTAssertTrue(CarPlaySurface.dashboard.pitchAllowed(performance: .full), "lite — наклон остаётся")
+        XCTAssertFalse(CarPlaySurface.dashboard.pitchAllowed(performance: .reduced), "flat — плоско")
+    }
+
+    /// Плитка считает сама, только если телефон и экран машины молчат.
+    func testTileTakesTheReadyRibbon() {
+        XCTAssertTrue(Drive3D.computes(surface: .car, sincePrimary: 0))
+        XCTAssertTrue(Drive3D.computes(surface: .phone, sincePrimary: 0))
+        XCTAssertFalse(Drive3D.computes(surface: .dashboard, sincePrimary: 0.5), "экран машины жив — берём его")
+        XCTAssertTrue(Drive3D.computes(surface: .dashboard, sincePrimary: AppConfig.drive3DShareYieldSeconds))
+        XCTAssertTrue(Drive3D.computes(surface: .dashboard, sincePrimary: .infinity), "плитка одна")
+    }
+
+    /// Бюджет плитки строже машины по всем столбцам; срез в машине и на
+    /// плитке — не чаще секунды пути (аудит 05.11, №3).
+    func testTileBudgetIsCheaper() {
+        let tile = Drive3D.budget(surface: .dashboard), car = Drive3D.budget(surface: .car)
+        XCTAssertGreaterThan(tile.recomputeMeters, car.recomputeMeters)
+        XCTAssertLessThan(tile.tailMarginMeters, car.tailMarginMeters)
+        XCTAssertGreaterThan(tile.retrySeconds, car.retrySeconds)
+        XCTAssertLessThan(tile.probeLimit, car.probeLimit)
+        XCTAssertGreaterThanOrEqual(car.cutSeconds, 1)
+        XCTAssertGreaterThanOrEqual(tile.cutSeconds, 1)
+        XCTAssertEqual(Drive3D.budget(surface: .phone), .full)
+        // 60 км/ч: машина режет раз в 16,7 м, телефон — раз в 8,3.
+        XCTAssertEqual(Drive3D.cutStep(speedMps: 60 / 3.6, hot: false, seconds: car.cutSeconds), 16.67, accuracy: 0.01)
+        XCTAssertEqual(Drive3D.cutStep(speedMps: 60 / 3.6, hot: false), 8.33, accuracy: 0.01)
+    }
+
+    /// Минута на 50 км/ч: машина и плитка в одном прогоне. Плитка пересчитывает
+    /// не чаще машины, а срез на обеих — не чаще раза в секунду.
+    func testTileComputesNoMoreThanTheCar() {
+        func run(_ budget: Drive3D.Budget, ahead: Double) -> (computes: Int, cuts: Int) {
+            let speed = 50 / 3.6
+            var plan: Drive3D.Plan?
+            var computes = 0, cuts = 0
+            var cut: Double?
+            var lastAttempt = -Double.infinity
+            for tick in 0..<180 {
+                let t = Double(tick) / 3
+                let car = 200 + speed * t
+                if Drive3D.needsRecompute(last: plan, route: 1, car: car, maneuver: nil, window: 200,
+                                          narrowing: true, sinceAttempt: t - lastAttempt, budget: budget) {
+                    computes += 1
+                    lastAttempt = t
+                    plan = Drive3D.Plan(route: 1, from: car, maneuver: nil, narrowing: true, inWindow: false,
+                                        complete: true, verifiedEnd: car + ahead)
+                }
+                if Drive3D.cutDue(last: cut, now: car,
+                                  step: Drive3D.cutStep(speedMps: speed, hot: false, seconds: budget.cutSeconds)) {
+                    cuts += 1
+                    cut = car
+                }
+            }
+            return (computes, cuts)
+        }
+        // Машина видит ~260 м впереди, плитка 375 точек при 45° — ~250.
+        let car = run(.car, ahead: 260), tile = run(.tile, ahead: 250)
+        XCTAssertLessThanOrEqual(tile.computes, car.computes)
+        XCTAssertLessThanOrEqual(tile.computes, 7, "плитка: пересчётов за минуту")
+        XCTAssertLessThanOrEqual(car.cuts, 62, "машина: срез не чаще раза в секунду")
+        XCTAssertLessThanOrEqual(tile.cuts, 62)
     }
 
     /// Разница в бандле — только известные свойства (иначе KVC уронил бы

@@ -113,6 +113,13 @@ final class CarMapStyleTests: XCTestCase {
     func testDashboardTileIsLowAndHouseless() {
         XCTAssertLessThanOrEqual(CarPlaySurface.dashboard.maxPitch, 30)
         XCTAssertFalse(CarPlaySurface.dashboard.houses(setting: true))
+        // «Вождение 3D» на плитке (48): 45°, низкие дома по тумблеру.
+        XCTAssertEqual(CarPlaySurface.dashboard.maxPitch(drive3D: true), AppConfig.carPlayDashboard3DMaxPitch)
+        XCTAssertLessThan(AppConfig.carPlayDashboard3DMaxPitch, AppConfig.engineMapPitchDegrees)
+        XCTAssertTrue(CarPlaySurface.dashboard.houses(setting: true, drive3D: true))
+        XCTAssertFalse(CarPlaySurface.dashboard.houses(setting: false, drive3D: true))
+        XCTAssertFalse(CarPlaySurface.cluster.houses(setting: true, drive3D: true))
+        XCTAssertEqual(CarPlaySurface.car.maxPitch(drive3D: true), AppConfig.engineMapPitchDegrees)
         XCTAssertEqual(CarPlaySurface.car.maxPitch, AppConfig.engineMapPitchDegrees)
     }
 

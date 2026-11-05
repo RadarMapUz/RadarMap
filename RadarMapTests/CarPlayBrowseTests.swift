@@ -112,4 +112,18 @@ final class CarPlayBrowseTests: XCTestCase {
         XCTAssertFalse(B.panHoldContinues(steps: 100, interval: 0.15, maxSeconds: 15))
         XCTAssertFalse(B.panHoldContinues(steps: 10_000))
     }
+
+    /// Возврат по камере — по признаку баннера, один раз на камеру (QA 05.11).
+    func testCameraReturnFollowsTheBannerOncePerCamera() {
+        let foreign = CarPlayCameraCue.decide(cameraID: 5, approaching: true, familiar: false)
+        let own = CarPlayCameraCue.decide(cameraID: 6, approaching: true, familiar: true)
+        XCTAssertTrue(CarPlayBrowse.cameraReturn(foreign, returnedFor: nil).due)
+        XCTAssertEqual(CarPlayBrowse.cameraReturn(foreign, returnedFor: nil).returnedFor, 5)
+        XCTAssertFalse(CarPlayBrowse.cameraReturn(foreign, returnedFor: 5).due, "та же камера — уже вернулись")
+        XCTAssertTrue(CarPlayBrowse.cameraReturn(CarPlayCameraCue.decide(cameraID: 9, approaching: true,
+                                                                         familiar: false), returnedFor: 5).due,
+                      "следующая камера — снова")
+        XCTAssertFalse(CarPlayBrowse.cameraReturn(own, returnedFor: nil).due, "своя камера без баннера")
+        XCTAssertNil(CarPlayBrowse.cameraReturn(.none, returnedFor: 5).returnedFor, "подъезд кончился — забыли")
+    }
 }

@@ -137,8 +137,10 @@ enum MemoryPressure {
 
     static func trim(_ reason: Reason) {
         // Кэш сетевых ответов: любая его строка берётся из сети повторно, и
-        // ни одна не нужна для предупреждения о камере.
-        URLCache.shared.removeAllCachedResponses()
+        // ни одна не нужна для предупреждения о камере. Чистка — SQLite-проход
+        // CFNetwork, поэтому не на главном (аудит 05.11, №6): переход в фон
+        // идёт внутри того же бюджета сторожа, что завис в 2.2.43.
+        Task.detached(priority: .utility) { URLCache.shared.removeAllCachedResponses() }
         subscribers = subscribers.filter { $0(reason) }
         Log.app.notice("память: чистка (\(String(describing: reason), privacy: .public)), предупреждений за сеанс \(warnings, privacy: .public)")
     }

@@ -256,6 +256,21 @@ private struct CarPlayDashboardGauge: View {
 
     private var showsArrival: Bool { width <= 0 || width >= AppConfig.carPlayGaugeArrivalWidth }
 
+    /// Минуты до показанного прибытия от минуты на часах — как «N min» в
+    /// системной полосе рядом (ArrivalClock.minutesUntil): «20 мин 22:02»
+    /// рядом с «22:01 · 20 min» читалось двумя разными прибытиями.
+    private var remaining: TimeInterval {
+        let route = env.route
+        guard let arrival = route.arrival else { return route.remainingTime }
+        let minutes = ArrivalClock.minutesUntil(arrival, now: Date())
+        return minutes > 0 ? TimeInterval(minutes * 60) : route.remainingTime
+    }
+
+    private func straight(to camera: Camera) -> Double {
+        guard let me = env.location.displayCoordinate ?? env.location.currentCoordinate else { return 0 }
+        return GeoMath.fastDistance(me.latitude, me.longitude, camera.lat, camera.lon)
+    }
+
     var body: some View {
         HStack(spacing: 10) {
             Text("\(Int(env.location.speedKmh.rounded()))")
@@ -267,7 +282,8 @@ private struct CarPlayDashboardGauge: View {
             }
             if let camera = env.location.displayNearestCamera,
                let distance = env.location.displayDistanceToNearest,
-               distance <= AppConfig.carPlayNearestCameraMeters {
+               distance <= AppConfig.carPlayNearestCameraMeters,
+               CarPlayCameraCue.gaugeShows(distance: distance, straight: straight(to: camera)) {
                 HStack(spacing: 4) {
                     CameraIcon(kind: camera.kind, side: 24)
                     Text(Formatting.distance(distance))
@@ -281,7 +297,7 @@ private struct CarPlayDashboardGauge: View {
             } else if env.route.isActive {
                 Rectangle().fill(Theme.stroke).frame(width: 1, height: 24)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(Formatting.duration(env.route.remainingTime))
+                    Text(Formatting.duration(remaining))
                         .font(.rounded(16, .heavy).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
                     Text(verbatim: env.route.arrivalText)

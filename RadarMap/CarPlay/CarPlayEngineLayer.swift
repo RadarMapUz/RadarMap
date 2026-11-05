@@ -118,11 +118,21 @@ struct CarPlayEngineLayer: View {
                                          night: !model.isDaylight)
         // У цели кадр держит и её, и ближайшие парковки — вместе с камерой.
         let arrivalKeep = detail.keepPoints.map { DriveCamera.Keep.offset(from: me, to: $0, bearing: bearing) }
+        // «Вождение 3D» и ступень плитки (48): плитка упрощается первой — на
+        // тёплом телефоне рисует как горячая, на горячем — плоско и без ленты.
+        let drive3D = Drive3D.surface(enabled: env.settings.drive3D, car: surface)
+        let lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+        let tile = surface == .dashboard
+            ? Drive3D.tileLevel(performance: env.thermal.mode, warm: env.thermal.isWarm, lowPower: lowPower)
+            : .full
+        let performance = surface == .dashboard
+            ? Drive3D.tilePerformance(tile, mode: env.thermal.mode) : env.thermal.mode
         // Профиль экрана машины: впереди секунды пути, а не 100 м разметки
         // (аудит 18.10, «при езде нормального вида нет»).
         let target = DriveCamera.target(
             speedKmh: env.location.speedKmh, maneuverDistance: maneuverDistance,
-            pitchAllowed: surface.pitchAllowed(performance: env.thermal.mode), maxPitch: surface.maxPitch,
+            pitchAllowed: surface.pitchAllowed(performance: env.thermal.mode),
+            maxPitch: surface.maxPitch(drive3D: drive3D != nil),
             screen: .car, keep: keep,
             stop: stop.state, jamEnd: stop.jamEnd,
             alsoKeep: arrivalKeep,
@@ -147,7 +157,7 @@ struct CarPlayEngineLayer: View {
             anchorY: surface.fixedMeY ?? Self.meY(size: size, safe: safe, share: frame.carShare),
             pitchDegrees: frame.pitchDegrees,
             daylight: model.isDaylight,
-            houses: surface.houses(setting: env.settings.mapHouses),
+            houses: surface.houses(setting: env.settings.mapHouses, drive3D: drive3D != nil),
             cameras: [],
             cameraRevision: env.cameras.revision,
             limitRevision: env.speedLimits.indexRevision * 2 + (env.settings.speedLimitsEnabled ? 1 : 0),
@@ -176,8 +186,8 @@ struct CarPlayEngineLayer: View {
             maneuverKind: env.route.nextStep?.kind,
             recenterToken: model.recenterRequests,
             modernStyle: env.settings.mapModernStyle,
-            performance: env.thermal.mode,
-            lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled,
+            performance: performance,
+            lowPower: lowPower,
             // В машине карта всегда «по ходу»: это навигатор. Без курса
             // (стоим) движок карту не крутит и держит последний поворот.
             northUp: false,
@@ -245,8 +255,10 @@ struct CarPlayEngineLayer: View {
             carScale: CarMapStyle.scale(for: surface),
             carStyle: carStyle,
             // «Вождение 3D» (43) — та же картинка, что на телефоне, поверх
-            // масштаба машины; плитка — упрощённо, приборка — карта поездки.
-            drive3D: Drive3D.surface(enabled: env.settings.drive3D, car: surface))
+            // масштаба машины; плитка с 48 — тоже, по своему бюджету и без
+            // ленты на горячем телефоне; приборка — карта поездки.
+            drive3D: drive3D,
+            drive3DRibbon: drive3D.map { Drive3D.ribbon(surface: $0, tile: tile) } ?? false)
     }
 
     /// Новая карта (вернулись из музыки, из схемы) стартует со слежения —

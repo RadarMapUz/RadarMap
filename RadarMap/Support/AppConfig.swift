@@ -2145,6 +2145,11 @@ nonisolated enum AppConfig {
     static let carPlayDockHeight: CGFloat = 100
     /// Прибор плитки главного экрана машины: прибытие — от такой ширины.
     static let carPlayGaugeArrivalWidth: CGFloat = 300
+    /// Прибор плитки: камера с расстоянием меньше этого по маршруту и дальше
+    /// этого по прямой — позади старта маршрута, а не «0 м впереди»
+    /// (CarPlayCameraCue.gaugeShows). 40 м — траверз записи проезда.
+    static let carPlayGaugeZeroMeters: Double = 5
+    static let carPlayGaugeZeroStraightMeters: Double = 40
     /// Потолок ширины приборной панели. На экране в 1900 точек три зоны,
     /// растянутые по третям всей ширины, разъезжаются так, что глаз пробегает
     /// весь дисплей ради одной строки данных. Остров, а не лента.
@@ -2208,6 +2213,9 @@ nonisolated enum AppConfig {
     /// «начальный» — первые 5 с нового манёвра.
     static let carPlayManeuverExecuteMeters: Double = 50
     static let carPlayManeuverPrepareMeters: Double = 400
+    /// Полоса гистерезиса состояния манёвра: обратно к «готовься» и «едем» —
+    /// только дальше порога на столько (шум позиции стоя — ±3–10 м).
+    static let carPlayManeuverStateHysteresisMeters: Double = 15
     static let carPlayManeuverInitialSeconds: TimeInterval = 5
 
     // MARK: - Объезд пробки (DetourAdvisor)
@@ -2306,9 +2314,13 @@ nonisolated enum AppConfig {
     /// минута в минуту. Полминуты — смена минуты видна не позже чем через 30 с
     /// и стоит одного пересчёта остатка (микросекунды), без сети и GPS.
     static let arrivalClockTickSeconds: TimeInterval = 30
-    /// Запас к остатку, который машина прибавляет к своим часам (CarPlay):
-    /// меньше полминуты — любое правило минуты в машине даёт ту же минуту.
-    static let arrivalClockCarMarginSeconds: TimeInterval = 5
+    /// Запас к остатку для машины (CarPlay, ArrivalClock.secondsUntil):
+    /// полсекунды — остаток в целых минутах от минуты на часах, и машина при
+    /// любом своём правиле (округлить или отбросить) берёт ровно их.
+    static let arrivalClockCarMarginSeconds: TimeInterval = 0.5
+    /// Последние столько секунд минуты остаток машине не шлём (ArrivalClock.carMaySend):
+    /// задержка доставки до 3 с + запас остатка не переносят её через минуту.
+    static let arrivalClockCarSendGuardSeconds: TimeInterval = 4
 
     // MARK: - «Поделиться прибытием» (EtaShare)
 
@@ -2437,6 +2449,9 @@ nonisolated enum AppConfig {
     /// столько секунд (на стоянке цифра всё равно должна жить) и не чаще, чем
     /// сменится видимое число — шаг в метрах вблизи, 5 % вдали.
     static let carPlayEstimateMaxInterval: TimeInterval = 5
+    /// Оценки всей поездки без смены минуты прибытия и шага расстояния — не
+    /// чаще (стоя: 2 сообщения в минуту вместо 12; минута и шаг — сразу).
+    static let carPlayTripEstimateMaxInterval: TimeInterval = 30
     static let carPlayEstimateMinStepMeters: Double = 10
     /// Сколько держится системный баннер о камере, когда на экране машины не
     /// мы (музыка, звонок): хватит прочитать «Камера через 400 м» и не мешать.
@@ -2848,12 +2863,23 @@ nonisolated enum AppConfig {
     /// Новое окно и новый остаток линии ждут своих тайлов не дольше: дальше
     /// считаем, что движок их показал (окно вне вида — тайлов нет вовсе).
     static let routeCutConfirmSeconds: CFTimeInterval = 0.6
+    /// Пока ждём, движок о признаках спрашиваем не чаще (100 мс — шесть
+    /// вопросов за окно ожидания вместо восемнадцати).
+    static let routeCutProbeSeconds: CFTimeInterval = 0.1
     /// Стрелки направления — точками через столько метров; реже на обзоре
     /// (ранг точки, RouteCut.arrowMinRank).
     static let routeArrowSpacingMeters: Double = 15
 
     /// Как часто карта с меткой пишет строку здоровья в журнал (EngineMapView.healthTag).
+    /// Уровень остаётся notice — только он доживает до `log collect` с
+    /// телефона, а строка — единственный свидетель плитки на устройстве; в
+    /// релизе реже (аудит 05.11, №11): машина + приборка писали 720 строк в
+    /// час с KVC по внутренностям движка.
+    #if DEBUG
     static let engineHealthLogSeconds: CFTimeInterval = 10
+    #else
+    static let engineHealthLogSeconds: CFTimeInterval = 30
+    #endif
 
     // MARK: - Карта на движке: кадры и нагрев (docs/perf_audit_2026-10-07.md)
 
@@ -3749,6 +3775,16 @@ nonisolated enum AppConfig {
     /// Плитка главного экрана машины: наклон не круче этого (на малой плитке
     /// 58° и объём закрывали дорогу), подписи чуть крупнее телефонных.
     static let carPlayDashboardMaxPitch: Double = 30
+    /// Плитка во «Вождении 3D» (48): 45°, а не 58° экрана машины. На плитке
+    /// 375 точек высотой с «я» на 0,62 при 140 м обзора стоя 45° дают z17,5 и
+    /// 27 м дороги между машиной и плашкой прибора (58° — z18,4 и 17 м: машина
+    /// садится на плашку, дорога позади уходит под край); на узкой плитке
+    /// 240 точек — 25 м против 17. Полоса у машины — 11,5 точки на 375 (58° —
+    /// 22, крупнее не нужно), у манёвра в 110 м — 7,9 (сужение к полосе
+    /// читается). Наклон машины в городе (38–48° до 30 км/ч) плитка повторяет,
+    /// выше 45° не идёт. Дома во «Вождении 3D» низкие (×0,45, ≤ 15 м) и при
+    /// 45° дорогу не закрывают — правило 40J было про 58° и полную высоту.
+    static let carPlayDashboard3DMaxPitch: Double = 45
     static let carPlayDashboardLabelScale: Double = 1.15
 
     // MARK: - Вождение 3D: лента маршрута во всю сторону (LanePath, 43)
@@ -3843,4 +3879,30 @@ nonisolated enum AppConfig {
     static let drive3DProbeStepMeters: Double = 40
     static let drive3DProbePoints: Double = 36
     static let drive3DProbeLimit = 30
+
+    // MARK: - Вождение 3D на плитке главного экрана машины (48)
+
+    /// Бюджет ленты плитки (Drive3D.Budget.tile). Плитка видит 140–400 м
+    /// впереди, пробы — ≤ 10 квадратов: потолок 12 вместо 30. Пересчёт по
+    /// пути — раз в 400 м (у машины 250), у конца прощупанного — за 100 м
+    /// (у машины 150), повтор неудачи — с 3 с (у машины 1,5).
+    static let drive3DTileRecomputeMeters: Double = 400
+    static let drive3DTileTailMarginMeters: Double = 100
+    static let drive3DTileRetrySeconds: Double = 3
+    static let drive3DTileProbeLimit = 12
+    /// Срез ленты под машиной на экране машины и плитке — не чаще секунды
+    /// пути (телефон — полсекунды): 60 км/ч — 17 м, раз в секунду вместо двух.
+    static let drive3DCarCutStepSeconds: Double = 1
+    /// Плитка считает ленту сама, только если карта телефона или экрана
+    /// машины не применялась столько секунд: иначе берёт их готовую.
+    static let drive3DShareYieldSeconds: CFTimeInterval = 3
+    /// Готовые признаки ленты (источник) переиспользуются второй картой, если
+    /// их начало позади её среза не дальше этого: лишнее позади гасит фильтр.
+    static let drive3DShareReuseBehindMeters: Double = 120
+    /// Расчёт, не вернувшийся за столько секунд, больше не держит очередь
+    /// (карта ушла без отмены).
+    static let drive3DShareStaleSeconds: CFTimeInterval = 10
+    /// Запись общей ленты без карт живёт столько (или до нового маршрута):
+    /// переключение плитки и экрана машины — секунды, возврат из музыки — десятки.
+    static let drive3DShareKeepSeconds: CFTimeInterval = 45
 }

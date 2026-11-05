@@ -320,16 +320,16 @@ struct SearchView: View {
             }
         }
         .presentationDetents([.large])
-        .onAppear {
-            assigning = initialAssign
-            if let initialCategory, model.category == nil {
-                model.pick(initialCategory, route: env.route.selected.map { ($0.points, env.route.progressAlong) })
-            }
-        }
+        .onAppear { assigning = initialAssign }
         .task {
             await model.loadBook(from: env.roads,
                                  at: env.location.currentCoordinate,
                                  fallback: env.settings.place(for: .home)?.coordinate)
+            // Плитка сразу — только после своей книги заведений и точки: до неё
+            // выбор ушёл бы в поиск Apple без региона, то есть по миру.
+            if let initialCategory, model.category == nil {
+                model.pick(initialCategory, route: env.route.selected.map { ($0.points, env.route.progressAlong) })
+            }
         }
         .fullScreenCover(item: $pickSlot, onDismiss: finishMapPick) { slot in
             PlacePickerMap(slot: slot, start: .init(for: slot, env: env),

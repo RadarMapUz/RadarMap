@@ -31,6 +31,15 @@ nonisolated struct ItogiScreen: Equatable {
     var overLimitPlaces: [OverLimit.Place]
     /// Цель недели — по дням, не по окну периода (31E).
     var goal: WeeklyGoal?
+    /// Показывать ли рейтинг и какой (аудит 05.11: мало данных — без кольца,
+    /// у дня рейтинга нет).
+    var availability: ItogiRating.Availability = .none
+    /// «Сняли 35: камеры −15, резкая езда −20» — то же разложение, что в
+    /// разборе рейтинга (RatingBreakdown.sources), в целых.
+    var taken: ItogiRating.Taken?
+    /// Километры по дням окна — у недели (у месяца — календарь на странице
+    /// «Поездки», у дня — нечего делить).
+    var bars: [DayBar] = []
 
     static func == (a: ItogiScreen, b: ItogiScreen) -> Bool {
         a.summary == b.summary && a.insights == b.insights
@@ -38,6 +47,7 @@ nonisolated struct ItogiScreen: Equatable {
             && a.trips.map(\.id) == b.trips.map(\.id)
             && a.action == b.action && a.jams == b.jams
             && a.overLimitPlaces == b.overLimitPlaces && a.goal == b.goal
+            && a.availability == b.availability && a.taken == b.taken && a.bars == b.bars
     }
 
     /// Чистая сборка — её и проверяет тест; `screen` лишь уводит её с main.
@@ -47,6 +57,15 @@ nonisolated struct ItogiScreen: Equatable {
                                           period: period, anchor: anchor, now: now)
         let nudge = TripHistory.pendingFineNudge(history, now: now)
         let trips = TripHistory.historyList(history, period: period, anchor: anchor)
+        let interval = period.interval(containing: anchor)
+        let availability = ItogiRating.availability(summary, period: period)
+        var taken: ItogiRating.Taken?
+        if case .shown(let rating) = availability {
+            taken = ItogiRating.taken(rating: rating,
+                                      sources: RatingBreakdown.sources(records: trips, days: days, in: interval))
+        }
+        let bars = period == .week
+            ? TripHistory.dailyKm(trips, days: 7, now: interval.end.addingTimeInterval(-1)) : []
         return ItogiScreen(summary: summary,
                            insights: PeriodInsights.hero(summary).map { [$0] } ?? [],
                            pendingCount: nudge?.count ?? 0,
@@ -55,7 +74,8 @@ nonisolated struct ItogiScreen: Equatable {
                            action: PeriodInsights.action(summary),
                            jams: TrafficTime.period(trips),
                            overLimitPlaces: OverLimit.places(trips),
-                           goal: WeeklyGoal.build(days: days, now: now))
+                           goal: WeeklyGoal.build(days: days, now: now),
+                           availability: availability, taken: taken, bars: bars)
     }
 
     @concurrent

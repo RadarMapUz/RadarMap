@@ -409,9 +409,11 @@ struct RatingRing: View {
                 Text("\(rating)")
                     .font(.numeral(compact ? 20 : 30, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
+                // «из 100», а не «рейтинг» (аудит «Итогов» 05.11): число
+                // без шкалы читалось наравне с километрами рядом.
                 if !compact {
-                    Text("рейтинг")
-                        .font(.rounded(10, .medium))
+                    Text("из 100")
+                        .font(.rounded(12, .medium))
                         .foregroundStyle(Theme.textTertiary)
                 }
             }

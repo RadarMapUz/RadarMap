@@ -25,67 +25,23 @@ extension TripStatsSheet {
 
     // MARK: - График по дням
 
+    /// Те же столбики, что в карточке-ответе (ItogiDayBars, три состояния),
+    /// с подписью самого длинного дня.
     func dailyChart(days: Int, summary: PeriodSummary) -> some View {
         let daily = TripHistory.dailyKm(
             TripHistory.records(env.trip.history, period: period, anchor: anchor),
             days: days, now: period.interval(containing: anchor).end.addingTimeInterval(-1))
-        let peak = max(daily.map(\.km).max() ?? 0, 1)
-        let dense = days > 10
-        let hasOverspeed = daily.contains(where: \.hasOverspeed)
         return VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title: String(localized: "Километры по дням")) {
-                // «Больше всего» — только когда есть из чего выбирать (34):
-                // при одном дне с поездками «больше всего — вчера» пусто.
+                // «Больше всего» — только когда есть из чего выбирать (34).
                 if let busiest = summary.busiestDay, summary.busiestDayKm > 0, summary.activeDays >= 2 {
                     Text(String(format: String(localized: "Больше всего — %@"),
                                 Formatting.dayTitle(busiest)))
-                        .font(.rounded(15, .semibold))
-                        .foregroundStyle(Theme.accent)
+                        .font(.rounded(13, .semibold))
+                        .foregroundStyle(Theme.textSecondary)
                 }
             }
-            Chart(daily) { item in
-                BarMark(x: .value("День", item.day, unit: .day),
-                        y: .value("км", item.km),
-                        width: .ratio(dense ? 0.7 : 0.55))
-                // Красный столбик = день с превышением: график продолжает
-                // историю «где и когда я нарушал», а не просто про километры.
-                //
-                // Заливка ПЛОСКАЯ, а не градиентом. Градиент снизу вверх на
-                // столбике означает, что один и тот же день окрашен по-разному
-                // в зависимости от своей высоты: цвет начинает кодировать
-                // величину, которую уже кодирует сама высота. Это двойное
-                // кодирование, и оно мешает сравнивать столбики между собой.
-                .foregroundStyle(item.hasOverspeed ? Theme.danger : Theme.accent)
-                .cornerRadius(4)
-                // Подпись ТОЛЬКО у пика. Ось Y здесь скрыта намеренно — на
-                // полосе в 96 pt она съела бы треть ширины, — но график без
-                // единого числа сообщает лишь «какой-то день был длиннее
-                // другого». Одна подпись у максимума задаёт масштаб всему
-                // остальному: подписывать каждый столбик не нужно.
-                .annotation(position: .top, spacing: 2) {
-                    if item.km >= peak, item.km > 0 {
-                        Text(Formatting.distance(item.km * 1000))
-                            .font(.rounded(9, .bold).monospacedDigit())
-                            .foregroundStyle(Theme.textSecondary)
-                    }
-                }
-            }
-            .chartYScale(domain: 0...peak * 1.15)
-            .chartXAxis {
-                // В месяце подписи каждого дня превращаются в кашу — раз в неделю.
-                AxisMarks(values: .stride(by: .day, count: dense ? 7 : 1)) { _ in
-                    AxisValueLabel(format: dense ? .dateTime.day()
-                                                 : .dateTime.weekday(.abbreviated),
-                                   centered: true)
-                        .foregroundStyle(Theme.textTertiary)
-                        .font(.rounded(9, .medium))
-                }
-            }
-            .chartYAxis(.hidden)
-            .frame(height: 96)
-            if hasOverspeed {
-                legendItem(Theme.danger, String(localized: "день с превышением"))
-            }
+            ItogiDayBars(bars: daily, height: 96)
         }
         .statCard()
     }
@@ -131,7 +87,10 @@ extension TripStatsSheet {
                 .foregroundStyle(Theme.textPrimary)
             if let nearest = nearestNonEmptyAnchor() {
                 Button {
-                    withMotion(Motion.standard) { anchor = nearest }
+                    withMotion(Motion.standard) {
+                        autoShifted = false
+                        anchor = nearest
+                    }
                 } label: {
                     Text(String(format: String(localized: "Показать: %@"),
                                 period.rangeTitle(containing: nearest)))
@@ -148,18 +107,9 @@ extension TripStatsSheet {
         .statCard(padding: 24)
     }
 
-    /// Ближайшее к текущему окно с поездками: ищем по дневным агрегатам —
-    /// они переживают чистку истории, значит найдут и старый период.
+    /// Ближайшее к текущему окно с поездками (ItogiWindow — по дневным
+    /// агрегатам, они переживают чистку истории).
     func nearestNonEmptyAnchor() -> Date? {
-        let calendar = Calendar.current
-        let current = period.interval(containing: anchor)
-        // Ближайший день с поездками — по разнице с текущим окном.
-        return env.trip.days
-            .filter { !current.contains($0.day) }
-            .min { lhs, rhs in
-                abs(lhs.day.timeIntervalSince(current.start))
-                    < abs(rhs.day.timeIntervalSince(current.start))
-            }
-            .map { calendar.startOfDay(for: $0.day) }
+        ItogiWindow.nearestAnchor(days: env.trip.days, period: period, anchor: anchor)
     }
 }

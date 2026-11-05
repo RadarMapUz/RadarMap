@@ -43,7 +43,7 @@ struct TripHistorySection: View {
 
             ForEach(TripHistory.dayGroups(records), id: \.day) { group in
                 Text(Formatting.dayTitle(group.day))
-                    .font(.rounded(15, .semibold))
+                    .font(.rounded(12, .semibold))
                     .foregroundStyle(Theme.textTertiary)
                     .textCase(.uppercase)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -117,15 +117,17 @@ struct TripHistorySection: View {
     /// Самая дорогая камера поездки — короткий ответ на «почему не 100».
     /// Считается по проездам (их единицы), трек не разбирается: строка списка
     /// не имеет права стоить дороже, чем она читается.
-    static func worstPenalty(_ record: TripRecord) -> (points: Int, place: String)? {
-        var worst: (points: Double, place: String)?
+    /// `edge` — проезд «на грани» (PassVerdict): строка жёлтая, не красная.
+    static func worstPenalty(_ record: TripRecord) -> (points: Int, place: String, edge: Bool)? {
+        var worst: (points: Double, place: String, edge: Bool)?
         for pass in record.passed {
             guard let limit = pass.limitKmh else { continue }
             let points = DrivingScore.penaltyPoints(overKmh: pass.speedKmh - Double(limit))
             guard points > 0, points > (worst?.points ?? 0) else { continue }
-            worst = (points, pass.location.isEmpty ? pass.kind.displayName : pass.location)
+            worst = (points, pass.location.isEmpty ? pass.kind.displayName : pass.location,
+                     pass.verdict == .edge)
         }
-        return worst.map { (Int($0.points.rounded()), $0.place) }
+        return worst.map { (Int($0.points.rounded()), $0.place, $0.edge) }
     }
 
     /// Место самого дорогого ЖДУЩЕГО штрафа — пара к сумме риска. Лидер по
@@ -164,60 +166,61 @@ struct TripListRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(title)
-                        .font(.rounded(14, .semibold))
+                        .font(.rounded(15, .semibold))
                         .foregroundStyle(Theme.textPrimary)
-                    // Куда приехали — «→ Работа»: строку узнают по цели,
-                    // а не по времени старта.
+                    // Куда приехали — значком места, не стрелкой-символом:
+                    // строку узнают по цели, а не по времени старта.
                     if let finish {
-                        // Две строки каталога, не тернарник литералов (правило 7).
-                        Text(finish == .home ? String(localized: "→ Дом") : String(localized: "→ Работа"))
-                            .font(.rounded(12, .semibold))
-                            .foregroundStyle(Theme.accent)
-                    }
-                }
-                // Километры, время и камеры одной строкой: справа остаются
-                // только балл и шеврон — раньше там теснились три элемента.
-                HStack(spacing: 6) {
-                    Text("\(Formatting.distance(record.distanceMeters)) · \(Formatting.duration(record.duration))")
-                        .font(.rounded(15))
+                        Label {
+                            // Две строки каталога, не тернарник литералов (правило 7).
+                            Text(finish == .home ? String(localized: "Дом") : String(localized: "Работа"))
+                        } icon: {
+                            SymbolIcon(finish == .home ? "house.fill" : "briefcase.fill", size: 11)
+                        }
+                        .labelStyle(.titleAndIcon)
+                        .font(.rounded(12, .semibold))
                         .foregroundStyle(Theme.textSecondary)
-                    if record.camerasPassed > 0 {
-                        // Счётчик проездов — нейтральным (34b): синий в
-                        // «Итогах» значит «своё и маршрут», а не камеру.
-                        Label { Text(verbatim: "\(record.camerasPassed)") } icon: { SymbolIcon(Icon.cameras, size: 11) }
-                            .font(.rounded(11, .semibold))
-                            .foregroundStyle(Theme.textSecondary)
-                            .labelStyle(.titleAndIcon)
                     }
                 }
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
+                // «14,2 км · 41 мин · 6 камер» — одной подписью 13 pt
+                // (аудит 05.11): справа остаются только балл и шеврон.
+                Text(factsLine)
+                    .font(.rounded(13))
+                    .foregroundStyle(Theme.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                 // «Почему не 100» — прямо в строке: самая дорогая камера
-                // поездки. Раньше балл 55 объяснялся только в деталке.
+                // поездки, словами «к баллу» — голое «−25» читалось чем
+                // угодно, а «баллов» путалось с рейтингом недели.
                 if let worst = TripHistorySection.worstPenalty(record) {
-                    // «−25 баллов · Юнусабад»: голое «−25» читалось
-                    // чем угодно — км/ч, минутами (6.3).
-                    Text(verbatim: "−" + String(localized: "\(worst.points) баллов") + " · " + worst.place)
-                        .font(.rounded(11, .medium))
-                        .foregroundStyle(Theme.danger)
+                    Text(String(format: String(localized: "%1$@ к баллу · %2$@"),
+                                Formatting.points(worst.points), worst.place))
+                        .font(.rounded(13, .medium))
+                        .foregroundStyle(worst.edge ? PassVerdict.edge.tint : PassVerdict.over.tint)
                         .lineLimit(1)
                 }
                 // Склеенная поездка: сразу видно, что внутри был заезд по пути.
                 if let stops = record.stops, !stops.isEmpty {
                     Label(String(format: String(localized: "Остановок в пути: %lld"), stops.count),
                           systemImage: "pause.circle.fill")
-                        .font(.rounded(11, .medium))
+                        .font(.rounded(12, .medium))
                         .foregroundStyle(Theme.textTertiary)
                 }
             }
             Spacer(minLength: 8)
-            // Балл поездки — цвет по зоне, поездки сравниваешь с одного взгляда.
+            // «балл 55» — балл поездки, не рейтинг (аудит, п. 4); цвет по зоне.
             if let score = record.score {
-                Text("\(Int(score))")
-                    .font(.rounded(14, .heavy).monospacedDigit())
-                    .foregroundStyle(TripHistorySection.scoreColor(Int(score)))
-                    .padding(.horizontal, 9).padding(.vertical, 5)
-                    .background(Theme.quietFill, in: Capsule())
+                VStack(spacing: 0) {
+                    Text("\(Int(score))")
+                        .font(.rounded(15, .heavy).monospacedDigit())
+                        .foregroundStyle(TripHistorySection.scoreColor(Int(score)))
+                    Text("балл")
+                        .font(.rounded(12))
+                        .foregroundStyle(Theme.textTertiary)
+                }
+                .frame(minWidth: 40)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(String(format: String(localized: "Балл поездки: %lld"), Int(score))))
             }
             trailingIcon
         }
@@ -225,6 +228,14 @@ struct TripListRow: View {
         // Выбранная поездка подсвечена акцентом — видно, что показано на карте.
         .background(selected ? Theme.quietFill : .clear)
         .contentShape(Rectangle())
+    }
+
+    private var factsLine: String {
+        var parts = [Formatting.distance(record.distanceMeters), Formatting.duration(record.duration)]
+        if record.camerasPassed > 0 {
+            parts.append("\(record.camerasPassed)\u{00A0}" + Formatting.camerasLabel(record.camerasPassed))
+        }
+        return parts.joined(separator: " · ")
     }
 
     /// Справа шеврон — тап открывает деталку. У поездки, «применённой» к карте

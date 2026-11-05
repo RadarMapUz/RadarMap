@@ -2312,9 +2312,12 @@ nonisolated enum AppConfig {
     /// и стоит одного пересчёта остатка (микросекунды), без сети и GPS.
     static let arrivalClockTickSeconds: TimeInterval = 30
     /// Запас к остатку для машины (CarPlay, ArrivalClock.secondsUntil):
-    /// секунда — остаток в целых минутах от минуты на часах, и машина при
+    /// полсекунды — остаток в целых минутах от минуты на часах, и машина при
     /// любом своём правиле (округлить или отбросить) берёт ровно их.
-    static let arrivalClockCarMarginSeconds: TimeInterval = 1
+    static let arrivalClockCarMarginSeconds: TimeInterval = 0.5
+    /// Последние столько секунд минуты остаток машине не шлём (ArrivalClock.carMaySend):
+    /// задержка доставки до 3 с + запас остатка не переносят её через минуту.
+    static let arrivalClockCarSendGuardSeconds: TimeInterval = 4
 
     // MARK: - «Поделиться прибытием» (EtaShare)
 
@@ -3896,4 +3899,7 @@ nonisolated enum AppConfig {
     /// Расчёт, не вернувшийся за столько секунд, больше не держит очередь
     /// (карта ушла без отмены).
     static let drive3DShareStaleSeconds: CFTimeInterval = 10
+    /// Запись общей ленты без карт живёт столько (или до нового маршрута):
+    /// переключение плитки и экрана машины — секунды, возврат из музыки — десятки.
+    static let drive3DShareKeepSeconds: CFTimeInterval = 45
 }

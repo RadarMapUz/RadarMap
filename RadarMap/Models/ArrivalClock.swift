@@ -53,13 +53,29 @@ nonisolated enum ArrivalClock {
     /// машина «22:01 · 20 min» при остатке «до 22:02:05 от 21:41:ss», то есть
     /// не «сейчас + остаток» (это дало бы 22:02). Поэтому остаток — от
     /// минуты на часах до показанной минуты, ровно целые минуты, плюс запас
-    /// `arrivalClockCarMarginSeconds` (секунда): и «минута часов + минуты
+    /// `arrivalClockCarMarginSeconds` (полсекунды): и «минута часов + минуты
     /// остатка» (округлить или отбросить), и «сейчас + остаток» с отбрасыванием
-    /// секунд дают ту же минуту, что на телефоне, а «N min» в машине — ту же
-    /// разность, что у плитки (`minutesUntil`).
+    /// секунд дают ту же минуту, что на телефоне, — если отправка не попала в
+    /// конец минуты (`carMaySend`), — а «N min» в машине — ту же разность, что
+    /// у плитки (`minutesUntil`).
     static func secondsUntil(_ arrival: Date, now: Date,
                              margin: TimeInterval = AppConfig.arrivalClockCarMarginSeconds) -> TimeInterval {
         max(0, arrival.timeIntervalSince(clockMinute(now))) + margin
+    }
+
+    /// Можно ли слать остаток машине сейчас: не в последние
+    /// `arrivalClockCarSendGuardSeconds` минуты. Остаток считается от минуты
+    /// часов, и отправка в 21:41:59,6, доставленная в 21:42:00,1, при любом
+    /// правиле машины дала бы минутой позже — до следующей отправки (стоя —
+    /// до 30 с). Запас 4 с покрывает задержку доставки до 3 с и запас
+    /// остатка; отложенная отправка уходит в начале следующей минуты.
+    static func carMaySend(now: Date, guardSeconds: TimeInterval = AppConfig.arrivalClockCarSendGuardSeconds) -> Bool {
+        now.timeIntervalSince(clockMinute(now)) < 60 - guardSeconds
+    }
+
+    /// Когда отправить отложенное: начало следующей минуты.
+    static func nextCarSend(after now: Date) -> Date {
+        clockMinute(now).addingTimeInterval(60)
     }
 
     /// Минута на часах: «сейчас» без секунд.

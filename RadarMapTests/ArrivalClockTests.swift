@@ -58,29 +58,38 @@ final class ArrivalClockTests: XCTestCase {
     /// Как машина печатает прибытие — каждое правило, которое снимок владельца
     /// (05.11: телефон 22:02, машина 22:01 · 20 min) не опроверг: минута её
     /// часов плюс минуты остатка (округлить или отбросить) и «сейчас + остаток»
-    /// с отбрасыванием секунд.
-    private func carClocks(now: Date, seconds: TimeInterval) -> [String: TimeInterval] {
-        let clock = floor(now.timeIntervalSince1970 / 60) * 60
+    /// с отбрасыванием секунд. `lag` — доставка в машину после расчёта.
+    private func carClocks(now: Date, seconds: TimeInterval, lag: TimeInterval = 0) -> [String: TimeInterval] {
+        let seen = now.timeIntervalSince1970 + lag
+        let clock = floor(seen / 60) * 60
         return [
             "минута часов + округлённые минуты": clock + (seconds / 60).rounded() * 60,
             "минута часов + отброшенные минуты": clock + floor(seconds / 60) * 60,
-            "сейчас + остаток, без секунд": floor((now.timeIntervalSince1970 + seconds) / 60) * 60,
+            "сейчас + остаток, без секунд": floor((seen + seconds) / 60) * 60,
         ]
     }
 
     /// Машина при любом своём правиле показывает ту же минуту, что телефон, —
-    /// на любой секунде «сейчас», а не только в первые 17 (до 48 тест знал
-    /// одно правило «сейчас + остаток», и машина показывала минутой раньше).
+    /// на любой секунде, когда отправка разрешена, и с задержкой доставки до
+    /// 3 с (ревью 48, A: отправка в 21:41:59,6, доставленная в 21:42:00,1,
+    /// давала минутой позже).
     func testCarSecondsLandOnTheSameMinuteEitherWay() {
         let arrival = minute.addingTimeInterval(25 * 60)
-        for fraction in stride(from: 0.0, to: 59, by: 0.7) {
+        var sent = 0
+        for fraction in stride(from: 0.0, to: 60, by: 0.1) {
             let now = minute.addingTimeInterval(fraction)
+            guard ArrivalClock.carMaySend(now: now) else { continue }
+            sent += 1
             let seconds = ArrivalClock.secondsUntil(arrival, now: now)
-            for (rule, seen) in carClocks(now: now, seconds: seconds) {
-                XCTAssertEqual(seen, arrival.timeIntervalSince1970, "\(rule): сейчас +\(fraction) с")
+            for lag in [0.0, 0.2, 0.9, 2, 3] {
+                for (rule, seen) in carClocks(now: now, seconds: seconds, lag: lag) {
+                    XCTAssertEqual(seen, arrival.timeIntervalSince1970,
+                                   "\(rule): сейчас +\(fraction) с, задержка \(lag) с")
+                }
             }
             XCTAssertEqual(ArrivalClock.minutesUntil(arrival, now: now), 25, "плитка: 25 мин, как «25 min» машины")
         }
+        XCTAssertGreaterThan(sent, 540, "отправка разрешена почти всю минуту")
         // Старое правило «до минуты + 5 с» на снимке владельца: 21:41:40, 22:02.
         let photo = minute.addingTimeInterval(40)
         let shown = minute.addingTimeInterval(21 * 60)
@@ -90,6 +99,28 @@ final class ArrivalClockTests: XCTestCase {
         XCTAssertEqual(ArrivalClock.secondsUntil(minute, now: minute.addingTimeInterval(90)),
                        AppConfig.arrivalClockCarMarginSeconds, "минута в прошлом — не отрицательный остаток")
         XCTAssertEqual(ArrivalClock.minutesUntil(minute, now: minute.addingTimeInterval(90)), 0)
+    }
+
+    /// Конец минуты (59,0–59,9 с): не шлём, а откладываем на начало следующей —
+    /// и отложенная отправка с задержкой 0,2–3 с даёт ту же минуту при обоих
+    /// правилах машины.
+    func testEndOfMinuteSendIsDeferredToTheNextMinute() {
+        let arrival = minute.addingTimeInterval(25 * 60)
+        for fraction in stride(from: 59.0, to: 60, by: 0.1) {
+            let now = minute.addingTimeInterval(fraction)
+            XCTAssertFalse(ArrivalClock.carMaySend(now: now), "+\(fraction) с — не шлём")
+            let when = ArrivalClock.nextCarSend(after: now)
+            XCTAssertEqual(when, minute.addingTimeInterval(60))
+            XCTAssertEqual(CarPlayGuidanceMapping.tripSend(due: true, now: now), .at(when))
+            let seconds = ArrivalClock.secondsUntil(arrival, now: when)
+            for lag in [0.2, 1, 2, 3] {
+                for (rule, seen) in carClocks(now: when, seconds: seconds, lag: lag) {
+                    XCTAssertEqual(seen, arrival.timeIntervalSince1970, "\(rule): отложено, задержка \(lag) с")
+                }
+            }
+        }
+        XCTAssertEqual(CarPlayGuidanceMapping.tripSend(due: true, now: minute.addingTimeInterval(10)), .now)
+        XCTAssertEqual(CarPlayGuidanceMapping.tripSend(due: false, now: minute.addingTimeInterval(59.5)), .no)
     }
 
     /// Варианты маршрута в машине (выбор до «Поехали») — то же правило минуты.
@@ -190,9 +221,12 @@ final class ArrivalClockFlowTests: XCTestCase {
         // Панель поездки, панель маршрута, CarPlay-оверлей и плитка, Siri.
         XCTAssertEqual(route.arrivalText, Formatting.clock(arrival), file: file, line: line)
         // CarPlay: машина прибавляет остаток к своим часам.
+        // В конце минуты машине не шлём (ArrivalClock.carMaySend) — отправка в
+        // начале следующей; проверяем ту, что ушла бы.
+        let sentAt = ArrivalClock.carMaySend(now: now) ? now : ArrivalClock.nextCarSend(after: now)
         let estimates = CarPlayGuidance.tripEstimates(meters: route.remainingDistance,
-                                                      seconds: route.arrivalSeconds(now: now))
-        for (rule, car) in carClocks(now: now, seconds: estimates.timeRemaining) {
+                                                      seconds: route.arrivalSeconds(now: sentAt))
+        for (rule, car) in carClocks(now: sentAt, seconds: estimates.timeRemaining) {
             XCTAssertEqual(car, arrival.timeIntervalSince1970, "машина — та же минута (\(rule))",
                            file: file, line: line)
         }

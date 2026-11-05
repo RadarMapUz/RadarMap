@@ -140,16 +140,15 @@ struct CarPlayOverlay: View {
     /// Общая подложка капсулы низа: тёмное стекло темы, кромка, тень. Размер —
     /// по содержимому (`fixedSize`): обрезать текст ради ровной сетки нельзя.
     private func pill<Content: View>(edge: Color = Theme.stroke, edgeWidth: CGFloat = 1,
-                                     glow: Color? = nil,
                                      @ViewBuilder _ content: () -> Content) -> some View {
         content()
             .fixedSize()
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            // Подъём без размытия (см. круг скорости выше); свечение — цветом.
+            // Подъём без размытия (см. круг скорости выше).
             .background {
                 CarPlayLift(shape: RoundedRectangle(cornerRadius: 22, style: .continuous),
-                            fill: Theme.background.opacity(0.94), glow: glow)
+                            fill: Theme.background.opacity(0.94))
             }
             .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(edge, lineWidth: edgeWidth))
@@ -287,10 +286,16 @@ private struct CarSpeedBadge: View {
                 SpeedLimitSign(limit: limit, diameter: 42,
                                isAssumed: env.speedLimits.isCurrentLimitAssumed)
                     .background {
-                        Circle()
-                            .stroke(isOver ? Theme.danger.opacity(0.75) : Color.black.opacity(0.28),
-                                    lineWidth: isOver ? 5 : 2)
-                            .padding(isOver ? -3 : -1)
+                        // «Горит» — два кольца с убывающей непрозрачностью за
+                        // бортиком знака, без размытия; в норме — тонкая кромка.
+                        if isOver {
+                            ZStack {
+                                Circle().stroke(Theme.danger.opacity(0.5), lineWidth: 3).padding(-2.5)
+                                Circle().stroke(Theme.danger.opacity(0.22), lineWidth: 3).padding(-5.5)
+                            }
+                        } else {
+                            Circle().stroke(Color.black.opacity(0.22), lineWidth: 1.5).padding(-1)
+                        }
                     }
                     .offset(x: 16, y: -12)
                     .transition(.scale.combined(with: .opacity))
@@ -370,19 +375,21 @@ private struct CarEtaCell: View {
 }
 
 /// Подъём панели над картой машины без размытия (аудит 05.11, №4): сдвинутая
-/// вниз тёмная копия фигуры и мягкая кромка вокруг. `.shadow` у фигуры без
+/// вниз тёмная копия фигуры и кромка вокруг. `.shadow` у фигуры без
 /// `shadowPath` — проход вне экрана на каждом кадре окна машины, а карта под
-/// HUD рисуется до 30 раз в секунду. Свечение (камера, превышение) — та же
-/// копия цветом свечения.
+/// HUD рисуется до 30 раз в секунду. Днём на светлой карте тёмная кромка
+/// читалась жёсткой рамкой (ревью 48, F): днём — полупрозрачная светлая
+/// кромка и сдвиг не темнее 0,15, ночью — тёмный сдвиг и тёмная кромка.
 private struct CarPlayLift<S: Shape>: View {
+    @Environment(\.colorScheme) private var scheme
     let shape: S
     let fill: Color
-    var glow: Color? = nil
 
     var body: some View {
+        let day = scheme == .light
         ZStack {
-            shape.fill((glow ?? .black).opacity(glow == nil ? 0.32 : 0.55)).offset(y: 3)
-            shape.stroke((glow ?? .black).opacity(glow == nil ? 0.14 : 0.5), lineWidth: glow == nil ? 3 : 5)
+            shape.fill(Color.black.opacity(day ? 0.12 : 0.32)).offset(y: day ? 2 : 3)
+            shape.stroke(day ? Color.white.opacity(0.55) : Color.black.opacity(0.14), lineWidth: day ? 2 : 3)
             shape.fill(fill)
         }
     }

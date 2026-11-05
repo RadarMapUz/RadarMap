@@ -95,6 +95,10 @@ final class EngineRibbonShare {
         /// Когда карта телефона или экрана машины последний раз применялась.
         var primarySeenAt: CFTimeInterval = -.infinity
         var users: Set<ObjectIdentifier> = []
+        /// Когда ушла последняя карта (nil — карты есть): запись живёт ещё
+        /// drive3DShareKeepSeconds — смена плитки и экрана машины сносит
+        /// прежнюю карту раньше, чем новая загрузит стиль и возьмёт ленту.
+        var orphanedAt: CFTimeInterval?
         var built: Built?
 
         init(id: Int, route: MKPolyline?, points: [CLLocationCoordinate2D]) {
@@ -125,9 +129,15 @@ final class EngineRibbonShare {
 
     /// Запись маршрута для карты `user`: найденная или новая. Держим не больше
     /// двух маршрутов (смена линии доходит до двух карт не в один кадр).
-    func entry(route: MKPolyline?, points: [CLLocationCoordinate2D], user: ObjectIdentifier) -> Entry {
+    func entry(route: MKPolyline?, points: [CLLocationCoordinate2D], user: ObjectIdentifier,
+               now: CFTimeInterval = CACurrentMediaTime()) -> Entry {
+        entries.removeAll { entry in
+            entry.orphanedAt.map { now - $0 >= AppConfig.drive3DShareKeepSeconds } ?? false
+        }
         let found = entries.first { $0.matches(route: route, points: points) }
         let entry = found ?? {
+            // Новый маршрут: брошенные записи прежнего больше не нужны.
+            entries.removeAll { $0.users.isEmpty }
             nextID &+= 1
             let made = Entry(id: nextID, route: route, points: points)
             entries.append(made)
@@ -135,14 +145,17 @@ final class EngineRibbonShare {
             return made
         }()
         entry.users.insert(user)
+        entry.orphanedAt = nil
         return entry
     }
 
-    /// Карта ушла с маршрута: запись без карт отпускается (кеш дорог и признаки).
-    func leave(_ entry: Entry, user: ObjectIdentifier) {
+    /// Карта ушла с маршрута. Запись без карт не удаляется сразу, а живёт
+    /// drive3DShareKeepSeconds (или до нового маршрута): карта, которая придёт
+    /// на смену, возьмёт ленту и кеш дорог готовыми.
+    func leave(_ entry: Entry, user: ObjectIdentifier, now: CFTimeInterval = CACurrentMediaTime()) {
         entry.users.remove(user)
         if entry.computing?.owner == user { entry.computing = nil }
-        if entry.users.isEmpty { entries.removeAll { $0 === entry } }
+        if entry.users.isEmpty { entry.orphanedAt = now }
     }
 }
 
@@ -265,7 +278,10 @@ final class EngineDriveRibbon {
         let entry = self.entry ?? share.entry(route: model.routeObject, points: model.route, user: me)
         self.entry = entry
         let now = CACurrentMediaTime()
-        if surface != .dashboard { entry.primarySeenAt = now }
+        // Уступать плитке есть кому, только если эта карта вправе считать:
+        // телефон в осмотре ленту не считает, и плитка без него осталась бы
+        // за концом старой ленты без ленты и без линии маршрута.
+        if surface != .dashboard, probeAllowed { entry.primarySeenAt = now }
         let hot = model.performance != .full
         let budget = Drive3D.budget(surface: surface)
         let car = max(0, cut ?? model.routeProgress)

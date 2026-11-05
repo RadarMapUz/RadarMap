@@ -506,6 +506,7 @@ D3_EDGE_NIGHT_MAX = 1.6
 # маршрута (#66a3ff, 0,36) — без «прожектора».
 D3_NIGHT_RIBBON_MAX_L = 0.18
 D3_MARKED_KEYS = ("road_trunk", "road", "road_secondary", "road_tertiary")
+D3_CAR_CAMERA_LABEL = ("#f2f4f7", "#3f4859")
 
 
 def _mix(top, under, alpha):
@@ -562,6 +563,9 @@ def measure_drive3d(theme, p=None, ribbon=None):
                                                         default=100.0),
         "3D: ΔE новый цвет / красная камера, дейтеранопия (мин)": min(
             (delta_e(x, CAMERA_TYPES["camera"], True) for x in new), default=100.0),
+        # Подпись «400 м» у камеры в машине — цветами 40J и в 3D (светлый текст
+        # на ореоле асфальта машины, AppConfig.carPlayCameraLabelDay).
+        "3D: подпись камеры в машине / свой ореол": contrast(D3_CAR_CAMERA_LABEL[0], D3_CAR_CAMERA_LABEL[1]),
         "3D: светлота ленты": luminance(fill),
         "3D: светлота имени улицы": luminance(p["street_label"]),
         "3D: светлота подписи места": luminance(p["label"]),
@@ -587,6 +591,7 @@ def measure_drive3d(theme, p=None, ribbon=None):
     need(m["3D: ΔE пробки / асфальт, дейтеранопия (мин)"] >= CAMERA_DEUTAN_MIN,
          "3D: пробка сливается с асфальтом при дейтеранопии")
     need(m["3D: ΔE пробки / лента (мин)"] >= ALT_ROUTE_DE_MIN, "3D: пробка похожа на ленту маршрута")
+    need(m["3D: подпись камеры в машине / свой ореол"] >= TEXT_MIN, "3D: подпись камеры в машине < 4,5:1")
     need(m["3D: ΔE новый цвет / красная камера (мин)"] >= USE_CAMERA_DE_MIN, "3D: новый цвет похож на камеру")
     need(m["3D: ΔE новый цвет / красная камера, дейтеранопия (мин)"] >= CAMERA_DEUTAN_MIN,
          "3D: новый цвет похож на камеру при дейтеранопии")

@@ -724,10 +724,13 @@ BUILDING_USES = ("health", "education", "religious", "retail", "industrial")
 
 
 def building_height(p):
-    """Высота объёма; у экрана машины (CAR_PALETTES) — ниже, множителем."""
+    """Высота объёма; у экрана машины (CAR_PALETTES) — ниже, множителем;
+    у «Вождения 3D» (D3_PALETTES) — ещё и не выше building_height_max."""
     height = ["coalesce", ["get", "render_height"], 10]
     scale = p.get("building_height", 1.0)
-    return height if scale == 1.0 else ["*", scale, height]
+    height = height if scale == 1.0 else ["*", scale, height]
+    ceiling = p.get("building_height_max")
+    return height if ceiling is None else ["min", ceiling, height]
 
 
 def building_colour(p):
@@ -1031,6 +1034,106 @@ def car_overrides(theme, variant="A"):
             out.setdefault(a["id"], {})[prop] = now
     result = {"layers": out}
     light = (static_p["light"] if drive_p is None else drive_p["light"])
+    if light != PALETTES[theme]["light"]:
+        result["light"] = {key: value for key, value in light.items() if PALETTES[theme]["light"].get(key) != value}
+    return result
+
+
+# «Вождение 3D» (43, исследование 42, вариант A на нашей палитре): светлый
+# тихий мир, серый асфальт с белой разметкой и белыми кромками, низкие белые
+# дома с мягким светом; ночь — правила C 42 «без засветки» (тёмная земля,
+# графитовый асфальт, приглушённая светлая разметка, без свечения
+# магистрали). Разница map_drive3d_<тема>.json кладётся в поездке вместо
+# разницы поездки или машины тем же механизмом (EngineDriveAsphalt) — стиль
+# не перезагружается. Правки постоянные, без окна по зуму: камера поездки
+# стоит на z15,5–18, а обзор (основа до 15-го) остаётся прежним.
+#
+# Лента маршрута (LanePath) — цвет Theme.route, смешанный с асфальтом
+# (D3_RIBBON): непрозрачная заливка, разметка поверх неё. Полупрозрачные
+# куски на стыке моста и под середину складывались бы в тёмные полосы
+# (первый рендер 42). Числа — palette_check.measure_drive3d.
+D3_LIGHT_ASPHALT = "#848e9b"
+D3_LIGHT_TRUNK = "#7e8895"
+D3_LIGHT_MINOR = "#b3bac4"
+D3_DARK_ASPHALT = "#363d48"
+D3_DARK_TRUNK = "#3b4049"
+D3_DARK_MINOR = "#272c34"
+
+
+def _d3_roads(trunk, asphalt, minor, minor_edge, kerb, paint, label):
+    """Асфальт классов на всех зумах нашего полотна, кромки, разметка, имена —
+    и в обычных ключах, и в ключах вблизи/поездки: окно перехода не нужно."""
+    out = {}
+    for prefix in ("road", "near", "drive"):
+        trunk_key = "road_trunk" if prefix == "road" else f"{prefix}_trunk"
+        out[trunk_key] = trunk
+        for cls in ("primary", "secondary", "tertiary"):
+            key = {"road": {"primary": "road", "secondary": "road_secondary", "tertiary": "road_tertiary"}[cls]}
+            out[key.get(prefix, f"{prefix}_{cls}")] = asphalt
+        out["minor" if prefix == "road" else f"{prefix}_minor"] = minor
+    out.update({"minor_far": minor, "minor_edge": minor_edge, "minor_edge_far": minor_edge,
+                "drive_minor_edge": minor_edge,
+                "kerb": kerb, "kerb_trunk": kerb, "casing": kerb,
+                "drive_kerb": kerb, "drive_kerb_trunk": kerb, "drive_casing": kerb,
+                "zebra_base": asphalt, "drive_zebra_base": asphalt,
+                "paint": paint, "drive_paint": paint,
+                "street_label": label, "drive_street_label": label})
+    return out
+
+
+def _d3_houses(colour):
+    return {"building": colour, "building_tall": colour, "building_use": _uses(colour),
+            "drive_building": colour, "drive_building_use": _uses(colour)}
+
+
+D3_PALETTES = {
+    "light": dict(
+        _d3_roads(D3_LIGHT_TRUNK, D3_LIGHT_ASPHALT, D3_LIGHT_MINOR, "#a3aab5", "#ffffff", "#ffffff", "#14181d"),
+        **_d3_houses("#f7f8fa"),
+        bg="#edf0f3", landuse="#e8ecf0", landuse_kind={k: "#e8ecf0" for k in PALETTES["light"]["landuse_kind"]},
+        park="#dce7de", wood="#dce7de", water="#c6daea", median="#dce1e7", concrete="#dce1e7",
+        building_wall="#e3e7ec", building_shadow="rgba(80,90,105,0.16)",
+        building_height=0.45, building_height_max=15,
+        light=dict(PALETTES["light"]["light"], intensity=0.55),
+        label="#4a525e", halo="#edf0f3", bridge_shadow="rgba(30,38,50,0.30)"),
+    "dark": dict(
+        _d3_roads(D3_DARK_TRUNK, D3_DARK_ASPHALT, D3_DARK_MINOR, "#1f232a", "#8e959f", "#cbd1d9", "#aeb6c2"),
+        **_d3_houses("#262b33"),
+        bg="#111317", landuse="#161a20", landuse_kind={k: "#161a20" for k in PALETTES["dark"]["landuse_kind"]},
+        park="#141d18", wood="#141d18", water="#0e1c2c", median="#1c2026", concrete="#1c2026",
+        building_wall="#1e2228", building_shadow="rgba(0,0,0,0.35)",
+        building_height=0.45, building_height_max=15,
+        light=dict(PALETTES["dark"]["light"], intensity=0.3),
+        label="#8a93a0", halo="#111317", trunk_glow_opacity=0, bridge_shadow="rgba(0,0,0,0.5)"),
+}
+# Лента маршрута «Вождения 3D» — те же числа, что Drive3D.ribbon (Swift):
+# заливка (Theme.route поверх асфальта: днём 80 %, ночью 47 %), кант и его
+# непрозрачность.
+D3_RIBBON = {"light": {"fill": "#236bc5", "edge": "#ffffff", "edge_opacity": 0.7},
+             "dark": {"fill": "#4d6d9e", "edge": "#9cc3ff", "edge_opacity": 0.3}}
+D3_FILES = (("map_drive3d_light.json", "light"), ("map_drive3d_dark.json", "dark"))
+
+
+def drive3d_palette(theme):
+    return dict(PALETTES[theme], **D3_PALETTES[theme])
+
+
+def drive3d_overrides(theme):
+    """{"layers": {слой: {свойство: значение}}, "light": {...}?} — чем стиль
+    «Вождения 3D» отличается от обычного. Правки постоянные (без окна)."""
+    def layers(palette):
+        return build(APP_BASE, theme, "full", tileset=APP_TILESET, palette=palette)["layers"]
+    normal, d3 = layers(PALETTES[theme]), layers(drive3d_palette(theme))
+    if [l["id"] for l in normal] != [l["id"] for l in d3]:
+        raise ValueError("палитра 3D поменяла состав слоёв")
+    out = {}
+    for a, b in zip(normal, d3):
+        for prop in CAR_PROPS:
+            was, now = a.get("paint", {}).get(prop), b.get("paint", {}).get(prop)
+            if now != was and now is not None:
+                out.setdefault(a["id"], {})[prop] = now
+    result = {"layers": out}
+    light = drive3d_palette(theme)["light"]
     if light != PALETTES[theme]["light"]:
         result["light"] = {key: value for key, value in light.items() if PALETTES[theme]["light"].get(key) != value}
     return result
@@ -1548,6 +1651,9 @@ def app_styles():
     # Машина (40J): A + N1; ночь у B та же, свой у B только день (DEBUG-ключ).
     for name, theme, variant in CAR_FILES:
         out[name] = json.dumps(car_overrides(theme, variant), ensure_ascii=False, sort_keys=True, indent=1) + "\n"
+    # «Вождение 3D» (43): телефон в поездке и машина — одна разница.
+    for name, theme in D3_FILES:
+        out[name] = json.dumps(drive3d_overrides(theme), ensure_ascii=False, sort_keys=True, indent=1) + "\n"
     return out
 
 

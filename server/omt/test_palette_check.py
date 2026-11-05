@@ -57,6 +57,29 @@ class PaletteRules(unittest.TestCase):
                 _, failures = palette_check.measure_car(theme, variant)
                 self.assertEqual(failures, [], (theme, variant))
 
+    def test_drive3d_passes_every_rule(self):
+        # 43: разметка на асфальте и на ленте ≥ 3:1 (ночью тоже), лента
+        # отличается оттенком, камеры и пробки видны, ночью без засветки.
+        for theme in ("light", "dark"):
+            _, failures = palette_check.measure_drive3d(theme)
+            self.assertEqual(failures, [], theme)
+
+    def test_drive3d_rules_catch_night_paint_on_the_threshold(self):
+        # Вариант C исследования 42: #c3c9d2 на ленте 47 % — 2,99:1.
+        p = dict(make_style.drive3d_palette("dark"), paint="#a9afb8")
+        _, failures = palette_check.measure_drive3d("dark", p)
+        self.assertIn("3D: разметка на ленте < 3:1", failures)
+
+    def test_drive3d_rules_catch_a_ribbon_lost_in_the_asphalt(self):
+        ribbon = dict(make_style.D3_RIBBON["light"], fill="#7f8ea3")
+        _, failures = palette_check.measure_drive3d("light", ribbon=ribbon)
+        self.assertIn("3D: лента не отличается от асфальта оттенком при дейтеранопии", failures)
+
+    def test_drive3d_rules_catch_a_glaring_night_ribbon(self):
+        ribbon = dict(make_style.D3_RIBBON["dark"], fill="#66a3ff")
+        _, failures = palette_check.measure_drive3d("dark", ribbon=ribbon)
+        self.assertIn("3D: лента ночью слепит", failures)
+
     def test_car_rules_catch_glaring_night_labels(self):
         night = dict(make_style.CAR_PALETTES["A"]["dark"], street_label="#f2f4f7", drive_street_label="#f2f4f7")
         cars = dict(make_style.CAR_PALETTES, A=dict(make_style.CAR_PALETTES["A"], dark=night))
@@ -229,6 +252,18 @@ class AppColoursInSync(unittest.TestCase):
         pill = _swift("RadarMap/Models/StreetPill.swift")
         pairs = re.findall(r'\("([^"]+)", "([^"]+)"\)', pill[pill.index("mapTypes"):pill.index("static func label")])
         self.assertEqual(tuple(pairs), make_style.STREET_TYPES)
+
+    def test_drive3d_ribbon(self):
+        # Лента «Вождения 3D» — те же числа, что Drive3D.ribbon в приложении.
+        source = _swift("RadarMap/Models/Drive3D.swift")
+        for theme, name in (("light", "day"), ("dark", "night")):
+            found = re.search(rf"static let {name} = Ribbon\(fill: 0x([0-9A-F]{{6}}), edge: 0x([0-9A-F]{{6}}), "
+                              rf"edgeOpacity: ([0-9.]+)\)", source)
+            self.assertIsNotNone(found, name)
+            ribbon = make_style.D3_RIBBON[theme]
+            self.assertEqual("#" + found.group(1).lower(), ribbon["fill"], name)
+            self.assertEqual("#" + found.group(2).lower(), ribbon["edge"], name)
+            self.assertAlmostEqual(float(found.group(3)), ribbon["edge_opacity"], msg=name)
 
     def test_calm_markers(self):
         # С 29.C («Монета») спокойные значки описаны в CameraMarkerLook:

@@ -54,6 +54,22 @@ final class PassVerdictTests: XCTestCase {
         }
     }
 
+    /// У границы — десятые (то самое число, что судили), вдали — целое.
+    func testSpeedDigitsNearBoundaries() {
+        XCTAssertEqual(PassVerdict.speedDigits(speedKmh: 61.6, limitKmh: 60), 1, "в лимите, до «на грани» 0,4")
+        XCTAssertEqual(PassVerdict.speedDigits(speedKmh: 64.6, limitKmh: 60), 1, "на грани, до штрафа 0,4")
+        XCTAssertEqual(PassVerdict.speedDigits(speedKmh: 65.4, limitKmh: 60), 1, "превышение, за штрафом 0,4")
+        XCTAssertEqual(PassVerdict.speedDigits(speedKmh: 70, limitKmh: 60), 0)
+        XCTAssertEqual(PassVerdict.speedDigits(speedKmh: 120, limitKmh: nil), 0, "без лимита границ нет")
+        XCTAssertEqual(PassVerdict.of(speedKmh: 64.6, limitKmh: 60), .edge)
+        XCTAssertEqual(PassVerdict.of(speedKmh: 65.4, limitKmh: 60), .over)
+        let ru = Locale(identifier: "ru")
+        XCTAssertEqual(Formatting.decimal(65.4, digits: PassVerdict.speedDigits(speedKmh: 65.4, limitKmh: 60),
+                                          locale: ru), "65,4")
+        XCTAssertEqual(Formatting.decimal(70, digits: PassVerdict.speedDigits(speedKmh: 70, limitKmh: 60),
+                                          locale: ru), "70")
+    }
+
     func testTallyAndWorst() {
         let tally = PassVerdict.tally([pass(55, limit: 60), pass(64, limit: 60),
                                        pass(90, limit: 60), pass(70, limit: nil)])

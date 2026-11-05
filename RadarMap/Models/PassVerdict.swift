@@ -45,6 +45,32 @@ nonisolated enum PassVerdict: Equatable, Sendable {
         limitKmh.map { Int((speedKmh - Double($0)).rounded()) }
     }
 
+    // MARK: - Скорость на экране
+
+    /// Знаков после запятой у скорости проезда: один — когда до границы «на
+    /// грани» (+2) или «превышение» (+5) меньше 1 км/ч, иначе ноль. Вердикт
+    /// судит по точной скорости, как балл и штраф (DrivingScore, FineSchedule),
+    /// а целое «65» при лимите 60 бывало и жёлтым (64,6), и красным (65,4):
+    /// у границы видно число, которое судили.
+    static func speedDigits(speedKmh: Double, limitKmh: Int?) -> Int {
+        guard let limitKmh else { return 0 }
+        let over = speedKmh - Double(limitKmh)
+        return [2.0, FineSchedule.toleranceKmh].contains { abs(over - $0) < 1 } ? 1 : 0
+    }
+
+    /// «65,4» / «70» — скорость проезда по правилу `speedDigits`, запятая по
+    /// языку приложения.
+    static func speedText(speedKmh: Double, limitKmh: Int?) -> String {
+        Formatting.decimal(speedKmh, digits: speedDigits(speedKmh: speedKmh, limitKmh: limitKmh))
+    }
+
+    /// «5,4» — на сколько выше лимита, с теми же знаками; nil — лимит неизвестен.
+    static func excessText(speedKmh: Double, limitKmh: Int?) -> String? {
+        guard let limitKmh else { return nil }
+        return Formatting.decimal(speedKmh - Double(limitKmh),
+                                  digits: speedDigits(speedKmh: speedKmh, limitKmh: limitKmh))
+    }
+
     /// Счёт проездов по состояниям.
     struct Tally: Equatable, Sendable {
         var clean = 0

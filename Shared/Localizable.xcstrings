@@ -37554,6 +37554,70 @@
           }
         }
       }
+    },
+    "%@ км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ km/soat"
+          }
+        }
+      }
+    },
+    "+%@ км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+%@ км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+%@ km/soat"
+          }
+        }
+      }
+    },
+    "превышение на %@ км/ч": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "превышение на %@ км/ч"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ km/soat oshirish"
+          }
+        }
+      }
+    },
+    "+%1$@ км/ч: штрафа обычно нет, но балл снят — ещё +%2$lld км/ч, и это штраф.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+%1$@ км/ч: штрафа обычно нет, но балл снят — ещё +%2$lld км/ч, и это штраф."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+%1$@ km/soat: odatda jarima yoʻq, lekin ball olindi — yana +%2$lld km/soat va bu jarima."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

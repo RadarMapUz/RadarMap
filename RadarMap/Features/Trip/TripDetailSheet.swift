@@ -80,7 +80,10 @@ struct PassRow: View {
                     if let symbol = PassStyle.symbol(speed: pass.speedKmh, limit: pass.limitKmh) {
                         Image(systemName: symbol).font(.rounded(12, .bold))
                     }
-                    Text("\(Int(pass.speedKmh.rounded())) км/ч")
+                    // Десятые у границы (PassVerdict.speedText): «65» бывало и
+                    // жёлтым, и красным.
+                    Text(String(format: String(localized: "%@ км/ч"),
+                                PassVerdict.speedText(speedKmh: pass.speedKmh, limitKmh: pass.limitKmh)))
                         .font(.rounded(15, .bold))
                 }
                 .foregroundStyle(PassStyle.color(speed: pass.speedKmh, limit: pass.limitKmh))

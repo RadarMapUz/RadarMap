@@ -66,17 +66,6 @@ struct PassDetailView: View {
     /// о нарушении мы не вправе.
     private var overKmh: Double? { pass.overLimitKmh }
 
-    /// Скорость, как её ВИДИТ человек. Одно округление на весь экран: раньше
-    /// скорость печаталась усечением (66,6 → 66), а превышение округлением
-    /// (6,6 → 7), и карточка сообщала «66 км/ч» и «превышение на 7 км/ч» при
-    /// лимите 60. Арифметика на экране обязана сходиться сама с собой.
-    private var shownSpeedKmh: Int { Int(pass.speedKmh.rounded()) }
-
-    /// Превышение от ПОКАЗАННОЙ скорости — не от сырой.
-    private var shownOverKmh: Int? {
-        pass.limitKmh.map { shownSpeedKmh - $0 }
-    }
-
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -259,7 +248,9 @@ struct PassDetailView: View {
                     // Герой карточки: ради этого числа экран и открывают.
                     // Цвет состояния — у самой цифры; цветное свечение вокруг
                     // убрано вместе с остальными «ореолами» (31D).
-                    Text("\(shownSpeedKmh) км/ч")
+                    // Десятые у границы вердикта (PassVerdict.speedText).
+                    Text(String(format: String(localized: "%@ км/ч"),
+                                PassVerdict.speedText(speedKmh: pass.speedKmh, limitKmh: pass.limitKmh)))
                         .font(.numeral(30, .heavy).monospacedDigit())
                         .foregroundStyle(honestyColor)
                         .contentTransition(.numericText())
@@ -276,8 +267,9 @@ struct PassDetailView: View {
             .statePanel(honestyColor)
 
             // «На грани» словами: штрафа нет, а балл снят — и сколько до штрафа.
-            if pass.verdict == .edge, let over = shownOverKmh {
-                Text(edgeExplanation(over: over))
+            if pass.verdict == .edge, let over = overKmh,
+               let shown = PassVerdict.excessText(speedKmh: pass.speedKmh, limitKmh: pass.limitKmh) {
+                Text(edgeExplanation(over: over, shown: shown))
                     .font(.rounded(13, .medium))
                     .foregroundStyle(Theme.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -300,10 +292,11 @@ struct PassDetailView: View {
     }
 
     /// «+5 км/ч: штрафа обычно нет, но балл снят — ещё +1 км/ч, и это штраф.»
-    private func edgeExplanation(over: Int) -> String {
-        let toFine = max(1, Int(FineSchedule.toleranceKmh) + 1 - over)
-        return String(format: String(localized: "+%1$lld км/ч: штрафа обычно нет, но балл снят — ещё +%2$lld км/ч, и это штраф."),
-                      over, toFine)
+    /// `over` — точное превышение (по нему судят), `shown` — оно же на экране.
+    private func edgeExplanation(over: Double, shown: String) -> String {
+        let toFine = max(1, Int(FineSchedule.toleranceKmh - over) + 1)
+        return String(format: String(localized: "+%1$@ км/ч: штрафа обычно нет, но балл снят — ещё +%2$lld км/ч, и это штраф."),
+                      shown, toFine)
     }
 
     @ViewBuilder private var statusChip: some View {
@@ -322,8 +315,8 @@ struct PassDetailView: View {
             // красная панель; слово «превышение» рядом с крупной скоростью
             // ломалось посередине — «превы / шение».
             Group {
-                if let over = shownOverKmh, over > 0 {
-                    Label(String(format: String(localized: "+%lld км/ч"), over),
+                if let shown = PassVerdict.excessText(speedKmh: pass.speedKmh, limitKmh: pass.limitKmh) {
+                    Label(String(format: String(localized: "+%@ км/ч"), shown),
                           systemImage: "exclamationmark.triangle.fill")
                 } else {
                     Label("превышение", systemImage: "exclamationmark.triangle.fill")
@@ -333,8 +326,9 @@ struct PassDetailView: View {
             .foregroundStyle(Theme.danger)
             .lineLimit(1)
             .fixedSize()
-            .accessibilityLabel(Text(String(format: String(localized: "превышение на %lld км/ч"),
-                                            shownOverKmh ?? 0)))
+            .accessibilityLabel(Text(String(format: String(localized: "превышение на %@ км/ч"),
+                                            PassVerdict.excessText(speedKmh: pass.speedKmh,
+                                                                   limitKmh: pass.limitKmh) ?? "0")))
             .padding(.horizontal, 10).padding(.vertical, 6)
             .background(Theme.quietFill,
                         in: RoundedRectangle(cornerRadius: 10, style: .continuous))

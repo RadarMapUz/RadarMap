@@ -242,7 +242,7 @@ struct PeriodMapSheet: View {
     /// «макс 82 · лимит 60» — суть проезда одним взглядом.
     private func speedBadge(_ marker: PassMarker) -> some View {
         HStack(spacing: 5) {
-            Text("\(Int(marker.maxSpeedKmh.rounded()))")
+            Text(verbatim: PassVerdict.speedText(speedKmh: marker.maxSpeedKmh, limitKmh: marker.limitKmh))
                 .font(.rounded(17, .heavy).monospacedDigit())
                 .foregroundStyle(marker.limitUnknown ? Theme.textPrimary : Self.tint(marker))
             if let limit = marker.limitKmh {

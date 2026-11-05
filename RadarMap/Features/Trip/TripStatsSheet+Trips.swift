@@ -2,7 +2,7 @@
 //  TripStatsSheet+Trips.swift
 //  RadarMap
 //
-//  Итоги: список поездок периода и предложение склеить.
+//  Итоги: предложение склеить две поездки (список — TripStatsSheet+Pages).
 //
 
 import SwiftUI
@@ -11,59 +11,6 @@ import MapKit
 import CoreLocation
 
 extension TripStatsSheet {
-
-    // MARK: - Список поездок периода
-
-    /// Первые statsTripsPreview строк + «Показать все поездки (N)»: неделя
-    /// активной езды — это 20+ записей, и без обрезки блок «За всё время»
-    /// приходилось искать археологией.
-    /// `all` — из того же экрана, что герой: второе чтение `current` в кадр
-    /// смены периода собирало бы весь экран второй раз (ревью 19.10).
-    func tripsSection(all: [TripRecord], proxy: ScrollViewProxy) -> some View {
-        let shown = tripsExpanded ? all : Array(all.prefix(AppConfig.statsTripsPreview))
-        return VStack(spacing: 10) {
-            if let pair = mergeSuggestion {
-                mergeSuggestionCard(pair)
-            }
-            TripHistorySection(
-                title: "",
-                records: shown,
-                selectedID: mapSelection?.id,
-                onShowOnMap: { showOnMap($0, proxy: proxy) },
-                onOpenDetail: { path.append(.trip($0.id)) },
-                onRepeat: onRoute.map { route in
-                    { coord, name in dismiss(); route(coord, name) }
-                },
-                onDelete: { record in
-                    withMotion {
-                        if mapSelection?.id == record.id { clearMapSelection() }
-                        env.trip.deleteRecord(id: record.id)
-                    }
-                },
-                canMerge: { env.trip.canMergeWithPrevious(id: $0.id) },
-                onMerge: { merge(next: $0) })
-            if !tripsExpanded, all.count > AppConfig.statsTripsPreview {
-                Button {
-                    withMotion(Motion.standard) { tripsExpanded = true }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(String(format: String(localized: "Показать все поездки (%lld)"),
-                                    all.count))
-                            .font(.rounded(15, .semibold))
-                        Image(systemName: "chevron.down")
-                            .font(.rounded(10, .bold))
-                    }
-                    .foregroundStyle(Theme.accent)
-                    .frame(maxWidth: .infinity)
-                    // Голая строка-ссылка: капсула на всю ширину выглядела ещё
-                    // одной карточкой в и без того плотном столбце.
-                    .padding(.vertical, 10)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(PressableStyle())
-            }
-        }
-    }
 
     // MARK: - Предложение склейки
 

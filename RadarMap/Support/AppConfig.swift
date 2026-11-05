@@ -1562,6 +1562,9 @@ nonisolated enum AppConfig {
     /// Три — столько водитель держит в голове «я нажал»; дольше — плитки
     /// закрывают низ карты, а точка касания уезжает назад.
     nonisolated static let reportChooseSeconds: TimeInterval = 3
+    /// Выбор типа, переживший оповещение о камере, возвращается с остатком
+    /// срока, но не меньше этого: «✕» за полсекунды не нажать (этап 45).
+    nonisolated static let reportChooseResumeSeconds: TimeInterval = 1.5
     /// Окно «Отменить» после отправки (спецификация владельца).
     nonisolated static let reportUndoSeconds: TimeInterval = 8
     /// Сетка «Пост ДПС / ДТП» в машине до iOS 27: без выбора столько —

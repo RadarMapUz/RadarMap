@@ -34946,6 +34946,150 @@
           }
         }
       }
+    },
+    "Камера — без превышения": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камера — без превышения"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamerada tezlik oshirilmadi"
+          }
+        }
+      }
+    },
+    "Все %lld камер — без превышения": {
+      "localizations": {
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Все %lld камера — без превышения"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Все %lld камеры — без превышения"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Все %lld камер — без превышения"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Все %lld камеры — без превышения"
+                }
+              }
+            }
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ta kameraning barchasida tezlik oshirilmadi"
+          }
+        }
+      }
+    },
+    "Камеры без превышения: %1$lld из %2$lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камеры без превышения: %1$lld из %2$lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tezlik oshirilmagan kameralar: %2$lld tadan %1$lld"
+          }
+        }
+      }
+    },
+    "Вашу отметку подтвердили %lld водителей": {
+      "localizations": {
+        "ru": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вашу отметку подтвердил %lld водитель"
+                }
+              },
+              "few": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вашу отметку подтвердили %lld водителя"
+                }
+              },
+              "many": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вашу отметку подтвердили %lld водителей"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Вашу отметку подтвердили %lld водителя"
+                }
+              }
+            }
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belgingizni %lld haydovchi tasdiqladi"
+          }
+        }
+      }
+    },
+    "%@ — скажу, когда подтвердят": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — скажу, когда подтвердят"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — tasdiqlashsa, aytaman"
+          }
+        }
+      }
+    },
+    "С прошлой поездки — новых подтверждений ваших отметок: %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "С прошлой поездки — новых подтверждений ваших отметок: %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻtgan safardan beri belgilaringizga yangi tasdiqlar: %lld"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

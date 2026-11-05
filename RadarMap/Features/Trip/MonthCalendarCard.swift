@@ -7,7 +7,8 @@
 //  Столбики километров отвечают «сколько», но не отвечают «когда всё было
 //  хорошо»: зелёная решётка с двумя красными клетками рассказывает месяц
 //  быстрее любого графика. Цвет — про поведение, не про километры: зелёный —
-//  ездил чисто, красный — было штрафуемое превышение, пустая — не ездил.
+//  в лимите, жёлтый — на грани (штрафа нет, балл снят), красный — было
+//  штрафуемое превышение, пустая — не ездил. Три состояния — PassVerdict.
 //
 //  Данные — дневные агрегаты (TripDay): они хранятся вечно, поэтому календарь
 //  честен и для месяцев, чьи полные записи давно вычищены. Раскладка —
@@ -63,15 +64,18 @@ struct MonthCalendarCard: View {
         return result
     }
 
-    /// «Пн Вт Ср…» в порядке календаря пользователя.
+    /// «Пн Вт Ср…» в порядке календаря пользователя и на языке приложения
+    /// (NumberFormat.locale), как у цели недели, — не на языке телефона.
     private var weekdayHeader: some View {
-        let symbols = calendar.veryShortWeekdaySymbols
+        var localized = calendar
+        localized.locale = NumberFormat.locale
+        let symbols = localized.veryShortStandaloneWeekdaySymbols
         let ordered = (0..<7).map { symbols[($0 + calendar.firstWeekday - 1) % 7] }
         // Без spacing — как у клеток: колонки обязаны совпасть по центрам.
         return HStack(spacing: 0) {
             ForEach(Array(ordered.enumerated()), id: \.offset) { _, symbol in
                 Text(symbol)
-                    .font(.rounded(10, .semibold))
+                    .font(.rounded(12, .semibold))
                     .foregroundStyle(Theme.textTertiary)
                     .frame(maxWidth: .infinity)
             }
@@ -97,9 +101,9 @@ struct MonthCalendarCard: View {
                         // День с превышением помечен ещё и точкой: цвет один
                         // при дальтонизме и на солнце в держателе неотличим,
                         // а разница между «чисто» и «штраф» — весь смысл сетки.
-                        if state.hasOverspeed {
+                        if state.verdict == .over {
                             Circle()
-                                .fill(Theme.danger)
+                                .fill(PassVerdict.over.tint)
                                 .frame(width: 4, height: 4)
                                 .padding(.bottom, 3)
                         }
@@ -118,7 +122,7 @@ struct MonthCalendarCard: View {
             .buttonStyle(PressableStyle(.choice))
             .accessibilityLabel(Text(Formatting.date(day, Date.FormatStyle(date: .abbreviated, time: .omitted))))
             .accessibilityValue(state.hasTrips
-                ? (state.hasOverspeed ? Text("превышения") : Text("чисто"))
+                ? Text(state.verdict?.word ?? String(localized: "без камер"))
                 : Text("без поездок"))
         } else {
             // День соседнего месяца — пустое место, не клетка.
@@ -127,15 +131,18 @@ struct MonthCalendarCard: View {
         }
     }
 
-    /// Три состояния клетки. Красное — только штрафуемое превышение: клетка
-    /// не имеет права быть строже, чем деньги и рейтинг.
+    /// Состояние клетки. Красное — только штрафуемое превышение: клетка не
+    /// имеет права быть строже, чем деньги; жёлтое — балл снят без штрафа.
     private struct CellState {
         let hasTrips: Bool
-        let hasOverspeed: Bool
+        let verdict: PassVerdict?
 
         init(_ day: TripDay?) {
             hasTrips = (day?.trips ?? 0) > 0
-            hasOverspeed = (day?.overPasses ?? 0) > 0
+            verdict = day.flatMap {
+                PassVerdict.day(clean: $0.cleanPasses - ($0.edgePasses ?? 0), edge: $0.edgePasses ?? 0,
+                                over: $0.overPasses)
+            }
         }
 
         var fill: Color {
@@ -146,27 +153,26 @@ struct MonthCalendarCard: View {
 
         var text: Color {
             guard hasTrips else { return Theme.textTertiary }
-            return hasOverspeed ? Theme.danger : Theme.success
+            // Поездки без камер с лимитом — нейтрально: «в лимите» не о чем.
+            return verdict?.tint ?? Theme.textPrimary
         }
     }
 
     private var legend: some View {
-        HStack(spacing: 14) {
-            legendItem(Theme.success, String(localized: "чисто"))
-            legendItem(Theme.danger, String(localized: "с превышением"))
-            Spacer(minLength: 0)
-            Text("тап — день подробно")
-                .font(.rounded(10))
-                .foregroundStyle(Theme.textTertiary)
-        }
-    }
-
-    private func legendItem(_ color: Color, _ title: String) -> some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(color)
-                .frame(width: 8, height: 8)
-            Text(title).font(.rounded(10)).foregroundStyle(Theme.textTertiary)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 14) {
+                ItogiVerdictLegend()
+                Text("тап — день подробно")
+                    .font(.rounded(12))
+                    .foregroundStyle(Theme.textTertiary)
+                    .fixedSize()
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                ItogiVerdictLegend()
+                Text("тап — день подробно")
+                    .font(.rounded(12))
+                    .foregroundStyle(Theme.textTertiary)
+            }
         }
     }
 }

@@ -63,11 +63,12 @@ final class TripVerdictTests: XCTestCase {
     }
 
     /// Граница вердикта — ступень штрафа: допуск камеры (+5 км/ч) ещё не
-    /// штрафуемое превышение, как во всех сводках. Балл снимает и здесь —
-    /// поэтому на экранах «штрафуемых превышений нет», а не «превышений нет».
-    func testWithinToleranceIsClean() {
+    /// штрафуемое превышение, как во всех сводках. Но балл он снимает — и с
+    /// 05.11 это не «чисто», а «на грани» (PassVerdict): «Все камеры — без
+    /// превышения» рядом с баллом 92 водитель не мог объяснить.
+    func testWithinToleranceIsEdge() {
         let edge = 60 + FineSchedule.toleranceKmh
-        XCTAssertEqual(record([pass(1, speed: edge, limit: 60)]).verdict, .clean)
+        XCTAssertEqual(record([pass(1, speed: edge, limit: 60)]).verdict, .edge(1))
         XCTAssertEqual(record([pass(1, speed: edge + 1, limit: 60, assumed: true)]).verdict,
                        .overspeed(1))
     }

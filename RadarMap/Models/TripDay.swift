@@ -32,6 +32,10 @@ nonisolated struct TripDay: Codable, Identifiable, Equatable {
     var cameraPasses = 0
     var cleanPasses = 0
     var overPasses = 0
+    /// Из `cleanPasses` — «на грани» (PassVerdict.edge): штрафа нет, балл
+    /// снят. Опционал — ради файлов дней на дисках; nil — день до 05.11,
+    /// когда третьего состояния не считали (читается как ноль).
+    var edgePasses: Int? = nil
     var fineRisk: Double = 0
     /// Пришедшие штрафы дня. Опционал не от неуверенности, а ради Codable:
     /// синтезированный декодер требует все ключи, а файлы дней уже на дисках.
@@ -69,6 +73,12 @@ nonisolated enum TripDayBook {
         let key = fixedKey ?? calendar.startOfDay(for: record.startedAt)
         var result = days
         var day = result.first { $0.day == key } ?? TripDay(day: key)
+        // «На грани» считаем только в строке, где он посчитан с начала: в
+        // строке дня до 05.11 он остаётся nil, пока его не допишет
+        // `backfillingEdge` по всем записям дня, — иначе в nil-строку легла
+        // бы одна новая поездка, а старые того же дня — нет.
+        let countsEdge = day.trips == 0 || day.edgePasses != nil
+        if countsEdge, day.edgePasses == nil { day.edgePasses = 0 }
 
         day.trips += 1
         day.distanceMeters += record.distanceMeters
@@ -108,6 +118,7 @@ nonisolated enum TripDayBook {
                 day.overByHour[calendar.component(.hour, from: pass.date)] += 1
             } else {
                 day.cleanPasses += 1
+                if countsEdge, pass.verdict == .edge { day.edgePasses = (day.edgePasses ?? 0) + 1 }
             }
         }
 
@@ -161,6 +172,7 @@ nonisolated enum TripDayBook {
                 day.overByHour[hour] = max(0, day.overByHour[hour] - 1)
             } else {
                 day.cleanPasses = max(0, day.cleanPasses - 1)
+                if pass.verdict == .edge, let had = day.edgePasses { day.edgePasses = max(0, had - 1) }
             }
         }
 
@@ -199,6 +211,28 @@ nonisolated enum TripDayBook {
         for old in olds { result = unfolded(old, from: result, calendar: calendar) }
         for new in news { result = folded(new, into: result, calendar: calendar, key: key) }
         return result
+    }
+
+    /// «На грани» для строк, посчитанных до 05.11 (`edgePasses == nil`):
+    /// дописываем там, где все поездки дня ещё лежат в истории. Строка, чьи
+    /// записи вычищены, остаётся nil — выдумывать ей поведение не из чего.
+    /// Только недостающее поле, остальное не трогаем (правило 17).
+    static func backfillingEdge(_ days: [TripDay], history: [TripRecord],
+                                calendar: Calendar = .current) -> [TripDay] {
+        guard days.contains(where: { $0.edgePasses == nil }) else { return days }
+        var trips: [Date: Int] = [:]
+        var edges: [Date: Int] = [:]
+        for record in history {
+            guard let key = rowKey(for: record, in: days, calendar: calendar) else { continue }
+            trips[key, default: 0] += 1
+            edges[key, default: 0] += record.cameraTally.edge
+        }
+        return days.map { day in
+            guard day.edgePasses == nil, let count = trips[day.day], count == day.trips else { return day }
+            var filled = day
+            filled.edgePasses = edges[day.day] ?? 0
+            return filled
+        }
     }
 
     static func rebuilt(from history: [TripRecord],
@@ -250,6 +284,7 @@ nonisolated enum TripDayBook {
             result.cameras += day.cameraPasses
             result.cleanPasses += day.cleanPasses
             result.overPasses += day.overPasses
+            result.edgePasses += day.edgePasses ?? 0
             result.fineRisk += day.fineRisk
             result.finesPaid += day.finePaid ?? 0
             result.maxSpeedKmh = max(result.maxSpeedKmh, day.maxSpeedKmh)

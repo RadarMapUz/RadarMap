@@ -796,13 +796,19 @@ struct TripShareCard: View {
             let place = TripHistorySection.worstRiskPlace(record)
             chip(icon: "exclamationmark.triangle.fill",
                  text: place.map {
-                     String(format: String(localized: "Риск ≈ %1$@ · %2$@"), Formatting.money(risk), $0)
-                 } ?? String(format: String(localized: "Риск ≈ %@"), Formatting.money(risk)),
+                     String(format: String(localized: "Может прийти ≈ %1$@ · %2$@"), Formatting.money(risk), $0)
+                 } ?? String(format: String(localized: "Может прийти ≈ %@"), Formatting.money(risk)),
                  tint: Theme.danger)
         case .overspeed(let count):
             chip(icon: "exclamationmark.triangle.fill",
                  text: String(format: String(localized: "Штрафуемых превышений: %lld"), count),
                  tint: Theme.danger)
+        case .edge(let count):
+            // «На грани» (PassVerdict): штрафа нет, балл снят — жёлтым, а не
+            // зелёной печатью «без превышений».
+            chip(icon: Theme.symbol(.attention) ?? "exclamationmark.circle.fill",
+                 text: String(format: String(localized: "На грани у камер: %lld"), count),
+                 tint: Theme.warning)
         case .clean:
             // Не «Все камеры в лимите»: у части камер лимит мог быть неизвестен,
             // а балл снимает и ниже ступени штрафа.

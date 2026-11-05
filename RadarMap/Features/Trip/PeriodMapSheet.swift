@@ -178,10 +178,8 @@ struct PeriodMapSheet: View {
 
     /// Красный — превышение, зелёный — в лимите, серый — лимит неизвестен:
     /// зелёным такую точку красить нельзя, «в лимите» мы о ней не знаем.
-    static func tint(_ marker: PassMarker) -> Color {
-        if marker.hasViolation { return Theme.danger }
-        return marker.limitUnknown ? Theme.textTertiary : Theme.success
-    }
+    /// Три состояния (PassVerdict) — то же слово и цвет, что в строках проездов.
+    static func tint(_ marker: PassMarker) -> Color { marker.verdict.tint }
 
     /// Карточка выбранной камеры: место, проезды, макс скорость против лимита.
     private func markerCard(_ marker: PassMarker) -> some View {

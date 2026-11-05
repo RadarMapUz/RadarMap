@@ -43,6 +43,10 @@ struct MapPicture {
         /// Короткая подпись внутри точки (скорость проезда).
         var label: String? = nil
         var labelColor: Color = .white
+        /// SF Symbol внутри точки (цветом `labelColor`) — вместо юникод-значка
+        /// вроде «✓»: тот рисовался шрифтом и выглядел чужим рядом с глифами
+        /// приложения.
+        var symbol: String? = nil
     }
 
     var lines: [Line] = []
@@ -161,7 +165,14 @@ enum MapPictureRenderer {
                     circle.lineWidth = dot.ringWidth
                     circle.stroke()
                 }
-                if let label = dot.label {
+                if let symbol = dot.symbol,
+                   let image = UIImage(systemName: symbol,
+                                       withConfiguration: UIImage.SymbolConfiguration(pointSize: dot.diameter * 0.46,
+                                                                                      weight: .heavy))?
+                    .withTintColor(ui(dot.labelColor), renderingMode: .alwaysOriginal) {
+                    let box = image.size
+                    image.draw(at: CGPoint(x: center.x - box.width / 2, y: center.y - box.height / 2))
+                } else if let label = dot.label {
                     let font = UIFont.systemFont(ofSize: dot.diameter * 0.42, weight: .heavy)
                     let rounded = font.fontDescriptor.withDesign(.rounded)
                         .map { UIFont(descriptor: $0, size: font.pointSize) } ?? font

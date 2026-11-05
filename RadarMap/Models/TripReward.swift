@@ -25,6 +25,9 @@ nonisolated enum TripReward {
         /// «Все 8 камер — без превышения» (clean == total) или «7 из 8 камер —
         /// без превышения» (лишнее, но не штрафуемое).
         case camerasClean(clean: Int, total: Int)
+        /// Штрафа нет, но балл снят у `edge` камер (PassVerdict): «Камеры: в
+        /// лимите 5 · на грани 1». Не похвала — факт, за что снят балл.
+        case camerasEdge(clean: Int, edge: Int)
         /// Штрафуемое превышение с суммой риска — факт, без похвалы.
         case risk(Double)
         /// Штрафуемые превышения без достоверной суммы — факт, без похвалы.
@@ -40,14 +43,14 @@ nonisolated enum TripReward {
         var isPraise: Bool {
             switch self {
             case .camerasClean, .reportConfirmed, .earlierConfirmed: return true
-            case .risk, .overspeed, .reportAwaiting:                 return false
+            case .risk, .overspeed, .camerasEdge, .reportAwaiting:   return false
             }
         }
 
         /// Строка о вождении (первая), а не о сообществе.
         var isDriving: Bool {
             switch self {
-            case .camerasClean, .risk, .overspeed: return true
+            case .camerasClean, .camerasEdge, .risk, .overspeed: return true
             default:                               return false
             }
         }
@@ -98,6 +101,9 @@ nonisolated enum TripReward {
         switch verdict {
         case .risk(let amount):     return .risk(amount)
         case .overspeed(let count): return .overspeed(count)
+        case .edge:
+            let tally = PassVerdict.tally(passes.map { PassVerdict.of(speedKmh: $0.speedKmh, limitKmh: $0.limitKmh) })
+            return .camerasEdge(clean: tally.clean, edge: tally.edge)
         case .unknownLimits, .noCameras: return nil
         case .clean:
             let limited = passes.compactMap { pass in pass.limitKmh.map { (pass.speedKmh, Double($0)) } }

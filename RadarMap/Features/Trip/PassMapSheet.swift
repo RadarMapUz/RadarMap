@@ -190,12 +190,13 @@ struct PassDetailView: View {
     /// баг, а не оформление.
     private var fullMapMarker: PassMarker? {
         guard let coordinate = pass.coordinate else { return nil }
-        let over = overKmh.map { FineSchedule.fine(overKmh: $0) > 0 } ?? false
+        let verdict = pass.verdict
         return PassMarker(cameraID: pass.cameraID, lat: coordinate.latitude,
                           lon: coordinate.longitude,
                           location: pass.location.isEmpty ? pass.kind.displayName : pass.location,
-                          times: 1, overTimes: over ? 1 : 0,
-                          maxSpeedKmh: pass.speedKmh, limitKmh: pass.limitKmh)
+                          times: 1, overTimes: verdict == .over ? 1 : 0,
+                          maxSpeedKmh: pass.speedKmh, limitKmh: pass.limitKmh,
+                          edgeTimes: verdict == .edge ? 1 : 0)
     }
 
     private var fullMapData: PeriodMapData {

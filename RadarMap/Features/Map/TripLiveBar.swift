@@ -46,7 +46,7 @@ struct TripLiveBar: View {
             // Вопрос на ходу — вместо содержимого панели, а не новым слоем над
             // ней: «Стоп» на это время убран (промах по нему невозможен),
             // «Отметить» — на своём месте у края, прибытие — в углу.
-            if let shown = map.roadPrompt,
+            if let shown = map.roadPrompt, Self.morphs(shown.kind),
                let model = RoadPromptContent.model(for: shown, env: env, map: map, voiceOver: voiceOver,
                                                    onLateShare: onLateShare) {
                 RoadPromptCard(model: model, eta: promptETA) { ReportButton() }
@@ -66,6 +66,10 @@ struct TripLiveBar: View {
         .overlay(shape.stroke(Theme.stroke, lineWidth: 1))
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
+
+    /// Становится ли панель этим вопросом. «Карта по пути» — нет: срока у неё
+    /// нет, и «Стоп» не должен прятаться, пока не ответят или не тронутся.
+    static func morphs(_ kind: RoadPromptPolicy.Kind) -> Bool { kind != .corridor }
 
     /// Прибытие в углу вопроса: по маршруту или по своим прошлым поездкам.
     private var promptETA: String? {

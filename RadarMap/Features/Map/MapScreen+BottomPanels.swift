@@ -83,9 +83,7 @@ extension MapScreen {
                 // Вопрос на ходу вне поездки (покой, выбор маршрута) — на месте
                 // прежних плашек. В поездке им становится сама панель поездки
                 // (вариант B, этап 45); кого показать — RoadPromptDriver.
-                if !promptsInTripBar {
-                    RoadPromptStandalone(map: map, onLateShare: shareLate)
-                }
+                RoadPromptStandalone(map: map, tripBarShown: promptsInTripBar, onLateShare: shareLate)
                 // Итог поездки — сразу после стопа, в момент, когда цифры
                 // интереснее всего (см. maybeShowTripEnd про условия показа).
                 if let record = tripEndRecord {
@@ -230,7 +228,7 @@ extension MapScreen {
         // Очередь вопросов на ходу: одна на семь плашек (RoadPromptPolicy).
         // Фоном — пер-тиковые чтения в своей маленькой вью (правило 13).
         .background {
-            RoadPromptDriver(map: map, embedded: promptsInTripBar,
+            RoadPromptDriver(map: map, dismissedApproachID: dismissedApproachID,
                              blocked: map.isAddingCamera
                                 || (!promptsInTripBar && (map.pressedPoint != nil || reportPoint != nil)),
                              yieldsCorridor: tripEndRecord != nil || arrivalShown,

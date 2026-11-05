@@ -35138,6 +35138,22 @@
           }
         }
       }
+    },
+    "отметка уходит — ничего нажимать не нужно": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "отметка уходит — ничего нажимать не нужно"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "belgi yuborilmoqda — hech narsa bosish shart emas"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -47,23 +47,28 @@ enum RoadPromptSources {
 
     /// Ждущие вопросы с остатком их срока и отметкой «был вытеснен».
     ///
-    /// - `embedded`: вопрос встанет в панель поездки — «карте по пути» не
-    ///   нужно искать себе место над ней.
     /// - `yieldsCorridor`: внизу карточка итога или прибытия — мегабайты
     ///   подождут (5.9: больше двух карточек внизу не бывает).
     static func candidates(env: AppEnvironment, map: MapState, now: Date, voiceOver: Bool,
-                           speedKmh: Double, embedded: Bool, yieldsCorridor: Bool,
+                           speedKmh: Double, yieldsCorridor: Bool,
                            freesActionBar: Bool) -> [Candidate] {
         var result: [Candidate] = []
         func clock(_ id: String) -> RoadPromptClock { map.promptClocks[id] ?? RoadPromptClock() }
         func preempted(_ id: String) -> Bool { clock(id).preempted }
 
-        // Своё касание: выбор типа, затем «Отменить» — один номер черновика.
+        // Своё касание: выбор типа и «отправляю…» — один вопрос (панель не
+        // мигает строкой поездки, пока отметка летит), «Отменить» — свой: он
+        // возвращается после камеры, пока окно отмены открыто.
+        let serial = env.reports.draft.serial
         switch env.reports.draft.phase {
-        case .choosing, .sent:
-            let id = "own-\(env.reports.draft.serial)"
+        case .choosing, .sending:
+            let id = "own-\(serial)"
             result.append(Candidate(kind: .ownTouch, id: id, preempted: preempted(id)))
-        case .idle, .sending:
+        case .sent(let sent):
+            let id = "own-\(serial)-sent"
+            result.append(Candidate(kind: .ownTouch, id: id, remaining: sent.undoUntil.timeIntervalSince(now),
+                                    preempted: preempted(id)))
+        case .idle:
             break
         }
 
@@ -111,7 +116,9 @@ enum RoadPromptSources {
                 answered: false,
                 questionShown: yieldsCorridor)
             let id = "corridor-\(pending.key)"
-            let fits = embedded || CorridorOfferPlacement.fits(
+            // Карточкой над панелью поездки, а не вместо неё: срока у вопроса
+            // нет, и «Стоп» не должен прятаться, пока не ответят.
+            let fits = CorridorOfferPlacement.fits(
                 room: map.columnRoom, cardHeight: map.corridorCardHeight,
                 shown: map.roadPrompt?.id == id,
                 freed: freesActionBar ? map.actionBarHeight : 0)
@@ -150,7 +157,9 @@ struct RoadPromptDriver: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     let map: MapState
-    var embedded: Bool
+    /// Оповещение о камере, скрытое кнопкой «Скрыть» (MapScreen.dismissedApproachID):
+    /// оно экран больше не занимает.
+    var dismissedApproachID: Int?
     /// Экран занят своим действием водителя (прицел камеры, точка на карте) —
     /// как под камерой: вопрос ждёт, отсчёт стоит.
     var blocked: Bool
@@ -179,10 +188,13 @@ struct RoadPromptDriver: View {
         let now = Date()
         let speed = env.location.speedKmh
         let candidates = RoadPromptSources.candidates(
-            env: env, map: map, now: now, voiceOver: voiceOver, speedKmh: speed, embedded: embedded,
+            env: env, map: map, now: now, voiceOver: voiceOver, speedKmh: speed,
             yieldsCorridor: yieldsCorridor, freesActionBar: freesActionBar)
         let outcome = RoadPromptPolicy.decide(
-            candidates, covered: env.location.isApproachingCamera || blocked,
+            candidates,
+            covered: RoadPromptPolicy.cameraCovers(approaching: env.location.isApproachingCamera,
+                                                   cameraID: env.location.nearestCamera?.id,
+                                                   dismissedID: dismissedApproachID) || blocked,
             standing: speed < AppConfig.commuteLatePromptMaxKmh)
         let kinds = Dictionary(candidates.map { ($0.id, $0.kind) }, uniquingKeysWith: { a, _ in a })
         let decision = Decision(
@@ -270,11 +282,11 @@ struct RoadPromptDriver: View {
         withMotion { env.mobile.answerPassQuestion(stillThere: value, for: number) }
     }
 
-    /// Срок экрана у вопроса о проезде и «опаздываю»: истёк — снять молча.
+    /// Срок экрана у вопроса о проезде и «опаздываю», а у объезда — срок
+    /// RouteService: стоя в пробке фиксов нет, и без этого карточка стояла бы
+    /// с «0 сек» до следующего фикса. Истёк — снять молча.
     private func runTimeout() async {
-        guard let shown = map.roadPrompt,
-              let total = RoadPromptSources.ownTotal(shown.kind, voiceOver: voiceOver),
-              let deadline = map.promptClocks[shown.id]?.deadline(total: total) else { return }
+        guard let shown = map.roadPrompt, let deadline = deadline(of: shown) else { return }
         do {
             try await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow)))
         } catch {
@@ -284,6 +296,14 @@ struct RoadPromptDriver: View {
         }
         guard map.roadPrompt == shown else { return }
         expire(Ref(kind: shown.kind, id: shown.id))
+    }
+
+    private func deadline(of shown: RoadPromptShown) -> Date? {
+        if shown.kind == .detour {
+            return env.route.detourOffer?.shownAt?.addingTimeInterval(AppConfig.detourOfferSeconds)
+        }
+        guard let total = RoadPromptSources.ownTotal(shown.kind, voiceOver: voiceOver) else { return nil }
+        return map.promptClocks[shown.id]?.deadline(total: total)
     }
 }
 
@@ -414,7 +434,14 @@ enum RoadPromptContent {
                 ] : [],
                 bounces: true,
                 timer: .init(deadline: sent.undoUntil, total: AppConfig.reportUndoSeconds, ownTouch: true))
-        case .idle, .sending:
+        case .sending(_, let kind):
+            // Отметка летит: та же карточка, без кнопок — панель не мигает
+            // строкой поездки со «Стопом».
+            return RoadPromptModel(
+                glyph: .filled(Icon.reportRadar, fill: Theme.action, ink: Theme.onAction),
+                question: ReportWords.sending(kind),
+                silence: String(localized: "отметка уходит — ничего нажимать не нужно"))
+        case .idle:
             return nil
         }
     }
@@ -515,11 +542,14 @@ struct RoadPromptStandalone: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     let map: MapState
+    /// Панель поездки на экране: в неё встают все вопросы, кроме «карты по
+    /// пути» — та карточкой над панелью (TripLiveBar.morphs).
+    var tripBarShown = false
     let onLateShare: (String) -> Void
 
     var body: some View {
         Group {
-            if let shown = map.roadPrompt,
+            if let shown = map.roadPrompt, !tripBarShown || !TripLiveBar.morphs(shown.kind),
                let model = RoadPromptContent.model(for: shown, env: env, map: map, voiceOver: voiceOver,
                                                    onLateShare: onLateShare) {
                 RoadPromptPanel { RoadPromptCard(model: model) }

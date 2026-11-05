@@ -160,6 +160,43 @@ nonisolated enum ItogiRating {
         return tips.sorted { $0.gain > $1.gain }.prefix(maxCount).map(\.tip)
     }
 
+    /// Поездка окна, где резкая езда сняла больше всего: остаток недобора
+    /// балла сверх камер (с потолком), как в RatingBreakdown.sources. nil —
+    /// резкой езды не было ни в одной.
+    static func roughestTrip(records: [TripRecord], in interval: DateInterval) -> TripRecord? {
+        var best: (record: TripRecord, points: Double)?
+        for record in records where interval.contains(record.startedAt) {
+            guard let score = record.score else { continue }
+            let deficit = 100 - score
+            var cameras = 0.0
+            for pass in record.passed {
+                guard let limit = pass.limitKmh else { continue }
+                cameras += DrivingScore.penaltyPoints(overKmh: pass.speedKmh - Double(limit))
+            }
+            let smooth = deficit - min(cameras, min(DrivingScore.cameraPenaltyCap, deficit))
+            guard smooth >= 0.5, smooth > (best?.points ?? 0) else { continue }
+            best = (record, smooth)
+        }
+        return best?.record
+    }
+
+    // MARK: - Как обычно
+
+    /// «Обычно у вас 66–76 — эта неделя ниже обычного». nil — нормы ещё нет.
+    static func baselineWords(_ baseline: RatingBaseline?, rating: Int, period: StatsPeriod) -> String? {
+        guard let baseline else { return nil }
+        let range = "\(baseline.low)–\(baseline.high)"
+        let position = baseline.contains(rating) ? 0 : (rating > baseline.high ? 1 : -1)
+        switch (period, position) {
+        case (.month, 0):  return String(format: String(localized: "Обычно у вас %@ — этот месяц как обычно"), range)
+        case (.month, 1):  return String(format: String(localized: "Обычно у вас %@ — этот месяц выше обычного"), range)
+        case (.month, _):  return String(format: String(localized: "Обычно у вас %@ — этот месяц ниже обычного"), range)
+        case (_, 0):       return String(format: String(localized: "Обычно у вас %@ — эта неделя как обычно"), range)
+        case (_, 1):       return String(format: String(localized: "Обычно у вас %@ — эта неделя выше обычного"), range)
+        default:           return String(format: String(localized: "Обычно у вас %@ — эта неделя ниже обычного"), range)
+        }
+    }
+
     /// Рейтинг окна, будто все проезды камеры `cameraID` были не выше лимита.
     /// Как RatingBreakdown.ratingIfClean, только для всех проездов камеры
     /// сразу: прибавка — к СОХРАНЁННОМУ баллу поездки (трек живёт неделю) и с

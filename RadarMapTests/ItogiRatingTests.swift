@@ -121,6 +121,35 @@ final class ItogiRatingTests: XCTestCase {
         XCTAssertNil(ItogiRating.ratingIfCameraClean(cameraID: 9, records: [b, a], days: days, in: week))
     }
 
+    /// «Больше всего — в поездке пт, 18:34»: остаток недобора сверх камер.
+    func testRoughestTrip() {
+        func trip(_ hours: Double, score: Double, over: Double?) -> TripRecord {
+            let start = monday.addingTimeInterval(hours * 3_600)
+            let passes = over.map {
+                [PassedCamera(id: UUID(), cameraID: 1, typeRaw: "Стационар радар", location: "К",
+                              speedKmh: 60 + $0, date: start, lat: nil, lon: nil, limitKmh: 60)]
+            } ?? []
+            return TripRecord(id: start.timeIntervalSince1970, startedAt: start,
+                              endedAt: start.addingTimeInterval(1_800), distanceMeters: 10_000,
+                              maxSpeedKmh: 90, passed: passes, score: score)
+        }
+        let camerasOnly = trip(1, score: 75, over: 25)     // −25 камеры, плавность 0
+        let rough = trip(2, score: 82, over: nil)          // −18 плавность
+        let mixed = trip(3, score: 80, over: 15)           // −14 камеры, −6 плавность
+        let week = StatsPeriod.week.interval(containing: monday, calendar: calendar)
+        XCTAssertEqual(ItogiRating.roughestTrip(records: [camerasOnly, rough, mixed], in: week)?.id, rough.id)
+        XCTAssertNil(ItogiRating.roughestTrip(records: [camerasOnly], in: week))
+    }
+
+    func testBaselineWords() {
+        let baseline = RatingBaseline(median: 71, low: 66, high: 76, periods: 5)
+        XCTAssertNil(ItogiRating.baselineWords(nil, rating: 65, period: .week))
+        let below = ItogiRating.baselineWords(baseline, rating: 65, period: .week) ?? ""
+        let inside = ItogiRating.baselineWords(baseline, rating: 70, period: .week) ?? ""
+        XCTAssertTrue(below.contains("66–76"))
+        XCTAssertNotEqual(below, inside)
+    }
+
     // MARK: - Окно
 
     /// Понедельник утром неделя пуста — открываем прошлую и говорим об этом.

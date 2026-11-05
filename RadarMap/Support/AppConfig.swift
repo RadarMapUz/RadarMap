@@ -2213,6 +2213,9 @@ nonisolated enum AppConfig {
     /// «начальный» — первые 5 с нового манёвра.
     static let carPlayManeuverExecuteMeters: Double = 50
     static let carPlayManeuverPrepareMeters: Double = 400
+    /// Полоса гистерезиса состояния манёвра: обратно к «готовься» и «едем» —
+    /// только дальше порога на столько (шум позиции стоя — ±3–10 м).
+    static let carPlayManeuverStateHysteresisMeters: Double = 15
     static let carPlayManeuverInitialSeconds: TimeInterval = 5
 
     // MARK: - Объезд пробки (DetourAdvisor)

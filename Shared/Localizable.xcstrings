@@ -1,6 +1,26 @@
 {
   "sourceLanguage": "ru",
   "strings": {
+    "Поездка уже завершена": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar allaqachon yakunlangan"
+          }
+        }
+      }
+    },
+    "Поездка уже идёт — слежу за камерами": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar allaqachon ketyapti — kameralarni kuzatyapman"
+          }
+        }
+      }
+    },
     "Учитывать мою манеру езды": {
       "localizations": {
         "ru": {

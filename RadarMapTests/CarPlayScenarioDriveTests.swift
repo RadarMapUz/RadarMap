@@ -9,9 +9,8 @@
 //  зацикливается за две часа трассы с тоннелями и финишем. Строки матрицы —
 //  docs/carplay_test_matrix.md, разделы «Вид», «Данные» и «Устойчивость».
 //
-//  Два теста помечены XCTExpectFailure: они фиксируют найденные дефекты
-//  (отчёт QA 05.11) и станут красными, как только дефект исправят, — тогда
-//  пометку снять.
+//  Два теста фиксировали дефекты отчёта QA 05.11 («1000 м» и гистерезис
+//  состояния манёвра) с XCTExpectFailure; исправлены в 48, пометки сняты.
 //
 
 import CarPlay
@@ -40,7 +39,8 @@ final class CarPlayScenarioDriveTests: XCTestCase {
         while car < turnAt {
             let left = turnAt - car
             let card = Map.distance(meters: left)
-            if left >= 1_000 {
+            // Порог — по округлённому до 10 м (995 м — уже «1 км», не «1000 м»).
+            if (left / 10).rounded() * 10 >= 1_000 {
                 XCTAssertEqual(card.unit, UnitLength.kilometers, "\(left) м")
             } else {
                 XCTAssertEqual(card.unit, UnitLength.meters, "\(left) м")
@@ -75,7 +75,6 @@ final class CarPlayScenarioDriveTests: XCTestCase {
     /// `CarPlayGuidance.swift`, `distance(meters:)`: порог проверяется до
     /// округления. Исправление — сравнивать с 1000 уже округлённое.
     func testCardNeverSaysOneThousandMetres() {
-        XCTExpectFailure("дефект QA 05.11: distance(995…999) = 1000 m — исправить порог после округления")
         for meters in stride(from: 990.0, through: 1_000, by: 1) {
             let card = Map.distance(meters: meters)
             XCTAssertFalse(card.unit == UnitLength.meters && card.value >= 1_000, "\(meters) м → \(card)")
@@ -89,11 +88,20 @@ final class CarPlayScenarioDriveTests: XCTestCase {
     /// Порог без гистерезиса (`carPlayManeuverExecuteMeters`). Исправление —
     /// не откатывать состояние того же манёвра назад.
     func testStandingAtTheExecuteThresholdDoesNotFlickerTheClusterState() {
-        XCTExpectFailure("дефект QA 05.11: maneuverState без гистерезиса у 50 и 400 м")
-        let threshold = AppConfig.carPlayManeuverExecuteMeters
-        let jitter = [threshold - 2, threshold + 3, threshold - 1, threshold + 2, threshold - 3]
-        let states = jitter.map { Map.maneuverState(distance: $0, sinceShown: 30) }
-        XCTAssertEqual(Set(states).count, 1, "стоя у порога: \(states)")
+        for threshold in [AppConfig.carPlayManeuverExecuteMeters, AppConfig.carPlayManeuverPrepareMeters] {
+            let jitter = [threshold - 2, threshold + 3, threshold - 1, threshold + 2, threshold - 3]
+            var sent: CPManeuverState?
+            let states = jitter.map { distance -> CPManeuverState in
+                let state = Map.maneuverState(distance: distance, sinceShown: 30, previous: sent)
+                sent = state
+                return state
+            }
+            XCTAssertEqual(Set(states).count, 1, "стоя у порога \(threshold) м: \(states)")
+        }
+        // Уехали за полосу (разворот, перестроение) — состояние честно откатывается.
+        XCTAssertEqual(Map.maneuverState(distance: AppConfig.carPlayManeuverExecuteMeters
+                                            + AppConfig.carPlayManeuverStateHysteresisMeters + 1,
+                                         sinceShown: 30, previous: .execute), .prepare)
     }
 
     /// Д-3г: стоим в пробке 5 минут, расстояние не меняется — в машину уходит

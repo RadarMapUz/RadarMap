@@ -57,10 +57,11 @@ nonisolated enum CarPlayGuidanceMapping {
     /// у панели прибытия (`tripDistance`).
     static func distance(meters: Double) -> Measurement<UnitLength> {
         let meters = max(0, meters)
-        guard meters >= 1000 else {
-            return Measurement(value: (meters / 10).rounded() * 10, unit: .meters)
-        }
-        return Measurement(value: kilometers(meters), unit: .kilometers)
+        // Порог — по уже округлённому: 995–999 м округлялись в «1000 м»
+        // (QA 05.11), а водитель должен увидеть «1 км» и сразу «990 м».
+        let tens = (meters / 10).rounded() * 10
+        guard tens >= 1000 else { return Measurement(value: tens, unit: .meters) }
+        return Measurement(value: kilometers(max(1000, meters)), unit: .kilometers)
     }
 
     /// Остаток ПОЕЗДКИ (панель прибытия «08:29 · 1 мин · 0,8 км» и карточки
@@ -170,10 +171,17 @@ nonisolated enum CarPlayGuidanceMapping {
 
     /// Состояние манёвра по мере подъезда — как у встроенных навигаторов:
     /// «едем» вдали, «готовься» на подходе, «выполняй» у самого поворота.
-    /// Новый манёвр первые метры — «начальный».
-    static func maneuverState(distance: Double, sinceShown: TimeInterval) -> CPManeuverState {
-        if distance <= AppConfig.carPlayManeuverExecuteMeters { return .execute }
-        if distance <= AppConfig.carPlayManeuverPrepareMeters { return .prepare }
+    /// Новый манёвр первые метры — «начальный». `previous` — что ушло в
+    /// машину для этого же манёвра: назад к прежнему состоянию — только за
+    /// полосой `carPlayManeuverStateHysteresisMeters` (QA 05.11: стоя на
+    /// красном в 48–53 м от поворота приборка прыгала «выполняй ↔ готовься»).
+    static func maneuverState(distance: Double, sinceShown: TimeInterval,
+                              previous: CPManeuverState? = nil) -> CPManeuverState {
+        let band = AppConfig.carPlayManeuverStateHysteresisMeters
+        let holdsExecute = previous == .execute
+        let holdsPrepare = holdsExecute || previous == .prepare
+        if distance <= AppConfig.carPlayManeuverExecuteMeters + (holdsExecute ? band : 0) { return .execute }
+        if distance <= AppConfig.carPlayManeuverPrepareMeters + (holdsPrepare ? band : 0) { return .prepare }
         if sinceShown < AppConfig.carPlayManeuverInitialSeconds { return .initial }
         return .continue
     }
@@ -856,7 +864,8 @@ final class CarPlayGuidance {
         let now = Date()
         if let session, maneuver != nil, maneuverStep != nil, sessionMetadata {
             let state = CarPlayGuidanceMapping.maneuverState(distance: route.nextStepDistance,
-                                                             sinceShown: now.timeIntervalSince(maneuverShownAt))
+                                                             sinceShown: now.timeIntervalSince(maneuverShownAt),
+                                                             previous: sentManeuverState)
             if state != sentManeuverState {
                 sentManeuverState = state
                 session.maneuverState = state
@@ -943,6 +952,10 @@ final class CarPlayGuidance {
     /// Баннер камеры — на каждом пересчёте (CarPlayCameraBanner). Решение
     /// «предупреждать ли» уже приняли гейты оповещений.
     private func updateCameraBanner() {
+        // Возврат карты к машине по камере — тот же признак, что у баннера
+        // (CarPlayBrowse.cameraReturn); здесь, а не во вью: ведение
+        // пересчитывается и при пересобранном окне, и вне экрана.
+        model.noteCamera(CarPlayCameraCue.current(env.location))
         guard let banners else { return }
         cameraBanner.update(banners: banners, onScreen: isOnScreen,
                             onDark: model.carIsDark ?? !model.isDaylight)

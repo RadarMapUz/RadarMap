@@ -13,6 +13,20 @@ import CoreLocation
 import XCTest
 @testable import RadarMap
 
+/// Как машина печатает прибытие — каждое правило, которое снимок владельца
+/// (05.11: телефон 22:02, машина 22:01 · 20 min) не опроверг: минута её
+/// часов плюс минуты остатка (округлить или отбросить) и «сейчас + остаток»
+/// с отбрасыванием секунд. `lag` — доставка в машину после расчёта.
+private func carClocks(now: Date, seconds: TimeInterval, lag: TimeInterval = 0) -> [String: TimeInterval] {
+    let seen = now.timeIntervalSince1970 + lag
+    let clock = floor(seen / 60) * 60
+    return [
+        "минута часов + округлённые минуты": clock + (seconds / 60).rounded() * 60,
+        "минута часов + отброшенные минуты": clock + floor(seconds / 60) * 60,
+        "сейчас + остаток, без секунд": floor((seen + seconds) / 60) * 60,
+    ]
+}
+
 final class ArrivalClockTests: XCTestCase {
     /// 15.01.2027 13:20:00 по Ташкенту — ровно минута.
     private let minute = Date(timeIntervalSince1970: 1_800_001_200)
@@ -53,20 +67,6 @@ final class ArrivalClockTests: XCTestCase {
         XCTAssertLessThan(AppConfig.arrivalClockHoldSeconds, 60)
         XCTAssertGreaterThan(AppConfig.arrivalClockCarMarginSeconds, 0)
         XCTAssertLessThan(AppConfig.arrivalClockCarMarginSeconds, 30)
-    }
-
-    /// Как машина печатает прибытие — каждое правило, которое снимок владельца
-    /// (05.11: телефон 22:02, машина 22:01 · 20 min) не опроверг: минута её
-    /// часов плюс минуты остатка (округлить или отбросить) и «сейчас + остаток»
-    /// с отбрасыванием секунд. `lag` — доставка в машину после расчёта.
-    private func carClocks(now: Date, seconds: TimeInterval, lag: TimeInterval = 0) -> [String: TimeInterval] {
-        let seen = now.timeIntervalSince1970 + lag
-        let clock = floor(seen / 60) * 60
-        return [
-            "минута часов + округлённые минуты": clock + (seconds / 60).rounded() * 60,
-            "минута часов + отброшенные минуты": clock + floor(seconds / 60) * 60,
-            "сейчас + остаток, без секунд": floor((seen + seconds) / 60) * 60,
-        ]
     }
 
     /// Машина при любом своём правиле показывает ту же минуту, что телефон, —

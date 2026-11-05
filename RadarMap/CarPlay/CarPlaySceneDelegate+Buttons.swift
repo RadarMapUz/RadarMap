@@ -112,9 +112,12 @@ extension CarPlaySceneDelegate {
             // конец «0 м, не сохранена», дважды подряд, — водитель не видел
             // ответа на первое нажатие и жал ещё раз, а стоя второе нажатие
             // завершает без вопроса. Кнопка «не работала».
-            if let last = lastTripToggle,
-               Date().timeIntervalSince(last) < AppConfig.carPlayTripToggleGuard {
-                Log.carplay.notice("поездка: повторное нажатие через \(Date().timeIntervalSince(last), format: .fixed(precision: 1), privacy: .public) с — пропускаю")
+            // Ответ — баннером о том, что уже сделано (CarPlayTripToggle).
+            if case .repeated(let message) = CarPlayTripToggle.decide(lastToggle: lastTripToggle, now: Date(),
+                                                                     tripActive: location.isTripActive) {
+                let since = lastTripToggle.map { Date().timeIntervalSince($0) } ?? 0
+                Log.carplay.notice("поездка: повторное нажатие через \(since, format: .fixed(precision: 1), privacy: .public) с — не переключаю, отвечаю баннером")
+                showToast(message, speakIfHidden: true)
                 return
             }
             lastTripToggle = Date()

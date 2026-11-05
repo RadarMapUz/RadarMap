@@ -63,7 +63,7 @@ final class CarPlayScenarioControlsTests: XCTestCase {
         model.pan(by: CGSize(width: -30, height: 0))
         XCTAssertFalse(model.isFollowing)
         let recenters = model.recenterRequests
-        model.returnOnAlert()
+        model.noteCamera(CarPlayCameraCue.decide(cameraID: 42, approaching: true, familiar: false))
         XCTAssertEqual(closedPanning, 1, "осмотр закрыт возвратом, а не только карта")
         XCTAssertEqual(model.recenterRequests, recenters + 1)
         XCTAssertTrue(model.isFollowing)
@@ -78,9 +78,31 @@ final class CarPlayScenarioControlsTests: XCTestCase {
         let model = freshModel()
         model.panningShown()
         let recenters = model.recenterRequests
-        model.returnOnAlert()
+        model.noteCamera(CarPlayCameraCue.decide(cameraID: 42, approaching: true, familiar: false))
         XCTAssertEqual(closedPanning, 1)
         XCTAssertEqual(model.recenterRequests, recenters)
+        model.panningHidden()
+        model.onClosePanning = nil
+    }
+
+    /// К-7в (QA 05.11): своя камера — без баннера и без закрытия осмотра; та
+    /// же камера второй раз осмотр не выдёргивает; окно пересобрали посреди
+    /// подъезда (новая карта) — закрывает снова.
+    func testOnlyABannerCameraClosesPanningOncePerMap() {
+        let model = freshModel()
+        model.panningShown()
+        model.noteCamera(CarPlayCameraCue.decide(cameraID: 7, approaching: true, familiar: true))
+        XCTAssertEqual(closedPanning, 0, "своя камера — осмотр остаётся")
+        let cue = CarPlayCameraCue.decide(cameraID: 8, approaching: true, familiar: false)
+        model.noteCamera(cue)
+        XCTAssertEqual(closedPanning, 1)
+        model.panningHidden()
+        model.panningShown()
+        model.noteCamera(cue)
+        XCTAssertEqual(closedPanning, 1, "та же камера — один возврат на подъезд")
+        model.adoptFollowing()   // окно пересобрано: новая карта
+        model.noteCamera(cue)
+        XCTAssertEqual(closedPanning, 2, "новая карта посреди подъезда — закрывает")
         model.panningHidden()
         model.onClosePanning = nil
     }

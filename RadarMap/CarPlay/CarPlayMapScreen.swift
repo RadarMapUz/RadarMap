@@ -158,6 +158,8 @@ final class CarPlayMapModel {
     /// обязана сказать то же, иначе после давней панорамы «+/−» шли бы в
     /// «свободную карту», которой нет, а «к себе» показывал «не следим».
     func adoptFollowing() {
+        // Новая карта: подъезд к камере, если он идёт, ещё не возвращал её.
+        cameraReturnedFor = nil
         guard !browse.following else { return }
         browse.following = true
         returnTask?.cancel()
@@ -215,7 +217,7 @@ final class CarPlayMapModel {
     /// Автовозврат: водитель отпанорамировал или открыл осмотр и забыл —
     /// карта не должна стоять, а бар — оставаться «осмотровым», пока он едет.
     /// Таймер взводится каждым движением и гасится «к себе»; камера впереди
-    /// возвращает всё сразу (returnOnAlert).
+    /// возвращает всё сразу (noteCamera).
     @ObservationIgnored private var returnTask: Task<Void, Never>?
 
     private func armIdle() {
@@ -229,8 +231,15 @@ final class CarPlayMapModel {
     }
 
     /// Камера впереди — карта обязана ехать за машиной, где бы её ни оставили,
-    /// и осмотр закрывается вместе с ней.
-    func returnOnAlert() { send(.cameraAhead) }
+    /// и осмотр закрывается вместе с ней. Зовёт ведение на каждом пересчёте
+    /// (CarPlayGuidance.sync), решение — CarPlayBrowse.cameraReturn.
+    func noteCamera(_ cue: CarPlayCameraCue.Cue) {
+        let decision = CarPlayBrowse.cameraReturn(cue, returnedFor: cameraReturnedFor)
+        cameraReturnedFor = decision.returnedFor
+        if decision.due { send(.cameraAhead) }
+    }
+    /// Камера, по которой эта карта уже вернулась к машине (CarPlayBrowse.cameraReturn).
+    @ObservationIgnored private var cameraReturnedFor: Int?
 
     /// Пересчитать день/ночь. Ручной выбор старше всего; в «Авто» — машина,
     /// а без её ответа — солнце (`sunDay` = AppEnvironment.sunIsUp: один
@@ -290,10 +299,6 @@ struct CarPlayMapScreen: View {
         // прочитанный здесь, пересобирал бы на каждом фиксе всё дерево с
         // картой, а не крошечный невидимый пульс.
         .background { if model.isOnScreen { CarPlayLiveness(model: model) } }
-        // Камера впереди — карта возвращается к машине, где бы её ни оставили.
-        .onChange(of: env.location.isApproachingCamera) { _, approaching in
-            if approaching { model.returnOnAlert() }
-        }
         // База камер докодировалась/обновилась — «что рядом» пересчитывает
         // AppEnvironment.observeCameraRevision сразу и без экрана (холодный
         // запуск из машины: первый фикс раньше базы, машина стоит — раньше

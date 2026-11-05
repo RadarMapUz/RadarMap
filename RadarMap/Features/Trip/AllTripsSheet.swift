@@ -56,6 +56,14 @@ struct AllTripsSheet: View {
                         .frame(maxWidth: .infinity)
                         .padding(.top, 60)
                     } else {
+                        // Фильтр — сегментом под навбаром (аудит 05.11): кнопка
+                        // в баре читалась действием, а не выбором списка.
+                        Picker("", selection: $onlyFined.animation(Motion.standard)) {
+                            Text("Все").tag(false)
+                            Text("С превышениями").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .padding(.bottom, 4)
                         retentionNote
                         if months.isEmpty, onlyFined {
                             Text("Поездок с превышениями среди сохранённых нет")
@@ -67,7 +75,7 @@ struct AllTripsSheet: View {
                     ForEach(months, id: \.start) { month in
                         Text(month.start.formatted(.dateTime.month(.wide).year()
                                                     .locale(NumberFormat.locale)))
-                            .font(.rounded(15, .semibold))
+                            .font(.rounded(12, .semibold))
                             .foregroundStyle(Theme.textTertiary)
                             .textCase(.uppercase)
                             .padding(.top, 8)
@@ -102,19 +110,6 @@ struct AllTripsSheet: View {
             .navigationTitle("Архив поездок")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        withMotion(Motion.standard) { onlyFined.toggle() }
-                    } label: {
-                        // Фильтр словом (34), как на карте проездов.
-                        Label("Превышения", systemImage: onlyFined
-                              ? "line.3.horizontal.decrease.circle.fill"
-                              : "line.3.horizontal.decrease.circle")
-                            .labelStyle(.titleAndIcon)
-                    }
-                    .accessibilityLabel(Text("Только с превышениями"))
-                    .accessibilityAddTraits(onlyFined ? .isSelected : [])
-                }
                 ToolbarItem(placement: .confirmationAction) { Button("Готово") { dismiss() } }
             }
             .navigationDestination(for: Route.self) { destination($0) }

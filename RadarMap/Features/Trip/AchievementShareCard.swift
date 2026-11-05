@@ -61,12 +61,12 @@ struct AchievementShareCard: View {
                             tint: Theme.success)
                 ShareMetricDivider()
                 ShareMetric(value: "\(lifetime.camerasInLimit)",
-                            label: String(localized: "камер в лимите"),
+                            label: String(localized: "проездов в лимите"),
                             icon: "checkmark.shield.fill", tint: Theme.accent)
                 ShareMetricDivider()
                 ShareMetric(value: "\(lifetime.bestStreak)",
-                            label: String(localized: "лучшая серия"),
-                            icon: "flame.fill", tint: Theme.warning)
+                            label: String(localized: "поездок подряд без штрафа"),
+                            icon: Icon.record, tint: Theme.warning)
             }
             .shareMetricsTile()
             .padding(.bottom, 4)

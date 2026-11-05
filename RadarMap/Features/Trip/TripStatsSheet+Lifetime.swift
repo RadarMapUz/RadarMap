@@ -22,8 +22,10 @@ extension TripStatsSheet {
              Icon.trips, Theme.textSecondary),
             (Formatting.distance(trip.lifetime.distanceMeters), "пройдено",
              "point.topleft.down.to.point.bottomright.curvepath", Theme.textSecondary),
-            ("\(trip.lifetime.camerasInLimit)", "камер в лимите", Icon.cameras, Theme.Icon.camera),
-            ("\(trip.lifetime.bestStreak)", "лучшая серия чистых проездов", "flame.fill", Theme.textSecondary),
+            // «Проездов», а не «камер»: счётчик — проезды. «Серия» — только у
+            // недель (цель недели); здесь — рекорд поездок подряд без штрафа.
+            ("\(trip.lifetime.camerasInLimit)", "проездов в лимите", Icon.cameras, Theme.Icon.camera),
+            ("\(trip.lifetime.bestStreak)", "рекорд: поездок подряд без штрафа", Icon.record, Theme.textSecondary),
         ]
         return VStack(spacing: 12) {
             // Две на две, а не четыре в ряд. Четыре колонки на 390 pt дают по

@@ -48,6 +48,7 @@ struct WeeklyGoalCard: View {
                     Image(systemName: "flame.fill")
                         .foregroundStyle(Theme.Icon.streak)
                     Text(String(localized: "Серия: \(goal.streak) недель подряд"))
+                        .fixedSize(horizontal: false, vertical: true)
                         .foregroundStyle(Theme.textSecondary)
                 }
                 .font(.rounded(13, .semibold))
@@ -57,9 +58,10 @@ struct WeeklyGoalCard: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// Синий — только у нажимаемого (аудит 05.11): ждущая цель — нейтральная.
     private var tint: Color {
         switch goal.state {
-        case .waiting:  return Theme.accent
+        case .waiting:  return Theme.textSecondary
         case .onTrack:  return Theme.success
         case .missed:   return Theme.danger
         }
@@ -70,17 +72,18 @@ struct WeeklyGoalCard: View {
         case .waiting:
             return String(localized: "На этой неделе у камер ещё не проезжали")
         case .onTrack(let passes):
-            return String(localized: "Пока ни одного: \(passes) проездов камер в лимите")
+            return String(localized: "Пока без превышений: \(passes) проездов")
         case .missed(let over):
-            return String(format: String(localized: "Сорвана — превышений: %lld. Новая попытка со следующей недели"),
-                          over)
+            return String(format: String(localized: "Сорвана: %@. Новая попытка со следующей недели"),
+                          "\(over)\u{00A0}" + ItogiWords.overLabel(over))
         }
     }
 
     private func fill(_ mark: WeeklyGoal.Mark) -> Color {
         switch mark {
-        case .clean:  return Theme.success
-        case .over:   return Theme.danger
+        case .clean:  return PassVerdict.clean.tint
+        case .edge:   return PassVerdict.edge.tint
+        case .over:   return PassVerdict.over.tint
         case .none:   return Theme.textTertiary.opacity(0.35)
         case .future: return .clear
         }

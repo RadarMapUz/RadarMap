@@ -27,6 +27,10 @@ speed_limits*.json на месте — подпись под ними разош
 Подпись гарантирует другое: телефон получит ровно то, что владелец проверил,
 и никто после — ни сервер, ни кэш, ни сеть — это не подменит.
 
+ПОПРАВКИ (limit_overrides.py). Снижение лимита по решению кенгаша накладывает
+крон, а файл с нарушенной поправкой выглядит как обычная сборка. Поэтому здесь
+же отказ, если поправка из репозитория не применена.
+
 Скрипт ничего не подписывает и никуда не ходит: проверяет файлы, кладёт копии
 под именами с хэшем и пишет payload. Логика — в build_payload(), покрыта
 test_build_limits_index.py.
@@ -40,6 +44,7 @@ import os
 import sys
 import time
 
+import limit_overrides
 from extract_speed_limits import MIN_SEGMENTS
 
 # Формат САМОГО индекса — контракт с LimitsManifest (RadarMap/Models/LimitsManifest.swift).
@@ -131,14 +136,21 @@ def check_consistent(legacy, modern):
     for position, (old, new) in enumerate(zip(legacy["segments"], modern["segments"])):
         if old != [new[0], new[2]]:
             raise ValueError("v1 и v2 расходятся в сегменте %d" % position)
+    if legacy.get("limit_overrides") != modern.get("limit_overrides"):
+        raise ValueError("v1 и v2 с разной отметкой поправок")
 
 
-def build_payload(files, built=None, min_segments=MIN_SEGMENTS):
+def build_payload(files, built=None, min_segments=MIN_SEGMENTS, overrides=None):
     """Индекс набора: {формат: байты файла} → payload (dict).
 
     Чистая функция: никакой сети и диска. Файлы перечислены от нового формата
     к старому — клиент берёт самый новый из понятных ему, и порядок здесь
     лишь облегчает чтение глазами.
+
+    overrides — разобранный limit_overrides.json. Файл собирает сервер, а подпись
+    ставится здесь: без этой проверки владелец подписал бы набор, из которого
+    поправка выпала (старый код на сервере, порвавшаяся за месяц цепочка ref).
+    Проверяется формат 2: только в нём есть класс дороги, а v1 обязан с ним сойтись.
     """
     if not files:
         raise ValueError("нет ни одного файла лимитов")
@@ -152,6 +164,10 @@ def build_payload(files, built=None, min_segments=MIN_SEGMENTS):
     versions = {doc["version"] for doc in docs.values()}
     if len(versions) != 1:
         raise ValueError("файлы разных сборок: %s" % sorted(versions))
+    if overrides is not None:
+        if 2 not in docs:
+            raise ValueError("нет файла формата 2: поправки проверить не на чем")
+        limit_overrides.check_built(docs[2], overrides)
 
     entries = []
     for fmt in sorted(files, reverse=True):
@@ -196,6 +212,8 @@ def main(argv=None):
     parser.add_argument("--v1", help="speed_limits.json (формат 1)")
     parser.add_argument("--v2", help="speed_limits_v2.json (формат 2)")
     parser.add_argument("--out", required=True, help="каталог для копий и index_payload.json")
+    parser.add_argument("--overrides", default=limit_overrides.DEFAULT_PATH,
+                        help="limit_overrides.json из репозитория (по умолчанию рядом со скриптом)")
     args = parser.parse_args(argv)
 
     files = {}
@@ -204,8 +222,8 @@ def main(argv=None):
             with open(path, "rb") as handle:
                 files[fmt] = handle.read()
     try:
-        payload = build_payload(files)
-    except ValueError as error:
+        payload = build_payload(files, overrides=limit_overrides.load(args.overrides))
+    except (OSError, ValueError) as error:
         print("НЕ ПОДПИСЫВАТЬ: %s" % error)
         return 1
     write_stage(args.out, files, payload)

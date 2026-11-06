@@ -20,6 +20,8 @@ RoadClass.assumedLimitKmh(inSettlement:). То есть этот файл пок
 Выход: {"version": <unix_ts>, "segments": [[limit, [lat,lon,lat,lon,...]], ...]}
 Координаты округлены до 5 знаков (~1.1 м). Пишет только при изменении
 содержимого — иначе телефоны скачивали бы 3.4 МБ ради нового номера версии.
+Поверх OSM накладываются официальные снижения (limit_overrides.py): тега там
+нет, а знак уже стоит, и крон не должен их терять.
 
 Стоимость прогона: 21 секунда, 567 МБ пика (замерено на бою 2026-09-01).
 """
@@ -30,8 +32,11 @@ import os
 import sys
 import time
 
+import limit_overrides
+
 PBF = os.environ.get("RADARMAP_PBF", "/opt/radarmap/osrm/uzbekistan-latest.osm.pbf")
 OUT = os.environ.get("RADARMAP_LIMITS", "/opt/radarmap/www/speed_limits.json")
+OVERRIDES = os.environ.get("RADARMAP_LIMIT_OVERRIDES", limit_overrides.DEFAULT_PATH)
 
 # --- Ворота публикации.
 #
@@ -136,8 +141,12 @@ def floor_main_roads(segments):
     return raised
 
 
-def collect(pbf):
-    """Пройти выгрузку и собрать [[limit, cls, [lat,lon,...]], ...]."""
+def collect(pbf, wanted_refs=frozenset()):
+    """Пройти выгрузку: [[limit, cls, [lat,lon,...]], ...], пропуски и way поправок.
+
+    wanted_refs — ref дорог из limit_overrides.json: такие way и все магистрали
+    запоминаются с узлами, даже если тега maxspeed у них нет.
+    """
     import osmium
 
     class Handler(osmium.SimpleHandler):
@@ -145,28 +154,65 @@ def collect(pbf):
             super().__init__()
             self.segments = []
             self.skipped = 0
+            self.road_ways = []
 
         def way(self, w):
+            highway = w.tags.get("highway")
             raw = w.tags.get("maxspeed")
-            if raw is None:
+            limit = parse_limit(raw) if raw is not None else None
+            ref = w.tags.get("ref")
+            # Соседние магистрали нужны поправке тоже: рядом с ними зона не ставится.
+            wanted = bool(wanted_refs) and (
+                highway in limit_overrides.NEIGHBOUR_HIGHWAYS
+                or (highway in limit_overrides.MAIN_HIGHWAYS
+                    and bool(limit_overrides.normalize_ref(ref) & wanted_refs)))
+            if limit is None and not wanted:
                 return
-            limit = parse_limit(raw)
-            if limit is None:
-                return
-            flat = []
+            nodes = []
             try:
                 for n in w.nodes:
-                    flat.append(round(n.lat, 5))
-                    flat.append(round(n.lon, 5))
+                    nodes.append((n.ref, round(n.lat, 5), round(n.lon, 5)))
             except osmium.InvalidLocationError:
                 self.skipped += 1
                 return
-            if len(flat) >= 4:
-                self.segments.append([limit, road_class_code(w.tags.get("highway")), flat])
+            if len(nodes) < 2:
+                return
+            cls = road_class_code(highway)
+            segment = None
+            if limit is not None:
+                segment = [limit, cls, [value for _id, lat, lon in nodes for value in (lat, lon)]]
+                self.segments.append(segment)
+            if wanted:
+                self.road_ways.append(limit_overrides.way_record(
+                    w.id, highway, cls, w.tags.get("oneway"), ref, nodes, segment,
+                    w.tags.get("junction")))
 
     h = Handler()
     h.apply_file(pbf, locations=True)
-    return h.segments, h.skipped
+    return h.segments, h.skipped, h.road_ways
+
+
+def overlay_overrides(segments, ways, doc):
+    """Наложить поправки и вернуть (сегменты, отметка в файл). Сбой — в журнал.
+
+    Крон не падает: старые сборки читают эти же файлы, и месячное обновление
+    лимитов не должно зависеть от одной поправки. Подписанный набор такой файл
+    не получит — его остановит гейт на маке (limit_overrides.check_built).
+    """
+    result, report = limit_overrides.apply_overrides(segments, ways, doc)
+    for line in limit_overrides.describe(report):
+        print(line)
+    mark = {"sha": report["sha"], "applied": report["applied"], "failed": report["failed"]}
+    return result, mark
+
+
+def load_overrides(path):
+    """Файл поправок или пустой набор с записью в журнал: крон должен дойти до конца."""
+    try:
+        return limit_overrides.load(path)
+    except (OSError, ValueError) as error:
+        print("ПОПРАВКИ НЕ ЗАГРУЖЕНЫ: %s" % error)
+        return None
 
 
 def write_published(path, body):
@@ -205,9 +251,14 @@ def companions_fresh(out):
 
 
 def main():
-    segments, skipped = collect(PBF)
+    overrides = load_overrides(OVERRIDES)
+    wanted = limit_overrides.wanted_refs(overrides) if overrides else frozenset()
+    segments, skipped, road_ways = collect(PBF, wanted)
     print("пол %d на магистралях: поднято %d сегментов" % (
         MAIN_ROAD_FLOOR_KMH, floor_main_roads(segments)))
+    mark = None
+    if overrides:
+        segments, mark = overlay_overrides(segments, road_ways, overrides)
     allowed, why = decide(previous_count(OUT), len(segments))
     print(why)
     if not allowed:
@@ -216,8 +267,10 @@ def main():
 
     # Хэш — по СОДЕРЖИМОМУ без версии: иначе номер версии менялся бы каждый
     # прогон, и телефоны качали бы 3.4 МБ ради одного и того же списка.
+    # Отметка поправок — в хэш: снятая поправка без единого изменившегося
+    # сегмента всё равно должна дойти до файла, иначе гейт на маке не сойдётся.
     new_hash = hashlib.sha256(
-        json.dumps(segments, separators=(",", ":")).encode()).hexdigest()
+        json.dumps([segments, mark], separators=(",", ":"), sort_keys=True).encode()).hexdigest()
     hash_file = OUT + ".hash"
     old_hash = ""
     if os.path.exists(hash_file):
@@ -236,11 +289,14 @@ def main():
     # roads_index.json и roads_index_v2.json.
     version = int(time.time())
     legacy = [[limit, flat] for limit, _cls, flat in segments]
-    body = json.dumps({"version": version, "segments": legacy},
+    # Ключ limit_overrides клиент не читает (LimitIndex.Builder берёт только
+    # segments); он нужен гейту публикации, и его не бывает без поправок.
+    extra = {"limit_overrides": mark} if mark else {}
+    body = json.dumps(dict({"version": version, "segments": legacy}, **extra),
                       separators=(",", ":"))
     write_published(OUT, body)
 
-    body_v2 = json.dumps({"version": version, "format": 2, "segments": segments},
+    body_v2 = json.dumps(dict({"version": version, "format": 2, "segments": segments}, **extra),
                          separators=(",", ":"))
     out_v2 = OUT.replace(".json", "_v2.json")
     write_published(out_v2, body_v2)

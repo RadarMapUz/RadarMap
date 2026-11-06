@@ -14,6 +14,7 @@
 //
 
 import CoreLocation
+import MapKit
 import XCTest
 @testable import RadarMap
 
@@ -23,11 +24,20 @@ final class ScenarioDriveTests: XCTestCase {
 
     /// Маршрут для стенда: ломаная в метрах; у камеры — одна позиция вдоль
     /// него (ближайший отрезок, первый при равенстве — как
-    /// RouteService.camerasAlong), прогресс — проекция в окне у прошлого
-    /// прогресса и с отставанием на фикс (сервис обновляет его после выбора
-    /// ближайшей камеры).
+    /// RouteService.camerasAlong, и за концом линии её нет — RouteLineEnds),
+    /// прогресс — проекция в окне у прошлого прогресса и с отставанием на фикс
+    /// (сервис обновляет его после выбора ближайшей камеры).
     private struct RouteModel {
         let points: [(x: Double, y: Double)]
+        /// Те же точки на карте (`routeModel`) — для RouteLineEnds.
+        var line: [MKMapPoint] = []
+
+        var length: Double {
+            zip(points, points.dropFirst()).reduce(0) { sum, pair in
+                let dx = pair.1.x - pair.0.x, dy = pair.1.y - pair.0.y
+                return sum + (dx * dx + dy * dy).squareRoot()
+            }
+        }
 
         func project(_ p: (x: Double, y: Double), near: Double? = nil) -> (along: Double, offset: Double) {
             var best = (along: 0.0, offset: Double.infinity)
@@ -95,7 +105,10 @@ final class ScenarioDriveTests: XCTestCase {
             let cameraAlong: [Int: Double] = route.map { route in
                 Dictionary(uniqueKeysWithValues: cameras.compactMap { camera in
                     let hit = route.project(xy(camera.lat, camera.lon))
-                    return hit.offset <= 30 ? (camera.id, hit.along) : nil
+                    guard hit.offset <= 30,
+                          !RouteLineEnds.isBeyond(camera, along: hit.along, points: route.line,
+                                                  length: route.length) else { return nil }
+                    return (camera.id, hit.along)
                 })
             } ?? [:]
             for fix in fixes {
@@ -191,6 +204,13 @@ final class ScenarioDriveTests: XCTestCase {
 
     private func xy(_ lat: Double, _ lon: Double) -> (x: Double, y: Double) {
         ((lon - lon0) * kx, (lat - lat0) * 111_320)
+    }
+
+    private func routeModel(_ points: [(x: Double, y: Double)]) -> RouteModel {
+        RouteModel(points: points, line: points.map {
+            let p = point($0.x, $0.y)
+            return MKMapPoint(CLLocationCoordinate2D(latitude: p.lat, longitude: p.lon))
+        })
     }
 
     /// Отрезок пути: куда ехать (x, y в метрах), с какой скоростью (м/с) и
@@ -370,7 +390,7 @@ final class ScenarioDriveTests: XCTestCase {
     func testRouteCameraWarnsOnce() {
         let track = fixes(from: (0, 0), legs: [Leg(x: 1800, y: 0, speed: 14)])
         var drive = Drive()
-        drive.route = RouteModel(points: [(0, 0), (1800, 0)])
+        drive.route = routeModel([(0, 0), (1800, 0)])
         drive.run(track, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
         XCTAssertEqual(drive.firstAlerts[1], 1)
     }
@@ -381,7 +401,7 @@ final class ScenarioDriveTests: XCTestCase {
     func testRouteWithAUTurnWarnsAgainOnTheWayBack() {
         let track = fixes(from: (0, 0), legs: [Leg(x: 1300, y: 0, speed: 14), Leg(x: 0, y: 0, speed: 14)])
         var drive = Drive()
-        drive.route = RouteModel(points: [(0, 0), (1300, 0), (0, 0)])
+        drive.route = routeModel([(0, 0), (1300, 0), (0, 0)])
         drive.run(track, cameras: [camera(1, x: 1000, y: 0)], xy: xy)
         XCTAssertEqual(drive.firstAlerts[1], 2)
     }
@@ -678,12 +698,27 @@ final class ScenarioDriveTests: XCTestCase {
         let route = fixes(from: (0, 0), legs: [Leg(x: 600, y: 0, speed: 13.9),
                                                Leg(x: 600, y: 1400, speed: 13.9)])
         var drive = Drive()
-        drive.route = RouteModel(points: [(0, 0), (2000, 0)])
+        drive.route = routeModel([(0, 0), (2000, 0)])
         drive.run(route, cameras: [camera(1, x: 900, y: 0), camera(2, x: 600, y: 800)], xy: xy)
         let first = drive.firstAlertPoints[2]?.first
         XCTAssertNotNil(first, "настоящая камера на новой дороге звучит")
         XCTAssertLessThan(first?.y ?? 999, 450,
                           "звучит за полный радиус, а не когда стала ближе застывшей R: \(drive.firstAlertPoints)")
+    }
+
+    /// Старт маршрута в 30 м за камерой (снимок 05.11, плитка «камера 0 м»): едем
+    /// от неё — молчит и в историю не пишется, настоящая впереди звучит сразу.
+    func testRouteStartingPastACameraDoesNotAlarmOrHideTheNextOne() {
+        let route = fixes(from: (30, 0), legs: [Leg(x: 900, y: 0, speed: 13.9)])
+        var drive = Drive()
+        drive.route = routeModel([(30, 0), (2000, 0)])
+        drive.run(route, cameras: [snappedCamera(1, x: 0, y: 0, axis: 90), snappedCamera(2, x: 330, y: 0, axis: 90)], xy: xy)
+        drive.finish()
+        XCTAssertNil(drive.firstAlerts[1])
+        XCTAssertNil(drive.passes[1])
+        XCTAssertEqual(drive.firstAlerts[2], 1)
+        XCTAssertEqual(drive.firstAlertPoints[2]?.first?.x ?? 999, 44, accuracy: 1, "с первого фикса")
+        XCTAssertNotNil(drive.passes[2])
     }
 
     // MARK: - A3: тоннель

@@ -134,7 +134,7 @@
 
 | ID | Случай | Шаги | Ожидание | Чем закрыт | Журнал |
 |---|---|---|---|---|---|
-| Д-1 | «0 м» до камеры на плитке (жалоба владельца 05.11) | Стоя у дороги, своя камера позади старта маршрута | Плитка не пишет «0 м» о камере позади | **Р** — правка и тест в ветке этапа 48 (`CarPlayCameraCue.gaugeShows`, `CarPlayCameraCueTests`); после слияния — **Т** | — (снимок плитки) |
+| Д-1 | «0 м» до камеры на плитке (жалоба владельца 05.11) | Стоя у дороги, своя камера позади старта маршрута; стоя на светофоре в 40–60 м за камерой маршрута | Плитка не пишет «0 м» о камере позади; камера за стартом не тревожит и не заслоняет переднюю | **Т+Р** `RouteLineEndsTests` (камера вне маршрута, оповещения), `CarPlayCameraCueTests/testGaugeHidesTheZeroOfACameraBehindUs` (показ) | — (снимок плитки) |
 | Д-2 | Своя камера с галочкой | См. О-8 | Значок с галочкой, баннера нет | **Т** `CarPlayCameraCueTests/testFamiliarCameraIsOnlyAnIconWithACheck` | — |
 | Д-3 | ETA в плашке против системной полосы | Ведение: сравнить минуту на телефоне, в карточке CarPlay и на плашке | Одна и та же минута; расстояние в полосе — км, в карточке манёвра ближе 1 км — метры кратно 10 | **Т+Р** `CSD/testManeuverApproachSecondBySecond`, `ArrivalClockTests/testCarSecondsLandOnTheSameMinuteEitherWay`, `CarPlayGuidanceTests/testTripDistanceIsAlwaysKilometres` | — (снимок) |
 | Д-4 | Язык и единицы `CPTravelEstimates` | Язык телефона: русский, узбекский, английский | Единицы короткие: «км», «km», «m»; не «meter», «metr» | **Т+Р** `CarPlayGuidanceTests/testUnitsPrintShortInTheLanguagesOfOurPhones` | — |

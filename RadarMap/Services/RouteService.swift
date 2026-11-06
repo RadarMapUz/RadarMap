@@ -2396,6 +2396,11 @@ final class RouteService {
                 }
             }
             if bestMeters <= AppConfig.routeCorridorMeters {
+                // За концом линии — не на нашем пути: без этого позади старта
+                // прижималась к его точке и звучала как «0 м» (RouteLineEnds).
+                if RouteLineEnds.isBeyond(camera, along: bestAlong, points: pts, length: cum[n - 1]) {
+                    continue
+                }
                 // Встречная при доказанно поделённых сторонах — в коридоре, но
                 // не наша (27.J); недоказанное — наше, как было.
                 let oncoming = RouteCameraDirection.isProvenOncoming(camera, on: pts,

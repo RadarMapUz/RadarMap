@@ -119,6 +119,8 @@ nonisolated enum LocationGates {
         // Исключение одно (27.J): доказанно встречная камера коридора сюда
         // приходит уже с isOnRoute = false (routeRemaining, RouteCamera.
         // countsAsOurs) — её судят шаги ниже, как любую камеру вне маршрута.
+        // Камера за концом линии (позади старта) в маршрут не попадает вовсе
+        // (RouteLineEnds) — её судят так же.
         if isOnRoute { return .ours }
 
         let coordinate = situation.coordinate

@@ -95,6 +95,7 @@ struct RootView: View {
         .onChange(of: env.isCarPlayConnected) { _, connected in
             if !connected { phoneMapOverride = false }
         }
+        .onChange(of: phoneMapOverride) { _, open in env.phoneMapOverride = open }
         // Виджет локскрина: radarmap://start-trip — поездка одним тапом с
         // заблокированного экрана. Активную поездку диплинк никогда не трогает.
         // Ссылка без ключа своих кнопок (чужое приложение, страница, свой

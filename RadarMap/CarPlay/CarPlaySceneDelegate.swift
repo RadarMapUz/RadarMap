@@ -238,6 +238,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         model.isPreviewing = false
         offerTask?.cancel()
         offerTask = nil
+        choiceOfferCheck?.cancel()
+        choiceOfferCheck = nil
+        choiceOfferAlert = nil
+        previewOffer = nil
         self.interfaceController = nil
         sessionConfiguration = nil
         mapTemplate = nil
@@ -277,6 +281,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             return
         }
         Self.activeDelegate = nil
+        Self.choiceOffer.interrupted()
         env.route.choiceShownInCar = false
         if let connectedAt {
             env.usage.noteCarPlaySession(minutes: Int(Date().timeIntervalSince(connectedAt) / 60),
@@ -414,6 +419,23 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     var offeredDestination = false
     var offerTask: Task<Void, Never>?
 
+    // MARK: - Выбор маршрута после остановки
+
+    /// Статический: «один раз на маршрут» переживает моргание кабеля — новая
+    /// сцена машины не спрашивает о том же наборе вариантов второй раз.
+    static var choiceOffer = CarPlayRouteChoiceOffer.Tracker()
+    /// Баннер «Есть другие варианты» на экране и набор, о котором он.
+    var choiceOfferAlert: CPNavigationAlert?
+    var choiceOfferRoute: Int?
+    /// Проверка стоя: фиксов может не быть, а время идёт.
+    var choiceOfferCheck: Task<Void, Never>?
+    /// Список открыт из баннера: какие варианты показать и к какому вернуться
+    /// по «Отмена» — маршрут при этом остаётся, снимать его водитель не просил.
+    var previewOffer: (route: Int, origin: Int, ids: Set<Int>)?
+    /// Список открыт по просьбе водителя в машине («Куда»): его «Отмена» снимает
+    /// только что заказанный маршрут и в поездке.
+    var previewAskedInCar = false
+
     /// Что сейчас показано поверх карты (алерт, сетка, поиск). Своя
     /// запись вместо `interfaceController.presentedTemplate`: то свойство
     /// может синхронно ходить в процесс хоста, а читается оно на пути тревоги
@@ -454,6 +476,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // Ушли с экрана машины: камеры поверх чужого приложения — системными
         // алертами сессии, манёвр и оценки для приборки — заново.
         guidance.isOnScreen = false
+        closeOfferedPreviewOnLeaving()
         guidance.refresh(reason: "ушли с экрана машины")
         // В фоне приложение могут приостановить, и сторож записал бы паузу
         // процесса как фриз — счёт только пока экран машины наш.

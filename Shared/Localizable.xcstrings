@@ -1,6 +1,66 @@
 {
   "sourceLanguage": "ru",
   "strings": {
+    "Есть другие варианты маршрута": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boshqa marshrut variantlari bor"
+          }
+        }
+      }
+    },
+    "Другие варианты": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boshqa variantlar"
+          }
+        }
+      }
+    },
+    "Показать": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Koʻrsatish"
+          }
+        }
+      }
+    },
+    "Быстрее на %lld мин": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld daq tezroq"
+          }
+        }
+      }
+    },
+    "Камер меньше на %lld": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera %lld taga kam"
+          }
+        }
+      }
+    },
+    "Можно выбрать, пока стоим": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turgan paytda tanlash mumkin"
+          }
+        }
+      }
+    },
     "Поездка уже завершена": {
       "localizations": {
         "uz": {

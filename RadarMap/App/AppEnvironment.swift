@@ -155,6 +155,9 @@ final class AppEnvironment {
     /// опрашивала сервер вечно, а телефон в кармане глушил отметки на экране
     /// машины).
     @ObservationIgnored private(set) var isPhoneSceneActive = false
+    /// При подключённой машине открыта телефонная карта (ставит RootView): на
+    /// ней панель маршрута, и в машине выбор не дублируем.
+    @ObservationIgnored var phoneMapOverride = false
 
     /// Ставит сцена CarPlay при подключении/отключении.
     func setCarPlayConnected(_ connected: Bool) {

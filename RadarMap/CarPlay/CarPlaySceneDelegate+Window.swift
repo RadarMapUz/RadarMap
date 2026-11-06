@@ -121,6 +121,7 @@ extension CarPlaySceneDelegate {
         // хост ещё держал сцену в фоне.
         // Выбор на телефоне уже идёт — тот же выбор и здесь, до сессии.
         observeFlow()
+        observeChoiceOffer()
         if !guidanceAttached {
             attachGuidance(background: false)
         } else if guidanceAttachedInBackground {

@@ -327,6 +327,8 @@ extension CarPlaySceneDelegate {
                     preview = allowPreview && CarPlayTripPreview.shouldPreview(speedKmh: env.location.speedKmh)
                     if previewTrip != nil { mapTemplate?.hideTripPreviews() }
                     previewTrip = nil
+                    previewOffer = nil
+                    previewAskedInCar = preview
                     // Карточки на экране больше нет; новая поставит флаг сама.
                     self.env.route.choiceShownInCar = false
                     model.isPreviewing = preview
@@ -341,7 +343,11 @@ extension CarPlaySceneDelegate {
                     return true
                 })
             switch outcome {
-            case .busy, .built:
+            case .built:
+                // Цель подтверждена касанием («куда едем?») — второго экрана
+                // выбора водитель не просил и после остановки не получит.
+                if !allowPreview { Self.choiceOffer.spend(route: choiceOfferKey()) }
+            case .busy:
                 break
             case .noFix:
                 showAlert(title: String(localized: "Ждём спутники"),
@@ -354,7 +360,12 @@ extension CarPlaySceneDelegate {
 
     /// Варианты с нашими метками и временем с пробками; рекомендованный —
     /// первым и выбранным. Линия — целиком на экране.
-    func showPreview(name: String, destination: CLLocationCoordinate2D) {
+    /// `offer` — список открыт из баннера «Есть другие варианты»; любой другой
+    /// показ (новый маршрут при открытом списке) — обычный: его «Отмена» снимает
+    /// маршрут.
+    func showPreview(name: String, destination: CLLocationCoordinate2D,
+                     offer: (route: Int, origin: Int, ids: Set<Int>)? = nil) {
+        previewOffer = offer
         guard mapTemplate != nil else {
             return endPreview(start: true, keepRoute: true, reason: "шаблона нет")
         }
@@ -367,7 +378,7 @@ extension CarPlaySceneDelegate {
 
     /// Строки вариантов сейчас — по ним видно, устарела ли карточка.
     private func previewTexts() -> [Int: CarPlayTripPreview.ChoiceText] {
-        let variants = env.route.variants
+        let variants = previewVariants
         return Dictionary(variants.map { ($0.id, CarPlayTripPreview.text(for: $0, among: variants)) },
                           uniquingKeysWith: { first, _ in first })
     }
@@ -388,7 +399,9 @@ extension CarPlaySceneDelegate {
         // замерзает ещё в `apply` (`choiceShownInCar`), до поздних пробок.
         route.noteChoiceTouched()
         route.choiceShownInCar = true
-        let variants = route.variants
+        // Список показан — предлагать его баннером больше незачем.
+        Self.choiceOffer.spend(route: choiceOfferKey())
+        let variants = previewVariants
         let texts = previewTexts()
         let ordered = variants.filter { $0.id == route.selectedID } + variants.filter { $0.id != route.selectedID }
         let choices = ordered.compactMap { variant -> CPRouteChoice? in
@@ -405,7 +418,9 @@ extension CarPlaySceneDelegate {
         let trip = CarPlayGuidance.makeTrip(origin: origin, destination: target, choices: choices)
         if previewTrip != nil { mapTemplate.hideTripPreviews() }
         previewTrip = trip
-        previewShown = CarPlayTripPreview.Shown(set: CarPlayTripPreview.identity(variants),
+        // Опознание — по всему набору маршрута (его же сверяет refresh), а не
+        // по показанным: список из баннера показывает не все варианты.
+        previewShown = CarPlayTripPreview.Shown(set: CarPlayTripPreview.identity(route.variants),
                                                 order: ordered.map(\.id), texts: texts)
         previewEstimateKey = nil
         let text = CPTripPreviewTextConfiguration(startButtonTitle: String(localized: "Поехали"),
@@ -490,6 +505,8 @@ extension CarPlaySceneDelegate {
         previewDestination = nil
         previewShown = nil
         previewEstimateKey = nil
+        previewOffer = nil
+        previewAskedInCar = false
         env.route.choiceShownInCar = false
         guard model.isPreviewing else { return }
         if !keepRoute { env.route.clear() }

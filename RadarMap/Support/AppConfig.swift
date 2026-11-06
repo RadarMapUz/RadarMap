@@ -2200,6 +2200,46 @@ nonisolated enum AppConfig {
     /// ещё ждёт экрана столько — дальше это уже не «сели и поехали» (10.9).
     static let carPlayDestinationOfferWindow: TimeInterval = 180
     static let carPlayDestinationOfferSeconds: TimeInterval = 12
+
+    // MARK: - Выбор маршрута после остановки (CarPlayRouteChoiceOffer, 51)
+
+    /// Стоим: не быстрее 4 км/ч (тот же порог, что у вида на остановке,
+    /// stopViewEnterKmh); счёт сбрасывает 8 км/ч — стоя GPS шумит до 3–5 км/ч —
+    /// или сдвиг по маршруту на 20 м: рывок пробки на малой скорости.
+    static let carPlayChoiceOfferStandKmh: Double = 4
+    static let carPlayChoiceOfferMoveKmh: Double = 8
+    static let carPlayChoiceOfferCrawlMeters: Double = 20
+    /// Устойчивая стоянка — полторы минуты. Красный в городе — обычно до минуты
+    /// с небольшим; на самых длинных фазах баннер всё же может встать, но он
+    /// один на маршрут, ничего не прерывает и сам уходит. Оценка, а не замер:
+    /// данных о длине фаз у нас нет. Меньше — чаще повод на светофоре; больше —
+    /// водитель, вставший подумать, уже решил сам.
+    static let carPlayChoiceOfferStandSeconds: TimeInterval = 90
+    /// Предложение свежо: маршрут моложе 5 минут на начало стоянки или проехан
+    /// меньше километра (заехал на заправку и стоит долго), и в любом случае
+    /// позади не больше четверти пути: дальше варианты считаны от места, где
+    /// нас давно нет, и выбирать поздно.
+    static let carPlayChoiceOfferMaxAgeSeconds: TimeInterval = 300
+    static let carPlayChoiceOfferMaxMeters: Double = 1_000
+    static let carPlayChoiceOfferMaxShare: Double = 0.25
+    /// Заметная разница считается по остатку пути: быстрее на 2 мин и 5 % —
+    /// меньше точность оценки времени всё равно не даёт; не быстрее, но не дольше
+    /// 5 мин и 15 % — если впереди меньше камер или своя метка. Дольше — незачем.
+    /// Машина должна стоять на линии варианта (routeSnapMeters).
+    static let carPlayChoiceOfferFasterSeconds: TimeInterval = 120
+    static let carPlayChoiceOfferFasterShare: Double = 0.05
+    static let carPlayChoiceOfferSlowerSeconds: TimeInterval = 300
+    static let carPlayChoiceOfferSlowerShare: Double = 0.15
+    /// Сколько баннер на экране (как «Куда едем?») и как часто проверка, пока
+    /// мешает камера, занятый экран или открытая панель телефона.
+    static let carPlayChoiceOfferSeconds: TimeInterval = 12
+    static let carPlayChoiceOfferRecheckSeconds: TimeInterval = 10
+    /// Отмена навигации в первые столько секунд после нашей отмены ради списка —
+    /// её отзвук (один раз, CarPlayGuidanceMapping.PreviewCancelEcho). Цена:
+    /// настоящая отмена в это окно потеряется — она приходит один раз, и сессия
+    /// останется мёртвой. Поэтому окно короткое и только ради списка; журнал
+    /// «ОТЗВУК отмены» покажет, нужно ли оно вообще, — нет отзвука, значит убрать.
+    static let carPlayOwnCancelEchoSeconds: TimeInterval = 2
     /// Метаданные ведения для приборки и проекции на стекло — значение по
     /// умолчанию настройки «Манёвры на приборке и HUD»
     /// (`AppSettings.carPlayNavigationMetadata`, 26.4). Поля все на месте

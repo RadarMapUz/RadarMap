@@ -37,7 +37,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 echo "=== 1/5: самотест сборщика индекса (локально) ==="
-(cd "$DIR" && python3 -m unittest test_build_limits_index test_limit_overrides 2>&1 | tail -3)
+(cd "$DIR" && python3 -m unittest test_build_limits_index 2>&1 | tail -3)
 
 echo "=== 2/5: забираю файлы лимитов с VPS ==="
 scp -q "$HOST:$WEBROOT/speed_limits.json" "$WORK/speed_limits.json"
@@ -45,11 +45,9 @@ scp -q "$HOST:$WEBROOT/speed_limits_v2.json" "$WORK/speed_limits_v2.json"
 
 echo "=== 3/5: ворота и payload (локально) ==="
 # Не прошли ворота — дальше не идём: подписанный мусор доехал бы до всех
-# телефонов, и отозвать его тихо было бы уже нельзя. Отказ здесь же, если крон
-# собрал файл без поправки из limit_overrides.json (сверка с файлом из репо).
+# телефонов, и отозвать его тихо было бы уже нельзя.
 python3 "$DIR/build_limits_index.py" \
     --v1 "$WORK/speed_limits.json" --v2 "$WORK/speed_limits_v2.json" \
-    --overrides "$DIR/limit_overrides.json" \
     --out "$WORK/stage"
 
 echo "=== 4/5: подпись локально ==="

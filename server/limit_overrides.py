@@ -59,6 +59,14 @@ LENGTH_TOLERANCE_MIN_METERS = 150
 # сегмент боевого файла — 8,5 точки.
 MAX_POINTS_PER_SEGMENT = 24
 
+# Как далеко клиент берёт дорогу под колёсами и насколько её ось может отличаться
+# от курса (LimitIndex.matchHit: 35 м, ±40°). Рядом с зоной в этих пределах не
+# должно быть дороги, где реальный лимит выше: на ней 80 станет ложным превышением.
+NEIGHBOUR_REACH_METERS = 35
+NEIGHBOUR_AXIS_DEGREES = 40
+# Чужая магистраль рядом запрещает зону и без тега: там предполагается 100.
+NEIGHBOUR_HIGHWAYS = {"motorway", "trunk"}
+
 # Проба гейта публикации: как далеко от неё может лежать сегмент поправки.
 PROBE_REACH_METERS = 25
 # Доля проб, где лимит обязан быть ровно лимитом поправки (остальные — тег ниже).
@@ -89,8 +97,12 @@ def load(path=DEFAULT_PATH):
 def validate(doc):
     if not isinstance(doc, dict) or doc.get("format") != FORMAT:
         raise ValueError("limit_overrides: формат не %d" % FORMAT)
+    if not isinstance(doc.get("overrides", []), list):
+        raise ValueError("limit_overrides: overrides не список")
     seen = set()
     for entry in doc.get("overrides", []):
+        if not isinstance(entry, dict):
+            raise ValueError("limit_overrides: запись не объект")
         ident = entry.get("id")
         if not ident or ident in seen:
             raise ValueError("limit_overrides: нет id или повтор (%r)" % ident)
@@ -289,6 +301,59 @@ def _route(edges, start, end, expected):
     return best, None
 
 
+def _same_axis(first, second):
+    diff = abs(first - second) % 180
+    return min(diff, 180 - diff) <= NEIGHBOUR_AXIS_DEGREES
+
+
+def _close_alongside(a, b, zone):
+    """Лежит ли отрезок ab в пределах клиента от какого-нибудь шага зоны."""
+    axis = _bearing(a, b)
+    middle = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+    for edge in zone:
+        if not _same_axis(axis, _bearing(edge.a, edge.b)):
+            continue
+        for point in (a, middle, b):
+            if _project(point[0], point[1], edge.a, edge.b)[0] <= NEIGHBOUR_REACH_METERS:
+                return True
+    return False
+
+
+def _neighbour_conflict(steps, segments, ways, refs, limit):
+    """Причина не применять зону или None. Съезды и дворы не в счёт: там лимит ниже.
+
+    Смотрим только в рамке зоны: кандидатов там десятки, а крон ходит раз в месяц.
+    """
+    zone = [edge for edge, t0, t1 in steps if t1 > t0]
+    lats = [value for edge in zone for value in (edge.a[0], edge.b[0])]
+    lons = [value for edge in zone for value in (edge.a[1], edge.b[1])]
+    margin = NEIGHBOUR_REACH_METERS / 111320.0 * 2
+    low_lat, high_lat = min(lats) - margin, max(lats) + margin
+    low_lon, high_lon = min(lons) - margin, max(lons) + margin
+
+    def inside(point):
+        return low_lat <= point[0] <= high_lat and low_lon <= point[1] <= high_lon
+
+    own = {id(record["segment"]) for record in ways
+           if record["refs"] & refs and record.get("segment") is not None}
+    for limit_there, cls, flat in ((s[0], s[1], s[2]) for s in segments
+                                   if s[0] > limit and id(s) not in own):
+        if not 1 <= cls <= 5:
+            continue
+        points = [(flat[i], flat[i + 1]) for i in range(0, len(flat), 2)]
+        for a, b in zip(points, points[1:]):
+            if (inside(a) or inside(b)) and _close_alongside(a, b, zone):
+                return "рядом дорога с лимитом %d у %.5f,%.5f" % (limit_there, a[0], a[1])
+    for record in ways:
+        if record["refs"] & refs or record["highway"] not in NEIGHBOUR_HIGHWAYS:
+            continue
+        points = [(node[1], node[2]) for node in record["nodes"]]
+        for a, b in zip(points, points[1:]):
+            if (inside(a) or inside(b)) and _close_alongside(a, b, zone):
+                return "рядом другая магистраль (way %d) у %.5f,%.5f" % (record["id"], a[0], a[1])
+    return None
+
+
 def _intervals(steps):
     """Покрытие пути в параметрах way: {id way: [(p0, p1)]}, p = номер пары + t."""
     out = {}
@@ -376,6 +441,10 @@ def apply_overrides(segments, ways, doc):
             backward, why = _route(edges, entry["end"], entry["start"], entry["length_m"])
         if forward is None or backward is None:
             report["failed"][entry["id"]] = why
+            continue
+        neighbour = _neighbour_conflict(forward[1] + backward[1], segments, ways, refs, entry["limit"])
+        if neighbour:
+            report["failed"][entry["id"]] = neighbour
             continue
         covered = {}
         for way_id, parts in list(_intervals(forward[1]).items()) + list(_intervals(backward[1]).items()):
@@ -487,9 +556,15 @@ def check_built(built, doc):
     проб — файл, собранный не тем кодом или с разорвавшейся за месяц цепочкой.
     """
     entries = verified(doc)
-    if not entries:
-        return
     mark = built.get("limit_overrides")
+    if not entries:
+        # Аварийное снятие последней поправки: в файле ещё лежат её 80, и без
+        # этой проверки его можно было бы подписать как чистый.
+        if isinstance(mark, dict) and mark.get("applied"):
+            raise ValueError("в репозитории поправок нет, а файл собран с %s: "
+                             "выложите limit_overrides.json на сервер и пересоберите"
+                             % ", ".join(mark["applied"]))
+        return
     if not isinstance(mark, dict):
         raise ValueError("в файле нет отметки поправок: сервер собирал старым кодом "
                          "или без limit_overrides.json")
@@ -539,6 +614,40 @@ def describe(report):
     return lines
 
 
+# --- Доказательство привязки: километры зоны считаются из данных, а не пишутся.
+
+def zone_km(boundary, anchors):
+    """Километры точки зоны (низ, верх) по камерам, на которые она опирается.
+
+    Смещение км − длина OSM у камеры с пикетом — одно число, у адреса «73 km
+    oralig‘i» — полоса в километр: адрес значит «где-то в км 73–74».
+    """
+    by_camera = {anchor["camera"]: anchor for anchor in anchors}
+    offsets = []
+    for camera in boundary["anchors"]:
+        anchor = by_camera[camera]
+        for km in anchor["km"]:
+            offsets.append(km - anchor["along_m"] / 1000.0)
+    along = boundary["along_m"] / 1000.0
+    return along + min(offsets), along + max(offsets)
+
+
+def check_proof(entry):
+    """ValueError, если по собственным данным зона выходит за участок решения."""
+    proof = entry.get("proof")
+    if not isinstance(proof, dict) or not proof.get("anchors"):
+        raise ValueError("%s: нет данных привязки" % entry["id"])
+    low, _ = zone_km(proof["start"], proof["anchors"])
+    _, high = zone_km(proof["end"], proof["anchors"])
+    if low < entry["km"][0] - 1e-6:
+        raise ValueError("%s: начало зоны может лежать на км %.2f, участок с км %s"
+                         % (entry["id"], low, entry["km"][0]))
+    if high > entry["km"][1] + 1e-6:
+        raise ValueError("%s: конец зоны может лежать на км %.2f, участок до км %s"
+                         % (entry["id"], high, entry["km"][1]))
+    return low, high
+
+
 # --- Обновление проб и длины: раз OSM сдвинул полотно, гейт скажет об этом сам.
 
 def measure(ways, entry):
@@ -578,6 +687,7 @@ def refresh(pbf, path=DEFAULT_PATH):
         doc = json.load(handle)
     _segments, _skipped, ways = collect(pbf, wanted_refs(doc))
     for entry in verified(doc):
+        check_proof(entry)
         measured = measure(ways, entry)
         entry["length_m"] = measured["length_m"]
         entry["probes"] = measured["probes"]

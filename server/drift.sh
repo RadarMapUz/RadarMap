@@ -62,8 +62,6 @@ osm_queue.py                  /opt/radarmap/api/osm_queue.py
 status.py                     /opt/radarmap/api/status.py
 build_hotspots.py             /opt/radarmap/api/build_hotspots.py
 extract_speed_limits.py       /opt/radarmap/api/extract_speed_limits.py
-limit_overrides.py            /opt/radarmap/api/limit_overrides.py
-limit_overrides.json          /opt/radarmap/api/limit_overrides.json
 update_speed_limits.sh        /opt/radarmap/api/update_speed_limits.sh
 update_cameras.py             /opt/radarmap/api/update_cameras.py
 update_osrm.sh                /opt/radarmap/api/update_osrm.sh

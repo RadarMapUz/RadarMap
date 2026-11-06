@@ -144,8 +144,8 @@ def floor_main_roads(segments):
 def collect(pbf, wanted_refs=frozenset()):
     """Пройти выгрузку: [[limit, cls, [lat,lon,...]], ...], пропуски и way поправок.
 
-    wanted_refs — ref дорог из limit_overrides.json: такие way запоминаются с
-    узлами, даже если тега maxspeed у них нет. Именно они и нужны поправке.
+    wanted_refs — ref дорог из limit_overrides.json: такие way и все магистрали
+    запоминаются с узлами, даже если тега maxspeed у них нет.
     """
     import osmium
 
@@ -161,8 +161,11 @@ def collect(pbf, wanted_refs=frozenset()):
             raw = w.tags.get("maxspeed")
             limit = parse_limit(raw) if raw is not None else None
             ref = w.tags.get("ref")
-            wanted = (highway in limit_overrides.MAIN_HIGHWAYS
-                      and bool(limit_overrides.normalize_ref(ref) & wanted_refs))
+            # Соседние магистрали нужны поправке тоже: рядом с ними зона не ставится.
+            wanted = bool(wanted_refs) and (
+                highway in limit_overrides.NEIGHBOUR_HIGHWAYS
+                or (highway in limit_overrides.MAIN_HIGHWAYS
+                    and bool(limit_overrides.normalize_ref(ref) & wanted_refs)))
             if limit is None and not wanted:
                 return
             nodes = []

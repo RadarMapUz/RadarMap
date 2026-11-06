@@ -14,9 +14,17 @@ import build_limits_index as bli
 import extract_speed_limits as sl
 import limit_overrides as lo
 
+CAMERAS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..",
+                       "RadarMap", "Resources", "cameras.json")
+
 # Прямая дорога на восток по широте 41.0: 0.001° долготы ≈ 84 м.
 LAT = 41.0
 TRUNK = 2
+
+
+def load_cameras():
+    with open(CAMERAS, encoding="utf-8") as handle:
+        return {camera["id"]: camera for camera in json.load(handle)}
 
 
 def line(start_id, lat, lon_start, count, step=0.001):
@@ -287,6 +295,13 @@ class ValidateTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "формат"):
             lo.validate({"format": 99, "overrides": []})
 
+    def test_malformed_entries_are_a_data_error_not_a_crash(self):
+        # Иначе cron упал бы без файла вместо записи в журнал.
+        with self.assertRaisesRegex(ValueError, "не объект"):
+            lo.validate({"format": lo.FORMAT, "overrides": ["x"]})
+        with self.assertRaisesRegex(ValueError, "не список"):
+            lo.validate({"format": lo.FORMAT, "overrides": {"a": 1}})
+
 
 class ShippedFileTest(unittest.TestCase):
     """Сам limit_overrides.json из репозитория: то, что уедет на сервер."""
@@ -318,10 +333,141 @@ class ShippedFileTest(unittest.TestCase):
             self.assertNotEqual(entry["limit"], entry.get("limit_hgv_info"))
             self.assertEqual(entry["limit"], 80)
 
-    def test_applied_zone_stays_inside_the_official_range(self):
+    def test_zone_stays_inside_the_decision_by_its_own_data(self):
+        # Границы считаются из проб привязки в файле, а не сверяются с написанным
+        # рукой: именно так прошла ошибка в полосе смещений у 4Р-12.
         for entry in lo.verified(self.doc):
-            self.assertGreaterEqual(entry["applied_km"][0], entry["km"][0], entry["id"])
-            self.assertLessEqual(entry["applied_km"][1], entry["km"][1], entry["id"])
+            low, high = lo.check_proof(entry)
+            self.assertGreaterEqual(low, entry["km"][0], entry["id"])
+            self.assertLessEqual(high, entry["km"][1], entry["id"])
+            written = entry["applied_km"]
+            self.assertGreaterEqual(written[0], low, "%s: написанное начало вне расчёта" % entry["id"])
+            self.assertLessEqual(written[1], high, "%s: написанный конец вне расчёта" % entry["id"])
+
+    def test_anchors_are_real_cameras_with_that_address(self):
+        cameras = load_cameras()
+        for entry in lo.verified(self.doc):
+            for anchor in entry["proof"]["anchors"]:
+                camera = cameras[anchor["camera"]]
+                self.assertIn(anchor["address"], camera["location"], anchor["camera"])
+
+    def test_anchors_are_where_their_length_says(self):
+        # Числа along_m нельзя проверить без выгрузки целиком, но перепутать их
+        # можно поймать: по прямой между точками не больше, чем по дороге, и
+        # горная дорога не длиннее прямой вдвое с лишним на этих расстояниях.
+        cameras = load_cameras()
+        for entry in lo.verified(self.doc):
+            proof = entry["proof"]
+            start_along, end_along = proof["start"]["along_m"], proof["end"]["along_m"]
+            for anchor in proof["anchors"]:
+                camera = cameras[anchor["camera"]]
+                straight = lo._meters(entry["start"][0], entry["start"][1], camera["lat"], camera["lon"])
+                by_road = abs(anchor["along_m"] - start_along)
+                self.assertLessEqual(straight, by_road + 300, anchor["camera"])
+                self.assertGreaterEqual(straight * 2.2 + 300, by_road, anchor["camera"])
+            self.assertLess(abs(end_along - start_along - entry["length_m"]), 300, entry["id"])
+
+    def test_zone_starts_clear_of_the_tag_60(self):
+        # Едущему на запад с настоящим 80 пробы LimitAhead смотрят на 400 м, ещё
+        # 4 фикса (~110 м на 100 км/ч) лимит держится за концом зоны и 35 м —
+        # охват проб. Меньше — и снова «Ограничение 60 через 350 м».
+        entry = next(e for e in self.doc["overrides"] if e["id"] == "a373-km108-131")
+        tag_end_along = 37230
+        self.assertGreaterEqual(entry["proof"]["start"]["along_m"] - tag_end_along, 545)
+
+    def test_only_a373_is_applied_for_now(self):
+        self.assertEqual([e["id"] for e in lo.verified(self.doc)], ["a373-km108-131"])
+        chorvoq = next(e for e in self.doc["overrides"] if e["id"] == "4r12-km71-74")
+        self.assertEqual(chorvoq["status"], "unverified")
+
+
+class CheckProofTest(unittest.TestCase):
+    def entry(self, anchors, start, end, km=(71, 74)):
+        return {"id": "x", "km": list(km),
+                "proof": {"anchors": anchors, "start": start, "end": end}}
+
+    def test_address_without_picket_is_a_band_of_a_kilometre(self):
+        # Настоящие числа снятой зоны 4Р-12: конец 73.9 км длины при камере
+        # «73 km» в 73.41 — это км 73.49–74.49, за концом участка.
+        anchor = {"camera": 2930, "km": [73, 74], "along_m": 73410}
+        entry = self.entry([anchor], {"along_m": 72410, "anchors": [2930]},
+                           {"along_m": 73900, "anchors": [2930]})
+        self.assertAlmostEqual(lo.zone_km(entry["proof"]["end"], [anchor])[1], 74.49, places=2)
+        with self.assertRaisesRegex(ValueError, "конец зоны"):
+            lo.check_proof(entry)
+
+    def test_start_before_the_decision_is_refused(self):
+        anchor = {"camera": 1, "km": [100.0], "along_m": 30000}
+        entry = self.entry([anchor], {"along_m": 29000, "anchors": [1]},
+                           {"along_m": 30500, "anchors": [1]}, km=(100, 110))
+        with self.assertRaisesRegex(ValueError, "начало зоны"):
+            lo.check_proof(entry)
+
+    def test_picket_inside_passes(self):
+        anchor = {"camera": 1, "km": [105.0], "along_m": 35000}
+        entry = self.entry([anchor], {"along_m": 33000, "anchors": [1]},
+                           {"along_m": 37000, "anchors": [1]}, km=(100, 110))
+        self.assertEqual(lo.check_proof(entry), (103.0, 107.0))
+
+    def test_no_data_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "нет данных"):
+            lo.check_proof({"id": "x", "km": [1, 2]})
+
+
+class NeighbourTest(unittest.TestCase):
+    """Рядом с зоной не должно быть дороги, где реальный лимит выше поправки."""
+
+    def street(self, highway="tertiary", ref=None, limit=None, lat=LAT - 0.0002):
+        return record(3, line(3000, lat, 69.0, 61), ref=ref, highway=highway, limit=limit)
+
+    def run_with(self, neighbour):
+        ways = carriageways() + [neighbour]
+        segments = [neighbour["segment"]] if neighbour["segment"] else []
+        return lo.apply_overrides(segments, ways, document(override()))
+
+    def test_tag_above_override_alongside_refuses_the_zone(self):
+        result, report = self.run_with(self.street(limit=100))
+        self.assertEqual(flat_of(result, 80), [])
+        self.assertIn("лимитом 100", report["failed"]["a"])
+
+    def test_other_trunk_alongside_refuses_the_zone(self):
+        result, report = self.run_with(self.street(highway="trunk", ref="M39"))
+        self.assertEqual(flat_of(result, 80), [])
+        self.assertIn("другая магистраль", report["failed"]["a"])
+
+    def test_trunk_without_ref_alongside_refuses_the_zone(self):
+        _, report = self.run_with(self.street(highway="trunk"))
+        self.assertIn("другая магистраль", report["failed"]["a"])
+
+    def test_tag_below_override_alongside_is_fine(self):
+        # Дублёр на 60 — обычное дело: мы показываем 80 на нём, а не ложное превышение.
+        _, report = self.run_with(self.street(limit=60))
+        self.assertEqual(report["applied"], ["a"])
+
+    def test_untagged_minor_road_alongside_is_fine(self):
+        _, report = self.run_with(self.street())
+        self.assertEqual(report["applied"], ["a"])
+
+    def test_far_road_is_fine(self):
+        _, report = self.run_with(self.street(limit=100, lat=LAT - 0.002))
+        self.assertEqual(report["applied"], ["a"])
+
+    def test_crossing_road_is_fine(self):
+        # Поперёк: курс её не совпадёт, матчинг клиента её не возьмёт.
+        cross = record(3, [(3000, LAT - 0.001, 69.03), (3001, LAT + 0.001, 69.03)],
+                       ref="M39", highway="trunk", limit=100)
+        _, report = self.run_with(cross)
+        self.assertEqual(report["applied"], ["a"])
+
+    def test_own_road_tag_above_is_not_a_neighbour(self):
+        ways = carriageways(limit=100)
+        _, report = lo.apply_overrides([w["segment"] for w in ways], ways, document(override()))
+        self.assertEqual(report["applied"], ["a"])
+
+    def test_outside_the_zone_is_fine(self):
+        far = record(3, line(3000, LAT - 0.0002, 69.2, 30), ref="M39", highway="trunk", limit=100)
+        _, report = self.run_with(far)
+        self.assertEqual(report["applied"], ["a"])
 
 
 def built(segments, mark):
@@ -344,6 +490,23 @@ class GateTest(unittest.TestCase):
 
     def test_no_verified_overrides_needs_nothing(self):
         lo.check_built(built([], None), document({"id": "u", "status": "unverified"}))
+
+    def test_last_override_withdrawn_but_file_still_has_it(self):
+        # Аварийное снятие: в репозитории пусто, а в файле с VPS ещё лежат 80.
+        withdrawn = document({"id": "a", "status": "unverified"})
+        with self.assertRaisesRegex(ValueError, "файл собран с a"):
+            lo.check_built(built(self.segments, self.mark), withdrawn)
+
+    def test_withdrawn_and_rebuilt_passes(self):
+        withdrawn = document({"id": "a", "status": "unverified"})
+        mark = {"sha": lo.fingerprint(withdrawn), "applied": [], "failed": {}}
+        lo.check_built(built([], mark), withdrawn)
+
+    def test_one_of_two_withdrawn_is_caught_by_the_fingerprint(self):
+        remaining = document(self.doc["overrides"][0], {"id": "b", "status": "unverified"})
+        extra_mark = dict(self.mark, sha="0" * 16, applied=["a", "b"])
+        with self.assertRaisesRegex(ValueError, "другим набором"):
+            lo.check_built(built(self.segments, extra_mark), remaining)
 
     def test_file_from_old_code_is_refused(self):
         with self.assertRaisesRegex(ValueError, "нет отметки"):

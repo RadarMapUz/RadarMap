@@ -68,6 +68,16 @@ enum CarPlayTripPreview {
         }
     }
 
+    /// Оставляет ли маршрут «Отмена» в списке. Снимает — вне поездки (как было)
+    /// и когда водитель сам попросил этот маршрут в машине («Куда» поверх поездки:
+    /// «Отмена» и значит «не туда», иначе ведение началось бы к отменённой цели).
+    /// Оставляет — список из баннера «Есть другие варианты» и список, показанный
+    /// при идущей поездке не по его просьбе (цель сменили на телефоне): маршрут
+    /// он не отменял, он закрывает список.
+    static func cancelKeepsRoute(offered: Bool, tripActive: Bool, askedInCar: Bool) -> Bool {
+        offered || (tripActive && !askedInCar)
+    }
+
     /// Показывать ли выбор: только пока машина стоит или ползёт.
     static func shouldPreview(speedKmh: Double) -> Bool {
         !(speedKmh.isFinite && speedKmh >= AppConfig.carPlayPreviewMaxKmh)

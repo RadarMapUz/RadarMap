@@ -150,7 +150,8 @@ final class CarPlayRouteChoiceOfferTests: XCTestCase {
 
     private func variant(_ id: Int, minutes: Double, cameras: Int = 3, labeled: Bool = false,
                          near: Bool = true) -> Offer.Variant {
-        Offer.Variant(id: id, seconds: minutes * 60, cameras: cameras, labeled: labeled, nearCar: near)
+        Offer.Variant(id: id, seconds: minutes * 60, fullSeconds: minutes * 60, cameras: cameras,
+                      labeled: labeled, nearCar: near)
     }
 
     func testAlmostTheSameIsNothingToChoose() {
@@ -268,5 +269,28 @@ final class CarPlayRouteChoiceOfferTests: XCTestCase {
         tracker.spend(route: 1)
         tracker.interrupted()
         XCTAssertFalse(tracker.isOpen, "отключение не возвращает потраченную попытку")
+    }
+
+    /// Неровная скорость: A — 25 мин на 25 км, B — 26 мин на 13 км, общие 4 км.
+    /// По долям пути 21 и 18 мин, а B на деле на минуту медленнее — не «быстрее на 3».
+    func testShareOfTheWayAloneDoesNotProveFaster() {
+        let a = Offer.variant(id: 0, shownSeconds: 25 * 60, distance: 25_000, along: 4_000, deviation: 2,
+                              cameraAlongs: [], labeled: false)
+        let b = Offer.variant(id: 1, shownSeconds: 26 * 60, distance: 13_000, along: 4_000, deviation: 2,
+                              cameraAlongs: [], labeled: false)
+        XCTAssertEqual(a.seconds, 21 * 60, accuracy: 0.01)
+        XCTAssertEqual(b.seconds, 18 * 60, accuracy: 0.01)
+        XCTAssertEqual(Offer.saved(b, over: a), -60, accuracy: 0.01)
+        XCTAssertEqual(Offer.choices(selected: 0, variants: [a, b]), [])
+        XCTAssertNotEqual(Offer.gain(selected: 0, variants: [a, b], choices: [0, 1]), .faster(minutes: 3))
+    }
+
+    /// «Быстрее» — меньшая из двух разниц: по остатку 5 мин, по полному 3 — обещаем 3.
+    func testFasterShowsTheSmallerDifference() {
+        let a = Offer.Variant(id: 0, seconds: 20 * 60, fullSeconds: 30 * 60, cameras: 0, labeled: false, nearCar: true)
+        let b = Offer.Variant(id: 1, seconds: 15 * 60, fullSeconds: 27 * 60, cameras: 0, labeled: false, nearCar: true)
+        let choices = Offer.choices(selected: 0, variants: [a, b])
+        XCTAssertEqual(choices, [0, 1])
+        XCTAssertEqual(Offer.gain(selected: 0, variants: [a, b], choices: choices), .faster(minutes: 3))
     }
 }

@@ -85,7 +85,14 @@ extension CarPlaySceneDelegate {
             if model.isPreviewing, !building, phase != .free,
                let destination = route.destinationCoordinate, let shown = previewDestination,
                !CarPlayGuidance.same(shown, destination) {
-                showPreview(name: route.destinationName, destination: destination)
+                previewAskedInCar = false
+                // На ходу нового списка не показываем: читать его нельзя, а
+                // MovingWatch принял бы его только через 4 с.
+                if moving {
+                    endPreview(start: true, keepRoute: true, reason: "цель сменили на ходу — едем к новой")
+                } else {
+                    showPreview(name: route.destinationName, destination: destination)
+                }
             }
         case .show:
             guard let destination = route.destinationCoordinate else { return }
@@ -331,8 +338,14 @@ extension CarPlaySceneDelegate {
     /// ведение у Яндекса (сценарий D1). Вернуть ведение — новый маршрут
     /// (цель — в «Недавних»).
     func mapTemplateDidCancelNavigation(_ mapTemplate: CPMapTemplate) {
-        // Список выбора открыт: сессию закрыли мы сами (выбор поверх ведения),
-        // и её конец не значит, что навигацию забрали.
+        // Отзвук нашей отмены ради списка: по заголовку его быть не должно, а
+        // снял бы маршрут сразу после закрытия списка. Отдельная строка журнала —
+        // журнал с устройства подтвердит или опровергнет, нужно ли окно вообще.
+        if guidance.consumePreviewCancelEcho() {
+            Log.carplay.notice("CarPlay: ОТЗВУК отмены ради списка — событие пришло после нашего cancelTrip, маршрут не трогаю")
+            return
+        }
+        // Список открыт, а сессии при нём нет: отменять нечего.
         if model.isPreviewing {
             Log.carplay.notice("CarPlay: отмена навигации при открытом выборе — маршрут не трогаю")
             return
@@ -340,13 +353,6 @@ extension CarPlaySceneDelegate {
         // Только владелец экрана машины и только наша живая сессия: событие
         // старой сцены после «моргания» кабеля или отмена сессии, которой у
         // нас нет, не вправе снимать общий маршрут (ревью 20.10).
-        // Отзвук собственной отмены: по заголовку событие только про отмену
-        // системой, но отзвук после закрытия списка снял бы маршрут (новая сессия
-        // уже есть, hadSession истинно) и запретил ведение к этой цели.
-        if CarPlayGuidanceMapping.isOwnCancelEcho(cancelledAt: guidance.ownCancelAt, now: Date()) {
-            Log.carplay.notice("CarPlay: отмена навигации сразу после нашей — отзвук, маршрут не трогаю")
-            return
-        }
         let hadSession = model.hasSystemGuidance
         guidance.systemCancelled()
         guard Self.activeDelegate === self, hadSession else {

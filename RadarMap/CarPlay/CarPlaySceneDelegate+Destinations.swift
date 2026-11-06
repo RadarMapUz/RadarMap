@@ -328,6 +328,7 @@ extension CarPlaySceneDelegate {
                     if previewTrip != nil { mapTemplate?.hideTripPreviews() }
                     previewTrip = nil
                     previewOffer = nil
+                    previewAskedInCar = preview
                     // Карточки на экране больше нет; новая поставит флаг сама.
                     self.env.route.choiceShownInCar = false
                     model.isPreviewing = preview
@@ -505,6 +506,7 @@ extension CarPlaySceneDelegate {
         previewShown = nil
         previewEstimateKey = nil
         previewOffer = nil
+        previewAskedInCar = false
         env.route.choiceShownInCar = false
         guard model.isPreviewing else { return }
         if !keepRoute { env.route.clear() }

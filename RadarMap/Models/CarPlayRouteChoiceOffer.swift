@@ -36,8 +36,12 @@ nonisolated enum CarPlayRouteChoiceOffer {
 
     struct Variant: Equatable, Sendable {
         let id: Int
-        /// Время, которое осталось ехать (см. `variant(id:…)`).
+        /// Время, которое осталось ехать (см. `variant(id:…)`): доля показанного
+        /// времени по доле пути. Скорость оно считает ровной, поэтому одно не
+        /// доказывает «быстрее» — см. `saved`.
         let seconds: Double
+        /// Показанное время всего варианта.
+        let fullSeconds: Double
         /// Камеры на нашей стороне впереди.
         let cameras: Int
         /// У варианта своя метка («Знакомый», «Спокойнее», «Проще»…).
@@ -56,10 +60,18 @@ nonisolated enum CarPlayRouteChoiceOffer {
     static func variant(id: Int, shownSeconds: Double, distance: Double, along: Double,
                         deviation: Double, cameraAlongs: [Double], labeled: Bool) -> Variant {
         let left = distance > 0 ? max(0, 1 - along / distance) : 1
-        return Variant(id: id, seconds: shownSeconds * left,
+        return Variant(id: id, seconds: shownSeconds * left, fullSeconds: shownSeconds,
                        cameras: cameraAlongs.count { $0 > along },
                        labeled: labeled && along <= AppConfig.carPlayChoiceOfferMaxMeters,
                        nearCar: deviation <= AppConfig.routeSnapMeters)
+    }
+
+    /// На сколько вариант быстрее выбранного наверняка: меньшая из разниц по
+    /// остатку и по полному времени. Одна доля пути обманывает при неровной
+    /// скорости: A — 25 мин на 25 км, B — 26 мин на 13 км, общие первые 4 км.
+    /// По долям 21 и 18 мин, «быстрее на 3», а на деле B на минуту медленнее.
+    static func saved(_ other: Variant, over selected: Variant) -> Double {
+        min(selected.seconds - other.seconds, selected.fullSeconds - other.fullSeconds)
     }
 
     /// Заметно ли вариант лучше выбранного: быстрее на ощутимое время, или не
@@ -69,7 +81,7 @@ nonisolated enum CarPlayRouteChoiceOffer {
         guard other.nearCar else { return false }
         let faster = max(AppConfig.carPlayChoiceOfferFasterSeconds,
                          selected.seconds * AppConfig.carPlayChoiceOfferFasterShare)
-        if other.seconds <= selected.seconds - faster { return true }
+        if saved(other, over: selected) >= faster { return true }
         let slower = max(AppConfig.carPlayChoiceOfferSlowerSeconds,
                          selected.seconds * AppConfig.carPlayChoiceOfferSlowerShare)
         guard other.seconds <= selected.seconds + slower else { return false }
@@ -94,8 +106,8 @@ nonisolated enum CarPlayRouteChoiceOffer {
     static func gain(selected: Int, variants: [Variant], choices: [Int]) -> Gain {
         guard let current = variants.first(where: { $0.id == selected }) else { return .other }
         let others = variants.filter { $0.id != selected && choices.contains($0.id) }
-        let saved = current.seconds - (others.map(\.seconds).min() ?? current.seconds)
-        if saved >= AppConfig.carPlayChoiceOfferFasterSeconds { return .faster(minutes: Int((saved / 60).rounded())) }
+        let best = others.map { saved($0, over: current) }.max() ?? 0
+        if best >= AppConfig.carPlayChoiceOfferFasterSeconds { return .faster(minutes: Int((best / 60).rounded())) }
         let fewer = current.cameras - (others.map(\.cameras).min() ?? current.cameras)
         return fewer > 0 ? .fewerCameras(fewer) : .other
     }

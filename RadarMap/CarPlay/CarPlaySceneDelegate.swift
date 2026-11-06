@@ -432,6 +432,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Список открыт из баннера: какие варианты показать и к какому вернуться
     /// по «Отмена» — маршрут при этом остаётся, снимать его водитель не просил.
     var previewOffer: (route: Int, origin: Int, ids: Set<Int>)?
+    /// Список открыт по просьбе водителя в машине («Куда»): его «Отмена» снимает
+    /// только что заказанный маршрут и в поездке.
+    var previewAskedInCar = false
 
     /// Что сейчас показано поверх карты (алерт, сетка, поиск). Своя
     /// запись вместо `interfaceController.presentedTemplate`: то свойство

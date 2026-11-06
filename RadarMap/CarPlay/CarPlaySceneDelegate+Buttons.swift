@@ -455,17 +455,18 @@ extension CarPlaySceneDelegate {
         return (image ?? UIImage()).withRenderingMode(.alwaysTemplate)
     }
 
-    /// «Отмена» в баре на время выбора — единственная кнопка: выбор закрыт,
-    /// маршрут снят, карта снова за машиной. Список, открытый из баннера «Есть
-    /// другие варианты», маршрут не снимает: водитель просто посмотрел — едем
-    /// тем, чем ехали (`closeOfferedPreview`).
+    /// «Отмена» в баре на время выбора — единственная кнопка: выбор закрыт, карта
+    /// снова за машиной. Снимает ли она маршрут — CarPlayTripPreview.cancelKeepsRoute.
     var cancelPreviewButton: CPBarButton {
         CPBarButton(title: String(localized: "Отмена")) { [weak self] _ in
             guard let self else { return }
             if self.previewOffer != nil {
                 self.closeOfferedPreview()
             } else {
-                self.endPreview(start: false, keepRoute: false, reason: "Отмена")
+                let keeps = CarPlayTripPreview.cancelKeepsRoute(offered: false,
+                                                                tripActive: self.env.location.isTripActive,
+                                                                askedInCar: self.previewAskedInCar)
+                self.endPreview(start: false, keepRoute: keeps, reason: "Отмена")
             }
         }
     }

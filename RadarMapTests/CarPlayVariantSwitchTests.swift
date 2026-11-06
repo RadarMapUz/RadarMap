@@ -101,11 +101,44 @@ final class CarPlayVariantSwitchTests: XCTestCase {
 
     // MARK: - Отмена навигации
 
-    func testOwnCancelEchoWindow() {
+    /// Окно отзвука — только после отмены ради списка и только один раз.
+    func testOwnCancelEchoIsOnlyForThePreviewAndOnce() {
         let at = Date(timeIntervalSince1970: 1_800_000_000)
-        typealias Map = CarPlayGuidanceMapping
-        XCTAssertFalse(Map.isOwnCancelEcho(cancelledAt: nil, now: at), "своей отмены не было — решение системы")
-        XCTAssertTrue(Map.isOwnCancelEcho(cancelledAt: at, now: at.addingTimeInterval(1)))
-        XCTAssertFalse(Map.isOwnCancelEcho(cancelledAt: at, now: at.addingTimeInterval(AppConfig.carPlayOwnCancelEchoSeconds)))
+        var echo = CarPlayGuidanceMapping.PreviewCancelEcho()
+        XCTAssertFalse(echo.consume(now: at), "своей отмены не было — решение системы")
+        echo.note(.preview, now: at)
+        XCTAssertTrue(echo.consume(now: at.addingTimeInterval(1)), "сразу после отмены ради списка")
+        XCTAssertFalse(echo.consume(now: at.addingTimeInterval(1.1)), "второе событие — уже настоящая отмена")
+        echo.note(.preview, now: at)
+        XCTAssertFalse(echo.consume(now: at.addingTimeInterval(AppConfig.carPlayOwnCancelEchoSeconds)), "окно вышло")
+    }
+
+    /// Отмена при обычном конце поездки или `restartSession`: окно на неё не
+    /// действует, настоящая отмена системы снимает маршрут как раньше.
+    func testRegularCancelsOpenNoEchoWindow() {
+        let at = Date(timeIntervalSince1970: 1_800_000_000)
+        for reason in [CarPlayGuidanceMapping.OwnCancel.tripEnded, .restart] {
+            var echo = CarPlayGuidanceMapping.PreviewCancelEcho()
+            echo.note(reason, now: at)
+            XCTAssertFalse(echo.consume(now: at.addingTimeInterval(0.5)), "\(reason)")
+            // И окно списка они закрывают: сессия после него уже другая.
+            echo.note(.preview, now: at)
+            echo.note(reason, now: at.addingTimeInterval(0.2))
+            XCTAssertFalse(echo.consume(now: at.addingTimeInterval(0.5)), "\(reason) после списка")
+        }
+    }
+
+    // MARK: - «Отмена» в списке
+
+    func testCancelKeepsTheRouteOnlyWhenTheDriverDidNotCancelIt() {
+        typealias Preview = CarPlayTripPreview
+        XCTAssertFalse(Preview.cancelKeepsRoute(offered: false, tripActive: false, askedInCar: false),
+                       "вне поездки — как было")
+        XCTAssertFalse(Preview.cancelKeepsRoute(offered: false, tripActive: false, askedInCar: true))
+        XCTAssertTrue(Preview.cancelKeepsRoute(offered: false, tripActive: true, askedInCar: false),
+                      "поездка идёт, цель сменили на телефоне: водитель маршрут не отменял")
+        XCTAssertFalse(Preview.cancelKeepsRoute(offered: false, tripActive: true, askedInCar: true),
+                       "«Куда» поверх поездки: «Отмена» и значит «не туда»")
+        XCTAssertTrue(Preview.cancelKeepsRoute(offered: true, tripActive: false, askedInCar: false), "из баннера")
     }
 }

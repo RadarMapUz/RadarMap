@@ -204,13 +204,29 @@ nonisolated enum CarPlayGuidanceMapping {
     /// минуты (ArrivalClock.carMaySend) — тогда в начале следующей.
     enum TripSend: Equatable { case now, at(Date), no }
 
-    /// Событие об отмене навигации сразу после нашей собственной — отзвук, а не
-    /// решение системы (`carPlayOwnCancelEchoSeconds`).
-    static func isOwnCancelEcho(cancelledAt: Date?, now: Date,
-                                window: TimeInterval = AppConfig.carPlayOwnCancelEchoSeconds) -> Bool {
-        guard let cancelledAt else { return false }
-        let since = now.timeIntervalSince(cancelledAt)
-        return since >= 0 && since < window
+    /// Почему мы сами закрыли сессию.
+    enum OwnCancel: Equatable, Sendable { case preview, restart, tripEnded }
+
+    /// Отзвук нашей отмены ради списка. По заголовку `mapTemplateDidCancelNavigation`
+    /// отзвука быть не должно; окно — страховка, пока журнал с устройства этого не
+    /// подтвердит: отзвук снял бы маршрут сразу после закрытия списка. Только отмена
+    /// ради списка и только один раз: настоящая отмена приходит единожды, и фильтр,
+    /// съевший её, оставил бы мёртвую сессию — телефон говорил бы повороты поверх
+    /// чужого навигатора. Конец поездки и `restartSession` окна не открывают.
+    struct PreviewCancelEcho: Equatable, Sendable {
+        private(set) var cancelledAt: Date?
+
+        mutating func note(_ reason: OwnCancel, now: Date) {
+            cancelledAt = reason == .preview ? now : nil
+        }
+
+        /// Это отзвук? Срабатывает один раз; после окна метки тоже нет.
+        mutating func consume(now: Date, window: TimeInterval = AppConfig.carPlayOwnCancelEchoSeconds) -> Bool {
+            guard let at = cancelledAt else { return false }
+            cancelledAt = nil
+            let since = now.timeIntervalSince(at)
+            return since >= 0 && since < window
+        }
     }
 
     static func tripSend(due: Bool, now: Date) -> TripSend {
@@ -348,11 +364,15 @@ final class CarPlayGuidance {
     /// списка, а не следующим пересчётом — выбор показывается только без
     /// сессии (как и при «Куда» на стоянке). Новая сессия к той же цели
     /// начнётся сама, когда список закроют (`sync`).
-    private(set) var ownCancelAt: Date?
-
     func yieldToPreview() {
-        if let session { dropSession(.cancel, session) }
+        if let session { dropSession(.cancel, session, reason: .preview) }
     }
+
+    /// Отмена навигации только что — отзвук нашей отмены ради списка?
+    func consumePreviewCancelEcho(now: Date = Date()) -> Bool {
+        previewCancelEcho.consume(now: now)
+    }
+    private var previewCancelEcho = CarPlayGuidanceMapping.PreviewCancelEcho()
 
     /// Навигацию забрала система: сессии нет, и для ЭТОЙ цели её не
     /// перезапускаем — иначе шаблон и система дрались бы за экран до конца
@@ -371,7 +391,7 @@ final class CarPlayGuidance {
     func restartSession(reason: String) {
         guard let session else { return refresh(reason: reason) }
         Log.carplay.notice("сессия заново: \(reason, privacy: .public)")
-        dropSession(.cancel, session)
+        dropSession(.cancel, session, reason: .restart)
         sync()
     }
 
@@ -479,7 +499,7 @@ final class CarPlayGuidance {
         // устроен CarPlay: предпросмотр, затем startNavigationSession). Старое
         // ведение к прежней цели при этом заканчиваем: маршрут уже другой.
         if model.isPreviewing {
-            if let session { dropSession(.cancel, session) }
+            if let session { dropSession(.cancel, session, reason: .preview) }
             updateCameraBanner()
             return
         }
@@ -514,7 +534,7 @@ final class CarPlayGuidance {
             // Разница видна водителю: CarPlay по-разному прощается с поездкой.
             let arrived = route.lastArrival
                 .map { Date().timeIntervalSince($0.at) < AppConfig.carPlayArrivalFreshSeconds } ?? false
-            dropSession(arrived ? .finish : .cancel, session)
+            dropSession(arrived ? .finish : .cancel, session, reason: .tripEnded)
         }
         updateCameraBanner()
     }
@@ -528,12 +548,13 @@ final class CarPlayGuidance {
     /// попрощаться с поездкой, затем очистить её списки — потом забыть всё,
     /// что держалось ради этой сессии. Ряды полос (`laneGuidances`) уходят
     /// последними: манёвры держат их ссылкой `assign`.
-    private func dropSession(_ end: SessionEnd, _ session: CPNavigationSession? = nil) {
+    private func dropSession(_ end: SessionEnd, _ session: CPNavigationSession? = nil,
+                             reason: CarPlayGuidanceMapping.OwnCancel = .tripEnded) {
         if let session {
             switch end {
             case .finish: session.finishTrip()
             case .cancel:
-                ownCancelAt = Date()
+                previewCancelEcho.note(reason, now: Date())
                 session.cancelTrip()
             case .none: break
             }

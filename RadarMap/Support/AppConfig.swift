@@ -1707,6 +1707,14 @@ nonisolated enum AppConfig {
 
     /// Коридор (метры) от линии маршрута — камеры ближе этого считаются «на маршруте».
     static let routeCorridorMeters: CLLocationDistance = 90
+    /// Проекция камеры за первую или последнюю точку линии дальше этого — камера
+    /// не на маршруте (RouteLineEnds). Ближе — шум, а не доказательство: старт
+    /// снапнут с фикса, координата камеры снята снапом, и обе ошибаются на
+    /// столько же (`roadShapeMinToleranceMeters`, отличный GPS). Шум с большим
+    /// запасом закрывает допуск живых гейтов (`corridorBehindToleranceMeters`,
+    /// 30 м позади): здесь не решается, замолчит ли камера, только кто судит.
+    /// Цена допуска — камера до 10 м за стартом по-прежнему «0 м».
+    static let routeLineEndToleranceMeters: CLLocationDistance = roadShapeMinToleranceMeters
 
     // MARK: - Маршрутизация
 
@@ -2145,11 +2153,6 @@ nonisolated enum AppConfig {
     static let carPlayDockHeight: CGFloat = 100
     /// Прибор плитки главного экрана машины: прибытие — от такой ширины.
     static let carPlayGaugeArrivalWidth: CGFloat = 300
-    /// Прибор плитки: камера с расстоянием меньше этого по маршруту и дальше
-    /// этого по прямой — позади старта маршрута, а не «0 м впереди»
-    /// (CarPlayCameraCue.gaugeShows). 40 м — траверз записи проезда.
-    static let carPlayGaugeZeroMeters: Double = 5
-    static let carPlayGaugeZeroStraightMeters: Double = 40
     /// Потолок ширины приборной панели. На экране в 1900 точек три зоны,
     /// растянутые по третям всей ширины, разъезжаются так, что глаз пробегает
     /// весь дисплей ради одной строки данных. Остров, а не лента.

@@ -96,14 +96,4 @@ final class CarPlayCameraCueTests: XCTestCase {
                       "проехали — подпись уходит сразу")
         XCTAssertTrue(CarPlayCameraCue.shouldRefreshLabel(shown: nil, new: shown, sinceLast: 0))
     }
-
-    /// Прибор плитки (снимок 05.11): своя камера позади старта маршрута, у
-    /// которой маршрут дал «0 м», а по прямой — 67 м, не показывается; ноль на
-    /// траверзе настоящего проезда — показывается.
-    func testGaugeHidesTheZeroOfACameraBehindTheRouteStart() {
-        XCTAssertFalse(CarPlayCameraCue.gaugeShows(distance: 0, straight: 67), "позади старта, прижата к нулю")
-        XCTAssertTrue(CarPlayCameraCue.gaugeShows(distance: 0, straight: 12), "проезжаем — у камеры")
-        XCTAssertTrue(CarPlayCameraCue.gaugeShows(distance: 380, straight: 360))
-        XCTAssertTrue(CarPlayCameraCue.gaugeShows(distance: AppConfig.carPlayGaugeZeroMeters, straight: 900))
-    }
 }

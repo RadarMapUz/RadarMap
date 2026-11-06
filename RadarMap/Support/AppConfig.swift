@@ -487,6 +487,12 @@ nonisolated enum AppConfig {
     /// не были — проезда не было: начали рядом с ней и уехали (PassGeometry.
     /// startedPast). Ближе — первый фикс на самом траверзе, он записывается.
     static let passStartedPastMeters: CLLocationDistance = 10
+    /// Запас там же — путь за интервал между фиксами: фикс бывает реже секунды
+    /// (адаптивный GPS, 2–3 с в пути). Без предыдущего фикса считаем 2 с. Потолок:
+    /// после дыры в сигнале путь за неё уже шире траверза записи, и правило
+    /// просто не срабатывает — выезд из тоннеля за камерой записывается.
+    static let passStartedPastFirstLagSeconds: TimeInterval = 2
+    static let passStartedPastMaxLagSeconds: TimeInterval = 5
     /// Один проезд на точку (11.1): тот же тип камеры ближе этого и в
     /// пределах этого времени — повтор (дубли базы стоят в 1–11 м).
     static let passDuplicateMeters: CLLocationDistance = 15

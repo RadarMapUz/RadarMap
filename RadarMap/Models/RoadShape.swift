@@ -386,13 +386,16 @@ nonisolated enum PassGeometry {
     }
 
     /// Первый годный курс: камера уже позади, а ближе `closest` мы к ней не были.
-    /// Запас — не меньше секунды пути: фикс раз в секунду приходит с отставанием
-    /// от траверза, и две камеры в паре метров передают ближайшую уже за первой.
-    /// Камера точно сбоку (дальняя проезжая часть) позади не считается.
+    /// Запас — не меньше пути за реальный интервал между фиксами (`lag`; nil —
+    /// фикса до этого не было): фикс приходит с отставанием от траверза, и две
+    /// камеры в паре метров передают ближайшую уже за первой. Камера точно сбоку
+    /// (дальняя проезжая часть) позади не считается.
     static func startedPast(camera: Camera, closest: CLLocationDistance,
                             at coordinate: CLLocationCoordinate2D, course: CLLocationDirection,
-                            speedKmh: Double) -> Bool {
-        let limit = max(AppConfig.passStartedPastMeters, speedKmh / 3.6)
+                            speedKmh: Double, lag: TimeInterval?) -> Bool {
+        let seconds = lag.flatMap { $0 > 0 ? min($0, AppConfig.passStartedPastMaxLagSeconds) : nil }
+            ?? AppConfig.passStartedPastFirstLagSeconds
+        let limit = max(AppConfig.passStartedPastMeters, speedKmh / 3.6 * seconds)
         return closest > limit
             && RoadCorridor.fix(from: coordinate, course: course, to: camera.coordinate).along < -limit
     }

@@ -75,6 +75,8 @@ nonisolated struct PassTracking {
     }
 
     private(set) var tracked: [Int: Tracker] = [:]
+    /// Время прошлого фикса — интервал для запаса «начали за камерой».
+    private var lastFix: Date?
 
     /// Скорость проезда: минимальная из зоны измерения (80 м перед камерой) —
     /// разгон ПОСЛЕ проезда или смещённая координата камеры в базе не завышают
@@ -104,6 +106,8 @@ nonisolated struct PassTracking {
                          axisDeviation: (Camera, CLLocationCoordinate2D, CLLocationDirection) -> Double?
                             = { _, _, _ in nil })
         -> [Pass] {
+        let lag = lastFix.map { now.timeIntervalSince($0) }
+        lastFix = now
         // Вошли в радиус камеры впереди — начинаем следить.
         if let nearest, let distance = nearestDistance,
            distance <= radius, tracked[nearest.id] == nil {
@@ -137,7 +141,8 @@ nonisolated struct PassTracking {
             let moving = course >= 0 && speedKmh >= AppConfig.directionalMinSpeedKmh
             if moving, tracker.startedPast == nil, distance >= tracker.minDist {
                 tracker.startedPast = PassGeometry.startedPast(camera: tracker.camera, closest: tracker.minDist,
-                                                               at: coordinate, course: course, speedKmh: speedKmh)
+                                                               at: coordinate, course: course,
+                                                               speedKmh: speedKmh, lag: lag)
                 tracked[id] = tracker
             }
             var sampled = false
@@ -190,11 +195,13 @@ nonisolated struct PassTracking {
     mutating func flush() -> [Pass] {
         let passes = tracked.values.compactMap(Self.pass(from:))
         tracked.removeAll()
+        lastFix = nil
         return passes
     }
 
     mutating func reset() {
         tracked.removeAll()
+        lastFix = nil
     }
 
     /// Три гейта записи, все — по траверзу.

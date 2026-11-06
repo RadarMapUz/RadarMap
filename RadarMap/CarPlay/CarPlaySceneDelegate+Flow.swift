@@ -70,6 +70,11 @@ extension CarPlaySceneDelegate {
         let decision = NavigationFlow.carChoice(from: flowPhase, to: phase,
                                                 showing: model.isPreviewing, building: building,
                                                 moving: moving)
+        // «Поехали» при открытой панели телефона: варианты были перед глазами,
+        // и выбор сделан — после остановки о нём не спрашиваем.
+        if flowPhase == .choosing, phase == .guiding, env.isPhoneSceneActive, env.phoneMapOverride {
+            Self.choiceOffer.spend(route: choiceOfferKey())
+        }
         // Пока строится, фаза промежуточная — прошлой её не считаем: иначе
         // маршрут, достроенный на телефоне, не открыл бы выбор здесь.
         if !building { flowPhase = phase }
@@ -207,6 +212,7 @@ extension CarPlaySceneDelegate {
             confirmBanner = nil
             confirmBannerID = nil
         }
+        if alert === choiceOfferAlert { choiceOfferAlert = nil }
         roadWeatherBanner.forget(alert)
         jamBanner.forget(alert)
         if alert === reportBanner {
@@ -324,6 +330,12 @@ extension CarPlaySceneDelegate {
     /// ведение у Яндекса (сценарий D1). Вернуть ведение — новый маршрут
     /// (цель — в «Недавних»).
     func mapTemplateDidCancelNavigation(_ mapTemplate: CPMapTemplate) {
+        // Список выбора открыт: сессию закрыли мы сами (выбор поверх ведения),
+        // и её конец не значит, что навигацию забрали.
+        if model.isPreviewing {
+            Log.carplay.notice("CarPlay: отмена навигации при открытом выборе — маршрут не трогаю")
+            return
+        }
         // Только владелец экрана машины и только наша живая сессия: событие
         // старой сцены после «моргания» кабеля или отмена сессии, которой у
         // нас нет, не вправе снимать общий маршрут (ревью 20.10).

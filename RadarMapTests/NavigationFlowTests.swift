@@ -49,6 +49,16 @@ final class NavigationFlowTests: XCTestCase {
         XCTAssertEqual(Flow.carChoice(from: .guiding, to: .free, showing: true, building: false), .close)
     }
 
+    /// Выбор, открытый из баннера поверх ведения (51): пока список на экране,
+    /// сессии нет и фаза его не закрывает; закрыли — ведение снова машины.
+    func testChoiceOpenedOverGuidanceStaysAndGuidanceReturns() {
+        XCTAssertEqual(Flow.carChoice(from: .guiding, to: .guiding, showing: true, building: false), .none)
+        XCTAssertFalse(Flow.carGuides(phase: .guiding, choosing: true), "список на экране — сессии нет")
+        XCTAssertEqual(Flow.carChoice(from: .guiding, to: .guiding, showing: false, building: false), .none,
+                       "закрыли — выбор сам не всплывает")
+        XCTAssertTrue(Flow.carGuides(phase: .guiding, choosing: false), "и ведение возвращается")
+    }
+
     /// Маршрут с телефона на ходу: в машине ни списка вариантов, ни старта
     /// без «Поехали» — решает телефон (аудит CarPlay 19.10; «я пассажир» на
     /// ходу оставляет маршрут, и автостарт сделал бы пассажира водителем).

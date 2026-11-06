@@ -238,6 +238,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         model.isPreviewing = false
         offerTask?.cancel()
         offerTask = nil
+        choiceOfferCheck?.cancel()
+        choiceOfferCheck = nil
+        choiceOfferAlert = nil
+        previewOffer = nil
         self.interfaceController = nil
         sessionConfiguration = nil
         mapTemplate = nil
@@ -413,6 +417,20 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// посадку в машину не спрашиваем.
     var offeredDestination = false
     var offerTask: Task<Void, Never>?
+
+    // MARK: - Выбор маршрута после остановки
+
+    /// Статический: «один раз на маршрут» переживает моргание кабеля — новая
+    /// сцена машины не спрашивает о том же наборе вариантов второй раз.
+    static var choiceOffer = CarPlayRouteChoiceOffer.Tracker()
+    /// Баннер «Есть другие варианты» на экране и набор, о котором он.
+    var choiceOfferAlert: CPNavigationAlert?
+    var choiceOfferRoute: Int?
+    /// Проверка стоя: фиксов может не быть, а время идёт.
+    var choiceOfferCheck: Task<Void, Never>?
+    /// Список открыт из баннера: какие варианты показать и к какому вернуться
+    /// по «Отмена» — маршрут при этом остаётся, снимать его водитель не просил.
+    var previewOffer: (route: Int, origin: Int, ids: Set<Int>)?
 
     /// Что сейчас показано поверх карты (алерт, сетка, поиск). Своя
     /// запись вместо `interfaceController.presentedTemplate`: то свойство

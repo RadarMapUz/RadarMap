@@ -272,20 +272,32 @@ final class CarPlayScenarioConnectTests: XCTestCase {
         XCTAssertFalse(car.guides(route: true, trip: false))
     }
 
-    /// Подозрение из матрицы (М-7б): маршрут с телефона пришёл на ходу —
-    /// выбора нет; машина остановилась — выбор всё равно не появляется:
-    /// решения принимаются только на смене фазы, а скорость фазу не меняет.
-    /// Начать маршрут из машины можно только заново через «Куда». Фиксирует
-    /// нынешнее поведение — менять его решает владелец.
-    func testPhoneRouteOnTheMoveStaysWithoutAChoiceAfterStopping() {
+    /// М-7б: маршрут с телефона пришёл на ходу — выбора нет. Машина встала:
+    /// полноэкранный выбор по-прежнему не всплывает (остановка — не смена фазы),
+    /// а после устойчивой стоянки решение — предложить его баннером, один раз
+    /// (CarPlayRouteChoiceOffer; решение владельца 06.11, до 51 выбора не было
+    /// вовсе и начать маршрут из машины можно было только заново через «Куда»).
+    func testPhoneRouteOnTheMoveOffersAChoiceOnceAfterASteadyStop() {
         var car = Connection()
         car.rootConfirmed(true)
         car.checkRoot(timedOut: false)
         car.sync(route: false, trip: false, speedKmh: 40)
         XCTAssertEqual(car.sync(route: true, trip: false, speedKmh: 40), .none)
         XCTAssertEqual(car.sync(route: true, trip: false, speedKmh: 0), .none,
-                       "остановка — не смена фазы, выбор не показывается")
+                       "остановка — не смена фазы, полноэкранного выбора нет")
         XCTAssertFalse(car.previewing)
+
+        var offer = CarPlayRouteChoiceOffer.Tracker()
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        func stand(_ seconds: TimeInterval) -> CarPlayRouteChoiceOffer.Decision {
+            offer.update(.init(route: 1, variantCount: 2, speedKmh: 0, along: 200, length: 8_000),
+                         now: start.addingTimeInterval(seconds))
+        }
+        XCTAssertEqual(stand(0), .check(after: AppConfig.carPlayChoiceOfferStandSeconds))
+        XCTAssertEqual(stand(AppConfig.carPlayChoiceOfferStandSeconds), .ready)
+        offer.spend(route: 1)
+        XCTAssertEqual(stand(AppConfig.carPlayChoiceOfferStandSeconds + 60), .none, "один раз")
+        XCTAssertFalse(car.previewing, "сам баннер выбор не открывает")
     }
 
     /// М-12: навигацию забрала система (Яндекс начал своё ведение). Мы

@@ -86,6 +86,7 @@ extension CarPlaySceneDelegate {
     /// нет. Вопрос, закрытый без ответа, — это «Пропустить»: ничего не шлём.
     func mapTemplate(_ mapTemplate: CPMapTemplate, didDismiss navigationAlert: CPNavigationAlert,
                      dismissalContext: CPNavigationAlert.DismissalContext) {
+        if navigationAlert === choiceOfferAlert { choiceOfferAlert = nil }
         if dismissalContext == .systemDismissed {
             forgetBanner(navigationAlert)
         } else if navigationAlert === confirmBanner {

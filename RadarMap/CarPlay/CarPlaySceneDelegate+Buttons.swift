@@ -456,10 +456,17 @@ extension CarPlaySceneDelegate {
     }
 
     /// «Отмена» в баре на время выбора — единственная кнопка: выбор закрыт,
-    /// маршрут снят, карта снова за машиной.
+    /// маршрут снят, карта снова за машиной. Список, открытый из баннера «Есть
+    /// другие варианты», маршрут не снимает: водитель просто посмотрел — едем
+    /// тем, чем ехали (`closeOfferedPreview`).
     var cancelPreviewButton: CPBarButton {
         CPBarButton(title: String(localized: "Отмена")) { [weak self] _ in
-            self?.endPreview(start: false, keepRoute: false, reason: "Отмена")
+            guard let self else { return }
+            if self.previewOffer != nil {
+                self.closeOfferedPreview()
+            } else {
+                self.endPreview(start: false, keepRoute: false, reason: "Отмена")
+            }
         }
     }
 }

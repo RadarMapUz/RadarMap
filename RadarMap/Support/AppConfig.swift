@@ -483,6 +483,10 @@ nonisolated enum AppConfig {
     /// историю. Камера снимает проезжую часть, над которой стоит: половина
     /// ширины проспекта (13–20 м) плюс шум GPS — это сорок метров с запасом.
     static let passTraverseMaxMeters: CLLocationDistance = 40
+    /// Первый годный курс показал камеру позади дальше этого, а ближе мы к ней
+    /// не были — проезда не было: начали рядом с ней и уехали (PassGeometry.
+    /// startedPast). Ближе — первый фикс на самом траверзе, он записывается.
+    static let passStartedPastMeters: CLLocationDistance = 10
     /// Один проезд на точку (11.1): тот же тип камеры ближе этого и в
     /// пределах этого времени — повтор (дубли базы стоят в 1–11 м).
     static let passDuplicateMeters: CLLocationDistance = 15
@@ -1708,11 +1712,11 @@ nonisolated enum AppConfig {
     /// Коридор (метры) от линии маршрута — камеры ближе этого считаются «на маршруте».
     static let routeCorridorMeters: CLLocationDistance = 90
     /// Проекция камеры за первую или последнюю точку линии дальше этого — камера
-    /// не на маршруте (RouteLineEnds). Ближе — шум, а не доказательство: старт
-    /// снапнут с фикса, координата камеры снята снапом, и обе ошибаются на
-    /// столько же (`roadShapeMinToleranceMeters`, отличный GPS). Шум с большим
-    /// запасом закрывает допуск живых гейтов (`corridorBehindToleranceMeters`,
-    /// 30 м позади): здесь не решается, замолчит ли камера, только кто судит.
+    /// не на маршруте (RouteLineEnds). Ближе — шум снапа старта и GPS
+    /// (`roadShapeMinToleranceMeters`, отличный GPS). Это не предел ошибки самой
+    /// камеры: снап правит её координату поперёк дороги, а вдоль дороги ошибка
+    /// реестра бывает больше десяти метров. Её в сторону тишины ограничивает
+    /// допуск живых гейтов (`corridorBehindToleranceMeters`, 30 м позади).
     /// Цена допуска — камера до 10 м за стартом по-прежнему «0 м».
     static let routeLineEndToleranceMeters: CLLocationDistance = roadShapeMinToleranceMeters
 
@@ -2153,6 +2157,11 @@ nonisolated enum AppConfig {
     static let carPlayDockHeight: CGFloat = 100
     /// Прибор плитки главного экрана машины: прибытие — от такой ширины.
     static let carPlayGaugeArrivalWidth: CGFloat = 300
+    /// Прибор плитки: камера с расстоянием меньше этого по маршруту и дальше
+    /// этого по прямой — за спиной, а не «0 м впереди»
+    /// (CarPlayCameraCue.gaugeShows). 40 м — траверз записи проезда.
+    static let carPlayGaugeZeroMeters: Double = 5
+    static let carPlayGaugeZeroStraightMeters: Double = 40
     /// Потолок ширины приборной панели. На экране в 1900 точек три зоны,
     /// растянутые по третям всей ширины, разъезжаются так, что глаз пробегает
     /// весь дисплей ради одной строки данных. Остров, а не лента.

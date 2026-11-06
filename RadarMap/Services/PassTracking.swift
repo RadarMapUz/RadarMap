@@ -43,6 +43,9 @@ nonisolated struct PassTracking {
         /// перекрёстке (PassGeometry.isProvenCrossing). Пусто — доказывать
         /// нечем, решают прежние гейты.
         var traverseDeviations: [Double] = []
+        /// Слежение началось уже за камерой, и ближе мы к ней не были: проезда
+        /// нет (PassGeometry.startedPast). nil — годного курса ещё не было.
+        var startedPast: Bool?
     }
 
     /// Завершённый проезд, готовый к записи в поездку.
@@ -126,6 +129,17 @@ nonisolated struct PassTracking {
             // подходе, и на отходе: пересечение её дороги длится весь траверз,
             // а один тик курса шумит. Только на ходу, как у гейтов: стоящей
             // машине курс не верят (LocationGates.isFilteringActive).
+            // Запись требует доказательства, оповещение — нет: гейты держат
+            // камеру и в 30 м позади, а стоя — и в любых, и без этой проверки
+            // старт рядом с камерой писался чистым проездом. Сближение на ходу
+            // снимает отметку (разворот и назад мимо камеры — настоящий проезд);
+            // стоя расстояние шумит и не значит ничего.
+            let moving = course >= 0 && speedKmh >= AppConfig.directionalMinSpeedKmh
+            if moving, tracker.startedPast == nil, distance >= tracker.minDist {
+                tracker.startedPast = PassGeometry.startedPast(camera: tracker.camera, closest: tracker.minDist,
+                                                               at: coordinate, course: course, speedKmh: speedKmh)
+                tracked[id] = tracker
+            }
             var sampled = false
             if distance <= PassGeometry.traverseLimit(for: tracker.camera),
                speedKmh >= AppConfig.directionalMinSpeedKmh,
@@ -138,6 +152,7 @@ nonisolated struct PassTracking {
             }
             if distance < tracker.minDist {
                 tracker.minDist = distance
+                if moving { tracker.startedPast = false }
                 tracker.speedAtMin = speedKmh
                 tracker.courseAtMin = course
                 tracker.timeAtMin = now
@@ -195,6 +210,7 @@ nonisolated struct PassTracking {
     /// по подозрению, запись — по доказательству.
     private static func pass(from tracker: Tracker) -> Pass? {
         guard tracker.minDist <= PassGeometry.traverseLimit(for: tracker.camera),
+              tracker.startedPast != true,
               !tracker.offRoadAtMin,
               !PassGeometry.isProvenCrossing(tracker.traverseDeviations) else { return nil }
         return Pass(camera: tracker.camera,

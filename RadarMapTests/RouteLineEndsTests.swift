@@ -39,7 +39,7 @@ final class RouteLineEndsTests: XCTestCase {
     /// Камера со снапом, как в базе: кусок своей дороги ±100 м под `roadBearing`.
     private func snapped(_ id: Int, _ y: Double, east: Double = 0, roadBearing: Double = 0,
                          type: String = "Стационар радар", cls: String = "primary",
-                         needsReview: Bool = false) -> Camera {
+                         needsReview: Bool = false, dir: Int? = nil, twin: Bool? = nil) -> Camera {
         let at = spot(y, east: east)
         var road: [Int] = []
         for step in [-100.0, 0, 100] {
@@ -49,8 +49,8 @@ final class RouteLineEndsTests: XCTestCase {
             road.append(Int(((p.longitude - at.longitude) * 1e6).rounded()))
         }
         return Camera(id: id, region: "Т", city: "", location: "к", lat: at.latitude, lon: at.longitude,
-                      type: type, violations: [], needsReview: needsReview, axis: nil, dir: nil,
-                      lanes: 2, cls: cls, road: road, split: nil, twin: nil)
+                      type: type, violations: [], needsReview: needsReview, axis: nil, dir: dir,
+                      lanes: 2, cls: cls, road: road, split: nil, twin: twin)
     }
 
     /// Точка без куска дороги: отметка водителей или своя камера.
@@ -240,7 +240,11 @@ final class RouteLineEndsTests: XCTestCase {
     func testStubsAtTheStartDoNotDecide() {
         let main = line(0, 2_000)
         XCTAssertTrue(along([main[0], main[0]] + main.dropFirst(), [snapped(1, -50)]).isEmpty, "повтор точки")
-        let stub = MKMapPoint(spot(1, east: 1))
+        // Почти строго вбок: по такому ходу камера «за стартом» всего на ~10 м и
+        // осталась бы на маршруте; решает ход линии, а не обрезок (5 м).
+        let stub = MKMapPoint(spot(0.2, east: 1))
+        XCTAssertLessThan(RouteLineEnds.overshoot(MKMapPoint(spot(-50)), from: [main[0], stub]),
+                          AppConfig.routeLineEndToleranceMeters, "обрезок сам по себе не доказал бы")
         XCTAssertTrue(along([main[0], stub] + main.dropFirst(), [snapped(1, -50)]).isEmpty, "обрезок в метр")
     }
 
@@ -309,6 +313,9 @@ final class RouteLineEndsTests: XCTestCase {
         XCTAssertEqual(first.distance, 15, accuracy: 0.5)
         XCTAssertFalse(first.onRoute)
         XCTAssertNil(run.tick(spot(20), y: 20, course: 0, speed: speed), "за 30 м позади — ушла")
+        drive(&run, stride(from: 35.0, through: 700, by: 15))
+        run.finish()
+        XCTAssertNil(run.passes[1], "предупредить можно, записать проезд — нет")
     }
 
     // MARK: - Глушить можно только доказанное
@@ -340,6 +347,125 @@ final class RouteLineEndsTests: XCTestCase {
             XCTAssertTrue(pick.onRoute, "\(name): маршрут сильнее геометрии, как раньше")
             XCTAssertEqual(run.firstAlerts[1], 1, name)
         }
+    }
+
+    // MARK: - Доказанные стороны: только здесь исключённая камера может замолчать
+
+    /// Старт в 40 м впереди машины, камера между ними, стороны поделены:
+    /// настоящая по нашему ходу предупреждает, встречная и вне нашей проезжей
+    /// части молчит — обе по доказательству гейтов, а не из-за маршрута.
+    func testProvenSidesWarnForOurDirectionAndMuteTheOncoming() throws {
+        let ours = snapped(1, 10, dir: 0, twin: true)
+        let oncoming = snapped(2, 10, dir: 180, twin: true)
+        let farCarriageway = snapped(3, 10, east: 60, dir: 0, twin: true)
+        XCTAssertTrue(ours.allowsDirectionGate)
+        XCTAssertTrue(along(line(40, 2_000), [ours, oncoming, farCarriageway]).isEmpty)
+
+        var run = bench(line: line(40, 2_000), start: 40, [ours])
+        let pick = try XCTUnwrap(run.tick(spot(-30), y: -30, course: 0, speed: speed))
+        XCTAssertEqual(pick.distance, 40, accuracy: 0.5)
+        XCTAssertEqual(run.firstAlerts[1], 1)
+
+        var against = bench(line: line(40, 2_000), start: 40, [oncoming])
+        XCTAssertNil(against.tick(spot(-30), y: -30, course: 0, speed: speed), "встречная")
+        XCTAssertEqual(LocationGates.verdict(oncoming, in: .init(coordinate: spot(-30), course: 0, speedKmh: speed,
+                                                                 horizontalAccuracy: 5, context: .city),
+                                             isOnRoute: false), .provenDirection)
+
+        var aside = bench(line: line(40, 2_000), start: 40, [farCarriageway])
+        XCTAssertNil(aside.tick(spot(-30), y: -30, course: 0, speed: speed), "другая проезжая часть")
+
+        // Стоя доказательств нет ни у какой: неизвестность — в пользу предупреждения.
+        var standing = bench(line: line(40, 2_000), start: 40, [oncoming])
+        XCTAssertEqual(standing.tick(spot(-30), y: -30, course: -1, speed: 0)?.id, 2)
+    }
+
+    // MARK: - Курс поперёк дороги и выезд с парковки
+
+    func testCrossingTheRoadPastTheCameraIsSilent() {
+        var run = bench(line: line(0, 2_000), start: 0, [snapped(1, -30)])
+        for east in stride(from: -60.0, through: 60, by: 15) {
+            XCTAssertNil(run.tick(spot(0, east: east), y: 0, course: 90, speed: 30), "\(east)")
+        }
+        run.finish()
+        XCTAssertNil(run.firstAlerts[1])
+        XCTAssertNil(run.passes[1])
+    }
+
+    /// Парковка у дороги, старт снапнут на дорогу за камерой, а выезд — до неё.
+    /// Поперёк дороги молчим; выехали — первое предупреждение звучит на
+    /// оставшемся расстоянии, и проезд записан. Самое короткое из всех
+    /// предупреждений, но не молчание; раньше было «0 м» весь выезд.
+    func testLeavingAParkingLotOntoTheRoadBeforeTheCamera() throws {
+        var run = bench(line: line(20, 2_000), start: 20, [snapped(1, 0)])
+        XCTAssertTrue(run.route.isEmpty)
+        for east in stride(from: 70.0, through: 10, by: -15) {
+            XCTAssertNil(run.tick(spot(-40, east: east), y: -40, course: 270, speed: 25), "выезд поперёк, \(east)")
+        }
+        let pick = try XCTUnwrap(run.tick(spot(-40), y: -40, course: 0, speed: 30))
+        XCTAssertEqual(pick.distance, 40, accuracy: 0.5)
+        XCTAssertEqual(run.firstAlerts[1], 1)
+        XCTAssertEqual(run.firstDistances[1] ?? 0, 40, accuracy: 0.5)
+        drive(&run, stride(from: -30.0, through: 700, by: 10), speed: 30)
+        run.finish()
+        XCTAssertEqual(run.passes[1], 30, "проезд записан")
+    }
+
+    // MARK: - Запись проезда: начали рядом с камерой и уехали
+
+    func testStandingNearTheCameraAndLeavingIsNotAPass() throws {
+        for y in [-15.0, -35] {
+            var run = bench(line: line(0, 2_000), start: 0, [snapped(1, y)])
+            XCTAssertEqual(run.tick(spot(0), y: 0, course: -1, speed: 0)?.id, 1, "предупредили, стоя")
+            // Стоя точка шумит и в сторону камеры — это не сближение.
+            run.tick(spot(-1), y: 0, course: -1, speed: 0)
+            drive(&run, stride(from: 5.0, through: 700, by: 10))
+            run.finish()
+            XCTAssertNil(run.passes[1], "\(y) м за камерой — проезда не было")
+        }
+    }
+
+    /// Шаг записи по одной камере: первый фикс — там, где сказано, дальше едем.
+    private func recorded(_ camera: Camera, firstY: Double, east: Double = 0, speed: Double,
+                          firstCourse: Double = 0, then ys: [(y: Double, course: Double)]) -> Bool {
+        var tracking = PassTracking()
+        let first = spot(firstY, east: east)
+        let distance = GeoMath.fastDistance(first.latitude, first.longitude, camera.lat, camera.lon)
+        var passes = tracking.update(nearest: camera, nearestDistance: distance, coordinate: first,
+                                     speedKmh: speed, roadLimit: nil, radius: 400, course: firstCourse)
+        for tick in ys {
+            passes += tracking.update(nearest: nil, nearestDistance: nil, coordinate: spot(tick.y, east: east),
+                                      speedKmh: speed, roadLimit: nil, radius: 400, course: tick.course)
+        }
+        passes += tracking.flush()
+        return passes.contains { $0.camera.id == camera.id }
+    }
+
+    /// Настоящая запись не теряется: первый фикс на самом траверзе, с отставанием
+    /// на тик и на дальней проезжей части; разворот и назад мимо камеры.
+    func testARealPassStaysRecorded() {
+        let camera = snapped(1, 0)
+        let away = stride(from: 40.0, through: 600, by: 30).map { (y: $0, course: 0.0) }
+        XCTAssertTrue(recorded(camera, firstY: -2, speed: 60, then: away), "на траверзе, ещё до камеры")
+        XCTAssertTrue(recorded(camera, firstY: 8, speed: 60, then: away), "на траверзе, уже за камерой")
+        XCTAssertTrue(recorded(camera, firstY: 25, speed: 100, then: away), "отстали на тик: 28 м/с")
+        XCTAssertTrue(recorded(camera, firstY: 1, east: 25, speed: 60, then: away), "дальняя проезжая часть, сбоку")
+        let back = stride(from: 15.0, through: -300, by: -25).map { (y: $0, course: 180.0) }
+        XCTAssertTrue(recorded(camera, firstY: 20, speed: 40, then: back), "развернулись и проехали мимо неё")
+    }
+
+    func testFirstFixBehindOnTheMoveIsNotAPass() {
+        let camera = snapped(1, 0)
+        let away = stride(from: 50.0, through: 600, by: 30).map { (y: $0, course: 0.0) }
+        XCTAssertFalse(recorded(camera, firstY: 20, speed: 40, then: away),
+                       "въехали на дорогу в 20 м за камерой и едем от неё")
+    }
+
+    /// Без курса доказательства нет — запись как раньше.
+    func testNoCourseProvesNothing() {
+        let camera = snapped(1, 0)
+        let away = stride(from: 30.0, through: 600, by: 30).map { (y: $0, course: -1.0) }
+        XCTAssertTrue(recorded(camera, firstY: 20, speed: 40, firstCourse: -1, then: away))
     }
 
     // MARK: - Старт снапнут вперёд или линия идёт против нас

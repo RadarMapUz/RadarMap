@@ -266,6 +266,11 @@ private struct CarPlayDashboardGauge: View {
         return minutes > 0 ? TimeInterval(minutes * 60) : route.remainingTime
     }
 
+    private func straight(to camera: Camera) -> Double {
+        guard let me = env.location.displayCoordinate ?? env.location.currentCoordinate else { return 0 }
+        return GeoMath.fastDistance(me.latitude, me.longitude, camera.lat, camera.lon)
+    }
+
     var body: some View {
         HStack(spacing: 10) {
             Text("\(Int(env.location.speedKmh.rounded()))")
@@ -277,7 +282,8 @@ private struct CarPlayDashboardGauge: View {
             }
             if let camera = env.location.displayNearestCamera,
                let distance = env.location.displayDistanceToNearest,
-               distance <= AppConfig.carPlayNearestCameraMeters {
+               distance <= AppConfig.carPlayNearestCameraMeters,
+               CarPlayCameraCue.gaugeShows(distance: distance, straight: straight(to: camera)) {
                 HStack(spacing: 4) {
                     CameraIcon(kind: camera.kind, side: 24)
                     Text(Formatting.distance(distance))

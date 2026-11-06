@@ -75,6 +75,19 @@ nonisolated enum CarPlayCameraCue {
         return sinceLast >= interval
     }
 
+    /// Показать ли «до камеры N м» в приборе плитки. Нет — когда маршрут дал
+    /// камере ноль, а по прямой до неё далеко. Гейт кандидатов держит камеру
+    /// маршрута «0 м» до `routePassedToleranceMeters` за ней: светофор в 40–60 м
+    /// за камерой — и весь красный на плитке «0 м» про камеру за спиной (жалоба
+    /// владельца 05.11). То же у камеры за стартом маршрута, которой координата
+    /// не даёт выйти из маршрута (RouteLineEnds.coordinateProves), и у камеры
+    /// между стартом и машиной после перестроения. Ноль рядом с камерой по
+    /// прямой — настоящий траверз, он показывается. Только показ: оповещения,
+    /// гейты и голос это не читают.
+    static func gaugeShows(distance: Double, straight: Double) -> Bool {
+        distance >= AppConfig.carPlayGaugeZeroMeters || straight <= AppConfig.carPlayGaugeZeroStraightMeters
+    }
+
     /// Подпись с расстоянием у значка алерт-камеры.
     struct Label: Equatable, Sendable {
         let id: Int

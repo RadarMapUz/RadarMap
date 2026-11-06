@@ -190,4 +190,83 @@ final class CarPlayRouteChoiceOfferTests: XCTestCase {
         let other = [variant(0, minutes: 30), variant(1, minutes: 31, labeled: true)]
         XCTAssertEqual(Offer.gain(selected: 0, variants: other, choices: [0, 1]), .other)
     }
+
+    // MARK: - Ревью 51
+
+    /// A и B сошлись: всё, чем B «быстрее», осталось на проеханном участке A.
+    func testDifferenceOnlyBehindUsIsNoOffer() {
+        let a = Offer.variant(id: 0, shownSeconds: 30 * 60, distance: 30_000, along: 15_000, deviation: 2,
+                              cameraAlongs: [], labeled: false)
+        let b = Offer.variant(id: 1, shownSeconds: 24 * 60, distance: 24_000, along: 9_000, deviation: 2,
+                              cameraAlongs: [], labeled: false)
+        XCTAssertEqual(a.seconds, 15 * 60, accuracy: 0.01)
+        XCTAssertEqual(b.seconds, 15 * 60, accuracy: 0.01)
+        XCTAssertEqual(Offer.choices(selected: 0, variants: [a, b]), [])
+    }
+
+    /// Вперёд и вправду быстрее — предложение, и в баннере разница по остатку.
+    func testRemainingDifferenceIsAnOffer() {
+        let a = Offer.variant(id: 0, shownSeconds: 30 * 60, distance: 30_000, along: 15_000, deviation: 2,
+                              cameraAlongs: [], labeled: false)
+        let b = Offer.variant(id: 1, shownSeconds: 20 * 60, distance: 20_000, along: 10_000, deviation: 2,
+                              cameraAlongs: [], labeled: false)
+        let choices = Offer.choices(selected: 0, variants: [a, b])
+        XCTAssertEqual(choices, [0, 1])
+        XCTAssertEqual(Offer.gain(selected: 0, variants: [a, b], choices: choices), .faster(minutes: 5))
+    }
+
+    /// Камеры позади не считаются; метка от старта не держится далеко от него.
+    func testCamerasBehindAndOldLabelsDoNotCount() {
+        let a = Offer.variant(id: 0, shownSeconds: 1_800, distance: 30_000, along: 5_000, deviation: 2,
+                              cameraAlongs: [1_000, 2_000, 3_000], labeled: false)
+        XCTAssertEqual(a.cameras, 0, "все три проехали")
+        let b = Offer.variant(id: 1, shownSeconds: 1_800, distance: 30_000, along: 5_000, deviation: 2,
+                              cameraAlongs: [], labeled: true)
+        XCTAssertFalse(b.labeled, "«Спокойнее» сказано про путь от старта")
+        XCTAssertEqual(Offer.choices(selected: 0, variants: [a, b]), [])
+    }
+
+    /// Соседняя улица (в 100 м) не вариант: порог — прижим к линии, не перестроение.
+    func testVariantOnTheNextStreetIsNoOffer() {
+        let a = Offer.variant(id: 0, shownSeconds: 1_800, distance: 30_000, along: 0, deviation: 2,
+                              cameraAlongs: [], labeled: false)
+        let next = Offer.variant(id: 1, shownSeconds: 1_200, distance: 30_000, along: 0, deviation: 100,
+                                 cameraAlongs: [], labeled: false)
+        XCTAssertFalse(next.nearCar)
+        XCTAssertEqual(Offer.choices(selected: 0, variants: [a, next]), [])
+        let same = Offer.variant(id: 1, shownSeconds: 1_200, distance: 30_000, along: 0,
+                                 deviation: AppConfig.routeSnapMeters, cameraAlongs: [], labeled: false)
+        XCTAssertEqual(Offer.choices(selected: 0, variants: [a, same]), [0, 1])
+    }
+
+    /// Тоннель: скорость доходит до 0, путь замирает. Баннера нет, счёт заново.
+    func testLostSignalIsNotAStop() {
+        var tracker = Offer.Tracker()
+        var lost = situation()
+        lost.signalLost = true
+        for seconds in [0, stand, stand * 2] {
+            XCTAssertEqual(tracker.update(lost, now: at(seconds)), .none, "\(seconds) с без сигнала")
+        }
+        XCTAssertTrue(tracker.isOpen, "попытка цела")
+        XCTAssertEqual(tracker.update(situation(), now: at(stand * 2 + 1)), .check(after: stand), "сигнал вернулся")
+
+        // Стояли 80 с, пропал сигнал на 20 с — считаем заново, а не 100 с.
+        var stood = Offer.Tracker()
+        _ = stood.update(situation(), now: at(0))
+        _ = stood.update(lost, now: at(80))
+        XCTAssertEqual(stood.update(situation(), now: at(100)), .check(after: stand))
+    }
+
+    /// Встал, вынул кабель, вернулся через час на то же место: не с порога.
+    func testDisconnectRestartsTheCount() {
+        var tracker = Offer.Tracker()
+        _ = tracker.update(situation(), now: at(0))
+        _ = tracker.update(situation(), now: at(80))
+        tracker.interrupted()
+        XCTAssertEqual(tracker.update(situation(), now: at(3_600)), .check(after: stand))
+        XCTAssertTrue(tracker.isOpen)
+        tracker.spend(route: 1)
+        tracker.interrupted()
+        XCTAssertFalse(tracker.isOpen, "отключение не возвращает потраченную попытку")
+    }
 }

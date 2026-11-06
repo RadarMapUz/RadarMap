@@ -2222,9 +2222,10 @@ nonisolated enum AppConfig {
     static let carPlayChoiceOfferMaxAgeSeconds: TimeInterval = 300
     static let carPlayChoiceOfferMaxMeters: Double = 1_000
     static let carPlayChoiceOfferMaxShare: Double = 0.25
-    /// Заметная разница: быстрее на 2 мин и 5 % — меньше точность оценки
-    /// времени всё равно не даёт; не быстрее, но не дольше 5 мин и 15 % — если
-    /// меньше камер или своя метка. Дольше — выбирать незачем.
+    /// Заметная разница считается по остатку пути: быстрее на 2 мин и 5 % —
+    /// меньше точность оценки времени всё равно не даёт; не быстрее, но не дольше
+    /// 5 мин и 15 % — если впереди меньше камер или своя метка. Дольше — незачем.
+    /// Машина должна стоять на линии варианта (routeSnapMeters).
     static let carPlayChoiceOfferFasterSeconds: TimeInterval = 120
     static let carPlayChoiceOfferFasterShare: Double = 0.05
     static let carPlayChoiceOfferSlowerSeconds: TimeInterval = 300
@@ -2233,6 +2234,10 @@ nonisolated enum AppConfig {
     /// мешает камера, занятый экран или открытая панель телефона.
     static let carPlayChoiceOfferSeconds: TimeInterval = 12
     static let carPlayChoiceOfferRecheckSeconds: TimeInterval = 10
+    /// Отмена навигации в первые столько секунд после нашей — её отзвук.
+    /// Настоящая отмена в это окно потеряется, но новая сессия тут же получит её
+    /// снова: чужой навигатор не отпускает экран.
+    static let carPlayOwnCancelEchoSeconds: TimeInterval = 2
     /// Метаданные ведения для приборки и проекции на стекло — значение по
     /// умолчанию настройки «Манёвры на приборке и HUD»
     /// (`AppSettings.carPlayNavigationMetadata`, 26.4). Поля все на месте

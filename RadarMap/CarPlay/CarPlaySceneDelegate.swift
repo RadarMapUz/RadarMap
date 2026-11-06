@@ -281,6 +281,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             return
         }
         Self.activeDelegate = nil
+        Self.choiceOffer.interrupted()
         env.route.choiceShownInCar = false
         if let connectedAt {
             env.usage.noteCarPlaySession(minutes: Int(Date().timeIntervalSince(connectedAt) / 60),
@@ -472,6 +473,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // Ушли с экрана машины: камеры поверх чужого приложения — системными
         // алертами сессии, манёвр и оценки для приборки — заново.
         guidance.isOnScreen = false
+        closeOfferedPreviewOnLeaving()
         guidance.refresh(reason: "ушли с экрана машины")
         // В фоне приложение могут приостановить, и сторож записал бы паузу
         // процесса как фриз — счёт только пока экран машины наш.

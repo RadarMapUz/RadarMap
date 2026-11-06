@@ -136,7 +136,7 @@ extension CarPlaySceneDelegate {
                      using routeChoice: CPRouteChoice) {
         guard trip === previewTrip, let id = routeChoice.userInfo as? Int else { return }
         previewShown?.picked(id)
-        env.route.selectVariant(id)
+        switchVariant(id)
         updatePreviewEstimates(env.route.selected)
         model.showOverview()
     }
@@ -144,7 +144,9 @@ extension CarPlaySceneDelegate {
     /// «Поехали».
     func mapTemplate(_ mapTemplate: CPMapTemplate, startedTrip trip: CPTrip,
                      using routeChoice: CPRouteChoice) {
-        if let id = routeChoice.userInfo as? Int { env.route.selectVariant(id) }
+        // Устаревшая карточка (маршрут сменили, пока список был открыт): её номер
+        // варианта относится к другому набору.
+        if trip === previewTrip, let id = routeChoice.userInfo as? Int { switchVariant(id) }
         endPreview(start: true, keepRoute: true, reason: "Поехали")
     }
 }

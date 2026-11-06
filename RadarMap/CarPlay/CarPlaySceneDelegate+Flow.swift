@@ -80,8 +80,9 @@ extension CarPlaySceneDelegate {
         if !building { flowPhase = phase }
         switch decision {
         case .none:
-            // Тот же выбор, но маршрут заменили на телефоне — показать новый.
-            if model.isPreviewing, !building, phase == .choosing,
+            // Тот же выбор, но маршрут заменили на телефоне — показать новый (и
+            // поверх ведения: иначе «Поехали» в старом списке выбрал бы чужой вариант).
+            if model.isPreviewing, !building, phase != .free,
                let destination = route.destinationCoordinate, let shown = previewDestination,
                !CarPlayGuidance.same(shown, destination) {
                 showPreview(name: route.destinationName, destination: destination)
@@ -339,6 +340,13 @@ extension CarPlaySceneDelegate {
         // Только владелец экрана машины и только наша живая сессия: событие
         // старой сцены после «моргания» кабеля или отмена сессии, которой у
         // нас нет, не вправе снимать общий маршрут (ревью 20.10).
+        // Отзвук собственной отмены: по заголовку событие только про отмену
+        // системой, но отзвук после закрытия списка снял бы маршрут (новая сессия
+        // уже есть, hadSession истинно) и запретил ведение к этой цели.
+        if CarPlayGuidanceMapping.isOwnCancelEcho(cancelledAt: guidance.ownCancelAt, now: Date()) {
+            Log.carplay.notice("CarPlay: отмена навигации сразу после нашей — отзвук, маршрут не трогаю")
+            return
+        }
         let hadSession = model.hasSystemGuidance
         guidance.systemCancelled()
         guard Self.activeDelegate === self, hadSession else {

@@ -35,6 +35,7 @@ extension CarPlaySceneDelegate {
             _ = env.route.variants
             _ = model.isPreviewing
             _ = model.isOnScreen
+            _ = env.location.isSignalStale
             if env.route.variants.count >= 2, Self.choiceOffer.isOpen || choiceOfferAlert != nil {
                 _ = env.location.speedKmh
             }
@@ -66,7 +67,8 @@ extension CarPlaySceneDelegate {
             screenFree: rootShown && model.isOnScreen && shownTemplate == nil && !model.isPreviewing
                 && choiceOfferAlert == nil,
             phonePanelOpen: phase == .choosing && env.isPhoneSceneActive && env.phoneMapOverride,
-            busy: route.isBuilding || route.isRerouting || route.isOffRoute || route.detourOffer != nil)
+            busy: route.isBuilding || route.isRerouting || route.isOffRoute || route.detourOffer != nil,
+            signalLost: location.isSignalStale)
         let decision = Self.choiceOffer.update(situation, inJam: choiceOfferInJam(), now: Date())
         choiceOfferCheck?.cancel()
         choiceOfferCheck = nil
@@ -100,13 +102,23 @@ extension CarPlaySceneDelegate {
     }
 
     private func presentChoiceOffer(key: Int?) {
+        // Занятый экран — сначала: дальше проекции всех вариантов на главном.
+        switch CarPlayBannerPolicy.decide(showing: banners?.showingKind, incoming: .suggestion) {
+        case .wait, .drop:
+            scheduleChoiceOfferCheck(after: AppConfig.carPlayChoiceOfferRecheckSeconds)
+            return
+        case .present, .replace:
+            break
+        }
         let route = env.route
-        let here = env.location.displayCoordinate ?? env.location.currentCoordinate
-        let variants = route.variants.map { variant in
-            CarPlayRouteChoiceOffer.Variant(id: variant.id, seconds: variant.shownTime,
-                                            cameras: variant.ourCameraCount,
-                                            labeled: !variant.assessment.labels.isEmpty,
-                                            nearCar: here.map { Self.isNear($0, variant) } ?? false)
+        let here = env.location.currentCoordinate ?? env.location.displayCoordinate
+        let variants = route.variants.map { variant -> CarPlayRouteChoiceOffer.Variant in
+            let spot = here.map { Self.project($0, on: variant) }
+            return CarPlayRouteChoiceOffer.variant(
+                id: variant.id, shownSeconds: variant.shownTime, distance: variant.distance,
+                along: spot?.along ?? 0, deviation: spot?.deviation ?? .infinity,
+                cameraAlongs: variant.cameras.filter(\.countsAsOurs).map(\.distanceAlong),
+                labeled: !variant.assessment.labels.isEmpty)
         }
         let choices = CarPlayRouteChoiceOffer.choices(selected: route.selectedID, variants: variants)
         guard choices.count >= 2, let key else {
@@ -143,12 +155,33 @@ extension CarPlaySceneDelegate {
         Log.carplay.notice("выбор после остановки: предлагаю, вариантов \(choices.count, privacy: .public)")
     }
 
-    /// Машина на линии варианта: иначе выбор тут же сменился бы перестроением.
-    private static func isNear(_ coordinate: CLLocationCoordinate2D, _ variant: RouteService.Variant) -> Bool {
+    /// Где машина на линии варианта и как далеко от неё.
+    private static func project(_ coordinate: CLLocationCoordinate2D,
+                                on variant: RouteService.Variant) -> (along: Double, deviation: Double) {
         var hint = 0
-        let projected = RouteService.project(MKMapPoint(coordinate), onto: variant.points,
-                                             cum: RouteService.cumulative(of: variant.points), hint: &hint)
-        return projected.deviation <= AppConfig.rerouteDeviationMeters
+        return RouteService.project(MKMapPoint(coordinate), onto: variant.points,
+                                    cum: RouteService.cumulative(of: variant.points), hint: &hint)
+    }
+
+    /// Сменить вариант посреди пути. `selectVariant` обнуляет прогресс, а обратно
+    /// его считает только сдвиг на 2 м: стоя при ровном GPS этого может не быть
+    /// всю стоянку. Пока прогресс 0, камера в 300 м считается за 1300 м и молчит,
+    /// проеханная становится «нашей», новая сессия висит на «загружаю» без манёвра.
+    /// Поэтому прогресс — сразу от текущей точки, без голоса.
+    static func switchVariant(_ id: Int, route: RouteService, at coordinate: CLLocationCoordinate2D?,
+                              cameras: [Camera], course: CLLocationDirection, speedKmh: Double) {
+        let changed = id != route.selectedID
+        route.selectVariant(id)
+        guard changed, let coordinate else { return }
+        route.updateProgress(coordinate: coordinate, cameras: cameras, announce: false,
+                             course: course, speedKmh: speedKmh)
+    }
+
+    func switchVariant(_ id: Int) {
+        let location = env.location
+        Self.switchVariant(id, route: env.route, at: location.currentCoordinate ?? location.displayCoordinate,
+                           cameras: env.cameras.cameras, course: location.routeHeading ?? -1,
+                           speedKmh: location.speedKmh)
     }
 
     /// «Показать»: только теперь — список. За секунды показа могли и тронуться,
@@ -157,15 +190,17 @@ extension CarPlaySceneDelegate {
         let route = env.route
         guard key == choiceOfferKey(), !model.isPreviewing,
               CarPlayTripPreview.shouldPreview(speedKmh: env.location.speedKmh),
+              // Без сигнала скорость 0 ничего не значит: может, мы едем.
+              !env.location.isSignalStale,
               let destination = route.destinationCoordinate else {
             Log.carplay.notice("выбор после остановки: касание устарело")
             return
         }
         Log.carplay.notice("выбор после остановки: открываю список")
-        previewOffer = (key, route.selectedID, ids)
         model.isPreviewing = true
         guidance.yieldToPreview()
-        showPreview(name: route.destinationName, destination: destination)
+        showPreview(name: route.destinationName, destination: destination,
+                    offer: (key, route.selectedID, ids))
     }
 
     /// Какие варианты в списке: из баннера — заметно другие и выбранный, иначе все.
@@ -179,8 +214,18 @@ extension CarPlaySceneDelegate {
     /// маршрут за это время не заменили.
     func closeOfferedPreview() {
         if let offer = previewOffer, offer.route == choiceOfferKey() {
-            env.route.selectVariant(offer.origin)
+            switchVariant(offer.origin)
         }
         endPreview(start: false, keepRoute: true, reason: "остаёмся на прежнем варианте")
+    }
+
+    /// Ушли с экрана машины при открытом списке из баннера. Сессию до него
+    /// закрыли мы; система нас не отменит, а когда машина тронется, MovingWatch
+    /// начал бы её заново — поверх чужого навигатора (правило D1). Ведение
+    /// возвращается сейчас, и чужой навигатор снимет его обычной отменой.
+    /// Обычный список — без сессии до него — остаётся как был.
+    func closeOfferedPreviewOnLeaving() {
+        guard previewOffer != nil else { return }
+        closeOfferedPreview()
     }
 }

@@ -36,14 +36,30 @@ nonisolated enum CarPlayRouteChoiceOffer {
 
     struct Variant: Equatable, Sendable {
         let id: Int
-        /// Время, которое видит водитель.
+        /// Время, которое осталось ехать (см. `variant(id:…)`).
         let seconds: Double
-        /// Камеры на нашей стороне.
+        /// Камеры на нашей стороне впереди.
         let cameras: Int
         /// У варианта своя метка («Знакомый», «Спокойнее», «Проще»…).
         let labeled: Bool
         /// Машина стоит на его линии: выбор не обернётся перестроением.
         let nearCar: Bool
+    }
+
+    /// Вариант глазами машины, стоящей на нём: время — остаток (доля показанного
+    /// времени по доле оставшегося пути), камеры — только впереди. Весь вариант
+    /// сравнивать нельзя: разницу мог дать уже проеханный участок, и баннер
+    /// обещал бы «быстрее на 6 мин», которых впереди нет (ревью 51). Рядом —
+    /// `routeSnapMeters`: порог перестроения (150 м) пускал соседнюю улицу. Метка
+    /// варианта («Спокойнее», «Знакомый») сказана про путь от старта и держится,
+    /// только пока проехано мало.
+    static func variant(id: Int, shownSeconds: Double, distance: Double, along: Double,
+                        deviation: Double, cameraAlongs: [Double], labeled: Bool) -> Variant {
+        let left = distance > 0 ? max(0, 1 - along / distance) : 1
+        return Variant(id: id, seconds: shownSeconds * left,
+                       cameras: cameraAlongs.count { $0 > along },
+                       labeled: labeled && along <= AppConfig.carPlayChoiceOfferMaxMeters,
+                       nearCar: deviation <= AppConfig.routeSnapMeters)
     }
 
     /// Заметно ли вариант лучше выбранного: быстрее на ощутимое время, или не
@@ -112,6 +128,9 @@ nonisolated enum CarPlayRouteChoiceOffer {
         var phonePanelOpen = false
         /// Маршрут строится, перестраивается, ждёт ответа об объезде.
         var busy = false
+        /// Нет сигнала GPS: скорость сама доходит до 0 и путь замирает — это не
+        /// стоянка, а тоннель (баннер встал бы на 60 км/ч).
+        var signalLost = false
     }
 
     enum Decision: Equatable, Sendable {
@@ -139,6 +158,10 @@ nonisolated enum CarPlayRouteChoiceOffer {
                              now: Date) -> Decision {
             if situation.route != route { start(situation.route, now: now) }
             guard route != nil, !spent, situation.variantCount >= 2 else { return .none }
+            if situation.signalLost {
+                interrupted()
+                return .none
+            }
             let speed = situation.speedKmh.isFinite ? max(0, situation.speedKmh) : 0
             // Тронулись или ползём: стоянка начнётся заново. Порог выхода выше
             // порога входа — шум GPS стоя не сбрасывает счёт; рывок пробки на
@@ -170,6 +193,14 @@ nonisolated enum CarPlayRouteChoiceOffer {
                 return .check(after: AppConfig.carPlayChoiceOfferRecheckSeconds)
             }
             return .ready
+        }
+
+        /// Стоянка прервалась, и что было в это время, мы не знаем: нет сигнала,
+        /// машина отключилась (вернулись через час на то же место — не повод для
+        /// баннера с порога). Счёт заново, попытка цела.
+        mutating func interrupted() {
+            standingSince = nil
+            standAlong = nil
         }
 
         /// Вопрос закрыт: баннер встал, список показан, выбор сделан на телефоне

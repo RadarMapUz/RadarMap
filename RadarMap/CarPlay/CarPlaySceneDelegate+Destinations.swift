@@ -327,6 +327,7 @@ extension CarPlaySceneDelegate {
                     preview = allowPreview && CarPlayTripPreview.shouldPreview(speedKmh: env.location.speedKmh)
                     if previewTrip != nil { mapTemplate?.hideTripPreviews() }
                     previewTrip = nil
+                    previewOffer = nil
                     // Карточки на экране больше нет; новая поставит флаг сама.
                     self.env.route.choiceShownInCar = false
                     model.isPreviewing = preview
@@ -358,7 +359,12 @@ extension CarPlaySceneDelegate {
 
     /// Варианты с нашими метками и временем с пробками; рекомендованный —
     /// первым и выбранным. Линия — целиком на экране.
-    func showPreview(name: String, destination: CLLocationCoordinate2D) {
+    /// `offer` — список открыт из баннера «Есть другие варианты»; любой другой
+    /// показ (новый маршрут при открытом списке) — обычный: его «Отмена» снимает
+    /// маршрут.
+    func showPreview(name: String, destination: CLLocationCoordinate2D,
+                     offer: (route: Int, origin: Int, ids: Set<Int>)? = nil) {
+        previewOffer = offer
         guard mapTemplate != nil else {
             return endPreview(start: true, keepRoute: true, reason: "шаблона нет")
         }

@@ -204,6 +204,15 @@ nonisolated enum CarPlayGuidanceMapping {
     /// минуты (ArrivalClock.carMaySend) — тогда в начале следующей.
     enum TripSend: Equatable { case now, at(Date), no }
 
+    /// Событие об отмене навигации сразу после нашей собственной — отзвук, а не
+    /// решение системы (`carPlayOwnCancelEchoSeconds`).
+    static func isOwnCancelEcho(cancelledAt: Date?, now: Date,
+                                window: TimeInterval = AppConfig.carPlayOwnCancelEchoSeconds) -> Bool {
+        guard let cancelledAt else { return false }
+        let since = now.timeIntervalSince(cancelledAt)
+        return since >= 0 && since < window
+    }
+
     static func tripSend(due: Bool, now: Date) -> TripSend {
         guard due else { return .no }
         return ArrivalClock.carMaySend(now: now) ? .now : .at(ArrivalClock.nextCarSend(after: now))
@@ -339,6 +348,8 @@ final class CarPlayGuidance {
     /// списка, а не следующим пересчётом — выбор показывается только без
     /// сессии (как и при «Куда» на стоянке). Новая сессия к той же цели
     /// начнётся сама, когда список закроют (`sync`).
+    private(set) var ownCancelAt: Date?
+
     func yieldToPreview() {
         if let session { dropSession(.cancel, session) }
     }
@@ -521,7 +532,9 @@ final class CarPlayGuidance {
         if let session {
             switch end {
             case .finish: session.finishTrip()
-            case .cancel: session.cancelTrip()
+            case .cancel:
+                ownCancelAt = Date()
+                session.cancelTrip()
             case .none: break
             }
             session.upcomingManeuvers = []

@@ -62,8 +62,29 @@ final class Drive3DTests: XCTestCase {
             XCTAssertFalse(id.hasPrefix("radar-markings"), id)
             XCTAssertFalse(id.hasPrefix("radar-arrows"), id)
             XCTAssertFalse(id.contains("signal"), id)
-            XCTAssertFalse(id.hasPrefix("route"), id)
+            if id != Drive3D.traveledLayer { XCTAssertFalse(id.hasPrefix("route"), id) }
         }
+    }
+
+    /// Отдаление карты в поездке: линия пройденного — весь маршрут, вблизи её
+    /// заменяет лента, а на малых зумах она проступала старым маршрутом за
+    /// машиной. В 3D её нет ни до готовности ленты, ни после.
+    func testTraveledLineNeverReturnsWhenZoomingOut() {
+        XCTAssertTrue(Drive3D.hiddenLayers.contains("route-traveled"))
+        for id in ["route", "route-case", "route-near", "route-traffic", "route-maneuver", "route-arrows"] {
+            XCTAssertFalse(Drive3D.hiddenLayers.contains(id), "линия впереди остаётся: \(id)")
+        }
+    }
+
+    /// Проехали конец ленты без пересчёта (карта в осмотре, панорама, тоннель):
+    /// её хвост лежал бы на пройденном — показывается линия с её срезом.
+    func testRibbonNotShownOncePassedItsEnd() {
+        XCTAssertTrue(Drive3D.showsRibbon(ready: true, car: 500, verifiedEnd: 900))
+        XCTAssertFalse(Drive3D.showsRibbon(ready: false, car: 500, verifiedEnd: 900), "не готова")
+        XCTAssertFalse(Drive3D.showsRibbon(ready: true, car: 901, verifiedEnd: 900), "проехали конец")
+        XCTAssertFalse(Drive3D.showsRibbon(ready: true, car: 895, verifiedEnd: 900),
+                       "начало хвоста уже за машиной")
+        XCTAssertTrue(Drive3D.showsRibbon(ready: true, car: 889, verifiedEnd: 900))
     }
 
     func testChevronGateHasHysteresis() {

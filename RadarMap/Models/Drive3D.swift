@@ -185,9 +185,13 @@ nonisolated enum Drive3D {
 
     /// Украшения, которых нет в «тихом мире» на ходу: жёлоб, зерно асфальта,
     /// свечение магистрали, штриховки, стрелки одностороннего, деревья,
-    /// тоннели поверх, борта эстакад. Камеры, разметка, стрелки полос,
-    /// светофоры, заправки по пути остаются.
+    /// тоннели поверх, борта эстакад — и бледная линия пройденного: это весь
+    /// маршрут целиком, вблизи лента её заменяет, а при отдалении карты она
+    /// проступала старым маршрутом за машиной. Камеры, разметка, стрелки
+    /// полос, светофоры, заправки по пути остаются.
+    static let traveledLayer = "route-traveled"
     static let hiddenLayers: [String] = [
+        traveledLayer,
         "radar-roads-gutter", "radar-asphalt-grain", "radar-trunk-glow", "radar-island-hatch",
         "railway-transit-hatching", "railway-service-hatching", "railway-hatching", "radar-oneway",
         "trees", "radar-tree-shadow", "radar-tree", "radar-tree-light", "radar-tree-3d",
@@ -292,6 +296,15 @@ nonisolated enum Drive3D {
         plan.verifiedEnd = end
         plan.stalledEnd = nil
         return .write
+    }
+
+    /// Лента на карте — только пока машина не подъехала к её концу: дальше
+    /// начало хвоста оказалось бы за машиной (карта в осмотре, панорама в
+    /// машине, тоннель — пересчёта нет), а его источник срезом не режется.
+    /// Показывается линия маршрута, её срез идёт под машиной всегда.
+    static func showsRibbon(ready: Bool, car: Double, verifiedEnd: Double,
+                            overlap: Double = AppConfig.drive3DTailOverlapMeters) -> Bool {
+        ready && car < verifiedEnd - overlap
     }
 
     static func inWindow(car: Double, maneuver: Double?, window: Double) -> Bool {

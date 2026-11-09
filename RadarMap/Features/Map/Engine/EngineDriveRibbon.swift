@@ -178,7 +178,7 @@ final class EngineDriveRibbon {
     }
 
     /// Слои линии маршрута, которые лента сменяет с 15-го зума.
-    private static let routeLines = ["route-traveled", "route-case", "route", "route-traffic", "route-maneuver",
+    private static let routeLines = ["route-case", "route", "route-traffic", "route-maneuver",
                                      "route-core", EngineMapStyle.routeNearLayers.casing,
                                      EngineMapStyle.routeNearLayers.body, EngineMapStyle.routeNearLayers.maneuver,
                                      EngineMapStyle.routeNearLayers.core]
@@ -299,7 +299,9 @@ final class EngineDriveRibbon {
             compute(model, entry: entry, car: car, speedMps: speedMps, window: window, narrowing: narrowing,
                     budget: budget, in: view)
         }
-        let ready = entry.ribbon?.isReady == true
+        let ready = entry.ribbon.map {
+            Drive3D.showsRibbon(ready: $0.isReady, car: car, verifiedEnd: $0.verifiedEnd)
+        } ?? false
         if ready != shown { show(ready, in: style) }
         guard ready, let ribbon = entry.ribbon else { return }
         if writtenVersion != entry.version || writtenTraffic != trafficVersion {

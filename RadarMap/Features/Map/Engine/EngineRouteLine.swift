@@ -46,6 +46,8 @@ final class EngineRouteLine {
     private var maneuver: ClosedRange<Double>?
     private var task: Task<Void, Never>?
     private var generation = 0
+    /// Считается новая линия: на карте пока прежняя, её срез не ведём.
+    private var replacing = false
 
     // MARK: Срез и окно
 
@@ -119,6 +121,7 @@ final class EngineRouteLine {
     func styleLoaded() {
         cancel()
         initialized = false
+        replacing = false
         lineKeys = [:]
         layers = nil
         arrowLayer = nil
@@ -133,6 +136,18 @@ final class EngineRouteLine {
     func releaseMemory() {
         // Индекс и линия — несколько массивов на маршрут; нужны каждый кадр,
         // поэтому остаются. Освобождать нечего.
+    }
+
+    /// Данные прежнего маршрута; источники остаются до записи новых.
+    private func forgetRoute() {
+        replacing = false
+        index = nil
+        line = nil
+        arrows = []
+        traffic = []
+        maneuver = nil
+        resetCut()
+        lineKeys = [:]
     }
 
     private func resetCut() {
@@ -162,26 +177,26 @@ final class EngineRouteLine {
             initialized = true
             routeObject = model.routeObject
             cancel()
-            index = nil
-            line = nil
-            arrows = []
-            traffic = []
-            maneuver = nil
             trafficRevision = model.trafficRevision
-            resetCut()
-            // Прежний маршрут уходит целиком: источники с поколением
-            // (окно, остаток) ключей не ведут, поэтому — без сравнения.
-            lineKeys = [:]
-            for name in ["traveled", "route", "maneuver", "route-traffic", EngineMapStyle.routeNearSource,
-                         EngineMapStyle.routeArrowsSource] {
-                setShape(nil, source: name, in: view)
-                lineKeys[name] = [0]
+            guard model.route.count >= 2 else {
+                forgetRoute()
+                // Прежний маршрут уходит целиком: источники с поколением
+                // (окно, остаток) ключей не ведут, поэтому — без сравнения.
+                for name in ["traveled", "route", "maneuver", "route-traffic", EngineMapStyle.routeNearSource,
+                             EngineMapStyle.routeArrowsSource] {
+                    setShape(nil, source: name, in: view)
+                    lineKeys[name] = [0]
+                }
+                applyPaint(.clear, in: view)
+                return
             }
-            applyPaint(.clear, in: view)
-            guard model.route.count >= 2 else { return }
+            // Другая линия (вариант, перестроение): прежняя стоит на карте,
+            // пока новая не посчитана, — без кадров вовсе без маршрута.
+            replacing = true
             prepare(model.route, snapshot: model.trafficSnapshot, reuse: nil, in: view)
             return
         }
+        guard !replacing else { return }
         if model.trafficRevision != trafficRevision, let index, let line {
             trafficRevision = model.trafficRevision
             prepare(model.route, snapshot: model.trafficSnapshot, reuse: (index, line, arrows), in: view)
@@ -205,7 +220,8 @@ final class EngineRouteLine {
         task = Task { [weak self, weak view] in
             let frame = await EngineMapPresentation.prepareCut(route, reuse: reuse, traffic: snapshot)
             guard !Task.isCancelled, let self, let view, self.generation == token else { return }
-            let fresh = self.line == nil
+            let fresh = reuse == nil
+            if fresh { self.forgetRoute() }
             self.index = frame.index
             self.line = frame.line
             self.arrows = frame.arrows
@@ -218,6 +234,13 @@ final class EngineRouteLine {
                 self.writeFarTraffic(in: view)
             }
             self.frame(in: view)
+            // Окна нет (нет ещё значка, линия короче окна): прежняя линия не остаётся.
+            if fresh, self.window == nil {
+                for name in ["route", "maneuver", "route-traffic", EngineMapStyle.routeNearSource] {
+                    self.setShape(nil, source: name, in: view)
+                    self.lineKeys[name] = [0]
+                }
+            }
         }
     }
 
@@ -228,7 +251,7 @@ final class EngineRouteLine {
     func frame(pose: CLLocationCoordinate2D? = nil, course: Double = -1, speedMps: Double = 0,
                in view: MLNMapView) {
         if let pose { lastPose = (pose, course, speedMps) }
-        guard let line, let index, let pose = lastPose else { return }
+        guard !replacing, let line, let index, let pose = lastPose else { return }
         tracker.advance(pose: pose.coordinate, course: pose.course, fixAlong: fixAlong,
                         speedMps: pose.speed, line: line)
         let cut = tracker.cut

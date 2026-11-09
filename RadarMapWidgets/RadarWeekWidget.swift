@@ -5,14 +5,13 @@
 //  Неделя на локскрине — отдельный виджет, а не второе лицо у существующего.
 //
 //  Круглый и прямоугольный слоты у RadarStatsWidget заняты кнопкой «Старт
-//  поездки», и правильно: за рулём с локскрина нужна кнопка, а не цифра. Но
-//  между поездками полезно ровно обратное — балл недели, не открывая
-//  приложение. Двум разным задачам нужны два разных виджета, чтобы человек
-//  сам выбрал, что у него на экране блокировки.
+//  поездки». Между поездками полезно ровно обратное — балл недели, не открывая
+//  приложение, — и это отдельный виджет, чтобы человек сам выбрал, что у него
+//  на экране блокировки.
 //
-//  Локскрин рисуется одним цветом (система сама решает, каким), поэтому здесь
-//  нет ни колец с заливкой, ни красного «риска»: только число, километры и
-//  слово. Цвет как носитель смысла на этом экране не работает.
+//  Локскрин рисуется одним цветом, поэтому здесь нет ни заливок, ни красного
+//  «риска»: число, километры, слово. Нулей здесь тоже нет: ноль километров —
+//  не факт, а его отсутствие.
 //
 
 import WidgetKit
@@ -36,7 +35,7 @@ struct RadarWeekProvider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<RadarWeekEntry>) -> Void) {
         let snapshot = SharedDefaults.read()
         completion(Timeline(entries: [RadarWeekEntry(date: .now, snapshot: snapshot)],
-                            policy: .after(WidgetWeek.nextRefresh(after: .now, updatedAt: snapshot.updatedAt))))
+                            policy: .after(WidgetWeek.nextRefresh(after: .now))))
     }
 }
 
@@ -57,19 +56,17 @@ private struct RadarWeekView: View {
     let entry: RadarWeekEntry
 
     private var snapshot: SharedDefaults.Snapshot { entry.snapshot }
-    private var rating: Int { snapshot.weekRating }
-    /// Прошлая неделя на локскрине выдала бы себя за текущую особенно легко:
-    /// там нет места для дат. Поэтому не свою неделю показываем прочерком.
-    private var isCurrentWeek: Bool {
-        WidgetWeek.isCurrentWeek(snapshot.weekStart, now: entry.date)
+    private var hasWeek: Bool {
+        WidgetWeek.isCurrentWeek(snapshot.weekStart, now: entry.date) && snapshot.weekDistance > 0
     }
     private var state: WidgetState { WidgetWeek.state(snapshot) }
-    private var value: String { rating >= 0 && isCurrentWeek ? "\(rating)" : "—" }
-    /// На локскрине герой тоже километры: балл ушёл внутрь кольца.
-    private var distance: String { isCurrentWeek ? km(snapshot.weekDistance) : "—" }
     private var progress: Double {
-        WidgetWeek.usualWeekProgress(distance: snapshot.weekDistance,
-                                     usual: snapshot.usualWeekDistance)
+        WidgetWeek.usualWeekProgress(distance: snapshot.weekDistance, usual: snapshot.usualWeekDistance)
+    }
+    private var rating: Int? { snapshot.weekRating >= 0 ? snapshot.weekRating : nil }
+    private var today: Int? { WidgetWeek.todayIndex(snapshot.weekStart, now: entry.date) }
+    private var kmNumber: String {
+        snapshot.weekDistance < 1000 ? "<1" : "\(Int(snapshot.weekDistance / 1000))"
     }
 
     var body: some View {
@@ -83,56 +80,111 @@ private struct RadarWeekView: View {
     private var circular: some View {
         ZStack {
             AccessoryWidgetBackground()
-            // Кольцо — к обычной неделе, число внутри — километры. Балл на
-            // локскрине не помещается вместе с ними, а факт нужнее оценки.
-            Gauge(value: progress, in: 0...1) {
-                Image(systemName: "car.fill")
-            } currentValueLabel: {
-                Text(isCurrentWeek ? "\(Int(snapshot.weekDistance / 1000))" : "—")
-                    .font(.system(size: 15, weight: .heavy, design: .rounded))
-                    .minimumScaleFactor(0.7)
+            if hasWeek {
+                Gauge(value: progress, in: 0...1) {
+                    Image(systemName: "car.fill")
+                } currentValueLabel: {
+                    Text(verbatim: kmNumber)
+                        .font(.system(size: 15, weight: .heavy, design: .rounded))
+                        .minimumScaleFactor(0.7)
+                }
+                .gaugeStyle(.accessoryCircularCapacity)
+            } else {
+                VStack(spacing: 0) {
+                    Image(systemName: "car.fill")
+                        .font(.system(size: 15, weight: .bold))
+                    Text(verbatim: "—")
+                        .font(.system(size: 15, weight: .heavy, design: .rounded))
+                }
             }
-            .gaugeStyle(.accessoryCircularCapacity)
         }
-        .widgetURL(URL(string: "radarmap://trip"))
+        .widgetURL(URL(string: "radarmap://stats"))
     }
 
     private var rectangular: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text("Неделя за рулём")
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Неделя")
                 .font(.system(size: 12, weight: .semibold))
-            HStack(spacing: 6) {
-                Text(distance)
+            if hasWeek {
+                Text(verbatim: valueLine)
                     .font(.system(size: 17, weight: .heavy, design: .rounded))
-                Text(String(format: String(localized: "балл %@"), value))
-                    .font(.system(size: 13))
-                    .opacity(0.8)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                dots
+            } else {
+                Text(emptyTitle)
+                    .font(.system(size: 17, weight: .heavy))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                if let emptyNote {
+                    Text(verbatim: emptyNote)
+                        .font(.system(size: 11))
+                        .opacity(0.8)
+                        .lineLimit(1)
+                }
             }
-            Text(usualLine)
-                .font(.system(size: 11))
-                .opacity(0.75)
-                .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .widgetURL(URL(string: "radarmap://trip"))
+        .widgetURL(URL(string: "radarmap://stats"))
     }
 
     private var inline: some View {
-        // Строка над часами: одна короткая мысль, без иконок и без цвета.
-        Text(String(format: String(localized: "Неделя %@ · балл %@"), distance, value))
-            .widgetURL(URL(string: "radarmap://trip"))
+        Group {
+            if hasWeek {
+                Text(verbatim: inlineLine)
+            } else if state == .noAccess {
+                Text("Нет доступа к данным")
+            } else if state == .empty {
+                Text("Первая поездка")
+            } else {
+                Text("На этой неделе поездок нет")
+            }
+        }
+        .widgetURL(URL(string: "radarmap://stats"))
     }
 
-    /// «как обычно» или «из обычных 115 км» — норма, а не абстрактная цель.
-    private var usualLine: String {
-        let usual = snapshot.usualWeekDistance
-        if state == .noAccess { return String(localized: "Нет доступа к данным") }
-        guard isCurrentWeek, usual > 1000, snapshot.weekDistance > 0 else {
-            return String(localized: "Неделя за рулём")
+    /// Прошедшие ездовые дни бледнее, сегодня полной точкой, остальное — кружок.
+    private var dots: some View {
+        let values = WidgetWeek.dayDots(snapshot.dayDistances, today: today)
+        return HStack(spacing: 4) {
+            ForEach(0..<7, id: \.self) { index in
+                Group {
+                    switch values[index] {
+                    case .today: Circle().fill(.primary)
+                    case .driven: Circle().fill(.primary.opacity(0.55))
+                    case .none: Circle().stroke(.primary.opacity(0.4), lineWidth: 1)
+                    }
+                }
+                .frame(width: 7, height: 7)
+            }
         }
-        let share = snapshot.weekDistance / usual
-        if share >= 0.95 && share <= 1.05 { return String(localized: "как обычно") }
-        return String(format: String(localized: "из обычных %@"), km(usual))
+    }
+
+    private var emptyTitle: LocalizedStringKey {
+        switch state {
+        case .noAccess: return "Нет доступа"
+        case .empty: return "Первая поездка"
+        default: return "Поездок нет"
+        }
+    }
+
+    private var emptyNote: String? {
+        guard state != .noAccess, snapshot.usualWeekDistance > 1000 else { return nil }
+        return String(format: String(localized: "обычно %@"), km(snapshot.usualWeekDistance))
+    }
+
+    private var valueLine: String {
+        guard let rating else { return km(snapshot.weekDistance) }
+        return String(format: String(localized: "%1$@ · балл %2$lld"), km(snapshot.weekDistance), rating)
+    }
+
+    private var inlineLine: String {
+        guard snapshot.usualWeekDistance > 1000, state == .full else { return valueLine }
+        let usual = "\(Int(snapshot.usualWeekDistance / 1000))"
+        if let rating {
+            return String(format: String(localized: "%1$@ из %2$@ км · балл %3$lld"), kmNumber, usual, rating)
+        }
+        return String(format: String(localized: "%1$@ из %2$@ км"), kmNumber, usual)
     }
 
     private func km(_ meters: Double) -> String {

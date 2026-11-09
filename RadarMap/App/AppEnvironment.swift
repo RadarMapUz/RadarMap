@@ -514,6 +514,8 @@ final class AppEnvironment {
         ActivityActions.perform = { [weak self] action in
             await self?.performActivityAction(action)
         }
+        ControlBridge.listen()
+        settings.onMutedChanged = { [weak self] in self?.mirrorControls() }
         self.location.route = route
         self.location.speedLimits = speedLimits
         self.location.hotspots = hotspots
@@ -568,6 +570,7 @@ final class AppEnvironment {
         location.onTripStateChanged = { [weak self] active in
             guard let self else { return }
             self.mobile.setTripActive(active)
+            self.mirrorControls()
             self.tripStateChangedForReports(active: active)
             // Такт сети — по поездке, а не по экрану; старт — внеочередной
             // опрос отметок (список получасовой давности пропустил бы ровно
@@ -1745,6 +1748,7 @@ final class AppEnvironment {
     /// координат), приватность, язык. Запись и перезагрузка — только при
     /// смене, виджеты читают их сами.
     func refreshWidgetPrefs() {
+        mirrorControls()
         func known(_ slot: PlaceSlot, _ kind: FrequentPlaces.Kind) -> Bool {
             settings.place(for: slot) != nil || learnedPlaces.contains { $0.kind == kind }
         }
@@ -1758,6 +1762,17 @@ final class AppEnvironment {
             WidgetCenter.shared.reloadAllTimelines()
         } else {
             WidgetCenter.shared.reloadTimelines(ofKind: "RadarCommuteWidget")
+        }
+    }
+
+    /// Значения переключателей Пункта управления; кнопка перерисовывается
+    /// только при смене.
+    func mirrorControls() {
+        if ControlBridge.mirror(location.isTripActive, key: ControlBridge.tripActiveKey) {
+            ControlCenter.shared.reloadControls(ofKind: ControlBridge.tripKind)
+        }
+        if ControlBridge.mirror(settings.isMuted, key: ControlBridge.mutedKey) {
+            ControlCenter.shared.reloadControls(ofKind: ControlBridge.soundKind)
         }
     }
 
@@ -1906,7 +1921,7 @@ final class AppEnvironment {
         default:   // full — богатая неделя
             return SharedDefaults.Snapshot(
                 weekStart: start, weekDistance: 128_400, weekTrips: 9, weekRating: 67,
-                weekFineRisk: 2_200_000, weekDeltaPercent: 12,
+                weekFineRisk: 2_200_000,
                 dayDistances: [14_000, 22_000, 31_000, 9_000, 27_000, 0, 25_400],
                 dayOverspeed: [false, false, true, false, true, false, false],
                 topRiskPlace: "Юнусабад, Амира Темура", topRiskPasses: 4,
@@ -1959,14 +1974,39 @@ final class AppEnvironment {
         // выпадает: иначе неделя на виджете выглядела бы короче, чем была.
         var distances = [Double](repeating: 0, count: 7)
         var overspeed = [Bool](repeating: false, count: 7)
+        var dayScores = [Int](repeating: -1, count: 7)
+        var dayRoad = [Double](repeating: 0, count: 7)
+        var dayPerfect = [Bool](repeating: false, count: 7)
         if let weekStart {
+            let usualDay = ItogiCalendar.usualKm(trip.days)
             for day in trip.days {
                 guard let index = calendar.dateComponents([.day], from: weekStart,
                                                           to: calendar.startOfDay(for: day.day)).day,
                       (0...6).contains(index) else { continue }
                 distances[index] = day.distanceMeters
                 overspeed[index] = day.overPasses > 0
+                let ring = ItogiCalendar.ring(day, usualKm: usualDay)
+                dayScores[index] = ring.score ?? -1
+                dayRoad[index] = ring.road
+                dayPerfect[index] = ring.perfect
             }
+        }
+        // Прошлая неделя — чем сказать «Новая неделя» в понедельник.
+        var previous = (distance: 0.0, sum: 0.0, weight: 0.0)
+        if let weekStart, let interval = calendar.dateInterval(of: .weekOfYear,
+                                                               for: weekStart.addingTimeInterval(-7 * 86400)) {
+            for day in trip.days where day.day >= interval.start && day.day < interval.end {
+                previous.distance += day.distanceMeters
+                previous.sum += day.scoreSum
+                previous.weight += day.scoreWeight
+            }
+        }
+        // Дом–работа внутри недели — суммой; какие именно поездки, виджету знать незачем.
+        var commuteMeters = 0.0
+        if let ends = commuteEnds, let weekStart {
+            let thisWeek = trip.history.filter { $0.startedAt >= weekStart && $0.work != true }
+            commuteMeters = Commute.trips(history: thisWeek, home: ends.home, work: ends.work)
+                .reduce(0) { $0 + $1.distanceMeters }
         }
         // «Обычная неделя» — медиана километров за предыдущие восемь, без
         // текущей: она ещё не кончилась и занижала бы норму каждый понедельник.
@@ -1991,28 +2031,32 @@ final class AppEnvironment {
             weekTrips: week.trips,
             weekRating: week.rating ?? -1,
             weekFineRisk: week.fineRisk,
-            // То же правило, что в «Итогах» (31E): процент — только у
-            // сопоставимых целых недель, идущая неделя его не получает.
-            weekDeltaPercent: week.distanceChange?.percent,
             dayDistances: distances,
             dayOverspeed: overspeed,
+            dayScores: dayScores,
+            dayRoad: dayRoad,
+            dayPerfect: dayPerfect,
             topRiskPlace: week.topOverLocation,
             topRiskPasses: week.topOverCount,
             usualWeekDistance: WidgetWeek.median(previousWeeks),
+            previousWeekDistance: previous.distance,
+            previousWeekRating: previous.weight > 0 ? Int((previous.sum / previous.weight).rounded()) : -1,
             monthDistance: month.distance,
             // «За всё время» ещё не перенесено (старт до разблокировки) —
             // прошлое значение, а не журнал одного процесса (ревью S9).
             lifetimeDistance: trip.isLifetimeTrusted ? trip.lifetime.distanceMeters
                                                      : SharedDefaults.read().lifetimeDistance,
             weekMovingDuration: week.movingDuration,
+            weekCommuteDistance: commuteMeters,
             lastTripDistance: trip.history.first?.distanceMeters ?? 0,
             lastTripAt: trip.history.first?.startedAt
         )
         // Сравниваем с тем, что виджет уже видит: перезагрузка без новых цифр
         // тратит дневной бюджет WidgetKit (см. WidgetWeek.needsRefresh).
-        guard WidgetWeek.needsRefresh(previous: SharedDefaults.read(), next: snapshot, now: now)
-        else { return }
+        guard WidgetWeek.needsRefresh(previous: SharedDefaults.read(), next: snapshot) else { return }
         SharedDefaults.write(snapshot)
-        WidgetCenter.shared.reloadAllTimelines()
+        // «Дорогу» перезагружает её собственная ветка, и только при новых числах.
+        WidgetCenter.shared.reloadTimelines(ofKind: "RadarStatsWidget")
+        WidgetCenter.shared.reloadTimelines(ofKind: "RadarWeekWidget")
     }
 }

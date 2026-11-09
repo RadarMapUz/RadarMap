@@ -290,6 +290,10 @@ extension AppEnvironment {
             settings.setMuted(!settings.isMuted)
             Log.alerts.info("Плашка: звук \(self.settings.isMuted ? "выключен" : "включён", privacy: .public)")
             location.refreshLiveActivity()
+        case .setSound(let on):
+            settings.setMuted(!on)
+            Log.alerts.info("Пункт управления: звук \(on ? "включён" : "выключен", privacy: .public)")
+            location.refreshLiveActivity()
         case .report:
             guard let ok = await remoteRadarReport(from: .liveActivity) else { return }
             // Повтор на том же месте — точка уже стоит: ✓, а не «✕ Не

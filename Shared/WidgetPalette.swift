@@ -45,6 +45,24 @@ nonisolated enum WidgetPalette {
     /// Подложка виджета — Theme.surface, ровная: градиент «свет сверху»
     /// ушёл из приложения вместе с остальными (31D).
     static let surface = Pair(light: 0xFFFFFF, dark: 0x1F1F1F)
+    /// Спокойная зона виджета «Дорога» — вторая карточка рядом с синей.
+    static let quiet = Pair(light: 0xF2F1EE, dark: 0x2A2A29)
+    /// Кольца дня и недели. Ночные значения — Theme.Stats; дневные — те же
+    /// оттенки темнее, потому что ночные на белом не видны (тест проверяет
+    /// контраст обоих со своей подложкой).
+    struct Gradient: Equatable, Sendable {
+        let light: [UInt32]
+        let dark: [UInt32]
+    }
+
+    static let ringCalm = Gradient(light: [0x0B9F78, 0x0A8AA8], dark: [0x2BF0B5, 0x19C8E8])
+    static let ringWatch = Gradient(light: [0xC77E00, 0xB85C00], dark: [0xFFD15C, 0xFF9A2E])
+    static let ringRisk = Gradient(light: [0xE0325A, 0xC2187A], dark: [0xFF5C7A, 0xE0218A])
+    static let ringRoad = Gradient(light: [0x7A5CF0, 0x5B3DF5], dark: [0xB49CFF, 0x6C4DFF])
+    /// Theme.Stats.commute / other — деление недели.
+    static let statsCommute = Pair(light: 0x5B3DF5, dark: 0x9A85FF)
+    static let statsOther = Pair(light: 0x0B9F78, dark: 0x3BE3B0)
+
     /// Кант знака ограничения скорости (Theme.signRed).
     static let signRed: UInt32 = 0xD90D1A
 

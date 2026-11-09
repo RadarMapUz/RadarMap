@@ -481,7 +481,10 @@ final class AppSettings {
 
     /// Выключить/вернуть звук одной кнопкой. Возвращается ПРЕЖНИЙ режим
     /// голоса, а не «по умолчанию»: выбранное человеком не теряется.
+    @ObservationIgnored var onMutedChanged: (() -> Void)?
+
     func setMuted(_ muted: Bool) {
+        defer { onMutedChanged?() }
         if muted {
             if voiceMode != .off { store.set(voiceMode.rawValue, forKey: Keys.voiceBeforeMute) }
             soundEnabled = false

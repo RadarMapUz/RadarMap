@@ -40,9 +40,14 @@ enum SharedDefaults {
         static let weekTrips = "widget.weekTrips"
         static let weekRating = "widget.weekRating"
         static let weekFineRisk = "widget.weekFineRisk"
-        static let weekDeltaPercent = "widget.weekDeltaPercent"
         static let dayDistances = "widget.dayDistances"
         static let dayOverspeed = "widget.dayOverspeed"
+        static let dayScores = "widget.dayScores"
+        static let dayRoad = "widget.dayRoad"
+        static let dayPerfect = "widget.dayPerfect"
+        static let previousWeekDistance = "widget.previousWeekDistance"
+        static let previousWeekRating = "widget.previousWeekRating"
+        static let weekCommuteDistance = "widget.weekCommuteDistance"
         static let topRiskPlace = "widget.topRiskPlace"
         static let topRiskPasses = "widget.topRiskPasses"
         static let usualWeekDistance = "widget.usualWeekDistance"
@@ -67,12 +72,15 @@ enum SharedDefaults {
         /// «нет значения» от нуля, а ноль здесь был бы враньём про худшую езду.
         var weekRating = -1
         var weekFineRisk = 0.0
-        /// Дельта километров к прошлой неделе. nil — сравнивать не с чем.
-        var weekDeltaPercent: Int?
         /// Километры по дням недели, в порядке календаря пользователя (7 чисел).
         var dayDistances = [Double](repeating: 0, count: 7)
         /// Был ли в этот день хоть один штрафуемый проезд камеры.
         var dayOverspeed = [Bool](repeating: false, count: 7)
+        /// Балл дня, −1 — оценки нет; доля обычного дня 0…1; день без замечаний.
+        /// Это кольца дня, те же, что в календаре «Итогов».
+        var dayScores = [Int](repeating: -1, count: 7)
+        var dayRoad = [Double](repeating: 0, count: 7)
+        var dayPerfect = [Bool](repeating: false, count: 7)
         /// Место, где за неделю потеряно больше всего, и число проездов там.
         var topRiskPlace: String?
         var topRiskPasses = 0
@@ -80,11 +88,16 @@ enum SharedDefaults {
         /// заполняется кольцо: цель, которую человек не ставил, ему и не нужна,
         /// а своя привычная норма — понятная точка отсчёта.
         var usualWeekDistance = 0.0
+        /// Прошлая неделя — чем говорить в понедельник вместо «нет данных».
+        var previousWeekDistance = 0.0
+        var previousWeekRating = -1
         var monthDistance = 0.0
         /// Пожизненный пробег с приложением — единственное число, которое
         /// только растёт, и потому приятное.
         var lifetimeDistance = 0.0
         var weekMovingDuration: TimeInterval = 0
+        /// Из километров недели — дорога дом–работа. Без координат: только сумма.
+        var weekCommuteDistance = 0.0
         /// Последняя поездка — единственное, что можно честно показать, пока
         /// неделя ещё не набралась: сравнивать не с чем, а факт уже есть.
         var lastTripDistance = 0.0
@@ -104,14 +117,14 @@ enum SharedDefaults {
         store.set(snapshot.weekTrips, forKey: Keys.weekTrips)
         store.set(snapshot.weekRating, forKey: Keys.weekRating)
         store.set(snapshot.weekFineRisk, forKey: Keys.weekFineRisk)
-        // Отсутствие дельты — это не ноль: ноль означает «столько же».
-        if let delta = snapshot.weekDeltaPercent {
-            store.set(delta, forKey: Keys.weekDeltaPercent)
-        } else {
-            store.removeObject(forKey: Keys.weekDeltaPercent)
-        }
         store.set(WidgetWeek.padded(snapshot.dayDistances), forKey: Keys.dayDistances)
         store.set(WidgetWeek.padded(snapshot.dayOverspeed), forKey: Keys.dayOverspeed)
+        store.set(WidgetWeek.padded(snapshot.dayScores, fill: -1), forKey: Keys.dayScores)
+        store.set(WidgetWeek.padded(snapshot.dayRoad), forKey: Keys.dayRoad)
+        store.set(WidgetWeek.padded(snapshot.dayPerfect), forKey: Keys.dayPerfect)
+        store.set(snapshot.previousWeekDistance, forKey: Keys.previousWeekDistance)
+        store.set(snapshot.previousWeekRating, forKey: Keys.previousWeekRating)
+        store.set(snapshot.weekCommuteDistance, forKey: Keys.weekCommuteDistance)
         store.set(snapshot.topRiskPlace, forKey: Keys.topRiskPlace)
         store.set(snapshot.topRiskPasses, forKey: Keys.topRiskPasses)
         store.set(snapshot.usualWeekDistance, forKey: Keys.usualWeekDistance)
@@ -134,15 +147,21 @@ enum SharedDefaults {
             weekRating: store.object(forKey: Keys.weekRating) == nil
                 ? -1 : store.integer(forKey: Keys.weekRating),
             weekFineRisk: store.double(forKey: Keys.weekFineRisk),
-            weekDeltaPercent: store.object(forKey: Keys.weekDeltaPercent) as? Int,
             dayDistances: WidgetWeek.padded(store.array(forKey: Keys.dayDistances) as? [Double] ?? []),
             dayOverspeed: WidgetWeek.padded(store.array(forKey: Keys.dayOverspeed) as? [Bool] ?? []),
+            dayScores: WidgetWeek.padded(store.array(forKey: Keys.dayScores) as? [Int] ?? [], fill: -1),
+            dayRoad: WidgetWeek.padded(store.array(forKey: Keys.dayRoad) as? [Double] ?? []),
+            dayPerfect: WidgetWeek.padded(store.array(forKey: Keys.dayPerfect) as? [Bool] ?? []),
             topRiskPlace: store.string(forKey: Keys.topRiskPlace),
             topRiskPasses: store.integer(forKey: Keys.topRiskPasses),
             usualWeekDistance: store.double(forKey: Keys.usualWeekDistance),
+            previousWeekDistance: store.double(forKey: Keys.previousWeekDistance),
+            previousWeekRating: store.object(forKey: Keys.previousWeekRating) == nil
+                ? -1 : store.integer(forKey: Keys.previousWeekRating),
             monthDistance: store.double(forKey: Keys.monthDistance),
             lifetimeDistance: store.double(forKey: Keys.lifetimeDistance),
             weekMovingDuration: store.double(forKey: Keys.weekMovingDuration),
+            weekCommuteDistance: store.double(forKey: Keys.weekCommuteDistance),
             lastTripDistance: store.double(forKey: Keys.lastTripDistance),
             lastTripAt: store.object(forKey: Keys.lastTripAt) as? Date,
             updatedAt: store.object(forKey: Keys.updatedAt) as? Date
@@ -161,11 +180,14 @@ enum SharedDefaults {
 nonisolated enum WidgetState: Equatable {
     /// App Group не выдан подписью — данных нет и не будет, пока это не чинят.
     case noAccess
-    /// Поездок не было. Ноль километров — не факт, а его отсутствие.
+    /// Поездок ещё не было вообще. Ноль километров — не факт, а его отсутствие.
     case empty
+    /// На этой неделе поездок нет, а раньше были: водитель с историей в
+    /// понедельник, а не первый день в приложении.
+    case newWeek
     /// Поездки есть, но нормы и формы недели ещё нет: сравнивать не с чем.
     case few
-    /// Полная неделя: столбики, норма, дельта.
+    /// Полная неделя: дни и норма.
     case full
 }
 
@@ -192,43 +214,23 @@ nonisolated enum WidgetWeek {
 
     /// Когда виджету самому перечитать снимок: в начале следующих суток (с
     /// минутой запаса). Новые цифры приносит приложение (reloadTimelines),
-    /// а сам виджет должен заметить только смену дня и недели — до 19.10 он
-    /// просыпался каждый час, ~24 пробуждения расширения в сутки на виджет
-    /// впустую.
-    /// `updatedAt` — время снимка: в момент, когда он станет «старым»
-    /// (`isStale`), виджет тоже просыпается, чтобы приглушить подпись.
-    static func nextRefresh(after now: Date, updatedAt: Date? = nil,
-                            calendar: Calendar = .current) -> Date {
+    /// а сам виджет должен заметить только смену дня и недели.
+    static func nextRefresh(after now: Date, calendar: Calendar = .current) -> Date {
         let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))
             ?? now.addingTimeInterval(86_400)
-        var next = tomorrow.addingTimeInterval(60)
-        if let updatedAt {
-            let staleAt = updatedAt.addingTimeInterval(staleAfter + 60)
-            if staleAt > now { next = min(next, staleAt) }
-        }
-        return next
+        return tomorrow.addingTimeInterval(60)
     }
-    /// Как часто переписывать неизменный снимок. Меньше суток с запасом:
-    /// виджет приглушает подпись снимку старше `isStale` (24 ч), и при
-    /// ежедневно открываемом приложении он не должен тускнеть.
-    static let unchangedRefreshInterval: TimeInterval = 12 * 60 * 60
 
-    /// Перезаписать ли снимок и перезагрузить виджет.
-    ///
-    /// Раньше перезагрузка шла безусловно — на каждом уходе в фон, на каждом
-    /// запуске (в том числе фоновом, после выгрузки по памяти, ~3 раза в
-    /// фоновый час) и в конце поездки. У WidgetKit дневной бюджет
-    /// перезагрузок, и, выбранный впустую, он кончался ровно к концу поездки —
-    /// к единственному моменту, ради которого виджет и обновляют (аудит
-    /// 11.10). Теперь — только когда цифры другие или снимок пора освежить.
-    static func needsRefresh(previous: SharedDefaults.Snapshot, next: SharedDefaults.Snapshot,
-                             now: Date) -> Bool {
-        guard previous.hasAccess, let updatedAt = previous.updatedAt else { return true }
+    /// Перезаписать ли снимок и перезагрузить виджет. Только когда цифры
+    /// другие: у WidgetKit дневной бюджет, и, выбранный впустую, он кончался
+    /// ровно к концу поездки (аудит 11.10). Сутки без поездок снимок не
+    /// портят: поездки пишутся сами, а смену дня виджет замечает сам.
+    static func needsRefresh(previous: SharedDefaults.Snapshot, next: SharedDefaults.Snapshot) -> Bool {
+        guard previous.hasAccess, previous.updatedAt != nil else { return true }
         var old = previous, new = next
         old.updatedAt = nil
         new.updatedAt = nil
-        if old != new { return true }
-        return now.timeIntervalSince(updatedAt) > unchangedRefreshInterval
+        return old != new
     }
 
     /// Сколько дней недели были ездовыми.
@@ -241,7 +243,11 @@ nonisolated enum WidgetWeek {
     /// а значит ни «в среднем», ни «из обычных» показывать нельзя.
     static func state(_ snapshot: SharedDefaults.Snapshot) -> WidgetState {
         guard snapshot.hasAccess else { return .noAccess }
-        guard snapshot.weekTrips > 0 || snapshot.weekDistance > 0 else { return .empty }
+        guard snapshot.weekTrips > 0 || snapshot.weekDistance > 0 else {
+            let hasHistory = snapshot.lifetimeDistance > 0 || snapshot.previousWeekDistance > 0
+                || snapshot.usualWeekDistance > 0 || snapshot.lastTripAt != nil
+            return hasHistory ? .newWeek : .empty
+        }
         let days = activeDayCount(snapshot.dayDistances)
         return days >= 2 && snapshot.usualWeekDistance > 1000 ? .full : .few
     }
@@ -291,14 +297,75 @@ nonisolated enum WidgetWeek {
             || (weekStart >= interval.start && weekStart < interval.end)
     }
 
-    /// Снимку больше суток — цифры ещё те же, но подпись стоит приглушить:
-    /// приложение давно не открывали, и сегодняшняя поездка в них не вошла.
-    static let staleAfter: TimeInterval = 24 * 60 * 60
+    /// Подпись к норме. Идущая неделя сравнивается с целой обычной только
+    /// как «118 из обычных 165»: «на 28 % меньше» в четверг неправда, водитель
+    /// не отстаёт, неделя просто не кончилась. «Больше» — уже факт.
+    enum UsualLine: Equatable {
+        case none
+        case asUsual
+        case ofUsual(Double)
+        case above(percent: Int)
+    }
 
-    static func isStale(_ updatedAt: Date?, now: Date,
-                        maxAge: TimeInterval = staleAfter) -> Bool {
-        guard let updatedAt else { return true }
-        return now.timeIntervalSince(updatedAt) > maxAge
+    static func usualLine(distance: Double, usual: Double) -> UsualLine {
+        guard usual > 1000, distance > 0 else { return .none }
+        let share = distance / usual
+        if share > 1.05 { return .above(percent: Int(((share - 1) * 100).rounded())) }
+        return share >= 0.95 ? .asUsual : .ofUsual(usual)
+    }
+
+    /// Сколько дней назад: 0 — сегодня, 1 — вчера. Для абсолютной подписи:
+    /// виджет перерисовывается раз в сутки, «2 часа назад» замерло бы.
+    static func daysAgo(_ date: Date, now: Date, calendar: Calendar = .current) -> Int {
+        calendar.dateComponents([.day], from: calendar.startOfDay(for: date),
+                                to: calendar.startOfDay(for: now)).day ?? 0
+    }
+
+    /// Кольца дня; nil — в этот день не ездили.
+    struct DayRing: Equatable {
+        let score: Int?
+        let road: Double
+        let fine: Bool
+        let perfect: Bool
+    }
+
+    static func dayRings(_ snapshot: SharedDefaults.Snapshot) -> [DayRing?] {
+        let distances = padded(snapshot.dayDistances), scores = padded(snapshot.dayScores, fill: -1)
+        let road = padded(snapshot.dayRoad), fines = padded(snapshot.dayOverspeed)
+        let perfect = padded(snapshot.dayPerfect)
+        let marks = marksOverspeedDays(distances)
+        return (0..<7).map { index in
+            guard distances[index] > 0 else { return nil }
+            return DayRing(score: scores[index] >= 0 ? scores[index] : nil,
+                           road: min(1, max(0, road[index])),
+                           fine: marks && fines[index], perfect: perfect[index])
+        }
+    }
+
+    enum DayDot: Equatable {
+        case none, driven, today
+    }
+
+    /// Дни точками на экране блокировки: сегодня, если ездили, ярче остальных.
+    static func dayDots(_ distances: [Double], today: Int?) -> [DayDot] {
+        padded(distances).enumerated().map { index, distance in
+            guard distance > 0 else { return .none }
+            return index == today ? .today : .driven
+        }
+    }
+
+    struct Split: Equatable {
+        let commute: Double
+        let other: Double
+        var commuteShare: Double { commute / (commute + other) }
+    }
+
+    /// Дорога дом–работа и всё остальное. Показывать только когда есть оба:
+    /// полоса из одной половины — это не сравнение.
+    static func split(_ snapshot: SharedDefaults.Snapshot) -> Split? {
+        let total = snapshot.weekDistance, commute = min(snapshot.weekCommuteDistance, total)
+        guard commute >= 1000, total - commute >= 1000 else { return nil }
+        return Split(commute: commute, other: total - commute)
     }
 
     /// Высоты столбиков 0…1 от самого длинного дня. День без поездок — 0

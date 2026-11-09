@@ -102,6 +102,29 @@ final class WidgetPaletteTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(contrast(WidgetPalette.onAction, WidgetPalette.action), 4.5)
     }
 
+    /// Кольца: ночью — ровно Theme.Stats, днём — читаются на белом.
+    func testRingsAreTheStatsPaletteAtNightAndVisibleByDay() {
+        let night: [(WidgetPalette.Gradient, [Color], String)] = [
+            (WidgetPalette.ringCalm, Theme.Stats.ringCalm, "calm"),
+            (WidgetPalette.ringWatch, Theme.Stats.ringWatch, "watch"),
+            (WidgetPalette.ringRisk, Theme.Stats.ringRisk, "risk"),
+            (WidgetPalette.ringRoad, Theme.Stats.ringRoad, "road"),
+        ]
+        for (gradient, theme, name) in night {
+            XCTAssertEqual(gradient.dark, theme.map { hex($0, .dark) }, name)
+            for color in gradient.light {
+                XCTAssertGreaterThanOrEqual(contrast(color, WidgetPalette.surface.light), 3, "\(name) днём")
+            }
+            for color in gradient.dark {
+                XCTAssertGreaterThanOrEqual(contrast(color, WidgetPalette.surface.dark), 3, "\(name) ночью")
+            }
+        }
+        XCTAssertEqual(WidgetPalette.statsCommute.light, hex(Theme.Stats.commute, .light))
+        XCTAssertEqual(WidgetPalette.statsCommute.dark, hex(Theme.Stats.commute, .dark))
+        XCTAssertEqual(WidgetPalette.statsOther.light, hex(Theme.Stats.other, .light))
+        XCTAssertEqual(WidgetPalette.statsOther.dark, hex(Theme.Stats.other, .dark))
+    }
+
     func testScoreTiersMatchTheApp() {
         for rating in 0...100 {
             XCTAssertEqual(WidgetPalette.scoreTier(rating), DrivingScore.tier(for: rating), "балл \(rating)")

@@ -190,13 +190,62 @@ nonisolated enum Drive3D {
     /// проступала старым маршрутом за машиной. Камеры, разметка, стрелки
     /// полос, светофоры, заправки по пути остаются.
     static let traveledLayer = "route-traveled"
+    /// Блик середины и тёмный отрезок манёвра на линии: в 3D линия одного
+    /// цвета — как лента, белая жила и две полосы тона читались трубкой.
+    static let lineAccentLayers = ["route-core", "route-near-core", "route-maneuver", "route-near-maneuver"]
     static let hiddenLayers: [String] = [
         traveledLayer,
+    ] + lineAccentLayers + [
         "radar-roads-gutter", "radar-asphalt-grain", "radar-trunk-glow", "radar-island-hatch",
         "railway-transit-hatching", "railway-service-hatching", "railway-hatching", "radar-oneway",
         "trees", "radar-tree-shadow", "radar-tree", "radar-tree-light", "radar-tree-3d",
         "radar-tunnel-case", "radar-tunnel", "radar-barrier-3d",
     ]
+
+    // MARK: - Линия за лентой и манёвр (70)
+
+    /// Точка пробы: на экране и в запасе вокруг него. Запрос признаков не
+    /// режется кадром — отвечает, сколько загружено тайлов.
+    static func probeInReach(x: Double, y: Double, width: Double, height: Double) -> Bool {
+        let reach = 2 * max(width, height)
+        return x.isFinite && y.isFinite && x >= -reach && x <= width + reach && y >= -reach && y <= height + reach / 2
+    }
+
+    /// Белая стрелка манёвра — только где манёвр не показан лентой: на
+    /// ленте его показывает её сужение и изгиб, а стрелка лежала посреди неё
+    /// белым пятном. Без ленты (`ribbonEnd` nil) — как раньше.
+    static func maneuverArrowShown(ribbonEnd: Double?, maneuver: Double?) -> Bool {
+        guard let ribbonEnd, let maneuver else { return true }
+        return maneuver > ribbonEnd - AppConfig.drive3DEndTaperMeters
+    }
+
+    /// Точек на метр на зуме (широта Ташкента: стиль задаёт ширину числами).
+    static func pointsPerMeter(zoom: Double, latitude: Double = 41.3) -> Double {
+        512 * pow(2, zoom) / (40_075_016.686 * cos(latitude * .pi / 180))
+    }
+
+    /// Толщина канта ленты, точки.
+    static func edgeWidth(zoom: Double, daylight: Bool) -> Double {
+        let far = daylight ? 0.9 : 0.7, near = daylight ? 1.2 : 0.9
+        if zoom <= 16 { return 0.5 }
+        if zoom <= 18 { return 0.5 + (far - 0.5) * (zoom - 16) / 2 }
+        return far + (near - far) * min(1, (zoom - 18) / 2)
+    }
+
+    /// Толщина линии за лентой: в метрах полосы (drive3DTailMeters) — та же,
+    /// что конец ленты на любом зуме и под любым наклоном, — и не тоньше
+    /// жилы дальнего плана. `casing` — с кантом по обе стороны.
+    static func tailWidth(casing: Bool = false, daylight: Bool = true) -> [Any] {
+        let floor = AppConfig.drive3DSpineFarPoints
+        let meters = AppConfig.drive3DTailMeters
+        let lock = log2(floor / (meters * pointsPerMeter(zoom: 0)))
+        var out: [Any] = ["interpolate", ["exponential", 2], ["zoom"]]
+        for zoom in [15, lock, 18, 20].sorted() {
+            let body = max(floor, meters * pointsPerMeter(zoom: zoom))
+            out += [zoom, body + (casing ? 2 * edgeWidth(zoom: zoom, daylight: daylight) : 0)]
+        }
+        return out
+    }
 
     // MARK: - Шевроны
 

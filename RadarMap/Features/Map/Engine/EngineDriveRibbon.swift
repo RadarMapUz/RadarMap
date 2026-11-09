@@ -14,16 +14,17 @@
 //  ней (цветом линии маршрута), кант, шевроны.
 //
 //  Лента — только на прощупанном участке (LanePath.Ribbon.verifiedEnd).
-//  Дальше маршрут — «хвостом»: линия цветом маршрута от конца ленты; обычная
-//  линия маршрута гаснет с 15-го зума только пока лента готова (isReady), а
-//  без лент тайла (обзор, непрогруженная карта) остаётся как была.
+//  Дальше маршрут — «хвостом»: на конце лента сходится к ширине полосы и
+//  переходит в линию той же ширины, цвета и оси, без торца (LanePath.tail);
+//  обычная линия маршрута гаснет с 15-го зума только пока лента готова
+//  (isReady), а без лент тайла (обзор, непрогруженная карта) остаётся как была.
 //
 //  Когда пишется (правило аудита 11.10 — источники не на тике):
 //  • расчёт — только при слежении, с 15-го зума и на дорисованном кадре
 //    (Drive3D.canCompute), на смене маршрута, манёвра, перегрева, на входе в
 //    окно подъезда, у конца прощупанного и раз в 250 м (Drive3D.needsRecompute);
-//    вне главного потока; ленты дорог — пробами вдоль маршрута на экране
-//    (с запасом прощупанного), стрелки ряда — только при сужении;
+//    вне главного потока; ленты дорог — пробами вдоль маршрута, и за краем
+//    экрана, стрелки ряда — только при сужении;
 //  • источник — только с готовым расчётом и новыми пробками;
 //  • срез под машиной — фильтром слоёв по концу куска (`t`), шагом
 //    Drive3D.cutStep (крупнее на горячем телефоне);
@@ -246,6 +247,9 @@ final class EngineDriveRibbon {
         if let entry, entry.computing?.owner == me { entry.computing = nil }
     }
 
+    /// Докуда сейчас показана лента (nil — не показана): стрелка манёвра.
+    var shownEnd: Double? { shown ? entry?.ribbon?.verifiedEnd : nil }
+
     /// Карту сносят: расчёт отменён, общая запись маршрута — без неё (кеш
     /// дорог отпускается, когда карт на маршруте не осталось).
     func release() {
@@ -387,8 +391,9 @@ final class EngineDriveRibbon {
             guard settled == .write else { return }
             entry.ribbon = result
             entry.drawnKey = (next.maneuver, narrowing)
+            // Шеврон шире сходящегося конца ленты — только до него.
             entry.chevrons = LanePath.chevrons(result, spacing: AppConfig.drive3DChevronSpacing)
-                .filter { $0.along <= result.verifiedEnd }
+                .filter { $0.along <= result.verifiedEnd - AppConfig.drive3DEndTaperMeters }
             entry.version &+= 1
             entry.versionOwner = self.me
             entry.built = nil
@@ -434,15 +439,13 @@ final class EngineDriveRibbon {
                                       longitude: a.longitude + (b.longitude - a.longitude) * t)
     }
 
-    private static func index(at along: Double, cumulative: [Double]) -> Int {
-        cumulative.firstIndex { $0 >= along } ?? max(0, cumulative.count - 1)
-    }
-
-    /// Ленты дорог вдоль маршрута на экране: квадрат пробы через каждые
+    /// Ленты дорог вдоль маршрута: квадрат пробы через каждые
     /// drive3DProbeStepMeters, не дальше уже прощупанного минус 100 м; что
     /// нащупали раньше, остаётся (общий кеш маршрута — им пользуются все
-    /// карты). За краем экрана данных нет — лента там кончается, дальше
-    /// линия (verifiedEnd).
+    /// карты). Запрос признаков отвечает и за краем экрана, сколько загружено
+    /// тайлов (70: на коротком экране машины лента кончалась у первого узла
+    /// за кадром и стык был виден). Пустая проба за экраном — тайла нет,
+    /// дальше не щупаем: лента там кончается, дальше линия (verifiedEnd).
     private func probeRoads(entry: EngineRibbonShare.Entry, route: [CLLocationCoordinate2D], car: Double,
                             from: Double, length: Double, limit: Int, in view: MLNMapView) -> [LanePath.Road] {
         pruneRoads(entry: entry, route: route, car: car)
@@ -450,16 +453,20 @@ final class EngineDriveRibbon {
         let half = AppConfig.drive3DProbePoints / 2
         var along = max(from, entry.probedUntil - 100)
         var probes = 0
-        while along <= from + length, probes < limit,
+        let until = from + min(length, AppConfig.drive3DProbeAheadMeters)
+        while along <= until, probes < limit,
               let coordinate = Self.point(at: along, route: route, cumulative: entry.cumulative) {
             let here = along
             along += AppConfig.drive3DProbeStepMeters
             let p = view.convert(coordinate, toPointTo: view)
-            guard bounds.contains(p) else { continue }
+            guard Drive3D.probeInReach(x: Double(p.x), y: Double(p.y), width: Double(bounds.width),
+                                       height: Double(bounds.height)) else { continue }
             probes += 1
-            entry.probedUntil = max(entry.probedUntil, here)
             let rect = CGRect(x: p.x - half, y: p.y - half, width: 2 * half, height: 2 * half)
-            for feature in view.visibleFeatures(in: rect, styleLayerIdentifiers: Self.roadLayers) {
+            let features = view.visibleFeatures(in: rect, styleLayerIdentifiers: Self.roadLayers)
+            if features.isEmpty, !bounds.contains(p) { break }
+            entry.probedUntil = max(entry.probedUntil, here)
+            for feature in features {
                 for line in Self.lines(of: feature) where line.count >= 2 {
                     let first = line[0], end = line[line.count - 1]
                     let key = String(format: "%.6f,%.6f,%.6f,%.6f,%ld", first.latitude, first.longitude,
@@ -604,12 +611,8 @@ final class EngineDriveRibbon {
             point.attributes = ["a": chevron.along, "b": chevron.bearing, "bridge": chevron.bridge]
             return point
         }
-        // Хвост: маршрут от конца ленты (с заходом под неё) — линией.
-        var tail: [CLLocationCoordinate2D] = []
-        if let head = point(at: max(0, end - AppConfig.drive3DTailOverlapMeters), route: route,
-                            cumulative: entry.cumulative) {
-            tail = [head] + route[min(route.count - 1, index(at: end, cumulative: entry.cumulative))...]
-        }
+        // Хвост — продолжение оси ленты: та же точка и то же направление.
+        let tail = LanePath.tail(ribbon, route: route, cumulative: entry.cumulative)
         let tailFeature: MLNPolylineFeature? = tail.count >= 2
             ? { var c = tail; return MLNPolylineFeature(coordinates: &c, count: UInt(c.count)) }() : nil
         return EngineRibbonShare.Built(version: entry.version, traffic: traffic, start: start,
@@ -711,19 +714,15 @@ final class EngineDriveRibbon {
                 if let anchor { style.insertLayer(layer, below: anchor) } else { style.addLayer(layer) }
             }
         }
-        // Хвост — там же, где линия маршрута: над её серединой, под стрелками.
-        let fadeIn = NSExpression(mglJSONObject: ["interpolate", ["linear"], ["zoom"], 14.5, 0, 15.5, 1])
-        var above: MLNStyleLayer? = style.layer(withIdentifier: "route-core")
-        for (id, extra) in [(Self.tailLayers.casing, 3.0), (Self.tailLayers.body, 0.0)]
-        where style.layer(withIdentifier: id) == nil {
+        // Хвост — сразу над настилом мостов: неизвестная эстакада впереди не
+        // прячет маршрут; торец без скругления — стык с концом ленты не виден.
+        let anchor = style.layer(withIdentifier: "radar-markings-solid-bridge") ?? style.layer(withIdentifier: "route-core")
+        for id in [Self.tailLayers.casing, Self.tailLayers.body] where style.layer(withIdentifier: id) == nil {
             let layer = MLNLineStyleLayer(identifier: id, source: tailSource)
             layer.lineJoin = NSExpression(forConstantValue: "round")
-            layer.lineCap = NSExpression(forConstantValue: "round")
-            layer.lineWidth = NSExpression(mglJSONObject: EngineMapStyle.routeWidth(extra: extra))
-            layer.lineOpacity = fadeIn
+            layer.lineCap = NSExpression(forConstantValue: "butt")
             layer.isVisible = false
-            if let above { style.insertLayer(layer, above: above) } else { style.addLayer(layer) }
-            above = layer
+            if let anchor { style.insertLayer(layer, below: anchor) } else { style.addLayer(layer) }
         }
     }
 
@@ -798,10 +797,17 @@ final class EngineDriveRibbon {
             (style.layer(withIdentifier: Self.layerID("chevrons", bridge: bridge)) as? MLNSymbolStyleLayer)?.iconOpacity =
                 NSExpression(forConstantValue: daylight ? 0.9 : 0.55)
         }
-        (style.layer(withIdentifier: Self.tailLayers.casing) as? MLNLineStyleLayer)?.lineColor =
-            NSExpression(forConstantValue: Theme.rgb(routeDaylight ? RouteColors.casing.day : RouteColors.casing.night))
-        (style.layer(withIdentifier: Self.tailLayers.body) as? MLNLineStyleLayer)?.lineColor =
-            NSExpression(forConstantValue: Theme.rgb(routeDaylight ? RouteColors.body.day : RouteColors.body.night))
+        // Хвост — цветом и кантом самой ленты, шириной её конца.
+        if let casing = style.layer(withIdentifier: Self.tailLayers.casing) as? MLNLineStyleLayer {
+            casing.lineColor = NSExpression(forConstantValue: Theme.rgb(ribbon.edge))
+            casing.lineWidth = NSExpression(mglJSONObject: Drive3D.tailWidth(casing: true, daylight: daylight))
+            casing.lineOpacity = edgeOpacity
+        }
+        if let body = style.layer(withIdentifier: Self.tailLayers.body) as? MLNLineStyleLayer {
+            body.lineColor = fill
+            body.lineWidth = NSExpression(mglJSONObject: Drive3D.tailWidth())
+            body.lineOpacity = NSExpression(mglJSONObject: ["interpolate", ["linear"], ["zoom"], 14.5, 0, 15.5, 1])
+        }
     }
 
     /// Показать ленту (готова): её слои и хвост видны, линия маршрута гаснет

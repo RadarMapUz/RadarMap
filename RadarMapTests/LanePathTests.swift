@@ -370,4 +370,73 @@ final class LanePathTests: XCTestCase {
         XCTAssertEqual(LanePath.smootherstep(0.5), 0.5, accuracy: 1e-9)
         XCTAssertLessThan(LanePath.smootherstep(0.02), 0.0001)
     }
+
+    // MARK: - Конец ленты (70, снимок CarPlay: у перекрёстка лента сменялась трубкой)
+
+    /// Прямая на север: лента тайла кончается у `roadEnd` (узел за кадром),
+    /// маршрут идёт дальше.
+    private func endInput(roadEnd: Double = 300, car: Double = 50, routeLength: Double = 1000,
+                          width: Double = 12, oneway: Bool = true) -> LanePath.Input {
+        LanePath.Input(route: [c(0, 0), c(0, routeLength)], from: car, length: 1500, car: car, speedMps: 8, window: 150,
+                       roads: [LanePath.Road(points: [c(0, -40), c(0, roadEnd)], width: width, oneway: oneway, bridge: false)],
+                       arrows: [], maneuver: nil, narrowing: true)
+    }
+
+    func testRibbonEndConvergesToLineWidthOnRouteAxis() {
+        let ribbon = LanePath.build(endInput())
+        XCTAssertTrue(ribbon.isReady)
+        let end = ribbon.verifiedEnd
+        let tail = AppConfig.drive3DTailMeters
+        let (l, r) = offsets(ribbon, at: end)
+        XCTAssertEqual(r - l, tail, accuracy: 0.05, "конец ленты — ширина линии")
+        XCTAssertEqual((l + r) / 2, 0, accuracy: 0.05, "конец ленты — на оси маршрута")
+        let (fl, fr) = offsets(ribbon, at: end - AppConfig.drive3DEndTaperMeters - 4)
+        XCTAssertEqual(fr - fl, 12, accuracy: 0.1, "до схода — вся лента")
+    }
+
+    func testRibbonEndWidthChangesGraduallyAndNeverJumps() {
+        let ribbon = LanePath.build(endInput())
+        let last = ribbon.along.lastIndex { $0 <= ribbon.verifiedEnd }!
+        var previous = ribbon.rightOffset[0] - ribbon.leftOffset[0]
+        for i in 1...last {
+            let width = ribbon.rightOffset[i] - ribbon.leftOffset[i]
+            XCTAssertLessThanOrEqual(width, previous + 0.02, "сужение монотонно")
+            XCTAssertLessThan(previous - width, 0.8, "на станции \(ribbon.along[i]) — скачок ширины")
+            previous = width
+        }
+    }
+
+    func testTwoWayRibbonEndsOnAxisWithoutJump() {
+        let ribbon = LanePath.build(endInput(width: 14, oneway: false))
+        let (l, r) = offsets(ribbon, at: ribbon.verifiedEnd)
+        XCTAssertEqual((l + r) / 2, 0, accuracy: 0.05, "с правой половины — на ось, где начинается линия")
+        XCTAssertEqual(r - l, AppConfig.drive3DTailMeters, accuracy: 0.05)
+    }
+
+    func testTailStartsInsideRibbonEndOnSameAxis() throws {
+        let input = endInput()
+        let ribbon = LanePath.build(input)
+        let line = LanePath.tail(ribbon, route: input.route, cumulative: LanePath.measure(input))
+        let first = try XCTUnwrap(line.first)
+        let point = ribbon.frame.point(first)
+        let k = ribbon.along.lastIndex { $0 <= ribbon.verifiedEnd }!
+        XCTAssertLessThanOrEqual((point - ribbon.centre[k]).length, AppConfig.drive3DTailLapMeters + 2.1)
+        XCTAssertEqual(point.x, ribbon.centre[k].x, accuracy: 0.05, "та же ось: без бокового сдвига")
+        XCTAssertEqual(try XCTUnwrap(line.last).latitude, try XCTUnwrap(input.route.last).latitude, accuracy: 1e-6)
+    }
+
+    func testTaperIsNotUnderTheCarNearRibbonEnd() {
+        let ribbon = LanePath.build(endInput(roadEnd: 300, car: 270))
+        let end = ribbon.verifiedEnd
+        let (l, r) = offsets(ribbon, at: 272)
+        XCTAssertGreaterThan(r - l, 11.5, "под машиной лента не сужается")
+        let (el, er) = offsets(ribbon, at: end)
+        XCTAssertEqual(er - el, AppConfig.drive3DTailMeters, accuracy: 0.05)
+    }
+
+    func testRibbonReachingFinishKeepsFullWidth() {
+        let ribbon = LanePath.build(endInput(roadEnd: 420, routeLength: 400))
+        let (l, r) = offsets(ribbon, at: ribbon.verifiedEnd)
+        XCTAssertEqual(r - l, 12, accuracy: 0.2, "линии за финишем нет: сходить не во что")
+    }
 }

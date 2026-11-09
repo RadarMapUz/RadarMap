@@ -29,6 +29,12 @@
 //  осей не уводят ленту с асфальта. Внутри узла (лент нет или они `inner`)
 //  края плавно переходят от входа к выходу.
 //
+//  Конец ленты (70). За прощупанным участком маршрут — линией, и стык не
+//  виден: на последних drive3DEndTaperMeters ширина сходится S-кривой к ширине
+//  линии (drive3DTailMeters), а края — к оси маршрута; линия начинается там же,
+//  той же шириной и идёт по той же сглаженной оси (`tail`). Круглых торцов
+//  посреди дороги нет.
+//
 //  Только картинка: ни голос, ни оповещения, ни прогресс маршрута отсюда не
 //  читают. Считается при смене маршрута, манёвра и раз в несколько сотен
 //  метров пути — не на тике (EngineDriveRibbon). Покрыто LanePathTests.
@@ -159,6 +165,8 @@ nonisolated enum LanePath {
         let left: [Point]
         let right: [Point]
         let centre: [Point]
+        /// Сглаженная ось маршрута на станциях: продолжение ленты линией (`tail`).
+        let axis: [Point]
         let bridge: [Bool]
         /// Смещения краёв от оси маршрута, м (+ вправо) — для тестов и журнала.
         let leftOffset: [Double]
@@ -188,7 +196,7 @@ nonisolated enum LanePath {
         }
 
         static func empty(_ frame: Frame) -> Ribbon {
-            Ribbon(frame: frame, along: [], left: [], right: [], centre: [], bridge: [], leftOffset: [],
+            Ribbon(frame: frame, along: [], left: [], right: [], centre: [], axis: [], bridge: [], leftOffset: [],
                    rightOffset: [], narrowing: .none, narrowed: nil, row: nil, matchedShare: 0, verifiedEnd: 0)
         }
     }
@@ -298,6 +306,10 @@ nonisolated enum LanePath {
             }
         }
 
+        if let verified, along[verified] < (rawAlong.last ?? 0) - AppConfig.drive3DEndTaperMeters {
+            taperToLine(&leftOff, &rightOff, along: along, verified: verified, car: input.car)
+        }
+
         var left = [Point]()
         var right = [Point]()
         var centre = [Point]()
@@ -314,13 +326,44 @@ nonisolated enum LanePath {
         untangle(&right)
         untangle(&centre)
 
-        return Ribbon(frame: frame, along: along, left: left, right: right, centre: centre,
+        return Ribbon(frame: frame, along: along, left: left, right: right, centre: centre, axis: points,
                       bridge: bridges(bridgeRaw), leftOffset: leftOff, rightOffset: rightOff,
                       narrowing: plan.kind,
                       narrowed: narrowedLo <= narrowedHi ? narrowedLo...narrowedHi : nil,
                       row: plan.row, matchedShare: verified.map { Double(matched) / Double($0 + 1) } ?? 0,
                       verifiedEnd: verified.map { along[$0] } ?? along[0],
                       shiftStart: plan.kind == .none ? nil : plan.start)
+    }
+
+    // MARK: - Сход в линию
+
+    /// Последние метры прощупанного: края S-кривой — к половине ширины линии
+    /// по обе стороны оси маршрута; дальше — ровно линия.
+    static func taperToLine(_ left: inout [Double], _ right: inout [Double], along: [Double], verified: Int,
+                            car: Double) {
+        let end = along[verified]
+        // Не под машиной: на коротком остатке сход занимает его вторую половину.
+        let start = max(end - AppConfig.drive3DEndTaperMeters,
+                        car + min(AppConfig.drive3DShiftLeadMeters, (end - car) / 2))
+        let half = AppConfig.drive3DTailMeters / 2
+        for i in along.indices where along[i] > start {
+            let k = smootherstep((along[i] - start) / max(0.1, end - start))
+            left[i] += (-half - left[i]) * k
+            right[i] += (half - right[i]) * k
+        }
+    }
+
+    /// Линия за концом ленты: начинается на `drive3DTailLapMeters` раньше
+    /// конца (без щели сглаживания на стыке), идёт по той же сглаженной оси
+    /// до конца участка, дальше — вершинами маршрута.
+    static func tail(_ ribbon: Ribbon, route: [CLLocationCoordinate2D], cumulative: [Double]) -> [CLLocationCoordinate2D] {
+        guard !ribbon.isEmpty, cumulative.count == route.count,
+              let from = ribbon.along.lastIndex(where: { $0 <= ribbon.verifiedEnd - AppConfig.drive3DTailLapMeters }),
+              let last = ribbon.along.last else { return [] }
+        let axis = simplified(Array(ribbon.axis[from...]), AppConfig.drive3DTailSimplifyMeters)
+        var out = axis.map(ribbon.frame.coordinate)
+        if let next = cumulative.firstIndex(where: { $0 > last + 1 }) { out += route[next...] }
+        return out.count >= 2 ? out : []
     }
 
     // MARK: - Куски для карты

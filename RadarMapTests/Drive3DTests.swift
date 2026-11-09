@@ -62,7 +62,7 @@ final class Drive3DTests: XCTestCase {
             XCTAssertFalse(id.hasPrefix("radar-markings"), id)
             XCTAssertFalse(id.hasPrefix("radar-arrows"), id)
             XCTAssertFalse(id.contains("signal"), id)
-            if id != Drive3D.traveledLayer { XCTAssertFalse(id.hasPrefix("route"), id) }
+            if id != Drive3D.traveledLayer, !Drive3D.lineAccentLayers.contains(id) { XCTAssertFalse(id.hasPrefix("route"), id) }
         }
     }
 
@@ -71,7 +71,7 @@ final class Drive3DTests: XCTestCase {
     /// машиной. В 3D её нет ни до готовности ленты, ни после.
     func testTraveledLineNeverReturnsWhenZoomingOut() {
         XCTAssertTrue(Drive3D.hiddenLayers.contains("route-traveled"))
-        for id in ["route", "route-case", "route-near", "route-traffic", "route-maneuver", "route-arrows"] {
+        for id in ["route", "route-case", "route-near", "route-traffic", "route-arrows"] {
             XCTAssertFalse(Drive3D.hiddenLayers.contains(id), "линия впереди остаётся: \(id)")
         }
     }
@@ -380,6 +380,38 @@ final class Drive3DTests: XCTestCase {
             XCTAssertGreaterThan(overrides.count, 50)
             XCTAssertNotNil(try DriveAsphalt.lightIntensity(from: data))
             XCTAssertFalse(overrides.contains { $0.layer.hasPrefix("camera") })
+        }
+    }
+
+    // MARK: - Линия за лентой и манёвр (70)
+
+    func testProbeReachesPastScreenButNotAnywhere() {
+        XCTAssertTrue(Drive3D.probeInReach(x: 400, y: -500, width: 960, height: 360), "за верхом экрана — впереди дорога")
+        XCTAssertTrue(Drive3D.probeInReach(x: -800, y: 100, width: 402, height: 874), "после поворота — вбок")
+        XCTAssertFalse(Drive3D.probeInReach(x: 400, y: -5000, width: 960, height: 360))
+        XCTAssertFalse(Drive3D.probeInReach(x: .nan, y: 0, width: 960, height: 360))
+    }
+
+    func testManeuverArrowOnlyWhereRibbonDoesNotShowTheTurn() {
+        XCTAssertTrue(Drive3D.maneuverArrowShown(ribbonEnd: nil, maneuver: 100), "линия без ленты — со стрелкой")
+        XCTAssertFalse(Drive3D.maneuverArrowShown(ribbonEnd: 700, maneuver: 100), "манёвр на ленте — без стрелки")
+        XCTAssertTrue(Drive3D.maneuverArrowShown(ribbonEnd: 120, maneuver: 100), "манёвр на сходе — со стрелкой")
+    }
+
+    func testTailWidthIsLaneInMetersAndNeverThin() throws {
+        let stops = Drive3D.tailWidth()
+        func value(_ zoom: Double) throws -> Double {
+            let rest = Array(stops.dropFirst(3))
+            let i = try XCTUnwrap(stride(from: 0, to: rest.count, by: 2).first { rest[$0] as? Double == zoom })
+            return try XCTUnwrap(rest[i + 1] as? Double)
+        }
+        XCTAssertEqual(try value(15), AppConfig.drive3DSpineFarPoints)
+        XCTAssertEqual(try value(18), AppConfig.drive3DTailMeters * Drive3D.pointsPerMeter(zoom: 18), accuracy: 1e-6)
+    }
+
+    func testLineInDrive3DIsOneColour() {
+        for id in ["route-core", "route-near-core", "route-maneuver", "route-near-maneuver"] {
+            XCTAssertTrue(Drive3D.hiddenLayers.contains(id), id)
         }
     }
 }

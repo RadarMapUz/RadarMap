@@ -306,23 +306,13 @@ struct MapScreen: View {
         // radarmap://trip/<id> — пуш «Итоги поездки», открывает ЭТУ поездку;
         // radarmap://trip — виджет недели на локскрине,
         // radarmap://stats — домашний виджет километров,
-        // radarmap://fines — напоминание о сроке оплаты штрафа.
+        // radarmap://fines — напоминание о сроке оплаты штрафа,
+        // radarmap://places — виджет «Дорога» без адресов;
+        // radarmap://go/home — маршрут, см. handleGoLink.
         .onOpenURL { url in
+            if handleGoLink(url) { return }
             guard let link = DeepLink.parse(url) else { return }
-            // Поверх может быть другой шит — вторая презентация молча не
-            // проходит, а «истинный» showStats делал кнопку Итогов мёртвой.
-            // Закрываем всё своё и открываем Итоги после паузы на анимацию.
-            map.selectedCamera = nil
-            map.showNearbySheet = false
-            map.showSearch = false
-            map.showSettings = false
-            showRouteCameras = false
-            showAlongRoute = false
-            showLongTrip = false
-            showMyPlaces = false
-            showsWhatsNew = false
-            tripEndDetail = nil
-            showFines = false
+            closeSheetsForLink()
             // Деталка — отдельный шит карты: поверх открытых Итогов не встанет.
             if link != .stats { map.showStats = false }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
@@ -340,6 +330,8 @@ struct MapScreen: View {
                     if let last = env.trip.history.first { tripEndDetail = last } else { map.showStats = true }
                 case .fines:
                     showFines = true
+                case .places:
+                    showMyPlaces = true
                 }
             }
         }

@@ -22,6 +22,10 @@
 //      вечером — «На работу» с утра понятна, а в 15:00 у дома человек едет
 //      не домой, а на работу (вторая смена).
 //
+//  «Домой» и «На работу» на виджете — действие: нажатие строит маршрут.
+//  Что показать в каждой зоне, решает `panel`, и здесь нет ни слова про то,
+//  как это нарисовать.
+//
 //  Чистая логика без часов и диска — WidgetCommuteTests.
 //
 
@@ -149,6 +153,57 @@ nonisolated enum WidgetCommute {
         case usualDeparture(minute: Int)
     }
 
+    /// Что показать в зоне виджета.
+    struct Zone: Equatable, Sendable {
+        enum State: Equatable, Sendable {
+            /// Время в пути; `approx` — окно своих поездок, а не норма.
+            case time(seconds: Double, approx: Bool, usual: Double)
+            /// Адрес есть, а поездок ещё мало: маршрут работает, времени нет.
+            case route
+            /// Адреса нет — зона ведёт к «Моим местам».
+            case setup
+        }
+
+        let toWork: Bool
+        let state: State
+        var jam: CommuteWidgetData.Jam? = nil
+        var hint: Hint? = nil
+
+        var place: TripLink.GoPlace { toWork ? .work : .home }
+    }
+
+    struct Panel: Equatable, Sendable {
+        let primary: Zone
+        let secondary: Zone
+    }
+
+    /// Две зоны виджета. Главная — куда, скорее всего, ехать сейчас; зона с
+    /// адресом главнее зоны без него: первая действует.
+    static func panel(_ data: CommuteWidgetData?, prefs: WidgetPrefs, now: Date,
+                      calendar: Calendar = .current) -> Panel {
+        func idle(_ toWork: Bool) -> Zone {
+            Zone(toWork: toWork, state: (toWork ? prefs.hasWork : prefs.hasHome) ? .route : .setup)
+        }
+        if let line = line(data, now: now, calendar: calendar) {
+            let primary = Zone(toWork: line.toWork,
+                               state: .time(seconds: line.nowSeconds ?? line.usualSeconds,
+                                            approx: line.nowSeconds != nil, usual: line.usualSeconds),
+                               jam: line.jam, hint: line.hint)
+            let other = line.toWork ? data?.toHome : data?.toWork
+            let secondary = other.map {
+                Zone(toWork: !line.toWork,
+                     state: .time(seconds: $0.usualSeconds, approx: false, usual: $0.usualSeconds))
+            } ?? idle(!line.toWork)
+            return Panel(primary: primary, secondary: secondary)
+        }
+        let toWork = data.map { prefersWork($0, now: now, calendar: calendar) }
+            ?? (calendar.component(.hour, from: now) < eveningHour)
+        let first = idle(toWork), second = idle(!toWork)
+        return first.state == .setup && second.state == .route
+            ? Panel(primary: second, secondary: first)
+            : Panel(primary: first, secondary: second)
+    }
+
     /// Строка на сейчас: утром — на работу, с 14:00 — домой (нет одной —
     /// другая); nil — данных нет или они старше месяца.
     static func line(_ data: CommuteWidgetData?, now: Date, calendar: Calendar = .current) -> Line? {
@@ -158,13 +213,16 @@ nonisolated enum WidgetCommute {
             : [(false, data.toHome), (true, data.toWork)]
         guard let (toWork, direction) = order.first(where: { $0.1 != nil }).map({ ($0.0, $0.1!) }) else { return nil }
         let minute = calendar.component(.hour, from: now) * 60 + calendar.component(.minute, from: now)
+        // В выходной совет только под действующий срок: «выезд около 8:20» в
+        // воскресенье — неправда. Прошедшая подсказка снимается вовсе.
+        let adviceToday = !calendar.isDateInWeekend(now)
         let hint: Hint?
         if let leaveBy = direction.leaveBy, calendar.isDate(leaveBy, inSameDayAs: now), now <= leaveBy {
             hint = .leaveBy(minute: calendar.component(.hour, from: leaveBy) * 60
                                 + calendar.component(.minute, from: leaveBy))
-        } else if let best = direction.bestStartMinute, let seconds = direction.bestSeconds, minute <= best {
+        } else if adviceToday, let best = direction.bestStartMinute, let seconds = direction.bestSeconds, minute <= best {
             hint = .best(minute: best, seconds: seconds)
-        } else if let usual = direction.usualDepartureMinute {
+        } else if adviceToday, let usual = direction.usualDepartureMinute, minute <= usual {
             hint = .usualDeparture(minute: usual)
         } else {
             hint = nil
@@ -267,14 +325,19 @@ nonisolated enum WidgetCommute {
     }
 
     /// Записи таймлайна: сейчас, каждое окно таблицы до следующей перерисовки
-    /// — «~44 мин» меняется на 15-минутной границе без запуска приложения.
+    /// — «~44 мин» меняется на 15-минутной границе без запуска приложения — и
+    /// минута, когда «выезд около 18:30» перестаёт быть правдой. Запись, а не
+    /// перезагрузка: бюджет WidgetKit это не трогает.
     static func entryDates(after now: Date, data: CommuteWidgetData?, calendar: Calendar = .current) -> [Date] {
         let until = nextRefresh(after: now, data: data, calendar: calendar)
-        let starts = [data?.toWork?.slots, data?.toHome?.slots].compactMap { $0 }.flatMap { $0 }
+        let day = calendar.startOfDay(for: now)
+        let slots = [data?.toWork?.slots, data?.toHome?.slots].compactMap { $0 }.flatMap { $0 }
             .map(\.start)
             .flatMap { [$0, $0.addingTimeInterval(Double(slotStepMinutes) * 60)] }
-            .filter { $0 > now && $0 < until }
-        return [now] + Array(Set(starts)).sorted()
+        let hintEnds = [data?.toWork, data?.toHome].compactMap { $0?.usualDepartureMinute }
+            .map { day.addingTimeInterval(Double($0 + 1) * 60) }
+        let moments = (slots + hintEnds).filter { $0 > now && $0 < until }
+        return [now] + Array(Set(moments)).sorted()
     }
 
     /// Не закодировалось (NaN в длительностях — JSONEncoder такого не пишет) —

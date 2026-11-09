@@ -196,4 +196,81 @@ final class WidgetCommuteTests: XCTestCase {
         XCTAssertNil(decoded.toWork?.slots)
         XCTAssertNil(decoded.lastPlace)
     }
+
+    // MARK: - План 09.11: честные подсказки и зоны
+
+    /// «Выезд около 18:30» не висит в 21:00.
+    func testUsualDepartureDoesNotLingerAfterItsTime() {
+        XCTAssertEqual(WidgetCommute.line(data(), now: at(17), calendar: utc)?.hint, .usualDeparture(minute: 1110))
+        XCTAssertNil(WidgetCommute.line(data(), now: at(21), calendar: utc)?.hint)
+    }
+
+    /// Минута, когда совет устаревает, — запись таймлайна, а не новая перезагрузка.
+    func testHintExpiryIsATimelineEntryNotAReload() {
+        var value = data()
+        value.toWork?.bestStartMinute = nil
+        let dates = WidgetCommute.entryDates(after: at(18), data: value, calendar: utc)
+        XCTAssertTrue(dates.contains(at(18, 31)), "\(dates)")
+        XCTAssertEqual(WidgetCommute.nextRefresh(after: at(18), data: value, calendar: utc), at(0, day: 21))
+    }
+
+    /// Суббота, 24 октября: срока нет — совета тоже.
+    func testNoAdviceOnAWeekendWithoutADeadline() {
+        XCTAssertNil(WidgetCommute.line(data(), now: at(7, day: 24), calendar: utc)?.hint)
+        XCTAssertEqual(WidgetCommute.line(data(leaveBy: at(8, 10, day: 24)), now: at(7, day: 24), calendar: utc)?.hint,
+                       .leaveBy(minute: 490), "срок на субботу действует — шестидневка")
+    }
+
+    private let both = WidgetPrefs(hasHome: true, hasWork: true)
+
+    func testPanelWithTimeShowsBothDirections() {
+        var value = data(leaveBy: at(8, 10))
+        value.toWork?.slots = [CommuteWidgetData.Slot(start: at(8), seconds: 2640)]
+        let panel = WidgetCommute.panel(value, prefs: both, now: at(8, 5), calendar: utc)
+        XCTAssertEqual(panel.primary.toWork, true)
+        XCTAssertEqual(panel.primary.place, .work)
+        XCTAssertEqual(panel.primary.state, .time(seconds: 2640, approx: true, usual: 2520))
+        XCTAssertEqual(panel.secondary.place, .home)
+        XCTAssertEqual(panel.secondary.state, .time(seconds: 2340, approx: false, usual: 2340))
+    }
+
+    func testPanelWithAddressesButNoTripsOffersARoute() {
+        let panel = WidgetCommute.panel(nil, prefs: both, now: at(7), calendar: utc)
+        XCTAssertEqual(panel.primary.state, .route)
+        XCTAssertEqual(panel.primary.toWork, true)
+        XCTAssertEqual(panel.secondary.state, .route)
+        XCTAssertEqual(WidgetCommute.panel(nil, prefs: both, now: at(18), calendar: utc).primary.toWork, false)
+    }
+
+    func testPanelWithoutAddressesAsksToSetThem() {
+        let panel = WidgetCommute.panel(nil, prefs: WidgetPrefs(), now: at(7), calendar: utc)
+        XCTAssertEqual(panel.primary.state, .setup)
+        XCTAssertEqual(panel.secondary.state, .setup)
+    }
+
+    /// Адрес есть только один — главной становится зона, которая действует.
+    func testPanelPutsTheWorkingZoneFirst() {
+        let panel = WidgetCommute.panel(nil, prefs: WidgetPrefs(hasHome: true), now: at(7), calendar: utc)
+        XCTAssertEqual(panel.primary.place, .home)
+        XCTAssertEqual(panel.primary.state, .route)
+        XCTAssertEqual(panel.secondary.place, .work)
+        XCTAssertEqual(panel.secondary.state, .setup)
+    }
+
+    /// Флаги — единственное, что про адреса лежит в общем контейнере.
+    func testPrefsCarryNoCoordinates() throws {
+        let raw = try JSONEncoder().encode(WidgetPrefs(hasHome: true, hasWork: true, privateLock: true, language: "uz"))
+        let text = try XCTUnwrap(String(data: raw, encoding: .utf8))
+        for word in ["lat", "lon", "coord", "address"] { XCTAssertFalse(text.lowercased().contains(word), word) }
+    }
+
+    func testLanguageIsWrittenOnlyWhenItChanges() throws {
+        let suite = "test.widgetprefs.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        WidgetPrefs.applyLanguage("uz", to: defaults)
+        XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["uz"])
+        WidgetPrefs.applyLanguage("ru", to: defaults)
+        XCTAssertEqual(defaults.stringArray(forKey: "AppleLanguages"), ["ru"])
+    }
 }

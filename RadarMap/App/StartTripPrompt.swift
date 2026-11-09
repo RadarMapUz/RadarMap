@@ -26,6 +26,17 @@ enum StartTripPrompt {
         return true
     }
 
+    /// Вопрос на ссылку маршрута без ключа своих кнопок (TripLink.GoDecision).
+    @discardableResult
+    static func presentRoute(title: String, build: @escaping () -> Void) -> Bool {
+        guard let top = topController() else { return false }
+        let alert = UIAlertController(title: title, message: nil, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: String(localized: "Отмена"), style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: "Построить"), style: .default) { _ in build() })
+        top.present(alert, animated: true)
+        return true
+    }
+
     /// Верхний показанный контроллер окна телефона (не CarPlay).
     private static func topController() -> UIViewController? {
         let scenes = UIApplication.shared.connectedScenes

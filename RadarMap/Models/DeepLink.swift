@@ -21,6 +21,8 @@ nonisolated enum DeepLink: Equatable, Sendable {
     case lastTrip
     /// Экран «Штрафы» (напоминание об оплате: radarmap://fines).
     case fines
+    /// «Мои места» (виджет «Дорога» без адресов: radarmap://places).
+    case places
 
     static let scheme = "radarmap"
 
@@ -39,6 +41,8 @@ nonisolated enum DeepLink: Equatable, Sendable {
             return .stats
         case "fines":
             return .fines
+        case "places":
+            return .places
         case "trip":
             let path = url.pathComponents.filter { $0 != "/" }
             guard path.count == 1 else { return .stats }

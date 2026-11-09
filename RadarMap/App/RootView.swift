@@ -111,6 +111,10 @@ struct RootView: View {
             }
             #endif
             let key = SharedDefaults.store?.string(forKey: TripLink.storeKey)
+            if TripLink.decideEnd(url, expectedKey: key, tripActive: env.location.isTripActive) {
+                env.location.endTrip()
+                return
+            }
             switch TripLink.decide(url, expectedKey: key, tripActive: env.location.isTripActive) {
             case .start: env.location.startTrip()
             case .confirm:

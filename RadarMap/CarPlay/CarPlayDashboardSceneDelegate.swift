@@ -208,7 +208,8 @@ struct CarPlayDashboardView: View {
     @State private var width: CGFloat = 0
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        // Прибор справа: слева он сливался с подписями улиц и терялся (владелец, 09.11).
+        ZStack(alignment: .bottomTrailing) {
             if model.isOnScreen {
                 #if canImport(MapLibre)
                 CarPlayEngineLayer(model: model, surface: .dashboard)

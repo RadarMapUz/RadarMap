@@ -124,7 +124,12 @@ OUT_PATH = "/opt/radarmap/www/traffic/now.json"
 
 PIECE_TTL = 20 * 60          # кусок, который не удалось сопоставить, не живёт дольше
 RUN_BUDGET = 90              # секунд на сопоставление: now.json выходит каждый прогон и при очереди
-MATCH_WORKERS = 2            # запросов к OSRM разом: по числу ядер VPS
+_CAPACITY = tc.capacity()
+MATCH_WORKERS = _CAPACITY["match_workers"]   # запросов к OSRM разом
+SATURATE_FROM = _CAPACITY["saturate_from"]   # кусков в очереди: ниже CPU хватает и каждый кусок дороже
+CELL_LAT, CELL_LON = 0.003, 0.004   # ячейка насыщения: ~330 м на широте Ташкента
+CELL_BUCKET = 180            # секунд: лимит по коротким окнам, чтобы данные шли весь период
+CELL_LIMIT = 2               # кусков на ячейку, направление и окно — остальные не идут в OSRM
 SEEN_TTL = 30 * 60           # отпечатки повторов: как TRAFFIC_SEEN_TTL в api.py
 SAMPLE_WINDOW = 15 * 60      # «текущая» скорость — за последние 15 минут
 SAMPLE_KEEP = 60 * 60        # сырые скорости рёбер хранятся час
@@ -137,6 +142,8 @@ JAM_RATIO = 0.35             # ниже — пробка (красный)
 SLOW_RATIO = 0.6             # ниже — медленно (жёлтый)
 TASHKENT_UTC_OFFSET = 5 * 3600
 OUTPUT_VERSION = 1
+CHAIN_VERSION = 2
+CHAIN_NAME = "now2.json"
 
 TYPICAL_DIR = "/opt/radarmap/www/traffic/typical"
 PROFILE_PATH = "/opt/radarmap/www/traffic/profile.json"   # 33C: профиль часа недели для телефона
@@ -161,6 +168,10 @@ def schema(conn):
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         received REAL NOT NULL,
         points TEXT NOT NULL)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS traffic_cell_load(
+        la INTEGER NOT NULL, lo INTEGER NOT NULL, sector INTEGER NOT NULL,
+        bucket INTEGER NOT NULL, n INTEGER NOT NULL,
+        PRIMARY KEY(la, lo, sector, bucket)) WITHOUT ROWID""")
     conn.execute("""CREATE TABLE IF NOT EXISTS traffic_samples(
         u INTEGER NOT NULL, v INTEGER NOT NULL,
         kmh REAL NOT NULL, weight REAL NOT NULL,
@@ -657,33 +668,72 @@ def match_or_none(matcher, points):
         return None
 
 
-def process(conn, now, matcher=osrm_match, budget=RUN_BUDGET, clock=time.monotonic):
+def piece_cell(points, received):
+    """Ключ насыщения: ячейка середины куска, сектор направления 45°, окно времени."""
+    lat, lon = points[len(points) // 2][:2]
+    heading = bearing(points[0][0], points[0][1], points[-1][0], points[-1][1])
+    return (math.floor(lat / CELL_LAT), math.floor(lon / CELL_LON),
+            int((heading + 22.5) % 360 // 45), int(received // CELL_BUCKET))
+
+
+def cell_count(conn, key):
+    row = conn.execute("SELECT n FROM traffic_cell_load WHERE la = ? AND lo = ? AND sector = ? AND bucket = ?",
+                       key).fetchone()
+    return row[0] if row else 0
+
+
+def count_cell(conn, key):
+    conn.execute("""INSERT INTO traffic_cell_load(la, lo, sector, bucket, n) VALUES(?, ?, ?, ?, 1)
+                    ON CONFLICT(la, lo, sector, bucket) DO UPDATE SET n = n + 1""", key)
+
+
+def process(conn, now, matcher=osrm_match, budget=RUN_BUDGET, clock=time.monotonic, saturate_from=SATURATE_FROM):
     """Сопоставить ждущие куски, новые первыми, не дольше budget секунд.
     Сопоставленный кусок удаляется сразу; не сопоставленный (OSRM лежит или
     кончилось время) ждёт следующего прогона, но не дольше PIECE_TTL. Запись
     открыта только между запросами к OSRM: иначе POST /api/traffic ждёт весь
-    прогон и падает с database is locked. Возвращает (кусков, отрезков)."""
+    прогон и падает с database is locked. При очереди от saturate_from куски
+    из уже закрытых ячеек удаляются без OSRM. Возвращает (кусков, отрезков)."""
     deadline = clock() + budget
-    done = matched = 0
+    saturating = conn.execute("SELECT COUNT(*) FROM traffic_pieces").fetchone()[0] >= saturate_from
+    done = matched = skipped = 0
     with ThreadPoolExecutor(MATCH_WORKERS) as pool:
         while clock() < deadline:
-            rows = conn.execute("SELECT id, points FROM traffic_pieces ORDER BY id DESC LIMIT ?",
+            rows = conn.execute("SELECT id, received, points FROM traffic_pieces ORDER BY id DESC LIMIT ?",
                                 (MATCH_WORKERS,)).fetchall()
             if not rows:
                 break
-            batch = [(piece_id, json.loads(raw)) for piece_id, raw in rows]
+            batch, planned = [], {}
+            for piece_id, received, raw in rows:
+                points = json.loads(raw)
+                key = piece_cell(points, received)
+                if saturating and cell_count(conn, key) + planned.get(key, 0) >= CELL_LIMIT:
+                    conn.execute("DELETE FROM traffic_pieces WHERE id = ?", (piece_id,))
+                    skipped += 1
+                else:
+                    batch.append((piece_id, points, key))
+                    planned[key] = planned.get(key, 0) + 1
+            conn.commit()
             responses = list(pool.map(lambda item: match_or_none(matcher, item[1]), batch))
-            for (piece_id, points), response in zip(batch, responses):
+            for (piece_id, points, key), response in zip(batch, responses):
                 if response is None:
                     continue
                 samples, nodes, models = edges_from_match(response, points)
                 store(conn, piece_id, samples, nodes, models, now, turns_from_match(response, points))
                 conn.execute("DELETE FROM traffic_pieces WHERE id = ?", (piece_id,))
+                if saturating:
+                    count_cell(conn, key)
                 done += 1
                 matched += len(samples)
             conn.commit()
             if None in responses:
                 break
+    left = conn.execute("SELECT COUNT(*) FROM traffic_pieces").fetchone()[0]
+    conn.executemany("INSERT OR REPLACE INTO traffic_meta(key, value) VALUES(?, ?)",
+                     [("last_left", left), ("last_skipped", skipped)])
+    conn.commit()
+    if skipped:
+        print(f"насыщение: без OSRM пропущено кусков {skipped}")
     return done, matched
 
 
@@ -696,6 +746,7 @@ def prune(conn, now):
     except sqlite3.OperationalError:
         pass
     conn.execute("DELETE FROM traffic_samples WHERE ts < ?", (now - SAMPLE_KEEP,))
+    conn.execute("DELETE FROM traffic_cell_load WHERE bucket < ?", (int((now - PIECE_TTL) // CELL_BUCKET),))
     conn.commit()
 
 
@@ -984,6 +1035,38 @@ def payload(edges, now):
     }
 
 
+def chain_payload(edges, now):
+    """now2.json: те же рёбра цепочками, gzip вдвое меньше now.json (замер 09.11.2026).
+    Координаты — целые в 1e-5°, каждая следующая — разность с предыдущей:
+      {"v": 2, "generated": t, "chains": [[lat0, lon0, dlat, dlon, level, kmh, model, …]]}"""
+    def grid(value):
+        return round(round(value, 5) * 1e5)   # то же округление, что в now.json
+
+    rows = sorted((grid(a), grid(b), grid(c), grid(d), lvl, int(round(kmh)), int(round(model)))
+                  for a, b, c, d, lvl, kmh, model in edges)
+    leaving = {}
+    for index, row in enumerate(rows):
+        leaving.setdefault(row[:2], []).append(index)
+    arriving = {row[2:4] for row in rows}
+    used = [False] * len(rows)
+    # Сначала начала цепочек; кольца, у которых начала нет, — остатком.
+    order = [i for i, row in enumerate(rows) if row[:2] not in arriving] + list(range(len(rows)))
+    chains = []
+    for index in order:
+        if used[index]:
+            continue
+        lat, lon = rows[index][:2]
+        chain = [lat, lon]
+        while index is not None:
+            used[index] = True
+            _, _, end_lat, end_lon, lvl, kmh, model = rows[index]
+            chain += [end_lat - lat, end_lon - lon, lvl, kmh, model]
+            lat, lon = end_lat, end_lon
+            index = next((i for i in leaving.get((lat, lon), ()) if not used[i]), None)
+        chains.append(chain)
+    return {"v": CHAIN_VERSION, "generated": int(now), "chains": chains}
+
+
 def write_atomic(path, body):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
@@ -1044,9 +1127,13 @@ def run(conn, now, matcher=osrm_match, out_path=OUT_PATH, typical_dir=TYPICAL_DI
     pieces, segments = process(conn, now, matcher=matcher)
     prune(conn, now)
     edges = aggregate(conn, now)
-    body = json.dumps(payload(merge_demo(edges, demo_edges(now, demo_path)), now), separators=(",", ":"))
-    write_atomic(out_path, body)
-    write_gzip_copy(out_path, body)
+    published = merge_demo(edges, demo_edges(now, demo_path))
+    # now.json — для вышедших сборок, now2.json — для новых.
+    chain_path = os.path.join(os.path.dirname(out_path), CHAIN_NAME)
+    for path, content in ((out_path, payload(published, now)), (chain_path, chain_payload(published, now))):
+        body = json.dumps(content, separators=(",", ":"))
+        write_atomic(path, body)
+        write_gzip_copy(path, body)
     mark_shared(conn, now)
     typical = None
     if typical_due(conn, now):

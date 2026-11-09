@@ -16,6 +16,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 import traffic_build as tb
 import traffic_config as tc
@@ -106,6 +107,73 @@ def split_fixture(at):
     return part(0, at, coords[:cut + 1]), part(at, len(legs), coords[cut:])
 
 
+def chain_edges(data):
+    """Разбор now2.json так же, как в TrafficSnapshot.decode на телефоне."""
+    out = []
+    for row in data["chains"]:
+        lat, lon = row[0], row[1]
+        for i in range(2, len(row), 5):
+            end_lat, end_lon = lat + row[i], lon + row[i + 1]
+            out.append([lat / 1e5, lon / 1e5, end_lat / 1e5, end_lon / 1e5, row[i + 2], row[i + 3], row[i + 4]])
+            lat, lon = end_lat, end_lon
+    return out
+
+
+class ChainPayloadTest(unittest.TestCase):
+    A, B, C, D = (41.3, 69.28), (41.301, 69.28), (41.302, 69.281), (41.303, 69.28)
+
+    def edge(self, start, end, level=2, kmh=30, model=60):
+        return start + end + (level, kmh, model)
+
+    def rows(self, edges):
+        return tb.chain_payload(edges, 1_760_000_000)["chains"]
+
+    def test_connected_edges_become_one_chain_with_deltas(self):
+        rows = self.rows([self.edge(self.B, self.C, 3, 9), self.edge(self.A, self.B, 1, 50)])
+        self.assertEqual(rows, [[4130000, 6928000, 100, 0, 1, 50, 60, 100, 100, 3, 9, 60]])
+
+    def test_every_edge_survives_a_fork(self):
+        edges = [self.edge(self.A, self.B), self.edge(self.B, self.C), self.edge(self.B, self.D)]
+        decoded = chain_edges({"chains": self.rows(edges)})
+        self.assertEqual(len(decoded), 3)
+        self.assertEqual({tuple(e[:4]) for e in decoded}, {e[:4] for e in edges})
+
+    def test_ring_is_not_lost(self):
+        ring = [self.edge(self.A, self.B), self.edge(self.B, self.C), self.edge(self.C, self.A)]
+        self.assertEqual(len(chain_edges({"chains": self.rows(ring)})), 3)
+
+    def test_both_directions_stay_separate_edges(self):
+        rows = [self.edge(self.A, self.B, 3, 9), self.edge(self.B, self.A, 1, 50)]
+        decoded = chain_edges({"chains": self.rows(rows)})
+        self.assertEqual(sorted((e[4], e[5]) for e in decoded), [(1, 50), (3, 9)])
+
+    def test_order_of_input_does_not_change_the_file(self):
+        edges = [self.edge(self.A, self.B), self.edge(self.B, self.C), self.edge(self.B, self.D)]
+        self.assertEqual(self.rows(edges), self.rows(list(reversed(edges))))
+
+    def test_empty_set_is_a_valid_file(self):
+        self.assertEqual(tb.chain_payload([], 5), {"v": 2, "generated": 5, "chains": []})
+
+
+class CapacityPlanTest(unittest.TestCase):
+    def test_current_tariff_keeps_the_values_proven_on_prod(self):
+        self.assertEqual(tc.capacity_plan(2, 1963), {"match_workers": 2, "saturate_from": 300,
+                                                     "customize_cpus": 1, "customize_memory_mb": 900})
+
+    def test_bigger_tariff_uses_the_new_cores_and_memory(self):
+        self.assertEqual(tc.capacity_plan(4, 8192), {"match_workers": 3, "saturate_from": 450,
+                                                     "customize_cpus": 2, "customize_memory_mb": 2048})
+
+    def test_one_core_still_works(self):
+        plan = tc.capacity_plan(1, 1024)
+        self.assertEqual((plan["match_workers"], plan["customize_cpus"], plan["customize_memory_mb"]), (2, 1, 900))
+
+    def test_environment_overrides_the_plan_only_with_a_valid_number(self):
+        env = {"RADARMAP_MATCH_WORKERS": "9", "RADARMAP_SATURATE_FROM": "abc", "RADARMAP_CUSTOMIZE_CPUS": "0"}
+        plan = tc.capacity(environ=env, cores=2, mem_mb=1963)
+        self.assertEqual((plan["match_workers"], plan["saturate_from"], plan["customize_cpus"]), (9, 300, 1))
+
+
 class PipelineTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
@@ -148,14 +216,90 @@ class PipelineTest(unittest.TestCase):
         other.close()
         self.assertEqual(done, 4, "приём кусков не ждёт конца прогона")
 
+    def counting_matcher(self, calls):
+        def matcher(points):
+            calls.append(points)
+            return {"code": "Ok", "matchings": [], "tracepoints": []}
+        return matcher
+
+    def pending_count(self):
+        return self.conn.execute("SELECT COUNT(*) FROM traffic_pieces").fetchone()[0]
+
+    def test_full_cell_skips_osrm_and_drops_the_piece(self):
+        for _ in range(5):
+            self.add_piece()
+        calls = []
+        done, _ = tb.process(self.conn, self.now, matcher=self.counting_matcher(calls), saturate_from=1)
+        self.assertEqual((done, len(calls)), (tb.CELL_LIMIT, tb.CELL_LIMIT))
+        self.assertEqual(self.pending_count(), 0, "лишний кусок не копится в очереди")
+
+    def test_short_queue_keeps_every_piece(self):
+        for _ in range(5):
+            self.add_piece()
+        calls = []
+        done, _ = tb.process(self.conn, self.now, matcher=self.counting_matcher(calls))
+        self.assertEqual((done, len(calls)), (5, 5), "без очереди каждый кусок идёт в OSRM")
+
+    def test_osrm_failure_does_not_spend_the_cell(self):
+        for _ in range(3):
+            self.add_piece()
+
+        def down(points):
+            raise OSError("connection refused")
+
+        with mock.patch.object(tb, "MATCH_WORKERS", 2):
+            tb.process(self.conn, self.now, matcher=down, saturate_from=1)
+        self.assertEqual(self.pending_count(), 3)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM traffic_cell_load").fetchone()[0], 0)
+
+    def test_opposite_direction_has_its_own_limit(self):
+        for _ in range(5):
+            self.add_piece()
+        back = [[lat, lon, i, kmh] for i, (lat, lon, _, kmh) in enumerate(reversed(FIXTURE["points"]))]
+        self.conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)", (self.now, json.dumps(back)))
+        self.conn.commit()
+        for _ in range(3):
+            self.add_piece()
+        calls = []
+        tb.process(self.conn, self.now, matcher=self.counting_matcher(calls), saturate_from=1)
+        self.assertIn(back, calls, "встречное направление не гасится чужим потоком")
+
+    def test_cell_is_counted_per_time_bucket(self):
+        for _ in range(3):
+            self.add_piece(received=self.now - tb.CELL_BUCKET)
+        for _ in range(3):
+            self.add_piece()
+        calls = []
+        tb.process(self.conn, self.now, matcher=self.counting_matcher(calls), saturate_from=1)
+        self.assertGreater(len(calls), tb.CELL_LIMIT, "новое окно открывает ячейку заново")
+
+    def test_cell_counters_are_pruned(self):
+        self.add_piece()
+        tb.process(self.conn, self.now, matcher=self.counting_matcher([]), saturate_from=1)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM traffic_cell_load").fetchone()[0], 1)
+        tb.prune(self.conn, self.now + tb.PIECE_TTL + 2 * tb.CELL_BUCKET)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM traffic_cell_load").fetchone()[0], 0)
+
+    def test_batch_cannot_overfill_a_cell(self):
+        for _ in range(5):
+            self.add_piece()
+        calls = []
+        with mock.patch.object(tb, "MATCH_WORKERS", 4):
+            done, _ = tb.process(self.conn, self.now, matcher=self.counting_matcher(calls), saturate_from=1)
+        self.assertEqual((done, len(calls)), (tb.CELL_LIMIT, tb.CELL_LIMIT), "на большом сервере лимит тот же")
+
     def test_budget_leaves_the_oldest_pieces_waiting(self):
         for _ in range(5):
             self.add_piece()
         ticks = iter([0, 0, tb.RUN_BUDGET + 1])
-        done, _ = tb.process(self.conn, self.now, matcher=lambda pts: FIXTURE["response"], clock=lambda: next(ticks))
-        self.assertEqual(done, tb.MATCH_WORKERS)
+        with mock.patch.object(tb, "MATCH_WORKERS", 2):
+            done, _ = tb.process(self.conn, self.now, matcher=lambda pts: FIXTURE["response"],
+                                 clock=lambda: next(ticks))
+        self.assertEqual(done, 2)
         left = [r[0] for r in self.conn.execute("SELECT id FROM traffic_pieces ORDER BY id")]
         self.assertEqual(left, [1, 2, 3], "при очереди важнее свежие куски")
+        meta = dict(self.conn.execute("SELECT key, value FROM traffic_meta WHERE key LIKE 'last_%'"))
+        self.assertEqual(meta, {"last_left": 3, "last_skipped": 0}, "монитор видит хвост очереди")
 
     def test_unmatched_piece_waits_but_not_forever(self):
         self.add_piece()
@@ -734,6 +878,17 @@ class MigrationTest(unittest.TestCase):
         name = tb.bucket_name(tb.profile_slot(now))
         with open(os.path.join(self.typical, f"{name}.json"), encoding="utf-8") as f:
             return json.load(f)["edges"]
+
+    def test_now2_carries_the_same_edges_as_now(self):
+        self.run_builder(self.now, pending=2)
+        with open(self.out, encoding="utf-8") as f:
+            old = json.load(f)
+        chain_path = os.path.join(os.path.dirname(self.out), tb.CHAIN_NAME)
+        with open(chain_path, "rb") as plain, gzip.open(chain_path + ".gz", "rb") as packed:
+            raw = plain.read()
+            self.assertEqual(raw, packed.read())
+        self.assertGreater(len(old["edges"]), 0)
+        self.assertEqual(sorted(chain_edges(json.loads(raw))), sorted(old["edges"]))
 
     def test_now_json_gets_a_gzip_copy_of_the_same_body(self):
         self.run_builder(self.now)

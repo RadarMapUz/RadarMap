@@ -509,13 +509,16 @@ extension TripHistory {
     /// отвечает на вопрос «когда именно я нарушал», а не просто «сколько ездил».
     static func dailyKm(_ history: [TripRecord], days: Int,
                         calendar: Calendar = .current,
-                        now: Date = Date()) -> [DayBar] {
+                        now: Date = Date(),
+                        isCommute: (TripRecord) -> Bool = { _ in false }) -> [DayBar] {
         let today = calendar.startOfDay(for: now)
         var byDay: [Date: DayBar] = [:]
         for record in history {
             let day = calendar.startOfDay(for: record.startedAt)
             var bar = byDay[day] ?? DayBar(day: day)
             bar.km += record.distanceMeters / 1000
+            bar.trips += 1
+            if isCommute(record) { bar.commuteKm += record.distanceMeters / 1000 }
             let tally = record.cameraTally
             bar.overPasses += tally.over
             bar.edgePasses += tally.edge
@@ -526,6 +529,26 @@ extension TripHistory {
             else { return nil }
             return byDay[day] ?? DayBar(day: day)
         }
+    }
+
+    /// Километры по часам дня: поездка целиком в час своего начала.
+    static func hourlyKm(_ history: [TripRecord], day: Date, calendar: Calendar = .current,
+                         isCommute: (TripRecord) -> Bool = { _ in false }) -> [DayBar] {
+        let start = calendar.startOfDay(for: day)
+        var bars = (0..<24).compactMap { hour in
+            calendar.date(byAdding: .hour, value: hour, to: start).map { DayBar(day: $0) }
+        }
+        for record in history where calendar.isDate(record.startedAt, inSameDayAs: start) {
+            let hour = calendar.component(.hour, from: record.startedAt)
+            guard bars.indices.contains(hour) else { continue }
+            let tally = record.cameraTally
+            bars[hour].km += record.distanceMeters / 1000
+            bars[hour].trips += 1
+            if isCommute(record) { bars[hour].commuteKm += record.distanceMeters / 1000 }
+            bars[hour].overPasses += tally.over
+            bars[hour].edgePasses += tally.edge
+        }
+        return bars
     }
 
     /// Поездки для списка истории. Список подчиняется тому же фильтру, что и весь
@@ -773,9 +796,17 @@ nonisolated struct DayBar: Identifiable, Equatable {
     var overPasses = 0
     /// «На грани» (PassVerdict.edge) — день жёлтым, а не зелёным.
     var edgePasses = 0
+    var trips = 0
+    /// Из `km` — дорога дом↔работа.
+    var commuteKm: Double = 0
 
     var id: Date { day }
     var hasOverspeed: Bool { overPasses > 0 }
+}
+
+/// Шаг графика «Итогов»: дни недели буквами, числа месяца, часы дня.
+nonisolated enum ItogiBarUnit: Equatable, Sendable {
+    case weekday, day, hour
 }
 
 /// Камера на карте отчёта: сколько раз проезжали, сколько из них с превышением

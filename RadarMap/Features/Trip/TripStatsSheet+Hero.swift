@@ -56,12 +56,22 @@ extension TripStatsSheet {
     var periodNavigator: some View {
         HStack(spacing: 8) {
             navArrow("chevron.left", enabled: true) { step(-1) }
-            Text(period.rangeTitle(containing: anchor))
-                .font(.rounded(14, .semibold))
-                .foregroundStyle(Theme.textPrimary)
-                .frame(maxWidth: .infinity)
-                .contentTransition(.numericText())
-                .motionAnimation(Motion.quick, value: anchor)
+            Button { showRingsCalendar = true } label: {
+                HStack(spacing: 6) {
+                    Text(period.rangeTitle(containing: anchor))
+                        .font(.rounded(14, .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                        .contentTransition(.numericText())
+                        .motionAnimation(Motion.quick, value: anchor)
+                    Image(systemName: "calendar")
+                        .font(.rounded(14, .semibold))
+                        .foregroundStyle(Theme.accent)
+                }
+                .frame(maxWidth: .infinity, minHeight: Theme.controlSize)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PressableStyle())
+            .accessibilityHint(Text("Открыть календарь поездок"))
             // Вперёд из текущего периода некуда: будущего в статистике нет.
             navArrow("chevron.right", enabled: period.canGoForward(from: anchor)) { step(1) }
         }

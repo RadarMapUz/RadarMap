@@ -266,6 +266,24 @@ enum Theme {
         }
     }
 
+    // MARK: - Статистика
+
+    /// Свой набор «Итогов»: фиолетовый и мятный не спорят с синим маршрутом,
+    /// жёлтым действием и красной камерой.
+    enum Stats {
+        static let commute = adaptive(0x5B3DF5, 0x9A85FF)
+        static let commuteTop = adaptive(0x8266FF, 0xB8A8FF)
+        static let commuteText = adaptive(0x4A2FE0, 0xB8A8FF)
+        static let other = adaptive(0x0B9F78, 0x3BE3B0)
+        static let otherTop = adaptive(0x22C79A, 0x86F2D2)
+        static let otherText = adaptive(0x067A5B, 0x63EBC2)
+        static let ringGround = Color(uiColor: Theme.rgb(0x0E1014))
+        static let ringCalm = [Color(uiColor: Theme.rgb(0x2BF0B5)), Color(uiColor: Theme.rgb(0x19C8E8))]
+        static let ringWatch = [Color(uiColor: Theme.rgb(0xFFD15C)), Color(uiColor: Theme.rgb(0xFF9A2E))]
+        static let ringRisk = [Color(uiColor: Theme.rgb(0xFF5C7A)), Color(uiColor: Theme.rgb(0xE0218A))]
+        static let ringRoad = [Color(uiColor: Theme.rgb(0xB49CFF)), Color(uiColor: Theme.rgb(0x6C4DFF))]
+    }
+
     // MARK: - Типы камер
     //
     // Маркер — цветной круг с белым кантом (читается на любой подложке).

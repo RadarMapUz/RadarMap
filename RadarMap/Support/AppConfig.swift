@@ -2024,6 +2024,8 @@ nonisolated enum AppConfig {
     /// поездок и километров (ItogiRating.availability, аудит 05.11). Кольцо
     /// «97» после одной поездки до магазина читалось оценкой недели; порог —
     /// как у `few` виджета: меньше двух поездок или ~20 км — «пока мало».
+    /// С такой оценки и без замечаний у камер день считается идеальным.
+    static let itogiPerfectDayScore = 95
     static let itogiRatingMinTrips = 2
     static let itogiRatingMinMeters: Double = 20_000
     /// Сколько последних поездок окна главный лист «Итогов» показывает

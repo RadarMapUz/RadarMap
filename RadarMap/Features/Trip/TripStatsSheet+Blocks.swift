@@ -27,7 +27,8 @@ extension TripStatsSheet {
                         onFines: {
                             finesRequest = FinesRequest(window: .period(period, anchor), tab: .possible,
                                                         periodRisk: itogi.summary.fineRisk)
-                        })
+                        },
+                        onOpenDay: { path.append(.day($0)) })
     }
 
     // MARK: - 2. Что сделать
@@ -91,10 +92,48 @@ extension TripStatsSheet {
     }
 
     /// «Держите 60 у «Юнусабад»» — заголовок дела.
+    /// Где сняли больше всего: полоска — доля самой дорогой камеры.
+    @ViewBuilder
+    func lossSection(_ itogi: ItogiScreen) -> some View {
+        if !itogi.losses.isEmpty {
+            let peak = max(itogi.losses.map(\.points).max() ?? 1, 0.1)
+            VStack(alignment: .leading, spacing: 14) {
+                ItogiGroupTitle(title: String(localized: "Где теряете баллы"))
+                Button { showRatingInfo = true } label: {
+                    VStack(alignment: .leading, spacing: 14) {
+                        ForEach(itogi.losses) { loss in
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(ItogiCalendar.shortPlace(loss.location))
+                                    .font(.rounded(15, .semibold))
+                                    .foregroundStyle(Theme.textPrimary)
+                                    .lineLimit(2)
+                                GeometryReader { geo in
+                                    Capsule()
+                                        .fill(Theme.Stats.commute)
+                                        .frame(width: max(8, geo.size.width * loss.points / peak), height: 6)
+                                }
+                                .frame(height: 6)
+                                Text(String(format: String(localized: "%1$@ баллов · %2$@"),
+                                            "−\(max(1, Int(loss.points.rounded())))", ItogiWords.times(loss.times)))
+                                    .font(.rounded(12))
+                                    .foregroundStyle(Theme.textTertiary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding(16)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableStyle(.card))
+                .statCard(padding: 0)
+            }
+        }
+    }
+
     func actionTitle(_ hint: ActionHint) -> String {
         hint.limitKmh.map {
-            String(format: String(localized: "Держите %1$lld у «%2$@»"), $0, hint.location)
-        } ?? String(format: String(localized: "Сбавьте у «%@»"), hint.location)
+            String(format: String(localized: "Держите %1$lld у «%2$@»"), $0, ItogiCalendar.shortPlace(hint.location))
+        } ?? String(format: String(localized: "Сбавьте у «%@»"), ItogiCalendar.shortPlace(hint.location))
     }
 
     /// «2 из 3 проездов выше лимита · ≈ 1,1 млн сум» — без суммы, если это

@@ -81,6 +81,22 @@
         }
       }
     },
+    "Find address in ${applicationName}" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find address in ${applicationName}"
+          }
+        },
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da manzilni top"
+          }
+        }
+      }
+    },
     "Start trip in ${applicationName}" : {
       "localizations" : {
         "en" : {
@@ -171,6 +187,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "${applicationName}da bu yerda YTH"
+          }
+        }
+      }
+    },
+    "Найди адрес в ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da manzilni top"
+          }
+        }
+      }
+    },
+    "Маршрут по адресу в ${applicationName}" : {
+      "localizations" : {
+        "uz" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "${applicationName}da manzil boʻyicha yoʻnalish"
           }
         }
       }

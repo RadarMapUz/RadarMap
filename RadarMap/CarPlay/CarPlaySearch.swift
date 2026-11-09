@@ -7,8 +7,8 @@
 //  До 10.10.2026 «Куда» в машине умело только Дом, Работу и недавние: адрес,
 //  которого в них нет, можно было задать лишь на телефоне. Здесь тот же поиск,
 //  что на телефоне, в том же порядке источников: свой индекс адресов (без
-//  сети, мгновенно) первым, Apple — вторым. Клавиатура на ходу у CarPlay
-//  своя (на большинстве машин — только диктовка), её правила задаёт система.
+//  сети, мгновенно) первым, Apple — вторым. Клавиатура — у системы: пока машина
+//  её ограничивает, сюда не приходим (CarPlaySearchEntry, список «Поиск на ходу»).
 //
 
 import CarPlay
@@ -25,8 +25,15 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
     /// Показать шаблон поверх поиска (список по кнопке «Найти»). Ставит
     /// делегат сцены: у поиска своего контроллера интерфейса нет.
     var present: ((CPTemplate) -> Void)?
-    /// Что нашлось на последний запрос — для полного списка по «Найти».
+    /// Что нашлось на последний запрос — для полного списка по «Найти». Свои
+    /// адреса пишутся сразу, не дожидаясь Apple.
     private var lastResults: [(SavedPlace, String)] = []
+    /// Запрос ещё идёт: «Найти» ждёт ответа, а не говорит «ничего».
+    private var searching = false
+    /// Свои адреса на текущий запрос уже есть: раньше «Найти» показать нечего.
+    private var ownReady = false
+    private var listWanted = false
+    private var listFallback: Task<Void, Never>?
     private var book: AddressBook?
     private var venues: VenueBook?
     /// Поиск по всем именам клетки (40G) — строится своей задачей после
@@ -46,23 +53,15 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
     private var task: Task<Void, Never>?
     /// Ответ шаблону на текущий запрос. CarPlay требует ответить на каждый, и
     /// ровно один раз: заменённый запрос получает пустой список сразу.
-    private var reply: Reply?
-
-    private final class Reply {
-        private var send: (([CPListItem]) -> Void)?
-        init(_ send: @escaping ([CPListItem]) -> Void) { self.send = send }
-        func callAsFunction(_ items: [CPListItem]) {
-            send?(items)
-            send = nil
-        }
-    }
+    private var reply: CarPlaySearchReply<CPListItem>?
 
     private var env: AppEnvironment { .shared }
 
     /// Сколько строк покажет список машины: CarPlay сам режет лишнее молча,
     /// а на ходу многие машины держат всего 12 (Руководство CarPlay, стр. 19).
     private static var listLimit: Int {
-        min(AppConfig.carPlaySearchLimit, Int(CPListTemplate.maximumItemCount))
+        CarPlaySearchEntry.listLimit(own: AppConfig.carPlaySearchLimit,
+                                     maximumItemCount: Int(CPListTemplate.maximumItemCount))
     }
 
     init(onPick: @escaping (SavedPlace) -> Void) {
@@ -142,6 +141,27 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
         }
     }
 
+    /// Машина отключилась: идущий запрос ни к чему, а ответ шаблону обязателен.
+    func cancelAll() {
+        task?.cancel()
+        task = nil
+        reply?([])
+        reply = nil
+        lastResults = []
+        searching = false
+        stopWaitingForList()
+    }
+
+    /// Лучшее совпадение для фразы Siri: тот же порядок источников.
+    func firstPlace(for text: String) async -> SavedPlace? {
+        let query = CarPlaySearchEntry.normalized(text, maxLength: AppConfig.carPlaySearchMaxQueryLength)
+        guard CarPlaySearchEntry.isSearchable(query) else { return nil }
+        let near = env.location.currentCoordinate
+        if let own = await ownPlaces(query, near: near).first { return own.0 }
+        guard env.network.isOnline else { return nil }
+        return await apple(query, near: near).first?.0
+    }
+
     func makeTemplate() -> CPSearchTemplate {
         let template = CPSearchTemplate()
         template.delegate = self
@@ -175,6 +195,25 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
     }
 
     private func showAllResults() {
+        guard CarPlaySearchEntry.listRequest(searching: searching) == .whenReady else { return presentList() }
+        listWanted = true
+        listFallback?.cancel()
+        // Apple медлит — покажем то, что уже есть своего.
+        listFallback = Task { [weak self] in
+            await Task.pause(seconds: AppConfig.carPlaySearchListWaitSeconds)
+            guard let self, !Task.isCancelled, self.listWanted, self.ownReady else { return }
+            self.presentList()
+        }
+    }
+
+    private func stopWaitingForList() {
+        listWanted = false
+        listFallback?.cancel()
+        listFallback = nil
+    }
+
+    private func presentList() {
+        stopWaitingForList()
         let items: [CPListItem] = lastResults.map { place, detail in
             let item = CPListItem(text: place.title, detailText: detail)
             item.handler = { [weak self] _, completion in
@@ -183,12 +222,19 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
             }
             return item
         }
-        let section = items.isEmpty
-            ? CPListSection(items: [CPListItem(text: String(localized: "Ничего не нашлось"),
-                                               detailText: String(localized: "Попробуйте адрес или название иначе"))])
-            : CPListSection(items: items)
+        let section = CPListSection(items: items.isEmpty ? [emptyRow()] : items)
         Log.carplay.notice("поиск: «Найти», результатов \(items.count, privacy: .public)")
         present?(CPListTemplate(title: String(localized: "Найдено"), sections: [section]))
+    }
+
+    /// Строка «ничего не нашлось»: пустой экран за рулём читается как поломка.
+    private func emptyRow() -> CPListItem {
+        let detail = CarPlaySearchEntry.empty(online: env.network.isOnline) == .offline
+            ? String(localized: "Без сети ищу только по своей карте.")
+            : String(localized: "Попробуйте адрес или название иначе")
+        let item = CPListItem(text: String(localized: "Ничего не нашлось"), detailText: detail)
+        item.isEnabled = false
+        return item
     }
 
     // MARK: - Поиск
@@ -249,55 +295,77 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
     private func search(_ text: String, completion: @escaping ([CPListItem]) -> Void) {
         task?.cancel()
         reply?([])
-        let reply = Reply(completion)
+        stopWaitingForList()
+        let reply = CarPlaySearchReply(completion)
         self.reply = reply
-        let query = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard query.count >= 2 else {
+        let query = CarPlaySearchEntry.normalized(text, maxLength: AppConfig.carPlaySearchMaxQueryLength)
+        guard CarPlaySearchEntry.isSearchable(query) else {
             lastResults = []
+            searching = false
             return reply([])
         }
         let near = env.location.currentCoordinate
+        searching = true
+        ownReady = false
         task = Task { [weak self] in
             guard let self else { return reply([]) }
-            await self.ensureLoaded(near: near)
+            let own = await self.ownPlaces(query, near: near)
             guard !Task.isCancelled else { return }
-            let language = self.env.settings.appLanguage.mapCode
-            // Свой индекс: по всем именам, со старыми («метро хамза»). Пока
-            // он строится — как раньше, по одному имени.
-            let own = AppConfig.carPlaySearchOwnLimit
-            let answer = self.index?.search(query, near: near, streetLimit: own, venueLimit: own)
-                ?? SearchIndex.Answer(addresses: self.book?.lookup(query, near: near, limit: own) ?? [],
-                                      venues: self.venues?.search(query, near: near, limit: own) ?? [])
-            let found: [(SavedPlace, String)] = answer.venues.map { venue in
-                (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),
-                 Self.detail(near: near, point: venue.point, offline: true, former: answer.formerNames[venue.id]))
-            }
-            let streets: [(SavedPlace, String)] = answer.addresses.map { address in
-                let street = StreetName.display(address.street, language: language)
-                let title = address.house.isEmpty ? street : "\(street), \(address.house)"
-                return (SavedPlace(title: title, lat: address.point.latitude, lon: address.point.longitude),
-                        Self.detail(near: near, point: address.point, offline: true,
-                                    former: answer.formerNames[address.id]))
-            }
-            // Заведения — первыми, если лучший ответ — место: «азс» за рулём
-            // значит «ближайшая заправка», «метро хамза» — станция.
-            var places = answer.venuesFirst ? found + streets : streets + found
+            let limit = Self.listLimit
+            self.lastResults = Array(own.prefix(limit))
+            self.ownReady = true
             // Apple — вторым и только со связью: без неё запрос лишь задержит
             // ответ, а свои адреса уже готовы.
+            var apple: [(SavedPlace, String)] = []
             if self.env.network.isOnline {
                 await Task.pause(seconds: AppConfig.carPlaySearchAppleDebounceSeconds)
                 guard !Task.isCancelled else { return }
-                places += await self.apple(query, near: near)
+                apple = await self.apple(query, near: near)
             }
             guard !Task.isCancelled else { return }
-            let limit = Self.listLimit
-            self.lastResults = Array(places.prefix(limit))
-            reply(places.prefix(limit).map { place, detail in
+            let places = CarPlaySearchEntry.merged(own: own, apple: apple, limit: limit,
+                                                   appleSlots: AppConfig.carPlaySearchAppleSlots,
+                                                   isSame: Self.samePlace)
+            self.lastResults = places
+            self.searching = false
+            reply(places.isEmpty ? [self.emptyRow()] : places.map { place, detail in
                 let item = CPListItem(text: place.title, detailText: detail)
                 item.userInfo = place
                 return item
             })
+            if self.listWanted { self.presentList() }
         }
+    }
+
+    /// Свои адреса и заведения по запросу, лучшие первыми.
+    private func ownPlaces(_ query: String, near: CLLocationCoordinate2D?) async -> [(SavedPlace, String)] {
+        await ensureLoaded(near: near)
+        let language = env.settings.appLanguage.mapCode
+        // Свой индекс: по всем именам, со старыми («метро хамза»). Пока он
+        // строится — как раньше, по одному имени.
+        let own = AppConfig.carPlaySearchOwnLimit
+        let answer = index?.search(query, near: near, streetLimit: own, venueLimit: own)
+            ?? SearchIndex.Answer(addresses: book?.lookup(query, near: near, limit: own) ?? [],
+                                  venues: venues?.search(query, near: near, limit: own) ?? [])
+        let found: [(SavedPlace, String)] = answer.venues.map { venue in
+            (SavedPlace(title: venue.title, lat: venue.point.latitude, lon: venue.point.longitude),
+             Self.detail(near: near, point: venue.point, offline: true, former: answer.formerNames[venue.id]))
+        }
+        let streets: [(SavedPlace, String)] = answer.addresses.map { address in
+            let street = StreetName.display(address.street, language: language)
+            let title = address.house.isEmpty ? street : "\(street), \(address.house)"
+            return (SavedPlace(title: title, lat: address.point.latitude, lon: address.point.longitude),
+                    Self.detail(near: near, point: address.point, offline: true,
+                                former: answer.formerNames[address.id]))
+        }
+        // Заведения — первыми, если лучший ответ — место: «азс» за рулём
+        // значит «ближайшая заправка», «метро хамза» — станция.
+        return answer.venuesFirst ? found + streets : streets + found
+    }
+
+    private static func samePlace(_ a: (SavedPlace, String), _ b: (SavedPlace, String)) -> Bool {
+        GeoMath.fastDistance(a.0.lat, a.0.lon, b.0.lat, b.0.lon) < AppConfig.carPlayRecentDuplicateMeters
+            && SearchIndex.fold(a.0.title) == SearchIndex.fold(b.0.title)
     }
 
     private func apple(_ query: String, near: CLLocationCoordinate2D?) async -> [(SavedPlace, String)] {
@@ -307,18 +375,32 @@ final class CarPlaySearch: NSObject, CPSearchTemplateDelegate {
             request.region = MKCoordinateRegion(center: near, latitudinalMeters: AppConfig.searchRegionMeters,
                                                 longitudinalMeters: AppConfig.searchRegionMeters)
         }
-        do {
-            let items = try await MKLocalSearch(request: request).start().mapItems
-            return items.prefix(Self.listLimit).compactMap { item in
-                let point = item.placemark.coordinate
-                guard CLLocationCoordinate2DIsValid(point) else { return nil }
-                let title = item.name ?? query
-                return (SavedPlace(title: title, lat: point.latitude, lon: point.longitude),
-                        Self.detail(near: near, point: point, offline: false))
+        let items = await Self.mapItems(MKLocalSearch(request: request))
+        return items.prefix(Self.listLimit).compactMap { item in
+            let point = item.placemark.coordinate
+            guard CLLocationCoordinate2DIsValid(point) else { return nil }
+            let title = item.name ?? query
+            return (SavedPlace(title: title, lat: point.latitude, lon: point.longitude),
+                    Self.detail(near: near, point: point, offline: false))
+        }
+    }
+
+    /// Запрос к Apple с потолком времени: при плохой связи ответ мог не прийти
+    /// вовсе, и шаблон ждал бы, не показывая готовые свои адреса.
+    private static func mapItems(_ search: MKLocalSearch) async -> [MKMapItem] {
+        await withCheckedContinuation { (continuation: CheckedContinuation<[MKMapItem], Never>) in
+            let reply = CarPlaySearchReply<MKMapItem> { continuation.resume(returning: $0) }
+            search.start { response, error in
+                if let error {
+                    Log.carplay.error("поиск Apple в машине: \(error.localizedDescription, privacy: .public)")
+                }
+                reply(response?.mapItems ?? [])
             }
-        } catch {
-            Log.carplay.error("поиск Apple в машине: \(error.localizedDescription, privacy: .public)")
-            return []
+            Task {
+                await Task.pause(seconds: AppConfig.carPlaySearchAppleTimeoutSeconds)
+                search.cancel()
+                reply([])
+            }
         }
     }
 

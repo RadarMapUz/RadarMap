@@ -90,6 +90,20 @@ private func routeBySiri(_ slot: PlaceSlot) async -> IntentDialog {
             : IntentDialog("Не знаю, где работа. Задайте её в RadarMap — или поездите, я выучу сам.")
     }
     let title = manual?.title ?? slot.name
+    if let failure = await buildSiriRoute(env, to: destination, title: title) { return failure }
+    let time = Formatting.duration(env.route.remainingTime)
+    // Прибытие — та же минута, что на панели и в машине (RouteService.arrival).
+    let clock = env.route.arrivalText
+    let cameras = env.route.ourCameraCount
+    return slot == .home
+        ? IntentDialog("Едем домой: \(time), прибытие в \(clock), камер на пути — \(cameras).")
+        : IntentDialog("Едем на работу: \(time), прибытие в \(clock), камер на пути — \(cameras).")
+}
+
+/// Маршрут по команде Siri; nil — построен, иначе что сказать водителю.
+@MainActor
+private func buildSiriRoute(_ env: AppEnvironment, to destination: CLLocationCoordinate2D,
+                            title: String) async -> IntentDialog? {
     // Поездка — ДО ожидания точки: в тихом фоне GPS даёт один фикс по
     // запросу, и забракованный фильтром он оставлял нас без позиции. В
     // поездке GPS непрерывный — точная точка приходит за секунды.
@@ -108,13 +122,38 @@ private func routeBySiri(_ slot: PlaceSlot) async -> IntentDialog {
         return IntentDialog("Маршрут не построился — попробуйте позже.")
     }
     env.settings.addRecent(title: title, lat: destination.latitude, lon: destination.longitude)
-    let time = Formatting.duration(env.route.remainingTime)
-    // Прибытие — та же минута, что на панели и в машине (RouteService.arrival).
-    let clock = env.route.arrivalText
-    let cameras = env.route.ourCameraCount
-    return slot == .home
-        ? IntentDialog("Едем домой: \(time), прибытие в \(clock), камер на пути — \(cameras).")
-        : IntentDialog("Едем на работу: \(time), прибытие в \(clock), камер на пути — \(cameras).")
+    return nil
+}
+
+/// Адрес голосом — путь на ходу, когда клавиатуры в машине нет: тот же поиск,
+/// лучшее совпадение, и ответ называет место, чтобы водитель слышал, куда едет.
+@MainActor
+private func routeToAddressBySiri(_ text: String) async -> IntentDialog {
+    let env = AppEnvironment.shared
+    env.startDrivingServices()
+    guard env.location.authorizationStatus == .authorizedAlways else {
+        return IntentDialog("Нет доступа к геолокации. Откройте RadarMap и разрешите «Всегда».")
+    }
+    guard let place = await CarPlaySearch(onPick: { _ in }).firstPlace(for: text) else {
+        return IntentDialog(stringLiteral: String(format: String(localized: "Не нашёл «%@». Попробуйте сказать иначе."), text))
+    }
+    if let failure = await buildSiriRoute(env, to: place.coordinate, title: place.title) { return failure }
+    return IntentDialog(stringLiteral: String(format: String(localized: "Едем: %1$@. %2$@, прибытие в %3$@, камер на пути — %4$lld."),
+                                              place.title, Formatting.duration(env.route.remainingTime),
+                                              env.route.arrivalText, env.route.ourCameraCount))
+}
+
+struct RouteToAddressIntent: AppIntent {
+    static let title: LocalizedStringResource = "Маршрут по адресу"
+    static let description = IntentDescription("Ищет адрес или место и строит маршрут — голосом, руки на руле.")
+
+    @Parameter(title: "Куда", requestValueDialog: IntentDialog("Куда едем?"))
+    var destination: String
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        .result(dialog: await routeToAddressBySiri(destination))
+    }
 }
 
 struct RouteHomeIntent: AppIntent {
@@ -329,6 +368,16 @@ struct RadarShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "На работу",
             systemImageName: "briefcase.fill"
+        )
+        AppShortcut(
+            intent: RouteToAddressIntent(),
+            phrases: [
+                "Найди адрес в \(.applicationName)",
+                "Маршрут по адресу в \(.applicationName)",
+                "Find address in \(.applicationName)",
+            ],
+            shortTitle: "Маршрут по адресу",
+            systemImageName: "magnifyingglass"
         )
         AppShortcut(
             intent: ReportRadarIntent(),

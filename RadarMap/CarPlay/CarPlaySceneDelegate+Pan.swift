@@ -56,6 +56,7 @@ extension CarPlaySceneDelegate {
         panningFallback = nil
         model.panningHidden()
         resendButtons()
+        runAfterPanning()
     }
 
     /// Закрыть осмотр: шаблону — `dismissPanningInterface`, бар вернёт его
@@ -76,7 +77,15 @@ extension CarPlaySceneDelegate {
             self.isPanning = false
             self.model.panningHidden()
             self.resendButtons()
+            self.runAfterPanning()
         }
+    }
+
+    /// То, что водитель нажал в осмотре и что ждало его закрытия.
+    func runAfterPanning() {
+        let action = afterPanning
+        afterPanning = nil
+        action?()
     }
 
     /// Бар и кнопки карты — заново, мимо кэша «что уже отправлено».

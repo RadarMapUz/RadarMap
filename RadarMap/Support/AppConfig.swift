@@ -2726,6 +2726,15 @@ nonisolated enum AppConfig {
     /// буква уходила в сеть (MKLocalSearch), отмена задачи сам запрос не
     /// отменяет, и быстрый набор упирался в `loadingThrottled` (аудит 11.10).
     static let carPlaySearchAppleDebounceSeconds = 0.35
+    /// Дольше Apple не ждём: свои адреса важнее его ответа.
+    static let carPlaySearchAppleTimeoutSeconds = 3.0
+    /// Столько «Найти» ждёт идущий запрос, потом показывает, что есть.
+    static let carPlaySearchListWaitSeconds = 1.5
+    /// Строк, которые свои адреса оставляют Apple, если он что-то нашёл.
+    static let carPlaySearchAppleSlots = 3
+    static let carPlaySearchMaxQueryLength = 120
+    /// Список «Поиск на ходу»: многие машины на ходу показывают не больше 12.
+    static let carPlayMovingListLimit = 12
     /// Сколько ближайших показывает плитка категории («АЗС»).
     static let searchCategoryLimit = 8
 

@@ -107,24 +107,55 @@ nonisolated struct TrafficSnapshot: Sendable {
         return false
     }
 
-    /// Разбор now.json. Формат версии 1:
-    /// `{"v":1,"generated":t,"edges":[[ulat,ulon,vlat,vlon,level,kmh,model]]}`.
-    /// Лишние колонки (если сервер когда-нибудь их добавит) не читаются.
+    /// Разбор now.json и now2.json. Версия 1:
+    /// `{"v":1,"generated":t,"edges":[[ulat,ulon,vlat,vlon,level,kmh,model]]}`,
+    /// версия 2: `{"v":2,"generated":t,"chains":[[lat0,lon0,dlat,dlon,level,kmh,model,…]]}`,
+    /// координаты в 1e-5°, каждая следующая — разность с предыдущей.
+    /// Лишние колонки версии 1 (если сервер когда-нибудь их добавит) не читаются.
     /// Другая версия или битое ребро — nil/пропуск: показывать догадку о
     /// формате хуже, чем не показывать пробки.
     static func decode(_ data: Data) -> TrafficSnapshot? {
         // Не JSON — «нет данных»; опрос каждые 2 минуты, журнал им не засоряем.
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              object["v"] as? Int == 1,
-              let generated = object["generated"] as? Double ?? (object["generated"] as? Int).map(Double.init),
-              let raw = object["edges"] as? [[Double]] else { return nil }
-        let edges = raw.compactMap { row -> TrafficEdge? in
-            guard row.count >= 7, (1...3).contains(Int(row[4])), row[6] > 0 else { return nil }
-            return TrafficEdge(a: CLLocationCoordinate2D(latitude: row[0], longitude: row[1]),
-                               b: CLLocationCoordinate2D(latitude: row[2], longitude: row[3]),
-                               level: Int(row[4]), kmh: max(0, row[5]), modelKmh: row[6])
+              let generated = object["generated"] as? Double ?? (object["generated"] as? Int).map(Double.init)
+        else { return nil }
+        let edges: [TrafficEdge]
+        switch object["v"] as? Int {
+        case 1:
+            guard let raw = object["edges"] as? [[Double]] else { return nil }
+            edges = raw.compactMap { row -> TrafficEdge? in
+                guard row.count >= 7, (1...3).contains(Int(row[4])), row[6] > 0 else { return nil }
+                return TrafficEdge(a: CLLocationCoordinate2D(latitude: row[0], longitude: row[1]),
+                                   b: CLLocationCoordinate2D(latitude: row[2], longitude: row[3]),
+                                   level: Int(row[4]), kmh: max(0, row[5]), modelKmh: row[6])
+            }
+        case 2:
+            guard let raw = object["chains"] as? [[Double]] else { return nil }
+            edges = raw.flatMap(chainEdges)
+        default:
+            return nil
         }
         return TrafficSnapshot(generated: Date(timeIntervalSince1970: generated), edges: edges)
+    }
+
+    /// Рёбра одной цепочки; битое ребро пропускается, но позиция идёт дальше.
+    private static func chainEdges(_ row: [Double]) -> [TrafficEdge] {
+        guard row.count >= 7, (row.count - 2) % 5 == 0 else { return [] }
+        var lat = row[0], lon = row[1]
+        var edges: [TrafficEdge] = []
+        edges.reserveCapacity((row.count - 2) / 5)
+        for i in stride(from: 2, to: row.count, by: 5) {
+            let endLat = lat + row[i], endLon = lon + row[i + 1]
+            let level = row[i + 2]
+            if level == 1 || level == 2 || level == 3, row[i + 4] > 0 {
+                edges.append(TrafficEdge(a: CLLocationCoordinate2D(latitude: lat / 1e5, longitude: lon / 1e5),
+                                         b: CLLocationCoordinate2D(latitude: endLat / 1e5, longitude: endLon / 1e5),
+                                         level: Int(level), kmh: max(0, row[i + 3]), modelKmh: row[i + 4]))
+            }
+            lat = endLat
+            lon = endLon
+        }
+        return edges
     }
 
     /// Пробкам больше `trafficStaleSeconds` — данных нет (сборщик стоит).

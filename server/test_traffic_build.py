@@ -107,6 +107,54 @@ def split_fixture(at):
     return part(0, at, coords[:cut + 1]), part(at, len(legs), coords[cut:])
 
 
+def chain_edges(data):
+    """Разбор now2.json так же, как в TrafficSnapshot.decode на телефоне."""
+    out = []
+    for row in data["chains"]:
+        lat, lon = row[0], row[1]
+        for i in range(2, len(row), 5):
+            end_lat, end_lon = lat + row[i], lon + row[i + 1]
+            out.append([lat / 1e5, lon / 1e5, end_lat / 1e5, end_lon / 1e5, row[i + 2], row[i + 3], row[i + 4]])
+            lat, lon = end_lat, end_lon
+    return out
+
+
+class ChainPayloadTest(unittest.TestCase):
+    A, B, C, D = (41.3, 69.28), (41.301, 69.28), (41.302, 69.281), (41.303, 69.28)
+
+    def edge(self, start, end, level=2, kmh=30, model=60):
+        return start + end + (level, kmh, model)
+
+    def rows(self, edges):
+        return tb.chain_payload(edges, 1_760_000_000)["chains"]
+
+    def test_connected_edges_become_one_chain_with_deltas(self):
+        rows = self.rows([self.edge(self.B, self.C, 3, 9), self.edge(self.A, self.B, 1, 50)])
+        self.assertEqual(rows, [[4130000, 6928000, 100, 0, 1, 50, 60, 100, 100, 3, 9, 60]])
+
+    def test_every_edge_survives_a_fork(self):
+        edges = [self.edge(self.A, self.B), self.edge(self.B, self.C), self.edge(self.B, self.D)]
+        decoded = chain_edges({"chains": self.rows(edges)})
+        self.assertEqual(len(decoded), 3)
+        self.assertEqual({tuple(e[:4]) for e in decoded}, {e[:4] for e in edges})
+
+    def test_ring_is_not_lost(self):
+        ring = [self.edge(self.A, self.B), self.edge(self.B, self.C), self.edge(self.C, self.A)]
+        self.assertEqual(len(chain_edges({"chains": self.rows(ring)})), 3)
+
+    def test_both_directions_stay_separate_edges(self):
+        rows = [self.edge(self.A, self.B, 3, 9), self.edge(self.B, self.A, 1, 50)]
+        decoded = chain_edges({"chains": self.rows(rows)})
+        self.assertEqual(sorted((e[4], e[5]) for e in decoded), [(1, 50), (3, 9)])
+
+    def test_order_of_input_does_not_change_the_file(self):
+        edges = [self.edge(self.A, self.B), self.edge(self.B, self.C), self.edge(self.B, self.D)]
+        self.assertEqual(self.rows(edges), self.rows(list(reversed(edges))))
+
+    def test_empty_set_is_a_valid_file(self):
+        self.assertEqual(tb.chain_payload([], 5), {"v": 2, "generated": 5, "chains": []})
+
+
 class CapacityPlanTest(unittest.TestCase):
     def test_current_tariff_keeps_the_values_proven_on_prod(self):
         self.assertEqual(tc.capacity_plan(2, 1963), {"match_workers": 2, "saturate_from": 300,
@@ -830,6 +878,17 @@ class MigrationTest(unittest.TestCase):
         name = tb.bucket_name(tb.profile_slot(now))
         with open(os.path.join(self.typical, f"{name}.json"), encoding="utf-8") as f:
             return json.load(f)["edges"]
+
+    def test_now2_carries_the_same_edges_as_now(self):
+        self.run_builder(self.now, pending=2)
+        with open(self.out, encoding="utf-8") as f:
+            old = json.load(f)
+        chain_path = os.path.join(os.path.dirname(self.out), tb.CHAIN_NAME)
+        with open(chain_path, "rb") as plain, gzip.open(chain_path + ".gz", "rb") as packed:
+            raw = plain.read()
+            self.assertEqual(raw, packed.read())
+        self.assertGreater(len(old["edges"]), 0)
+        self.assertEqual(sorted(chain_edges(json.loads(raw))), sorted(old["edges"]))
 
     def test_now_json_gets_a_gzip_copy_of_the_same_body(self):
         self.run_builder(self.now)

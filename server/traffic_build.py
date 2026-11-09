@@ -142,6 +142,8 @@ JAM_RATIO = 0.35             # ниже — пробка (красный)
 SLOW_RATIO = 0.6             # ниже — медленно (жёлтый)
 TASHKENT_UTC_OFFSET = 5 * 3600
 OUTPUT_VERSION = 1
+CHAIN_VERSION = 2
+CHAIN_NAME = "now2.json"
 
 TYPICAL_DIR = "/opt/radarmap/www/traffic/typical"
 PROFILE_PATH = "/opt/radarmap/www/traffic/profile.json"   # 33C: профиль часа недели для телефона
@@ -1033,6 +1035,38 @@ def payload(edges, now):
     }
 
 
+def chain_payload(edges, now):
+    """now2.json: те же рёбра цепочками, gzip вдвое меньше now.json (замер 09.11.2026).
+    Координаты — целые в 1e-5°, каждая следующая — разность с предыдущей:
+      {"v": 2, "generated": t, "chains": [[lat0, lon0, dlat, dlon, level, kmh, model, …]]}"""
+    def grid(value):
+        return round(round(value, 5) * 1e5)   # то же округление, что в now.json
+
+    rows = sorted((grid(a), grid(b), grid(c), grid(d), lvl, int(round(kmh)), int(round(model)))
+                  for a, b, c, d, lvl, kmh, model in edges)
+    leaving = {}
+    for index, row in enumerate(rows):
+        leaving.setdefault(row[:2], []).append(index)
+    arriving = {row[2:4] for row in rows}
+    used = [False] * len(rows)
+    # Сначала начала цепочек; кольца, у которых начала нет, — остатком.
+    order = [i for i, row in enumerate(rows) if row[:2] not in arriving] + list(range(len(rows)))
+    chains = []
+    for index in order:
+        if used[index]:
+            continue
+        lat, lon = rows[index][:2]
+        chain = [lat, lon]
+        while index is not None:
+            used[index] = True
+            _, _, end_lat, end_lon, lvl, kmh, model = rows[index]
+            chain += [end_lat - lat, end_lon - lon, lvl, kmh, model]
+            lat, lon = end_lat, end_lon
+            index = next((i for i in leaving.get((lat, lon), ()) if not used[i]), None)
+        chains.append(chain)
+    return {"v": CHAIN_VERSION, "generated": int(now), "chains": chains}
+
+
 def write_atomic(path, body):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
@@ -1093,9 +1127,13 @@ def run(conn, now, matcher=osrm_match, out_path=OUT_PATH, typical_dir=TYPICAL_DI
     pieces, segments = process(conn, now, matcher=matcher)
     prune(conn, now)
     edges = aggregate(conn, now)
-    body = json.dumps(payload(merge_demo(edges, demo_edges(now, demo_path)), now), separators=(",", ":"))
-    write_atomic(out_path, body)
-    write_gzip_copy(out_path, body)
+    published = merge_demo(edges, demo_edges(now, demo_path))
+    # now.json — для вышедших сборок, now2.json — для новых.
+    chain_path = os.path.join(os.path.dirname(out_path), CHAIN_NAME)
+    for path, content in ((out_path, payload(published, now)), (chain_path, chain_payload(published, now))):
+        body = json.dumps(content, separators=(",", ":"))
+        write_atomic(path, body)
+        write_gzip_copy(path, body)
     mark_shared(conn, now)
     typical = None
     if typical_due(conn, now):

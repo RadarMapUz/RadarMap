@@ -27,6 +27,15 @@ final class NetSchedulerTests: XCTestCase {
                            remotePollInterval: remote, disabled: disabled, riderDue: due)
     }
 
+    func testPultOnlyWidensTrafficPolling() {
+        var s = situation(.trip)
+        XCTAssertEqual(SyncPlan.interval(.traffic, s), AppConfig.trafficRefreshInterval)
+        s.remoteTrafficInterval = 300
+        XCTAssertEqual(SyncPlan.interval(.traffic, s), 300, "перегрузка: пробки реже")
+        s.remoteTrafficInterval = 60
+        XCTAssertEqual(SyncPlan.interval(.traffic, s), AppConfig.trafficRefreshInterval, "чаще сборки нельзя")
+    }
+
     private func tracks(_ pairs: [Job: TimeInterval], failures: [Job: Int] = [:]) -> [Job: SyncPlan.Track] {
         pairs.reduce(into: [:]) { out, pair in
             out[pair.key] = SyncPlan.Track(lastAttempt: at(pair.value), failures: failures[pair.key] ?? 0)

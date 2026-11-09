@@ -51,6 +51,11 @@ ROOT = os.environ.get("RADARMAP_ROOT", "/opt/radarmap")
 OUT = os.environ.get("RADARMAP_STATUS", ROOT + "/api/status.json")
 PUBLIC_OUT = os.environ.get("RADARMAP_STATUS_PUBLIC", ROOT + "/www/status.json")
 HISTORY_DB = os.environ.get("RADARMAP_STATUS_DB", ROOT + "/api/status.db")
+# Большие файлы — условным GET: 304 вместо десятков МБ каждые 5 минут. Раз в
+# CACHE_FULL_EVERY тело качается целиком: ETag nginx — лишь mtime и размер.
+CACHE_DIR = os.environ.get("RADARMAP_STATUS_CACHE", ROOT + "/api/status_cache")
+CACHE_MIN_BYTES = 256 * 1024
+CACHE_FULL_EVERY = 6 * 3600
 REPORTS_DB = os.environ.get("RADARMAP_REPORTS_DB", ROOT + "/api/reports.db")
 ROADS_LOG = os.environ.get("RADARMAP_ROADS_LOG", "/var/log/radarmap-roads.log")
 
@@ -124,19 +129,61 @@ class Fetched:
             return None
 
 
+def cache_base(path, gzip_ok):
+    """gzip и identity — разные записи: их расхождение ищет same_both_ways."""
+    name = hashlib.sha256(("%s|%d" % (path, gzip_ok)).encode()).hexdigest()
+    return os.path.join(CACHE_DIR, name)
+
+
+def read_cache(path, gzip_ok, now):
+    """(тело, заголовки) или None: записи нет, она битая или пора качать целиком."""
+    base = cache_base(path, gzip_ok)
+    try:
+        with open(base + ".meta", encoding="utf-8") as f:
+            meta = json.load(f)
+        if now - meta["full_at"] >= CACHE_FULL_EVERY or not meta["headers"].get("ETag"):
+            return None
+        with open(base, "rb") as f:
+            return f.read(), meta["headers"]
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
+
+
+def write_cache(path, gzip_ok, body, headers, now):
+    if len(body) < CACHE_MIN_BYTES or not headers.get("ETag"):
+        return
+    base = cache_base(path, gzip_ok)
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(base + ".tmp", "wb") as f:
+            f.write(body)
+        os.replace(base + ".tmp", base)
+        with open(base + ".meta.tmp", "w", encoding="utf-8") as f:
+            json.dump({"full_at": now, "headers": headers}, f)
+        os.replace(base + ".meta.tmp", base + ".meta")
+    except OSError as error:
+        print("кэш пульта не записан: %s" % error, file=sys.stderr)
+
+
 def fetch(path, gzip_ok=True, timeout=20):
     """GET как у телефона: с gzip по умолчанию, тело — уже распакованное."""
     headers = {"User-Agent": "RadarMap-status/1",
                "Accept-Encoding": "gzip" if gzip_ok else "identity"}
-    request = urllib.request.Request(BASE + "/" + path, headers=headers)
     started = time.time()
+    hit = read_cache(path, gzip_ok, started)
+    if hit:
+        headers["If-None-Match"] = hit[1]["ETag"]
+    request = urllib.request.Request(BASE + "/" + path, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             raw = response.read()
             got = dict(response.headers.items())
             code = response.status
     except urllib.error.HTTPError as error:
-        return Fetched(error.code, ms=int((time.time() - started) * 1000))
+        ms = int((time.time() - started) * 1000)
+        if error.code == 304 and hit:
+            return Fetched(200, hit[0], {**hit[1], **dict(error.headers.items())}, ms)
+        return Fetched(error.code, ms=ms)
     except (urllib.error.URLError, socket.timeout, OSError) as error:
         return Fetched(0, ms=int((time.time() - started) * 1000), error=str(error))
     if got.get("Content-Encoding") == "gzip":
@@ -144,6 +191,8 @@ def fetch(path, gzip_ok=True, timeout=20):
             raw = gzip.decompress(raw)
         except OSError as error:
             return Fetched(0, error="битый gzip: %s" % error)
+    if code == 200:
+        write_cache(path, gzip_ok, raw, got, started)
     return Fetched(code, raw, got, int((time.time() - started) * 1000))
 
 

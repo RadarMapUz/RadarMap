@@ -15,6 +15,8 @@ import sqlite3
 import tempfile
 import time
 import unittest
+import urllib.error
+from unittest import mock
 
 import status as st
 
@@ -422,6 +424,86 @@ class DeliveryTests(Base):
     def test_fingerprint_is_stable(self):
         self.assertEqual(st.index_fingerprint(b"abc"),
                          int(hashlib.sha256(b"abc").hexdigest()[:7], 16))
+
+
+class FakeResponse:
+    def __init__(self, body, etag):
+        self.body, self.status = body, 200
+        self.headers = {"ETag": etag, "Last-Modified": http_date(NOW)}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def read(self):
+        return self.body
+
+
+class ConditionalFetchTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        patcher = mock.patch.object(st, "CACHE_DIR", self.tmp)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(shutil.rmtree, self.tmp)
+        self.big = b"x" * (st.CACHE_MIN_BYTES + 1)
+        self.etag = '"a"'
+        self.sent = []
+
+    def serve(self, request, timeout=20):
+        sent = request.get_header("If-none-match")
+        self.sent.append(sent)
+        if sent == self.etag:
+            raise urllib.error.HTTPError(request.full_url, 304, "Not Modified", {"ETag": self.etag}, None)
+        return FakeResponse(self.big, self.etag)
+
+    def get(self, path="big.json", gzip_ok=False):
+        with mock.patch.object(st.urllib.request, "urlopen", self.serve):
+            return st.fetch(path, gzip_ok=gzip_ok)
+
+    def test_unchanged_file_comes_from_304_with_its_body(self):
+        self.get()
+        again = self.get()
+        self.assertEqual(self.sent, [None, '"a"'])
+        self.assertTrue(again.ok)
+        self.assertEqual(again.body, self.big, "проверки получают то же тело")
+        self.assertIsNotNone(again.age_days(NOW), "возраст берётся из сохранённых заголовков")
+
+    def test_changed_file_replaces_the_copy(self):
+        self.get()
+        self.etag, self.big = '"b"', b"y" * (st.CACHE_MIN_BYTES + 1)
+        self.assertEqual(self.get().body, self.big)
+        self.assertEqual(self.get().body, self.big)
+        self.assertEqual(self.sent[-1], '"b"')
+
+    def test_small_file_is_always_downloaded(self):
+        self.big = b"small"
+        self.get()
+        self.get()
+        self.assertEqual(self.sent, [None, None], "тайлы выборки проверяются настоящим телом")
+
+    def test_full_download_returns_after_the_interval(self):
+        with mock.patch.object(st.time, "time", return_value=NOW):
+            self.get()
+        with mock.patch.object(st.time, "time", return_value=NOW + st.CACHE_FULL_EVERY):
+            self.get()
+        self.assertEqual(self.sent, [None, None])
+
+    def test_stale_gzip_stays_visible_next_to_fresh_plain(self):
+        self.get(gzip_ok=True)
+        old = self.big
+        self.etag, self.big = '"new"', b"y" * (st.CACHE_MIN_BYTES + 1)
+        plain = self.get(gzip_ok=False)
+        self.assertNotEqual(plain.body, old, "записи gzip и identity не смешиваются")
+
+    def test_broken_copy_means_a_plain_download(self):
+        self.get()
+        with open(st.cache_base("big.json", False) + ".meta", "w", encoding="utf-8") as f:
+            f.write("{")
+        self.get()
+        self.assertEqual(self.sent, [None, None])
 
 
 class AlertTests(unittest.TestCase):

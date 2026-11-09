@@ -148,6 +148,69 @@ class PipelineTest(unittest.TestCase):
         other.close()
         self.assertEqual(done, 4, "приём кусков не ждёт конца прогона")
 
+    def counting_matcher(self, calls):
+        def matcher(points):
+            calls.append(points)
+            return {"code": "Ok", "matchings": [], "tracepoints": []}
+        return matcher
+
+    def pending_count(self):
+        return self.conn.execute("SELECT COUNT(*) FROM traffic_pieces").fetchone()[0]
+
+    def test_full_cell_skips_osrm_and_drops_the_piece(self):
+        for _ in range(5):
+            self.add_piece()
+        calls = []
+        done, _ = tb.process(self.conn, self.now, matcher=self.counting_matcher(calls), saturate_from=1)
+        self.assertEqual((done, len(calls)), (tb.CELL_LIMIT, tb.CELL_LIMIT))
+        self.assertEqual(self.pending_count(), 0, "лишний кусок не копится в очереди")
+
+    def test_short_queue_keeps_every_piece(self):
+        for _ in range(5):
+            self.add_piece()
+        calls = []
+        done, _ = tb.process(self.conn, self.now, matcher=self.counting_matcher(calls))
+        self.assertEqual((done, len(calls)), (5, 5), "без очереди каждый кусок идёт в OSRM")
+
+    def test_osrm_failure_does_not_spend_the_cell(self):
+        for _ in range(3):
+            self.add_piece()
+
+        def down(points):
+            raise OSError("connection refused")
+
+        tb.process(self.conn, self.now, matcher=down, saturate_from=1)
+        self.assertEqual(self.pending_count(), 3)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM traffic_cell_load").fetchone()[0], 0)
+
+    def test_opposite_direction_has_its_own_limit(self):
+        for _ in range(5):
+            self.add_piece()
+        back = [[lat, lon, i, kmh] for i, (lat, lon, _, kmh) in enumerate(reversed(FIXTURE["points"]))]
+        self.conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)", (self.now, json.dumps(back)))
+        self.conn.commit()
+        for _ in range(3):
+            self.add_piece()
+        calls = []
+        tb.process(self.conn, self.now, matcher=self.counting_matcher(calls), saturate_from=1)
+        self.assertIn(back, calls, "встречное направление не гасится чужим потоком")
+
+    def test_cell_is_counted_per_time_bucket(self):
+        for _ in range(3):
+            self.add_piece(received=self.now - tb.CELL_BUCKET)
+        for _ in range(3):
+            self.add_piece()
+        calls = []
+        tb.process(self.conn, self.now, matcher=self.counting_matcher(calls), saturate_from=1)
+        self.assertGreater(len(calls), tb.CELL_LIMIT, "новое окно открывает ячейку заново")
+
+    def test_cell_counters_are_pruned(self):
+        self.add_piece()
+        tb.process(self.conn, self.now, matcher=self.counting_matcher([]), saturate_from=1)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM traffic_cell_load").fetchone()[0], 1)
+        tb.prune(self.conn, self.now + tb.PIECE_TTL + 2 * tb.CELL_BUCKET)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM traffic_cell_load").fetchone()[0], 0)
+
     def test_budget_leaves_the_oldest_pieces_waiting(self):
         for _ in range(5):
             self.add_piece()

@@ -60,8 +60,8 @@ nonisolated enum CarPlayGuidanceMapping {
         // Порог — по уже округлённому: 995–999 м округлялись в «1000 м»
         // (QA 05.11), а водитель должен увидеть «1 км» и сразу «990 м».
         let tens = (meters / 10).rounded() * 10
-        guard tens >= 1000 else { return Measurement(value: tens, unit: .meters) }
-        return Measurement(value: kilometers(max(1000, meters)), unit: .kilometers)
+        guard tens >= 1000 else { return Measurement(value: tens, unit: CarPlayUnits.meters()) }
+        return Measurement(value: kilometers(max(1000, meters)), unit: CarPlayUnits.kilometers())
     }
 
     /// Остаток ПОЕЗДКИ (панель прибытия «08:29 · 1 мин · 0,8 км» и карточки
@@ -79,8 +79,8 @@ nonisolated enum CarPlayGuidanceMapping {
     /// «0,8 км»; ненулевой остаток не показываем нулём, пока не приехали.
     static func tripDistance(meters: Double) -> Measurement<UnitLength> {
         let meters = max(0, meters)
-        guard meters > 0 else { return Measurement(value: 0, unit: .kilometers) }
-        return Measurement(value: max(0.1, kilometers(meters)), unit: .kilometers)
+        guard meters > 0 else { return Measurement(value: 0, unit: CarPlayUnits.kilometers()) }
+        return Measurement(value: max(0.1, kilometers(meters)), unit: CarPlayUnits.kilometers())
     }
 
     /// Километры так, как их напечатает CarPlay: десятая до сотни, дальше

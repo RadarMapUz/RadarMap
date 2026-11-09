@@ -475,7 +475,7 @@ extension CarPlaySceneDelegate {
     /// Строки вариантов сейчас — по ним видно, устарела ли карточка.
     private func previewTexts() -> [Int: CarPlayTripPreview.ChoiceText] {
         let variants = previewVariants
-        return Dictionary(variants.map { ($0.id, CarPlayTripPreview.text(for: $0, among: variants)) },
+        return Dictionary(variants.map { ($0.id, CarPlayTripPreview.text(for: $0)) },
                           uniquingKeysWith: { first, _ in first })
     }
 

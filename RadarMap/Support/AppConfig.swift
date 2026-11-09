@@ -2589,6 +2589,18 @@ nonisolated enum AppConfig {
     /// предела строки списка, чтобы читался значком, а не плиткой.
     static let carPlayOptionsPanelIconPoints: CGFloat = 24
 
+    // MARK: - Панели CarPlay
+    /// Заголовок варианта маршрута, символов: столбец около 145 pt.
+    static let carPlayRouteTitleMaxChars = 24
+    /// Подпись варианта: одна строка, иначе второй вариант уходит под кнопки.
+    static let carPlayRouteDetailMaxChars = 26
+    /// Слово типа камеры: «Стационарны» занимало всю строку панели.
+    static let carPlayPanelKindWordMaxChars = 11
+    /// Адрес камеры в панели «…»: две строки мелким шрифтом.
+    static let carPlayPanelAddressMaxChars = 32
+    /// Слово адреса: длиннее строки система рвёт посередине.
+    static let carPlayPanelAddressWordMaxChars = 18
+
     // MARK: - Дороги и карта на движке
 
     /// Не чаще этого перепроверять индекс дорог, когда скачанный тайл не

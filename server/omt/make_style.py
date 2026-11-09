@@ -182,8 +182,8 @@ PALETTES = {
         # Ночью улица СВЕТЛЕЕ домов: двор темнее домов пропадал (07.10.2026).
         "minor": "#30343c", "minor_far": "#30343c", "minor_edge": "#1f2227", "minor_edge_far": "#1c1e22",
         "path": "#24272c", "path_edge": "#1e2025",
-        "far_motorway": "#6b717d", "far_motorway_edge": "#a88c55",
-        "far_trunk": "#636975", "far_trunk_edge": "#9a8352",
+        "far_motorway": "#6b717d", "far_motorway_edge": "#8b97a8",
+        "far_trunk": "#636975", "far_trunk_edge": "#7c8797",
         "far_primary": "#464b55", "far_primary_edge": "#2a2d33",
         "far_secondary": "#3a3e47", "far_secondary_edge": "#25282d",
         "far_tertiary": "#32363e", "far_tertiary_edge": "#212328",
@@ -217,7 +217,7 @@ PALETTES = {
         # маршрутом, камерами и машиной.
         "trunk_glow": "#c9a35a",
         "casing": "#25282e",
-        "kerb": "#575c66", "kerb_trunk": "#9a8352", "trees": "trees-dark", "asphalt": "asphalt-dark",
+        "kerb": "#575c66", "kerb_trunk": "#7c8797", "trees": "trees-dark", "asphalt": "asphalt-dark",
         "gutter": "#1d2025",
         "parking": "#212429", "parking_edge": "#2c2f36", "barrier": "#4a4f58",
         "bridge_edge": "#6b717c", "bridge_shadow": "rgba(0,0,0,0.45)", "tunnel": "#262a30",
@@ -231,7 +231,7 @@ PALETTES = {
         # обязаны определять одни цвета (test_themes_define_the_same_colours).
         "drive_trunk": "#626874", "drive_primary": "#40454f", "drive_secondary": "#383c45",
         "drive_tertiary": "#33373f", "drive_minor": "#30343c",
-        "drive_kerb": "#575c66", "drive_kerb_trunk": "#9a8352", "drive_minor_edge": "#1f2227",
+        "drive_kerb": "#575c66", "drive_kerb_trunk": "#7c8797", "drive_minor_edge": "#1f2227",
         "drive_casing": "#25282e", "drive_gutter": "#1d2025", "drive_zebra_base": "#2e3137",
         "drive_paint": "#9aa0aa", "drive_street_label": "#f2f4f7",
         "drive_building": "#24272e",
@@ -1048,8 +1048,8 @@ def car_overrides(theme, variant="A"):
 # не перезагружается. Правки постоянные, без окна по зуму: камера поездки
 # стоит на z15,5–18, а обзор (основа до 15-го) остаётся прежним.
 #
-# Лента маршрута (LanePath) — цвет Theme.route, смешанный с асфальтом
-# (D3_RIBBON): непрозрачная заливка, разметка поверх неё. Полупрозрачные
+# Лента маршрута (LanePath) — насыщенный синий (D3_RIBBON): непрозрачная
+# заливка, разметка поверх неё. Полупрозрачные
 # куски на стыке моста и под середину складывались бы в тёмные полосы
 # (первый рендер 42). Числа — palette_check.measure_drive3d.
 D3_LIGHT_ASPHALT = "#848e9b"
@@ -1090,27 +1090,28 @@ D3_PALETTES = {
     "light": dict(
         _d3_roads(D3_LIGHT_TRUNK, D3_LIGHT_ASPHALT, D3_LIGHT_MINOR, "#a3aab5", "#ffffff", "#ffffff", "#14181d"),
         **_d3_houses("#f7f8fa"),
-        bg="#edf0f3", landuse="#e8ecf0", landuse_kind={k: "#e8ecf0" for k in PALETTES["light"]["landuse_kind"]},
-        park="#dce7de", wood="#dce7de", water="#c6daea", median="#dce1e7", concrete="#dce1e7",
+        bg="#f3f5f8", landuse="#eef1f5", landuse_kind={k: "#eef1f5" for k in PALETTES["light"]["landuse_kind"]},
+        park="#d2e6d4", wood="#d2e6d4", water="#c6daea", median="#dce1e7", concrete="#dce1e7",
         building_wall="#e3e7ec", building_shadow="rgba(80,90,105,0.16)",
         building_height=0.45, building_height_max=15,
         light=dict(PALETTES["light"]["light"], intensity=0.55),
-        label="#4a525e", halo="#edf0f3", bridge_shadow="rgba(30,38,50,0.30)"),
+        label="#4a525e", halo="#f3f5f8", bridge_shadow="rgba(30,38,50,0.30)"),
     "dark": dict(
         _d3_roads(D3_DARK_TRUNK, D3_DARK_ASPHALT, D3_DARK_MINOR, "#1f232a", "#8e959f", "#cbd1d9", "#aeb6c2"),
         **_d3_houses("#262b33"),
         bg="#111317", landuse="#161a20", landuse_kind={k: "#161a20" for k in PALETTES["dark"]["landuse_kind"]},
-        park="#141d18", wood="#141d18", water="#0e1c2c", median="#1c2026", concrete="#1c2026",
+        park="#16251c", wood="#16251c", water="#0e1c2c", median="#1c2026", concrete="#1c2026",
         building_wall="#1e2228", building_shadow="rgba(0,0,0,0.35)",
         building_height=0.45, building_height_max=15,
         light=dict(PALETTES["dark"]["light"], intensity=0.3),
         label="#8a93a0", halo="#111317", trunk_glow_opacity=0, bridge_shadow="rgba(0,0,0,0.5)"),
 }
 # Лента маршрута «Вождения 3D» — те же числа, что Drive3D.ribbon (Swift):
-# заливка (Theme.route поверх асфальта: днём 80 %, ночью 47 %), кант и его
-# непрозрачность.
-D3_RIBBON = {"light": {"fill": "#236bc5", "edge": "#ffffff", "edge_opacity": 0.7},
-             "dark": {"fill": "#4d6d9e", "edge": "#9cc3ff", "edge_opacity": 0.3}}
+# заливка насыщенным синим (не смесью с асфальтом: смесь серела и у владельца
+# читалась ночью грязной), кант и его непрозрачность. Ночью — насыщенно и без
+# засветки (palette_check: светлота ≤ 0,18, разметка на ленте ≥ 3:1).
+D3_RIBBON = {"light": {"fill": "#0a5fd8", "edge": "#ffffff", "edge_opacity": 0.7},
+             "dark": {"fill": "#2b63c0", "edge": "#9cc3ff", "edge_opacity": 0.3}}
 D3_FILES = (("map_drive3d_light.json", "light"), ("map_drive3d_dark.json", "dark"))
 
 

@@ -766,7 +766,7 @@ final class EngineDriveRibbon {
             layer.iconAllowsOverlap = NSExpression(forConstantValue: true)
             layer.iconIgnoresPlacement = NSExpression(forConstantValue: true)
             layer.iconScale = NSExpression(mglJSONObject: ["interpolate", ["linear"], ["zoom"],
-                                                           15, 0.45, 17, 0.75, 19, 1.2, 20, 1.5])
+                                                           15, 0.6, 17, 1.0, 19, 1.6, 20, 2.0])
             layer.minimumZoomLevel = 15
             return layer
         }
@@ -796,7 +796,7 @@ final class EngineDriveRibbon {
                 edge.lineWidth = edgeWidth
             }
             (style.layer(withIdentifier: Self.layerID("chevrons", bridge: bridge)) as? MLNSymbolStyleLayer)?.iconOpacity =
-                NSExpression(forConstantValue: daylight ? 0.8 : 0.45)
+                NSExpression(forConstantValue: daylight ? 0.9 : 0.55)
         }
         (style.layer(withIdentifier: Self.tailLayers.casing) as? MLNLineStyleLayer)?.lineColor =
             NSExpression(forConstantValue: Theme.rgb(routeDaylight ? RouteColors.casing.day : RouteColors.casing.night))

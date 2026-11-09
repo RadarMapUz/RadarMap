@@ -944,10 +944,10 @@
    "fill-color": "#161a20"
   },
   "landcover-grass": {
-   "fill-color": "#141d18"
+   "fill-color": "#16251c"
   },
   "landcover-grass-park": {
-   "fill-color": "#141d18"
+   "fill-color": "#16251c"
   },
   "landcover-ice-shelf": {
    "fill-color": "#161a20"
@@ -956,7 +956,7 @@
    "fill-color": "#161a20"
   },
   "landcover-wood": {
-   "fill-color": "#141d18"
+   "fill-color": "#16251c"
   },
   "landuse-cemetery": {
    "fill-color": "#161a20"

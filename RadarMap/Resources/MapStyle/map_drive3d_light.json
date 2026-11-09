@@ -2,10 +2,10 @@
  "layers": {
   "airport-label-major": {
    "text-color": "#4a525e",
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "background": {
-   "background-color": "#edf0f3"
+   "background-color": "#f3f5f8"
   },
   "bridge-link": {
    "line-color": [
@@ -639,7 +639,7 @@
      "zoom"
     ],
     14.5,
-    "#edf0f3",
+    "#f3f5f8",
     15.5,
     [
      "match",
@@ -673,7 +673,7 @@
      "zoom"
     ],
     14.5,
-    "#edf0f3",
+    "#f3f5f8",
     15.5,
     [
      "match",
@@ -707,7 +707,7 @@
      "zoom"
     ],
     14.5,
-    "#edf0f3",
+    "#f3f5f8",
     15.5,
     [
      "match",
@@ -862,15 +862,15 @@
   },
   "highway-shield": {
    "text-color": "#4a525e",
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "highway-shield-us-interstate": {
    "text-color": "#4a525e",
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "highway-shield-us-other": {
    "text-color": "#4a525e",
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "highway-trunk": {
    "line-color": [
@@ -941,25 +941,25 @@
    "text-halo-color": "#f7f8fa"
   },
   "landcover-glacier": {
-   "fill-color": "#e8ecf0"
+   "fill-color": "#eef1f5"
   },
   "landcover-grass": {
-   "fill-color": "#dce7de"
+   "fill-color": "#d2e6d4"
   },
   "landcover-grass-park": {
-   "fill-color": "#dce7de"
+   "fill-color": "#d2e6d4"
   },
   "landcover-ice-shelf": {
-   "fill-color": "#e8ecf0"
+   "fill-color": "#eef1f5"
   },
   "landcover-sand": {
-   "fill-color": "#e8ecf0"
+   "fill-color": "#eef1f5"
   },
   "landcover-wood": {
-   "fill-color": "#dce7de"
+   "fill-color": "#d2e6d4"
   },
   "landuse-cemetery": {
-   "fill-color": "#e8ecf0"
+   "fill-color": "#eef1f5"
   },
   "landuse-commercial": {
    "fill-color": [
@@ -969,68 +969,68 @@
      "class"
     ],
     "retail",
-    "#e8ecf0",
-    "#e8ecf0"
+    "#eef1f5",
+    "#eef1f5"
    ]
   },
   "landuse-hospital": {
-   "fill-color": "#e8ecf0"
+   "fill-color": "#eef1f5"
   },
   "landuse-industrial": {
-   "fill-color": "#e8ecf0"
+   "fill-color": "#eef1f5"
   },
   "landuse-railway": {
-   "fill-color": "#edf0f3"
+   "fill-color": "#f3f5f8"
   },
   "landuse-residential": {
-   "fill-color": "#edf0f3"
+   "fill-color": "#f3f5f8"
   },
   "landuse-school": {
-   "fill-color": "#e8ecf0"
+   "fill-color": "#eef1f5"
   },
   "place-city": {
    "text-color": "#4a525e",
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "place-city-capital": {
    "text-color": "#4a525e",
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "place-continent": {
    "text-color": "#4a525e",
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "place-country-1": {
    "text-color": "#4a525e",
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "place-country-2": {
    "text-color": "#4a525e",
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "place-country-3": {
    "text-color": "#4a525e",
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "place-country-other": {
    "text-color": "#4a525e",
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "place-other": {
    "text-color": "#4a525e",
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "place-state": {
    "text-color": "#4a525e",
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "place-town": {
    "text-color": "#4a525e",
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "place-village": {
    "text-color": "#4a525e",
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "poi-level-1": {
    "text-color": [
@@ -1106,7 +1106,7 @@
     "#7b48c8",
     "#4a525e"
    ],
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "poi-level-2": {
    "text-color": [
@@ -1182,7 +1182,7 @@
     "#7b48c8",
     "#4a525e"
    ],
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "poi-level-3": {
    "text-color": [
@@ -1258,11 +1258,11 @@
     "#7b48c8",
     "#4a525e"
    ],
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "poi-railway": {
    "text-color": "#4a525e",
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "radar-bridge": {
    "line-color": [
@@ -1356,7 +1356,7 @@
   },
   "radar-poi-fuel": {
    "text-color": "#4a525e",
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "radar-roads": {
    "line-color": [
@@ -1831,19 +1831,19 @@
    "fill-color": "#c6daea"
   },
   "water-name-lakeline": {
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "water-name-ocean": {
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "water-name-other": {
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "water-offset": {
    "fill-color": "#c6daea"
   },
   "waterway-name": {
-   "text-halo-color": "#edf0f3"
+   "text-halo-color": "#f3f5f8"
   },
   "waterway-other": {
    "line-color": "#c6daea"

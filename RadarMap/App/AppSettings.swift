@@ -1013,7 +1013,7 @@ final class AppSettings {
         appLanguage = AppLanguage(rawValue: store.string(forKey: Keys.language) ?? "") ?? .system
         backgroundAlerts = BackgroundAlertMode(rawValue: store.string(forKey: Keys.backgroundAlerts) ?? "") ?? .all
         hapticsEnabled = store.bool(forKey: Keys.haptics)
-        mapAppearance = MapAppearance(rawValue: store.string(forKey: Keys.mapAppearance) ?? "") ?? .dark
+        mapAppearance = MapAppearance(rawValue: store.string(forKey: Keys.mapAppearance) ?? "") ?? .auto
         do {
             let data = store.data(forKey: Keys.favorites)
             favoritePlaces = try data.map { try JSONDecoder().decode([SavedPlace].self, from: $0) } ?? []

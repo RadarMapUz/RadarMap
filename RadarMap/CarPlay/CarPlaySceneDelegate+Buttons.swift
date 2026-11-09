@@ -38,23 +38,15 @@ extension CarPlaySceneDelegate {
             // и требует её В БАРЕ (заголовок CPMapTemplate). Раньше «выйти»
             // было кнопкой карты, а бар после осмотра никто не возвращал — и
             // в 2.2.3 он исчезал насовсем: без «Поездки», «Куда» и «Радар!».
-            let bar = [tripActive, routeActive, panning, previewing]
+            // Лупа — в каждом состоянии (CarPlaySearchEntry).
+            let bar = CarPlaySearchEntry.bar(.init(tripActive: tripActive, routeActive: routeActive,
+                                                   panning: panning, previewing: previewing))
             if bar != sentBar || sound != sentSound {
                 sentBar = bar
                 sentSound = sound
                 Log.carplay.notice("бар шаблона: поездка=\(tripActive), маршрут=\(routeActive), звук=\(String(describing: sound), privacy: .public), осмотр=\(panning), выбор=\(previewing)")
-                if panning {
-                    mapTemplate.leadingNavigationBarButtons = []
-                    mapTemplate.trailingNavigationBarButtons = [panDoneButton]
-                } else if previewing {
-                    mapTemplate.leadingNavigationBarButtons = [cancelPreviewButton]
-                    mapTemplate.trailingNavigationBarButtons = []
-                } else {
-                    mapTemplate.leadingNavigationBarButtons = [tripButton(active: tripActive),
-                                                               soundButton(sound)]
-                    mapTemplate.trailingNavigationBarButtons = [destinationsButton(routeActive: routeActive),
-                                                                reportButton]
-                }
+                mapTemplate.leadingNavigationBarButtons = bar.leading.map { barButton($0, sound: sound) }
+                mapTemplate.trailingNavigationBarButtons = bar.trailing.map { barButton($0, sound: sound) }
             }
             // Набор — по состоянию (CarPlayMapButtons): в поездке первой
             // стоит «Радар!», в осмотре — ровно зум (система показывает там
@@ -95,6 +87,17 @@ extension CarPlaySceneDelegate {
             return CPBarButton(image: image, handler: handler)
         }
         return CPBarButton(title: title, handler: handler)
+    }
+
+    func barButton(_ kind: CarPlaySearchEntry.Bar, sound: CarPlaySoundChoice) -> CPBarButton {
+        switch kind {
+        case .trip(let active): tripButton(active: active)
+        case .sound: soundButton(sound)
+        case .destinations(let routeActive): destinationsButton(routeActive: routeActive)
+        case .report: reportButton
+        case .panDone: panDoneButton
+        case .cancelPreview: cancelPreviewButton
+        }
     }
 
     func tripButton(active: Bool) -> CPBarButton {
@@ -228,7 +231,19 @@ extension CarPlaySceneDelegate {
         barButton(symbol: "magnifyingglass",
                   title: routeActive ? String(localized: "Маршрут")
                                      : String(localized: "Куда")) { [weak self] _ in
-            self?.presentDestinations()
+            self?.openDestinations()
+        }
+    }
+
+    /// Лупа: из осмотра — через его закрытие.
+    func openDestinations() {
+        switch CarPlaySearchEntry.open(panning: isPanning) {
+        case .now:
+            presentDestinations()
+        case .afterClosingPanning:
+            guard afterPanning == nil else { return }
+            afterPanning = { [weak self] in self?.presentDestinations() }
+            leavePanning(reason: "Куда")
         }
     }
 

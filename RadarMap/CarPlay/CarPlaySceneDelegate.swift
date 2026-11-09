@@ -67,9 +67,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Клавиатура сейчас недоступна (на ходу в большинстве машин). Поиск по
     /// адресу тогда — только на стоянке (Руководство CarPlay, стр. 25, 51).
     var keyboardLimited = false
-    /// Показанная сетка «Куда» — её плитку «Поиск» переключаем, когда машина
-    /// остановилась или тронулась.
-    weak var destinationsGrid: CPGridTemplate?
+    /// Открытый список «Поиск на ходу» — машина встала, и в нём появляется
+    /// «Ввести адрес».
+    weak var movingList: CPListTemplate?
     var mapTemplate: CPMapTemplate?
     /// Постоянный корень окна машины на всё подключение (CarPlayWindowRoot):
     /// хост CarPlay показывает слой именно этого корня, и подменять его нельзя.
@@ -255,6 +255,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         panningFallback = nil
         stopPanHold()
         isPanning = false
+        afterPanning = nil
+        pushStartedAt = nil
+        movingList = nil
+        search.cancelAll()
+        assignSearch?.cancelAll()
+        assignSearch = nil
         guidance.detach()
         optionsPanel.reset()
         guidanceAttached = false
@@ -339,13 +345,15 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// тап, пришедшийся на замену, теряется. Наблюдение будит пересборку на
     /// любое касание отслеживаемого (а MapKit дёргал слежение на каждом «+»),
     /// поэтому отправляем только реально изменившееся.
-    var sentBar: [Bool]?
+    var sentBar: CarPlaySearchEntry.BarLayout?
     /// Звук, с которым собран бар (10.1): значок кнопки — нынешний выбор.
     var sentSound: CarPlaySoundChoice?
     var sentMapButtons: [CarPlayMapButtons.Kind]?
 
     /// Открыт ли сейчас осмотр карты: бар на это время — одна кнопка «Готово».
     var isPanning = false
+    /// Что сделать, когда осмотр закроется (лупа из осмотра).
+    var afterPanning: (() -> Void)?
 
     // MARK: - Осмотр карты
 

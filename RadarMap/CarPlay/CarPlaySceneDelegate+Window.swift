@@ -168,6 +168,9 @@ extension CarPlaySceneDelegate {
             break
         case .markShown:
             rootDidShow(via: "сцена активна, установка подтверждена")
+            // templateDidAppear здесь не приходил: бар, отправленный раньше
+            // показа корня, машина потеряла, и пересылать его больше некому.
+            resendButtons()
         case .setAgain:
             guard let mapTemplate, let interfaceController else { break }
             rootRetried = true

@@ -37698,6 +37698,166 @@
           }
         }
       }
+    },
+    "Поиск на ходу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск на ходу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻlda qidiruv"
+          }
+        }
+      }
+    },
+    "На ходу клавиатуры нет — выберите или скажите": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На ходу клавиатуры нет — выберите или скажите"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻlda klaviatura yoʻq — tanlang yoki ayting"
+          }
+        }
+      }
+    },
+    "Машина стоит — можно ввести адрес": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Машина стоит — можно ввести адрес"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina toʻxtagan — manzilni kiritish mumkin"
+          }
+        }
+      }
+    },
+    "Ввести адрес": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ввести адрес"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manzilni kiritish"
+          }
+        }
+      }
+    },
+    "Сказать адрес": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сказать адрес"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manzilni aytish"
+          }
+        }
+      }
+    },
+    "Скажите Siri: «Найди адрес в RadarMap»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скажите Siri: «Найди адрес в RadarMap»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Siri’ga ayting: «RadarMapda manzilni top»"
+          }
+        }
+      }
+    },
+    "Маршрут по адресу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрут по адресу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manzil boʻyicha yoʻnalish"
+          }
+        }
+      }
+    },
+    "Ищет адрес или место и строит маршрут — голосом, руки на руле.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ищет адрес или место и строит маршрут — голосом, руки на руле."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manzil yoki joyni topib, yoʻnalish tuzadi — ovoz bilan, qoʻllar rulda."
+          }
+        }
+      }
+    },
+    "Не нашёл «%@». Попробуйте сказать иначе.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не нашёл «%@». Попробуйте сказать иначе."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«%@» topilmadi. Boshqacha aytib koʻring."
+          }
+        }
+      }
+    },
+    "Едем: %1$@. %2$@, прибытие в %3$@, камер на пути — %4$lld.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Едем: %1$@. %2$@, прибытие в %3$@, камер на пути — %4$lld."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ketdik: %1$@. %2$@, yetib borish %3$@ da, yoʻldagi kameralar — %4$lld."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

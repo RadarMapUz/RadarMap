@@ -31,7 +31,14 @@ extension CarPlaySceneDelegate {
         guard limited != keyboardLimited else { return }
         keyboardLimited = limited
         Log.carplay.notice("клавиатура в машине: \(limited ? "недоступна" : "доступна", privacy: .public)")
-        destinationsGrid?.updateGridButtons(destinationButtons())
+        movingList?.updateSections([movingSection()])
+    }
+
+    /// Ограничение — сейчас, а не с момента подключения: сразу после
+    /// создания конфигурации значение бывает ещё пустым (форум Apple 741142).
+    func currentKeyboardLimited() -> Bool {
+        keyboardLimited = sessionConfiguration?.limitedUserInterfaces.contains(.keyboard) ?? keyboardLimited
+        return keyboardLimited
     }
 
     // MARK: - «Куда»: горячие плитки
@@ -45,7 +52,6 @@ extension CarPlaySceneDelegate {
         let grid = CPGridTemplate(title: env.route.isActive ? String(localized: "Маршрут")
                                                             : String(localized: "Куда"),
                                   gridButtons: destinationButtons())
-        destinationsGrid = grid
         interfaceController?.pushTemplate(grid, animated: true) { [weak self] _, error in
             Task { @MainActor [weak self] in self?.endPush() }
             if let error {
@@ -55,82 +61,162 @@ extension CarPlaySceneDelegate {
     }
 
     func destinationButtons() -> [CPGridButton] {
-        var buttons: [CPGridButton] = []
-
-        // Активный маршрут: первым делом даём его сбросить — это самая частая
-        // причина зайти сюда во время движения.
-        if env.route.isActive {
-            buttons.append(gridButton(symbol: "xmark.circle.fill",
-                                      titles: [String(localized: "Отменить маршрут"),
-                                               String(localized: "Стоп")]) { [weak self] in
-                guard let self else { return }
-                env.route.clear()
-                popToMap()
-            })
-            // Весь маршрут и камеры на нём (10.4): во время ведения число
-            // камер впереди не было видно нигде.
-            buttons.append(gridButton(symbol: "map",
-                                      titles: [String(localized: "Весь маршрут"),
-                                               String(localized: "Обзор")]) { [weak self] in
-                self?.popToMap { [weak self] in self?.model.showOverview() }
-            })
-            let ahead = RouteCamerasAhead.list(env.route.camerasOnRoute, progress: env.route.progressAlong)
-            buttons.append(gridButton(symbol: "camera.fill",
-                                      titles: ahead.isEmpty
-                                        ? [String(localized: "Камер впереди нет")]
-                                        : [String(format: String(localized: "Камер впереди: %lld"), ahead.count),
-                                           String(format: String(localized: "Камеры: %lld"), ahead.count)]) { [weak self] in
-                self?.presentRouteCameras()
-            })
+        let slots = PlaceSlot.allCases
+        let stops = env.settings.vehicleEnergy.stops
+        let recent = recentsBesidesPinned()
+        let tiles = CarPlaySearchEntry.grid(routeActive: env.route.isActive, slots: slots.count,
+                                            stops: stops.count, recents: recent.count,
+                                            limit: AppConfig.carPlayGridLimit)
+        return tiles.map { tile in
+            switch tile {
+            case .search: searchTile()
+            case .cancelRoute: cancelRouteTile()
+            case .overview: overviewTile()
+            case .cameras: camerasTile()
+            case .slot(let index): placeButton(slot: slots[index])
+            case .stop(let index): nearestTile(stops[index])
+            case .recent(let index): recentTile(recent[index])
+            }
         }
+    }
 
-        for slot in PlaceSlot.allCases {
-            buttons.append(placeButton(slot: slot))
+    /// Всегда нажимается: на ходу ответит причиной и альтернативой. Серая
+    /// плитка на светофоре читалась как «поиска нет» (владелец, 09.11).
+    private func searchTile() -> CPGridButton {
+        gridButton(symbol: "magnifyingglass", titles: [String(localized: "Поиск")]) { [weak self] in
+            self?.openSearch()
         }
+    }
 
-        // Поиск — третьей плиткой, сразу за Домом и Работой: адрес, которого
-        // нет в недавних, раньше можно было задать только на телефоне. На
-        // ходу клавиатура в машине недоступна, и экран поиска был бы пустым
-        // обещанием (аудит 18.10, п. 3): плитка стоит на своём месте, но
-        // выключена и говорит, когда заработает.
-        let search = gridButton(symbol: "magnifyingglass",
-                                titles: keyboardLimited
-                                    ? [String(localized: "Поиск на стоянке"), String(localized: "Поиск")]
-                                    : [String(localized: "Поиск")]) { [weak self] in
-            self?.presentSearch()
+    func openSearch() {
+        switch CarPlaySearchEntry.searchTap(keyboardLimited: currentKeyboardLimited()) {
+        case .keyboard: presentSearch()
+        case .alternatives: presentMovingAlternatives()
         }
-        search.isEnabled = !keyboardLimited
-        buttons.append(search)
-        // АЗС или зарядка — частый вопрос в дороге, и ответ на него — одна
-        // плитка. Какая — по машине (Настройки → Поездка → «Машина»): у
-        // электромобиля «Зарядка» вместо «АЗС», у гибрида обе.
-        for kind in env.settings.vehicleEnergy.stops {
-            buttons.append(gridButton(symbol: kind.symbol, titles: [kind.title]) { [weak self] in
-                self?.presentNearest(kind)
-            })
-        }
+    }
 
-        // Дом и Работа уже стоят своими плитками выше — в «недавних» они
-        // дублируются и съедают места из восьми, которые есть у сетки.
-        // Сравниваем по координате, а не по названию: одно и то же место
-        // может называться по-разному.
+    private func cancelRouteTile() -> CPGridButton {
+        gridButton(symbol: "xmark.circle.fill",
+                   titles: [String(localized: "Отменить маршрут"), String(localized: "Стоп")]) { [weak self] in
+            guard let self else { return }
+            env.route.clear()
+            popToMap()
+        }
+    }
+
+    /// Весь маршрут и камеры на нём (10.4): во время ведения число камер
+    /// впереди не было видно нигде.
+    private func overviewTile() -> CPGridButton {
+        gridButton(symbol: "map",
+                   titles: [String(localized: "Весь маршрут"), String(localized: "Обзор")]) { [weak self] in
+            self?.popToMap { [weak self] in self?.model.showOverview() }
+        }
+    }
+
+    private func camerasTile() -> CPGridButton {
+        let ahead = RouteCamerasAhead.list(env.route.camerasOnRoute, progress: env.route.progressAlong)
+        return gridButton(symbol: "camera.fill",
+                          titles: ahead.isEmpty
+                            ? [String(localized: "Камер впереди нет")]
+                            : [String(format: String(localized: "Камер впереди: %lld"), ahead.count),
+                               String(format: String(localized: "Камеры: %lld"), ahead.count)]) { [weak self] in
+            self?.presentRouteCameras()
+        }
+    }
+
+    /// АЗС или зарядка — по машине (Настройки → Поездка → «Машина»).
+    private func nearestTile(_ kind: Venue.Kind) -> CPGridButton {
+        gridButton(symbol: kind.symbol, titles: [kind.title]) { [weak self] in
+            self?.presentNearest(kind)
+        }
+    }
+
+    private func recentTile(_ place: SavedPlace) -> CPGridButton {
+        gridButton(symbol: "clock.arrow.circlepath",
+                   titles: [place.title, Self.shortTitle(place.title)]) { [weak self] in
+            self?.route(to: place)
+        }
+    }
+
+    /// Недавние без Дома и Работы: те стоят своими плитками. Сравниваем по
+    /// координате: одно место может называться по-разному.
+    private func recentsBesidesPinned() -> [SavedPlace] {
         let pinned = PlaceSlot.allCases.compactMap { slotPlace($0)?.saved.coordinate }
-        let recent = env.settings.recentPlaces.filter { place in
+        return env.settings.recentPlaces.filter { place in
             !pinned.contains { GeoMath.fastDistance($0.latitude, $0.longitude,
                                                     place.coordinate.latitude,
                                                     place.coordinate.longitude)
                 < AppConfig.carPlayRecentDuplicateMeters }
         }
-        for place in recent.prefix(max(0, AppConfig.carPlayGridLimit - buttons.count)) {
-            buttons.append(gridButton(symbol: "clock.arrow.circlepath",
-                                      titles: [place.title, Self.shortTitle(place.title)]) { [weak self] in
-                self?.route(to: place)
-            })
-        }
+    }
 
-        // Сетка держит не больше восьми: с маршрутом и двумя заправками
-        // постоянных плиток ровно столько — лишняя не должна ронять шаблон.
-        return Array(buttons.prefix(AppConfig.carPlayGridLimit))
+    // MARK: - Поиск на ходу
+
+    /// Клавиатуры нет — причина и то, что можно сделать без неё.
+    private func presentMovingAlternatives() {
+        guard beginPush("поиск на ходу") else { return }
+        let list = CPListTemplate(title: String(localized: "Поиск на ходу"), sections: [movingSection()])
+        movingList = list
+        interfaceController?.pushTemplate(list, animated: true) { [weak self] _, error in
+            Task { @MainActor [weak self] in self?.endPush() }
+            if let error {
+                Log.carplay.error("pushTemplate(поиск на ходу): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    func movingSection() -> CPListSection {
+        let slots = PlaceSlot.allCases.compactMap { slot in slotPlace(slot).map { (slot, $0) } }
+        let recent = recentsBesidesPinned()
+        var categories = env.settings.vehicleEnergy.stops
+        for kind in [Venue.Kind.pharmacy, .atm, .parking, .food] where !categories.contains(kind) {
+            categories.append(kind)
+        }
+        let limit = CarPlaySearchEntry.listLimit(own: AppConfig.carPlayMovingListLimit,
+                                                 maximumItemCount: Int(CPListTemplate.maximumItemCount))
+        let rows = CarPlaySearchEntry.movingRows(keyboardLimited: keyboardLimited, slots: slots.count,
+                                                 recents: recent.count, categories: categories.count, limit: limit)
+        let items: [CPListItem] = rows.map { row in
+            switch row {
+            case .typeAddress:
+                return movingItem(String(localized: "Ввести адрес"), symbol: "keyboard") { [weak self] in
+                    self?.presentSearch()
+                }
+            case .voice:
+                let hint = String(localized: "Скажите Siri: «Найди адрес в RadarMap»")
+                return movingItem(String(localized: "Сказать адрес"), detail: hint, symbol: "mic.fill") { [weak self] in
+                    self?.env.alerts.speak(hint)
+                }
+            case .slot(let index):
+                let (slot, target) = slots[index]
+                return movingItem(slot.name, detail: target.saved.title, symbol: slot.symbol) { [weak self] in
+                    self?.route(to: target.saved, remember: target.remembers)
+                }
+            case .recent(let index):
+                let place = recent[index]
+                return movingItem(place.title, symbol: "clock.arrow.circlepath") { [weak self] in
+                    self?.route(to: place)
+                }
+            case .category(let index):
+                let kind = categories[index]
+                return movingItem(kind.title, symbol: kind.symbol) { [weak self] in
+                    self?.presentNearest(kind)
+                }
+            }
+        }
+        let header = keyboardLimited ? String(localized: "На ходу клавиатуры нет — выберите или скажите")
+                                     : String(localized: "Машина стоит — можно ввести адрес")
+        return CPListSection(items: items, header: header, sectionIndexTitle: nil)
+    }
+
+    private func movingItem(_ text: String, detail: String? = nil, symbol: String,
+                            action: @escaping () -> Void) -> CPListItem {
+        let item = CPListItem(text: text, detailText: detail, image: gridImage(symbol))
+        item.handler = { _, completion in
+            action()
+            completion()
+        }
+        return item
     }
 
     /// Камеры впереди по маршруту — список с остатком пути до каждой.
@@ -190,7 +276,9 @@ extension CarPlaySceneDelegate {
 
     /// Полный список найденного по «Найти» на клавиатуре — поверх поиска.
     func pushSearchResults(_ template: CPTemplate) {
-        interfaceController?.pushTemplate(template, animated: true) { _, error in
+        guard beginPush("результаты поиска") else { return }
+        interfaceController?.pushTemplate(template, animated: true) { [weak self] _, error in
+            Task { @MainActor [weak self] in self?.endPush() }
             if let error {
                 Log.carplay.error("pushTemplate(результаты поиска): \(error.localizedDescription, privacy: .public)")
             }
@@ -198,7 +286,7 @@ extension CarPlaySceneDelegate {
     }
 
     func presentAssign(_ slot: PlaceSlot) {
-        guard !keyboardLimited else {
+        guard CarPlaySearchEntry.slotTap(hasPlace: false, keyboardLimited: currentKeyboardLimited()) == .assign else {
             return showAlert(title: String(format: String(localized: "«%@» — на стоянке"), slot.name),
                              message: String(localized: "Поиск адреса на ходу недоступен — задайте место, когда машина остановится."))
         }
@@ -247,8 +335,8 @@ extension CarPlaySceneDelegate {
 
     func beginPush(_ label: String) -> Bool {
         guard interfaceController != nil else { return false }
-        if let started = pushStartedAt,
-           Date().timeIntervalSince(started) < AppConfig.carPlayPushGuardSeconds {
+        guard CarPlaySearchEntry.pushAllowed(startedAt: pushStartedAt, now: Date(),
+                                             guardSeconds: AppConfig.carPlayPushGuardSeconds) else {
             Log.carplay.notice("второй тап, пока экран едет (\(label, privacy: .public)) — пропускаю")
             return false
         }
@@ -536,7 +624,9 @@ extension CarPlaySceneDelegate {
     /// «АЗС», а найденная поиском аптека молча заменяла цель — и маршрут
     /// домой пропадал, хотя хотели заскочить по дороге.
     func pickFromSearch(_ place: SavedPlace) {
-        guard env.route.isActive, !model.isPreviewing else { return route(to: place) }
+        guard CarPlaySearchEntry.pick(routeActive: env.route.isActive, previewing: model.isPreviewing)
+                == .askStopOrReplace else { return route(to: place) }
+        guard beginPush("заезд или цель") else { return }
         let sheet = CPActionSheetTemplate(
             title: Self.shortTitle(place.title),
             message: nil,
@@ -551,7 +641,8 @@ extension CarPlaySceneDelegate {
                     self?.dismissTopTemplate()
                 },
             ])
-        interfaceController?.presentTemplate(sheet, animated: true) { _, error in
+        interfaceController?.presentTemplate(sheet, animated: true) { [weak self] _, error in
+            Task { @MainActor [weak self] in self?.endPush() }
             if let error {
                 Log.carplay.error("presentTemplate(заезд или цель): \(error.localizedDescription, privacy: .public)")
             }

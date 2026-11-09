@@ -178,7 +178,7 @@ final class EngineDriveRibbon {
     }
 
     /// Слои линии маршрута, которые лента сменяет с 15-го зума.
-    private static let routeLines = ["route-traveled", "route-case", "route", "route-traffic", "route-maneuver",
+    private static let routeLines = ["route-case", "route", "route-traffic", "route-maneuver",
                                      "route-core", EngineMapStyle.routeNearLayers.casing,
                                      EngineMapStyle.routeNearLayers.body, EngineMapStyle.routeNearLayers.maneuver,
                                      EngineMapStyle.routeNearLayers.core]
@@ -299,7 +299,9 @@ final class EngineDriveRibbon {
             compute(model, entry: entry, car: car, speedMps: speedMps, window: window, narrowing: narrowing,
                     budget: budget, in: view)
         }
-        let ready = entry.ribbon?.isReady == true
+        let ready = entry.ribbon.map {
+            Drive3D.showsRibbon(ready: $0.isReady, car: car, verifiedEnd: $0.verifiedEnd)
+        } ?? false
         if ready != shown { show(ready, in: style) }
         guard ready, let ribbon = entry.ribbon else { return }
         if writtenVersion != entry.version || writtenTraffic != trafficVersion {
@@ -764,7 +766,7 @@ final class EngineDriveRibbon {
             layer.iconAllowsOverlap = NSExpression(forConstantValue: true)
             layer.iconIgnoresPlacement = NSExpression(forConstantValue: true)
             layer.iconScale = NSExpression(mglJSONObject: ["interpolate", ["linear"], ["zoom"],
-                                                           15, 0.45, 17, 0.75, 19, 1.2, 20, 1.5])
+                                                           15, 0.6, 17, 1.0, 19, 1.6, 20, 2.0])
             layer.minimumZoomLevel = 15
             return layer
         }
@@ -794,7 +796,7 @@ final class EngineDriveRibbon {
                 edge.lineWidth = edgeWidth
             }
             (style.layer(withIdentifier: Self.layerID("chevrons", bridge: bridge)) as? MLNSymbolStyleLayer)?.iconOpacity =
-                NSExpression(forConstantValue: daylight ? 0.8 : 0.45)
+                NSExpression(forConstantValue: daylight ? 0.9 : 0.55)
         }
         (style.layer(withIdentifier: Self.tailLayers.casing) as? MLNLineStyleLayer)?.lineColor =
             NSExpression(forConstantValue: Theme.rgb(routeDaylight ? RouteColors.casing.day : RouteColors.casing.night))

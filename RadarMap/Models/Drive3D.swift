@@ -45,10 +45,10 @@ nonisolated enum Drive3D {
         let edgeOpacity: Double
     }
 
-    /// День: Theme.route #0B62D0 на 80 % поверх асфальта #848E9B; кант белый.
-    static let day = Ribbon(fill: 0x236BC5, edge: 0xFFFFFF, edgeOpacity: 0.7)
-    /// Ночь: #66A3FF на 47 % поверх #363D48; кант еле заметный, без свечения.
-    static let night = Ribbon(fill: 0x4D6D9E, edge: 0x9CC3FF, edgeOpacity: 0.3)
+    /// День: насыщенный синий, разметка на нём 5,8:1; кант белый.
+    static let day = Ribbon(fill: 0x0A5FD8, edge: 0xFFFFFF, edgeOpacity: 0.7)
+    /// Ночь: насыщенный синий без засветки (светлота 0,13); кант еле заметный.
+    static let night = Ribbon(fill: 0x2B63C0, edge: 0x9CC3FF, edgeOpacity: 0.3)
 
     static func ribbon(daylight: Bool) -> Ribbon { daylight ? day : night }
 
@@ -185,9 +185,13 @@ nonisolated enum Drive3D {
 
     /// Украшения, которых нет в «тихом мире» на ходу: жёлоб, зерно асфальта,
     /// свечение магистрали, штриховки, стрелки одностороннего, деревья,
-    /// тоннели поверх, борта эстакад. Камеры, разметка, стрелки полос,
-    /// светофоры, заправки по пути остаются.
+    /// тоннели поверх, борта эстакад — и бледная линия пройденного: это весь
+    /// маршрут целиком, вблизи лента её заменяет, а при отдалении карты она
+    /// проступала старым маршрутом за машиной. Камеры, разметка, стрелки
+    /// полос, светофоры, заправки по пути остаются.
+    static let traveledLayer = "route-traveled"
     static let hiddenLayers: [String] = [
+        traveledLayer,
         "radar-roads-gutter", "radar-asphalt-grain", "radar-trunk-glow", "radar-island-hatch",
         "railway-transit-hatching", "railway-service-hatching", "railway-hatching", "radar-oneway",
         "trees", "radar-tree-shadow", "radar-tree", "radar-tree-light", "radar-tree-3d",
@@ -292,6 +296,15 @@ nonisolated enum Drive3D {
         plan.verifiedEnd = end
         plan.stalledEnd = nil
         return .write
+    }
+
+    /// Лента на карте — только пока машина не подъехала к её концу: дальше
+    /// начало хвоста оказалось бы за машиной (карта в осмотре, панорама в
+    /// машине, тоннель — пересчёта нет), а его источник срезом не режется.
+    /// Показывается линия маршрута, её срез идёт под машиной всегда.
+    static func showsRibbon(ready: Bool, car: Double, verifiedEnd: Double,
+                            overlap: Double = AppConfig.drive3DTailOverlapMeters) -> Bool {
+        ready && car < verifiedEnd - overlap
     }
 
     static func inWindow(car: Double, maneuver: Double?, window: Double) -> Bool {

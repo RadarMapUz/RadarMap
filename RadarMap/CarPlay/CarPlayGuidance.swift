@@ -1037,7 +1037,9 @@ final class CarPlayGuidance {
     private static func cameraDetail() -> String? {
         let location = AppEnvironment.shared.location
         guard CarPlayCameraCue.current(location).distanceLabel,
-              let distance = location.distanceToNearest else { return nil }
+              let camera = location.nearestCamera,
+              let distance = location.distanceToNearest,
+              !CarPlayCameraCue.passedZero(location, camera: camera, distance: distance) else { return nil }
         return Formatting.distance(distance)
     }
 

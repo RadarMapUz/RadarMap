@@ -51,7 +51,8 @@ struct CarPlayEngineLayer: View {
     private func cameraLabel(_ cue: CarPlayCameraCue.Cue, line: CameraOnLine.Display) -> CarPlayCameraCue.Label? {
         guard cue.distanceLabel, let camera = env.location.displayNearestCamera,
               camera.id == cue.mapAlertID,
-              let distance = env.location.displayDistanceToNearest else { return nil }
+              let distance = env.location.displayDistanceToNearest,
+              !CarPlayCameraCue.passedZero(env.location, camera: camera, distance: distance) else { return nil }
         let at = line.coordinate(of: camera)
         return CarPlayCameraCue.Label(id: camera.id, latitude: at.latitude, longitude: at.longitude,
                                       text: Formatting.distance(distance))

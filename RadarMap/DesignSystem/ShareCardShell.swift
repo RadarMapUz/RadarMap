@@ -50,26 +50,38 @@ struct ShareCardShell<Content: View>: View {
     /// Подпись справа в шапке («дата» / «Мои итоги»).
     let subtitle: String
     var format: ShareFormat = .feed
+    /// Шапка лежит поверх первого элемента: карта идёт под ней во всю ширину.
+    var headerOverHero = false
     @ViewBuilder let content: Content
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "dot.radiowaves.left.and.right")
+                .font(.system(size: 22, weight: .heavy))
+                .foregroundStyle(headerOverHero ? Color.white : Theme.accent)
+            Text("RadarMap")
+                .font(.system(size: 26, weight: .heavy))
+                .foregroundStyle(.white)
+            Spacer()
+            Text(subtitle)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.white.opacity(headerOverHero ? 0.8 : 0.55))
+        }
+        .padding(.horizontal, 32)
+        .padding(.top, 32)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Image(systemName: "dot.radiowaves.left.and.right")
-                    .font(.system(size: 22, weight: .heavy))
-                    .foregroundStyle(Theme.accent)
-                Text("RadarMap")
-                    .font(.system(size: 26, weight: .heavy))
-                    .foregroundStyle(.white)
-                Spacer()
-                Text(subtitle)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.55))
+            if headerOverHero {
+                ZStack(alignment: .top) {
+                    VStack(spacing: 0) { content }
+                    header
+                }
+            } else {
+                header
+                content
             }
-            .padding(.horizontal, 32)
-            .padding(.top, 32)
-
-            content
 
             ShareInstallFooter()
                 // В сторис нижняя треть перекрыта интерфейсом соцсети —

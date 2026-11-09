@@ -76,6 +76,27 @@ enum CarPlaySoundChoice: CaseIterable, Hashable {
               voice: current.voice == carSet.voice ? before.voice : current.voice)
     }
 
+    /// Откат звука, поставленного в машине. Зовётся при выходе из машины и при
+    /// старте процесса: выгрузка или падение посреди поездки не присылают
+    /// didDisconnect, и «Тишина до конца поездки» оставалась на следующую поездку —
+    /// камеры молчали, пока машину не подключат и не отключат ещё раз.
+    @MainActor
+    static func restoreAfterCar(settings: AppSettings) {
+        defer { Storage.set(false, for: .carPlayMuted) }
+        guard Storage.bool(.carPlayMuted) else { return }
+        let before = Sound(
+            enabled: Storage.bool(.carPlaySoundBeforeMute),
+            voice: Storage.string(.carPlayVoiceBeforeMute).flatMap(VoiceMode.init(rawValue:)) ?? .smart)
+        // Маркер прежней тишины (до 20.10) без «поставленного» — это тишина.
+        let carSet = Sound(
+            enabled: Storage.bool(.carPlaySoundSet),
+            voice: Storage.string(.carPlayVoiceSet).flatMap(VoiceMode.init(rawValue:)) ?? .off)
+        let current = Sound(enabled: settings.soundEnabled, voice: settings.voiceMode)
+        let next = restoring(before: before, carSet: carSet, current: current)
+        if next.enabled != current.enabled { settings.soundEnabled = next.enabled }
+        if next.voice != current.voice { settings.voiceMode = next.voice }
+    }
+
     var title: String {
         switch self {
         case .all: return String(localized: "Обо всех камерах")

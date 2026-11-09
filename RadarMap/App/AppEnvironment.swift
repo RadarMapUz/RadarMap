@@ -423,6 +423,8 @@ final class AppEnvironment {
 
     init() {
         let settings = AppSettings()
+        // Прошлый процесс мог умереть в машине: в этом звук ещё никто не менял.
+        CarPlaySoundChoice.restoreAfterCar(settings: settings)
         let cameras = CameraStore()
         self.sync = RemoteSyncService(store: cameras)
         self.mobile = MobileCameraService(store: cameras)

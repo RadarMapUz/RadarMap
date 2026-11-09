@@ -62,4 +62,49 @@ final class CarPlaySoundRestoreTests: XCTestCase {
         let legacySet = Sound(enabled: false, voice: .off)
         XCTAssertEqual(CarPlaySoundChoice.restoring(before: before, carSet: legacySet, current: legacySet), before)
     }
+
+    /// Падение или выгрузка в машине не присылают didDisconnect: метка «машина
+    /// меняла звук» переживает процесс, и старт обязан её отработать.
+    @MainActor
+    func testProcessDeathInTheCarDoesNotLeaveThePhoneSilent() {
+        let settings = AppSettings()
+        let keep = (settings.soundEnabled, settings.voiceMode)
+        defer {
+            settings.soundEnabled = keep.0
+            settings.voiceMode = keep.1
+            Storage.set(false, for: .carPlayMuted)
+        }
+        Storage.set(true, for: .carPlaySoundBeforeMute)
+        Storage.set(VoiceMode.always.rawValue, for: .carPlayVoiceBeforeMute)
+        Storage.set(false, for: .carPlaySoundSet)
+        Storage.set(VoiceMode.off.rawValue, for: .carPlayVoiceSet)
+        Storage.set(true, for: .carPlayMuted)
+        settings.soundEnabled = false
+        settings.voiceMode = .off
+
+        CarPlaySoundChoice.restoreAfterCar(settings: settings)
+
+        XCTAssertTrue(settings.soundEnabled)
+        XCTAssertEqual(settings.voiceMode, .always)
+        XCTAssertFalse(Storage.bool(.carPlayMuted))
+    }
+
+    /// Без метки старт ничего не трогает: тишина, выбранная на телефоне, остаётся.
+    @MainActor
+    func testStartWithoutTheCarMarkKeepsAPhoneChoice() {
+        let settings = AppSettings()
+        let keep = (settings.soundEnabled, settings.voiceMode)
+        defer {
+            settings.soundEnabled = keep.0
+            settings.voiceMode = keep.1
+        }
+        Storage.set(false, for: .carPlayMuted)
+        settings.soundEnabled = false
+        settings.voiceMode = .off
+
+        CarPlaySoundChoice.restoreAfterCar(settings: settings)
+
+        XCTAssertFalse(settings.soundEnabled)
+        XCTAssertEqual(settings.voiceMode, .off)
+    }
 }

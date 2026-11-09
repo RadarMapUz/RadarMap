@@ -85,11 +85,22 @@ extension CarPlayCameraCue {
     static func passedZero(_ location: LocationService, camera: Camera, distance: Double) -> Bool {
         // Дешёвое первым: почти на всех тиках расстояние не ноль.
         guard distance < AppConfig.carPlayGaugeZeroMeters, let coordinate = location.currentCoordinate else {
+            passedHold = PassedZeroHold()
             return false
         }
-        return isProvenPassedZero(distance: distance, camera: camera, in: location.gateSituation(at: coordinate),
-                                  positionCoarse: location.isPositionCoarse)
+        let situation = location.gateSituation(at: coordinate)
+        let proven = isProvenPassedZero(distance: distance, camera: camera, in: situation,
+                                        positionCoarse: location.isPositionCoarse)
+        let straight = GeoMath.fastDistance(coordinate.latitude, coordinate.longitude, camera.lat, camera.lon)
+        return passedHold.update(cameraID: camera.id, distance: distance, straight: straight, proven: proven,
+                                 clearlyAhead: LocationGates.isClearlyAhead(camera, in: situation))
     }
+
+    /// Одно удержание на баннер, подпись и строку оценок: иначе миг без курса
+    /// вернул бы «0 м» подписи при снятом баннере.
+    @MainActor private static var passedHold = PassedZeroHold()
+
+    @MainActor static func resetPassedHold() { passedHold = PassedZeroHold() }
 }
 
 /// Баннер камеры одного подключения. Зовётся на каждом пересчёте ведения.
@@ -121,9 +132,6 @@ final class CarPlayCameraBanner {
     /// его зовёт наблюдение, а без маршрута и без новых фиксов наблюдать
     /// нечего — баннер (`duration: 0`) висел бы до смены ближайшей камеры.
     private var graceTask: Task<Void, Never>?
-    /// Проехавшая камера: миг без курса не возвращает баннер «0 м».
-    private var passedHold = CarPlayCameraCue.PassedZeroHold()
-
     private var env: AppEnvironment { .shared }
 
     func update(banners: CarPlayBanners, onScreen: Bool, onDark: Bool) {
@@ -131,8 +139,11 @@ final class CarPlayCameraBanner {
         // Тревога гейтов (в радиусе = уровень ≥ 1, скорость от
         // directionalMinSpeedKmh) — баннер; своя камера — без баннера: голос о
         // ней молчит, и на карте у неё галочка (CarPlayCameraCue).
+        let passed = location.nearestCamera.flatMap { camera in
+            location.distanceToNearest.map { CarPlayCameraCue.passedZero(location, camera: camera, distance: $0) }
+        } ?? false
         guard CarPlayCameraCue.current(location).banner, let camera = location.nearestCamera,
-              let distance = location.distanceToNearest, !isPassedZero(camera, distance: distance) else {
+              let distance = location.distanceToNearest, !passed else {
             // Проехали или тревога снята: баннер уходит, следующий подъезд —
             // заново, в том числе к той же камере. Короткое мигание тревоги
             // у той же камеры баннер не трогает.
@@ -140,7 +151,8 @@ final class CarPlayCameraBanner {
                 let now = Date()
                 let since = lostSince ?? now
                 lostSince = since
-                if CarPlayCameraBannerText.keepsThroughDropout(
+                // Доказанный проезд снимается сразу: пауза только от мигания тревоги.
+                if !passed, CarPlayCameraBannerText.keepsThroughDropout(
                     sameCamera: location.nearestCamera?.id == cameraID,
                     lostFor: now.timeIntervalSince(since)) {
                     if graceTask == nil {
@@ -236,15 +248,6 @@ final class CarPlayCameraBanner {
         Log.carplay.notice("камера \(camera.id, privacy: .public): баннер \(onScreen ? "на нашем экране" : "поверх другого приложения", privacy: .public)")
     }
 
-    private func isPassedZero(_ camera: Camera, distance: Double) -> Bool {
-        let location = env.location
-        let straight = location.currentCoordinate.map {
-            GeoMath.fastDistance($0.latitude, $0.longitude, camera.lat, camera.lon)
-        } ?? 0
-        return passedHold.update(cameraID: camera.id, distance: distance, straight: straight,
-                                 proven: CarPlayCameraCue.passedZero(location, camera: camera, distance: distance))
-    }
-
     private func text(for camera: Camera, distance: Double) -> CarPlayCameraBannerText.Text {
         if limit?.cameraID != camera.id {
             limit = (camera.id, env.speedLimits.limit(near: camera.coordinate))
@@ -301,7 +304,7 @@ final class CarPlayCameraBanner {
     /// Подключение кончилось.
     func reset() {
         clear()
-        passedHold = CarPlayCameraCue.PassedZeroHold()
+        CarPlayCameraCue.resetPassedHold()
         imageSizes = nil   // другая машина — другие пределы
     }
 

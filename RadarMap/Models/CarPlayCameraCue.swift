@@ -111,9 +111,11 @@ nonisolated enum CarPlayCameraCue {
     struct PassedZeroHold: Equatable, Sendable {
         private var cameraID: Int?
 
-        mutating func update(cameraID id: Int, distance: Double, straight: Double, proven: Bool) -> Bool {
+        /// `clearlyAhead` — водитель развернулся: камера снова впереди, скрывать её нельзя.
+        mutating func update(cameraID id: Int, distance: Double, straight: Double, proven: Bool,
+                             clearlyAhead: Bool = false) -> Bool {
             if id != cameraID || distance >= AppConfig.carPlayGaugeZeroMeters
-                || straight <= AppConfig.alertPassedBehindMeters {
+                || straight <= AppConfig.alertPassedBehindMeters || clearlyAhead {
                 cameraID = nil
             }
             if proven { cameraID = id }

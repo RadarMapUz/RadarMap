@@ -184,6 +184,13 @@ final class CarPlayCameraCueTests: XCTestCase {
         XCTAssertFalse(hold.update(cameraID: 7, distance: 0, straight: 10, proven: false), "снова у камеры")
     }
 
+    func testPassedZeroHoldReleasesAfterAUTurn() {
+        var hold = CarPlayCameraCue.PassedZeroHold()
+        XCTAssertTrue(hold.update(cameraID: 7, distance: 0, straight: 50, proven: true))
+        XCTAssertFalse(hold.update(cameraID: 7, distance: 0, straight: 55, proven: false, clearlyAhead: true),
+                       "развернулись: камера снова впереди и должна быть видна")
+    }
+
     /// Показ не меняет решения: баннер, облик и подпись считает только
     /// `decide` от гейтов, и ей нечего сказать о проезде.
     func testAlertDecisionDoesNotKnowAboutThePass() {

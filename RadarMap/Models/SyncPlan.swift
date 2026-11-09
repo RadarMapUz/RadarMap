@@ -221,7 +221,11 @@ nonisolated enum SyncPlan {
             return (job, interval)
         }
         let next = nextCheck(s, wanted: wanted, tracks: tracks)
-        guard s.isOnline else { return Decision(jobs: [], nextCheck: next) }
+        // Без связи срок ведущих не сдвигается (попыток нет), и «к ближайшему
+        // сроку» значило бы пробуждение каждую секунду, пока связи нет.
+        guard s.isOnline else {
+            return Decision(jobs: [], nextCheck: s.mode == .idle ? nil : AppConfig.netSchedulerStepSeconds)
+        }
 
         func since(_ job: Job) -> TimeInterval {
             guard let at = tracks[job]?.lastAttempt else { return .infinity }

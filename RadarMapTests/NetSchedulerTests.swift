@@ -123,6 +123,20 @@ final class NetSchedulerTests: XCTestCase {
         XCTAssertEqual(soon.nextCheck ?? 0, 5, accuracy: 0.001, "к сроку ведущей, а не шагом мимо него")
     }
 
+    /// Без связи попыток нет, срок ведущей не сдвигается: цикл не должен
+    /// просыпаться каждую секунду всё время, пока связи нет.
+    func testOfflineLoopSleepsAFullStep() {
+        var offline = situation(.trip, at: 600, speed: 50)
+        offline.isOnline = false
+        let plan = SyncPlan.plan(offline, tracks: tracks([.mobile: 0, .traffic: 0]), trigger: .tick)
+        XCTAssertEqual(plan.jobs, [])
+        XCTAssertEqual(plan.nextCheck, AppConfig.netSchedulerStepSeconds)
+        var never = situation(.watching, at: 600)
+        never.isOnline = false
+        XCTAssertEqual(SyncPlan.plan(never, tracks: [:], trigger: .tick).nextCheck,
+                       AppConfig.netSchedulerStepSeconds, "и когда попыток не было вовсе")
+    }
+
     // MARK: - Пульт
 
     func testRemoteWidenedIntervalIsNeverNarrowed() {

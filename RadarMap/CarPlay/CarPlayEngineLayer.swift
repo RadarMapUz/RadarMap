@@ -35,7 +35,7 @@ struct CarPlayEngineLayer: View {
             GeometryReader { geo in
                 map(me: me, size: geo.size, safe: geo.safeAreaInsets)
                     .ignoresSafeArea()
-                    .overlay(alignment: .bottomTrailing) { attribution }
+                    .overlay(alignment: surface.attributionOnTop ? .topLeading : .bottomTrailing) { attribution }
             }
             .onAppear(perform: adopt)
         } else {
@@ -51,7 +51,8 @@ struct CarPlayEngineLayer: View {
     private func cameraLabel(_ cue: CarPlayCameraCue.Cue, line: CameraOnLine.Display) -> CarPlayCameraCue.Label? {
         guard cue.distanceLabel, let camera = env.location.displayNearestCamera,
               camera.id == cue.mapAlertID,
-              let distance = env.location.displayDistanceToNearest else { return nil }
+              let distance = env.location.displayDistanceToNearest,
+              !CarPlayCameraCue.passedZero(env.location, camera: camera, distance: distance) else { return nil }
         let at = line.coordinate(of: camera)
         return CarPlayCameraCue.Label(id: camera.id, latitude: at.latitude, longitude: at.longitude,
                                       text: Formatting.distance(distance))
@@ -90,17 +91,15 @@ struct CarPlayEngineLayer: View {
         // капсулу «до камеры».
         // Приборка: края окна кластера закрывают стрелки приборов машины —
         // это его safe area; камера впереди держится внутри неё.
-        let clear = surface == .dashboard ? DriveCamera.Clear(width: width)
+        let clear = surface == .dashboard ? CarPlaySurface.dashboardClear(width: width, height: height)
             : surface == .cluster
             ? DriveCamera.Clear(top: Double(safe.top) / max(1, height),
                                 bottom: Double(safe.bottom) / max(1, height),
                                 width: width,
                                 side: Double(max(safe.leading, safe.trailing)) + AppConfig.engineKeepSidePoints)
-            : DriveCamera.Clear(top: Double(safe.top) / max(1, height),
-                                bottom: Double(safe.bottom + 12 + AppConfig.carPlayDockHeight) / max(1, height),
-                                width: width,
-                                side: Double(max(safe.leading, safe.trailing, model.mapButtonInsets.trailing))
-                                    + AppConfig.engineKeepSidePoints)
+            : CarPlaySurface.carClear(width: width, height: height, safeTop: Double(safe.top),
+                                      safeBottom: Double(safe.bottom),
+                                      side: Double(max(safe.leading, safe.trailing, model.mapButtonInsets.trailing)))
         // Вид на остановке (29.D): на светофоре в машине развилка в 200 м
         // была за краем экрана (105 м обзора стоя). Машина подключена —
         // значит едем: вид работает и без начатой поездки.
@@ -247,9 +246,11 @@ struct CarPlayEngineLayer: View {
             onBrowse: { model.mapStartedBrowsing() },
             // Значок и камера — по оценке «где машина сейчас» (MarkerPredictor).
             markerMotion: env.location.markerMotion,
-            // Плашка улицы и крупные подписи (29.F) — на карте машины;
-            // плитка и приборка малы, плашка закрыла бы им дорогу.
-            onStreetName: surface == .car ? { model.streetName = $0 } : nil,
+            // Плашка улицы и крупные подписи (29.F) — на карте машины и на
+            // широкой плитке; узкой плитке и приборке она закрыла бы дорогу.
+            onStreetName: surface == .car
+                || (surface == .dashboard && CarPlaySurface.tileShowsStreet(width: width, arrivalShown: false))
+                ? { model.streetName = $0 } : nil,
             // Крупнее телефона и свой стиль (40J, CarMapStyle) — экран машины
             // и плитка; приборка — как карта поездки.
             carScale: CarMapStyle.scale(for: surface),
@@ -273,8 +274,8 @@ struct CarPlayEngineLayer: View {
     /// текстом.
     private var attribution: some View {
         MapAttribution(interactive: false)
-            .padding(.trailing, 6)
-            .padding(.bottom, 4)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
     }
 
     /// Где «я» по высоте всего окна (0 — верх, 1 — низ). Свободное поле —

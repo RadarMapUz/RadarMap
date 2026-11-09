@@ -159,8 +159,24 @@ final class AppEnvironment {
     /// ней панель маршрута, и в машине выбор не дублируем.
     @ObservationIgnored var phoneMapOverride = false
 
-    /// Ставит сцена CarPlay при подключении/отключении.
+    /// Какие сцены машины подключены: основная и плитки главного экрана.
+    @ObservationIgnored private var carPresence = CarPlayPresence()
+
+    /// Ставит основная сцена CarPlay при подключении/отключении.
     func setCarPlayConnected(_ connected: Bool) {
+        carPresence.setMain(connected)
+        applyCarPresence()
+    }
+
+    /// Ставит плитка главного экрана: она приходит и без основной сцены.
+    func setCarPlayDashboardConnected(_ connected: Bool) {
+        carPresence.dashboardChanged(connected: connected)
+        applyCarPresence()
+    }
+
+    private func applyCarPresence() {
+        let connected = carPresence.isConnected
+        guard connected != isCarPlayConnected else { return }
         isCarPlayConnected = connected
         MemoryPressure.isCarPlayConnected = connected
         location.setCarPlayConnected(connected)

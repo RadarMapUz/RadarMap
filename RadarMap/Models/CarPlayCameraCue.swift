@@ -88,6 +88,57 @@ nonisolated enum CarPlayCameraCue {
         distance >= AppConfig.carPlayGaugeZeroMeters || straight <= AppConfig.carPlayGaugeZeroStraightMeters
     }
 
+    /// «0 м» в баннере и подписи экрана машины — о камере, которую уже
+    /// проехали. Маршрут держит проеханную камеру нулём до
+    /// `routePassedToleranceMeters` за ней; показывать ноль нельзя, только когда
+    /// это доказано: расстояние — ноль, камера явно позади по достоверному
+    /// курсу (`LocationGates.isClearlyBehind`, та же проверка снимает
+    /// уведомление о проехавшей камере) и позиция годная. Нет курса, грубая
+    /// или неизвестная точность, камера рядом или сбоку — показываем как
+    /// раньше: лишняя подпись лучше тишины. Только показ: гейты, тревога, голос
+    /// и `PassTracking` это не читают.
+    static func isProvenPassedZero(distance: Double, camera: Camera, in situation: LocationGates.Situation,
+                                   positionCoarse: Bool) -> Bool {
+        distance < AppConfig.carPlayGaugeZeroMeters
+            && !positionCoarse
+            && LocationGates.fixAccuracy(situation) <= AppConfig.courseProofMaxAccuracyMeters
+            && LocationGates.isClearlyBehind(camera, in: situation)
+    }
+
+    /// Доказанный проезд держится, пока та же камера стоит нулём: иначе миг
+    /// без курса заново поднимал бы системный баннер «0 м». Отпускает смена
+    /// камеры, ненулевое расстояние и возврат к самой камере.
+    struct PassedZeroHold: Equatable, Sendable {
+        private var cameraID: Int?
+
+        mutating func update(cameraID id: Int, distance: Double, straight: Double, proven: Bool) -> Bool {
+            if id != cameraID || distance >= AppConfig.carPlayGaugeZeroMeters
+                || straight <= AppConfig.alertPassedBehindMeters {
+                cameraID = nil
+            }
+            if proven { cameraID = id }
+            return cameraID == id
+        }
+    }
+
+    /// Что в приборе плитки на месте камеры.
+    enum GaugeCamera: Equatable, Sendable {
+        case hidden
+        /// Фиксов нет: прежнее расстояние показывать нельзя, оно стоит.
+        case noSignal
+        case distance
+    }
+
+    /// `distance` — до ближайшей камеры для показа, nil — её нет. Как и на
+    /// телефоне (NearestCameraReadout): на экране машины о потере сигнала
+    /// говорит чип, у плитки чипов нет. Только показ.
+    static func gaugeCamera(signalStale: Bool, distance: Double?, straight: Double) -> GaugeCamera {
+        if signalStale { return .noSignal }
+        guard let distance, distance <= AppConfig.carPlayNearestCameraMeters,
+              gaugeShows(distance: distance, straight: straight) else { return .hidden }
+        return .distance
+    }
+
     /// Подпись с расстоянием у значка алерт-камеры.
     struct Label: Equatable, Sendable {
         let id: Int

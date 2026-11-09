@@ -67,6 +67,7 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
         // Карта — только в активном приложении: MapLibre, созданный в фоне,
         // стартует «спящим» (см. CarPlaySceneDelegate.didConnect).
         if shown && UIApplication.shared.applicationState != .background { installHost() }
+        env.setCarPlayDashboardConnected(true)
         env.startDrivingServices()
         shortcutsGeneration += 1
         observeShortcuts()
@@ -108,6 +109,7 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
         model.isOnScreen = false
         windowRoot?.setContent(nil)
         windowRoot = nil
+        env.setCarPlayDashboardConnected(false)
     }
 
     func sceneWillEnterForeground(_ scene: UIScene) {
@@ -208,7 +210,8 @@ struct CarPlayDashboardView: View {
     @State private var width: CGFloat = 0
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        // Прибор справа: слева он сливался с подписями улиц и терялся (владелец, 09.11).
+        ZStack(alignment: .bottomTrailing) {
             if model.isOnScreen {
                 #if canImport(MapLibre)
                 CarPlayEngineLayer(model: model, surface: .dashboard)
@@ -222,9 +225,19 @@ struct CarPlayDashboardView: View {
             // дистанцию каждого фикса, и плитка, которую никто не видит,
             // пересобиралась бы всю поездку.
             if model.isOnScreen {
-                CarPlayDashboardGauge(width: width - 20)
-                    .padding(10)
+                HStack(alignment: .bottom, spacing: 8) {
+                    if CarPlaySurface.tileShowsStreet(width: width, arrivalShown: env.route.isActive) {
+                        TileStreetSlot(model: model)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    CarPlayDashboardGauge(width: width - 20)
+                        .layoutPriority(1)
+                }
+                .padding(10)
             }
+        }
+        .overlay(alignment: .topTrailing) {
+            if model.isOnScreen { TileMapStatus(width: width).padding(10) }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .environment(\.colorScheme, model.isDaylight ? .light : .dark)
@@ -234,6 +247,56 @@ struct CarPlayDashboardView: View {
         // Настройку сменили на телефоне — плитка не ждёт солнца.
         .onChange(of: env.settings.mapAppearance) { _, appearance in
             model.refreshDaylight(appearance: appearance, sunDay: env.sunIsUp)
+        }
+    }
+}
+
+/// Улица на широкой плитке: своя вью — имя читается только здесь.
+private struct TileStreetSlot: View {
+    let model: CarPlayMapModel
+    var body: some View { StreetNamePill(name: model.streetName) }
+}
+
+/// Карте неоткуда взять тайлы. Пока сеть есть, координату не читает вовсе, и
+/// фиксы эту вью не трогают; без сети фикс пересобирает её одну, а не плитку.
+private struct TileMapStatus: View {
+    @Environment(AppEnvironment.self) private var env
+    let width: CGFloat
+
+    var body: some View {
+        if env.network.isMapOnline {
+            EmptyView()
+        } else {
+            let me = env.location.displayCoordinate ?? env.location.currentCoordinate
+            switch CarPlaySurface.tileMapChip(isOnline: env.network.isOnline,
+                                              tileServerDown: env.network.isTileServerDown,
+                                              hasOfflineArea: me.flatMap(env.offlineMaps.offlineFiles(at:)) != nil,
+                                              width: width) {
+            case .noNetwork(let compact)?:
+                chip("wifi.slash", String(localized: "Нет сети — камеры работают"), compact: compact)
+            case .serverDown(let compact)?:
+                chip("server.rack", String(localized: "Карта не отвечает — камеры работают"), compact: compact)
+            case nil:
+                EmptyView()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func chip(_ symbol: String, _ text: String, compact: Bool) -> some View {
+        if compact {
+            Image(systemName: symbol)
+                .font(.rounded(15, .bold))
+                .foregroundStyle(Theme.warning)
+                .padding(8)
+                .background(Theme.background.opacity(0.88), in: Capsule())
+                .overlay(Capsule().stroke(Theme.warning.opacity(0.35), lineWidth: 1))
+                .accessibilityLabel(Text(text))
+                .allowsHitTesting(false)
+        } else {
+            CarPlayStatusChip(chip: CarPlayChip(id: symbol, symbol: symbol, tint: Theme.warning, text: text))
+                .frame(maxWidth: max(0, width - 20), alignment: .trailing)
+                .allowsHitTesting(false)
         }
     }
 }
@@ -280,18 +343,7 @@ private struct CarPlayDashboardGauge: View {
             if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
                 SpeedLimitSign(limit: limit, diameter: 32, isAssumed: env.speedLimits.isCurrentLimitAssumed)
             }
-            if let camera = env.location.displayNearestCamera,
-               let distance = env.location.displayDistanceToNearest,
-               distance <= AppConfig.carPlayNearestCameraMeters,
-               CarPlayCameraCue.gaugeShows(distance: distance, straight: straight(to: camera)) {
-                HStack(spacing: 4) {
-                    CameraIcon(kind: camera.kind, side: 24)
-                    Text(Formatting.distance(distance))
-                        .font(.rounded(16, .bold).monospacedDigit())
-                        .foregroundStyle(env.location.isApproachingCamera ? Theme.danger : Theme.textPrimary)
-                        .liveNumber()
-                }
-            }
+            cameraCell
             if !showsArrival {
                 EmptyView()
             } else if env.route.isActive {
@@ -300,6 +352,7 @@ private struct CarPlayDashboardGauge: View {
                     Text(Formatting.duration(remaining))
                         .font(.rounded(16, .heavy).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
+                        .lineLimit(1)
                     Text(verbatim: env.route.arrivalText)
                         .font(.rounded(11, .semibold).monospacedDigit())
                         .foregroundStyle(Theme.textSecondary)
@@ -324,5 +377,32 @@ private struct CarPlayDashboardGauge: View {
         .background(Theme.background.opacity(0.9), in: Capsule())
         .overlay(Capsule().stroke(Theme.stroke, lineWidth: 1))
         .allowsHitTesting(false)
+    }
+
+    @ViewBuilder private var cameraCell: some View {
+        let camera = env.location.displayNearestCamera
+        let distance = camera == nil ? nil : env.location.displayDistanceToNearest
+        switch CarPlayCameraCue.gaugeCamera(signalStale: env.location.isSignalStale, distance: distance,
+                                            straight: camera.map(straight(to:)) ?? 0) {
+        case .noSignal:
+            Image(systemName: Icon.noGPSSignal)
+                .font(.rounded(16, .semibold))
+                .foregroundStyle(Theme.warning)
+                .accessibilityLabel(Text("Нет сигнала GPS"))
+        case .distance:
+            if let camera, let distance {
+                HStack(spacing: 4) {
+                    CameraIcon(kind: camera.kind, side: 24)
+                    Text(Formatting.distance(distance))
+                        .font(.rounded(16, .bold).monospacedDigit())
+                        .foregroundStyle(env.location.isApproachingCamera ? Theme.danger : Theme.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .liveNumber()
+                }
+            }
+        case .hidden:
+            EmptyView()
+        }
     }
 }

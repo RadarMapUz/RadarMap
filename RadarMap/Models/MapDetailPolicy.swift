@@ -25,7 +25,8 @@
 //    • дальняя дорога (> 100 км) — на карте только ближайшие впереди из
 //      «По пути»;
 //    • без маршрута — заправки рядом, без шума;
-//    • плитка и приборка — только маршрут, флаг цели и камеры;
+//    • плитка и приборка — только маршрут, флаг цели и камеры; плитка без
+//      маршрута — ещё заправки рядом;
 //    • телефон вне поездки — как было: решение «всё видно».
 //
 //  Камер, событий дороги, маршрута и пробок решение не касается вовсе — у
@@ -167,8 +168,11 @@ nonisolated enum MapDetailPolicy {
     static func decide(_ c: Context) -> Decision {
         if c.surface == .phone, !c.tripActive { return .browse }
         if c.surface == .dashboard || c.surface == .cluster {
+            // Плитка без маршрута — заправки рядом, как на экране машины: одним
+            // слоем значков, без шума; с маршрутом — только линия и камеры.
             return Decision(mode: .glance, decor: false, places: .none, houseNumbers: false,
-                            fuel: .hidden, parking: .hidden, corridor: 0, corridorFood: false,
+                            fuel: c.surface == .dashboard && !c.hasRoute ? .nearby : .hidden,
+                            parking: .hidden, corridor: 0, corridorFood: false,
                             destination: c.hasRoute ? .flag : .none, keepDestination: false)
         }
         let phone = c.surface == .phone

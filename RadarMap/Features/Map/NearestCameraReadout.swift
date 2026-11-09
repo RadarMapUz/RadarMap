@@ -33,7 +33,8 @@ struct NearestCameraReadout: View {
 
     var body: some View {
         let location = env.location
-        if location.isSignalStale {
+        // Геолокацию ещё не спрашивали — «камер рядом нет» было бы неправдой.
+        if location.isSignalStale || location.authorizationStatus == .notDetermined {
             stale(location)
         } else if let camera = location.displayNearestCamera,
                   let distance = location.displayDistanceToNearest {

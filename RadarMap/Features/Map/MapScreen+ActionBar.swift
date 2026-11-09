@@ -73,8 +73,21 @@ extension MapScreen {
     }
 
     var bannerInfo: (message: String, button: String, action: () -> Void)? {
+        // Приблизительная — первой: без точной фиксы отбрасываются, и оповещений
+        // нет ни при каком уровне доступа.
+        if env.location.isAuthorized && !env.location.hasFullAccuracy {
+            return (String(localized: "Включите точную геолокацию, иначе оповещения не сработают."),
+                    String(localized: "Включить точную"), { env.location.requestPreciseLocation() })
+        }
         switch env.location.authorizationStatus {
+        case .notDetermined:
+            return (String(localized: "Разрешите геолокацию — без неё не будет оповещений о камерах."),
+                    String(localized: "Разрешить"), { env.location.takeAccessStep() })
         case .denied, .restricted:
+            if !env.location.locationServicesOn {
+                return (String(localized: "Службы геолокации выключены: Настройки → Конфиденциальность → Службы геолокации."),
+                        String(localized: "Настройки"), openSettings)
+            }
             return (String(localized: "Геолокация выключена. Включите «Всегда» для оповещений о камерах."),
                     String(localized: "Настройки"), openSettings)
         case .authorizedWhenInUse:
@@ -87,10 +100,6 @@ extension MapScreen {
                     String(localized: "Включить"), { env.location.takeAccessStep() })
         default:
             break
-        }
-        if env.location.isAuthorized && !env.location.hasFullAccuracy {
-            return (String(localized: "Включена приблизительная геолокация — оповещения о камерах будут неточными."),
-                    String(localized: "Включить точную"), { env.location.requestPreciseLocation() })
         }
         if env.notifications.authorizationStatus == .denied {
             return (String(localized: "Уведомления выключены — вы не услышите сигнал о камере."),

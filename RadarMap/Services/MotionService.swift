@@ -64,7 +64,30 @@ final class MotionService {
 
     static var isAvailable: Bool { CMMotionActivityManager.isActivityAvailable() }
 
+    /// Выдано ли «Движение и фитнес»: для онбординга, на работу датчика не влияет.
+    private(set) var authorizationStatus = CMMotionActivityManager.authorizationStatus()
+
     init(settings: AppSettings) { self.settings = settings }
+
+    func refreshAuthorization() {
+        authorizationStatus = CMMotionActivityManager.authorizationStatus()
+    }
+
+    /// Окно iOS по кнопке. Запроса как такового нет: система спрашивает при
+    /// первом чтении истории, поэтому читаем последнюю минуту.
+    func requestAuthorizationResult() async {
+        guard Self.isAvailable else { return }
+        let now = Date()
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            manager.queryActivityStarting(from: now.addingTimeInterval(-60), to: now, to: .main) { _, error in
+                if let error {
+                    Log.trips.notice("запрос «Движения»: \(error.localizedDescription, privacy: .public)")
+                }
+                continuation.resume()
+            }
+        }
+        refreshAuthorization()
+    }
 
     func start() {
         guard Self.isAvailable, !isMonitoring, settings.tripStartMode.usesMotion else { return }

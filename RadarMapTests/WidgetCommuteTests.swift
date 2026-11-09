@@ -44,8 +44,10 @@ final class WidgetCommuteTests: XCTestCase {
         let leave = at(8, 10)
         XCTAssertEqual(WidgetCommute.line(data(leaveBy: leave), now: at(7), calendar: utc)?.hint,
                        .leaveBy(minute: 490))
-        XCTAssertEqual(WidgetCommute.line(data(leaveBy: leave), now: at(8, 30), calendar: utc)?.hint,
+        XCTAssertEqual(WidgetCommute.line(data(leaveBy: leave), now: at(8, 15), calendar: utc)?.hint,
                        .usualDeparture(minute: 500), "срок прошёл, окно 7:45 тоже")
+        XCTAssertNil(WidgetCommute.line(data(leaveBy: leave), now: at(8, 30), calendar: utc)?.hint,
+                     "и обычный выезд прошёл: прошедшая подсказка снимается")
         XCTAssertEqual(WidgetCommute.line(data(leaveBy: at(8, 10, day: 21)), now: at(7), calendar: utc)?.hint,
                        .best(minute: 465, seconds: 2160), "срок завтра — сегодня совет окна")
     }

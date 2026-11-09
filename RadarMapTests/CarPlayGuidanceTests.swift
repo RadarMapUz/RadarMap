@@ -85,10 +85,10 @@ final class CarPlayGuidanceTests: XCTestCase {
     /// какой дали. От километра — километры с десятой, ближе — метры по 10.
     func testDistanceGoesToTheCarInReadableUnits() {
         let far = CarPlayGuidanceMapping.distance(meters: 12_834)
-        XCTAssertEqual(far.unit, UnitLength.kilometers)
+        XCTAssertEqual(far.unit, CarPlayUnits.kilometers())
         XCTAssertEqual(far.value, 12.8, accuracy: 0.001)
         let near = CarPlayGuidanceMapping.distance(meters: 347)
-        XCTAssertEqual(near.unit, UnitLength.meters)
+        XCTAssertEqual(near.unit, CarPlayUnits.meters())
         XCTAssertEqual(near.value, 350, accuracy: 0.001)
         XCTAssertEqual(CarPlayGuidanceMapping.distance(meters: 154_300).value, 154, accuracy: 0.001)
         XCTAssertEqual(CarPlayGuidanceMapping.distance(meters: -5).value, 0, accuracy: 0.001)
@@ -99,7 +99,7 @@ final class CarPlayGuidanceTests: XCTestCase {
     /// и метры там — слово. Остаток поездки — всегда километры, с десятой.
     func testTripDistanceIsAlwaysKilometres() {
         let near = CarPlayGuidanceMapping.tripDistance(meters: 780)
-        XCTAssertEqual(near.unit, UnitLength.kilometers)
+        XCTAssertEqual(near.unit, CarPlayUnits.kilometers())
         XCTAssertEqual(near.value, 0.8, accuracy: 0.0001, "780 м — «0,8 км»")
         XCTAssertEqual(CarPlayGuidanceMapping.tripDistance(meters: 1_740).value, 1.7, accuracy: 0.0001)
         XCTAssertEqual(CarPlayGuidanceMapping.tripDistance(meters: 12_834).value, 12.8, accuracy: 0.0001)
@@ -110,7 +110,7 @@ final class CarPlayGuidanceTests: XCTestCase {
         XCTAssertEqual(CarPlayGuidanceMapping.tripDistance(meters: 0).value, 0, accuracy: 0.0001)
         XCTAssertEqual(CarPlayGuidanceMapping.tripDistance(meters: -5).value, 0, accuracy: 0.0001)
         for meters in [1.0, 40, 780, 999, 1_000, 12_834, 154_300] {
-            XCTAssertEqual(CarPlayGuidanceMapping.tripDistance(meters: meters).unit, UnitLength.kilometers,
+            XCTAssertEqual(CarPlayGuidanceMapping.tripDistance(meters: meters).unit, CarPlayUnits.kilometers(),
                            "\(meters) м")
         }
     }
@@ -124,7 +124,7 @@ final class CarPlayGuidanceTests: XCTestCase {
             XCTAssertEqual(maneuver.unit, trip.unit, "\(meters) м")
             XCTAssertEqual(maneuver.value, trip.value, accuracy: 0.0001, "\(meters) м")
         }
-        XCTAssertEqual(CarPlayGuidanceMapping.distance(meters: 120).unit, UnitLength.meters,
+        XCTAssertEqual(CarPlayGuidanceMapping.distance(meters: 120).unit, CarPlayUnits.meters(),
                        "карточка манёвра ближе километра — метры: средний стиль печатает «120 m»")
     }
 

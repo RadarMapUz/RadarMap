@@ -8102,6 +8102,22 @@
         }
       }
     },
+    "Камера и радар": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камера и радар"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera va radar"
+          }
+        }
+      }
+    },
     "Камера на месте": {
       "localizations": {
         "ru": {
@@ -9380,6 +9396,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mening jarimalarim"
+          }
+        }
+      }
+    },
+    "Мобильный радар": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Мобильный радар"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Koʻchma radar"
           }
         }
       }

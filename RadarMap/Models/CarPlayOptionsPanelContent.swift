@@ -51,9 +51,10 @@ enum CarPlayOptionsPanelContent {
                         distance: ((Double) -> String)? = nil) -> Content {
         let distance = distance ?? { Formatting.distance($0) }
         return Content(cameras: ahead.prefix(max(0, limit)).map { item in
-                    Row(id: item.camera.id,
-                        title: "\(distance(item.meters)) · \(item.camera.kind.displayName)",
-                        detail: item.camera.displayTitle)
+                    let text = CarPlayPanelText.cameraRow(distance: distance(item.meters),
+                                                          kind: CarPlayPanelText.kindName(item.camera.kind),
+                                                          location: item.camera.displayTitle)
+                    return Row(id: item.camera.id, title: text.title, detail: text.detail)
                 },
                 sound: sound)
     }

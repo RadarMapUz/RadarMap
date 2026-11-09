@@ -33,7 +33,7 @@ final class CarPlayTripPreviewTests: XCTestCase {
         let fast = variant(id: 0, minutes: 25, km: 12, cameras: 3, labels: [.fastest])
         let calm = variant(id: 1, minutes: 27, km: 13, cameras: 1, labels: [.fewerCameras])
         for v in [fast, calm, variant(id: 2, minutes: 9, km: 4)] {
-            let text = CarPlayTripPreview.text(for: v, among: [fast, calm])
+            let text = CarPlayTripPreview.text(for: v)
             for line in [text.summary, text.additional, text.selection] {
                 XCTAssertFalse(line.isEmpty)
                 XCTAssertFalse(line.contains { $0.trimmingCharacters(in: .whitespaces).isEmpty })
@@ -44,7 +44,7 @@ final class CarPlayTripPreviewTests: XCTestCase {
     func testLabelLeadsAndTimeIsAlwaysThere() {
         let fast = variant(id: 0, minutes: 25, km: 12, cameras: 3, labels: [.fastest])
         let calm = variant(id: 1, minutes: 27, km: 13, cameras: 1, labels: [.fewerCameras])
-        let text = CarPlayTripPreview.text(for: calm, among: [fast, calm])
+        let text = CarPlayTripPreview.text(for: calm)
         let title = RoutePanel.title(.fewerCameras, calm)
         XCTAssertTrue(text.summary[0].hasPrefix(title), text.summary[0])
         XCTAssertTrue(text.summary[0].contains(calm.etaText))
@@ -60,7 +60,7 @@ final class CarPlayTripPreviewTests: XCTestCase {
                                                       jamSeconds: 4 * 60)
         XCTAssertEqual(mine.expectedTime, 43 * 60)
         XCTAssertEqual(mine.shownTrafficDelay, 4 * 60, "пробки — сверх своего обычного, не по линии")
-        let text = CarPlayTripPreview.text(for: mine, among: [fast, mine])
+        let text = CarPlayTripPreview.text(for: mine)
         XCTAssertTrue(text.summary[0].hasPrefix(RoutePanel.title(.myRoad, mine)), text.summary[0])
         XCTAssertTrue(text.summary[0].contains(mine.etaText))
         let reason = RoutePanel.reason(mine, among: [fast, mine]) ?? ""
@@ -73,28 +73,16 @@ final class CarPlayTripPreviewTests: XCTestCase {
         XCTAssertNil(mine.trafficNote)
     }
 
-    func testFactsCarryCamerasAndTraffic() {
-        let jam = variant(id: 0, minutes: 25, km: 12, cameras: 2, traffic: 420)
-        let text = CarPlayTripPreview.text(for: jam, among: [jam])
-        let cameras = String(format: String(localized: "камер: %lld"), 2)
-        XCTAssertTrue(text.additional[0].contains(cameras), text.additional[0])
-        XCTAssertTrue(text.additional[0].contains(jam.trafficNote ?? "—"), text.additional[0])
-        XCTAssertTrue(text.additional.last?.contains(cameras) ?? false)
-    }
-
-    /// Карточка выбранного варианта в машине говорит то же, что карточка
-    /// телефона (27.D): ярлык, время, путь, камеры — от длинной к короткой.
-    func testSelectionMatchesThePhoneCard() {
-        let fast = variant(id: 0, minutes: 25, km: 12, cameras: 3, labels: [.fastest])
-        let calm = variant(id: 1, minutes: 27, km: 13, cameras: 1, labels: [.fewerCameras])
-        let text = CarPlayTripPreview.text(for: fast, among: [fast, calm])
-        let full = text.selection[0]
-        for part in [RoutePanel.title(.fastest, fast), fast.etaText, fast.distanceText,
-                     String(format: String(localized: "камер: %lld"), 3)] {
-            XCTAssertTrue(full.contains(part), "\(part) в «\(full)»")
-        }
-        XCTAssertEqual(text.selection.last, fast.etaText)
-        XCTAssertGreaterThanOrEqual(text.selection[0].count, text.selection[1].count)
+    /// Подпись строки — километры и камеры: метка и время уже в заголовке
+    /// (CPSRouteRowView: подпись — selection, заголовок — summary).
+    func testLineBelowTheTitleIsDistanceAndCameras() {
+        let fast = variant(id: 0, minutes: 25, km: 12, cameras: 3, labels: [.fastest], traffic: 420)
+        let text = CarPlayTripPreview.text(for: fast)
+        let cameras = String(format: String(localized: "камер: %lld"), 3)
+        XCTAssertEqual(text.selection, ["\(fast.distanceText) · \(cameras)", fast.distanceText])
+        XCTAssertEqual(text.additional, text.selection)
+        XCTAssertFalse(text.selection[0].contains(RoutePanel.title(.fastest, fast)))
+        XCTAssertFalse(text.selection[0].contains(fast.etaText))
     }
 
     func testTimeColorNeverClaimsFreeRoadWithoutData() {
@@ -127,7 +115,7 @@ final class CarPlayTripPreviewTests: XCTestCase {
     }
 
     private func texts(_ variants: [RouteService.Variant]) -> [Int: CarPlayTripPreview.ChoiceText] {
-        Dictionary(uniqueKeysWithValues: variants.map { ($0.id, CarPlayTripPreview.text(for: $0, among: variants)) })
+        Dictionary(uniqueKeysWithValues: variants.map { ($0.id, CarPlayTripPreview.text(for: $0)) })
     }
 
     /// Пробки пришли поздно и сменили время в строках: пока водитель не

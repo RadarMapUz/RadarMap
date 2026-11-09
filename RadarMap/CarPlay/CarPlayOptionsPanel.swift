@@ -46,6 +46,9 @@ final class CarPlayOptionsPanel: NSObject {
         }
         let buttons = CPMapPanelButtonConfiguration(primaryAction: end, secondaryButton: nil,
                                                     travelEstimates: estimates())
+        // Над кнопкой система печатает оценки поверх прокручиваемого списка;
+        // прибытие и так на плашке, под которой открылась панель.
+        buttons.travelEstimates = nil
         let panel = CPMapPanel(title: nil, sections: sections(content), buttonConfiguration: buttons)
         panel.delegate = self
         self.panel = panel
@@ -64,7 +67,6 @@ final class CarPlayOptionsPanel: NSObject {
                                                                  sinceLast: now.timeIntervalSince(refreshedAt),
                                                                  visible: visible) else { return }
         panel.sections = sections(content)
-        panel.buttonConfiguration?.travelEstimates = estimates()
         shown = content
         refreshedAt = now
     }

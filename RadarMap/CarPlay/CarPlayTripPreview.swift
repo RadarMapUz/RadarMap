@@ -24,30 +24,13 @@ import Foundation
 
 enum CarPlayTripPreview {
 
-    /// Строки варианта для CPRouteChoice — каждая от длинной к короткой
-    /// (машина покажет ту, что влезет).
-    struct ChoiceText: Equatable {
-        let summary: [String]
-        let additional: [String]
-        let selection: [String]
-    }
+    /// Строки варианта для CPRouteChoice — CarPlayPanelText.
+    typealias ChoiceText = CarPlayPanelText.RouteLines
 
-    static func text(for variant: RouteService.Variant,
-                     among all: [RouteService.Variant]) -> ChoiceText {
-        let eta = variant.etaText
-        let head = variant.assessment.labels.first.map { RoutePanel.title($0, variant) }
-        let cameras = String(format: String(localized: "камер: %lld"), variant.ourCameraCount)
-        let facts = [variant.distanceText, cameras, variant.trafficNote]
-            .compactMap { $0 }.joined(separator: " · ")
-        let short = "\(variant.distanceText) · \(cameras)"
-        let reason = all.count > 1 ? RoutePanel.reason(variant, among: all) : nil
-        return ChoiceText(
-            summary: [head.map { "\($0) · \(eta)" }, eta].compactMap { $0 },
-            additional: [reason.map { "\($0) · \(facts)" }, facts, short].compactMap { $0 },
-            // Выбранный вариант на карточке машины — то же, что карточка
-            // телефона (27.D): ярлык, время, путь, камеры; короче — без камер.
-            selection: [[head, eta, variant.distanceText, cameras].compactMap { $0 }.joined(separator: " · "),
-                        [head, eta, variant.distanceText].compactMap { $0 }.joined(separator: " · "), eta])
+    static func text(for variant: RouteService.Variant) -> ChoiceText {
+        CarPlayPanelText.route(label: variant.assessment.labels.first.map { RoutePanel.title($0, variant) },
+                               eta: variant.etaText, distance: variant.distanceText,
+                               cameras: String(format: String(localized: "камер: %lld"), variant.ourCameraCount))
     }
 
     /// Цвет оставшегося времени по пробкам (CPTimeRemainingColor).

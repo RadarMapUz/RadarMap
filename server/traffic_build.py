@@ -105,6 +105,7 @@ traffic_speeds.py пишет файл скоростей для стенда MLD
 import datetime
 import fcntl
 import functools
+import gzip
 import json
 import math
 import os
@@ -113,6 +114,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 
 import traffic_config as tc
 
@@ -121,6 +123,8 @@ OSRM = "http://127.0.0.1:8092"
 OUT_PATH = "/opt/radarmap/www/traffic/now.json"
 
 PIECE_TTL = 20 * 60          # кусок, который не удалось сопоставить, не живёт дольше
+RUN_BUDGET = 90              # секунд на сопоставление: now.json выходит каждый прогон и при очереди
+MATCH_WORKERS = 2            # запросов к OSRM разом: по числу ядер VPS
 SEEN_TTL = 30 * 60           # отпечатки повторов: как TRAFFIC_SEEN_TTL в api.py
 SAMPLE_WINDOW = 15 * 60      # «текущая» скорость — за последние 15 минут
 SAMPLE_KEEP = 60 * 60        # сырые скорости рёбер хранятся час
@@ -645,25 +649,41 @@ def piece_profile(samples):
             for edge, (count, total, length, paced) in acc.items()}
 
 
-def process(conn, now, matcher=osrm_match):
-    """Сопоставить все ждущие куски. Сопоставленный кусок удаляется сразу;
-    не сопоставленный (OSRM лежит) ждёт следующего прогона, но не дольше
-    PIECE_TTL. Возвращает (кусков, отрезков)."""
-    rows = conn.execute("SELECT id, points FROM traffic_pieces ORDER BY id").fetchall()
+def match_or_none(matcher, points):
+    try:
+        return matcher(points)
+    except (urllib.error.URLError, OSError, ValueError) as error:
+        print(f"OSRM недоступен: {error}", file=sys.stderr)
+        return None
+
+
+def process(conn, now, matcher=osrm_match, budget=RUN_BUDGET, clock=time.monotonic):
+    """Сопоставить ждущие куски, новые первыми, не дольше budget секунд.
+    Сопоставленный кусок удаляется сразу; не сопоставленный (OSRM лежит или
+    кончилось время) ждёт следующего прогона, но не дольше PIECE_TTL. Запись
+    открыта только между запросами к OSRM: иначе POST /api/traffic ждёт весь
+    прогон и падает с database is locked. Возвращает (кусков, отрезков)."""
+    deadline = clock() + budget
     done = matched = 0
-    for piece_id, raw in rows:
-        points = json.loads(raw)
-        try:
-            response = matcher(points)
-        except (urllib.error.URLError, OSError, ValueError) as error:
-            print(f"OSRM недоступен: {error}", file=sys.stderr)
-            break
-        samples, nodes, models = edges_from_match(response, points)
-        store(conn, piece_id, samples, nodes, models, now, turns_from_match(response, points))
-        conn.execute("DELETE FROM traffic_pieces WHERE id = ?", (piece_id,))
-        done += 1
-        matched += len(samples)
-    conn.commit()
+    with ThreadPoolExecutor(MATCH_WORKERS) as pool:
+        while clock() < deadline:
+            rows = conn.execute("SELECT id, points FROM traffic_pieces ORDER BY id DESC LIMIT ?",
+                                (MATCH_WORKERS,)).fetchall()
+            if not rows:
+                break
+            batch = [(piece_id, json.loads(raw)) for piece_id, raw in rows]
+            responses = list(pool.map(lambda item: match_or_none(matcher, item[1]), batch))
+            for (piece_id, points), response in zip(batch, responses):
+                if response is None:
+                    continue
+                samples, nodes, models = edges_from_match(response, points)
+                store(conn, piece_id, samples, nodes, models, now, turns_from_match(response, points))
+                conn.execute("DELETE FROM traffic_pieces WHERE id = ?", (piece_id,))
+                done += 1
+                matched += len(samples)
+            conn.commit()
+            if None in responses:
+                break
     return done, matched
 
 
@@ -717,7 +737,7 @@ def live_edges(conn, now):
                            JOIN traffic_edges e ON e.u = s.u AND e.v = s.v
                            JOIN traffic_nodes a ON a.id = s.u
                            JOIN traffic_nodes b ON b.id = s.v
-                           WHERE s.ts >= ?""", (now - SAMPLE_WINDOW,)).fetchall()
+                           WHERE s.ts >= ?""", (now - SAMPLE_WINDOW,))
     grouped = {}
     for u, v, kmh, weight, piece, passed, model, alat, alon, blat, blon in rows:
         entry = grouped.setdefault((u, v), {"pairs": [], "pieces": set(), "model": model,
@@ -972,6 +992,14 @@ def write_atomic(path, body):
     os.replace(tmp, path)
 
 
+def write_gzip_copy(path, body):
+    """Готовый path.gz: nginx с gzip_static не сжимает файл на каждый запрос."""
+    tmp = path + ".gz.tmp"
+    with open(tmp, "wb") as f:
+        f.write(gzip.compress(body.encode("utf-8"), 6, mtime=0))
+    os.replace(tmp, path + ".gz")
+
+
 # Показ пробки для проверки владельцем (27.10): пока файл есть и не истёк,
 # его рёбра добавляются в now.json поверх настоящих. Срок вшит в сам файл —
 # забытый показ гаснет сам; откат раньше срока — удалить файл. Файл скоростей
@@ -1016,8 +1044,9 @@ def run(conn, now, matcher=osrm_match, out_path=OUT_PATH, typical_dir=TYPICAL_DI
     pieces, segments = process(conn, now, matcher=matcher)
     prune(conn, now)
     edges = aggregate(conn, now)
-    write_atomic(out_path, json.dumps(payload(merge_demo(edges, demo_edges(now, demo_path)), now),
-                                      separators=(",", ":")))
+    body = json.dumps(payload(merge_demo(edges, demo_edges(now, demo_path)), now), separators=(",", ":"))
+    write_atomic(out_path, body)
+    write_gzip_copy(out_path, body)
     mark_shared(conn, now)
     typical = None
     if typical_due(conn, now):
@@ -1045,6 +1074,7 @@ def main():
         now = time.time()
         conn = sqlite3.connect(DB_PATH, timeout=5)
         conn.execute("PRAGMA busy_timeout = 5000")
+        conn.execute("PRAGMA synchronous = NORMAL")
         try:
             pieces, segments, edges, typical = run(conn, now)
         finally:

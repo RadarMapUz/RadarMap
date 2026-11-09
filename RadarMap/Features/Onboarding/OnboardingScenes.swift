@@ -12,142 +12,137 @@
 //  элементов, что и экран поездки (знак лимита, значок «я», маркер камеры),
 //  поэтому обещание на иллюстрации совпадает с тем, что будет на экране.
 //
-//  Всё статично: онбординг показывают один раз, и анимация здесь — батарея,
-//  а не смысл.
+//  Движется только сцена первого экрана: это обещание приложения в семи секундах.
 //
 
 import SwiftUI
 
-/// Дорога с камерой впереди и плашкой расстояния — первое, что приложение
-/// делает, и первое, что о нём надо понять.
+/// Едем к камере: расстояние тает, голос предупреждает, камера проезжает мимо.
+/// Те же элементы, что на экране поездки. При «Уменьшении движения» — один
+/// неподвижный кадр.
 struct OnboardingRoadScene: View {
+    var playing = true
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let cycleSeconds = 7.0
+    private static let startMeters = 420.0
+    /// Доля цикла, на которой камера поравнялась с машиной.
+    private static let passedAt = 0.82
+    /// Неподвижный кадр: 240 м до камеры.
+    private static let stillProgress = (1 - 240 / startMeters) * passedAt
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
-                .fill(Theme.Scene.grass)
-            // Дорога: полотно, кромки, пунктир осевой.
-            RoadStripe()
-            // Камера впереди — маркер «на пути» (цвет типа, белое кольцо, ореол).
-            VStack(spacing: 0) {
-                CameraMark(kind: .stationaryCamera, alert: true)
-                    .padding(.top, 34)
-                Spacer()
-            }
-            // «Я» — значок из настроек, носом вверх.
-            VStack {
-                Spacer()
-                MeCursor(scale: 1.4, style: env.settings.cursorStyle)
-                    .frame(width: 42, height: 50)
-                    .padding(.bottom, 26)
-            }
-            // Плашка HUD — та же, что в поездке, только короче.
-            VStack {
-                Spacer()
-                HStack(spacing: 10) {
-                    CameraIcon(kind: .stationaryCamera, side: 30)
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("240 м").font(.numeral(20, .heavy)).foregroundStyle(Theme.danger)
-                        Text("до камеры").font(.rounded(11)).foregroundStyle(Theme.textSecondary)
-                    }
-                    Spacer(minLength: 0)
-                    SpeedLimitSign(limit: 60, diameter: 30)
-                    Text("58").font(.numeral(20, .heavy).monospacedDigit()).foregroundStyle(Theme.textPrimary)
-                }
-                .padding(.horizontal, 14).padding(.vertical, 10)
-                .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
-                .padding(.horizontal, 18)
-                .padding(.bottom, 96)
-            }
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !playing || reduceMotion)) { context in
+            let moving = playing && !reduceMotion
+            let seconds = moving ? context.date.timeIntervalSinceReferenceDate : 0
+            frame(progress: moving ? (seconds / Self.cycleSeconds).truncatingRemainder(dividingBy: 1)
+                               : Self.stillProgress,
+                  seconds: seconds, moving: moving)
         }
-        .frame(height: 300)
+        .frame(height: 340)
         .clipShape(RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
         .accessibilityHidden(true)
     }
-}
 
-/// Фразы голоса: короткая в городе, полная на трассе, молчание у своей.
-struct OnboardingVoiceScene: View {
-    var body: some View {
-        VStack(spacing: 10) {
-            bubble("Камера, 300 метров", icon: "building.2.fill", tint: Theme.accent)
-            bubble("По маршруту радар через 800 метров", icon: "road.lanes", tint: Theme.accent)
-            bubble("Своя камера — молчу, только вибрация", icon: "checkmark.circle.fill", tint: Theme.success, quiet: true)
-            bubble("Превышение! Камера, 200 метров", icon: "exclamationmark.triangle.fill", tint: Theme.danger)
+    private func frame(progress p: Double, seconds: Double, moving: Bool) -> some View {
+        let approach = min(1, p / Self.passedAt)
+        let meters = Self.startMeters * (1 - approach)
+        let passed = p >= Self.passedAt
+        let voiceOn = moving && meters < 310 && meters > 170
+        // История целиком: 72 при лимите 60, голос, сбросили до 58, проехали.
+        let braking = moving ? Self.ease((p - 0.26) / 0.3) : 1
+        let speed = Int((72 - 14 * braking).rounded())
+        let depth = pow(approach, 1.7)
+        let cameraFade = passed ? max(0, 1 - (p - Self.passedAt) / 0.08) : (moving ? min(1, p / 0.05) : 1)
+        // На стыке циклов плашка гаснет и загорается, а не прыгает.
+        let plate = moving ? min(1, min(p, 1 - p) / 0.03) : 1
+        return GeometryReader { geo in
+            ZStack {
+                RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous)
+                    .fill(Theme.Scene.grass)
+                trees(seconds: seconds, size: geo.size)
+                RoadStripe(phase: CGFloat(-seconds * 90))
+                CameraMark(kind: .stationaryCamera, alert: true)
+                    .scaleEffect(0.7 + 0.5 * depth)
+                    .position(x: geo.size.width / 2 + 34 + 62 * depth, y: 96 + 190 * depth)
+                    .opacity(cameraFade)
+                MeCursor(scale: 1.4, style: env.settings.cursorStyle)
+                    .frame(width: 42, height: 50)
+                    .position(x: geo.size.width / 2, y: geo.size.height - 56)
+                voice(on: voiceOn, moving: moving)
+                    .position(x: geo.size.width / 2, y: geo.size.height - 112)
+                plateView(meters: meters, speed: speed, passed: passed)
+                    .opacity(plate)
+                    .position(x: geo.size.width / 2, y: 44)
+            }
         }
-        .padding(16)
-        .background(Theme.Scene.panel,
-                    in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
-        .accessibilityHidden(true)
     }
 
-    private func bubble(_ text: LocalizedStringKey, icon: String, tint: Color, quiet: Bool = false) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
+    private static func ease(_ t: Double) -> Double {
+        let x = max(0, min(1, t))
+        return x * x * (3 - 2 * x)
+    }
+
+    /// Деревья на обочине растут к краю кадра: скорость чувствуется боковым зрением.
+    private func trees(seconds: Double, size: CGSize) -> some View {
+        ForEach(0..<8, id: \.self) { index in
+            let t = (seconds * 0.34 + Double(index) / 8).truncatingRemainder(dividingBy: 1)
+            let side: CGFloat = index.isMultiple(of: 2) ? -1 : 1
+            let diameter = CGFloat(10 + 30 * t * t)
+            let edge = size.width * CGFloat(0.30 + 0.14 * t)
+            Circle()
+                .fill(Theme.success.opacity(0.26))
+                .frame(width: diameter, height: diameter)
+                .position(x: size.width / 2 + side * (edge + 10 + diameter / 2),
+                          y: size.height * CGFloat(t * t))
+        }
+    }
+
+    private func voice(on: Bool, moving: Bool) -> some View {
+        HStack(spacing: 8) {
+            OnboardingVoiceBars(playing: on)
+            Text("«Камера, 300 метров»")
                 .font(.rounded(14, .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 32, height: 32)
-                .background(Theme.quietFill, in: Circle())
-            Text(text)
-                .font(.rounded(15, quiet ? .regular : .semibold))
-                .foregroundStyle(quiet ? Theme.textSecondary : Theme.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(Theme.textPrimary)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .liftedBackground(Theme.surface, in: Capsule())
+        .scaleEffect(on ? 1 : 0.85, anchor: .bottom)
+        .opacity(on ? 1 : 0)
+        .animation(moving ? .spring(response: 0.3, dampingFraction: 0.7) : nil, value: on)
+    }
+
+    private func plateView(meters: Double, speed: Int, passed: Bool) -> some View {
+        HStack(spacing: 10) {
+            if passed {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.rounded(24))
+                    .foregroundStyle(Theme.success)
+                Text("Проехали в лимите")
+                    .font(.rounded(15, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+            } else {
+                CameraIcon(kind: .stationaryCamera, side: 30)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(verbatim: Formatting.distance((meters / 10).rounded() * 10))
+                        .font(.numeral(20, .heavy).monospacedDigit())
+                        .foregroundStyle(meters < 310 ? Theme.danger : Theme.textPrimary)
+                    Text("до камеры").font(.rounded(11)).foregroundStyle(Theme.textSecondary)
+                }
+            }
             Spacer(minLength: 0)
-            Image(systemName: quiet ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                .font(.rounded(12))
-                .foregroundStyle(Theme.textTertiary)
+            SpeedLimitSign(limit: 60, diameter: 30)
+            Text(verbatim: "\(speed)")
+                .font(.numeral(20, .heavy).monospacedDigit())
+                .foregroundStyle(speed > 60 ? Theme.danger : Theme.textPrimary)
         }
-        .padding(.horizontal, 12).padding(.vertical, 10)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        .padding(.horizontal, 14)
+        .frame(height: 56)
+        .liftedBackground(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
+        .padding(.horizontal, 14)
     }
 }
-
-/// Кнопка «Радар!» и путь отметки: неподтверждённая «?» → подтверждённая.
-struct OnboardingCommunityScene: View {
-    var body: some View {
-        HStack(alignment: .top, spacing: 6) {
-            step {
-                Image(systemName: Icon.reportRadar)
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundStyle(Theme.onAction)
-                    .frame(width: 74, height: 74)
-                    .background(Theme.action, in: RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
-            } caption: { Text("Радар!") }
-            arrow
-            step { CameraMark(kind: .mobileRadar, alert: false, ghost: true) } caption: { Text("отметка") }
-            arrow
-            step { CameraMark(kind: .mobileRadar, alert: false) } caption: { Text("подтверждена") }
-        }
-        .padding(.vertical, 24).padding(.horizontal, 12)
-        .frame(maxWidth: .infinity)
-        .background(Theme.Scene.panel,
-                    in: RoundedRectangle(cornerRadius: Theme.cornerLarge, style: .continuous))
-        .accessibilityHidden(true)
-    }
-
-    private var arrow: some View {
-        Image(systemName: "arrow.right")
-            .font(.rounded(16, .bold)).foregroundStyle(Theme.textTertiary)
-            .frame(height: 74)
-    }
-
-    /// Шаг пути отметки: картинка и подпись одной ширины, подпись в строку.
-    private func step<Picture: View, Caption: View>(@ViewBuilder _ picture: () -> Picture,
-                                                    @ViewBuilder caption: () -> Caption) -> some View {
-        VStack(spacing: 8) {
-            picture().frame(height: 74)
-            caption()
-                .font(.rounded(12, .semibold))
-                .foregroundStyle(Theme.textSecondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-// MARK: - Детали сцен
 
 /// Маркер камеры как на карте (вариант B, значок «Монета» 29.C): цвет типа,
 /// белый кант; тревога крупнее и с ореолом; неподтверждённая — пунктир и «?».
@@ -181,6 +176,8 @@ private struct CameraMark: View {
 
 /// Дорога снизу вверх с лёгкой перспективой и пунктиром.
 private struct RoadStripe: View {
+    var phase: CGFloat = 0
+
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width, h = geo.size.height
@@ -197,7 +194,7 @@ private struct RoadStripe: View {
                 p.move(to: CGPoint(x: w * 0.5, y: 0))
                 p.addLine(to: CGPoint(x: w * 0.5, y: h))
             }
-            .stroke(Theme.Scene.marking, style: StrokeStyle(lineWidth: 3, dash: [14, 12]))
+            .stroke(Theme.Scene.marking, style: StrokeStyle(lineWidth: 3, dash: [14, 12], dashPhase: phase))
             ForEach([0.5 - top, 0.5 + top], id: \.self) { x0 in
                 let x1 = x0 < 0.5 ? 0.5 - bottom : 0.5 + bottom
                 Path { p in

@@ -37698,6 +37698,726 @@
           }
         }
       }
+    },
+    "Разрешите три вещи": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Разрешите три вещи"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uchta narsaga ruxsat bering"
+          }
+        }
+      }
+    },
+    "Разрешите две вещи": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Разрешите две вещи"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ikki narsaga ruxsat bering"
+          }
+        }
+      }
+    },
+    "Иначе с погашенным экраном камеры молчат": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Иначе с погашенным экраном камеры молчат"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aks holda ekran oʻchganda kameralar haqida aytilmaydi"
+          }
+        }
+      }
+    },
+    "Сигнал о камере, когда поездка не идёт": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сигнал о камере, когда поездка не идёт"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar boshlanmaganda kamera signali"
+          }
+        }
+      }
+    },
+    "Движение": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Движение"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Harakat"
+          }
+        }
+      }
+    },
+    "Чтобы поездка начиналась сама": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Чтобы поездка начиналась сама"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar oʻzi boshlanishi uchun"
+          }
+        }
+      }
+    },
+    "iOS спросит про геолокацию дважды. Выберите «При использовании», затем «Всегда». Переключатель «Точная» не выключайте.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS спросит про геолокацию дважды. Выберите «При использовании», затем «Всегда». Переключатель «Точная» не выключайте."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS geolokatsiyani ikki marta soʻraydi. Avval «Foydalanganda», keyin «Doim»ni tanlang. «Aniq» tugmasini oʻchirmang."
+          }
+        }
+      }
+    },
+    "Открыть Настройки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть Настройки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sozlamalarni ochish"
+          }
+        }
+      }
+    },
+    "Позже": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Позже"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keyinroq"
+          }
+        }
+      }
+    },
+    "Открыть карту": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть карту"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xaritani ochish"
+          }
+        }
+      }
+    },
+    "Продолжить без оповещений": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Продолжить без оповещений"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogohlantirishlarsiz davom etish"
+          }
+        }
+      }
+    },
+    "Голос за 22 секунды до камеры, с учётом скорости": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голос за 22 секунды до камеры, с учётом скорости"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameraga 22 soniya qolganda ovoz, tezlik hisobga olinadi"
+          }
+        }
+      }
+    },
+    "Работает с погашенным экраном и поверх Яндекса": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Работает с погашенным экраном и поверх Яндекса"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ekran oʻchganda ham, Yandex ustida ham ishlaydi"
+          }
+        }
+      }
+    },
+    "Поездка начинается сама": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездка начинается сама"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar oʻzi boshlanadi"
+          }
+        }
+      }
+    },
+    "Проехали в лимите": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Проехали в лимите"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limitda oʻtdingiz"
+          }
+        }
+      }
+    },
+    "«Камера, 300 метров»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Камера, 300 метров»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Kamera, 300 metr»"
+          }
+        }
+      }
+    },
+    "«Превышение. Камера, 300 метров»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Превышение. Камера, 300 метров»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Tezlik oshdi. Kamera, 300 metr»"
+          }
+        }
+      }
+    },
+    "Как вам удобнее": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Как вам удобнее"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sizga qanday qulay"
+          }
+        }
+      }
+    },
+    "Уже выбрано лучшее. Поменять можно в любой момент в Настройках.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Уже выбрано лучшее. Поменять можно в любой момент в Настройках."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eng yaxshisi tanlangan. Istalgan vaqtda Sozlamalarda oʻzgartirish mumkin."
+          }
+        }
+      }
+    },
+    "Начало поездки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Начало поездки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar boshlanishi"
+          }
+        }
+      }
+    },
+    "Сама": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сама"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻzi"
+          }
+        }
+      }
+    },
+    "Кнопкой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Кнопкой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tugma bilan"
+          }
+        }
+      }
+    },
+    "В своей машине начнётся сама, в чужой спросит.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В своей машине начнётся сама, в чужой спросит."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻz mashinangizda oʻzi boshlanadi, begonasida soʻraydi."
+          }
+        }
+      }
+    },
+    "Только когда нажмёте кнопку на карте.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только когда нажмёте кнопку на карте."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faqat xaritadagi tugmani bosganingizda."
+          }
+        }
+      }
+    },
+    "Только панель и вибрация": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только панель и вибрация"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faqat panel va tebranish"
+          }
+        }
+      }
+    },
+    "Молчит, пока вы едете в лимите. Скажет при превышении и о внезапном радаре.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Молчит, пока вы едете в лимите. Скажет при превышении и о внезапном радаре."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limitda yurganingizda jim turadi. Tezlik oshganda va kutilmagan radar haqida aytadi."
+          }
+        }
+      }
+    },
+    "Скажет о каждой камере.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скажет о каждой камере."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Har bir kamera haqida aytadi."
+          }
+        }
+      }
+    },
+    "Камеру покажет панель, предупредит вибрация.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камеру покажет панель, предупредит вибрация."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamerani panel koʻrsatadi, tebranish ogohlantiradi."
+          }
+        }
+      }
+    },
+    "Окно 1 из 2": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Окно 1 из 2"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1-oyna, jami 2 ta"
+          }
+        }
+      }
+    },
+    "Окно 2 из 2": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Окно 2 из 2"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2-oyna, jami 2 ta"
+          }
+        }
+      }
+    },
+    "При использовании": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "При использовании"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Foydalanganda"
+          }
+        }
+      }
+    },
+    "Один раз": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Один раз"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bir marta"
+          }
+        }
+      }
+    },
+    "Запретить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запретить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taqiqlash"
+          }
+        }
+      }
+    },
+    "Оставить как есть": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оставить как есть"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oʻzgartirmaslik"
+          }
+        }
+      }
+    },
+    "Разрешения": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Разрешения"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ruxsatlar"
+          }
+        }
+      }
+    },
+    "Всё включено": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Всё включено"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hammasi yoqilgan"
+          }
+        }
+      }
+    },
+    "Нужно внимание": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нужно внимание"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eʼtibor kerak"
+          }
+        }
+      }
+    },
+    "Разрешено": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Разрешено"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ruxsat berilgan"
+          }
+        }
+      }
+    },
+    "Не спрашивали": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не спрашивали"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Soʻralmagan"
+          }
+        }
+      }
+    },
+    "Геолокация": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Геолокация"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geolokatsiya"
+          }
+        }
+      }
+    },
+    "Приблизительная": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приблизительная"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taxminiy"
+          }
+        }
+      }
+    },
+    "Разрешите геолокацию — без неё не будет оповещений о камерах.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Разрешите геолокацию — без неё не будет оповещений о камерах."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geolokatsiyaga ruxsat bering — usiz kameralar haqida ogohlantirish boʻlmaydi."
+          }
+        }
+      }
+    },
+    "Службы геолокации выключены: Настройки → Конфиденциальность → Службы геолокации.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Службы геолокации выключены: Настройки → Конфиденциальность → Службы геолокации."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geolokatsiya xizmatlari oʻchirilgan: Sozlamalar → Maxfiylik → Geolokatsiya xizmatlari."
+          }
+        }
+      }
+    },
+    "Включите точную геолокацию, иначе оповещения не сработают.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Включите точную геолокацию, иначе оповещения не сработают."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aniq geolokatsiyani yoqing, aks holda ogohlantirishlar ishlamaydi."
+          }
+        }
+      }
+    },
+    "История поездок, дом и работа остаются на этом iPhone.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "История поездок, дом и работа остаются на этом iPhone."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarlar tarixi, uy va ish shu iPhoneʼda qoladi."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

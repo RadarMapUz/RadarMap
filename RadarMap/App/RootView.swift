@@ -68,13 +68,14 @@ struct RootView: View {
                     // второй раз он не выполнится — идентичность ZStack при
                     // смене флага не меняется. Без этого ПЕРВАЯ сессия жила в
                     // тихом фоне: без опроса отметок, без CoreMotion и без
-                    // отметки «экран на виду».
+                    // отметки «экран на виду». Флаг — первым: старт проверяет его
+                    // и без него молча выходил, не спросив геолокацию.
+                    withMotion(.easeInOut) { hasCompletedOnboarding = true }
                     // Прошедший онбординг «нового» не видит: ему всё рассказали.
                     Storage.set(WhatsNew.edition, for: .whatsNewEdition)
                     env.startDrivingServices()
                     env.location.setForeground(true)
                     env.setPhoneSceneActive(true)
-                    withMotion(.easeInOut) { hasCompletedOnboarding = true }
                 }
                 .transition(.opacity)
             }

@@ -37,6 +37,7 @@ struct SettingsView: View {
         NavigationStack(path: $path) {
             List {
                 Section {
+                    link(.permissions, value: permissionsValue) { PermissionsSettingsPage() }
                     link(.alerts, value: settings.alertProfile.title) { AlertSettingsPage() }
                     link(.speed, value: settings.speedLimitsEnabled
                          ? Self.tolerance(settings.overspeedTolerance) : String(localized: "Выкл.")) {
@@ -99,6 +100,13 @@ struct SettingsView: View {
         }
     }
 
+    /// Коротко справа у строки «Разрешения».
+    private var permissionsValue: String {
+        let location = env.location.accessStep == .done && env.location.hasFullAccuracy
+        return location && env.notifications.authorizationStatus != .denied
+            ? String(localized: "Всё включено") : String(localized: "Нужно внимание")
+    }
+
     /// «О приложении» — второй этаж настроек.
     private var aboutPage: some View {
         let settings = env.settings
@@ -144,6 +152,7 @@ struct SettingsView: View {
 
     @ViewBuilder private static func debugPage(_ name: String) -> some View {
         switch name {
+        case "permissions": PermissionsSettingsPage()
         case "alerts": AlertSettingsPage()
         case "speed": SpeedSettingsPage()
         case "trip": TripSettingsPage()
@@ -198,7 +207,7 @@ struct SettingsView: View {
 /// разбросанных по строкам `Label(systemImage:)` — цвета разделов не
 /// повторяются у соседей и не спорят с цветами камер.
 enum SettingsItem {
-    case alerts, speed, trip, vehicle, route
+    case permissions, alerts, speed, trip, vehicle, route
     case map, offline, places
     case learning, battery, privacy
     case database, backup, language
@@ -206,6 +215,7 @@ enum SettingsItem {
 
     var title: LocalizedStringKey {
         switch self {
+        case .permissions: return "Разрешения"
         case .alerts:   return "Оповещения и звук"
         case .speed:    return "Скорость"
         case .trip:     return "Поездка"
@@ -232,6 +242,7 @@ enum SettingsItem {
 
     var symbol: String {
         switch self {
+        case .permissions: return "checkmark.shield.fill"
         case .alerts:   return "bell.badge.fill"
         case .speed:    return "gauge.with.dots.needle.67percent"
         case .trip:     return "car.fill"

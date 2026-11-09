@@ -2,46 +2,53 @@
 //  OnboardingView.swift
 //  RadarMap
 //
-//  Первое впечатление: четыре страницы — дорога с камерой, голос, сообщество,
-//  разрешения.
-//
-//  Переделано 13.10. Было семь страниц с одинаковыми синими кругами-иконками
-//  и по четыре строки текста на каждой — это читали как инструкцию, а не как
-//  обещание. Теперь каждая страница — одна картинка из самого приложения
-//  (OnboardingScenes) и две-три строки под ней; про навигатор и Яндекс
-//  сказано одной строкой, подробности — в «Помощи». Последняя страница —
-//  два разрешения: без «Всегда» приложение не работает, и это единственное
-//  место, где онбординг чего-то просит.
+//  Первый запуск — три экрана: зачем это нужно, разрешения одной кнопкой,
+//  два выбора (OnboardingSetup.swift). Раньше страниц было четыре, главная
+//  кнопка называлась «Начать» и вела мимо геолокации, а «Разрешить» была
+//  мелкой в строке: человек попадал на карту без оповещений и не понимал,
+//  почему.
 //
 
 import SwiftUI
 import CoreLocation
+import CoreMotion
+import UIKit
 import UserNotifications
 
 struct OnboardingView: View {
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let onFinish: () -> Void
 
     @State private var page = Self.startPage
-    private let lastPage = 3
+    private let permissionsIndex = 1
+    private let lastPage = 2
+
+    private enum Row { case location, notifications, motion }
+    /// Какое окно iOS сейчас открыто; nil — цепочка не идёт.
+    @State private var asking: Row?
+    /// Для ожидания окон геолокации: `scenePhase` из захваченной вью устарел бы.
+    @State private var isActive = true
+    @State private var lastInactive = Date.distantPast
+    @State private var rowsShown = false
+    @Namespace private var languageCapsule
 
     /// DEBUG `-onboardingPage N` — открыть страницу на снимок.
     private static var startPage: Int {
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
         if let i = args.firstIndex(of: "-onboardingPage"), i + 1 < args.count, let n = Int(args[i + 1]) {
-            return max(0, min(3, n))
+            return max(0, min(2, n))
         }
         #endif
         return 0
     }
 
     @Environment(\.dynamicTypeSize) private var typeSize
-    /// Размер экрана онбординга: низкий (SE) ужимает картинки, узкий ставит
-    /// кнопку разрешения под текст.
+    /// Размер экрана онбординга: низкий (SE) ужимает картинку.
     @State private var screen: CGSize = .zero
     private var isCompactHeight: Bool { screen.height > 0 && screen.height < 700 }
-    private var isNarrow: Bool { screen.width > 0 && screen.width < 400 }
 
     var body: some View {
         ZStack {
@@ -49,10 +56,9 @@ struct OnboardingView: View {
 
             VStack(spacing: 0) {
                 TabView(selection: $page) {
-                    roadPage.tag(0)
-                    voicePage.tag(1)
-                    communityPage.tag(2)
-                    permissionsPage.tag(3)
+                    welcomePage.tag(0)
+                    permissionsPage.tag(1)
+                    scrollingPage { OnboardingSetupPage(playing: page == 2) }.tag(2)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 // Прокручиваемая страница не рисуется под точками и кнопкой:
@@ -64,132 +70,287 @@ struct OnboardingView: View {
                     .padding(.top, 12)
                     .padding(.bottom, 18)
 
-                if page < lastPage {
-                    PrimaryButton(title: "Далее", systemImage: "chevron.right") {
-                        withMotion { page += 1 }
-                    }
+                bottomActions
                     .padding(.horizontal, 20)
                     .padding(.bottom, 8)
-                } else {
-                    PrimaryButton(title: "Начать", systemImage: "checkmark") { onFinish() }
-                        .padding(.horizontal, 20)
-                        .padding(.bottom, 8)
-                }
 
                 Color.clear.frame(height: 12)
             }
         }
-        // «Пропустить» — к разрешениям, а не мимо них (7.5): три страницы
-        // рассказа можно пролистать, а без доступа к геопозиции приложение
-        // не предупредит ни о чём.
         .onGeometryChange(for: CGSize.self) { $0.size } action: { screen = $0 }
+        // Подписи — выбранным языком сразу: остальное приложение перейдёт на
+        // него при следующем запуске.
+        .environment(\.locale, Locale(identifier: env.settings.appLanguage.mapCode))
+        .task {
+            await refreshPermissions()
+            withMotion(.easeOut(duration: 0.45).delay(0.15)) { rowsShown = true }
+        }
+        // Вернулись из Настроек iOS: кнопка должна сразу показать новое состояние.
+        .onChange(of: scenePhase) { _, phase in
+            isActive = phase == .active
+            if phase == .active {
+                Task { await refreshPermissions() }
+            } else {
+                lastInactive = Date()
+            }
+        }
         .overlay(alignment: .topTrailing) {
-            if page < lastPage {
-                Button {
-                    withMotion { page = lastPage }
-                } label: {
-                    Text("Пропустить")
-                        .font(.rounded(15, .semibold))
-                        .foregroundStyle(Theme.textSecondary)
-                        .padding(.horizontal, 16)
-                        .tapTarget()
+            if page == 0 {
+                languageSwitch
+                    .padding(.top, 8)
+                    .padding(.trailing, 16)
+                    .transition(.opacity)
+            }
+        }
+        .sensoryFeedback(.success, trigger: grantedCount) { old, new in new > old }
+    }
+
+    private func refreshPermissions() async {
+        env.motion.refreshAuthorization()
+        await env.notifications.refreshStatus()
+    }
+
+    // MARK: - Цепочка окон iOS
+
+    /// Одно нажатие — все окна по очереди: геолокация (iOS спросит дважды),
+    /// уведомления, движение. Отказ в одном не останавливает остальные.
+    private func runPermissions() async {
+        guard asking == nil else { return }
+        if env.location.accessStep == .askWhenInUse || env.location.accessStep == .askAlways {
+            withMotion(Motion.standard) { asking = .location }
+            env.location.takeAccessStep()
+            await waitForLocationDialogs()
+        }
+        if env.notifications.authorizationStatus == .notDetermined {
+            withMotion(Motion.standard) { asking = .notifications }
+            _ = await env.notifications.requestAuthorizationResult()
+        }
+        if motionPending {
+            withMotion(Motion.standard) { asking = .motion }
+            await env.motion.requestAuthorizationResult()
+        }
+        withMotion(Motion.standard) { asking = nil }
+        if primary == .next {
+            do {
+                try await Task.sleep(for: .milliseconds(650))
+            } catch {
+                return
+            }
+            if page == permissionsIndex { withMotion(Motion.standard) { page += 1 } }
+        }
+    }
+
+    /// У окон геолокации нет ответа «закрыто», а второе («Всегда») iOS
+    /// показывает сама вслед за первым. Закрытыми считаем их, когда приложение
+    /// снова активно секунду подряд; 2 минуты — предел на забытое окно.
+    private func waitForLocationDialogs() async {
+        let start = Date()
+        lastInactive = start
+        while Date().timeIntervalSince(start) < 120 {
+            do {
+                try await Task.sleep(for: .milliseconds(250))
+            } catch {
+                return
+            }
+            if isActive, Date().timeIntervalSince(lastInactive) >= 1 { return }
+        }
+    }
+
+    // MARK: - Кнопки внизу
+
+    private var motionRelevant: Bool { MotionService.isAvailable && env.settings.tripStartMode.usesMotion }
+    private var motionPending: Bool { motionRelevant && env.motion.authorizationStatus == .notDetermined }
+
+    private var primary: OnboardingPermissions.Primary {
+        OnboardingPermissions.primary(location: env.location.accessStep,
+                                      notificationsAsked: env.notifications.authorizationStatus != .notDetermined,
+                                      motionPending: motionPending)
+    }
+
+    @ViewBuilder private var bottomActions: some View {
+        switch page {
+        case 0:
+            PrimaryButton(title: "Продолжить", systemImage: "chevron.right") { go(to: 1) }
+        case permissionsIndex:
+            VStack(spacing: 4) {
+                switch primary {
+                case .ask:
+                    PrimaryButton(title: "Разрешить", systemImage: "checkmark.shield.fill") {
+                        Task { await runPermissions() }
+                    }
+                    .disabled(asking != nil)
+                case .openSettings:
+                    PrimaryButton(title: "Открыть Настройки", systemImage: "gearshape.fill") { openSystemSettings() }
+                case .next:
+                    PrimaryButton(title: "Далее", systemImage: "chevron.right") { go(to: lastPage) }
                 }
-                .padding(.top, 4)
-                .transition(.opacity)
+                if primary != .next {
+                    Button { go(to: lastPage) } label: {
+                        Text("Позже")
+                            .font(.rounded(15, .semibold))
+                            .foregroundStyle(Theme.textSecondary)
+                            .frame(maxWidth: .infinity, minHeight: Theme.controlSize)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PressableStyle())
+                    .disabled(asking != nil)
+                }
+            }
+        default:
+            PrimaryButton(title: env.location.isAuthorized ? "Открыть карту" : "Продолжить без оповещений",
+                          systemImage: "checkmark") { onFinish() }
+        }
+    }
+
+    private func go(to index: Int) {
+        withMotion(Motion.standard) { page = index }
+    }
+
+    private func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+
+    // MARK: - Экран 1
+
+    private var languageSwitch: some View {
+        HStack(spacing: 2) {
+            languageButton(.ru, "RU")
+            languageButton(.uz, "UZ")
+        }
+        .padding(3)
+        .background(Theme.quietFill, in: Capsule())
+        .sensoryFeedback(.selection, trigger: env.settings.appLanguage)
+    }
+
+    private func languageButton(_ language: AppLanguage, _ title: String) -> some View {
+        let isOn = env.settings.appLanguage.mapCode == language.mapCode
+        return Button {
+            withMotion(Motion.standard) { env.settings.appLanguage = language }
+        } label: {
+            Text(verbatim: title)
+                .font(.rounded(13, .bold))
+                .foregroundStyle(isOn ? Theme.textPrimary : Theme.textSecondary)
+                .frame(width: 44, height: 36)
+                .background {
+                    if isOn {
+                        Capsule().fill(Theme.surface).matchedGeometryEffect(id: "on", in: languageCapsule)
+                    }
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(PressableStyle())
+        .accessibilityLabel(Text(verbatim: language.title))
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+
+    private var welcomePage: some View {
+        scrollingPage {
+            VStack(alignment: .leading, spacing: 0) {
+                Spacer(minLength: 52)
+                CompactScene(scale: isCompactHeight ? 0.68 : 1) {
+                    OnboardingRoadScene(playing: page == 0)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, isCompactHeight ? 16 : 24)
+                Text("Предупредит о камере заранее")
+                    .font(.rounded(26, .bold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 16)
+                VStack(spacing: 10) {
+                    row(0, "speaker.wave.2.fill", "Голос за 22 секунды до камеры, с учётом скорости")
+                    row(1, "moon.fill", "Работает с погашенным экраном и поверх Яндекса")
+                    row(2, "car.fill", "Поездка начинается сама")
+                }
+                .padding(.horizontal, 24)
+                Spacer(minLength: 8)
             }
         }
     }
 
-    // MARK: - Страницы
-
-    private var roadPage: some View {
-        // Цифра — из AppConfig (её сторожит тест по встроенной базе), а не
-        // из текста: на витрине уже висело отставшее «3 400+».
-        let count = Formatting.unbreakable(AppConfig.cameraCountClaim.formatted(
-            .number.grouping(.automatic).locale(NumberFormat.locale)))
-        return scenePage(title: "Предупредит о камере заранее",
-                  subtitle: "\(count)+ камер и радаров Узбекистана из официальных данных. Голос — за 22 секунды до камеры, с учётом скорости; работает со свёрнутым приложением и погасшим экраном.") {
-            OnboardingRoadScene()
-        } rows: {
-            row("car.fill", "Сели за руль — поездка началась сама")
-            row("map.fill", "Маршруты, лимиты и Итоги поездок — тоже здесь")
+    /// Строки входят по очереди: взгляд идёт сверху вниз вслед за ними.
+    private func row(_ index: Int, _ icon: String, _ text: LocalizedStringKey) -> some View {
+        HStack(spacing: 12) {
+            IconBadge(symbol: icon, tint: Theme.accent, size: 34)
+            Text(text)
+                .font(.rounded(14, .medium))
+                .foregroundStyle(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
         }
+        .opacity(rowsShown ? 1 : 0)
+        .offset(y: rowsShown || reduceMotion ? 0 : 10)
+        .motionAnimation(.easeOut(duration: 0.45).delay(0.2 + Double(index) * 0.12), value: rowsShown)
     }
 
-    private var voicePage: some View {
-        scenePage(title: "Говорит только по делу",
-                  subtitle: "В городе — коротко, на трассе — полностью. О камерах, которые вы проезжаете спокойно каждый день, молчит.") {
-            OnboardingVoiceScene()
-        } rows: {
-            row("exclamationmark.triangle.fill", "Громко — только при превышении или внезапном радаре")
-            row("square.2.layers.3d.top.filled", "Едете с Яндексом? Сверните RadarMap — голос останется")
-        }
-    }
-
-    private var communityPage: some View {
-        scenePage(title: "Треноги находим вместе",
-                  subtitle: "Расписание передвижных радаров закрыто с 2022 года. Увидели засаду — одна жёлтая кнопка, не глядя на экран.") {
-            OnboardingCommunityScene()
-        } rows: {
-            row("checkmark.seal.fill", "Отметку проверяет другой водитель; до проверки она с «?»")
-            row("clock.arrow.circlepath", "Нажали случайно — «Отменить» рядом")
-        }
-    }
+    // MARK: - Экран 2
 
     private var permissionsPage: some View {
         scrollingPage {
-            VStack(spacing: 0) {
-                Spacer(minLength: 24)
-                Image(systemName: "checkmark.shield.fill")
-                    .font(.rounded(44, .bold))
-                    .foregroundStyle(Theme.accent)
-                    .padding(.bottom, 18)
-                Text("Два разрешения — и в путь")
+            VStack(alignment: .leading, spacing: 0) {
+                Text(motionRelevant ? "Разрешите три вещи" : "Разрешите две вещи")
                     .font(.rounded(26, .bold))
                     .foregroundStyle(Theme.textPrimary)
-                    .padding(.bottom, 20)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 24)
+                    .padding(.bottom, 16)
 
-                VStack(spacing: 12) {
-                    // Кнопка не бывает мёртвой (40D): окно «Всегда» iOS
-                    // показывает один раз, дальше — Настройки и путь в них.
-                    permissionRow(
-                        icon: "location.fill",
-                        title: "Геолокация «Всегда»",
-                        subtitle: "Голос о камере — и с погашенным экраном, и поверх Яндекса.",
-                        footnote: accessHint,
-                        state: locationState,
-                        action: { env.location.takeAccessStep() }
-                    )
-                    permissionRow(
-                        icon: "bell.badge.fill",
-                        title: "Уведомления",
-                        subtitle: "Звук и баннер при приближении к камере.",
-                        state: notificationsState,
-                        action: { env.notifications.requestAuthorization() }
-                    )
+                VStack(spacing: 10) {
+                    permissionRow(.location, icon: "location.fill", title: "Геолокация «Всегда»",
+                                  subtitle: "Иначе с погашенным экраном камеры молчат",
+                                  footnote: accessHint, state: locationState)
+                        .onboardingEntrance(index: 0, shown: page >= permissionsIndex)
+                    permissionRow(.notifications, icon: "bell.badge.fill", title: "Уведомления",
+                                  subtitle: "Сигнал о камере, когда поездка не идёт",
+                                  state: notificationsState)
+                        .onboardingEntrance(index: 1, shown: page >= permissionsIndex)
+                    if motionRelevant {
+                        permissionRow(.motion, icon: "figure.walk.motion", title: "Движение",
+                                      subtitle: "Чтобы поездка начиналась сама", state: motionState)
+                            .onboardingEntrance(index: 2, shown: page >= permissionsIndex)
+                    }
                 }
                 .padding(.horizontal, 20)
 
-                // Прайминг приватности: объясняем ДО системного диалога — больше доверия
-                // и согласий, App Review видит обоснование фоновой геолокации.
-                Label("История поездок, дом и работа хранятся только на этом iPhone. На сервер уходят запрос маршрута, ваши отметки и обезличенные отрезки для пробок — их можно выключить в Настройках.",
-                      systemImage: "lock.shield.fill")
+                if locationWindowsAhead {
+                    VStack(alignment: .leading, spacing: 8) {
+                        OnboardingDialogGuide(playing: page == permissionsIndex)
+                        Text("iOS спросит про геолокацию дважды. Выберите «При использовании», затем «Всегда». Переключатель «Точная» не выключайте.")
+                            .font(.rounded(13))
+                            .foregroundStyle(Theme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 14)
+                    .transition(.opacity)
+                }
+
+                Label("История поездок, дом и работа остаются на этом iPhone.", systemImage: "lock.shield.fill")
                     .font(.rounded(12, .medium))
                     .foregroundStyle(Theme.textSecondary)
-                    .multilineTextAlignment(.leading)
-                    .padding(.horizontal, 28)
+                    .padding(.horizontal, 24)
                     .padding(.top, 14)
-                Spacer(minLength: 24)
+                Spacer(minLength: 16)
             }
         }
     }
 
-    // MARK: - Компоненты
+    private var locationWindowsAhead: Bool {
+        env.location.accessStep == .askWhenInUse || env.location.accessStep == .askAlways
+    }
 
-    /// Страница, которая прокручивается, когда не влезает. На SE с крупным
-    /// шрифтом строки и карточки разрешений обрезались снизу, а прокрутить
-    /// было нечем. Высота не меньше экрана: пока всё влезает, Spacer'ы
-    /// по-прежнему центрируют страницу. «Далее» снаружи — закреплена.
+    private var scrollingBottomFade: some View {
+        VStack(spacing: 0) {
+            Color.black
+            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                .frame(height: 28)
+        }
+    }
+
+    /// Страница, которая прокручивается, когда не влезает. Высота не меньше
+    /// экрана: пока всё влезает, Spacer'ы по-прежнему центрируют страницу.
     private func scrollingPage(@ViewBuilder _ content: () -> some View) -> some View {
         let page = content()
         return GeometryReader { proxy in
@@ -198,60 +359,7 @@ struct OnboardingView: View {
                     .frame(maxWidth: .infinity, minHeight: proxy.size.height)
             }
             .scrollBounceBehavior(.basedOnSize)
-            // Низ — затуханием: не влезшая строка не обрывается посередине
-            // букв у точек страниц, а уходит под край — видно, что дальше
-            // есть ещё (SE с крупным шрифтом, 12в F1).
-            .mask {
-                VStack(spacing: 0) {
-                    Color.black
-                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                        .frame(height: 28)
-                }
-            }
-        }
-    }
-
-    /// Картинка, заголовок, две-три строки.
-    private func scenePage<Scene: View, Rows: View>(title: LocalizedStringKey, subtitle: LocalizedStringKey,
-                                                    @ViewBuilder scene: () -> Scene,
-                                                    @ViewBuilder rows: () -> Rows) -> some View {
-        scrollingPage {
-            VStack(alignment: .leading, spacing: 0) {
-                Spacer(minLength: 8)
-                // На низком экране (SE: 647 pt без статус-бара) картинка —
-                // 2/3 своей высоты, иначе пункты уходили под затухание
-                // (этап 31). Масштаб, а не обрезка: дорога без камеры или
-                // стрелки теряет смысл. На высоких экранах — как была.
-                CompactScene(scale: isCompactHeight ? 0.68 : 1) { scene() }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, isCompactHeight ? 16 : 24)
-                Text(title)
-                    .font(.rounded(26, .bold))
-                    .foregroundStyle(Theme.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 24)
-                Text(subtitle)
-                    .font(.rounded(15))
-                    .foregroundStyle(Theme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 24)
-                    .padding(.top, 8)
-                    .padding(.bottom, 18)
-                VStack(spacing: 10) { rows() }
-                    .padding(.horizontal, 24)
-                Spacer(minLength: 8)
-            }
-        }
-    }
-
-    private func row(_ icon: String, _ text: LocalizedStringKey) -> some View {
-        HStack(spacing: 12) {
-            IconBadge(symbol: icon, tint: Theme.accent, size: 34)
-            Text(text)
-                .font(.rounded(14, .medium))
-                .foregroundStyle(Theme.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
+            .mask { scrollingBottomFade }
         }
     }
 
@@ -264,8 +372,7 @@ struct OnboardingView: View {
             }
         }
         .motionAnimation(Motion.standard, value: page)
-        // Точки — для глаза; VoiceOver слышит одну фразу «страница 2 из 4»,
-        // а не семь безымянных капсул (4.6).
+        // Точки — для глаза; VoiceOver слышит одну фразу «страница 2 из 3».
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(String(format: String(localized: "Страница %lld из %lld"),
                                         page + 1, lastPage + 1)))
@@ -273,17 +380,24 @@ struct OnboardingView: View {
 
     // MARK: - Состояния разрешений
 
-    private enum PermState { case granted, partial, pending }
+    private enum PermState { case granted, partial, pending, blocked }
+
+    private var grantedCount: Int {
+        [locationState, notificationsState, motionRelevant ? motionState : .pending]
+            .filter { $0 == .granted }.count
+    }
 
     private var locationState: PermState {
         switch env.location.authorizationStatus {
         case .authorizedAlways: return .granted
         case .authorizedWhenInUse: return .partial
+        case .denied, .restricted: return .blocked
         default: return .pending
         }
     }
-    /// Что выбрать в Настройках. Открывается сразу страница приложения, и
-    /// слова там — системные iOS (по-узбекски их не бывает).
+
+    /// Что выбрать в Настройках: страница приложения открывается сразу, слова
+    /// там системные.
     private var accessHint: LocalizedStringKey? {
         switch env.location.accessStep.hint {
         case .pickAlways: return "Геопозиция → Всегда"
@@ -291,84 +405,89 @@ struct OnboardingView: View {
         case nil: return nil
         }
     }
+
     private var notificationsState: PermState {
-        env.notifications.authorizationStatus == .authorized ? .granted : .pending
+        switch env.notifications.authorizationStatus {
+        case .authorized, .provisional, .ephemeral: return .granted
+        case .denied: return .blocked
+        default: return .pending
+        }
     }
 
-    /// Крупный шрифт — кнопка под текстом: в строку на SE она сжимала
-    /// заголовок до «Уведомлен-ия» и сама рвалась на «Разреши-ть» (12в F1).
-    private func permissionRow(icon: String, title: LocalizedStringKey, subtitle: LocalizedStringKey,
-                               footnote: LocalizedStringKey? = nil,
-                               state: PermState, action: @escaping () -> Void) -> some View {
-        let texts = VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.rounded(15, .semibold)).foregroundStyle(Theme.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(subtitle).font(.rounded(12)).foregroundStyle(Theme.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-            // Что выбрать в Настройках: открываем их мы, выбирает человек.
-            if let footnote {
-                Label(footnote, systemImage: "gearshape.fill")
-                    .font(.rounded(12, .semibold))
-                    .foregroundStyle(Theme.textPrimary)
+    private var motionState: PermState {
+        switch env.motion.authorizationStatus {
+        case .authorized: return .granted
+        case .denied, .restricted: return .blocked
+        default: return .pending
+        }
+    }
+
+    private func permissionRow(_ row: Row, icon: String, title: LocalizedStringKey, subtitle: LocalizedStringKey,
+                               footnote: LocalizedStringKey? = nil, state: PermState) -> some View {
+        HStack(spacing: 12) {
+            IconBadge(symbol: icon, tint: Theme.accent, size: 40)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.rounded(15, .semibold)).foregroundStyle(Theme.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 4)
-            }
-        }
-        return Group {
-            // Кнопка — под текстом на крупном шрифте и на узком экране, пока
-            // разрешение не дано: справа она сжимала подпись в столбик
-            // «при / приближении к», а на uz рвала «Bildirishnom / alar».
-            if typeSize >= .xLarge || (isNarrow && state != .granted) {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .top, spacing: 14) {
-                        IconBadge(symbol: icon, tint: Theme.accent, size: 44)
-                        texts
-                        Spacer(minLength: 0)
-                    }
-                    trailing(for: state, action: action)
-                }
-            } else {
-                HStack(spacing: 14) {
-                    IconBadge(symbol: icon, tint: Theme.accent, size: 44)
-                    texts
-                    Spacer(minLength: 8)
-                    trailing(for: state, action: action)
+                Text(subtitle).font(.rounded(12)).foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let footnote {
+                    Label(footnote, systemImage: "gearshape.fill")
+                        .font(.rounded(12, .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 3)
                 }
             }
+            Spacer(minLength: 6)
+            status(row, state)
         }
-        .padding(14)
+        .padding(12)
         .statCard(padding: 0)
+        .overlay {
+            RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous)
+                .stroke(Theme.accent, lineWidth: 2)
+                .opacity(asking == row ? 1 : 0)
+        }
+        .motionAnimation(Motion.standard, value: asking == row)
     }
 
-    @ViewBuilder
-    private func trailing(for state: PermState, action: @escaping () -> Void) -> some View {
-        switch state {
-        case .granted:
-            Image(systemName: "checkmark.circle.fill")
-                .font(.rounded(22)).foregroundStyle(Theme.success)
-        case .partial:
-            permissionButton("Всегда", tint: Theme.warning, action: action)
-        case .pending:
-            permissionButton("Разрешить", tint: Theme.accent, action: action)
+    @ViewBuilder private func status(_ row: Row, _ state: PermState) -> some View {
+        Group {
+            if asking == row {
+                ProgressView().controlSize(.small)
+            } else {
+                switch state {
+                case .granted:
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.rounded(24))
+                        .foregroundStyle(Theme.success)
+                        .transition(.scale(scale: 0.4).combined(with: .opacity))
+                case .partial:
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .font(.rounded(24))
+                        .foregroundStyle(Theme.warning)
+                case .blocked:
+                    Button { openSystemSettings() } label: {
+                        Text("Настройки")
+                            .font(.rounded(13, .semibold))
+                            .foregroundStyle(Theme.warning)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .padding(.horizontal, 12)
+                            .frame(minHeight: Theme.controlSize)
+                            .background(Theme.quietFill, in: Capsule())
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(PressableStyle())
+                case .pending:
+                    Circle()
+                        .stroke(Theme.stroke, lineWidth: 2)
+                        .frame(width: 22, height: 22)
+                }
+            }
         }
-    }
-
-    /// Кнопка разрешения — капсула 44 pt: самое важное касание онбординга
-    /// («Всегда» — без него нет фоновых предупреждений) не бывает мелким.
-    private func permissionButton(_ title: LocalizedStringKey, tint: Color,
-                                  action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.rounded(15, .semibold))
-                .foregroundStyle(tint)
-                .lineLimit(1)
-                .fixedSize()
-                .padding(.horizontal, 14)
-                .frame(minHeight: Theme.controlSize)
-                .background(Theme.quietFill, in: Capsule())
-                .contentShape(Capsule())
-        }
-        .buttonStyle(PressableStyle())
+        .motionAnimation(.spring(response: 0.35, dampingFraction: 0.6), value: state)
     }
 }
 

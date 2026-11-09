@@ -238,6 +238,17 @@ final class TrafficService {
         }
     }
 
+    /// Набор протух, а такта пробок нет (без связи окно не открывается):
+    /// снять без сети. Иначе цвета десятиминутной давности лежали бы на карте
+    /// часами, а время и «впереди пробка» уже считали бы их отсутствующими.
+    func dropStale(now: Date = Date()) {
+        #if DEBUG
+        if demoPinned { return }
+        #endif
+        guard let current = snapshot, !current.isFresh(now: now) else { return }
+        apply(nil)
+    }
+
     private func apply(_ snapshot: TrafficSnapshot?) {
         self.snapshot = snapshot
         revision &+= 1

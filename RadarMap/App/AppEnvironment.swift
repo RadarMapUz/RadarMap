@@ -275,7 +275,8 @@ final class AppEnvironment {
         }
         // Срок отметки вышел, а сервер молчит (нет сети, лёг) — снимаем сами:
         // «тренога впереди» часами после срока хуже, чем её отсутствие (S5).
-        netScheduler.onStep = { [weak mobile] in
+        netScheduler.onStep = { [weak mobile, weak traffic] in
+            traffic?.dropStale()
             guard let mobile, mobile.isEnabled else { return }
             mobile.pruneExpired(now: Date())
         }
@@ -693,6 +694,9 @@ final class AppEnvironment {
         route.offlinePath = { [weak offlineRoutes] from, to in await offlineRoutes?.path(from: from, to: to) }
         // Коридор длинного маршрута (19.3): области карты и граф по пути,
         // файлы заведений «По пути» — сам он ничего не качает без правил.
+        offlineMaps.onSearchCellsNeeded = { [weak roads] centers in
+            Task { await roads?.prefetchSearchFiles(at: centers) }
+        }
         corridor.maps = offlineMaps
         corridor.graph = offlineRoutes
         corridor.roads = roads
@@ -1057,17 +1061,37 @@ final class AppEnvironment {
     var carOnlyOfferRevision = 0
 
     @ObservationIgnored private var tileProbeTask: Task<Void, Never>?
+    @ObservationIgnored private var offlineSearchChecked = false
+
+    /// Области, скачанные до того, как поиск стал ехать вместе с картой: их
+    /// файлы поиска — один раз за процесс и только не по сотовой.
+    func prefetchOfflineSearchIfNeeded() {
+        guard !offlineSearchChecked, network.isOnline, !network.isExpensive else { return }
+        offlineSearchChecked = true
+        let centers = offlineMaps.installedSearchCells
+        guard !centers.isEmpty else { return }
+        Task { await roads.prefetchSearchFiles(at: centers) }
+    }
 
     #if canImport(MapLibre)
     private func tileServerHealthChanged(down: Bool) {
         network.setTileServerDown(down)
         tileProbeTask?.cancel()
         guard down else { return }
+        // Назад — только когда сервер ответил на маленький запрос: слепой
+        // возврат на слабой связи давал две перезагрузки стиля и мигание
+        // карты каждые три минуты, пока связь для системы «есть».
         tileProbeTask = Task { [weak self] in
-            await Task.pause(seconds: AppConfig.tileServerProbeSeconds)
-            guard !Task.isCancelled else { return }
-            EngineTileGuard.resetHealthForProbe()
-            self?.network.setTileServerDown(false)
+            let api = APIClient()
+            while !Task.isCancelled {
+                await Task.pause(seconds: AppConfig.tileServerProbeSeconds)
+                guard !Task.isCancelled, self?.network.isOnline == true else { continue }
+                let answer = await api.probe(AppConfig.tileServerProbePath)
+                guard !Task.isCancelled, TileServerHealth.probeAnswered(status: answer?.status) else { continue }
+                EngineTileGuard.resetHealthForProbe()
+                self?.network.setTileServerDown(false)
+                return
+            }
         }
     }
     #endif

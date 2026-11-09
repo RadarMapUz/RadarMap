@@ -60,6 +60,19 @@ final class RegionCatalogTests: XCTestCase {
         XCTAssertEqual(samarkand.title(language: "uz"), "Самаркандская область", "нет перевода — берём русское")
     }
 
+    /// Клетки поиска — те же ключи, что у AddressBook, без дыр по краям.
+    func testSearchCellsCoverRegionRows() {
+        // Ургенч: клетка z12 и её соседка — одна строка, две клетки подряд.
+        let urgench = CLLocationCoordinate2D(latitude: 41.55, longitude: 60.63)
+        let cell = RegionCatalog.cell(of: urgench, zoom: 12)
+        let region = RegionCatalog.Region(id: "UZ-XO", name: [:], bbox: [], cells: 2,
+                                          rows: [[cell.y, cell.x, cell.x + 1]], files: [:])
+        let keys = Set(region.searchCellCenters(cellZoom: 12).map(AddressBook.key(for:)))
+        XCTAssertTrue(keys.contains(AddressBook.key(for: urgench)))
+        XCTAssertEqual(Set(keys).count, region.searchCellCenters(cellZoom: 12).count, "клетка не повторяется")
+        XCTAssertLessThanOrEqual(keys.count, 4, "две клетки z12 ~ 18 км: не больше четырёх клеток адресов")
+    }
+
     func testUnsignedCatalogIsRejected() throws {
         let data = Data(payload.utf8)
         let unsigned = try JSONEncoder().encode(

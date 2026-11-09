@@ -25,7 +25,6 @@ struct MapStatusBanner: View {
     /// недолгие, а лишний ключ в настройках — навсегда.
     @State private var dismissed: Set<String> = []
     @State private var isRetrying = false
-    @State private var showOfflineMaps = false
 
     private enum Kind {
         case server(RemoteConfig.Message)
@@ -104,17 +103,15 @@ struct MapStatusBanner: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .sheet(isPresented: $showOfflineMaps) {
-            NavigationStack {
-                OfflineMapsView()
-                    .settingsPage()
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Готово") { showOfflineMaps = false }
-                        }
-                    }
-            }
-        }
+    }
+
+    /// Вторая строка офлайн-плашки: что без связи не работает. Граф трасс —
+    /// файл на диске, поэтому спрашиваем только на стоянке (в поездке строки нет).
+    private var offlineLimits: String? {
+        guard !compact else { return nil }
+        return env.offlineRoutes.hasGraph
+            ? String(localized: "Маршрут — только приблизительный, по трассам. Пробок нет")
+            : String(localized: "Маршруты и пробки недоступны без связи")
     }
 
     @ViewBuilder
@@ -137,13 +134,12 @@ struct MapStatusBanner: View {
                   id: status.id)
         case .offline(.downloadedRegion):
             shell(symbol: "wifi.slash", tint: Theme.textSecondary,
-                  title: String(localized: "Нет связи — карта из скачанной области"),
-                  body: nil, id: status.id)
+                  title: String(localized: "Офлайн-режим: карта и камеры работают"),
+                  body: offlineLimits, id: status.id)
         case .offline(.noMap):
             shell(symbol: "wifi.slash", tint: Theme.textSecondary,
-                  title: String(localized: "Нет связи — карта не грузится, камеры предупреждают"),
-                  body: nil, id: status.id,
-                  action: (String(localized: "Скачать область"), { showOfflineMaps = true }))
+                  title: String(localized: "Офлайн-режим: камеры работают, карты здесь нет"),
+                  body: offlineLimits, id: status.id)
         case .offline(.serverDown):
             shell(symbol: "server.rack", tint: Theme.textSecondary,
                   title: String(localized: "Сервер карты не отвечает — камеры предупреждают"),

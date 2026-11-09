@@ -56,7 +56,8 @@ enum Storage {
         case hintSilenceShown       // разовая подсказка «знакомые камеры не называю вслух» показана
         case hintCarOnlyShown       // разовая подсказка «поездка только в машине — Настройки» показана (26.2)
         case alwaysAccessAsked      // окно повышения до «Всегда» уже запрашивали (LocationAccessStep, 40D)
-        case offlineOfferAnswered   // на предложение «скачать карту области» ответили (любой ответ)
+        case offlineOfferAnswered   // на предложение «скачать карту области» ответили (любой ответ; до 09.11 — одно на жизнь)
+        case offlineOfferRegions    // области, по которым на предложение уже ответили (id через запятую)
         case mergeSuggestDismissedID // id поездки, для которой «Объединить?» отклонили
         case pendingReports         // отметки, ждущие связи (ReportQueue)
         case myReports              // свои отметки и их судьба (счётчик в Итогах)

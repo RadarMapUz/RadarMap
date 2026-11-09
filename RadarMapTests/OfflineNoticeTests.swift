@@ -3,8 +3,7 @@
 //  RadarMapTests
 //
 //  Плашка «нет связи»: со связью её нет вовсе, на новой карте она различает
-//  «карта из скачанной области» и «карта не грузится», и скачать область
-//  предлагает только там, где области нет.
+//  «карта из скачанной области» и «карта не грузится».
 //
 
 import XCTest
@@ -23,20 +22,17 @@ final class OfflineNoticeTests: XCTestCase {
     func testDownloadedRegionIsCalm() {
         let notice = OfflineNotice.resolve(online: false, modernMap: true, hasRegionFiles: true)
         XCTAssertEqual(notice, .downloadedRegion)
-        XCTAssertEqual(notice?.offersDownload, false, "область уже на телефоне — качать нечего")
     }
 
-    func testNoRegionOffersDownload() {
+    func testNoRegionSaysNoMap() {
         let notice = OfflineNotice.resolve(online: false, modernMap: true, hasRegionFiles: false)
         XCTAssertEqual(notice, .noMap)
-        XCTAssertEqual(notice?.offersDownload, true)
     }
 
     func testOtherMapKeepsGeneralBanner() {
         for files in [true, false] {
             let notice = OfflineNotice.resolve(online: false, modernMap: false, hasRegionFiles: files)
             XCTAssertEqual(notice, .general, "на карте Apple скачанная область ничего не меняет")
-            XCTAssertEqual(notice?.offersDownload, false)
         }
     }
 }

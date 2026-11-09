@@ -94,4 +94,21 @@ final class TrafficDataTests: XCTestCase {
         let beyond = TrafficSnapshot.distance(north(1100), toSegment: north(0), north(1000))
         XCTAssertEqual(beyond, 100, accuracy: 1)
     }
+
+    #if DEBUG
+    /// Без связи такта пробок нет: протухший набор снимается без сети, а не
+    /// лежит цветами на карте часами. Сервис — статический: снос @MainActor-
+    /// класса посреди теста роняет рантайм (см. CameraStoreTests).
+    private static let staleService = TrafficService(settings: AppSettings())
+
+    @MainActor
+    func testStaleSetIsDroppedWithoutANetworkTick() {
+        let service = Self.staleService
+        service.seedDemo()
+        service.dropStale(now: Date())
+        XCTAssertNotNil(service.snapshot, "свежий набор остаётся")
+        service.dropStale(now: Date().addingTimeInterval(24 * 3600))
+        XCTAssertNil(service.snapshot, "протухший снят")
+    }
+    #endif
 }

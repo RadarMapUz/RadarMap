@@ -35,7 +35,7 @@ struct CarPlayEngineLayer: View {
             GeometryReader { geo in
                 map(me: me, size: geo.size, safe: geo.safeAreaInsets)
                     .ignoresSafeArea()
-                    .overlay(alignment: .bottomTrailing) { attribution }
+                    .overlay(alignment: surface.attributionOnTop ? .topLeading : .bottomTrailing) { attribution }
             }
             .onAppear(perform: adopt)
         } else {
@@ -90,7 +90,7 @@ struct CarPlayEngineLayer: View {
         // капсулу «до камеры».
         // Приборка: края окна кластера закрывают стрелки приборов машины —
         // это его safe area; камера впереди держится внутри неё.
-        let clear = surface == .dashboard ? DriveCamera.Clear(width: width)
+        let clear = surface == .dashboard ? CarPlaySurface.dashboardClear(width: width, height: height)
             : surface == .cluster
             ? DriveCamera.Clear(top: Double(safe.top) / max(1, height),
                                 bottom: Double(safe.bottom) / max(1, height),
@@ -247,9 +247,11 @@ struct CarPlayEngineLayer: View {
             onBrowse: { model.mapStartedBrowsing() },
             // Значок и камера — по оценке «где машина сейчас» (MarkerPredictor).
             markerMotion: env.location.markerMotion,
-            // Плашка улицы и крупные подписи (29.F) — на карте машины;
-            // плитка и приборка малы, плашка закрыла бы им дорогу.
-            onStreetName: surface == .car ? { model.streetName = $0 } : nil,
+            // Плашка улицы и крупные подписи (29.F) — на карте машины и на
+            // широкой плитке; узкой плитке и приборке она закрыла бы дорогу.
+            onStreetName: surface == .car
+                || (surface == .dashboard && CarPlaySurface.tileShowsStreet(width: width, arrivalShown: false))
+                ? { model.streetName = $0 } : nil,
             // Крупнее телефона и свой стиль (40J, CarMapStyle) — экран машины
             // и плитка; приборка — как карта поездки.
             carScale: CarMapStyle.scale(for: surface),
@@ -273,8 +275,8 @@ struct CarPlayEngineLayer: View {
     /// текстом.
     private var attribution: some View {
         MapAttribution(interactive: false)
-            .padding(.trailing, 6)
-            .padding(.bottom, 4)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
     }
 
     /// Где «я» по высоте всего окна (0 — верх, 1 — низ). Свободное поле —

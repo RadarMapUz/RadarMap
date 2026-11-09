@@ -78,6 +78,22 @@ nonisolated enum CarPlaySurface: Equatable, Sendable {
     /// нужна и стоя.
     var alwaysDeclutter: Bool { self == .cluster }
 
+    /// Подпись данных — в верхнем левом углу плитки: нижний правый занят
+    /// прибором, нижний левый — улицей; пять секунд её закрывал прибор.
+    var attributionOnTop: Bool { self == .dashboard }
+
+    /// Незакрытая часть плитки: снизу справа прибор (с 09.11), и камера позади
+    /// или сбоку стоя не должна уходить под него.
+    static func dashboardClear(width: Double, height: Double) -> DriveCamera.Clear {
+        DriveCamera.Clear(bottom: Double(AppConfig.carPlayGaugeKeepReserve) / max(1, height), width: width)
+    }
+
+    /// Показать ли название улицы на плитке: узкая — нет, плашка закрыла бы
+    /// дорогу и упёрлась в прибор.
+    static func tileShowsStreet(width: CGFloat, arrivalShown: Bool) -> Bool {
+        width >= (arrivalShown ? AppConfig.carPlayTileStreetWidthWithArrival : AppConfig.carPlayTileStreetWidth)
+    }
+
     /// «Я» по высоте окна — своя доля; nil — по раскладке экрана машины
     /// (между баром и доком).
     var fixedMeY: Double? {
@@ -86,5 +102,24 @@ nonisolated enum CarPlaySurface: Equatable, Sendable {
         case .dashboard: AppConfig.carPlayDashboardMeY
         case .cluster:   AppConfig.carPlayClusterMeY
         }
+    }
+}
+
+/// Подключена ли машина: основная сцена или хотя бы одна плитка главного
+/// экрана. Плитка приходит и без основной сцены (RadarMap не открывали на
+/// экране машины) — по одной основной приложение считало себя в кармане: без
+/// непрерывного GPS, опроса пробок и отметок плитка стояла пустой.
+nonisolated struct CarPlayPresence: Equatable, Sendable {
+    private var main = false
+    private var dashboards = 0
+
+    var isConnected: Bool { main || dashboards > 0 }
+
+    mutating func setMain(_ connected: Bool) { main = connected }
+
+    /// Счётчиком: поздний didDisconnect старой плитки приходит после
+    /// didConnect новой и не должен гасить живую.
+    mutating func dashboardChanged(connected: Bool) {
+        dashboards = max(0, dashboards + (connected ? 1 : -1))
     }
 }

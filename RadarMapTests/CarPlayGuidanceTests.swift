@@ -414,6 +414,14 @@ final class CarPlayGuidanceTests: XCTestCase {
         XCTAssertEqual(CarPlayGuidance.card(for: leftTurn(), carDark: true, metadata: false).upcoming.count, 1)
     }
 
+    /// Второй манёвр на плитке: своя стрелка в теме машины, иначе белая на
+    /// светлой карточке системы.
+    func testThenManeuverCarriesItsDashboardFields() {
+        let then = CarPlayGuidance.thenManeuver(leftTurn(), carDark: false)
+        XCTAssertEqual(then.dashboardInstructionVariants, then.instructionVariants)
+        XCTAssertNotNil(then.dashboardSymbolImage)
+    }
+
     func testEdgeGoesIntoTheTextWithoutLaneData() {
         let card = CarPlayGuidance.card(for: leftTurn(approach: 2), carDark: false, metadata: false)
         XCTAssertNil(card.laneRow, "полосы по догадке не рисуем")

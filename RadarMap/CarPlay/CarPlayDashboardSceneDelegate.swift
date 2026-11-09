@@ -67,6 +67,7 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
         // Карта — только в активном приложении: MapLibre, созданный в фоне,
         // стартует «спящим» (см. CarPlaySceneDelegate.didConnect).
         if shown && UIApplication.shared.applicationState != .background { installHost() }
+        env.setCarPlayDashboardConnected(true)
         env.startDrivingServices()
         shortcutsGeneration += 1
         observeShortcuts()
@@ -108,6 +109,7 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
         model.isOnScreen = false
         windowRoot?.setContent(nil)
         windowRoot = nil
+        env.setCarPlayDashboardConnected(false)
     }
 
     func sceneWillEnterForeground(_ scene: UIScene) {
@@ -223,8 +225,15 @@ struct CarPlayDashboardView: View {
             // дистанцию каждого фикса, и плитка, которую никто не видит,
             // пересобиралась бы всю поездку.
             if model.isOnScreen {
-                CarPlayDashboardGauge(width: width - 20)
-                    .padding(10)
+                HStack(alignment: .bottom, spacing: 8) {
+                    if CarPlaySurface.tileShowsStreet(width: width, arrivalShown: env.route.isActive) {
+                        TileStreetSlot(model: model)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    CarPlayDashboardGauge(width: width - 20)
+                        .layoutPriority(1)
+                }
+                .padding(10)
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
@@ -237,6 +246,12 @@ struct CarPlayDashboardView: View {
             model.refreshDaylight(appearance: appearance, sunDay: env.sunIsUp)
         }
     }
+}
+
+/// Улица на широкой плитке: своя вью — имя читается только здесь.
+private struct TileStreetSlot: View {
+    let model: CarPlayMapModel
+    var body: some View { StreetNamePill(name: model.streetName) }
 }
 
 /// Скорость, лимит, ближайшая камера и прибытие — одной плашкой. Отдельная
@@ -281,18 +296,7 @@ private struct CarPlayDashboardGauge: View {
             if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
                 SpeedLimitSign(limit: limit, diameter: 32, isAssumed: env.speedLimits.isCurrentLimitAssumed)
             }
-            if let camera = env.location.displayNearestCamera,
-               let distance = env.location.displayDistanceToNearest,
-               distance <= AppConfig.carPlayNearestCameraMeters,
-               CarPlayCameraCue.gaugeShows(distance: distance, straight: straight(to: camera)) {
-                HStack(spacing: 4) {
-                    CameraIcon(kind: camera.kind, side: 24)
-                    Text(Formatting.distance(distance))
-                        .font(.rounded(16, .bold).monospacedDigit())
-                        .foregroundStyle(env.location.isApproachingCamera ? Theme.danger : Theme.textPrimary)
-                        .liveNumber()
-                }
-            }
+            cameraCell
             if !showsArrival {
                 EmptyView()
             } else if env.route.isActive {
@@ -301,6 +305,7 @@ private struct CarPlayDashboardGauge: View {
                     Text(Formatting.duration(remaining))
                         .font(.rounded(16, .heavy).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
+                        .lineLimit(1)
                     Text(verbatim: env.route.arrivalText)
                         .font(.rounded(11, .semibold).monospacedDigit())
                         .foregroundStyle(Theme.textSecondary)
@@ -325,5 +330,32 @@ private struct CarPlayDashboardGauge: View {
         .background(Theme.background.opacity(0.9), in: Capsule())
         .overlay(Capsule().stroke(Theme.stroke, lineWidth: 1))
         .allowsHitTesting(false)
+    }
+
+    @ViewBuilder private var cameraCell: some View {
+        let camera = env.location.displayNearestCamera
+        let distance = camera == nil ? nil : env.location.displayDistanceToNearest
+        switch CarPlayCameraCue.gaugeCamera(signalStale: env.location.isSignalStale, distance: distance,
+                                            straight: camera.map(straight(to:)) ?? 0) {
+        case .noSignal:
+            Image(systemName: Icon.noGPSSignal)
+                .font(.rounded(16, .semibold))
+                .foregroundStyle(Theme.warning)
+                .accessibilityLabel(Text("Нет сигнала GPS"))
+        case .distance:
+            if let camera, let distance {
+                HStack(spacing: 4) {
+                    CameraIcon(kind: camera.kind, side: 24)
+                    Text(Formatting.distance(distance))
+                        .font(.rounded(16, .bold).monospacedDigit())
+                        .foregroundStyle(env.location.isApproachingCamera ? Theme.danger : Theme.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .liveNumber()
+                }
+            }
+        case .hidden:
+            EmptyView()
+        }
     }
 }

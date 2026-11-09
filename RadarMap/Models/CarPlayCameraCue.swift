@@ -88,6 +88,24 @@ nonisolated enum CarPlayCameraCue {
         distance >= AppConfig.carPlayGaugeZeroMeters || straight <= AppConfig.carPlayGaugeZeroStraightMeters
     }
 
+    /// Что в приборе плитки на месте камеры.
+    enum GaugeCamera: Equatable, Sendable {
+        case hidden
+        /// Фиксов нет: прежнее расстояние показывать нельзя, оно стоит.
+        case noSignal
+        case distance
+    }
+
+    /// `distance` — до ближайшей камеры для показа, nil — её нет. Как и на
+    /// телефоне (NearestCameraReadout): на экране машины о потере сигнала
+    /// говорит чип, у плитки чипов нет. Только показ.
+    static func gaugeCamera(signalStale: Bool, distance: Double?, straight: Double) -> GaugeCamera {
+        if signalStale { return .noSignal }
+        guard let distance, distance <= AppConfig.carPlayNearestCameraMeters,
+              gaugeShows(distance: distance, straight: straight) else { return .hidden }
+        return .distance
+    }
+
     /// Подпись с расстоянием у значка алерт-камеры.
     struct Label: Equatable, Sendable {
         let id: Int

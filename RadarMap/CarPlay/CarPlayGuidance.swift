@@ -824,6 +824,10 @@ final class CarPlayGuidance {
         then.cardBackgroundColor = cardColor
         let symbolName = step.kind?.isDrawable == false ? "flag.checkered" : step.icon
         then.symbolImage = symbol(symbolName, pointSize: 22, onDark: whiteArrow(on: cardColor, dark: carDark))
+        // Плитка рисует в теме машины без нашей синей карточки: белая стрелка
+        // на светлом фоне не видна (та же причина, что у первого манёвра).
+        then.dashboardInstructionVariants = then.instructionVariants
+        then.dashboardSymbolImage = symbol(symbolName, pointSize: 22, onDark: carDark)
         then.maneuverType = CarPlayGuidanceMapping.maneuverType(step.kind)
         then.trafficSide = .right
         return then

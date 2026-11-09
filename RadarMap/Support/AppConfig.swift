@@ -2162,7 +2162,17 @@ nonisolated enum AppConfig {
     /// подпись «км/ч» и та уедет под срез.
     static let carPlayDockHeight: CGFloat = 100
     /// Прибор плитки главного экрана машины: прибытие — от такой ширины.
-    static let carPlayGaugeArrivalWidth: CGFloat = 300
+    /// «120, знак, 1,2 км, 1 ч 20 мин» просит 306 pt (329 при крупном тексте),
+    /// при 300 слова переносились в две строки (стенд, 09.11).
+    static let carPlayGaugeArrivalWidth: CGFloat = 340
+    /// Сколько снизу плитки занимает прибор для «держать камеру в кадре»:
+    /// отступ 10 и высота до 49, минус запас `DriveCamera.keepMarginPoints`
+    /// сверх половины значка — значок встаёт вплотную над прибором.
+    static let carPlayGaugeKeepReserve: CGFloat = 52
+    /// Плитка: название улицы слева от прибора — от такой ширины; с прибытием
+    /// прибор втрое шире, и улице нужно больше места.
+    static let carPlayTileStreetWidth: CGFloat = 420
+    static let carPlayTileStreetWidthWithArrival: CGFloat = 560
     /// Прибор плитки: камера с расстоянием меньше этого по маршруту и дальше
     /// этого по прямой — за спиной, а не «0 м впереди»
     /// (CarPlayCameraCue.gaugeShows). 40 м — траверз записи проезда.

@@ -91,10 +91,15 @@ struct CameraActivityWidget: Widget {
                 DynamicIslandExpandedRegion(.trailing) {
                     // Без сигнала расстояние уже неправда — его нет вовсе,
                     // как и на локскрине (ревью 19.10: остров держал «300 м»).
-                    if !context.isStale, let distance = context.state.distanceMeters {
-                        Text(format(distance))
-                            .font(.system(.title3, design: .rounded).bold())
-                            .foregroundStyle(WTheme.level(context.state.alertLevel))
+                    HStack(spacing: 6) {
+                        if !context.isStale, let distance = context.state.distanceMeters {
+                            Text(format(distance))
+                                .font(.system(.title3, design: .rounded).bold())
+                                .foregroundStyle(WTheme.level(context.state.alertLevel))
+                        }
+                        if !context.isStale, let limit = context.state.limitKmh {
+                            LimitSign(limit: limit, size: 30)
+                        }
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
@@ -190,10 +195,71 @@ private struct ActivityContent: View {
     let isStale: Bool
 
     var body: some View {
-        switch family {
-        case .small: SmallActivityView(state: state, isStale: isStale)
-        default: LockScreenView(state: state, isStale: isStale)
+        if let finish = state.finish {
+            TripFinishView(finish: finish, compact: family == .small)
+                .widgetURL(URL(string: "radarmap://trip/\(finish.tripID)"))
+                .environment(\.colorScheme, .dark)
+        } else {
+            switch family {
+            case .small: SmallActivityView(state: state, isStale: isStale)
+            default: LockScreenView(state: state, isStale: isStale)
+            }
         }
+    }
+}
+
+/// Финальный кадр: чем кончилась поездка. Держится десять минут.
+private struct TripFinishView: View {
+    let finish: CameraActivityAttributes.TripFinish
+    let compact: Bool
+
+    private var duration: String { String(format: String(localized: "%lld мин"), finish.minutes) }
+
+    /// На малом лице камеры не помещаются, а цифры важнее.
+    private var numbers: String {
+        compact ? "\(format(finish.distanceMeters)) · \(duration)"
+                : String(format: String(localized: "%1$@ · %2$@ · камер %3$lld"),
+                         format(finish.distanceMeters), duration, finish.cameras)
+    }
+
+    var body: some View {
+        HStack(spacing: compact ? 8 : 13) {
+            if let score = finish.score {
+                WidgetRings(score: score, road: nil, side: compact ? 32 : 58)
+            }
+            VStack(alignment: .leading, spacing: compact ? 1 : 3) {
+                Text("Поездка сохранена")
+                    .font(compact ? .caption.weight(.semibold) : .headline)
+                    .foregroundStyle(WTheme.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text(verbatim: numbers)
+                    .font(compact ? .caption2 : .caption)
+                    .foregroundStyle(WTheme.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                if !compact {
+                    Group {
+                        if finish.fineRisk > 0 {
+                            Text(verbatim: SW.moneyText(finish.fineRisk))
+                                .foregroundStyle(WTheme.camera)
+                        } else {
+                            Text("Без штрафов")
+                                .foregroundStyle(WTheme.clear)
+                        }
+                    }
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+            if let score = finish.score, !compact {
+                Text(verbatim: "\(score)")
+                    .font(.system(size: 34, weight: .heavy, design: .rounded))
+                    .foregroundStyle(SW.score(score))
+            }
+        }
+        .padding(compact ? 10 : 14)
     }
 }
 
@@ -307,7 +373,7 @@ private struct LockScreenView: View {
     }
 }
 
-/// Кнопки плашки (9.1б): «Отметить» — широкая жёлтая, по ней бьют не глядя
+/// Кнопки плашки (9.1б): «Радар!» — широкая жёлтая, по ней бьют не глядя
 /// (тренога по умолчанию, 02.11); после отметки 8 с на её месте «Отменить»;
 /// «Звук» — узкая, со значком нынешнего состояния. Намерения выполняет
 /// приложение (Shared/ActivityIntents), ответ приходит следующим состоянием:
@@ -321,7 +387,7 @@ private struct ActivityButtons: View {
     var body: some View {
         HStack(spacing: 8) {
             // Отметка ушла и её ещё можно отменить (8 с) — на месте
-            // «Отметить» встаёт «Отменить»: та же широкая кнопка под пальцем.
+            // «Радар!» встаёт «Отменить»: та же широкая кнопка под пальцем.
             if state.reportUndo == true {
                 Button(intent: ActivityCancelReportIntent()) {
                     HStack(spacing: 6) {
@@ -386,7 +452,7 @@ private struct ActivityButtons: View {
         switch state.reportFlash {
         case true?: Text("Отмечено")
         case false?: Text("Не отправлено")
-        case nil: Text("Отметить")
+        case nil: Text("Радар!")
         }
     }
 

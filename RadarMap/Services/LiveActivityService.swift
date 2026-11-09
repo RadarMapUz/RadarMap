@@ -141,7 +141,10 @@ final class LiveActivityService {
         reportFlashID += 1
     }
 
-    func end() {
+    /// `finish` — итог поездки: плашка не уходит сразу, а держит его на экране
+    /// блокировки `liveActivityFinishSeconds`; нажатие открывает поездку.
+    func end(finish: CameraActivityAttributes.TripFinish? = nil) {
+        let own = activity
         self.activity = nil
         lastSentState = nil
         reportFlash = nil
@@ -149,7 +152,14 @@ final class LiveActivityService {
         // Все плашки этого типа, а не только своя: осиротевшая от прошлого
         // процесса не должна пережить конец поездки (S14).
         for activity in Activity<CameraActivityAttributes>.activities {
-            Task { await activity.end(nil, dismissalPolicy: .immediate) }
+            if let finish, let own, activity.id == own.id {
+                let state = CameraActivityAttributes.ContentState(
+                    nearestTitle: nil, nearestSymbol: "checkmark.shield.fill", finish: finish)
+                let until = Date().addingTimeInterval(AppConfig.liveActivityFinishSeconds)
+                Task { await activity.end(.init(state: state, staleDate: nil), dismissalPolicy: .after(until)) }
+            } else {
+                Task { await activity.end(nil, dismissalPolicy: .immediate) }
+            }
         }
     }
 

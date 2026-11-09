@@ -3084,6 +3084,8 @@ nonisolated enum AppConfig {
     static let watchReplyMaxSeconds: TimeInterval = 8
     /// Плашка Live Activity «устаревает» (нет обновлений) — «Нет сигнала GPS».
     static let liveActivityStaleSeconds: TimeInterval = 300
+    /// Сколько итог поездки держится на плашке экрана блокировки.
+    static let liveActivityFinishSeconds: TimeInterval = 600
     /// Пачка кусков пробок за одну отправку.
     static let trafficBatchPieces = 12
     /// Аудиосессия отпускается через столько после фразы — музыка возвращается.

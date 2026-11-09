@@ -3959,6 +3959,23 @@ nonisolated enum AppConfig {
     static let drive3DTailMarginMeters: Double = 150
     /// Хвост линии маршрута заходит под конец ленты на столько метров (без щели).
     static let drive3DTailOverlapMeters: Double = 10
+    /// Сход ленты в линию за прощупанным участком (70): столько метров ширина
+    /// сходится к `drive3DTailMeters`, линия начинается за `drive3DTailLapMeters`
+    /// до конца ленты (без щели сглаживания) и упрощается с этим допуском.
+    static let drive3DEndTaperMeters: Double = 45
+    static let drive3DTailMeters: Double = 4
+    static let drive3DTailLapMeters: Double = 1.5
+    static let drive3DTailSimplifyMeters: Double = 0.2
+    /// Пробы ленты вперёд от машины, м (70): и за краем экрана, сколько
+    /// загружено тайлов. Запас больше видимого: конец ленты не виден в кадре.
+    static let drive3DProbeAheadMeters: Double = 700
+    /// Пунктир от машины до начала линии (RouteConnector, 70): короче — под
+    /// значком, дальше — другое место; пока срез не ушёл дальше этих метров;
+    /// запись — при сдвиге концов на этот шаг.
+    static let routeConnectorMinMeters: Double = 8
+    static let routeConnectorMaxMeters: Double = 500
+    static let routeConnectorAlongMeters: Double = 40
+    static let routeConnectorStepMeters: Double = 3
     /// Шевроны внутри ленты: шаг, м; видны только медленнее порога (км/ч) с
     /// гистерезисом.
     static let drive3DChevronSpacing: Double = 50

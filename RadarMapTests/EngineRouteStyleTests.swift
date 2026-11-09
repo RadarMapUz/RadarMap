@@ -143,4 +143,37 @@ struct EngineRouteStyleTests {
         #expect((stroke[4] as? Double ?? (stroke[4] as? Int).map(Double.init)) == 0, "спокойная — без кольца")
         #expect((stroke.last as? Double) == 1.8, "на пути — прежнее кольцо")
     }
+
+    // MARK: - Спокойные пробки в 3D (70: зелёные и оранжевые ленты со стрелками поверх разметки)
+
+    @Test("В 3D вблизи гаснут «обычно» и «свободно», заторы остаются", arguments: [true, false])
+    func quietTrafficHidesCalmLines(daylight: Bool) throws {
+        let quiet = EngineMapStyle.trafficLayers(daylight: daylight, quiet: true)
+        let line = try #require(layer("traffic", quiet)?["paint"] as? [String: Any])
+        let opacity = try #require(line["line-opacity"] as? [Any])
+        #expect(opacity[3] as? Double == EngineMapStyle.trafficQuietZooms.from)
+        #expect(opacity[5] as? Double == EngineMapStyle.trafficQuietZooms.to)
+        let close = try #require(opacity[6] as? [Any])
+        let calm = "\(close[1])"
+        #expect(calm.contains("src") && calm.contains("level"), "условие спокойной линии: \(calm)")
+        #expect((close[2] as? Int ?? (close[2] as? Double).map(Int.init)) == 0, "спокойная вблизи — прозрачна")
+        #expect((close[3] as? Int ?? (close[3] as? Double).map(Int.init)) == 1, "затор вблизи — виден")
+        let chevrons = "\(try #require(layer("traffic-arrows", quiet)?["paint"] as? [String: Any]))"
+        #expect(chevrons.contains("level"), "стрелки спокойных линий погашены")
+    }
+
+    @Test("Вне 3D пробки как были", arguments: [true, false])
+    func normalTrafficUnchanged(daylight: Bool) throws {
+        let line = try #require(layer("traffic", EngineMapStyle.trafficLayers(daylight: daylight))?["paint"] as? [String: Any])
+        #expect(line["line-opacity"] == nil)
+    }
+
+    @Test("Пунктир к началу линии — под линией и в списке источников")
+    func connectorLayer() throws {
+        let ids = layers(daylight: true).compactMap { $0["id"] as? String }
+        let connector = try #require(ids.firstIndex(of: "route-connector"))
+        let body = try #require(ids.firstIndex(of: "route"))
+        #expect(connector < body)
+        #expect(EngineModernStyle.liveSources.contains("route-connector"))
+    }
 }

@@ -98,6 +98,8 @@ final class EngineRouteLine {
 
     /// Что последним ушло в источник линии — пустое поверх пустого не пишется.
     private var lineKeys: [String: [Double]] = [:]
+    private static let connectorSource = "route-connector"
+    private var connector: [CLLocationCoordinate2D]?
 
     /// Где сейчас нарисована граница пройденного, метры маршрута: от неё
     /// начинается лента «Вождения 3D» (EngineDriveRibbon). nil — ещё не резали.
@@ -125,6 +127,7 @@ final class EngineRouteLine {
         lineKeys = [:]
         layers = nil
         arrowLayer = nil
+        connector = nil
         resetCut()
     }
 
@@ -183,10 +186,11 @@ final class EngineRouteLine {
                 // Прежний маршрут уходит целиком: источники с поколением
                 // (окно, остаток) ключей не ведут, поэтому — без сравнения.
                 for name in ["traveled", "route", "maneuver", "route-traffic", EngineMapStyle.routeNearSource,
-                             EngineMapStyle.routeArrowsSource] {
+                             EngineMapStyle.routeArrowsSource, Self.connectorSource] {
                     setShape(nil, source: name, in: view)
                     lineKeys[name] = [0]
                 }
+                connector = nil
                 applyPaint(.clear, in: view)
                 return
             }
@@ -209,6 +213,19 @@ final class EngineRouteLine {
         // Новый фикс: значок посчитан раньше (в начале применения), а предел
         // среза держится за прогресс фикса — пересчитать с новым.
         if line != nil, fixMoved || range != paintKey?.maneuver { frame(in: view) }
+        updateConnector(model, in: view)
+    }
+
+    /// Пунктир от машины к линии: источник — только на заметном сдвиге концов.
+    private func updateConnector(_ model: EngineMapView, in view: MLNMapView) {
+        let wanted = line.flatMap { line in
+            model.showsPosition
+                ? RouteConnector.line(car: model.coordinate, target: line.pose(at: tracker.cut).coordinate, cut: tracker.cut)
+                : nil
+        }
+        guard RouteConnector.needsWrite(written: connector, wanted: wanted) else { return }
+        connector = wanted
+        setLine(wanted ?? [], source: Self.connectorSource, in: view)
     }
 
     /// Индекс, линия среза, стрелки и пробки — вне главного потока.

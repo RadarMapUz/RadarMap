@@ -38,8 +38,11 @@ final class EngineManeuverArrow {
     private var routeKey: ObjectIdentifier?
     private var cumulative: [Double] = []
 
+    private var layersShown = true
+
     func styleLoaded() {
         installed = false
+        layersShown = true
         written = nil
         wroteEmpty = false
         paintedDaylight = nil
@@ -47,10 +50,18 @@ final class EngineManeuverArrow {
     }
 
     /// `along` — манёвр (метры от старта), nil — манёвра нет.
+    /// `shown` false — манёвр показан лентой 3D: слои гаснут, источник не трогаем.
     func update(route: [CLLocationCoordinate2D], routeObject: AnyObject?, progress: Double,
-                along: Double?, kind: ManeuverKind?, routeDaylight: Bool, in view: MLNMapView) {
+                along: Double?, kind: ManeuverKind?, routeDaylight: Bool, shown: Bool = true, in view: MLNMapView) {
         guard let style = view.style else { return }
         if !installed { install(in: style) }
+        if shown != layersShown {
+            layersShown = shown
+            for id in [Self.casingID, Self.bodyID, Self.headID + "-casing", Self.headID] {
+                style.layer(withIdentifier: id)?.isVisible = shown
+            }
+        }
+        guard shown else { return }
         guard let source = style.source(withIdentifier: Self.sourceID) as? MLNShapeSource else { return }
         if paintedDaylight != routeDaylight {
             paintedDaylight = routeDaylight

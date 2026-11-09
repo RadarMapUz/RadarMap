@@ -188,7 +188,15 @@ nonisolated enum EngineMapStyle {
         return out
     }
 
-    static func trafficLayers(daylight: Bool) -> [[String: Any]] {
+    /// На этих зумах в «Вождении 3D» спокойные линии гаснут (70): та же
+    /// полоса 14,5–15,5, где лента сменяет линию маршрута.
+    static let trafficQuietZooms = (from: 14.5, to: 15.5)
+
+    /// `quiet` — «Вождение 3D»: вблизи только живые заторы. «Обычно в это
+    /// время» (профиль недели, не факт) и «свободно» лежат посреди полос
+    /// зелёной и оранжевой лентой со стрелками поверх разметки, а действия от
+    /// водителя не требуют; пробку на маршруте показывает его собственный цвет.
+    static func trafficLayers(daylight: Bool, quiet: Bool = false) -> [[String: Any]] {
         func hex(_ pair: RouteColors.Pair) -> String { RouteColors.pick(pair, daylight: daylight) }
         let colours = TrafficPalette.active
         func byLevel(_ transform: (RouteColors.Pair) -> RouteColors.Pair) -> [Any] {
@@ -199,6 +207,11 @@ nonisolated enum EngineMapStyle {
              hex(transform(TrafficPalette.level(1, in: colours)))]
         }
         let isUsual: [Any] = ["==", ["get", "src"], 1]
+        let calm: [Any] = ["any", isUsual, ["<=", ["get", "level"], 1]]
+        func quieted(_ value: Any) -> [Any] {
+            ["interpolate", ["linear"], ["zoom"], trafficQuietZooms.from, value,
+             trafficQuietZooms.to, ["case", calm, 0, value]]
+        }
         let offset = trafficWidth(scale: trafficOffsetShare)
         let round: [String: Any] = ["line-cap": "round", "line-join": "round"]
         let casingOpacity = daylight ? TrafficPalette.casingOpacity.day : TrafficPalette.casingOpacity.night
@@ -222,7 +235,7 @@ nonisolated enum EngineMapStyle {
                 visible.append(["all", ["==", ["get", "tier"], item.tier],
                                 [item.usual ? "==" : "!=", ["get", "src"], 1]])
             }
-            chevronOpacity += [threshold.zoom, ["case", visible, 1, 0]]
+            chevronOpacity += [threshold.zoom, ["case", quiet ? ["all", visible, ["!", calm]] : visible, 1, 0]]
         }
         // Высота наконечника = trafficArrowScale толщин своей линии.
         let chevronSize = trafficWidth(scale: trafficArrowScale / trafficChevronSide,
@@ -234,16 +247,18 @@ nonisolated enum EngineMapStyle {
              2, trafficChevronImage(level: 2, daylight: daylight, usual: usual),
              trafficChevronImage(level: 1, daylight: daylight, usual: usual)]
         }
+        let casingFade: Any = ["case", isUsual, casingOpacity * 0.4, casingOpacity]
+        var lineLayer: [String: Any] = ["line-color": ["case", isUsual, byLevel(TrafficPalette.usual), byLevel { $0 }],
+                                        "line-width": trafficWidth(scale: 1, usualShare: TrafficPalette.usualWidthShare),
+                                        "line-offset": offset]
+        if quiet { lineLayer["line-opacity"] = quieted(1) }
         return [
             ["id": trafficLayerIDs.casing, "type": "line", "source": "traffic", "layout": round,
              "paint": ["line-color": hex(TrafficPalette.casing),
                        "line-width": trafficWidth(extra: trafficCasingExtra, usualShare: TrafficPalette.usualWidthShare),
                        "line-offset": offset,
-                       "line-opacity": ["case", isUsual, casingOpacity * 0.4, casingOpacity]]],
-            ["id": trafficLayerIDs.line, "type": "line", "source": "traffic", "layout": round,
-             "paint": ["line-color": ["case", isUsual, byLevel(TrafficPalette.usual), byLevel { $0 }],
-                       "line-width": trafficWidth(scale: 1, usualShare: TrafficPalette.usualWidthShare),
-                       "line-offset": offset]],
+                       "line-opacity": quiet ? quieted(casingFade) : casingFade]],
+            ["id": trafficLayerIDs.line, "type": "line", "source": "traffic", "layout": round, "paint": lineLayer],
             ["id": trafficLayerIDs.chevrons, "type": "symbol", "source": "traffic",
              "minzoom": trafficChevronFromZoom[0],
              "layout": ["symbol-placement": "line",
@@ -474,6 +489,14 @@ nonisolated enum EngineMapStyle {
             ["id": id, "type": "line", "source": nearSource, "layout": round,
              "paint": ["line-gradient": RouteCut.gradient(RouteCut.Paint.clear.body), "line-width": width]]
         }
+        // Пунктир от машины до начала линии (RouteConnector).
+        out.append([
+            "id": "route-connector", "type": "line", "source": "route-connector",
+            "layout": round,
+            "paint": ["line-color": colour(RouteColors.body),
+                      "line-width": ["interpolate", ["linear"], ["zoom"], 13, 2.5, 17, 4, 20, 7],
+                      "line-dasharray": [0.01, 2.2]],
+        ])
         // Мягкое свечение под каймой (29.F, «линия как у Amap»): широкая
         // размытая полоса цвета тела. На тёмном асфальте поездки линия
         // светится, а не лежит пластиковой трубкой; днём на светлой земле —

@@ -1424,7 +1424,10 @@ struct EngineMapView: UIViewRepresentable {
         private func updateManeuverMarks(_ model: EngineMapView, routeDaylight: Bool, in view: MLNMapView) {
             maneuverArrow.update(route: model.route, routeObject: model.routeObject, progress: model.routeProgress,
                                  along: model.maneuverAlong, kind: model.maneuverKind,
-                                 routeDaylight: routeDaylight, in: view)
+                                 routeDaylight: routeDaylight,
+                                 shown: Drive3D.maneuverArrowShown(ribbonEnd: driveRibbon.shownEnd,
+                                                                   maneuver: model.maneuverAlong),
+                                 in: view)
             guard let content = model.maneuverCallout, model.calloutFrame != nil else {
                 maneuverCallout.update(nil)
                 maneuverCallout.layout(cursor: nil, visible: false, in: view)

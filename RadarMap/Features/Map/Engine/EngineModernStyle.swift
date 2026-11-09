@@ -29,7 +29,7 @@ nonisolated enum EngineModernStyle {
 
     /// Свои источники приложения — пустые при сборке, наполняются на тике.
     static let liveSources = ["cameras", "route", "traveled", "maneuver", "traffic", "route-traffic",
-                              "route-near", "route-arrows",
+                              "route-near", "route-arrows", "route-connector",
                               "position", "marks", "road-events", "cng-status", "hotspots", "camera-label"]
 
     /// Готовые стили по набору входов. Сборка — это чтение и разбор 214 КБ

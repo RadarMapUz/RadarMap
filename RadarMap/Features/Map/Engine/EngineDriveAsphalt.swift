@@ -39,7 +39,7 @@ final class EngineDriveAsphalt {
     private var originalLight: NSExpression?
     /// Как покрашены постоянные слои линии маршрута: тема и сила свечения
     /// (nil — как в стиле).
-    private var routePainted: (daylight: Bool, glow: Double)?
+    private var routePainted: (daylight: Bool, glow: Double, quiet: Bool)?
     /// Первое обновление после загрузки стиля ещё не прошло: разница, если
     /// нужна, ложится без перехода (DriveAsphalt.transitionSeconds).
     private var fresh = true
@@ -79,10 +79,10 @@ final class EngineDriveAsphalt {
         let glow = threeD ? Drive3D.glowOpacity : car?.glowOpacity(daylight: daylight)
             ?? (routeDaylight ? RouteColors.glowOpacity.day : RouteColors.glowOpacity.night)
         // Стиль собран с линией темы дня; перекрашивать — только если нужна другая.
-        let painted = routePainted ?? (daylight, daylight ? RouteColors.glowOpacity.day : RouteColors.glowOpacity.night)
-        if painted.daylight != routeDaylight || painted.glow != glow {
-            routePainted = (routeDaylight, glow)
-            paintRoute(daylight: routeDaylight, glow: glow, in: style)
+        let painted = routePainted ?? (daylight, daylight ? RouteColors.glowOpacity.day : RouteColors.glowOpacity.night, false)
+        if painted.daylight != routeDaylight || painted.glow != glow || painted.quiet != threeD {
+            routePainted = (routeDaylight, glow, threeD)
+            paintRoute(daylight: routeDaylight, glow: glow, quietTraffic: threeD, in: style)
         }
     }
 
@@ -168,7 +168,7 @@ final class EngineDriveAsphalt {
 
     /// Постоянные слои линии маршрута — цветами темы. Окно у машины
     /// (route-near-*) красит EngineRouteLine своей краской по той же теме.
-    private func paintRoute(daylight: Bool, glow glowOpacity: Double, in style: MLNStyle) {
+    private func paintRoute(daylight: Bool, glow glowOpacity: Double, quietTraffic: Bool, in style: MLNStyle) {
         func colour(_ pair: RouteColors.Pair) -> NSExpression {
             NSExpression(forConstantValue: Theme.rgb(daylight ? pair.day : pair.night))
         }
@@ -176,6 +176,7 @@ final class EngineDriveAsphalt {
             ("route-traveled", colour(RouteColors.traveled)),
             ("route-case", colour(RouteColors.casing)),
             ("route", colour(RouteColors.body)),
+            ("route-connector", colour(RouteColors.body)),
             ("route-maneuver", colour(RouteColors.maneuver)),
             ("route-core", NSExpression(forConstantValue: UIColor.white.withAlphaComponent(
                 daylight ? RouteColors.coreAlpha.day : RouteColors.coreAlpha.night))),
@@ -195,7 +196,7 @@ final class EngineDriveAsphalt {
         }
         (style.layer(withIdentifier: "route-arrows") as? MLNSymbolStyleLayer)?.iconImageName =
             NSExpression(forConstantValue: EngineMapStyle.routeArrowImage(daylight: daylight))
-        paintTraffic(daylight: daylight, in: style)
+        paintTraffic(daylight: daylight, quiet: quietTraffic, in: style)
     }
 
     /// Пробки на улицах (33H3) — той же темой, что линия маршрута: на тёмном
@@ -213,18 +214,20 @@ final class EngineDriveAsphalt {
         return NSExpression(mglJSONObject: json)
     }
 
-    private func paintTraffic(daylight: Bool, in style: MLNStyle) {
+    private func paintTraffic(daylight: Bool, quiet: Bool, in style: MLNStyle) {
         let ids = EngineMapStyle.trafficLayerIDs
-        for layer in EngineMapStyle.trafficLayers(daylight: daylight) {
+        for layer in EngineMapStyle.trafficLayers(daylight: daylight, quiet: quiet) {
             guard let id = layer["id"] as? String else { continue }
             let paint = layer["paint"] as? [String: Any] ?? [:]
             let layout = layer["layout"] as? [String: Any] ?? [:]
             if id == ids.casing || id == ids.line, let line = style.layer(withIdentifier: id) as? MLNLineStyleLayer {
                 if let colour = paint["line-color"] { line.lineColor = Self.colourExpression(colour) }
-                if let opacity = paint["line-opacity"] { line.lineOpacity = NSExpression(mglJSONObject: opacity) }
+                line.lineOpacity = paint["line-opacity"].map { NSExpression(mglJSONObject: $0) }
+                    ?? NSExpression(forConstantValue: 1)
             } else if id == ids.chevrons, let symbols = style.layer(withIdentifier: id) as? MLNSymbolStyleLayer,
                       let image = layout["icon-image"] {
                 symbols.iconImageName = NSExpression(mglJSONObject: image)
+                if let opacity = paint["icon-opacity"] { symbols.iconOpacity = NSExpression(mglJSONObject: opacity) }
             }
         }
     }

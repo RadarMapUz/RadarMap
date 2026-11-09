@@ -74,6 +74,46 @@ nonisolated struct CommuteWidgetData: Codable, Equatable, Sendable {
     var lastPlaceAt: Date? = nil
 }
 
+/// Что виджетам нужно от настроек приложения. Дом и работа — только флагами:
+/// координаты в общий контейнер не кладутся.
+nonisolated struct WidgetPrefs: Codable, Equatable, Sendable {
+    var hasHome = false
+    var hasWork = false
+    /// Экран блокировки без слов «дом» и «работа».
+    var privateLock = false
+    /// Язык, выбранный в приложении; nil — как в системе.
+    var language: String? = nil
+
+    static let key = "widget.prefs"
+
+    static func read() -> WidgetPrefs? {
+        guard SharedDefaults.hasAppGroup, let raw = SharedDefaults.store?.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(WidgetPrefs.self, from: raw)
+    }
+
+    static func write(_ prefs: WidgetPrefs) {
+        do {
+            SharedDefaults.store?.set(try JSONEncoder().encode(prefs), forKey: key)
+        } catch {
+            Logger(subsystem: "uz.radarmap.ios", category: "app")
+                .error("настройки виджетов не записаны: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// `AppleLanguages` приложения лежит в его собственном домене, расширение
+    /// его не видит; здесь язык выставляется в домене расширения при запуске,
+    /// до первого обращения к локализации.
+    static func applyLanguage(_ language: String?, to defaults: UserDefaults = .standard) {
+        let key = "AppleLanguages"
+        if let language {
+            guard defaults.stringArray(forKey: key) != [language] else { return }
+            defaults.set([language], forKey: key)
+        } else if defaults.persistentDomain(forName: Bundle.main.bundleIdentifier ?? "")?[key] != nil {
+            defaults.removeObject(forKey: key)
+        }
+    }
+}
+
 nonisolated enum WidgetCommute {
     static let key = "widget.commute"
     /// Старше месяца — это уже не «обычно»: дорогу могли сменить.

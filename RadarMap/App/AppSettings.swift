@@ -604,6 +604,9 @@ final class AppSettings {
     /// Подсказка «Домой / На работу» на главном экране по выученному
     /// распорядку. Выключается целиком — обучение молчит вместе с ней.
     var destinationSuggestions: Bool { didSet { store.set(destinationSuggestions, forKey: Keys.destinationHints) } }
+    /// Экран блокировки без дома и работы: «Дорога» вместо «На работу» и
+    /// плашка поездки без названия цели.
+    var lockScreenPrivate: Bool { didSet { store.set(lockScreenPrivate, forKey: Keys.lockScreenPrivate) } }
     /// Время дороги дом↔работа по участкам (CommuteProfile) — для прогноза
     /// «приеду в 9:12». Хранится инвертированно: включено по умолчанию.
     var commuteLearning: Bool { didSet { store.set(!commuteLearning, forKey: Keys.commuteLearningOff) } }
@@ -874,6 +877,7 @@ final class AppSettings {
         static let roadWeatherOff = "roadWeatherOff"
         static let maintenanceRemindersOff = "maintenanceRemindersOff"
         static let alertProfile = "alertProfile"
+        static let lockScreenPrivate = "lockScreenPrivate"
     }
 
     /// Пишем/снимаем override языка приложения. iOS читает «AppleLanguages» из
@@ -971,6 +975,7 @@ final class AppSettings {
         keepScreenOn = store.bool(forKey: Keys.keepScreenOn)
         destinationSuggestions = store.bool(forKey: Keys.destinationHints)
         commuteLearning = !store.bool(forKey: Keys.commuteLearningOff)
+        lockScreenPrivate = store.bool(forKey: Keys.lockScreenPrivate)
         smartSilence = store.bool(forKey: Keys.smartSilence)
         tripodHints = store.bool(forKey: Keys.tripodHints)
         nightVoice = store.bool(forKey: Keys.nightVoice)
@@ -1187,6 +1192,7 @@ extension AppSettings {
         Keys.cursorStyle: .string, Keys.alertMode: .string, Keys.alertProfile: .string,
         Keys.usageStats: .bool, Keys.trafficHidden: .bool, Keys.trafficContributionOff: .bool,
         Keys.roadWeatherOff: .bool, Keys.maintenanceRemindersOff: .bool,
+        Keys.lockScreenPrivate: .bool,
     ]
 
     /// Ключи, которые принадлежат этому телефону, — для теста: ни один не
@@ -1252,6 +1258,7 @@ extension AppSettings {
         case (Keys.keepScreenOn, .bool(let v)): keepScreenOn = v
         case (Keys.destinationHints, .bool(let v)): destinationSuggestions = v
         case (Keys.commuteLearningOff, .bool(let v)): commuteLearning = !v
+        case (Keys.lockScreenPrivate, .bool(let v)): lockScreenPrivate = v
         case (Keys.smartSilence, .bool(let v)): smartSilence = v
         case (Keys.tripodHints, .bool(let v)): tripodHints = v
         case (Keys.nightVoice, .bool(let v)): nightVoice = v

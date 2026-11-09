@@ -89,8 +89,9 @@ private func routeBySiri(_ slot: PlaceSlot) async -> IntentDialog {
             ? IntentDialog("Не знаю, где дом. Задайте его в RadarMap — или поездите, я выучу сам.")
             : IntentDialog("Не знаю, где работа. Задайте её в RadarMap — или поездите, я выучу сам.")
     }
-    let title = manual?.title ?? slot.name
-    if let failure = await buildSiriRoute(env, to: destination, title: title) { return failure }
+    // Только «Дом»/«Работа»: подпись маршрута уходит на плашку экрана
+    // блокировки, адрес из поиска там увидел бы любой рядом с телефоном.
+    if let failure = await buildSiriRoute(env, to: destination, title: slot.name) { return failure }
     let time = Formatting.duration(env.route.remainingTime)
     // Прибытие — та же минута, что на панели и в машине (RouteService.arrival).
     let clock = env.route.arrivalText

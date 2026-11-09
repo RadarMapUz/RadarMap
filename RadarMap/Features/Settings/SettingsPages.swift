@@ -697,6 +697,15 @@ struct PrivacySettingsPage: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Section {
+                Toggle("Приватный экран блокировки", isOn: $settings.lockScreenPrivate)
+                    .onChange(of: settings.lockScreenPrivate) { _, _ in
+                        env.lockScreenPrivacyChanged()
+                    }
+            } footer: {
+                Text("На экране блокировки вместо «На работу» и «Домой» — «Дорога», а плашка поездки не называет цель.")
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Section {
                 Toggle("Помогать с пробками", isOn: $settings.trafficContribution)
                 SettingsExplainer([
                     "Во время поездки отправляем отрезки пути по километру: где и с какой скоростью ехала машина. Из них сервер считает пробки для всех.",

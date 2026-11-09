@@ -1,6 +1,38 @@
 {
   "sourceLanguage": "ru",
   "strings": {
+    "Приватный экран блокировки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приватный экран блокировки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maxfiy qulflangan ekran"
+          }
+        }
+      }
+    },
+    "На экране блокировки вместо «На работу» и «Домой» — «Дорога», а плашка поездки не называет цель.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На экране блокировки вместо «На работу» и «Домой» — «Дорога», а плашка поездки не называет цель."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qulflangan ekranda «Ishga» va «Uyga» o‘rniga «Yo‘l» ko‘rinadi, safar paneli manzilni aytmaydi."
+          }
+        }
+      }
+    },
     "Есть другие варианты маршрута": {
       "localizations": {
         "uz": {

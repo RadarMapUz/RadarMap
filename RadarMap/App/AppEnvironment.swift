@@ -500,11 +500,14 @@ final class AppEnvironment {
             // Минута — та же, что на панели и в машине (RouteService.arrival).
             if self.route.isActive, let arrival = self.route.arrival {
                 let left = Formatting.distance(self.route.remainingDistance)
-                let name = self.route.destinationName
-                return (arrival, name.isEmpty ? left : "\(name) · \(left)", false)
+                let name = self.lockScreenDestination()
+                return (arrival, name.map { "\($0) · \(left)" } ?? left, false)
             }
             guard let ghost = self.commuteLive.display else { return nil }
-            return (ghost.arrival, GhostText.caption(ghost), GhostText.isAlert(ghost))
+            // Подпись призрака начинается с «Работа»/«Дом» — приватный режим
+            // оставляет только хвост.
+            let caption = self.settings.lockScreenPrivate ? GhostText.tail(ghost) : GhostText.caption(ghost)
+            return (ghost.arrival, caption, GhostText.isAlert(ghost))
         }
         // Кнопки плашки (9.1б): система выполняет их намерения в процессе
         // приложения, исполнитель — здесь (Shared/ActivityIntents).
@@ -1543,6 +1546,23 @@ final class AppEnvironment {
 
     /// Дом и работа для дороги: заданный вручную адрес старше выученного —
     /// то же правило, что у подсказки «Домой».
+    /// Подпись цели на плашке экрана блокировки. nil — подписи нет (приватный
+    /// режим или у маршрута нет имени).
+    func lockScreenDestination() -> String? {
+        func end(_ slot: PlaceSlot, _ kind: FrequentPlaces.Kind) -> CLLocationCoordinate2D? {
+            settings.place(for: slot)?.coordinate ?? learnedPlaces.first { $0.kind == kind }?.coordinate
+        }
+        switch LockScreenPlace.label(routeName: route.destinationName,
+                                     destination: route.destinationCoordinate,
+                                     home: end(.home, .home), work: end(.work, .work),
+                                     privateMode: settings.lockScreenPrivate) {
+        case .hidden: return nil
+        case .home: return String(localized: "Дом")
+        case .work: return String(localized: "Работа")
+        case .named(let name): return name
+        }
+    }
+
     var commuteEnds: (home: CLLocationCoordinate2D, work: CLLocationCoordinate2D)? {
         func end(_ kind: FrequentPlaces.Kind) -> CLLocationCoordinate2D? {
             settings.place(for: kind == .home ? .home : .work)?.coordinate
@@ -1660,6 +1680,7 @@ final class AppEnvironment {
         // холодном старте, а в фоновом подъёме — ровно утром (ревью 14.1).
         // Прочитается второе из двух — его колбэк и перепишет.
         guard trip.isLoaded, commuteProfiles.isLoaded else { return }
+        refreshWidgetPrefs()
         let target = settings.commuteLearning ? settings.workArrivalTarget : nil
         func direction(_ kind: Commute.Direction) -> CommuteWidgetData.Direction? {
             guard let summary = commute.first(where: { $0.direction == kind }), let usual = summary.usual else {
@@ -1718,6 +1739,32 @@ final class AppEnvironment {
         guard !WidgetCommute.sameNumbers(stored, data) else { return }
         WidgetCommute.write(data)
         WidgetCenter.shared.reloadTimelines(ofKind: "RadarCommuteWidget")
+    }
+
+    /// Флаги и настройки виджетов в App Group: есть ли дом и работа (без
+    /// координат), приватность, язык. Запись и перезагрузка — только при
+    /// смене, виджеты читают их сами.
+    func refreshWidgetPrefs() {
+        func known(_ slot: PlaceSlot, _ kind: FrequentPlaces.Kind) -> Bool {
+            settings.place(for: slot) != nil || learnedPlaces.contains { $0.kind == kind }
+        }
+        let prefs = WidgetPrefs(hasHome: known(.home, .home), hasWork: known(.work, .work),
+                                privateLock: settings.lockScreenPrivate,
+                                language: settings.appLanguage.appleLanguages?.first)
+        let stored = WidgetPrefs.read()
+        guard stored != prefs else { return }
+        WidgetPrefs.write(prefs)
+        if stored?.language != prefs.language {
+            WidgetCenter.shared.reloadAllTimelines()
+        } else {
+            WidgetCenter.shared.reloadTimelines(ofKind: "RadarCommuteWidget")
+        }
+    }
+
+    /// Настройка сменилась у открытого экрана: виджет и плашка узнают сразу.
+    func lockScreenPrivacyChanged() {
+        refreshWidgetPrefs()
+        location.refreshLiveActivity()
     }
 
     /// Последний заказанный системе фоновый подъём: заявка переставляется

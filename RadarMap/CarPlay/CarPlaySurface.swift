@@ -85,7 +85,18 @@ nonisolated enum CarPlaySurface: Equatable, Sendable {
     /// Незакрытая часть плитки: снизу справа прибор (с 09.11), и камера позади
     /// или сбоку стоя не должна уходить под него.
     static func dashboardClear(width: Double, height: Double) -> DriveCamera.Clear {
-        DriveCamera.Clear(bottom: Double(AppConfig.carPlayGaugeKeepReserve) / max(1, height), width: width)
+        DriveCamera.Clear(bottom: Double(AppConfig.carPlayGaugeKeepReserve) / max(1, height), width: width,
+                          topKeepPoints: DriveCamera.keepMarginPoints)
+    }
+
+    /// Незакрытая часть экрана машины: сверху бар (безопасная зона), снизу док
+    /// HUD, сбоку кнопки карты.
+    static func carClear(width: Double, height: Double, safeTop: Double, safeBottom: Double,
+                         side: Double) -> DriveCamera.Clear {
+        DriveCamera.Clear(top: safeTop / max(1, height),
+                          bottom: (safeBottom + 12 + Double(AppConfig.carPlayDockHeight)) / max(1, height),
+                          width: width, side: side + AppConfig.engineKeepSidePoints,
+                          topKeepPoints: DriveCamera.keepMarginPoints)
     }
 
     /// Показать ли название улицы на плитке: узкая — нет, плашка закрыла бы

@@ -97,11 +97,9 @@ struct CarPlayEngineLayer: View {
                                 bottom: Double(safe.bottom) / max(1, height),
                                 width: width,
                                 side: Double(max(safe.leading, safe.trailing)) + AppConfig.engineKeepSidePoints)
-            : DriveCamera.Clear(top: Double(safe.top) / max(1, height),
-                                bottom: Double(safe.bottom + 12 + AppConfig.carPlayDockHeight) / max(1, height),
-                                width: width,
-                                side: Double(max(safe.leading, safe.trailing, model.mapButtonInsets.trailing))
-                                    + AppConfig.engineKeepSidePoints)
+            : CarPlaySurface.carClear(width: width, height: height, safeTop: Double(safe.top),
+                                      safeBottom: Double(safe.bottom),
+                                      side: Double(max(safe.leading, safe.trailing, model.mapButtonInsets.trailing)))
         // Вид на остановке (29.D): на светофоре в машине развилка в 200 м
         // была за краем экрана (105 м обзора стоя). Машина подключена —
         // значит едем: вид работает и без начатой поездки.

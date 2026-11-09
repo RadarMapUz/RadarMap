@@ -89,7 +89,8 @@ nonisolated enum DriveCameraSim {
         let top = 50.0
         return Screen(name: "машина \(Int(height)) pt", kind: .car, height: height,
                       clear: DriveCamera.Clear(top: top / height, bottom: 112 / height,
-                                               width: width, side: 120),
+                                               width: width, side: 120,
+                                               topKeepPoints: DriveCamera.keepMarginPoints),
                       carY: { share in (top + 12 + (height - 12 - top - 12) * share) / height })
     }
 

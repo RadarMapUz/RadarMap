@@ -102,6 +102,11 @@ nonisolated enum DriveCamera {
         var bottom = 0.0
         var width = 0.0
         var side = 0.0
+        /// Запас над удерживаемой точкой — точки экрана В ЕЁ СТРОКЕ; 0 — прежний
+        /// запас в метрах центра экрана (телефон, приборка). На наклоне у
+        /// верхней кромки метр мельче в разы: от задуманных 28 оставалось 7–9
+        /// точек, и значок 38 уходил наполовину под бар (владелец, 09.11).
+        var topKeepPoints = 0.0
     }
 
     /// Вертикальный угол обзора MapLibre Native (util::DEFAULT_FOV).
@@ -362,22 +367,35 @@ nonisolated enum DriveCamera {
         // `keepMinZoom` — камера в 400 м на 10 км/ч уводила кадр в район (z15).
         // Цель и парковки у неё в режиме прибытия (MapDetailPolicy, 29.H) —
         // по тому же правилу и вместе с камерой: из потолков берётся меньший.
+        var laneKept = zoom
         for keep in [keep].compactMap({ $0 }) + alsoKeep
         where keep.distance.isFinite && keep.distance <= keepAheadMaxMeters
             && !isPassed(keep, speedKmh: speedKmh) {
-            var cap = max(keepMinZoom(speedKmh: speedKmh),
-                          maxZoom(keeping: keep, pitchDegrees: pitch, viewHeight: viewHeight,
-                                  carY: y, latitude: latitude, clear: clear))
+            func capped(_ clear: Clear) -> Double {
+                max(keepMinZoom(speedKmh: speedKmh),
+                    DriveCamera.maxZoom(keeping: keep, pitchDegrees: pitch, viewHeight: viewHeight,
+                                        carY: y, latitude: latitude, clear: clear))
+            }
+            var cap = capped(clear)
+            // Порог полос у развилки запасу значка не уступает: ради него
+            // стрелки полос не пропадают — кадр у манёвра как до 09.11.
+            var laneCap = framesManeuver ? capped(Clear(top: clear.top, bottom: clear.bottom, width: clear.width,
+                                                        side: clear.side)) : cap
             // Стоим, а точка ПОЗАДИ (её проехали): ради неё вид остановки не
             // уходит мельче своего пола. Позади «я» на экране машины ~25 %
             // высоты, и камера в 40 м сзади уводила кадр к z15,5 — перекрёсток
             // впереди мельчал до района (29.F/29.H, 26.10). Сбоку и впереди
             // точка держится по-прежнему — до минимально нужного отъезда:
             // «136 м до камеры» сбоку стоя обязана быть видна (12.10).
-            if stop.standing, isBehind(keep) { cap = max(cap, stopMinZoom(screen)) }
+            if stop.standing, isBehind(keep) {
+                cap = max(cap, stopMinZoom(screen))
+                laneCap = max(laneCap, stopMinZoom(screen))
+            }
             zoom = min(zoom, cap)
-            minZoom = min(minZoom, cap)
+            minZoom = min(minZoom, laneCap)
+            laneKept = min(laneKept, laneCap)
         }
+        if framesManeuver { zoom = max(zoom, min(laneZoom, laneKept)) }
         // Порог развилки (стрелки полос) старше потолка скорости.
         let maxZoom = max(profile.maxZoom, minZoom)
         return Frame(zoom: min(maxZoom, max(minZoom, zoom)),
@@ -521,8 +539,13 @@ nonisolated enum DriveCamera {
             guard seen > margin, need > 0 else { return }
             cap = min(cap, reference - log2(need / (seen - margin)))
         }
-        let ahead = visibleAhead(zoom: reference, pitchDegrees: pitchDegrees, viewHeight: viewHeight,
-                                 carY: carY, latitude: latitude, clearTop: clear.top)
+        // Запас в точках строки: кромка опущена на него, а метровый запас
+        // возвращён — `limit` его вычтет. Обзор до кромки ∝ 2^-zoom, решение точное.
+        let ahead = clear.topKeepPoints > 0
+            ? visibleAhead(zoom: reference, pitchDegrees: pitchDegrees, viewHeight: viewHeight, carY: carY,
+                           latitude: latitude, clearTop: clear.top + clear.topKeepPoints / max(1, viewHeight)) + margin
+            : visibleAhead(zoom: reference, pitchDegrees: pitchDegrees, viewHeight: viewHeight,
+                           carY: carY, latitude: latitude, clearTop: clear.top)
         let behind = visibleBehind(zoom: reference, pitchDegrees: pitchDegrees, viewHeight: viewHeight,
                                    carY: carY, latitude: latitude, clearBottom: clear.bottom)
         let usable = clear.width / 2 - clear.side

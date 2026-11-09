@@ -108,7 +108,7 @@ nonisolated enum RoadEventPassWatch {
     /// Вопрос водителю — короткий, на «да/нет».
     static func question(for kind: RoadEvent.Kind) -> String {
         switch kind {
-        case .closure:  return String(localized: "Ещё перекрыто?")
+        case .closure:  return String(localized: "Дорога ещё перекрыта?")
         case .roadwork: return String(localized: "Ремонт ещё идёт?")
         }
     }

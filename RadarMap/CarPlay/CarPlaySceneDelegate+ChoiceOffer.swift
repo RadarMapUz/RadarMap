@@ -2,7 +2,7 @@
 //  CarPlaySceneDelegate+ChoiceOffer.swift
 //  RadarMap
 //
-//  «Есть другие варианты маршрута» — баннер после устойчивой стоянки для
+//  «Другой путь быстрее…» — баннер после устойчивой стоянки для
 //  маршрута, построенного на ходу. Решение — CarPlayRouteChoiceOffer (чистое),
 //  здесь — входы, баннер и открытие списка по касанию.
 //
@@ -126,15 +126,18 @@ extension CarPlaySceneDelegate {
             Self.choiceOffer.spend(route: key)
             return
         }
-        let gain = CarPlayRouteChoiceOffer.gain(selected: route.selectedID, variants: variants, choices: choices)
-        let subtitle = switch gain {
-        case .faster(let minutes): String(format: String(localized: "Быстрее на %lld мин"), minutes)
-        case .fewerCameras(let count): String(format: String(localized: "Камер меньше на %lld"), count)
-        case .other: String(localized: "Можно выбрать, пока стоим")
+        let gain = CarPlayRouteChoiceOffer.gain(selected: route.selectedID, variants: variants, choices: choices,
+                                                trafficKnown: env.traffic.snapshot?.isFresh(now: Date()) == true)
+        let titles = switch gain {
+        case .faster(let minutes): [String(format: String(localized: "Другой путь быстрее на %lld мин"), minutes),
+                                    String(format: String(localized: "Быстрее на %lld мин"), minutes)]
+        case .fewerCameras(let count): [String(format: String(localized: "На другом пути камер меньше на %lld"), count),
+                                        String(format: String(localized: "Камер меньше на %lld"), count)]
+        case .other: [String(localized: "Можно выбрать другой путь"), String(localized: "Другой путь")]
         }
         let alert = CPNavigationAlert(
-            titleVariants: [String(localized: "Есть другие варианты маршрута"), String(localized: "Другие варианты")],
-            subtitleVariants: [subtitle],
+            titleVariants: titles,
+            subtitleVariants: [String(localized: "Пока стоим — покажу варианты")],
             image: CarPlayGuidance.symbol("arrow.triangle.branch", pointSize: 30,
                                           onDark: model.carIsDark ?? !model.isDaylight),
             primaryAction: CPAlertAction(title: String(localized: "Показать"), style: .default) { [weak self] _ in

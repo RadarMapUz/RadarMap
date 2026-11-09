@@ -41,8 +41,8 @@ final class CarPlayRoadWeatherBanner {
         guard remaining >= AppConfig.carPlayRoadWeatherMinSeconds else { return }
         let notice = banner.notice
         let next = CPNavigationAlert(
-            titleVariants: [notice.title],
-            subtitleVariants: [notice.subtitle],
+            titleVariants: [notice.headline, notice.title],
+            subtitleVariants: [notice.distanceLine],
             image: CarPlayGuidance.symbol(notice.symbol, pointSize: 30, onDark: onDark),
             primaryAction: CPAlertAction(title: String(localized: "Понятно"), style: .cancel) { _ in
                 AppEnvironment.shared.roadWeather.hideBanner()

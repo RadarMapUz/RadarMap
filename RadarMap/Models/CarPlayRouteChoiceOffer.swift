@@ -6,7 +6,7 @@
 //  в машине не было — читать список на скорости нельзя (NavigationFlow.carChoice).
 //  До 51 он не появлялся и потом: решения принимались только на смене фазы, а
 //  остановка фазу не меняет. Теперь машина предлагает выбор один раз, когда
-//  стоит по-настоящему, — баннером «Есть другие варианты», а список открывается
+//  стоит по-настоящему, — баннером «Другой путь быстрее…», а список открывается
 //  только касанием. Ведение без касания не прерывается никогда.
 //
 //  Что считается поводом:
@@ -103,11 +103,15 @@ nonisolated enum CarPlayRouteChoiceOffer {
         case other
     }
 
-    static func gain(selected: Int, variants: [Variant], choices: [Int]) -> Gain {
+    /// `trafficKnown` — свежие данные о пробках есть. Без них минуты выигрыша —
+    /// только расчёт по графу, и обещать их водителю нельзя.
+    static func gain(selected: Int, variants: [Variant], choices: [Int], trafficKnown: Bool = true) -> Gain {
         guard let current = variants.first(where: { $0.id == selected }) else { return .other }
         let others = variants.filter { $0.id != selected && choices.contains($0.id) }
         let best = others.map { saved($0, over: current) }.max() ?? 0
-        if best >= AppConfig.carPlayChoiceOfferFasterSeconds { return .faster(minutes: Int((best / 60).rounded())) }
+        if trafficKnown, best >= AppConfig.carPlayChoiceOfferFasterSeconds {
+            return .faster(minutes: Int((best / 60).rounded()))
+        }
         let fewer = current.cameras - (others.map(\.cameras).min() ?? current.cameras)
         return fewer > 0 ? .fewerCameras(fewer) : .other
     }

@@ -121,15 +121,15 @@ extension JamAhead {
 
 /// Фраза — на главном потоке: Formatting знает язык приложения.
 extension JamAhead.Jam {
-    /// Баннер в машине: «Впереди пробка: +6 мин».
+    /// Баннер в машине: «Пробка впереди: задержка 6 мин».
     var bannerTitle: String {
-        String(format: String(localized: "Впереди пробка: +%@"),
+        String(format: String(localized: "Пробка впереди: задержка %@"),
                Formatting.unbreakable(Formatting.duration(delay)))
     }
 
-    /// «около 1,2 км, через 300 м».
+    /// «длина около 1,2 км, начало через 300 м».
     var bannerSubtitle: String {
-        String(format: String(localized: "около %1$@, через %2$@"),
+        String(format: String(localized: "длина около %1$@, начало через %2$@"),
                Formatting.distance((length / 100).rounded() * 100),
                Formatting.distance((startsIn / 50).rounded() * 50))
     }

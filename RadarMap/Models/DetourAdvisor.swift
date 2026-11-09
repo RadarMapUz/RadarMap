@@ -52,20 +52,47 @@ nonisolated enum DetourAdvisor {
 
     // MARK: - Когда искать
 
+    /// Почему спрашиваем сейчас.
+    enum Trigger: Equatable, Sendable {
+        /// Очередной фикс поездки.
+        case fix
+        /// Приехал новый файл пробок: стоя фиксов может не быть минутами.
+        case traffic
+        /// Водитель открыл приложение или экран машины.
+        case opened
+    }
+
+    /// Файл пробок, приехавший сразу после открытия, — то же открытие: приложение
+    /// только что запросило его, а прежний мог быть несвежим.
+    static func effective(_ trigger: Trigger, sinceOpened: TimeInterval?) -> Trigger {
+        guard trigger == .traffic, let sinceOpened, sinceOpened < AppConfig.detourOpenedWindowSeconds else {
+            return trigger
+        }
+        return .opened
+    }
+
     /// - Parameters:
     ///   - delayAhead: подтверждённая живыми данными задержка на нашем пути впереди.
     ///   - currentRemaining: время до цели по текущему пути той же меркой, что
     ///     в `decide` (движок + живые пробки).
+    ///   - sinceDecline: «Остаться» или показанное без ответа — тишина для всех.
+    ///   - sinceUnseen: предложение так и не дошло до экрана. Голос десять минут
+    ///     молчит, но открывший приложение водитель вправе увидеть выгоду.
     static func shouldSearch(remainingDistance: CLLocationDistance,
                              delayAhead: TimeInterval,
                              currentRemaining: TimeInterval,
                              sinceLastSearch: TimeInterval?,
                              sinceDecline: TimeInterval?,
-                             offersOnRoute: Int) -> Bool {
+                             offersOnRoute: Int,
+                             sinceUnseen: TimeInterval? = nil,
+                             trigger: Trigger = .fix) -> Bool {
         guard remainingDistance >= AppConfig.detourMinRemainingMeters,
               offersOnRoute < AppConfig.detourMaxOffersPerRoute else { return false }
-        if let sinceLastSearch, sinceLastSearch < AppConfig.detourSearchIntervalSeconds { return false }
+        let interval = trigger == .opened ? AppConfig.detourOpenSearchIntervalSeconds
+                                          : AppConfig.detourSearchIntervalSeconds
+        if let sinceLastSearch, sinceLastSearch < interval { return false }
         if let sinceDecline, sinceDecline < AppConfig.detourDeclineQuietSeconds { return false }
+        if trigger != .opened, let sinceUnseen, sinceUnseen < AppConfig.detourDeclineQuietSeconds { return false }
         return delayAhead >= searchTrigger(currentRemaining: currentRemaining)
     }
 

@@ -47,6 +47,15 @@ nonisolated enum FrequentPlaces {
             }
         }
 
+        /// Вопрос баннера «куда едем?» в машине: одно «Домой» читалось как
+        /// кнопка или подпись без смысла.
+        var suggestionQuestion: String {
+            switch self {
+            case .home: return String(localized: "Едем домой?")
+            case .work: return String(localized: "Едем на работу?")
+            }
+        }
+
         var symbol: String {
             switch self {
             case .home: return "house.fill"

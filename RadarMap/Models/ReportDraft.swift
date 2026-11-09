@@ -354,9 +354,9 @@ nonisolated enum ReportWords {
     }
 
     /// Открыли выбор — голосом, если на экран не смотрят.
-    static var choosePrompt: String { String(localized: "Тренога? Или выберите") }
+    static var choosePrompt: String { String(localized: "Что отметить?") }
     /// Короткий вариант заголовка выбора (узкий экран машины).
-    static var choosePromptShort: String { String(localized: "Тренога?") }
+    static var choosePromptShort: String { String(localized: "Отметить?") }
     /// «✕» до отправки.
     static var notMarked: String { String(localized: "Не отмечено") }
 }

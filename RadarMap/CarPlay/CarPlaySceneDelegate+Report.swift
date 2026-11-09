@@ -5,8 +5,8 @@
 //  «Отметить» в машине — вариант B (02.11; спецификация CarPlay, часть A).
 //
 //  Касание кнопки бара или карты запоминает точку (ReportFlow — тот же
-//  черновик, что у телефона) и ставит над картой баннер «Тренога? Или
-//  выберите»: iOS 27 — три типа кнопками и крестик, до iOS 27 — «Пост ·
+//  черновик, что у телефона) и ставит над картой баннер «Что отметить?»:
+//  iOS 27 — три типа кнопками и крестик, до iOS 27 — «Пост ·
 //  ДТП…» (сетка) и «Отмена». Три секунды молчания — тренога; тот же баннер
 //  становится «Тренога отмечена · Отменить» на 8 с. Пока выбор не сделан и
 //  отсчёт не вышел, на сервер не уходит ничего.
@@ -106,7 +106,7 @@ extension CarPlaySceneDelegate {
 
     private func presentChoice(serial: Int, banners: CarPlayBanners) {
         let titles = [ReportWords.choosePrompt, ReportWords.choosePromptShort]
-        let subtitle = String(localized: "Уйдёт сама через 3 с")
+        let subtitle = String(localized: "Через 3 с отмечу треногу")
         var maximum: Int?
         if #available(iOS 27.0, *) { maximum = CPNavigationAlert.maximumActionsCount }
         let alert: CPNavigationAlert

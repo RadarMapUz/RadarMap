@@ -1869,6 +1869,10 @@ nonisolated enum AppConfig {
     static let routeCameraBehindSlackMeters: CLLocationDistance = 30
     /// Таймаут запроса к своему OSRM: дольше — «сервер недоступен».
     static let osrmTimeoutSeconds: TimeInterval = 12
+    /// Ближе этого — та же цель: второе касание не второе построение.
+    nonisolated static let routeBuildSameTargetMeters: Double = 30
+    /// Дольше этого индикатор говорит, что сеть медленная.
+    static let routeBuildSlowSeconds: TimeInterval = 5
 
     /// Остановка по пути (АЗС, кафе) считается пройденной ближе этого — дальше
     /// перестроение ведёт прямо к цели, без заезда.
@@ -2266,6 +2270,8 @@ nonisolated enum AppConfig {
     /// Сколько баннер на экране (как «Куда едем?») и как часто проверка, пока
     /// мешает камера, занятый экран или открытая панель телефона.
     static let carPlayChoiceOfferSeconds: TimeInterval = 12
+    /// Сколько висит «Маршрут не построен» с кнопкой «Повторить».
+    static let carPlayBuildFailedSeconds: TimeInterval = 15
     static let carPlayChoiceOfferRecheckSeconds: TimeInterval = 10
     /// Отмена навигации в первые столько секунд после нашей отмены ради списка —
     /// её отзвук (один раз, CarPlayGuidanceMapping.PreviewCancelEcho). Цена:
@@ -2309,6 +2315,12 @@ nonisolated enum AppConfig {
     /// Не чаще одного поиска за этот срок; после «Остаться» — тишина; не
     /// больше предложений за маршрут.
     static let detourSearchIntervalSeconds: TimeInterval = 180
+    /// Открыли приложение или экран машины: проверка может быть чаще обычной —
+    /// водитель пришёл посмотреть, а открытий не сотни.
+    static let detourOpenSearchIntervalSeconds: TimeInterval = 60
+    /// Столько после открытия новый файл пробок считается тем же открытием:
+    /// свежие пробки приезжают через пару секунд после него.
+    static let detourOpenedWindowSeconds: TimeInterval = 30
     static let detourDeclineQuietSeconds: TimeInterval = 600
     static let detourMaxOffersPerRoute = 3
     /// Выигрыш: не меньше max(3 мин, 15 % оставшегося времени по текущему пути)

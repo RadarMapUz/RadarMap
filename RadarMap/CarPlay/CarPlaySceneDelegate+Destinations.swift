@@ -287,8 +287,8 @@ extension CarPlaySceneDelegate {
 
     func presentAssign(_ slot: PlaceSlot) {
         guard CarPlaySearchEntry.slotTap(hasPlace: false, keyboardLimited: currentKeyboardLimited()) == .assign else {
-            return showAlert(title: String(format: String(localized: "«%@» — на стоянке"), slot.name),
-                             message: String(localized: "Поиск адреса на ходу недоступен — задайте место, когда машина остановится."))
+            return showAlert(title: "\(slot.name) \(slot.notSetTitle)",
+                             message: String(localized: "На ходу адрес не ввести — задайте его на стоянке или на телефоне."))
         }
         let search = CarPlaySearch { [weak self] place in
             guard let self else { return }
@@ -310,7 +310,7 @@ extension CarPlaySceneDelegate {
     /// Вход с приборной панели: касание её кнопки запускает основную сцену
     /// CarPlay, но обработчик кнопки приходит раньше, чем сцена подключилась.
     /// Ждём её коротко и открываем поиск для слота.
-    static func presentAssignWhenReady(_ slot: PlaceSlot) {
+    static func presentAssignWhenReady(_ slot: PlaceSlot, onMissed: (@MainActor () -> Void)? = nil) {
         Task { @MainActor in
             for _ in 0..<AppConfig.carPlaySceneWaitAttempts {
                 if let delegate = activeDelegate, delegate.interfaceController != nil {
@@ -320,6 +320,7 @@ extension CarPlaySceneDelegate {
                 await Task.pause(seconds: AppConfig.carPlaySceneWaitStep)
             }
             Log.carplay.notice("слот \(slot.rawValue, privacy: .public): основная сцена не подключилась вовремя")
+            onMissed?()
         }
     }
 
@@ -402,13 +403,14 @@ extension CarPlaySceneDelegate {
     /// Само построение и защита от двойного касания — общие с плиткой
     /// главного экрана (CarPlayRouteRequest).
     func route(to place: SavedPlace, allowPreview: Bool = true, remember: Bool = true) {
+        // К карте — в момент касания: под сеткой не видно ни хода, ни ошибки.
+        popToMap()
         Task { @MainActor [weak self] in
             guard let self else { return }
             var preview = false
             let outcome = await CarPlayRouteRequest.run(
                 env: env, to: place, remember: remember,
                 prepare: {
-                    popToMap()
                     // Выбор маршрута — только стоя (CarPlayTripPreview): на ходу
                     // ведём рекомендованным, как раньше. Флаг — ДО построения: иначе
                     // сессия навигации стартовала бы на первом варианте раньше выбора.
@@ -442,20 +444,19 @@ extension CarPlaySceneDelegate {
                 // Цель подтверждена касанием («куда едем?») — второго экрана
                 // выбора водитель не просил и после остановки не получит.
                 if !allowPreview { Self.choiceOffer.spend(route: choiceOfferKey()) }
-            case .busy:
-                break
-            case .noFix:
-                showAlert(title: String(localized: "Ждём спутники"),
-                          message: String(localized: "Положение ещё не определено — попробуйте через несколько секунд."))
-            case .failed(let error):
-                showAlert(title: String(localized: "Маршрут не построен"), message: error)
+            case .busy, .noFix, .failed:
+                break   // ход и ошибка — баннером (CarPlayBuildBanner)
+            case .alreadyGuiding:
+                showToast(String(localized: "Маршрут уже идёт"), speakIfHidden: true)
+            case .cancelled:
+                if preview { endPreview(start: false, keepRoute: true, reason: "построение отменено") }
             }
         }
     }
 
     /// Варианты с нашими метками и временем с пробками; рекомендованный —
     /// первым и выбранным. Линия — целиком на экране.
-    /// `offer` — список открыт из баннера «Есть другие варианты»; любой другой
+    /// `offer` — список открыт из баннера «Другой путь»; любой другой
     /// показ (новый маршрут при открытом списке) — обычный: его «Отмена» снимает
     /// маршрут.
     func showPreview(name: String, destination: CLLocationCoordinate2D,
@@ -667,12 +668,10 @@ extension CarPlaySceneDelegate {
                 return
             }
             popToMap()
+            // Ход и отказ — баннером (CarPlayBuildBanner): маршрут остаётся прежним.
             await env.route.addStop(place.coordinate, name: place.title,
                                     from: from, heading: env.location.routeHeading,
                                     cameras: env.cameras.cameras)
-            if let error = env.route.errorMessage {
-                showAlert(title: String(localized: "Не удалось заехать по пути"), message: error)
-            }
         }
     }
 }

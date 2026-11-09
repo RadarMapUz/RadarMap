@@ -187,6 +187,16 @@ extension RoadWeatherAlert.Notice {
         return String(format: String(localized: "%1$@ · через %2$@"), capitalized, km)
     }
 
+    /// Заголовок баннера: «Перевал Камчик: туман» — что случилось и где.
+    var headline: String { "\(title): \(hazardsText)" }
+
+    /// «Через 32 км на вашем пути».
+    var distanceLine: String {
+        let km = Formatting.unbreakable(String(format: String(localized: "%@ км"),
+                                               String(max(1, Int((distance / 1000).rounded())))))
+        return String(format: String(localized: "Через %@ на вашем пути"), km)
+    }
+
     /// Значок главной опасности — один для телефона и машины.
     var symbol: String { hazards.first?.symbol ?? "cloud.fill" }
 }

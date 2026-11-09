@@ -293,4 +293,15 @@ final class CarPlayRouteChoiceOfferTests: XCTestCase {
         XCTAssertEqual(choices, [0, 1])
         XCTAssertEqual(Offer.gain(selected: 0, variants: [a, b], choices: choices), .faster(minutes: 3))
     }
+
+    /// Без свежих пробок минуты выигрыша — только расчёт по графу: не обещаем.
+    func testNoTrafficDataPromisesNoMinutes() {
+        let a = Offer.Variant(id: 0, seconds: 1_800, fullSeconds: 1_800, cameras: 2, labeled: false, nearCar: true)
+        let b = Offer.Variant(id: 1, seconds: 1_200, fullSeconds: 1_200, cameras: 2, labeled: false, nearCar: true)
+        XCTAssertEqual(Offer.gain(selected: 0, variants: [a, b], choices: [0, 1]), .faster(minutes: 10))
+        XCTAssertEqual(Offer.gain(selected: 0, variants: [a, b], choices: [0, 1], trafficKnown: false), .other)
+        let calmer = Offer.Variant(id: 1, seconds: 1_200, fullSeconds: 1_200, cameras: 0, labeled: false, nearCar: true)
+        XCTAssertEqual(Offer.gain(selected: 0, variants: [a, calmer], choices: [0, 1], trafficKnown: false),
+                       .fewerCameras(2), "камеры считаются без пробок")
+    }
 }

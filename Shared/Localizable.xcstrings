@@ -38786,6 +38786,346 @@
           }
         }
       }
+    },
+    "Нет GPS": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GPS yoʻq"
+          }
+        }
+      }
+    },
+    "Вы только что проехали эту отметку": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu belgi yonidan hozirgina oʻtdingiz"
+          }
+        }
+      }
+    },
+    "Маршрут построен: %@": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrut tayyor: %@"
+          }
+        }
+      }
+    },
+    "Едем домой?": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyga ketamizmi?"
+          }
+        }
+      }
+    },
+    "Через %@ на вашем пути": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻlingizda %@ dan keyin"
+          }
+        }
+      }
+    },
+    "Отметить?": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belgilaymizmi?"
+          }
+        }
+      }
+    },
+    "Сеть медленная, ещё немного…": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Internet sekin, biroz kuting…"
+          }
+        }
+      }
+    },
+    "На ходу адрес не ввести — задайте его на стоянке или на телефоне.": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yurganda manzil kiritib boʻlmaydi — toʻxtaganda yoki telefonda belgilang."
+          }
+        }
+      }
+    },
+    "Через 3 с отмечу треногу": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3 soniyadan keyin uch oyoqni belgilayman"
+          }
+        }
+      }
+    },
+    "Маршруты временно недоступны": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrutlar vaqtincha ishlamayapti"
+          }
+        }
+      }
+    },
+    "Определяю положение…": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joylashuv aniqlanmoqda…"
+          }
+        }
+      }
+    },
+    "Сервис недоступен": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xizmat ishlamayapti"
+          }
+        }
+      }
+    },
+    "Проверьте интернет и повторите": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Internetni tekshirib, qayta urining"
+          }
+        }
+      }
+    },
+    "Нет маршрута": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrut yoʻq"
+          }
+        }
+      }
+    },
+    "Другой путь": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boshqa yoʻl"
+          }
+        }
+      }
+    },
+    "Строим маршрут: %@": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrut qurilmoqda: %@"
+          }
+        }
+      }
+    },
+    "Дорога ещё перекрыта?": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻl hali ham yopiqmi?"
+          }
+        }
+      }
+    },
+    "Не видим ваше положение": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joylashuvingizni koʻrmayapmiz"
+          }
+        }
+      }
+    },
+    "длина около %1$@, начало через %2$@": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "uzunligi taxminan %1$@, %2$@ dan keyin boshlanadi"
+          }
+        }
+      }
+    },
+    "Едем на работу?": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishga ketamizmi?"
+          }
+        }
+      }
+    },
+    "Откройте RadarMap, чтобы задать адрес": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manzilni belgilash uchun RadarMap’ni oching"
+          }
+        }
+      }
+    },
+    "Можно выбрать другой путь": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boshqa yoʻlni tanlash mumkin"
+          }
+        }
+      }
+    },
+    "Есть путь быстрее на %@": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ tezroq yoʻl bor"
+          }
+        }
+      }
+    },
+    "Другой путь быстрее на %lld мин": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boshqa yoʻl %lld daq tezroq"
+          }
+        }
+      }
+    },
+    "Пока стоим — покажу варианты": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turganimizda variantlarni koʻrsataman"
+          }
+        }
+      }
+    },
+    "Нет сети": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Internet yoʻq"
+          }
+        }
+      }
+    },
+    "Маршрут уже идёт": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrut allaqachon ketyapti"
+          }
+        }
+      }
+    },
+    "На другом пути камер меньше на %lld": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boshqa yoʻlda kamera %lld taga kam"
+          }
+        }
+      }
+    },
+    "Подождите пару секунд и повторите": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bir necha soniya kutib, qayta urining"
+          }
+        }
+      }
+    },
+    "Мы уже чиним": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tuzatyapmiz"
+          }
+        }
+      }
+    },
+    "Нет связи с сервером маршрутов": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrut serveri bilan aloqa yoʻq"
+          }
+        }
+      }
+    },
+    "Пробка впереди: задержка %@": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oldinda tirbandlik: %@ kechikish"
+          }
+        }
+      }
+    },
+    "Попробуйте точку рядом": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yaqinroq nuqtani tanlab koʻring"
+          }
+        }
+      }
+    },
+    "Сравниваю варианты…": {
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Variantlar solishtirilmoqda…"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -83,7 +83,7 @@ extension CarPlaySceneDelegate {
         }
         let alert = CPNavigationAlert(
             titleVariants: titles,
-            subtitleVariants: [],
+            subtitleVariants: [String(localized: "Вы только что проехали эту отметку")],
             image: CarPlayGuidance.symbol(symbolName, pointSize: 30,
                                           onDark: model.carIsDark ?? !model.isDaylight),
             primaryAction: CPAlertAction(title: yesTitle, style: .default) { [weak self] _ in

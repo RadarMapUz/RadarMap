@@ -405,9 +405,20 @@ final class AppEnvironment {
         mobile.acknowledgeUndelivered()
     }
 
+    /// Есть ли путь быстрее: открыли приложение или экран машины, приехал новый
+    /// файл пробок. Стоящему в пробке телефону фиксов может не прийти минутами,
+    /// а только с них раньше и проверяли. Пороги и тишина — DetourAdvisor.
+    func checkFasterRoute(trigger: DetourAdvisor.Trigger) {
+        guard location.isTripActive, route.isActive, !location.isSignalStale, !location.isPositionCoarse,
+              let here = location.currentCoordinate else { return }
+        route.refreshTrafficDelay(revision: traffic.revision)
+        route.considerDetour(coordinate: here, speedKmh: location.speedKmh, trigger: trigger)
+    }
+
     /// Ставит RootView по scenePhase телефона.
     func setPhoneSceneActive(_ active: Bool) {
         isPhoneSceneActive = active
+        if active { checkFasterRoute(trigger: .opened) }
         if !active { cloud.sceneEnteredBackground() }
         refreshTrafficWanted()
         updateThemeClock()
@@ -759,9 +770,12 @@ final class AppEnvironment {
         route.paceFactor = { [weak personalPace] roadClass in personalPace?.factor(for: roadClass) ?? 1 }
         // Свежий now.json, пока варианты выбирают, — их время и (до касания
         // панели) ярлыки по нему; в пути остаток ведёт refreshTrafficDelay.
-        traffic.onSnapshotChanged = { [weak route, weak location] in
-            guard location?.isTripActive != true else { return }
-            route?.liveTrafficArrived()
+        traffic.onSnapshotChanged = { [weak self, weak route, weak location] in
+            guard location?.isTripActive == true else {
+                route?.liveTrafficArrived()
+                return
+            }
+            self?.checkFasterRoute(trigger: .traffic)
         }
         route.isTripActive = { [weak location] in location?.isTripActive ?? false }
         route.onPaceSample = { [weak personalPace] sample in personalPace?.add(sample) }
@@ -953,10 +967,6 @@ final class AppEnvironment {
         }
         // Объезд пробки: сказать — голосом, решить — касанием (телефон или
         // машина). Маршрут сам не меняется.
-        route.detourScreenAvailable = { [weak self] in
-            guard let self else { return false }
-            return self.isPhoneSceneActive || self.isCarPlayConnected
-        }
         route.onDetourOffer = { [weak alerts] offer in
             guard settings.voiceEnabled else { return }
             alerts?.speak(offer.spoken, event: offer.voiceEvent)

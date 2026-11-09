@@ -77,6 +77,9 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
     /// телефоне, до 19.10 оставался на плитке «не задан» до переподключения —
     /// синхронизация шла только при подключении и выходе на экран.
     private var shortcutsGeneration = 0
+    /// Что уже отправлено в машину: новый массив заменяет кнопки целиком, а
+    /// нажатие, пришедшееся на замену, пропало бы.
+    private var sentShortcuts: [String]?
 
     private func observeShortcuts() {
         let generation = shortcutsGeneration
@@ -85,6 +88,7 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
             for slot in PlaceSlot.allCases { _ = env.settings.place(for: slot) }
             _ = env.learnedPlaces
             _ = env.commute
+            _ = env.route.buildFlow
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self, self.controller != nil, self.shortcutsGeneration == generation else { return }
@@ -121,7 +125,7 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
             }
         }
         model.isOnScreen = true
-        syncShortcuts()
+        syncShortcuts(force: true)
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
@@ -145,9 +149,10 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
     /// маршрут; не задан, но выучен по поездкам (FrequentPlaces) — маршрут к
     /// выученному; ничего — «не задан», касание открывает поиск в машине, и
     /// выбранное место становится этим слотом.
-    private func syncShortcuts() {
+    private func syncShortcuts(force: Bool = false) {
         guard let controller else { return }
-        controller.shortcutButtons = PlaceSlot.allCases.compactMap { slot in
+        var key: [String] = []
+        let buttons = PlaceSlot.allCases.compactMap { slot -> CPDashboardButton? in
             guard let image = UIImage(systemName: slot.symbol) else { return nil }
             // Выбор «ручное → выученное» и «обычно 39 мин» — те же, что у
             // «Куда» основного экрана (CarPlaySlotTarget).
@@ -156,27 +161,45 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
                                                    learned: env.learnedPlaces)
             switch target {
             case .manual(let place)?:
-                return CPDashboardButton(titleVariants: [slot.name],
-                                         subtitleVariants: [usual.map { "\(place.title) · \($0)" }, place.title]
-                                            .compactMap { $0 },
+                let subtitles = status(of: place)?.subtitles
+                    ?? [usual.map { "\(place.title) · \($0)" }, place.title].compactMap { $0 }
+                key += [slot.rawValue] + subtitles
+                return CPDashboardButton(titleVariants: [slot.name], subtitleVariants: subtitles,
                                          image: image) { [weak self] _ in
                     self?.route(to: place, remember: true)
                 }
             case .learned(let place)?:
-                return CPDashboardButton(titleVariants: [slot.name],
-                                         subtitleVariants: [usual, String(localized: "по вашим поездкам")]
-                                            .compactMap { $0 },
+                let subtitles = status(of: place)?.subtitles
+                    ?? [usual, String(localized: "по вашим поездкам")].compactMap { $0 }
+                key += [slot.rawValue] + subtitles
+                return CPDashboardButton(titleVariants: [slot.name], subtitleVariants: subtitles,
                                          image: image) { [weak self] _ in
                     // Выученное в «недавние» не пишем (см. «Куда»).
                     self?.route(to: place, remember: false)
                 }
             case nil:
+                key += [slot.rawValue, slot.notSetTitle]
                 return CPDashboardButton(titleVariants: [slot.name], subtitleVariants: [slot.notSetTitle],
-                                         image: image) { _ in
-                    CarPlaySceneDelegate.presentAssignWhenReady(slot)
+                                         image: image) { [weak self] _ in
+                    guard let self else { return }
+                    // Ответ — сразу и словами: поиск откроется, только если
+                    // поднимется основная сцена.
+                    env.alerts.speak("\(slot.name) \(slot.notSetTitle)")
+                    CarPlaySceneDelegate.presentAssignWhenReady(slot) { [weak self] in
+                        self?.env.alerts.speak(String(localized: "Откройте RadarMap, чтобы задать адрес"))
+                    }
                 }
             }
         }
+        guard force || key != sentShortcuts else { return }
+        sentShortcuts = key
+        controller.shortcutButtons = buttons
+    }
+
+    private func status(of place: SavedPlace) -> CarPlayShortcutLook.Status? {
+        let status = CarPlayShortcutLook.status(latitude: place.lat, longitude: place.lon,
+                                                state: env.route.buildFlow.state)
+        return status == .idle ? nil : status
     }
 
     /// Построение и защита от двойного касания — общие с основным экраном
@@ -185,18 +208,36 @@ final class CarPlayDashboardSceneDelegate: UIResponder, CPTemplateApplicationDas
         Task { @MainActor [weak self] in
             guard let self else { return }
             switch await CarPlayRouteRequest.run(env: env, to: place, remember: remember) {
-            case .busy, .built:
+            case .busy, .cancelled:
                 break
+            case .built:
+                // Манёвр плитка покажет сама (сессия); итог — голосом.
+                guard env.settings.voiceEnabled else { break }
+                env.alerts.speak(String(format: String(localized: "Маршрут построен: %@"),
+                                        Formatting.duration(env.route.remainingTime)))
+            case .alreadyGuiding:
+                env.alerts.speak(String(localized: "Маршрут уже идёт"))
             case .noFix:
                 // Без точного фикса маршрута нет. Сказать — голосом: у плитки
                 // нет своих диалогов, а тап «Домой» без ответа читается как
                 // поломка (аудит CarPlay, 12.10).
                 Log.carplay.error("маршрут с приборной панели: нет точного фикса")
                 env.alerts.speak(String(localized: "Не вижу точного положения — маршрут пока не построить"))
+                closeFailureLater()
             case .failed(let error):
                 Log.carplay.error("маршрут с приборной панели: \(error, privacy: .public)")
-                env.alerts.speak(String(localized: "Маршрут не построился"))
+                env.alerts.speak(error.isEmpty ? String(localized: "Маршрут не построился") : error)
+                closeFailureLater()
             }
+        }
+    }
+
+    /// Причина на кнопке — на время; баннер основной сцены закрывает её сам,
+    /// но её может не быть на экране.
+    private func closeFailureLater() {
+        Task { @MainActor [weak self] in
+            await Task.pause(seconds: AppConfig.carPlayBuildFailedSeconds)
+            self?.env.route.dismissBuildFailure()
         }
     }
 }
@@ -344,7 +385,16 @@ private struct CarPlayDashboardGauge: View {
                 SpeedLimitSign(limit: limit, diameter: 32, isAssumed: env.speedLimits.isCurrentLimitAssumed)
             }
             cameraCell
-            if !showsArrival {
+            if let line = env.route.buildFlow.state.gaugeLine {
+                // Кнопка плитки может и не перерисоваться: отклик — и здесь,
+                // в уже существующей капсуле, без нового элемента поверх карты.
+                Rectangle().fill(Theme.stroke).frame(width: 1, height: 24)
+                Text(verbatim: line)
+                    .font(.rounded(13, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            } else if !showsArrival {
                 EmptyView()
             } else if env.route.isActive {
                 Rectangle().fill(Theme.stroke).frame(width: 1, height: 24)

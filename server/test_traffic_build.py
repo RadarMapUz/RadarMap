@@ -6,12 +6,14 @@
 три шага по 40 с вместо 8.
 """
 import calendar
+import gzip
 import json
 import math
 import os
 import re
 import sqlite3
 import tempfile
+import threading
 import time
 import unittest
 
@@ -127,6 +129,33 @@ class PipelineTest(unittest.TestCase):
         self.assertGreater(segments, 0)
         left = self.conn.execute("SELECT COUNT(*) FROM traffic_pieces").fetchone()[0]
         self.assertEqual(left, 0, "сырой след не хранится после сопоставления")
+
+    def test_match_keeps_the_database_open_for_writers(self):
+        for _ in range(4):
+            self.add_piece()
+        other = sqlite3.connect(self.tmp.name, timeout=0, check_same_thread=False)
+        other.execute("CREATE TABLE probe(x)")
+        other.commit()
+        lock = threading.Lock()
+
+        def matcher(points):
+            with lock:
+                other.execute("INSERT INTO probe VALUES(1)")
+                other.commit()
+            return FIXTURE["response"]
+
+        done, _ = tb.process(self.conn, self.now, matcher=matcher)
+        other.close()
+        self.assertEqual(done, 4, "приём кусков не ждёт конца прогона")
+
+    def test_budget_leaves_the_oldest_pieces_waiting(self):
+        for _ in range(5):
+            self.add_piece()
+        ticks = iter([0, 0, tb.RUN_BUDGET + 1])
+        done, _ = tb.process(self.conn, self.now, matcher=lambda pts: FIXTURE["response"], clock=lambda: next(ticks))
+        self.assertEqual(done, tb.MATCH_WORKERS)
+        left = [r[0] for r in self.conn.execute("SELECT id FROM traffic_pieces ORDER BY id")]
+        self.assertEqual(left, [1, 2, 3], "при очереди важнее свежие куски")
 
     def test_unmatched_piece_waits_but_not_forever(self):
         self.add_piece()
@@ -705,6 +734,11 @@ class MigrationTest(unittest.TestCase):
         name = tb.bucket_name(tb.profile_slot(now))
         with open(os.path.join(self.typical, f"{name}.json"), encoding="utf-8") as f:
             return json.load(f)["edges"]
+
+    def test_now_json_gets_a_gzip_copy_of_the_same_body(self):
+        self.run_builder(self.now)
+        with open(self.out, "rb") as plain, gzip.open(self.out + ".gz", "rb") as packed:
+            self.assertEqual(plain.read(), packed.read())
 
     def test_first_run_on_the_8_8_16_database(self):
         result = self.run_builder(self.now)

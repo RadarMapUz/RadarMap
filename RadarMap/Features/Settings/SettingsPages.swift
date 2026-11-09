@@ -350,7 +350,7 @@ struct TripSettingsPage: View {
             }
 
             Section {
-                Toggle("Объёмный вид в поездке", isOn: $settings.drive3D)
+                Toggle("Вождение 3D", isOn: $settings.drive3D)
             } header: {
                 Text("Карта")
             } footer: {

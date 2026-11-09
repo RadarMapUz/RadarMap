@@ -59,6 +59,8 @@ struct MapLayersPanel: View {
     /// «Объёмный вид» — из колонки сюда (этап 31): переключают редко, а круг
     /// «3D» занимал место у камер правого края.
     @Binding var threeD: Bool
+    /// Вид поездки: серый асфальт и лента во всю полосу, только пока идёт поездка.
+    @Binding var drive3D: Bool
     @Binding var zoomButtons: Bool
     /// «Весь маршрут» — пока маршрут есть (плитка «Карта» меню «Ещё», этап 45).
     var onOverview: (() -> Void)? = nil
@@ -91,7 +93,7 @@ struct MapLayersPanel: View {
         .overlay(RoundedRectangle(cornerRadius: Theme.cornerPanel, style: .continuous)
             .strokeBorder(Theme.edgePanel, lineWidth: 1))
         // Таймер простоя — от любого переключения внутри (MapPopoverCard).
-        .mapPopoverCard(activity: [traffic, places, houses, sidewalks, threeD, zoomButtons], onClose: onClose)
+        .mapPopoverCard(activity: [traffic, places, houses, sidewalks, threeD, drive3D, zoomButtons], onClose: onClose)
     }
 
     private var panelContent: some View {
@@ -104,7 +106,8 @@ struct MapLayersPanel: View {
             toggle("Места", Icon.placesLayer, isOn: $places)
             toggle("Дома", Icon.buildingsLayer, isOn: $houses)
             toggle("Тротуары", Icon.sidewalksLayer, isOn: $sidewalks)
-            toggle("Объёмный вид", "view.3d", isOn: $threeD)
+            toggle("Наклон карты", "view.3d", isOn: $threeD)
+            toggle("Вождение 3D", "road.lanes", isOn: $drive3D)
             if let onOverview {
                 Button(action: onOverview) {
                     HStack(spacing: 10) {

@@ -378,6 +378,8 @@ struct EngineMapView: UIViewRepresentable {
         private let performanceLog = OSLog(subsystem: "uz.radarmap", category: "MapPerformance")
         fileprivate var lastCameraModel: EngineMapView?
         private var browsing = false
+        /// Наклон из модели на прошлом обновлении (см. наклон на свободной карте).
+        private var lastModelPitch: Double?
         /// Последний кадр нарисован со всеми тайлами — лента 3D может щупать карту.
         private var framesComplete = false
         private var lastRecenterToken = 0
@@ -1334,6 +1336,15 @@ struct EngineMapView: UIViewRepresentable {
                                      y: view.bounds.midY - step.height)
                 view.setCenter(view.convert(target, toCoordinateFrom: view), animated: false)
             }
+            // Наклон выключили или включили на свободной карте: следование её не
+            // двигает, и переключатель казался мёртвым.
+            if browsing, let shownPitch = lastModelPitch, (shownPitch == 0) != (model.pitchDegrees == 0) {
+                let tilted = view.camera
+                tilted.pitch = model.pitchDegrees
+                view.setCamera(tilted, withDuration: 0.35,
+                               animationTimingFunction: CAMediaTimingFunction(name: .easeInEaseOut))
+            }
+            lastModelPitch = model.pitchDegrees
             if !browsing && changed {
                 lastFollowTime = followNow
                 os_signpost(.event, log: performanceLog, name: "Follow camera")

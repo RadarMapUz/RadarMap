@@ -104,6 +104,7 @@ extension MapScreen {
                                                env.settings.map3D = on
                                                map.prefers3D = on
                                            }),
+                           drive3D: setting(\.drive3D),
                            zoomButtons: setting(\.mapZoomButtons),
                            onOverview: routeOverviewAction,
                            maxPanelHeight: columnSlots.map {

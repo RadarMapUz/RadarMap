@@ -39238,6 +39238,38 @@
           }
         }
       }
+    },
+    "Наклон карты": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Наклон карты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarita qiyaligi"
+          }
+        }
+      }
+    },
+    "Вождение 3D": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вождение 3D"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3D haydash"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

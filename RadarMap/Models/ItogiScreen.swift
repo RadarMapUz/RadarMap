@@ -12,6 +12,7 @@
 //  (`TripStats.dataRevision`), а body лишь рисует готовое.
 //
 
+import CoreLocation
 import Foundation
 
 nonisolated struct ItogiScreen: Equatable {
@@ -40,6 +41,11 @@ nonisolated struct ItogiScreen: Equatable {
     /// Километры по дням окна — у недели (у месяца — календарь на странице
     /// «Поездки», у дня — нечего делить).
     var bars: [DayBar] = []
+    var barUnit: ItogiBarUnit = .weekday
+    /// Среднее за прошедший день окна; у дня не считается.
+    var averageKm: Double?
+    /// Где сняли больше всего баллов — до трёх камер.
+    var losses: [RatingHotspot] = []
 
     static func == (a: ItogiScreen, b: ItogiScreen) -> Bool {
         a.summary == b.summary && a.insights == b.insights
@@ -48,11 +54,18 @@ nonisolated struct ItogiScreen: Equatable {
             && a.action == b.action && a.jams == b.jams
             && a.overLimitPlaces == b.overLimitPlaces && a.goal == b.goal
             && a.availability == b.availability && a.taken == b.taken && a.bars == b.bars
+            && a.barUnit == b.barUnit && a.averageKm == b.averageKm && a.losses == b.losses
     }
 
     /// Чистая сборка — её и проверяет тест; `screen` лишь уводит её с main.
+    /// Дом и работа — чтобы красить дорогу между ними; nil — один цвет.
+    struct CommuteEnds: Sendable {
+        let home: CLLocationCoordinate2D
+        let work: CLLocationCoordinate2D
+    }
+
     static func build(days: [TripDay], history: [TripRecord], period: StatsPeriod,
-                      anchor: Date, now: Date) -> ItogiScreen {
+                      anchor: Date, now: Date, commute: CommuteEnds? = nil) -> ItogiScreen {
         let summary = TripHistory.summary(days: days, history: history,
                                           period: period, anchor: anchor, now: now)
         let nudge = TripHistory.pendingFineNudge(history, now: now)
@@ -60,12 +73,32 @@ nonisolated struct ItogiScreen: Equatable {
         let interval = period.interval(containing: anchor)
         let availability = ItogiRating.availability(summary, period: period)
         var taken: ItogiRating.Taken?
+        var losses: [RatingHotspot] = []
         if case .shown(let rating) = availability {
-            taken = ItogiRating.taken(rating: rating,
-                                      sources: RatingBreakdown.sources(records: trips, days: days, in: interval))
+            let sources = RatingBreakdown.sources(records: trips, days: days, in: interval)
+            taken = ItogiRating.taken(rating: rating, sources: sources)
+            losses = Array(sources.cameras.sorted { $0.points > $1.points }.prefix(3))
         }
-        let bars = period == .week
-            ? TripHistory.dailyKm(trips, days: 7, now: interval.end.addingTimeInterval(-1)) : []
+        let commuteIDs = commute.map { ends in
+            Set(Commute.trips(history: trips.filter { $0.work != true },
+                              home: ends.home, work: ends.work).map(\.id))
+        } ?? []
+        let isCommute: (TripRecord) -> Bool = { commuteIDs.contains($0.id) }
+        let lastInstant = interval.end.addingTimeInterval(-1)
+        let bars: [DayBar]
+        let barUnit: ItogiBarUnit
+        switch period {
+        case .week:
+            bars = TripHistory.dailyKm(trips, days: 7, now: lastInstant, isCommute: isCommute)
+            barUnit = .weekday
+        case .month:
+            bars = TripHistory.dailyKm(trips, days: period.chartDays(containing: anchor) ?? 30,
+                                       now: lastInstant, isCommute: isCommute)
+            barUnit = .day
+        case .day:
+            bars = TripHistory.hourlyKm(trips, day: interval.start, isCommute: isCommute)
+            barUnit = .hour
+        }
         return ItogiScreen(summary: summary,
                            insights: PeriodInsights.hero(summary).map { [$0] } ?? [],
                            pendingCount: nudge?.count ?? 0,
@@ -75,12 +108,14 @@ nonisolated struct ItogiScreen: Equatable {
                            jams: TrafficTime.period(trips),
                            overLimitPlaces: OverLimit.places(trips),
                            goal: WeeklyGoal.build(days: days, now: now),
-                           availability: availability, taken: taken, bars: bars)
+                           availability: availability, taken: taken, bars: bars, barUnit: barUnit,
+                           averageKm: period == .day ? nil : ItogiCalendar.averageKm(bars: bars, now: now),
+                           losses: losses)
     }
 
     @concurrent
     static func screen(days: [TripDay], history: [TripRecord], period: StatsPeriod,
-                       anchor: Date, now: Date) async -> ItogiScreen {
-        build(days: days, history: history, period: period, anchor: anchor, now: now)
+                       anchor: Date, now: Date, commute: CommuteEnds? = nil) async -> ItogiScreen {
+        build(days: days, history: history, period: period, anchor: anchor, now: now, commute: commute)
     }
 }

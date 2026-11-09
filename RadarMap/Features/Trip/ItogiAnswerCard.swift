@@ -25,21 +25,23 @@ struct ItogiAnswerCard: View {
     var onRating: () -> Void = {}
     /// «Штрафы» на вкладке «Могут прийти».
     var onFines: () -> Void = {}
+    /// Выбранный на графике день.
+    var onOpenDay: ((Date) -> Void)? = nil
 
     private var summary: PeriodSummary { itogi.summary }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ratingBlock
-            VStack(alignment: .leading, spacing: 14) {
-                ItogiFactStrip(facts: facts)
-                if !itogi.bars.isEmpty {
-                    ItogiDayBars(bars: itogi.bars)
-                }
+        VStack(spacing: 12) {
+            ratingCard
+            if !itogi.bars.isEmpty, summary.distance > 0 {
+                ItogiPeriodChart(bars: itogi.bars, unit: itogi.barUnit, average: itogi.averageKm,
+                                 title: totalTitle, value: Formatting.distance(summary.distance),
+                                 delta: summary.distanceChange.map { Self.distanceChangeText($0, period: period) },
+                                 footer: footerText,
+                                 onOpenDay: itogi.barUnit == .hour ? nil : onOpenDay)
+                    .statCard()
             }
-            .padding(16)
             if let money = moneyLine {
-                Divider().overlay(Theme.stroke)
                 Button(action: onFines) {
                     ItogiCardRow(symbol: money.symbol, tint: money.tint, title: money.title,
                                  caption: money.caption, chevron: true)
@@ -47,9 +49,33 @@ struct ItogiAnswerCard: View {
                 .buttonStyle(PressableStyle(.row))
                 .accessibilityElement(children: .combine)
                 .accessibilityHint(Text("Открыть штрафы"))
+                .statCard(padding: 0)
             }
         }
-        .statCard(padding: 0)
+    }
+
+    @ViewBuilder private var ratingCard: some View {
+        if case .none = itogi.availability {
+            EmptyView()
+        } else if case .notForPeriod = itogi.availability {
+            EmptyView()
+        } else {
+            ratingBlock.statCard(padding: 0)
+        }
+    }
+
+    private var totalTitle: String {
+        switch period {
+        case .day:   return String(localized: "Всего за день")
+        case .week:  return String(localized: "Всего за неделю")
+        case .month: return String(localized: "Всего за месяц")
+        }
+    }
+
+    /// «19 поездок · 15 ч 1 мин за рулём» — одной строкой, поэтому не обрезается.
+    private var footerText: String {
+        "\(summary.trips)\u{00A0}" + Formatting.tripsLabel(summary.trips) + " · "
+            + Formatting.duration(summary.movingDuration) + " " + String(localized: "за рулём")
     }
 
     // MARK: - Рейтинг
@@ -95,14 +121,12 @@ struct ItogiAnswerCard: View {
             .buttonStyle(PressableStyle(.card))
             .accessibilityElement(children: .combine)
             .accessibilityHint(Text("За что сняли баллы"))
-            Divider().overlay(Theme.stroke)
         case .tooFew:
             ItogiCardRow(symbol: Icon.ratingPending, tint: Theme.textSecondary,
                          title: Self.tooFewTitle(period),
                          caption: String(format: String(localized: "Рейтинг появится после %1$lld поездок и %2$@"),
                                          AppConfig.itogiRatingMinTrips,
                                          Formatting.distance(AppConfig.itogiRatingMinMeters)))
-            Divider().overlay(Theme.stroke)
         case .notForPeriod, .none:
             EmptyView()
         }
@@ -139,24 +163,7 @@ struct ItogiAnswerCard: View {
                       String(localized: "\(total) баллов"), parts.joined(separator: ", "))
     }
 
-    // MARK: - Факты
-
-    private var facts: [ItogiFactStrip.Fact] {
-        var distance = ItogiFactStrip.Fact(id: "km", value: Formatting.distance(summary.distance),
-                                           caption: String(localized: "пройдено"))
-        if let change = summary.distanceChange {
-            // «+18 к тем же дням» — синим только рост, без красного: меньше
-            // ездить — не провинность.
-            distance.note = Self.distanceChangeText(change, period: period)
-            distance.noteTint = Theme.textSecondary
-        }
-        return [
-            distance,
-            .init(id: "trips", value: "\(summary.trips)", caption: Formatting.tripsLabel(summary.trips)),
-            .init(id: "time", value: Formatting.duration(summary.movingDuration),
-                  caption: String(localized: "за рулём")),
-        ]
-    }
+    // MARK: - Сравнение
 
     /// «+18 км к тем же дням прошлой недели» — процент только у сопоставимых
     /// периодов (PeriodSummary.distanceChange).

@@ -9,7 +9,6 @@
 //
 
 import SwiftUI
-import Charts
 
 // MARK: - Облик состояния проезда
 
@@ -123,85 +122,6 @@ struct ItogiFactStrip: View {
                 .padding(.horizontal, index == 0 ? 0 : 10)
                 .accessibilityElement(children: .combine)
             }
-        }
-    }
-}
-
-// MARK: - Столбики дней
-
-/// Неделя картинкой: километры по дням, цвет столбика — худшее состояние
-/// дня у камер (в лимите — спокойный синий, на грани — жёлтый, штраф —
-/// красный). Без оси Y: подпись только у пика задаёт масштаб.
-struct ItogiDayBars: View {
-    let bars: [DayBar]
-    var height: CGFloat = 64
-
-    var body: some View {
-        let peak = max(bars.map(\.km).max() ?? 0, 1)
-        VStack(alignment: .leading, spacing: 8) {
-            Chart(bars) { item in
-                BarMark(x: .value("День", item.day, unit: .day),
-                        y: .value("км", item.km),
-                        width: .ratio(0.55))
-                    .foregroundStyle(Self.tint(item))
-                    .cornerRadius(4)
-                    .annotation(position: .top, spacing: 2) {
-                        if item.km >= peak, item.km > 0 {
-                            Text(Formatting.distance(item.km * 1000))
-                                .font(.rounded(12, .semibold).monospacedDigit())
-                                .foregroundStyle(Theme.textSecondary)
-                        }
-                    }
-            }
-            .chartYScale(domain: 0...peak * 1.3)
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .day, count: 1)) { value in
-                    AxisValueLabel(centered: true) {
-                        if let day = value.as(Date.self) {
-                            Text(Self.weekday(day))
-                                .font(.rounded(12))
-                                .foregroundStyle(Theme.textTertiary)
-                        }
-                    }
-                }
-            }
-            .chartYAxis(.hidden)
-            .frame(height: height)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text("Километры по дням"))
-            legend
-        }
-    }
-
-    static func tint(_ bar: DayBar) -> Color {
-        if bar.overPasses > 0 { return PassVerdict.over.tint }
-        if bar.edgePasses > 0 { return PassVerdict.edge.tint }
-        return Theme.accent
-    }
-
-    /// Буква дня — по языку приложения (NumberFormat.locale), как у цели недели.
-    static func weekday(_ day: Date) -> String {
-        var calendar = Calendar.current
-        calendar.locale = NumberFormat.locale
-        let index = calendar.component(.weekday, from: day) - 1
-        return calendar.veryShortStandaloneWeekdaySymbols[index]
-    }
-
-    /// Не влезает в строку (SE, узбекский) — столбиком, а не многоточием.
-    private var legend: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 14) { legendItems; Spacer(minLength: 0) }
-            VStack(alignment: .leading, spacing: 4) { legendItems }
-        }
-    }
-
-    @ViewBuilder private var legendItems: some View {
-        ItogiLegendDot(color: Theme.accent, title: String(localized: "км за день"))
-        if bars.contains(where: { $0.edgePasses > 0 && $0.overPasses == 0 }) {
-            ItogiLegendDot(color: PassVerdict.edge.tint, title: String(localized: "день на грани"))
-        }
-        if bars.contains(where: \.hasOverspeed) {
-            ItogiLegendDot(color: PassVerdict.over.tint, title: String(localized: "день со штрафуемым превышением"))
         }
     }
 }

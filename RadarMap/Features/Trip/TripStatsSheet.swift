@@ -60,6 +60,7 @@ struct TripStatsSheet: View {
     /// «Очистить историю» стирает все поездки разом — только после вопроса.
     @State var confirmsClear = false
     @State var showRatingInfo = false
+    @State var showRingsCalendar = false
     /// Один экран «Штрафы» (Ш-A) — окно и вкладка задаются входом.
     @State var finesRequest: FinesRequest?
     @State var selectedBadge: Achievement?
@@ -108,13 +109,17 @@ struct TripStatsSheet: View {
         ScreenKey(period: period, anchor: anchor, revision: env.trip.dataRevision)
     }
 
+    private var commuteEnds: ItogiScreen.CommuteEnds? {
+        env.commuteEnds.map { ItogiScreen.CommuteEnds(home: $0.home, work: $0.work) }
+    }
+
     /// Готовый экран; синхронно — только в кадр, когда ключ уже сменился, а
     /// фоновый пересчёт ещё не вернулся: иначе шапка показала бы новый период
     /// над цифрами старого.
     var current: ItogiScreen {
         if let screen, screenKey == currentKey { return screen }
         return ItogiScreen.build(days: env.trip.days, history: env.trip.history,
-                                 period: period, anchor: anchor, now: Date())
+                                 period: period, anchor: anchor, now: Date(), commute: commuteEnds)
     }
 
     /// Ключ пересчёта данных карты: период и состав истории.
@@ -170,6 +175,7 @@ struct TripStatsSheet: View {
                                 .id("goal")
                         }
                         todoSection(itogi)
+                        lossSection(itogi)
                             .entrance(2, appeared)
                             .id("todo")
                         recentTrips(itogi)
@@ -267,7 +273,8 @@ struct TripStatsSheet: View {
         .task(id: currentKey) {
             let key = currentKey
             let built = await ItogiScreen.screen(days: env.trip.days, history: env.trip.history,
-                                                 period: key.period, anchor: key.anchor, now: Date())
+                                                 period: key.period, anchor: key.anchor, now: Date(),
+                                                 commute: commuteEnds)
             guard key == currentKey else { return }
             screen = built
             screenKey = key
@@ -314,6 +321,9 @@ struct TripStatsSheet: View {
                            periodTitle: period.rangeTitle(containing: anchor))
         }
         // Расшифровка получает ТУ ЖЕ сводку, что показала карточка-ответ.
+        .sheet(isPresented: $showRingsCalendar) {
+            ItogiRingsCalendar(days: env.trip.days) { path.append(.day($0)) }
+        }
         .sheet(isPresented: $showRatingInfo) {
             RatingDetailSheet(summary: current.summary,
                               period: period,

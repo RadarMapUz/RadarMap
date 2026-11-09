@@ -41,7 +41,7 @@ extension TripStatsSheet {
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
-            ItogiDayBars(bars: daily, height: 96)
+            ItogiPeriodChart(bars: daily, unit: period == .week ? .weekday : .day, height: 110)
         }
         .statCard()
     }

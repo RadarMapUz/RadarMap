@@ -341,6 +341,22 @@ ssh radarmap-vps 'python3 /opt/radarmap/api/status.py; echo $?'   # 0 — нет
 цвета, поэтому тишина — норма. Пульт «не обновляется» больше 15 минут —
 смотреть крон и `/var/log/radarmap-status.log`.
 
+## Смена тарифа
+
+Когда менять, говорит проверка «Запас мощности» на пульте: в её деталях написано,
+что упёрлось — канал, ядра или память.
+
+Потоки к OSRM, порог насыщения, ядра и память customize считаются по машине
+(`traffic_config.capacity_plan`) и подхватываются следующим прогоном cron. Руками
+после смены тарифа:
+
+1. Новый канал в строке cron у `status.py`: `RADARMAP_CHANNEL_MBIT=<Мбит/с>`,
+   иначе проверка считает долю от 30.
+2. Память контейнера стенда: `docker update --memory 2g --memory-swap 2g radarmap-osrm-mld`.
+
+Переопределить расчёт: `RADARMAP_MATCH_WORKERS`, `RADARMAP_SATURATE_FROM`,
+`RADARMAP_CUSTOMIZE_CPUS`, `RADARMAP_CUSTOMIZE_MEMORY_MB`.
+
 ## Долги
 
 - **HTTPS с доменом** — блокер App Store и предусловие панели наружу

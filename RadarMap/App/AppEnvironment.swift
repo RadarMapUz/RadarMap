@@ -271,7 +271,8 @@ final class AppEnvironment {
                 // Нагрев, а не итоговая ступень: автоэконом батареи не повод
                 // узнавать о треноге позже (AutoEconomy).
                 speedKmh: self.location.speedKmh, thermal: self.thermal.heatMode,
-                remotePollInterval: self.config.pollInterval, disabled: disabled)
+                remotePollInterval: self.config.pollInterval,
+                remoteTrafficInterval: self.config.current.trafficInterval, disabled: disabled)
         }
         // Срок отметки вышел, а сервер молчит (нет сети, лёг) — снимаем сами:
         // «тренога впереди» часами после срока хуже, чем её отсутствие (S5).

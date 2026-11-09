@@ -57,6 +57,17 @@ final class RemoteConfigTests: XCTestCase {
         XCTAssertEqual(config.pollInterval, 600, "значение в границах должно применяться")
     }
 
+    func testTrafficIntervalOutOfRangeIsIgnored() {
+        var config = RemoteConfig()
+        XCTAssertNil(config.trafficInterval)
+        for bad in [0.0, 5.0, 86400.0, -1.0] {
+            config.trafficPollInterval = bad
+            XCTAssertNil(config.trafficInterval, "\(bad) — это испорченный файл, а не настройка")
+        }
+        config.trafficPollInterval = 300
+        XCTAssertEqual(config.trafficInterval, 300)
+    }
+
     // MARK: - Версии
 
     func testVersionCompareIsNumericNotAlphabetic() {

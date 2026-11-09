@@ -288,7 +288,14 @@ final class TrafficService {
     @concurrent
     private static func fetch(api: APIClient, etag: String?) async throws
         -> (snapshot: TrafficSnapshot?, etag: String?)? {
-        guard let answer = try await api.getRawIfChanged("traffic/now.json", etag: etag) else { return nil }
+        let answer: (data: Data, etag: String?)?
+        do {
+            answer = try await api.getRawIfChanged("traffic/now2.json", etag: etag)
+        } catch APIClient.Failure.badStatus(404) {
+            // На сервере ещё (или снова) нет now2.json — старый файл.
+            answer = try await api.getRawIfChanged("traffic/now.json", etag: etag)
+        }
+        guard let answer else { return nil }
         return (TrafficSnapshot.decode(answer.data), answer.etag)
     }
 

@@ -121,6 +121,8 @@ nonisolated enum SyncPlan {
         var thermal: PerformanceMode = .full
         /// Интервал отметок из пульта (nil — пульта нет).
         var remotePollInterval: TimeInterval?
+        /// Интервал пробок из пульта: только разрежает (nil — как в сборке).
+        var remoteTrafficInterval: TimeInterval?
         /// Выключено пультом или настройкой.
         var disabled: Set<Job> = []
         /// Попутные, чей срок по часам самой службы подошёл.
@@ -168,7 +170,8 @@ nonisolated enum SyncPlan {
             if s.thermal >= .reduced { interval *= AppConfig.mobilePollThermalFactor }
             return interval
         case (.traffic, _):
-            return s.screenOn || s.hasRoute ? AppConfig.trafficRefreshInterval : AppConfig.trafficQuietInterval
+            let own = s.screenOn || s.hasRoute ? AppConfig.trafficRefreshInterval : AppConfig.trafficQuietInterval
+            return max(own, s.remoteTrafficInterval ?? 0)
         default:
             return nil
         }

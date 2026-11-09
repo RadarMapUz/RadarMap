@@ -37,6 +37,10 @@ nonisolated struct RemoteConfig: Codable, Equatable, Sendable {
     /// не выключая функцию целиком.
     var mobilePollInterval: TimeInterval?
 
+    /// Интервал обмена пробками (сек): при перегрузке сервера пульт разрежает
+    /// опрос. Чаще, чем в сборке, не бывает.
+    var trafficPollInterval: TimeInterval?
+
     /// Что временно выключено. Отсутствующий флаг = включено.
     var features: Features?
 
@@ -87,6 +91,12 @@ nonisolated struct RemoteConfig: Codable, Equatable, Sendable {
               AppConfig.remoteConfigPollRange.contains(value) else {
             return AppConfig.mobilePollInterval
         }
+        return value
+    }
+
+    /// Интервал пробок из пульта; nil — нет его или значение вне границ.
+    var trafficInterval: TimeInterval? {
+        guard let value = trafficPollInterval, AppConfig.remoteConfigPollRange.contains(value) else { return nil }
         return value
     }
 

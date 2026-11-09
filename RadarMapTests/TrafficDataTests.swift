@@ -44,8 +44,38 @@ final class TrafficDataTests: XCTestCase {
     }
 
     func testOtherVersionIsNoData() {
+        XCTAssertNil(TrafficSnapshot.decode(Data(#"{"v":3,"generated":1,"edges":[]}"#.utf8)))
         XCTAssertNil(TrafficSnapshot.decode(Data(#"{"v":2,"generated":1,"edges":[]}"#.utf8)))
         XCTAssertNil(TrafficSnapshot.decode(Data("not json".utf8)))
+    }
+
+    /// Тот же файл, что в test_traffic_build.ChainPayloadTest: сервер и телефон
+    /// читают формат одинаково.
+    func testDecodesChains() throws {
+        let json = #"{"v":2,"generated":1760000000,"chains":[[4130000,6928000,100,0,1,50,60,100,100,3,9,60]]}"#
+        let snapshot = try XCTUnwrap(TrafficSnapshot.decode(Data(json.utf8)))
+        XCTAssertEqual(snapshot.edges.count, 2)
+        XCTAssertEqual(snapshot.edges[0].a.latitude, 41.3, accuracy: 1e-9)
+        XCTAssertEqual(snapshot.edges[0].b.latitude, 41.301, accuracy: 1e-9)
+        XCTAssertEqual(snapshot.edges[1].b.latitude, 41.302, accuracy: 1e-9)
+        XCTAssertEqual(snapshot.edges[1].b.longitude, 69.281, accuracy: 1e-9)
+        XCTAssertEqual(snapshot.edges[1].level, 3)
+        XCTAssertEqual(snapshot.edges[1].kmh, 9)
+        XCTAssertEqual(snapshot.edges[0].modelKmh, 60)
+        XCTAssertEqual(snapshot.generated, Date(timeIntervalSince1970: 1_760_000_000))
+    }
+
+    func testBrokenEdgeInChainKeepsTheNextOnesInPlace() throws {
+        let json = #"{"v":2,"generated":1,"chains":[[4130000,6928000,100,0,9,50,60,100,0,2,30,60]]}"#
+        let snapshot = try XCTUnwrap(TrafficSnapshot.decode(Data(json.utf8)))
+        XCTAssertEqual(snapshot.edges.count, 1, "уровень 9 — пропуск")
+        XCTAssertEqual(snapshot.edges[0].a.latitude, 41.301, accuracy: 1e-9, "позиция идёт через битое ребро")
+    }
+
+    func testChainOfWrongLengthIsSkippedWhole() throws {
+        let json = #"{"v":2,"generated":1,"chains":[[4130000,6928000,100,0,1,50],[4130000,6928000,100,0,1,50,60]]}"#
+        let snapshot = try XCTUnwrap(TrafficSnapshot.decode(Data(json.utf8)))
+        XCTAssertEqual(snapshot.edges.count, 1)
     }
 
     func testStaleFileIsNoData() {

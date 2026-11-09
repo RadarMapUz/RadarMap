@@ -60,7 +60,10 @@ DOCKER="${RADARMAP_DOCKER:-docker}"
 SOURCE="${RADARMAP_SPEEDS_SOURCE:-route}"   # 33A: профиль часа недели + живые
 MODE="${RADARMAP_SPEEDS_MODE:-weight}"
 NAME=uzbekistan
-MEMORY=900m
+# Ядра и память customize — по железу машины (traffic_config.py), без него — минимум.
+eval "$(python3 "$BIN/traffic_config.py" --shell 2>/dev/null || true)"
+MEMORY="${CUSTOMIZE_MEMORY_MB:-900}m"
+CPUS="${CUSTOMIZE_CPUS:-1}"
 # Проба после подмены — пара аудита chil-yunus (Чиланзар → Юнусабад).
 PROBE="/route/v1/driving/69.19617,41.28151;69.28866,41.36612?overview=false"
 
@@ -196,15 +199,15 @@ UPDATES=()
 [ "$ROWS" = 0 ] || UPDATES+=(--segment-speed-file /data/speeds.csv)
 [ "$TROWS" = 0 ] || UPDATES+=(--turn-penalty-file /data/turns.csv)
 customize() {
-    "$DOCKER" run --rm --name "$CONTAINER-customize" -m "$MEMORY" --memory-swap "$MEMORY" --cpus 1 \
+    "$DOCKER" run --rm --name "$CONTAINER-customize" -m "$MEMORY" --memory-swap "$MEMORY" --cpus "$CPUS" \
         -v "$STAGE:/data" "$IMAGE" \
-        osrm-customize -t 1 "${UPDATES[@]}" "/data/$NAME.osrm"
+        osrm-customize -t "$CPUS" "${UPDATES[@]}" "/data/$NAME.osrm"
 }
 if [ "$CHANGES" != 0 ]; then
     # Журнал customize (~40 строк) — в $ROOT/customize.log, в журнал cron —
     # одна итоговая строка цикла.
     if [ "$DRY" = 1 ]; then
-        echo "+ $DOCKER run --rm --name $CONTAINER-customize -m $MEMORY --memory-swap $MEMORY --cpus 1 -v $STAGE:/data $IMAGE osrm-customize -t 1 --segment-speed-file /data/speeds.csv --turn-penalty-file /data/turns.csv /data/$NAME.osrm"
+        echo "+ $DOCKER run --rm --name $CONTAINER-customize -m $MEMORY --memory-swap $MEMORY --cpus $CPUS -v $STAGE:/data $IMAGE osrm-customize -t $CPUS --segment-speed-file /data/speeds.csv --turn-penalty-file /data/turns.csv /data/$NAME.osrm"
     elif ! customize > "$ROOT/customize.log" 2>&1; then
         log "customize упал (предел памяти $MEMORY?) — слот без пробок"
         run rm -rf "$STAGE"

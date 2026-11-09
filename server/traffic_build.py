@@ -124,8 +124,9 @@ OUT_PATH = "/opt/radarmap/www/traffic/now.json"
 
 PIECE_TTL = 20 * 60          # кусок, который не удалось сопоставить, не живёт дольше
 RUN_BUDGET = 90              # секунд на сопоставление: now.json выходит каждый прогон и при очереди
-MATCH_WORKERS = 2            # запросов к OSRM разом: по числу ядер VPS
-SATURATE_FROM = 300          # кусков в очереди: ниже CPU хватает и каждый кусок дороже
+_CAPACITY = tc.capacity()
+MATCH_WORKERS = _CAPACITY["match_workers"]   # запросов к OSRM разом
+SATURATE_FROM = _CAPACITY["saturate_from"]   # кусков в очереди: ниже CPU хватает и каждый кусок дороже
 CELL_LAT, CELL_LON = 0.003, 0.004   # ячейка насыщения: ~330 м на широте Ташкента
 CELL_BUCKET = 180            # секунд: лимит по коротким окнам, чтобы данные шли весь период
 CELL_LIMIT = 2               # кусков на ячейку, направление и окно — остальные не идут в OSRM
@@ -673,10 +674,10 @@ def piece_cell(points, received):
             int((heading + 22.5) % 360 // 45), int(received // CELL_BUCKET))
 
 
-def cell_full(conn, key):
+def cell_count(conn, key):
     row = conn.execute("SELECT n FROM traffic_cell_load WHERE la = ? AND lo = ? AND sector = ? AND bucket = ?",
                        key).fetchone()
-    return row is not None and row[0] >= CELL_LIMIT
+    return row[0] if row else 0
 
 
 def count_cell(conn, key):
@@ -700,15 +701,16 @@ def process(conn, now, matcher=osrm_match, budget=RUN_BUDGET, clock=time.monoton
                                 (MATCH_WORKERS,)).fetchall()
             if not rows:
                 break
-            batch = []
+            batch, planned = [], {}
             for piece_id, received, raw in rows:
                 points = json.loads(raw)
                 key = piece_cell(points, received)
-                if saturating and cell_full(conn, key):
+                if saturating and cell_count(conn, key) + planned.get(key, 0) >= CELL_LIMIT:
                     conn.execute("DELETE FROM traffic_pieces WHERE id = ?", (piece_id,))
                     skipped += 1
                 else:
                     batch.append((piece_id, points, key))
+                    planned[key] = planned.get(key, 0) + 1
             conn.commit()
             responses = list(pool.map(lambda item: match_or_none(matcher, item[1]), batch))
             for (piece_id, points, key), response in zip(batch, responses):
@@ -724,6 +726,10 @@ def process(conn, now, matcher=osrm_match, budget=RUN_BUDGET, clock=time.monoton
             conn.commit()
             if None in responses:
                 break
+    left = conn.execute("SELECT COUNT(*) FROM traffic_pieces").fetchone()[0]
+    conn.executemany("INSERT OR REPLACE INTO traffic_meta(key, value) VALUES(?, ?)",
+                     [("last_left", left), ("last_skipped", skipped)])
+    conn.commit()
     if skipped:
         print(f"насыщение: без OSRM пропущено кусков {skipped}")
     return done, matched

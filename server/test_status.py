@@ -506,6 +506,119 @@ class ConditionalFetchTests(unittest.TestCase):
         self.assertEqual(self.sent, [None, None])
 
 
+def interval(**over):
+    base = {"mbit": 3.0, "cpu": 20.0, "mem": 1500, "route_ms": 100, "http": 100, "blocked": 0, "left": 0, "skipped": 0}
+    base.update(over)
+    return base
+
+
+class CapacityVerdictTests(unittest.TestCase):
+    def verdict(self, *items, channel=30):
+        return st.capacity_verdict(list(items) or [interval()], channel)
+
+    def test_calm_server_is_green_and_says_why(self):
+        state, summary, advice = self.verdict()
+        self.assertEqual(state, st.OK)
+        self.assertIn("канал 3.0/30", summary)
+        self.assertEqual(advice, [])
+
+    def test_no_samples_is_not_a_verdict(self):
+        self.assertEqual(st.capacity_verdict([], 30)[0], st.IDLE)
+
+    def test_each_limit_names_what_to_change(self):
+        cases = (({"mbit": 20.0}, st.WARN, "каналом"), ({"mbit": 27.0}, st.BAD, "каналом"),
+                 ({"cpu": 75.0}, st.WARN, "ядер"), ({"cpu": 95.0}, st.BAD, "ядер"),
+                 ({"mem": 400}, st.WARN, "памяти"), ({"mem": 100}, st.BAD, "памяти"),
+                 ({"http": 100, "blocked": 5}, st.WARN, "CGNAT"), ({"left": 50}, st.WARN, "очередью"))
+        for over, state, word in cases:
+            with self.subTest(over=over):
+                got, _, advice = self.verdict(interval(**over))
+                self.assertEqual(got, state)
+                self.assertIn(word, " ".join(advice))
+
+    def test_peak_counts_not_the_average(self):
+        calm = [interval() for _ in range(50)]
+        self.assertEqual(self.verdict(*calm, interval(cpu=95.0))[0], st.BAD)
+
+    def test_new_tariff_moves_the_channel_limit(self):
+        self.assertEqual(self.verdict(interval(mbit=27.0), channel=200)[0], st.OK)
+
+    def test_slow_route_needs_enough_samples(self):
+        few = [interval(route_ms=900) for _ in range(st.LIMITS["route_min_samples"] - 1)]
+        self.assertEqual(self.verdict(*few)[0], st.OK)
+        many = few + [interval(route_ms=900)]
+        self.assertIn("реплика", " ".join(self.verdict(*many)[2]))
+
+    def test_saturation_alone_is_a_note_not_an_alarm(self):
+        state, _, advice = self.verdict(interval(skipped=40))
+        self.assertEqual(state, st.OK, "насыщение — штатная работа")
+        self.assertIn("насыщение", " ".join(advice))
+
+
+class CapacityCheckTests(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir)
+        self.proc = os.path.join(self.dir, "proc")
+        os.makedirs(os.path.join(self.proc, "net"))
+        self.log = os.path.join(self.dir, "access.log")
+        self.history = os.path.join(self.dir, "status.db")
+
+    def machine(self, sent, total, idle):
+        with open(self.proc + "/net/route", "w") as f:
+            f.write("Iface Destination Gateway\nens3 00000000 01000000\n")
+        with open(self.proc + "/net/dev", "w") as f:
+            f.write("Inter-|\n face |\n    lo: 9 0 0 0 0 0 0 0 999 0\n  ens3: 5 0 0 0 0 0 0 0 %d 0\n" % sent)
+        with open(self.proc + "/stat", "w") as f:
+            f.write("cpu  %d 0 0 %d 0 0 0 0 0 0\n" % (total - idle, idle))
+        with open(self.proc + "/meminfo", "w") as f:
+            f.write("MemTotal: 2000000 kB\nMemAvailable: 1048576 kB\n")
+
+    def run_at(self, now):
+        ctx = st.Context(now=now, fetcher=None, root=self.dir, history_db=self.history, proc=self.proc, nginx_log=self.log)
+        ctx.route_ms = 120
+        return st.check_capacity(ctx)
+
+    def test_two_samples_give_channel_and_cpu(self):
+        self.machine(0, 1000, 900)
+        self.assertEqual(self.run_at(NOW)["state"], st.IDLE, "первый замер — ещё не вывод")
+        self.machine(300 * 125000 * 3, 2000, 1500)
+        report = self.run_at(NOW + 300)
+        self.assertEqual(report["state"], st.OK)
+        self.assertIn("канал 3.0/30", report["summary"])
+        self.assertIn("CPU 40", report["summary"])
+
+    def test_reboot_resets_counters_without_a_false_peak(self):
+        self.machine(10**12, 10**6, 10**5)
+        self.run_at(NOW)
+        self.machine(1000, 2000, 1000)
+        self.assertEqual(self.run_at(NOW + 300)["state"], st.IDLE)
+
+    def test_without_history_there_is_no_verdict(self):
+        ctx = st.Context(now=NOW, fetcher=None, root=self.dir)
+        self.assertEqual(st.check_capacity(ctx)["state"], st.IDLE)
+
+    def test_http_counts_only_new_phone_requests(self):
+        stamp = time.strftime("%d/%b/%Y:%H:%M:%S +0000", time.gmtime(NOW))
+        old = time.strftime("%d/%b/%Y:%H:%M:%S +0000", time.gmtime(NOW - 900))
+        with open(self.log, "w") as f:
+            f.write('1.1.1.1 - - [%s] "GET /radarmap/a HTTP/1.1" 200 5 "-" "RadarMap/1"\n' % stamp)
+            f.write('1.1.1.1 - - [%s] "GET /radarmap/a HTTP/1.1" 429 5 "-" "RadarMap/1"\n' % stamp)
+            f.write('1.1.1.1 - - [%s] "GET /radarmap/a HTTP/1.1" 429 5 "-" "RadarMap/1"\n' % old)
+            f.write('1.1.1.1 - - [%s] "GET /radarmap/a HTTP/1.1" 200 5 "-" "RadarMap-status/1"\n' % stamp)
+            f.write('1.1.1.1 - - [%s] "GET /other HTTP/1.1" 429 5 "-" "x"\n' % stamp)
+        self.assertEqual(st.count_http(self.log, NOW - 300), (2, 1))
+
+    def test_builder_queue_is_read_from_its_own_database(self):
+        os.makedirs(os.path.join(self.dir, "api"))
+        conn = sqlite3.connect(os.path.join(self.dir, "api", "traffic.db"))
+        conn.execute("CREATE TABLE traffic_meta(key TEXT PRIMARY KEY, value REAL)")
+        conn.executemany("INSERT INTO traffic_meta VALUES(?, ?)", [("last_left", 7), ("last_skipped", 3)])
+        conn.commit()
+        conn.close()
+        self.assertEqual(st.traffic_queue(self.dir), (7, 3))
+
+
 class AlertTests(unittest.TestCase):
     def report(self, **states):
         return {"at": 1, "checks": [{"id": k, "title": k, "state": v, "summary": "s"}

@@ -7,6 +7,51 @@ status.py. Константы сборщика до этапа 33 (MIN_PIECES, S
 Выкладка: этот файл едет вместе с traffic_build.py (deploy_traffic.sh) и в
 каталог стенда /opt/radarmap/osrm-mld/bin — без него сборщик не запустится.
 """
+import os
+import sys
+
+
+# --- Мощность сервера: настройки из ядер и памяти -------------------------------
+# Смена тарифа не требует правок: всё зависящее от железа считается здесь.
+# На 2 ядрах и 2 ГБ получаются значения, проверенные на проде.
+CAPACITY_ENV = {"match_workers": "RADARMAP_MATCH_WORKERS",
+                "saturate_from": "RADARMAP_SATURATE_FROM",
+                "customize_cpus": "RADARMAP_CUSTOMIZE_CPUS",
+                "customize_memory_mb": "RADARMAP_CUSTOMIZE_MEMORY_MB"}
+
+
+def capacity_plan(cores, mem_mb):
+    workers = max(2, cores - 1)          # одно ядро остаётся nginx, API и маршрутам
+    return {"match_workers": workers,
+            "saturate_from": 150 * workers,
+            "customize_cpus": max(1, cores // 2),
+            "customize_memory_mb": max(900, min(2048, mem_mb // 4))}
+
+
+def machine_size():
+    """(ядер, МБ памяти); память неизвестна — как у самого маленького тарифа."""
+    try:
+        cores = len(os.sched_getaffinity(0))
+    except AttributeError:
+        cores = os.cpu_count() or 1
+    try:
+        with open("/proc/meminfo", encoding="ascii") as f:
+            return cores, next(int(line.split()[1]) // 1024 for line in f if line.startswith("MemTotal:"))
+    except (OSError, ValueError, IndexError, StopIteration):
+        return cores, 2048
+
+
+def capacity(environ=os.environ, cores=None, mem_mb=None):
+    """Настройки этой машины; переменные CAPACITY_ENV перекрывают расчёт."""
+    if cores is None or mem_mb is None:
+        cores, mem_mb = machine_size()
+    plan = capacity_plan(cores, mem_mb)
+    for key, name in CAPACITY_ENV.items():
+        raw = environ.get(name, "")
+        if raw.isdigit() and int(raw) > 0:
+            plan[key] = int(raw)
+    return plan
+
 
 # --- Слои: выключатели (33F) ----------------------------------------------------
 # Каждый слой файла для маршрутизатора гасится отдельно; выключенный слой —
@@ -222,3 +267,9 @@ MODEL_MAX_FILE_BYTES = 20 * 1024 * 1024
 # узел OSM; так файл в разы меньше.
 MODEL_PHONE_MERGE_METERS = 200.0
 MODEL_PHONE_MERGE_TOLERANCE = 3.0
+
+
+if __name__ == "__main__" and sys.argv[1:] == ["--shell"]:
+    _plan = capacity()
+    print(f"CUSTOMIZE_CPUS={_plan['customize_cpus']}")
+    print(f"CUSTOMIZE_MEMORY_MB={_plan['customize_memory_mb']}")

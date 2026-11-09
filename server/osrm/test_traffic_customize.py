@@ -130,6 +130,14 @@ class CycleTest(Stand):
         self.assertIn("inspect radarmap-osrm-mld", self.calls())
         self.assertIn("контейнера radarmap-osrm-mld нет", self.last.stdout)
 
+    def test_customize_takes_cores_and_memory_from_the_machine_plan(self):
+        server = os.path.dirname(os.path.dirname(os.path.abspath(SCRIPT)))
+        self.cycle("1,2,40.0,1.389\n", env={"RADARMAP_OSRM_MLD_BIN": server, "RADARMAP_CUSTOMIZE_CPUS": "3",
+                                            "RADARMAP_CUSTOMIZE_MEMORY_MB": "1500"})
+        run = [c for c in self.calls() if c.startswith("run ")][0]
+        for word in ("-m 1500m", "--memory-swap 1500m", "--cpus 3", "osrm-customize -t 3"):
+            self.assertIn(word, run)
+
     def test_turn_penalties_copy_the_files_customize_rewrites(self):
         self.cycle("", "--turns", self.turns("1,2,3,40\n"))
         self.assertEqual(self.current(), "a")

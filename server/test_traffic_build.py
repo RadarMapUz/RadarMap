@@ -16,6 +16,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 import traffic_build as tb
 import traffic_config as tc
@@ -106,6 +107,25 @@ def split_fixture(at):
     return part(0, at, coords[:cut + 1]), part(at, len(legs), coords[cut:])
 
 
+class CapacityPlanTest(unittest.TestCase):
+    def test_current_tariff_keeps_the_values_proven_on_prod(self):
+        self.assertEqual(tc.capacity_plan(2, 1963), {"match_workers": 2, "saturate_from": 300,
+                                                     "customize_cpus": 1, "customize_memory_mb": 900})
+
+    def test_bigger_tariff_uses_the_new_cores_and_memory(self):
+        self.assertEqual(tc.capacity_plan(4, 8192), {"match_workers": 3, "saturate_from": 450,
+                                                     "customize_cpus": 2, "customize_memory_mb": 2048})
+
+    def test_one_core_still_works(self):
+        plan = tc.capacity_plan(1, 1024)
+        self.assertEqual((plan["match_workers"], plan["customize_cpus"], plan["customize_memory_mb"]), (2, 1, 900))
+
+    def test_environment_overrides_the_plan_only_with_a_valid_number(self):
+        env = {"RADARMAP_MATCH_WORKERS": "9", "RADARMAP_SATURATE_FROM": "abc", "RADARMAP_CUSTOMIZE_CPUS": "0"}
+        plan = tc.capacity(environ=env, cores=2, mem_mb=1963)
+        self.assertEqual((plan["match_workers"], plan["saturate_from"], plan["customize_cpus"]), (9, 300, 1))
+
+
 class PipelineTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
@@ -179,7 +199,8 @@ class PipelineTest(unittest.TestCase):
         def down(points):
             raise OSError("connection refused")
 
-        tb.process(self.conn, self.now, matcher=down, saturate_from=1)
+        with mock.patch.object(tb, "MATCH_WORKERS", 2):
+            tb.process(self.conn, self.now, matcher=down, saturate_from=1)
         self.assertEqual(self.pending_count(), 3)
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM traffic_cell_load").fetchone()[0], 0)
 
@@ -211,14 +232,26 @@ class PipelineTest(unittest.TestCase):
         tb.prune(self.conn, self.now + tb.PIECE_TTL + 2 * tb.CELL_BUCKET)
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM traffic_cell_load").fetchone()[0], 0)
 
+    def test_batch_cannot_overfill_a_cell(self):
+        for _ in range(5):
+            self.add_piece()
+        calls = []
+        with mock.patch.object(tb, "MATCH_WORKERS", 4):
+            done, _ = tb.process(self.conn, self.now, matcher=self.counting_matcher(calls), saturate_from=1)
+        self.assertEqual((done, len(calls)), (tb.CELL_LIMIT, tb.CELL_LIMIT), "на большом сервере лимит тот же")
+
     def test_budget_leaves_the_oldest_pieces_waiting(self):
         for _ in range(5):
             self.add_piece()
         ticks = iter([0, 0, tb.RUN_BUDGET + 1])
-        done, _ = tb.process(self.conn, self.now, matcher=lambda pts: FIXTURE["response"], clock=lambda: next(ticks))
-        self.assertEqual(done, tb.MATCH_WORKERS)
+        with mock.patch.object(tb, "MATCH_WORKERS", 2):
+            done, _ = tb.process(self.conn, self.now, matcher=lambda pts: FIXTURE["response"],
+                                 clock=lambda: next(ticks))
+        self.assertEqual(done, 2)
         left = [r[0] for r in self.conn.execute("SELECT id FROM traffic_pieces ORDER BY id")]
         self.assertEqual(left, [1, 2, 3], "при очереди важнее свежие куски")
+        meta = dict(self.conn.execute("SELECT key, value FROM traffic_meta WHERE key LIKE 'last_%'"))
+        self.assertEqual(meta, {"last_left": 3, "last_skipped": 0}, "монитор видит хвост очереди")
 
     def test_unmatched_piece_waits_but_not_forever(self):
         self.add_piece()

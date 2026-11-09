@@ -31,11 +31,13 @@
 openssl, он на сервере есть (OpenSSL 3).
 """
 import base64
+import datetime
 import gzip
 import hashlib
 import json
 import os
 import random
+import re
 import socket
 import sqlite3
 import ssl
@@ -58,6 +60,7 @@ CACHE_MIN_BYTES = 256 * 1024
 CACHE_FULL_EVERY = 6 * 3600
 REPORTS_DB = os.environ.get("RADARMAP_REPORTS_DB", ROOT + "/api/reports.db")
 ROADS_LOG = os.environ.get("RADARMAP_ROADS_LOG", "/var/log/radarmap-roads.log")
+NGINX_LOG = os.environ.get("RADARMAP_NGINX_LOG", "/var/log/nginx/access.log")
 
 # Тот же ключ, что в AppConfig.otaPublicKeyB64. Если он разъедется с
 # приложением, пульт покраснит всё подписанное — и это правильно: телефоны в
@@ -103,6 +106,15 @@ LIMITS = {
     "tile_sample": 20,
     # Основа карты пересобирается раз в неделю на маке владельца.
     "omt_warn_days": 10, "omt_bad_days": 30,
+    # Запас мощности: канал замерен 09.11.2026, после смены тарифа — новое значение.
+    "channel_mbit": int(os.environ.get("RADARMAP_CHANNEL_MBIT", "30")),
+    "channel_warn_pct": 60, "channel_bad_pct": 85,
+    "cpu_warn_pct": 70, "cpu_bad_pct": 90,
+    "mem_warn_mb": 500, "mem_bad_mb": 200,
+    "route_warn_ms": 500, "route_min_samples": 12,
+    "http429_warn_pct": 1,
+    "queue_warn_share": 0.5,
+    "capacity_log_tail": 8 * 1024 * 1024,
 }
 
 
@@ -272,13 +284,18 @@ def days(value):
 
 class Context:
     def __init__(self, now=None, fetcher=fetch, verify=verify_ed25519,
-                 reports_db=REPORTS_DB, root=ROOT, roads_log=ROADS_LOG):
+                 reports_db=REPORTS_DB, root=ROOT, roads_log=ROADS_LOG,
+                 history_db=None, proc="/proc", nginx_log=NGINX_LOG):
         self.now = now or time.time()
         self.fetch = fetcher
         self.verify = verify
         self.reports_db = reports_db
         self.root = root
         self.roads_log = roads_log
+        self.history_db = history_db
+        self.proc = proc
+        self.nginx_log = nginx_log
+        self.route_ms = None
         # Опубликованные версии, как их считает телефон (api.DATA_VERSION_KEYS).
         # Заполняют проверки по ходу; check_delivery сравнивает с телефонами.
         self.published = {}
@@ -341,6 +358,8 @@ def check_crowd(ctx):
 def check_osrm(ctx):
     got = ctx.fetch("osrm/route/v1/driving/69.24,41.31;69.28,41.33?overview=false")
     routes = got.ok and b'"code":"Ok"' in got.body
+    if routes:
+        ctx.route_ms = got.ms
     graph = os.path.join(ctx.root, "osrm", "uzbekistan-latest.osrm.hsgr")
     age = (ctx.now - os.path.getmtime(graph)) / DAY if os.path.exists(graph) else None
     state = BAD if not routes else (WARN if age is not None and age > LIMITS["osrm_warn_days"] else OK)
@@ -977,9 +996,158 @@ def check_delivery(ctx):
     return result("delivery", "Доставка до телефонов", state, summary, meaning)
 
 
+# --- Запас мощности: когда менять тариф -------------------------------------
+
+def read_machine(proc):
+    """Счётчики ядра: (отправлено байт, CPU всего, CPU простой, свободно МБ) или None."""
+    try:
+        with open(proc + "/net/route", encoding="ascii") as f:
+            iface = next(line.split()[0] for line in f.readlines()[1:] if line.split()[1] == "00000000")
+        with open(proc + "/net/dev", encoding="ascii") as f:
+            stats = next(line.split(":", 1)[1].split() for line in f if line.strip().startswith(iface + ":"))
+        with open(proc + "/stat", encoding="ascii") as f:
+            cpu = [int(value) for value in f.readline().split()[1:9]]
+        with open(proc + "/meminfo", encoding="ascii") as f:
+            memory = next(int(line.split()[1]) // 1024 for line in f if line.startswith("MemAvailable:"))
+        return int(stats[8]), sum(cpu), cpu[3] + cpu[4], memory
+    except (OSError, ValueError, IndexError, StopIteration):
+        return None
+
+
+HTTP_LINE = re.compile(r'\[([^\]]+)\] "[^"]*" (\d{3}) ')
+
+
+def count_http(path, since):
+    """(запросов RadarMap, из них 429) после since; читается только хвост журнала."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - LIMITS["capacity_log_tail"]))
+            tail = f.read().decode("utf-8", "replace")
+    except OSError:
+        return 0, 0
+    total = blocked = 0
+    for line in tail.splitlines():
+        if "/radarmap/" not in line or "RadarMap-status/" in line:
+            continue
+        found = HTTP_LINE.search(line)
+        if not found:
+            continue
+        try:
+            at = datetime.datetime.strptime(found.group(1), "%d/%b/%Y:%H:%M:%S %z").timestamp()
+        except ValueError:
+            continue
+        if at > since:
+            total += 1
+            blocked += found.group(2) == "429"
+    return total, blocked
+
+
+def traffic_queue(root):
+    """(кусков осталось после прогона сборки, пропущено насыщением)."""
+    path = os.path.join(root, "api", "traffic.db")
+    if not os.path.exists(path):
+        return 0, 0
+    try:
+        conn = sqlite3.connect("file:%s?mode=ro" % path, uri=True, timeout=5)
+        try:
+            meta = dict(conn.execute("SELECT key, value FROM traffic_meta WHERE key IN ('last_left', 'last_skipped')"))
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return 0, 0
+    return int(meta.get("last_left", 0)), int(meta.get("last_skipped", 0))
+
+
+def capacity_intervals(rows):
+    """Строки capacity → показатели между соседними замерами; сброс счётчиков пропускается."""
+    out = []
+    for a, b in zip(rows, rows[1:]):
+        seconds, sent, cpu_total = b[0] - a[0], b[1] - a[1], b[2] - a[2]
+        if seconds <= 0 or sent < 0 or cpu_total <= 0:
+            continue
+        out.append({"mbit": sent * 8 / seconds / 1e6, "cpu": 100 * (1 - (b[3] - a[3]) / cpu_total), "mem": b[4],
+                    "route_ms": b[5], "http": b[6], "blocked": b[7], "left": b[8], "skipped": b[9]})
+    return out
+
+
+def capacity_verdict(intervals, channel_mbit):
+    """(состояние, сводка, советы) по замерам за сутки: важен пик, а не среднее."""
+    if not intervals:
+        return IDLE, "копим замеры", []
+    mbit = max(i["mbit"] for i in intervals)
+    cpu = max(i["cpu"] for i in intervals)
+    mem = min(i["mem"] for i in intervals)
+    routes = sorted(i["route_ms"] for i in intervals if i["route_ms"])
+    route_p95 = routes[int(len(routes) * 0.95)] if len(routes) >= LIMITS["route_min_samples"] else None
+    http = sum(i["http"] for i in intervals)
+    blocked_pct = 100 * sum(i["blocked"] for i in intervals) / http if http else 0
+    recent = intervals[-12:]
+    lagging = sum(1 for i in recent if i["left"] > 0) / len(recent)
+    skipped = sum(i["skipped"] for i in recent)
+    channel_pct = 100 * mbit / channel_mbit
+
+    states, advice = [OK], []
+
+    def rate(state, text):
+        states.append(state)
+        advice.append(text)
+
+    if channel_pct >= LIMITS["channel_warn_pct"]:
+        rate(BAD if channel_pct >= LIMITS["channel_bad_pct"] else WARN,
+             "канал занят на %d %% в пик → тариф с большим каналом или edge" % channel_pct)
+    if cpu >= LIMITS["cpu_warn_pct"]:
+        rate(BAD if cpu >= LIMITS["cpu_bad_pct"] else WARN, "CPU %d %% в пик → больше ядер" % cpu)
+    if mem < LIMITS["mem_warn_mb"]:
+        rate(BAD if mem < LIMITS["mem_bad_mb"] else WARN, "свободно %d МБ в худший момент → больше памяти" % mem)
+    if route_p95 is not None and route_p95 > LIMITS["route_warn_ms"]:
+        rate(WARN, "маршрут p95 %d мс → реплика OSRM" % route_p95)
+    if blocked_pct > LIMITS["http429_warn_pct"]:
+        rate(WARN, "ответов 429: %.1f %% → лимиты nginx под CGNAT" % blocked_pct)
+    if lagging >= LIMITS["queue_warn_share"]:
+        rate(WARN, "сборка не успевает за очередью кусков → больше ядер")
+    if skipped:
+        advice.append("насыщение за час: без OSRM %d кусков" % skipped)
+
+    summary = "канал %.1f/%d Мбит/с · CPU %d %% · свободно %d МБ · маршрут p95 %s · 429: %.1f %%" % (
+        mbit, channel_mbit, cpu, mem, "%d мс" % route_p95 if route_p95 is not None else "—", blocked_pct)
+    return worst(*states), summary, advice
+
+
+def check_capacity(ctx):
+    meaning = ("Сервер подходит к пределу: водители получат устаревшие пробки и медленные "
+               "маршруты. В деталях — что именно менять в тарифе.")
+    machine = read_machine(ctx.proc) if ctx.history_db else None
+    if machine is None:
+        return result("capacity", "Запас мощности", IDLE, "нет счётчиков машины", meaning)
+    conn = sqlite3.connect(ctx.history_db, timeout=10)
+    try:
+        conn.execute("CREATE TABLE IF NOT EXISTS capacity(at INTEGER PRIMARY KEY, tx_bytes INTEGER, "
+                     "cpu_total INTEGER, cpu_idle INTEGER, mem_mb INTEGER, route_ms INTEGER, "
+                     "http_all INTEGER, http_429 INTEGER, queue_left INTEGER, skipped INTEGER)")
+        last = conn.execute("SELECT MAX(at) FROM capacity").fetchone()[0]
+        http, blocked = count_http(ctx.nginx_log, last if last is not None else ctx.now - 300)
+        left, skipped = traffic_queue(ctx.root)
+        with conn:
+            conn.execute("INSERT OR REPLACE INTO capacity VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                         (int(ctx.now),) + machine + (ctx.route_ms, http, blocked, left, skipped))
+            conn.execute("DELETE FROM capacity WHERE at < ?", (ctx.now - 30 * DAY,))
+        rows = conn.execute("SELECT * FROM capacity WHERE at >= ? ORDER BY at", (ctx.now - DAY,)).fetchall()
+    finally:
+        conn.close()
+    state, summary, advice = capacity_verdict(capacity_intervals(rows), LIMITS["channel_mbit"])
+    details = list(advice)
+    if getattr(_tc, "capacity", None):
+        plan = _tc.capacity()
+        details.append("настройки этой машины: потоков к OSRM %d · насыщение от %d кусков · customize %d яд., %d МБ"
+                       % (plan["match_workers"], plan["saturate_from"], plan["customize_cpus"],
+                          plan["customize_memory_mb"]))
+    return result("capacity", "Запас мощности", state, summary, meaning, details)
+
+
 CHECKS = (check_api, check_cameras, check_registry, check_limits, check_roads, check_mvt, check_omt, check_overrides,
           check_hotspots, check_config, check_osrm, check_traffic, check_crowd, check_backup, check_disk,
-          check_cert, check_delivery)
+          check_cert, check_delivery, check_capacity)
 
 
 def run_all(ctx):
@@ -1043,7 +1211,7 @@ def write_json(path, data):
 
 
 def main():
-    report = run_all(Context())
+    report = run_all(Context(history_db=HISTORY_DB))
     write_json(OUT, report)
     write_json(PUBLIC_OUT, {"at": report["at"], "overall": report["overall"],
                             "checks": {r["id"]: r["state"] for r in report["checks"]}})

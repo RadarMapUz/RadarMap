@@ -99,6 +99,22 @@ nonisolated enum CarPlaySurface: Equatable, Sendable {
                           topKeepPoints: DriveCamera.keepMarginPoints)
     }
 
+    /// Чип на плитке, когда карте неоткуда взять тайлы. Как на экране машины,
+    /// но только если и скачанной области здесь нет: со своей областью карта
+    /// рисуется, и «нет сети» водителю ничего не объясняет.
+    enum TileMapChip: Equatable, Sendable {
+        case noNetwork(compact: Bool)
+        case serverDown(compact: Bool)
+    }
+
+    static func tileMapChip(isOnline: Bool, tileServerDown: Bool, hasOfflineArea: Bool,
+                            width: CGFloat) -> TileMapChip? {
+        guard !(isOnline && !tileServerDown), !hasOfflineArea else { return nil }
+        // Ширина ещё не измерена (0) — значком: текст на неизвестной ширине может не влезть.
+        let compact = width < AppConfig.carPlayTileChipTextWidth
+        return isOnline ? .serverDown(compact: compact) : .noNetwork(compact: compact)
+    }
+
     /// Показать ли название улицы на плитке: узкая — нет, плашка закрыла бы
     /// дорогу и упёрлась в прибор.
     static func tileShowsStreet(width: CGFloat, arrivalShown: Bool) -> Bool {

@@ -131,6 +131,31 @@ final class CarPlayTileTests: XCTestCase {
         XCTAssertTrue(presence.isConnected)
     }
 
+    // MARK: - Чип «нет сети»
+
+    func testOfflineChipOnlyWhenTheMapHasNowhereToLoadFrom() {
+        typealias Surface = CarPlaySurface
+        let wide: CGFloat = 480
+        XCTAssertNil(Surface.tileMapChip(isOnline: true, tileServerDown: false, hasOfflineArea: false, width: wide))
+        XCTAssertNil(Surface.tileMapChip(isOnline: false, tileServerDown: false, hasOfflineArea: true, width: wide),
+                     "скачанная область рисует карту")
+        XCTAssertNil(Surface.tileMapChip(isOnline: true, tileServerDown: true, hasOfflineArea: true, width: wide))
+        XCTAssertEqual(Surface.tileMapChip(isOnline: false, tileServerDown: false, hasOfflineArea: false, width: wide),
+                       .noNetwork(compact: false))
+        XCTAssertEqual(Surface.tileMapChip(isOnline: true, tileServerDown: true, hasOfflineArea: false, width: wide),
+                       .serverDown(compact: false), "связь есть — «нет сети» было бы неправдой")
+    }
+
+    func testNarrowTileGetsOnlyTheGlyph() {
+        for width: CGFloat in [0, 280, 320, AppConfig.carPlayTileChipTextWidth - 1] {
+            XCTAssertEqual(CarPlaySurface.tileMapChip(isOnline: false, tileServerDown: false, hasOfflineArea: false,
+                                                      width: width), .noNetwork(compact: true), "\(width)")
+        }
+        XCTAssertEqual(CarPlaySurface.tileMapChip(isOnline: false, tileServerDown: false, hasOfflineArea: false,
+                                                  width: AppConfig.carPlayTileChipTextWidth),
+                       .noNetwork(compact: false))
+    }
+
     // MARK: - Камера у верхней кромки (09.11)
 
     private struct KeepScreen {

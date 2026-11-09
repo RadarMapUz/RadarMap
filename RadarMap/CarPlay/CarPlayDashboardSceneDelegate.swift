@@ -236,6 +236,9 @@ struct CarPlayDashboardView: View {
                 .padding(10)
             }
         }
+        .overlay(alignment: .topTrailing) {
+            if model.isOnScreen { TileMapStatus(width: width).padding(10) }
+        }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .environment(\.colorScheme, model.isDaylight ? .light : .dark)
         .onChange(of: env.sunIsUp, initial: true) { _, day in
@@ -252,6 +255,50 @@ struct CarPlayDashboardView: View {
 private struct TileStreetSlot: View {
     let model: CarPlayMapModel
     var body: some View { StreetNamePill(name: model.streetName) }
+}
+
+/// Карте неоткуда взять тайлы. Пока сеть есть, координату не читает вовсе, и
+/// фиксы эту вью не трогают; без сети фикс пересобирает её одну, а не плитку.
+private struct TileMapStatus: View {
+    @Environment(AppEnvironment.self) private var env
+    let width: CGFloat
+
+    var body: some View {
+        if env.network.isMapOnline {
+            EmptyView()
+        } else {
+            let me = env.location.displayCoordinate ?? env.location.currentCoordinate
+            switch CarPlaySurface.tileMapChip(isOnline: env.network.isOnline,
+                                              tileServerDown: env.network.isTileServerDown,
+                                              hasOfflineArea: me.flatMap(env.offlineMaps.offlineFiles(at:)) != nil,
+                                              width: width) {
+            case .noNetwork(let compact)?:
+                chip("wifi.slash", String(localized: "Нет сети — камеры работают"), compact: compact)
+            case .serverDown(let compact)?:
+                chip("server.rack", String(localized: "Карта не отвечает — камеры работают"), compact: compact)
+            case nil:
+                EmptyView()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func chip(_ symbol: String, _ text: String, compact: Bool) -> some View {
+        if compact {
+            Image(systemName: symbol)
+                .font(.rounded(15, .bold))
+                .foregroundStyle(Theme.warning)
+                .padding(8)
+                .background(Theme.background.opacity(0.88), in: Capsule())
+                .overlay(Capsule().stroke(Theme.warning.opacity(0.35), lineWidth: 1))
+                .accessibilityLabel(Text(text))
+                .allowsHitTesting(false)
+        } else {
+            CarPlayStatusChip(chip: CarPlayChip(id: symbol, symbol: symbol, tint: Theme.warning, text: text))
+                .frame(maxWidth: max(0, width - 20), alignment: .trailing)
+                .allowsHitTesting(false)
+        }
+    }
 }
 
 /// Скорость, лимит, ближайшая камера и прибытие — одной плашкой. Отдельная

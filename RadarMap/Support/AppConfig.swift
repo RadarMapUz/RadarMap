@@ -2173,6 +2173,9 @@ nonisolated enum AppConfig {
     /// прибор втрое шире, и улице нужно больше места.
     static let carPlayTileStreetWidth: CGFloat = 420
     static let carPlayTileStreetWidthWithArrival: CGFloat = 560
+    /// Плитка: чип «нет сети» с текстом — от такой ширины, уже — один значок
+    /// (самая длинная фраза с отступами плитки просит около 320 pt).
+    static let carPlayTileChipTextWidth: CGFloat = 340
     /// Прибор плитки: камера с расстоянием меньше этого по маршруту и дальше
     /// этого по прямой — за спиной, а не «0 м впереди»
     /// (CarPlayCameraCue.gaugeShows). 40 м — траверз записи проезда.

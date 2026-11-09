@@ -58,6 +58,12 @@ final class OfflineMapService {
 
     @ObservationIgnored private let api = APIClient(timeout: 30, resourceTimeout: 1800)
     @ObservationIgnored private var tasks: [String: Task<Void, Never>] = [:]
+    /// Область установлена: середины её клеток поиска, скачать адреса и
+    /// заведения. Ставит AppEnvironment.
+    @ObservationIgnored var onSearchCellsNeeded: (([CLLocationCoordinate2D]) -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onSearchCellsNeeded,
+                                               "OfflineMapService.onSearchCellsNeeded") }
+    }
 
     init() {
         installed = JSONFile.load([String: Installed].self, from: Self.manifestURL, log: Log.network) ?? [:]
@@ -147,13 +153,19 @@ final class OfflineMapService {
     /// тоже кэшируется, иначе регион без файлов проверялся бы на каждый тик.
     @ObservationIgnored private var offlineFilesCache: [String: OfflineFiles?] = [:]
 
+    /// Середины клеток поиска всех установленных областей.
+    var installedSearchCells: [CLLocationCoordinate2D] {
+        guard let catalog else { return [] }
+        return catalog.regions.filter { installed[$0.id] != nil }
+            .flatMap { $0.searchCellCenters(cellZoom: catalog.cellZoom) }
+    }
+
     // MARK: - Загрузка
 
     func download(_ region: RegionCatalog.Region) {
-        guard tasks[region.id] == nil, let catalog else { return }
+        guard tasks[region.id] == nil, catalog != nil else { return }
         errors[region.id] = nil
         progress[region.id] = 0
-        let total = Double(max(region.totalBytes, 1))
         let api = self.api
         let id = region.id
         // Прогресс — на главный актор; собственный слабый захват, без
@@ -161,11 +173,18 @@ final class OfflineMapService {
         let report: @Sendable (Double) -> Void = { [weak self] value in
             guard let owner = self else { return }
             Task { @MainActor in
-                guard owner.progress[id] != nil else { return }
+                // Процент, а не каждый пакет: значение читает SwiftUI.
+                guard let old = owner.progress[id], Int(value * 100) != Int(old * 100) else { return }
                 owner.progress[id] = value
             }
         }
         tasks[region.id] = Task { [weak self] in
+            // Свежий каталог перед загрузкой: на сервере живут только последние
+            // версии, и файл по адресу из старого каталога ответил бы 404.
+            await self?.refreshCatalog()
+            guard let self, let catalog = self.catalog else { return }
+            let region = catalog.regions.first { $0.id == id } ?? region
+            let total = Double(max(region.totalBytes, 1))
             var done: Int64 = 0
             var saved: [String: String] = [:]
             do {
@@ -188,7 +207,6 @@ final class OfflineMapService {
                     saved[kind] = name
                     done += file.bytes
                 }
-                guard let self else { return }
                 let old = self.installed[region.id]
                 self.installed[region.id] = Installed(version: catalog.version, files: saved)
                 self.offlineFilesCache[region.id] = nil
@@ -198,18 +216,23 @@ final class OfflineMapService {
                     Self.remove(name)
                 }
                 Log.network.info("офлайн-регион \(region.id, privacy: .public) v\(catalog.version, privacy: .public) установлен")
-            } catch is CancellationError {
-                Log.network.info("загрузка \(region.id, privacy: .public) отменена")
+                self.onSearchCellsNeeded?(region.searchCellCenters(cellZoom: catalog.cellZoom))
             } catch {
-                Log.network.error("офлайн-регион \(region.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
-                self?.errors[region.id] = String(localized: "Не удалось скачать — проверьте связь и попробуйте ещё раз")
                 // Недокачанное — не в карту: удаляем то, что успело лечь.
                 for name in saved.values {
                     Self.remove(name)
                 }
+                // Отмена приходит и как URLError.cancelled: «проверьте связь»
+                // на собственный ✕ было бы неправдой.
+                if error is CancellationError || Task.isCancelled {
+                    Log.network.info("загрузка \(region.id, privacy: .public) отменена")
+                } else {
+                    Log.network.error("офлайн-регион \(region.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                    self.errors[region.id] = String(localized: "Не удалось скачать — проверьте связь и попробуйте ещё раз")
+                }
             }
-            self?.progress[region.id] = nil
-            self?.tasks[region.id] = nil
+            self.progress[region.id] = nil
+            self.tasks[region.id] = nil
         }
     }
 

@@ -700,6 +700,8 @@ nonisolated enum AppConfig {
     nonisolated static let tileServerFailureThreshold = 4
     nonisolated static let tileServerFailureWindowSeconds: TimeInterval = 30
     static let tileServerProbeSeconds: TimeInterval = 180
+    /// Маленький файл того же сервера: проба «ожил ли» без перезагрузки стиля.
+    static let tileServerProbePath = "version.json"
     /// «Я пассажир» живёт до конца езды, но после перезапуска системой
     /// конец езды мог пройти незамеченным — не дольше этого (S29).
     nonisolated static let passengerSessionMaxSeconds: TimeInterval = 3 * 3600
@@ -3088,6 +3090,9 @@ nonisolated enum AppConfig {
     /// Подписанный каталог регионов и каталог с их файлами на сервере.
     static let offlineRegionsPath = "regions.json"
     static let offlineRegionsDirectory = "regions"
+    /// До этого размера карту области предлагаем и по сотовой: человек в
+    /// чужой области чаще всего на сотовой, а самая большая — 47 МБ.
+    static let offlineOfferCellularMaxBytes: Int64 = 60_000_000
 
     // MARK: - Коридор длинного маршрута (RouteCorridor, CorridorVenues, 19.3)
 

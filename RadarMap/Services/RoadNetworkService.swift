@@ -519,6 +519,23 @@ final class RoadNetworkService {
                        decode: { _ in true }) ?? false
     }
 
+    /// Адреса и заведения скачанной области — чтобы поиск работал без связи
+    /// (раньше файл клетки появлялся только после поиска в ней со связью).
+    /// Файл на месте — сверится и останется; индекса ещё нет — подождём его.
+    func prefetchSearchFiles(at centers: [CLLocationCoordinate2D]) async {
+        var waited = 0
+        while !localLoaded, waited < 50 {
+            await Task.pause(seconds: 0.2)
+            waited += 1
+        }
+        for center in centers {
+            guard connectivity?.isOnline ?? true else { return }
+            for key in [AddressBook.key(for: center), VenueBook.key(for: center)] {
+                _ = await cellFile(key: key, what: "файл поиска области", decode: { _ in true })
+            }
+        }
+    }
+
     /// Файл крупной клетки из подписанного индекса: с диска, если sha сошёлся,
     /// иначе с сервера (только со связью) — и на диск. Не сошёлся sha или
     /// формат — клетка помечается битой до следующего индекса.

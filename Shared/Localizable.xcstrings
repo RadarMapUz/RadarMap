@@ -23527,6 +23527,118 @@
         }
       }
     },
+    "Офлайн-режим: карта и камеры работают": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Офлайн-режим: карта и камеры работают"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oflayn rejim: xarita va kameralar ishlaydi"
+          }
+        }
+      }
+    },
+    "Офлайн-режим: камеры работают, карты здесь нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Офлайн-режим: камеры работают, карты здесь нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oflayn rejim: kameralar ishlaydi, bu yerda xarita yoʻq"
+          }
+        }
+      }
+    },
+    "Маршруты и пробки недоступны без связи": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршруты и пробки недоступны без связи"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aloqasiz marshrut va tirbandliklar mavjud emas"
+          }
+        }
+      }
+    },
+    "Маршрут — только приблизительный, по трассам. Пробок нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрут — только приблизительный, по трассам. Пробок нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marshrut faqat taxminiy, trassalar boʻyicha. Tirbandliklar yoʻq"
+          }
+        }
+      }
+    },
+    "Скачиваем карту": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скачиваем карту"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarita yuklanmoqda"
+          }
+        }
+      }
+    },
+    "Карта не скачалась": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Карта не скачалась"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarita yuklanmadi"
+          }
+        }
+      }
+    },
+    "Карта области и её адреса сохраняются на телефоне: карта рисуется, а поиск работает без интернета — на трассе, в тоннеле, в роуминге. Камеры предупреждают и без этого: их база всегда на телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Карта области и её адреса сохраняются на телефоне: карта рисуется, а поиск работает без интернета — на трассе, в тоннеле, в роуминге. Камеры предупреждают и без этого: их база всегда на телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Viloyat xaritasi va manzillari telefonda saqlanadi: xarita chiziladi, qidiruv esa internetsiz ishlaydi — trassada, tunnelda, roumingda. Kameralar bularsiz ham ogohlantiradi: ularning bazasi doim telefonda."
+          }
+        }
+      }
+    },
     "Нет связи — карта из скачанной области": {
       "localizations": {
         "ru": {

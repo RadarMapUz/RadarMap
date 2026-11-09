@@ -4,7 +4,7 @@
 //
 //  «Офлайн-карты»: скачать область, чтобы карта рисовалась без связи.
 //
-//  Первой — область дома (или та, где человек сейчас): её и скачивают в
+//  Первой — область, где человек сейчас (без точки — дом): её и скачивают в
 //  девяти случаях из десяти. Остальные — списком, с размером: трасса
 //  Ташкент — Самарканд — это две-три области, и решение «качать ли по
 //  мобильной сети» человек принимает по числу мегабайт.
@@ -23,7 +23,7 @@ struct OfflineMapsView: View {
         let service = env.offlineMaps
         List {
             Section {
-                Text("Карта области сохраняется на телефоне и рисуется без интернета — на трассе, в тоннеле, в роуминге. Камеры предупреждают и без этого: их база всегда на телефоне.")
+                Text("Карта области и её адреса сохраняются на телефоне: карта рисуется, а поиск работает без интернета — на трассе, в тоннеле, в роуминге. Камеры предупреждают и без этого: их база всегда на телефоне.")
                     .font(.rounded(15))
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -152,13 +152,12 @@ struct OfflineMapsView: View {
 
     // MARK: - Помощники
 
-    /// Область дома — по адресу «Дом», иначе по выученному дому, иначе там,
-    /// где человек сейчас.
+    /// Та же область, что предлагает карточка: где человек сейчас, иначе дом.
     private func recommended(in catalog: RegionCatalog) -> RegionCatalog.Region? {
-        let anchor = OfflineOffer.anchor(
+        let anchor = OfflineOffer.offerPoint(
+            current: env.location.currentCoordinate,
             home: env.settings.homePlace?.coordinate,
-            learnedHome: env.learnedPlaces.first { $0.kind == .home }?.coordinate,
-            current: env.location.currentCoordinate)
+            learnedHome: env.learnedPlaces.first { $0.kind == .home }?.coordinate)
         return anchor.flatMap { catalog.region(containing: $0) }
     }
 

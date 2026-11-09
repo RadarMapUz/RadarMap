@@ -38,6 +38,13 @@ final class TileServerHealthTests: XCTestCase {
         XCTAssertFalse(mixed.isDown, "тайлы приходят — сервер жив")
     }
 
+    func testProbeNeedsARealAnswer() {
+        XCTAssertTrue(TileServerHealth.probeAnswered(status: 200))
+        XCTAssertTrue(TileServerHealth.probeAnswered(status: 304))
+        XCTAssertFalse(TileServerHealth.probeAnswered(status: 502), "сервер отвечает ошибкой — карта всё ещё не грузится")
+        XCTAssertFalse(TileServerHealth.probeAnswered(status: nil), "нет ответа — остаёмся на области")
+    }
+
     func testNoticeSaysServerNotNetwork() {
         XCTAssertNil(OfflineNotice.resolve(online: true, modernMap: true, hasRegionFiles: false))
         XCTAssertEqual(OfflineNotice.resolve(online: true, modernMap: true, hasRegionFiles: false, serverDown: true),

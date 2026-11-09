@@ -3,8 +3,8 @@
 //  RadarMapTests
 //
 //  Предложение скачать карту: спрашиваем один раз и только в спокойный
-//  момент. Тесты держат то, чего быть НЕ должно: вопроса за рулём, по
-//  сотовой сети, повторно после ответа.
+//  момент. Тесты держат то, чего быть НЕ должно: вопроса за рулём, в
+//  «Экономии данных», повторно после ответа об этой области.
 //
 
 import CoreLocation
@@ -43,10 +43,61 @@ final class OfflineOfferTests: XCTestCase {
     func testNeverOverCellular() {
         var s = calm
         s.expensiveNetwork = true
-        XCTAssertFalse(OfflineOffer.shouldOffer(s), "сотни мегабайт по мобильной сети не предлагаем")
+        XCTAssertFalse(OfflineOffer.shouldOffer(s), "размер неизвестен — по сотовой не предлагаем")
         s = calm
         s.online = false
         XCTAssertFalse(OfflineOffer.shouldOffer(s))
+    }
+
+    /// Хорезм — 12 МБ, и человек там чаще всего на сотовой.
+    func testSmallRegionIsOfferedOverCellular() {
+        var s = calm
+        s.expensiveNetwork = true
+        s.regionBytes = 12_300_000
+        XCTAssertTrue(OfflineOffer.shouldOffer(s))
+        s.regionBytes = AppConfig.offlineOfferCellularMaxBytes + 1
+        XCTAssertFalse(OfflineOffer.shouldOffer(s))
+    }
+
+    func testNeverInLowDataMode() {
+        var s = calm
+        s.expensiveNetwork = true
+        s.constrainedNetwork = true
+        s.regionBytes = 1_000
+        XCTAssertFalse(OfflineOffer.shouldOffer(s))
+    }
+
+    func testOfferFollowsWhereThePersonIs() {
+        let home = CLLocationCoordinate2D(latitude: 41.31, longitude: 69.28)
+        let khorezm = CLLocationCoordinate2D(latitude: 41.55, longitude: 60.63)
+        XCTAssertEqual(OfflineOffer.offerPoint(current: khorezm, home: home, learnedHome: nil)?.longitude, 60.63)
+        XCTAssertEqual(OfflineOffer.offerPoint(current: nil, home: home, learnedHome: nil)?.longitude, 69.28)
+        XCTAssertNil(OfflineOffer.offerPoint(current: nil, home: nil, learnedHome: nil))
+    }
+
+    func testAnswerClosesOnlyThatRegion() {
+        let answered: Set<String> = ["UZ-XO"]
+        XCTAssertTrue(OfflineOffer.wasAnswered(regionID: "UZ-XO", answeredRegions: answered,
+                                               legacyAnswered: false, homeRegionID: "UZ-TK"))
+        XCTAssertFalse(OfflineOffer.wasAnswered(regionID: "UZ-BU", answeredRegions: answered,
+                                                legacyAnswered: false, homeRegionID: "UZ-TK"))
+    }
+
+    /// Старый общий флаг: родную область не спрашиваем снова, чужую — один раз.
+    func testLegacyAnswerCoversHomeNotTravel() {
+        XCTAssertTrue(OfflineOffer.wasAnswered(regionID: "UZ-TK", answeredRegions: [],
+                                               legacyAnswered: true, homeRegionID: "UZ-TK"))
+        XCTAssertFalse(OfflineOffer.wasAnswered(regionID: "UZ-XO", answeredRegions: [],
+                                                legacyAnswered: true, homeRegionID: "UZ-TK"))
+        XCTAssertTrue(OfflineOffer.wasAnswered(regionID: "UZ-XO", answeredRegions: [],
+                                               legacyAnswered: true, homeRegionID: nil),
+                      "дом неизвестен — про какую область был ответ, не знаем: не переспрашиваем")
+    }
+
+    func testRegionsRoundTrip() {
+        let regions: Set<String> = ["UZ-XO", "UZ-TK"]
+        XCTAssertEqual(OfflineOffer.decodeRegions(OfflineOffer.encodeRegions(regions)), regions)
+        XCTAssertEqual(OfflineOffer.decodeRegions(nil), [])
     }
 
     func testNotBeforeOnboardingOrOnAppleMap() {
@@ -62,15 +113,5 @@ final class OfflineOfferTests: XCTestCase {
         var s = calm
         s.regionAvailable = false
         XCTAssertFalse(OfflineOffer.shouldOffer(s))
-    }
-
-    func testHomeOutranksCurrentPlace() {
-        let home = CLLocationCoordinate2D(latitude: 41.31, longitude: 69.28)
-        let learned = CLLocationCoordinate2D(latitude: 41.0, longitude: 69.0)
-        let here = CLLocationCoordinate2D(latitude: 39.65, longitude: 66.96)
-        XCTAssertEqual(OfflineOffer.anchor(home: home, learnedHome: learned, current: here)?.latitude, 41.31)
-        XCTAssertEqual(OfflineOffer.anchor(home: nil, learnedHome: learned, current: here)?.latitude, 41.0)
-        XCTAssertEqual(OfflineOffer.anchor(home: nil, learnedHome: nil, current: here)?.latitude, 39.65)
-        XCTAssertNil(OfflineOffer.anchor(home: nil, learnedHome: nil, current: nil))
     }
 }

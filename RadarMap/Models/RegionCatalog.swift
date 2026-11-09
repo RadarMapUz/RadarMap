@@ -39,6 +39,31 @@ nonisolated struct RegionCatalog: Codable, Sendable, Equatable {
 
         var totalBytes: Int64 { files.values.reduce(0) { $0 + $1.bytes } }
 
+        /// Середины клеток адресов (`AddressBook.cellDegrees`), которых
+        /// касается регион, — что скачать вместе с картой, чтобы поиск работал
+        /// без связи. Клетка карты z`zoom` может задеть соседнюю по обе стороны.
+        func searchCellCenters(cellZoom zoom: Int) -> [CLLocationCoordinate2D] {
+            let n = Double(1 << zoom)
+            let step = AddressBook.cellDegrees
+            func latitude(_ y: Int) -> Double {
+                atan(sinh(.pi * (1 - 2 * Double(y) / n))) * 180 / .pi
+            }
+            func longitude(_ x: Int) -> Double { Double(x) / n * 360 - 180 }
+            var seen = Set<[Int]>()
+            var centers: [CLLocationCoordinate2D] = []
+            for row in rows where row.count == 3 {
+                let rowRange = Int(floor((latitude(row[0] + 1) + 90) / step))...Int(floor((latitude(row[0]) + 90) / step))
+                let columnRange = Int(floor((longitude(row[1]) + 180) / step))...Int(floor((longitude(row[2] + 1) + 180) / step))
+                for r in rowRange {
+                    for c in columnRange where seen.insert([r, c]).inserted {
+                        centers.append(CLLocationCoordinate2D(latitude: (Double(r) + 0.5) * step - 90,
+                                                              longitude: (Double(c) + 0.5) * step - 180))
+                    }
+                }
+            }
+            return centers
+        }
+
         /// Лежит ли клетка z`cellZoom` в регионе.
         func contains(cellX: Int, cellY: Int) -> Bool {
             rows.contains { row in

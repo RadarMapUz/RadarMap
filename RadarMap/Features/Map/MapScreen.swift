@@ -192,12 +192,12 @@ struct MapScreen: View {
                 // подсказка под листом сгорела бы, а у обновившихся она одна
                 // на всю жизнь (ревью 19.10).
                 if !maybeShowWhatsNew() { maybeShowHint() }
-                // Каталог областей — маленький подписанный файл; нужен, только
-                // пока на предложение скачать карту не ответили.
-                if !Storage.bool(.offlineOfferAnswered), env.offlineMaps.catalog == nil,
-                   !env.network.isExpensive {
+                // Каталог областей — маленький подписанный файл: без него
+                // нечего предложить ни дома, ни в чужой области.
+                if env.offlineMaps.catalog == nil, env.network.isOnline, !env.network.isConstrained {
                     await env.offlineMaps.refreshCatalog()
                 }
+                env.prefetchOfflineSearchIfNeeded()
             }
         }
         .onChange(of: env.settings.filter) { _, newValue in

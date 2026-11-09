@@ -36,6 +36,12 @@ nonisolated struct TileServerHealth: Sendable {
         return true
     }
 
+    /// Ответила ли проба: любой код до 400. Тело не важно, важен живой сервер.
+    static func probeAnswered(status: Int?) -> Bool {
+        guard let status else { return false }
+        return status < 400
+    }
+
     /// Пробный возврат к онлайну: с областью на телефоне онлайн-запросов нет,
     /// и узнать, что сервер ожил, иначе нечем.
     mutating func resetForProbe() {

@@ -39,6 +39,8 @@ final class NetworkMonitor {
     /// первого ответа — да: предложить скачать сотни мегабайт по мобильной
     /// сети хуже, чем не предложить вовсе.
     private(set) var isExpensive = true
+    /// Включён «Экономия данных»: предложений скачать не делаем вовсе.
+    private(set) var isConstrained = true
 
     @ObservationIgnored private let monitor = NWPathMonitor()
     /// Связь вернулась (переход «нет → есть») — маршрут без сети заменить
@@ -52,9 +54,11 @@ final class NetworkMonitor {
         monitor.pathUpdateHandler = { [weak self] path in
             let online = path.status == .satisfied
             let expensive = path.isExpensive || path.isConstrained
+            let constrained = path.isConstrained
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 if self.isExpensive != expensive { self.isExpensive = expensive }
+                if self.isConstrained != constrained { self.isConstrained = constrained }
                 guard self.isOnline != online else { return }
                 self.isOnline = online
                 Log.network.notice("связь: \(online ? "есть" : "нет", privacy: .public)")

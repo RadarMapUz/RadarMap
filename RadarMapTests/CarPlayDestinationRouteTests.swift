@@ -51,4 +51,22 @@ final class CarPlayDestinationRouteTests: XCTestCase {
         taps.end(key)
         XCTAssertTrue(taps.begin(key), "построили — следующий тап снова строит")
     }
+
+    /// «Отмена» в баре, пока маршрут строился: ни выбора, ни поездки.
+    func testCancelWhileBuildingStartsNothing() {
+        XCTAssertEqual(CarPlayBuiltChoice.decide(wantedChoice: true, stillChoosing: false,
+                                                 hasRoute: false, failed: false), .nothing)
+        XCTAssertEqual(CarPlayBuiltChoice.decide(wantedChoice: true, stillChoosing: false,
+                                                 hasRoute: true, failed: false), .nothing)
+    }
+
+    func testBuiltChoiceWhenNotCancelled() {
+        XCTAssertEqual(CarPlayBuiltChoice.decide(wantedChoice: true, stillChoosing: true,
+                                                 hasRoute: true, failed: false), .showChoice)
+        // Ошибка стоя и маршрут на ходу — как было: поездка идёт.
+        XCTAssertEqual(CarPlayBuiltChoice.decide(wantedChoice: true, stillChoosing: true,
+                                                 hasRoute: false, failed: true), .startTrip)
+        XCTAssertEqual(CarPlayBuiltChoice.decide(wantedChoice: false, stillChoosing: false,
+                                                 hasRoute: true, failed: false), .startTrip)
+    }
 }

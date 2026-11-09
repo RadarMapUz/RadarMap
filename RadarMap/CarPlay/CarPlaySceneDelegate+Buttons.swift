@@ -399,20 +399,7 @@ extension CarPlaySceneDelegate {
     /// кнопкой в машине. Откатываем только поля, которые и сейчас такие,
     /// какими их поставила машина: выбранное с тех пор руками не трогаем.
     func restoreCarSound() {
-        defer { Storage.set(false, for: .carPlayMuted) }
-        guard Storage.bool(.carPlayMuted) else { return }
-        let before = CarPlaySoundChoice.Sound(
-            enabled: Storage.bool(.carPlaySoundBeforeMute),
-            voice: Storage.string(.carPlayVoiceBeforeMute).flatMap(VoiceMode.init(rawValue:)) ?? .smart)
-        // Маркер прежней тишины (до 20.10) без «поставленного» — это тишина.
-        let carSet = CarPlaySoundChoice.Sound(
-            enabled: Storage.bool(.carPlaySoundSet),
-            voice: Storage.string(.carPlayVoiceSet).flatMap(VoiceMode.init(rawValue:)) ?? .off)
-        let current = CarPlaySoundChoice.Sound(enabled: env.settings.soundEnabled,
-                                               voice: env.settings.voiceMode)
-        let next = CarPlaySoundChoice.restoring(before: before, carSet: carSet, current: current)
-        if next.enabled != current.enabled { env.settings.soundEnabled = next.enabled }
-        if next.voice != current.voice { env.settings.voiceMode = next.voice }
+        CarPlaySoundChoice.restoreAfterCar(settings: env.settings)
     }
 
     /// Значок кнопки машины. 24 пункта, а не 20: систему кнопок рисует

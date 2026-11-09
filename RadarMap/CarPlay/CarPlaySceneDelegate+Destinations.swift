@@ -335,12 +335,19 @@ extension CarPlaySceneDelegate {
                     return preview
                 },
                 startsTrip: {
-                    if preview, env.route.isActive, env.route.errorMessage == nil {
+                    switch CarPlayBuiltChoice.decide(wantedChoice: preview, stillChoosing: model.isPreviewing,
+                                                     hasRoute: env.route.isActive,
+                                                     failed: env.route.errorMessage != nil) {
+                    case .showChoice:
                         showPreview(name: place.title, destination: place.coordinate)
                         return false
+                    case .nothing:
+                        Log.carplay.notice("маршрут достроился после «Отмены» — поездку не начинаю")
+                        return false
+                    case .startTrip:
+                        if preview { endPreview(start: false, keepRoute: true, reason: "маршрут не построен") }
+                        return true
                     }
-                    if preview { endPreview(start: false, keepRoute: true, reason: "маршрут не построен") }
-                    return true
                 })
             switch outcome {
             case .built:

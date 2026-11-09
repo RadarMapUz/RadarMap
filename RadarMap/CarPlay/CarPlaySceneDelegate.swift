@@ -302,6 +302,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     /// Машина сменила тему (включились фары, въехали в тоннель).
     func contentStyleDidChange(_ contentStyle: UIUserInterfaceStyle) {
+        // Смена темы перезагружает стиль карты целиком: журнал покажет, как часто.
+        Log.carplay.notice("тема машины: \(contentStyle == .dark ? "тёмная" : "светлая", privacy: .public)")
         model.carIsDark = contentStyle == .dark
         model.refreshDaylight(appearance: env.settings.mapAppearance, sunDay: env.sunIsUp)
     }

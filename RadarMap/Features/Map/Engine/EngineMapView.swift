@@ -1204,6 +1204,7 @@ struct EngineMapView: UIViewRepresentable {
             // когда карта должна ехать. Слои поездки прячутся видимостью
             // (applyHiddenLayers), дома приглушаются свойством слоя.
             if modernLoaded, lastPlaces != model.places || lastOffline != model.offline {
+                Log.network.notice("карта \(model.healthTag ?? "телефон", privacy: .public): стиль заново — офлайн \(self.lastOffline != nil, privacy: .public) → \(model.offline != nil, privacy: .public)")
                 loadStyle(model, in: view)
                 return
             }
@@ -1212,6 +1213,7 @@ struct EngineMapView: UIViewRepresentable {
                 // цветов, и перекрашивать её по слою незачем — день и ночь
                 // сменяются дважды в сутки.
                 if modernLoaded {
+                    Log.network.notice("карта \(model.healthTag ?? "телефон", privacy: .public): стиль заново — день \(model.daylight, privacy: .public), дома \(model.houses, privacy: .public)")
                     loadStyle(model, in: view)
                     return
                 }

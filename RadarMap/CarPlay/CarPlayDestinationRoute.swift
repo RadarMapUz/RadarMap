@@ -63,6 +63,24 @@ struct CarPlayTapGuard {
     static func routeKey(_ place: SavedPlace) -> String { "route:\(place.lat),\(place.lon)" }
 }
 
+/// Что делать, когда маршрут из «Куда» достроился. Пока он строится, в баре
+/// одна «Отмена»; нажатая в эти секунды, она снимала выбор, а поездка всё равно
+/// начиналась. Чистое — CarPlayDestinationRouteTests.
+nonisolated enum CarPlayBuiltChoice: Equatable, Sendable {
+    /// Показать выбор варианта.
+    case showChoice
+    /// Выбора не просили или показать нечего: едем.
+    case startTrip
+    /// Водитель отменил, пока строился, или машину отключили.
+    case nothing
+
+    static func decide(wantedChoice: Bool, stillChoosing: Bool, hasRoute: Bool, failed: Bool) -> CarPlayBuiltChoice {
+        guard wantedChoice else { return .startTrip }
+        guard stillChoosing else { return .nothing }
+        return hasRoute && !failed ? .showChoice : .startTrip
+    }
+}
+
 /// Построение маршрута из машины: точный фикс → маршрут → «недавние» →
 /// поездка. Что показать водителю при отказе, решает сцена (у основного
 /// экрана — диалог, у плитки — голос: своих диалогов у неё нет).

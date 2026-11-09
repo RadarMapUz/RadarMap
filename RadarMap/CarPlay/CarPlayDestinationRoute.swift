@@ -78,6 +78,10 @@ enum CarPlayRouteRequest {
         case built
         /// Не построился — текст ошибки маршрутизатора.
         case failed(String)
+        /// Водитель отменил, пока строился.
+        case cancelled
+        /// Сюда уже ведём: второе построение только сбросило бы ведение.
+        case alreadyGuiding
     }
 
     /// Общая защита обеих сцен.
@@ -91,23 +95,45 @@ enum CarPlayRouteRequest {
     static func run(env: AppEnvironment, to place: SavedPlace, remember: Bool,
                     prepare: () -> Bool = { false },
                     startsTrip: () -> Bool = { true }) async -> Outcome {
+        if CarPlayShortcutLook.isAlreadyGuiding(tripActive: env.location.isTripActive,
+                                                destination: env.route.destinationCoordinate,
+                                                place: place.coordinate) {
+            return .alreadyGuiding
+        }
         let key = CarPlayTapGuard.routeKey(place)
         guard taps.begin(key) else {
             Log.carplay.notice("повторное касание — маршрут уже строится")
             return .busy
         }
         defer { taps.end(key) }
-        guard let from = await env.location.awaitPreciseCoordinate() else { return .noFix }
+        // Отклик — сейчас: дальше до 6 с ожидания GPS.
+        guard let attempt = env.route.beginBuild(to: place.coordinate, name: place.title) else { return .busy }
+        guard let from = await env.location.awaitPreciseCoordinate() else {
+            env.route.reportNoFix(attempt: attempt)
+            return .noFix
+        }
+        guard env.route.buildFlow.isCurrent(attempt) else { return .cancelled }
         let alternatives = prepare()
         // На ходу — по курсу (20.9); стоя (выбор варианта) курса нет.
-        await env.route.build(from: from, heading: env.location.routeHeading,
-                              to: place.coordinate, name: place.title,
-                              cameras: env.cameras.cameras, alternatives: alternatives)
+        let result = await env.route.build(from: from, heading: env.location.routeHeading,
+                                           to: place.coordinate, name: place.title,
+                                           cameras: env.cameras.cameras, alternatives: alternatives,
+                                           attempt: attempt)
+        switch result {
+        case .cancelled:
+            return .cancelled
+        case .superseded, .duplicate:
+            return .busy
+        case .failed:
+            _ = startsTrip()   // закрыть выбор варианта; поездку без маршрута не начинаем
+            return .failed(env.route.errorMessage ?? "")
+        case .built:
+            break
+        }
         if remember { env.settings.addRecent(title: place.title, lat: place.lat, lon: place.lon) }
         guard startsTrip() else { return .built }
         // Едем уже с активной поездкой — не обнулять её накат.
         if !env.location.isTripActive { env.location.startTrip() }
-        if let error = env.route.errorMessage { return .failed(error) }
         return .built
     }
 }

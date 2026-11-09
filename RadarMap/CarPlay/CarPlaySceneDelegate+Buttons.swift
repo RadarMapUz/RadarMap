@@ -460,6 +460,7 @@ extension CarPlaySceneDelegate {
     var cancelPreviewButton: CPBarButton {
         CPBarButton(title: String(localized: "Отмена")) { [weak self] _ in
             guard let self else { return }
+            self.env.route.cancelBuild()
             if self.previewOffer != nil {
                 self.closeOfferedPreview()
             } else {

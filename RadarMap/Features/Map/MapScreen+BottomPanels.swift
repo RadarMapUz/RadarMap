@@ -22,6 +22,10 @@ extension MapScreen {
     @ViewBuilder
     var bottomPanels: some View {
         VStack(spacing: 10) {
+            RouteBuildCard { target in
+                buildRoute(to: CLLocationCoordinate2D(latitude: target.latitude, longitude: target.longitude),
+                           name: target.name)
+            }
             if map.isAddingCamera {
                 AddCameraBar(
                     onCancel: { map.isAddingCamera = false },
@@ -123,6 +127,10 @@ extension MapScreen {
                             showVariantsOverview()
                         }
                     )
+                    // Строится новый маршрут: панель показывает старый, и
+                    // «Поехали» на ней сейчас уводило бы не туда.
+                    .disabled(env.route.isBuilding)
+                    .opacity(env.route.isBuilding ? 0.55 : 1)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 } else {
                     // ОДНА плашка, а не четыре разом.
@@ -133,26 +141,6 @@ extension MapScreen {
                     // считается один раз (BottomHint.choose) и не
                     // оспаривается: требующее решения старше сообщающего.
                     switch bottomHint {
-                    case .routeError(let error):
-                        // Тап убирает ошибку — значит, это кнопка, и мишень у
-                        // неё 44 pt (была капсула ~28 pt под onTapGesture).
-                        Button { env.route.clear() } label: {
-                            Text(error)
-                                .font(.rounded(12, .medium)).foregroundStyle(Theme.danger)
-                                .padding(.horizontal, 14)
-                                .frame(minHeight: Theme.controlSize)
-                                .liftedBackground(Theme.surface, in: Capsule())
-                        }
-                        .buttonStyle(PressableStyle())
-                        .accessibilityHint(Text("Убрать сообщение"))
-                    case .building:
-                        HStack(spacing: 8) {
-                            ProgressView().controlSize(.small)
-                            Text("Строим маршрут…")
-                                .font(.rounded(12, .medium)).foregroundStyle(Theme.textSecondary)
-                        }
-                        .padding(.horizontal, 12).padding(.vertical, 6)
-                        .liftedBackground(Theme.surface, in: Capsule())
                     case .driving:
                         // Только старт: подсказка живёт до следующего фикса,
                         // и второе касание через toggle завершало бы поездку.
@@ -249,9 +237,7 @@ extension MapScreen {
 
     /// Что показать над доком — одно решение на панель и док.
     var bottomHint: BottomHint {
-        BottomHint.choose(routeError: env.route.errorMessage,
-                          isBuilding: env.route.isBuilding,
-                          isProbablyDriving: env.location.isProbablyDriving,
+        BottomHint.choose(isProbablyDriving: env.location.isProbablyDriving,
                           showsQuickDestinations: mode.showsQuickDestinations)
     }
 
@@ -292,6 +278,8 @@ extension MapScreen {
         .motionAnimation(Motion.standard, value: map.pressedPoint)
         .motionAnimation(Motion.standard, value: reportPoint)
         .motionAnimation(Motion.standard, value: arrivalShown)
+        // Варианты маршрута выезжают, а не появляются скачком.
+        .motionAnimation(Motion.standard, value: env.route.isActive)
     }
 
     /// Долгий тап: маркер + бар действий (кроме режима прицела добавления камеры).
@@ -338,13 +326,16 @@ extension MapScreen {
     }
 
     func removeStop() {
+        guard let stop = env.route.stop,
+              let attempt = env.route.beginBuild(to: stop.coordinate, name: stop.name, purpose: .removeStop)
+        else { return }
         Task {
             guard let from = await env.location.awaitPreciseCoordinate() else {
-                env.route.reportNoFixForStop()
+                env.route.reportNoFixForStop(attempt: attempt)
                 return
             }
             await env.route.removeStop(from: from, heading: env.location.routeHeading,
-                                       cameras: env.cameras.cameras)
+                                       cameras: env.cameras.cameras, attempt: attempt)
         }
     }
 
@@ -365,33 +356,40 @@ extension MapScreen {
     /// Построить авто-маршрут от текущей позиции и показать все варианты целиком.
     /// Заезд по пути (АЗС, кафе из плитки категории): цель остаётся прежней.
     func addStop(_ coordinate: CLLocationCoordinate2D, name: String) {
+        guard let attempt = env.route.beginBuild(to: coordinate, name: name, purpose: .addStop) else { return }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         Task {
             guard let from = await env.location.awaitPreciseCoordinate() else {
-                env.route.reportNoFix()
+                env.route.reportNoFixForStop(attempt: attempt)
                 return
             }
             await env.route.addStop(coordinate, name: name, from: from,
                                     heading: env.location.routeHeading,
-                                    cameras: env.cameras.cameras)
+                                    cameras: env.cameras.cameras, attempt: attempt)
         }
     }
 
     func buildRoute(to coordinate: CLLocationCoordinate2D, name: String) {
+        // Отклик — сейчас, до GPS и сети. Второе касание той же цели — не
+        // второе построение: карточка уже говорит, что идёт работа.
+        guard let attempt = env.route.beginBuild(to: coordinate, name: name) else { return }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         Task {
             // Только от ЖИВОЙ точки. Раньше здесь стоял currentCoordinate без
             // проверки isPositionCoarse — а в него пишется и грубая точка
             // фонового режима, из-за чего маршрут «начинал считаться» за
             // километры от машины (plan_drive_complaints.md, Ж5).
             guard let from = await env.location.awaitPreciseCoordinate() else {
-                env.route.reportNoFix()
+                env.route.reportNoFix(attempt: attempt)
                 return
             }
             // Курс — только на ходу: маршрут пойдёт туда, куда едем (20.9).
-            await env.route.build(from: from, heading: env.location.routeHeading,
-                                  to: coordinate, name: name,
-                                  cameras: env.cameras.cameras,
-                                  alternatives: env.settings.routeAlternatives)
-            guard env.route.isActive else { return }
+            let outcome = await env.route.build(from: from, heading: env.location.routeHeading,
+                                                to: coordinate, name: name,
+                                                cameras: env.cameras.cameras,
+                                                alternatives: env.settings.routeAlternatives,
+                                                attempt: attempt)
+            guard outcome == .built else { return }
             env.settings.addRecent(title: name, lat: coordinate.latitude, lon: coordinate.longitude)
             showVariantsOverview()
         }

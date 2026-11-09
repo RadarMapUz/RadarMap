@@ -89,6 +89,14 @@ extension CarPlaySceneDelegate {
         if navigationAlert === choiceOfferAlert { choiceOfferAlert = nil }
         if dismissalContext == .systemDismissed {
             forgetBanner(navigationAlert)
+        } else if buildBanner.owns(navigationAlert) {
+            // Кнопка или срок: порядок с обработчиком кнопки не обещан, а
+            // закрыть можно только ошибку — идущую попытку это не тронет.
+            buildBanner.forget(navigationAlert)
+            env.route.dismissBuildFailure()
+        } else if navigationAlert === detourAlert, dismissalContext == .timeout {
+            // Стоя фиксов нет, и истечение ждало бы следующего: «остаёмся» сейчас.
+            env.route.declineDetour(reason: "нет ответа")
         } else if navigationAlert === confirmBanner {
             let id = confirmBannerID
             confirmBanner = nil

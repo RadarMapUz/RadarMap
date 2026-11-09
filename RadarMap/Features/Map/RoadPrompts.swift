@@ -461,7 +461,7 @@ enum RoadPromptContent {
         guard let offer = env.route.detourOffer else { return nil }
         return RoadPromptModel(
             glyph: .symbol("arrow.triangle.branch", tint: Theme.success),
-            question: String(format: String(localized: "%@ — объехать?"), offer.title),
+            question: offer.title,
             detail: offer.subtitle,
             silence: String(localized: "промолчите — останемся на своём пути"),
             actions: [
@@ -482,8 +482,8 @@ enum RoadPromptContent {
         guard let banner = env.roadWeather.banner else { return nil }
         return RoadPromptModel(
             glyph: .symbol(banner.notice.symbol, tint: Theme.warning),
-            question: banner.notice.title,
-            detail: banner.notice.subtitle,
+            question: banner.notice.headline,
+            detail: banner.notice.distanceLine,
             silence: String(localized: "уйдёт само"),
             actions: [
                 .init(id: "ok", title: String(localized: "Понятно"), perform: { env.roadWeather.hideBanner() }),

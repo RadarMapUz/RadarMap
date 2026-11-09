@@ -60,4 +60,14 @@ final class CarPlayGuidancePauseTests: XCTestCase {
         XCTAssertFalse(CarPlayGuidancePause.showsGPSChip(signalStale: true, systemLocating: true))
         XCTAssertFalse(CarPlayGuidancePause.showsGPSChip(signalStale: false, systemLocating: false))
     }
+
+    func testBuildingNewRoutePausesAsLoading() {
+        func wanted(rerouting: Bool = false, building: Bool) -> CarPlayGuidancePause.Reason? {
+            CarPlayGuidancePause.wanted(rerouting: rerouting, signalStale: false, hasManeuver: true,
+                                        locatingEnabled: true, building: building)
+        }
+        XCTAssertEqual(wanted(building: true), .loading)
+        XCTAssertEqual(wanted(rerouting: true, building: true), .rerouting)
+        XCTAssertEqual(CarPlayGuidancePause.step(current: .loading, wanted: nil), .resume, "отмена возвращает манёвр")
+    }
 }

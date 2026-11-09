@@ -30,6 +30,8 @@ nonisolated enum CarPlayGuidancePause {
     enum Reason: Equatable, Sendable {
         case rerouting
         case locating
+        /// Строится маршрут к новой цели: прежний манёвр уже не про неё.
+        case loading
     }
 
     enum Step: Equatable, Sendable {
@@ -42,8 +44,9 @@ nonisolated enum CarPlayGuidancePause {
     /// Какая пауза нужна сейчас. `locatingEnabled` — пауза поиска сигнала
     /// доступна (план 25.H1 включает её с iOS 27).
     static func wanted(rerouting: Bool, signalStale: Bool, hasManeuver: Bool,
-                       locatingEnabled: Bool) -> Reason? {
+                       locatingEnabled: Bool, building: Bool = false) -> Reason? {
         if rerouting { return .rerouting }
+        if building { return .loading }
         if locatingEnabled, signalStale, hasManeuver { return .locating }
         return nil
     }

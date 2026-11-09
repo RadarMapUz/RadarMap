@@ -589,7 +589,8 @@ final class CarPlayGuidance {
         let wanted = CarPlayGuidancePause.wanted(rerouting: env.route.isRerouting,
                                                  signalStale: env.location.isSignalStale,
                                                  hasManeuver: maneuver != nil,
-                                                 locatingEnabled: Self.pausesForLocating)
+                                                 locatingEnabled: Self.pausesForLocating,
+                                                 building: env.route.isBuilding)
         switch CarPlayGuidancePause.step(current: pause, wanted: wanted) {
         case .none:
             return
@@ -597,6 +598,10 @@ final class CarPlayGuidance {
             pause = .rerouting
             session.pauseTrip(for: .rerouting, description: String(localized: "Перестраиваю маршрут"))
             Log.carplay.notice("ведение: пауза на перестроение")
+        case .pause(.loading):
+            pause = .loading
+            session.pauseTrip(for: .loading, description: String(localized: "Строим маршрут…"))
+            Log.carplay.notice("ведение: пауза на построение нового маршрута")
         case .pause(.locating):
             pause = .locating
             session.pauseTrip(for: .locating, description: String(localized: "Нет сигнала GPS"))

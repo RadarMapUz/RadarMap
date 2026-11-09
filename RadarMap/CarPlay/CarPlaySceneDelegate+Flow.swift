@@ -23,6 +23,16 @@ extension CarPlaySceneDelegate {
         Log.carplay.notice("ведение подключено \(background ? "в фоне" : "на экране", privacy: .public)")
         guidance.optionsPanel = optionsPanel
         guidance.attach(to: mapTemplate, banners: banners)
+        if !background { offerFasterRouteOnOpen() }
+    }
+
+    /// Открыли RadarMap на экране машины или подключились с идущим маршрутом:
+    /// показать ждущее предложение и проверить, нет ли пути быстрее.
+    func offerFasterRouteOnOpen() {
+        guard rootShown else { return }
+        syncBuildBanner()
+        syncDetourAlert()
+        env.checkFasterRoute(trigger: .opened)
     }
 
     /// Машина подключилась, а на её экране не мы (главный экран, Яндекс):
@@ -134,7 +144,7 @@ extension CarPlaySceneDelegate {
         }
         guard let offer, detourAlertID == nil else { return }
         let alert = CPNavigationAlert(
-            titleVariants: [offer.title],
+            titleVariants: [offer.title, offer.shortTitle],
             subtitleVariants: [offer.subtitle, String(localized: "Объезд пробки")],
             image: CarPlayGuidance.symbol("arrow.triangle.branch", pointSize: 30,
                                           onDark: model.carIsDark ?? !model.isDaylight),
@@ -153,6 +163,29 @@ extension CarPlaySceneDelegate {
         detourAlert = alert
         env.route.noteDetourShown(id: offer.id)
         Log.carplay.notice("объезд: баннер в машине")
+    }
+
+    /// Ход построения и его ошибка — то же состояние, что карточка на телефоне.
+    func observeBuild() {
+        let session = session
+        withObservationTracking {
+            _ = env.route.buildFlow
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, self.session == session else { return }
+                self.syncBuildBanner()
+                self.observeBuild()
+            }
+        }
+    }
+
+    func syncBuildBanner() {
+        guard let banners, rootShown else { return }
+        buildBanner.sync(env.route.buildFlow, banners: banners, actions: .init(
+            cancel: { [weak self] in self?.env.route.cancelBuild() },
+            retry: { [weak self] target in
+                self?.route(to: SavedPlace(title: target.name, lat: target.latitude, lon: target.longitude))
+            }))
     }
 
     /// Погода на перевале (19.2): тот же баннер, что карточка на телефоне.
@@ -198,6 +231,7 @@ extension CarPlaySceneDelegate {
 
     /// Экран баннеров освободился — показать ждущих: объезд, пробку, погоду и вопрос.
     func bannersFreed() {
+        syncBuildBanner()
         syncDetourAlert()
         syncJamBanner()
         syncRoadWeatherBanner()
@@ -221,6 +255,7 @@ extension CarPlaySceneDelegate {
             confirmBannerID = nil
         }
         if alert === choiceOfferAlert { choiceOfferAlert = nil }
+        buildBanner.forget(alert)
         roadWeatherBanner.forget(alert)
         jamBanner.forget(alert)
         if alert === reportBanner {
@@ -303,13 +338,12 @@ extension CarPlaySceneDelegate {
               shownTemplate == nil, !model.isPreviewing, !env.route.isActive,
               env.location.speedKmh < AppConfig.carPlayPreviewMaxKmh,
               let guess = env.destinationGuess(now: Date()) else { return }
-        let title = guess.kind.suggestionTitle
         let place = SavedPlace(title: guess.placeTitle ?? guess.kind.title,
                                lat: guess.coordinate.latitude, lon: guess.coordinate.longitude)
         let alert = CPNavigationAlert(
             // Время — один раз, в подзаголовке (как на телефоне): до 20.10
             // «сейчас ~52 мин, пробки +8» стояло и в заголовке, и под ним.
-            titleVariants: [title],
+            titleVariants: [guess.kind.suggestionQuestion, guess.kind.suggestionTitle],
             subtitleVariants: [guess.subtitle],
             image: CarPlayGuidance.symbol(guess.kind.symbol, pointSize: 30,
                                           onDark: model.carIsDark ?? !model.isDaylight),

@@ -173,7 +173,11 @@ final class RouteService {
         let name: String
     }
     private(set) var stop: Stop?
-    private(set) var isBuilding = false
+    /// Ход построения — одно состояние на телефон и машину (RouteBuildFlow).
+    private(set) var buildFlow = RouteBuildFlow()
+    /// Идёт расчёт. Ожидание GPS сюда не входит: прежний маршрут это время живёт.
+    var isBuilding: Bool { buildFlow.isCalculating }
+    @ObservationIgnored private var cancelBuildWork: (() -> Void)?
     private(set) var errorMessage: String?
 
     // Живой прогресс (обновляется на каждой GPS-точке при активном маршруте).
@@ -304,10 +308,6 @@ final class RouteService {
                                                "RouteService.onRerouted") }
     }
     /// Найден объезд пробки — сказать водителю (голос). Решение принимает он.
-    /// Есть ли экран, на котором предложение можно показать (телефон на
-    /// переднем плане или машина); нет — оно только голосом.
-    @ObservationIgnored var detourScreenAvailable: (() -> Bool)?
-
     @ObservationIgnored var onDetourOffer: ((DetourOffer) -> Void)? {
         didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onDetourOffer,
                                                "RouteService.onDetourOffer") }
@@ -705,7 +705,7 @@ final class RouteService {
         let files = typicalFiles(needed)
         guard live != nil || !files.isEmpty || profile != nil else { return }
         let lines = variants.map { $0.polyline }
-        let inputs = variants.map { (points: $0.points.map(\.coordinate), travelTime: $0.travelTime) }
+        let inputs = variants.map { (points: $0.points, travelTime: $0.travelTime) }
         // Ярлыки — заново, только пока водитель не касался выбора: база
         // выбора та же, время — с новыми пробками, перекрытия — текущие.
         let basis = choiceGate.touched || variants.count < 2 ? nil : choiceBasis
@@ -713,7 +713,7 @@ final class RouteService {
         Task {
             let (forecasts, verdict) = await offMain { () -> ([TrafficForecast.Delay?], RouteChoice.Verdict?) in
                 let forecasts = inputs.map { input in
-                    Self.variantDelay(points: input.points, travelTime: input.travelTime, now: now,
+                    Self.variantDelay(points: input.points.map(\.coordinate), travelTime: input.travelTime, now: now,
                                       live: live, profile: profile, typical: files)
                 }
                 guard let basis, basis.inputs.count == inputs.count else { return (forecasts, nil) }
@@ -845,38 +845,104 @@ final class RouteService {
 
     // MARK: - Построение
 
-    /// Живой точки нет — маршрут не строим вовсе, и говорим об этом.
-    ///
-    /// Сообщение идёт тем же каналом, что остальные отказы (`BottomHint`
-    /// показывает `errorMessage`): молчаливое «ничего не произошло» после тапа
-    /// читается как поломка кнопки.
-    func reportNoFix() {
-        errorMessage = String(localized: "Не видим вашего положения — маршрут не построен")
+    /// Касание «построить»: отклик сразу, ещё до GPS и сети. nil — к этой цели
+    /// уже строится, второе касание ничего не запускает.
+    @discardableResult
+    func beginBuild(to coordinate: CLLocationCoordinate2D, name: String,
+                    purpose: RouteBuildFlow.Target.Purpose = .route) -> Int? {
+        let target = RouteBuildFlow.Target(name: name, latitude: coordinate.latitude,
+                                           longitude: coordinate.longitude, purpose: purpose)
+        let attempt: Int
+        switch buildFlow.begin(target) {
+        case .duplicate:
+            Log.route.notice("построение: повторное касание той же цели — пропускаю")
+            return nil
+        case .replaced(let next):
+            Log.route.notice("построение: цель сменили — прежняя попытка не нужна")
+            cancelBuildWork?()
+            cancelBuildWork = nil
+            attempt = next
+        case .started(let next):
+            attempt = next
+        }
+        errorMessage = nil
+        Task { [weak self] in
+            await Task.pause(seconds: AppConfig.routeBuildSlowSeconds)
+            self?.buildFlow.markSlow(attempt)
+        }
+        return attempt
+    }
+
+    /// «Отмена» под индикатором: прежний маршрут, если он был, остаётся.
+    func cancelBuild() {
+        guard let stage = buildFlow.cancel() else { return }
+        cancelBuildWork?()
+        cancelBuildWork = nil
+        // Ждали только GPS — считать было нечего, чужие расчёты не трогаем.
+        if stage >= .calculating { generation += 1 }
+        Log.route.notice("построение: отменено")
+    }
+
+    /// Закрыли сообщение об ошибке — маршрут при этом не трогаем.
+    func dismissBuildFailure() {
+        guard case .failed = buildFlow.state else { return }
+        buildFlow.dismissFailure()
+        errorMessage = nil
+    }
+
+    /// false — попытка уже не текущая, и её ошибка никому не нужна.
+    @discardableResult
+    private func failBuild(_ attempt: Int, _ failure: RouteBuildFlow.Failure, message: String) -> Bool {
+        guard buildFlow.fail(attempt, failure) else { return false }
+        errorMessage = message
+        return true
+    }
+
+    /// Попытку заменили или отменили: что сказать тому, кто её начал.
+    private var abandonedOutcome: RouteBuildFlow.Outcome { buildFlow.isWorking ? .superseded : .cancelled }
+
+    /// Живой точки нет — маршрут не строим вовсе, и говорим об этом:
+    /// молчаливое «ничего не произошло» после тапа читается как поломка кнопки.
+    func reportNoFix(attempt: Int) {
+        failBuild(attempt, .noFix, message: String(localized: "Не видим вашего положения — маршрут не построен"))
     }
 
     /// Убрать заезд не вышло без положения — маршрут при этом остаётся.
-    func reportNoFixForStop() {
-        errorMessage = String(localized: "Не видим вашего положения — заезд остался")
+    func reportNoFixForStop(attempt: Int) {
+        failBuild(attempt, .stopUnchanged, message: String(localized: "Не видим вашего положения — заезд остался"))
     }
 
     /// `heading` — курс машины, если она едет (`LocationService.routeHeading`,
     /// правило — `requestHeading`): маршрут начнётся туда, куда она едет, а не
     /// с разворота за спиной (20.9). Стоя — nil: поехать можно в любую сторону.
+    ///
+    /// `attempt` — номер из `beginBuild`, если кнопка уже ответила касанием;
+    /// nil — попытка начнётся здесь (Siri, плитка главного экрана).
+    @discardableResult
     func build(from source: CLLocationCoordinate2D,
                heading: CLLocationDirection?,
                to destination: CLLocationCoordinate2D,
                name: String, cameras: [Camera],
-               alternatives: Bool = true) async {
+               alternatives: Bool = true,
+               attempt given: Int? = nil) async -> RouteBuildFlow.Outcome {
+        let attempt: Int
+        if let given {
+            guard buildFlow.isCurrent(given) else { return abandonedOutcome }
+            attempt = given
+        } else {
+            guard let started = beginBuild(to: destination, name: name) else { return .duplicate }
+            attempt = started
+        }
+        defer { buildFlow.finish(attempt) }
         // Пульт: если наш OSRM лежит, честное «временно недоступны» лучше, чем
         // спиннер на 20 секунд и «Маршрут не найден» — последнее водитель
         // прочитает как «дороги нет», а не как «сервер чинят».
         guard isRoutingEnabled else {
-            errorMessage = String(localized: "Маршруты временно недоступны — мы уже чиним")
-            return
+            failBuild(attempt, .unavailable, message: String(localized: "Маршруты временно недоступны — мы уже чиним"))
+            return .failed
         }
-        isBuilding = true
+        buildFlow.advance(attempt, to: .calculating)
         errorMessage = nil
-        defer { isBuilding = false }
         generation += 1
         let gen = generation
         resetDetour()
@@ -889,15 +955,21 @@ final class RouteService {
         // Своя дорога (24.4) — только при выборе из вариантов: запрос через
         // её опорные точки идёт рядом с обычным, а не после него.
         let plan = alternatives ? myRoadPlan?(source, destination) : nil
-        do {
+        // Отдельной задачей: «Отмена» обрывает запросы, а не ждёт их таймаута.
+        let work = Task { () throws -> ([BuiltVariant], BuiltVariant?) in
             async let engine = calculate(from: source, via: nil, to: destination,
                                          alternatives: alternatives, heading: heading)
             async let ownRoute = myRoadRoute(plan, from: source, to: destination, heading: heading)
             let built = try await engine
-            let mine = await ownRoute
-            guard gen == generation else { return }   // пока считали — маршрут сбросили/заменили
+            return (built, await ownRoute)
+        }
+        cancelBuildWork = { work.cancel() }
+        do {
+            let (built, mine) = try await work.value
+            guard buildFlow.isCurrent(attempt), gen == generation else { return abandonedOutcome }   // пока считали — маршрут сбросили/заменили
+            buildFlow.advance(attempt, to: .comparing)
             let merged = await offMain { Self.merge(built, mine: mine, plan: plan) }
-            guard gen == generation else { return }
+            guard buildFlow.isCurrent(attempt), gen == generation else { return abandonedOutcome }
             // Новая цель — остановка прежнего маршрута не её. Забываем ТОЛЬКО
             // после успеха: не построилось — прежняя линия (через остановку)
             // остаётся, и перестроение по ней обязано помнить заезд.
@@ -906,10 +978,14 @@ final class RouteService {
             await apply(merged.variants, name: name, destination: destination,
                         cameras: cameras, gen: gen, history: personalHistory?(),
                         myRoad: merged.index.flatMap { index in plan.map { (index, $0) } })
+            return buildFlow.isCurrent(attempt) && gen == generation ? .built : abandonedOutcome
         } catch RouteError.serverUnreachable {
-            errorMessage = String(localized: "Нет связи с сервером маршрутов — проверьте интернет")
+            let shown = failBuild(attempt, .network,
+                                  message: String(localized: "Нет связи с сервером маршрутов — проверьте интернет"))
+            return shown ? .failed : abandonedOutcome
         } catch {
-            errorMessage = String(localized: "Маршрут не найден")
+            let shown = failBuild(attempt, .noRoute, message: String(localized: "Маршрут не найден"))
+            return shown ? .failed : abandonedOutcome
         }
     }
 
@@ -920,20 +996,19 @@ final class RouteService {
     /// выбрал сам. Не вышло — старый маршрут остаётся как был, с сообщением.
     func addStop(_ coordinate: CLLocationCoordinate2D, name: String,
                  from source: CLLocationCoordinate2D, heading: CLLocationDirection?,
-                 cameras: [Camera]) async {
-        errorMessage = nil   // прежняя ошибка — не причина этого отказа
+                 cameras: [Camera], attempt given: Int? = nil) async {
+        guard let attempt = stopAttempt(given, to: coordinate, name: name, purpose: .addStop) else { return }
+        defer { buildFlow.finish(attempt) }
         guard isActive, let destination = destinationCoordinate else {
             // Маршрут успел закончиться (приехали, сбросили), пока выбирали место.
-            errorMessage = String(localized: "Маршрута уже нет — заезд не добавлен")
+            failBuild(attempt, .stopUnchanged, message: String(localized: "Маршрута уже нет — заезд не добавлен"))
             return
         }
         guard isRoutingEnabled else {
-            errorMessage = String(localized: "Маршруты временно недоступны — мы уже чиним")
+            failBuild(attempt, .unavailable, message: String(localized: "Маршруты временно недоступны — мы уже чиним"))
             return
         }
-        isBuilding = true
-        errorMessage = nil
-        defer { isBuilding = false }
+        buildFlow.advance(attempt, to: .calculating)
         generation += 1
         let gen = generation
         let destinationName = self.destinationName
@@ -941,14 +1016,15 @@ final class RouteService {
         do {
             let built = try await calculate(from: source, via: newStop, to: destination,
                                             alternatives: false, heading: heading)
-            guard gen == generation else { return }
+            guard buildFlow.isCurrent(attempt), gen == generation else { return }
+            buildFlow.advance(attempt, to: .comparing)
             stop = newStop
             await apply(built, name: destinationName, destination: destination,
                         cameras: cameras, gen: gen, history: nil)
         } catch RouteError.serverUnreachable {
-            errorMessage = String(localized: "Нет связи с сервером маршрутов — проверьте интернет")
+            failBuild(attempt, .stopUnchanged, message: String(localized: "Нет связи с сервером маршрутов — проверьте интернет"))
         } catch {
-            errorMessage = String(localized: "Не удалось заехать по пути — маршрут прежний")
+            failBuild(attempt, .stopUnchanged, message: String(localized: "Не удалось заехать по пути — маршрут прежний"))
         }
     }
 
@@ -956,30 +1032,42 @@ final class RouteService {
     /// АЗС сбрасывал весь маршрут и искал адрес заново. Не вышло — заезд и
     /// линия остаются, как были, с сообщением.
     func removeStop(from source: CLLocationCoordinate2D, heading: CLLocationDirection?,
-                    cameras: [Camera]) async {
-        errorMessage = nil
-        guard isActive, stop != nil, let destination = destinationCoordinate else { return }
-        guard isRoutingEnabled else {
-            errorMessage = String(localized: "Маршруты временно недоступны — мы уже чиним")
+                    cameras: [Camera], attempt given: Int? = nil) async {
+        guard let current = stop, isActive, let destination = destinationCoordinate else {
+            if let given { buildFlow.finish(given) }
             return
         }
-        isBuilding = true
-        defer { isBuilding = false }
+        guard let attempt = stopAttempt(given, to: current.coordinate, name: current.name, purpose: .removeStop)
+        else { return }
+        defer { buildFlow.finish(attempt) }
+        guard isRoutingEnabled else {
+            failBuild(attempt, .unavailable, message: String(localized: "Маршруты временно недоступны — мы уже чиним"))
+            return
+        }
+        buildFlow.advance(attempt, to: .calculating)
         generation += 1
         let gen = generation
         let destinationName = self.destinationName
         do {
             let built = try await calculate(from: source, via: nil, to: destination,
                                             alternatives: false, heading: heading)
-            guard gen == generation else { return }
+            guard buildFlow.isCurrent(attempt), gen == generation else { return }
+            buildFlow.advance(attempt, to: .comparing)
             stop = nil
             await apply(built, name: destinationName, destination: destination,
                         cameras: cameras, gen: gen, history: nil)
         } catch RouteError.serverUnreachable {
-            errorMessage = String(localized: "Нет связи с сервером маршрутов — проверьте интернет")
+            failBuild(attempt, .stopUnchanged, message: String(localized: "Нет связи с сервером маршрутов — проверьте интернет"))
         } catch {
-            errorMessage = String(localized: "Не удалось убрать заезд — маршрут прежний")
+            failBuild(attempt, .stopUnchanged, message: String(localized: "Не удалось убрать заезд — маршрут прежний"))
         }
+    }
+
+    /// Попытка заезда: начатая кнопкой или новая; nil — уже идёт такая же.
+    private func stopAttempt(_ given: Int?, to coordinate: CLLocationCoordinate2D, name: String,
+                             purpose: RouteBuildFlow.Target.Purpose) -> Int? {
+        if let given { return buildFlow.isCurrent(given) ? given : nil }
+        return beginBuild(to: coordinate, name: name, purpose: purpose)
     }
 
     func selectVariant(_ id: Int) {
@@ -1000,6 +1088,9 @@ final class RouteService {
         closePaceSample()
         choiceBasis = nil
         generation += 1   // rebuild в полёте не должен вернуть линию на карту
+        buildFlow.reset()
+        cancelBuildWork?()
+        cancelBuildWork = nil
         resetDetour()
         variants = []
         selectedID = 0
@@ -1374,11 +1465,35 @@ final class RouteService {
                            to destination: CLLocationCoordinate2D,
                            alternatives: Bool,
                            heading: CLLocationDirection? = nil) async throws -> [BuiltVariant] {
-        // Сбой Apple-роутинга — штатный путь: ниже падаем на собственный OSRM.
         // С остановкой — сразу OSRM: промежуточных точек MKDirections не знает.
-        if stop == nil,
-           let apple = try? await appleRoute(from: source, to: destination, alternatives: alternatives),
+        guard stop == nil else {
+            return try await ownRoute(from: source, via: stop, to: destination, alternatives: alternatives,
+                                      heading: heading)
+        }
+        // Apple и свой сервер — одновременно: внутри Узбекистана Apple не
+        // строит, и ждать его отказа перед запросом OSRM значило прибавлять
+        // круг по сети к каждому построению. Apple по-прежнему главнее.
+        // Сбой Apple-роутинга — штатный путь: берём ответ своего сервера.
+        async let own = ownRouteResult(from: source, to: destination, alternatives: alternatives, heading: heading)
+        if let apple = try? await appleRoute(from: source, to: destination, alternatives: alternatives),
            !apple.isEmpty { return apple }
+        return try await own.get()
+    }
+
+    private func ownRouteResult(from source: CLLocationCoordinate2D, to destination: CLLocationCoordinate2D,
+                                alternatives: Bool,
+                                heading: CLLocationDirection?) async -> Result<[BuiltVariant], Error> {
+        do {
+            return .success(try await ownRoute(from: source, via: nil, to: destination,
+                                               alternatives: alternatives, heading: heading))
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    private func ownRoute(from source: CLLocationCoordinate2D, via stop: Stop?,
+                          to destination: CLLocationCoordinate2D, alternatives: Bool,
+                          heading: CLLocationDirection?) async throws -> [BuiltVariant] {
         do {
             if let heading {
                 do {
@@ -1390,6 +1505,8 @@ final class RouteService {
             }
             return try await osrmRoute(from: source, via: stop, to: destination, alternatives: alternatives)
         } catch {
+            // Отменили или ответ больше не нужен — свой граф трасс ни к чему.
+            guard !Task.isCancelled else { throw error }
             // Ни Apple, ни свой сервер — на трассе без связи. Последнее средство —
             // свой граф трасс: приблизительный маршрут лучше, чем никакого
             // (12б.10). С остановкой — нет: заезд по пути без сети не считаем.
@@ -2155,8 +2272,13 @@ final class RouteService {
                 ?? waitingSince.addingTimeInterval(AppConfig.detourOfferUnseenSeconds)
         }
 
-        /// «Быстрее на 8 мин».
+        /// «Есть путь быстрее на 8 мин» — и на телефоне, и в машине.
         var title: String {
+            String(format: String(localized: "Есть путь быстрее на %@"),
+                   Formatting.unbreakable(Formatting.duration(saving)))
+        }
+        /// Для узкого экрана машины: «Быстрее на 8 мин».
+        var shortTitle: String {
             String(format: String(localized: "Быстрее на %@"), Formatting.unbreakable(Formatting.duration(saving)))
         }
         /// «Объезд пробки · через Шота Руставели».
@@ -2179,24 +2301,39 @@ final class RouteService {
     @ObservationIgnored private var detourCrawl = DetourAdvisor.CrawlWatch()
     @ObservationIgnored private var detourSearchAt: Date?
     @ObservationIgnored private var detourDeclinedAt: Date?
+    /// Предложение истекло, так и не дойдя до экрана: голос молчит, открытие — нет.
+    @ObservationIgnored private var detourUnseenAt: Date?
+    @ObservationIgnored private var detourOpenedAt: Date?
     @ObservationIgnored private var detourOffers = 0
     @ObservationIgnored private var detourSearching = false
 
     /// На каждом фиксе поездки — и стоя: в пробке машина не сдвигается, и
     /// updateProgress (он ждёт смещения) молчит ровно тогда, когда объезд нужен.
-    func considerDetour(coordinate: CLLocationCoordinate2D, speedKmh: Double, now: Date = Date()) {
-        // Истекло — показанное или так и не показанное — это «остаёмся»: то же
-        // молчание 10 минут и тот же счёт в лимит. Иначе невиданное
-        // предложение, снятое без отказа, звучало голосом снова через 3 мин
-        // всю пробку (ревью 20.10).
+    /// Кроме фиксов — открытие приложения или экрана машины и новый файл
+    /// пробок: стоящему телефону фиксов может не прийти минутами.
+    func considerDetour(coordinate: CLLocationCoordinate2D, speedKmh: Double, now: Date = Date(),
+                        trigger: DetourAdvisor.Trigger = .fix) {
+        if trigger == .opened { detourOpenedAt = now }
+        // Истекло — показанное: это «остаёмся», те же 10 минут тишины. Так и не
+        // показанное считается в лимит и глушит голос, но открывшему приложение
+        // водителю выгоду показать можно (ревью 20.10: без этого невиданное
+        // предложение звучало снова через 3 мин всю пробку).
         if let offer = detourOffer, now >= offer.expires {
-            declineDetour(now: now, reason: offer.shownAt == nil ? "так и не показано" : "нет ответа")
+            if offer.shownAt == nil {
+                detourOffer = nil
+                detourVariant = nil
+                detourUnseenAt = now
+                Log.route.notice("объезд: так и не показано")
+            } else {
+                declineDetour(now: now, reason: "нет ответа")
+            }
         }
         let crawl = detourCrawl.update(speedKmh: speedKmh, at: now)
         // Пульт выключил маршруты (OSRM лёг) — поиск объезда не ходит (S24).
         // Ниже истечения и счёта «ползём»: открытое предложение должно истечь,
         // а не висеть до конца маршрута (ревью S24).
         guard isRoutingEnabled else { return }
+        let reason = DetourAdvisor.effective(trigger, sinceOpened: detourOpenedAt.map { now.timeIntervalSince($0) })
         guard let variant = selected, let destination = destinationCoordinate,
               !isBuilding, !isRebuilding, detourOffer == nil, !detourSearching,
               let snapshot = trafficSnapshot?(), snapshot.isFresh(now: now),
@@ -2205,15 +2342,18 @@ final class RouteService {
                                          currentRemaining: engineRemaining,
                                          sinceLastSearch: detourSearchAt.map { now.timeIntervalSince($0) },
                                          sinceDecline: detourDeclinedAt.map { now.timeIntervalSince($0) },
-                                         offersOnRoute: detourOffers) else { return }
+                                         offersOnRoute: detourOffers,
+                                         sinceUnseen: detourUnseenAt.map { now.timeIntervalSince($0) },
+                                         trigger: reason) else { return }
         detourSearching = true
         detourSearchAt = now
         let gen = generation
-        let current = Self.remaining(variant.points, after: progressAlong)
+        let points = variant.points
+        let along = progressAlong
         // Той же меркой, что варианты: движок + пробки, не личный остаток (8.8.11).
         let currentRemaining = engineRemaining
         let via = stop
-        Log.route.notice("объезд: ищу — впереди +\(Int(self.remainingTrafficDelay), privacy: .public) с, ползём \(Int(crawl), privacy: .public) с")
+        Log.route.notice("объезд: ищу (\(String(describing: reason), privacy: .public)) — впереди +\(Int(self.remainingTrafficDelay), privacy: .public) с, ползём \(Int(crawl), privacy: .public) с")
         Task {
             defer { detourSearching = false }
             let built: [BuiltVariant]
@@ -2224,14 +2364,14 @@ final class RouteService {
                 return
             }
             guard gen == generation else { return }
-            let candidates = built.map { variant in
-                (points: variant.points.map(\.coordinate), travelTime: variant.travelTime, steps: variant.steps)
-            }
+            let found = built
             let offer = await Task.detached(priority: .utility) { () -> DetourAdvisor.Offer? in
-                let scored = candidates.map { candidate in
-                    DetourAdvisor.Candidate(points: candidate.points,
-                                            expectedTime: candidate.travelTime + snapshot.delay(along: candidate.points),
-                                            steps: candidate.steps)
+                let current = Self.remaining(points, after: along)
+                let scored = found.map { variant in
+                    let path = variant.points.map(\.coordinate)
+                    return DetourAdvisor.Candidate(points: path,
+                                                   expectedTime: variant.travelTime + snapshot.delay(along: path),
+                                                   steps: variant.steps)
                 }
                 return DetourAdvisor.decide(currentRemaining: currentRemaining, current: current, candidates: scored)
             }.value
@@ -2243,13 +2383,10 @@ final class RouteService {
             detourVariant = built[offer.index]
             detourCounter += 1
             detourOffers += 1
-            // Ни телефон, ни машина показать не могут (телефон заблокирован в
-            // держателе, машины нет) — предложение только голосом, и время на
-            // ответ идёт сразу, как до 20.10.
-            let now = Date()
-            let screen = detourScreenAvailable?() ?? true
-            let shown = DetourOffer(id: detourCounter, saving: offer.saving, via: offer.via,
-                                    waitingSince: now, shownAt: screen ? nil : now)
+            // Срок на ответ пойдёт, когда предложение встанет на экран. Телефон
+            // заблокирован, машины нет — услышав голос, водитель успеет открыть
+            // приложение: до 09.11 предложение тут же считалось отказом.
+            let shown = DetourOffer(id: detourCounter, saving: offer.saving, via: offer.via, waitingSince: Date())
             detourOffer = shown
             Log.route.notice("объезд: предлагаю, выигрыш \(Int(offer.saving), privacy: .public) с")
             onDetourOffer?(shown)
@@ -2357,6 +2494,8 @@ final class RouteService {
         detourVariant = nil
         detourSearchAt = nil
         detourDeclinedAt = nil
+        detourUnseenAt = nil
+        detourOpenedAt = nil
         detourOffers = 0
         detourCrawl.reset()
     }

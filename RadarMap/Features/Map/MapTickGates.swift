@@ -105,18 +105,12 @@ struct ManeuverBannerGate: View {
 /// «Похоже, вы едете» — подсказка включить оповещения; условие читает скорость.
 /// Что показать внизу экрана — ОДНО, а не всё сразу.
 ///
-/// Плашки заводились по одной и каждая права по отдельности: ошибка маршрута,
-/// «строим», подсказка о поездке, предложение назначения. Вместе они делят
-/// внимание на четыре, и делят его за рулём — там, где на взгляд есть доля
-/// секунды.
-///
-/// Правило простое и оно тут одно на всех: **то, что требует решения, старше
-/// того, что сообщает**. Ошибка маршрута ждёт ответа, «строим» сообщает о
-/// работе, подсказка о поездке предлагает, назначение — догадка.
+/// Плашки заводились по одной и каждая права по отдельности. Вместе они делят
+/// внимание, и делят его за рулём — там, где на взгляд есть доля секунды.
+/// Ход построения и его ошибка — своя карточка (RouteBuildCard): она нужна и
+/// поверх панели маршрута, и в поездке, где этой ветки нет вовсе.
 nonisolated enum BottomHint: Equatable {
     case none
-    case routeError(String)
-    case building
     case driving
     case destinations
 
@@ -124,11 +118,7 @@ nonisolated enum BottomHint: Equatable {
     /// скорость. Скорость пишется каждым фиксом, и её чтение в теле экрана
     /// делало пересборку главного экрана ежесекундной ради строки, которая
     /// меняется раз в поездку. Флаг уже учитывает и поездку, и гистерезис.
-    static func choose(routeError: String?, isBuilding: Bool,
-                       isProbablyDriving: Bool,
-                       showsQuickDestinations: Bool) -> BottomHint {
-        if let routeError, !routeError.isEmpty { return .routeError(routeError) }
-        if isBuilding { return .building }
+    static func choose(isProbablyDriving: Bool, showsQuickDestinations: Bool) -> BottomHint {
         if isProbablyDriving { return .driving }
         if showsQuickDestinations { return .destinations }
         return .none

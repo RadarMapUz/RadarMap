@@ -10,23 +10,10 @@ import Testing
 @Suite("Внизу экрана — одна плашка, а не четыре")
 struct BottomHintTests {
 
-    private func choose(error: String? = nil, building: Bool = false,
-                        trip: Bool = false, speed: Double = 0,
+    private func choose(trip: Bool = false, speed: Double = 0,
                         destinations: Bool = true) -> BottomHint {
-        BottomHint.choose(routeError: error, isBuilding: building,
-                          isProbablyDriving: !trip && speed >= 20,
+        BottomHint.choose(isProbablyDriving: !trip && speed >= 20,
                           showsQuickDestinations: destinations)
-    }
-
-    @Test("Ошибка старше всего: она ждёт решения")
-    func errorWins() {
-        #expect(choose(error: "Маршрут не построен", building: true,
-                       speed: 60) == .routeError("Маршрут не построен"))
-    }
-
-    @Test("«Строим» старше подсказки и назначения")
-    func buildingBeatsHints() {
-        #expect(choose(building: true, speed: 60) == .building)
     }
 
     @Test("Подсказка о поездке старше предложения назначения")
@@ -42,13 +29,6 @@ struct BottomHintTests {
     @Test("Стоим — подсказки о поездке нет")
     func standingStillIsQuiet() {
         #expect(choose(speed: 3) == .destinations)
-    }
-
-    @Test("Пустая строка ошибки — не ошибка")
-    func emptyErrorIsNotAnError() {
-        // Иначе пустая строка заняла бы единственное место на экране и
-        // прогнала бы всё остальное, ничего при этом не сказав.
-        #expect(choose(error: "", speed: 60) == .driving)
     }
 
     @Test("Когда сказать нечего — не говорим ничего")

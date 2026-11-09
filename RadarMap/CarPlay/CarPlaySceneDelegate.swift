@@ -213,6 +213,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         resendButtons()
         observePendingConfirm()
         observeDetour()
+        observeBuild()
         observeRoadWeather()
         observeJam()
         observeTripSaved()
@@ -269,8 +270,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         confirmWatch = nil
         confirmBanner = nil
         confirmBannerID = nil
+        // Машину отключили, пока предложение было на её экране: время на ответ
+        // начнётся заново, когда его увидят на телефоне.
+        if let id = detourAlertID { env.route.noteDetourHidden(id: id) }
         detourAlert = nil
         detourAlertID = nil
+        buildBanner.reset()
         roadWeatherBanner.reset()
         jamBanner.reset()
         // Глобальное состояние гасит только владелец экрана: запоздавший
@@ -406,6 +411,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Предложение объезда, показанное баннером в машине (id из RouteService).
     var detourAlertID: Int?
     var detourAlert: CPNavigationAlert?
+    /// Ход построения маршрута (общее состояние с телефоном).
+    let buildBanner = CarPlayBuildBanner()
 
     // MARK: - Итог поездки
 
@@ -424,7 +431,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// Статический: «один раз на маршрут» переживает моргание кабеля — новая
     /// сцена машины не спрашивает о том же наборе вариантов второй раз.
     static var choiceOffer = CarPlayRouteChoiceOffer.Tracker()
-    /// Баннер «Есть другие варианты» на экране и набор, о котором он.
+    /// Баннер «Другой путь» на экране и набор, о котором он.
     var choiceOfferAlert: CPNavigationAlert?
     var choiceOfferRoute: Int?
     /// Проверка стоя: фиксов может не быть, а время идёт.
@@ -530,6 +537,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         watchRootTemplate()
         presentPendingConfirmIfNeeded()
         retryOneTimeShows()
+        offerFasterRouteOnOpen()
     }
 
     /// Проверка «корень действительно на экране машины», когда сцена стала

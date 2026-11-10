@@ -618,8 +618,6 @@ struct EngineMapView: UIViewRepresentable {
         /// Курсор «я» — картинка вида-стрелки поверх карты (см. «Стрелка»).
         private func installCursor(_ cursor: CursorStyle) {
             lastCursor = cursor
-            // Новый значок — поставить заново, а «Машине 3D» — выбрать кадр.
-            shownCarFrame = nil
             shownPosition = nil
             guard let image = Self.cursorImage(cursor) else {
                 Log.network.error("MapLibre: курсор \(cursor.rawValue, privacy: .public) не отрисовался")
@@ -629,13 +627,14 @@ struct EngineMapView: UIViewRepresentable {
             positionView?.bounds = CGRect(origin: .zero, size: image.size)
         }
 
-        /// Тот же MeCursor, что у схемы и карты Apple, — растром ×3. Рамка та
-        /// же, что была у стрелки: значки вписаны в неё сами, а поля — под тень.
+        /// Машина — готовая картинка каталога (уже с полями под тень); стрелка —
+        /// тот же MeCursor растром ×3, один раз на процесс.
         private static func cursorImage(_ cursor: CursorStyle) -> UIImage? {
+            if let asset = cursor.assetName { return UIImage(named: asset) }
             if let cached = cursorCache[cursor] { return cached }
             let frame = cursor.frameSize
             let renderer = ImageRenderer(content: MeCursor(scale: 1, style: cursor)
-                .frame(width: frame.width, height: frame.height).padding(8))
+                .frame(width: frame.width, height: frame.height).padding(CursorStyle.padding))
             renderer.scale = 3
             let image = renderer.uiImage
             cursorCache[cursor] = image
@@ -2045,18 +2044,7 @@ struct EngineMapView: UIViewRepresentable {
                abs(shown.angle - angle) < 0.0035, shownPitch == pitch { return }
             shownPosition = (point, angle)
             shownPitch = pitch
-            // «Машина 3D» (29.B): кадр модели по ракурсу, поворот картинки —
-            // только остаток до кадра, без наклона (он уже в кадре).
-            var transform = Self.cursorTransform(angle: angle, pitchDegrees: pitch)
-            if lastCursor == .car3D {
-                let pick = Car3DModel.frame(relativeYaw: angle * 180 / .pi, pitch: pitch)
-                if pick.frame != shownCarFrame, let image = Car3DSprites.image(pick.frame) {
-                    shownCarFrame = pick.frame
-                    marker.image = image
-                    marker.bounds = CGRect(origin: .zero, size: image.size)
-                }
-                transform = Self.car3DTransform(residualDegrees: pick.residual, pitchDegrees: pitch)
-            }
+            let transform = Self.cursorTransform(angle: angle, pitchDegrees: pitch)
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             marker.layer.position = point
@@ -2070,18 +2058,6 @@ struct EngineMapView: UIViewRepresentable {
         private var shownPosition: (point: CGPoint, angle: Double)?
         /// Наклон, под который посажена стрелка (целые градусы).
         private var shownPitch: Double?
-        /// Кадр «Машины 3D», что сейчас в виде стрелки (nil — не она или не ставили).
-        private var shownCarFrame: Car3DModel.Frame?
-
-        /// «Машина 3D»: ракурс уже нарисован в кадре — картинка только
-        /// докручивается на остаток до кадра (≤ полшага) и чуть растёт с
-        /// наклоном, как плоские значки (engineCursorPitchGrow).
-        static func car3DTransform(residualDegrees: Double, pitchDegrees: Double) -> CATransform3D {
-            let share = min(max(0, pitchDegrees), AppConfig.engineMapPitchDegrees) / AppConfig.engineMapPitchDegrees
-            let grow = 1 + AppConfig.engineCursorPitchGrow * share
-            return CATransform3DRotate(CATransform3DMakeScale(grow, grow, 1), residualDegrees * .pi / 180, 0, 0, 1)
-        }
-
         /// Посадка значка «я» на наклонную карту (25.D): курс в плоскости
         /// карты, затем наклон к горизонту — ДОЛЯ наклона карты, чтобы значок
         /// лёг на дорогу, но не сплющился в блин, — с лёгкой перспективой и

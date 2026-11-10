@@ -20,8 +20,6 @@ final class UnifiedPaletteTests: XCTestCase {
     /// Файлы, где сырой цвет законен, — с причиной.
     private let rawColourExceptions: [String: String] = [
         "Shared/WidgetPalette.swift": "источник чисел палитры для виджетов и часов",
-        "RadarMap/Features/Map/Cursor3D.swift": "светотень граней объёмного курсора",
-        "RadarMap/Features/Map/CursorRacers.swift": "рисунки курсоров-болидов",
     ]
 
     private let rawColourPatterns = ["Color(red:", "Color(hex", "UIColor(red:", "Color(hue:", "UIColor(hue:",

@@ -786,7 +786,7 @@ final class AppSettings {
         didSet { store.set(mapAppearance.rawValue, forKey: Keys.mapAppearance) }
     }
 
-    /// Значок «я» на карте: стрелка, машина, спорткар, звездолёт. Один на все
+    /// Значок «я» на карте: стрелка или одна из машин. Один на все
     /// подложки и на экран машины — менять «себя» вместе с подложкой значило
     /// бы терять себя взглядом при каждом переключении (см. CursorStyle).
     var cursorStyle: CursorStyle {
@@ -1004,7 +1004,13 @@ final class AppSettings {
         // ключи mapBase/engineMapEnabled/sketchWhileDriving больше не читаются.
         let loadedMode = AlertMode(rawValue: store.string(forKey: Keys.alertMode) ?? "") ?? .auto
         alertMode = loadedMode
-        cursorStyle = CursorStyle(stored: store.string(forKey: Keys.cursorStyle))
+        let storedCursor = store.string(forKey: Keys.cursorStyle)
+        let loadedCursor = CursorStyle(stored: storedCursor)
+        cursorStyle = loadedCursor
+        // Старый значок (до 3D-машин) — один раз переписать на новый.
+        if let storedCursor, CursorStyle.legacy[storedCursor] != nil {
+            store.set(loadedCursor.rawValue, forKey: Keys.cursorStyle)
+        }
         knownCarAudio = store.stringArray(forKey: Keys.knownCarAudio) ?? []
         carDevices = Self.loadCarDevices(store)
         weeklyDigest = store.bool(forKey: Keys.digest)

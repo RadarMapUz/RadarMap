@@ -4604,22 +4604,6 @@
         }
       }
     },
-    "Болид": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Болид"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bolid"
-          }
-        }
-      }
-    },
     "Больше всего — %@": {
       "localizations": {
         "ru": {
@@ -16026,22 +16010,6 @@
         }
       }
     },
-    "Ралли": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ралли"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ralli"
-          }
-        }
-      }
-    },
     "Расписание передвижных радаров закрыто с 2022 года. Увидели засаду — одна жёлтая кнопка, не глядя на экран.": {
       "localizations": {
         "ru": {
@@ -17914,22 +17882,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Summa, soʻm"
-          }
-        }
-      }
-    },
-    "Суперкар": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Суперкар"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Superkar"
           }
         }
       }
@@ -27015,18 +26967,98 @@
         }
       }
     },
-    "Звездолёт": {
+    "Премиум седан": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Звездолёт"
+            "value": "Премиум седан"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kosmik kema"
+            "value": "Premium sedan"
+          }
+        }
+      }
+    },
+    "Внедорожник": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Внедорожник"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻltanlamas"
+          }
+        }
+      }
+    },
+    "Кроссовер": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Кроссовер"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Krossover"
+          }
+        }
+      }
+    },
+    "Такси": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Такси"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taksi"
+          }
+        }
+      }
+    },
+    "Пикап-клин": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пикап-клин"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pona pikap"
+          }
+        }
+      }
+    },
+    "Мотоцикл": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Мотоцикл"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mototsikl"
           }
         }
       }
@@ -32739,22 +32771,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld %% yoʻl bosildi"
-          }
-        }
-      }
-    },
-    "Машина 3D": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Машина 3D"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "3D mashina"
           }
         }
       }

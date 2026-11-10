@@ -2,30 +2,16 @@
 //  MeCursor.swift
 //  RadarMap
 //
-//  Курсор «я» — по выбору водителя: стрелка, машина, спорткар, звездолёт.
+//  Курсор «я» — по выбору водителя: стрелка или машина.
 //
-//  Отдельным файлом, а не внутри схемы: курсор рисуют ТРИ рендера — своя
-//  схема (экран машины), движок карты (битмапом в стиле) и карта Apple
-//  (аннотацией), — и жить внутри одного из них ему незачем. Все значки
-//  рисуются носом вверх и в одной рамке, поэтому каждый рендер вращает и
-//  ставит их ровно так же, как стрелку до появления выбора.
-//
-//  Значки, кроме стрелки, — в CursorVehicles.swift.
+//  Отдельным файлом: курсор рисуют карта на движке (битмапом над картой),
+//  плитки выбора и онбординг. Все значки — носом вверх; стрелка рисуется
+//  здесь, машины — готовые картинки каталога (CursorStyle.assetName).
 //
 
 import SwiftUI
 
-/// Курсор машины: всегда строго вверх — схема повёрнута по ходу движения,
-/// поэтому «вверх» и есть «куда я еду». Экранным слоем, а не в растре: мир
-/// вращается, курсор — никогда.
-///
-/// Объём даётся тремя тонами одного цвета и посадкой на тень, а не рисованной
-/// перспективой: плоский треугольник читался указателем на чертеже, а не
-/// машиной на дороге. Всё статично — ни одного пересчёта на тик.
-/// Курсор машины. Не приватный: его рисуют три рендера — своя схема, карта
-/// на движке и (для выбранных значков) карта Apple, — и рисовать «я»
-/// по-разному в разных подложках значило бы менять вместе с подложкой самый
-/// важный предмет на экране.
+/// Значок «я» носом вверх — карта на движке поворачивает его по курсу.
 struct MeCursor: View {
     var scale: CGFloat = 1
     /// Какой значок. По умолчанию — стрелка: вызовы, которые о выборе не
@@ -33,15 +19,19 @@ struct MeCursor: View {
     var style: CursorStyle = .arrow
 
     var body: some View {
-        switch style {
-        case .arrow:     ArrowCursor(scale: scale)
-        case .car:       CarCursor(scale: scale)
-        case .sport:     SportCursor(scale: scale)
-        case .formula:   FormulaCursor(scale: scale)
-        case .supercar:  SupercarCursor(scale: scale)
-        case .rally:     RallyCursor(scale: scale)
-        case .spaceship: SpaceshipCursor(scale: scale)
-        case .car3D:     Car3DCursor(scale: scale)
+        if let asset = style.assetName {
+            // Картинка уже с полями под тень: шире рамки и выступает за неё,
+            // как тень стрелки.
+            let pad = CursorStyle.padding * 2
+            Image(asset)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: (style.frameSize.width + pad) * scale,
+                       height: (style.frameSize.height + pad) * scale)
+                .frame(width: style.frameSize.width * scale, height: style.frameSize.height * scale)
+                .accessibilityHidden(true)
+        } else {
+            ArrowCursor(scale: scale)
         }
     }
 }

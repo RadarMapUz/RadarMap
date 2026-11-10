@@ -362,6 +362,44 @@ final class PerformanceBudgetTests: XCTestCase {
         XCTAssertLessThan(frameTime, .milliseconds(150), "600 кадров отбора камер на линии: \(frameTime)")
     }
 
+    /// Участок треноги (83): выбор цели — на каждом кадре карты; места целей
+    /// на маршруте — раз на маршрут.
+    func testTripodZoneBudget() {
+        let pts = (0..<10_000).map {
+            MKMapPoint(CLLocationCoordinate2D(latitude: 41.30 + Double($0) * 0.00002,
+                                              longitude: 69.20 + Double($0) * 0.0001))
+        }
+        let tripods = (0..<60).map { i in
+            TripodZone.Candidate(key: i, coordinate: pts[i * 150].coordinate, grade: .confirmed)
+        }
+        let spots = (0..<600).map { i in
+            TripodZone.Candidate(key: -1 - i, coordinate: CLLocationCoordinate2D(
+                latitude: 41.0 + Double(i % 30) * 0.02, longitude: 69.0 + Double(i / 30) * 0.03), grade: .hotspot)
+        }
+        let clock = ContinuousClock()
+        let started = clock.now
+        var along: [Int: Double] = [:]
+        for candidate in tripods + spots {
+            if let value = TripodZone.along(of: candidate.coordinate, route: pts) { along[candidate.key] = value }
+        }
+        let alongTime = clock.now - started
+        XCTAssertEqual(along.count, 60)
+        XCTAssertLessThan(alongTime, .milliseconds(400), "места 660 целей на маршруте в 10 000 точек: \(alongTime)")
+
+        var found = 0
+        let frames = clock.now
+        for frame in 0..<600 {
+            let me = pts[frame * 15].coordinate
+            if TripodZone.target(tripods: tripods, hotspots: spots, me: me, course: 79,
+                                 routeAlong: nil, progress: nil) != nil { found += 1 }
+            if TripodZone.target(tripods: tripods, hotspots: spots, me: me, course: 79,
+                                 routeAlong: along, progress: Double(frame) * 100) != nil { found += 1 }
+        }
+        let frameTime = clock.now - frames
+        XCTAssertGreaterThan(found, 0)
+        XCTAssertLessThan(frameTime, .milliseconds(150), "600 кадров выбора цели участка: \(frameTime)")
+    }
+
     /// Учёт проездов на каждом тике: подход к камере, зона измерения, траверз.
     func testPassTrackingBudget() {
         let origin = CLLocationCoordinate2D(latitude: 41.3110, longitude: 69.2790)

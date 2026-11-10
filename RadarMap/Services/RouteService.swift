@@ -1674,17 +1674,38 @@ final class RouteService {
             // Инструкции Apple уже локализованы системой; позиция шага — накопленная длина.
             var along: CLLocationDistance = 0
             var steps: [RouteStep] = []
+            // Линия, пройденная до шага, — для угла поворота (AppleTurn).
+            var walked: [CLLocationCoordinate2D] = []
+            let last = route.steps.count - 1
             // Шаг без текста тоже занимает дорогу: пропуская его, не прибавляли
             // и его длину — следующие манёвры съезжали назад по маршруту.
-            for step in route.steps {
+            for (index, step) in route.steps.enumerated() {
+                let line = Self.coordinates(of: step.polyline)
                 if !step.instructions.isEmpty {
-                    steps.append(RouteStep(distanceAlong: along, text: step.instructions, icon: "arrow.up"))
+                    if index == last, index > 0 {
+                        steps.append(RouteStep(distanceAlong: along, text: step.instructions,
+                                               icon: "flag.checkered", kind: .arrive))
+                    } else {
+                        // Тип — из угла между линиями; Apple его не отдаёт.
+                        let modifier = index == 0 ? nil : AppleTurn.modifier(incoming: walked, outgoing: line)
+                        steps.append(RouteStep(distanceAlong: along, text: step.instructions,
+                                               icon: AppleTurn.icon(modifier: modifier),
+                                               kind: modifier.map { ManeuverKind.fromOSRM(modifier: $0) }))
+                    }
                 }
+                walked += line
                 along += step.distance
             }
             return BuiltVariant(points: points, distance: route.distance,
                                 travelTime: route.expectedTravelTime, steps: steps)
         }
+    }
+
+    /// Точки линии MKPolyline как координаты.
+    private static func coordinates(of polyline: MKPolyline) -> [CLLocationCoordinate2D] {
+        var out = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: polyline.pointCount)
+        polyline.getCoordinates(&out, range: NSRange(location: 0, length: polyline.pointCount))
+        return out
     }
 
     // MARK: - Своя дорога (24.4)

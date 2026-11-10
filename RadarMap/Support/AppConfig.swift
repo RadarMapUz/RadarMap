@@ -1886,6 +1886,17 @@ nonisolated enum AppConfig {
     /// (RouteRace): внутри Узбекистана Apple не строит, и готовый маршрут не
     /// должен стоять за его отказом.
     static let appleRouteWaitSeconds: TimeInterval = 2.5
+    /// Тип поворота шага Apple (AppleTurn): курс по стольким метрам линии
+    /// до манёвра и после — излом последнего метра не решает за перекрёсток.
+    static let appleTurnProbeMeters: CLLocationDistance = 25
+    /// Линия короче этого — угол не судим, стрелка «прямо».
+    static let appleTurnMinProbeMeters: CLLocationDistance = 5
+    /// Границы угла поворота, °: меньше первой — прямо, дальше — плавно,
+    /// поворот, круто, разворот.
+    static let appleTurnStraightDegrees = 20.0
+    static let appleTurnSlightDegrees = 45.0
+    static let appleTurnSharpDegrees = 135.0
+    static let appleTurnUturnDegrees = 165.0
     /// Ближе этого — та же цель: второе касание не второе построение.
     nonisolated static let routeBuildSameTargetMeters: Double = 30
     /// Дольше этого индикатор говорит, что сеть медленная.

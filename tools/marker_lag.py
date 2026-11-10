@@ -18,6 +18,10 @@
 назад), минус — впереди. Нос значка впереди центра на полкорпуса, так что
 хвост от 0 до −полкорпуса не виден вовсе: линия выходит из-под машины.
 
+Лента «Вождения 3D» (85): строки «МЕТКА лента <t> <lat значка> <lon значка>
+<lat границы> <lon границы>» — где начинается показанная лента; хвост ленты
+считается так же, как хвост линии.
+
 Плавность (27.A): строки «МЕТКА кадр <t> <значок> <срез> <центр камеры>»
 пишутся на каждом кадре хода значка. По каждой из трёх точек: сколько кадров
 она сдвинулась НАЗАД вдоль движения больше чем на сантиметр (в движении цель
@@ -36,7 +40,7 @@ M_PER_DEG = 111320.0
 
 
 def parse(path):
-    fixes, marks, cuts, frames, truth = [], [], [], [], []
+    fixes, marks, cuts, frames, truth, ribbon = [], [], [], [], [], []
     with open(path, encoding="utf-8") as f:
         for line in f:
             if "МЕТКА" not in line:
@@ -48,13 +52,15 @@ def parse(path):
                 marks.append((float(parts[1]), float(parts[2]), float(parts[3])))
             elif parts[0] == "линия":
                 cuts.append(tuple(float(x) for x in parts[1:6]))
+            elif parts[0] == "лента":
+                ribbon.append(tuple(float(x) for x in parts[1:6]))
             elif parts[0] == "кадр":
                 frames.append(tuple(float(x) for x in parts[1:10]))
             elif parts[0] == "истина":
                 truth.append((float(parts[1]), float(parts[1]), float(parts[2]), float(parts[3]), float(parts[4])))
     if truth:
         fixes = [(t, lat, lon, v) for t, _, lat, lon, v in truth]
-    return fixes, marks, cuts, frames, bool(truth)
+    return fixes, marks, cuts, frames, bool(truth), ribbon
 
 
 def local(lat0, a, b):
@@ -213,7 +219,7 @@ def report(path, name, values):
 
 def main():
     for path in sys.argv[1:]:
-        fixes, marks, cuts, frames, trusted = parse(path)
+        fixes, marks, cuts, frames, trusted, ribbon = parse(path)
         values = lags(fixes, marks, trusted)
         if values:
             report(path, "лаг значка", values)
@@ -223,6 +229,10 @@ def main():
             line = tails(fixes, cuts)
             if line:
                 report(path, "хвост линии", line)
+        if ribbon:
+            band = tails(fixes, ribbon)
+            if band:
+                report(path, "хвост ленты 3D", band)
         if frames:
             for name, index in (("значок", 1), ("граница линии", 3), ("камера", 5)):
                 back, total, step, jerk = smoothness(fixes, frames, index)

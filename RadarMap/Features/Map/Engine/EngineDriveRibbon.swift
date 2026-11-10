@@ -26,11 +26,11 @@
 //    вне главного потока; ленты дорог — пробами вдоль маршрута, и за краем
 //    экрана, стрелки ряда — только при сужении;
 //  • источник — только с готовым расчётом и новыми пробками;
-//  • срез под машиной — фильтром слоёв по концу куска (`t`), шагом
-//    Drive3D.cutStep (крупнее на горячем телефоне);
+//  • срез под машиной — фильтром слоёв по концу куска (`t`) на кадре значка,
+//    когда граница ушла от машины дальше допуска (Drive3D.ribbonCut: полкуска,
+//    точки под значком, не чаще полсекунды пути на телефоне и секунды в машине —
+//    смена фильтра — перераскладка тайлов источника);
 //  • фильтр шевронов — когда срез проходит шеврон.
-//  • срез — не чаще полсекунды пути на телефоне и секунды в машине и на
-//    плитке (Drive3D.Budget): смена фильтра — перераскладка тайлов источника.
 //  Расчёт, кеш дорог и готовые признаки — общие для всех карт процесса
 //  (EngineRibbonShare, 48): плитка берёт ленту телефона или экрана машины, а
 //  не щупает тайлы второй раз. Расчёты, взятые готовыми ленты, записи
@@ -67,6 +67,8 @@ final class EngineRibbonShare {
         let body: MLNShapeCollectionFeature
         let chevrons: MLNShapeCollectionFeature
         let tail: MLNPolylineFeature?
+        /// Концы кусков ленты по возрастанию — пороги среза.
+        let ends: [Double]
     }
 
     final class Entry {
@@ -207,8 +209,10 @@ final class EngineDriveRibbon {
     private var task: Task<Void, Never>?
     private var generation = 0
 
-    /// Срез, по которому стоят фильтры слоёв (nil — ещё не ставили).
+    /// Порог, по которому стоят фильтры слоёв (nil — ещё не ставили).
     private var cutValue: Double?
+    /// Концы кусков ленты в источнике этой карты.
+    private var cutEnds: [Double] = []
     /// Какая версия общей ленты и какие пробки лежат в источнике этой карты.
     private var writtenVersion = -1
     private var writtenTraffic = -1
@@ -312,12 +316,9 @@ final class EngineDriveRibbon {
             if writtenVersion != entry.version, entry.versionOwner != me { counters.adopted += 1 }
             writeSource(ribbon, entry: entry, model: model, trafficVersion: trafficVersion, in: style)
             chevronThreshold = nil
-            setCut(car, in: style)
+            cutValue = nil
         }
-        if Drive3D.cutDue(last: cutValue, now: car,
-                          step: Drive3D.cutStep(speedMps: speedMps, hot: hot, seconds: budget.cutSeconds)) {
-            setCut(car, in: style)
-        }
+        moveCut(car, view: view)
         updateChevrons(surface: surface, hot: hot, cut: car, speedKmh: speedMps * 3.6, in: style)
         logCountersIfDue()
     }
@@ -403,7 +404,8 @@ final class EngineDriveRibbon {
                 self.writeSource(result, entry: entry, model: current, trafficVersion: self.lastTrafficVersion,
                                  in: style)
             }
-            self.setCut(self.last.cut, in: style)
+            self.cutValue = nil
+            self.moveCut(self.last.cut, view: view)
             if !self.shown { self.show(true, in: style) }
         }
     }
@@ -581,6 +583,7 @@ final class EngineDriveRibbon {
             entry.built = built
         }
         (style.source(withIdentifier: Self.sourceID) as? MLNShapeSource)?.shape = built.body
+        cutEnds = built.ends
         (style.source(withIdentifier: Self.chevronSourceID) as? MLNShapeSource)?.shape = built.chevrons
         (style.source(withIdentifier: Self.tailSourceID) as? MLNShapeSource)?.shape = built.tail
     }
@@ -591,7 +594,9 @@ final class EngineDriveRibbon {
         let chunk = AppConfig.drive3DCutStepMeters
         let chunkUntil = (entry.plan?.from ?? start) + AppConfig.drive3DChunkMeters
         var shapes: [MLNShape] = []
+        var ends: [Double] = []
         for piece in LanePath.pieces(ribbon, from: start, to: end, chunk: chunk, chunkUntil: chunkUntil) {
+            ends.append(piece.to)
             shapes.append(polygon(piece.ring, kind: "body", piece: piece))
             shapes.append(line(piece.centre, kind: "spine", piece: piece))
             shapes.append(line(piece.left, kind: "edge", piece: piece))
@@ -617,7 +622,8 @@ final class EngineDriveRibbon {
             ? { var c = tail; return MLNPolylineFeature(coordinates: &c, count: UInt(c.count)) }() : nil
         return EngineRibbonShare.Built(version: entry.version, traffic: traffic, start: start,
                                        body: MLNShapeCollectionFeature(shapes: shapes),
-                                       chevrons: MLNShapeCollectionFeature(shapes: points), tail: tailFeature)
+                                       chevrons: MLNShapeCollectionFeature(shapes: points), tail: tailFeature,
+                                       ends: ends)
     }
 
     private func clearSources(in style: MLNStyle) {
@@ -641,7 +647,35 @@ final class EngineDriveRibbon {
         return shape
     }
 
-    /// Срез под машиной: куски, кончившиеся позади, гаснут фильтром.
+    /// Кадр значка: граница ленты — за срезом линии на этом же кадре (85: по
+    /// применению модели и шагом секунды пути из-под машины торчал хвост).
+    func frame(cut: Double?, in view: MLNMapView) {
+        guard active, shown, let cut else { return }
+        last.cut = cut
+        moveCut(cut, view: view)
+    }
+
+    #if DEBUG
+    /// Где начинается показанная лента, м маршрута (замер 85, `-logMarker`); nil — ещё ничего не спрятано.
+    var shownStartAlong: Double? {
+        guard shown, let cutValue else { return nil }
+        return cutEnds.last { $0 <= cutValue }
+    }
+    #endif
+
+    /// Порог фильтра — когда граница показанного ушла от машины дальше допуска (Drive3D.ribbonCut).
+    private func moveCut(_ car: Double, view: MLNMapView) {
+        guard let style = view.style, let model = current, let surface = model.drive3D else { return }
+        let tolerance = Drive3D.cutTolerance(
+            metersPerPoint: view.metersPerPoint(atLatitude: view.centerCoordinate.latitude),
+            speedMps: max(0, model.markerMotion?.speedMps ?? 0), hot: model.performance != .full,
+            seconds: Drive3D.budget(surface: surface).cutSeconds)
+        guard let threshold = Drive3D.ribbonCut(applied: cutValue, car: car, ends: cutEnds,
+                                                tolerance: tolerance) else { return }
+        setCut(threshold, in: style)
+    }
+
+    /// Срез под машиной: куски, кончившиеся не дальше порога, гаснут фильтром.
     private func setCut(_ cut: Double, in style: MLNStyle) {
         os_signpost(.begin, log: performanceLog, name: "Лента 3D: срез")
         defer { os_signpost(.end, log: performanceLog, name: "Лента 3D: срез") }

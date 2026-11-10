@@ -368,10 +368,29 @@ nonisolated enum Drive3D {
         return hot ? base * AppConfig.drive3DCutHotFactor : base
     }
 
-    /// Срез (фильтр слоя по концу куска) переставляется шагом, а не на каждом
-    /// применении; назад (новый маршрут, откат прогресса) — сразу.
-    static func cutDue(last: Double?, now: Double, step: Double = AppConfig.drive3DCutStepMeters) -> Bool {
-        guard let last else { return true }
-        return now - last >= step || now < last - 1
+    /// Допуск границы ленты от машины, м: полкуска, точки под значком и не чаще шага бюджета (смена фильтра — перераскладка тайлов).
+    static func cutTolerance(metersPerPoint: Double, speedMps: Double, hot: Bool,
+                             seconds: Double = AppConfig.drive3DCutStepSeconds) -> Double {
+        let screen = max(0, metersPerPoint.isFinite ? metersPerPoint : 0) * AppConfig.drive3DCutPoints
+        let budget = (cutStep(speedMps: speedMps, hot: false, seconds: seconds) + AppConfig.drive3DCutStepMeters) / 2
+        let base = max(AppConfig.drive3DCutStepMeters / 2 + 0.5, screen, budget)
+        return hot ? base * AppConfig.drive3DCutHotFactor : base
+    }
+
+    /// Новый порог фильтра ленты (прячутся куски с концом ≤ порога), когда граница ушла от машины дальше допуска; nil — оставить.
+    static func ribbonCut(applied: Double?, car: Double, ends: [Double], tolerance: Double) -> Double? {
+        func lastEnd(atMost value: Double) -> Double? {
+            var lo = 0, hi = ends.count
+            while lo < hi {
+                let mid = (lo + hi) / 2
+                if ends[mid] <= value { lo = mid + 1 } else { hi = mid }
+            }
+            return lo > 0 ? ends[lo - 1] : nil
+        }
+        let wanted = lastEnd(atMost: car + tolerance) ?? -1
+        guard let applied else { return wanted }
+        guard wanted != applied else { return nil }
+        let boundary = lastEnd(atMost: applied) ?? -.infinity
+        return abs(boundary - car) > tolerance ? wanted : nil
     }
 }

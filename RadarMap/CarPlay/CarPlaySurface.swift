@@ -89,14 +89,34 @@ nonisolated enum CarPlaySurface: Equatable, Sendable {
                           topKeepPoints: DriveCamera.keepMarginPoints)
     }
 
-    /// Незакрытая часть экрана машины: сверху бар (безопасная зона), снизу док
-    /// HUD, сбоку кнопки карты.
+    /// Незакрытая часть экрана машины: сверху бар (безопасная зона), снизу
+    /// строка плашки улицы, сбоку кнопки карты.
     static func carClear(width: Double, height: Double, safeTop: Double, safeBottom: Double,
                          side: Double) -> DriveCamera.Clear {
         DriveCamera.Clear(top: safeTop / max(1, height),
-                          bottom: (safeBottom + 12 + Double(AppConfig.carPlayDockHeight)) / max(1, height),
+                          bottom: carBottomReserve(safeBottom: safeBottom) / max(1, height),
                           width: width, side: side + AppConfig.engineKeepSidePoints,
                           topKeepPoints: DriveCamera.keepMarginPoints)
+    }
+
+    /// Сколько точек снизу окна машины закрыто под «я»: поле HUD и плашка улицы.
+    static func carBottomReserve(safeBottom: Double) -> Double {
+        max(0, safeBottom) + 12 + AppConfig.carPlayStreetRowPoints
+    }
+
+    /// Где «я» по высоте окна машины (0 — верх, 1 — низ): доля `share` поля от
+    /// бара до низа, но не ниже строки плашки улицы с запасом на кольцо компаса.
+    static func carMeY(height: Double, safeTop: Double, safeBottom: Double,
+                       share: Double = AppConfig.carPlayMeShare) -> Double {
+        guard height > 0 else { return AppConfig.mapMeY }
+        let top = max(0, safeTop) + 12
+        let bottom = height - max(0, safeBottom) - 12
+        guard bottom > top else { return AppConfig.mapMeY }
+        let wanted = top + (bottom - top) * share
+        let floor = height - carBottomReserve(safeBottom: safeBottom) - AppConfig.carPlayMeClearancePoints
+        // Окно ниже кольца с плашкой: предел поставил бы машину выше середины.
+        let y = floor > (top + bottom) / 2 ? min(wanted, floor) : wanted
+        return y / height
     }
 
     /// Чип на плитке, когда карте неоткуда взять тайлы. Как на экране машины,

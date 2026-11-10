@@ -84,14 +84,13 @@ nonisolated enum DriveCameraSim {
     // MARK: - Экраны
 
     /// Окно CarPlay со снимков владельца (2000×943 px, 21.10): бар сверху,
-    /// док HUD снизу (100 + 12 pt), кнопки карты справа.
+    /// плашка улицы снизу, кнопки карты справа — раскладка CarPlaySurface.
     static func car(height: Double = 471, width: Double = 940) -> Screen {
         let top = 50.0
         return Screen(name: "машина \(Int(height)) pt", kind: .car, height: height,
-                      clear: DriveCamera.Clear(top: top / height, bottom: 112 / height,
-                                               width: width, side: 120,
-                                               topKeepPoints: DriveCamera.keepMarginPoints),
-                      carY: { share in (top + 12 + (height - 12 - top - 12) * share) / height })
+                      clear: CarPlaySurface.carClear(width: width, height: height, safeTop: top, safeBottom: 0,
+                                                     side: 60),
+                      carY: { CarPlaySurface.carMeY(height: height, safeTop: top, safeBottom: 0, share: $0) })
     }
 
     /// Телефон 402×760: HUD сверху, панель поездки снизу, кнопки справа.

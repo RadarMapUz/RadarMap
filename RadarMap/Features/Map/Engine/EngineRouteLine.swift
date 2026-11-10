@@ -101,15 +101,19 @@ final class EngineRouteLine {
     private static let connectorSource = "route-connector"
     private var connector: [CLLocationCoordinate2D]?
 
-    /// Где сейчас нарисована граница пройденного, метры маршрута: от неё
-    /// начинается лента «Вождения 3D» (EngineDriveRibbon). nil — ещё не резали.
-    var paintedCutAlong: Double? { paintedCut.isFinite ? paintedCut : nil }
+    /// Срез под значком на этом кадре, метры маршрута (лента 3D режется по нему же).
+    var cutAlong: Double? { line == nil || replacing || lastPose == nil ? nil : tracker.cut }
 
     /// Пробки на линии с местом в метрах — их же лента 3D кладёт поверх себя.
     var trafficPieces: [RouteTraffic.Piece] { traffic }
     /// Поколение этих пробок: меняется, когда куски уже пришли (а не ревизия
     /// модели, которая опережает расчёт).
     var trafficVersion: Int { trafficGeneration }
+
+    #if DEBUG
+    /// Точка маршрута на `along` метрах (замер ленты 3D, 85).
+    func coordinate(along: Double) -> CLLocationCoordinate2D? { line?.pose(at: along).coordinate }
+    #endif
 
     /// Где сейчас нарисована граница пройденного (для замера 27.A).
     var paintedCutCoordinate: CLLocationCoordinate2D? {

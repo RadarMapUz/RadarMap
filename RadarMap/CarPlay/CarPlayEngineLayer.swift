@@ -76,7 +76,10 @@ struct CarPlayEngineLayer: View {
         // в 128 («радары не показывает», carplay12; «куда пропал радар?»,
         // 12.10). Без курса карта держит прежний поворот, которого мы не
         // знаем, — тогда камера обязана влезть в любую сторону.
-        let bearing = model.mapDirection ?? (env.location.displayCourse >= 0 ? env.location.displayCourse : nil)
+        let now = Date()
+        model.cameraParking.update(speedKmh: env.location.speedKmh, course: env.location.displayCourse, at: now)
+        let course = model.cameraParking.course(env.location.displayCourse)
+        let bearing = model.mapDirection ?? (course >= 0 ? course : nil)
         // Своя камера («без голоса») — не цель: водитель её знает, и ради неё
         // кадр уходил в район (снимок 63, 21.10).
         let keep = env.location.displayNearestCamera.flatMap {
@@ -84,11 +87,7 @@ struct CarPlayEngineLayer: View {
                              familiar: env.location.familiarCameraIDs, from: me, bearing: bearing)
         }
         let width = Double(size.width + safe.leading + safe.trailing)
-        // Верх окна машины — бар с кнопками, низ — док HUD, справа — кнопки
-        // карты. Док (скорость, камера) — сто точек над низом окна, а кнопки
-        // карты лежат внутри безопасной зоны: до 10.7 «в кадре» считалось
-        // по 12 точкам снизу и без кнопок, и камера впереди вставала ровно под
-        // капсулу «до камеры».
+        // Верх окна машины — бар с кнопками, низ под «я» — плашка улицы, справа — кнопки карты и док.
         // Приборка: края окна кластера закрывают стрелки приборов машины —
         // это его safe area; камера впереди держится внутри неё.
         let clear = surface == .dashboard ? CarPlaySurface.dashboardClear(width: width, height: height)
@@ -128,16 +127,19 @@ struct CarPlayEngineLayer: View {
             ? Drive3D.tilePerformance(tile, mode: env.thermal.mode) : env.thermal.mode
         // Профиль экрана машины: впереди секунды пути, а не 100 м разметки
         // (аудит 18.10, «при езде нормального вида нет»).
+        let inputs = model.cameraParking.inputs(.init(speedKmh: env.location.speedKmh,
+                                                      maneuverDistance: maneuverDistance, keep: keep,
+                                                      alsoKeep: arrivalKeep, jamEnd: stop.jamEnd), at: now)
         let target = DriveCamera.target(
-            speedKmh: env.location.speedKmh, maneuverDistance: maneuverDistance,
+            speedKmh: inputs.speedKmh, maneuverDistance: inputs.maneuverDistance,
             pitchAllowed: surface.pitchAllowed(performance: env.thermal.mode),
             maxPitch: surface.maxPitch(drive3D: drive3D != nil),
-            screen: .car, keep: keep,
-            stop: stop.state, jamEnd: stop.jamEnd,
-            alsoKeep: arrivalKeep,
+            screen: .car, keep: inputs.keep,
+            stop: stop.state, jamEnd: inputs.jamEnd,
+            alsoKeep: inputs.alsoKeep,
             viewHeight: height, latitude: me.latitude, clear: clear,
             carY: { surface.fixedMeY ?? Self.meY(size: size, safe: safe, share: $0) })
-        let frame = model.cameraSmoother.step(toward: target, at: Date())
+        let frame = model.cameraSmoother.step(toward: target, at: now)
         #if DEBUG
         DriveFrameLog.note(surface.healthTag, stop: stop.state, maneuver: maneuverDistance, keep: keep,
                            also: arrivalKeep.count, target: target, frame: frame, bias: model.zoomBias)
@@ -149,7 +151,7 @@ struct CarPlayEngineLayer: View {
             ? nil : env.offlineMaps.offlineFiles(at: me)
         return EngineMapView(
             coordinate: me,
-            courseDegrees: env.location.displayCourse,
+            courseDegrees: course,
             // «+/−» сдвигают масштаб на ступень за нажатие поверх динамики.
             spanMeters: DriveCamera.span(zoom: frame.zoom + model.zoomBias, viewHeight: height,
                                          latitude: me.latitude),
@@ -279,20 +281,11 @@ struct CarPlayEngineLayer: View {
             .padding(.vertical, 4)
     }
 
-    /// Где «я» по высоте всего окна (0 — верх, 1 — низ). Свободное поле —
-    /// между верхней safe area (бар CarPlay) и приборной панелью HUD; «я»
-    /// стоит на AppConfig.carPlayMeShare его высоты. Окно — на всю высоту,
-    /// поэтому доля считается от полной высоты с safe area.
-    /// Машина по высоте экрана: доля `share` свободной полосы между верхней
-    /// и нижней безопасной зоной. Резерва под док снизу больше нет — док
-    /// справа, у кнопок карты (12.10), середину низа он не закрывает.
+    /// Где «я» по высоте всего окна — CarPlaySurface.carMeY: окно на всю
+    /// высоту, доля считается от полной высоты с safe area.
     static func meY(size: CGSize, safe: EdgeInsets, share: Double = AppConfig.carPlayMeShare) -> Double {
-        let full = size.height + safe.top + safe.bottom
-        guard full > 0 else { return AppConfig.mapMeY }
-        let top = safe.top + 12
-        let bottom = full - safe.bottom - 12
-        guard bottom > top else { return AppConfig.mapMeY }
-        return Double((top + (bottom - top) * share) / full)
+        CarPlaySurface.carMeY(height: Double(size.height + safe.top + safe.bottom), safeTop: Double(safe.top),
+                              safeBottom: Double(safe.bottom), share: share)
     }
 }
 #endif

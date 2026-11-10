@@ -2562,10 +2562,17 @@ nonisolated enum AppConfig {
     /// стольких шагов в каждую сторону: дальше машина уже не видна или не
     /// видно, куда едем.
     static let carPlayZoomBiasLimit: Double = 2
-    /// Где стоит «я» по высоте свободного поля карты (между верхней кромкой и
-    /// приборной панелью): ниже середины — впереди дороги видно больше, чем
-    /// позади, как на телефоне.
-    static let carPlayMeShare: Double = 0.7
+    /// Где стоит «я» по высоте свободного поля карты машины (от бара до низа
+    /// окна), на любой скорости. 0,8 — позади ~22 % поля (на 471 pt — 91 из
+    /// 421), как на телефоне (MapViewport.meY); до 85 было 0,62 стоя и 0,66–0,75
+    /// на ходу — под машиной оставалось 35 % экрана («внизу много места», 10.11).
+    static let carPlayMeShare: Double = 0.8
+    /// Что закрывает низ карты машины под «я»: плашка улицы (кегль 17 + поля 8 —
+    /// 37 pt, и 6 над краем HUD). Док со скоростью и прибытием — у правого края
+    /// с 12.10, камеры в нём нет с 21.10: середину низа он не закрывает.
+    static let carPlayStreetRowPoints: Double = 43
+    /// «Я» выше этой строки не меньше чем на столько: кольцо компаса (34) и 6 pt.
+    static let carPlayMeClearancePoints: Double = 40
     /// Шаг панорамы стрелками крутилки, точки: на головных устройствах без
     /// сенсора до соседнего квартала иначе щёлкать полминуты.
     static let carPlayPanStep: CGFloat = 120
@@ -2971,6 +2978,30 @@ nonisolated enum AppConfig {
     static let driveZoomOutConfirm: TimeInterval = 0.75
     /// Направление масштаба меняется не чаще раза за столько секунд.
     static let driveZoomReversalLock: TimeInterval = 8
+
+    // MARK: - Камера на стоянке (DriveCamera.Parking, 85)
+    //
+    // Владелец, 10.11: «при остановке болтается — карта сама увеличивается или
+    // уменьшается, шатается». Стоя входы кадра держатся (docs/drive_camera_2026-10-12.md).
+
+    /// «Стоим» для кадра: не быстрее этого столько секунд. Выше шума доплера
+    /// на месте после Standstill (там ноль) и ниже узла 10 км/ч таблицы.
+    static let driveParkEnterKmh = 5.0
+    static let driveParkEnterSeconds: TimeInterval = 1
+    /// Тронулись: не медленнее этого столько секунд (два фикса раз в секунду) —
+    /// выше шума доплера стоя (до 8 км/ч, standstillNoiseMaxKmh)…
+    static let driveParkExitKmh = 9.0
+    static let driveParkExitSeconds: TimeInterval = 0.8
+    /// …или один фикс быстрее этого.
+    static let driveParkExitFastKmh = 12.0
+    /// Стоя развилка и удерживаемая точка обновляются, когда ушли дальше этого,
+    /// м, и держатся там `driveParkConfirmSeconds` (дальше тройного — сразу):
+    /// шум позиции стоя ±5–10 м, в городе до 20; смена маршрута или камеры — больше.
+    static let driveParkManeuverSlackMeters = 25.0
+    static let driveParkKeepSlackMeters = 25.0
+    static let driveParkConfirmSeconds: TimeInterval = 3
+    /// Конец пробки стоя — так же, с шагом пошире: его считают по рёбрам пробок.
+    static let driveParkJamSlackMeters = 50.0
 
     // MARK: - Вид на остановке (StopView, 29.D)
     //
@@ -4153,6 +4184,10 @@ nonisolated enum AppConfig {
     /// Срез ленты под машиной на экране машины и плитке — не чаще секунды
     /// пути (телефон — полсекунды): 60 км/ч — 17 м, раз в секунду вместо двух.
     static let drive3DCarCutStepSeconds: Double = 1
+    /// Граница ленты под значком — не дальше стольких точек экрана от машины
+    /// (значок — 36–44 pt): до 85 срез ставился по применению модели и шагом
+    /// секунды пути, и из-под машины в машине торчал хвост ленты до 30 м.
+    static let drive3DCutPoints: Double = 10
     /// Плитка считает ленту сама, только если карта телефона или экрана
     /// машины не применялась столько секунд: иначе берёт их готовую.
     static let drive3DShareYieldSeconds: CFTimeInterval = 3

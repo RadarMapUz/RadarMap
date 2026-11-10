@@ -103,7 +103,7 @@ struct EngineBaseLayer: View {
                 ZStack {
                     EngineMapView(
                         coordinate: me,
-                        courseDegrees: env.location.displayCourse,
+                        courseDegrees: map.cameraParking.course(env.location.displayCourse),
                         spanMeters: camera.spanMeters,
                         anchorY: insets.meY,
                         pitchDegrees: camera.pitchDegrees,
@@ -262,6 +262,7 @@ struct EngineBaseLayer: View {
         let viewHeight = max(1, Double(size.height))
         guard env.location.isTripActive else {
             map.cameraSmoother.reset()
+            map.cameraParking = DriveCamera.Parking()
             #if DEBUG
             // Показ пробок 33H: ровно заданный масштаб, сверху.
             if let zoom = TrafficDemo.zoom {
@@ -280,8 +281,11 @@ struct EngineBaseLayer: View {
         // до радара» над картой, на которой радара не видно, — «куда пропал
         // радар?» (владелец, 12.10); стоя курса нет, и камера бывает сбоку.
         // Поворот — тот, что у карты: север, курс или последний (движок).
+        let now = Date()
+        map.cameraParking.update(speedKmh: env.location.speedKmh, course: env.location.displayCourse, at: now)
+        let course = map.cameraParking.course(env.location.displayCourse)
         let bearing: Double = map.orientation == .following ? 0
-            : (env.location.displayCourse >= 0 ? env.location.displayCourse : map.displayedDirection)
+            : (course >= 0 ? course : map.displayedDirection)
         // Своя камера («без голоса») — не цель (снимок 63, 21.10).
         let keep = env.location.displayNearestCamera.flatMap {
             DriveCamera.keep(camera: $0.id, at: CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lon),
@@ -291,12 +295,15 @@ struct EngineBaseLayer: View {
                                       width: Double(size.width), side: AppConfig.engineKeepSidePoints)
         // У цели кадр держит и её, и ближайшие парковки (29.H) — вместе с камерой.
         let arrivalKeep = keepPoints.map { DriveCamera.Keep.offset(from: me, to: $0, bearing: bearing) }
-        let target = DriveCamera.target(speedKmh: env.location.speedKmh, maneuverDistance: maneuverDistance,
-                                        pitchAllowed: pitchAllowed, keep: keep,
-                                        stop: stop.state, jamEnd: stop.jamEnd, alsoKeep: arrivalKeep,
+        let inputs = map.cameraParking.inputs(.init(speedKmh: env.location.speedKmh,
+                                                    maneuverDistance: maneuverDistance, keep: keep,
+                                                    alsoKeep: arrivalKeep, jamEnd: stop.jamEnd), at: now)
+        let target = DriveCamera.target(speedKmh: inputs.speedKmh, maneuverDistance: inputs.maneuverDistance,
+                                        pitchAllowed: pitchAllowed, keep: inputs.keep,
+                                        stop: stop.state, jamEnd: inputs.jamEnd, alsoKeep: inputs.alsoKeep,
                                         viewHeight: viewHeight, latitude: me.latitude,
                                         clear: clear, carY: { _ in insets.meY })
-        let frame = map.cameraSmoother.step(toward: target, at: Date())
+        let frame = map.cameraSmoother.step(toward: target, at: now)
         #if DEBUG
         DriveFrameLog.note("телефон", stop: stop.state, maneuver: maneuverDistance, keep: keep,
                            also: arrivalKeep.count, target: target, frame: frame, bias: map.zoomBias)

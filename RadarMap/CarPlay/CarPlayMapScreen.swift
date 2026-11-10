@@ -53,6 +53,8 @@ final class CarPlayMapModel {
     /// Шаг делает вид карты на каждом своём пересчёте — состояние не
     /// наблюдаемое, перерисовку оно не вызывает.
     @ObservationIgnored var cameraSmoother = DriveCamera.Smoother()
+    /// Кадр на стоянке (DriveCamera.Parking, 85): входы кадра стоя держатся.
+    @ObservationIgnored var cameraParking = DriveCamera.Parking()
     /// Вид на остановке (StopView, 29.D): «стоим» с гистерезисом и развилка,
     /// взятая в кадр стоя; пишет тело карты на тике, как `declutter`.
     @ObservationIgnored var stopView = StopView.Tracker()

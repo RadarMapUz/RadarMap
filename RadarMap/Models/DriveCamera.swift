@@ -172,29 +172,29 @@ nonisolated enum DriveCamera {
     /// (382 pt, расчёт DriveCameraTests). Разметка полос с z17 на ходу в
     /// городе не видна — её возвращает подъезд к манёвру (порог z17.3).
     private static let carPitched: [Knot] = [
-        Knot(kmh: 0, pitch: standingPitch, seconds: 0, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
-        Knot(kmh: 5, pitch: standingPitch, seconds: 10.0 / 3, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
-        Knot(kmh: 10, pitch: standingPitch, seconds: 20.0 / 3, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
-        Knot(kmh: 15, pitch: 38, seconds: 10, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
+        Knot(kmh: 0, pitch: standingPitch, seconds: 0, minZoom: 17.0, maxZoom: 17.2, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 5, pitch: standingPitch, seconds: 10.0 / 3, minZoom: 17.0, maxZoom: 17.2, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 10, pitch: standingPitch, seconds: 20.0 / 3, minZoom: 17.0, maxZoom: 17.2, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 15, pitch: 38, seconds: 10, minZoom: 17.0, maxZoom: 17.2, share: AppConfig.carPlayMeShare),
         // Потолок 17,3, а не 17,4: под наклоном 25.D обзор добирается
         // ближе, кадр упирался в потолок, и размах в городе выходил за 1,8
         // уровня (DriveCameraBreathTests); 17,3 — порог стрелок у развилки.
-        Knot(kmh: 30, pitch: 48, seconds: 22, minZoom: 16.4, maxZoom: 17.3, share: 0.66),
-        Knot(kmh: 50, pitch: 53, seconds: 25, minZoom: 16.0, maxZoom: 17.2, share: 0.70),
-        Knot(kmh: 70, pitch: 55, seconds: 24, minZoom: 15.7, maxZoom: 17.0, share: 0.72),
-        Knot(kmh: 90, pitch: 57, seconds: 22, minZoom: 15.5, maxZoom: 16.8, share: 0.74),
-        Knot(kmh: 110, pitch: 58, seconds: 21, minZoom: 15.3, maxZoom: 16.6, share: 0.75),
-        Knot(kmh: 130, pitch: 58, seconds: 20, minZoom: 15.1, maxZoom: 16.4, share: 0.75),
+        Knot(kmh: 30, pitch: 48, seconds: 22, minZoom: 16.4, maxZoom: 17.3, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 50, pitch: 53, seconds: 25, minZoom: 16.0, maxZoom: 17.2, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 70, pitch: 55, seconds: 24, minZoom: 15.7, maxZoom: 17.0, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 90, pitch: 57, seconds: 22, minZoom: 15.5, maxZoom: 16.8, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 110, pitch: 58, seconds: 21, minZoom: 15.3, maxZoom: 16.6, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 130, pitch: 58, seconds: 20, minZoom: 15.1, maxZoom: 16.4, share: AppConfig.carPlayMeShare),
     ]
 
     /// Экран машины плоско (горячий телефон): обзор — только отдалением.
     private static let carFlat: [Knot] = [
-        Knot(kmh: 0, pitch: 0, seconds: 0, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
-        Knot(kmh: 15, pitch: 0, seconds: 10, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
-        Knot(kmh: 40, pitch: 0, seconds: 18, minZoom: 16.0, maxZoom: 17.2, share: 0.70),
-        Knot(kmh: 70, pitch: 0, seconds: 18, minZoom: 15.4, maxZoom: 16.8, share: 0.74),
-        Knot(kmh: 100, pitch: 0, seconds: 16, minZoom: 15.0, maxZoom: 16.4, share: 0.75),
-        Knot(kmh: 130, pitch: 0, seconds: 15, minZoom: 14.8, maxZoom: 16.2, share: 0.75),
+        Knot(kmh: 0, pitch: 0, seconds: 0, minZoom: 17.0, maxZoom: 17.2, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 15, pitch: 0, seconds: 10, minZoom: 17.0, maxZoom: 17.2, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 40, pitch: 0, seconds: 18, minZoom: 16.0, maxZoom: 17.2, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 70, pitch: 0, seconds: 18, minZoom: 15.4, maxZoom: 16.8, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 100, pitch: 0, seconds: 16, minZoom: 15.0, maxZoom: 16.4, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 130, pitch: 0, seconds: 15, minZoom: 14.8, maxZoom: 16.2, share: AppConfig.carPlayMeShare),
     ]
 
     /// Обзор впереди не короче этого и стоя.
@@ -600,6 +600,129 @@ nonisolated enum DriveCamera {
                                 carY: carY, latitude: latitude, clearTop: clearTop)
         guard seen > 0, meters > 0 else { return reference }
         return reference + log2(seen / meters)
+    }
+
+    // MARK: - Стоянка
+
+    /// Кадр стоя замирает (85, «при остановке болтается»): входы кадра держатся, пока не ушли дальше шума GPS.
+    struct Parking: Sendable {
+        /// Что кадр берёт из конвейера на тике.
+        struct Inputs: Equatable, Sendable {
+            var speedKmh: Double
+            var maneuverDistance: Double?
+            var keep: Keep?
+            var alsoKeep: [Keep] = []
+            var jamEnd: Double?
+        }
+
+        private(set) var parked = false
+        /// Поворот карты стоя — последний курс до остановки; −1 — движок держит свой.
+        private(set) var heldCourse: Double = -1
+        private var lastCourse: Double = -1
+        private var slowSince: Date?
+        private var fastSince: Date?
+        private var held: Inputs?
+        /// С какого момента живое значение поля дальше удержанного: развилка, камера, точки цели, пробка.
+        private var away: [Date?] = [nil, nil, nil, nil]
+
+        mutating func update(speedKmh: Double, course: Double, at now: Date) {
+            let v = speedKmh.isFinite ? max(0, speedKmh) : 0
+            if parked {
+                if v >= AppConfig.driveParkExitFastKmh {
+                    leave()
+                } else if v >= AppConfig.driveParkExitKmh {
+                    let since = fastSince ?? now
+                    fastSince = since
+                    if now.timeIntervalSince(since) >= AppConfig.driveParkExitSeconds { leave() }
+                } else {
+                    fastSince = nil
+                }
+                return
+            }
+            guard v <= AppConfig.driveParkEnterKmh else {
+                if course.isFinite, course >= 0 { lastCourse = course }
+                slowSince = nil
+                return
+            }
+            let since = slowSince ?? now
+            slowSince = since
+            if now.timeIntervalSince(since) >= AppConfig.driveParkEnterSeconds {
+                parked = true
+                heldCourse = lastCourse
+                fastSince = nil
+            }
+        }
+
+        func course(_ live: Double) -> Double { parked ? heldCourse : live }
+
+        mutating func inputs(_ live: Inputs, at now: Date) -> Inputs {
+            guard parked else {
+                held = nil
+                away = [nil, nil, nil, nil]
+                return live
+            }
+            guard var next = held else {
+                var first = live
+                first.speedKmh = 0
+                held = first
+                return first
+            }
+            let slack = AppConfig.driveParkManeuverSlackMeters
+            if accept(0, Self.gap(next.maneuverDistance, live.maneuverDistance), slack: slack, at: now) {
+                next.maneuverDistance = live.maneuverDistance
+            }
+            if accept(1, Self.gap(next.keep, live.keep), slack: AppConfig.driveParkKeepSlackMeters, at: now) {
+                next.keep = live.keep
+            }
+            let also = next.alsoKeep.count == live.alsoKeep.count
+                ? zip(next.alsoKeep, live.alsoKeep).map { Self.gap($0, $1) }.max() ?? 0 : .infinity
+            if accept(2, also, slack: AppConfig.driveParkKeepSlackMeters, at: now) { next.alsoKeep = live.alsoKeep }
+            if accept(3, Self.gap(next.jamEnd, live.jamEnd), slack: AppConfig.driveParkJamSlackMeters, at: now) {
+                next.jamEnd = live.jamEnd
+            }
+            held = next
+            return next
+        }
+
+        /// Дальше тройного шума — сразу (другой маршрут, другая камера), дальше шума — если держится.
+        private mutating func accept(_ field: Int, _ gap: Double, slack: Double, at now: Date) -> Bool {
+            guard gap > slack else {
+                away[field] = nil
+                return false
+            }
+            let since = away[field] ?? now
+            let take = gap > 3 * slack || now.timeIntervalSince(since) >= AppConfig.driveParkConfirmSeconds
+            away[field] = take ? nil : since
+            return take
+        }
+
+        private mutating func leave() {
+            parked = false
+            slowSince = nil
+            fastSince = nil
+            held = nil
+            away = [nil, nil, nil, nil]
+        }
+
+        private static func gap(_ a: Double?, _ b: Double?) -> Double {
+            switch (a, b) {
+            case (nil, nil): 0
+            case let (a?, b?): abs(a - b).isFinite ? abs(a - b) : .infinity
+            default: .infinity
+            }
+        }
+
+        private static func gap(_ a: Keep?, _ b: Keep?) -> Double {
+            switch (a, b) {
+            case (nil, nil): return 0
+            case let (a?, b?):
+                guard a.anyDirection == b.anyDirection else { return .infinity }
+                let d = ((a.forward - b.forward) * (a.forward - b.forward)
+                         + (a.right - b.right) * (a.right - b.right)).squareRoot()
+                return d.isFinite ? d : .infinity
+            default: return .infinity
+            }
+        }
     }
 
     // MARK: - Плавность

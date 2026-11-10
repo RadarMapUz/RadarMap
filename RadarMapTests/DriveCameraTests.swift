@@ -382,6 +382,87 @@ final class DriveCameraTests: XCTestCase {
         }
     }
 
+    // MARK: - Место машины на экране машины (85)
+
+    /// Окна CarPlay: бар 50 сверху, плашка улицы снизу, кнопки справа.
+    private let carWindows: [(width: Double, height: Double)] = [(800, 480), (940, 471), (1015, 382)]
+    private let carSpeeds: [Double] = [0, 5, 15, 30, 50, 70, 90, 130]
+
+    /// До 85: доля по скорости (0,62 стоя … 0,75) и док снизу на всю ширину.
+    private func oldCarShare(_ kmh: Double) -> Double {
+        let knots: [(Double, Double)] = [(0, 0.62), (15, 0.62), (30, 0.66), (50, 0.70), (70, 0.72), (90, 0.74),
+                                         (110, 0.75)]
+        guard kmh > 0 else { return 0.62 }
+        for (a, b) in zip(knots, knots.dropFirst()) where kmh <= b.0 {
+            return a.1 + (b.1 - a.1) * (kmh - a.0) / (b.0 - a.0)
+        }
+        return 0.75
+    }
+
+    func testCarSitsLowWithAQuarterOfTheFieldBehind() {
+        for w in carWindows {
+            for kmh in carSpeeds {
+                let share = Cam.profile(speedKmh: kmh, pitchAllowed: true, screen: .car).carShare
+                let y = CarPlaySurface.carMeY(height: w.height, safeTop: 50, safeBottom: 0, share: share) * w.height
+                let behind = (w.height - y) / (w.height - 50)
+                let wanted: ClosedRange<Double> = w.height >= 470 ? 0.20...0.25 : 0.20...0.30
+                XCTAssertTrue(wanted.contains(behind), "\(w), \(kmh) км/ч: позади \(Int(behind * 100)) % поля")
+                let before = (w.height - (62 + (w.height - 74) * oldCarShare(kmh))) / (w.height - 50)
+                if kmh < 90 { XCTAssertLessThan(behind, before, "\(w), \(kmh) км/ч: машина ниже прежнего") }
+            }
+        }
+    }
+
+    func testCarStaysAboveTheBottomRowWithClearance() {
+        for w in carWindows {
+            let clear = CarPlaySurface.carClear(width: w.width, height: w.height, safeTop: 50, safeBottom: 0, side: 60)
+            for kmh in carSpeeds {
+                let share = Cam.profile(speedKmh: kmh, pitchAllowed: true, screen: .car).carShare
+                let y = CarPlaySurface.carMeY(height: w.height, safeTop: 50, safeBottom: 0, share: share)
+                XCTAssertGreaterThanOrEqual((1 - clear.bottom - y) * w.height,
+                                            AppConfig.carPlayMeClearancePoints - 1e-6, "\(w), \(kmh) км/ч")
+                let f = Cam.target(speedKmh: kmh, maneuverDistance: nil, pitchAllowed: true, screen: .car,
+                                   viewHeight: w.height, latitude: tashkent, clear: clear,
+                                   carY: { CarPlaySurface.carMeY(height: w.height, safeTop: 50, safeBottom: 0,
+                                                                 share: $0) })
+                XCTAssertGreaterThan(Cam.visibleBehind(zoom: f.zoom, pitchDegrees: f.pitchDegrees, viewHeight: w.height,
+                                                       carY: y, latitude: tashkent, clearBottom: clear.bottom), 0,
+                                     "\(w), \(kmh) км/ч: позади машины есть открытая дорога")
+            }
+        }
+    }
+
+    func testLoweredCarSeesNoLessRoadAhead() {
+        for w in carWindows {
+            let clear = CarPlaySurface.carClear(width: w.width, height: w.height, safeTop: 50, safeBottom: 0, side: 60)
+            let oldClear = Cam.Clear(top: 50 / w.height, bottom: 112 / w.height, width: w.width, side: 120,
+                                     topKeepPoints: Cam.keepMarginPoints)
+            for kmh in carSpeeds {
+                let newY: (Double) -> Double = { CarPlaySurface.carMeY(height: w.height, safeTop: 50, safeBottom: 0,
+                                                                       share: $0) }
+                let oldY: (Double) -> Double = { _ in (62 + (w.height - 74) * self.oldCarShare(kmh)) / w.height }
+                func seen(_ carY: @escaping (Double) -> Double, _ clear: Cam.Clear) -> Double {
+                    let f = Cam.target(speedKmh: kmh, maneuverDistance: nil, pitchAllowed: true, screen: .car,
+                                       viewHeight: w.height, latitude: tashkent, clear: clear, carY: carY)
+                    return Cam.visibleAhead(zoom: f.zoom, pitchDegrees: f.pitchDegrees, viewHeight: w.height,
+                                            carY: carY(f.carShare), latitude: tashkent, clearTop: clear.top)
+                }
+                XCTAssertGreaterThanOrEqual(seen(newY, clear), seen(oldY, oldClear) - 0.5, "\(w), \(kmh) км/ч")
+            }
+        }
+    }
+
+    func testCarRowDoesNotRideWithSpeed() {
+        let shares = carSpeeds.map { Cam.profile(speedKmh: $0, pitchAllowed: true, screen: .car).carShare }
+        XCTAssertEqual(Set(shares), [AppConfig.carPlayMeShare], "машина не ездит по экрану со скоростью")
+        XCTAssertEqual(Cam.profile(speedKmh: 40, pitchAllowed: false, screen: .car).carShare, AppConfig.carPlayMeShare)
+    }
+
+    func testPhoneAlreadyKeepsAQuarterBehind() {
+        // Телефон: «я» на 0,78 видимой части между панелями — позади 22 %, менять нечего.
+        XCTAssertTrue((0.20...0.25).contains(1 - MapViewport.meY))
+    }
+
     // MARK: - Плавность
 
     func testSmootherGlidesWithoutOvershootAndArrives() {

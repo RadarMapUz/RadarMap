@@ -138,7 +138,7 @@ class AggregateTest(unittest.TestCase):
         for week in range(days):
             at = self.now - week * 7 * 86400
             for _ in range(per_day):
-                self.conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)",
+                self.conn.execute("INSERT INTO traffic_pieces(received, points, src, gen) VALUES(?, ?, hex(randomblob(4)), 1)",
                                   (at, json.dumps(pts)))
             self.conn.commit()
             tb.process(self.conn, at, matcher=lambda p: FIXTURE["response"])

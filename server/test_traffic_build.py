@@ -37,7 +37,7 @@ class EdgesFromMatchTest(unittest.TestCase):
 
     def test_samples_are_osm_edges_with_sane_speeds(self):
         self.assertGreater(len(self.samples), 10)
-        for u, v, kmh, weight, passed in self.samples:
+        for u, v, kmh, weight, passed, secs in self.samples:
             self.assertIsInstance(u, int)
             self.assertIsInstance(v, int)
             self.assertNotEqual(u, v)
@@ -46,7 +46,7 @@ class EdgesFromMatchTest(unittest.TestCase):
             self.assertIsInstance(passed, bool)
 
     def test_jam_part_of_the_trace_is_slower(self):
-        speeds = sorted({round(kmh) for _, _, kmh, _, _ in self.samples})
+        speeds = sorted({round(kmh) for _, _, kmh, *_ in self.samples})
         self.assertLess(speeds[0], 15, "шаги по 40 с — это ползком")
         self.assertGreater(speeds[-1], 30, "шаги по 8 с — это ход")
 
@@ -72,7 +72,7 @@ class EdgesFromMatchTest(unittest.TestCase):
         self.assertFalse(self.samples[-1][4])
         total = sum(s[3] for s in self.samples)
         along, passed = 0.0, 0
-        for _, _, _, weight, through in self.samples:
+        for _, _, _, weight, through, _ in self.samples:
             start, along = along, along + weight
             self.assertEqual(through, start >= tb.PIECE_END_GUARD and along <= total - tb.PIECE_END_GUARD)
             passed += through
@@ -186,7 +186,7 @@ class PipelineTest(unittest.TestCase):
         os.unlink(self.tmp.name)
 
     def add_piece(self, received=None):
-        self.conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)",
+        self.conn.execute("INSERT INTO traffic_pieces(received, points, src, gen) VALUES(?, ?, hex(randomblob(4)), 1)",
                           (received or self.now, json.dumps(FIXTURE["points"])))
         self.conn.commit()
 
@@ -256,7 +256,7 @@ class PipelineTest(unittest.TestCase):
         for _ in range(5):
             self.add_piece()
         back = [[lat, lon, i, kmh] for i, (lat, lon, _, kmh) in enumerate(reversed(FIXTURE["points"]))]
-        self.conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)", (self.now, json.dumps(back)))
+        self.conn.execute("INSERT INTO traffic_pieces(received, points, src, gen) VALUES(?, ?, hex(randomblob(4)), 1)", (self.now, json.dumps(back)))
         self.conn.commit()
         for _ in range(3):
             self.add_piece()
@@ -336,7 +336,7 @@ class PipelineTest(unittest.TestCase):
         edges_b = {s[:2] for s in tb.edges_from_match(rb, pb)[0]}
         self.assertTrue(edges_a & edges_b, "стык — общее ребро")
         for points in (pa, pb):
-            self.conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)",
+            self.conn.execute("INSERT INTO traffic_pieces(received, points, src, gen) VALUES(?, ?, hex(randomblob(4)), 1)",
                               (self.now, json.dumps(points)))
         self.conn.commit()
         tb.process(self.conn, self.now, matcher=lambda pts: ra if pts == pa else rb)
@@ -357,7 +357,7 @@ class PipelineTest(unittest.TestCase):
                                                                 [69.28, 41.30002]]}}]}
         self.conn.executemany("INSERT INTO traffic_nodes VALUES(?, ?, ?)", [(10, 41.3, 69.28), (11, 41.3001, 69.28)])
         for start in (self.now - 500, self.now):
-            self.conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)",
+            self.conn.execute("INSERT INTO traffic_pieces(received, points, src, gen) VALUES(?, ?, hex(randomblob(4)), 1)",
                               (start, json.dumps(points)))
         self.conn.commit()
         tb.process(self.conn, self.now, matcher=lambda pts: response)
@@ -423,7 +423,7 @@ class ProfileFixture:
         at = at or self.now
         points = [[lat, lon, t * slower, kmh] for lat, lon, t, kmh in FIXTURE["points"]]
         for _ in range(count):
-            self.conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)",
+            self.conn.execute("INSERT INTO traffic_pieces(received, points, src, gen) VALUES(?, ?, hex(randomblob(4)), 1)",
                               (at, json.dumps(points)))
         self.conn.commit()
         tb.process(self.conn, at, matcher=lambda pts: FIXTURE["response"])
@@ -848,7 +848,7 @@ class MigrationTest(unittest.TestCase):
         conn.executemany("INSERT INTO traffic_edges VALUES(?, ?, ?)",
                          [(u, v, kmh) for (u, v), kmh in models.items()])
         conn.executemany("INSERT INTO traffic_samples VALUES(?, ?, ?, ?, ?, ?)",
-                         [(u, v, kmh, w, self.now - 60, 900) for u, v, kmh, w, _ in samples[:5]])
+                         [(u, v, kmh, w, self.now - 60, 900) for u, v, kmh, w, *_ in samples[:5]])
         conn.execute("INSERT INTO traffic_meta VALUES('typical_built', ?)", (self.now - 86400,))
         conn.commit()
         conn.close()
@@ -864,8 +864,10 @@ class MigrationTest(unittest.TestCase):
     def run_builder(self, now, pending=0):
         conn = sqlite3.connect(self.db)
         try:
+            if pending:
+                tb.schema(conn)              # столбцы метки источника — до вставки
             for _ in range(pending):
-                conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)",
+                conn.execute("INSERT INTO traffic_pieces(received, points, src, gen) VALUES(?, ?, hex(randomblob(4)), 1)",
                              (now, json.dumps(FIXTURE["points"])))
             conn.commit()
             return tb.run(conn, now, matcher=lambda pts: FIXTURE["response"],
@@ -1033,7 +1035,7 @@ class HolidayTest(unittest.TestCase):
             tb.schema(conn)
             at = tashkent_ts(2026, 5, 28, 8, 30)
             for _ in range(tb.TYPICAL_MIN_PIECES):
-                conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)",
+                conn.execute("INSERT INTO traffic_pieces(received, points, src, gen) VALUES(?, ?, hex(randomblob(4)), 1)",
                              (at, json.dumps(FIXTURE["points"])))
             conn.commit()
             tb.process(conn, at, matcher=lambda pts: FIXTURE["response"])
@@ -1055,12 +1057,193 @@ class PureTest(unittest.TestCase):
     def test_weighted_median(self):
         self.assertEqual(tb.weighted_median([(10, 1), (50, 1), (60, 5)]), 60)
         self.assertEqual(tb.weighted_median([(10, 3), (50, 1)]), 10)
+        self.assertEqual(tb.weighted_median([(10, 1), (50, 1)]), 30, "два равных свидетеля — середина, а не меньший")
+        self.assertEqual(tb.weighted_median([(10, 1), (20, 1), (40, 1), (50, 1)]), 30)
+        self.assertEqual(tb.weighted_median([(10, 0.2), (50, 1)]), 50, "свежий перевешивает старого")
         self.assertIsNone(tb.weighted_median([]))
 
     def test_hour_of_week_is_tashkent_local(self):
         # 2026-10-12 03:30 UTC — понедельник 08:30 в Ташкенте.
         self.assertEqual(tb.hour_of_week(1_791_775_800), 8)
 
+
+
+class SourceTrustTest(unittest.TestCase):
+    """Этап 75: свидетели ребра — разные источники, скорость — путь / время,
+    свежее перевешивает старое. Ребро 1→2, граф — 50 км/ч."""
+
+    MODEL = 50.0
+
+    def setUp(self):
+        self.tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.conn = sqlite3.connect(self.tmp.name)
+        tb.schema(self.conn)
+        self.now = 1_760_000_000.0
+        self.conn.executemany("INSERT INTO traffic_nodes VALUES(?, ?, ?)", [(1, 41.3, 69.28), (2, 41.301, 69.28)])
+        self.conn.execute("INSERT INTO traffic_edges VALUES(1, 2, ?)", (self.MODEL,))
+        self.piece_id = 0
+
+    def tearDown(self):
+        self.conn.close()
+        os.unlink(self.tmp.name)
+
+    def passage(self, src, kmh, age=0, gen=1, meters=100.0):
+        """Один кусок источника `src`, прошедший ребро со скоростью `kmh`."""
+        self.piece_id += 1
+        self.conn.execute("""INSERT INTO traffic_samples(u, v, kmh, weight, ts, piece, passed, secs, src, gen)
+                             VALUES(1, 2, ?, ?, ?, ?, 1, ?, ?, ?)""",
+                          (kmh, meters, self.now - age, self.piece_id, meters * 3.6 / kmh, src, gen))
+        self.conn.commit()
+
+    def edge(self):
+        rows = tb.live_edges(self.conn, self.now)
+        return rows[0] if rows else None
+
+    def test_one_address_cannot_paint_a_jam(self):
+        for age in range(0, 600, 60):
+            self.passage("0000aaaa", 4, age=age)
+        self.assertIsNone(self.edge(), "десять кусков одного источника — один свидетель")
+        tb.mark_shared(self.conn, self.now)
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM traffic_shared").fetchone()[0], 0)
+        import traffic_profile
+        self.assertEqual(traffic_profile.live_observations(self.conn, self.now)[(1, 2)][1], 1)
+        self.assertEqual(traffic_profile.live_weight(1, 0), 0.0, "и в путь он не идёт")
+
+    def test_pieces_without_a_label_are_one_source(self):
+        for _ in range(4):
+            self.passage("", 4, gen=0)
+        self.assertIsNone(self.edge(), "строки до выкладки — общий источник")
+        self.passage("0000bbbb", 4)
+        self.assertIsNone(self.edge(), "метки разных солей не складываются")
+        self.passage("0000cccc", 4)
+        self.assertIsNotNone(self.edge())
+
+    def test_labels_of_different_salts_are_not_compared(self):
+        self.passage("0000aaaa", 4, gen=1)
+        self.passage("0000bbbb", 4, gen=2)
+        self.assertIsNone(self.edge(), "тот же адрес после смены соли — другая метка")
+
+    def test_two_sources_publish_and_disagreement_meets_in_the_middle(self):
+        self.passage("0000aaaa", 5)
+        self.passage("0000bbbb", 50)
+        _u, _v, *_coords, lvl, kmh, model = self.edge()
+        self.assertAlmostEqual(kmh, 27.5, msg="два равных свидетеля — середина, а не меньший")
+        self.assertEqual((lvl, model), (2, self.MODEL), "вставшее такси и свободная машина — не пробка")
+
+    def test_red_needs_two_slow_sources(self):
+        self.passage("0000aaaa", 3)
+        self.passage("0000bbbb", 30)             # 0,6 графа — уже не «медленно»
+        self.assertEqual(tb.level(16.5, self.MODEL), 3)
+        self.assertEqual(self.edge()[6], 2, "красный по одному медленному источнику не ставится")
+        self.passage("0000cccc", 6)
+        self.assertEqual(self.edge()[6], 3, "двое медленных — пробка")
+
+    def test_fresh_passage_outweighs_the_old_one(self):
+        self.passage("0000aaaa", 5, age=12 * 60)
+        self.passage("0000bbbb", 45, age=30)
+        self.assertAlmostEqual(self.edge()[7], 45.0, msg="пробка рассосалась — свежий проезд сильнее")
+
+    def test_unconfirmed_jam_fades_before_the_window_ends(self):
+        self.passage("0000aaaa", 5, age=tc.LIVE_FRESH_AGE + 30)
+        self.passage("0000bbbb", 5, age=tc.LIVE_FRESH_AGE + 60)
+        self.assertLess(tc.LIVE_FRESH_AGE + 60, tb.SAMPLE_WINDOW)
+        self.assertIsNone(self.edge(), "свежего свидетеля нет — ребро гаснет раньше 15 минут")
+
+    def test_source_votes_with_its_freshest_pieces_only(self):
+        for age in (700, 650, 600, 550):
+            self.passage("0000aaaa", 5, age=age)
+        for age in (120, 60, 0):
+            self.passage("0000aaaa", 40, age=age)
+        self.passage("0000bbbb", 40)
+        votes = tb.live_speeds(self.conn, self.now)[(1, 2)][3]
+        self.assertEqual(votes, [40.0, 40.0], f"не больше {tc.SOURCE_EDGE_PIECES} свежих кусков на источник")
+
+    def stop_and_go(self):
+        """140 м одного ребра: 70 м ходом, минута у светофора, 70 м ходом."""
+        steps = [(30.0, 3), (40.0, 4), (0.0, 60), (40.0, 4), (30.0, 3)]
+        points, t = [[41.3, 69.28, 0, 30]], 0
+        for _, dt in steps:
+            t += dt
+            points.append([41.3, 69.28, t, 30])
+        legs = [{"distance": d, "annotation": {"nodes": [1, 2], "distance": [d], "duration": [d / 14]}}
+                for d, _ in steps]
+        response = {"code": "Ok",
+                    "tracepoints": [{"waypoint_index": i, "matchings_index": 0} for i in range(len(points))],
+                    "matchings": [{"confidence": 0.9, "legs": legs, "geometry": {"coordinates": []}}]}
+        return points, response
+
+    def test_queue_at_the_lights_counts_in_seconds(self):
+        points, response = self.stop_and_go()
+        samples = tb.edges_from_match(response, points)[0]
+        self.assertEqual(sum(s[3] for s in samples), 140.0)
+        self.assertAlmostEqual(sum(s[5] for s in samples), 74.0)
+        self.assertAlmostEqual(3600 / tb.piece_profile(samples)[(1, 2)][2], 140 / 74 * 3.6, places=3)
+        for label in ("0000aaaa", "0000bbbb"):
+            self.conn.execute("INSERT INTO traffic_pieces(received, points, src, gen) VALUES(?, ?, ?, 1)",
+                              (self.now, json.dumps(points), label))
+        self.conn.commit()
+        tb.process(self.conn, self.now, matcher=lambda pts: response)
+        self.assertAlmostEqual(self.edge()[7], 140 / 74 * 3.6, places=3,
+                               msg="старт-стоп — 6,8 км/ч, а не 36 по метрам хода")
+        slot = self.conn.execute("SELECT DISTINCT kmh FROM traffic_slot_obs").fetchall()
+        self.assertAlmostEqual(slot[0][0], 140 / 74 * 3.6, places=3, msg="профиль часа — тем же темпом")
+
+    def test_sample_age_is_the_time_of_receipt(self):
+        points, response = self.stop_and_go()
+        self.conn.execute("INSERT INTO traffic_pieces(received, points, src, gen) VALUES(?, ?, 'feedf00d', 7)",
+                          (self.now - 300, json.dumps(points)))
+        self.conn.commit()
+        tb.process(self.conn, self.now, matcher=lambda pts: response)
+        self.assertEqual(self.conn.execute("SELECT DISTINCT ts, src, gen FROM traffic_samples").fetchall(),
+                         [(self.now - 300, "feedf00d", 7)])
+
+    def test_label_is_erased_after_the_window(self):
+        self.passage("0000aaaa", 5, age=tb.SAMPLE_WINDOW + 1)
+        self.passage("0000bbbb", 5)
+        tb.prune(self.conn, self.now)
+        self.assertEqual(self.conn.execute("SELECT src, gen FROM traffic_samples ORDER BY ts").fetchall(),
+                         [("", 0), ("0000bbbb", 1)])
+
+
+class SourceLeakTest(ProfileFixture, unittest.TestCase):
+    """Метка источника не выходит ни в один публикуемый файл."""
+
+    LABELS = ("5eedface", "0ddba11c")
+
+    def test_no_published_file_carries_the_label(self):
+        import traffic_profile
+        import traffic_speeds
+        points = [[lat, lon, t * 4, kmh] for lat, lon, t, kmh in FIXTURE["points"]]
+        for _ in range(tb.TYPICAL_MIN_PIECES):
+            for label in self.LABELS:
+                self.conn.execute("INSERT INTO traffic_pieces(received, points, src, gen) VALUES(?, ?, ?, 1)",
+                                  (self.now, json.dumps(points), label))
+        self.conn.commit()
+        result = tb.run(self.conn, self.now, matcher=lambda pts: FIXTURE["response"],
+                        out_path=os.path.join(self.out, "now.json"), typical_dir=self.out,
+                        profile_path=os.path.join(self.out, "profile.json"),
+                        demo_path=os.path.join(self.out, "нет.json"))
+        self.assertGreater(result[2], 0, "рёбра в выходе есть — проверка не пустая")
+        self.assertEqual({row[0] for row in self.conn.execute("SELECT DISTINCT src FROM traffic_samples")},
+                         set(self.LABELS))
+        live = traffic_speeds.speeds(self.conn, self.now, "now")
+        self.assertTrue(live)
+        route, _graph, _stats = traffic_profile.route_edges(self.conn, self.now, model={})
+        for name, edges in (("speeds.csv", live), ("route.csv", {e: (kmh, 50.0) for e, kmh in route.items()})):
+            with open(os.path.join(self.out, name), "w", encoding="utf-8") as f:
+                f.write(traffic_speeds.csv_body(edges, "duration"))
+        names = os.listdir(self.out)
+        for expected in ("now.json", "now.json.gz", "now2.json", "now2.json.gz", "profile.json", "speeds.csv"):
+            self.assertIn(expected, names)
+        self.assertGreaterEqual(len(names), 48 + 6)
+        for name in names:
+            with open(os.path.join(self.out, name), "rb") as f:
+                raw = f.read()
+            if name.endswith(".gz"):
+                raw = gzip.decompress(raw)
+            text = raw.decode("utf-8").lower()
+            for leak in self.LABELS + ("src", "gen\"", "source"):
+                self.assertNotIn(leak, text, f"{name}: метка источника в публикуемом файле")
 
 
 class DemoJamTest(unittest.TestCase):
@@ -1080,6 +1263,21 @@ class DemoJamTest(unittest.TestCase):
         self.assertEqual(tb.demo_edges(1000, path), [])          # срок вышел — показа нет
         self.assertEqual(tb.demo_edges(0, "/нет/такого/файла.json"), [])
         self.assertEqual(tb.demo_edges(0, self.write("{не json")), [])
+
+    def test_expiry_is_required_and_capped_at_a_day(self):
+        edge = [41.3, 69.28, 41.301, 69.281, 3, 8, 50]
+        now = time.time()
+        for expires in (None, "завтра", True, float("inf")):
+            body = {"edges": [edge]} if expires is None else {"expires": expires, "edges": [edge]}
+            path = self.write(json.dumps(body).replace("Infinity", "1e999"))
+            self.assertEqual(tb.demo_edges(now, path), [], f"срок {expires!r} — показа нет")
+        self.assertEqual(tb.demo_edges(now, self.write([edge])), [])
+        self.assertEqual(tb.demo_edges(now, self.write({"expires": now + 60, "edges": "x"})), [])
+        forgotten = self.write({"expires": now + 365 * 86400, "edges": [edge]})
+        self.assertEqual(tb.demo_edges(now, forgotten), [tuple(edge)])
+        self.assertEqual(tb.demo_edges(now + tc.DEMO_MAX_SECONDS - 60, forgotten), [tuple(edge)])
+        self.assertEqual(tb.demo_edges(now + tc.DEMO_MAX_SECONDS + 60, forgotten), [],
+                         "срок на год — показ всё равно гаснет через сутки после записи файла")
 
     def test_demo_overrides_same_edge(self):
         real = [(41.3, 69.28, 41.301, 69.281, 1, 45, 50), (41.31, 69.29, 41.311, 69.291, 2, 20, 50)]

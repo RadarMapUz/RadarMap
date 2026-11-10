@@ -602,6 +602,129 @@ nonisolated enum DriveCamera {
         return reference + log2(seen / meters)
     }
 
+    // MARK: - Стоянка
+
+    /// Кадр стоя замирает (85, «при остановке болтается»): входы кадра держатся, пока не ушли дальше шума GPS.
+    struct Parking: Sendable {
+        /// Что кадр берёт из конвейера на тике.
+        struct Inputs: Equatable, Sendable {
+            var speedKmh: Double
+            var maneuverDistance: Double?
+            var keep: Keep?
+            var alsoKeep: [Keep] = []
+            var jamEnd: Double?
+        }
+
+        private(set) var parked = false
+        /// Поворот карты стоя — последний курс до остановки; −1 — движок держит свой.
+        private(set) var heldCourse: Double = -1
+        private var lastCourse: Double = -1
+        private var slowSince: Date?
+        private var fastSince: Date?
+        private var held: Inputs?
+        /// С какого момента живое значение поля дальше удержанного: развилка, камера, точки цели, пробка.
+        private var away: [Date?] = [nil, nil, nil, nil]
+
+        mutating func update(speedKmh: Double, course: Double, at now: Date) {
+            let v = speedKmh.isFinite ? max(0, speedKmh) : 0
+            if parked {
+                if v >= AppConfig.driveParkExitFastKmh {
+                    leave()
+                } else if v >= AppConfig.driveParkExitKmh {
+                    let since = fastSince ?? now
+                    fastSince = since
+                    if now.timeIntervalSince(since) >= AppConfig.driveParkExitSeconds { leave() }
+                } else {
+                    fastSince = nil
+                }
+                return
+            }
+            guard v <= AppConfig.driveParkEnterKmh else {
+                if course.isFinite, course >= 0 { lastCourse = course }
+                slowSince = nil
+                return
+            }
+            let since = slowSince ?? now
+            slowSince = since
+            if now.timeIntervalSince(since) >= AppConfig.driveParkEnterSeconds {
+                parked = true
+                heldCourse = lastCourse
+                fastSince = nil
+            }
+        }
+
+        func course(_ live: Double) -> Double { parked ? heldCourse : live }
+
+        mutating func inputs(_ live: Inputs, at now: Date) -> Inputs {
+            guard parked else {
+                held = nil
+                away = [nil, nil, nil, nil]
+                return live
+            }
+            guard var next = held else {
+                var first = live
+                first.speedKmh = 0
+                held = first
+                return first
+            }
+            let slack = AppConfig.driveParkManeuverSlackMeters
+            if accept(0, Self.gap(next.maneuverDistance, live.maneuverDistance), slack: slack, at: now) {
+                next.maneuverDistance = live.maneuverDistance
+            }
+            if accept(1, Self.gap(next.keep, live.keep), slack: AppConfig.driveParkKeepSlackMeters, at: now) {
+                next.keep = live.keep
+            }
+            let also = next.alsoKeep.count == live.alsoKeep.count
+                ? zip(next.alsoKeep, live.alsoKeep).map { Self.gap($0, $1) }.max() ?? 0 : .infinity
+            if accept(2, also, slack: AppConfig.driveParkKeepSlackMeters, at: now) { next.alsoKeep = live.alsoKeep }
+            if accept(3, Self.gap(next.jamEnd, live.jamEnd), slack: AppConfig.driveParkJamSlackMeters, at: now) {
+                next.jamEnd = live.jamEnd
+            }
+            held = next
+            return next
+        }
+
+        /// Дальше тройного шума — сразу (другой маршрут, другая камера), дальше шума — если держится.
+        private mutating func accept(_ field: Int, _ gap: Double, slack: Double, at now: Date) -> Bool {
+            guard gap > slack else {
+                away[field] = nil
+                return false
+            }
+            let since = away[field] ?? now
+            let take = gap > 3 * slack || now.timeIntervalSince(since) >= AppConfig.driveParkConfirmSeconds
+            away[field] = take ? nil : since
+            return take
+        }
+
+        private mutating func leave() {
+            parked = false
+            slowSince = nil
+            fastSince = nil
+            held = nil
+            away = [nil, nil, nil, nil]
+        }
+
+        private static func gap(_ a: Double?, _ b: Double?) -> Double {
+            switch (a, b) {
+            case (nil, nil): 0
+            case let (a?, b?): abs(a - b).isFinite ? abs(a - b) : .infinity
+            default: .infinity
+            }
+        }
+
+        private static func gap(_ a: Keep?, _ b: Keep?) -> Double {
+            switch (a, b) {
+            case (nil, nil): return 0
+            case let (a?, b?):
+                guard a.anyDirection == b.anyDirection else { return .infinity }
+                let d = ((a.forward - b.forward) * (a.forward - b.forward)
+                         + (a.right - b.right) * (a.right - b.right)).squareRoot()
+                return d.isFinite ? d : .infinity
+            default: return .infinity
+            }
+        }
+    }
+
     // MARK: - Плавность
 
     /// Сглаживание во времени: кадр подходит к цели экспоненциально, а не

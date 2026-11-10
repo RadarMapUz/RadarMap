@@ -76,7 +76,10 @@ struct CarPlayEngineLayer: View {
         // в 128 («радары не показывает», carplay12; «куда пропал радар?»,
         // 12.10). Без курса карта держит прежний поворот, которого мы не
         // знаем, — тогда камера обязана влезть в любую сторону.
-        let bearing = model.mapDirection ?? (env.location.displayCourse >= 0 ? env.location.displayCourse : nil)
+        let now = Date()
+        model.cameraParking.update(speedKmh: env.location.speedKmh, course: env.location.displayCourse, at: now)
+        let course = model.cameraParking.course(env.location.displayCourse)
+        let bearing = model.mapDirection ?? (course >= 0 ? course : nil)
         // Своя камера («без голоса») — не цель: водитель её знает, и ради неё
         // кадр уходил в район (снимок 63, 21.10).
         let keep = env.location.displayNearestCamera.flatMap {
@@ -124,16 +127,19 @@ struct CarPlayEngineLayer: View {
             ? Drive3D.tilePerformance(tile, mode: env.thermal.mode) : env.thermal.mode
         // Профиль экрана машины: впереди секунды пути, а не 100 м разметки
         // (аудит 18.10, «при езде нормального вида нет»).
+        let inputs = model.cameraParking.inputs(.init(speedKmh: env.location.speedKmh,
+                                                      maneuverDistance: maneuverDistance, keep: keep,
+                                                      alsoKeep: arrivalKeep, jamEnd: stop.jamEnd), at: now)
         let target = DriveCamera.target(
-            speedKmh: env.location.speedKmh, maneuverDistance: maneuverDistance,
+            speedKmh: inputs.speedKmh, maneuverDistance: inputs.maneuverDistance,
             pitchAllowed: surface.pitchAllowed(performance: env.thermal.mode),
             maxPitch: surface.maxPitch(drive3D: drive3D != nil),
-            screen: .car, keep: keep,
-            stop: stop.state, jamEnd: stop.jamEnd,
-            alsoKeep: arrivalKeep,
+            screen: .car, keep: inputs.keep,
+            stop: stop.state, jamEnd: inputs.jamEnd,
+            alsoKeep: inputs.alsoKeep,
             viewHeight: height, latitude: me.latitude, clear: clear,
             carY: { surface.fixedMeY ?? Self.meY(size: size, safe: safe, share: $0) })
-        let frame = model.cameraSmoother.step(toward: target, at: Date())
+        let frame = model.cameraSmoother.step(toward: target, at: now)
         #if DEBUG
         DriveFrameLog.note(surface.healthTag, stop: stop.state, maneuver: maneuverDistance, keep: keep,
                            also: arrivalKeep.count, target: target, frame: frame, bias: model.zoomBias)
@@ -145,7 +151,7 @@ struct CarPlayEngineLayer: View {
             ? nil : env.offlineMaps.offlineFiles(at: me)
         return EngineMapView(
             coordinate: me,
-            courseDegrees: env.location.displayCourse,
+            courseDegrees: course,
             // «+/−» сдвигают масштаб на ступень за нажатие поверх динамики.
             spanMeters: DriveCamera.span(zoom: frame.zoom + model.zoomBias, viewHeight: height,
                                          latitude: me.latitude),

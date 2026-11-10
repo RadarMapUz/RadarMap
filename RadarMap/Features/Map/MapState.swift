@@ -116,6 +116,8 @@ final class MapState {
     /// Сглаживание камеры поездки (DriveCamera). Шаг делает вид карты на
     /// своём пересчёте; состояние не наблюдаемое и перерисовку не вызывает.
     @ObservationIgnored var cameraSmoother = DriveCamera.Smoother()
+    /// Кадр на стоянке (DriveCamera.Parking, 85): входы кадра стоя держатся.
+    @ObservationIgnored var cameraParking = DriveCamera.Parking()
     /// Вид на остановке (StopView, 29.D): «стоим» с гистерезисом и развилка,
     /// взятая в кадр стоя; пишет тело карты на тике, как `declutter`.
     @ObservationIgnored var stopView = StopView.Tracker()

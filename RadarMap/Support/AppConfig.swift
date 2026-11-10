@@ -2979,6 +2979,30 @@ nonisolated enum AppConfig {
     /// Направление масштаба меняется не чаще раза за столько секунд.
     static let driveZoomReversalLock: TimeInterval = 8
 
+    // MARK: - Камера на стоянке (DriveCamera.Parking, 85)
+    //
+    // Владелец, 10.11: «при остановке болтается — карта сама увеличивается или
+    // уменьшается, шатается». Стоя входы кадра держатся (docs/drive_camera_2026-10-12.md).
+
+    /// «Стоим» для кадра: не быстрее этого столько секунд. Выше шума доплера
+    /// на месте после Standstill (там ноль) и ниже узла 10 км/ч таблицы.
+    static let driveParkEnterKmh = 5.0
+    static let driveParkEnterSeconds: TimeInterval = 1
+    /// Тронулись: не медленнее этого столько секунд (два фикса раз в секунду) —
+    /// выше шума доплера стоя (до 8 км/ч, standstillNoiseMaxKmh)…
+    static let driveParkExitKmh = 9.0
+    static let driveParkExitSeconds: TimeInterval = 0.8
+    /// …или один фикс быстрее этого.
+    static let driveParkExitFastKmh = 12.0
+    /// Стоя развилка и удерживаемая точка обновляются, когда ушли дальше этого,
+    /// м, и держатся там `driveParkConfirmSeconds` (дальше тройного — сразу):
+    /// шум позиции стоя ±5–10 м, в городе до 20; смена маршрута или камеры — больше.
+    static let driveParkManeuverSlackMeters = 25.0
+    static let driveParkKeepSlackMeters = 25.0
+    static let driveParkConfirmSeconds: TimeInterval = 3
+    /// Конец пробки стоя — так же, с шагом пошире: его считают по рёбрам пробок.
+    static let driveParkJamSlackMeters = 50.0
+
     // MARK: - Вид на остановке (StopView, 29.D)
     //
     // Владелец, 25.10: «при остановке показать нужные детали… умный». Стоя

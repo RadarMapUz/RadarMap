@@ -69,6 +69,9 @@ struct EngineMapView: UIViewRepresentable {
     /// Зона камеры на асфальте (CameraZone, 28.B): участок её проезжей части
     /// перед ней у камеры, к которой едем. nil — не рисуем. Только картинка.
     var cameraZone: CameraZone.Band?
+    /// Участок треноги на асфальте (TripodZone, 83): штриховка своей проезжей
+    /// части у ближайшей треноги или зоны «часто ставят». Только картинка.
+    var tripodZone: TripodZone.Band?
     /// Свои камеры — голос о них молчит, на значке галочка.
     var familiarCameraIDs: Set<Int> = []
     /// Свои свежие отметки водителя — без «?» (CameraMarkerLook.isGhost).
@@ -334,6 +337,8 @@ struct EngineMapView: UIViewRepresentable {
         private let laneFocusLayers = EngineLaneFocus()
         /// Зона камеры на асфальте (28.B).
         private let cameraZone = EngineCameraZone()
+        /// Участок треноги на асфальте (83).
+        private let tripodZone = EngineTripodZone()
         /// Стрелка манёвра на линии и выноска у точки манёвра (29.G).
         private let maneuverArrow = EngineManeuverArrow()
         private let maneuverCallout = EngineManeuverCallout()
@@ -917,6 +922,7 @@ struct EngineMapView: UIViewRepresentable {
             routeLine.styleLoaded()
             laneFocusLayers.styleLoaded()
             cameraZone.styleLoaded()
+            tripodZone.styleLoaded()
             driveAsphalt.styleLoaded()
             driveRibbon.styleLoaded()
             framesComplete = false
@@ -1408,6 +1414,7 @@ struct EngineMapView: UIViewRepresentable {
                                routeDaylight: routeDaylight, in: view)
             laneFocusLayers.update(model, routeDaylight: routeDaylight, in: view)
             cameraZone.update(model.cameraZone, daylight: model.daylight, in: view)
+            tripodZone.update(model.tripodZone, daylight: model.daylight, hot: model.performance != .full, in: view)
             mapDetail.update(EngineMapDetail.Content(
                 marks: model.detailMarks,
                 halo: model.detail.destination == .arrival ? model.destination : nil,
@@ -1489,9 +1496,10 @@ struct EngineMapView: UIViewRepresentable {
                                       // Шевроны пробок (33H): цвет линии остаётся, направление
                                       // на горячем телефоне — лишняя раскладка символов.
                                       EngineMapStyle.trafficLayerIDs.chevrons]
+            + EngineTripodZone.hotHidden
         /// Видны ТОЛЬКО на горячем телефоне: плоские дома вместо объёмных —
         /// город не пустеет (в стиле выключены, make_style «building-flat»).
-        static let hotShownLayers = ["building-flat"]
+        static let hotShownLayers = ["building-flat"] + EngineTripodZone.hotShown
         private var hiddenLayers: Set<String>?
         /// Значки заведений стоя (29.D): порядок слоёв и круг у машины.
         private let stopDetail = EngineStopDetail()

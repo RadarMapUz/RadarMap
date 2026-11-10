@@ -2149,6 +2149,48 @@ nonisolated enum AppConfig {
     /// значком, а в ведении по городу масштаб 17–18.
     nonisolated static let cameraZoneMinZoom = 15.0
 
+    // MARK: - Участок треноги на асфальте (TripodZone, 83)
+
+    /// Участок перед отметкой треноги: 80 м зоны замера (как `passZoneMeters`)
+    /// плюс неточность самой отметки вдоль дороги — водитель жмёт «Радар!»,
+    /// уже поравнявшись или проехав (2–4 с реакции на 60 км/ч — 35–70 м), —
+    /// и запас на передвижной радар, который ведёт машину дольше стационарного.
+    nonisolated static let tripodZoneBeforeMeters: CLLocationDistance = 200
+    /// После отметки: съёмка «в спину» и раннее нажатие.
+    nonisolated static let tripodZoneAfterMeters: CLLocationDistance = 50
+    /// Короче этого участок перед отметкой — не рисуем: обрывок дороги у
+    /// перекрёстка читался бы пятном, а не участком.
+    nonisolated static let tripodZoneMinBeforeMeters: CLLocationDistance = 40
+    /// Дальше этого вперёд цель не ищем: участок нужен на подъезде.
+    nonisolated static let tripodZoneAheadMeters: CLLocationDistance = 1200
+    /// Без курса (стоим) — только отметка ближе этого.
+    nonisolated static let tripodZoneStandMeters: CLLocationDistance = 500
+    /// Без маршрута отметка дальше этого от линии нашего курса — не впереди.
+    nonisolated static let tripodZoneLateralMeters: CLLocationDistance = 150
+    /// Отметка дальше этого от линии маршрута — не на нём. Отметка посажена
+    /// на ось проезжей части отметившего; встречная половина разделённой
+    /// дороги — 15–30 м, и участок всё равно ляжет на НАШУ полосу маршрута.
+    nonisolated static let tripodZoneRouteMeters: CLLocationDistance = 35
+    /// Проезжие части дороги отметки — оси в этом радиусе от неё.
+    nonisolated static let tripodZoneSnapMeters: CLLocationDistance = 25
+    /// Две оси ближе этого поперёк — одна проезжая часть (дубли источников).
+    nonisolated static let tripodZoneSameAxisMeters: CLLocationDistance = 4
+    /// Ось дороги расходится с курсом не больше этого — иначе не наша дорога.
+    nonisolated static let tripodZoneMaxAxisDegrees = 35.0
+    /// Концы соседних отрезков дороги ближе этого — одна дорога (OSM режет
+    /// её на перекрёстках).
+    nonisolated static let tripodZoneJoinMeters: CLLocationDistance = 6
+    /// Ширина участка, когда источник не знает ширины проезжей части (индекс
+    /// лимитов): две полосы. У двусторонней дороги — половина, своя сторона.
+    nonisolated static let tripodZoneWidthMeters: CLLocationDistance = 7
+    /// Мягкие концы: участок набирает силу и гаснет ступенями на этих метрах.
+    nonisolated static let tripodZoneFadeInMeters: CLLocationDistance = 40
+    nonisolated static let tripodZoneFadeOutMeters: CLLocationDistance = 30
+    /// Знак лимита в начале участка — сбоку от проезжей части на столько.
+    nonisolated static let tripodZoneLimitSideMeters: CLLocationDistance = 7
+    /// С этого масштаба участок виден (машина — z16+, телефон в поездке — 17).
+    nonisolated static let tripodZoneMinZoom = 14.5
+
     // MARK: - Выбор маршрута на карте (RoutePreview, 27.D)
 
     /// Касание линии варианта: дальше этого от линии — мимо (половина мишени

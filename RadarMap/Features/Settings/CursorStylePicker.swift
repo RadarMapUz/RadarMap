@@ -17,7 +17,7 @@ import SwiftUI
 struct CursorStylePicker: View {
     @Binding var selection: CursorStyle
 
-    /// Четыре в ряд: семь значков в одну строку на SE — плитки по 40 pt и
+    /// Четыре в ряд: восемь значков в одну строку на SE — плитки по 35 pt и
     /// подписи в многоточие. Сетка держит плитку крупной на любом экране.
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 4)
 

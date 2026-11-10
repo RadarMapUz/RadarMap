@@ -391,63 +391,8 @@ nonisolated enum MapPalette {
 
     // MARK: - «Я»
 
-    /// Курсор машины: объём даётся тремя тонами одного цвета, а не тенью.
+    /// Стрелка «я»: объём даётся тремя тонами одного цвета, а не тенью.
     static let meTop = Color(red: 0.42, green: 0.78, blue: 1.0)
     static let meBody = Color(red: 0.16, green: 0.52, blue: 0.96)
     static let meBase = Color(red: 0.08, green: 0.30, blue: 0.68)
-
-    // MARK: - Значки «я» (настройка «Значок на карте»)
-    //
-    // Цвета запекаются в битмап движка и рисуются поверх дневной и ночной
-    // карты одинаково, поэтому они фиксированные, а не адаптивные: читаться на
-    // обеих подложках значок обязан за счёт белой каймы и тени, а не за счёт
-    // перекраски.
-
-    /// Спорткар — оранжевый «папайя». Не красный, и это правило, а не вкус:
-    /// красный на этой карте — камера и тревога, а «я» с ними путаться не
-    /// должен ни на миг.
-    static let sportTop = Color(red: 1.00, green: 0.66, blue: 0.30)
-    static let sportBody = Color(red: 0.98, green: 0.47, blue: 0.08)
-    static let sportBase = Color(red: 0.70, green: 0.29, blue: 0.02)
-    /// Стекло машин: глубокий синий, а не чёрный — чёрное стекло на ночной
-    /// карте проваливается дырой в кузове.
-    static let glassTop = Color(red: 0.20, green: 0.31, blue: 0.46)
-    static let glass = Color(red: 0.06, green: 0.11, blue: 0.20)
-    /// Фары и стопы — по паре пикселей, но именно они говорят «вот перед,
-    /// вот зад» раньше, чем глаз разберёт силуэт.
-    static let headlight = Color(red: 1.00, green: 0.96, blue: 0.80)
-    static let taillight = Color(red: 1.00, green: 0.27, blue: 0.27)
-    /// Карбон антикрыла спорткара.
-    static let carbon = Color(red: 0.13, green: 0.14, blue: 0.16)
-    /// Фюзеляж звездолёта: светлый металл в три тона, как и у остальных.
-    static let hullTop = Color(red: 1.00, green: 1.00, blue: 1.00)
-    static let hullBody = Color(red: 0.84, green: 0.88, blue: 0.94)
-    static let hullBase = Color(red: 0.55, green: 0.61, blue: 0.70)
-    /// Сопло и пламя: пламя горячее у сопла и остывает к хвосту.
-    static let nozzle = Color(red: 0.24, green: 0.27, blue: 0.33)
-    static let flameCore = Color(red: 1.00, green: 0.97, blue: 0.78)
-    static let flameMid = Color(red: 1.00, green: 0.70, blue: 0.18)
-    static let flameTail = Color(red: 1.00, green: 0.36, blue: 0.10)
-    /// Болид — бирюза с карбоном, как у команд «Формулы»: не красный
-    /// (камера), не оранжевый (спорткар), не синий (стрелка).
-    static let formulaTop = Color(red: 0.36, green: 0.90, blue: 0.84)
-    static let formulaBody = Color(red: 0.00, green: 0.64, blue: 0.60)
-    static let formulaBase = Color(red: 0.00, green: 0.40, blue: 0.38)
-    /// Шлем пилота — жёлтая точка в кокпите: по ней болид узнают сразу.
-    static let helmet = Color(red: 1.00, green: 0.84, blue: 0.22)
-    /// Суперкар — лайм.
-    static let limeTop = Color(red: 0.80, green: 0.96, blue: 0.42)
-    static let limeBody = Color(red: 0.55, green: 0.83, blue: 0.16)
-    static let limeBase = Color(red: 0.32, green: 0.54, blue: 0.06)
-    /// Ралли — синий кузов, белая крыша, золотые полосы: «я» по-прежнему синий.
-    static let rallyTop = Color(red: 0.38, green: 0.64, blue: 1.00)
-    static let rallyBody = Color(red: 0.10, green: 0.36, blue: 0.86)
-    static let rallyBase = Color(red: 0.05, green: 0.20, blue: 0.55)
-    static let rallyRoof = Color(red: 0.96, green: 0.97, blue: 0.99)
-    static let rallyGold = Color(red: 0.96, green: 0.76, blue: 0.27)
-    /// Шины гоночных значков: почти чёрные, с более светлым протектором.
-    static let tyre = Color(red: 0.09, green: 0.10, blue: 0.12)
-    static let tyreTread = Color(red: 0.34, green: 0.36, blue: 0.40)
-    /// Люстра раллийных фар.
-    static let spotlight = Color(red: 1.00, green: 0.94, blue: 0.66)
 }

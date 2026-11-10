@@ -12,11 +12,12 @@
 //  тому же курсу, стоит в той же точке, а без курса так же уступает место
 //  точке «курс неизвестен».
 //
-//  Рисуют все значки сверху, носом ВВЕРХ (на север): так поворот по курсу,
-//  который уже делают схема, движок и карта Apple, работает без поправок.
-//  Само рисование — в слое вью (MeCursor), здесь только выбор и его хранение.
+//  Все значки — сверху, носом ВВЕРХ (на север): поворот по курсу работает без
+//  поправок. Стрелка рисуется в SwiftUI (MeCursor), машины — готовые картинки
+//  из каталога (Cursors/cursor-<id>), отрендеренные офлайн из 3D-моделей
+//  скриптом tools/cursors. Имена — типы машин, не марки.
 //
-//  Чистое правило хранения — покрыто CursorStyleTests.
+//  Чистое правило хранения и миграции — покрыто CursorStyleTests.
 //
 
 import Foundation
@@ -24,54 +25,57 @@ import Foundation
 nonisolated enum CursorStyle: String, CaseIterable, Identifiable, Sendable {
     /// Стрелка-конус — облик курсора до появления выбора. По умолчанию.
     case arrow
-    /// Легковая машина, вид сверху.
-    case car
-    /// Спорткар: ниже, шире, с полосами — другой силуэт и другой цвет.
+    /// Чёрный представительский седан с люком.
+    case premium
+    /// Большой премиальный внедорожник: панорамная крыша, рейлинги.
+    case suv
+    case crossover
+    /// Жёлтое такси с шашками на крыше.
+    case taxi
     case sport
-    /// Болид «Формулы»: открытые колёса, переднее и заднее антикрылья.
-    case formula
-    /// Суперкар-клин: кабина вперёд, жалюзи мотора, воздухозаборники.
-    case supercar
-    /// Раллийный хэтчбек: люстра фар, воздухозаборник на крыше, антикрыло.
-    case rally
-    /// Звездолёт с маленьким пламенем двигателя.
-    case spaceship
-    /// Объёмная машина (29.B, как у Amap): кадры модели с разных ракурсов по
-    /// повороту и наклону карты (Car3DModel), а не одна картинка сверху.
-    case car3D
+    /// Гранёный пикап из нержавейки.
+    case pickup
+    case moto
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .arrow:     return String(localized: "Стрелка")
-        case .car:       return String(localized: "Машина")
+        case .premium:   return String(localized: "Премиум седан")
+        case .suv:       return String(localized: "Внедорожник")
+        case .crossover: return String(localized: "Кроссовер")
+        case .taxi:      return String(localized: "Такси")
         case .sport:     return String(localized: "Спорткар")
-        case .formula:   return String(localized: "Болид")
-        case .supercar:  return String(localized: "Суперкар")
-        case .rally:     return String(localized: "Ралли")
-        case .spaceship: return String(localized: "Звездолёт")
-        case .car3D:     return String(localized: "Машина 3D")
+        case .pickup:    return String(localized: "Пикап-клин")
+        case .moto:      return String(localized: "Мотоцикл")
         }
     }
 
-    /// Рамка значка, точки. Гоночные — крупнее и длиннее: колёса, крылья и
-    /// ливрея в рамке 30×36 сливались в пятно («иконка детализированная»,
-    /// владелец, 12.10). Остальные — в прежней рамке, пиксель в пиксель.
+    /// Картинка машины в каталоге; у стрелки её нет — она рисуется.
+    var assetName: String? { self == .arrow ? nil : "cursor-\(rawValue)" }
+
+    /// Рамка значка без полей, точки. Картинка машины — 44×60 pt: эта рамка
+    /// плюс поля по 8 pt под тень и ободок, как у стрелки.
     var frameSize: CGSize {
-        switch self {
-        case .formula, .supercar, .rally: return CGSize(width: 32, height: 44)
-        // Под наклоном крыша и капот поднимаются над точкой на земле — рамка
-        // выше, шире — под боковые ракурсы.
-        case .car3D:                      return CGSize(width: 46, height: 46)
-        default:                          return CGSize(width: 30, height: 36)
-        }
+        self == .arrow ? CGSize(width: 30, height: 36) : CGSize(width: 28, height: 44)
     }
+
+    /// Поля вокруг рамки под тень, точки — у всех значков одни.
+    static let padding: CGFloat = 8
+
+    /// Значки до 3D-машин (10.11) → ближайший новый: выбор водителя не
+    /// сбрасывается в стрелку только потому, что старый рисунок убран.
+    static let legacy: [String: CursorStyle] = [
+        "car": .crossover, "car3D": .crossover,
+        "formula": .sport, "supercar": .sport, "rally": .sport,
+        "spaceship": .arrow,
+    ]
 
     /// Значение из хранилища. Неизвестное (значок из будущей версии, ручная
-    /// правка, мусор) — стрелка: курсор обязан нарисоваться всегда, и
-    /// незнакомое имя не повод оставить водителя без «я» на карте.
+    /// правка, мусор) — стрелка: курсор обязан нарисоваться всегда.
     init(stored raw: String?) {
-        self = raw.flatMap(CursorStyle.init(rawValue:)) ?? .arrow
+        guard let raw else { self = .arrow; return }
+        self = CursorStyle(rawValue: raw) ?? Self.legacy[raw] ?? .arrow
     }
 }

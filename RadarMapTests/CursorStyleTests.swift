@@ -2,15 +2,10 @@
 //  CursorStyleTests.swift
 //  RadarMapTests
 //
-//  Значок «я» на карте: хранение выбора, поворот на карте Apple и сами
-//  картинки.
-//
-//  Картинки проверяются по пикселям, а не по коду — по той же причине, что и
-//  схема (RoadSketchPixelTests): значок «собирается и не падает» при любой
-//  ошибке в геометрии, а видно её только на экране. Здесь — три вещи, которые
-//  обязаны быть верны при любой перерисовке: значок вообще нарисован, он
-//  отличается от соседей, и он СИММЕТРИЧЕН — кривая половина силуэта даёт
-//  машину, которая едет боком.
+//  Значок «я» на карте: хранение выбора, перевод старых значков и сами
+//  картинки. Картинки проверяются по пикселям: ассет «есть и грузится» при
+//  любой ошибке рендера, а кривой силуэт, красная деталь или две одинаковые
+//  машины видны только в пикселях.
 //
 
 import SwiftUI
@@ -30,12 +25,40 @@ final class CursorStyleTests: XCTestCase {
     }
 
     func testUnknownStoredValueFallsBackToArrow() {
-        // Значок из будущей версии, ручная правка, пустота — курсор обязан
-        // нарисоваться всё равно, и нарисоваться прежним.
         XCTAssertEqual(CursorStyle(stored: nil), .arrow)
         XCTAssertEqual(CursorStyle(stored: ""), .arrow)
-        XCTAssertEqual(CursorStyle(stored: "moto"), .arrow)
+        XCTAssertEqual(CursorStyle(stored: "boat"), .arrow)
         XCTAssertEqual(CursorStyle(stored: "Car"), .arrow)
+    }
+
+    func testOldStylesMoveToTheNearestNewOne() {
+        // Выбор водителя не сбрасывается из-за того, что старый рисунок убран.
+        XCTAssertEqual(CursorStyle(stored: "car"), .crossover)
+        XCTAssertEqual(CursorStyle(stored: "car3D"), .crossover)
+        XCTAssertEqual(CursorStyle(stored: "sport"), .sport)
+        XCTAssertEqual(CursorStyle(stored: "formula"), .sport)
+        XCTAssertEqual(CursorStyle(stored: "supercar"), .sport)
+        XCTAssertEqual(CursorStyle(stored: "rally"), .sport)
+        XCTAssertEqual(CursorStyle(stored: "spaceship"), .arrow)
+        // Ни одно старое имя не совпадает с новым случаем, кроме спорткара.
+        for (old, _) in CursorStyle.legacy {
+            XCTAssertNil(CursorStyle(rawValue: old), old)
+        }
+    }
+
+    func testSettingsRewriteOldStyleOnce() {
+        let defaults = UserDefaults.standard, key = "cursorStyle"
+        let saved = defaults.object(forKey: key)
+        defer {
+            if let saved { defaults.set(saved, forKey: key) } else { defaults.removeObject(forKey: key) }
+        }
+        defaults.set("formula", forKey: key)
+        XCTAssertEqual(AppSettings().cursorStyle, .sport)
+        XCTAssertEqual(defaults.string(forKey: key), "sport")
+        // Неизвестное имя не трогаем: оно может быть из более новой версии.
+        defaults.set("hovercraft", forKey: key)
+        XCTAssertEqual(AppSettings().cursorStyle, .arrow)
+        XCTAssertEqual(defaults.string(forKey: key), "hovercraft")
     }
 
     func testEveryStyleHasItsOwnTitle() {
@@ -46,51 +69,52 @@ final class CursorStyleTests: XCTestCase {
 
     // MARK: - Картинки
 
-    /// Значок в той же рамке, в какой его запекает движок карты.
-    private func pixels(_ style: CursorStyle?) throws -> Bitmap {
-        let cursor = style.map { MeCursor(scale: 1, style: $0) } ?? MeCursor(scale: 1)
-        let frame = (style ?? .arrow).frameSize
-        let renderer = ImageRenderer(content: cursor.frame(width: frame.width, height: frame.height).padding(8))
-        renderer.scale = 2
-        let image = try XCTUnwrap(renderer.uiImage?.cgImage)
-        return Bitmap(image)
+    /// Картинки машин из каталога, @3x: 44×60 pt — рамка плюс поля под тень.
+    private func assets() throws -> [(CursorStyle, Bitmap)] {
+        try CursorStyle.allCases.compactMap { style in
+            guard let name = style.assetName else { return nil }
+            let image = try XCTUnwrap(UIImage(named: name, in: .main, compatibleWith: UITraitCollection(displayScale: 3)),
+                                      "\(name): нет картинки в каталоге")
+            let pad = CursorStyle.padding * 2
+            XCTAssertEqual(image.size, CGSize(width: style.frameSize.width + pad, height: style.frameSize.height + pad), name)
+            return (style, Bitmap(try XCTUnwrap(image.cgImage)))
+        }
     }
 
-    func testEveryStyleDrawsSomething() throws {
-        for style in CursorStyle.allCases {
-            let bitmap = try pixels(style)
-            // Четверть рамки и больше непрозрачна: значок, а не соринка.
+    func testEveryVehicleHasAnAsset() throws {
+        XCTAssertEqual(try assets().count, CursorStyle.allCases.count - 1)
+        XCTAssertNil(CursorStyle.arrow.assetName)
+    }
+
+    func testEveryVehicleDrawsSomething() throws {
+        for (style, bitmap) in try assets() {
+            // Узкий мотоцикл — ~12 % холста, машины — 25–35 %; соринка — меньше.
             let opaque = bitmap.alpha.filter { $0 > 200 }.count
-            let frame = 30 * 36 * 4   // рамка значка в пикселях при ×2
-            XCTAssertGreaterThan(opaque, frame / 4,
+            XCTAssertGreaterThan(opaque, bitmap.width * bitmap.height * 8 / 100,
                                  "\(style.rawValue): нарисовано слишком мало (\(opaque) пикс.)")
         }
     }
 
-    func testDefaultCursorIsTheArrow() throws {
-        // Все вызовы, которые о выборе не знают, рисуют ровно прежнюю стрелку.
-        XCTAssertEqual(try pixels(nil).rgba, try pixels(.arrow).rgba)
-    }
-
-    func testStylesLookDifferent() throws {
-        let images = try CursorStyle.allCases.map { try pixels($0).alpha }
-        for i in images.indices {
-            // Разные рамки — разные картинки уже по размеру; сравниваем силуэты
-            // в одной рамке.
-            for j in images.indices where j > i && images[j].count == images[i].count {
-                let differing = zip(images[i], images[j]).filter { abs(Int($0) - Int($1)) > 64 }.count
-                XCTAssertGreaterThan(differing, 200,
-                                     "\(CursorStyle.allCases[i]) и \(CursorStyle.allCases[j]) неразличимы")
+    func testVehiclesLookDifferent() throws {
+        let all = try assets()
+        for i in all.indices {
+            for j in all.indices where j > i {
+                let a = all[i].1.rgba, b = all[j].1.rgba
+                var differing = 0
+                for p in stride(from: 0, to: min(a.count, b.count), by: 4) {
+                    let d = abs(Int(a[p]) - Int(b[p])) + abs(Int(a[p + 1]) - Int(b[p + 1])) + abs(Int(a[p + 2]) - Int(b[p + 2]))
+                    if d > 96 { differing += 1 }
+                }
+                XCTAssertGreaterThan(differing, 500, "\(all[i].0) и \(all[j].0) неразличимы")
             }
         }
     }
 
     func testSilhouettesAreSymmetric() throws {
-        // Форма (альфа) обязана быть зеркальной: свет падает слева и красит
-        // половины по-разному, но контур у машины один с обеих сторон.
-        for style in CursorStyle.allCases {
-            let bitmap = try pixels(style)
-            let alpha = bitmap.alpha   // вычисляемое свойство — один раз, не на пиксель
+        // Свет слева красит половины по-разному, но контур у машины один с
+        // обеих сторон: кривой силуэт — машина, которая едет боком.
+        for (style, bitmap) in try assets() {
+            let alpha = bitmap.alpha
             var worst = 0
             for y in 0..<bitmap.height {
                 for x in 0..<(bitmap.width / 2) {
@@ -101,6 +125,56 @@ final class CursorStyleTests: XCTestCase {
             }
             XCTAssertLessThanOrEqual(worst, 24, "\(style.rawValue): силуэт кривой (\(worst))")
         }
+    }
+
+    func testNoVehicleIsCameraRed() throws {
+        // Красный на карте — камера. Стоп-сигналы тёмно-бордовые и мелкие.
+        for (style, bitmap) in try assets() {
+            var red = 0
+            for p in stride(from: 0, to: bitmap.rgba.count, by: 4) where bitmap.rgba[p + 3] > 128 {
+                let color = UIColor(red: CGFloat(bitmap.rgba[p]) / 255, green: CGFloat(bitmap.rgba[p + 1]) / 255,
+                                    blue: CGFloat(bitmap.rgba[p + 2]) / 255, alpha: 1)
+                var h: CGFloat = 0, s: CGFloat = 0, v: CGFloat = 0
+                color.getHue(&h, saturation: &s, brightness: &v, alpha: nil)
+                if (h < 0.04 || h > 0.95) && s > 0.6 && v > 0.55 { red += 1 }
+            }
+            XCTAssertLessThanOrEqual(red, 4, "\(style.rawValue): красные пиксели (\(red))")
+        }
+    }
+
+    /// Значок в той же рамке, в какой его запекает движок карты.
+    private func rendered(_ style: CursorStyle?) throws -> Bitmap {
+        let cursor = style.map { MeCursor(scale: 1, style: $0) } ?? MeCursor(scale: 1)
+        let frame = (style ?? .arrow).frameSize
+        let renderer = ImageRenderer(content: cursor.frame(width: frame.width, height: frame.height).padding(CursorStyle.padding))
+        renderer.scale = 2
+        return Bitmap(try XCTUnwrap(renderer.uiImage?.cgImage))
+    }
+
+    func testDefaultCursorIsTheArrow() throws {
+        XCTAssertEqual(try rendered(nil).rgba, try rendered(.arrow).rgba)
+    }
+
+    func testArrowIsDrawnAndSymmetric() throws {
+        let bitmap = try rendered(.arrow)
+        XCTAssertGreaterThan(bitmap.alpha.filter { $0 > 200 }.count, 30 * 36 * 4 / 4)
+        let alpha = bitmap.alpha
+        var worst = 0
+        for y in 0..<bitmap.height {
+            for x in 0..<(bitmap.width / 2) {
+                worst = max(worst, abs(Int(alpha[y * bitmap.width + x]) - Int(alpha[y * bitmap.width + bitmap.width - 1 - x])))
+            }
+        }
+        XCTAssertLessThanOrEqual(worst, 24)
+    }
+
+    func testPickerTileShowsTheAsset() throws {
+        // Плитка выбора рисует ту же картинку, что поедет по карте: MeCursor
+        // в рамке движка даёт холст 44×60 pt с машиной внутри.
+        let bitmap = try rendered(.taxi)
+        XCTAssertEqual(bitmap.width, 88)
+        XCTAssertEqual(bitmap.height, 120)
+        XCTAssertGreaterThan(bitmap.alpha.filter { $0 > 200 }.count, 88 * 120 / 5)
     }
 }
 

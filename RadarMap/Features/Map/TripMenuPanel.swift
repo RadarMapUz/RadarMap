@@ -141,6 +141,8 @@ struct TripMenuPanel: View {
 /// скорость, которая пишется каждым фиксом (ARCHITECTURE.md, правило 13).
 struct TripMenuHost: View {
     @Environment(AppEnvironment.self) private var env
+    /// Док с полем поиска сейчас на экране (простой без маршрута).
+    var searchOnScreen = false
     let onPick: (TripMenuSlots.Action) -> Void
     let onClose: () -> Void
 
@@ -172,7 +174,8 @@ struct TripMenuHost: View {
                                                          isPassenger: location.isPassengerSession,
                                                          pausedThisTrip: env.family.pausedThisTrip,
                                                          headingHome: env.family.isHeadingHome, now: Date()),
-            parked: parked ?? TripScreenLayout.tripMenuShowsParkedItems(speedKmh: location.speedKmh)))
+            parked: parked ?? TripScreenLayout.tripMenuShowsParkedItems(speedKmh: location.speedKmh),
+            searchOnScreen: searchOnScreen))
     }
 }
 

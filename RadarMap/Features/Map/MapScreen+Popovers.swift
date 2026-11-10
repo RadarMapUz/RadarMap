@@ -126,7 +126,8 @@ extension MapScreen {
         case .tripMenu:
             // Над нижними панелями, во всю их ширину: палец уже внизу, и
             // плитки встают там же, где «Отметить» и панель поездки.
-            TripMenuHost(onPick: performMenu, onClose: { send(.dismissed(.tripMenu)) })
+            TripMenuHost(searchOnScreen: mode.showsActionBar && !map.corridorCardShown && !env.route.isActive,
+                         onPick: performMenu, onClose: { send(.dismissed(.tripMenu)) })
                 .frame(width: rect.width)
                 .alignmentGuide(.leading) { _ in -rect.minX }
                 .alignmentGuide(.top) { panel in panel.height - (rect.minY - gap) }

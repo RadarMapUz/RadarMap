@@ -46,6 +46,11 @@ extension MapScreen {
         // Обслуживание во всех состояниях (18.2): `-demoMaintenance` вместе с
         // `-showStats` (карточка в Итогах) или `-showSettings -settingsPage maintenance`.
         if args.contains("-demoMaintenance") { env.maintenance.seedDemo() }
+        // Автодневник за «Машиной и расходами» (план 78) — демо его включает.
+        if ["-demoMaintenance", "-demoEnergy", "-demoEnergyLegacy", "-demoJournal", "-demoWorkShifts", "-carLog"]
+            .contains(where: args.contains) {
+            env.settings.carLog = true
+        }
         // Пришедшие штрафы поверх демо-истории — после её чтения: сверка
         // правит записи, а до чтения правка истории отклоняется.
         if args.contains("-demoFines") {

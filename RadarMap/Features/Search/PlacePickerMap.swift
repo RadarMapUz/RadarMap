@@ -171,7 +171,7 @@ struct PlacePickerMap: View {
             cameras: [],
             route: [],
             recenterToken: recenterToken,
-            modernStyle: env.settings.mapModernStyle,
+            modernStyle: true,
             performance: env.thermal.mode,
             lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled,
             northUp: true,

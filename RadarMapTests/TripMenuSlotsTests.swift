@@ -34,6 +34,23 @@ final class TripMenuSlotsTests: XCTestCase {
         XCTAssertEqual(parked.suffix(3).map(\.action), [.stats, .addCamera, .settings])
     }
 
+    /// Поиск уже в доке — первая плитка «Настройки», и в третьем ряду их нет.
+    func testSettingsReplaceSearchWhenDockIsOnScreen() {
+        let idle = Slots.tiles(Slots.Situation(parked: true, searchOnScreen: true))
+        XCTAssertEqual(idle.first?.slot, .search)
+        XCTAssertEqual(idle.first?.action, .settings)
+        XCTAssertEqual(idle.map(\.action).filter { $0 == .settings }.count, 1)
+        XCTAssertEqual(idle.suffix(2).map(\.action), [.stats, .addCamera])
+        XCTAssertFalse(idle.contains { $0.action == .search })
+
+        let moving = Slots.tiles(Slots.Situation(searchOnScreen: true))
+        XCTAssertEqual(moving.map(\.slot), [.search, .myPlaces, .along, .cameras, .share, .map])
+        XCTAssertEqual(moving.first?.action, .settings)
+
+        // В поездке дока нет — поиск остаётся на своём месте.
+        XCTAssertEqual(Slots.tiles(Slots.Situation(hasRoute: true)).first?.action, .search)
+    }
+
     /// Без маршрута «По пути» — заправки рядом, «Камеры впереди» — ближайшие.
     func testRouteDependentActions() {
         let route = Slots.tiles(Slots.Situation(hasRoute: true))

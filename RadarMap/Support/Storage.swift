@@ -93,6 +93,7 @@ enum Storage {
         case cameraKnownIDs         // id камер базы, уже виденные телефоном (CameraNews, JSON, 31E)
         case cameraNews             // новые камеры на своих дорогах: id и когда нашли (JSON, 31E)
         case personalPaceSamples    // личный темп: проезды по маршруту за 30 дней (PersonalPace.Sample, JSON, 33E)
+        case carLogMigrated1        // «Машина и расходы» решено однократно по записям на телефоне (CarLog, план 78)
     }
 
     private static var defaults: UserDefaults { .standard }

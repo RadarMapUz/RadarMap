@@ -304,17 +304,33 @@ nonisolated enum EnergySplit {
             }
         }
 
-        /// Дорога на работу (или домой) в месяц: сумма поездок направления за
-        /// 30 дней окна. nil — суммы нет (профиль не готов) или поездок нет.
-        func monthly(_ commute: [Commute.Trip], now: Date) -> Double? {
+        /// Дорога на работу (или домой) за 30 дней: поездки, путь и деньги.
+        /// Поездка, которой в расчёте нет (он знает только записи истории, а
+        /// журнал дороги держит 45 дней), — по цене километра посчитанных
+        /// поездок этой же дороги: без неё сумма молча занижалась (разбор
+        /// 10.11). nil — ни одной посчитанной поездки или нет цены.
+        func commuteMonth(_ commute: [Commute.Trip], now: Date) -> CommuteMonth? {
             let since = now.addingTimeInterval(-30 * 86_400)
-            var total = Use()
-            for trip in commute where trip.departure >= since {
+            let recent = commute.filter { $0.departure >= since && $0.departure <= now }
+            var known = Use()
+            var knownMeters = 0.0
+            for trip in recent {
                 guard let entry = trips[trip.id] else { continue }
-                total = total + entry.use
+                known = known + entry.use
+                knownMeters += trip.distanceMeters
             }
-            return total.cost.map(FuelCost.rounded)
+            guard let cost = known.cost, knownMeters > 0 else { return nil }
+            let meters = recent.reduce(0) { $0 + $1.distanceMeters }
+            return CommuteMonth(cost: FuelCost.rounded(cost * meters / knownMeters),
+                                trips: recent.count, meters: meters)
         }
+    }
+
+    /// Дорога за 30 дней — для строки «22 поездки, 270 км · топливо ≈ …».
+    struct CommuteMonth: Equatable, Sendable {
+        let cost: Double
+        let trips: Int
+        let meters: Double
     }
 
     // MARK: - Расчёт

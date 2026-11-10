@@ -91,11 +91,34 @@ final class FuelCostTests: XCTestCase {
         let days = trips.map { EnergySplit.Day(day: $0.departure, trips: [
             EnergySplit.Trip(id: $0.id, start: $0.departure, meters: $0.distanceMeters)]) }
         let ledger = EnergySplit.split(days, model: EnergySplit.model(profile: petrol, energy: .fuel))
-        XCTAssertEqual(ledger.monthly(trips, now: now), 38_000,
-                       "две поездки за 30 дней × 20 км × 960 сум/км = 38 400 → 38 000")
+        let month = ledger.commuteMonth(trips, now: now)
+        XCTAssertEqual(month?.cost, 38_000, "две поездки за 30 дней × 20 км × 960 сум/км = 38 400 → 38 000")
+        XCTAssertEqual(month?.trips, 2)
+        XCTAssertEqual(month?.meters, 40_000)
         let unpriced = EnergySplit.split(days, model: EnergySplit.model(profile: FuelProfile(), energy: .fuel))
-        XCTAssertNil(unpriced.monthly(trips, now: now))
-        XCTAssertNil(ledger.monthly([trip(40, km: 20)], now: now))
+        XCTAssertNil(unpriced.commuteMonth(trips, now: now))
+        XCTAssertNil(ledger.commuteMonth([trip(40, km: 20)], now: now))
+    }
+
+    /// Поездка из журнала дороги, которой уже нет в истории (и в расчёте),
+    /// не выпадает из суммы: её путь — по цене километра посчитанных поездок
+    /// той же дороги (разбор 10.11: сумма молча занижалась).
+    func testCommuteMonthCountsTripsMissingFromTheLedger() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        func trip(_ daysAgo: Double) -> Commute.Trip {
+            let departure = now.addingTimeInterval(-daysAgo * 86_400)
+            return Commute.Trip(id: departure.timeIntervalSince1970, direction: .toHome, departure: departure,
+                                arrival: departure.addingTimeInterval(1_800), duration: 1_800,
+                                distanceMeters: 20_000)
+        }
+        let known = trip(1), pruned = trip(20)
+        let petrol = profile([.petrol: FuelRate(per100Km: 8, price: 12_000)])
+        let days = [EnergySplit.Day(day: known.departure, trips: [
+            EnergySplit.Trip(id: known.id, start: known.departure, meters: known.distanceMeters)])]
+        let ledger = EnergySplit.split(days, model: EnergySplit.model(profile: petrol, energy: .fuel))
+        let month = try XCTUnwrap(ledger.commuteMonth([known, pruned], now: now))
+        XCTAssertEqual(month.trips, 2)
+        XCTAssertEqual(month.cost, 38_000, "две поездки по 19 200 сум, а не одна")
     }
 
     func testProfileSurvivesStorage() throws {

@@ -142,10 +142,10 @@ final class TypeScaleTests: XCTestCase {
         }
     }
 
-    /// Заголовки на экране чтения растут до 1.70, а между — наклон без ступеньки.
+    /// Заголовки на экране чтения растут до 1.90, а между — наклон без ступеньки.
     func testReadingLargeTextGrowsModerately() {
         for step in Font.typeSteps where step >= 38 {
-            XCTAssertEqual(Font.typeFactor(raw: 3.1, size: step, density: .reading), 1.70, accuracy: 0.001)
+            XCTAssertEqual(Font.typeFactor(raw: 3.1, size: step, density: .reading), 1.90, accuracy: 0.001)
         }
         let ceilings = Font.typeSteps.map { Font.typeFactor(raw: 3.1, size: $0, density: .reading) }
         for (small, large) in zip(ceilings, ceilings.dropFirst()) {

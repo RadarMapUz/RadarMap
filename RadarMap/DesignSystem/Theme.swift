@@ -536,7 +536,7 @@ extension Font {
     /// настройки, «Итоги», листы) растёт до `readingCeiling` — это AX3 (2.55 по UIFontMetrics)
     /// целиком, а AX4–AX5 упираются в него: дальше строки списков ломаются.
     /// Ступени до 19 растут полностью (основной текст 17 снапается в 19),
-    /// заголовки от 38 — до 1.70. Панели поверх карты держат прежние
+    /// заголовки от 38 — до 1.90 (ниже 30 и 38 сливаются). Панели поверх карты держат прежние
     /// 1.30 / 1.10.
     nonisolated static let readingCeiling: Double = 2.60
 
@@ -544,7 +544,7 @@ extension Font {
                                        density: TypeDensity) -> Double {
         let small: Double, large: Double, from: CGFloat, to: CGFloat
         switch density {
-        case .reading: small = readingCeiling; large = 1.70; from = 19; to = 38
+        case .reading: small = readingCeiling; large = 1.90; from = 19; to = 38
         case .dense:   small = 1.30; large = 1.10; from = 15; to = 30
         }
         let ceiling: Double

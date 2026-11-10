@@ -269,7 +269,6 @@ struct SpeedSettingsPage: View {
 
 struct TripSettingsPage: View {
     @Environment(AppEnvironment.self) private var env
-    @State private var allTracks: ShareFilePayload?
 
     var body: some View {
         @Bindable var settings = env.settings
@@ -359,34 +358,6 @@ struct TripSettingsPage: View {
             }
 
             Section {
-                Toggle("Подробный трек для регистратора", isOn: $settings.recordTimedTrack)
-                    .onChange(of: settings.recordTimedTrack) { _, on in
-                        env.trip.recordsTimedTrack = on
-                    }
-                Button("Выгрузить все поездки (GPX)") {
-                    if let url = TimedTrackStore.gpxFile(forAll: env.trip.history) {
-                        allTracks = ShareFilePayload(url: url)
-                    }
-                }
-                .disabled(env.trip.history.isEmpty)
-                SettingsExplainer([
-                    "Точка каждую секунду со временем — чтобы видео с регистратора можно было поставить на карту. Хранится только на телефоне 30 дней.",
-                    "«Выгрузить все поездки» отдаёт один файл GPX: линии поездок последней недели и проезды камер за месяц.",
-                ])
-            } header: {
-                Text("Регистратор")
-            }
-
-            Section {
-                Toggle("Вождение 3D", isOn: $settings.drive3D)
-            } header: {
-                Text("Карта")
-            } footer: {
-                Text("Наклон, серый асфальт, маршрут во всю полосу и сужение к нужному ряду у поворота — на телефоне и в машине. Выключите — наклон вернётся прежний.")
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Section {
                 Toggle("Не гасить экран в поездке", isOn: $settings.keepScreenOn)
                     .onChange(of: settings.keepScreenOn) { _, keepOn in
                         if env.location.isTripActive {
@@ -401,10 +372,6 @@ struct TripSettingsPage: View {
             }
         }
         .settingsPage("Поездка")
-        .sheet(item: $allTracks) { payload in
-            ActivityFileSheet(url: payload.url)
-                .presentationDetents([.medium, .large])
-        }
     }
 }
 
@@ -451,17 +418,6 @@ struct RouteSettingsPage: View {
                 ])
             } footer: {
                 Text("Время прибытия — с поправкой на то, как быстро вы обычно едете.")
-            }
-
-            // 26.4: метаданные ведения CarPlay. Действует сразу — идущее
-            // ведение в машине начинается заново (CarPlayGuidance).
-            Section {
-                Toggle("Манёвры на приборке и HUD", isOn: $settings.carPlayNavigationMetadata)
-            } header: {
-                Text(verbatim: "CarPlay")
-            } footer: {
-                Text("Машина покажет стрелку и расстояние на приборке или проекции, если умеет; ряд полос на экране CarPlay при этом не показывается.")
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .settingsPage("Маршрут")
@@ -687,10 +643,12 @@ struct LearningSettingsPage: View {
     }
 }
 
-// MARK: - Батарея
+// MARK: - Для опытных
 
-struct BatterySettingsPage: View {
+/// Инженерные переключатели со всех разделов — одной страницей в конце настроек.
+struct AdvancedSettingsPage: View {
     @Environment(AppEnvironment.self) private var env
+    @State private var allTracks: ShareFilePayload?
 
     var body: some View {
         @Bindable var settings = env.settings
@@ -701,12 +659,56 @@ struct BatterySettingsPage: View {
                         // Иначе выключение в поездке залипало бы на последнем тире.
                         env.location.refreshLocationMode()
                     }
+            } header: {
+                Text("Батарея")
             } footer: {
-                Text("Вдали от камер точность GPS ниже, у камеры — максимальная. Пока на карту смотрят, фиксы идут каждую секунду.")
-                    .fixedSize(horizontal: false, vertical: true)
+                Text("Вдали от камер GPS бережёт батарею, у камеры работает в полную силу.")
+            }
+
+            Section {
+                Toggle("Вождение 3D", isOn: $settings.drive3D)
+            } header: {
+                Text("Карта")
+            } footer: {
+                Text("Наклонная карта в поездке и маршрут во всю полосу — на телефоне и в машине.")
+            }
+
+            // 26.4: метаданные ведения CarPlay. Действует сразу — идущее
+            // ведение в машине начинается заново (CarPlayGuidance).
+            Section {
+                Toggle("Манёвры на приборке и HUD", isOn: $settings.carPlayNavigationMetadata)
+            } header: {
+                Text(verbatim: "CarPlay")
+            } footer: {
+                Text("Стрелка поворота на приборной панели, если машина умеет. Ряд полос на экране CarPlay при этом скрыт.")
+            }
+
+            Section {
+                Toggle("Подробный трек для регистратора", isOn: $settings.recordTimedTrack)
+                    .onChange(of: settings.recordTimedTrack) { _, on in
+                        env.trip.recordsTimedTrack = on
+                    }
+                Button("Выгрузить все поездки (GPX)") {
+                    if let url = TimedTrackStore.gpxFile(forAll: env.trip.history) {
+                        allTracks = ShareFilePayload(url: url)
+                    }
+                }
+                .disabled(env.trip.history.isEmpty)
+                SettingsExplainer([
+                    "Точка каждую секунду со временем — чтобы видео с регистратора можно было поставить на карту. Хранится только на телефоне 30 дней.",
+                    "«Выгрузить все поездки» отдаёт один файл GPX: линии поездок последней недели и проезды камер за месяц.",
+                ])
+            } header: {
+                Text("Регистратор")
+            } footer: {
+                Text("Точка каждую секунду — чтобы положить видео регистратора на карту.")
             }
         }
-        .settingsPage("Батарея")
+        .settingsPage("Для опытных")
+        .sheet(item: $allTracks) { payload in
+            ActivityFileSheet(url: payload.url)
+                .presentationDetents([.medium, .large])
+        }
     }
 }
 
@@ -804,7 +806,7 @@ struct HelpSettingsPage: View {
             Item(icon: "location.fill", question: "Зачем доступ к геопозиции «Всегда»?",
                  answer: "Без него поездка не начнётся сама, пока приложение свёрнуто, и о камерах оно промолчит. Поездка, начатая на экране, звучит и в фоне — до первой долгой остановки; доступ «Всегда» снимает это ограничение. На сервер уходят запрос маршрута, ваши отметки и «Поделиться прибытием», а в поездке — обезличенные отрезки пути для пробок; их можно выключить: Настройки → Конфиденциальность → «Помогать с пробками»."),
             Item(icon: "battery.75percent", question: "Сколько тратится батареи?",
-                 answer: "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно, но вдали от камер точность снижается сама (Настройки → Батарея). Больше всего тратит экран: если смотреть на карту не нужно, погасите его — при доступе «Всегда» о камерах приложение предупредит голосом и с погашенным экраном."),
+                 answer: "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно, но вдали от камер точность снижается сама (Настройки → Для опытных). Больше всего тратит экран: если смотреть на карту не нужно, погасите его — при доступе «Всегда» о камерах приложение предупредит голосом и с погашенным экраном."),
             Item(icon: "externaldrive.fill", question: "Как перенести поездки на новый телефон?",
                  answer: "Включите Настройки → Поездка → История поездок → «Хранить поездки: в iCloud» — на новом iPhone с тем же Apple ID история появится сама. Без iCloud — Настройки → О приложении → Мои данные → «Сохранить копию», затем на новом телефоне «Восстановить из файла». На наш сервер история не уходит ни так, ни так."),
         ]),

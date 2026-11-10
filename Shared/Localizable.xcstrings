@@ -4607,22 +4607,6 @@
         }
       }
     },
-    "Вдали от камер точность GPS ниже, у камеры — максимальная. Пока на карту смотрят, фиксы идут каждую секунду.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Вдали от камер точность GPS ниже, у камеры — максимальная. Пока на карту смотрят, фиксы идут каждую секунду."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kameralardan uzoqda GPS aniqligi pastroq, kamera yonida — maksimal. Xaritaga qarab turilganda nuqtalar har soniyada keladi."
-          }
-        }
-      }
-    },
     "Вернуть": {
       "localizations": {
         "ru": {
@@ -4860,22 +4844,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aniqni yoqish"
-          }
-        }
-      }
-    },
-    "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно, но вдали от камер точность снижается сама (Настройки → Батарея). Больше всего тратит экран: если смотреть на карту не нужно, погасите его — при доступе «Всегда» о камерах приложение предупредит голосом и с погашенным экраном.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно, но вдали от камер точность снижается сама (Настройки → Батарея). Больше всего тратит экран: если смотреть на карту не нужно, погасите его — при доступе «Всегда» о камерах приложение предупредит голосом и с погашенным экраном."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Safardan tashqari — deyarli hech narsa: ilova faqat kameralar yonida uygʻonadi. Safarda GPS doim ishlaydi, lekin kameralardan uzoqda aniqlik oʻzi pasayadi (Sozlamalar → Batareya). Eng koʻp ekran sarflaydi: xaritaga qarash shart boʻlmasa, uni oʻchiring — «Doim» ruxsati boʻlsa, ilova kameralar haqida oʻchgan ekranda ham ovoz bilan ogohlantiradi."
           }
         }
       }
@@ -9875,22 +9843,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mashina · %@"
-          }
-        }
-      }
-    },
-    "Машина покажет стрелку и расстояние на приборке или проекции, если умеет; ряд полос на экране CarPlay при этом не показывается.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Машина покажет стрелку и расстояние на приборке или проекции, если умеет; ряд полос на экране CarPlay при этом не показывается."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mashina qoʻllab-quvvatlasa, asboblar panelida yoki proyeksiyada yoʻnalish koʻrsatkichi va masofani koʻrsatadi; bunda CarPlay ekranida yoʻl qatorlari koʻrsatilmaydi."
           }
         }
       }
@@ -35635,22 +35587,6 @@
         }
       }
     },
-    "Наклон, серый асфальт, маршрут во всю полосу и сужение к нужному ряду у поворота — на телефоне и в машине. Выключите — наклон вернётся прежний.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Наклон, серый асфальт, маршрут во всю полосу и сужение к нужному ряду у поворота — на телефоне и в машине. Выключите — наклон вернётся прежний."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Qiyalik, kulrang asfalt, marshrut butun yoʻl boʻylab va burilishda kerakli qatorga torayadi — telefonda ham, mashinada ham. Oʻchirsangiz — avvalgi qiyalik qaytadi."
-          }
-        }
-      }
-    },
     "%@ — объехать?": {
       "localizations": {
         "ru": {
@@ -40003,6 +39939,102 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tezlikni oshirish haqida ovoz, dovonlardagi ob-havo, bildirishnomalar."
+          }
+        }
+      }
+    },
+    "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно, но вдали от камер точность снижается сама (Настройки → Для опытных). Больше всего тратит экран: если смотреть на карту не нужно, погасите его — при доступе «Всегда» о камерах приложение предупредит голосом и с погашенным экраном.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно, но вдали от камер точность снижается сама (Настройки → Для опытных). Больше всего тратит экран: если смотреть на карту не нужно, погасите его — при доступе «Всегда» о камерах приложение предупредит голосом и с погашенным экраном."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safardan tashqari — deyarli hech narsa: ilova faqat kameralar yonida uygʻonadi. Safarda GPS doim ishlaydi, lekin kameralardan uzoqda aniqlik oʻzi pasayadi (Sozlamalar → Tajribalilar uchun). Eng koʻp ekran sarflaydi: xaritaga qarash shart boʻlmasa, uni oʻchiring — «Doim» ruxsati boʻlsa, ilova kameralar haqida oʻchgan ekranda ham ovoz bilan ogohlantiradi."
+          }
+        }
+      }
+    },
+    "Для опытных": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для опытных"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tajribalilar uchun"
+          }
+        }
+      }
+    },
+    "Вдали от камер GPS бережёт батарею, у камеры работает в полную силу.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вдали от камер GPS бережёт батарею, у камеры работает в полную силу."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralardan uzoqda GPS batareyani tejaydi, kamera yonida toʻliq quvvatda ishlaydi."
+          }
+        }
+      }
+    },
+    "Наклонная карта в поездке и маршрут во всю полосу — на телефоне и в машине.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Наклонная карта в поездке и маршрут во всю полосу — на телефоне и в машине."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarda qiya xarita va butun qator kengligidagi marshrut — telefonda ham, mashinada ham."
+          }
+        }
+      }
+    },
+    "Стрелка поворота на приборной панели, если машина умеет. Ряд полос на экране CarPlay при этом скрыт.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Стрелка поворота на приборной панели, если машина умеет. Ряд полос на экране CarPlay при этом скрыт."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina qoʻllab-quvvatlasa, asboblar panelida burilish koʻrsatkichi koʻrinadi. Bunda CarPlay ekranida yoʻl qatorlari koʻrsatilmaydi."
+          }
+        }
+      }
+    },
+    "Точка каждую секунду — чтобы положить видео регистратора на карту.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Точка каждую секунду — чтобы положить видео регистратора на карту."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Har soniyada bitta nuqta — videoregistrator videosini xaritaga qoʻyish uchun."
           }
         }
       }

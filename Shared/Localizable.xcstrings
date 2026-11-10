@@ -32423,6 +32423,22 @@
         }
       }
     },
+    "%1$@. Затем %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@. Затем %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@. Keyin %2$@"
+          }
+        }
+      }
+    },
     "пост ДПС": {
       "comment": "Сводка листа «Перед дальней дорогой» (LongTripText.postsLabel): форма для 1, 21…; число стоит отдельно.",
       "localizations": {

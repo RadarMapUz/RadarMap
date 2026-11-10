@@ -396,6 +396,8 @@ final class RouteService {
     @ObservationIgnored private var announcedStage: [Int: Int] = [:]   // индекс шага → стадия (2 далеко, 1 близко, 0 сейчас)
     /// Шаги, ряд которых уже назван: совет звучит один раз на манёвр.
     @ObservationIgnored private var laneAdviceSaid: Set<Int> = []
+    /// Манёвры, к которым «затем» уже сказано (ManeuverThen).
+    @ObservationIgnored private var thenSaid: Set<Int> = []
     /// Полос на подъезде по индексу шага (LaneAdvice.approachLanes) и когда
     /// спрашивали сеть, не найдя дороги: тайлы могли ещё не приехать.
     @ObservationIgnored private var approachLanesByStep: [Int: Int] = [:]
@@ -1150,6 +1152,7 @@ final class RouteService {
         isOffRoute = false
         announcedStage = [:]
         laneAdviceSaid = []
+        thenSaid = []
         approachLanesByStep = [:]
         approachMissedAt = [:]
         segmentHint = 0
@@ -1345,16 +1348,23 @@ final class RouteService {
                                        alreadySaid: laneAdviceSaid.contains(index))
             ? advice : nil
         if said != nil { laneAdviceSaid.insert(index) }
+        // «Затем …» — один раз на манёвр (ManeuverThen). С хвостом фраза не
+        // из записанных отрывков — её говорит синтезатор.
+        let then = ManeuverThen.voiced(stage: next, alreadySaid: thenSaid.contains(index), cameraHolds: cameraHolds)
+            ? ManeuverThen.following(index, in: variant.steps) : nil
+        if then != nil { thenSaid.insert(index) }
         // Улика для разбора поездки: какая ступень, где и с рядом ли (фраза
         // целиком не пишется — в ней улица).
         Log.route.notice("манёвр голосом: ступень \(next, privacy: .public), \(Int(distance), privacy: .public) м, \(Int(speedKmh), privacy: .public) км/ч, ряд \(said?.logName ?? "-", privacy: .public), камера держит \(cameraHolds, privacy: .public)")
         if next == 0 {
-            onManeuver?(step.text, step.voiceEvent(meters: nil))
+            onManeuver?(then.map { ManeuverThen.spoken(step.text, then: $0) } ?? step.text,
+                        then == nil ? step.voiceEvent(meters: nil) : nil)
         } else {
             let meters = Self.spokenMeters(distance, far: next == 2)
-            onManeuver?(Self.withAdvice(String(format: String(localized: "Через %lld метров — %@"),
-                                               meters, step.text), said),
-                        step.voiceEvent(meters: meters, advice: said))
+            let phrase = Self.withAdvice(String(format: String(localized: "Через %lld метров — %@"),
+                                                meters, step.text), said)
+            onManeuver?(then.map { ManeuverThen.spoken(phrase, then: $0) } ?? phrase,
+                        then == nil ? step.voiceEvent(meters: meters, advice: said) : nil)
         }
         // Считаем манёвр один раз — при первом объявлении. Хранимые ступени
         // это 0…2, поэтому «было 3» означает «до сих пор не объявляли».

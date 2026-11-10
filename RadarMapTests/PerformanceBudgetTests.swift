@@ -879,6 +879,7 @@ final class PerformanceBudgetTests: XCTestCase {
                        "olmazor 12", "qoyli", "nov", "z", "улица ", "zzzzzz", "a b c d",
                        "ka 1", "ko 1", "Чи 1", "yu 1", "ta 1", "K.G‘", "chorsu 2"]
         var worst: Duration = .zero
+        var worstQuery = ""
         var found = 0
         for query in queries {
             // Лучший из трёх: бюджет — про цену запроса, а не про занятость мака.
@@ -889,10 +890,10 @@ final class PerformanceBudgetTests: XCTestCase {
                 best = min(best, clock.now - start)
                 found += answer.addresses.count + answer.venues.count
             }
-            worst = max(worst, best)
+            if best > worst { worst = best; worstQuery = query }
         }
         XCTAssertGreaterThan(found, 0)
-        XCTAssertLessThan(worst, .milliseconds(30), "запрос поиска дорожает: худший \(worst)")
+        XCTAssertLessThan(worst, .milliseconds(30), "запрос поиска дорожает: худший \(worst) на «\(worstQuery)»")
         XCTAssertLessThan(build, .seconds(3), "сборка индекса поиска дорожает: \(build)")
     }
     /// Лента «Вождения 3D» (LanePath, 43): участок 1,5 км по городской

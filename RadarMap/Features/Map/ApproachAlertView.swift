@@ -76,6 +76,9 @@ struct ApproachAlertView: View {
     let relativeBearing: Double?
     let alertRadius: Double
     var layout: Layout = .fullScreen
+    /// Пример из онбординга и настроек (`AlertSample`): без «без звука» и
+    /// «Радар!», лимит и скорость свои, любое касание закрывает.
+    var isSample = false
     /// Верхняя кромка нижней карточки в пунктах окна (nil — карточки нет):
     /// карта поднимает «я» и камеру над ней (MapFrameState).
     var onCardEdge: (CGFloat?) -> Void = { _ in }
@@ -91,7 +94,7 @@ struct ApproachAlertView: View {
     private var proximity: Double {
         max(0, min(1, 1 - distance / max(alertRadius, 1)))
     }
-    private var isOverspeeding: Bool { env.speedLimits.isOverspeeding }
+    private var isOverspeeding: Bool { isSample ? false : env.speedLimits.isOverspeeding }
 
     var body: some View {
         switch layout {
@@ -203,6 +206,7 @@ struct ApproachAlertView: View {
             .ignoresSafeArea()
 
             VStack(spacing: 0) {
+                if isSample { sampleBadge }
                 header
                     .padding(.top, 12)
                 Spacer(minLength: 12)
@@ -222,20 +226,25 @@ struct ApproachAlertView: View {
 
             VStack(spacing: 10) {
                 Spacer()
-                HStack(spacing: 12) {
-                    muteButton
-                    ReportButton(source: .phoneAlert)
+                if isSample {
+                    sampleFooter
+                } else {
+                    HStack(spacing: 12) {
+                        muteButton
+                        ReportButton(source: .phoneAlert)
+                    }
+                    .padding(.horizontal, 24)
+                    hideButton
+                        .padding(.bottom, 4)
                 }
-                .padding(.horizontal, 24)
-                hideButton
-                    .padding(.bottom, 4)
             }
         }
         .environment(\.colorScheme, .dark)
         // Касание мимо кнопок не уходит в карту под экраном и ничего не
-        // скрывает: скрыть — только кнопкой (см. шапку файла).
+        // скрывает: скрыть — только кнопкой (см. шапку файла). Пример
+        // закрывается любым касанием.
         .contentShape(Rectangle())
-        .onTapGesture {}
+        .onTapGesture { if isSample { onDismiss() } }
         .onAppear { pulse = true }
         .transition(.opacity.combined(with: .scale(scale: 1.03)))
     }
@@ -333,6 +342,41 @@ struct ApproachAlertView: View {
         .accessibilityHint(Text("До следующей камеры"))
     }
 
+    // MARK: - Пример
+
+    private var sampleBadge: some View {
+        Text("Пример")
+            .font(.dense(15, .bold))
+            .foregroundStyle(Theme.textPrimary)
+            .padding(.horizontal, 16).padding(.vertical, 8)
+            .background(Color.white.opacity(0.14), in: Capsule())
+            .accessibilityHidden(true)
+    }
+
+    private var sampleFooter: some View {
+        VStack(spacing: 10) {
+            Text("Так выглядит предупреждение у камеры. Коснитесь, чтобы закрыть.")
+                .font(.dense(15))
+                .foregroundStyle(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 24)
+                .accessibilityHidden(true)
+            Button(action: onDismiss) {
+                Text("Закрыть")
+                    .font(.dense(17, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .background(Color.white.opacity(0.10),
+                                in: RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
+            }
+            .buttonStyle(PressableStyle(.ownFeedback))
+            .padding(.horizontal, 24)
+            .padding(.bottom, 4)
+        }
+    }
+
     // MARK: - Блоки
 
     /// Тип камеры — значком и словом, под ним адрес.
@@ -391,7 +435,9 @@ struct ApproachAlertView: View {
                 }
             }
             chip {
-                if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
+                if isSample {
+                    SpeedLimitSign(limit: AlertSample.limitKmh, diameter: 30, isAssumed: false)
+                } else if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
                     SpeedLimitSign(limit: limit, diameter: 30, isAssumed: env.speedLimits.isCurrentLimitAssumed)
                 }
                 HStack(alignment: .lastTextBaseline, spacing: 3) {
@@ -442,6 +488,7 @@ struct ApproachAlertView: View {
     /// «Радар через 220 метров, прямо. Скорость 47 км/ч» — для VoiceOver.
     private var accessibilitySummary: String {
         var text = "\(camera.kind.displayName) — \(Formatting.distance(distance))"
+        if isSample { text = String(localized: "Пример") + ". " + text }
         if let rel = relativeBearing { text += ", \(directionText(rel))" }
         text += ". " + String(format: String(localized: "Скорость %lld км/ч"), Int(speedKmh))
         return text

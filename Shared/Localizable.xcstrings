@@ -14205,6 +14205,38 @@
         }
       }
     },
+    "Показать, как выглядит оповещение": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать, как выглядит оповещение"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogohlantirish qanday koʻrinishini koʻrsatish"
+          }
+        }
+      }
+    },
+    "Так выглядит предупреждение у камеры. Коснитесь, чтобы закрыть.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Так выглядит предупреждение у камеры. Коснитесь, чтобы закрыть."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera oldidagi ogohlantirish shunday koʻrinadi. Yopish uchun bosing."
+          }
+        }
+      }
+    },
     "Пост ДПС": {
       "localizations": {
         "ru": {

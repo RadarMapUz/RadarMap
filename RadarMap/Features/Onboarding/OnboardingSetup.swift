@@ -69,6 +69,7 @@ struct OnboardingSetupPage: View {
     /// Экран виден: волна голоса не считает кадры за кадром, блоки входят по очереди.
     var playing = true
     @Environment(AppEnvironment.self) private var env
+    @State private var showsSample = false
 
     private enum TripStart: Hashable { case itself, button }
 
@@ -91,6 +92,11 @@ struct OnboardingSetupPage: View {
                 OnboardingSegment(options: [VoiceMode.smart, .always, .off], selected: settings.voiceMode,
                                   title: Self.title) { settings.voiceMode = $0 }
                 OnboardingVoicePreview(mode: settings.voiceMode, playing: playing)
+                SecondaryButton(title: "Показать, как выглядит оповещение", systemImage: "play.rectangle.fill") {
+                    showsSample = true
+                }
+                .disabled(!AlertSample.canShow(isTripActive: env.location.isTripActive,
+                                               isApproachingCamera: env.location.isApproachingCamera))
                 note(Self.note(settings.voiceMode)).id(settings.voiceMode)
                     .transition(.opacity)
             }
@@ -121,6 +127,7 @@ struct OnboardingSetupPage: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 20)
+        .alertSample(isPresented: $showsSample)
     }
 
     private func note(_ text: LocalizedStringKey) -> some View {

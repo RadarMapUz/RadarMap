@@ -2,8 +2,9 @@
 //  WidgetPalette.swift
 //  RadarMap
 //
-//  Цвета виджетов — числами, без SwiftUI: файл общий и для часов, а
-//  проверяет их тест приложения (WidgetPaletteTests) против Theme.
+//  Общая палитра числами — источник Theme (приложение), виджетов и часов:
+//  токены состояний, текста и подложек живут здесь один раз, а проверяет их
+//  тест приложения (WidgetPaletteTests, PaletteTests).
 //
 //  До 19.10 у виджета была своя неоновая палитра «радар-детектора» — циан
 //  и малиновый, от которых само приложение отказалось 7 октября. Виджет на
@@ -13,7 +14,7 @@
 //  ровная подложка без градиента.
 //
 
-import Foundation
+import SwiftUI
 
 nonisolated enum WidgetPalette {
     /// Пара «день / ночь» в 0xRRGGBB.
@@ -41,6 +42,9 @@ nonisolated enum WidgetPalette {
     /// Подложка плашки поездки — графит экрана тревоги (Theme.alertSurface):
     /// Live Activity и Dynamic Island всегда тёмные.
     static let alertSurface: UInt32 = 0x14181D
+    /// Подложка календаря колец «Итогов» — та же всегда тёмная подложка: до
+    /// 10.11 там был свой почти такой же графит #0E1014 (ΔE 3,8).
+    static let ringGround: UInt32 = alertSurface
 
     /// Подложка виджета — Theme.surface, ровная: градиент «свет сверху»
     /// ушёл из приложения вместе с остальными (31D).
@@ -57,8 +61,10 @@ nonisolated enum WidgetPalette {
 
     static let ringCalm = Gradient(light: [0x0B9F78, 0x0A8AA8], dark: [0x2BF0B5, 0x19C8E8])
     static let ringWatch = Gradient(light: [0xC77E00, 0xB85C00], dark: [0xFFD15C, 0xFF9A2E])
-    static let ringRisk = Gradient(light: [0xE0325A, 0xC2187A], dark: [0xFF5C7A, 0xE0218A])
-    static let ringRoad = Gradient(light: [0x7A5CF0, 0x5B3DF5], dark: [0xB49CFF, 0x6C4DFF])
+    /// Ночные концы «риска» и «пробега» до 10.11 были неоном (OKLCH C 0,20–0,25
+    /// против ≤ 0,165 у состояний) — насыщенность снижена при той же светлоте и тоне.
+    static let ringRisk = Gradient(light: [0xE0325A, 0xC2187A], dark: [0xF16B80, 0xC94F88])
+    static let ringRoad = Gradient(light: [0x7A5CF0, 0x5B3DF5], dark: [0xB49CFF, 0x6B63D2])
     /// Theme.Stats.commute / other — деление недели.
     static let statsCommute = Pair(light: 0x5B3DF5, dark: 0x9A85FF)
     static let statsOther = Pair(light: 0x0B9F78, dark: 0x3BE3B0)
@@ -90,5 +96,12 @@ nonisolated enum WidgetPalette {
     /// Значок на заливке типа: на светлом янтаре радара и треноги — тёмный.
     static func cameraGlyph(symbol: String?) -> UInt32 {
         (CameraGlyph(symbol: symbol) ?? .other).inkRGB
+    }
+
+    /// Цвет из числа — для виджетов и часов, где нет Theme.
+    static func color(_ hex: UInt32) -> Color {
+        Color(red: Double((hex >> 16) & 0xFF) / 255,
+              green: Double((hex >> 8) & 0xFF) / 255,
+              blue: Double(hex & 0xFF) / 255)
     }
 }

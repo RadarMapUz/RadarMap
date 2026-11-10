@@ -3103,6 +3103,10 @@ nonisolated enum AppConfig {
     static let trafficBatchPieces = 12
     /// Аудиосессия отпускается через столько после фразы — музыка возвращается.
     static let audioReleaseDelaySeconds: TimeInterval = 0.4
+    /// Пример оповещения (онбординг, настройки) закрывается сам через столько.
+    static let alertSampleSeconds: TimeInterval = 6
+    /// Второе нажатие «пример» в этот зазор молчит: сессия ещё активируется.
+    static let alertSampleRepeatGuardSeconds: TimeInterval = 1.5
     /// Шаг дистанции на часах вдали от камеры и вблизи (зона — как у Live Activity).
     static let watchDistanceStepFar = 100.0
     static let watchDistanceStepNear = 25.0

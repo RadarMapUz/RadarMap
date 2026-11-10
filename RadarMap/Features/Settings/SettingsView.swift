@@ -20,7 +20,7 @@ struct SettingsView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     @State private var showFeedback = false
-    /// DEBUG `-settingsPage <alerts|speed|trip|history|route|map|places|learning|battery|privacy|database|backup|language|energy|maintenance|help>`:
+    /// DEBUG `-settingsPage <alerts|alerts-more|speed|trip|history|route|map|places|learning|advanced|privacy|database|backup|language|energy|maintenance|help>`:
     /// открыть страницу раздела сразу — на снимок без касаний.
     @State private var path = NavigationPath()
 
@@ -59,8 +59,6 @@ struct SettingsView: View {
 
                 Section {
                     link(.learning) { LearningSettingsPage() }
-                    link(.battery, value: settings.adaptiveGPS
-                         ? String(localized: "Адаптивный GPS") : nil) { BatterySettingsPage() }
                 }
 
                 Section {
@@ -71,6 +69,7 @@ struct SettingsView: View {
                         SettingsRow(.feedback)
                     }
                     .tint(Theme.textPrimary)
+                    link(.advanced) { AdvancedSettingsPage() }
                     // Второй этаж (7.4): то, что меняют раз в год или не
                     // меняют никогда, — база, данные, язык, приватность,
                     // источники и версия. В корне было 19 строк, и нужная
@@ -154,6 +153,7 @@ struct SettingsView: View {
         switch name {
         case "permissions": PermissionsSettingsPage()
         case "alerts": AlertSettingsPage()
+        case "alerts-more": AlertExtrasPage()
         case "speed": SpeedSettingsPage()
         case "trip": TripSettingsPage()
         case "history": TripHistorySettingsPage()
@@ -161,7 +161,7 @@ struct SettingsView: View {
         case "map": MapSettingsPage()
         case "places": PlacesSettingsPage()
         case "learning": LearningSettingsPage()
-        case "battery": BatterySettingsPage()
+        case "advanced", "battery": AdvancedSettingsPage()
         case "privacy": PrivacySettingsPage()
         case "database": DatabaseSettingsPage()
         case "backup": BackupSettingsPage()
@@ -209,7 +209,7 @@ struct SettingsView: View {
 enum SettingsItem {
     case permissions, alerts, speed, trip, vehicle, route
     case map, offline, places
-    case learning, battery, privacy
+    case learning, advanced, privacy
     case database, backup, language
     case help, feedback, project, version, openData, licenses, about
 
@@ -225,7 +225,7 @@ enum SettingsItem {
         case .offline:  return "Офлайн-карты"
         case .places:   return "Мои места"
         case .learning: return "Приложение учится"
-        case .battery:  return "Батарея"
+        case .advanced: return "Для опытных"
         case .privacy:  return "Конфиденциальность"
         case .database: return "База камер"
         case .backup:   return "Мои данные"
@@ -252,7 +252,7 @@ enum SettingsItem {
         case .offline:  return "arrow.down.circle.fill"
         case .places:   return Icon.myPlaces
         case .learning: return "sparkles"
-        case .battery:  return "battery.75percent"
+        case .advanced: return "wrench.and.screwdriver.fill"
         case .privacy:  return "hand.raised.fill"
         case .database: return "camera.fill"
         case .backup:   return "externaldrive.fill"

@@ -35,6 +35,11 @@ final class EnergyJournalStore {
     /// «Удалить всю историю» до чтения файла: прочитанное — выбросить.
     @ObservationIgnored private var erasedBeforeLoad = false
     @ObservationIgnored private var loading = false
+    /// Файл прочитан — вешает AppEnvironment (перенос «Машины и расходов»).
+    @ObservationIgnored var onLoaded: (() -> Void)? {
+        didSet { Wiring.assertSingleAssignment(previous: oldValue, current: onLoaded,
+                                               "EnergyJournalStore.onLoaded") }
+    }
     #if DEBUG
     /// Демо для снимков экрана: в память, не на диск.
     @ObservationIgnored private(set) var isDemo = false
@@ -129,6 +134,7 @@ final class EnergyJournalStore {
         merged.append(contentsOf: local)
         entries = merged
         isLoaded = true
+        defer { onLoaded?() }
         let hadLocal = erasedBeforeLoad || !editedBeforeLoad.isEmpty || !removedBeforeLoad.isEmpty
         editedBeforeLoad = []
         removedBeforeLoad = []

@@ -38,11 +38,11 @@ struct RouteBuildCard: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
                 Text(verbatim: stage.title)
-                    .font(.rounded(15, .semibold))
+                    .font(.dense(15, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.opacity)
                 Text(verbatim: slow ? String(localized: "Сеть медленная, ещё немного…") : target.name)
-                    .font(.rounded(12, .medium))
+                    .font(.dense(12, .medium))
                     .foregroundStyle(slow ? Theme.warning : Theme.textSecondary)
                     .lineLimit(1)
                     .contentTransition(.opacity)
@@ -51,7 +51,7 @@ struct RouteBuildCard: View {
             Spacer(minLength: 0)
             Button { env.route.cancelBuild() } label: {
                 Text("Отмена")
-                    .font(.rounded(15, .semibold))
+                    .font(.dense(15, .semibold))
                     .foregroundStyle(Theme.accent)
                     .padding(.horizontal, 8)
                     .frame(minHeight: Theme.controlSize)
@@ -82,18 +82,18 @@ struct RouteBuildCard: View {
     private func failed(_ target: RouteBuildFlow.Target, failure: RouteBuildFlow.Failure) -> some View {
         HStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.rounded(18, .semibold))
+                .font(.dense(18, .semibold))
                 .foregroundStyle(Theme.warning)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: failure.title ?? env.route.errorMessage ?? String(localized: "Маршрут не построен"))
-                    .font(.rounded(15, .semibold))
+                    .font(.dense(15, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(2)
                     .minimumScaleFactor(0.85)
                 if let hint = failure.hint {
                     Text(verbatim: hint)
-                        .font(.rounded(12, .medium))
+                        .font(.dense(12, .medium))
                         .foregroundStyle(Theme.textSecondary)
                         .lineLimit(2)
                 }
@@ -102,7 +102,7 @@ struct RouteBuildCard: View {
             if RouteBuildFlow.canRetry(target, failure) {
                 Button { onRetry(target) } label: {
                     Text("Повторить")
-                        .font(.rounded(15, .semibold))
+                        .font(.dense(15, .semibold))
                         .foregroundStyle(Theme.accent)
                         .padding(.horizontal, 8)
                         .frame(minHeight: Theme.controlSize)
@@ -112,7 +112,7 @@ struct RouteBuildCard: View {
             }
             Button { env.route.dismissBuildFailure() } label: {
                 Image(systemName: "xmark")
-                    .font(.rounded(12, .bold))
+                    .font(.dense(12, .bold))
                     .foregroundStyle(Theme.textSecondary)
                     .frame(width: 30, height: 30)
                     .background(Theme.background, in: Circle())

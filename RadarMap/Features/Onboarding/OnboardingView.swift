@@ -229,7 +229,7 @@ struct OnboardingView: View {
             withMotion(Motion.standard) { env.settings.appLanguage = language }
         } label: {
             Text(verbatim: title)
-                .font(.rounded(13, .bold))
+                .font(.dense(13, .bold))
                 .foregroundStyle(isOn ? Theme.textPrimary : Theme.textSecondary)
                 .frame(width: 44, height: 36)
                 .background {

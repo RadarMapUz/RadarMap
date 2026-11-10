@@ -2,9 +2,11 @@
 //  TripStatsSheet+Blocks.swift
 //  RadarMap
 //
-//  Главный лист «Итогов» — вариант A аудита 05.11 «Неделя одним взглядом»:
-//  карточка-ответ, «Что сделать», поездки окна, «Ещё за неделю» (числа того
-//  же окна) и «Не только эта неделя» (у каждой строки своё окно). Правила:
+//  Главный лист «Итогов» — вариант A аудита 05.11 «Неделя одним взглядом»,
+//  порядок плана 78: карточка-ответ, «Что сделать», дорога на работу,
+//  поездки окна, «Где теряете баллы», цель недели, «Ещё за неделю» (числа
+//  того же окна) и «Не только эта неделя» (у каждой строки своё окно).
+//  Блок с выключенным своим переключателем не показывается. Правила:
 //    * одно число — одно место: сумма штрафов периода — только в строке денег
 //      карточки-ответа, камера-лидер — только в «Сделать», обслуживание —
 //      только строкой «Машина»;
@@ -157,6 +159,34 @@ extension TripStatsSheet {
         return String(format: String(localized: "Не оплачено: %lld"), dues.unpaid)
     }
 
+    // MARK: - Дорога на работу
+
+    /// Дорога на работу и домой — окно «последняя поездка», на первом экране
+    /// (план 78). Опоздание — не красным: красный здесь — штраф и камера.
+    /// Выключено «Время дороги на работу» — блока нет.
+    @ViewBuilder
+    func commuteSection() -> some View {
+        let items = commuteItems()
+        if !items.isEmpty {
+            ItogiRowGroup(items: items)
+        }
+    }
+
+    func commuteItems() -> [ItogiRowItem] {
+        guard env.settings.commuteLearning else { return [] }
+        return env.commute.map { commute in
+            // Та же фраза, что в шапке листа: разброс, показанные минуты.
+            let delay = commute.usual != nil ? CommuteCard.verdictPhrase(commute) : nil
+            return ItogiRowItem(
+                id: "commute-\(commute.direction.rawValue)", symbol: commute.direction.symbol,
+                title: commute.direction.title,
+                caption: [String(localized: "последняя поездка"), delay ?? CommuteCard.dayLine(commute.last.departure)]
+                    .joined(separator: " · "),
+                value: Formatting.duration(commute.last.duration),
+                action: { commuteDetail = commute })
+        }
+    }
+
     // MARK: - 3. Поездки окна
 
     /// Три последние поездки окна строками и вход на страницу «Поездки»: до
@@ -253,7 +283,7 @@ extension TripStatsSheet {
                 value: Formatting.duration(jam),
                 action: { roadHabit = payload(.jams, itogi) }))
         }
-        if let share = summary.overLimitShare {
+        if let share = summary.overLimitShare, env.settings.speedLimitsEnabled {
             items.append(ItogiRowItem(
                 id: "overLimit", symbol: Icon.overLimit,
                 title: String(localized: "Скорость вне камер"),
@@ -263,7 +293,7 @@ extension TripStatsSheet {
                 value: Self.percentText(share),
                 action: { roadHabit = payload(.overLimit, itogi) }))
         }
-        if let expenses = expensesRow(summary) {
+        if env.showsCarLog(.expenses), let expenses = expensesRow(summary) {
             items.append(expenses)
         }
         return items
@@ -306,22 +336,8 @@ extension TripStatsSheet {
                 action: { path.append(.cameraNews) }))
         }
 
-        // Дорога на работу и домой — окно «последняя поездка». Опоздание —
-        // не красным: красный здесь — штраф и камера, а не пробка.
-        for commute in env.commute {
-            // Та же фраза, что в шапке листа: разброс, показанные минуты.
-            let delay = commute.usual != nil ? CommuteCard.verdictPhrase(commute) : nil
-            items.append(ItogiRowItem(
-                id: "commute-\(commute.direction.rawValue)", symbol: commute.direction.symbol,
-                title: commute.direction.title,
-                caption: [String(localized: "последняя поездка"), delay ?? CommuteCard.dayLine(commute.last.departure)]
-                    .joined(separator: " · "),
-                value: Formatting.duration(commute.last.duration),
-                action: { commuteDetail = commute }))
-        }
-
         // Обслуживание — только когда что-то скоро или пора (18.2).
-        let maintenance = env.maintenance.attention()
+        let maintenance = env.showsCarLog(.maintenance) ? env.maintenance.attention() : []
         if !maintenance.isEmpty {
             items.append(ItogiRowItem(
                 id: "car", symbol: Icon.maintenance,
@@ -333,7 +349,7 @@ extension TripStatsSheet {
         }
 
         // Смены таксиста (12б.9) — из рабочих рейсов.
-        let shifts = WorkShiftsCard.shown(env.workShifts)
+        let shifts = env.showsCarLog(.shifts) ? WorkShiftsCard.shown(env.workShifts) : []
         if !shifts.isEmpty {
             items.append(ItogiRowItem(
                 id: "shifts", symbol: Icon.shifts,

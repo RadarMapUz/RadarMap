@@ -35,39 +35,48 @@ struct TripHistorySettingsPage: View {
         let ready = trip.isLoaded && trip.isLifetimeTrusted
         let journal = env.energyJournal.entries.count
         let canExport = ready && !exporting && (trip.storedTripCount > 0 || journal > 0)
+        let exports = env.showsCarLog(.export)
         Form {
             // Где хранить (27.F) — первым: это решение о тех же данных, что
             // экспорт и удаление ниже.
-            CloudSyncSection()
+            // У сборки нет прав на iCloud — выбора нет; включённое раньше можно выключить.
+            if env.cloud.buildSupportsCloud || env.cloud.isEnabled {
+                CloudSyncSection()
+            }
 
             Section {
                 LabeledContent("Поездок на телефоне") {
                     Text(Formatting.decimal(Double(trip.storedTripCount), digits: 0))
                 }
-                Button {
-                    export()
-                } label: {
-                    HStack {
-                        // Цвет задан явно — значит, и «недоступно» тоже явно.
-                        Label("Экспорт всех поездок", systemImage: "square.and.arrow.up")
-                            .foregroundStyle(canExport ? Theme.textPrimary : Theme.textTertiary)
-                        Spacer()
-                        if exporting { ProgressView() }
+                // Выгрузка — часть автодневника (CarLog).
+                if exports {
+                    Button {
+                        export()
+                    } label: {
+                        HStack {
+                            // Цвет задан явно — значит, и «недоступно» тоже явно.
+                            Label("Экспорт всех поездок", systemImage: "square.and.arrow.up")
+                                .foregroundStyle(canExport ? Theme.textPrimary : Theme.textTertiary)
+                            Spacer()
+                            if exporting { ProgressView() }
+                        }
                     }
+                    .disabled(!canExport)
                 }
-                .disabled(!canExport)
             } footer: {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Архив ZIP: таблица trips.csv — строка на поездку — и треки GPX тех поездок, у которых трек ещё хранится. Дом и работа в них не подписаны. Отдельно — commute_forecast.csv, точность прогноза дороги на работу: по нему поездки дом↔работа узнаются.")
-                    if journal > 0 {
-                        Text("Журнал заправок и зарядок — таблица energy_journal.csv.")
+                if exports {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Архив ZIP: таблица trips.csv — строка на поездку — и треки GPX тех поездок, у которых трек ещё хранится. Дом и работа в них не подписаны. Отдельно — commute_forecast.csv, точность прогноза дороги на работу: по нему поездки дом↔работа узнаются.")
+                        if journal > 0 {
+                            Text("Журнал заправок и зарядок — таблица energy_journal.csv.")
+                        }
+                        if exportFailed {
+                            Label("Архив не собрался — попробуйте ещё раз", systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(Theme.warning)
+                        }
                     }
-                    if exportFailed {
-                        Label("Архив не собрался — попробуйте ещё раз", systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(Theme.warning)
-                    }
+                    .fixedSize(horizontal: false, vertical: true)
                 }
-                .fixedSize(horizontal: false, vertical: true)
             }
 
             Section {

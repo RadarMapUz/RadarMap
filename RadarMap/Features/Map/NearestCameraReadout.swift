@@ -71,14 +71,14 @@ struct NearestCameraReadout: View {
             }
             VStack(alignment: .leading, spacing: compact ? 0 : 2) {
                 Text(Formatting.distance(distance))
-                    .font(.numeral(compact ? 17 : 23, .bold))
+                    .font(.denseNumeral(compact ? 17 : 23, .bold))
                     .monospacedDigit()
                     .lineLimit(1)
                     .fixedSize()
                     .foregroundStyle(alerting ? Theme.danger : Theme.textPrimary)
                     .liveNumber()
                 SpeedHUDView.caption(for: camera, location: location)
-                    .font(.rounded(11, .medium))
+                    .font(.dense(11, .medium))
                     .lineLimit(1)
                     .truncationMode(.tail)
                 // Полоса близости — только в оповещении: заполняется к камере
@@ -118,7 +118,7 @@ struct NearestCameraReadout: View {
         // статуса в CarPlay; без ДОСТУПА к геопозиции — свой значок.
         HStack(spacing: compact ? 8 : 12) {
             Image(systemName: location.isAuthorized ? Icon.noGPSSignal : Icon.noLocationAccess)
-                .font(.rounded(compact ? 13 : 16, .semibold))
+                .font(.dense(compact ? 13 : 16, .semibold))
                 .foregroundStyle(Theme.warning)
                 .symbolEffect(.pulse, options: .repeating, isActive: !compact)
                 .frame(width: compact ? 30 : 38, height: compact ? 30 : 38)
@@ -127,13 +127,13 @@ struct NearestCameraReadout: View {
                 // Причину и кнопку уже показывает баннер над картой — здесь
                 // то, что работает и без позиции (12в A10).
                 (location.isAuthorized ? Text("Нет сигнала GPS") : Text("Оповещений нет"))
-                    .font(.rounded(compact ? 15 : 14, .semibold))
+                    .font(.dense(compact ? 15 : 14, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
                 if !compact {
                     (location.isAuthorized ? Text("Оповещения ждут спутники")
                                            : Text("Камеры на карте видны и без позиции"))
-                        .font(.rounded(11))
+                        .font(.dense(11))
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
@@ -148,10 +148,10 @@ struct NearestCameraReadout: View {
     private var clear: some View {
         HStack(spacing: compact ? 6 : 10) {
             Image(systemName: "checkmark.shield.fill")
-                .font(.rounded(compact ? 13 : 16, .semibold))
+                .font(.dense(compact ? 13 : 16, .semibold))
                 .foregroundStyle(Theme.success)
             Text("Камер рядом нет")
-                .font(.rounded(compact ? 13 : 15, .medium))
+                .font(.dense(compact ? 13 : 15, .medium))
                 .foregroundStyle(Theme.textSecondary)
             if !compact { Spacer(minLength: 0) }
         }

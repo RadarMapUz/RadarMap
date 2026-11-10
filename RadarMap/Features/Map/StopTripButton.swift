@@ -66,7 +66,7 @@ struct StopTripButton: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .font(.rounded(16, .bold))
+            .font(.dense(16, .bold))
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
             .frame(minHeight: 52)
@@ -85,12 +85,12 @@ struct StopTripButton: View {
         Button(action: tap) {
             HStack(spacing: 6) {
                 Image(systemName: isArmed ? "questionmark" : "stop.fill")
-                    .font(.rounded(16, .bold))
+                    .font(.dense(16, .bold))
                     .foregroundStyle(Theme.danger)
                     .contentTransition(.symbolEffect(.replace))
                 if isArmed {
                     Text("Точно?")
-                        .font(.rounded(15, .heavy))
+                        .font(.dense(15, .heavy))
                         .foregroundStyle(Theme.textPrimary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)

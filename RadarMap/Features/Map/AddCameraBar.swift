@@ -30,7 +30,7 @@ struct AddCameraBar: View {
                 HStack {
                     Image(systemName: "scope").foregroundStyle(Theme.accent)
                     Text("Наведите центр на камеру")
-                        .font(.rounded(15, .semibold))
+                        .font(.dense(15, .semibold))
                         .foregroundStyle(Theme.textPrimary)
                     Spacer()
                 }
@@ -62,6 +62,7 @@ struct AddCameraBar: View {
                 }
             }
             .padding(16)
+            .typeDensity(.dense)
         }
     }
 }

@@ -79,11 +79,11 @@ struct TripMenuPanel: View {
         return Button { pick(tile.action) } label: {
             VStack(spacing: 6) {
                 Image(systemName: face.symbol)
-                    .font(.rounded(21, .semibold))
+                    .font(.dense(21, .semibold))
                     .foregroundStyle(Theme.accent)
                     .frame(height: 26)
                 face.title
-                    .font(.rounded(12, .semibold))
+                    .font(.dense(12, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
@@ -141,6 +141,8 @@ struct TripMenuPanel: View {
 /// скорость, которая пишется каждым фиксом (ARCHITECTURE.md, правило 13).
 struct TripMenuHost: View {
     @Environment(AppEnvironment.self) private var env
+    /// Док с полем поиска сейчас на экране (простой без маршрута).
+    var searchOnScreen = false
     let onPick: (TripMenuSlots.Action) -> Void
     let onClose: () -> Void
 
@@ -172,7 +174,8 @@ struct TripMenuHost: View {
                                                          isPassenger: location.isPassengerSession,
                                                          pausedThisTrip: env.family.pausedThisTrip,
                                                          headingHome: env.family.isHeadingHome, now: Date()),
-            parked: parked ?? TripScreenLayout.tripMenuShowsParkedItems(speedKmh: location.speedKmh)))
+            parked: parked ?? TripScreenLayout.tripMenuShowsParkedItems(speedKmh: location.speedKmh),
+            searchOnScreen: searchOnScreen))
     }
 }
 

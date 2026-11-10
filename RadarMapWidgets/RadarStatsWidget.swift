@@ -25,7 +25,7 @@ import UIKit
 /// Theme.Stats, днём те же оттенки потемнее (на белом ночные не читаются).
 enum SW {
     /// Один цвет без темы — для всегда тёмных Live Activity и Dynamic Island.
-    static func fixed(_ hex: UInt32) -> Color { Color(uiColor: rgb(hex)) }
+    static func fixed(_ hex: UInt32) -> Color { WidgetPalette.color(hex) }
 
     private static func color(_ pair: WidgetPalette.Pair) -> Color {
         Color(uiColor: UIColor { traits in
@@ -33,11 +33,7 @@ enum SW {
         })
     }
 
-    private static func rgb(_ hex: UInt32) -> UIColor {
-        UIColor(red: CGFloat((hex >> 16) & 0xFF) / 255,
-                green: CGFloat((hex >> 8) & 0xFF) / 255,
-                blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
-    }
+    private static func rgb(_ hex: UInt32) -> UIColor { UIColor(WidgetPalette.color(hex)) }
 
     static let accent = color(WidgetPalette.accent)
     /// Заливки под белым значком: текстовые accent/danger ночью светлые.

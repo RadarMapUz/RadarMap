@@ -24,8 +24,8 @@ enum EnginePlaceIcons {
     static let side: CGFloat = 22
 
     static var all: [(name: String, image: UIImage)] {
-        [(fuel, icon(symbol: Venue.Kind.fuel.symbol, fill: Theme.rgb(0x3B4047))),
-         (parking, icon(symbol: Venue.Kind.parking.symbol, fill: Theme.rgb(0x2563D9)))]
+        [(fuel, icon(symbol: Venue.Kind.fuel.symbol, fill: Theme.rgb(MapIconColors.graphite))),
+         (parking, icon(symbol: Venue.Kind.parking.symbol, fill: Theme.rgb(MapIconColors.accentFill)))]
     }
 
     /// Скруглённый квадрат цвета места с белой кромкой и белым символом: та

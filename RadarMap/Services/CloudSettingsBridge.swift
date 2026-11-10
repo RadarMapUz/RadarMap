@@ -66,7 +66,7 @@ final class CloudSettingsBridge {
 
     /// «Удалить копию из iCloud»: свои ключи из хранилища — прочь.
     func removeCloudCopy() {
-        for key in AppSettings.cloudSettingKinds.keys {
+        for key in Array(AppSettings.cloudSettingKinds.keys) + AppSettings.retiredCloudSettingKeys {
             store.removeObject(forKey: CloudSettingsSync.prefix + key)
         }
         Storage.remove(.cloudSettingsPushed)

@@ -28,8 +28,9 @@ extension MapScreen {
             }
             if map.isAddingCamera {
                 AddCameraBar(
+                    tripod: { tripodAvailability },
                     onCancel: { map.isAddingCamera = false },
-                    onAdd: { kind, name in addCamera(kind: kind, name: name) }
+                    onAdd: { kind, name in addPoint(kind: kind, name: name) }
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             } else if let point = map.pressedPoint {

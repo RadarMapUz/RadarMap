@@ -15,7 +15,8 @@
 упорного человека, чтобы приложение начало врать всему городу.
 
 ПРИВАТНОСТЬ. Наружу уходит только координата кластера, счётчик, число разных
-дней и «когда обычно» с точностью до четверти суток. Ни device, ни ip, ни
+дней, число разных людей (адресов, с потолком), «когда обычно» с точностью до
+четверти суток и в скольких разных днях это было именно в эту четверть. Ни device, ни ip, ни
 времена отдельных отметок: по ним восстанавливается маршрут конкретного
 человека, а ради подсказки о треноге это непозволительная цена.
 
@@ -53,6 +54,10 @@ KINDS = ("radar", "tripod")
 TZ_OFFSET = 5 * 3600
 #: Метров в градусе широты (плоская аппроксимация: кластеры маленькие).
 M_PER_DEG_LAT = 111_320.0
+#: Потолок числа людей в payload: больше — уже «много», точнее не нужно.
+SOURCES_CAP = 9
+#: Причины закрытия, при которых отметка не наблюдение (api.HISTORY_SKIP_CLOSED).
+SKIP_CLOSED = ("author", "blocked", "moderator", "quorum", "merged")
 
 
 def distance(lat1, lon1, lat2, lon2):
@@ -83,7 +88,8 @@ def cluster(rows, *, radius=CLUSTER_METERS):
                 best, best_distance = item, d
         if best is None:
             best = {"lat": lat, "lon": lon, "n": 0, "devices": set(),
-                    "ips": set(), "days": set(), "quarters": [0, 0, 0, 0]}
+                    "ips": set(), "days": set(), "quarters": [0, 0, 0, 0],
+                    "quarter_days": [set(), set(), set(), set()]}
             clusters.append(best)
         n = best["n"]
         best["lat"] = (best["lat"] * n + lat) / (n + 1)
@@ -97,6 +103,7 @@ def cluster(rows, *, radius=CLUSTER_METERS):
             best["ips"].add(ip)
         best["days"].add(day_key(created))
         best["quarters"][quarter(created)] += 1
+        best["quarter_days"][quarter(created)].add(day_key(created))
     return clusters
 
 
@@ -114,21 +121,51 @@ def spots(clusters, *, min_reports=MIN_REPORTS, min_devices=MIN_DEVICES,
         # «Обычно утром» имеет смысл, только если это действительно перевес.
         # Ровное распределение честнее показать как «когда угодно» (peak = -1).
         peak = top if counts[top] * 2 > item["n"] else -1
+        # src и pdays (82): по ним телефон решает, предупреждать ли заранее
+        # «здесь вечером часто стоит тренога» — разные люди в разные дни.
         result.append({"lat": round(item["lat"], 5), "lon": round(item["lon"], 5),
-                       "n": item["n"], "days": len(item["days"]), "peak": peak})
+                       "n": item["n"], "days": len(item["days"]), "peak": peak,
+                       "src": min(SOURCES_CAP, len(item["ips"])),
+                       "pdays": len(item["quarter_days"][peak]) if peak >= 0 else 0})
     result.sort(key=lambda s: (-s["n"], s["lat"], s["lon"]))
     return result
 
 
+def history_moment(day, q):
+    """Середина четверти суток дня истории — момент, дающий те же day_key и
+    quarter (история хранит только их, без точного времени)."""
+    return day * 86400 - TZ_OFFSET + q * 21600 + 10800
+
+
 def load(db_path, *, now, window_days=WINDOW_DAYS):
+    """Наблюдения за окно: живые и недавно погасшие отметки (reports) с их
+    независимыми «Стоит» плюс история погасших (report_history, api.py)."""
     since = now - window_days * 86400
     conn = sqlite3.connect(db_path)
     try:
-        placeholders = ",".join("?" for _ in KINDS)
-        return conn.execute(
-            f"SELECT lat, lon, created, device, ip FROM reports "
-            f"WHERE created >= ? AND type IN ({placeholders}) ORDER BY created",
-            (since, *KINDS)).fetchall()
+        kinds = ",".join("?" for _ in KINDS)
+        skip = ",".join("?" for _ in SKIP_CLOSED)
+        when = "CASE WHEN r.observed > 0 THEN r.observed ELSE r.created END"
+        rows = conn.execute(
+            f"SELECT r.lat, r.lon, {when}, r.device, r.ip FROM reports r "
+            f"WHERE {when} >= ? AND r.type IN ({kinds}) "
+            f"AND COALESCE(r.closed, '') NOT IN ({skip})",
+            (since, *KINDS, *SKIP_CLOSED)).fetchall()
+        rows += conn.execute(
+            f"SELECT r.lat, r.lon, v.ts, v.device, v.ip FROM votes v JOIN reports r ON r.id = v.report_id "
+            f"WHERE v.ts >= ? AND v.value = 1 AND v.stale = 0 AND v.device != r.device "
+            f"AND r.type IN ({kinds}) AND COALESCE(r.closed, '') NOT IN ({skip})",
+            (since, *KINDS, *SKIP_CLOSED)).fetchall()
+        try:
+            first_day = int((since + TZ_OFFSET) // 86400)
+            rows += [(lat, lon, history_moment(day, q), device, ip)
+                     for lat, lon, day, q, device, ip in conn.execute(
+                         f"SELECT lat, lon, day, quarter, device, ip FROM report_history "
+                         f"WHERE day >= ? AND type IN ({kinds})", (first_day, *KINDS))]
+        except sqlite3.OperationalError:
+            pass   # база до пункта 82 — истории ещё нет
+        rows.sort(key=lambda row: row[2])
+        return rows
     finally:
         conn.close()
 

@@ -47,8 +47,10 @@ spots = data.get("spots")
 if data.get("version") != 1 or not isinstance(spots, list):
     sys.exit("не тот контракт: ожидался version=1 и список spots")
 for spot in spots:
-    if sorted(spot) != ["days", "lat", "lon", "n", "peak"]:
+    if sorted(spot) != ["days", "lat", "lon", "n", "pdays", "peak", "src"]:
         sys.exit(f"лишние или недостающие поля в точке: {sorted(spot)}")
+    if not (0 <= spot["src"] <= 9 and 0 <= spot["pdays"] <= spot["days"]):
+        sys.exit(f"src/pdays вне пределов: {spot}")
     if not (37.0 <= spot["lat"] <= 46.0 and 55.0 <= spot["lon"] <= 74.0):
         sys.exit(f"точка вне Узбекистана: {spot['lat']}, {spot['lon']}")
     if spot["n"] < 3 or spot["days"] < 2:

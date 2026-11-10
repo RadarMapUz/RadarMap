@@ -41,13 +41,13 @@ final class CarPlayScenarioDriveTests: XCTestCase {
             let card = Map.distance(meters: left)
             // Порог — по округлённому до 10 м (995 м — уже «1 км», не «1000 м»).
             if (left / 10).rounded() * 10 >= 1_000 {
-                XCTAssertEqual(card.unit, UnitLength.kilometers, "\(left) м")
+                XCTAssertEqual(card.unit, CarPlayUnits.kilometers(), "\(left) м")
             } else {
-                XCTAssertEqual(card.unit, UnitLength.meters, "\(left) м")
+                XCTAssertEqual(card.unit, CarPlayUnits.meters(), "\(left) м")
                 XCTAssertEqual(card.value.truncatingRemainder(dividingBy: 10), 0, "\(left) м")
             }
             let trip = Map.tripDistance(meters: routeLength - car)
-            XCTAssertEqual(trip.unit, UnitLength.kilometers)
+            XCTAssertEqual(trip.unit, CarPlayUnits.kilometers())
             XCTAssertGreaterThan(trip.value, 0, "до приезда не «0 км»")
             let state = Map.maneuverState(distance: left, sinceShown: t)
             let index = try? XCTUnwrap(order.firstIndex(of: state))
@@ -77,7 +77,7 @@ final class CarPlayScenarioDriveTests: XCTestCase {
     func testCardNeverSaysOneThousandMetres() {
         for meters in stride(from: 990.0, through: 1_000, by: 1) {
             let card = Map.distance(meters: meters)
-            XCTAssertFalse(card.unit == UnitLength.meters && card.value >= 1_000, "\(meters) м → \(card)")
+            XCTAssertFalse(card.unit == CarPlayUnits.meters() && card.value >= 1_000, "\(meters) м → \(card)")
         }
     }
 
@@ -127,7 +127,7 @@ final class CarPlayScenarioDriveTests: XCTestCase {
         var meters = 200_000.0
         while meters > 0 {
             let trip = Map.tripDistance(meters: meters)
-            XCTAssertEqual(trip.unit, UnitLength.kilometers)
+            XCTAssertEqual(trip.unit, CarPlayUnits.kilometers())
             XCTAssertGreaterThan(trip.value, 0)
             XCTAssertLessThanOrEqual(trip.value, previous, "\(meters) м")
             let tenths = trip.value * 10

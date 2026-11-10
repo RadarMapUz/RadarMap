@@ -114,7 +114,8 @@ final class PassVerdictTests: XCTestCase {
         let both = TripDayBook.folded(other, into: folded)
         let back = TripDayBook.unfolded(trip, from: both)
         XCTAssertEqual(back.first?.edgePasses, 0)
-        XCTAssertEqual(TripDayBook.summary(folded, in: DateInterval(start: day, duration: 86_400)).edgePasses, 2)
+        XCTAssertEqual(TripDayBook.summary(folded, in: DateInterval(start: Calendar.current.startOfDay(for: day),
+                                                                     duration: 86_400)).edgePasses, 2)
     }
 
     /// Строка до обновления (nil) не получает «на грани» от одной новой

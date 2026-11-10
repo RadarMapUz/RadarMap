@@ -1757,7 +1757,7 @@ class TrafficDensityTests(unittest.TestCase):
         self.tb.schema(conn)
         points = [[lat, lon, t * 4, kmh] for lat, lon, t, kmh in self.fixture["points"]]
         for _ in range(pieces):
-            conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)",
+            conn.execute("INSERT INTO traffic_pieces(received, points, src, gen) VALUES(?, ?, hex(randomblob(4)), 1)",
                          (self.now, json.dumps(points)))
         conn.commit()
         self.tb.process(conn, self.now, matcher=lambda pts: self.fixture["response"])
@@ -1776,7 +1776,7 @@ class TrafficDensityTests(unittest.TestCase):
         self.assertIn(f"кусков за час: 2 / {self.tb.CITY_READY_PIECES_PER_HOUR}", body)
         published = len(self.tb.aggregate(sqlite3.connect(admin.TRAFFIC_DB_PATH), self.now))
         self.assertIn(f"в слое сейчас: {published}", body)
-        self.assertIn(f"не меньше\n  {self.tb.MIN_PIECES} разных кусков", body)
+        self.assertIn(f"не меньше\n  {self.tb.MIN_SOURCES} разных источников", body)
 
     def test_page_shows_no_ids_and_no_coordinates(self):
         self.fill(2)

@@ -60,6 +60,10 @@ EVENT_MAX_AGE: перекрытие — 5 км/ч на рёбрах в 30 м о�
 стенда на ±30 м вдоль дороги; ответ кэшируется по id отметки (--events-cache)
 и считается один раз, до того как штраф попал в граф: иначе следующий цикл
 искал бы путь в объезд собственного штрафа. Неподтверждённые — только показ.
+С --reports-db и --turns-out в файл манёвров ложатся запреты поворотов,
+подтверждённые модератором (89, turn_decisions): TURN_BAN_PENALTY секунд, на
+тройке с задержкой 33B — большее из двух; штраф, а не запрет — без другого
+пути маршрут проедет (docs/plan_89_turn_hints_2026-11-10.md).
 Источники now/typical/auto ниже — прежние (32D), для проверки руками; цикл
 стенда берёт route.
 
@@ -321,6 +325,35 @@ def turns_body(rows):
     return "".join(f"{u},{v},{w},{int(delay)}\n" for u, v, w, delay, *_ in sorted(rows))
 
 
+def banned_turns(reports_db):
+    """[(u, v, w)] поворотов, которые модератор запретил (89, панель —
+    «Повороты», таблица turn_decisions в reports.db). Только чтение. Таблицы
+    ещё нет (панель не выкатывалась) — запретов нет; любая другая ошибка —
+    наружу: инвариант 1, файлы пустые."""
+    if not reports_db or not os.path.exists(reports_db):
+        return []
+    conn = sqlite3.connect(f"file:{reports_db}?mode=ro", uri=True, timeout=5)
+    try:
+        return [tuple(row) for row in conn.execute(
+            "SELECT u, v, w FROM turn_decisions WHERE decision = 'ban' ORDER BY u, v, w")]
+    except sqlite3.OperationalError as error:
+        if "no such table" in str(error):
+            return []
+        raise
+    finally:
+        conn.close()
+
+
+def merge_bans(rows, bans, penalty=tc.TURN_BAN_PENALTY):
+    """Запреты поверх задержек 33B: у тройки — большее из двух, значимость —
+    бесконечность (потолок MAX_TURNS запрет не обрезает)."""
+    merged = {tuple(row[:3]): row for row in rows}
+    for key in bans:
+        delay = max(penalty, merged[key][3]) if key in merged else penalty
+        merged[key] = key + (delay, math.inf)
+    return [merged[key] for key in sorted(merged)]
+
+
 def cap_turns(rows, limit=tc.MAX_TURNS):
     """Инвариант 5 для манёвров: самые значимые (превышение над профилем)."""
     ranked = sorted(rows, key=lambda row: (-row[4], row[:3]))
@@ -511,7 +544,13 @@ def route_files(args, now, steps, resolver=None):
         turns = []
         if args.turns_out:
             started = time.perf_counter()
-            turns, trimmed_turns = cap_turns(tp.turn_penalties(conn, now))
+            rows = tp.turn_penalties(conn, now)
+            stats["bans"] = 0
+            if args.reports_db and tc.LAYER_TURN_BANS:
+                bans = banned_turns(args.reports_db)
+                rows = merge_bans(rows, bans)
+                stats["bans"] = len(bans)
+            turns, trimmed_turns = cap_turns(rows)
             trimmed += trimmed_turns
             steps["манёвры"] = time.perf_counter() - started
         stats["trimmed"] = trimmed
@@ -586,7 +625,8 @@ def main(argv=None, resolver=None):
         trimmed = f", ПОТОЛОК: обрезано {stats['trimmed']}" if stats.get("trimmed") else ""
         print(f"{stamp} скорости (route, {args.mode}): слоты {stats['slots']}, рёбер типичных "
               f"{stats['typical']}, модели {stats['model']}, живых {stats['live']}, событий {stats['events']}, записано {len(edges)} "
-              f"(гистерезис {stats['kept']}), манёвров {len(turns) if args.turns_out else '—'}{trimmed}; {timing}; {result}, "
+              f"(гистерезис {stats['kept']}), манёвров {len(turns) if args.turns_out else '—'}"
+              f"{', запретов ' + str(stats['bans']) if stats.get('bans') else ''}{trimmed}; {timing}; {result}, "
               f"{'изменён' if changed else 'без изменений'} → {args.out}")
     return 0
 

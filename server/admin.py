@@ -42,6 +42,7 @@ Stdlib-only (sqlite3 + http.server), слушает 127.0.0.1:8093. Вход п�
 """
 import html
 import json
+import math
 import os
 import sqlite3
 import sys
@@ -161,6 +162,22 @@ def init_db():
         note TEXT DEFAULT '',
         decided_at REAL NOT NULL,
         who TEXT DEFAULT '')""")
+    # Решения по подсказкам поворотов (89, экран «Повороты»). Ключ — тройка
+    # узлов OSM (откуда, через, куда), ровно ключ --turn-penalty-file: ban
+    # уходит в turns.csv стенда (traffic_speeds.banned_turns), allow больше не
+    # предлагается, later прячет до until. Координаты узлов — для выгрузки в
+    # OSM: traffic.db живёт своей жизнью, а решение должно пережить уборку.
+    # Ни устройств, ни адресов, ни времени проездов — только решение.
+    conn.execute("""CREATE TABLE IF NOT EXISTS turn_decisions(
+        u INTEGER NOT NULL, v INTEGER NOT NULL, w INTEGER NOT NULL,
+        decision TEXT NOT NULL,            -- ban | allow | later
+        until REAL NOT NULL DEFAULT 0,
+        kind TEXT NOT NULL DEFAULT '', angle INTEGER,
+        lat REAL, lon REAL, from_lat REAL, from_lon REAL, to_lat REAL, to_lon REAL,
+        note TEXT DEFAULT '',
+        decided_at REAL NOT NULL,
+        who TEXT DEFAULT '',
+        PRIMARY KEY(u, v, w))""")
     try:
         conn.execute("ALTER TABLE camera_reports ADD COLUMN snooze_until REAL DEFAULT 0")
     except sqlite3.OperationalError:
@@ -387,7 +404,8 @@ TABS = (("/", "Сводка"), ("/map", "Карта"), ("/editor", "Констр
         ("/junctions", "Перекрёстки"),
         ("/changes", "Что изменилось"), ("/cameras", "Камеры"),
         ("/mobile", "Передвижные"), ("/feedback", "Обращения"),
-        ("/usage", "Люди"), ("/traffic", "Пробки"), ("/journal", "Журнал"),
+        ("/usage", "Люди"), ("/traffic", "Пробки"), ("/turns", "Повороты"),
+        ("/journal", "Журнал"),
         ("/status", "Пульт"), ("/health", "Здоровье"))
 
 # Префикс, под которым панель видна снаружи: "/radarmap/admin" на общем домене
@@ -1673,6 +1691,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, self.health_page(conn))
             if path == "/traffic":
                 return self._send(200, traffic_page())
+            if path == "/turns":
+                return self._send(200, turns_page(conn))
+            if path == "/turns/osm":
+                return self._send(200, turns_osm_page(conn))
+            if path == "/turns.geojson":
+                return self._send(200, json.dumps(turns_geojson(conn), ensure_ascii=False),
+                                  "application/geo+json; charset=utf-8",
+                                  extra={"Content-Disposition": 'attachment; filename="radarmap-turns.geojson"'})
             if path == "/status":
                 return self._send(200, status_page())
             if path == "/junctions":
@@ -1798,6 +1824,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/candidates/act":
                 self.candidate_action(conn, field)
                 return self._redirect(u("/candidates"))
+            if path == "/turns/act":
+                turn_action(conn, field, self.who())
+                return self._redirect(u("/turns"))
             if path == "/mobile/act":
                 self.mobile_action(conn, field)
                 return self._redirect(u("/mobile"))
@@ -3461,6 +3490,276 @@ def traffic_page(now=None):
   публикуется только с двумя свидетелями.</div>
   <div class="muted" style="margin-top:6px">Ни устройств, ни поездок, ни
   координат здесь нет — только счётчики по городам.</div></div>""")
+
+
+# --- Повороты: подсказки «налево нельзя» по следам водителей (89) ----------
+#
+# В OSM часто нет «налево нельзя»: граф разрешает поворот, а водители его не
+# делают. traffic_build.turn_hints находит такие места по счётчикам выходов
+# подхода (только счётчики и номер дня — ни устройств, ни адресов, ни времени
+# проезда); решает человек. «Запретить» — большой штраф в графе стенда MLD
+# (TURN_BAN_PENALTY, traffic_speeds.banned_turns), а не запрет: если другого
+# пути нет, маршрут проедет. «Разрешено» — больше не предлагается.
+# Подтверждённое выгружается для правки OSM (/turns/osm, /turns.geojson) —
+# правят люди.
+
+MANEUVER_TITLE = {"straight": "прямо", "right": "направо", "left": "налево", "uturn": "разворот"}
+TURN_OSM_RESTRICTION = {"left": "no_left_turn", "uturn": "no_u_turn"}
+TURN_DECISIONS = ("ban", "allow", "later")
+
+
+def maneuver_title(angle):
+    if angle is None or traffic_build is None:
+        return "?"
+    return MANEUVER_TITLE[traffic_build.maneuver(angle)]
+
+
+def turn_decided(conn, now):
+    """Тройки, которые не предлагать: запрещённые, разрешённые и отложенные до
+    срока. Таблицы ещё нет (init_db не запускался) — решений нет."""
+    try:
+        rows = conn.execute("SELECT u, v, w, decision, until FROM turn_decisions").fetchall()
+    except sqlite3.OperationalError:
+        return frozenset()
+    return frozenset((r[0], r[1], r[2]) for r in rows if r[3] != "later" or r[4] > now)
+
+
+def turn_queue(conn, now=None, path=None):
+    """(подсказки, None) или (None, почему нет данных): traffic.db только
+    чтением, без решённых."""
+    if traffic_build is None or not hasattr(traffic_build, "turn_hints"):
+        return None, "сборщик пробок (traffic_build.py) не установлен или старый — выкладка пробок"
+    path = path or TRAFFIC_DB_PATH
+    if not os.path.exists(path):
+        return None, "traffic.db ещё нет — сборщик не запускался"
+    now = now or time.time()
+    try:
+        tconn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
+        try:
+            return traffic_build.turn_hints(tconn, now, turn_decided(conn, now)), None
+        finally:
+            tconn.close()
+    except sqlite3.Error as error:
+        return None, f"traffic.db не читается: {error}"
+
+
+def _turn_ray(origin, point, length=46.0):
+    """Конец луча длиной length от origin в сторону point на схеме (x — восток,
+    y — вниз, то есть на юг)."""
+    if not origin or not point or None in origin or None in point:
+        return None
+    x = (point[1] - origin[1]) * 111_320.0 * math.cos(math.radians(origin[0]))
+    y = (point[0] - origin[0]) * 111_320.0
+    norm = math.hypot(x, y)
+    if norm < 0.5:
+        return None
+    return (round(x / norm * length, 1), round(-y / norm * length, 1))
+
+
+def _turn_line(ray, colour, label, dashed=False):
+    dash = ' stroke-dasharray="6 5"' if dashed else ""
+    return (f'<line x1="0" y1="0" x2="{ray[0]}" y2="{ray[1]}" stroke="{colour}" '
+            f'stroke-width="4" stroke-linecap="round"{dash}/>'
+            f'<text x="{ray[0] * 1.2:.1f}" y="{ray[1] * 1.2 + 4:.1f}" fill="{colour}" '
+            f'font-size="11" text-anchor="middle">{label}</text>')
+
+
+def turn_svg(item):
+    """Схема перекрёстка без карты и без чужих источников (CSP панели): серый —
+    подход, зелёные — куда уходят (с числом проездов), красный пунктир —
+    поворот, которым никто не воспользовался. Север сверху."""
+    at = item.get("at")
+    parts = []
+    came = _turn_ray(at, item.get("came"))
+    if came:
+        parts.append(f'<line x1="{came[0]}" y1="{came[1]}" x2="0" y2="0" stroke="#8ea0bb" '
+                     f'stroke-width="6" stroke-linecap="round"/>')
+    for exit_ in item.get("taken") or []:
+        ray = _turn_ray(at, exit_.get("to"))
+        if ray:
+            parts.append(_turn_line(ray, "#38e58c", int(exit_["n"])))
+    ray = _turn_ray(at, item.get("to"))
+    if ray:
+        parts.append(_turn_line(ray, "#ff4560", 0, dashed=True))
+    parts.append('<circle cx="0" cy="0" r="5" fill="#e8ecf3"/>')
+    return (f'<svg viewBox="-64 -64 128 128" width="128" height="128" role="img" '
+            f'aria-label="схема перекрёстка" style="float:right;margin:0 0 6px 10px">'
+            f'{"".join(parts)}</svg>')
+
+
+def turn_bans(conn):
+    try:
+        return [dict(row) for row in conn.execute(
+            "SELECT * FROM turn_decisions WHERE decision = 'ban' ORDER BY decided_at DESC, u, v, w")]
+    except sqlite3.OperationalError:
+        return []
+
+
+def turn_ban_usage(bans, path=None):
+    """Сколько раз по запрещённому повороту проехали после решения — по тем же
+    счётчикам traffic.db. Нет базы или сборщик старый — пусто."""
+    path = path or TRAFFIC_DB_PATH
+    if not bans or traffic_build is None or not hasattr(traffic_build, "turn_usage") or not os.path.exists(path):
+        return {}
+    try:
+        tconn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
+        try:
+            return traffic_build.turn_usage(tconn, [(b["u"], b["v"], b["w"], traffic_build.day_number(b["decided_at"]))
+                                                    for b in bans])
+        finally:
+            tconn.close()
+    except sqlite3.Error:
+        return {}
+
+
+def _turn_form(key, buttons, note=True):
+    fields = "".join(f'<input type="hidden" name="{name}" value="{value}">'
+                     for name, value in zip("uvw", key))
+    note_field = ('<input type="text" name="note" placeholder="заметка (необязательно)" maxlength="200">'
+                  if note else "")
+    return f'<form method="post" action="{esc(u("/turns/act"))}">{fields}{note_field}{buttons}</form>'
+
+
+def turns_page(conn, now=None):
+    now = now or time.time()
+    items, problem = turn_queue(conn, now)
+    rule = ""
+    if traffic_build is not None and hasattr(traffic_build, "turn_hints"):
+        tc_ = traffic_build.tc
+        rule = (f'Подход к перекрёстку проехали не меньше {tc_.TURN_HINT_MIN_PASSES} раз за '
+                f'{tc_.TURN_HINT_MIN_DAYS}+ разных дней из последних {tc_.TURN_HINT_DAYS}, граф '
+                f'разрешает поворот, выезд — проезжая дорога (на неё въезжают с других подходов), '
+                f'а налево или на разворот отсюда не ушёл никто. ')
+    intro = (f'<div class="card"><b>Повороты</b> — где в OSM, похоже, нет «налево нельзя». {rule}'
+             f'<b>Запретить</b> — штраф в графе маршрутов (не запрет: без другого пути маршрут '
+             f'проедет), <b>Разрешено</b> — больше не предлагать, <b>Отложить</b> — вернуть через '
+             f'месяц. Знак проверьте по снимку или панораме, прежде чем решать. '
+             f'<a href="{esc(u("/turns/osm"))}">Запрещённые — для правки OSM</a></div>')
+    if items is None:
+        queue = f'<div class="empty">{esc(problem)}</div>'
+        items = []
+    else:
+        cards = []
+        for item in items:
+            at = item.get("at") or (None, None)
+            key = (item["u"], item["v"], item["w"])
+            taken = ", ".join(f'{maneuver_title(e.get("angle"))} {e["n"]}' for e in item["taken"])
+            buttons = ('<button class="danger" name="action" value="ban">Запретить</button>'
+                       '<button name="action" value="allow">Разрешено</button>'
+                       '<button name="action" value="later">Отложить</button>')
+            cards.append(f"""<div class="card">{turn_svg(item)}
+  <div class="row"><b>{esc(MANEUVER_TITLE.get(item['kind'], item['kind']))}</b>
+    <span class="tag bad">0 из {item['passes']}</span>
+    <span class="tag">дней {item['days']}</span>
+    <span class="tag">угол {item['angle']}°</span>
+    {osm_link(at[0], at[1])}
+    <a class="map" target="_blank" rel="noopener" href="https://www.openstreetmap.org/node/{item['v']}">узел OSM</a></div>
+  <div class="muted">Куда уходят с подхода: {esc(taken or '—')}. На этот выезд с других
+    подходов — {item['exit_passes']} проездов за {item['exit_days']} дн.
+    Тройка <code>{item['u']},{item['v']},{item['w']}</code>.</div>
+  {_turn_form(key, buttons)}<div style="clear:both"></div></div>""")
+        queue = "".join(cards) or '<div class="empty">Подозрительных поворотов нет</div>'
+    bans = turn_bans(conn)
+    usage = turn_ban_usage(bans)
+
+    def used(b):
+        n = usage.get((b["u"], b["v"], b["w"])) or 0
+        return (f'<span class="tag warn">после запрета повернули {n} раз — проверьте знак</span>'
+                if n else "")
+
+    confirmed = "".join(f"""<div class="card"><div class="row">
+    <b>{esc(MANEUVER_TITLE.get(b['kind'], b['kind']) or 'поворот')}</b>
+    <span class="tag">{esc(time.strftime('%d.%m.%Y', time.localtime(b['decided_at'])))}</span>
+    {used(b)}
+    {osm_link(b['lat'], b['lon'])}
+    <span class="muted">{esc(b['note'] or '')}</span></div>
+  {_turn_form((b['u'], b['v'], b['w']), '<button name="action" value="undo">Снять запрет</button>', note=False)}
+  </div>""" for b in bans)
+    return page("/turns", "Повороты", f"""{intro}
+<h1>Ждут решения ({len(items)})</h1>{queue}
+<h1>Запрещено ({len(bans)})</h1>{confirmed or '<div class="empty">Пока ничего</div>'}""")
+
+
+def turn_action(conn, field, who=""):
+    """Решение модератора. ban/allow/later — только для тройки, которая сейчас
+    в очереди: чужая строка в таблице решений попала бы в граф. undo снимает
+    запрет — тройка вернётся в очередь, если подозрение живо."""
+    try:
+        key = (int(field("u")), int(field("v")), int(field("w")))
+    except ValueError:
+        return
+    action = field("action")
+    note = field("note")[:200]
+    now = time.time()
+    detail = f"{key[0]},{key[1]},{key[2]} {note}".strip()
+    if action == "undo":
+        conn.execute("DELETE FROM turn_decisions WHERE u = ? AND v = ? AND w = ?", key)
+        log_action(conn, None, "turn_undo", detail, who=who)
+        conn.commit()
+        return
+    if action not in TURN_DECISIONS:
+        return
+    items, _ = turn_queue(conn, now)
+    item = next((i for i in items or () if (i["u"], i["v"], i["w"]) == key), None)
+    if item is None:
+        return
+    at = item.get("at") or (None, None)
+    came = item.get("came") or (None, None)
+    to = item.get("to") or (None, None)
+    until = now + traffic_build.tc.TURN_HINT_SNOOZE_DAYS * DAY if action == "later" else 0
+    conn.execute(
+        """INSERT OR REPLACE INTO turn_decisions(u, v, w, decision, until, kind, angle, lat, lon,
+               from_lat, from_lon, to_lat, to_lon, note, decided_at, who)
+           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        key + (action, until, item["kind"], item["angle"], at[0], at[1], came[0], came[1],
+               to[0], to[1], note, now, who))
+    log_action(conn, None, f"turn_{action}", detail, who=who)
+    conn.commit()
+
+
+def turns_osm_page(conn):
+    """Запрещённые повороты — для правки OSM руками: узел «через», ссылки на
+    карту и редактор, какое отношение поставить. Правки в OSM делают люди и
+    только после проверки знака."""
+    bans = turn_bans(conn)
+    rows = []
+    for b in bans:
+        kind = b["kind"] or "left"
+        rows.append(f"""<div class="card"><div class="row">
+    <b>{esc(MANEUVER_TITLE.get(kind, kind))}</b>
+    <code>type=restriction + restriction={esc(TURN_OSM_RESTRICTION.get(kind, 'no_left_turn'))}</code>
+    {osm_link(b['lat'], b['lon'])}
+    <a class="map" target="_blank" rel="noopener" href="https://www.openstreetmap.org/node/{b['v']}">узел {b['v']}</a>
+    <a class="map" target="_blank" rel="noopener" href="https://www.openstreetmap.org/edit?node={b['v']}">править в iD</a></div>
+  <div class="muted">from — путь через узел {b['u']}, via — узел {b['v']}, to — путь через
+    узел {b['w']}. {esc(b['note'] or '')}</div></div>""")
+    body = "".join(rows) or '<div class="empty">Запрещённых поворотов нет</div>'
+    return page("/turns", "Повороты для OSM", f"""<div class="card"><b>Для правки OSM.</b>
+Каждый запрет — отношение <code>type=restriction</code>: from — путь подхода, via — узел
+перекрёстка, to — путь выезда. Ставьте его после проверки знака (снимок, панорама, выезд
+на место); в нашем графе штраф уже стоит. <a href="{esc(u("/turns.geojson"))}">GeoJSON</a> —
+линии «откуда → через → куда» для слоя в JOSM.</div>
+<h1>Запрещено ({len(bans)})</h1>{body}""")
+
+
+def turns_geojson(conn):
+    """FeatureCollection запрещённых поворотов: линия откуда → через → куда,
+    свойства — тройка узлов, вид, отношение OSM, ссылка на узел, заметка."""
+    features = []
+    for b in turn_bans(conn):
+        points = ((b["from_lon"], b["from_lat"]), (b["lon"], b["lat"]), (b["to_lon"], b["to_lat"]))
+        coords = [[lon, lat] for lon, lat in points if lon is not None and lat is not None]
+        if len(coords) < 2:
+            continue
+        kind = b["kind"] or "left"
+        features.append({"type": "Feature",
+                         "geometry": {"type": "LineString", "coordinates": coords},
+                         "properties": {"from_node": b["u"], "via_node": b["v"], "to_node": b["w"],
+                                        "kind": kind,
+                                        "restriction": TURN_OSM_RESTRICTION.get(kind, "no_left_turn"),
+                                        "osm": f"https://www.openstreetmap.org/node/{b['v']}",
+                                        "note": b["note"] or ""}})
+    return {"type": "FeatureCollection", "features": features}
 
 
 # --- Пульт состояния ------------------------------------------------------

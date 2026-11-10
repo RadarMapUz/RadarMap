@@ -135,7 +135,10 @@ nonisolated struct TrafficSnapshot: Sendable {
     /// Лишние колонки версии 1 (если сервер когда-нибудь их добавит) не читаются.
     /// Другая версия или битое ребро — nil/пропуск: показывать догадку о
     /// формате хуже, чем не показывать пробки.
-    static func decode(_ data: Data) -> TrafficSnapshot? {
+    /// Возраст — от `generated` сервера, не от скачивания; `receivedAt` (время
+    /// приёма) — потолок: файл «из будущего» (часы сервера впереди) иначе жил
+    /// бы в памяти дольше 10 минут.
+    static func decode(_ data: Data, receivedAt: Date? = nil) -> TrafficSnapshot? {
         // Не JSON — «нет данных»; опрос каждые 2 минуты, журнал им не засоряем.
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let generated = object["generated"] as? Double ?? (object["generated"] as? Int).map(Double.init)
@@ -156,7 +159,8 @@ nonisolated struct TrafficSnapshot: Sendable {
         default:
             return nil
         }
-        return TrafficSnapshot(generated: Date(timeIntervalSince1970: generated), edges: edges)
+        let stamp = Date(timeIntervalSince1970: generated)
+        return TrafficSnapshot(generated: receivedAt.map { min(stamp, $0) } ?? stamp, edges: edges)
     }
 
     /// Рёбра одной цепочки; битое ребро пропускается, но позиция идёт дальше.
@@ -182,6 +186,24 @@ nonisolated struct TrafficSnapshot: Sendable {
     /// Пробкам больше `trafficStaleSeconds` — данных нет (сборщик стоит).
     func isFresh(now: Date) -> Bool {
         now.timeIntervalSince(generated) <= AppConfig.trafficStaleSeconds
+    }
+
+    /// Что известно о дороге под точкой — три состояния, а не два (77):
+    /// «свободно» говорим только об измеренном ребре свежего набора.
+    enum Knowledge: Equatable, Sendable {
+        /// Набора нет или он старше `trafficStaleSeconds`.
+        case noData
+        /// Набор свежий, но об этом ребре в нём ничего — не «свободно».
+        case unknown
+        /// Ребро измерено: уровень 1 — свободно, 2 — медленно, 3 — пробка.
+        case measured(level: Int)
+    }
+
+    static func knowledge(_ snapshot: TrafficSnapshot?, at point: CLLocationCoordinate2D,
+                          course: Double, now: Date) -> Knowledge {
+        guard let snapshot, snapshot.isFresh(now: now) else { return .noData }
+        guard let edge = snapshot.matchingEdge(at: point, course: course) else { return .unknown }
+        return .measured(level: edge.level)
     }
 
     // MARK: - Маршрут
@@ -213,7 +235,14 @@ nonisolated struct TrafficSnapshot: Sendable {
     /// `length`; 0 — ребра нет или оно свободно. Одна мерка для живых пробок
     /// (`delay`) и прогноза по часу (TrafficForecast).
     func stepDelay(at point: CLLocationCoordinate2D, course: Double, length: Double) -> TimeInterval {
-        guard let edge = matchingEdge(at: point, course: course), edge.level >= 2, edge.modelKmh > 0 else { return 0 }
+        measuredStepDelay(at: point, course: course, length: length) ?? 0
+    }
+
+    /// То же, но nil — ребра под шагом нет (о дороге ничего не известно), а
+    /// 0 — ребро измерено и свободно.
+    func measuredStepDelay(at point: CLLocationCoordinate2D, course: Double, length: Double) -> TimeInterval? {
+        guard let edge = matchingEdge(at: point, course: course) else { return nil }
+        guard edge.level >= 2, edge.modelKmh > 0 else { return 0 }
         let now = max(3, edge.kmh) / 3.6
         let free = edge.modelKmh / 3.6
         return max(0, length / now - length / free)

@@ -307,7 +307,7 @@ final class TrafficService {
             answer = try await api.getRawIfChanged("traffic/now.json", etag: etag)
         }
         guard let answer else { return nil }
-        return (TrafficSnapshot.decode(answer.data), answer.etag)
+        return (TrafficSnapshot.decode(answer.data, receivedAt: Date()), answer.etag)
     }
 
     #if DEBUG

@@ -193,6 +193,50 @@ final class TrafficForecastTests: XCTestCase {
                        ["off-00", "wd-23"])
     }
 
+    // MARK: - «Без пробок» — только по измеренному (77)
+
+    func testEmptyFreshLiveIsNoDataNotFree() throws {
+        let live = snapshot([], generated: at(hour: 8, minute: 5))
+        let delay = try XCTUnwrap(forecast(live: live))
+        XCTAssertEqual(delay.seconds, 0)
+        XCTAssertEqual(delay.liveMeasuredShare, 0)
+        XCTAssertNil(TrafficForecast.claimable(delay), "о пути ничего не известно — «нет данных», а не «без пробок»")
+    }
+
+    func testMeasuredFreeRouteIsFree() throws {
+        let live = snapshot(edges(level: 1, kmh: 60), generated: at(hour: 8, minute: 5))
+        let delay = try XCTUnwrap(TrafficForecast.claimable(forecast(live: live)))
+        XCTAssertEqual(delay.seconds, 0)
+        XCTAssertEqual(delay.liveMeasuredShare, 1, accuracy: 0.01)
+    }
+
+    func testThinCoverageKeepsARealJamButNotFree() throws {
+        // Измерен километр из четырёх, и он стоит: задержка — правда.
+        let jam = snapshot(edges(from: 1000, to: 2000, level: 3, kmh: 10), generated: at(hour: 8, minute: 5))
+        let delay = try XCTUnwrap(TrafficForecast.claimable(forecast(live: jam)))
+        XCTAssertLessThan(delay.liveMeasuredShare, AppConfig.trafficFreeMinMeasuredShare)
+        XCTAssertGreaterThan(delay.seconds, 60)
+        // Тот же километр свободен — сказать «без пробок» о четырёх нельзя.
+        let free = snapshot(edges(from: 1000, to: 2000, level: 1, kmh: 60), generated: at(hour: 8, minute: 5))
+        XCTAssertNil(TrafficForecast.claimable(forecast(live: free)))
+    }
+
+    func testOncomingMeasuredEdgesDoNotCountAsKnown() throws {
+        let oncoming = edges(level: 1, kmh: 60).map {
+            TrafficEdge(a: $0.b, b: $0.a, level: 1, kmh: 60, modelKmh: 60)
+        }
+        let delay = try XCTUnwrap(forecast(live: snapshot(oncoming, generated: at(hour: 8, minute: 5))))
+        XCTAssertEqual(delay.liveMeasuredShare, 0, "встречная сторона о нашей ничего не говорит")
+    }
+
+    func testUsualHourAloneNeverClaimsFree() throws {
+        let delay = try XCTUnwrap(forecast(typical: [wd8: typicalFile(kmh: 60)]))
+        XCTAssertEqual(delay.source, .typical)
+        XCTAssertNil(TrafficForecast.claimable(delay), "«обычно» — не «сейчас свободно»")
+        let jam = try XCTUnwrap(TrafficForecast.claimable(forecast(typical: [wd8: typicalFile(kmh: 10)])))
+        XCTAssertGreaterThan(jam.seconds, 60, "обычная пробка часа остаётся в ETA")
+    }
+
     // MARK: - Разбор «обычно» с графом
 
     func testTypicalFileCarriesGraphSpeedAndLevel() throws {

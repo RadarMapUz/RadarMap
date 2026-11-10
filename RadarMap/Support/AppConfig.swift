@@ -970,6 +970,11 @@ nonisolated enum AppConfig {
     /// (красный).
     static let routeTrafficNoticeSeconds: TimeInterval = 3 * 60
     static let routeTrafficHeavySeconds: TimeInterval = 12 * 60
+    /// «Без пробок» (задержка меньше этого) — только когда измеренные рёбра
+    /// свежего now.json покрыли не меньше этой доли пути в живом горизонте;
+    /// иначе «нет данных»: слой толпы покрывает не каждую улицу (77).
+    nonisolated static let trafficFreeClaimSeconds: TimeInterval = 60
+    nonisolated static let trafficFreeMinMeasuredShare = 0.5
 
     // MARK: - Дорога на работу и домой (Commute)
 

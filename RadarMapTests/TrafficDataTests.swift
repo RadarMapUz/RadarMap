@@ -84,6 +84,38 @@ final class TrafficDataTests: XCTestCase {
         XCTAssertFalse(snapshot.isFresh(now: Date(timeIntervalSince1970: 1_000 + AppConfig.trafficStaleSeconds + 1)))
     }
 
+    func testAgeCountsFromTheServerNotFromTheDownload() throws {
+        let json = #"{"v":1,"generated":1800000000,"edges":[[41.3,69.28,41.301,69.28,3,8,60]]}"#
+        let received = Date(timeIntervalSince1970: 1_800_000_000 + 9 * 60)
+        let snapshot = try XCTUnwrap(TrafficSnapshot.decode(Data(json.utf8), receivedAt: received))
+        XCTAssertEqual(snapshot.generated, Date(timeIntervalSince1970: 1_800_000_000))
+        XCTAssertFalse(snapshot.isFresh(now: received.addingTimeInterval(2 * 60)),
+                       "скачан через 9 минут — через 2 минуты уже старше 10")
+        // Часы сервера впереди: файл «из будущего» не живёт дольше 10 минут после приёма.
+        let early = Date(timeIntervalSince1970: 1_800_000_000 - 3600)
+        let future = try XCTUnwrap(TrafficSnapshot.decode(Data(json.utf8), receivedAt: early))
+        XCTAssertEqual(future.generated, early)
+        XCTAssertFalse(future.isFresh(now: early.addingTimeInterval(AppConfig.trafficStaleSeconds + 1)))
+    }
+
+    func testThreeStatesOfARoad() {
+        let now = Date(timeIntervalSince1970: 10_000)
+        let snapshot = TrafficSnapshot(generated: now.addingTimeInterval(-60),
+                                       edges: [edge(from: 0, to: 500, level: 1, kmh: 60),
+                                               edge(from: 500, to: 1000, level: 3, kmh: 8)])
+        XCTAssertEqual(TrafficSnapshot.knowledge(snapshot, at: north(250), course: 0, now: now), .measured(level: 1))
+        XCTAssertEqual(TrafficSnapshot.knowledge(snapshot, at: north(750), course: 0, now: now), .measured(level: 3))
+        XCTAssertEqual(TrafficSnapshot.knowledge(snapshot, at: north(2000), course: 0, now: now), .unknown,
+                       "ребра в наборе нет — не «свободно»")
+        XCTAssertEqual(TrafficSnapshot.knowledge(snapshot, at: north(250), course: 180, now: now), .unknown,
+                       "встречное ребро о нашей стороне ничего не говорит")
+        XCTAssertEqual(TrafficSnapshot.knowledge(snapshot, at: north(250), course: 0,
+                                                 now: now.addingTimeInterval(AppConfig.trafficStaleSeconds)), .noData)
+        XCTAssertEqual(TrafficSnapshot.knowledge(nil, at: north(250), course: 0, now: now), .noData)
+        XCTAssertEqual(snapshot.measuredStepDelay(at: north(250), course: 0, length: 25), 0)
+        XCTAssertNil(snapshot.measuredStepDelay(at: north(2000), course: 0, length: 25))
+    }
+
     /// Километр пробки 10 км/ч при свободных 60: 360 − 60 = 300 с.
     func testJamAddsItsTime() {
         let snapshot = TrafficSnapshot(generated: .now, edges: [edge(from: 0, to: 1000, level: 3, kmh: 10)])

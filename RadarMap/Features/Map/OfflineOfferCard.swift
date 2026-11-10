@@ -75,12 +75,12 @@ struct OfflineOfferCard: View {
                 icon
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Скачиваем карту")
-                        .font(.rounded(15, .bold))
+                        .font(.dense(15, .bold))
                         .foregroundStyle(Theme.textPrimary)
                     ProgressView(value: fraction)
                         .tint(Theme.accent)
                     Text(regionTitle(region) + " · \(Int(fraction * 100)) %")
-                        .font(.rounded(11))
+                        .font(.dense(11))
                         .foregroundStyle(Theme.textTertiary)
                         .lineLimit(1)
                 }
@@ -92,10 +92,10 @@ struct OfflineOfferCard: View {
                     icon
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Карта не скачалась")
-                            .font(.rounded(15, .bold))
+                            .font(.dense(15, .bold))
                             .foregroundStyle(Theme.textPrimary)
                         Text(regionTitle(region) + " · " + message)
-                            .font(.rounded(11))
+                            .font(.dense(11))
                             .foregroundStyle(Theme.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -114,7 +114,7 @@ struct OfflineOfferCard: View {
     /// Знак карточки — украшение: что предлагают, говорит заголовок.
     private var icon: some View {
         Image(systemName: "arrow.down.circle.fill")
-            .font(.rounded(18, .bold))
+            .font(.dense(18, .bold))
             .foregroundStyle(Theme.accent)
             .frame(width: 36, height: 36)
             .background(Theme.quietFill, in: Circle())
@@ -128,13 +128,13 @@ struct OfflineOfferCard: View {
     private func texts(_ region: RegionCatalog.Region, wraps: Bool) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text("Карта без интернета")
-                .font(.rounded(15, .bold))
+                .font(.dense(15, .bold))
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(wraps ? nil : 1)
                 .minimumScaleFactor(wraps ? 1 : 0.85)
                 .fixedSize(horizontal: false, vertical: wraps)
             Text(regionTitle(region) + " · " + OfflineMapsView.size(region.totalBytes))
-                .font(.rounded(11))
+                .font(.dense(11))
                 .foregroundStyle(Theme.textTertiary)
                 .lineLimit(wraps ? nil : 1)
                 .fixedSize(horizontal: false, vertical: wraps)
@@ -148,7 +148,7 @@ struct OfflineOfferCard: View {
             decline(region)
         } label: {
             Image(systemName: "xmark")
-                .font(.rounded(14, .bold))
+                .font(.dense(14, .bold))
                 .foregroundStyle(Theme.textSecondary)
                 .frame(width: 32, height: 32)
                 .background(Theme.textTertiary.opacity(0.14), in: Circle())
@@ -172,7 +172,7 @@ struct OfflineOfferCard: View {
     private func actionButton(_ title: String, perform: @escaping () -> Void) -> some View {
         Button(action: perform) {
             Text(verbatim: title)
-                .font(.rounded(15, .bold))
+                .font(.dense(15, .bold))
                 .foregroundStyle(Theme.onAccentFill)
                 .fixedSize()
                 .padding(.horizontal, 16)

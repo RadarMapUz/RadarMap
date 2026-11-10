@@ -66,11 +66,11 @@ struct NearbyCamerasSheet: View {
                 Text(camera.displayTitle)
                     .font(.rounded(15, .semibold))
                     .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(1)
+                    .lineLimit(2)
                 Text(camera.subtitle)
                     .font(.rounded(12))
                     .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
             }
 
             Spacer(minLength: 8)

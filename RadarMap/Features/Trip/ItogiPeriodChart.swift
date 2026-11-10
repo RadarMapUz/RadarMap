@@ -61,6 +61,7 @@ struct ItogiPeriodChart: View {
                     .font(.rounded(13, .medium))
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 Text(selected.map { Formatting.distance($0.km * 1000) } ?? value ?? "")
                     .font(.numeral(30, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)

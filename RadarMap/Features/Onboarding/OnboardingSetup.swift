@@ -38,9 +38,9 @@ struct OnboardingSegment<Option: Hashable>: View {
                     withMotion(Motion.standard) { pick(option) }
                 } label: {
                     HStack(spacing: 6) {
-                        if let symbol { Image(systemName: symbol(option)).font(.rounded(13, .semibold)) }
+                        if let symbol { Image(systemName: symbol(option)).font(.dense(13, .semibold)) }
                         Text(title(option))
-                            .font(.rounded(15, .semibold))
+                            .font(.dense(15, .semibold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
                     }

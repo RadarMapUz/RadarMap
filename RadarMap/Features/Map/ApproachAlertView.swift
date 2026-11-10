@@ -111,14 +111,14 @@ struct ApproachAlertView: View {
                     CameraIcon(kind: camera.kind, side: 42)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(camera.kind.displayName)
-                            .font(.rounded(16, .bold))
+                            .font(.dense(16, .bold))
                             .foregroundStyle(Theme.textPrimary)
                             .lineLimit(2)
                             .minimumScaleFactor(0.85)
                             .fixedSize(horizontal: false, vertical: true)
                         if !camera.location.isEmpty {
                             Text(camera.location)
-                                .font(.rounded(13))
+                                .font(.dense(13))
                                 .foregroundStyle(Theme.textSecondary)
                                 .lineLimit(1)
                         }
@@ -129,7 +129,7 @@ struct ApproachAlertView: View {
                             .font(.numeralFree(38, .heavy))
                             .foregroundStyle(Theme.textPrimary)
                             .liveNumber()
-                        Text("м").font(.rounded(18, .bold)).foregroundStyle(Theme.textSecondary)
+                        Text("м").font(.dense(18, .bold)).foregroundStyle(Theme.textSecondary)
                     }
                     .fixedSize()
                 }
@@ -178,7 +178,7 @@ struct ApproachAlertView: View {
         } label: {
             Label(muted ? "Включить звук" : "Без звука",
                   systemImage: muted ? "speaker.wave.2.fill" : "speaker.slash.fill")
-                .font(.rounded(15, .semibold))
+                .font(.dense(15, .semibold))
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -255,14 +255,14 @@ struct ApproachAlertView: View {
                         // камеры — то, ради чего водитель смотрит на карточку.
                         // Обрезается адрес, не тип.
                         Text(camera.kind.displayName)
-                            .font(.rounded(17, .bold))
+                            .font(.dense(17, .bold))
                             .foregroundStyle(Theme.textPrimary)
                             .lineLimit(2)
                             .minimumScaleFactor(0.85)
                             .fixedSize(horizontal: false, vertical: true)
                         if !camera.location.isEmpty {
                             Text(camera.location)
-                                .font(.rounded(13))
+                                .font(.dense(13))
                                 .foregroundStyle(Theme.textSecondary)
                                 .lineLimit(1)
                         }
@@ -273,7 +273,7 @@ struct ApproachAlertView: View {
                             .font(.numeralFree(44, .heavy))
                             .foregroundStyle(Theme.textPrimary)
                             .liveNumber()
-                        Text("м").font(.rounded(20, .bold)).foregroundStyle(Theme.textSecondary)
+                        Text("м").font(.dense(20, .bold)).foregroundStyle(Theme.textSecondary)
                     }
                     .fixedSize()
                 }
@@ -324,7 +324,7 @@ struct ApproachAlertView: View {
     private var hideButton: some View {
         Button(action: onDismiss) {
             Text("Скрыть")
-                .font(.rounded(15, .semibold))
+                .font(.dense(15, .semibold))
                 .foregroundStyle(Theme.textSecondary)
                 .frame(maxWidth: .infinity, minHeight: Theme.controlSize)
                 .contentShape(Rectangle())
@@ -348,11 +348,11 @@ struct ApproachAlertView: View {
             }
             VStack(spacing: 4) {
                 Text(camera.kind.displayName)
-                    .font(.rounded(22, .bold))
+                    .font(.dense(22, .bold))
                     .foregroundStyle(Theme.textPrimary)
                 if !camera.location.isEmpty {
                     Text(camera.location)
-                        .font(.rounded(14))
+                        .font(.dense(14))
                         .foregroundStyle(Theme.textSecondary)
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
@@ -369,7 +369,7 @@ struct ApproachAlertView: View {
                     .font(.numeralFree(112, .heavy))
                     .foregroundStyle(Theme.textPrimary)
                     .liveNumber()
-                Text("м").font(.numeral(34, .bold)).foregroundStyle(Theme.textSecondary)
+                Text("м").font(.denseNumeral(34, .bold)).foregroundStyle(Theme.textSecondary)
             }
             proximityBar
                 .padding(.horizontal, 12)
@@ -382,11 +382,11 @@ struct ApproachAlertView: View {
             if let rel = relativeBearing {
                 chip {
                     Image(systemName: "location.north.fill")
-                        .font(.rounded(16, .bold))
+                        .font(.dense(16, .bold))
                         .foregroundStyle(tint)
                         .rotationEffect(.degrees(CameraDirection.arrowAngle(relativeBearing: rel)))
                     Text(directionText(rel))
-                        .font(.rounded(17, .semibold))
+                        .font(.dense(17, .semibold))
                         .foregroundStyle(Theme.textPrimary)
                 }
             }
@@ -396,11 +396,11 @@ struct ApproachAlertView: View {
                 }
                 HStack(alignment: .lastTextBaseline, spacing: 3) {
                     Text("\(Int(speedKmh.rounded()))")
-                        .font(.numeral(22, .heavy).monospacedDigit())
+                        .font(.denseNumeral(22, .heavy).monospacedDigit())
                         .foregroundStyle(isOverspeeding ? Theme.danger : Theme.textPrimary)
                         .liveNumber()
                     Text("км/ч")
-                        .font(.rounded(13, .semibold))
+                        .font(.dense(13, .semibold))
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
@@ -427,7 +427,7 @@ struct ApproachAlertView: View {
         } label: {
             Label(muted ? "Включить звук" : "Без звука",
                   systemImage: muted ? "speaker.wave.2.fill" : "speaker.slash.fill")
-                .font(.rounded(17, .semibold))
+                .font(.dense(17, .semibold))
                 .foregroundStyle(Theme.textPrimary)
                 .frame(maxWidth: .infinity, minHeight: 56)
                 .background(Color.white.opacity(0.10),

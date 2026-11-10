@@ -18,11 +18,11 @@ struct FamilyLiveChip: View {
         if !names.isEmpty {
             HStack(spacing: 8) {
                 Image(systemName: "eye.fill")
-                    .font(.rounded(12, .bold))
+                    .font(.dense(12, .bold))
                     .foregroundStyle(Theme.accent)
                     .accessibilityHidden(true)
                 Text(FamilyShare.watchersText(names: names))
-                    .font(.rounded(13, .semibold))
+                    .font(.dense(13, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -33,7 +33,7 @@ struct FamilyLiveChip: View {
                     if !Self.showsDemo { env.family.pause() }
                 } label: {
                     Image(systemName: "pause.fill")
-                        .font(.rounded(12, .bold))
+                        .font(.dense(12, .bold))
                         .foregroundStyle(Theme.textSecondary)
                         .frame(width: 28, height: 28)
                         .background(Theme.background, in: Circle())
@@ -81,10 +81,10 @@ struct FamilyNoticeChip: View {
         if let text = env.family.notice ?? (env.location.isTripActive ? Self.demoText : nil) {
             HStack(spacing: 8) {
                 Image(systemName: "house.fill")
-                    .font(.rounded(12, .bold))
+                    .font(.dense(12, .bold))
                     .accessibilityHidden(true)
                 Text(text)
-                    .font(.rounded(12, .semibold))
+                    .font(.dense(12, .semibold))
                     .fixedSize(horizontal: false, vertical: true)
             }
             .foregroundStyle(Theme.accent)

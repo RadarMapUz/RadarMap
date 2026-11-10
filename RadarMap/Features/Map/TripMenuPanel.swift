@@ -79,11 +79,11 @@ struct TripMenuPanel: View {
         return Button { pick(tile.action) } label: {
             VStack(spacing: 6) {
                 Image(systemName: face.symbol)
-                    .font(.rounded(21, .semibold))
+                    .font(.dense(21, .semibold))
                     .foregroundStyle(Theme.accent)
                     .frame(height: 26)
                 face.title
-                    .font(.rounded(12, .semibold))
+                    .font(.dense(12, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)

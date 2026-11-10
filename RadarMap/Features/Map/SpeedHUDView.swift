@@ -114,13 +114,13 @@ struct SpeedHUDView: View {
             // Крупно: за рулём HUD читается взглядом <1 сек. На втором плане
             // цифра меньше — но остаётся читаемой.
             Text("\(Int(speed.rounded()))")
-                .font(.numeral(secondary ? 26 : 34, .bold))
+                .font(.denseNumeral(secondary ? 26 : 34, .bold))
                 .monospacedDigit()
                 .foregroundStyle(env.speedLimits.isOverspeeding ? Theme.danger : Theme.textPrimary)
                 .liveNumber()
             HStack(spacing: 3) {
                 Text("км/ч")
-                    .font(.rounded(11, .medium))
+                    .font(.dense(11, .medium))
                     .foregroundStyle(Theme.textSecondary)
                 if env.location.isLowPowerMode {
                     // Энергосбережение iOS: точность GPS снижена (голос о камерах — как всегда).

@@ -513,7 +513,7 @@ struct SearchView: View {
                         Text(venue.title)
                             .font(.rounded(15, .semibold))
                             .foregroundStyle(Theme.textPrimary)
-                            .lineLimit(1)
+                            .lineLimit(2)
                         if let ahead = model.categoryAhead[venue.id] {
                             Text(String(format: String(localized: "через %@ по пути"), Formatting.distance(ahead)))
                                 .font(.rounded(12))
@@ -522,7 +522,7 @@ struct SearchView: View {
                             Text(caption)
                                 .font(.rounded(12))
                                 .foregroundStyle(Theme.textSecondary)
-                                .lineLimit(1)
+                                .lineLimit(2)
                         }
                         if venue.kind == .cng, env.cng.isActive,
                            let station = env.cng.station(for: venue.point),
@@ -530,7 +530,7 @@ struct SearchView: View {
                             Text(caption)
                                 .font(.rounded(12, .medium))
                                 .foregroundStyle(station.status == .nogas ? Theme.textTertiary : Theme.success)
-                                .lineLimit(1)
+                                .lineLimit(2)
                         }
                     }
                 }
@@ -640,7 +640,7 @@ struct SearchView: View {
                                 Text(place.title)
                                     .font(.rounded(14, .medium))
                                     .foregroundStyle(Theme.textPrimary)
-                                    .lineLimit(1)
+                                    .lineLimit(2)
                                 Spacer(minLength: 0)
                             }
                             .contentShape(Rectangle())
@@ -717,12 +717,12 @@ struct SearchView: View {
                         Text(title)
                             .font(.rounded(15, .semibold))
                             .foregroundStyle(Theme.textPrimary)
-                            .lineLimit(1)
+                            .lineLimit(2)
                         if let caption = model.caption(id: address.id, kind: nil, point: address.point) {
                             Text(caption)
                                 .font(.rounded(12))
                                 .foregroundStyle(Theme.textSecondary)
-                                .lineLimit(1)
+                                .lineLimit(2)
                         }
                     }
                 }

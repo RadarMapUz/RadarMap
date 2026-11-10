@@ -327,7 +327,7 @@ private struct TileMapStatus: View {
     private func chip(_ symbol: String, _ text: String, compact: Bool) -> some View {
         if compact {
             Image(systemName: symbol)
-                .font(.rounded(15, .bold))
+                .font(.dense(15, .bold))
                 .foregroundStyle(Theme.warning)
                 .padding(8)
                 .background(Theme.background.opacity(0.88), in: Capsule())
@@ -378,7 +378,7 @@ private struct CarPlayDashboardGauge: View {
     var body: some View {
         HStack(spacing: 10) {
             Text("\(Int(env.location.speedKmh.rounded()))")
-                .font(.numeral(26, .heavy).monospacedDigit())
+                .font(.denseNumeral(26, .heavy).monospacedDigit())
                 .foregroundStyle(env.speedLimits.isOverspeeding ? Theme.danger : Theme.textPrimary)
                 .liveNumber()
             if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
@@ -390,7 +390,7 @@ private struct CarPlayDashboardGauge: View {
                 // в уже существующей капсуле, без нового элемента поверх карты.
                 Rectangle().fill(Theme.stroke).frame(width: 1, height: 24)
                 Text(verbatim: line)
-                    .font(.rounded(13, .semibold))
+                    .font(.dense(13, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
@@ -400,11 +400,11 @@ private struct CarPlayDashboardGauge: View {
                 Rectangle().fill(Theme.stroke).frame(width: 1, height: 24)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(Formatting.duration(remaining))
-                        .font(.rounded(16, .heavy).monospacedDigit())
+                        .font(.dense(16, .heavy).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
                         .lineLimit(1)
                     Text(verbatim: env.route.arrivalText)
-                        .font(.rounded(11, .semibold).monospacedDigit())
+                        .font(.dense(11, .semibold).monospacedDigit())
                         .foregroundStyle(Theme.textSecondary)
                 }
             } else if let ghost = env.commuteLive.display {
@@ -413,10 +413,10 @@ private struct CarPlayDashboardGauge: View {
                 Rectangle().fill(Theme.stroke).frame(width: 1, height: 24)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(verbatim: Formatting.clock(ghost.arrival))
-                        .font(.rounded(16, .heavy).monospacedDigit())
+                        .font(.dense(16, .heavy).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
                     Text(verbatim: GhostText.tail(ghost))
-                        .font(.rounded(11, .semibold))
+                        .font(.dense(11, .semibold))
                         .foregroundStyle(GhostText.tint(ghost))
                         .lineLimit(1)
                 }
@@ -436,7 +436,7 @@ private struct CarPlayDashboardGauge: View {
                                             straight: camera.map(straight(to:)) ?? 0) {
         case .noSignal:
             Image(systemName: Icon.noGPSSignal)
-                .font(.rounded(16, .semibold))
+                .font(.dense(16, .semibold))
                 .foregroundStyle(Theme.warning)
                 .accessibilityLabel(Text("Нет сигнала GPS"))
         case .distance:
@@ -444,7 +444,7 @@ private struct CarPlayDashboardGauge: View {
                 HStack(spacing: 4) {
                     CameraIcon(kind: camera.kind, side: 24)
                     Text(Formatting.distance(distance))
-                        .font(.rounded(16, .bold).monospacedDigit())
+                        .font(.dense(16, .bold).monospacedDigit())
                         .foregroundStyle(env.location.isApproachingCamera ? Theme.danger : Theme.textPrimary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)

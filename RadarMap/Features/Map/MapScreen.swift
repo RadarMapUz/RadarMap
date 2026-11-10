@@ -443,7 +443,7 @@ struct MapScreen: View {
         ZStack {
             Theme.background.ignoresSafeArea()
             Text("Карта недоступна в этой сборке")
-                .font(.rounded(15, .semibold))
+                .font(.dense(15, .semibold))
                 .foregroundStyle(Theme.textSecondary)
         }
         #endif
@@ -463,7 +463,7 @@ struct HintChip: View {
 
     var body: some View {
         Text(text)
-            .font(.rounded(12, .semibold))
+            .font(.dense(12, .semibold))
             .foregroundStyle(tint)
             .padding(.horizontal, 14).padding(.vertical, 8)
             .liftedBackground(Theme.surface, in: Capsule())

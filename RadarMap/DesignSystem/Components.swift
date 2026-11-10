@@ -187,7 +187,7 @@ struct CircleControlFace: View {
 
     var body: some View {
         Image(systemName: systemName)
-            .font(.rounded(17, .semibold))
+            .font(.dense(17, .semibold))
             .foregroundStyle(tint)
             .controlCircle(size: size)
     }
@@ -275,6 +275,7 @@ struct PrimaryButton: View {
     /// само отвечает «успехом» (две вибрации разом сливаются в дребезг).
     var touch: TouchRole = .primary
     let action: () -> Void
+    @Environment(\.typeDensity) private var density
 
     var body: some View {
         Button(action: action) {
@@ -282,7 +283,7 @@ struct PrimaryButton: View {
                 if let systemImage { Image(systemName: systemImage) }
                 Text(title)
             }
-            .font(.rounded(17, .semibold))
+            .font(.rounded(17, .semibold, density: density))
             .foregroundStyle(tint == Theme.action ? Theme.onAction : Color.white)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
@@ -303,6 +304,7 @@ struct SecondaryButton: View {
     /// Лёгкая вибрация; «Отмена» рядом с главным — `.cancel`.
     var touch: TouchRole = .regular
     let action: () -> Void
+    @Environment(\.typeDensity) private var density
 
     var body: some View {
         Button(action: action) {
@@ -310,7 +312,7 @@ struct SecondaryButton: View {
                 if let systemImage { Image(systemName: systemImage) }
                 Text(title)
             }
-            .font(.rounded(17, .semibold))
+            .font(.rounded(17, .semibold, density: density))
             .foregroundStyle(Theme.accent)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)

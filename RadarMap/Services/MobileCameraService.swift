@@ -49,6 +49,8 @@ final class MobileCameraService {
     /// или не пытаться вовсе.
     enum ReportResult: Equatable {
         case created, confirmed, amended
+        /// Своя отметка уже стоит здесь — сервер ничего не записал (82).
+        case mine
         case failed(Failure)
 
         enum Failure: Equatable {
@@ -214,6 +216,10 @@ final class MobileCameraService {
         /// Число независимых подтверждений — только в /api/road (28.10).
         /// Старый сервер не шлёт: nil, и перекрытие на выбор пути не влияет.
         let confirmers: Int?
+        /// Свежесть (пункт 82); старый сервер не шлёт — nil.
+        let last_confirmed: Double?
+        let trust: Int?
+        let doubted: Int?
     }
     private struct MobileResponse: Decodable { let reports: [APIReport] }
 
@@ -310,7 +316,9 @@ final class MobileCameraService {
                     violations: Camera.defaultViolations(forType: kind.cameraType.sourceString),
                     needsReview: nil,
                     mobileConfirmed: report.confirmed ?? true,
-                    mobileExpires: Date(timeIntervalSince1970: report.expires + skew)
+                    mobileExpires: Date(timeIntervalSince1970: report.expires + skew),
+                    mobileFresh: Self.freshness(report.created, report.last_confirmed, trust: report.trust,
+                                                doubted: report.doubted, confirmed: report.confirmed, skew: skew)
                 )
             }
             confirmations = fresh
@@ -491,7 +499,7 @@ final class MobileCameraService {
     /// защита от дублей) и только он ложится в очередь при сбое.
     @discardableResult
     private func send(_ item: PendingReport, live: Bool) async -> ReportResult {
-        struct Response: Decodable { let id: Int; let merged: Bool; let amended: Bool? }
+        struct Response: Decodable { let id: Int; let merged: Bool; let amended: Bool?; let own: Bool? }
         let kind = ReportKind(rawValue: item.kind) ?? .radar
         do {
             // fresh: эта сборка уточняет только явно (amend_id) — тип из веера
@@ -520,6 +528,7 @@ final class MobileCameraService {
             // amended: сервер счёл это уточнением типа СВОЕЙ свежей отметки
             // (другой тип в 400 м / 10 мин) и переписал её, а не создал вторую.
             if response.amended == true { return .amended }
+            if response.own == true { return .mine }
             return response.merged ? .confirmed : .created
         } catch {
             // Пользователь увидит «не удалось» — причина (таймаут/4xx) обязана
@@ -859,6 +868,7 @@ final class MobileCameraService {
             case .sent(.created):   return String(localized: "Принято, спасибо")
             case .sent(.confirmed): return String(localized: "Подтвердили, спасибо")
             case .sent(.amended):   return String(localized: "Тип уточнён")
+            case .sent(.mine):      return String(localized: "Уже отметили здесь")
             case .sent(.failed(let why)): return why.spoken
             case .refused(.duplicate):  return String(localized: "Уже отметили здесь")
             case .refused(.noPosition): return String(localized: "Ждём спутники")
@@ -1026,6 +1036,10 @@ final class MobileCameraService {
     /// Id своих отметок в пространстве карты (со сдвигом) — вопросы «ещё
     /// стоит?» о них не задаются.
     private var ownReportIDs: Set<Int> { Set(mine.map { Self.idOffset + $0.id }) }
+    /// Соль выборки вопроса «ещё стоит?» (TripodAskPolicy) — постоянная на устройство.
+    private var askSalt: Int { TripodAskPolicy.salt(from: deviceID) }
+    /// О какой отметке вопрос уже прозвучал голосом — телефон и машина не повторяют.
+    @ObservationIgnored var spokenQuestionID: Int?
 
     /// Тик положения: обновить наблюдение за передвижными точками.
     ///
@@ -1051,7 +1065,8 @@ final class MobileCameraService {
                                            from: coordinate,
                                            course: course,
                                            courses: reportCourses,
-                                           excluded: ownReportIDs,
+                                           excluded: ownReportIDs.union(
+                                               TripodAskPolicy.skipped(reports, now: now, salt: askSalt)),
                                            canAsk: pendingConfirm == nil,
                                            now: now)
         if pendingConfirm == nil, let askID {
@@ -1238,21 +1253,32 @@ final class MobileCameraService {
     /// испытательном сроке плюс своя свежая отметка — без сети и
     /// без настоящего POST в общую базу (фейк на проде увидят живые водители).
     func seedTrustDemo(near coordinate: CLLocationCoordinate2D) {
-        func demo(_ id: Int, dLat: Double, dLon: Double, confirmed: Bool) -> Camera {
+        // Свежесть (82): подтвердили 3 мин назад, не подтверждали 50 мин, «Уже нет».
+        func demo(_ id: Int, dLat: Double, dLon: Double, confirmed: Bool,
+                  fresh: TripodFreshness.Info) -> Camera {
             Camera(id: Self.idOffset + id,
-                   region: CameraType.mobileRadar.displayName, city: "",
+                   region: CameraType.tripod.displayName, city: "",
                    location: String(format: String(localized: "Отмечен водителями, исчезнет ~%@"),
                                     Self.expiryText(Date().addingTimeInterval(3600).timeIntervalSince1970)),
                    lat: coordinate.latitude + dLat, lon: coordinate.longitude + dLon,
-                   type: CameraType.mobileRadar.sourceString,
-                   violations: Camera.defaultViolations(forType: CameraType.mobileRadar.sourceString),
-                   needsReview: nil, mobileConfirmed: confirmed)
+                   type: CameraType.tripod.sourceString,
+                   violations: Camera.defaultViolations(forType: CameraType.tripod.sourceString),
+                   needsReview: nil, mobileConfirmed: confirmed, mobileFresh: fresh)
         }
-        reports = [demo(900_001, dLat: 0.004, dLon: 0.0015, confirmed: true),
-                   demo(900_002, dLat: 0.004, dLon: -0.0035, confirmed: false)]
+        let now = Date()
+        reports = [demo(900_001, dLat: 0.004, dLon: 0.0015, confirmed: true,
+                        fresh: .init(created: now.addingTimeInterval(-40 * 60),
+                                     lastConfirmed: now.addingTimeInterval(-3 * 60), trust: 2, confirmed: true)),
+                   demo(900_002, dLat: 0.004, dLon: -0.0035, confirmed: false,
+                        fresh: .init(created: now.addingTimeInterval(-50 * 60), trust: 0, confirmed: false)),
+                   demo(900_004, dLat: -0.003, dLon: 0.002, confirmed: true,
+                        fresh: .init(created: now.addingTimeInterval(-70 * 60),
+                                     lastConfirmed: now.addingTimeInterval(-25 * 60), trust: 0, doubted: 1,
+                                     confirmed: true))]
         confirmations = [
-            Self.idOffset + 900_001: Confirmation(upvotes: 3, created: Date(), confirmed: true),
-            Self.idOffset + 900_002: Confirmation(upvotes: 0, created: Date(), confirmed: false),
+            Self.idOffset + 900_001: Confirmation(upvotes: 3, created: now.addingTimeInterval(-40 * 60), confirmed: true),
+            Self.idOffset + 900_002: Confirmation(upvotes: 0, created: now.addingTimeInterval(-50 * 60), confirmed: false),
+            Self.idOffset + 900_004: Confirmation(upvotes: 1, created: now.addingTimeInterval(-70 * 60), confirmed: true),
         ]
         store?.setMobileCameras(reports)
         let sent = ReportGuard.Sent(kind: .radar, latitude: coordinate.latitude,

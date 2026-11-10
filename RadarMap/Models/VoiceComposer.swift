@@ -170,6 +170,8 @@ nonisolated enum VoiceComposer {
                        number: (Int) -> [SegmentID]?,
                        kind: (VoiceEvent.Kind) -> SegmentID = { VoiceComposer.kind($0) },
                        short: (VoiceEvent.Kind) -> SegmentID = { VoiceComposer.shortKind($0) }) -> [SegmentID]? {
+        // Хвоста свежести (82) в записи нет — фраза уходит синтезатору.
+        guard call.freshness == .none || call.form == .group else { return nil }
         var out: [SegmentID] = []
         if call.fromDrivers, call.form != .group { out += ["w.drivers_mark", .comma] }
         switch call.form {

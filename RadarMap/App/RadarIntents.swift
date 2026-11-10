@@ -210,7 +210,7 @@ private func reportBySiri(_ kind: ReportKind) async -> IntentDialog {
             return IntentDialog("Сервер не отвечает — отправлю, как только ответит.")
         case .queued:
             return IntentDialog("Связи нет — отправлю, как только появится.")
-        case .sent(.failed), .refused:
+        case .sent(.failed), .sent(.mine), .refused:
             // Причина уже разложена на человеческую фразу — Siri произносит её как
             // есть, а не «нет связи» поверх «слишком часто» или «выключено».
             return IntentDialog(stringLiteral: outcome.spoken)

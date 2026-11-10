@@ -1533,6 +1533,31 @@ nonisolated enum AppConfig {
     /// ради этого — расход батареи без пользы.
     static let hotspotRefreshInterval: TimeInterval = 7 * 24 * 60 * 60
 
+    // MARK: - Тренога: свежесть, вопрос, частые места (пункт 82)
+
+    /// Подтверждена не раньше стольких минут — голос говорит «подтвердили
+    /// только что» (как CONFIRM_FRESH_MAX сервера).
+    nonisolated static let tripodJustConfirmedMinutes = 10
+    /// Без подтверждения столько минут — «не подтверждали N мин»: половина
+    /// срока после «Стоит» (90 мин) прошла, доверие заметно ниже.
+    nonisolated static let tripodStaleMinutes = 40
+    /// Подтверждённую недавнее этого не спрашиваем «ещё стоит?».
+    nonisolated static let tripodAskSkipFreshSeconds: TimeInterval = 10 * 60
+    /// Свежую всё же спрашиваем раз из стольких — выборка для проверки.
+    nonisolated static let tripodAskSampleEvery = 10
+    /// «Часто стоит вечером»: независимых людей не меньше.
+    nonisolated static let tripodHabitMinSources = 3
+    /// …и разных дней именно в эту четверть суток не меньше.
+    nonisolated static let tripodHabitMinPeakDays = 3
+    /// За столько до начала четверти уже предупреждаем.
+    nonisolated static let tripodHabitLeadSeconds: TimeInterval = 30 * 60
+    /// Дальность предупреждения заранее: секунд пути, в пределах метров.
+    nonisolated static let tripodHabitLeadTravelSeconds: Double = 25
+    nonisolated static let tripodHabitWarnMinMeters: CLLocationDistance = 350
+    nonisolated static let tripodHabitWarnMaxMeters: CLLocationDistance = 800
+    /// «Стоит»/«Уже нет» в карточке — не дальше этого от отметки.
+    static let tripodCardVoteMeters: CLLocationDistance = 1000
+
     /// Сколько секунд после «Радар!» живёт предложение уточнить тип (тренога/
     /// пост/ДТП) вторым тапом. Короткое: плашка не должна висеть до следующего
     /// взгляда на экран — молчание честно оставляет «радар».

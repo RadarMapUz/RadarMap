@@ -131,10 +131,10 @@ struct CarPlayStatusChip: View {
         // а не первой буквой фразы.
         Label {
             Text(chip.text)
-                .font(.rounded(14, .semibold))
+                .font(.dense(14, .semibold))
         } icon: {
             Image(systemName: chip.symbol)
-                .font(.rounded(15, .bold))
+                .font(.dense(15, .bold))
         }
         .foregroundStyle(chip.tint)
         .lineLimit(1)

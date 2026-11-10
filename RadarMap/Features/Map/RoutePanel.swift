@@ -36,7 +36,7 @@ struct RoutePanel: View {
                 variantChips
                 if let selected = route.selected, let why = Self.reason(selected, among: route.variants) {
                     Text(why)
-                        .font(.rounded(12, .medium))
+                        .font(.dense(12, .medium))
                         .foregroundStyle(Theme.textSecondary)
                         .lineLimit(2)
                         .multilineTextAlignment(.center)
@@ -53,7 +53,7 @@ struct RoutePanel: View {
             // молча заменит серверный.
             if route.selected?.isOffline == true {
                 Label("Маршрут без сети, приблизительно", systemImage: "wifi.slash")
-                    .font(.rounded(12, .semibold))
+                    .font(.dense(12, .semibold))
                     .foregroundStyle(Theme.warning)
                     .padding(.horizontal, 12).padding(.vertical, 6)
                     .liftedBackground(Theme.surface, in: Capsule())
@@ -80,11 +80,11 @@ struct RoutePanel: View {
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(route.destinationName)
-                        .font(.rounded(12, .semibold))
+                        .font(.dense(12, .semibold))
                         .foregroundStyle(Theme.textSecondary)
                         .lineLimit(1)
                     Text(verbatim: route.etaText)
-                        .font(.numeral(30, .heavy))
+                        .font(.denseNumeral(30, .heavy))
                         .foregroundStyle(route.trafficNote == nil ? Theme.textPrimary
                                          : Self.trafficTint(route.trafficDelay))
                         .lineLimit(1)
@@ -104,7 +104,7 @@ struct RoutePanel: View {
                             if let note = route.trafficNote { trafficNoteText(note) }
                         }
                     }
-                    .font(.rounded(12, .semibold).monospacedDigit())
+                    .font(.dense(12, .semibold).monospacedDigit())
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -118,7 +118,7 @@ struct RoutePanel: View {
                 Spacer(minLength: 0)
                 Button { route.clear() } label: {
                     Image(systemName: "xmark")
-                        .font(.rounded(12, .bold))
+                        .font(.dense(12, .bold))
                         .foregroundStyle(Theme.textSecondary)
                         .frame(width: 30, height: 30)
                         .background(Theme.background, in: Circle())
@@ -133,6 +133,7 @@ struct RoutePanel: View {
             // В поездке панель заменяется компактной TripLiveBar — здесь всегда «до старта».
             HStack(spacing: 8) {
                 PrimaryButton(title: "Поехали", systemImage: "play.fill", action: onTripToggle)
+                    .typeDensity(.dense)
                 camerasPlate
                 moreMenu
             }
@@ -146,7 +147,7 @@ struct RoutePanel: View {
     @ViewBuilder private var pathAndArrival: some View {
         Text(verbatim: env.route.distanceText)
         Text(verbatim: "·").foregroundStyle(Theme.textTertiary)
-        Image(systemName: "flag.checkered").font(.rounded(12, .semibold))
+        Image(systemName: "flag.checkered").font(.dense(12, .semibold))
             .accessibilityHidden(true)
         Text(verbatim: env.route.arrivalText)
     }
@@ -161,17 +162,17 @@ struct RoutePanel: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Image(systemName: "road.lanes")
-                    .font(.rounded(15, .semibold))
+                    .font(.dense(15, .semibold))
                     .foregroundStyle(Theme.accent)
                     .accessibilityHidden(true)
                 Text("Перед дальней дорогой")
-                    .font(.rounded(15, .semibold))
+                    .font(.dense(15, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .font(.rounded(13, .bold))
+                    .font(.dense(13, .bold))
                     .foregroundStyle(Theme.textTertiary)
                     .accessibilityHidden(true)
             }
@@ -188,12 +189,12 @@ struct RoutePanel: View {
         HStack(spacing: 6) {
             Label(String(format: String(localized: "через %@"), name),
                   systemImage: "mappin.circle.fill")
-                .font(.rounded(12, .semibold))
+                .font(.dense(12, .semibold))
                 .foregroundStyle(Theme.accent)
                 .lineLimit(1)
             Button(action: onRemoveStop) {
                 Image(systemName: "xmark")
-                    .font(.rounded(10, .bold))
+                    .font(.dense(10, .bold))
                     .foregroundStyle(Theme.textSecondary)
                     .frame(width: 20, height: 20)
                     .background(Theme.background, in: Circle())
@@ -214,7 +215,7 @@ struct RoutePanel: View {
                 SymbolIcon(Icon.cameras, size: 13, weight: .bold)
                     .foregroundStyle(route.ourCameraCount == 0 ? Theme.success : Theme.Types.camera)
                 Text(verbatim: "\(route.ourCameraCount)")
-                    .font(.rounded(15, .heavy).monospacedDigit())
+                    .font(.dense(15, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
             }
             .frame(width: 56, height: 54)
@@ -244,7 +245,7 @@ struct RoutePanel: View {
                 }
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.rounded(17, .semibold))
+                    .font(.dense(17, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .frame(width: 48, height: 54)
                     .background(Theme.background, in: RoundedRectangle(cornerRadius: Theme.cornerMedium, style: .continuous))
@@ -289,7 +290,7 @@ struct RoutePanel: View {
             VStack(alignment: .leading, spacing: 3) {
                 if labeled {
                     Text(variant.assessment.labels.first.map { Self.title($0, variant) } ?? " ")
-                        .font(.rounded(12, .bold))
+                        .font(.dense(12, .bold))
                         // «Перекрытие» — предупреждение, а не достоинство: янтарём.
                         .foregroundStyle(isSelected ? Theme.onAccentFill
                                          : variant.assessment.closures > 0 ? Theme.warning : Theme.accent)
@@ -297,7 +298,7 @@ struct RoutePanel: View {
                         .minimumScaleFactor(0.75)
                 }
                 Text(variant.etaText)
-                    .font(.numeral(21, .heavy))
+                    .font(.denseNumeral(21, .heavy))
                     .foregroundStyle(isSelected ? Theme.onAccentFill
                                      : delay >= AppConfig.routeTrafficNoticeSeconds
                                         ? Self.trafficTint(delay) : Theme.textPrimary)
@@ -308,14 +309,14 @@ struct RoutePanel: View {
                     SymbolIcon(Icon.cameras, size: 10)
                     Text("\(variant.ourCameraCount)")
                 }
-                .font(.rounded(12, .semibold))
+                .font(.dense(12, .semibold))
                 .foregroundStyle(isSelected ? Theme.onAccentFillSecondary : Theme.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 if traffic {
                     Label(line ?? " ", systemImage: "car.2.fill")
                         .labelStyle(.titleAndIcon)
-                        .font(.rounded(11, .bold))
+                        .font(.dense(11, .bold))
                         .foregroundStyle(isSelected ? Theme.onAccentFillSecondary
                                          : Self.trafficTint(variant.shownTrafficDelay))
                         .lineLimit(1)
@@ -480,7 +481,7 @@ struct ManeuverBanner: View {
         VStack(spacing: 0) {
         HStack(spacing: 12) {
             Image(systemName: step.icon)
-                .font(.rounded(24, .bold))
+                .font(.dense(24, .bold))
                 .foregroundStyle(ink)
                 .frame(width: 52, height: 52)
                 .background(ink.opacity(0.18), in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
@@ -488,11 +489,11 @@ struct ManeuverBanner: View {
                 // Моноширинные цифры — как у приборки и CarPlay: дистанция
                 // тает каждый тик, и без них баннер дрожал шириной.
                 Text(Formatting.distance(distance))
-                    .font(.numeral(30, .bold).monospacedDigit())
+                    .font(.denseNumeral(30, .bold).monospacedDigit())
                     .foregroundStyle(ink)
                     .liveNumber()
                 Text(step.text)
-                    .font(.rounded(15, .semibold))
+                    .font(.dense(15, .semibold))
                     .foregroundStyle(Theme.onAccentFillSecondary)
                     .lineLimit(2)
             }
@@ -506,12 +507,12 @@ struct ManeuverBanner: View {
             // ряд» — правило ПДД для многополосного подъезда (20.3).
             HStack(spacing: 10) {
                 Image(systemName: LaneAdvice.symbol(edge))
-                    .font(.rounded(20, .heavy))
+                    .font(.dense(20, .heavy))
                     .foregroundStyle(fill)
                     .frame(width: 44, height: 34)
                     .background(ink, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 Text(LaneAdvice.spoken(edge))
-                    .font(.rounded(16, .bold))
+                    .font(.dense(16, .bold))
                     .foregroundStyle(ink)
                     .lineLimit(2)
                     .minimumScaleFactor(0.85)
@@ -530,7 +531,7 @@ struct ManeuverBanner: View {
             VStack(spacing: 6) {
                 if let advice = LaneAdvice.phrase(step.lanes) {
                     Text(advice)
-                        .font(.rounded(15, .bold))
+                        .font(.dense(15, .bold))
                         .foregroundStyle(ink)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -546,7 +547,7 @@ struct ManeuverBanner: View {
                                 .frame(width: 1.5, height: 28)
                         }
                         Image(systemName: lane.primaryArrow(for: step.kind).symbolName)
-                            .font(.rounded(24, lane.isValid ? .heavy : .regular))
+                            .font(.dense(24, lane.isValid ? .heavy : .regular))
                             .foregroundStyle(lane.isValid ? fill : ink.opacity(0.45))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
@@ -571,10 +572,10 @@ struct ManeuverBanner: View {
             // него выбирают ещё до первого.
             HStack(spacing: 8) {
                 Text("Затем")
-                    .font(.rounded(15, .semibold))
+                    .font(.dense(15, .semibold))
                     .foregroundStyle(Theme.onAccentFillSecondary)
                 Image(systemName: then.icon)
-                    .font(.rounded(18, .heavy))
+                    .font(.dense(18, .heavy))
                     .foregroundStyle(ink)
                 Spacer(minLength: 0)
             }
@@ -609,11 +610,11 @@ struct LaneNoticeBanner: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 1) {
                 Text(Formatting.distance(distance))
-                    .font(.rounded(15, .semibold).monospacedDigit())
+                    .font(.dense(15, .semibold).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .liveNumber()
                 Text(LaneAdvice.phrase(lanes) ?? String(localized: "Ряд для проезда прямо"))
-                    .font(.rounded(12, .semibold))
+                    .font(.dense(12, .semibold))
                     .foregroundStyle(Theme.accent)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -622,7 +623,7 @@ struct LaneNoticeBanner: View {
             HStack(spacing: 2) {
                 ForEach(Array(lanes.enumerated()), id: \.offset) { index, lane in
                     Image(systemName: lane.primaryArrow(for: .straight).symbolName)
-                        .font(.rounded(16, lane.isValid ? .heavy : .regular))
+                        .font(.dense(16, lane.isValid ? .heavy : .regular))
                         .foregroundStyle(lane.isValid ? Theme.onAccentFill : Theme.textTertiary)
                         .frame(width: 26, height: 28)
                         .background(lane.isValid ? Theme.accentFill : .clear,
@@ -655,17 +656,17 @@ struct RouteCamerasSheet: View {
                 } label: {
                     HStack(spacing: 12) {
                         Text("\(index + 1)")
-                            .font(.rounded(13, .bold))
+                            .font(.dense(13, .bold))
                             .foregroundStyle(Theme.textSecondary)
                             .frame(width: 24)
                         CameraIcon(kind: item.camera.kind, side: 34)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.camera.displayTitle)
-                                .font(.rounded(14, .semibold))
+                                .font(.dense(14, .semibold))
                                 .foregroundStyle(Theme.textPrimary)
                                 .lineLimit(1)
                             Text("\(Formatting.distance(item.distanceAlong)) от старта")
-                                .font(.rounded(12))
+                                .font(.dense(12))
                                 .foregroundStyle(Theme.textSecondary)
                         }
                         Spacer(minLength: 0)

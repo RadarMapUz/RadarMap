@@ -15,10 +15,10 @@ traffic_config.py). Читает traffic.db сборщика (traffic_build.py) 
   * плавность: минута m часа — смесь текущего и следующего слота, α = m/60
     (слот без годных данных — скорость графа); воскресенье 23:xx →
     понедельник 0 — тем же механизмом (следующий слот — час спустя);
-  * живое: n_live независимых кусков за LIVE_MAX_AGE (как now.json), вес
+  * живое: n_live разных источников за LIVE_MAX_AGE (как now.json), вес
     w = min(1, n_live/LIVE_FULL_PIECES) · exp(−age/LIVE_TAU), age — возраст
     самого свежего куска, старше LIVE_MAX_AGE — 0; для пути живое
-    участвует только с ROUTE_MIN_PIECES кусков (33F);
+    участвует только с ROUTE_MIN_SOURCES источников (33F, этап 75);
   * итог v = w·v_live + (1−w)·v_base, v_base — смесь слотов;
   * в файл — только v < WRITE_RATIO·граф, в пределах [SPEED_FLOOR_KMH, граф];
   * гистерезис: ребро меняет значение прошлого файла, только если сдвиг ≥
@@ -82,8 +82,8 @@ def base_speed(slots, v_graph):
 
 def live_weight(n_live, age):
     """w = min(1, n/LIVE_FULL_PIECES)·exp(−age/τ); старше LIVE_MAX_AGE или
-    меньше ROUTE_MIN_PIECES кусков — 0."""
-    if n_live < tc.ROUTE_MIN_PIECES or age > tc.LIVE_MAX_AGE or age < 0:
+    меньше ROUTE_MIN_SOURCES источников — 0."""
+    if n_live < tc.ROUTE_MIN_SOURCES or age > tc.LIVE_MAX_AGE or age < 0:
         return 0.0
     return min(1.0, n_live / tc.LIVE_FULL_PIECES) * math.exp(-age / tc.LIVE_TAU)
 
@@ -124,24 +124,12 @@ def slot_observations(conn, now, slots):
 
 
 def live_observations(conn, now):
-    """{(u, v): (v_live, n_live, возраст свежего куска)} за LIVE_MAX_AGE:
-    скорость — взвешенная медиана отрезков (как now.json), свидетели и
-    возраст — только куски, прошедшие ребро насквозь."""
-    rows = conn.execute("""SELECT u, v, kmh, weight, piece, passed, ts FROM traffic_samples
-                           WHERE ts >= ?""", (now - tc.LIVE_MAX_AGE,)).fetchall()
-    grouped = {}
-    for u, v, kmh, weight, piece, passed, ts in rows:
-        entry = grouped.setdefault((u, v), {"pairs": [], "pieces": set(), "fresh": None})
-        entry["pairs"].append((kmh, weight))
-        if passed:
-            entry["pieces"].add(piece)
-            entry["fresh"] = ts if entry["fresh"] is None else max(entry["fresh"], ts)
-    out = {}
-    for edge, entry in grouped.items():
-        speed = tb.weighted_median(entry["pairs"])
-        if entry["pieces"] and speed is not None:
-            out[edge] = (speed, len(entry["pieces"]), now - entry["fresh"])
-    return out
+    """{(u, v): (v_live, n_live, возраст свежего свидетеля)} за LIVE_MAX_AGE —
+    то же правило, что у now.json (traffic_build.live_speeds): скорость —
+    медиана по источникам, n_live — разных источников, прошедших ребро."""
+    return {edge: (speed, sources, age)
+            for edge, (speed, sources, age, _votes) in tb.live_speeds(conn, now, tc.LIVE_MAX_AGE).items()
+            if speed is not None}
 
 
 def graph_speeds(conn):

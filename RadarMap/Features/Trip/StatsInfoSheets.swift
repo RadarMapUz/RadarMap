@@ -60,7 +60,7 @@ struct FinesExplainer: View {
                             Text(source.location)
                                 .font(.rounded(15, .semibold))
                                 .foregroundStyle(Theme.textPrimary)
-                                .lineLimit(1)
+                                .lineLimit(2)
                             Text(String(format: String(localized: "штрафуемых проездов: %lld"),
                                         source.times))
                                 .font(.rounded(11))

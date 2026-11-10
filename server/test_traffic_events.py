@@ -120,8 +120,8 @@ class EventsTest(unittest.TestCase):
         conn = sqlite3.connect(self.traffic.name)
         conn.execute("INSERT INTO traffic_edges VALUES(1, 2, 50)")
         for piece in range(3):
-            conn.execute("INSERT INTO traffic_samples(u, v, kmh, weight, ts, piece, passed) "
-                         "VALUES(1, 2, 12, 100, ?, ?, 1)", (NOW, piece))
+            conn.execute("INSERT INTO traffic_samples(u, v, kmh, weight, ts, piece, passed, src, gen) "
+                         "VALUES(1, 2, 12, 100, ?, ?, 1, hex(randomblob(4)), 1)", (NOW, piece))
         conn.commit()
         conn.close()
         self.mark("accident", course=0.0)

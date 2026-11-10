@@ -420,6 +420,25 @@ enum Theme {
 
 // MARK: - Типографика (SF Pro; Rounded — только крупные цифры)
 
+/// Где стоит текст: экран чтения растёт с системным кеглем заметно, панель
+/// поверх карты — почти нет.
+nonisolated enum TypeDensity: Sendable {
+    case reading
+    case dense
+}
+
+extension EnvironmentValues {
+    /// Для общих компонентов (кнопки), которые стоят и в листах, и в панелях
+    /// поверх карты; панель ставит `.typeDensity(.dense)`.
+    @Entry var typeDensity: TypeDensity = .reading
+}
+
+extension View {
+    func typeDensity(_ density: TypeDensity) -> some View {
+        environment(\.typeDensity, density)
+    }
+}
+
 extension Font {
     // MARK: - Шкала кегля
     //
@@ -512,9 +531,22 @@ extension Font {
     /// 1.10: крупное по-прежнему почти не растёт (цифра видна и так, а
     /// карточка вокруг тесная), но шкала сохраняет пропорции на любом
     /// системном кегле.
-    nonisolated static func typeFactor(raw: Double, size: CGFloat) -> Double {
-        let small: Double = 1.30, large: Double = 1.10
-        let from: CGFloat = 15, to: CGFloat = 30
+    ///
+    /// С 10.11 потолков два (`TypeDensity`). Экран чтения (списки,
+    /// настройки, «Итоги», листы) растёт до `readingCeiling` — это AX3 (2.55 по UIFontMetrics)
+    /// целиком, а AX4–AX5 упираются в него: дальше строки списков ломаются.
+    /// Ступени до 19 растут полностью (основной текст 17 снапается в 19),
+    /// заголовки от 38 — до 1.90 (ниже 30 и 38 сливаются). Панели поверх карты держат прежние
+    /// 1.30 / 1.10.
+    nonisolated static let readingCeiling: Double = 2.60
+
+    nonisolated static func typeFactor(raw: Double, size: CGFloat,
+                                       density: TypeDensity) -> Double {
+        let small: Double, large: Double, from: CGFloat, to: CGFloat
+        switch density {
+        case .reading: small = readingCeiling; large = 1.90; from = 19; to = 38
+        case .dense:   small = 1.30; large = 1.10; from = 15; to = 30
+        }
         let ceiling: Double
         if size <= from {
             ceiling = small
@@ -558,18 +590,37 @@ extension Font {
     /// Maps. Переименование тронуло бы ~550 строк в каждом экране ради слова —
     /// функция сохранила имя, но Rounded здесь больше нет.
     static func rounded(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        scaled(size, weight, .default, .reading)
+    }
+
+    /// То же для панелей поверх карты (HUD, манёвр, тревога, CarPlay): там
+    /// тесно, и системный кегль держится под прежним жёстким потолком.
+    static func dense(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        scaled(size, weight, .default, .dense)
+    }
+
+    static func rounded(_ size: CGFloat, _ weight: Font.Weight = .regular,
+                        density: TypeDensity) -> Font {
+        scaled(size, weight, .default, density)
+    }
+
+    private static func scaled(_ size: CGFloat, _ weight: Font.Weight,
+                               _ design: Font.Design, _ density: TypeDensity) -> Font {
         let step = snapType(size)
-        let factor = typeFactor(raw: rawTypeFactor, size: step)
-        return .system(size: (step * CGFloat(factor)).rounded(), weight: weight)
+        let factor = typeFactor(raw: rawTypeFactor, size: step, density: density)
+        return .system(size: (step * CGFloat(factor)).rounded(), weight: weight, design: design)
     }
 
     /// Крупная цифра — скорость, расстояние, балл, время, деньги. Единственное
     /// место, где остался SF Pro Rounded: приборная цифра читается с вытянутой
     /// руки и отличает «число» от подписи вокруг.
     static func numeral(_ size: CGFloat, _ weight: Font.Weight = .bold) -> Font {
-        let step = snapType(size)
-        let factor = typeFactor(raw: rawTypeFactor, size: step)
-        return .system(size: (step * CGFloat(factor)).rounded(), weight: weight, design: .rounded)
+        scaled(size, weight, .rounded, .reading)
+    }
+
+    /// Цифра панели поверх карты — под жёстким потолком, как `dense`.
+    static func denseNumeral(_ size: CGFloat, _ weight: Font.Weight = .bold) -> Font {
+        scaled(size, weight, .rounded, .dense)
     }
 
     /// Цифра вне шкалы: экран тревоги, знак лимита, карточки для шеринга,

@@ -64,6 +64,8 @@ final class MotionTests: XCTestCase {
             for (index, line) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
                 let code = line.trimmingCharacters(in: .whitespaces)
                 guard !code.hasPrefix("//") else { continue }   // комментарии не код
+                // Расписание TimelineView и привязка через Motion.ok — не анимация мимо Motion.
+                guard !code.contains("TimelineView(.animation"), !code.contains(".animation(Motion.ok(") else { continue }
                 if code.contains("withAnimation(") || code.contains("withAnimation {")
                     || code.contains(".animation(") {
                     offenders.append("\(file.lastPathComponent):\(index + 1)")

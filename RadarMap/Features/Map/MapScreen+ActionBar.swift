@@ -18,6 +18,7 @@ extension MapScreen {
     /// нет: старт — пятая кнопка дока (`tripStartsByItself`).
     var tripButtonPrimary: some View {
         PrimaryButton(title: "Начать поездку", systemImage: "play.fill") { toggleTrip() }
+            .typeDensity(.dense)
             .liftAccent()
     }
 

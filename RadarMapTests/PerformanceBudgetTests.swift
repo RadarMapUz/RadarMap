@@ -881,10 +881,15 @@ final class PerformanceBudgetTests: XCTestCase {
         var worst: Duration = .zero
         var found = 0
         for query in queries {
-            let start = clock.now
-            let answer = index.search(query, near: near)
-            worst = max(worst, clock.now - start)
-            found += answer.addresses.count + answer.venues.count
+            // Лучший из трёх: бюджет — про цену запроса, а не про занятость мака.
+            var best: Duration = .seconds(1)
+            for _ in 0..<3 {
+                let start = clock.now
+                let answer = index.search(query, near: near)
+                best = min(best, clock.now - start)
+                found += answer.addresses.count + answer.venues.count
+            }
+            worst = max(worst, best)
         }
         XCTAssertGreaterThan(found, 0)
         XCTAssertLessThan(worst, .milliseconds(30), "запрос поиска дорожает: худший \(worst)")

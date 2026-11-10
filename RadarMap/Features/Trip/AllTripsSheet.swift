@@ -58,7 +58,7 @@ struct AllTripsSheet: View {
                     } else {
                         // Фильтр — сегментом под навбаром (аудит 05.11): кнопка
                         // в баре читалась действием, а не выбором списка.
-                        Picker("", selection: $onlyFined.animation(Motion.standard)) {
+                        Picker("", selection: $onlyFined.animation(Motion.ok(Motion.standard))) {
                             Text("Все").tag(false)
                             Text("С превышениями").tag(true)
                         }

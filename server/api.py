@@ -437,7 +437,8 @@ RETENTION_DAYS = {
     "feedback": LIVE_MAX_DAYS,
     "usage_stats": LIVE_MAX_DAYS,
     "cng": LIVE_MAX_DAYS,            # обычно — сутки после expires; это страховка
-    "traffic_pieces": None,          # ни устройства, ни адреса; 20 мин (traffic_build.py)
+    "traffic_pieces": None,          # ни устройства, ни адреса — метка источника
+                                     # (traffic_source); 20 мин (traffic_build.py)
     "traffic_seen": None,            # отпечаток куска, 30 мин
 }
 
@@ -713,7 +714,12 @@ def enforce_retention(conn, now):
 # построению, и проверки ниже её охраняют, а не только форму:
 #   * в куске нет ни устройства, ни поездки, ни абсолютного времени — только
 #     секунды от начала куска; лишние поля не читаются и не сохраняются;
-#   * IP не пишется никуда: он нужен только суточному лимиту в памяти;
+#   * IP не пишется никуда: он нужен суточному лимиту в памяти и метке
+#     источника (traffic_source) — усечённому HMAC с солью, которая живёт
+#     только в памяти этого процесса не дольше суток. По метке сборщик
+#     отличает двух водителей от одного, приславшего два куска; восстановить
+#     адрес по ней нельзя (соли нигде нет), связать вчера с сегодня — тоже.
+#     Метка живёт с куском и с образцами окна (15 мин) и наружу не идёт;
 #   * сырой кусок живёт до сопоставления (traffic_build.py удаляет его сразу
 #     после, и в любом случае через TRAFFIC_PIECE_TTL);
 #   * концы поездок и места у дома/работы режет сам телефон (TrafficProbes).
@@ -730,6 +736,30 @@ TRAFFIC_PIECES_PER_IP_DAY = 100_000 # CGNAT: за адресом операто�
 # после сопоставления, и по ним повтор уже не поймать. Отпечаток — sha256
 # тех же чисел, что и так лежат в traffic_pieces; ни устройства, ни адреса.
 TRAFFIC_SEEN_TTL = 30 * 60
+# Метка источника: длина и срок соли — как у сборщика (traffic_config.py);
+# сборщик выкладывается отдельно, поэтому числа здесь свои.
+TRAFFIC_SOURCE_HEX = 8
+TRAFFIC_SALT_SECONDS = 24 * 3600
+_traffic_salt_lock = threading.Lock()
+_traffic_salt = None             # (создана, соль) — только в памяти
+
+
+def traffic_source(ip, now=None):
+    """(метка, поколение соли) адреса: метка — TRAFFIC_SOURCE_HEX знаков
+    HMAC-SHA256, поколение — секунда создания соли (не секрет; по нему
+    сборщик не сравнивает метки разных солей). Нет адреса — ("", 0): общий
+    источник, свидетелем сам себе он не станет."""
+    global _traffic_salt
+    if not ip:
+        return "", 0
+    now = time.time() if now is None else now
+    with _traffic_salt_lock:
+        if _traffic_salt is None or not 0 <= now - _traffic_salt[0] < TRAFFIC_SALT_SECONDS:
+            _traffic_salt = (int(now), os.urandom(32))
+        created, salt = _traffic_salt
+    return hmac.new(salt, ip.encode(), hashlib.sha256).hexdigest()[:TRAFFIC_SOURCE_HEX], created
+
+
 # Узбекистан с запасом: точка за границей — не наша дорога или подделка.
 UZ_LAT = (37.0, 45.8)
 UZ_LON = (55.8, 73.3)
@@ -751,6 +781,11 @@ def init_traffic_db():
         received REAL NOT NULL,
         points TEXT NOT NULL)""")
     conn.execute("CREATE INDEX IF NOT EXISTS traffic_pieces_received ON traffic_pieces(received)")
+    # Метка источника (traffic_source); те же столбцы добавляет и сборщик.
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(traffic_pieces)")}
+    for column, decl in (("src", "TEXT NOT NULL DEFAULT ''"), ("gen", "INTEGER NOT NULL DEFAULT 0")):
+        if column not in columns:
+            conn.execute(f"ALTER TABLE traffic_pieces ADD COLUMN {column} {decl}")
     conn.execute("""CREATE TABLE IF NOT EXISTS traffic_seen(
         hash TEXT PRIMARY KEY,
         received REAL NOT NULL)""")
@@ -1907,6 +1942,7 @@ class Handler(BaseHTTPRequestHandler):
         ip = self._ip()
         accepted = 0
         now = time.time()
+        src, gen = traffic_source(ip, now)
         conn = traffic_db()
         try:
             conn.execute("DELETE FROM traffic_seen WHERE received < ?", (now - TRAFFIC_SEEN_TTL,))
@@ -1923,7 +1959,8 @@ class Handler(BaseHTTPRequestHandler):
                 if conn.execute("INSERT OR IGNORE INTO traffic_seen(hash, received) VALUES(?, ?)",
                                 (digest, now)).rowcount == 0:
                     continue
-                conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(?, ?)", (now, text))
+                conn.execute("INSERT INTO traffic_pieces(received, points, src, gen) VALUES(?, ?, ?, ?)",
+                             (now, text, src, gen))
                 accepted += 1
             conn.commit()
         finally:

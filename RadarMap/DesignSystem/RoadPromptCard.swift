@@ -119,14 +119,14 @@ struct RoadPromptCard<Trailing: View>: View {
             glyph
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: model.question)
-                    .font(.rounded(19, .bold))
+                    .font(.dense(19, .bold))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(2)
                     .minimumScaleFactor(0.8)
                     .fixedSize(horizontal: false, vertical: true)
                 if let detail = model.detail {
                     Text(verbatim: detail)
-                        .font(.rounded(12, .medium))
+                        .font(.dense(12, .medium))
                         .foregroundStyle(Theme.textSecondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
@@ -135,7 +135,7 @@ struct RoadPromptCard<Trailing: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             if let eta {
                 Text(verbatim: eta)
-                    .font(.numeral(15, .bold).monospacedDigit())
+                    .font(.denseNumeral(15, .bold).monospacedDigit())
                     .foregroundStyle(Theme.textSecondary)
                     .fixedSize()
                     .accessibilityLabel(Text("Прибытие \(eta)"))
@@ -158,7 +158,7 @@ struct RoadPromptCard<Trailing: View>: View {
             IconBadge(symbol: name, tint: tint, size: side)
         case .filled(let name, let fill, let ink):
             Image(systemName: name)
-                .font(.rounded(17, .bold))
+                .font(.dense(17, .bold))
                 .foregroundStyle(ink)
                 .frame(width: side, height: side)
                 .background(fill, in: Circle())
@@ -170,7 +170,7 @@ struct RoadPromptCard<Trailing: View>: View {
     private var silenceLine: some View {
         HStack(alignment: .firstTextBaseline, spacing: 5) {
             Image(systemName: "clock")
-                .font(.rounded(12, .semibold))
+                .font(.dense(12, .semibold))
                 .foregroundStyle(Theme.textTertiary)
                 .accessibilityHidden(true)
             Group {
@@ -183,7 +183,7 @@ struct RoadPromptCard<Trailing: View>: View {
                     Text(verbatim: model.silence)
                 }
             }
-            .font(.rounded(12, .medium).monospacedDigit())
+            .font(.dense(12, .medium).monospacedDigit())
             .foregroundStyle(Theme.textSecondary)
             .lineLimit(2)
             .fixedSize(horizontal: false, vertical: true)
@@ -254,7 +254,7 @@ struct RoadPromptCard<Trailing: View>: View {
     private func title(_ action: RoadPromptModel.Action, ink: Color, lines: Int,
                        size: CGFloat = 16) -> some View {
         Text(verbatim: action.title)
-            .font(.rounded(size, .bold))
+            .font(.dense(size, .bold))
             .foregroundStyle(ink)
             .multilineTextAlignment(.center)
             .lineLimit(lines)

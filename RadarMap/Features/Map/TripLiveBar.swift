@@ -129,17 +129,17 @@ struct TripLiveBar: View {
         return VStack(spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(Formatting.distance(route.remainingDistance))
-                    .font(.numeral(19, .bold).monospacedDigit())
+                    .font(.denseNumeral(19, .bold).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .liveNumber()
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text(verbatim: route.arrivalText)
-                    .font(.numeral(21, .heavy).monospacedDigit())
+                    .font(.denseNumeral(21, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
                     .fixedSize()
                 Text(Formatting.duration(route.remainingTime))
-                    .font(.numeral(19, .bold).monospacedDigit())
+                    .font(.denseNumeral(19, .bold).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .liveNumber()
                     .frame(maxWidth: .infinity, alignment: .trailing)
@@ -176,22 +176,22 @@ struct TripLiveBar: View {
             if route.isActive {
                 // Прибытие: как в настоящих навигаторах — время на часах + остаток.
                 Text(verbatim: route.arrivalText)
-                    .font(.numeral(22, .heavy).monospacedDigit())
+                    .font(.denseNumeral(22, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
                 Text(verbatim: "\(Formatting.duration(route.remainingTime)) · \(Formatting.distance(route.remainingDistance))")
-                    .font(.rounded(12, .medium).monospacedDigit())
+                    .font(.dense(12, .medium).monospacedDigit())
                     .foregroundStyle(Theme.textSecondary)
                     .liveNumber()
             } else if let ghost = env.commuteLive.display {
                 // Дорога на работу без маршрута (этап 8): прибытие по своим
                 // прошлым поездкам. Меняется раз в минуту — numericText можно.
                 Text(verbatim: Formatting.clock(ghost.arrival))
-                    .font(.numeral(22, .heavy).monospacedDigit())
+                    .font(.denseNumeral(22, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
                 Text(verbatim: GhostText.caption(ghost))
-                    .font(.rounded(12, .medium).monospacedDigit())
+                    .font(.dense(12, .medium).monospacedDigit())
                     .foregroundStyle(GhostText.tint(ghost))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -199,7 +199,7 @@ struct TripLiveBar: View {
                 // Свободная поездка без маршрута: таймер + путь + камеры.
                 if let started = env.trip.startedAt {
                     Text(timerInterval: started...Date.distantFuture, countsDown: false)
-                        .font(.numeral(22, .heavy).monospacedDigit())
+                        .font(.denseNumeral(22, .heavy).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
                 }
                 // Эмодзи-камера рендерилась чёрно-белым глифом и выбивалась
@@ -212,7 +212,7 @@ struct TripLiveBar: View {
                     Text(verbatim: "\(env.trip.camerasPassed)")
                         .contentTransition(.numericText())
                 }
-                .font(.rounded(12, .medium).monospacedDigit())
+                .font(.dense(12, .medium).monospacedDigit())
                 .foregroundStyle(Theme.textSecondary)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(Text(Formatting.distance(env.trip.distanceMeters)))
@@ -240,7 +240,7 @@ struct TripLiveBar: View {
                 HStack(spacing: 5) {
                     CameraIcon(kind: next.camera.kind, side: 24)
                     Text(Formatting.distance(route.nextCameraDistance))
-                        .font(.rounded(13, .bold).monospacedDigit())
+                        .font(.dense(13, .bold).monospacedDigit())
                         .foregroundStyle(Theme.textPrimary)
                         .lineLimit(1)
                         .liveNumber()

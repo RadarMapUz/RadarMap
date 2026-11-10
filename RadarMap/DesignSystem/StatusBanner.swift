@@ -31,15 +31,15 @@ struct StatusBanner: View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: symbol)
                 .foregroundStyle(tint)
-                .font(.rounded(19, .semibold))
+                .font(.dense(19, .semibold))
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.rounded(15, .semibold))
+                    .font(.dense(15, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 if let detail, !detail.isEmpty {
                     Text(detail)
-                        .font(.rounded(12))
+                        .font(.dense(12))
                         .foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -47,7 +47,7 @@ struct StatusBanner: View {
                     // Кнопка, а не подпись: промах за рулём — второй взгляд.
                     Button(action: action.perform) {
                         Text(action.isBusy ? String(localized: "Загружаю…") : action.title)
-                            .font(.rounded(15, .semibold))
+                            .font(.dense(15, .semibold))
                             .foregroundStyle(Theme.accent)
                             .padding(.horizontal, 14)
                             .frame(minHeight: Theme.controlSize)
@@ -63,7 +63,7 @@ struct StatusBanner: View {
             if let onDismiss {
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
-                        .font(.rounded(12, .bold))
+                        .font(.dense(12, .bold))
                         .foregroundStyle(Theme.textTertiary)
                         .tapTarget()         // палец за рулём крупнее крестика
                 }

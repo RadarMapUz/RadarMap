@@ -61,7 +61,7 @@ struct SymbolIcon: View {
                 .frame(width: (size * 1.3).rounded(), height: (size * 1.3).rounded())
                 .accessibilityHidden(true)
         } else {
-            Image(systemName: name).font(.rounded(size, weight))
+            Image(systemName: name).font(.dense(size, weight))
         }
     }
 }

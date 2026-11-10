@@ -30,9 +30,9 @@ struct MapCompassButton: View {
                 // соседней кнопкой «по ходу» (аудит 19.10, 4.1).
                 VStack(spacing: -1) {
                     Image(systemName: "arrowtriangle.up.fill")
-                        .font(.rounded(8, .bold))
+                        .font(.dense(8, .bold))
                     Text(verbatim: "N")
-                        .font(.rounded(14, .heavy))
+                        .font(.dense(14, .heavy))
                 }
                 .foregroundStyle(Theme.textPrimary)
                 .rotationEffect(.degrees(-map.displayedDirection))
@@ -71,7 +71,7 @@ struct MapZoomButtons: View {
         } label: {
             // Вес глифа — как у всех кругов колонки (CircleControlFace).
             Image(systemName: symbol)
-                .font(.rounded(17, .semibold))
+                .font(.dense(17, .semibold))
                 .foregroundStyle(Theme.textPrimary)
                 .frame(width: Theme.controlSize, height: Theme.controlSize)
                 .contentShape(Rectangle())
@@ -93,7 +93,7 @@ struct MapMuteButton: View {
             if !muted { env.alerts.hush() }   // тишина сразу, а не после фразы
         } label: {
             Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                .font(.rounded(17, .semibold))
+                .font(.dense(17, .semibold))
                 // Охра `warning`, а не красный (33H3): красный на карте — только
                 // камера и штраф; выключенный звук — «внимание», не «опасность».
                 .foregroundStyle(muted ? Theme.warning : Theme.textPrimary)

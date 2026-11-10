@@ -16,7 +16,7 @@ final class EngineRibbonShareTests: XCTestCase {
     private let points = [CLLocationCoordinate2D(latitude: 41.30, longitude: 69.24),
                           CLLocationCoordinate2D(latitude: 41.31, longitude: 69.25)]
 
-    private final class User {}
+    private nonisolated final class User {}
 
     func testTwoMapsOfOneRouteShareOneEntry() {
         let share = EngineRibbonShare.shared

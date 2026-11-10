@@ -106,6 +106,23 @@ nonisolated struct APIClient {
                 header.flatMap { http.value(forHTTPHeaderField: $0) })
     }
 
+    /// GET с параметрами и кодом ответа, без проверки статуса: отказ сервера
+    /// маршрутов несёт тело (OSRM: 400 и `{"code":"NoRoute"}`), его разбирает
+    /// вызывающий. `label` — что писать в журнал вместо пути: в пути OSRM
+    /// координаты поездки.
+    func getRaw(_ path: String, query: [URLQueryItem], label: String,
+                cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy) async throws -> (status: Int, data: Data) {
+        var req = request(path)
+        if !query.isEmpty, let url = req.url,
+           var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            components.queryItems = query
+            req.url = components.url ?? url
+        }
+        req.cachePolicy = cachePolicy
+        let (data, response) = try await transport(req, label: label)
+        return ((response as? HTTPURLResponse)?.statusCode ?? 200, data)
+    }
+
     /// GET сырых данных (файлы базы) с проверкой статуса.
     func getData(_ path: String, cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy) async throws -> Data {
         var req = request(path)
@@ -236,14 +253,15 @@ nonisolated struct APIClient {
     /// загрузки (в том числе подмена набора на сервере) не оставлял следа
     /// нигде (ARCHITECTURE.md, правило 3). Без сети — `notice`: это обычное
     /// состояние в дороге, а не ошибка программы.
-    private func transport(_ request: URLRequest) async throws -> (Data, URLResponse) {
+    private func transport(_ request: URLRequest, label: String? = nil) async throws -> (Data, URLResponse) {
         let started = Date()
-        NetActivity.began(request.url?.path ?? "?", at: started)
+        let name = label ?? request.url?.path ?? "?"
+        NetActivity.began(name, at: started)
         defer { NetActivity.ended(at: Date()) }
         do {
             return try await session.data(for: request)
         } catch {
-            Log.network.notice("\(request.url?.path ?? "?", privacy: .public): сеть — \(error.localizedDescription, privacy: .public)")
+            Log.network.notice("\(name, privacy: .public): сеть — \(error.localizedDescription, privacy: .public)")
             throw Failure.transport(error)
         }
     }

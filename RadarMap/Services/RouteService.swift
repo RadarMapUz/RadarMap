@@ -154,6 +154,9 @@ final class RouteService {
         /// `serverUnreachable`; отдельно — чтобы не повторять его без курса
         /// (`retriesWithoutHeading`).
         case noConnection
+        /// Сервер маршрутов ответил сбоем (5xx, не JSON, чужой отказ) — не
+        /// «нет связи» и не «пути нет».
+        case serverFailed
     }
 
     /// Кумулятивная длина считается по ВЫБРАННОЙ линии: смена набора или
@@ -376,6 +379,9 @@ final class RouteService {
 
     /// Когда перестраивать после съезда (RerouteGate, чистый).
     @ObservationIgnored private var rerouteGate = RerouteGate()
+    /// Свой сервер маршрутов (OSRM) — через общий APIClient, как вся сеть.
+    @ObservationIgnored private let osrm = APIClient(timeout: AppConfig.osrmTimeoutSeconds,
+                                                     base: AppConfig.osrmBaseURL)
     /// Последний фикс — дальше `rerouteDeviationMeters` от линии: мы не на
     /// маршруте (съехали, перестроиться нельзя — нет сети). Остаток «по
     /// маршруту» до его камер тогда ничего не значит (сценарий S7).
@@ -994,6 +1000,10 @@ final class RouteService {
         } catch RouteError.serverUnreachable {
             let shown = failBuild(attempt, .network,
                                   message: String(localized: "Нет связи с сервером маршрутов — проверьте интернет"))
+            return shown ? .failed : abandonedOutcome
+        } catch RouteError.serverFailed {
+            let shown = failBuild(attempt, .unavailable,
+                                  message: String(localized: "Маршруты временно недоступны — мы уже чиним"))
             return shown ? .failed : abandonedOutcome
         } catch {
             let shown = failBuild(attempt, .noRoute, message: String(localized: "Маршрут не найден"))
@@ -1747,24 +1757,17 @@ final class RouteService {
             .map { String(format: "%.6f,%.6f", $0.longitude, $0.latitude) }
             .joined(separator: ";")
 
-        // Сторонний OSRM, не наш бэкенд — единственное осознанное исключение из
-        // правила «сеть только через APIClient» (свой формат URL и ошибок).
         // Отказ сервера на новые параметры (29.E) — один повтор прежним
         // запросом (OSRMQuery.send): маршрут обязан построиться.
         let answer = try await OSRMQuery.send { legacy in
-            var components = URLComponents(url: AppConfig.osrmBaseURL
-                .appendingPathComponent("route/v1/driving")
-                .appendingPathComponent(path),
-                resolvingAgainstBaseURL: false)!
-            components.queryItems = pass.isEmpty
+            let query = pass.isEmpty
                 ? Self.osrmQueryItems(alternatives: alternatives, heading: heading, waypoints: waypoints.count,
                                       legacy: legacy)
                 : Self.osrmQueryItems(heading: heading, via: pass, legacy: legacy)
-            var request = URLRequest(url: components.url!, timeoutInterval: AppConfig.osrmTimeoutSeconds)
-            request.cachePolicy = .reloadIgnoringLocalCacheData
             do {
-                let (data, response) = try await URLSession.shared.data(for: request)
-                return OSRMQuery.Answer(status: (response as? HTTPURLResponse)?.statusCode ?? 200, data: data)
+                let raw = try await osrm.getRaw("route/v1/driving/" + path, query: query, label: "osrm route",
+                                                cachePolicy: .reloadIgnoringLocalCacheData)
+                return OSRMQuery.Answer(status: raw.status, data: raw.data)
             } catch {
                 throw Self.transportFailure(error)
             }
@@ -1772,11 +1775,11 @@ final class RouteService {
         if answer.legacy {
             Log.route.notice("OSRM отверг новые параметры — маршрут прежним запросом")
         }
-        // 5xx/4xx без валидного тела — это «сервер недоступен», а не «маршрута нет»:
-        // пользователь должен видеть проблему сети, а не думать, что дороги не существует.
-        guard (200...299).contains(answer.status) else {
-            Log.route.error("OSRM HTTP \(answer.status, privacy: .public)")
-            throw RouteError.serverUnreachable
+        // «Пути нет» (NoRoute/NoSegment) — «маршрут не найден»; прочий отказ —
+        // сбой сервера, а не «дороги не существует».
+        if let refusal = OSRMQuery.refusal(status: answer.status, data: answer.data) {
+            Log.route.error("OSRM HTTP \(answer.status, privacy: .public): \(refusal == .noRoute ? "пути нет" : "сбой сервера", privacy: .public)")
+            throw refusal == .noRoute ? RouteError.noRoute : RouteError.serverFailed
         }
         let data = answer.data
 
@@ -2733,7 +2736,8 @@ final class RouteService {
 
     /// Запрос оборвали мы сами (сменили цель, «Отмена»), а не сеть.
     nonisolated static func isCancellation(_ error: Error) -> Bool {
-        error is CancellationError || (error as? URLError)?.code == .cancelled
+        if case APIClient.Failure.transport(let inner) = error { return isCancellation(inner) }
+        return error is CancellationError || (error as? URLError)?.code == .cancelled
     }
 
     /// Чем считать сбой запроса к OSRM: отмена остаётся отменой, остальное —
@@ -2742,9 +2746,10 @@ final class RouteService {
         isCancellation(error) ? CancellationError() : RouteError.noConnection
     }
 
-    /// Пробовать ли свой граф трасс после сбоя сервера: после отмены — нет.
+    /// Пробовать ли свой граф трасс после сбоя сервера: после отмены — нет;
+    /// сервер ответил «пути нет» — граф трасс знает не больше.
     nonisolated static func fallsBackOffline(after error: Error, taskCancelled: Bool) -> Bool {
-        !taskCancelled && !isCancellation(error)
+        !taskCancelled && !isCancellation(error) && error as? RouteError != .noRoute
     }
 
     /// Ход по линии для RerouteGate (20.9): курс ветки, которую выбрала

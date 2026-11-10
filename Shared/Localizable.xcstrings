@@ -1,6 +1,422 @@
 {
   "sourceLanguage": "ru",
   "strings": {
+    "%@ — в пределах обычного": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — в пределах обычного"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — odatiy oraliqda"
+          }
+        }
+      }
+    },
+    "В другое время: %1$lld (%2$@) — в «обычно» не входят": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "В другое время: %1$lld (%2$@) — в «обычно» не входят"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boshqa vaqtda: %1$lld (%2$@) — «odatda»ga kirmaydi"
+          }
+        }
+      }
+    },
+    "За 7 дней обычно %@ — быстрее обычного": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "За 7 дней обычно %@ — быстрее обычного"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "7 kunda odatda %@ — odatdagidan tezroq"
+          }
+        }
+      }
+    },
+    "За 7 дней обычно %@ — дольше обычного": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "За 7 дней обычно %@ — дольше обычного"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "7 kunda odatda %@ — odatdagidan uzoqroq"
+          }
+        }
+      }
+    },
+    "Когда выезжать": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Когда выезжать"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qachon yoʻlga chiqish kerak"
+          }
+        }
+      }
+    },
+    "Лучше выезжать в %1$@ — обычно %2$@, на %3$@ быстрее": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лучше выезжать в %1$@ — обычно %2$@, на %3$@ быстрее"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Soat %1$@ da chiqqan maʼqul — odatda %2$@, %3$@ tezroq"
+          }
+        }
+      }
+    },
+    "Остановки по дороге — магазин, заправка — не считаем.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Остановки по дороге — магазин, заправка — не считаем."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻldagi toʻxtashlar — doʻkon, yoqilgʻi quyish — hisoblanmaydi."
+          }
+        }
+      }
+    },
+    "Первые и последние 400 м — стоянка и выезд, а не дорога: их время показано отдельно.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Первые и последние 400 м — стоянка и выезд, а не дорога: их время показано отдельно."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Birinchi va oxirgi 400 m — toʻxtash joyi va chiqish, yoʻl emas: ularning vaqti alohida koʻrsatilgan."
+          }
+        }
+      }
+    },
+    "По %1$lld поездкам за %2$lld дней": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По %1$lld поездкам за %2$lld дней"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$lld kundagi %1$lld ta safar boʻyicha"
+          }
+        }
+      }
+    },
+    "По %1$lld поездкам за %2$lld дней, выезд около %3$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По %1$lld поездкам за %2$lld дней, выезд около %3$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%2$lld kundagi %1$lld ta safar boʻyicha, chiqish taxminan %3$@ da"
+          }
+        }
+      }
+    },
+    "По %lld поездкам с выездом в это время": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По %lld поездкам с выездом в это время"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shu vaqtda chiqilgan %lld ta safar boʻyicha"
+          }
+        }
+      }
+    },
+    "Поездок за 30 дней: %1$lld · %2$@ · топливо ≈ %3$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездок за 30 дней: %1$lld · %2$@ · топливо ≈ %3$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 kunda safarlar: %1$lld · %2$@ · yoqilgʻi ≈ %3$@"
+          }
+        }
+      }
+    },
+    "Поиск места — не пробка": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск места — не пробка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joy qidirish — tirbandlik emas"
+          }
+        }
+      }
+    },
+    "Половина поездок — от %1$@ до %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Половина поездок — от %1$@ до %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarlarning yarmi — %1$@ dan %2$@ gacha"
+          }
+        }
+      }
+    },
+    "Последняя поездка, %@ · сверх обычного в это время": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Последняя поездка, %@ · сверх обычного в это время"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oxirgi safar, %@ · shu vaqtdagi odatiydan ortiq"
+          }
+        }
+      }
+    },
+    "Путь делим на участки по 200 м и сравниваем с вашими поездками по этой дороге в это же время: ±2 часа, будни отдельно от выходных.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Путь делим на участки по 200 м и сравниваем с вашими поездками по этой дороге в это же время: ±2 часа, будни отдельно от выходных."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoʻlni 200 m lik boʻlaklarga boʻlamiz va shu yoʻldagi shu vaqtdagi safarlaringiz bilan solishtiramiz: ±2 soat, ish kunlari dam olish kunlaridan alohida."
+          }
+        }
+      }
+    },
+    "Стоянка, прогрев, ворота — не пробка": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Стоянка, прогрев, ворота — не пробка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toʻxtash joyi, qizdirish, darvoza — tirbandlik emas"
+          }
+        }
+      }
+    },
+    "Топливо — по расходу и цене из настроек машины": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Топливо — по расходу и цене из настроек машины"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoqilgʻi — mashina sozlamalaridagi sarf va narx boʻyicha"
+          }
+        }
+      }
+    },
+    "Точка — поездка: во сколько выехали и сколько ехали": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Точка — поездка: во сколько выехали и сколько ехали"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuqta — safar: qachon chiqdingiz va qancha yurdingiz"
+          }
+        }
+      }
+    },
+    "У дома, до выезда на дорогу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "У дома, до выезда на дорогу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uy yonida, yoʻlga chiqquncha"
+          }
+        }
+      }
+    },
+    "У дома, подъезд и парковка": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "У дома, подъезд и парковка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uy yonida, yetib kelish va joy topish"
+          }
+        }
+      }
+    },
+    "У работы, до выезда на дорогу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "У работы, до выезда на дорогу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ish joyi yonida, yoʻlga chiqquncha"
+          }
+        }
+      }
+    },
+    "У работы, подъезд и парковка": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "У работы, подъезд и парковка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ish joyi yonida, yetib kelish va joy topish"
+          }
+        }
+      }
+    },
+    "Участок медленный, если вы ехали его дольше, чем в трёх поездках из четырёх. Минуты — сколько ушло сверх обычного.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Участок медленный, если вы ехали его дольше, чем в трёх поездках из четырёх. Минуты — сколько ушло сверх обычного."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boʻlak sekin hisoblanadi, agar uni toʻrt safardan uchtasidagidan uzoqroq bosib oʻtgan boʻlsangiz. Daqiqalar — odatiydan qancha ortiq ketgani."
+          }
+        }
+      }
+    },
+    "лучшее время": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "лучшее время"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "eng yaxshi vaqt"
+          }
+        }
+      }
+    },
+    "половина поездок": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "половина поездок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "safarlarning yarmi"
+          }
+        }
+      }
+    },
     "пробки +%1$@ · %2$@": {
       "localizations": {
         "ru": {

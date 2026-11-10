@@ -309,7 +309,8 @@ extension TripStatsSheet {
         // Дорога на работу и домой — окно «последняя поездка». Опоздание —
         // не красным: красный здесь — штраф и камера, а не пробка.
         for commute in env.commute {
-            let delay = commute.lastDelay.map(Formatting.delayPhrase)
+            // Та же фраза, что в шапке листа: разброс, показанные минуты.
+            let delay = commute.usual != nil ? CommuteCard.verdictPhrase(commute) : nil
             items.append(ItogiRowItem(
                 id: "commute-\(commute.direction.rawValue)", symbol: commute.direction.symbol,
                 title: commute.direction.title,

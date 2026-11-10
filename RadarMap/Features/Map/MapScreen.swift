@@ -56,6 +56,8 @@ struct MapScreen: View {
     @State var tripEndDetail: TripRecord?
     /// Экран «Штрафы» с карты: напоминание об оплате (radarmap://fines).
     @State var showFines = false
+    /// Лист «Дорога на работу/домой» без «Итогов» — снимки `-openScreen commute` (DEBUG).
+    @State var debugCommute: Commute.Summary?
     /// Текст ссылки «Поделиться прибытием» для системного листа.
     @State var etaSharePayload: ActivityTextPayload?
     /// «Задерживаюсь: буду в 9:07» — лист от экрана, а не от плашки (8.8.14).
@@ -292,6 +294,7 @@ struct MapScreen: View {
                 .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showFines) { FinesScreen() }
+        .sheet(item: $debugCommute) { CommuteDetailSheet(summary: $0) }
         .sheet(item: $tripEndDetail) { record in
             TripDetailSheet(record: record,
                             onRoute: !env.location.hasLocation ? nil : { coord, name in

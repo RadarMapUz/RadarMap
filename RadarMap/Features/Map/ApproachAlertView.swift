@@ -76,6 +76,9 @@ struct ApproachAlertView: View {
     let relativeBearing: Double?
     let alertRadius: Double
     var layout: Layout = .fullScreen
+    /// Пример из онбординга и настроек (`AlertSample`): без «без звука» и
+    /// «Радар!», лимит и скорость свои, любое касание закрывает.
+    var isSample = false
     /// Верхняя кромка нижней карточки в пунктах окна (nil — карточки нет):
     /// карта поднимает «я» и камеру над ней (MapFrameState).
     var onCardEdge: (CGFloat?) -> Void = { _ in }
@@ -91,7 +94,7 @@ struct ApproachAlertView: View {
     private var proximity: Double {
         max(0, min(1, 1 - distance / max(alertRadius, 1)))
     }
-    private var isOverspeeding: Bool { env.speedLimits.isOverspeeding }
+    private var isOverspeeding: Bool { isSample ? false : env.speedLimits.isOverspeeding }
 
     var body: some View {
         switch layout {
@@ -111,14 +114,14 @@ struct ApproachAlertView: View {
                     CameraIcon(kind: camera.kind, side: 42)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(camera.kind.displayName)
-                            .font(.rounded(16, .bold))
+                            .font(.dense(16, .bold))
                             .foregroundStyle(Theme.textPrimary)
                             .lineLimit(2)
                             .minimumScaleFactor(0.85)
                             .fixedSize(horizontal: false, vertical: true)
                         if !camera.location.isEmpty {
                             Text(camera.location)
-                                .font(.rounded(13))
+                                .font(.dense(13))
                                 .foregroundStyle(Theme.textSecondary)
                                 .lineLimit(1)
                         }
@@ -129,7 +132,7 @@ struct ApproachAlertView: View {
                             .font(.numeralFree(38, .heavy))
                             .foregroundStyle(Theme.textPrimary)
                             .liveNumber()
-                        Text("м").font(.rounded(18, .bold)).foregroundStyle(Theme.textSecondary)
+                        Text("м").font(.dense(18, .bold)).foregroundStyle(Theme.textSecondary)
                     }
                     .fixedSize()
                 }
@@ -178,7 +181,7 @@ struct ApproachAlertView: View {
         } label: {
             Label(muted ? "Включить звук" : "Без звука",
                   systemImage: muted ? "speaker.wave.2.fill" : "speaker.slash.fill")
-                .font(.rounded(15, .semibold))
+                .font(.dense(15, .semibold))
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -203,6 +206,7 @@ struct ApproachAlertView: View {
             .ignoresSafeArea()
 
             VStack(spacing: 0) {
+                if isSample { sampleBadge }
                 header
                     .padding(.top, 12)
                 Spacer(minLength: 12)
@@ -222,20 +226,25 @@ struct ApproachAlertView: View {
 
             VStack(spacing: 10) {
                 Spacer()
-                HStack(spacing: 12) {
-                    muteButton
-                    ReportButton(source: .phoneAlert)
+                if isSample {
+                    sampleFooter
+                } else {
+                    HStack(spacing: 12) {
+                        muteButton
+                        ReportButton(source: .phoneAlert)
+                    }
+                    .padding(.horizontal, 24)
+                    hideButton
+                        .padding(.bottom, 4)
                 }
-                .padding(.horizontal, 24)
-                hideButton
-                    .padding(.bottom, 4)
             }
         }
         .environment(\.colorScheme, .dark)
         // Касание мимо кнопок не уходит в карту под экраном и ничего не
-        // скрывает: скрыть — только кнопкой (см. шапку файла).
+        // скрывает: скрыть — только кнопкой (см. шапку файла). Пример
+        // закрывается любым касанием.
         .contentShape(Rectangle())
-        .onTapGesture {}
+        .onTapGesture { if isSample { onDismiss() } }
         .onAppear { pulse = true }
         .transition(.opacity.combined(with: .scale(scale: 1.03)))
     }
@@ -255,14 +264,14 @@ struct ApproachAlertView: View {
                         // камеры — то, ради чего водитель смотрит на карточку.
                         // Обрезается адрес, не тип.
                         Text(camera.kind.displayName)
-                            .font(.rounded(17, .bold))
+                            .font(.dense(17, .bold))
                             .foregroundStyle(Theme.textPrimary)
                             .lineLimit(2)
                             .minimumScaleFactor(0.85)
                             .fixedSize(horizontal: false, vertical: true)
                         if !camera.location.isEmpty {
                             Text(camera.location)
-                                .font(.rounded(13))
+                                .font(.dense(13))
                                 .foregroundStyle(Theme.textSecondary)
                                 .lineLimit(1)
                         }
@@ -273,7 +282,7 @@ struct ApproachAlertView: View {
                             .font(.numeralFree(44, .heavy))
                             .foregroundStyle(Theme.textPrimary)
                             .liveNumber()
-                        Text("м").font(.rounded(20, .bold)).foregroundStyle(Theme.textSecondary)
+                        Text("м").font(.dense(20, .bold)).foregroundStyle(Theme.textSecondary)
                     }
                     .fixedSize()
                 }
@@ -324,13 +333,48 @@ struct ApproachAlertView: View {
     private var hideButton: some View {
         Button(action: onDismiss) {
             Text("Скрыть")
-                .font(.rounded(15, .semibold))
+                .font(.dense(15, .semibold))
                 .foregroundStyle(Theme.textSecondary)
                 .frame(maxWidth: .infinity, minHeight: Theme.controlSize)
                 .contentShape(Rectangle())
         }
         .buttonStyle(PressableStyle(.ownFeedback))
         .accessibilityHint(Text("До следующей камеры"))
+    }
+
+    // MARK: - Пример
+
+    private var sampleBadge: some View {
+        Text("Пример")
+            .font(.dense(15, .bold))
+            .foregroundStyle(Theme.textPrimary)
+            .padding(.horizontal, 16).padding(.vertical, 8)
+            .background(Color.white.opacity(0.14), in: Capsule())
+            .accessibilityHidden(true)
+    }
+
+    private var sampleFooter: some View {
+        VStack(spacing: 10) {
+            Text("Так выглядит предупреждение у камеры. Коснитесь, чтобы закрыть.")
+                .font(.dense(15))
+                .foregroundStyle(Theme.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 24)
+                .accessibilityHidden(true)
+            Button(action: onDismiss) {
+                Text("Закрыть")
+                    .font(.dense(17, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .background(Color.white.opacity(0.10),
+                                in: RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: Theme.cornerControl, style: .continuous))
+            }
+            .buttonStyle(PressableStyle(.ownFeedback))
+            .padding(.horizontal, 24)
+            .padding(.bottom, 4)
+        }
     }
 
     // MARK: - Блоки
@@ -348,11 +392,11 @@ struct ApproachAlertView: View {
             }
             VStack(spacing: 4) {
                 Text(camera.kind.displayName)
-                    .font(.rounded(22, .bold))
+                    .font(.dense(22, .bold))
                     .foregroundStyle(Theme.textPrimary)
                 if !camera.location.isEmpty {
                     Text(camera.location)
-                        .font(.rounded(14))
+                        .font(.dense(14))
                         .foregroundStyle(Theme.textSecondary)
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
@@ -369,7 +413,7 @@ struct ApproachAlertView: View {
                     .font(.numeralFree(112, .heavy))
                     .foregroundStyle(Theme.textPrimary)
                     .liveNumber()
-                Text("м").font(.numeral(34, .bold)).foregroundStyle(Theme.textSecondary)
+                Text("м").font(.denseNumeral(34, .bold)).foregroundStyle(Theme.textSecondary)
             }
             proximityBar
                 .padding(.horizontal, 12)
@@ -382,25 +426,27 @@ struct ApproachAlertView: View {
             if let rel = relativeBearing {
                 chip {
                     Image(systemName: "location.north.fill")
-                        .font(.rounded(16, .bold))
+                        .font(.dense(16, .bold))
                         .foregroundStyle(tint)
                         .rotationEffect(.degrees(CameraDirection.arrowAngle(relativeBearing: rel)))
                     Text(directionText(rel))
-                        .font(.rounded(17, .semibold))
+                        .font(.dense(17, .semibold))
                         .foregroundStyle(Theme.textPrimary)
                 }
             }
             chip {
-                if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
+                if isSample {
+                    SpeedLimitSign(limit: AlertSample.limitKmh, diameter: 30, isAssumed: false)
+                } else if env.settings.speedLimitsEnabled, let limit = env.speedLimits.currentLimit {
                     SpeedLimitSign(limit: limit, diameter: 30, isAssumed: env.speedLimits.isCurrentLimitAssumed)
                 }
                 HStack(alignment: .lastTextBaseline, spacing: 3) {
                     Text("\(Int(speedKmh.rounded()))")
-                        .font(.numeral(22, .heavy).monospacedDigit())
+                        .font(.denseNumeral(22, .heavy).monospacedDigit())
                         .foregroundStyle(isOverspeeding ? Theme.danger : Theme.textPrimary)
                         .liveNumber()
                     Text("км/ч")
-                        .font(.rounded(13, .semibold))
+                        .font(.dense(13, .semibold))
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
@@ -427,7 +473,7 @@ struct ApproachAlertView: View {
         } label: {
             Label(muted ? "Включить звук" : "Без звука",
                   systemImage: muted ? "speaker.wave.2.fill" : "speaker.slash.fill")
-                .font(.rounded(17, .semibold))
+                .font(.dense(17, .semibold))
                 .foregroundStyle(Theme.textPrimary)
                 .frame(maxWidth: .infinity, minHeight: 56)
                 .background(Color.white.opacity(0.10),
@@ -442,6 +488,7 @@ struct ApproachAlertView: View {
     /// «Радар через 220 метров, прямо. Скорость 47 км/ч» — для VoiceOver.
     private var accessibilitySummary: String {
         var text = "\(camera.kind.displayName) — \(Formatting.distance(distance))"
+        if isSample { text = String(localized: "Пример") + ". " + text }
         if let rel = relativeBearing { text += ", \(directionText(rel))" }
         text += ". " + String(format: String(localized: "Скорость %lld км/ч"), Int(speedKmh))
         return text

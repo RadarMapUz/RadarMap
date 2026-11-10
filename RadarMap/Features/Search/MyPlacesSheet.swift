@@ -224,7 +224,7 @@ struct MyPlacesSheet: View {
                             Text(place.title)
                                 .font(.rounded(15, .medium))
                                 .foregroundStyle(Theme.textPrimary)
-                                .lineLimit(1)
+                                .lineLimit(2)
                             Spacer(minLength: 0)
                             if onRoute != nil {
                                 Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
@@ -266,7 +266,7 @@ struct MyPlacesSheet: View {
                         Text(place.title)
                             .font(.rounded(15, .semibold))
                             .foregroundStyle(Theme.textPrimary)
-                            .lineLimit(1)
+                            .lineLimit(2)
                         Spacer(minLength: 0)
                         if onRoute != nil {
                             Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
@@ -377,6 +377,7 @@ struct PlaceAssignLabel: View {
             .font(.rounded(15, .semibold))
             .foregroundStyle(Theme.accent)
             .lineLimit(1)
+            .minimumScaleFactor(0.8)
             .tapTarget()
     }
 }

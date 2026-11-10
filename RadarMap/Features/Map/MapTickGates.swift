@@ -137,9 +137,10 @@ struct DrivingHintChip: View {
         if env.location.isProbablyDriving {
             VStack(spacing: 8) {
                 Text("Похоже, вы едете")
-                    .font(.rounded(13, .medium))
+                    .font(.dense(13, .medium))
                     .foregroundStyle(Theme.textSecondary)
                 PrimaryButton(title: "Начать поездку", systemImage: "play.fill", action: onStart)
+                    .typeDensity(.dense)
                     .liftAccent()
             }
         }

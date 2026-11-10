@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import UIKit
 import XCTest
 @testable import RadarMap
 
@@ -92,21 +93,78 @@ final class TypeScaleTests: XCTestCase {
 
     // MARK: - Системное «Размер текста» (Д2)
 
-    /// Мелкий текст растёт полностью — он и есть нечитаемый.
-    func testSmallTextGrowsToTheFullCeiling() {
-        XCTAssertEqual(Font.typeFactor(raw: 1.6, size: 12), 1.30, accuracy: 0.001)
-        XCTAssertEqual(Font.typeFactor(raw: 1.2, size: 12), 1.20, accuracy: 0.001)
+    /// Панель поверх карты: мелкий текст растёт до прежнего потолка 1.30.
+    func testDenseSmallTextKeepsTheOldCeiling() {
+        XCTAssertEqual(Font.typeFactor(raw: 1.6, size: 12, density: .dense), 1.30, accuracy: 0.001)
+        XCTAssertEqual(Font.typeFactor(raw: 3.1, size: 12, density: .dense), 1.30, accuracy: 0.001)
+        XCTAssertEqual(Font.typeFactor(raw: 1.2, size: 12, density: .dense), 1.20, accuracy: 0.001)
     }
 
-    /// Крупный — почти нет: цифра скорости и так видна, а карточка вокруг
-    /// тесная, и рост на треть выбьет её за пределы.
-    func testLargeTextIsHeldBack() {
+    /// Крупный на панели — почти нет: цифра скорости и так видна, а карточка
+    /// вокруг тесная, и рост на треть выбьет её за пределы.
+    func testDenseLargeTextIsHeldBack() {
         for step in Font.typeSteps where step >= 30 {
-            XCTAssertEqual(Font.typeFactor(raw: 1.6, size: step), 1.10, accuracy: 0.001)
+            XCTAssertEqual(Font.typeFactor(raw: 3.1, size: step, density: .dense), 1.10, accuracy: 0.001)
         }
     }
 
-    /// Шкала остаётся шкалой при ЛЮБОМ системном кегле.
+    /// Множитель системного кегля для категории — как его видит само приложение.
+    private func factor(_ category: UIContentSizeCategory) -> Double {
+        let traits = UITraitCollection(preferredContentSizeCategory: category)
+        return Double(UIFontMetrics(forTextStyle: .body).scaledValue(for: 17, compatibleWith: traits) / 17)
+    }
+
+    /// Экран чтения: основной текст (до ступени 19 — туда снапается 17)
+    /// растёт до AX3 целиком. Прежние 1.30 гасили accessibility-кегли почти
+    /// полностью.
+    func testReadingCeilingCoversAX3() {
+        let ax3 = factor(.accessibilityExtraExtraLarge)
+        XCTAssertGreaterThan(ax3, 2.2, "AX3 — около 40 / 17")
+        XCTAssertGreaterThanOrEqual(Font.readingCeiling, ax3)
+        for step in Font.typeSteps where step <= 19 {
+            XCTAssertEqual(Font.typeFactor(raw: ax3, size: step, density: .reading), ax3, accuracy: 0.001)
+        }
+    }
+
+    /// AX4–AX5 упираются в потолок чтения: дальше строки списков ломаются.
+    func testReadingStopsAtItsCeilingAboveAX3() {
+        let ax5 = factor(.accessibilityExtraExtraExtraLarge)
+        XCTAssertGreaterThan(ax5, Font.readingCeiling)
+        XCTAssertEqual(Font.typeFactor(raw: ax5, size: 12, density: .reading), Font.readingCeiling, accuracy: 0.001)
+    }
+
+    /// Панель поверх карты на AX3 растёт заметно меньше экрана чтения.
+    func testDenseCeilingIsLowerThanReading() {
+        let ax3 = factor(.accessibilityExtraExtraLarge)
+        for step in Font.typeSteps {
+            XCTAssertLessThan(Font.typeFactor(raw: ax3, size: step, density: .dense),
+                              Font.typeFactor(raw: ax3, size: step, density: .reading))
+        }
+    }
+
+    /// Заголовки на экране чтения растут до 1.70, а между — наклон без ступеньки.
+    func testReadingLargeTextGrowsModerately() {
+        for step in Font.typeSteps where step >= 38 {
+            XCTAssertEqual(Font.typeFactor(raw: 3.1, size: step, density: .reading), 1.70, accuracy: 0.001)
+        }
+        let ceilings = Font.typeSteps.map { Font.typeFactor(raw: 3.1, size: $0, density: .reading) }
+        for (small, large) in zip(ceilings, ceilings.dropFirst()) {
+            XCTAssertGreaterThanOrEqual(small, large, "потолок не должен расти с кеглем")
+        }
+    }
+
+    /// Чтение никогда не растёт меньше панели: иначе разделение теряет смысл.
+    func testReadingNeverGrowsLessThanDense() {
+        for raw in stride(from: 0.5, through: 3.2, by: 0.05) {
+            for step in Font.typeSteps {
+                XCTAssertGreaterThanOrEqual(
+                    Font.typeFactor(raw: raw, size: step, density: .reading),
+                    Font.typeFactor(raw: raw, size: step, density: .dense))
+            }
+        }
+    }
+
+    /// Шкала остаётся шкалой при ЛЮБОМ системном кегле и в обоих контекстах.
     ///
     /// Регрессия, ради которой тест написан: потолок роста переключался
     /// порогом (`size >= 20 ? 1.10 : 1.30`), и на новой шкале эта ступенька
@@ -114,37 +172,36 @@ final class TypeScaleTests: XCTestCase {
     /// давали 25 и 26 pt — отношение 1,04, то есть соседние ступени
     /// становились неразличимы. И проявлялось это только у тех, кто увеличил
     /// текст в настройках, — то есть у тех, кому размер важнее всех.
-    func testTheScaleSurvivesTheLargestSystemTextSize() {
-        let scaled = Font.typeSteps.map { step in
-            (step * CGFloat(Font.typeFactor(raw: 1.6, size: step))).rounded()
-        }
-        for (small, large) in zip(scaled, scaled.dropFirst()) {
-            XCTAssertGreaterThanOrEqual(large / small, 1.15,
-                "при максимальном кегле ступени \(small) и \(large) сливаются")
-        }
-    }
-
-    /// И при уменьшенном тоже: там потолка нет, но есть пол 0.9.
-    func testTheScaleSurvivesTheSmallestSystemTextSize() {
-        let scaled = Font.typeSteps.map { step in
-            (step * CGFloat(Font.typeFactor(raw: 0.5, size: step))).rounded()
-        }
-        for (small, large) in zip(scaled, scaled.dropFirst()) {
-            XCTAssertGreaterThanOrEqual(large / small, 1.15,
-                "при минимальном кегле ступени \(small) и \(large) сливаются")
+    func testTheScaleSurvivesEverySystemTextSize() {
+        let ax1 = factor(.accessibilityMedium)
+        for density in [TypeDensity.reading, .dense] {
+            // 0.5…3.2 покрывает пол 0.9 и самый крупный accessibility-кегль (53 / 17).
+            for raw in stride(from: 0.5, through: 3.2, by: 0.05) {
+                // Выше AX1 экран чтения сводит соседние ступени, как и сама
+                // iOS (title1 и largeTitle на AX3 — 48 и 52 pt, 1,08), но
+                // порядок не теряет.
+                let floor = density == .reading && raw > ax1 + 0.001 ? 1.08 : 1.15
+                let scaled = Font.typeSteps.map { step in
+                    (step * CGFloat(Font.typeFactor(raw: raw, size: step, density: density))).rounded()
+                }
+                for (small, large) in zip(scaled, scaled.dropFirst()) {
+                    XCTAssertGreaterThanOrEqual(large / small, floor,
+                        "\(density), кегль ×\(raw): ступени \(small) и \(large) сливаются")
+                }
+            }
         }
     }
 
     /// Кто уменьшил текст в системе — тоже человек, но не до нечитаемости.
     func testShrinkingIsAllowedButBounded() {
-        XCTAssertEqual(Font.typeFactor(raw: 0.95, size: 12), 0.95, accuracy: 0.001)
-        XCTAssertEqual(Font.typeFactor(raw: 0.5, size: 12), 0.9, accuracy: 0.001)
+        XCTAssertEqual(Font.typeFactor(raw: 0.95, size: 12, density: .reading), 0.95, accuracy: 0.001)
+        XCTAssertEqual(Font.typeFactor(raw: 0.5, size: 12, density: .dense), 0.9, accuracy: 0.001)
     }
 
     /// Обычная настройка ничего не меняет — сегодняшний вид остаётся собой.
     func testDefaultSettingChangesNothing() {
         for step in Font.typeSteps {
-            XCTAssertEqual(Font.typeFactor(raw: 1, size: step), 1, accuracy: 0.001)
+            XCTAssertEqual(Font.typeFactor(raw: 1, size: step, density: .reading), 1, accuracy: 0.001)
         }
     }
 }

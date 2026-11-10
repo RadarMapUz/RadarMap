@@ -104,7 +104,7 @@ struct LongTripSheet: View {
                 Text(verbatim: env.route.destinationName)
                     .font(.rounded(13, .semibold))
                     .foregroundStyle(Theme.textSecondary)
-                    .lineLimit(1)
+                    .lineLimit(2)
                 Text(verbatim: env.route.distanceText + " · " + env.route.etaText)
                     .font(.numeral(22, .heavy))
                     .foregroundStyle(Theme.textPrimary)
@@ -159,7 +159,7 @@ struct LongTripSheet: View {
                         Text(verbatim: checkpoint.lead.displayTitle)
                             .font(.rounded(12))
                             .foregroundStyle(Theme.textSecondary)
-                            .lineLimit(1)
+                            .lineLimit(2)
                     }
                 }
                 Spacer(minLength: 0)

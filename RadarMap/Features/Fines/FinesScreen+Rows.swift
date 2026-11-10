@@ -150,7 +150,7 @@ extension FinesScreen {
                 Text(pass.location.isEmpty ? pass.kind.displayName : pass.location)
                     .font(.rounded(14, .semibold))
                     .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(1)
+                    .lineLimit(2)
                 Text(FineFormat.moment(pass.date, withTime: true))
                     .font(.rounded(11))
                     .foregroundStyle(Theme.textTertiary)
@@ -213,6 +213,7 @@ struct ReceivedFineHeader: View {
                         .font(.rounded(fine.amount == nil ? 12 : 15, .bold))
                         .foregroundStyle(fine.amount == nil ? Theme.textTertiary : Theme.textPrimary)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                         .layoutPriority(1)
                 }
                 // Номер постановления — своей строкой: рядом с датой

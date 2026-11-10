@@ -60,7 +60,7 @@ struct PassRow: View {
                 Text(pass.location.isEmpty ? pass.kind.displayName : pass.location)
                     .font(.rounded(14, .semibold))
                     .foregroundStyle(Theme.textPrimary)
-                    .lineLimit(1)
+                    .lineLimit(2)
                 Text(Formatting.clock(pass.date))
                     .font(.rounded(11))
                     .foregroundStyle(Theme.textTertiary)

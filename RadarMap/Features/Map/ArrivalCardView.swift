@@ -22,19 +22,19 @@ struct ArrivalCardView: View {
         VStack(spacing: 14) {
             HStack(spacing: 12) {
                 Image(systemName: "flag.checkered")
-                    .font(.rounded(19, .bold))
+                    .font(.dense(19, .bold))
                     .foregroundStyle(Theme.success)
                     .frame(width: 46, height: 46)
                     .background(Theme.quietFill, in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Вы на месте!")
-                        .font(.rounded(20, .heavy))
+                        .font(.dense(20, .heavy))
                         .foregroundStyle(Theme.textPrimary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                     if !arrival.name.isEmpty {
                         Text(arrival.name)
-                            .font(.rounded(13, .medium))
+                            .font(.dense(13, .medium))
                             .foregroundStyle(Theme.textSecondary)
                             .lineLimit(1)
                     }
@@ -42,7 +42,7 @@ struct ArrivalCardView: View {
                 Spacer(minLength: 0)
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
-                        .font(.rounded(15, .bold))
+                        .font(.dense(15, .bold))
                         .foregroundStyle(Theme.textTertiary)
                         .frame(width: 32, height: 32)
                         .background(Theme.background, in: Circle())
@@ -84,7 +84,7 @@ struct ArrivalCardView: View {
                 // закрыли рукой. В «Ручном» следить некому — и подписи нет.
                 if env.location.arrivalWatch != nil {
                     Text("Завершится сама, когда машина встанет")
-                        .font(.rounded(12, .medium))
+                        .font(.dense(12, .medium))
                         .foregroundStyle(Theme.textSecondary)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
@@ -111,11 +111,11 @@ struct ArrivalCardView: View {
     private func metric(_ value: String, _ label: String) -> some View {
         VStack(spacing: 2) {
             Text(value)
-                .font(.rounded(17, .bold))
+                .font(.dense(17, .bold))
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-            Text(label).font(.rounded(11)).foregroundStyle(Theme.textSecondary)
+            Text(label).font(.dense(11)).foregroundStyle(Theme.textSecondary)
         }
         .frame(maxWidth: .infinity)
     }

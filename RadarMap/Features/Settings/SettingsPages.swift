@@ -47,6 +47,8 @@ struct AlertSettingsPage: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            Section { AlertSampleButton() }
+
             Section {
                 // Один профиль вместо четырёх перечислений. Раньше поведение
                 // задавали голос, режим город/трасса, фоновые баннеры и старт

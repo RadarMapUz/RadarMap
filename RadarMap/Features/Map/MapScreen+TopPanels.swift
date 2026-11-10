@@ -239,12 +239,12 @@ extension MapScreen {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "figure.seated.seatbelt")
-                    .font(.rounded(13, .semibold))
+                    .font(.dense(13, .semibold))
                 Text("Вы пассажир — оповещения выключены")
-                    .font(.rounded(12, .semibold))
+                    .font(.dense(12, .semibold))
                 Spacer(minLength: 4)
                 Text("Я за рулём")
-                    .font(.rounded(12, .bold))
+                    .font(.dense(12, .bold))
                     .foregroundStyle(Theme.accent)
             }
             .foregroundStyle(Theme.textSecondary)

@@ -1003,7 +1003,7 @@ struct LanguageSettingsPage: View {
     }
 }
 
-// MARK: - Проверить штрафы
+// MARK: - Портал штрафов
 
 /// Госномер и кнопка на официальный портал (FineCheck, 12б.8). Номер — только
 /// в буфер, не в адрес ссылки; рядом своя оценка с честной пометкой.
@@ -1040,7 +1040,18 @@ struct FineCheckSection: View {
                 }
                 openURL(AppConfig.fineCheckPortalURL)
             } label: {
-                Label("Проверить штрафы", systemImage: "doc.text.magnifyingglass")
+                // Название — что кнопка делает на деле: штрафы показывает портал, не приложение.
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Открыть портал штрафов")
+                        Text(plate == nil ? String(localized: "Откроется в браузере")
+                                          : String(localized: "Скопируем номер — вставьте его на портале"))
+                            .font(.footnote)
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                } icon: {
+                    Image(systemName: "arrow.up.right.square")
+                }
             }
             // Кнопка уводит из приложения в браузер — об этом говорится до
             // нажатия, а не после.
@@ -1067,10 +1078,15 @@ struct FineCheckSection: View {
                 }
             }
             .foregroundStyle(Theme.textPrimary)
+            SettingsExplainer([
+                "Приложение не узнаёт о штрафах само: кнопка копирует госномер и открывает официальный портал в браузере.",
+                "Пришедший штраф внесите в «Мои штрафы» — сверим с поездкой и напомним о сроке.",
+                "Номер и штрафы хранятся только на телефоне.",
+            ])
         } header: {
             Text("Штрафы")
         } footer: {
-            Text("Оценка, не постановление: пришёл ли штраф, знает только портал. Пришедший штраф внесите в «Мои штрафы» — сверим с поездкой и напомним о сроке. Номер и штрафы хранятся только на телефоне.")
+            Text("Оценка, не постановление: пришёл ли штраф, знает только портал.")
         }
         .sheet(isPresented: $showsFines) { FinesScreen() }
     }

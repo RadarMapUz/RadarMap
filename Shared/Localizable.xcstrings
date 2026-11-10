@@ -12811,22 +12811,6 @@
         }
       }
     },
-    "Оценка, не постановление: пришёл ли штраф, знает только портал. Пришедший штраф внесите в «Мои штрафы» — сверим с поездкой и напомним о сроке. Номер и штрафы хранятся только на телефоне.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Оценка, не постановление: пришёл ли штраф, знает только портал. Пришедший штраф внесите в «Мои штрафы» — сверим с поездкой и напомним о сроке. Номер и штрафы хранятся только на телефоне."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bu taxmin, qaror emas: jarima kelgan-kelmaganini faqat portal biladi. Kelgan jarimani «Mening jarimalarim»ga kiriting — safar bilan solishtiramiz va muddatni eslatamiz. Raqam va jarimalar faqat telefonda saqlanadi."
-          }
-        }
-      }
-    },
     "Очередь больше 30 минут": {
       "localizations": {
         "ru": {
@@ -14730,22 +14714,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yangilanishlarni tekshirish"
-          }
-        }
-      }
-    },
-    "Проверить штрафы": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Проверить штрафы"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Jarimalarni tekshirish"
           }
         }
       }
@@ -40035,6 +40003,118 @@
           "stringUnit": {
             "state": "translated",
             "value": "Har soniyada bitta nuqta — videoregistrator videosini xaritaga qoʻyish uchun."
+          }
+        }
+      }
+    },
+    "Открыть портал штрафов": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть портал штрафов"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarimalar portalini ochish"
+          }
+        }
+      }
+    },
+    "Откроется в браузере": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Откроется в браузере"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brauzerda ochiladi"
+          }
+        }
+      }
+    },
+    "Скопируем номер — вставьте его на портале": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скопируем номер — вставьте его на портале"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raqamdan nusxa olamiz — uni portalga qoʻying"
+          }
+        }
+      }
+    },
+    "Приложение не узнаёт о штрафах само: кнопка копирует госномер и открывает официальный портал в браузере.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приложение не узнаёт о штрафах само: кнопка копирует госномер и открывает официальный портал в браузере."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ilova jarimalar haqida oʻzi bilmaydi: tugma davlat raqamidan nusxa oladi va rasmiy portalni brauzerda ochadi."
+          }
+        }
+      }
+    },
+    "Пришедший штраф внесите в «Мои штрафы» — сверим с поездкой и напомним о сроке.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пришедший штраф внесите в «Мои штрафы» — сверим с поездкой и напомним о сроке."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kelgan jarimani «Mening jarimalarim»ga kiriting — safar bilan solishtiramiz va muddatni eslatamiz."
+          }
+        }
+      }
+    },
+    "Номер и штрафы хранятся только на телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Номер и штрафы хранятся только на телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raqam va jarimalar faqat telefonda saqlanadi."
+          }
+        }
+      }
+    },
+    "Оценка, не постановление: пришёл ли штраф, знает только портал.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оценка, не постановление: пришёл ли штраф, знает только портал."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu taxmin, qaror emas: jarima kelgan-kelmaganini faqat portal biladi."
           }
         }
       }

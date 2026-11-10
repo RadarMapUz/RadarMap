@@ -16,32 +16,57 @@ struct AddCameraBar: View {
 
     @State private var kind: AddPointKind = .speedCamera
     @State private var name = ""
+    /// Поле названия свёрнуто в «+ Название»: оно нужно редко, а место над
+    /// панелью — это карта с прицелом.
+    @State private var naming = false
+    @FocusState private var nameFocused: Bool
 
     var body: some View {
         let tripodState = tripod()
         GlassCard(cornerRadius: Theme.cornerLarge) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(kind == .tripod ? String(localized: "Где стоит тренога?")
                                          : String(localized: "Где стоит камера?"))
                         .font(.dense(17, .semibold))
                         .foregroundStyle(Theme.textPrimary)
-                    Text("Наведите на неё центр карты")
+                    Text("Подвиньте карту, чтобы прицел встал на неё")
                         .font(.dense(13))
                         .foregroundStyle(Theme.textSecondary)
                 }
                 .accessibilityElement(children: .combine)
 
-                VStack(spacing: 8) {
+                HStack(spacing: 8) {
                     ForEach(AddPointKind.allCases) { option in
                         tile(option, tripod: tripodState)
                     }
                 }
 
-                if kind.isOwnCamera {
+                HStack(spacing: 8) {
+                    Text(Self.consequence(kind, tripod: tripodState))
+                        .font(.dense(12))
+                        .foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if kind.isOwnCamera && !naming {
+                        Button {
+                            withMotion { naming = true }
+                            nameFocused = true
+                        } label: {
+                            Label("Название", systemImage: "plus")
+                                .font(.dense(13, .semibold))
+                                .foregroundStyle(Theme.accent)
+                                .tapTarget()
+                        }
+                        .accessibilityLabel(Text("Добавить название"))
+                    }
+                }
+
+                if kind.isOwnCamera && naming {
                     TextField("Название (необязательно)", text: $name)
+                        .focused($nameFocused)
                         .textFieldStyle(.plain)
-                        .padding(12)
+                        .padding(.horizontal, 12)
                         .frame(minHeight: Theme.controlSize)
                         .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerSmall, style: .continuous))
                         .foregroundStyle(Theme.textPrimary)
@@ -60,11 +85,14 @@ struct AddCameraBar: View {
                     .disabled(kind == .tripod && !tripodState.isAvailable)
                 }
             }
-            .padding(16)
+            .padding(14)
             .typeDensity(.dense)
         }
     }
 
+    /// Плитка ряда: значок и короткое имя; что будет — строкой под рядом.
+    /// Тренога выбирается и там, где её сейчас не поставить: прицел можно
+    /// довести до места, а кнопка честно ждёт.
     private func tile(_ option: AddPointKind, tripod: TripodAvailability) -> some View {
         let selected = option == kind
         let open = option != .tripod || tripod.isAvailable
@@ -72,34 +100,25 @@ struct AddCameraBar: View {
         return Button {
             withMotion { kind = option }
         } label: {
-            HStack(spacing: 12) {
+            VStack(spacing: 4) {
                 // Пунктирный кант — так свежая отметка водителей и встанет на карте.
-                CameraIcon(kind: option.cameraType, side: 30, dashedRim: option == .tripod)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(Self.title(option))
-                        .font(.dense(15, .semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                    Text(Self.consequence(option, tripod: tripod))
-                        .font(.dense(12))
-                        .foregroundStyle(Theme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .font(.dense(20))
-                    .foregroundStyle(selected ? Theme.accent : Theme.textTertiary)
-                    .accessibilityHidden(true)
+                CameraIcon(kind: option.cameraType, side: 26, dashedRim: option == .tripod)
+                    .opacity(open ? 1 : 0.55)
+                Text(Self.shortTitle(option))
+                    .font(.dense(13, .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 6)
             .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, minHeight: Theme.controlSize, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: Theme.controlSize)
             .background(Theme.surface, in: shape)
             .overlay(shape.strokeBorder(selected ? Theme.accent : Theme.stroke, lineWidth: selected ? 2 : 1))
             .contentShape(shape)
-            .opacity(open ? 1 : 0.55)
         }
         .buttonStyle(PressableStyle())
-        .disabled(!open && !selected)
+        .accessibilityLabel(Text(Self.title(option)))
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
@@ -107,6 +126,14 @@ struct AddCameraBar: View {
         switch option {
         case .speedCamera:  return String(localized: "Камера скорости")
         case .signalCamera: return String(localized: "Камера на светофоре")
+        case .tripod:       return ReportWords.title(.tripod)
+        }
+    }
+
+    private static func shortTitle(_ option: AddPointKind) -> String {
+        switch option {
+        case .speedCamera:  return String(localized: "Скорость")
+        case .signalCamera: return String(localized: "Светофор")
         case .tripod:       return ReportWords.title(.tripod)
         }
     }

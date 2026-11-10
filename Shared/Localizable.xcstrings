@@ -41318,6 +41318,70 @@
           }
         }
       }
+    },
+    "Подвиньте карту, чтобы прицел встал на неё": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подвиньте карту, чтобы прицел встал на неё"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nishon unga tushishi uchun xaritani suring"
+          }
+        }
+      }
+    },
+    "Светофор": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Светофор"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Svetofor"
+          }
+        }
+      }
+    },
+    "Название": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Название"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nomi"
+          }
+        }
+      }
+    },
+    "Добавить название": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить название"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom qoʻshish"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

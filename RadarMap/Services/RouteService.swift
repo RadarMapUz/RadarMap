@@ -381,10 +381,10 @@ final class RouteService {
     /// маршруту» до его камер тогда ничего не значит (сценарий S7).
     @ObservationIgnored private(set) var isOffRoute = false
     @ObservationIgnored private var isRebuilding = false
-    /// Прогресс по маршруту сейчас не обновляется: идёт построение или
-    /// перестроение, `updateProgress` ждёт его конца, и `progressAlong`
-    /// застыл там, где машина была до него. Остатку «по маршруту» до камер
-    /// тогда верить нельзя (LocationGates.routeRemaining).
+    /// Прогрессу по маршруту сейчас не верить: при построении `updateProgress`
+    /// ждёт его конца, при перестроении ведёт по старой линии, с которой
+    /// съехали. Остатку «по маршруту» до камер тогда верить нельзя
+    /// (LocationGates.routeRemaining).
     var isProgressFrozen: Bool { isBuilding || isRebuilding }
     /// Идёт перестроение после съезда — наблюдаемо: машина на это время
     /// показывает «Перестраиваю маршрут» вместо уже неверного поворота.
@@ -1179,7 +1179,9 @@ final class RouteService {
         // Прибытие — на каждом фиксе, на любом выходе отсюда (и после
         // прибытия: маршрут снят — часов нет).
         defer { refreshArrival() }
-        guard let variant = selected, !isBuilding, !isRebuilding,
+        // Перестроение — не повод замирать: до прихода новой линии ведём по
+        // старой (76), без второго перестроения поверх первого.
+        guard let variant = selected, !isBuilding,
               let destination = destinationCoordinate else { return }
         let point = MKMapPoint(coordinate)
 
@@ -1238,7 +1240,8 @@ final class RouteService {
             nextCamera = nil
         }
 
-        updateManeuvers(variant: variant, along: along, announce: announce,
+        updateManeuvers(variant: variant, along: along,
+                        announce: announce && Self.voicesOldLine(rebuilding: isRebuilding, deviation: deviation),
                         speedKmh: speedKmh, cameraHolds: cameraHolds)
 
         // Отклонение → перестроение (с защитой от шума GPS и кулдауном).
@@ -1251,6 +1254,10 @@ final class RouteService {
         // Ход навстречу линии (20.9) — по ветке, которую выбрала проекция
         // (`segmentHint` после project — её сегмент): на обратной ветке
         // маршрута-петли курс попутен, и правило молчит.
+        guard !isRebuilding else {
+            isOffRoute = deviation > AppConfig.rerouteDeviationMeters || rerouteGate.isWrongWay
+            return
+        }
         let rerouteLimit = variant.isOffline ? AppConfig.offlineRouteRerouteMeters
                                              : AppConfig.rerouteDeviationMeters
         let rebuild = rerouteGate.note(
@@ -1383,6 +1390,12 @@ final class RouteService {
         }
         approachMissedAt[index] = Date()
         return nil
+    }
+
+    /// Голос манёвров старой линии во время перестроения — только если мы
+    /// снова на ней: съехав, водитель ждёт новый маршрут, а не старый поворот.
+    nonisolated static func voicesOldLine(rebuilding: Bool, deviation: CLLocationDistance) -> Bool {
+        !rebuilding || deviation <= AppConfig.rerouteDeviationMeters
     }
 
     /// Какую ступень голоса манёвра пора произнести: 2 — далеко («через 800

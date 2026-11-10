@@ -556,7 +556,7 @@ class ApiIntegrationTest(unittest.TestCase):
             first.recent.clear()
             self.report(first, USER, (41.33, 69.29), "radar")
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM votes WHERE report_id = ?", (rid,)).fetchone()[0],
-                             1, "повтор дошёл и слился голосом")
+                             0, "свой повтор дошёл до слияния и ничего не записал (82)")
             self.assertFalse(api.confirmed_independently(conn, rid, bot.device_for(SALT, USER, time.time()),
                                                          bot.pseudo_ip_for(SALT, USER, time.time())),
                              "свой повтор — не подтверждение")

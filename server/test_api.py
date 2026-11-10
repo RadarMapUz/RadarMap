@@ -4,6 +4,7 @@
 """
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -335,21 +336,26 @@ class APITest(ServerTestBase):
         self.assertFalse(body["merged"], "в квартале 250 м — разные точки")
 
     def test_same_spot_on_a_highway_still_merges(self):
+        """250 м вдоль хода на трассе (курс известен) — та же тренога."""
         _call(self.port, "POST", "/api/report",
               {"lat": 41.0, "lon": 65.0, "device": "a", "type": "tripod",
-               "cls": "motorway"})
+               "cls": "motorway", "course": 0})
         _, body = _call(self.port, "POST", "/api/report",
                         {"lat": 41.00225, "lon": 65.0, "device": "b",
-                         "type": "tripod", "cls": "motorway"})
+                         "type": "tripod", "cls": "motorway", "course": 0})
         self.assertTrue(body["merged"], "250 м на трассе — та же тренога")
 
-    def test_unknown_class_keeps_the_old_radius(self):
-        """Старый клиент класс не шлёт — поведение обязано остаться прежним."""
+    def test_without_course_the_circle_is_conservative(self):
+        """Без курса не отличить «дальше по ходу» от «соседней улицы»: 250 м —
+        две точки, 120 м — одна (82, MERGE_NO_COURSE_METERS)."""
         _call(self.port, "POST", "/api/report",
               {"lat": 41.0, "lon": 65.0, "device": "a"})
-        _, body = _call(self.port, "POST", "/api/report",
-                        {"lat": 41.00225, "lon": 65.0, "device": "b"})
-        self.assertTrue(body["merged"])
+        _, far = _call(self.port, "POST", "/api/report",
+                       {"lat": 41.00225, "lon": 65.0, "device": "b"})
+        self.assertFalse(far["merged"])
+        _, near = _call(self.port, "POST", "/api/report",
+                        {"lat": 41.00108, "lon": 65.0, "device": "c"})
+        self.assertTrue(near["merged"])
 
     # --- причина закрытия (для метрик качества) ---
 
@@ -360,7 +366,7 @@ class APITest(ServerTestBase):
                         {"lat": 41.31, "lon": 69.25, "device": "me"})
         _call(self.port, "POST", "/api/report/cancel", {"id": mine["id"], "device": "me"})
         _, other = _call(self.port, "POST", "/api/report",
-                         {"lat": 41.5, "lon": 69.9, "device": "creator"})
+                         {"lat": 41.5, "lon": 69.9, "device": "creator", "type": "post"})
         for i, device in enumerate(("h1", "h2", "h3")):
             _call(self.port, "POST", "/api/vote",
                   {"id": other["id"], "device": device, "value": -1}, ip=f"10.0.0.{i + 1}")
@@ -404,8 +410,9 @@ class APITest(ServerTestBase):
         self.assertTrue(body["active"], "3 подтверждения против 1 дизлайка — отметка жива")
 
     def test_three_dislikes_hide_unconfirmed(self):
+        """Кворум скрытия — у поста и прочих; радар и тренога уходят раньше (82)."""
         _, first = _call(self.port, "POST", "/api/report",
-                         {"lat": 41.31, "lon": 69.25, "device": "creator"})
+                         {"lat": 41.31, "lon": 69.25, "device": "creator", "type": "post"})
         rid = first["id"]
         for i, device in enumerate(("h1", "h2", "h3")):
             status, body = _call(self.port, "POST", "/api/vote",
@@ -596,16 +603,20 @@ class APITest(ServerTestBase):
                           {"lat": 41.3102, "lon": 69.2502, "device": "driver2"},
                           ip="10.2.3.2")
         self.assertTrue(merged["merged"])
+        self.assertTrue(merged["confirmed"], "независимое слияние — это «Стоит»")
         self.assertTrue(self._feed_report(rid)["confirmed"],
                         "независимый merge должен подтверждать")
-        self.assertGreater(self._expires(rid), before)
+        self.assertGreaterEqual(self._expires(rid), before)
+        self.assertGreater(self._feed_report(rid)["last_confirmed"], 0)
 
     def test_downvote_from_new_ip_cuts_life_once(self):
         """Дизлайк с нового адреса срезает 30 мин; повторы с того же адреса или
         устройства не режут второй раз — и три дизлайка с ДВУХ адресов точку
-        не скрывают (кворум остаётся кворумом)."""
+        не скрывают (кворум остаётся кворумом). Пост: у радара и треноги два
+        независимых «Уже нет» снимают точку (82, свой тест)."""
         _, body = _call(self.port, "POST", "/api/report",
-                        {"lat": 41.31, "lon": 69.25, "device": "creator"},
+                        {"lat": 41.31, "lon": 69.25, "device": "creator",
+                         "type": "post"},
                         ip="10.2.4.1")
         rid = body["id"]
         start = self._expires(rid)
@@ -1071,6 +1082,344 @@ def retention_doc(path=None):
 def created_tables(filename):
     with open(os.path.join(SERVER_DIR, filename), encoding="utf-8") as handle:
         return set(_CREATE_TABLE.findall(handle.read()))
+
+
+class TripodTrustTest(ServerTestBase):
+    """Пункт 82: свежесть треноги — срок от последнего независимого «Стоит»,
+    доверие 0/1/2, «Уже нет», история для карты частых мест."""
+
+    def report(self, device="author", ip="10.8.0.1", rtype="tripod", lat=41.31, lon=69.25, **extra):
+        body = {"lat": lat, "lon": lon, "device": device, "type": rtype}
+        body.update(extra)
+        return _call(self.port, "POST", "/api/report", body, ip=ip)
+
+    def vote(self, rid, device, value, ip, **extra):
+        body = {"id": rid, "device": device, "value": value, "kind": "pass"}
+        body.update(extra)
+        return _call(self.port, "POST", "/api/vote", body, ip=ip)
+
+    def row(self, rid):
+        conn = sqlite3.connect(api.DB_PATH)
+        try:
+            return conn.execute("SELECT created, expires, last_confirmed, active, closed, lat, lon "
+                                "FROM reports WHERE id = ?", (rid,)).fetchone()
+        finally:
+            conn.close()
+
+    def item(self, rid):
+        _, feed = _call(self.port, "GET", "/api/mobile")
+        return next((r for r in feed["reports"] if r["id"] == rid), None)
+
+    def seed_density(self):
+        conn = sqlite3.connect(api.DB_PATH)
+        now = time.time()
+        for index in range(api.PROBATION_MIN_DEVICES):
+            conn.execute("INSERT INTO reports(lat, lon, created, expires, device, type, active) "
+                         "VALUES(40.0, 68.0, ?, ?, ?, 'radar', 0)", (now - 3600, now - 60, f"seed-{index}"))
+        conn.commit()
+        conn.close()
+        api._probation_cache = (0.0, None)
+
+    def tearDown(self):
+        api._probation_cache = (0.0, None)
+
+    def test_fresh_report_is_trust_zero_without_confirmation(self):
+        _, made = self.report()
+        item = self.item(made["id"])
+        self.assertEqual(item["trust"], 0)
+        self.assertIsNone(item["last_confirmed"])
+        self.assertEqual(item["doubted"], 0)
+
+    def test_independent_yes_raises_trust_and_stamps_last_confirmed(self):
+        _, made = self.report()
+        rid = made["id"]
+        before = time.time()
+        self.vote(rid, "d2", 1, "10.8.0.2")
+        item = self.item(rid)
+        self.assertEqual(item["trust"], 1)
+        self.assertGreaterEqual(item["last_confirmed"], before - 1)
+        self.vote(rid, "d3", 1, "10.8.0.3")
+        self.assertEqual(self.item(rid)["trust"], 2, "двое независимых за час — доверие 2")
+
+    def test_unconfirmed_lives_probation(self):
+        self.seed_density()
+        now = time.time()
+        _, made = self.report()
+        self.assertAlmostEqual(self.row(made["id"])[1] - now, api.PROBATION_TTLS["tripod"], delta=30)
+
+    def test_each_independent_yes_holds_ninety_minutes_from_itself(self):
+        self.seed_density()
+        _, made = self.report()
+        rid = made["id"]
+        now = time.time()
+        self.vote(rid, "d2", 1, "10.8.1.2")
+        self.assertAlmostEqual(self.row(rid)[1], now + api.SPEED_CONFIRM_TTL, delta=30)
+        # наблюдение пятиминутной давности — срок от него, а не от приёма
+        self.vote(rid, "d3", 1, "10.8.1.3", age=300)
+        self.assertAlmostEqual(self.row(rid)[1], now + api.SPEED_CONFIRM_TTL, delta=30,
+                               msg="старое «Стоит» не продлевает дальше свежего")
+
+    def test_ceiling_is_ten_hours_from_creation(self):
+        _, made = self.report()
+        rid = made["id"]
+        now = time.time()
+        conn = sqlite3.connect(api.DB_PATH)
+        conn.execute("UPDATE reports SET created = ?, expires = ? WHERE id = ?",
+                     (now - 9.5 * 3600, now + 600, rid))
+        conn.commit()
+        conn.close()
+        self.vote(rid, "d2", 1, "10.8.2.2")
+        self.assertAlmostEqual(self.row(rid)[1], now - 9.5 * 3600 + api.SPEED_MAX_LIFE, delta=5)
+
+    def test_own_or_same_address_yes_neither_extends_nor_freshens(self):
+        self.seed_density()
+        _, made = self.report(ip="10.8.3.1")
+        rid = made["id"]
+        expires = self.row(rid)[1]
+        self.vote(rid, "author", 1, "10.8.3.9")
+        self.vote(rid, "passenger", 1, "10.8.3.1")
+        created, after, last, *_ = self.row(rid)
+        self.assertEqual(after, expires)
+        self.assertEqual(last, 0)
+        self.assertEqual(self.item(rid)["trust"], 0)
+
+    def test_stale_yes_counts_but_does_not_freshen(self):
+        self.seed_density()
+        _, made = self.report()
+        rid = made["id"]
+        expires = self.row(rid)[1]
+        self.vote(rid, "late", 1, "10.8.4.2", age=api.CONFIRM_FRESH_MAX + 60)
+        self.assertEqual(self.row(rid)[1], expires)
+        self.assertEqual(self.row(rid)[2], 0)
+
+    def test_independent_no_cuts_life_and_lowers_trust(self):
+        _, made = self.report()
+        rid = made["id"]
+        self.vote(rid, "d2", 1, "10.8.5.2")
+        expires = self.row(rid)[1]
+        _, body = self.vote(rid, "d3", -1, "10.8.5.3")
+        self.assertTrue(body["active"])
+        self.assertAlmostEqual(self.row(rid)[1], expires - api.DOWN_PENALTY, delta=5)
+        item = self.item(rid)
+        self.assertEqual(item["doubted"], 1)
+        self.assertEqual(item["trust"], 0, "«Уже нет» после «Стоит» — на ступень ниже")
+
+    def test_two_independent_noes_hide_the_tripod(self):
+        _, made = self.report()
+        rid = made["id"]
+        self.vote(rid, "d2", -1, "10.8.6.2")
+        _, body = self.vote(rid, "d3", -1, "10.8.6.3")
+        self.assertFalse(body["active"])
+        self.assertEqual(self.row(rid)[4], "gone")
+        self.assertIsNone(self.item(rid))
+
+    def test_noes_from_one_address_do_not_hide(self):
+        _, made = self.report()
+        rid = made["id"]
+        self.vote(rid, "d2", -1, "10.8.7.2")
+        _, body = self.vote(rid, "d3", -1, "10.8.7.2")
+        self.assertTrue(body["active"])
+
+    def test_fresh_yes_between_noes_keeps_it_alive(self):
+        _, made = self.report()
+        rid = made["id"]
+        self.vote(rid, "d2", -1, "10.8.8.2")
+        time.sleep(0.01)
+        self.vote(rid, "d3", 1, "10.8.8.3")
+        time.sleep(0.01)
+        _, body = self.vote(rid, "d4", -1, "10.8.8.4")
+        self.assertTrue(body["active"], "после свежего «Стоит» считается только одно «Уже нет»")
+
+    def test_oncoming_no_does_not_hide(self):
+        _, made = self.report(course=0)
+        rid = made["id"]
+        self.vote(rid, "d2", -1, "10.8.9.2", course=180)
+        _, body = self.vote(rid, "d3", -1, "10.8.9.3", course=180)
+        self.assertTrue(body["active"], "встречный мог не увидеть треногу через разделительную")
+
+    def test_expired_tripod_goes_to_history_without_exact_time(self):
+        _, made = self.report(device="a1", ip="10.9.0.1")
+        rid = made["id"]
+        self.vote(rid, "a2", 1, "10.9.0.2")
+        _, cancelled = self.report(device="a3", ip="10.9.0.3", lat=41.5, lon=69.5)
+        _call(self.port, "POST", "/api/report/cancel", {"id": cancelled["id"], "device": "a3"})
+        now = time.time()
+        conn = sqlite3.connect(api.DB_PATH)
+        conn.execute("UPDATE reports SET expires = ?", (now - 2 * 86400,))
+        conn.commit()
+        conn.close()
+        api.maintenance(now)
+        conn = sqlite3.connect(api.DB_PATH)
+        try:
+            history = conn.execute("SELECT type, day, quarter, device, kind FROM report_history "
+                                   "ORDER BY kind DESC").fetchall()
+            columns = {r[1] for r in conn.execute("PRAGMA table_info(report_history)")}
+            left = conn.execute("SELECT COUNT(*) FROM reports").fetchone()[0]
+        finally:
+            conn.close()
+        self.assertEqual(left, 0)
+        self.assertEqual([(h[3], h[4]) for h in history], [("a1", "report"), ("a2", "confirm")],
+                         "отозванная автором отметка в историю не идёт")
+        day = int((now + api.HISTORY_TZ_OFFSET) // 86400)
+        self.assertIn(history[0][1], (day - 1, day))
+        self.assertIn(history[0][2], range(4))
+        self.assertFalse(columns & {"created", "ts", "expires"}, "в истории нет точного времени")
+
+    def test_history_obeys_the_retention_ceiling(self):
+        now = time.time()
+        today = int((now + api.HISTORY_TZ_OFFSET) // 86400)
+        conn = sqlite3.connect(api.DB_PATH)
+        conn.execute("DELETE FROM report_history")
+        for day in (today - api.LIVE_MAX_DAYS - 1, today - 3):
+            conn.execute("INSERT INTO report_history(lat, lon, type, day, quarter, device, ip) "
+                         "VALUES(41.3, 69.2, 'tripod', ?, 3, 'd', '1.1.1.1')", (day,))
+        conn.commit()
+        api.enforce_retention(conn, now)
+        days = [r[0] for r in conn.execute("SELECT day FROM report_history")]
+        conn.execute("DELETE FROM report_history")
+        conn.commit()
+        conn.close()
+        self.assertEqual(days, [today - 3])
+
+
+class TripodDuplicateTest(ServerTestBase):
+    """Пункт 82, дубли: второе «Тренога» рядом — подтверждение той же метки,
+    а не вторая точка; геометрия — вдоль хода больше, поперёк меньше."""
+
+    BASE = (41.3, 69.25)
+
+    def report(self, device, ip, d_north=0.0, d_east=0.0, rtype="tripod", course=0, cls="primary"):
+        lat = self.BASE[0] + d_north / 111_320.0
+        lon = self.BASE[1] + d_east / (111_320.0 * math.cos(math.radians(self.BASE[0])))
+        body = {"lat": lat, "lon": lon, "device": device, "type": rtype, "cls": cls}
+        if course is not None:
+            body["course"] = course
+        return _call(self.port, "POST", "/api/report", body, ip=ip)
+
+    def live(self):
+        _, feed = _call(self.port, "GET", "/api/mobile")
+        return feed["reports"]
+
+    def test_second_driver_along_the_road_confirms_the_same_mark(self):
+        _, first = self.report("a", "10.10.0.1")
+        status, second = self.report("b", "10.10.0.2", d_north=120)
+        self.assertEqual(status, 200)
+        self.assertTrue(second["merged"])
+        self.assertEqual(second["id"], first["id"])
+        self.assertTrue(second["confirmed"], "независимое второе нажатие — это «Стоит»")
+        live = self.live()
+        self.assertEqual(len(live), 1)
+        self.assertEqual(live[0]["trust"], 1)
+        self.assertIsNotNone(live[0]["last_confirmed"])
+
+    def test_parallel_street_sixty_metres_across_is_another_mark(self):
+        self.report("a", "10.10.1.1")
+        _, second = self.report("b", "10.10.1.2", d_east=60)
+        self.assertFalse(second["merged"])
+        self.assertEqual(len(self.live()), 2)
+
+    def test_tripod_and_accident_do_not_merge(self):
+        self.report("a", "10.10.2.1")
+        _, second = self.report("b", "10.10.2.2", d_north=20, rtype="accident")
+        self.assertFalse(second["merged"])
+
+    def test_own_second_tap_is_not_a_confirmation(self):
+        _, first = self.report("a", "10.10.3.1")
+        rid = first["id"]
+        conn = sqlite3.connect(api.DB_PATH)
+        conn.execute("UPDATE reports SET created = created - 300 WHERE id = ?", (rid,))
+        conn.commit()
+        before = conn.execute("SELECT expires, up, last_confirmed FROM reports WHERE id = ?",
+                              (rid,)).fetchone()
+        conn.close()
+        _, again = self.report("a", "10.10.3.1", d_north=50)
+        self.assertTrue(again["merged"])
+        self.assertTrue(again["own"])
+        self.assertFalse(again["confirmed"])
+        _, passenger = self.report("p", "10.10.3.1", d_north=40)
+        self.assertTrue(passenger["merged"])
+        self.assertFalse(passenger["confirmed"], "тот же адрес — не независимый водитель")
+        conn = sqlite3.connect(api.DB_PATH)
+        after = conn.execute("SELECT expires, last_confirmed FROM reports WHERE id = ?",
+                             (rid,)).fetchone()
+        conn.close()
+        self.assertEqual(after, (before[0], before[2]), "себе не продлевают")
+
+    def test_two_simultaneous_reports_leave_one_mark(self):
+        barrier = threading.Barrier(2)
+        results = []
+
+        def go(device, ip):
+            barrier.wait()
+            results.append(self.report(device, ip, d_north=10 if device == "y" else 0))
+
+        threads = [threading.Thread(target=go, args=args)
+                   for args in (("x", "10.10.4.1"), ("y", "10.10.4.2"))]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual([status for status, _ in results], [200, 200])
+        self.assertEqual(len(self.live()), 1, "гонка двух вставок дала две метки")
+        self.assertEqual(sorted(body["merged"] for _, body in results), [False, True])
+
+    def test_merged_mark_does_not_wander(self):
+        _, first = self.report("a", "10.10.5.1")
+        rid = first["id"]
+        for index in range(12):
+            _, body = self.report(f"d{index}", f"10.10.5.{index + 2}", d_north=150)
+            self.assertEqual(body["id"], rid)
+        conn = sqlite3.connect(api.DB_PATH)
+        lat, lon = conn.execute("SELECT lat, lon FROM reports WHERE id = ?", (rid,)).fetchone()
+        conn.close()
+        moved = api.haversine(self.BASE[0], self.BASE[1], lat, lon)
+        self.assertGreater(moved, 1, "место уточняется")
+        self.assertLessEqual(moved, api.MERGE_DRIFT_MAX_METERS + 0.5, "метка уехала за нажатиями")
+
+    def test_one_step_moves_at_most_the_shift_limit(self):
+        _, first = self.report("a", "10.10.6.1")
+        self.report("b", "10.10.6.2", d_north=200)
+        conn = sqlite3.connect(api.DB_PATH)
+        lat, lon = conn.execute("SELECT lat, lon FROM reports WHERE id = ?", (first["id"],)).fetchone()
+        conn.close()
+        self.assertLessEqual(api.haversine(self.BASE[0], self.BASE[1], lat, lon),
+                             api.MERGE_SHIFT_MAX_METERS + 0.5)
+
+    def test_without_course_merges_only_close(self):
+        self.report("a", "10.10.7.1", course=None)
+        _, near = self.report("b", "10.10.7.2", d_north=100, course=None)
+        self.assertTrue(near["merged"])
+        _, far = self.report("c", "10.10.7.3", d_north=-200, course=None)
+        self.assertFalse(far["merged"])
+
+    def test_existing_duplicates_are_merged_keeping_votes(self):
+        now = time.time()
+        conn = sqlite3.connect(api.DB_PATH)
+        ids = []
+        for device, ip, d_north, created, confirmed in (("o1", "10.11.0.1", 0, now - 900, now - 600),
+                                                         ("o2", "10.11.0.2", 70, now - 300, 0)):
+            cur = conn.execute(
+                "INSERT INTO reports(lat, lon, created, expires, device, type, ip, course, cls, "
+                "last_confirmed) VALUES(?, ?, ?, ?, ?, 'tripod', ?, 0, 'primary', ?)",
+                (self.BASE[0] + d_north / 111_320.0, self.BASE[1], created, now + 3600 + d_north,
+                 device, ip, confirmed))
+            ids.append(cur.lastrowid)
+        conn.execute("INSERT INTO votes(report_id, device, value, ts, ip) VALUES(?, 'v1', 1, ?, '10.11.0.8')",
+                     (ids[0], now - 600))
+        conn.execute("INSERT INTO votes(report_id, device, value, ts, ip) VALUES(?, 'v2', 1, ?, '10.11.0.9')",
+                     (ids[1], now - 100))
+        conn.commit()
+        merged = api.merge_live_duplicates(conn, now)
+        conn.commit()
+        rows = conn.execute("SELECT id, active, closed, last_confirmed, expires FROM reports "
+                            "ORDER BY id").fetchall()
+        voters = {r[0] for r in conn.execute("SELECT device FROM votes WHERE report_id = ?", (ids[0],))}
+        conn.close()
+        self.assertEqual(merged, 1)
+        self.assertEqual([(r[1], r[2]) for r in rows], [(1, ""), (0, "merged")])
+        self.assertEqual(voters, {"v1", "v2", "o2"}, "голоса и автор дубля переехали")
+        self.assertAlmostEqual(rows[0][3], now - 300, delta=1, msg="автор дубля — независимое «Стоит»")
+        self.assertAlmostEqual(rows[0][4], now + 3670, delta=1)
 
 
 class RetentionTest(ServerTestBase):
@@ -1722,8 +2071,9 @@ class RoadEventsTest(ServerTestBase):
         self.assertTrue(body["active"], "четыре свежих «да» против трёх «нет» — ремонт идёт")
 
     def test_radar_quorum_still_counts_every_vote(self):
-        """Окно — только у дороги: у радара все голоса в счёте, как было."""
-        _, made = self.report("radar", device="owner")
+        """Окно — только у дороги: у поста все голоса в счёте, как было (радар
+        и тренога с 82 живут по своему правилу «Уже нет»)."""
+        _, made = self.report("post", device="owner")
         rid = made["id"]
         self._seed_old_yes(rid, 4, age=api.ROAD_VOTE_FRESH + 3600)
         for index in range(3):

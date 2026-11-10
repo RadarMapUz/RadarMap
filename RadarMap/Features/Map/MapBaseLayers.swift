@@ -184,6 +184,8 @@ struct EngineBaseLayer: View {
                         cngStations: env.cng.isActive ? env.cng.mapStations : [],
                         parkedCar: env.location.parkedCarOnMap?.coordinate,
                         hotspots: env.settings.tripodHints ? map.visibleHotspots.map(\.coordinate) : [],
+                        hotspotLabels: env.settings.tripodHints
+                            ? map.visibleHotspots.map { TripodHabit.mapLabel(peak: $0.peak) ?? "" } : [],
                         centerCommand: map.centerCommand,
                         centerTarget: map.centerTarget,
                         onHeading: { map.noteMapDirection($0) },

@@ -186,6 +186,8 @@ struct EngineMapView: UIViewRepresentable {
     var parkedCar: CLLocationCoordinate2D?
     /// Зоны «здесь часто ставят треногу»: пустые — слоя нет.
     var hotspots: [CLLocationCoordinate2D] = []
+    /// Подпись зоны того же индекса: «чаще вечером» (82); пусто — без подписи.
+    var hotspotLabels: [String] = []
     /// Перенести центр в точку (счётчик, как у остальных команд): нужно
     /// крестику постановки камеры, который встаёт на точку долгого тапа.
     var centerCommand: Int = 0
@@ -1837,15 +1839,19 @@ struct EngineMapView: UIViewRepresentable {
             updateCng(model.cngStations, in: view)
             var hasher = Hasher()
             for spot in model.hotspots { hasher.combine(spot.latitude); hasher.combine(spot.longitude) }
+            hasher.combine(model.hotspotLabels)
             let hotspotsKey = hasher.finalize()
             if hotspotsKey != lastHotspotsKey {
                 lastHotspotsKey = hotspotsKey
-                let zones = model.hotspots.map { centre -> MLNPolygonFeature in
+                let zones = model.hotspots.enumerated().map { index, centre -> MLNPolygonFeature in
                     let ring = (0..<36).map { step -> CLLocationCoordinate2D in
                         GeoMath.destination(from: centre, bearing: Double(step) * 10,
                                             distanceMeters: AppConfig.hotspotZoneRadiusMeters)
                     }
-                    return MLNPolygonFeature(coordinates: ring, count: UInt(ring.count))
+                    let zone = MLNPolygonFeature(coordinates: ring, count: UInt(ring.count))
+                    let label = model.hotspotLabels.indices.contains(index) ? model.hotspotLabels[index] : ""
+                    zone.attributes = ["label": label]
+                    return zone
                 }
                 (view.style?.source(withIdentifier: "hotspots") as? MLNShapeSource)?.shape =
                     MLNShapeCollectionFeature(shapes: zones)
@@ -2194,16 +2200,19 @@ struct EngineMapView: UIViewRepresentable {
         static func cameraAttributes(_ camera: Camera, alert: Int?, path: Set<Int>, familiar: Set<Int>,
                                      own: Set<Int> = [], daylight: Bool, limit: Int?) -> [String: Any] {
             let tier = CameraMarkerLook.tier(id: camera.id, alert: alert, path: path)
-            let ghost = CameraMarkerLook.isGhost(unconfirmed: camera.isUnconfirmedMobile,
-                                                 own: own.contains(camera.id))
+            // Свежесть (82): приглушена и неподтверждённая, и та, о которой сказали «Уже нет».
+            let faded = camera.mobileFresh.map(TripodFreshness.isFaded) ?? camera.isUnconfirmedMobile
+            let ghost = CameraMarkerLook.isGhost(unconfirmed: faded, own: own.contains(camera.id))
             return ["id": camera.id, "alert": tier == .alert, "tier": tier.rawValue,
                     "sort": CameraMarkerLook.sortKey(tier),
                     "color": CameraMarkerLook.dotColor(typeHex: EngineMapStyle.typeHex(camera.kind),
                                                        tier: tier, daylight: daylight),
                     "icon": CameraMarkerLook.icon(glyph: camera.kind.glyph, tier: tier, daylight: daylight),
-                    "badge": CameraMarkerLook.badge(tier: tier, unconfirmed: ghost,
+                    "badge": CameraMarkerLook.badge(tier: tier,
+                                                    unconfirmed: ghost && camera.isUnconfirmedMobile,
                                                     familiar: familiar.contains(camera.id)),
                     "limit": limit.map(String.init) ?? "",
+                    "fresh": camera.mobileFresh.map(TripodFreshness.mapLabel) ?? "",
                     "unconfirmed": ghost]
         }
 

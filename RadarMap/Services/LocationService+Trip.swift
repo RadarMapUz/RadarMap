@@ -212,6 +212,17 @@ extension LocationService {
     /// `auto` — автостоп по CoreMotion или у цели (а не кнопка): только такую
     /// поездку можно потом продолжить как заезд по пути.
     /// `atDestination` — закрыло прибытие к цели маршрута (ArrivalFinish).
+    /// Финальный кадр плашки — только когда экран приложения не открыт: в нём
+    /// итог показывает карточка «Поездка сохранена». Свежесть по endedAt: у
+    /// продолженной поездки (склейка) id остаётся старым.
+    private func activityFinish() -> CameraActivityAttributes.TripFinish? {
+        guard !isPhoneForeground, let record = trip.history.first,
+              Date().timeIntervalSince(record.endedAt) < 30 else { return nil }
+        return .init(tripID: record.id, distanceMeters: record.distanceMeters,
+                     minutes: Int((record.movingDuration / 60).rounded()), cameras: record.passed.count,
+                     score: record.score.map { Int($0) }, fineRisk: TripHistory.fineRisk(of: record.passed))
+    }
+
     func endTrip(asPassenger: Bool = false, auto: Bool = false, atDestination: Bool = false) {
         stopArrivalWatch()   // любой конец поездки — следить за прибытием незачем
         isTripActive = false
@@ -269,7 +280,7 @@ extension LocationService {
             route.clear()
         }
         applyLocationMode()
-        liveActivity?.end()
+        liveActivity?.end(finish: asPassenger ? nil : activityFinish())
         notifier.clearApproaching()   // конец поездки — убрать висящий баннер камеры
         // Часы сразу в «ожидание», не дожидаясь следующего GPS-тика.
         watchBridge?.update(isTripActive: false, speedKmh: 0, cameraTitle: nil, cameraSymbol: nil,

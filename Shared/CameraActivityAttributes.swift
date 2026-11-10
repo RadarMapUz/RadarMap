@@ -13,6 +13,15 @@ import ActivityKit
 // кодирует состояние вне главного потока (`@concurrent` в LiveActivityService) —
 // изолированное соответствие в Swift 6 стало бы ошибкой.
 nonisolated struct CameraActivityAttributes: ActivityAttributes {
+    nonisolated struct TripFinish: Codable, Hashable {
+        var tripID: Double
+        var distanceMeters: Double
+        var minutes: Int
+        var cameras: Int
+        var score: Int?
+        var fineRisk: Double
+    }
+
     nonisolated struct ContentState: Codable, Hashable {
         /// Адрес/название ближайшей камеры (nil — рядом камер нет).
         var nearestTitle: String?
@@ -50,6 +59,9 @@ nonisolated struct CameraActivityAttributes: ActivityAttributes {
         /// Отметку ещё можно отменить: на месте «Отметить» — «Отменить»
         /// (окно `AppConfig.reportUndoSeconds`); nil у старых состояний — нет.
         var reportUndo: Bool? = nil
+        /// Итог поездки — финальный кадр плашки: поездка кончилась, а телефон
+        /// на экране блокировки. nil — обычное состояние.
+        var finish: TripFinish? = nil
         // «Камер вокруг» убрано 19.10: строка «следит за N камерами» была шумом,
         // а неквантованный счётчик слал обновления плашки и в пробке на месте.
     }

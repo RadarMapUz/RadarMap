@@ -52,20 +52,6 @@ final class WidgetSnapshotTests: XCTestCase {
         XCTAssertTrue(WidgetWeek.isCurrentWeek(wednesday, now: now, calendar: calendar))
     }
 
-    // MARK: - Свежесть
-
-    func testFreshSnapshotIsNotStale() {
-        XCTAssertFalse(WidgetWeek.isStale(now.addingTimeInterval(-3600), now: now))
-    }
-
-    func testDayOldSnapshotIsStale() {
-        XCTAssertTrue(WidgetWeek.isStale(now.addingTimeInterval(-30 * 3600), now: now))
-    }
-
-    func testMissingTimestampIsStale() {
-        XCTAssertTrue(WidgetWeek.isStale(nil, now: now))
-    }
-
     // MARK: - Столбики
 
     func testBarsAreScaledToTheLongestDay() {
@@ -246,35 +232,24 @@ final class WidgetSnapshotTests: XCTestCase {
         return s
     }
 
-    /// Те же цифры, свежий снимок — бюджет WidgetKit не тратим.
-    func testUnchangedFreshSnapshotIsNotReloaded() {
-        let old = snapshot(km: 42, updated: now.addingTimeInterval(-3600))
-        XCTAssertFalse(WidgetWeek.needsRefresh(previous: old, next: snapshot(km: 42, updated: nil),
-                                               now: now))
+    /// Те же цифры — бюджет WidgetKit не тратим, сколько бы времени ни прошло.
+    func testUnchangedSnapshotIsNotReloaded() {
+        let old = snapshot(km: 42, updated: now.addingTimeInterval(-3 * 86400))
+        XCTAssertFalse(WidgetWeek.needsRefresh(previous: old, next: snapshot(km: 42, updated: nil)))
     }
 
     /// Другие цифры — перезагрузка сразу (конец поездки).
     func testChangedNumbersReload() {
         let old = snapshot(km: 42, updated: now.addingTimeInterval(-60))
-        XCTAssertTrue(WidgetWeek.needsRefresh(previous: old, next: snapshot(km: 43, updated: nil),
-                                              now: now))
-    }
-
-    /// Неизменный снимок освежается раньше, чем виджет приглушит его как
-    /// устаревший (24 ч).
-    func testUnchangedSnapshotRefreshesBeforeItLooksStale() {
-        let old = snapshot(km: 42, updated: now.addingTimeInterval(-13 * 3600))
-        XCTAssertTrue(WidgetWeek.needsRefresh(previous: old, next: snapshot(km: 42, updated: nil),
-                                              now: now))
-        XCTAssertLessThan(WidgetWeek.unchangedRefreshInterval, 24 * 3600)
+        XCTAssertTrue(WidgetWeek.needsRefresh(previous: old, next: snapshot(km: 43, updated: nil)))
     }
 
     /// Снимка ещё не было (или нет доступа к группе) — пишем.
     func testMissingPreviousSnapshotReloads() {
         XCTAssertTrue(WidgetWeek.needsRefresh(previous: snapshot(km: 0, updated: nil),
-                                              next: snapshot(km: 0, updated: nil), now: now))
+                                              next: snapshot(km: 0, updated: nil)))
         XCTAssertTrue(WidgetWeek.needsRefresh(previous: SharedDefaults.Snapshot(hasAccess: false),
-                                              next: snapshot(km: 0, updated: nil), now: now))
+                                              next: snapshot(km: 0, updated: nil)))
     }
 
     /// Виджет сам просыпается раз в сутки — сразу после полуночи (смена дня
@@ -288,11 +263,88 @@ final class WidgetSnapshotTests: XCTestCase {
         let morning = calendar.date(from: DateComponents(year: 2026, month: 10, day: 20, hour: 0, minute: 0, second: 30))!
         XCTAssertEqual(WidgetWeek.nextRefresh(after: morning, calendar: calendar),
                        calendar.date(from: DateComponents(year: 2026, month: 10, day: 21, hour: 0, minute: 1)))
-        // Снимок станет «старым» раньше полуночи — проснуться тогда, чтобы
-        // приглушить подпись.
-        let snapshotAt = evening.addingTimeInterval(-WidgetWeek.staleAfter + 600)
-        XCTAssertEqual(WidgetWeek.nextRefresh(after: evening, updatedAt: snapshotAt, calendar: calendar),
-                       snapshotAt.addingTimeInterval(WidgetWeek.staleAfter + 60))
+    }
+
+    // MARK: - Честные состояния (план 09.11)
+
+    private func newWeek(history: Bool) -> SharedDefaults.Snapshot {
+        var value = snapshot(trips: 0, days: [0, 0, 0, 0, 0, 0, 0])
+        if history {
+            value.previousWeekDistance = 165_000
+            value.previousWeekRating = 72
+            value.lifetimeDistance = 12_400_000
+        }
+        return value
+    }
+
+    /// Понедельник у водителя с годом поездок — не первый день в приложении.
+    func testNewWeekWithHistoryIsNotAFirstRun() {
+        XCTAssertEqual(WidgetWeek.state(newWeek(history: true)), .newWeek)
+        XCTAssertEqual(WidgetWeek.state(newWeek(history: false)), .empty)
+        var lastTripOnly = newWeek(history: false)
+        lastTripOnly.lastTripAt = now.addingTimeInterval(-86400)
+        XCTAssertEqual(WidgetWeek.state(lastTripOnly), .newWeek)
+    }
+
+    /// Идущая неделя не «меньше обычного»: она просто не кончилась.
+    func testUsualLineNeverCallsARunningWeekBehind() {
+        XCTAssertEqual(WidgetWeek.usualLine(distance: 118_000, usual: 165_000), .ofUsual(165_000))
+        XCTAssertEqual(WidgetWeek.usualLine(distance: 160_000, usual: 165_000), .asUsual)
+        XCTAssertEqual(WidgetWeek.usualLine(distance: 200_000, usual: 165_000), .above(percent: 21))
+        XCTAssertEqual(WidgetWeek.usualLine(distance: 0, usual: 165_000), .none)
+        XCTAssertEqual(WidgetWeek.usualLine(distance: 50_000, usual: 0), .none, "нормы нет")
+    }
+
+    func testDaysAgoIsCalendarDays() {
+        let lateEvening = thisWeekStart.addingTimeInterval(4 * 86400 + 23 * 3600)   // пятница 23:00
+        let earlyMorning = thisWeekStart.addingTimeInterval(4 * 86400 + 6 * 3600)
+        XCTAssertEqual(WidgetWeek.daysAgo(earlyMorning, now: lateEvening, calendar: calendar), 0)
+        XCTAssertEqual(WidgetWeek.daysAgo(lateEvening.addingTimeInterval(-86400), now: earlyMorning, calendar: calendar), 1,
+                       "вчера вечером — это вчера, хоть и меньше суток назад")
+    }
+
+    func testDayRingsKeepSevenDaysAndAreHonest() {
+        var value = snapshot(trips: 3, days: [20_000, 0, 30_000, 0, 0, 0, 0], usual: 100_000)
+        value.dayScores = [80, -1, 40, -1, -1, -1, -1]
+        value.dayRoad = [0.5, 0, 1.4, 0, 0, 0, 0]
+        value.dayOverspeed = [false, false, true, false, false, false, false]
+        value.dayPerfect = [true, false, false, false, false, false, false]
+        let rings = WidgetWeek.dayRings(value)
+        XCTAssertEqual(rings.count, 7)
+        XCTAssertEqual(rings[0], .init(score: 80, road: 0.5, fine: false, perfect: true))
+        XCTAssertNil(rings[1], "день без поездок — пустое кольцо, а не ноль")
+        XCTAssertEqual(rings[2], .init(score: 40, road: 1, fine: true, perfect: false), "доля не больше одного круга")
+        value.dayDistances = [20_000, 0, 0, 0, 0, 0, 0]
+        value.dayOverspeed = [true, false, false, false, false, false, false]
+        XCTAssertEqual(WidgetWeek.dayRings(value)[0]?.fine, false, "единственный день красным не красим")
+    }
+
+    func testDayDotsMarkTodayOnlyWhenDriven() {
+        let dots = WidgetWeek.dayDots([20_000, 0, 30_000, 0, 0, 0, 0], today: 2)
+        XCTAssertEqual(dots, [.driven, .none, .today, .none, .none, .none, .none])
+        XCTAssertEqual(WidgetWeek.dayDots([20_000, 0, 0, 0, 0, 0, 0], today: 2)[2], .none)
+    }
+
+    func testSplitNeedsBothHalves() {
+        var value = snapshot(trips: 5, days: [118_000, 0, 0, 0, 0, 0, 0], usual: 100_000)
+        value.weekCommuteDistance = 73_000
+        let split = WidgetWeek.split(value)
+        XCTAssertEqual(split, .init(commute: 73_000, other: 45_000))
+        XCTAssertEqual(split?.commuteShare ?? 0, 73.0 / 118, accuracy: 0.001)
+        value.weekCommuteDistance = 118_000
+        XCTAssertNil(WidgetWeek.split(value), "всё — дорога: сравнивать не с чем")
+        value.weekCommuteDistance = 0
+        XCTAssertNil(WidgetWeek.split(value))
+    }
+
+    /// Снимок читает и пишет числа: ни координат, ни адресов в нём нет.
+    func testSnapshotCarriesNoCoordinates() {
+        let names = Mirror(reflecting: SharedDefaults.Snapshot()).children.compactMap(\.label)
+        for name in names {
+            let lower = name.lowercased()
+            XCTAssertFalse(lower.contains("lat") || lower.contains("lon") || lower.contains("coord")
+                           || lower.contains("address"), name)
+        }
     }
 
     // MARK: - Процент к прошлой неделе (31E)

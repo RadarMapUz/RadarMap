@@ -22,7 +22,12 @@ final class DeepLinkTests: XCTestCase {
         XCTAssertEqual(parse("radarmap://trip/whatever"), .stats)
     }
 
+    func testEmptyCommuteWidgetOpensMyPlaces() {
+        XCTAssertEqual(DeepLink.parse(TripLink.placesURL), .places)
+    }
+
     func testForeignLinksAreNotOurs() {
+        XCTAssertNil(parse("radarmap://go/home"), "маршрут разбирает MapScreen.handleGoLink")
         XCTAssertNil(parse("radarmap://start-trip"), "старт поездки разбирает RootView")
         XCTAssertNil(parse("radarmap://map"))
         XCTAssertNil(parse("https://soulmed.uz/radarmap/trip"))

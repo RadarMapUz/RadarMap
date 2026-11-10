@@ -1,6 +1,678 @@
 {
   "sourceLanguage": "ru",
   "strings": {
+    "пробки +%1$@ · %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "пробки +%1$@ · %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tirbandlik +%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "Дорога": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дорога"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yo‘l"
+          }
+        }
+      }
+    },
+    "мин": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "мин"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "daq"
+          }
+        }
+      }
+    },
+    "Построить": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Построить"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qurish"
+          }
+        }
+      }
+    },
+    "Построить маршрут домой?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Построить маршрут домой?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyga yo‘nalish qurilsinmi?"
+          }
+        }
+      }
+    },
+    "Построить маршрут на работу?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Построить маршрут на работу?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishga yo‘nalish qurilsinmi?"
+          }
+        }
+      }
+    },
+    "в это время · обычно %lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "в это время · обычно %lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "shu vaqtda · odatda %lld"
+          }
+        }
+      }
+    },
+    "в это время около %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "в это время около %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "shu vaqtda taxminan %@"
+          }
+        }
+      }
+    },
+    "Домой — одним касанием": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Домой — одним касанием"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyga — bir teginishda"
+          }
+        }
+      }
+    },
+    "Укажите адреса": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Укажите адреса"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manzillarni belgilang"
+          }
+        }
+      }
+    },
+    "время — после 3 поездок": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "время — после 3 поездок"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "vaqt — 3 safardan keyin"
+          }
+        }
+      }
+    },
+    "пробки +%lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "пробки +%lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tirbandlik +%lld"
+          }
+        }
+      }
+    },
+    "выезд до %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "выезд до %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ gacha chiqing"
+          }
+        }
+      }
+    },
+    "Новая неделя": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новая неделя"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yangi hafta"
+          }
+        }
+      }
+    },
+    "Первая поездка": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Первая поездка"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Birinchi safar"
+          }
+        }
+      }
+    },
+    "Кольца заполнятся сами": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Кольца заполнятся сами"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halqalar o‘zi to‘ladi"
+          }
+        }
+      }
+    },
+    "Прошлая: %1$@ · балл %2$lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Прошлая: %1$@ · балл %2$lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘tgan: %1$@ · ball %2$lld"
+          }
+        }
+      }
+    },
+    "Прошлая: %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Прошлая: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘tgan: %@"
+          }
+        }
+      }
+    },
+    "Работа и дом %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Работа и дом %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ish va uy %@"
+          }
+        }
+      }
+    },
+    "Другое %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Другое %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boshqa %@"
+          }
+        }
+      }
+    },
+    "Поездок нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поездок нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safar yo‘q"
+          }
+        }
+      }
+    },
+    "На этой неделе поездок нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На этой неделе поездок нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu hafta safar yo‘q"
+          }
+        }
+      }
+    },
+    "Нет доступа": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет доступа"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ruxsat yo‘q"
+          }
+        }
+      }
+    },
+    "%1$@ · балл %2$lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · балл %2$lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · ball %2$lld"
+          }
+        }
+      }
+    },
+    "%1$@ из %2$@ км · балл %3$lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ из %2$@ км · балл %3$lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@/%2$@ km · ball %3$lld"
+          }
+        }
+      }
+    },
+    "%1$@ из %2$@ км": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ из %2$@ км"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@/%2$@ km"
+          }
+        }
+      }
+    },
+    "сегодня": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "сегодня"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "bugun"
+          }
+        }
+      }
+    },
+    "вчера": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "вчера"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kecha"
+          }
+        }
+      }
+    },
+    "Неделя за рулём: километры, балл и дни. На экране блокировки — старт поездки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неделя за рулём: километры, балл и дни. На экране блокировки — старт поездки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rulda o‘tgan hafta: kilometr, ball va kunlar. Qulflangan ekranda — safar boshlash"
+          }
+        }
+      }
+    },
+    "Сколько ехать и маршрут одним касанием — по вашим поездкам": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сколько ехать и маршрут одним касанием — по вашим поездкам"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qancha yurish va bir teginishda yo‘nalish — safarlaringiz bo‘yicha"
+          }
+        }
+      }
+    },
+    "Идёт": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Идёт"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Davom etmoqda"
+          }
+        }
+      }
+    },
+    "Включён": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Включён"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoqilgan"
+          }
+        }
+      }
+    },
+    "Выключен": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выключен"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O‘chirilgan"
+          }
+        }
+      }
+    },
+    "Отметить радар в текущей точке. Работает в поездке": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отметить радар в текущей точке. Работает в поездке"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joriy nuqtada radarni belgilash. Safarda ishlaydi"
+          }
+        }
+      }
+    },
+    "Сигналы и голос о камерах": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сигналы и голос о камерах"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralar haqida signal va ovoz"
+          }
+        }
+      }
+    },
+    "Маршрут домой и экран «Поехали»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрут домой и экран «Поехали»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uyga yo‘nalish va «Ketdik» ekrani"
+          }
+        }
+      }
+    },
+    "Маршрут на работу и экран «Поехали»": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Маршрут на работу и экран «Поехали»"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishga yo‘nalish va «Ketdik» ekrani"
+          }
+        }
+      }
+    },
+    "Отмечает радар в текущей точке.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отмечает радар в текущей точке."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joriy nuqtada radarni belgilaydi."
+          }
+        }
+      }
+    },
+    "Начинает или заканчивает поездку.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Начинает или заканчивает поездку."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarni boshlaydi yoki tugatadi."
+          }
+        }
+      }
+    },
+    "%1$@ · %2$@ · камер %3$lld": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$@ · камер %3$lld"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$@ · kameralar: %3$lld"
+          }
+        }
+      }
+    },
+    "Приватный экран блокировки": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приватный экран блокировки"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maxfiy qulflangan ekran"
+          }
+        }
+      }
+    },
+    "На экране блокировки вместо «На работу» и «Домой» — «Дорога», а плашка поездки не называет цель.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "На экране блокировки вместо «На работу» и «Домой» — «Дорога», а плашка поездки не называет цель."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qulflangan ekranda «Ishga» va «Uyga» o‘rniga «Yo‘l» ko‘rinadi, safar paneli manzilni aytmaydi."
+          }
+        }
+      }
+    },
     "Есть другие варианты маршрута": {
       "localizations": {
         "uz": {

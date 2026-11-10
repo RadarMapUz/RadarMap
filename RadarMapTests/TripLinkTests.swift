@@ -60,4 +60,33 @@ final class TripLinkTests: XCTestCase {
         XCTAssertFalse(second.created)
         XCTAssertNil(TripLink.prepareKey(in: nil).key)
     }
+
+    // MARK: - Маршрут с виджета и конец поездки
+
+    func testOwnWidgetBuildsARoute() {
+        let url = TripLink.goURL(.home, key: key)
+        XCTAssertEqual(url.absoluteString, "radarmap://go/home?k=\(key)")
+        XCTAssertEqual(TripLink.decideGo(url, expectedKey: key), .route(.home))
+        XCTAssertEqual(TripLink.decideGo(TripLink.goURL(.work, key: key), expectedKey: key), .route(.work))
+    }
+
+    /// Без ключа чужая страница заставила бы отправить адрес дома на сервер маршрутов.
+    func testForeignRouteLinkAsks() {
+        XCTAssertEqual(TripLink.decideGo(URL(string: "radarmap://go/home")!, expectedKey: key), .confirm(.home))
+        XCTAssertEqual(TripLink.decideGo(URL(string: "radarmap://go/work?k=0000")!, expectedKey: key), .confirm(.work))
+        XCTAssertEqual(TripLink.decideGo(TripLink.goURL(.home, key: key), expectedKey: nil), .confirm(.home))
+    }
+
+    func testOtherLinksAreNotRouteLinks() {
+        XCTAssertNil(TripLink.decideGo(URL(string: "radarmap://go/school")!, expectedKey: key))
+        XCTAssertNil(TripLink.decideGo(URL(string: "radarmap://go")!, expectedKey: key))
+        XCTAssertNil(TripLink.decideGo(URL(string: "radarmap://start-trip")!, expectedKey: key))
+    }
+
+    func testEndLinkNeedsTheKeyAndARunningTrip() {
+        let url = TripLink.endURL(key: key)
+        XCTAssertTrue(TripLink.decideEnd(url, expectedKey: key, tripActive: true))
+        XCTAssertFalse(TripLink.decideEnd(url, expectedKey: key, tripActive: false))
+        XCTAssertFalse(TripLink.decideEnd(URL(string: "radarmap://end-trip")!, expectedKey: key, tripActive: true))
+    }
 }

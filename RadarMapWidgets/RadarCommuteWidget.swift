@@ -2,13 +2,13 @@
 //  RadarCommuteWidget.swift
 //  RadarMapWidgets
 //
-//  «Дорога на работу» (план 19.10, 9.4 и 12б.2): «сейчас ~44 мин · пробки
-//  +8», «обычно 42 мин, выезжайте до 8:10». У дома — на работу, у работы —
-//  домой, без отметки места — по часам. Числа готовит приложение
-//  (WidgetCommute в App Group); виджет только выбирает строку на сейчас.
-//  Таймлайн — запись на каждое 15-минутное окно таблицы «сейчас» и на
-//  минуту подсказки, а не каждый час. Адреса не показываются никогда —
-//  только «Работа»/«Дом». Тап — «Итоги», где карточка дороги.
+//  «Дорога»: сколько ехать и маршрут одним касанием — нажатие открывает экран
+//  «Поехали», поездка сама не стартует. У дома — на работу, у работы — домой,
+//  без отметки места — по часам. Числа готовит приложение (WidgetCommute в
+//  App Group); виджет только выбирает строку на сейчас. Таймлайн — запись на
+//  каждое 15-минутное окно таблицы и на минуту подсказки, а не каждый час.
+//  Адреса не показываются никогда — только «Работа»/«Дом», а в приватном
+//  режиме на экране блокировки и того нет.
 //
 
 import WidgetKit
@@ -17,21 +17,26 @@ import SwiftUI
 struct RadarCommuteEntry: TimelineEntry {
     let date: Date
     let data: CommuteWidgetData?
+    var prefs: WidgetPrefs? = nil
 }
 
 struct RadarCommuteProvider: TimelineProvider {
     func placeholder(in context: Context) -> RadarCommuteEntry {
-        RadarCommuteEntry(date: .now, data: .demo)
+        RadarCommuteEntry(date: .now, data: .demo, prefs: .demo)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (RadarCommuteEntry) -> Void) {
-        completion(RadarCommuteEntry(date: .now, data: context.isPreview ? .demo : WidgetCommute.read()))
+        completion(context.isPreview
+                   ? RadarCommuteEntry(date: .now, data: .demo, prefs: .demo)
+                   : RadarCommuteEntry(date: .now, data: WidgetCommute.read(), prefs: WidgetPrefs.read()))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<RadarCommuteEntry>) -> Void) {
         let data = WidgetCommute.read()
+        let prefs = WidgetPrefs.read()
         let now = Date.now
-        let entries = WidgetCommute.entryDates(after: now, data: data).map { RadarCommuteEntry(date: $0, data: data) }
+        let entries = WidgetCommute.entryDates(after: now, data: data)
+            .map { RadarCommuteEntry(date: $0, data: data, prefs: prefs) }
         completion(Timeline(entries: entries,
                             policy: .after(WidgetCommute.nextRefresh(after: now, data: data))))
     }
@@ -52,6 +57,10 @@ extension CommuteWidgetData {
     }
 }
 
+extension WidgetPrefs {
+    static var demo: WidgetPrefs { WidgetPrefs(hasHome: true, hasWork: true) }
+}
+
 struct RadarCommuteWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "RadarCommuteWidget", provider: RadarCommuteProvider()) { entry in
@@ -61,215 +70,370 @@ struct RadarCommuteWidget: Widget {
                 }
         }
         .configurationDisplayName("Дорога на работу")
-        .description("Сколько обычно ехать и когда выезжать — по вашим поездкам")
-        .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular, .accessoryInline])
+        .description("Сколько ехать и маршрут одним касанием — по вашим поездкам")
+        .supportedFamilies([.systemSmall, .systemMedium, .accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }
 
 private struct RadarCommuteView: View {
     @Environment(\.widgetFamily) private var family
+    @Environment(\.showsWidgetContainerBackground) private var showsBackground
     let entry: RadarCommuteEntry
 
+    private var prefs: WidgetPrefs { entry.prefs ?? WidgetPrefs() }
+    private var panel: WidgetCommute.Panel { WidgetCommute.panel(entry.data, prefs: prefs, now: entry.date) }
     private var line: WidgetCommute.Line? { WidgetCommute.line(entry.data, now: entry.date) }
+
+    /// Экран блокировки и StandBy (там нет подложки): телефон лежит открыто.
+    private var isPrivate: Bool {
+        guard prefs.privateLock else { return false }
+        switch family {
+        case .accessoryCircular, .accessoryRectangular, .accessoryInline: return true
+        default: return !showsBackground
+        }
+    }
 
     var body: some View {
         switch family {
         case .accessoryInline: inline
+        case .accessoryCircular: circular
         case .accessoryRectangular: rectangular
         case .systemMedium: medium
         default: small
         }
     }
 
+    private func url(_ zone: WidgetCommute.Zone) -> URL {
+        zone.state == .setup ? TripLink.placesURL : TripLink.ownGoURL(zone.place)
+    }
+
     // MARK: Малый
 
     private var small: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if let line {
-                lineBlock(line)
+        Group {
+            if panel.primary.state == .setup {
+                setupSmall
             } else {
-                invitation
+                smallZone(panel.primary)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .voicePhrase(line.map { spoken($0, jamAndHint: false) })
-        .widgetURL(URL(string: "radarmap://stats"))
+        .widgetURL(url(panel.primary))
     }
 
-    /// Направление, «сейчас ~N» (или «обычно»), пробки и подсказка.
     @ViewBuilder
-    private func lineBlock(_ line: WidgetCommute.Line) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: line.toWork ? "briefcase.fill" : "house.fill")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(SW.accent)
-                .accessibilityHidden(true)
-            Text(title(line))
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(SW.secondary)
-        }
-        Spacer(minLength: 0)
-        Text(headline(line))
-            .font(.system(size: 30, weight: .heavy))
-            .foregroundStyle(SW.primary)
-            .minimumScaleFactor(0.7)
-            .lineLimit(1)
-        // Узбекское «hozir · odatda 42 daq» в малом виджете длиннее строки —
-        // ужимается, а не обрезается (14.6).
-        Text(caption(line))
-            .font(.system(size: 12))
-            .foregroundStyle(SW.tertiary)
-            .lineLimit(1)
-            .minimumScaleFactor(0.75)
-        if let jam = line.jam {
-            // Две строки: «tirbandlik +8 daq · 8:05 holatiga» в одну не
-            // влезала и при сжатии — терялось время, ради которого строка.
-            Text(jamText(jam))
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(SW.warning)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-        } else if let hint = line.hint {
-            Text(hintText(hint))
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(isAdvice(hint) ? SW.success : SW.secondary)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
+    private func smallZone(_ zone: WidgetCommute.Zone) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 5) {
+                Image(systemName: icon(zone))
+                    .font(.system(size: 13, weight: .bold))
+                    .ink(SW.accent, accent: true)
+                    .accessibilityHidden(true)
+                Text(title(zone))
+                    .font(.system(size: 13, weight: .semibold))
+                    .ink(SW.secondary, mono: 0.72)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Spacer(minLength: 2)
+                WidgetGo()
+            }
+            Spacer(minLength: 2)
+            bigValue(zone, size: 38, color: SW.primary)
+            Text(captionText(zone))
+                .font(.system(size: 12))
+                .ink(SW.secondary, mono: 0.72)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            if let jam = zone.jam {
+                Text(jamText(jam))
+                    .font(.system(size: 12, weight: .semibold))
+                    .ink(SW.warning, accent: true)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            } else if let hint = zone.hint {
+                Text(hintText(hint))
+                    .font(.system(size: 12, weight: .semibold))
+                    .ink(isAdvice(hint) ? SW.success : SW.secondary, mono: isAdvice(hint) ? 1 : 0.72,
+                         accent: isAdvice(hint))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
         }
     }
 
-    private var invitation: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Image(systemName: "briefcase.fill")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(SW.accent)
-                .accessibilityHidden(true)
+    private var setupSmall: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Image(systemName: "house.fill")
+                Image(systemName: "briefcase.fill")
+            }
+            .font(.system(size: 15, weight: .bold))
+            .ink(SW.accent, accent: true)
+            .accessibilityHidden(true)
             Spacer(minLength: 0)
-            // Приглашение, а не ноль: «дороги» ещё нет — так и сказать.
-            Text("Дорога на работу появится после трёх поездок между домом и работой")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(SW.secondary)
+            Text("Домой — одним касанием")
+                .font(.system(size: 15, weight: .heavy))
+                .ink(SW.primary)
+                .lineLimit(3)
+                .minimumScaleFactor(0.8)
+            Text("Укажите адреса")
+                .font(.system(size: 12, weight: .semibold))
+                .ink(SW.accent, accent: true)
+                .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
     }
 
     // MARK: Средний
 
-    /// Слева — дорога на сейчас целиком, справа — обратная одной строкой
-    /// и подсказка, если пробки заняли её место слева.
+    /// Две зоны и у каждой своя ссылка. Края виджета заходят в его поля:
+    /// карточки держат собственный отступ.
     private var medium: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
-                if let line { lineBlock(line) } else { invitation }
+        HStack(spacing: 8) {
+            Link(destination: url(panel.primary)) { zoneCard(panel.primary, main: true) }
+            Link(destination: url(panel.secondary)) {
+                zoneCard(panel.secondary, main: false)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            if let line {
-                VStack(alignment: .leading, spacing: 8) {
-                    if let other = otherDirection(line) {
-                        Label(line.toWork ? String(localized: "Домой") : String(localized: "На работу"),
-                              systemImage: line.toWork ? "house.fill" : "briefcase.fill")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(SW.secondary)
-                        Text(String(format: String(localized: "обычно %@"), minutes(other.usualSeconds)))
-                            .font(.system(size: 17, weight: .heavy))
-                            .foregroundStyle(SW.primary)
-                    }
-                    Spacer(minLength: 0)
-                    if line.jam != nil, let hint = line.hint {
-                        Text(hintText(hint))
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(isAdvice(hint) ? SW.success : SW.secondary)
-                            .lineLimit(2)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            }
+            .frame(width: panel.primary.state == .setup ? nil : 112)
         }
-        .voicePhrase(line.map { spoken($0, jamAndHint: true, other: otherDirection($0)) })
-        .widgetURL(URL(string: "radarmap://stats"))
+        .padding(-6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func otherDirection(_ line: WidgetCommute.Line) -> CommuteWidgetData.Direction? {
-        line.toWork ? entry.data?.toHome : entry.data?.toWork
+    @ViewBuilder
+    private func zoneCard(_ zone: WidgetCommute.Zone, main: Bool) -> some View {
+        if zone.state == .setup {
+            setupCard(zone)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(verbatim: "\(place(zone)). \(String(localized: "Указать"))"))
+        } else {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 5) {
+                    Image(systemName: icon(zone))
+                        .font(.system(size: 12, weight: .bold))
+                        .ink(main ? .white : SW.primary, accent: main)
+                    Text(title(zone))
+                        .font(.system(size: 13, weight: .semibold))
+                        .ink(main ? .white.opacity(0.85) : SW.secondary, mono: 0.72)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: 0)
+                    if main { WidgetGo(size: 22) }
+                }
+                Spacer(minLength: 0)
+                bigValue(zone, size: 30, color: main ? .white : SW.primary)
+                Text(cardCaption(zone, main: main))
+                    .font(.system(size: 11, weight: main ? .semibold : .regular))
+                    .ink(main ? .white.opacity(0.85) : SW.secondary, mono: 0.72)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .minimumScaleFactor(0.8)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(11)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .wash(main ? SW.accentFill : SW.quiet, in: RoundedRectangle(cornerRadius: 16, style: .continuous),
+                  mono: main ? 0.22 : 0.1)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(verbatim: spoken(zone)))
+        }
+    }
+
+    private func setupCard(_ zone: WidgetCommute.Zone) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Image(systemName: icon(zone))
+                .font(.system(size: 14, weight: .bold))
+                .ink(SW.accent, accent: true)
+            Spacer(minLength: 0)
+            Text(place(zone))
+                .font(.system(size: 15, weight: .heavy))
+                .ink(SW.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Text("Указать")
+                .font(.system(size: 11))
+                .ink(SW.accent, accent: true)
+                .lineLimit(1)
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            .ink(SW.primary.opacity(0.22), mono: 0.3))
+    }
+
+    private func cardCaption(_ zone: WidgetCommute.Zone, main: Bool) -> String {
+        guard main, case .time = zone.state else {
+            if case .route = zone.state { return String(localized: "время — после 3 поездок") }
+            return String(localized: "обычно")
+        }
+        var parts: [String] = []
+        if let jam = zone.jam {
+            parts.append(String(format: String(localized: "пробки +%lld"), Int((jam.extraSeconds / 60).rounded())))
+        }
+        if let hint = zone.hint { parts.append(shortHint(hint)) }
+        return parts.isEmpty ? String(localized: "обычно") : parts.joined(separator: " · ")
+    }
+
+    private func bigValue(_ zone: WidgetCommute.Zone, size: CGFloat, color: Color) -> some View {
+        Group {
+            if case .time = zone.state {
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Text(verbatim: minutesNumber(zone))
+                        .font(.system(size: size, weight: .heavy, design: .rounded))
+                    Text("мин")
+                        .font(.system(size: size * 0.45, weight: .bold, design: .rounded))
+                }
+            } else {
+                Text("Маршрут")
+                    .font(.system(size: size * 0.66, weight: .heavy))
+            }
+        }
+        .ink(color)
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
     }
 
     // MARK: Локскрин
 
+    private var circular: some View {
+        ZStack {
+            AccessoryWidgetBackground()
+            VStack(spacing: 0) {
+                if panel.primary.state == .setup {
+                    Text("Указать")
+                        .font(.system(size: 11, weight: .semibold))
+                        .minimumScaleFactor(0.7)
+                } else {
+                    Image(systemName: lockIcon(panel.primary))
+                        .font(.system(size: 15, weight: .bold))
+                        .accessibilityHidden(true)
+                    if case .time = panel.primary.state {
+                        Text(verbatim: minutesNumber(panel.primary))
+                            .font(.system(size: 16, weight: .heavy, design: .rounded))
+                            .minimumScaleFactor(0.6)
+                    } else {
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 13, weight: .bold))
+                            .accessibilityHidden(true)
+                    }
+                }
+            }
+        }
+        .voicePhrase(line.map { spoken($0, jamAndHint: nil) })
+        .widgetURL(url(panel.primary))
+    }
+
     private var rectangular: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            if let line {
-                Text(title(line))
+        let zone = panel.primary
+        return VStack(alignment: .leading, spacing: 1) {
+            switch zone.state {
+            case .time:
+                Text(lockTitle(zone))
                     .font(.system(size: 12, weight: .semibold))
-                Text(line.nowSeconds.map { approx($0) }
-                     ?? String(format: String(localized: "обычно %@"), minutes(line.usualSeconds)))
+                Text(verbatim: "\(minutesNumber(zone)) \(String(localized: "мин"))")
                     .font(.system(size: 17, weight: .heavy))
-                if let jam = line.jam {
-                    Text(jamText(jam))
-                        .font(.system(size: 11))
-                        .opacity(0.8)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                } else if let hint = line.hint {
-                    Text(hintText(hint))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                if let note = lockNote(zone) {
+                    Text(verbatim: note)
                         .font(.system(size: 11))
                         .opacity(0.8)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
-            } else {
-                Text("Дорога на работу")
+            case .route:
+                Text(lockTitle(zone))
                     .font(.system(size: 12, weight: .semibold))
-                Text("после трёх поездок")
-                    .font(.system(size: 11))
-                    .opacity(0.8)
+                Text("Маршрут")
+                    .font(.system(size: 17, weight: .heavy))
+            case .setup:
+                Text("Дорога")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("Укажите адреса")
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .voicePhrase(line.map { spoken($0, jamAndHint: false) })
-        .widgetURL(URL(string: "radarmap://stats"))
+        .widgetURL(url(zone))
     }
 
     private var inline: some View {
-        Group {
-            if let line {
-                Text(String(format: String(localized: "%1$@ · %2$@"), title(line),
-                            line.nowSeconds.map { approx($0) }
-                                ?? String(format: String(localized: "обычно %@"), minutes(line.usualSeconds))))
+        let zone = panel.primary
+        return Group {
+            if zone.state == .setup {
+                Text("Укажите адреса")
+            } else if case .time = zone.state {
+                Text(verbatim: String(format: String(localized: "%1$@ · %2$@"), lockTitle(zone),
+                                      "\(minutesNumber(zone)) \(String(localized: "мин"))"))
             } else {
-                Text("Дорога на работу")
+                Text(lockTitle(zone))
             }
         }
         .voicePhrase(line.map { spoken($0, jamAndHint: nil) })
-        .widgetURL(URL(string: "radarmap://stats"))
+        .widgetURL(url(zone))
     }
 
-    /// Крупная цифра: «~44 мин» по таблице на сейчас, иначе «обычно».
-    private func headline(_ line: WidgetCommute.Line) -> String {
-        line.nowSeconds.map { approx($0) } ?? minutes(line.usualSeconds)
+    private func lockTitle(_ zone: WidgetCommute.Zone) -> String {
+        isPrivate ? String(localized: "Дорога") : title(zone)
     }
 
-    private func caption(_ line: WidgetCommute.Line) -> String {
-        guard line.nowSeconds != nil else { return String(localized: "обычно") }
-        return String(format: String(localized: "сейчас · обычно %@"), minutes(line.usualSeconds))
+    private func lockIcon(_ zone: WidgetCommute.Zone) -> String {
+        isPrivate ? "road.lanes" : icon(zone)
     }
 
-    private func approx(_ seconds: Double) -> String {
-        String(format: String(localized: "~%@"), minutes(seconds))
-    }
-
-    private func jamText(_ jam: CommuteWidgetData.Jam) -> String {
-        String(format: String(localized: "пробки +%1$@ · на %2$@"), minutes(jam.extraSeconds),
-               NumberFormat.clock(jam.at))
+    /// Строка совета без значения направления: в приватном режиме тоже можно.
+    private func lockNote(_ zone: WidgetCommute.Zone) -> String? {
+        if let jam = zone.jam {
+            return String(format: String(localized: "пробки +%lld"), Int((jam.extraSeconds / 60).rounded()))
+        }
+        return zone.hint.map(shortHint)
     }
 
     // MARK: Слова
 
-    private func title(_ line: WidgetCommute.Line) -> String {
-        line.toWork ? String(localized: "На работу") : String(localized: "Домой")
+    private func title(_ zone: WidgetCommute.Zone) -> String {
+        if isPrivate { return String(localized: "Дорога") }
+        return zone.toWork ? String(localized: "На работу") : String(localized: "Домой")
+    }
+
+    private func place(_ zone: WidgetCommute.Zone) -> String {
+        zone.toWork ? String(localized: "Работа") : String(localized: "Дом")
+    }
+
+    private func icon(_ zone: WidgetCommute.Zone) -> String {
+        if isPrivate { return "road.lanes" }
+        return zone.toWork ? "briefcase.fill" : "house.fill"
+    }
+
+    private func minutesNumber(_ zone: WidgetCommute.Zone) -> String {
+        guard case let .time(seconds, approx, _) = zone.state else { return "" }
+        let number = "\(Int((seconds / 60).rounded()))"
+        return approx ? "~" + number : number
+    }
+
+    /// «в это время · обычно 42»: медиана своих поездок в этот час, а не «сейчас»
+    /// на дороге — про текущие пробки виджет знает только строкой пробок.
+    private func captionText(_ zone: WidgetCommute.Zone) -> String {
+        switch zone.state {
+        case let .time(_, true, usual):
+            return String(format: String(localized: "в это время · обычно %lld"), Int((usual / 60).rounded()))
+        case .route: return String(localized: "время — после 3 поездок")
+        default: return String(localized: "обычно")
+        }
     }
 
     private func minutes(_ seconds: Double) -> String {
         String(format: String(localized: "%lld мин"), Int((seconds / 60).rounded()))
+    }
+
+    private func jamText(_ jam: CommuteWidgetData.Jam) -> String {
+        String(format: String(localized: "пробки +%1$@ · %2$@"), minutes(jam.extraSeconds),
+               NumberFormat.clock(jam.at))
     }
 
     private func clock(_ minute: Int) -> String {
@@ -288,22 +452,33 @@ private struct RadarCommuteView: View {
         }
     }
 
+    private func shortHint(_ hint: WidgetCommute.Hint) -> String {
+        guard case .leaveBy(let minute) = hint else { return hintText(hint) }
+        return String(format: String(localized: "выезд до %@"), clock(minute))
+    }
+
     // MARK: VoiceOver
 
-    /// Виджет одной фразой, словами: «На работу: сейчас около 44 минут,
+    private func spoken(_ zone: WidgetCommute.Zone) -> String {
+        if case .time(let seconds, _, _) = zone.state {
+            return title(zone) + ": " + String(format: String(localized: "обычно %@"), spokenMinutes(seconds))
+        }
+        return title(zone)
+    }
+
+    /// Виджет одной фразой, словами: «На работу: в это время около 44 минут,
     /// обычно 42 минуты. Пробки плюс 8 минут, на 8:05. Выезжайте до 8:10».
-    /// По отдельным строкам VoiceOver читал «тильда 44 мин», «плюс 8 мин» и
-    /// имя значка портфеля. `jamAndHint`: `false` — как на малом и
-    /// локскрине (пробки, иначе подсказка), `true` — обе (средний), `nil` —
-    /// ни одной (строка у часов).
-    private func spoken(_ line: WidgetCommute.Line, jamAndHint: Bool?,
-                        other: CommuteWidgetData.Direction? = nil) -> String {
+    /// `jamAndHint`: `false` — пробки, иначе подсказка, `true` — обе, `nil` —
+    /// ни одной.
+    private func spoken(_ line: WidgetCommute.Line, jamAndHint: Bool?) -> String {
         let usual = String(format: String(localized: "обычно %@"), spokenMinutes(line.usualSeconds))
         var head = usual
         if let now = line.nowSeconds {
-            head = String(format: String(localized: "сейчас около %@"), spokenMinutes(now)) + ", " + usual
+            head = String(format: String(localized: "в это время около %@"), spokenMinutes(now)) + ", " + usual
         }
-        var parts = [title(line) + ": " + head]
+        let word = isPrivate ? String(localized: "Дорога")
+            : line.toWork ? String(localized: "На работу") : String(localized: "Домой")
+        var parts = [word + ": " + head]
         if let jamAndHint {
             if let jam = line.jam {
                 parts.append(String(format: String(localized: "пробки плюс %1$@, на %2$@"),
@@ -313,10 +488,6 @@ private struct RadarCommuteView: View {
             if let hint = line.hint, line.jam == nil || jamAndHint {
                 parts.append(spokenHint(hint))
             }
-        }
-        if let other {
-            parts.append((line.toWork ? String(localized: "Домой") : String(localized: "На работу")) + ": "
-                         + String(format: String(localized: "обычно %@"), spokenMinutes(other.usualSeconds)))
         }
         return parts.joined(separator: ". ")
     }

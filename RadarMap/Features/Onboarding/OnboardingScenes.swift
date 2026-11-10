@@ -110,7 +110,7 @@ struct OnboardingRoadScene: View {
         .liftedBackground(Theme.surface, in: Capsule())
         .scaleEffect(on ? 1 : 0.85, anchor: .bottom)
         .opacity(on ? 1 : 0)
-        .animation(moving ? .spring(response: 0.3, dampingFraction: 0.7) : nil, value: on)
+        .motionAnimation(moving ? .spring(response: 0.3, dampingFraction: 0.7) : nil, value: on)
     }
 
     private func plateView(meters: Double, speed: Int, passed: Bool) -> some View {

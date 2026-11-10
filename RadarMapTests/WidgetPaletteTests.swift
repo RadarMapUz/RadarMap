@@ -102,8 +102,8 @@ final class WidgetPaletteTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(contrast(WidgetPalette.onAction, WidgetPalette.action), 4.5)
     }
 
-    /// Кольца: ночью — ровно Theme.Stats, днём — читаются на белом.
-    func testRingsAreTheStatsPaletteAtNightAndVisibleByDay() {
+    /// Кольца виджета — ровно Theme.Stats в обеих темах и читаются на своей подложке.
+    func testRingsAreTheStatsPaletteInBothThemes() {
         let night: [(WidgetPalette.Gradient, [Color], String)] = [
             (WidgetPalette.ringCalm, Theme.Stats.ringCalm, "calm"),
             (WidgetPalette.ringWatch, Theme.Stats.ringWatch, "watch"),
@@ -112,6 +112,7 @@ final class WidgetPaletteTests: XCTestCase {
         ]
         for (gradient, theme, name) in night {
             XCTAssertEqual(gradient.dark, theme.map { hex($0, .dark) }, name)
+            XCTAssertEqual(gradient.light, theme.map { hex($0, .light) }, name)
             for color in gradient.light {
                 XCTAssertGreaterThanOrEqual(contrast(color, WidgetPalette.surface.light), 3, "\(name) днём")
             }

@@ -449,6 +449,7 @@ struct TripStatsSheet: View {
                 }
             }
             if args.contains("-showRatingInfo") { showRatingInfo = true }
+            if args.contains("-showRingsCalendar") { showRingsCalendar = true }
             if args.contains("-showSavingsInfo") || args.contains("-showFines") {
                 finesRequest = FinesRequest(window: .period(period, anchor), tab: .possible,
                                             periodRisk: current.summary.fineRisk)

@@ -293,11 +293,19 @@ enum Theme {
         static let other = adaptive(WidgetPalette.statsOther)
         static let otherTop = adaptive(0x22C79A, 0x86F2D2)
         static let otherText = adaptive(0x067A5B, 0x63EBC2)
-        static let ringGround = Color(uiColor: Theme.rgb(WidgetPalette.ringGround))
-        static let ringCalm = WidgetPalette.ringCalm.dark.map { Color(uiColor: Theme.rgb($0)) }
-        static let ringWatch = WidgetPalette.ringWatch.dark.map { Color(uiColor: Theme.rgb($0)) }
-        static let ringRisk = WidgetPalette.ringRisk.dark.map { Color(uiColor: Theme.rgb($0)) }
-        static let ringRoad = WidgetPalette.ringRoad.dark.map { Color(uiColor: Theme.rgb($0)) }
+        /// Подложка календаря колец — карточка темы: на тёплом сером фоне листа
+        /// дневные «спокойное» и «внимание» не держат 3:1.
+        static let ringGround = Theme.surface
+        static let ringCalm = ring(WidgetPalette.ringCalm)
+        static let ringWatch = ring(WidgetPalette.ringWatch)
+        static let ringRisk = ring(WidgetPalette.ringRisk)
+        static let ringRoad = ring(WidgetPalette.ringRoad)
+        /// Непройденная часть кольца — тот же цвет, бледно.
+        static let ringTrackOpacity = 0.2
+
+        private static func ring(_ gradient: WidgetPalette.Gradient) -> [Color] {
+            zip(gradient.light, gradient.dark).map { adaptive($0, $1) }
+        }
     }
 
     // MARK: - Типы камер

@@ -15,7 +15,6 @@ import UIKit
 
 struct AlertSettingsPage: View {
     @Environment(AppEnvironment.self) private var env
-    @State private var showsRecall = false
 
     var body: some View {
         @Bindable var settings = env.settings
@@ -74,14 +73,6 @@ struct AlertSettingsPage: View {
                     }
                 }
 
-                // Голос о САМОМ превышении — отдельно от голоса о камерах:
-                // просьба из реальной поездки — фраза без камеры впереди
-                // воспринимается как ворчание, штраф-то возможен у камеры.
-                Picker("Голос о превышении", selection: $settings.overspeedVoice) {
-                    ForEach(OverspeedVoice.allCases) { Text($0.title).tag($0) }
-                }
-                // Ночной голос (12.6): короче, но не тише.
-                Toggle("Ночью короче", isOn: $settings.nightVoice)
                 // Записанный голос (этап 16): строка есть, только когда для
                 // языка приложения в сборке есть пакет диктора.
                 if env.alerts.recorded.isAvailable {
@@ -118,8 +109,6 @@ struct AlertSettingsPage: View {
                 SettingsExplainer([
                     "«Авто» различает город и трассу: в городе короткая фраза, на трассе полная, при превышении — громче и с лимитом.",
                     "О камерах, которые вы каждый день проезжаете спокойно, приложение молчит и только отмечает вибрацией. Подъедете с превышением — заговорит.",
-                    "«Голос о превышении» — про фразу без камеры. В режиме «У камер» она звучит, только когда камера впереди по вашей дороге; в остальное время превышение видно цветом скорости.",
-                    "«Ночью короче» — после заката о камере говорится коротко: «Камера, 300 метров». Громкость та же, а при превышении фраза звучит целиком.",
                 ] + (env.alerts.recorded.isAvailable ? [
                     "«Записанный голос» — заранее озвученные фразы: голос ровный, без синтезатора в моменте. Фразу, которой в записи нет (например, с названием улицы), целиком прочтёт системный голос.",
                 ] : []))
@@ -149,6 +138,45 @@ struct AlertSettingsPage: View {
             } footer: {
                 Text("За сколько метров до камеры предупреждать. Голос отсчитывает пороги по мере приближения.")
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section {
+                NavigationLink {
+                    AlertExtrasPage()
+                } label: {
+                    Text("Дополнительно")
+                }
+            } footer: {
+                Text("Голос о превышении, погода на перевалах, уведомления.")
+            }
+        }
+        .settingsPage("Оповещения и звук")
+    }
+}
+
+/// Второй этаж «Оповещений»: то, что настраивают один раз.
+struct AlertExtrasPage: View {
+    @Environment(AppEnvironment.self) private var env
+    @State private var showsRecall = false
+
+    var body: some View {
+        @Bindable var settings = env.settings
+        Form {
+            Section {
+                // Голос о САМОМ превышении — отдельно от голоса о камерах:
+                // просьба из реальной поездки — фраза без камеры впереди
+                // воспринимается как ворчание, штраф-то возможен у камеры.
+                Picker("Голос о превышении", selection: $settings.overspeedVoice) {
+                    ForEach(OverspeedVoice.allCases) { Text($0.title).tag($0) }
+                }
+                // Ночной голос (12.6): короче, но не тише.
+                Toggle("Ночью короче", isOn: $settings.nightVoice)
+                SettingsExplainer([
+                    "«Голос о превышении» — про фразу без камеры. В режиме «У камер» она звучит, только когда камера впереди по вашей дороге; в остальное время превышение видно цветом скорости.",
+                    "«Ночью короче» — после заката о камере говорится коротко: «Камера, 300 метров». Громкость та же, а при превышении фраза звучит целиком.",
+                ])
+            } header: {
+                Text("Голос")
             }
 
             Section {
@@ -204,7 +232,7 @@ struct AlertSettingsPage: View {
                 }
             }
         }
-        .settingsPage("Оповещения и звук")
+        .settingsPage("Дополнительно")
         .sheet(isPresented: $showsRecall) { AlertRecallInfoSheet(tally: env.trip.alertRecall) }
     }
 }

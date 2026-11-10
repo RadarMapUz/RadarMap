@@ -20,7 +20,7 @@ struct SettingsView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     @State private var showFeedback = false
-    /// DEBUG `-settingsPage <alerts|speed|trip|history|route|map|places|learning|battery|privacy|database|backup|language|energy|maintenance|help>`:
+    /// DEBUG `-settingsPage <alerts|alerts-more|speed|trip|history|route|map|places|learning|battery|privacy|database|backup|language|energy|maintenance|help>`:
     /// открыть страницу раздела сразу — на снимок без касаний.
     @State private var path = NavigationPath()
 
@@ -154,6 +154,7 @@ struct SettingsView: View {
         switch name {
         case "permissions": PermissionsSettingsPage()
         case "alerts": AlertSettingsPage()
+        case "alerts-more": AlertExtrasPage()
         case "speed": SpeedSettingsPage()
         case "trip": TripSettingsPage()
         case "history": TripHistorySettingsPage()

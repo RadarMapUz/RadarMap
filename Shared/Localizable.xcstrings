@@ -39974,6 +39974,38 @@
           }
         }
       }
+    },
+    "Дополнительно": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дополнительно"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qoʻshimcha"
+          }
+        }
+      }
+    },
+    "Голос о превышении, погода на перевалах, уведомления.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голос о превышении, погода на перевалах, уведомления."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tezlikni oshirish haqida ovoz, dovonlardagi ob-havo, bildirishnomalar."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -506,9 +506,10 @@ ssh radarmap-vps 'docker rm -f radarmap-osrm-mld && rm -rf /opt/radarmap/osrm-ml
 Откат прод-графа CH (`/opt/radarmap/osrm-29e` → `/opt/radarmap/osrm`) — в
 `README.md`, он от стенда не зависит.
 
-### Новый граф (ежемесячно)
+### Новый граф (еженедельно, 87)
 
-Эталон пересобирается на маке (`build_osrm_mld.sh`), едет в
-`/opt/radarmap/osrm-mld/pristine.new`, затем `mv pristine pristine.old &&
-mv pristine.new pristine && bin/traffic_customize.sh --force`. Файл скоростей
-подходит к любому графу — ключи по узлам OSM.
+`server/osrm/graph_refresh.py`: сборка и аудит на маке, ночная заливка
+кандидата в `/opt/radarmap/osrm-mld/candidate-<дата>/`, подмена эталона
+под замком цикла с откатом — `switch`, только владелец. Подробно —
+`docs/graph_refresh_2026-11-10.md`. Файл скоростей подходит к любому графу —
+ключи по узлам OSM.

@@ -39,7 +39,7 @@ nonisolated enum CameraMarkerLook {
     static let neutralNightRGB: UInt32 = 0xAEB6C2
     /// Глиф и кант спокойной ночью: белый кант на тёмной карте горел бы
     /// ярче самой тревоги.
-    static let calmNightInkRGB: UInt32 = 0x14181D
+    static let calmNightInkRGB: UInt32 = WidgetPalette.alertSurface
 
     /// Растр значка в стиле движка — значок «Монета» (CameraCoin, 29.C) одного
     /// из обликов. `fill`/`ink` nil — цвет типа и его глиф.

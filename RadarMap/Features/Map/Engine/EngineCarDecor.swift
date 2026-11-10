@@ -140,7 +140,7 @@ struct LimitAheadBadge: View {
         HStack(spacing: 5) {
             Text(distance)
                 .font(.system(size: 13, weight: .bold, design: .rounded))
-                .foregroundStyle(Color(red: 0.11, green: 0.12, blue: 0.14))
+                .foregroundStyle(Theme.textPrimary)
                 .padding(.leading, 9)
             SpeedLimitSign(limit: limit, diameter: 26)
                 .padding(.trailing, 2)

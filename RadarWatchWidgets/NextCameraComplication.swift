@@ -84,11 +84,7 @@ struct NextCameraComplication: Widget {
 // MARK: - Вид
 
 private enum Look {
-    static func color(_ hex: UInt32) -> Color {
-        Color(red: Double((hex >> 16) & 0xFF) / 255,
-              green: Double((hex >> 8) & 0xFF) / 255,
-              blue: Double(hex & 0xFF) / 255)
-    }
+    static func color(_ hex: UInt32) -> Color { WidgetPalette.color(hex) }
     static let accent = color(WidgetPalette.accentFill.dark)
     static let success = color(WidgetPalette.successFill.dark)
     static let secondary = color(WidgetPalette.secondary.dark)

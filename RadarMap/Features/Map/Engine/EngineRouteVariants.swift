@@ -243,9 +243,9 @@ final class EngineRouteVariants {
     /// другие — панелью с каймой своего тона.
     static func pill(_ text: String, selected: Bool, daylight: Bool) -> UIImage {
         let font = UIFont.systemFont(ofSize: 14, weight: .bold).withRounded
-        let ink: UIColor = selected ? .white : Theme.rgb(daylight ? 0x111827 : 0xF1F4F8)
-        let fill: UIColor = selected ? Theme.rgb(daylight ? 0x2563D9 : 0x2A62D6)
-                                     : Theme.rgb(daylight ? 0xFFFFFF : 0x1E232A)
+        let ink: UIColor = selected ? .white : Theme.rgb(daylight ? WidgetPalette.primary.light : WidgetPalette.primary.dark)
+        let fill: UIColor = selected ? Theme.rgb(daylight ? WidgetPalette.accentFill.light : WidgetPalette.accentFill.dark)
+                                     : Theme.rgb(daylight ? WidgetPalette.surface.light : WidgetPalette.surface.dark)
         let rim: UIColor = selected ? .white
             : Theme.rgb(daylight ? RouteColors.alternativeCasing.day : RouteColors.alternative.night)
         let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: ink]

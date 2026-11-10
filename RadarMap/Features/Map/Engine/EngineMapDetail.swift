@@ -110,7 +110,7 @@ final class EngineMapDetail {
             // Парковка — синяя, как дорожный знак; остальное — графит, как у
             // заправок слоя тайлов (EnginePlaceIcons): красный и цвета типов
             // на этой карте заняты камерами.
-            let fill = Theme.rgb(kind == .parking ? 0x2563D9 : 0x3B4047)
+            let fill = Theme.rgb(kind == .parking ? MapIconColors.accentFill : MapIconColors.graphite)
             style.setImage(EnginePlaceIcons.icon(symbol: kind.symbol, fill: fill), forName: Self.iconName(kind))
         }
         let places = source(Self.sourceID, in: style)

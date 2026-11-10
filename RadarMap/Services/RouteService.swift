@@ -1913,11 +1913,12 @@ final class RouteService {
                                          currentName: String? = nil,
                                          bend: TurnBend.Measure? = nil) -> RouteStep? {
         let m = step.maneuver
+        let osrmType = spokenType(m.type)
         // «Остаёмся на дороге», а линия на перекрёстке ломается (29.E,
         // TurnBend): говорим как поворот — и в голосе, и в крае ряда.
-        let bendTurn = TurnBend.voices(type: m.type, modifier: m.modifier, bend: bend,
+        let bendTurn = TurnBend.voices(type: osrmType, modifier: m.modifier, bend: bend,
                                        roads: step.intersections?.first?.bearings?.count ?? 0)
-        let type = bendTurn ? "turn" : m.type
+        let type = bendTurn ? "turn" : osrmType
         var text: String?
         var icon = "arrow.up"
 
@@ -1934,7 +1935,7 @@ final class RouteService {
             }
         }
 
-        switch m.type {
+        switch osrmType {
         case "turn", "end of road":
             if let (phrase, symbol) = turnPhrase(m.modifier) { text = phrase; icon = symbol }
         case "continue":
@@ -1966,12 +1967,17 @@ final class RouteService {
         case "merge":
             text = String(localized: "перестройтесь в поток"); icon = "arrow.merge"
         case "on ramp":
-            text = String(localized: "съезд на развязку"); icon = "arrow.up.right"
+            text = String(localized: "съезд на развязку"); icon = rampIcon(m.modifier)
         case "off ramp":
-            text = String(localized: "сверните на съезд"); icon = "arrow.down.right"
+            text = String(localized: "сверните на съезд"); icon = rampIcon(m.modifier)
         case "roundabout", "rotary":
-            let exit = m.exit ?? 1
-            text = String(format: String(localized: "на кольце %lld-й съезд"), exit)
+            // Номер съезда неизвестен — без номера: выдуманный «1-й» уводит
+            // с кольца раньше нужного.
+            if let exit = m.exit, exit > 0 {
+                text = String(format: String(localized: "на кольце %lld-й съезд"), exit)
+            } else {
+                text = String(localized: "въезжайте на кольцо")
+            }
             icon = "arrow.triangle.2.circlepath"
         case "arrive":
             if let stopName {
@@ -1980,12 +1986,15 @@ final class RouteService {
                 text = String(localized: "вы прибыли"); icon = "flag.checkered"
             }
         default:
-            break   // depart, new name и прочее не озвучиваем
+            // depart; exit roundabout/rotary — съезд уже назван на въезде;
+            // use lane — ряд скажут подсказки полос; notification — смена
+            // свойств дороги без манёвра.
+            break
         }
 
         // Разворот на той же улице: улицу не называем — водитель на ней и
         // стоит, «на улицу Беруни» звучит как поворот куда-то ещё.
-        let uturnInPlace = m.modifier == "uturn" && ["turn", "continue", "end of road"].contains(m.type)
+        let uturnInPlace = m.modifier == "uturn" && ["turn", "continue", "end of road"].contains(osrmType)
             && sameStreet(step.name, currentName)
         if uturnInPlace { text = String(localized: "развернитесь") }
         guard var result = text else { return nil }
@@ -1993,7 +2002,7 @@ final class RouteService {
         // Излом на своей же улице: улицу не называем — «налево на улицу
         // Сеул», когда мы и так на Сеуле, звучит как поворот куда-то ещё.
         let bendInPlace = bendTurn && sameStreet(step.name, currentName)
-        if !step.name.isEmpty, m.type != "arrive", !uturnInPlace, !bendInPlace {
+        if !step.name.isEmpty, osrmType != "arrive", !uturnInPlace, !bendInPlace {
             // «на улицу Беруни», а не «на Beruniy shoh ko'chasi»: фраза просит
             // винительный падеж.
             let street = StreetName.display(step.name, language: language,
@@ -2003,8 +2012,8 @@ final class RouteService {
         // Тип манёвра — отдельно от фразы. Фраза зависит ещё и от типа
         // развязки («держитесь правее» на развилке против «поверните направо»
         // на перекрёстке), а геометрия поворота — только от модификатора.
-        let kind: ManeuverKind = m.type == "arrive" ? .arrive
-            : m.type == "roundabout" || m.type == "rotary" ? .roundabout
+        let kind: ManeuverKind = osrmType == "arrive" ? .arrive
+            : osrmType == "roundabout" || osrmType == "rotary" ? .roundabout
             : ManeuverKind.fromOSRM(modifier: m.modifier)
         // Тип команды для записанного голоса — только у фразы без имени
         // собственного: улицу и название остановки диктор не записывал.
@@ -2015,6 +2024,24 @@ final class RouteService {
                          shortText: result == phrase ? nil : phrase,
                          voiceAction: voiceAction,
                          edge: LaneAdvice.edge(osrmType: type, modifier: m.modifier))
+    }
+
+    /// Тип OSRM, как его говорим: малое кольцо (`roundabout turn`) OSRM
+    /// велит читать обычным поворотом, устаревший `ramp` — съездом.
+    nonisolated static func spokenType(_ type: String) -> String {
+        switch type {
+        case "roundabout turn": "turn"
+        case "ramp":            "off ramp"
+        default:                type
+        }
+    }
+
+    /// Стрелка съезда по стороне: съезд налево — не стрелка направо.
+    nonisolated static func rampIcon(_ modifier: String?) -> String {
+        switch modifier {
+        case "left", "slight left", "sharp left": "arrow.up.left"
+        default:                                  "arrow.up.right"
+        }
     }
 
     /// Одна ли это улица: имена OSRM сравниваются без регистра и крайних

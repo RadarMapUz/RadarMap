@@ -21057,6 +21057,22 @@
         }
       }
     },
+    "въезжайте на кольцо": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "въезжайте на кольцо"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aylanaga kiring"
+          }
+        }
+      }
+    },
     "на пути перекрытие — отметка водителей": {
       "localizations": {
         "ru": {

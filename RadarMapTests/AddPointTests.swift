@@ -81,3 +81,21 @@ final class AddPointTests: XCTestCase {
                                                 reportsEnabled: true, maxMeters: 200), .tooFar)
     }
 }
+
+// MARK: - «Радар здесь» с долгого нажатия — то же правило
+
+extension AddPointTests {
+
+    func testLongPressReportFarFromDriverRefused() {
+        // Точка долгого нажатия в 5 км — «с дивана»: ни один тип отметки не уходит.
+        XCTAssertEqual(TripodAvailability.check(point: point(metresEast: 5_000), driver: me,
+                                                reportsEnabled: true), .tooFar)
+        XCTAssertEqual(TripodAvailability.check(point: point(metresEast: 5_000), driver: nil,
+                                                reportsEnabled: true), .noPosition)
+    }
+
+    func testLongPressReportNearDriverAllowed() {
+        XCTAssertTrue(TripodAvailability.check(point: point(metresEast: 200), driver: me,
+                                               reportsEnabled: true).isAvailable)
+    }
+}

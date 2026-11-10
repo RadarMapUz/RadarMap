@@ -46,6 +46,7 @@ extension MapScreen {
                             reportPoint = point   // дальше — выбор типа отметки
                         }
                     },
+                    radarNote: { reportReach(at: point.coordinate).note },
                     onOwnCamera: {
                         // Крестик режима добавления встаёт на выбранную точку —
                         // пользователь при желании доводит позицию вручную.
@@ -69,6 +70,12 @@ extension MapScreen {
                         // Отклик — ПО ИТОГУ, а не сразу: прежний безусловный
                         // «успех» звучал одинаково и когда отметка ушла, и
                         // когда её отбросили как дубль.
+                        if let refusal = reportReach(at: report.coordinate).note {
+                            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                            env.alerts.speak(refusal)
+                            withMotion { reportPoint = nil }
+                            return
+                        }
                         Task {
                             let outcome = await env.mobile.quickReport(
                                 kind: kind,

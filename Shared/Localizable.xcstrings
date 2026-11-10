@@ -40343,18 +40343,18 @@
         }
       }
     },
-    "Нужна ваша геопозиция — тренога ставится рядом": {
+    "Нужна ваша геопозиция — отметка ставится рядом": {
       "localizations": {
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Нужна ваша геопозиция — тренога ставится рядом"
+            "value": "Нужна ваша геопозиция — отметка ставится рядом"
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Geolokatsiyangiz kerak — uch oyoq yoningizda belgilanadi"
+            "value": "Geolokatsiyangiz kerak — belgi yoningizda qoʻyiladi"
           }
         }
       }

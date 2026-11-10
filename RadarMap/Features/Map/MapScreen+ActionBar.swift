@@ -62,11 +62,14 @@ extension MapScreen {
 
     // MARK: - Действия
 
-    var tripodAvailability: TripodAvailability {
-        TripodAvailability.check(point: map.mapCenter,
+    /// Отметка для всех, поставленная пальцем (прицел и «Радар здесь») — одно правило.
+    func reportReach(at point: CLLocationCoordinate2D?) -> TripodAvailability {
+        TripodAvailability.check(point: point,
                                  driver: env.location.currentCoordinate,
                                  reportsEnabled: env.mobile.isEnabled)
     }
+
+    var tripodAvailability: TripodAvailability { reportReach(at: map.mapCenter) }
 
     func addPoint(kind: AddPointKind, name: String) {
         guard let center = map.mapCenter else {

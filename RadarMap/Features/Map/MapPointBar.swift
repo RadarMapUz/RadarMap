@@ -25,10 +25,14 @@ struct MapPointBar: View {
     /// nil — геопозиции нет, маршрут строить не из чего.
     let onRoute: (() -> Void)?
     let onRadar: () -> Void
+    /// Почему «Радар здесь» сейчас нельзя (TripodAvailability); nil — можно.
+    /// Зовётся в body бара, а не экрана: своя точка меняется каждый фикс.
+    var radarNote: () -> String? = { nil }
     let onOwnCamera: () -> Void
     let onCancel: () -> Void
 
     var body: some View {
+        let radarNote = radarNote()
         VStack(spacing: 10) {
             HStack {
                 Label {
@@ -57,8 +61,17 @@ struct MapPointBar: View {
                 action("Радар здесь", "dot.radiowaves.left.and.right",
                        tint: Theme.textPrimary, chip: Theme.Types.camera,
                        glyph: .white, action: onRadar)
+                    .disabled(radarNote != nil)
+                    .opacity(radarNote == nil ? 1 : 0.55)
                 action("Своя камера", "plus.viewfinder",
                        tint: Theme.textPrimary, action: onOwnCamera)
+            }
+            if let radarNote {
+                Text(radarNote)
+                    .font(.dense(12))
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(12)

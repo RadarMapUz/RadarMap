@@ -659,8 +659,8 @@ class TrafficTest(unittest.TestCase):
         conn = sqlite3.connect(os.path.join(self.root, "api", "traffic.db"))
         tb.schema(conn)
         for piece in (1, 2):
-            conn.execute("INSERT INTO traffic_samples(u, v, kmh, weight, ts, piece, passed) "
-                         "VALUES(1, 2, 10, 50, ?, ?, 1)", (NOW - 60, piece))
+            conn.execute("INSERT INTO traffic_samples(u, v, kmh, weight, ts, piece, passed, src, gen) "
+                         "VALUES(1, 2, 10, 50, ?, ?, 1, hex(randomblob(4)), 1)", (NOW - 60, piece))
         conn.commit()
         conn.close()
         self.now_json(NOW - 60)

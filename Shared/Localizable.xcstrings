@@ -6736,22 +6736,6 @@
         }
       }
     },
-    "Добавить здесь": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Добавить здесь"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Shu yerga qoʻshish"
-          }
-        }
-      }
-    },
     "Добавить камеру": {
       "localizations": {
         "ru": {
@@ -10212,22 +10196,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sahifada va xabarlarda: «Aziz uyga ketyapti». Boʻsh boʻlsa — «Haydovchi»."
-          }
-        }
-      }
-    },
-    "Наведите центр на камеру": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Наведите центр на камеру"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Markazni kameraga toʻgʻrilang"
           }
         }
       }
@@ -40227,6 +40195,214 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bu taxmin, qaror emas: jarima kelgan-kelmaganini faqat portal biladi."
+          }
+        }
+      }
+    },
+    "Где стоит камера?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Где стоит камера?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera qayerda turibdi?"
+          }
+        }
+      }
+    },
+    "Где стоит тренога?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Где стоит тренога?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uch oyoq qayerda turibdi?"
+          }
+        }
+      }
+    },
+    "Наведите на неё центр карты": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Наведите на неё центр карты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarita markazini unga toʻgʻrilang"
+          }
+        }
+      }
+    },
+    "Сохранить камеру": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранить камеру"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamerani saqlash"
+          }
+        }
+      }
+    },
+    "Отметить треногу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отметить треногу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uch oyoqni belgilash"
+          }
+        }
+      }
+    },
+    "Камера скорости": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камера скорости"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tezlik kamerasi"
+          }
+        }
+      }
+    },
+    "Камера на светофоре": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камера на светофоре"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Svetofordagi kamera"
+          }
+        }
+      }
+    },
+    "Меряет скорость · только у вас": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Меряет скорость · только у вас"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tezlikni oʻlchaydi · faqat sizda"
+          }
+        }
+      }
+    },
+    "Светофор и полосы · только у вас": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Светофор и полосы · только у вас"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Svetofor va qatorlar · faqat sizda"
+          }
+        }
+      }
+    },
+    "Увидят все водители · исчезнет сама": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Увидят все водители · исчезнет сама"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Barcha haydovchilar koʻradi · oʻzi yoʻqoladi"
+          }
+        }
+      }
+    },
+    "Только рядом с вами — до %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только рядом с вами — до %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faqat yoningizda — %@ gacha"
+          }
+        }
+      }
+    },
+    "Нужна ваша геопозиция — отметка ставится рядом": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нужна ваша геопозиция — отметка ставится рядом"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geolokatsiyangiz kerak — belgi yoningizda qoʻyiladi"
+          }
+        }
+      }
+    },
+    "Отметки водителей сейчас выключены": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отметки водителей сейчас выключены"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haydovchilar belgilari hozir oʻchirilgan"
           }
         }
       }

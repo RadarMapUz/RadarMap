@@ -287,6 +287,12 @@ extension MapScreen {
                 }
             }
         }
+        if args.contains("-addCamera") {
+            Task {
+                await Task.pause(seconds: 3)
+                withMotion { map.isAddingCamera = true }
+            }
+        }
         // Меню на карте (20.10): `-openQuickToggles` (старое имя `-quickToggles`)
         // и `-openLayers`. Закрываются сами через mapPopoverIdleSeconds — снимок
         // делать раньше.

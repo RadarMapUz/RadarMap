@@ -66,6 +66,28 @@ final class RouteCutTests: XCTestCase {
         XCTAssertEqual(advance(&tracker, line: corner, at(12, 300), course: 90, fixAlong: 305), 312, accuracy: 1.5)
     }
 
+    /// Поездка через поворот кадрами значка (30 в секунду, фикс раз в секунду):
+    /// значок, как и граница, ждёт фикса у излома — граница под значком на
+    /// прямой, у угла и после него (85).
+    func testCutStaysUnderTheArrowThroughTheTurn() {
+        var tracker = RouteCut.Tracker()
+        let v = 14.0
+        var worst = 0.0
+        var t = 0.0
+        while t < 40 {
+            let real = 20 + v * t
+            let fixAlong = 20 + v * t.rounded(.down)
+            let shown = fixAlong < corner.bends[0] ? min(real, corner.bends[0]) : real
+            guard shown < corner.length - 1 else { break }
+            let pose = corner.pose(at: shown)
+            let cut = advance(&tracker, line: corner, pose.coordinate, course: pose.bearing, fixAlong: fixAlong,
+                              speed: v)
+            worst = max(worst, abs(shown - cut))
+            t += 1.0 / 30
+        }
+        XCTAssertLessThan(worst, 0.5, "граница под значком, м")
+    }
+
     func testUTurnDoesNotJumpToTheReturnLeg() {
         // Разворот: 200 м на север и обратно по соседней полосе (4 м восточнее).
         let line = RouteCut.Line([at(0, 0), at(0, 200), at(4, 200), at(4, 0)])

@@ -1411,7 +1411,7 @@ struct EngineMapView: UIViewRepresentable {
             // кадре (Drive3D.canCompute): обзор и осмотр не дают лент дорог.
             let probeAllowed = Drive3D.canCompute(following: !browsing, zoom: view.zoomLevel,
                                                   tilesComplete: framesComplete)
-            driveRibbon.update(model, on: threeD, probeAllowed: probeAllowed, cut: routeLine.paintedCutAlong,
+            driveRibbon.update(model, on: threeD, probeAllowed: probeAllowed, cut: routeLine.cutAlong,
                                traffic: routeLine.trafficPieces, trafficVersion: routeLine.trafficVersion,
                                routeDaylight: routeDaylight, in: view)
             laneFocusLayers.update(model, routeDaylight: routeDaylight, in: view)
@@ -2025,6 +2025,9 @@ struct EngineMapView: UIViewRepresentable {
                     if let cut = routeLine.paintedCutCoordinate {
                         Log.location.notice("МЕТКА линия \(Date().timeIntervalSince1970, format: .fixed(precision: 3), privacy: .public) \(coordinate.latitude, format: .fixed(precision: 7), privacy: .public) \(coordinate.longitude, format: .fixed(precision: 7), privacy: .public) \(cut.latitude, format: .fixed(precision: 7), privacy: .public) \(cut.longitude, format: .fixed(precision: 7), privacy: .public)")
                     }
+                    if let start = driveRibbon.shownStartAlong, let edge = routeLine.coordinate(along: start) {
+                        Log.location.notice("МЕТКА лента \(Date().timeIntervalSince1970, format: .fixed(precision: 3), privacy: .public) \(coordinate.latitude, format: .fixed(precision: 7), privacy: .public) \(coordinate.longitude, format: .fixed(precision: 7), privacy: .public) \(edge.latitude, format: .fixed(precision: 7), privacy: .public) \(edge.longitude, format: .fixed(precision: 7), privacy: .public)")
+                    }
                 }
             }
             #endif
@@ -2142,6 +2145,7 @@ struct EngineMapView: UIViewRepresentable {
             routeLine.frame(pose: pose.coordinate,
                             course: pose.courseDegrees >= 0 ? pose.courseDegrees : (current?.courseDegrees ?? -1),
                             speedMps: fedFix?.speedMps ?? 0, in: view)
+            driveRibbon.frame(cut: routeLine.cutAlong, in: view)
         }
 
         private func startMarkerLink(in view: MLNMapView) {

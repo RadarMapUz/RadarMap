@@ -151,10 +151,72 @@ final class Drive3DTests: XCTestCase {
         XCTAssertEqual(Drive3D.cutStep(speedMps: 5, hot: false), AppConfig.drive3DCutStepMeters)
         XCTAssertEqual(Drive3D.cutStep(speedMps: 28, hot: false), 14, accuracy: 0.01)
         XCTAssertEqual(Drive3D.cutStep(speedMps: 28, hot: true), 14 * AppConfig.drive3DCutHotFactor, accuracy: 0.01)
-        XCTAssertTrue(Drive3D.cutDue(last: nil, now: 10))
-        XCTAssertFalse(Drive3D.cutDue(last: 100, now: 104))
-        XCTAssertTrue(Drive3D.cutDue(last: 100, now: 100 + AppConfig.drive3DCutStepMeters))
-        XCTAssertTrue(Drive3D.cutDue(last: 100, now: 50), "назад — сразу")
+    }
+
+    // MARK: - Срез ленты под машиной (85)
+
+    private let ribbonEnds = stride(from: 8.0, through: 3_000, by: 8).map { $0 }
+
+    func testRibbonCutKeepsTheBoundaryWithinTolerance() {
+        let ends = ribbonEnds
+        XCTAssertEqual(Drive3D.ribbonCut(applied: nil, car: 100, ends: ends, tolerance: 5), 104, "первый — сразу")
+        XCTAssertNil(Drive3D.ribbonCut(applied: 104, car: 106, ends: ends, tolerance: 5), "граница в допуске")
+        XCTAssertEqual(Drive3D.ribbonCut(applied: 104, car: 110, ends: ends, tolerance: 5), 112, "хвост длиннее допуска")
+        XCTAssertEqual(Drive3D.ribbonCut(applied: 112, car: 40, ends: ends, tolerance: 5), 40, "назад — сразу")
+        XCTAssertEqual(Drive3D.ribbonCut(applied: nil, car: 2, ends: ends, tolerance: 5), -1, "у начала ничего не прятать")
+    }
+
+    func testToleranceIsHalfAPieceOnScreenAndBudget() {
+        let slow = Drive3D.cutTolerance(metersPerPoint: 0.3, speedMps: 1, hot: false)
+        XCTAssertEqual(slow, AppConfig.drive3DCutStepMeters / 2 + 0.5, accuracy: 1e-9)
+        XCTAssertEqual(Drive3D.cutTolerance(metersPerPoint: 2, speedMps: 1, hot: false), 2 * AppConfig.drive3DCutPoints,
+                       accuracy: 1e-9, "обзор: точки экрана")
+        XCTAssertEqual(Drive3D.cutTolerance(metersPerPoint: 0.3, speedMps: 1, hot: true),
+                       slow * AppConfig.drive3DCutHotFactor, accuracy: 1e-9)
+    }
+
+    /// Минута на скорости: значок 30 кадров в секунду, модель — раз в секунду
+    /// (машина). До 85 срез ставился на применении модели шагом бюджета, и
+    /// из-под машины торчал хвост ленты до 35 м на 50 км/ч.
+    private func ribbonTails(kmh: Double, metersPerPoint: Double, seconds: Double)
+        -> (old: [Double], new: [Double], cuts: Int) {
+        let v = kmh / 3.6, ends = ribbonEnds
+        var oldCut: Double?, newCut: Double?
+        var old: [Double] = [], new: [Double] = []
+        var cuts = 0, nextApply = 0.0, t = 0.0
+        func boundary(_ threshold: Double?) -> Double { ends.last { $0 <= (threshold ?? -1) } ?? 0 }
+        while t < 60 {
+            let car = 50 + v * t
+            if t >= nextApply {
+                nextApply += 1
+                if oldCut.map({ car - $0 >= Drive3D.cutStep(speedMps: v, hot: false, seconds: seconds) }) ?? true {
+                    oldCut = car
+                }
+            }
+            let tolerance = Drive3D.cutTolerance(metersPerPoint: metersPerPoint, speedMps: v, hot: false,
+                                                 seconds: seconds)
+            if let next = Drive3D.ribbonCut(applied: newCut, car: car, ends: ends, tolerance: tolerance) {
+                newCut = next
+                cuts += 1
+            }
+            old.append(car - boundary(oldCut))
+            new.append(car - boundary(newCut))
+            t += 1.0 / 30
+        }
+        return (old, new, cuts)
+    }
+
+    func testRibbonEndsUnderTheCarNotBehindIt() {
+        for (kmh, mpp, seconds) in [(30.0, 0.45, Drive3D.Budget.car.cutSeconds), (50, 0.52, Drive3D.Budget.car.cutSeconds),
+                                    (90, 0.75, Drive3D.Budget.car.cutSeconds), (50, 0.3, Drive3D.Budget.full.cutSeconds),
+                                    (90, 0.33, Drive3D.Budget.full.cutSeconds)] {
+            let r = ribbonTails(kmh: kmh, metersPerPoint: mpp, seconds: seconds)
+            let tolerance = Drive3D.cutTolerance(metersPerPoint: mpp, speedMps: kmh / 3.6, hot: false, seconds: seconds)
+            XCTAssertLessThanOrEqual(r.new.map(abs).max() ?? .infinity, tolerance + 1e-9, "\(kmh) км/ч: в допуске")
+            XCTAssertLessThan(r.new.sorted()[r.new.count / 2], 3.5, "\(kmh) км/ч: медиана под значком")
+            XCTAssertGreaterThan(r.old.max() ?? 0, 2 * tolerance, "\(kmh) км/ч: прежний срез оставлял хвост")
+            XCTAssertLessThanOrEqual(Double(r.cuts), 60 / seconds + 2, "\(kmh) км/ч: не чаще шага бюджета")
+        }
     }
 
     /// Частота: минута на 100 км/ч, применение модели трижды в секунду. Источник
@@ -178,9 +240,10 @@ final class Drive3DTests: XCTestCase {
                                     inWindow: Drive3D.inWindow(car: car, maneuver: maneuver, window: window),
                                     complete: true, verifiedEnd: car + 900)
             }
-            if Drive3D.cutDue(last: cut, now: car, step: Drive3D.cutStep(speedMps: speed, hot: false)) {
+            let tolerance = Drive3D.cutTolerance(metersPerPoint: 0.33, speedMps: speed, hot: false)
+            if let next = Drive3D.ribbonCut(applied: cut, car: car, ends: ribbonEnds, tolerance: tolerance) {
                 cuts += 1
-                cut = car
+                cut = next
             }
         }
         XCTAssertLessThanOrEqual(computes, 10, "записей источника за минуту")
@@ -355,10 +418,11 @@ final class Drive3DTests: XCTestCase {
                     plan = Drive3D.Plan(route: 1, from: car, maneuver: nil, narrowing: true, inWindow: false,
                                         complete: true, verifiedEnd: car + ahead)
                 }
-                if Drive3D.cutDue(last: cut, now: car,
-                                  step: Drive3D.cutStep(speedMps: speed, hot: false, seconds: budget.cutSeconds)) {
+                let tolerance = Drive3D.cutTolerance(metersPerPoint: 0.52, speedMps: speed, hot: false,
+                                                     seconds: budget.cutSeconds)
+                if let next = Drive3D.ribbonCut(applied: cut, car: car, ends: ribbonEnds, tolerance: tolerance) {
                     cuts += 1
-                    cut = car
+                    cut = next
                 }
             }
             return (computes, cuts)

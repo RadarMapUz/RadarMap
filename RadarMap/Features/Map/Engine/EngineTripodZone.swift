@@ -162,7 +162,7 @@ final class EngineTripodZone {
         sign.text = NSExpression(forKeyPath: "kmh")
         sign.textFontNames = NSExpression(forConstantValue: ["Noto Sans Bold"])
         sign.textFontSize = NSExpression(forConstantValue: 11)
-        sign.textColor = NSExpression(forConstantValue: Theme.rgb(0x1A1A1A))
+        sign.textColor = NSExpression(forConstantValue: Theme.rgb(MapIconColors.ink))
         sign.textAllowsOverlap = NSExpression(forConstantValue: true)
         sign.textIgnoresPlacement = NSExpression(forConstantValue: true)
         sign.textPitchAlignment = NSExpression(forConstantValue: "viewport")

@@ -34,6 +34,10 @@ nonisolated struct TripodHotspots: Decodable, Sendable {
         /// Четверть суток, на которую приходится перевес: 0 ночь, 1 утро,
         /// 2 день, 3 вечер. −1 — перевеса нет, ставят когда угодно.
         let peak: Int
+        /// Разных людей (адресов, потолок 9); nil — файл до пункта 82.
+        var src: Int? = nil
+        /// Разных дней именно в четверть `peak`; nil — файл до пункта 82.
+        var pdays: Int? = nil
 
         var coordinate: CLLocationCoordinate2D {
             CLLocationCoordinate2D(latitude: lat, longitude: lon)

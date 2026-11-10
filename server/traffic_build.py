@@ -248,6 +248,17 @@ def schema(conn):
         u INTEGER NOT NULL, v INTEGER NOT NULL, w INTEGER NOT NULL, slot INTEGER NOT NULL,
         day INTEGER NOT NULL, delay REAL NOT NULL, angle REAL NOT NULL)""")
     conn.execute("CREATE INDEX IF NOT EXISTS traffic_turn_obs_slot ON traffic_turn_obs(slot, u, v, w)")
+    # Подсказки поворотов (89, раздел «Подсказки поворотов»): только счётчики
+    # и номер дня, живут TURN_HINT_DAYS, наружу не уходят.
+    conn.execute("""CREATE TABLE IF NOT EXISTS traffic_turn_moves(
+        u INTEGER NOT NULL, v INTEGER NOT NULL, w INTEGER NOT NULL, day INTEGER NOT NULL,
+        bearing INTEGER NOT NULL, n INTEGER NOT NULL,
+        PRIMARY KEY(u, v, w, day)) WITHOUT ROWID""")
+    conn.execute("CREATE INDEX IF NOT EXISTS traffic_turn_moves_exit ON traffic_turn_moves(v, bearing)")
+    conn.execute("""CREATE TABLE IF NOT EXISTS traffic_turn_exits(
+        u INTEGER NOT NULL, v INTEGER NOT NULL, bearing INTEGER NOT NULL,
+        angle INTEGER NOT NULL, entry INTEGER NOT NULL, day INTEGER NOT NULL,
+        PRIMARY KEY(u, v, bearing)) WITHOUT ROWID""")
     conn.commit()
 
 
@@ -408,7 +419,10 @@ def match_chains(response, points):
       marks     — [(метры вдоль, секунды следа)] точек следа;
       segments  — [(от, до, секунд графа)] отрезков рёбер вдоль совпадения;
       crossings — {(lon, lat) с точностью 1e-6} перекрёстков из шагов (3+
-                  направления; пусто, если ответ без steps).
+                  направления; пусто, если ответ без steps);
+      roads     — {(lon, lat): (азимуты, разрешён ли въезд, индекс въезда,
+                  индекс выезда)} тех же перекрёстков — `bearings`, `entry`,
+                  `in`, `out` шага (89: какие выезды граф разрешает).
     """
     out = []
     if response.get("code") != "Ok":
@@ -423,7 +437,7 @@ def match_chains(response, points):
         if len(ends) != len(legs) + 1:
             continue
         geometry = (matching.get("geometry") or {}).get("coordinates") or []
-        chain, marks, segments, crossings = [], [], [], set()
+        chain, marks, segments, crossings, roads = [], [], [], set(), {}
         along, offset = 0.0, 0
         for k, leg in enumerate(legs):
             marks.append((along, points[ends[k][1]][2]))
@@ -432,6 +446,10 @@ def match_chains(response, points):
                     if len(crossing.get("bearings") or []) >= 3 and crossing.get("location"):
                         lon, lat = crossing["location"]
                         crossings.add((round(lon, 6), round(lat, 6)))
+                        bearings, entry = crossing.get("bearings"), crossing.get("entry") or []
+                        if isinstance(crossing.get("in"), int) and len(entry) == len(bearings):
+                            roads[(round(lon, 6), round(lat, 6))] = (bearings, entry, crossing["in"],
+                                                                     crossing.get("out"))
             annotation = leg.get("annotation") or {}
             ids = annotation.get("nodes") or []
             dist = annotation.get("distance") or []
@@ -454,7 +472,8 @@ def match_chains(response, points):
             offset += m
             along += leg_length(leg)
         marks.append((along, points[ends[-1][1]][2]))
-        out.append({"chain": chain, "marks": marks, "segments": segments, "crossings": crossings})
+        out.append({"chain": chain, "marks": marks, "segments": segments, "crossings": crossings,
+                    "roads": roads})
     return out
 
 
@@ -553,6 +572,149 @@ def profile_turn_ceiling(angle):
     return base + (15.0 if left else 8.0) + (20.0 if uturn else 0.0)
 
 
+# --- Подсказки поворотов (89, docs/plan_89_turn_hints_2026-11-10.md) -------------
+#
+# В OSM часто нет «налево нельзя»: граф разрешает поворот, а водители его не
+# делают. Найти такое место можно только по тому, куда уходят с подхода, — а
+# 33B (traffic_turn_obs) пишет один манёвр на перекрёсток: узлы ближе
+# TURN_CLUSTER — один, и манёвр лежит на узле с самым крутым углом. Для
+# задержки это верно, для «куда уходят» — нет: разворот через разрыв
+# разделительной (налево и ещё раз налево) нередко ложится на второй узел,
+# въезд в разрыв с первого подхода в traffic_turn_obs не виден, и поворот,
+# которым ездят, выглядел бы никем не сделанным. Поэтому выходы считаются по каждому
+# узлу перекрёстка отдельно и только счётчиками:
+#   traffic_turn_moves — проездов (u, v, w) за ташкентский день (номер дня,
+#                        как в traffic_slot_obs) и азимут выезда w у узла v;
+#   traffic_turn_exits — выезды подхода u→v, которые видит граф (`bearings`,
+#                        `entry` шага match): азимут, угол, разрешён ли въезд,
+#                        день, когда граф показал их последний раз.
+# Ни куска, ни источника, ни минуты; живут TURN_HINT_DAYS, наружу не уходят.
+# Решает человек: подозрение идёт в очередь панели («Повороты»), в граф —
+# только подтверждённое модератором (traffic_speeds.banned_turns).
+
+def exit_angle(bearings, inbound, bearing):
+    """Угол выезда по азимутам перекрёстка OSRM: bearings[in] смотрит назад по
+    дороге въезда, движение — на 180° от него. −180…180, плюс — направо (как
+    turn_angle); разворот — −180."""
+    return (bearing - bearings[inbound]) % 360 - 180
+
+
+def turn_moves_from_match(response, points):
+    """Проезды узлов перекрёстков: [(u, v, w, азимут выезда, ((азимут, угол,
+    въезд разрешён), …))], по одному на узел и кусок, где окно 33B целиком
+    внутри совпадения (кусок прошёл узел, а не начался или кончился у него).
+    Выезд, чей азимут не сходится с отрезком v→w следа больше чем на 45°, не
+    пишется: такой ответ не даёт уверенно сказать, какая дорога — w."""
+    out = []
+    for item in match_chains(response, points):
+        chain, marks, roads = item["chain"], item["marks"], item["roads"]
+        if len(chain) < 3 or len(marks) < 2 or not roads:
+            continue
+        first, last = marks[0][0], marks[-1][0]
+        seen = set()
+        for i in range(1, len(chain) - 1):
+            road = roads.get((round(chain[i][2][1], 6), round(chain[i][2][0], 6)))
+            if road is None:
+                continue
+            if (chain[i][1] - tc.TURN_APPROACH < first + PIECE_END_GUARD
+                    or chain[i][1] + tc.TURN_EXIT > last - PIECE_END_GUARD):
+                continue
+            bearings, entry, inbound, outbound = road
+            if not (isinstance(outbound, int) and 0 <= outbound < len(bearings) and 0 <= inbound < len(bearings)):
+                continue
+            via, nxt = chain[i][2], chain[i + 1][2]
+            if abs((bearing(via[0], via[1], nxt[0], nxt[1]) - bearings[outbound] + 180) % 360 - 180) > 45:
+                continue
+            key = (chain[i - 1][0], chain[i][0], chain[i + 1][0])
+            if key in seen:
+                continue
+            seen.add(key)
+            exits = tuple((int(b), int(round(exit_angle(bearings, inbound, b))), bool(ok))
+                          for b, ok in zip(bearings, entry))
+            out.append(key + (int(bearings[outbound]), exits))
+    return out
+
+
+def road_speed(conn, u, v):
+    row = conn.execute("SELECT model_kmh FROM traffic_edges WHERE u = ? AND v = ?", (u, v)).fetchone()
+    return row[0] if row else None
+
+
+def node_point(conn, node):
+    row = conn.execute("SELECT lat, lon FROM traffic_nodes WHERE id = ?", (node,)).fetchone()
+    return (row[0], row[1]) if row else None
+
+
+def turn_hints(conn, now, skip=frozenset()):
+    """Подозрительные повороты: налево или разворот (TURN_HINT_KINDS), который
+    граф разрешает (`entry` на последнем проезде подхода), но из ≥
+    TURN_HINT_MIN_PASSES проездов подхода за ≥ TURN_HINT_MIN_DAYS разных дней
+    окна к нему не ушёл никто. Плюс: подход прошли два источника вместе
+    (traffic_shared за SHARED_TTL — не один человек), въезд и выезд — не дворы
+    (скорость графа ≥ TURN_HINT_MIN_ROAD_KMH), на выезд с других подходов
+    въезжали в ≥ TURN_HINT_EXIT_MIN_DAYS разных дней — дорога проезжая, и её
+    узел w известен. `skip` — тройки с решением модератора.
+
+    [{u, v, w, angle, kind, passes, days, exit_passes, exit_days, at, came,
+    to, taken: [{w, n, angle, to}]}], по убыванию проездов подхода."""
+    since = day_number(now) - tc.TURN_HINT_DAYS + 1
+    approaches = conn.execute("""SELECT u, v, SUM(n), COUNT(DISTINCT day) FROM traffic_turn_moves
+                                 WHERE day >= ? GROUP BY u, v
+                                 HAVING SUM(n) >= ? AND COUNT(DISTINCT day) >= ?""",
+                              (since, tc.TURN_HINT_MIN_PASSES, tc.TURN_HINT_MIN_DAYS)).fetchall()
+    out = []
+    for u, v, passes, days in approaches:
+        if conn.execute("SELECT 1 FROM traffic_shared WHERE u = ? AND v = ? AND seen >= ?",
+                        (u, v, now - SHARED_TTL)).fetchone() is None:
+            continue
+        if (road_speed(conn, u, v) or 0) < tc.TURN_HINT_MIN_ROAD_KMH:
+            continue
+        exits = conn.execute("SELECT bearing, angle, entry, day FROM traffic_turn_exits WHERE u = ? AND v = ?",
+                             (u, v)).fetchall()
+        if not exits:
+            continue
+        latest = max(day for *_, day in exits)
+        angles = {b: angle for b, angle, _, day in exits if day == latest}
+        taken = conn.execute("""SELECT w, bearing, SUM(n) FROM traffic_turn_moves
+                                WHERE u = ? AND v = ? AND day >= ? GROUP BY w, bearing""",
+                             (u, v, since)).fetchall()
+        taken_w = {w for w, _, _ in taken}
+        taken_b = {b for _, b, _ in taken}
+        for b, angle, entry, day in sorted(exits):
+            if not entry or day != latest or b in taken_b or maneuver(angle) not in tc.TURN_HINT_KINDS:
+                continue
+            road = conn.execute("""SELECT w, SUM(n), COUNT(DISTINCT day) FROM traffic_turn_moves
+                                   WHERE v = ? AND bearing = ? AND u != ? AND day >= ?
+                                   GROUP BY w ORDER BY 2 DESC, 1 LIMIT 1""", (v, b, u, since)).fetchone()
+            if road is None:
+                continue
+            w, exit_passes, exit_days = road
+            if (w in taken_w or (u, v, w) in skip or exit_days < tc.TURN_HINT_EXIT_MIN_DAYS
+                    or (road_speed(conn, v, w) or 0) < tc.TURN_HINT_MIN_ROAD_KMH):
+                continue
+            out.append({
+                "u": u, "v": v, "w": w, "angle": angle, "kind": maneuver(angle),
+                "passes": passes, "days": days, "exit_passes": exit_passes, "exit_days": exit_days,
+                "at": node_point(conn, v), "came": node_point(conn, u), "to": node_point(conn, w),
+                "taken": [{"w": tw, "n": n, "angle": angles.get(tb), "to": node_point(conn, tw)}
+                          for tw, tb, n in sorted(taken, key=lambda row: (-row[2], row[0]))],
+            })
+    out.sort(key=lambda item: (-item["passes"], item["u"], item["v"], item["w"]))
+    return out
+
+
+def turn_usage(conn, bans):
+    """{(u, v, w): проездов после дня решения} для запрещённых поворотов
+    [(u, v, w, день решения)]: поворачивать начали — знак, может быть, сняли,
+    и модератору стоит пересмотреть запрет."""
+    out = {}
+    for u, v, w, after in bans:
+        row = conn.execute("SELECT COALESCE(SUM(n), 0) FROM traffic_turn_moves WHERE u = ? AND v = ? AND w = ? "
+                           "AND day > ?", (u, v, w, after)).fetchone()
+        out[(u, v, w)] = row[0]
+    return out
+
+
 def hour_of_week(ts):
     """Час недели по Ташкенту: 0 — понедельник 00:00."""
     t = time.gmtime(ts + TASHKENT_UTC_OFFSET)
@@ -646,9 +808,10 @@ def decay_scale(epoch, now):
     return 2.0 ** ((now - epoch) / PROFILE_HALF_LIFE)
 
 
-def store(conn, piece_id, samples, nodes, models, now, turns=(), seen=None, source=("", 0)):
+def store(conn, piece_id, samples, nodes, models, now, turns=(), seen=None, source=("", 0), moves=()):
     """`seen` — оценка времени проезда (received куска, не позже `now`): по
-    ней стареют образцы окна; `source` — (метка, поколение соли) из api.py."""
+    ней стареют образцы окна; `source` — (метка, поколение соли) из api.py;
+    `moves` — проезды узлов перекрёстков (turn_moves_from_match)."""
     seen = now if seen is None else min(seen, now)
     how = profile_slot(now)
     weight = decay_scale(profile_epoch(conn, now), now)
@@ -663,6 +826,13 @@ def store(conn, piece_id, samples, nodes, models, now, turns=(), seen=None, sour
                       for (u, v), (_c, _t, pace) in sorted(piece_profile(passed).items())])
     conn.executemany("INSERT INTO traffic_turn_obs(u, v, w, slot, day, delay, angle) VALUES(?, ?, ?, ?, ?, ?, ?)",
                      [(u, v, w, slot, day, delay, angle) for u, v, w, delay, angle in turns])
+    conn.executemany("""INSERT INTO traffic_turn_moves(u, v, w, day, bearing, n) VALUES(?, ?, ?, ?, ?, 1)
+                        ON CONFLICT(u, v, w, day) DO UPDATE SET n = n + 1, bearing = excluded.bearing""",
+                     [(u, v, w, day, out_bearing) for u, v, w, out_bearing, _ in moves])
+    conn.executemany("""INSERT INTO traffic_turn_exits(u, v, bearing, angle, entry, day) VALUES(?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(u, v, bearing) DO UPDATE SET angle = excluded.angle,
+                            entry = excluded.entry, day = MAX(day, excluded.day)""",
+                     [(u, v, b, angle, int(ok), day) for u, v, _w, _b, exits in moves for b, angle, ok in exits])
     conn.executemany("""INSERT INTO traffic_samples(u, v, kmh, weight, ts, piece, passed, secs, src, gen)
                         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                      [(u, v, kmh, w, seen, piece_id, int(passed), sample_seconds(kmh, w, *rest), *source)
@@ -777,7 +947,7 @@ def process(conn, now, matcher=osrm_match, budget=RUN_BUDGET, clock=time.monoton
                     continue
                 samples, nodes, models = edges_from_match(response, points)
                 store(conn, piece_id, samples, nodes, models, now, turns_from_match(response, points),
-                      seen=received, source=source)
+                      seen=received, source=source, moves=turn_moves_from_match(response, points))
                 conn.execute("DELETE FROM traffic_pieces WHERE id = ?", (piece_id,))
                 if saturating:
                     count_cell(conn, key)
@@ -1058,6 +1228,8 @@ def maintain_profile(conn, now):
     conn.execute("DELETE FROM traffic_shared WHERE seen < ?", (now - SHARED_TTL,))
     conn.execute("DELETE FROM traffic_slot_obs WHERE day < ?", (day_number(now) - tc.PROFILE_KEEP_DAYS,))
     conn.execute("DELETE FROM traffic_turn_obs WHERE day < ?", (day_number(now) - tc.PROFILE_KEEP_DAYS,))
+    for table in ("traffic_turn_moves", "traffic_turn_exits"):
+        conn.execute(f"DELETE FROM {table} WHERE day <= ?", (day_number(now) - tc.TURN_HINT_DAYS,))
     if now - epoch >= PROFILE_RENORM_AFTER:
         # Одна транзакция с новой меткой: числа и метка меняются разом.
         factor = 1.0 / scale

@@ -87,7 +87,7 @@ final class MobilePassWatchTests: XCTestCase {
         // Машина берёт вопрос отсюда для всех типов — «%@ ещё на месте?» больше нет.
         let q = MobilePassWatch.question(for: .tripod)
         XCTAssertEqual(q.title, "Тренога ещё стоит?")
-        XCTAssertEqual([q.yes, q.no], ["Стоит", "Убрали"])
+        XCTAssertEqual([q.yes, q.no], ["Стоит", "Уже нет"])
         XCTAssertLessThanOrEqual(q.title.count, 24, "влезает в баннер машины")
         XCTAssertLessThanOrEqual(max(q.yes.count, q.no.count), 10, "влезает в CPAlertAction")
     }

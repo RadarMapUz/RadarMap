@@ -27,6 +27,7 @@ extension LocationService {
             unconfirmed: camera.isUnconfirmedMobile,
             currentLimit: speedLimits?.currentLimit,
             speedKmh: speedKmh,
-            speakSpeedThreshold: AppConfig.speakSpeedThresholdKmh)
+            speakSpeedThreshold: AppConfig.speakSpeedThresholdKmh,
+            freshness: TripodFreshness.voiceTail(camera.mobileFresh, now: Date()))
     }
 }

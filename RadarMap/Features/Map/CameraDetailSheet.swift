@@ -166,8 +166,16 @@ struct CameraDetailSheet: View {
                     // «сейчас» (владелец, 02.11), и «отмечена 10 мин назад»
                     // против «в 12:40» меняет решение водителя сильнее, чем
                     // число голосов. Подтверждённая — «с 14:05» (ReportAge).
-                    if let age = ReportAge.card(created: trust.created, confirmed: trust.confirmed, now: Date()) {
+                    // Свежесть (82): «Подтвердили 3 мин назад» / «Не подтверждали 50 мин».
+                    let fresh = camera.mobileFresh ?? TripodFreshness.Info(created: trust.created,
+                                                                           confirmed: trust.confirmed)
+                    if let age = TripodFreshness.card(fresh, now: Date()) {
                         Text(age)
+                            .font(.rounded(12, .medium))
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    if let doubt = TripodFreshness.doubt(fresh) {
+                        Label(doubt, systemImage: Icon.pointGone)
                             .font(.rounded(12, .medium))
                             .foregroundStyle(Theme.textSecondary)
                     }
@@ -279,15 +287,33 @@ struct CameraDetailSheet: View {
         String(format: "%.6f, %.6f", camera.lat, camera.lon)
     }
 
+    /// Отвечать «Стоит»/«Уже нет» — только рядом с отметкой (82): голос с
+    /// дивана портит свежесть сильнее, чем молчание.
+    private var isNearMark: Bool {
+        guard let coordinate = env.location.currentCoordinate else { return false }
+        return camera.distance(from: coordinate) <= AppConfig.tripodCardVoteMeters
+    }
+
     @ViewBuilder private var actionsBlock: some View {
-        if env.mobile.isMobile(camera) {
+        if env.mobile.isMobile(camera), !isNearMark {
+            Label("Ответить «Стоит» или «Уже нет» можно рядом с отметкой", systemImage: "location")
+                .font(.rounded(13))
+                .foregroundStyle(Theme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let mine = env.mobile.cancellableReportID(),
+               env.mobile.idOffsetApplied(mine) == camera.id {
+                destructiveButton(title: "Убрать мою отметку", icon: "trash") {
+                    confirmation = .cancelMark(mine)
+                }
+            }
+        } else if env.mobile.isMobile(camera) {
             // Краудсорсинг: подтверждение продлевает жизнь отметки, «нет радара» — гасит.
             HStack(spacing: 12) {
                 Button {
                     Task { await env.mobile.vote(cameraID: camera.id, stillThere: true) }
                     dismiss()
                 } label: {
-                    Label("Радар на месте", systemImage: Icon.pointHere)
+                    Label("Стоит", systemImage: Icon.pointHere)
                         .font(.rounded(15, .semibold))
                         .foregroundStyle(Theme.success)
                         .frame(maxWidth: .infinity)

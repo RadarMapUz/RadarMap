@@ -8,6 +8,9 @@ UUID, наружу не уходит ничего, по чему восстан�
     python3 test_build_hotspots.py
 """
 import json
+import os
+import sqlite3
+import tempfile
 import unittest
 
 import build_hotspots as bh
@@ -111,7 +114,7 @@ class PayloadTests(unittest.TestCase):
         self.assertEqual(payload["version"], 1)
         self.assertEqual(payload["window_days"], bh.WINDOW_DAYS)
         spot = payload["spots"][0]
-        self.assertEqual(sorted(spot), ["days", "lat", "lon", "n", "peak"])
+        self.assertEqual(sorted(spot), ["days", "lat", "lon", "n", "pdays", "peak", "src"])
 
     def test_spots_sorted_by_weight(self):
         strong = [report(lon=69.28, days_ago=d, device=f"d{d}", ip=f"{d}.0.0.1")
@@ -120,6 +123,83 @@ class PayloadTests(unittest.TestCase):
                 for d in range(1, 4)]
         result = bh.spots(bh.cluster(strong + weak))
         self.assertEqual([s["n"] for s in result], [5, 3])
+
+
+class HabitTests(unittest.TestCase):
+    """Пункт 82: src и pdays — по ним телефон предупреждает заранее."""
+
+    def _evening(self, days, ips):
+        base = NOW - (NOW + bh.TZ_OFFSET) % DAY
+        return [(41.31, 69.28, base + 20 * 3600 - d * DAY, f"dev{i}", ip)
+                for i, (d, ip) in enumerate(zip(days, ips))]
+
+    def test_peak_days_count_distinct_days_in_the_peak_quarter(self):
+        rows = self._evening([1, 1, 2, 3], ["1.1.1.1", "2.2.2.2", "3.3.3.3", "4.4.4.4"])
+        spot = bh.spots(bh.cluster(rows))[0]
+        self.assertEqual(spot["peak"], 3)
+        self.assertEqual(spot["pdays"], 3, "два наблюдения в один вечер — один день")
+        self.assertEqual(spot["src"], 4)
+
+    def test_sources_are_capped(self):
+        rows = self._evening(range(1, 15), [f"{i}.0.0.1" for i in range(1, 15)])
+        self.assertEqual(bh.spots(bh.cluster(rows))[0]["src"], bh.SOURCES_CAP)
+
+    def test_no_peak_means_no_peak_days(self):
+        base = NOW - (NOW + bh.TZ_OFFSET) % DAY
+        rows = [(41.31, 69.28, base + (q * 6 + 3) * 3600 - q * DAY, f"d{q}", f"{q}.1.1.1")
+                for q in range(4)]
+        spot = bh.spots(bh.cluster(rows))[0]
+        self.assertEqual((spot["peak"], spot["pdays"]), (-1, 0))
+
+    def test_history_moment_keeps_day_and_quarter(self):
+        for day, q in ((20_000, 0), (20_001, 3)):
+            moment = bh.history_moment(day, q)
+            self.assertEqual((bh.day_key(moment), bh.quarter(moment)), (day, q))
+
+
+class LoadTests(unittest.TestCase):
+    """Источник наблюдений: живые отметки, их «Стоит» и история погасших."""
+
+    def setUp(self):
+        handle, self.path = tempfile.mkstemp(suffix=".db")
+        os.close(handle)
+        conn = sqlite3.connect(self.path)
+        conn.executescript("""
+            CREATE TABLE reports(id INTEGER PRIMARY KEY, lat REAL, lon REAL, created REAL,
+                observed REAL DEFAULT 0, type TEXT, device TEXT, ip TEXT, closed TEXT DEFAULT '');
+            CREATE TABLE votes(report_id INTEGER, device TEXT, value INTEGER, ts REAL,
+                ip TEXT, stale INTEGER DEFAULT 0);
+            CREATE TABLE report_history(lat REAL, lon REAL, type TEXT, day INTEGER,
+                quarter INTEGER, device TEXT, ip TEXT, kind TEXT);""")
+        t = NOW - DAY
+        conn.execute("INSERT INTO reports VALUES(1, 41.31, 69.28, ?, 0, 'tripod', 'a', '1.1.1.1', '')", (t,))
+        conn.execute("INSERT INTO reports VALUES(2, 41.31, 69.28, ?, 0, 'tripod', 'x', '9.9.9.9', 'author')", (t,))
+        conn.execute("INSERT INTO reports VALUES(3, 41.31, 69.28, ?, 0, 'post', 'p', '8.8.8.8', '')", (t,))
+        conn.execute("INSERT INTO votes VALUES(1, 'b', 1, ?, '2.2.2.2', 0)", (t + 60,))
+        conn.execute("INSERT INTO votes VALUES(1, 'a', 1, ?, '1.1.1.1', 0)", (t + 90,))
+        conn.execute("INSERT INTO votes VALUES(1, 'c', 1, ?, '3.3.3.3', 1)", (t + 99,))
+        day = int((NOW + bh.TZ_OFFSET) // DAY) - 10
+        conn.execute("INSERT INTO report_history VALUES(41.31, 69.28, 'tripod', ?, 3, 'h', '4.4.4.4', 'report')",
+                     (day,))
+        conn.execute("INSERT INTO report_history VALUES(41.31, 69.28, 'tripod', ?, 3, 'old', '5.5.5.5', 'report')",
+                     (day - bh.WINDOW_DAYS - 5,))
+        conn.commit()
+        conn.close()
+
+    def tearDown(self):
+        os.unlink(self.path)
+
+    def test_load_takes_reports_fresh_votes_and_history(self):
+        rows = bh.load(self.path, now=NOW)
+        self.assertEqual(sorted(r[3] for r in rows), ["a", "b", "h"],
+                         "отозванная, свой голос, несвежий голос, пост и старая история — не наблюдения")
+
+    def test_database_without_history_still_loads(self):
+        conn = sqlite3.connect(self.path)
+        conn.execute("DROP TABLE report_history")
+        conn.commit()
+        conn.close()
+        self.assertEqual(sorted(r[3] for r in bh.load(self.path, now=NOW)), ["a", "b"])
 
 
 if __name__ == "__main__":

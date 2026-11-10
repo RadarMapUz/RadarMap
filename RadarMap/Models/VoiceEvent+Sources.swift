@@ -76,7 +76,8 @@ extension VoiceEvent {
                                    speaksLimit: Bool, brief: Bool, groupCount: Int,
                                    onRoute: () -> Bool, direction: CameraDirection?,
                                    unconfirmed: Bool, currentLimit: Int?,
-                                   speedKmh: Double, speakSpeedThreshold: Double) -> VoiceEvent? {
+                                   speedKmh: Double, speakSpeedThreshold: Double,
+                                   freshness: CameraCall.Freshness = .none) -> VoiceEvent? {
         let step: Double = distance >= 400 ? 100 : 50
         let rounded = Int((distance / step).rounded() * step)
         let form: CameraCall.Form
@@ -106,7 +107,8 @@ extension VoiceEvent {
             tail = .none
         }
         return .camera(CameraCall(kind: kind, form: form, meters: rounded,
-                                  fromDrivers: unconfirmed && groupCount == 0, tail: tail))
+                                  fromDrivers: unconfirmed && groupCount == 0, tail: tail,
+                                  freshness: groupCount == 0 ? freshness : .none))
     }
 }
 

@@ -123,6 +123,7 @@ final class CameraStore: CameraRepository {
                     || new.lat != old.lat || new.lon != old.lon
                     // Сервер продлил срок — новая подпись и новый срок гашения.
                     || new.mobileExpires != old.mobileExpires || new.location != old.location
+                    || new.mobileFresh != old.mobileFresh
             }
         guard changed else { return false }
         mobile = cameras

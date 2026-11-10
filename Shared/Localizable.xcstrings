@@ -40822,6 +40822,486 @@
           }
         }
       }
+    },
+    "Сообщили только что": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сообщили только что"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hozirgina xabar berildi"
+          }
+        }
+      }
+    },
+    "Сообщили %lld мин назад": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сообщили %lld мин назад"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld daq oldin xabar berildi"
+          }
+        }
+      }
+    },
+    "Подтвердили только что": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подтвердили только что"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hozirgina tasdiqlandi"
+          }
+        }
+      }
+    },
+    "Подтвердили %lld мин назад": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подтвердили %lld мин назад"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld daq oldin tasdiqlandi"
+          }
+        }
+      }
+    },
+    "Не подтверждали больше часа": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не подтверждали больше часа"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bir soatdan ortiq tasdiqlanmagan"
+          }
+        }
+      }
+    },
+    "Не подтверждали %lld мин": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не подтверждали %lld мин"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld daq tasdiqlanmagan"
+          }
+        }
+      }
+    },
+    "Водитель сообщил, что уже нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Водитель сообщил, что уже нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haydovchi endi yoʻqligini aytdi"
+          }
+        }
+      }
+    },
+    "Водители сообщили, что уже нет": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Водители сообщили, что уже нет"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haydovchilar endi yoʻqligini aytdi"
+          }
+        }
+      }
+    },
+    "больше часа": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "больше часа"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "bir soatdan ortiq"
+          }
+        }
+      }
+    },
+    ", подтвердили только что": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", подтвердили только что"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", hozirgina tasdiqlandi"
+          }
+        }
+      }
+    },
+    ", больше часа без подтверждения": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", больше часа без подтверждения"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", bir soatdan ortiq tasdiqlanmagan"
+          }
+        }
+      }
+    },
+    ", %lld минут без подтверждения": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", %lld минут без подтверждения"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", %lld daqiqa tasdiqlanmagan"
+          }
+        }
+      }
+    },
+    "Здесь ночью часто стоит тренога": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Здесь ночью часто стоит тренога"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu yerda kechasi tez-tez uchoyoq turadi"
+          }
+        }
+      }
+    },
+    "Здесь ночью часто стоит тренога, сбавьте": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Здесь ночью часто стоит тренога, сбавьте"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu yerda kechasi tez-tez uchoyoq turadi, sekinlang"
+          }
+        }
+      }
+    },
+    "Здесь утром часто стоит тренога": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Здесь утром часто стоит тренога"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu yerda ertalab tez-tez uchoyoq turadi"
+          }
+        }
+      }
+    },
+    "Здесь утром часто стоит тренога, сбавьте": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Здесь утром часто стоит тренога, сбавьте"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu yerda ertalab tez-tez uchoyoq turadi, sekinlang"
+          }
+        }
+      }
+    },
+    "Здесь днём часто стоит тренога": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Здесь днём часто стоит тренога"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu yerda kunduzi tez-tez uchoyoq turadi"
+          }
+        }
+      }
+    },
+    "Здесь днём часто стоит тренога, сбавьте": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Здесь днём часто стоит тренога, сбавьте"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu yerda kunduzi tez-tez uchoyoq turadi, sekinlang"
+          }
+        }
+      }
+    },
+    "Здесь вечером часто стоит тренога": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Здесь вечером часто стоит тренога"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu yerda kechqurun tez-tez uchoyoq turadi"
+          }
+        }
+      }
+    },
+    "Здесь вечером часто стоит тренога, сбавьте": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Здесь вечером часто стоит тренога, сбавьте"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu yerda kechqurun tez-tez uchoyoq turadi, sekinlang"
+          }
+        }
+      }
+    },
+    "чаще ночью": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "чаще ночью"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "koʻpincha kechasi"
+          }
+        }
+      }
+    },
+    "чаще утром": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "чаще утром"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "koʻpincha ertalab"
+          }
+        }
+      }
+    },
+    "чаще днём": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "чаще днём"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "koʻpincha kunduzi"
+          }
+        }
+      }
+    },
+    "чаще вечером": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "чаще вечером"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "koʻpincha kechqurun"
+          }
+        }
+      }
+    },
+    "Уже отмечено — подтвердили, спасибо": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Уже отмечено — подтвердили, спасибо"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allaqachon belgilangan — tasdiqlandi, rahmat"
+          }
+        }
+      }
+    },
+    "Заранее о частых местах треног": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заранее о частых местах треног"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uchoyoq koʻp turadigan joylar haqida oldindan"
+          }
+        }
+      }
+    },
+    "«Заранее о частых местах треног»: где разные водители в разные дни отмечали треногу в одно и то же время суток, голос один раз за поездку скажет «Здесь вечером часто стоит тренога». Это память о прошлом, а не отметка: стоит ли тренога сейчас, приложение не знает.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Заранее о частых местах треног»: где разные водители в разные дни отмечали треногу в одно и то же время суток, голос один раз за поездку скажет «Здесь вечером часто стоит тренога». Это память о прошлом, а не отметка: стоит ли тренога сейчас, приложение не знает."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Uchoyoq koʻp turadigan joylar haqida oldindan»: turli haydovchilar turli kunlarda sutkaning bir xil vaqtida uchoyoqni belgilagan joyda ovoz safar davomida bir marta «Bu yerda kechqurun tez-tez uchoyoq turadi» deydi. Bu belgi emas, oʻtmish xotirasi: uchoyoq hozir turibdimi, ilova bilmaydi."
+          }
+        }
+      }
+    },
+    "Ответить «Стоит» или «Уже нет» можно рядом с отметкой": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ответить «Стоит» или «Уже нет» можно рядом с отметкой"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "«Turibdi» yoki «Endi yoʻq» deb belgi yonida javob berish mumkin"
+          }
+        }
+      }
+    },
+    "Зачем отмечать треноги?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Зачем отмечать треноги?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uchoyoqlarni nega belgilash kerak?"
+          }
+        }
+      }
+    },
+    "С 30.10.2026 знак перед треногой не обязателен — поэтому отметки водителей важнее. Ответ «Стоит» или «Уже нет» после проезда держит отметку свежей для всех: на карте видно, когда её последний раз подтвердили.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "С 30.10.2026 знак перед треногой не обязателен — поэтому отметки водителей важнее. Ответ «Стоит» или «Уже нет» после проезда держит отметку свежей для всех: на карте видно, когда её последний раз подтвердили."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30.10.2026 dan boshlab uchoyoq oldida belgi qoʻyish majburiy emas — shuning uchun haydovchilar belgilari muhimroq. Oʻtgandan keyin «Turibdi» yoki «Endi yoʻq» javobi belgini hamma uchun yangi saqlaydi: xaritada uni oxirgi marta qachon tasdiqlashgani koʻrinadi."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

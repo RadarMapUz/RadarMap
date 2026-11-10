@@ -613,6 +613,15 @@ nonisolated enum EngineMapStyle {
             "paint": ["line-color": hotspotHex, "line-opacity": 0.5,
                       "line-width": 1.5, "line-dasharray": [3, 3]],
         ])
+        // «чаще вечером» (82) — подпись зоны вблизи; уступает всему.
+        out.append([
+            "id": "hotspot-label", "type": "symbol", "source": "hotspots", "minzoom": 15,
+            "filter": ["!=", ["coalesce", ["get", "label"], ""], ""],
+            "layout": ["text-field": ["get", "label"], "text-font": ["Noto Sans Regular"],
+                       "text-size": 12, "text-optional": true,
+                       "text-pitch-alignment": "viewport", "text-rotation-alignment": "viewport"],
+            "paint": ["text-color": label, "text-halo-color": halo, "text-halo-width": 1.6],
+        ])
         // Перекрытия и ремонт (12б.5) — ПОД камерами и без права занимать
         // их место: ремонт у радара не закрывает радар («камера не исчезает
         // никогда»). Неподтверждённые — полупрозрачными, как призрак радара.
@@ -696,6 +705,17 @@ nonisolated enum EngineMapStyle {
                                        "path", ["literal", [11, -11]],
                                        ["literal", [9, -9]]],
                        "symbol-sort-key": ["coalesce", ["get", "sort"], 0]],
+        ])
+        // Свежесть отметки водителей (82): «✓ 14:05» — последнее «Стоит»,
+        // «14:05?» — только сообщили. Вблизи, не у тревожной (там расстояние).
+        out.append([
+            "id": "camera-fresh", "type": "symbol", "source": "cameras", "minzoom": 16,
+            "filter": ["all", ["!=", ["coalesce", ["get", "fresh"], ""], ""], ["!", ["get", "alert"]]],
+            "layout": ["text-field": ["get", "fresh"], "text-font": ["Noto Sans Bold"],
+                       "text-size": 11, "text-anchor": "top", "text-offset": [0, 1.4],
+                       "text-optional": true,
+                       "text-pitch-alignment": "viewport", "text-rotation-alignment": "viewport"],
+            "paint": ["text-color": label, "text-halo-color": halo, "text-halo-width": 1.8],
         ])
         // Расстояние до камеры, о которой идёт тревога («400 м»), — у её
         // значка, в машине (CarPlayCameraCue, 25.F): камера ушла из дока,

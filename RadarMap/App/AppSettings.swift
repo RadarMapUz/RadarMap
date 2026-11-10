@@ -622,6 +622,9 @@ final class AppSettings {
     /// это разные вещи по природе: там факт от живого человека, здесь догадка
     /// о прошлом, и выключать их хочется по отдельности.
     var tripodHints: Bool { didSet { store.set(tripodHints, forKey: Keys.tripodHints) } }
+    /// «Здесь вечером часто стоит тренога» заранее, без превышения (пункт 82):
+    /// только сильные места в их типичное время. Включено по умолчанию.
+    var tripodHabitVoice: Bool { didSet { store.set(tripodHabitVoice, forKey: Keys.tripodHabitVoice) } }
     /// Ночной голос (12.6): после заката фраза о камере короче — «Камера,
     /// 300 метров» вместо полной на трассе. Громкость НЕ меняется: короче,
     /// но не тише (VoiceDirector.decide). Включено по умолчанию.
@@ -854,6 +857,7 @@ final class AppSettings {
         static let commuteLearningOff = "commuteLearningOff"
         static let smartSilence = "smartSilence"
         static let tripodHints = "tripodHints"
+        static let tripodHabitVoice = "tripodHabitVoice"
         static let nightVoice = "nightVoice"
         static let workDriverMode = "workDriverMode"
         static let licensePlate = "licensePlate"
@@ -914,6 +918,7 @@ final class AppSettings {
             Keys.destinationHints: true,
             Keys.smartSilence: true,
             Keys.tripodHints: true,
+            Keys.tripodHabitVoice: true,
             Keys.nightVoice: true,
             Keys.parkedCarHint: true,
             Keys.mapPlaces: true,
@@ -979,6 +984,7 @@ final class AppSettings {
         lockScreenPrivate = store.bool(forKey: Keys.lockScreenPrivate)
         smartSilence = store.bool(forKey: Keys.smartSilence)
         tripodHints = store.bool(forKey: Keys.tripodHints)
+        tripodHabitVoice = store.bool(forKey: Keys.tripodHabitVoice)
         nightVoice = store.bool(forKey: Keys.nightVoice)
         workDriverMode = store.bool(forKey: Keys.workDriverMode)
         carLog = store.bool(forKey: Keys.carLog)
@@ -1190,7 +1196,7 @@ extension AppSettings {
         Keys.digest: .bool, Keys.language: .string, Keys.backgroundAlerts: .string,
         Keys.haptics: .bool, Keys.mapAppearance: .string, Keys.keepScreenOn: .bool,
         Keys.destinationHints: .bool, Keys.commuteLearningOff: .bool, Keys.smartSilence: .bool,
-        Keys.tripodHints: .bool, Keys.nightVoice: .bool, Keys.workDriverMode: .bool, Keys.parkedCarHint: .bool,
+        Keys.tripodHints: .bool, Keys.tripodHabitVoice: .bool, Keys.nightVoice: .bool, Keys.workDriverMode: .bool, Keys.parkedCarHint: .bool,
         Keys.mapPlaces: .bool, Keys.mapHouses: .bool, Keys.mapSidewalks: .bool,
         Keys.mapZoomButtons: .bool,
         Keys.cursorStyle: .string, Keys.alertMode: .string, Keys.alertProfile: .string,
@@ -1265,6 +1271,7 @@ extension AppSettings {
         case (Keys.lockScreenPrivate, .bool(let v)): lockScreenPrivate = v
         case (Keys.smartSilence, .bool(let v)): smartSilence = v
         case (Keys.tripodHints, .bool(let v)): tripodHints = v
+        case (Keys.tripodHabitVoice, .bool(let v)): tripodHabitVoice = v
         case (Keys.nightVoice, .bool(let v)): nightVoice = v
         case (Keys.workDriverMode, .bool(let v)): workDriverMode = v
         case (Keys.parkedCarHint, .bool(let v)): parkedCarHint = v

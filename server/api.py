@@ -7,14 +7,20 @@ Stdlib-only (sqlite3 + http.server): без pip-зависимостей на о
 Endpoints:
   GET  /api/health         -> {"ok": true}
   GET  /api/mobile         -> {"reports": [{id, lat, lon, created, expires, up, down,
-                                            type, confirmed}]}   (без перекрытий и ремонта)
+                                            type, confirmed, course,
+                                            last_confirmed, trust, doubted}]}   (без перекрытий и ремонта;
+                              last_confirmed — последний независимый «Стоит» или null, trust 0/1/2,
+                              doubted — независимых «Уже нет» после него; пункт 82)
   GET  /api/road           -> {"reports": [... то же + course, confirmers]}  (только closure/roadwork;
                               confirmers — число независимых подтверждений, путь — от 2)
   GET  /api/cng            -> {"stations": [{lat, lon, status, status_age, queue, queue_age, confirmed}]}
   POST /api/cng            {lat, lon, kind: gas|nogas|queue15|queue30|queue60, device} -> {"ok": true}
                            (метан на АГНКС; см. «Метан» ниже)
   POST /api/report         {lat, lon, device, type [, course, amend_id]}  -> {"id": N, "merged": bool
-                                                                    [, "amended": true]}
+                                                                    [, "amended": true]
+                                                                    [, "own": bool, "confirmed": bool]}
+                           (own — своя точка уже здесь; confirmed — слияние засчитано
+                            независимым «Стоит»)
                            (amend_id не своей или ушедшей точки -> 409 "nothing to amend")
   POST /api/vote           {id, device, value: 1|-1 [, kind: "pass", age, course]} -> {"ok": true}
                            («на месте» старше 10 мин — голос без продления; «убрали»
@@ -51,10 +57,17 @@ Endpoints:
     фейк, которого никто не подтвердил, умирает сам
   * полный срок (3 ч / 6 ч) даёт только НЕЗАВИСИМОЕ подтверждение — другое
     устройство И другой адрес: ротация UUID не превращает слух в факт
-  * подтверждение (+1) продлевает на 30 мин (максимум 6 ч от создания)
-  * новая отметка в радиусе класса дороги от активной той же семьи —
-    подтверждение (merge) ближайшей; радар и тренога — одна семья, тип
-    остаётся точный (тренога)
+  * подтверждение (+1) продлевает на 30 мин (максимум 6 ч от создания);
+    радар и тренога (82) — иначе: каждое независимое свежее «Стоит» держит
+    точку до своего момента + 90 мин, потолок 10 ч от создания; два
+    независимых «Уже нет» после последнего «Стоит» снимают точку (gone)
+  * новая отметка той же семьи рядом с живой — подтверждение (merge)
+    ближайшей: с курсом — вдоль хода радиус класса дороги, поперёк 40 м;
+    без курса — круг 150 м; своя точка ещё раз — не подтверждение; радар и
+    тренога — одна семья, тип остаётся точный (тренога); место слитой точки
+    уточняется шагом ≤ 15 м и не дальше 50 м от первой отметки
+  * погасшие радары и треноги уходят в report_history (день, четверть суток)
+    — для карты частых мест (build_hotspots.py)
   * уточнение типа своей отметки (amend): с amend_id — ровно названная своя
     точка (400 м / 10 мин); без него — только своя точка не старше 60 с в 150 м
   * дизлайк с нового адреса срезает 30 мин жизни; полное скрытие — по кворуму:
@@ -352,6 +365,27 @@ MERGE_METERS_BY_CLASS = {
 # «я только что нажал, дайте исправить», а не право распоряжаться точкой,
 # которую уже подтвердили другие.
 CANCEL_WINDOW = 10 * 60
+# --- Тренога и радар: свежесть, срок от подтверждения, дубли (пункт 82,
+# обоснование чисел — docs/plan_82_tripod_2026-11-10.md) ---
+# Каждое независимое свежее «Стоит» держит точку до своего момента + 90 мин.
+SPEED_CONFIRM_TTL = 90 * 60
+# Потолок от создания — смена инспектора; дальше нужна новая отметка.
+SPEED_MAX_LIFE = 10 * 3600
+# Доверие 2 — два независимых адреса подтвердили за этот час.
+TRUST_RECENT = 60 * 60
+# Столько независимых «Уже нет» после последнего «Стоит» скрывают точку.
+GONE_DISTINCT_IPS = 2
+# Слияние с курсом: поперёк хода не дальше полотна разделённой дороги.
+MERGE_CROSS_METERS = 40
+# Слияние без курса: круг, покрывающий разброс GPS и реакции по ходу.
+MERGE_NO_COURSE_METERS = 150
+# Уточнение места слитой точки: шаг и уход от первой отметки.
+MERGE_SHIFT_MAX_METERS = 15
+MERGE_DRIFT_MAX_METERS = 50
+# Причины закрытия, которые не идут в историю мест (report_history).
+HISTORY_SKIP_CLOSED = ("author", "blocked", "moderator", "quorum", "merged")
+# Местное время для четверти суток истории (build_hotspots.TZ_OFFSET).
+HISTORY_TZ_OFFSET = 5 * 3600
 # Адрес панели — чтобы уведомление в Telegram вело на запись, а не заставляло
 # искать её глазами. Пусто — ссылки в сообщении просто не будет.
 ADMIN_URL = os.environ.get("RADARMAP_ADMIN_URL", "")
@@ -431,6 +465,7 @@ RETENTION_SWEEP_SECONDS = 3600
 RETENTION_DAYS = {
     "reports": LIVE_MAX_DAYS,        # обычно — сутки после expires; это страховка
     "votes": LIVE_MAX_DAYS,          # живут, пока жива их отметка
+    "report_history": LIVE_MAX_DAYS,  # наблюдения треног: день и четверть суток
     "blocked": BAN_MAX_DAYS,
     "metrics": METRICS_KEEP_DAYS,
     "camera_reports": LIVE_MAX_DAYS,  # разобранные — удалить, неразобранные — без device/ip
@@ -621,6 +656,19 @@ def init_db():
     # Курс голосующего (−1 — неизвестен): модератору и будущему решению о
     # «Убрали» без курса (сейчас оно режет срок и идёт в кворум, как раньше).
     migrate(conn, "votes", "course REAL DEFAULT -1")
+    # Пункт 82: момент последнего независимого свежего «Стоит» (0 — не было),
+    # число мест, усреднённых в координату, и первая координата точки.
+    migrate(conn, "reports", "last_confirmed REAL DEFAULT 0")
+    migrate(conn, "reports", "samples INTEGER DEFAULT 1")
+    migrate(conn, "reports", "lat0 REAL")
+    migrate(conn, "reports", "lon0 REAL")
+    # История наблюдений треног для карты частых мест: без точного времени —
+    # день и четверть суток; device/ip — для «разные люди», живут 55 дней.
+    conn.execute("""CREATE TABLE IF NOT EXISTS report_history(
+        lat REAL NOT NULL, lon REAL NOT NULL, type TEXT NOT NULL,
+        day INTEGER NOT NULL, quarter INTEGER NOT NULL,
+        device TEXT NOT NULL DEFAULT '', ip TEXT NOT NULL DEFAULT '',
+        kind TEXT NOT NULL DEFAULT 'report')""")
 
     # Метан на АГНКС (12б.4): «газ есть / нет / очередь». Станция — точка
     # заведения из файла заведений телефона, округлённая до ~10 м: сервер
@@ -653,6 +701,7 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_metrics_received ON metrics(received)",
         "CREATE INDEX IF NOT EXISTS idx_usage_day ON usage_stats(day)",
         "CREATE INDEX IF NOT EXISTS idx_usage_received ON usage_stats(received)",
+        "CREATE INDEX IF NOT EXISTS idx_history_day ON report_history(day)",
     ):
         conn.execute(statement)
 
@@ -681,6 +730,8 @@ def enforce_retention(conn, now):
     statements = (
         ("reports", "DELETE FROM reports WHERE created < ?", (live,)),
         ("votes", "DELETE FROM votes WHERE report_id NOT IN (SELECT id FROM reports)", ()),
+        ("report_history", "DELETE FROM report_history WHERE day < ?",
+         (int((now + HISTORY_TZ_OFFSET) // 86400) - LIVE_MAX_DAYS,)),
         ("cng", "DELETE FROM cng WHERE expires < ? OR created < ?", (now - EXPIRED_KEEP, live)),
         ("blocked", "DELETE FROM blocked WHERE until < ? OR created < ?",
          (now, now - BAN_MAX_DAYS * 86400)),
@@ -942,6 +993,9 @@ def maintenance(now, purge=True, sweep=False):
         conn = db()
         try:
             if purge:
+                conn.execute("BEGIN IMMEDIATE")
+                merge_live_duplicates(conn, now)
+                archive_expired(conn, now - EXPIRED_KEEP)
                 conn.execute("DELETE FROM reports WHERE expires < ?", (now - EXPIRED_KEEP,))
                 # голоса удалённых отметок — сироты, без чистки таблица растёт вечно
                 conn.execute("DELETE FROM votes WHERE report_id NOT IN (SELECT id FROM reports)")
@@ -1106,6 +1160,179 @@ def amended_expires(conn, rid, created, expires, owner_device, owner_ip, rtype, 
     else:
         cap = created + road_new_ttl(conn, rtype, now)
     return min(expires, max(now + 60, cap))
+
+
+# --- Тренога: свежесть и дубли (пункт 82) -----------------------------------
+
+def is_speed(rtype):
+    """Радар или тренога — их срок живёт от последнего подтверждения."""
+    return merge_family(rtype) == "speed"
+
+
+def independent_of(owner_device, owner_ip, device, ip):
+    """Другое устройство И другой непустой адрес — как confirmed_independently."""
+    return device != owner_device and bool(ip) and ip != owner_ip
+
+
+def speed_confirmed_expires(created, expires, at):
+    """Срок радара/треноги после независимого свежего «Стоит» в момент at."""
+    return min(created + SPEED_MAX_LIFE, max(expires, at + SPEED_CONFIRM_TTL))
+
+
+def local_offset(lat0, lon0, lat, lon):
+    """Смещение (восток, север) в метрах от первой точки ко второй."""
+    north = (lat - lat0) * 111_320.0
+    east = (lon - lon0) * 111_320.0 * math.cos(math.radians((lat + lat0) / 2))
+    return east, north
+
+
+def along_cross(east, north, course):
+    """Смещение вдоль курса и поперёк (вправо — плюс), метры."""
+    rad = math.radians(course)
+    return east * math.sin(rad) + north * math.cos(rad), east * math.cos(rad) - north * math.sin(rad)
+
+
+def merge_gap(lat, lon, course, cls, row_lat, row_lon, row_course, row_cls):
+    """Расстояние до живой точки, если новая отметка — она же; иначе None.
+
+    С курсом: вдоль хода — радиус класса дороги, поперёк — полотно; встречный
+    курс — одна тренога только вплотную. Без курса — осторожный круг."""
+    gap = haversine(lat, lon, row_lat, row_lon)
+    along_limit = max(merge_radius(cls), merge_radius(row_cls))
+    known = [c for c in (course, row_course) if c is not None and c >= 0]
+    if not known:
+        return gap if gap <= min(along_limit, MERGE_NO_COURSE_METERS) else None
+    if courses_diverge(course, row_course) and gap > MERGE_SAME_POINT_METERS:
+        return None
+    along, cross = along_cross(*local_offset(row_lat, row_lon, lat, lon), known[0])
+    if abs(cross) > MERGE_CROSS_METERS or abs(along) > along_limit:
+        return None
+    return gap
+
+
+def refined_position(lat, lon, samples, lat0, lon0, new_lat, new_lon):
+    """Координата слитой точки: бегущее среднее с шагом не больше
+    MERGE_SHIFT_MAX_METERS и уходом от первой отметки не дальше
+    MERGE_DRIFT_MAX_METERS. Возвращает (lat, lon, samples, lat0, lon0)."""
+    origin_lat = lat if lat0 is None else lat0
+    origin_lon = lon if lon0 is None else lon0
+    k = max(1, int(samples or 1))
+    east, north = local_offset(lat, lon, new_lat, new_lon)
+    east, north = east / (k + 1), north / (k + 1)
+    step = math.hypot(east, north)
+    if step > MERGE_SHIFT_MAX_METERS:
+        east, north = east * MERGE_SHIFT_MAX_METERS / step, north * MERGE_SHIFT_MAX_METERS / step
+    kx = 111_320.0 * math.cos(math.radians(lat))
+    out_lat, out_lon = lat + north / 111_320.0, lon + east / kx
+    oe, on = local_offset(origin_lat, origin_lon, out_lat, out_lon)
+    drift = math.hypot(oe, on)
+    if drift > MERGE_DRIFT_MAX_METERS:
+        scale = MERGE_DRIFT_MAX_METERS / drift
+        out_lat = origin_lat + on * scale / 111_320.0
+        out_lon = origin_lon + oe * scale / (111_320.0 * math.cos(math.radians(origin_lat)))
+    return out_lat, out_lon, k + 1, origin_lat, origin_lon
+
+
+def trust_level(confirmed, recent_ips, doubted):
+    """0 — только сообщили, 1 — подтвердил другой водитель, 2 — за последний
+    час подтвердили двое независимых; «Уже нет» после «Стоит» — на ступень ниже."""
+    level = 0 if not confirmed else (2 if recent_ips >= 2 else 1)
+    return max(0, level - 1) if doubted else level
+
+
+def gone_by_drivers(conn, rid, last_confirmed):
+    """Независимые адреса, сказавшие «Уже нет» после последнего «Стоит»."""
+    return conn.execute(
+        "SELECT COUNT(DISTINCT ip) FROM votes WHERE report_id = ? AND value = -1 "
+        "AND oncoming = 0 AND ip != '' AND ts > ?", (rid, last_confirmed or 0)).fetchone()[0]
+
+
+def archive_expired(conn, cutoff):
+    """Радары и треноги, погасшие до cutoff, — в историю мест: автор и каждый
+    независимый «Стоит» отдельной строкой, время — днём и четвертью суток."""
+    skip = ",".join("?" for _ in HISTORY_SKIP_CLOSED)
+    off = HISTORY_TZ_OFFSET
+    when = "CAST((%s + ?) / 86400 AS INTEGER), CAST((CAST(%s AS INTEGER) + ?) %% 86400 / 21600 AS INTEGER)"
+    rule = (f"r.expires < ? AND r.type IN ('radar', 'tripod') "
+            f"AND COALESCE(r.closed, '') NOT IN ({skip})")
+    t = "CASE WHEN r.observed > 0 THEN r.observed ELSE r.created END"
+    conn.execute(
+        "INSERT INTO report_history(lat, lon, type, day, quarter, device, ip, kind) "
+        f"SELECT r.lat, r.lon, r.type, {when % (t, t)}, r.device, COALESCE(r.ip, ''), 'report' "
+        f"FROM reports r WHERE {rule}", (off, off, cutoff, *HISTORY_SKIP_CLOSED))
+    conn.execute(
+        "INSERT INTO report_history(lat, lon, type, day, quarter, device, ip, kind) "
+        f"SELECT r.lat, r.lon, r.type, {when % ('v.ts', 'v.ts')}, v.device, COALESCE(v.ip, ''), 'confirm' "
+        f"FROM votes v JOIN reports r ON r.id = v.report_id WHERE {rule} "
+        "AND v.value = 1 AND v.stale = 0 AND v.device != r.device",
+        (off, off, cutoff, *HISTORY_SKIP_CLOSED))
+
+
+def _absorb(conn, keeper, loser):
+    """Влить дубль в живую точку: голоса, автор дубля — голосом, свежесть и
+    срок — лучшие из двух. keeper/loser — строки merge_live_duplicates."""
+    kid, kdev, kip = keeper["id"], keeper["device"], keeper["ip"]
+    for device, value, ts, ip, kind, stale, oncoming, course in conn.execute(
+            "SELECT device, value, ts, ip, kind, stale, oncoming, course FROM votes "
+            "WHERE report_id = ?", (loser["id"],)).fetchall():
+        if device == kdev:
+            continue
+        mine = conn.execute("SELECT ts FROM votes WHERE report_id = ? AND device = ?",
+                            (kid, device)).fetchone()
+        if mine is None or (mine[0] or 0) < (ts or 0):
+            conn.execute("INSERT OR REPLACE INTO votes(report_id, device, value, ts, ip, kind, stale, "
+                         "oncoming, course) VALUES(?,?,?,?,?,?,?,?,?)",
+                         (kid, device, value, ts, ip, kind, stale, oncoming, course))
+    at = loser["observed"] or loser["created"]
+    if loser["device"] != kdev and conn.execute(
+            "SELECT 1 FROM votes WHERE report_id = ? AND device = ?",
+            (kid, loser["device"])).fetchone() is None:
+        conn.execute("INSERT INTO votes(report_id, device, value, ts, ip, kind, stale) "
+                     "VALUES(?,?,1,?,?,'merge',0)", (kid, loser["device"], at, loser["ip"] or ""))
+    last = max(keeper["last_confirmed"], loser["last_confirmed"])
+    if independent_of(kdev, kip, loser["device"], loser["ip"]):
+        last = max(last, at)
+    expires = max(keeper["expires"], loser["expires"])
+    if is_speed(keeper["type"]):
+        expires = min(keeper["created"] + SPEED_MAX_LIFE, expires)
+    rtype = merged_type(keeper["type"], loser["type"])
+    up, down = conn.execute(
+        "SELECT COALESCE(SUM(value = 1), 0), COALESCE(SUM(value = -1), 0) FROM votes "
+        "WHERE report_id = ?", (kid,)).fetchone()
+    conn.execute("UPDATE reports SET up = ?, down = ?, expires = ?, type = ?, last_confirmed = ? "
+                 "WHERE id = ?", (up, down, expires, rtype, last, kid))
+    conn.execute("UPDATE reports SET active = 0, closed = 'merged' WHERE id = ?", (loser["id"],))
+    keeper.update(expires=expires, type=rtype, last_confirmed=last)
+
+
+def merge_live_duplicates(conn, now):
+    """Разовая чистка дублей среди живых меток по правилам merge_gap: остаётся
+    точка с большим числом независимых подтверждений (при равенстве — старшая).
+    Возвращает, сколько точек влито. Commit — за вызывающим."""
+    rows = [dict(zip(("id", "lat", "lon", "created", "expires", "type", "device", "ip", "cls",
+                      "course", "last_confirmed", "observed", "confirmers"), r))
+            for r in conn.execute(
+                "SELECT r.id, r.lat, r.lon, r.created, r.expires, r.type, r.device, r.ip, r.cls, "
+                "r.course, COALESCE(r.last_confirmed, 0), COALESCE(r.observed, 0), "
+                "(SELECT COUNT(DISTINCT v.ip) FROM votes v WHERE v.report_id = r.id AND v.value = 1 "
+                "AND v.stale = 0 AND v.device != r.device AND v.ip != '' AND v.ip != r.ip) "
+                "FROM reports r WHERE r.active = 1 AND r.expires > ? AND r.type NOT IN (?, ?) "
+                "ORDER BY r.created, r.id", (now, ROAD_TYPES[0], ROAD_TYPES[1])).fetchall()]
+    rows.sort(key=lambda r: (-r["confirmers"], r["created"], r["id"]))
+    gone, merged = set(), 0
+    for i, keeper in enumerate(rows):
+        if keeper["id"] in gone:
+            continue
+        for loser in rows[i + 1:]:
+            if loser["id"] in gone or merge_family(loser["type"]) != merge_family(keeper["type"]):
+                continue
+            if merge_gap(loser["lat"], loser["lon"], loser["course"], loser["cls"],
+                         keeper["lat"], keeper["lon"], keeper["course"], keeper["cls"]) is None:
+                continue
+            _absorb(conn, keeper, loser)
+            gone.add(loser["id"])
+            merged += 1
+    return merged
 
 # --- Поделиться прибытием -------------------------------------------------
 #
@@ -1807,10 +2034,17 @@ class Handler(BaseHTTPRequestHandler):
                 "EXISTS(SELECT 1 FROM votes v WHERE v.report_id = r.id AND v.value = 1 AND v.stale = 0 "
                 "AND v.device != r.device AND v.ip != '' AND v.ip != r.ip), r.course, "
                 "(SELECT COUNT(DISTINCT v.ip) FROM votes v WHERE v.report_id = r.id AND v.value = 1 "
-                "AND v.stale = 0 AND v.device != r.device AND v.ip != '' AND v.ip != r.ip) "
+                "AND v.stale = 0 AND v.device != r.device AND v.ip != '' AND v.ip != r.ip), "
+                # Пункт 82: свежесть — последний независимый «Стоит», двое за
+                # час и «Уже нет» после последнего «Стоит».
+                "COALESCE(r.last_confirmed, 0), "
+                "(SELECT COUNT(DISTINCT v.ip) FROM votes v WHERE v.report_id = r.id AND v.value = 1 "
+                "AND v.stale = 0 AND v.device != r.device AND v.ip != '' AND v.ip != r.ip AND v.ts >= ?), "
+                "(SELECT COUNT(DISTINCT v.ip) FROM votes v WHERE v.report_id = r.id AND v.value = -1 "
+                "AND v.oncoming = 0 AND v.ip != '' AND v.ts > COALESCE(r.last_confirmed, 0)) "
                 "FROM reports r WHERE r.active = 1 AND r.expires > ? "
                 "AND (r.type IN (?, ?)) = ?",
-                (now, ROAD_TYPES[0], ROAD_TYPES[1], 1 if road else 0)).fetchall()
+                (now - TRUST_RECENT, now, ROAD_TYPES[0], ROAD_TYPES[1], 1 if road else 0)).fetchall()
         finally:
             conn.close()
         items = []
@@ -1823,6 +2057,10 @@ class Handler(BaseHTTPRequestHandler):
             item["course"] = r[9] if r[9] is not None else -1
             if road:
                 item["confirmers"] = int(r[10] or 0)
+            # Старые сборки этих полей не читают (Decodable без них).
+            item["last_confirmed"] = r[11] or None
+            item["trust"] = trust_level(bool(r[8]), int(r[12] or 0), bool(r[13]))
+            item["doubted"] = int(r[13] or 0)
             items.append(item)
         body = json.dumps({"reports": items}).encode()
         # Отпечаток — по СОДЕРЖИМОМУ, а не по времени сборки: пока список
@@ -2382,49 +2620,61 @@ class Handler(BaseHTTPRequestHandler):
             # dedupe: nearby active report of the SAME type -> treat as confirmation
             # (пост ДПС и радар в 100 м друг от друга — разные сущности)
             active_rows = conn.execute(
-                "SELECT id, lat, lon, created, expires, type, device, ip, cls, course FROM reports "
+                "SELECT id, lat, lon, created, expires, type, device, ip, cls, course, "
+                "COALESCE(last_confirmed, 0), samples, lat0, lon0 FROM reports "
                 "WHERE active = 1 AND expires > ?", (now,)).fetchall()
-            # Радиус берём максимальный из двух классов: если хоть одна из
-            # точек стоит на трассе, «рядом» здесь измеряется по-трассовому.
             # Семья, а не тип: «радар» у чужой «треноги» — та же засада.
-            # Ближайшая подходящая, а не первая в выборке: две треноги в 250 м
-            # на трассе — две засады, и голос должен уйти той, у которой стоим.
+            # Ближайшая подходящая: две треноги в 250 м на трассе — две засады,
+            # и голос уходит той, у которой стоим. Геометрия — merge_gap (82).
             near = []
             for r in active_rows:
-                radius = max(merge_radius(cls), merge_radius(r[8]))
-                gap = haversine(lat, lon, r[1], r[2])
-                # Встречное полотно (курсы расходятся, и дальше одной точки) —
-                # своя засада; вплотную — одна тренога на обе стороны.
-                other_side = gap > MERGE_SAME_POINT_METERS and courses_diverge(course, r[9])
-                if merge_family(r[5]) == merge_family(rtype) and gap <= radius and not other_side:
+                if merge_family(r[5]) != merge_family(rtype):
+                    continue
+                gap = merge_gap(lat, lon, course, cls, r[1], r[2], r[9], r[8])
+                if gap is not None:
                     near.append((gap, r))
             near.sort(key=lambda pair: pair[0])
             for _, r in near[:1]:
-                    # Подтверждение — через votes, как обычный лайк: _vote
-                    # пересчитывает up/down только из votes, инкремент в
-                    # reports первый же голос стёр бы.
-                    # Отметка из очереди старше CONFIRM_FRESH_MAX — голос без
-                    # продления: тренога — это «сейчас» (ловец багов, 40a).
-                    stale = age > CONFIRM_FRESH_MAX
-                    conn.execute(
-                        "INSERT OR REPLACE INTO votes(report_id, device, value, ts, ip, kind, stale) "
-                        "VALUES(?,?,1,?,?,'merge',?)",
-                        (r[0], device, now, ip, 1 if stale else 0))
-                    up = conn.execute(
-                        "SELECT COUNT(*) FROM votes WHERE report_id = ? AND value = 1",
-                        (r[0],)).fetchone()[0]
-                    # Продление — привилегия НЕЗАВИСИМОГО подтверждения: merge
-                    # с того же адреса (свой второй UUID, пассажир на том же
-                    # Wi-Fi) засчитывается голосом, но испытательный срок не
-                    # снимает — иначе фейк продлевал бы сам себя ротацией.
+                # Своя же точка ещё раз — не подтверждение: себе не продлевают.
+                if r[6] == device:
+                    return self._json(200, {"id": r[0], "merged": True, "own": True,
+                                            "confirmed": False})
+                # Подтверждение — через votes, как обычный лайк: _vote
+                # пересчитывает up/down только из votes. Отметка из очереди
+                # старше CONFIRM_FRESH_MAX — голос без продления: тренога — «сейчас».
+                stale = age > CONFIRM_FRESH_MAX
+                conn.execute(
+                    "INSERT OR REPLACE INTO votes(report_id, device, value, ts, ip, kind, stale, course) "
+                    "VALUES(?,?,1,?,?,'merge',?,?)",
+                    (r[0], device, now, ip, 1 if stale else 0, course))
+                up = conn.execute(
+                    "SELECT COUNT(*) FROM votes WHERE report_id = ? AND value = 1",
+                    (r[0],)).fetchone()[0]
+                kind = merged_type(r[5], rtype)
+                # Продление — привилегия НЕЗАВИСИМОГО подтверждения: merge с того
+                # же адреса засчитывается голосом, но срок не трогает.
+                fresh_independent = not stale and independent_of(r[6], r[7], device, ip)
+                last_confirmed, lat_new, lon_new, samples, lat0, lon0 = r[10], r[1], r[2], r[11], r[12], r[13]
+                if is_speed(r[5]):
+                    new_exp = r[4]
+                    if fresh_independent:
+                        last_confirmed = max(r[10], observed)
+                        new_exp = speed_confirmed_expires(r[3], r[4], observed)
+                        lat_new, lon_new, samples, lat0, lon0 = refined_position(
+                            r[1], r[2], r[11], r[12], r[13], lat, lon)
+                else:
                     confirmed = confirmed_independently(conn, r[0], r[6], r[7])
-                    kind = merged_type(r[5], rtype)
                     new_exp = r[4] if stale else lifecycle_expires(r[3], r[4], kind, confirmed, now)
-                    conn.execute("UPDATE reports SET up = ?, expires = ?, type = ? WHERE id = ?",
-                                 (up, new_exp, kind, r[0]))
-                    conn.commit()
-                    bump_mobile_version()
-                    return self._json(200, {"id": r[0], "merged": True})
+                    if fresh_independent:
+                        last_confirmed = max(r[10], observed)
+                conn.execute("UPDATE reports SET up = ?, expires = ?, type = ?, last_confirmed = ?, "
+                             "lat = ?, lon = ?, samples = ?, lat0 = ?, lon0 = ? WHERE id = ?",
+                             (up, new_exp, kind, last_confirmed, lat_new, lon_new, samples,
+                              lat0, lon0, r[0]))
+                conn.commit()
+                bump_mobile_version()
+                return self._json(200, {"id": r[0], "merged": True, "own": False,
+                                        "confirmed": fresh_independent})
 
             # Глобальный кап: ротация device не должна ни заваливать карту
             # фейками, ни раздувать O(N)-скан дедупликации выше. По категории:
@@ -2624,11 +2874,11 @@ class Handler(BaseHTTPRequestHandler):
             # «на месте» не оживает — тренога — это «сейчас», и новый день —
             # новая отметка (docs/team/specs/tripod-report.md).
             row = conn.execute(
-                "SELECT created, expires, device, ip, type, course FROM reports "
-                "WHERE id = ? AND active = 1 AND expires > ?", (rid, now)).fetchone()
+                "SELECT created, expires, device, ip, type, course, COALESCE(last_confirmed, 0) "
+                "FROM reports WHERE id = ? AND active = 1 AND expires > ?", (rid, now)).fetchone()
             if not row:
                 return self._json(404, {"error": "no report"})
-            created, expires, owner_device, owner_ip, rtype, report_course = row
+            created, expires, owner_device, owner_ip, rtype, report_course, last_confirmed = row
             # Курс голосующего: «Стоит» от встречного — полное подтверждение
             # (тренога снимает обе стороны), «Убрали» от встречного срок не
             # режет. Нет курса — как раньше.
@@ -2669,7 +2919,14 @@ class Handler(BaseHTTPRequestHandler):
             # (ROAD_VOTE_FRESH), у камер — все голоса, как было.
             since = now - ROAD_VOTE_FRESH if is_road(rtype) else 0
             if value == 1:
-                if not stale:
+                fresh_independent = not stale and independent_of(owner_device, owner_ip, device, ip)
+                if fresh_independent:
+                    last_confirmed = max(last_confirmed, now - report_age(data))
+                if is_speed(rtype):
+                    # Радар и тренога (82): срок — от последнего независимого «Стоит».
+                    if fresh_independent:
+                        expires = speed_confirmed_expires(created, expires, last_confirmed)
+                elif not stale:
                     # Продление и полный срок — только за независимое подтверждение
                     # (другое устройство И другой адрес): см. lifecycle_expires.
                     confirmed = confirmed_independently(conn, rid, owner_device, owner_ip)
@@ -2699,9 +2956,16 @@ class Handler(BaseHTTPRequestHandler):
                 "SELECT COALESCE(SUM(value = 1), 0), COALESCE(SUM(value = -1 AND oncoming = 0), 0) "
                 "FROM votes WHERE report_id = ? AND ts >= ?", (rid, since)).fetchone()
             active = 0 if (q_down >= 3 and q_down > q_up and down_ips >= HIDE_DISTINCT_IPS) else 1
+            reason = "quorum"
+            # Радар и тренога (82): два независимых «Уже нет» после последнего
+            # «Стоит» — точку снимаем, не дожидаясь кворума.
+            if active and value == -1 and is_speed(rtype) \
+                    and gone_by_drivers(conn, rid, last_confirmed) >= GONE_DISTINCT_IPS:
+                active, reason = 0, "gone"
             conn.execute("UPDATE reports SET up = ?, down = ?, expires = ?, active = ?, "
-                         "closed = CASE WHEN ? = 0 THEN 'quorum' ELSE closed END WHERE id = ?",
-                         (up, down, expires, active, active, rid))
+                         "last_confirmed = ?, "
+                         "closed = CASE WHEN ? = 0 THEN ? ELSE closed END WHERE id = ?",
+                         (up, down, expires, active, last_confirmed, active, reason, rid))
             conn.commit()
             bump_mobile_version()
             return self._json(200, {"ok": True, "up": up, "down": down, "active": bool(active)})
@@ -2785,6 +3049,19 @@ class BoundedHTTPServer(ThreadingHTTPServer):
 if __name__ == "__main__":
     init_db()
     init_traffic_db()
+    # Дубли живых меток, накопленные до пункта 82, — один раз при старте.
+    _conn = db()
+    try:
+        _conn.execute("BEGIN IMMEDIATE")
+        _merged = merge_live_duplicates(_conn, time.time())
+        _conn.commit()
+        if _merged:
+            sys.stderr.write(f"дубли меток при старте: влито {_merged}\n")
+    except sqlite3.Error as _error:
+        _conn.rollback()
+        sys.stderr.write(f"дубли меток при старте: не вышло — {_error}\n")
+    finally:
+        _conn.close()
     # Сроки хранения — сразу при старте: после деплоя старое уходит, не
     # дожидаясь первого опроса /api/mobile.
     _conn = db()

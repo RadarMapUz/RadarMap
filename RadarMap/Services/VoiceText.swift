@@ -65,6 +65,7 @@ enum VoiceText {
             phrase = String(format: String(localized: "Отметка водителей: %@"),
                             phrase.prefix(1).lowercased() + phrase.dropFirst())
         }
+        if call.form != .group { phrase += text(call.freshness) }
         switch call.tail {
         case .none:
             break
@@ -76,6 +77,19 @@ enum VoiceText {
             phrase += String(format: String(localized: ", здесь %lld"), limit)
         }
         return phrase
+    }
+
+    /// Хвост свежести отметки водителей (пункт 82).
+    static func text(_ freshness: VoiceEvent.CameraCall.Freshness) -> String {
+        switch freshness {
+        case .none:
+            return ""
+        case .justConfirmed:
+            return String(localized: ", подтвердили только что")
+        case .unconfirmed(let minutes):
+            return minutes >= 60 ? String(localized: ", больше часа без подтверждения")
+                : String(format: String(localized: ", %lld минут без подтверждения"), minutes)
+        }
     }
 
     /// Как `LocationService.directionPhrase`.

@@ -209,7 +209,7 @@ final class VoiceTextTests: XCTestCase {
         typealias Outcome = MobileCameraService.QuickOutcome
         let failures: [MobileCameraService.ReportResult.Failure] = [
             .offline, .tooOften, .refused, .serverBroken, .disabled, .badAnswer]
-        var outcomes: [Outcome] = [.sent(.created), .sent(.confirmed), .sent(.amended),
+        var outcomes: [Outcome] = [.sent(.created), .sent(.confirmed), .sent(.amended), .sent(.mine),
                                    .refused(.duplicate), .refused(.noPosition), .refused(.notDriving),
                                    .queued(.serverBroken), .queued(.offline)]
         outcomes += failures.map { .sent(.failed($0)) }

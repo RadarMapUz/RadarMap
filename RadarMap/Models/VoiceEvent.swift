@@ -124,6 +124,16 @@ nonisolated enum VoiceEvent: Hashable, Sendable {
         /// Неподтверждённая отметка водителей: «Отметка водителей: …».
         var fromDrivers = false
         var tail: Tail = .none
+        /// Свежесть отметки водителей (пункт 82) — только когда меняет доверие.
+        /// Отрывков пока нет: фразу с хвостом говорит синтезатор.
+        enum Freshness: Hashable, Sendable {
+            case none
+            /// «, подтвердили только что».
+            case justConfirmed
+            /// «, 40 минут без подтверждения»; минуты кратны 10, 60 — «больше часа».
+            case unconfirmed(minutes: Int)
+        }
+        var freshness: Freshness = .none
     }
 
     // MARK: - Манёвр

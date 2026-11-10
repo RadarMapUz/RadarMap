@@ -208,6 +208,8 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
     /// истёкшая отметка гаснет и без связи — и в тихом фоне, где опроса нет
     /// (геозоны, уведомление о приближении; сценарий S5, 20.10).
     let mobileExpires: Date?
+    /// Свежесть отметки водителей (пункт 82); nil — не краудсорс.
+    let mobileFresh: TripodFreshness.Info?
 
     /// Отметка водителей, чей срок вышел.
     func isExpiredMobile(at now: Date) -> Bool {
@@ -286,7 +288,7 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
         Camera(id: id, region: region, city: city, location: location, lat: lat, lon: lon, type: type,
                violations: violations, needsReview: needsReview, axis: axis, dir: dir, lanes: lanes,
                cls: cls, road: road, split: split, twin: twin, mobileConfirmed: mobileConfirmed,
-               mobileExpires: mobileExpires)
+               mobileExpires: mobileExpires, mobileFresh: mobileFresh)
     }
 
     /// Класс дороги в разобранном виде.
@@ -297,8 +299,10 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
          needsReview: Bool?, axis: Int? = nil, dir: Int? = nil,
          lanes: Int? = nil, cls: String? = nil,
          road: [Int]? = nil, split: Bool? = nil, twin: Bool? = nil,
-         mobileConfirmed: Bool? = nil, mobileExpires: Date? = nil) {
+         mobileConfirmed: Bool? = nil, mobileExpires: Date? = nil,
+         mobileFresh: TripodFreshness.Info? = nil) {
         self.mobileExpires = mobileExpires
+        self.mobileFresh = mobileFresh
         self.dir = dir
         self.lanes = lanes
         self.cls = cls
@@ -341,6 +345,7 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
         // строит MobileCameraService из /api/mobile, не через Codable.
         mobileConfirmed = try c.decodeIfPresent(Bool.self, forKey: .mobileConfirmed)
         mobileExpires = nil   // срок есть только у живых отметок
+        mobileFresh = nil
         violations = try c.decodeIfPresent([String].self, forKey: .violations)
             ?? Self.defaultViolations(forType: type)
     }
@@ -441,7 +446,7 @@ nonisolated struct Camera: Identifiable, Codable, Hashable {
                lat: lat, lon: lon, type: type, violations: violations,
                needsReview: needsReview, axis: axis, dir: dir, lanes: lanes,
                cls: cls, road: road, split: split, twin: nil,
-               mobileConfirmed: mobileConfirmed, mobileExpires: mobileExpires)
+               mobileConfirmed: mobileConfirmed, mobileExpires: mobileExpires, mobileFresh: mobileFresh)
     }
 
     /// Камера с исправленным типом. Нарушения выводятся из типа, поэтому

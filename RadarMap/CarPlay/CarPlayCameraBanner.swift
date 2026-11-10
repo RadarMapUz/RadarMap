@@ -254,7 +254,9 @@ final class CarPlayCameraBanner {
         }
         // Минуты отметки обновляются вместе с расстоянием (не чаще раза в
         // секунду, shouldUpdate) — отдельного таймера баннеру не нужно.
-        let age = env.mobile.confirmation(for: camera.id).flatMap {
+        // Свежесть (82): «Подтвердили 3 мин назад» / «Не подтверждали 50 мин».
+        let age = camera.mobileFresh.flatMap { TripodFreshness.banner($0, now: Date()) }
+            ?? env.mobile.confirmation(for: camera.id).flatMap {
             ReportAge.banner(created: $0.created, confirmed: $0.confirmed, now: Date())
         }
         return CarPlayCameraBannerText.text(name: camera.kind.shortName, kind: camera.kind.displayName,

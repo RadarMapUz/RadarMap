@@ -19,7 +19,7 @@
 //  Голос «не знаю» испортил бы данные сильнее, чем их отсутствие.
 //
 //  Вопрос — по типу отметки (12.7): «Тренога ещё стоит?», «Пост ещё
-//  стоит?» с кнопками «Стоит» / «Убрали» — то же одно касание и тот же
+//  стоит?» с кнопками «Стоит» / «Уже нет» (у поста «Убрали») — то же одно касание и тот же
 //  голос серверу (`kind=pass`), только вопрос о том, что водитель видел.
 //  Обоим направлениям — треноги снимают и встречных (владелец, 02.11);
 //  поперечной улице — нет.
@@ -74,13 +74,13 @@ nonisolated enum MobilePassWatch {
         case .tripod:
             return Question(title: String(localized: "Тренога ещё стоит?"),
                             yes: String(localized: "Стоит"),
-                            no: String(localized: "Убрали"),
+                            no: String(localized: "Уже нет"),
                             spokenYes: String(localized: "Да, тренога ещё стоит"),
                             spokenNo: String(localized: "Нет, треноги уже нет"))
         default:
             return Question(title: String(localized: "Радар ещё стоит?"),
                             yes: String(localized: "Стоит"),
-                            no: String(localized: "Убрали"),
+                            no: String(localized: "Уже нет"),
                             spokenYes: String(localized: "Да, радар ещё стоит"),
                             spokenNo: String(localized: "Нет, радара уже нет"))
         }

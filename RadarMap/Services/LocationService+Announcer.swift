@@ -226,6 +226,21 @@ extension LocationService {
     /// и сказать — разные вещи.
     func announceHotspotIfNeeded(from coordinate: CLLocationCoordinate2D) {
         guard let hotspots, !hotspots.spots.isEmpty, settings.voiceMode != .off else { return }
+        // «Здесь вечером часто стоит тренога» (82) — заранее и без превышения,
+        // но не поверх камеры: камера рядом — скажем после неё.
+        let cameraClose = alertLevel > 0 || distanceToNearest.map {
+            $0 <= effectiveAlertRadius + speedKmh / 3.6 * AppConfig.roadEventCameraGapSeconds } ?? false
+        if !cameraClose, let habit = TripodHabit.spotToAnnounce(
+            in: hotspots.spots,
+            situation: .init(coordinate: coordinate, course: currentCourse, speedKmh: speedKmh,
+                             isTripActive: isTripActive,
+                             isOverspeeding: speedLimits?.isOverspeeding ?? false,
+                             enabled: settings.tripodHints && settings.tripodHabitVoice, now: Date()),
+            alreadyVoiced: voicedHotspots) {
+            voicedHotspots.insert(habit.key)
+            alerts.speak(TripodHabit.phrase(for: habit, slowDown: speedLimits?.isOverspeeding ?? false))
+            return
+        }
         let situation = HotspotAlert.Situation(
             coordinate: coordinate,
             course: currentCourse,   // уже прошёл LocationFilter; < 0 — курса нет
@@ -292,6 +307,8 @@ extension LocationService {
             phrase = String(format: String(localized: "Отметка водителей: %@"),
                             phrase.prefix(1).lowercased() + phrase.dropFirst())
         }
+        // Свежесть отметки водителей (82) — когда она меняет доверие.
+        if groupCount == 0 { phrase += VoiceText.text(TripodFreshness.voiceTail(camera.mobileFresh, now: Date())) }
         // Срочно — полная картина: своя скорость и лимит. Иначе (трасса) —
         // только лимит: «здесь 60» помогает, перечисление своей скорости при
         // спокойной езде лишнее.

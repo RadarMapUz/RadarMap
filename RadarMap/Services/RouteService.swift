@@ -1482,12 +1482,55 @@ final class RouteService {
         }
         // Apple и свой сервер — одновременно: внутри Узбекистана Apple не
         // строит, и ждать его отказа перед запросом OSRM значило прибавлять
-        // круг по сети к каждому построению. Apple по-прежнему главнее.
-        // Сбой Apple-роутинга — штатный путь: берём ответ своего сервера.
-        async let own = ownRouteResult(from: source, to: destination, alternatives: alternatives, heading: heading)
-        if let apple = try? await appleRoute(from: source, to: destination, alternatives: alternatives),
-           !apple.isEmpty { return apple }
-        return try await own.get()
+        // круг по сети к каждому построению. Apple главнее, но готовый свой
+        // ответ ждёт его не дольше `appleRouteWaitSeconds` (RouteRace).
+        // Задачи неструктурные: решив, не ждём проигравшего — MKDirections
+        // отмену задачи не слышит.
+        let (events, sink) = AsyncStream.makeStream(of: RouteRace<[BuiltVariant]>.Event.self)
+        let apple = Task {
+            let routes = try? await appleRoute(from: source, to: destination, alternatives: alternatives)
+            sink.yield(.apple(routes?.isEmpty == false ? routes : nil))
+        }
+        let own = Task {
+            let result = await ownRouteResult(from: source, to: destination, alternatives: alternatives,
+                                              heading: heading)
+            let weak = (try? result.get())?.contains(where: \.offline) ?? false
+            sink.yield(.own(result, weak: weak))
+        }
+        let wait = AppConfig.appleRouteWaitSeconds
+        let deadline = Task {
+            try? await Task.sleep(for: .seconds(wait))
+            sink.yield(.deadline)
+        }
+        defer {
+            apple.cancel()
+            own.cancel()
+            deadline.cancel()
+            sink.finish()
+        }
+        return try await withTaskCancellationHandler {
+            var race = RouteRace<[BuiltVariant]>()
+            var seen = 0
+            listening: for await event in events {
+                try Task.checkCancellation()
+                seen += 1
+                switch race.note(event) {
+                case .wait:               if seen >= 3 { break listening }
+                case .take(let routes):   return routes
+                case .fail(let error):    throw error
+                }
+            }
+            try Task.checkCancellation()
+            switch race.fallback() {
+            case .take(let routes):   return routes
+            case .fail(let error):    throw error
+            case .wait:               throw RouteError.noRoute
+            }
+        } onCancel: {
+            own.cancel()
+            apple.cancel()
+            sink.finish()
+        }
     }
 
     private func ownRouteResult(from source: CLLocationCoordinate2D, to destination: CLLocationCoordinate2D,

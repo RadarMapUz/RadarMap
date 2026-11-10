@@ -1882,6 +1882,10 @@ nonisolated enum AppConfig {
     static let routeCameraBehindSlackMeters: CLLocationDistance = 30
     /// Таймаут запроса к своему OSRM: дольше — «сервер недоступен».
     static let osrmTimeoutSeconds: TimeInterval = 12
+    /// Сколько от начала построения ждать Apple, когда свой OSRM уже ответил
+    /// (RouteRace): внутри Узбекистана Apple не строит, и готовый маршрут не
+    /// должен стоять за его отказом.
+    static let appleRouteWaitSeconds: TimeInterval = 2.5
     /// Ближе этого — та же цель: второе касание не второе построение.
     nonisolated static let routeBuildSameTargetMeters: Double = 30
     /// Дольше этого индикатор говорит, что сеть медленная.

@@ -38,7 +38,10 @@ struct TripHistorySettingsPage: View {
         Form {
             // Где хранить (27.F) — первым: это решение о тех же данных, что
             // экспорт и удаление ниже.
-            CloudSyncSection()
+            // У сборки нет прав на iCloud — выбора нет; включённое раньше можно выключить.
+            if env.cloud.buildSupportsCloud || env.cloud.isEnabled {
+                CloudSyncSection()
+            }
 
             Section {
                 LabeledContent("Поездок на телефоне") {

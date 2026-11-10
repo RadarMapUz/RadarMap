@@ -8,6 +8,7 @@
 | `car_radarmap.lua` | Профиль: стоковый `car.lua` OSRM v26.7.3 (побайтно тот, что в образе на VPS) плюс блок `profile.radarmap` |
 | `test_car_radarmap.py` | Проверка профиля на синтетических картах в 5–10 узлов: махалля, светофор, левый поворот, UZ:urban. Нужен Docker, без него идут только статические проверки |
 | `route_audit.py` | Аудит 20 пар: fetch → index (pyosmium) → analyze → render |
+| `turn_audit.py` | Аудит запретов поворотов, oneway и барьеров в рамке Ташкента: scan (pyosmium) → report (+ GeoJSON) → shots. Разбор — `docs/turn_audit_2026-11-10.md` |
 | `render_routes.swift` | PNG по спецификации `route_audit.py render`: CoreGraphics, без зависимостей |
 | `audit_pairs.json` | Пары аудита: районы и известные точки, без дома и работы владельца |
 | `TRAFFIC.md` | Пробки внутри маршрутизатора (32D): MLD + customize, замеры, стенд на 8094, переключение и откат |

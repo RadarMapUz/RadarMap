@@ -455,6 +455,26 @@ final class TripStats {
         onTripFinished?()
     }
 
+    /// Свой путь за окно — живая поездка и законченные в нём — для отметки
+    /// «видел по дороге» (TripodAvailability). Время точек — сырое, где оно
+    /// есть, иначе начало поездки.
+    func recentPath(now: Date = Date(),
+                    window: TimeInterval = AppConfig.addTripodTrackWindowSeconds) -> RecentPath {
+        let cutoff = now.addingTimeInterval(-window)
+        var legs: [[RecentPath.Point]] = []
+        if let startedAt {
+            legs.append(RecentPath.leg(track: trackBuffer, times: trackTimes, startedAt: startedAt))
+        }
+        for record in history where record.endedAt >= cutoff {
+            if let raw = lastFinishedRaw, raw.id == record.id {
+                legs.append(RecentPath.leg(track: raw.track, times: raw.times, startedAt: record.startedAt))
+            } else {
+                legs.append(RecentPath.leg(track: record.trackPoints, times: nil, startedAt: record.startedAt))
+            }
+        }
+        return RecentPath(legs: legs.filter { !$0.isEmpty })
+    }
+
     /// Пробки поездки по сырому треку (31E). Склейка без сырого трека первой
     /// ноги — её записанные пробки плюс посчитанные по второй (у первой
     /// времени нет, TrafficTime её пропустит). Время разошлось с треком — не

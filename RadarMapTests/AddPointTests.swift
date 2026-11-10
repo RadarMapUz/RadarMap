@@ -134,3 +134,95 @@ extension AddPointTests {
         XCTAssertEqual(AddPointAim.point(width: 0, height: 874, insets: .none), .zero)
     }
 }
+
+// MARK: - Тренога из дома: там, где сам проезжал за последние 3 часа
+
+extension AddPointTests {
+
+    private var now: Date { Date(timeIntervalSince1970: 1_800_000_000) }
+
+    /// Проезд с запада на восток по широте `me` + `metresNorth`, через точку
+    /// в `metresEast` от `me`; середина — `minutesAgo` назад, 60 км/ч.
+    private func drive(metresEast: Double, metresNorth: Double, minutesAgo: Double) -> RecentPath {
+        let middle = now.timeIntervalSince1970 - minutesAgo * 60
+        let lat = me.latitude + metresNorth / 111_320
+        let leg = [-2_000.0, 2_000.0].map { offset -> RecentPath.Point in
+            let east = metresEast + offset
+            return RecentPath.Point(lat: lat, lon: point(metresEast: east).longitude,
+                                    time: middle + offset / (60 / 3.6))
+        }
+        return RecentPath(legs: [leg])
+    }
+
+    func testHomeFarButPassedHourAgoAllowed() {
+        let target = point(metresEast: 8_000)
+        let path = drive(metresEast: 8_000, metresNorth: 100, minutesAgo: 60)
+        let result = TripodAvailability.check(point: target, driver: me, reportsEnabled: true,
+                                              path: path, now: now)
+        XCTAssertTrue(result.isAvailable, "видел по дороге час назад — отмечаю дома")
+        let passed = try? XCTUnwrap(result.observedAt)
+        XCTAssertEqual(passed?.timeIntervalSince1970 ?? 0, now.timeIntervalSince1970 - 3_600, accuracy: 5,
+                       "время проезда — у ближайшего подхода, оно уйдёт на сервер возрастом")
+    }
+
+    func testPassedFourHoursAgoRefused() {
+        let path = drive(metresEast: 8_000, metresNorth: 100, minutesAgo: 240)
+        XCTAssertEqual(TripodAvailability.check(point: point(metresEast: 8_000), driver: me,
+                                                reportsEnabled: true, path: path, now: now), .tooFar)
+    }
+
+    func testThreeHundredMetresFromTrackRefused() {
+        let path = drive(metresEast: 8_000, metresNorth: 300, minutesAgo: 60)
+        XCTAssertEqual(TripodAvailability.check(point: point(metresEast: 8_000), driver: me,
+                                                reportsEnabled: true, path: path, now: now), .tooFar)
+    }
+
+    func testNearbyStillAllowedWithoutPath() {
+        let result = TripodAvailability.check(point: point(metresEast: 300), driver: me,
+                                              reportsEnabled: true, path: .empty, now: now)
+        XCTAssertEqual(result, .available)
+        XCTAssertNil(result.observedAt, "рядом — отметка «сейчас», без возраста")
+    }
+
+    func testPassedWithoutPositionAllowed() {
+        let path = drive(metresEast: 8_000, metresNorth: 50, minutesAgo: 30)
+        XCTAssertTrue(TripodAvailability.check(point: point(metresEast: 8_000), driver: nil,
+                                               reportsEnabled: true, path: path, now: now).isAvailable)
+        XCTAssertEqual(TripodAvailability.check(point: point(metresEast: 20_000), driver: nil,
+                                                reportsEnabled: true, path: path, now: now), .noPosition)
+    }
+
+    func testReportsOffBeatsPath() {
+        let path = drive(metresEast: 8_000, metresNorth: 0, minutesAgo: 10)
+        XCTAssertEqual(TripodAvailability.check(point: point(metresEast: 8_000), driver: me,
+                                                reportsEnabled: false, path: path, now: now), .reportsOff)
+    }
+
+    func testSegmentNotOnlyVerticesCounts() {
+        // Упрощённый трек: две точки в 4 км, цель — посередине, в 100 м сбоку.
+        let path = drive(metresEast: 8_000, metresNorth: 100, minutesAgo: 20)
+        XCTAssertNotNil(path.passage(near: point(metresEast: 8_000), now: now))
+    }
+
+    func testOnlyFreshPartOfLegCounts() {
+        // Отрезок, начатый 3 ч 3 мин назад, в окно не входит целиком.
+        let path = drive(metresEast: 8_000, metresNorth: 0, minutesAgo: 181)
+        XCTAssertNil(path.passage(near: point(metresEast: 8_000), now: now))
+    }
+
+    func testTrackWithoutTimesTakesTripStart() {
+        let start = now.addingTimeInterval(-2 * 3_600)
+        let track = [TrackPoint(lat: 41.3, lon: 69.2, speedKmh: 50),
+                     TrackPoint(lat: 41.31, lon: 69.21, speedKmh: 50)]
+        let leg = RecentPath.leg(track: track, times: nil, startedAt: start)
+        XCTAssertEqual(leg.map(\.time), [start.timeIntervalSince1970, start.timeIntervalSince1970])
+        let partial = RecentPath.leg(track: track, times: [.nan, 1_799_999_000], startedAt: start)
+        XCTAssertEqual(partial.map(\.time), [start.timeIntervalSince1970, 1_799_999_000])
+    }
+
+    func testRefusalTextNamesTheWindow() {
+        XCTAssertEqual(AppConfig.addTripodTrackWindowSeconds, 3 * 3_600,
+                       "строки отказа называют «3 часа» словами — сменили окно, смените и их")
+        XCTAssertEqual(AppConfig.addTripodTrackMaxMeters, 150)
+    }
+}

@@ -63,10 +63,14 @@ extension MapScreen {
     // MARK: - Действия
 
     /// Отметка для всех, поставленная пальцем (прицел и «Радар здесь») — одно правило.
+    /// Рядом с собой или на своём пути за 3 часа: трек считается, только если рядом не вышло.
     func reportReach(at point: CLLocationCoordinate2D?) -> TripodAvailability {
-        TripodAvailability.check(point: point,
-                                 driver: env.location.currentCoordinate,
-                                 reportsEnabled: env.mobile.isEnabled)
+        let now = Date()
+        return TripodAvailability.check(point: point,
+                                        driver: env.location.currentCoordinate,
+                                        reportsEnabled: env.mobile.isEnabled,
+                                        path: env.trip.recentPath(now: now),
+                                        now: now)
     }
 
     var tripodAvailability: TripodAvailability { reportReach(at: map.addPointCoordinate) }
@@ -92,8 +96,10 @@ extension MapScreen {
             env.cameras.addCamera(at: center, type: type, label: name)   // revision → onChange обновит карту
             UINotificationFeedbackGenerator().notificationOccurred(.success)
         case .report(let reportKind):
-            guard tripodAvailability.isAvailable else { return }
+            let reach = tripodAvailability
+            guard reach.isAvailable else { return }
             // Та же дверь и тот же отклик, что у отметки из поездки; точка — прицел, не GPS.
+            // Отмечено по треку — с моментом проезда: срок жизни сервер ведёт от него.
             Task {
                 let outcome = await env.mobile.quickReport(
                     kind: reportKind,
@@ -101,7 +107,8 @@ extension MapScreen {
                     speedKmh: env.location.speedKmh,
                     isTripActive: env.location.isTripActive,
                     placement: .deliberate,
-                    fix: nil)
+                    fix: nil,
+                    touchedAt: reach.observedAt ?? Date())
                 UINotificationFeedbackGenerator()
                     .notificationOccurred(outcome.isSuccess ? .success : .warning)
                 env.alerts.speak(outcome.spoken(for: reportKind))

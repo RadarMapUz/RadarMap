@@ -143,6 +143,10 @@ struct AddCameraBar: View {
         case .speedCamera:  return String(localized: "Меряет скорость · только у вас")
         case .signalCamera: return String(localized: "Светофор и полосы · только у вас")
         case .tripod:
+            if let passed = tripod.observedAt {
+                return String(format: String(localized: "Вы проезжали здесь в %@ · увидят все водители"),
+                              Formatting.clock(passed))
+            }
             return tripod.note ?? String(localized: "Увидят все водители · исчезнет сама")
         }
     }
@@ -152,11 +156,11 @@ extension TripodAvailability {
     /// Почему отметку для всех пальцем сейчас не поставить; nil — можно.
     var note: String? {
         switch self {
-        case .available:  return nil
+        case .available, .passedBy: return nil
         case .tooFar:
-            return String(format: String(localized: "Только рядом с вами — до %@"),
-                          Formatting.distance(AppConfig.addTripodMaxDistanceMeters))
-        case .noPosition: return String(localized: "Нужна ваша геопозиция — отметка ставится рядом")
+            return String(localized: "Только рядом с вами или там, где вы проезжали за последние 3 часа")
+        case .noPosition:
+            return String(localized: "Нужна геопозиция — или место, где вы проезжали за последние 3 часа")
         case .reportsOff: return String(localized: "Отметки водителей сейчас выключены")
         }
     }

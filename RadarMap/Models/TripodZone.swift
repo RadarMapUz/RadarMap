@@ -146,31 +146,92 @@ nonisolated enum TripodZone {
     // MARK: - Участок по линии маршрута
 
     /// Место точки на линии маршрута (м от старта) или nil — точка дальше
-    /// `maxMeters` от линии.
+    /// `maxMeters` от линии. Для одной точки; целей много — `RouteIndex`.
     static func along(of point: CLLocationCoordinate2D, route: [MKMapPoint],
                       maxMeters: Double = AppConfig.tripodZoneRouteMeters) -> Double? {
-        guard route.count >= 2 else { return nil }
-        let p = MKMapPoint(point)
-        let metersPerPoint = MKMetersPerMapPointAtLatitude(point.latitude)
-        let reach = maxMeters / metersPerPoint
-        var walked = 0.0
-        var best: (distance: Double, along: Double)?
-        for index in 1..<route.count {
-            let a = route[index - 1], b = route[index]
-            let length = a.distance(to: b)
-            defer { walked += length }
-            // Грубая рамка: отрезок, до которого заведомо дальше порога, не считаем.
-            if p.x < min(a.x, b.x) - reach || p.x > max(a.x, b.x) + reach
-                || p.y < min(a.y, b.y) - reach || p.y > max(a.y, b.y) + reach { continue }
-            let dx = b.x - a.x, dy = b.y - a.y
-            let len2 = dx * dx + dy * dy
-            let t = len2 > 0 ? max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0
-            let foot = MKMapPoint(x: a.x + dx * t, y: a.y + dy * t)
-            let distance = foot.distance(to: p)
-            guard distance <= maxMeters else { continue }
-            if best.map({ distance < $0.distance }) ?? true { best = (distance, walked + length * t) }
+        RouteIndex(route: route, maxMeters: maxMeters).along(of: point)
+    }
+
+    /// Места целей на линии маршрута: индекс строится один раз на маршрут.
+    static func alongs(of candidates: [Candidate], route: [MKMapPoint],
+                       maxMeters: Double = AppConfig.tripodZoneRouteMeters) -> [Int: Double] {
+        let index = RouteIndex(route: route, maxMeters: maxMeters)
+        var out: [Int: Double] = [:]
+        for candidate in candidates {
+            if let along = index.along(of: candidate.coordinate) { out[candidate.key] = along }
         }
-        return best?.along
+        return out
+    }
+
+    /// Сетка отрезков маршрута: каждый отрезок записан в клетки своей рамки,
+    /// расширенной на порог, поэтому для точки достаточно отрезков её клетки.
+    /// Без сетки 660 целей на маршруте в 10 000 точек давали 6,6 млн проекций
+    /// и метрик расстояния (≈1 с в Debug на симуляторе).
+    struct RouteIndex {
+        private let points: [MKMapPoint]
+        private let cumulative: [Double]
+        private let maxMeters: Double
+        private let cell: Double
+        private var grid: [Int64: [Int32]] = [:]
+
+        init(route: [MKMapPoint], maxMeters: Double = AppConfig.tripodZoneRouteMeters) {
+            points = route
+            self.maxMeters = maxMeters
+            var cumulative = [0.0]
+            cumulative.reserveCapacity(route.count)
+            var minY = Double.greatestFiniteMagnitude, maxY = -Double.greatestFiniteMagnitude
+            for index in route.indices {
+                minY = min(minY, route[index].y)
+                maxY = max(maxY, route[index].y)
+                if index > 0 { cumulative.append(cumulative[index - 1] + route[index - 1].distance(to: route[index])) }
+            }
+            self.cumulative = cumulative
+            guard route.count >= 2 else {
+                cell = 1
+                return
+            }
+            // Порог в точках карты — по самой «плотной» широте маршрута (дальше от экватора).
+            let latitudes = [MKMapPoint(x: route[0].x, y: minY).coordinate.latitude,
+                             MKMapPoint(x: route[0].x, y: maxY).coordinate.latitude]
+            let metersPerPoint = latitudes.map { MKMetersPerMapPointAtLatitude($0) }.min() ?? 1
+            let reach = maxMeters / metersPerPoint
+            cell = max(reach * 4, 500 / metersPerPoint)
+            for index in 1..<route.count {
+                let a = route[index - 1], b = route[index]
+                let x0 = Int64(((min(a.x, b.x) - reach) / cell).rounded(.down))
+                let x1 = Int64(((max(a.x, b.x) + reach) / cell).rounded(.down))
+                let y0 = Int64(((min(a.y, b.y) - reach) / cell).rounded(.down))
+                let y1 = Int64(((max(a.y, b.y) + reach) / cell).rounded(.down))
+                for cx in x0...x1 {
+                    for cy in y0...y1 { grid[Self.key(cx, cy), default: []].append(Int32(index)) }
+                }
+            }
+        }
+
+        private static func key(_ x: Int64, _ y: Int64) -> Int64 { (x << 32) | (y & 0xFFFF_FFFF) }
+
+        func along(of point: CLLocationCoordinate2D) -> Double? {
+            guard points.count >= 2 else { return nil }
+            let p = MKMapPoint(point)
+            let cx = Int64((p.x / cell).rounded(.down)), cy = Int64((p.y / cell).rounded(.down))
+            guard let segments = grid[Self.key(cx, cy)] else { return nil }
+            var best: (distance: Double, along: Double)?
+            for segment in segments {
+                let index = Int(segment)
+                let a = points[index - 1], b = points[index]
+                let dx = b.x - a.x, dy = b.y - a.y
+                let len2 = dx * dx + dy * dy
+                let t = len2 > 0 ? max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0
+                let distance = MKMapPoint(x: a.x + dx * t, y: a.y + dy * t).distance(to: p)
+                guard distance <= maxMeters else { continue }
+                let along = cumulative[index - 1] + (cumulative[index] - cumulative[index - 1]) * t
+                // Равное расстояние — раньше по линии (как прежний проход по порядку).
+                if best.map({ distance < $0.distance || (distance == $0.distance && along < $0.along) }) ?? true {
+                    best = (distance, along)
+                }
+            }
+            return best?.along
+        }
     }
 
     /// Кусок линии маршрута у места `along`.

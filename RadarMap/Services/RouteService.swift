@@ -2358,8 +2358,10 @@ final class RouteService {
     /// updateProgress (он ждёт смещения) молчит ровно тогда, когда объезд нужен.
     /// Кроме фиксов — открытие приложения или экрана машины и новый файл
     /// пробок: стоящему телефону фиксов может не прийти минутами.
-    func considerDetour(coordinate: CLLocationCoordinate2D, speedKmh: Double, now: Date = Date(),
-                        trigger: DetourAdvisor.Trigger = .fix) {
+    /// `course` — достоверный курс (−1 — нет): объезд начинается туда, куда
+    /// машина едет, как и перестроение, а не с разворота на встречную.
+    func considerDetour(coordinate: CLLocationCoordinate2D, speedKmh: Double, course: CLLocationDirection = -1,
+                        now: Date = Date(), trigger: DetourAdvisor.Trigger = .fix) {
         if trigger == .opened { detourOpenedAt = now }
         // Истекло — показанное: это «остаёмся», те же 10 минут тишины. Так и не
         // показанное считается в лимит и глушит голос, но открывшему приложение
@@ -2400,12 +2402,14 @@ final class RouteService {
         // Той же меркой, что варианты: движок + пробки, не личный остаток (8.8.11).
         let currentRemaining = engineRemaining
         let via = stop
+        let heading = course >= 0 ? course : nil
         Log.route.notice("объезд: ищу (\(String(describing: reason), privacy: .public)) — впереди +\(Int(self.remainingTrafficDelay), privacy: .public) с, ползём \(Int(crawl), privacy: .public) с")
         Task {
             defer { detourSearching = false }
             let built: [BuiltVariant]
             do {
-                built = try await calculate(from: coordinate, via: via, to: destination, alternatives: true)
+                built = try await calculate(from: coordinate, via: via, to: destination, alternatives: true,
+                                            heading: heading)
             } catch {
                 Log.route.notice("объезд: варианты не построены — \(error.localizedDescription, privacy: .public)")
                 return

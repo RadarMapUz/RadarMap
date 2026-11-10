@@ -414,7 +414,8 @@ final class AppEnvironment {
         guard location.isTripActive, route.isActive, !location.isSignalStale, !location.isPositionCoarse,
               let here = location.currentCoordinate else { return }
         route.refreshTrafficDelay(revision: traffic.revision)
-        route.considerDetour(coordinate: here, speedKmh: location.speedKmh, trigger: trigger)
+        route.considerDetour(coordinate: here, speedKmh: location.speedKmh, course: location.currentCourse,
+                             trigger: trigger)
     }
 
     /// Ставит RootView по scenePhase телефона.

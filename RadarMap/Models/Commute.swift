@@ -18,6 +18,11 @@
 //  не пробка): `movingDuration`. Остановки на светофорах и в заторе в него
 //  входят — они и есть дорога.
 //
+//  Одна выборка на всё (разбор 10.11, docs/commute_review_2026-11-10.md):
+//  «обычно», разброс, «последняя», неделя и совет считаются по поездкам
+//  СВОЕГО окна времени (`routine`) — выезд домой в обед не та дорога, что
+//  вечером, и в «обычно» не входит.
+//
 //  Чистая логика, время — параметром; покрыто CommuteTests.
 //
 
@@ -78,16 +83,48 @@ nonisolated enum Commute {
         /// Последняя минус обычная; nil — «обычно» ещё нет.
         let lastDelay: TimeInterval?
         let best: BestWindow?
-        /// Поездки окна, новые первыми.
+        /// Поездки своего окна времени — выборка «обычно», новые первыми.
         let trips: [Trip]
-        /// Неделя дороги (8.8.15): средняя за 7 дней против «обычно»; nil —
+        /// Неделя дороги (8.8.15): медиана за 7 дней против «обычно»; nil —
         /// за неделю меньше двух поездок или «обычно» ещё нет.
         var week: Week? = nil
+        /// Поездки направления в другое время (обед, поручение), новые первыми:
+        /// в «обычно» не входят.
+        var other: [Trip] = []
+        /// Обычный разброс — межквартильный размах (половина поездок); nil —
+        /// поездок меньше `commuteRangeMinTrips`.
+        var range: ClosedRange<TimeInterval>? = nil
 
-        /// Последняя поездка заметно дольше/короче обычного.
-        var lastIsSlower: Bool { (lastDelay ?? 0) >= AppConfig.commuteNoticeableDelaySeconds }
-        var lastIsFaster: Bool { (lastDelay ?? 0) <= -AppConfig.commuteNoticeableDelaySeconds }
+        var verdict: Verdict { Commute.verdict(last.duration, usual: usual, range: range) }
+        /// Разница на экране — разность показанных минут: «58» и «обычно 52»
+        /// дают «на 6 мин», а не «на 7».
+        var shownDelay: Int? { usual.map { Commute.shownDelta(last.duration, $0) } }
+        var lastIsSlower: Bool { verdict == .slower }
+        var lastIsFaster: Bool { verdict == .faster }
     }
+
+    /// Поездка против обычного. Тревога — только за пределами обычного
+    /// разброса И с заметной разницей: колебание в пределах половины всех
+    /// поездок — это и есть «обычно».
+    enum Verdict: Equatable, Sendable {
+        case usual, slower, faster
+    }
+
+    static func verdict(_ duration: TimeInterval, usual: TimeInterval?,
+                        range: ClosedRange<TimeInterval>?) -> Verdict {
+        guard let usual else { return .usual }
+        let delay = duration - usual
+        let noticeable = AppConfig.commuteNoticeableDelaySeconds
+        if delay >= noticeable, range.map({ duration > $0.upperBound }) ?? true { return .slower }
+        if delay <= -noticeable, range.map({ duration < $0.lowerBound }) ?? true { return .faster }
+        return .usual
+    }
+
+    /// Целые минуты так, как их пишет `Formatting.duration` (без округления вверх).
+    static func wholeMinutes(_ seconds: TimeInterval) -> Int { Int(seconds.rounded()) / 60 }
+
+    /// Разница двух длительностей в показанных минутах.
+    static func shownDelta(_ a: TimeInterval, _ b: TimeInterval) -> Int { wholeMinutes(a) - wholeMinutes(b) }
 
     // MARK: - Поездки
 
@@ -143,28 +180,55 @@ nonisolated enum Commute {
 
     // MARK: - Сводка
 
-    /// Неделя дороги: «за неделю в среднем 41 мин — на 3 мин дольше обычного».
+    /// Неделя дороги: «за 7 дней обычно 61 мин — дольше обычного».
     struct Week: Equatable, Sendable {
-        /// Средняя за 7 дней, с.
-        let average: TimeInterval
+        /// Медиана за 7 дней, с.
+        let median: TimeInterval
         let trips: Int
-        /// Средняя минус «обычно» (медиана 30 дней), с.
+        /// Медиана недели минус «обычно» (медиана 30 дней), с.
         let delta: TimeInterval
-
-        /// Отклонение заметно — иначе строка «как обычно» ничего не добавляет.
-        var isNoticeable: Bool { abs(delta) >= AppConfig.commuteWeekNoticeableSeconds }
+        /// Неделя вне обычного разброса — иначе строка ничего не добавляет.
+        let isNoticeable: Bool
     }
 
     /// Неделя по поездкам окна: последние 7 суток до `now`, не меньше двух
-    /// поездок, и «обычно» уже есть. Средняя, а не медиана: неделю делает
-    /// каждый день, и один тяжёлый вторник — часть её правды.
-    static func week(_ window: [Trip], usual: TimeInterval?, now: Date) -> Week? {
+    /// поездок, и «обычно» уже есть. Медиана, как и «обычно»: среднее
+    /// скошенного вправо времени в пути всегда больше медианы, и неделя
+    /// читалась «дольше обычного» на ровно таких же поездках (разбор 10.11).
+    /// Заметна — вне разброса; пока разброса нет — дальше 2 мин от «обычно».
+    static func week(_ window: [Trip], usual: TimeInterval?, range: ClosedRange<TimeInterval>? = nil,
+                     now: Date) -> Week? {
         guard let usual else { return nil }
         let since = now.addingTimeInterval(-7 * 86_400)
         let recent = window.filter { $0.departure >= since && $0.departure <= now }
         guard recent.count >= AppConfig.commuteWeekMinTrips else { return nil }
-        let average = recent.reduce(0) { $0 + $1.duration } / Double(recent.count)
-        return Week(average: average, trips: recent.count, delta: average - usual)
+        let value = median(recent.map(\.duration))
+        let delta = value - usual
+        let far = abs(delta) >= AppConfig.commuteWeekNoticeableSeconds
+        return Week(median: value, trips: recent.count, delta: delta,
+                    isNoticeable: far && !(range?.contains(value) ?? false))
+    }
+
+    /// Своё окно времени: поездки в ±`span` минут от типичного выезда — медоида
+    /// по кругу суток (выезд в 23:50 и в 0:10 — соседи). Если таких не больше
+    /// половины, выезды просто разбросаны, и окна нет — все поездки свои
+    /// (то же правило, что у оси графика, CommuteChartAxis).
+    static func routine(_ trips: [Trip], calendar: Calendar = .current,
+                        span: Int = AppConfig.commuteRoutineSpanMinutes) -> (routine: [Trip], other: [Trip]) {
+        guard trips.count >= 2 else { return (trips, []) }
+        let minutes = trips.map { minuteOfDay($0.departure, calendar: calendar) }
+        func gap(_ a: Int, _ b: Int) -> Int {
+            let d = abs(a - b) % 1440
+            return min(d, 1440 - d)
+        }
+        func cost(_ center: Int) -> Int { minutes.reduce(0) { $0 + gap($1, center) } }
+        guard let center = minutes.min(by: { cost($0) < cost($1) }) else { return (trips, []) }
+        var routine: [Trip] = [], other: [Trip] = []
+        for (trip, minute) in zip(trips, minutes) {
+            if gap(minute, center) <= span { routine.append(trip) } else { other.append(trip) }
+        }
+        guard routine.count * 2 > trips.count else { return (trips, []) }
+        return (routine, other)
     }
 
     /// Сводка по направлению за окно. nil — поездок этого направления нет.
@@ -172,13 +236,19 @@ nonisolated enum Commute {
                         calendar: Calendar = .current,
                         windowDays: Int = AppConfig.commuteWindowDays) -> Summary? {
         let since = now.addingTimeInterval(-Double(windowDays) * 86400)
-        let window = trips
+        let all = trips
             .filter { $0.direction == direction && $0.departure >= since && $0.departure <= now }
             .sorted { $0.departure > $1.departure }
+        let split = routine(all, calendar: calendar)
+        let window = split.routine
         guard let last = window.first else { return nil }
 
         let enough = window.count >= AppConfig.commuteMinTrips
-        let usual = enough ? median(window.map(\.duration)) : nil
+        let durations = window.map(\.duration)
+        let usual = enough ? median(durations) : nil
+        let range = window.count >= AppConfig.commuteRangeMinTrips
+            ? quantile(durations, 0.25)...quantile(durations, 0.75)
+            : nil
         let usualDeparture = enough
             ? Int(median(window.map { Double(minuteOfDay($0.departure, calendar: calendar)) }).rounded())
             : nil
@@ -189,7 +259,8 @@ nonisolated enum Commute {
                        usualDepartureMinute: usualDeparture,
                        lastDelay: usual.map { last.duration - $0 },
                        best: best, trips: window,
-                       week: week(window, usual: usual, now: now))
+                       week: week(window, usual: usual, range: range, now: now),
+                       other: split.other, range: range)
     }
 
     /// Обе сводки, по которым есть поездки. Порядок — по времени суток:
@@ -201,7 +272,8 @@ nonisolated enum Commute {
     }
 
     /// Лучшее окно выезда: окна по четверти часа, медиана в каждом, 2+ поездки,
-    /// не дальше полутора часов от обычного выезда и с заметной экономией.
+    /// не дальше полутора часов от обычного выезда, с заметной экономией и
+    /// устойчивое — быстрее обычного хотя бы две поездки окна из трёх.
     /// Окно самого обычного выезда советом не считается — там человек и так.
     static func bestWindow(_ trips: [Trip], usual: TimeInterval, usualDeparture: Int,
                            calendar: Calendar = .current) -> BestWindow? {
@@ -219,6 +291,8 @@ nonisolated enum Commute {
             let med = median(durations)
             let saving = usual - med
             guard saving >= AppConfig.commuteMinSavingSeconds else { return nil }
+            let faster = durations.filter { $0 < usual }.count
+            guard Double(faster) >= Double(durations.count) * AppConfig.commuteBucketFasterShare else { return nil }
             return BestWindow(startMinute: start, medianDuration: med, saving: saving,
                               trips: durations.count)
         }
@@ -240,6 +314,17 @@ nonisolated enum Commute {
         guard !sorted.isEmpty else { return 0 }
         let mid = sorted.count / 2
         return sorted.count % 2 == 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
+    }
+
+    /// Квантиль с линейной интерполяцией между соседними значениями.
+    static func quantile(_ values: [Double], _ q: Double) -> Double {
+        let sorted = values.sorted()
+        guard let first = sorted.first else { return 0 }
+        guard sorted.count > 1 else { return first }
+        let position = q * Double(sorted.count - 1)
+        let low = Int(position.rounded(.down))
+        let high = min(low + 1, sorted.count - 1)
+        return sorted[low] + (sorted[high] - sorted[low]) * (position - Double(low))
     }
 
     private static func distance(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {

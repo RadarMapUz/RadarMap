@@ -175,7 +175,8 @@ extension TripStatsSheet {
     func commuteItems() -> [ItogiRowItem] {
         guard env.settings.commuteLearning else { return [] }
         return env.commute.map { commute in
-            let delay = commute.lastDelay.map(Formatting.delayPhrase)
+            // Та же фраза, что в шапке листа: разброс, показанные минуты.
+            let delay = commute.usual != nil ? CommuteCard.verdictPhrase(commute) : nil
             return ItogiRowItem(
                 id: "commute-\(commute.direction.rawValue)", symbol: commute.direction.symbol,
                 title: commute.direction.title,

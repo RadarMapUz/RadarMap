@@ -175,8 +175,10 @@ final class CommuteProfileStore {
     /// затрёт; на диск не пишется. С `trips` (демо-история «дороги») строки —
     /// по этим поездкам, а лишнее против обычного лежит посередине пути: так
     /// у медленных поездок есть «где ушло время» (8.8.8).
+    /// `parking` (`-demoCommuteOutliers`) — у последней поездки домой 8 мин
+    /// стоянки у работы: строка «у работы, до выезда на дорогу» (разбор 10.11).
     func seedDemo(home: CLLocationCoordinate2D, work: CLLocationCoordinate2D,
-                  trips: [TripRecord] = [], now: Date = Date()) {
+                  trips: [TripRecord] = [], parking: Bool = false, now: Date = Date()) {
         func line(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D)
             -> (line: [Int32], ends: [Float], count: Int) {
             let length = GeoMath.fastDistance(a.latitude, a.longitude, b.latitude, b.longitude)
@@ -206,17 +208,21 @@ final class CommuteProfileStore {
         /// Строки по демо-поездкам: обычное время — ровно по участкам, лишнее
         /// против медианы — на участках 40–60 % пути (пробка посередине).
         func variant(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D,
-                     records: [any CommuteTripSource]) -> CommuteProfile.Variant? {
+                     records: [any CommuteTripSource], parking: Bool = false) -> CommuteProfile.Variant? {
             guard records.count >= 4 else { return nil }
             let path = line(a, b)
             let durations = records.map(\.movingDuration).sorted()
             let usual = durations[durations.count / 2]
             let first = Int(Double(path.count) * 0.4)
             let jam = first..<max(Int(Double(path.count) * 0.6), first + 1)
+            let newest = records.max { $0.startedAt < $1.startedAt }?.id
             let rows = records.map { record -> CommuteProfile.Row in
                 let base = min(record.movingDuration, usual) / Double(path.count)
                 let extra = max(0, record.movingDuration - usual) / Double(jam.count)
-                let seconds = (0..<path.count).map { UInt16(min(60_000, base + (jam.contains($0) ? extra : 0))) }
+                let idle = parking && record.id == newest ? 480.0 : 0
+                let seconds = (0..<path.count).map {
+                    UInt16(min(60_000, base + (jam.contains($0) ? extra : 0) + ($0 == 0 ? idle : 0)))
+                }
                 return CommuteProfile.Row(tripID: record.id, departure: record.startedAt, weekend: false,
                                           arrivalMinute: Int16(CommuteProfile.minuteOfDay(record.endedAt,
                                                                                           calendar: .current)),
@@ -241,7 +247,7 @@ final class CommuteProfileStore {
             var book = CommuteProfile.Book()
             book.toWork = [variant(home, work, records: toWork)
                            ?? variant(home, work, hour: 8, minutes: [44, 41, 47, 43, 45])]
-            book.toHome = [variant(work, home, records: toHome)
+            book.toHome = [variant(work, home, records: toHome, parking: parking)
                            ?? variant(work, home, hour: 18, minutes: [39, 37, 42, 38, 40])]
             return book
         }

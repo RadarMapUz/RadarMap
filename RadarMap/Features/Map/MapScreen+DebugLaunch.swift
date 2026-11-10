@@ -105,7 +105,9 @@ extension MapScreen {
             }
         }
         // Снимки экранов для обзора вёрстки: -openScreen settings|search|
-        // places|nearby|stats|camera|fines — открыть экран сразу после запуска.
+        // places|nearby|stats|camera|fines|commute — открыть экран сразу после
+        // запуска. commute — лист дороги (с -demoCommutes; -commuteToWork —
+        // на работу, иначе домой).
         if let index = args.firstIndex(of: "-openScreen"), index + 1 < args.count {
             let screen = args[index + 1]
             Task {
@@ -117,6 +119,11 @@ extension MapScreen {
                 case "nearby": map.showNearbySheet = true
                 case "stats": map.showStats = true
                 case "fines": showFines = true
+                case "commute":
+                    let direction: Commute.Direction = args.contains("-commuteToWork") ? .toWork : .toHome
+                    // Демо-дорога появляется после чтения истории — ждём её.
+                    for _ in 0..<50 where env.commute.isEmpty { await Task.pause(seconds: 0.2) }
+                    debugCommute = env.commute.first { $0.direction == direction } ?? env.commute.first
                 case "camera":
                     let here = env.location.currentCoordinate
                     map.selectedCamera = here.flatMap { env.cameras.nearest(to: $0, limit: 1).first } ?? env.cameras.cameras.first
@@ -146,7 +153,8 @@ extension MapScreen {
                 while !env.trip.isLoaded { await Task.pause(seconds: 0.2) }
                 env.trip.seedDemoCommutes(outliers: args.contains("-demoCommuteOutliers"))
                 env.commuteProfiles.seedDemo(home: TripStats.demoHome, work: TripStats.demoWork,
-                                             trips: env.trip.history)
+                                             trips: env.trip.history,
+                                             parking: args.contains("-demoCommuteOutliers"))
                 env.refreshLearnedPlaces()
                 // Учения призрака: профиль под скорость симулятора поверх демо
                 // (дом и работа — выученные из демо-истории).

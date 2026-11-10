@@ -152,9 +152,9 @@ struct OfflineOfferCard: View {
                 .foregroundStyle(Theme.textSecondary)
                 .frame(width: 32, height: 32)
                 .background(Theme.textTertiary.opacity(0.14), in: Circle())
+                .tapTarget()
         }
         .buttonStyle(.plain)
-        .tapTarget()
         .accessibilityLabel(Text("Не сейчас"))
     }
 

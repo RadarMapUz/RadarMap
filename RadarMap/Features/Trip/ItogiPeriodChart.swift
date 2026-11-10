@@ -77,8 +77,8 @@ struct ItogiPeriodChart: View {
                         Image(systemName: "xmark.circle.fill")
                             .font(.rounded(20))
                             .foregroundStyle(Theme.textTertiary)
-                            .frame(width: Theme.controlSize, height: 28, alignment: .trailing)
-                            .contentShape(Rectangle())
+                            .frame(minWidth: Theme.controlSize, alignment: .trailing)
+                            .tapTarget()
                     }
                     .buttonStyle(PressableStyle())
                     .accessibilityLabel(Text("Сбросить выбор"))

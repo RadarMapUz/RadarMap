@@ -128,7 +128,7 @@ extension View {
 /// За рулём это не придирка к доступности: промах по крестику в баннере
 /// означает второй взгляд на экран вместо взгляда на дорогу.
 extension View {
-    func tapTarget(_ side: CGFloat = 44) -> some View {
+    func tapTarget(_ side: CGFloat = Theme.controlSize) -> some View {
         self.frame(minWidth: side, minHeight: side)
             .contentShape(Rectangle())
     }

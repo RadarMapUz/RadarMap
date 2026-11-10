@@ -168,7 +168,10 @@ final class Drive3DTests: XCTestCase {
 
     func testToleranceIsHalfAPieceOnScreenAndBudget() {
         let slow = Drive3D.cutTolerance(metersPerPoint: 0.3, speedMps: 1, hot: false)
-        XCTAssertEqual(slow, AppConfig.drive3DCutStepMeters / 2 + 0.5, accuracy: 1e-9)
+        // Медленно и крупно: допуск — не меньше полкуска и не чаще шага бюджета.
+        let budget = (Drive3D.cutStep(speedMps: 1, hot: false, seconds: AppConfig.drive3DCutStepSeconds)
+                      + AppConfig.drive3DCutStepMeters) / 2
+        XCTAssertEqual(slow, max(AppConfig.drive3DCutStepMeters / 2 + 0.5, budget), accuracy: 1e-9)
         XCTAssertEqual(Drive3D.cutTolerance(metersPerPoint: 2, speedMps: 1, hot: false), 2 * AppConfig.drive3DCutPoints,
                        accuracy: 1e-9, "обзор: точки экрана")
         XCTAssertEqual(Drive3D.cutTolerance(metersPerPoint: 0.3, speedMps: 1, hot: true),

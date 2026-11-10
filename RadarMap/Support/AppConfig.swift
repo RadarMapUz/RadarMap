@@ -2350,11 +2350,21 @@ nonisolated enum AppConfig {
 
     // MARK: - «Впереди пробка» без маршрута (JamAhead)
 
-    /// Где искать: от 30 м до 1,5 км по ходу, в коридоре 25 м + 5 % дальности.
-    static let jamMinAheadMeters: Double = 30
+    /// Где искать: до 1,5 км вперёд по цепочке рёбер от своего ребра.
     static let jamLookAheadMeters: Double = 1_500
-    static let jamCorridorMeters: Double = 25
-    static let jamCorridorSlope = 0.05
+    /// Своё ребро — ближе этого к машине: сырой фикс в крайней полосе
+    /// проспекта лежит в 10–15 м от оси плюс погрешность GPS; дальше — уже
+    /// дублёр или соседняя улица.
+    nonisolated static let jamOwnEdgeMeters: Double = 25
+    /// Разрыв внутри пробки (свободное или никем не измеренное ребро между
+    /// медленными), который ещё одна пробка: перекрёсток с примыканиями —
+    /// 100–150 м. Больше — пробка кончилась.
+    nonisolated static let jamGapMeters: Double = 150
+    /// Ребро за дырой в наблюдениях — не дальше этого в сторону от оси
+    /// (дублёр идёт в 15–30 м).
+    nonisolated static let jamGapSideMeters: Double = 12
+    /// На развилке продолжение «прямо» — отклонение не больше этого.
+    nonisolated static let jamMaxTurnDegrees: Double = 45
     /// Пробка — не короче 300 м и не меньше минуты задержки; говорим, когда
     /// до её начала не больше километра.
     static let jamMinLengthMeters: Double = 300

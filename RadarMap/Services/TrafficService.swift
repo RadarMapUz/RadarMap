@@ -363,7 +363,7 @@ final class TrafficService {
         guard isShown, let snapshot, snapshot.isFresh(now: now) else { return nil }
         if let at = jamCheckedAt, now.timeIntervalSince(at) < AppConfig.jamCheckIntervalSeconds { return nil }
         jamCheckedAt = now
-        guard let jam = JamAhead.detect(edges: snapshot.edges, position: position, course: course),
+        guard let jam = JamAhead.detect(in: snapshot, position: position, course: course),
               jamAnnouncer.shouldAnnounce(jam, at: now) else { return nil }
         Log.network.notice("пробка впереди: через \(Int(jam.startsIn), privacy: .public) м, \(Int(jam.length), privacy: .public) м, +\(Int(jam.delay), privacy: .public) с")
         return jam

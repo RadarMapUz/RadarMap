@@ -112,7 +112,7 @@ nonisolated struct TypicalTraffic: Sendable {
         }
         return TypicalTraffic(bucket: expected,
                               snapshot: TrafficSnapshot(generated: Date(timeIntervalSince1970: generated),
-                                                        edges: edges))
+                                                        edges: edges, linked: false))
     }
 
     // MARK: - Линия

@@ -665,6 +665,38 @@ final class PerformanceBudgetTests: XCTestCase {
         XCTAssertLessThan(total, .milliseconds(500), "пробки на линии деградировали: \(total)")
     }
 
+    /// «Впереди пробка» (JamAhead): раз в 10 с всю поездку, на главном потоке.
+    /// Индекс узлов строится один раз на снимок, а сам поиск идёт по цепочке
+    /// от своего ребра — не перебором всех рёбер города.
+    func testJamAheadBudget() {
+        // Город 10 × 10 км: улицы на север каждые ~200 м, рёбра по ~100 м, каждое третье медленное.
+        var edges: [TrafficEdge] = []
+        for street in 0..<50 {
+            for i in 0..<100 {
+                let a = CLLocationCoordinate2D(latitude: 41.25 + Double(i) * 0.0009,
+                                               longitude: 69.20 + Double(street) * 0.0024)
+                let b = CLLocationCoordinate2D(latitude: a.latitude + 0.0009, longitude: a.longitude)
+                edges.append(TrafficEdge(a: a, b: b, level: i % 3 == 0 ? 1 : 3, kmh: 8, modelKmh: 50))
+            }
+        }
+        let clock = ContinuousClock()
+        var start = clock.now
+        let snapshot = TrafficSnapshot(generated: Date(), edges: edges)
+        let build = clock.now - start
+        start = clock.now
+        var found = 0
+        for i in 0..<1_000 {
+            let position = CLLocationCoordinate2D(latitude: 41.25 + Double(i % 80) * 0.0009 + 0.0002,
+                                                  longitude: 69.20 + Double(i % 50) * 0.0024)
+            if JamAhead.detect(in: snapshot, position: position, course: 0) != nil { found += 1 }
+        }
+        let each = (clock.now - start) / 1_000
+        XCTAssertGreaterThan(found, 0)
+        // Замер 10.11 (macOS, -Onone): снимок 5 000 рёбер — 15 мс, поиск — 0,013 мс.
+        XCTAssertLessThan(build, .milliseconds(150), "снимок пробок с индексом узлов: \(build)")
+        XCTAssertLessThan(each, .microseconds(500), "пробка впереди на фикс: \(each)")
+    }
+
     /// Время прибытия во времени (33C): маршрут на 300 км с профилем города
     /// и живыми пробками — «Быстрый» считает его на каждый вариант, и он
     /// обязан оставаться в пределах 2 мс (docs/spec_traffic_33.md).

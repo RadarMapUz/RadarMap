@@ -3,8 +3,7 @@
 //  RadarMap
 //
 //  Месяцы кольцами: внешнее — аккуратность, внутреннее — пробег, точка —
-//  штраф или идеальный день. Лист всегда тёмный: цвета колец держатся на
-//  тёмном поле и не зависят от темы.
+//  штраф или идеальный день. Лист следует теме приложения, как остальные.
 //
 
 import SwiftUI
@@ -41,8 +40,6 @@ struct ItogiRingsCalendar: View {
                 }
             }
         }
-        .environment(\.colorScheme, .dark)
-        .preferredColorScheme(.dark)
         .task(id: days) {
             months = ItogiCalendar.months(days: days, now: Date())
         }
@@ -57,7 +54,7 @@ struct ItogiRingsCalendar: View {
             ForEach(Array(ordered.enumerated()), id: \.offset) { _, symbol in
                 Text(symbol)
                     .font(.rounded(12, .semibold))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(Theme.textTertiary)
             }
         }
         .padding(.horizontal, 12)
@@ -70,7 +67,7 @@ struct ItogiRingsCalendar: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(month.start.formatted(.dateTime.month(.wide).year().locale(NumberFormat.locale)))
                 .font(.rounded(20, .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.textPrimary)
                 .padding(.horizontal, 6)
             LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(0..<month.leading, id: \.self) { _ in Color.clear.frame(height: 1) }
@@ -91,7 +88,7 @@ struct ItogiRingsCalendar: View {
             VStack(spacing: 4) {
                 Text("\(Calendar.current.component(.day, from: cell.day))")
                     .font(.rounded(15, isToday ? .bold : .medium))
-                    .foregroundStyle(isToday ? Color.black : Color.white.opacity(cell.isFuture ? 0.4 : 0.92))
+                    .foregroundStyle(isToday ? Theme.onAction : cell.isFuture ? Theme.textTertiary : Theme.textPrimary)
                     .frame(width: 26, height: 26)
                     .background(isToday ? Theme.action : Color.clear, in: Circle())
                 ItogiDayRing(ring: cell.ring, dimmed: cell.isFuture)
@@ -122,7 +119,7 @@ struct ItogiRingsCalendar: View {
             Circle().fill(color).frame(width: 8, height: 8)
             Text(title)
                 .font(.rounded(12, .medium))
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(Theme.textSecondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
@@ -165,11 +162,11 @@ struct ItogiDayRing: View {
 
     private func arc(value: Double, colors: [Color], width: CGFloat, inset: CGFloat) -> some View {
         ZStack {
-            Circle().stroke((colors.last ?? .white).opacity(0.2), lineWidth: width)
+            Circle().stroke((colors.last ?? Theme.textTertiary).opacity(Theme.Stats.ringTrackOpacity), lineWidth: width)
             if value > 0 {
                 Circle()
                     .trim(from: 0, to: value)
-                    .stroke(AngularGradient(colors: colors + [colors.first ?? .white], center: .center),
+                    .stroke(AngularGradient(colors: colors + [colors.first ?? Theme.textTertiary], center: .center),
                             style: StrokeStyle(lineWidth: width, lineCap: .round))
                     .rotationEffect(.degrees(-90))
             }

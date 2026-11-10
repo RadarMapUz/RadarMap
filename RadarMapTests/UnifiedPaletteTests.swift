@@ -97,7 +97,6 @@ final class UnifiedPaletteTests: XCTestCase {
         XCTAssertEqual(Drive3D.night.fill, hex(Theme.accentFill, .dark), "лента 3D ночью — accentFill")
         XCTAssertEqual(CameraZone.Colors.day.hex, hex(Theme.Types.camera, .light), "зона камеры — красный камеры")
         XCTAssertEqual(CameraMarkerLook.calmNightInkRGB, hex(Theme.alertSurface, .dark))
-        XCTAssertEqual(hex(Theme.Stats.ringGround, .dark), hex(Theme.alertSurface, .dark), "подложка колец")
     }
 
     // MARK: - Гармония
@@ -141,6 +140,62 @@ final class UnifiedPaletteTests: XCTestCase {
         }
     }
 
+    /// Календарь колец следует теме (до 10.11 был прибит тёмным и днём
+    /// оставался чёрным листом): подложка — карточка темы, дуги ≥ 3:1 к ней,
+    /// числа дней и подписи ≥ 4,5:1, «сегодня» — onAction на жёлтом.
+    func testRingsCalendarFollowsTheTheme() {
+        let rings: [(String, [Color])] = [("calm", Theme.Stats.ringCalm), ("watch", Theme.Stats.ringWatch),
+                                          ("risk", Theme.Stats.ringRisk), ("road", Theme.Stats.ringRoad)]
+        for style in [UIUserInterfaceStyle.light, .dark] {
+            let theme = style == .light ? "днём" : "ночью"
+            let ground = hex(Theme.Stats.ringGround, style)
+            XCTAssertEqual(ground, hex(Theme.surface, style), "подложка календаря \(theme)")
+            for (name, colours) in rings {
+                for colour in colours {
+                    XCTAssertGreaterThanOrEqual(contrast(hex(colour, style), ground), 3, "кольцо \(name) \(theme)")
+                }
+            }
+            for (name, colour) in [("primary", Theme.textPrimary), ("secondary", Theme.textSecondary),
+                                   ("tertiary", Theme.textTertiary)] {
+                XCTAssertGreaterThanOrEqual(contrast(hex(colour, style), ground), 4.5, "\(name) \(theme)")
+            }
+            XCTAssertGreaterThanOrEqual(contrast(hex(Theme.onAction, style), hex(Theme.action, style)), 4.5,
+                                        "«сегодня» \(theme)")
+        }
+        XCTAssertGreaterThan(luminance(hex(Theme.Stats.ringGround, .light)), 0.8, "днём подложка светлая")
+        XCTAssertLessThan(luminance(hex(Theme.Stats.ringGround, .dark)), 0.05, "ночью — графит")
+    }
+
+    /// Тёмными при любой теме прибиты только тревога, шеринг, заставка
+    /// CarPlay и плашка поездки — лист данных следует теме приложения.
+    func testOnlyAlertsAndSharingPinTheDarkScheme() throws {
+        let allowed: Set<String> = [
+            "RadarMap/Features/Map/ApproachAlertView.swift", "RadarMap/Features/Map/MapTickGates.swift",
+            "RadarMap/Features/Map/AlertSampleView.swift", "RadarMap/DesignSystem/ShareCardShell.swift",
+            "RadarMap/Features/Map/CarPlayHandoffView.swift", "RadarMapWidgets/CameraActivityWidget.swift",
+        ]
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        var offenders: [String] = []
+        var scanned = 0
+        for folder in ["RadarMap", "RadarMapWidgets", "RadarWatch", "Shared"] {
+            let files = FileManager.default.enumerator(at: root.appendingPathComponent(folder),
+                                                       includingPropertiesForKeys: nil)?
+                .compactMap { $0 as? URL }
+                .filter { $0.pathExtension == "swift" } ?? []
+            for file in files {
+                let relative = String(file.path.dropFirst(root.path.count + 1))
+                scanned += 1
+                guard !allowed.contains(relative) else { continue }
+                let text = try String(contentsOf: file, encoding: .utf8)
+                if text.contains("colorScheme, .dark)") || text.contains("preferredColorScheme(.dark)") {
+                    offenders.append(relative)
+                }
+            }
+        }
+        try XCTSkipIf(scanned == 0, "исходники не найдены — тест запущен вне дерева проекта")
+        XCTAssertTrue(offenders.isEmpty, "тёмная тема прибита мимо списка: " + offenders.joined(separator: ", "))
+    }
+
     /// Уровни пробок не путаются с заливками значков: ΔE ≥ 40 к красному
     /// камеры и ≥ 30 к посту, ДТП и «прочему» — в обеих темах.
     func testTrafficLevelsAreNotCameraTypes() {
@@ -173,11 +228,12 @@ final class UnifiedPaletteTests: XCTestCase {
                 linear(Double(value & 0xFF) / 255))
     }
 
+    private func luminance(_ v: UInt32) -> Double {
+        let (r, g, b) = channels(v)
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    }
+
     private func contrast(_ a: UInt32, _ b: UInt32) -> Double {
-        func luminance(_ v: UInt32) -> Double {
-            let (r, g, b) = channels(v)
-            return 0.2126 * r + 0.7152 * g + 0.0722 * b
-        }
         let la = luminance(a), lb = luminance(b)
         return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
     }

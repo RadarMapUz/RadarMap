@@ -42,18 +42,15 @@ nonisolated enum WidgetPalette {
     /// Подложка плашки поездки — графит экрана тревоги (Theme.alertSurface):
     /// Live Activity и Dynamic Island всегда тёмные.
     static let alertSurface: UInt32 = 0x14181D
-    /// Подложка календаря колец «Итогов» — та же всегда тёмная подложка: до
-    /// 10.11 там был свой почти такой же графит #0E1014 (ΔE 3,8).
-    static let ringGround: UInt32 = alertSurface
 
     /// Подложка виджета — Theme.surface, ровная: градиент «свет сверху»
     /// ушёл из приложения вместе с остальными (31D).
     static let surface = Pair(light: 0xFFFFFF, dark: 0x1F1F1F)
     /// Спокойная зона виджета «Дорога» — вторая карточка рядом с синей.
     static let quiet = Pair(light: 0xF2F1EE, dark: 0x2A2A29)
-    /// Кольца дня и недели. Ночные значения — Theme.Stats; дневные — те же
-    /// оттенки темнее, потому что ночные на белом не видны (тест проверяет
-    /// контраст обоих со своей подложкой).
+    /// Кольца дня и недели (Theme.Stats и виджет). Дневные — те же оттенки
+    /// темнее, потому что ночные на белом не видны (тест проверяет контраст
+    /// обоих со своей подложкой).
     struct Gradient: Equatable, Sendable {
         let light: [UInt32]
         let dark: [UInt32]

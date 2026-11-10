@@ -172,29 +172,29 @@ nonisolated enum DriveCamera {
     /// (382 pt, расчёт DriveCameraTests). Разметка полос с z17 на ходу в
     /// городе не видна — её возвращает подъезд к манёвру (порог z17.3).
     private static let carPitched: [Knot] = [
-        Knot(kmh: 0, pitch: standingPitch, seconds: 0, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
-        Knot(kmh: 5, pitch: standingPitch, seconds: 10.0 / 3, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
-        Knot(kmh: 10, pitch: standingPitch, seconds: 20.0 / 3, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
-        Knot(kmh: 15, pitch: 38, seconds: 10, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
+        Knot(kmh: 0, pitch: standingPitch, seconds: 0, minZoom: 17.0, maxZoom: 17.2, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 5, pitch: standingPitch, seconds: 10.0 / 3, minZoom: 17.0, maxZoom: 17.2, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 10, pitch: standingPitch, seconds: 20.0 / 3, minZoom: 17.0, maxZoom: 17.2, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 15, pitch: 38, seconds: 10, minZoom: 17.0, maxZoom: 17.2, share: AppConfig.carPlayMeShare),
         // Потолок 17,3, а не 17,4: под наклоном 25.D обзор добирается
         // ближе, кадр упирался в потолок, и размах в городе выходил за 1,8
         // уровня (DriveCameraBreathTests); 17,3 — порог стрелок у развилки.
-        Knot(kmh: 30, pitch: 48, seconds: 22, minZoom: 16.4, maxZoom: 17.3, share: 0.66),
-        Knot(kmh: 50, pitch: 53, seconds: 25, minZoom: 16.0, maxZoom: 17.2, share: 0.70),
-        Knot(kmh: 70, pitch: 55, seconds: 24, minZoom: 15.7, maxZoom: 17.0, share: 0.72),
-        Knot(kmh: 90, pitch: 57, seconds: 22, minZoom: 15.5, maxZoom: 16.8, share: 0.74),
-        Knot(kmh: 110, pitch: 58, seconds: 21, minZoom: 15.3, maxZoom: 16.6, share: 0.75),
-        Knot(kmh: 130, pitch: 58, seconds: 20, minZoom: 15.1, maxZoom: 16.4, share: 0.75),
+        Knot(kmh: 30, pitch: 48, seconds: 22, minZoom: 16.4, maxZoom: 17.3, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 50, pitch: 53, seconds: 25, minZoom: 16.0, maxZoom: 17.2, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 70, pitch: 55, seconds: 24, minZoom: 15.7, maxZoom: 17.0, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 90, pitch: 57, seconds: 22, minZoom: 15.5, maxZoom: 16.8, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 110, pitch: 58, seconds: 21, minZoom: 15.3, maxZoom: 16.6, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 130, pitch: 58, seconds: 20, minZoom: 15.1, maxZoom: 16.4, share: AppConfig.carPlayMeShare),
     ]
 
     /// Экран машины плоско (горячий телефон): обзор — только отдалением.
     private static let carFlat: [Knot] = [
-        Knot(kmh: 0, pitch: 0, seconds: 0, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
-        Knot(kmh: 15, pitch: 0, seconds: 10, minZoom: 17.0, maxZoom: 17.2, share: 0.62),
-        Knot(kmh: 40, pitch: 0, seconds: 18, minZoom: 16.0, maxZoom: 17.2, share: 0.70),
-        Knot(kmh: 70, pitch: 0, seconds: 18, minZoom: 15.4, maxZoom: 16.8, share: 0.74),
-        Knot(kmh: 100, pitch: 0, seconds: 16, minZoom: 15.0, maxZoom: 16.4, share: 0.75),
-        Knot(kmh: 130, pitch: 0, seconds: 15, minZoom: 14.8, maxZoom: 16.2, share: 0.75),
+        Knot(kmh: 0, pitch: 0, seconds: 0, minZoom: 17.0, maxZoom: 17.2, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 15, pitch: 0, seconds: 10, minZoom: 17.0, maxZoom: 17.2, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 40, pitch: 0, seconds: 18, minZoom: 16.0, maxZoom: 17.2, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 70, pitch: 0, seconds: 18, minZoom: 15.4, maxZoom: 16.8, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 100, pitch: 0, seconds: 16, minZoom: 15.0, maxZoom: 16.4, share: AppConfig.carPlayMeShare),
+        Knot(kmh: 130, pitch: 0, seconds: 15, minZoom: 14.8, maxZoom: 16.2, share: AppConfig.carPlayMeShare),
     ]
 
     /// Обзор впереди не короче этого и стоя.

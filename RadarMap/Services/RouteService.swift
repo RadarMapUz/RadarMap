@@ -1470,7 +1470,7 @@ final class RouteService {
 
     // MARK: - Движки
 
-    private struct BuiltVariant {
+    struct BuiltVariant {
         let points: [MKMapPoint]
         let distance: CLLocationDistance
         let travelTime: TimeInterval
@@ -1821,7 +1821,7 @@ final class RouteService {
     /// Плечи (`legs`) идут подряд: с остановкой по пути их два, и манёвры
     /// второго считаются от начала маршрута, а прибытие первого — это заезд.
     @concurrent
-    private nonisolated static func parseOSRM(_ data: Data, language: String,
+    nonisolated static func parseOSRM(_ data: Data, language: String,
                                               stopName: String?) async -> [BuiltVariant]? {
         let response: OSRMResponse
         do {

@@ -5,7 +5,8 @@
 //  «Затем …» под карточкой манёвра (29.G): второй манёвр сразу за первым.
 //  Поворот направо и через 80 м налево — водителю нужно знать об обоих до
 //  первого, иначе он встанет в правый ряд и не успеет в левый. Так делают
-//  Яндекс и Apple Maps; голос второй манёвр называет только после первого.
+//  Яндекс и Apple Maps. С 76 и голос: «…направо. Затем налево» — один раз
+//  на манёвр, в ближней фразе или в команде, не пока камера держит голос.
 //
 //  Показываем, только когда второй ближе `maneuverThenMeters` за первым:
 //  дальше «затем» — шум, у водителя будет время прочитать карточку снова.
@@ -26,6 +27,18 @@ nonisolated enum ManeuverThen {
               second.distanceAlong - first.distanceAlong <= meters,
               second.distanceAlong > first.distanceAlong else { return nil }
         return second
+    }
+
+    /// Добавить ли «затем» к ступени голоса `stage` (2 — далеко, 1 — близко,
+    /// 0 — команда): далеко — рано, сказанное — не повторяем, камера впереди
+    /// держит голос — короткая фраза.
+    static func voiced(stage: Int, alreadySaid: Bool, cameraHolds: Bool) -> Bool {
+        stage <= 1 && !alreadySaid && !cameraHolds
+    }
+
+    /// Фраза с хвостом «Затем …»: второй манёвр без улицы — коротко.
+    static func spoken(_ phrase: String, then second: RouteStep) -> String {
+        String(format: String(localized: "%1$@. Затем %2$@"), phrase, second.shortText ?? second.text)
     }
 }
 

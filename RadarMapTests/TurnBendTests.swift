@@ -165,9 +165,9 @@ final class TurnBendTests: XCTestCase {
     func testManeuverVertexIsFoundInOrder() {
         let path = corner(-90)
         let target = path[30]
-        XCTAssertEqual(RouteService.vertexIndex(of: [target.longitude, target.latitude], in: path, from: 0), 30)
-        XCTAssertNil(RouteService.vertexIndex(of: [target.longitude, target.latitude], in: path, from: 31),
+        XCTAssertEqual(ManeuverAnchor.vertexIndex(of: [target.longitude, target.latitude], in: path, from: 0), 30)
+        XCTAssertNil(ManeuverAnchor.vertexIndex(of: [target.longitude, target.latitude], in: path, from: 31),
                      "назад по линии не ищем")
-        XCTAssertNil(RouteService.vertexIndex(of: [0, 0], in: path, from: 0))
+        XCTAssertNil(ManeuverAnchor.vertexIndex(of: [0, 0], in: path, from: 0))
     }
 }

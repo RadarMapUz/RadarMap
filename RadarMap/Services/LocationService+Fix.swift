@@ -411,7 +411,7 @@ extension LocationService {
             } ?? .greatestFiniteMagnitude
             // Объезд пробки — на каждом фиксе, и стоя: в пробке машина не
             // сдвигается, и прогресс ниже молчит ровно тогда, когда он нужен.
-            if isTripActive { route?.considerDetour(coordinate: coordinate, speedKmh: speedKmh) }
+            if isTripActive { route?.considerDetour(coordinate: coordinate, speedKmh: speedKmh, course: course) }
             // Темп для прибытия на последних километрах — тоже на каждом фиксе.
             route?.notePace(speedKmh: speedKmh)
             if progressMoved >= MapViewport.standstillMeters

@@ -21057,6 +21057,22 @@
         }
       }
     },
+    "въезжайте на кольцо": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "въезжайте на кольцо"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aylanaga kiring"
+          }
+        }
+      }
+    },
     "на пути перекрытие — отметка водителей": {
       "localizations": {
         "ru": {
@@ -32403,6 +32419,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Keyin: %@"
+          }
+        }
+      }
+    },
+    "%1$@. Затем %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@. Затем %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@. Keyin %2$@"
           }
         }
       }

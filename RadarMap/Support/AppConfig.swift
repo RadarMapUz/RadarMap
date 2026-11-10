@@ -1833,6 +1833,12 @@ nonisolated enum AppConfig {
     static let rerouteBearingRadiusMeters = 35
     /// Радиус прибытия: ближе этого до финиша — маршрут выполнен.
     static let arrivalRadiusMeters: CLLocationDistance = 60
+    /// …и по линии до цели не больше этого: на встречной стороне проспекта
+    /// цель в 30 м по прямой, а по линии — до разворота и обратно. Двор или
+    /// объезд дома в радиусе 60 м — до 250 м линии; ближайший разворот
+    /// (от 200 м) — 400 м и больше. Мимо линии (дальше `rerouteDriftMeters`)
+    /// остаток не спрашиваем (ArrivalReached).
+    static let arrivalNearRemainingMeters: CLLocationDistance = 350
     /// «Проехали финиш по линии»: осталось меньше этого по маршруту И до
     /// цели не дальше `arrivalPassedRadiusMeters` — парковка чуть в стороне,
     /// фикс не попал в малый радиус, а маршрут выполнен.
@@ -1871,11 +1877,31 @@ nonisolated enum AppConfig {
     /// Манёвр «впереди», если до него больше этого: иначе на самом повороте
     /// баннер перескакивал бы на следующий раньше, чем машина повернула.
     static let maneuverAheadSlackMeters: CLLocationDistance = 15
+    /// Манёвр привязывается к вершине линии не дальше этого от ожидаемого
+    /// места (сумма длин шагов): 120 м или 2 % длины предыдущего шага —
+    /// мерки OSRM и линии расходятся на доли процента (ManeuverAnchor).
+    static let maneuverAnchorSlackMeters: CLLocationDistance = 120
+    static let maneuverAnchorSlackShare = 0.02
     /// Камера маршрута остаётся «следующей», пока не отстала на столько:
     /// фикс у самой камеры может лечь на пару десятков метров за ней.
     static let routeCameraBehindSlackMeters: CLLocationDistance = 30
     /// Таймаут запроса к своему OSRM: дольше — «сервер недоступен».
     static let osrmTimeoutSeconds: TimeInterval = 12
+    /// Сколько от начала построения ждать Apple, когда свой OSRM уже ответил
+    /// (RouteRace): внутри Узбекистана Apple не строит, и готовый маршрут не
+    /// должен стоять за его отказом.
+    static let appleRouteWaitSeconds: TimeInterval = 2.5
+    /// Тип поворота шага Apple (AppleTurn): курс по стольким метрам линии
+    /// до манёвра и после — излом последнего метра не решает за перекрёсток.
+    static let appleTurnProbeMeters: CLLocationDistance = 25
+    /// Линия короче этого — угол не судим, стрелка «прямо».
+    static let appleTurnMinProbeMeters: CLLocationDistance = 5
+    /// Границы угла поворота, °: меньше первой — прямо, дальше — плавно,
+    /// поворот, круто, разворот.
+    static let appleTurnStraightDegrees = 20.0
+    static let appleTurnSlightDegrees = 45.0
+    static let appleTurnSharpDegrees = 135.0
+    static let appleTurnUturnDegrees = 165.0
     /// Ближе этого — та же цель: второе касание не второе построение.
     nonisolated static let routeBuildSameTargetMeters: Double = 30
     /// Дольше этого индикатор говорит, что сеть медленная.

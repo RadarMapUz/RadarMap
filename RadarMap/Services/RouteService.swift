@@ -87,6 +87,9 @@ final class RouteService {
         /// ТОЛЬКО для карты: оповещения и проезды читают `cameras` с
         /// настоящими координатами.
         var cameraSpots: [Int: CameraOnLine.Spot] = [:]
+        /// Время графа вдоль линии по шагам OSRM; nil — движок длительностей
+        /// не дал, остаток — долей расстояния.
+        var timeline: RouteTimeline? = nil
 
         /// Время в пути с пробками — его и показываем, и сравниваем. У своей
         /// дороги (24.4) — по своим поездкам в этот час, если их хватает.
@@ -151,6 +154,9 @@ final class RouteService {
         /// `serverUnreachable`; отдельно — чтобы не повторять его без курса
         /// (`retriesWithoutHeading`).
         case noConnection
+        /// Сервер маршрутов ответил сбоем (5xx, не JSON, чужой отказ) — не
+        /// «нет связи» и не «пути нет».
+        case serverFailed
     }
 
     /// Кумулятивная длина считается по ВЫБРАННОЙ линии: смена набора или
@@ -373,15 +379,18 @@ final class RouteService {
 
     /// Когда перестраивать после съезда (RerouteGate, чистый).
     @ObservationIgnored private var rerouteGate = RerouteGate()
+    /// Свой сервер маршрутов (OSRM) — через общий APIClient, как вся сеть.
+    @ObservationIgnored private let osrm = APIClient(timeout: AppConfig.osrmTimeoutSeconds,
+                                                     base: AppConfig.osrmBaseURL)
     /// Последний фикс — дальше `rerouteDeviationMeters` от линии: мы не на
     /// маршруте (съехали, перестроиться нельзя — нет сети). Остаток «по
     /// маршруту» до его камер тогда ничего не значит (сценарий S7).
     @ObservationIgnored private(set) var isOffRoute = false
     @ObservationIgnored private var isRebuilding = false
-    /// Прогресс по маршруту сейчас не обновляется: идёт построение или
-    /// перестроение, `updateProgress` ждёт его конца, и `progressAlong`
-    /// застыл там, где машина была до него. Остатку «по маршруту» до камер
-    /// тогда верить нельзя (LocationGates.routeRemaining).
+    /// Прогрессу по маршруту сейчас не верить: при построении `updateProgress`
+    /// ждёт его конца, при перестроении ведёт по старой линии, с которой
+    /// съехали. Остатку «по маршруту» до камер тогда верить нельзя
+    /// (LocationGates.routeRemaining).
     var isProgressFrozen: Bool { isBuilding || isRebuilding }
     /// Идёт перестроение после съезда — наблюдаемо: машина на это время
     /// показывает «Перестраиваю маршрут» вместо уже неверного поворота.
@@ -393,6 +402,8 @@ final class RouteService {
     @ObservationIgnored private var announcedStage: [Int: Int] = [:]   // индекс шага → стадия (2 далеко, 1 близко, 0 сейчас)
     /// Шаги, ряд которых уже назван: совет звучит один раз на манёвр.
     @ObservationIgnored private var laneAdviceSaid: Set<Int> = []
+    /// Манёвры, к которым «затем» уже сказано (ManeuverThen).
+    @ObservationIgnored private var thenSaid: Set<Int> = []
     /// Полос на подъезде по индексу шага (LaneAdvice.approachLanes) и когда
     /// спрашивали сеть, не найдя дороги: тайлы могли ещё не приехать.
     @ObservationIgnored private var approachLanesByStep: [Int: Int] = [:]
@@ -572,15 +583,22 @@ final class RouteService {
     }
 
     /// Остаток по маршруту до хвоста последних километров: доля времени графа
-    /// с личным темпом варианта (33E) + пробки остатка. На старте (весь путь,
+    /// (по шагам OSRM — RouteTimeline, без них — по расстоянию) с личным
+    /// темпом варианта (33E) + пробки остатка. На старте (весь путь,
     /// задержки из `initialRemainingDelays`) — ровно `Variant.shownTime`:
     /// флажок прибытия и крупная цифра — одно время (решение 28.10). Мерка
     /// объезда (`engineRemaining`) темпа не знает.
     static func remainingEstimate(_ variant: Variant, remainingDistance: CLLocationDistance,
                                   liveDelay: TimeInterval, typicalDelay: TimeInterval) -> TimeInterval {
         guard variant.distance > 0 else { return 0 }
-        let share = min(1, max(0, remainingDistance / variant.distance))
-        return variant.travelTime * variant.paceFactor * share + liveDelay + typicalDelay
+        return graphRemaining(variant, remainingDistance: remainingDistance) * variant.paceFactor
+            + liveDelay + typicalDelay
+    }
+
+    /// Время графа на остатке пути, без темпа и пробок.
+    static func graphRemaining(_ variant: Variant, remainingDistance: CLLocationDistance) -> TimeInterval {
+        variant.travelTime * RouteTimeline.remainingShare(variant.timeline, distance: variant.distance,
+                                                          remainingDistance: remainingDistance)
     }
 
     /// Закрыть наблюдение личного темпа (прибытие, снятие маршрута).
@@ -608,7 +626,7 @@ final class RouteService {
     /// против времени OSRM — в час пик это выдумало бы выгодный объезд.
     var engineRemaining: TimeInterval {
         guard let selected, selected.distance > 0 else { return 0 }
-        return selected.travelTime * remainingDistance / selected.distance + remainingTrafficDelay
+        return Self.graphRemaining(selected, remainingDistance: remainingDistance) + remainingTrafficDelay
     }
 
     /// Личный остаток пути (8.8.11), подаёт AppEnvironment из призрака дороги
@@ -642,7 +660,7 @@ final class RouteService {
             // прибытие поправкой (может быть и отрицательной: пробка в
             // получасе впереди к нашему приезду обычно уже рассосётся).
             live = snapshot?.delay(along: remaining) ?? 0
-            let baseTime = selected.travelTime * remainingDistance / selected.distance
+            let baseTime = Self.graphRemaining(selected, remainingDistance: remainingDistance)
             let ahead = TrafficTimeAhead.delay(along: remaining, baseTime: baseTime, departure: now, now: now,
                                                live: snapshot, profile: profile)?.seconds ?? live
             typical = ahead - live
@@ -651,7 +669,7 @@ final class RouteService {
         } else if selected.distance > 0 {
             // Живых нет (сборщик стоит, now.json старый) — обычная пробка
             // часа по остатку пути, с выездом «сейчас».
-            let baseTime = selected.travelTime * remainingDistance / selected.distance
+            let baseTime = Self.graphRemaining(selected, remainingDistance: remainingDistance)
             let needed = TrafficForecast.buckets(departure: now, travelTime: baseTime)
             let files = typicalFiles(needed)
             if files.count < needed.count { prefetchTypical?(needed) }
@@ -983,6 +1001,10 @@ final class RouteService {
             let shown = failBuild(attempt, .network,
                                   message: String(localized: "Нет связи с сервером маршрутов — проверьте интернет"))
             return shown ? .failed : abandonedOutcome
+        } catch RouteError.serverFailed {
+            let shown = failBuild(attempt, .unavailable,
+                                  message: String(localized: "Маршруты временно недоступны — мы уже чиним"))
+            return shown ? .failed : abandonedOutcome
         } catch {
             let shown = failBuild(attempt, .noRoute, message: String(localized: "Маршрут не найден"))
             return shown ? .failed : abandonedOutcome
@@ -1140,6 +1162,7 @@ final class RouteService {
         isOffRoute = false
         announcedStage = [:]
         laneAdviceSaid = []
+        thenSaid = []
         approachLanesByStep = [:]
         approachMissedAt = [:]
         segmentHint = 0
@@ -1169,7 +1192,9 @@ final class RouteService {
         // Прибытие — на каждом фиксе, на любом выходе отсюда (и после
         // прибытия: маршрут снят — часов нет).
         defer { refreshArrival() }
-        guard let variant = selected, !isBuilding, !isRebuilding,
+        // Перестроение — не повод замирать: до прихода новой линии ведём по
+        // старой (76), без второго перестроения поверх первого.
+        guard let variant = selected, !isBuilding,
               let destination = destinationCoordinate else { return }
         let point = MKMapPoint(coordinate)
 
@@ -1201,12 +1226,11 @@ final class RouteService {
                 ? Self.pointAndCourse(along: along, pts: variant.points, cum: selectedCumulative) : nil,
             course: course)
 
-        // Прибытие: у самой цели ИЛИ проехали финиш по маршруту (парковка чуть в стороне,
-        // GPS-точка не попала в малый радиус — маршрут всё равно выполнен).
+        // Прибытие: у самой цели и по линии осталось мало ИЛИ проехали финиш по
+        // маршруту (ArrivalReached).
         let destinationDistance = point.distance(to: MKMapPoint(destination))
-        if destinationDistance <= AppConfig.arrivalRadiusMeters
-            || (variant.distance - along < AppConfig.arrivalPassedRemainingMeters
-                && destinationDistance < AppConfig.arrivalPassedRadiusMeters) {
+        if ArrivalReached.isReached(destinationDistance: destinationDistance,
+                                    remainingAlong: variant.distance - along, deviation: deviation) {
             arrive()
             return
         }
@@ -1229,7 +1253,8 @@ final class RouteService {
             nextCamera = nil
         }
 
-        updateManeuvers(variant: variant, along: along, announce: announce,
+        updateManeuvers(variant: variant, along: along,
+                        announce: announce && Self.voicesOldLine(rebuilding: isRebuilding, deviation: deviation),
                         speedKmh: speedKmh, cameraHolds: cameraHolds)
 
         // Отклонение → перестроение (с защитой от шума GPS и кулдауном).
@@ -1242,6 +1267,10 @@ final class RouteService {
         // Ход навстречу линии (20.9) — по ветке, которую выбрала проекция
         // (`segmentHint` после project — её сегмент): на обратной ветке
         // маршрута-петли курс попутен, и правило молчит.
+        guard !isRebuilding else {
+            isOffRoute = deviation > AppConfig.rerouteDeviationMeters || rerouteGate.isWrongWay
+            return
+        }
         let rerouteLimit = variant.isOffline ? AppConfig.offlineRouteRerouteMeters
                                              : AppConfig.rerouteDeviationMeters
         let rebuild = rerouteGate.note(
@@ -1329,16 +1358,23 @@ final class RouteService {
                                        alreadySaid: laneAdviceSaid.contains(index))
             ? advice : nil
         if said != nil { laneAdviceSaid.insert(index) }
+        // «Затем …» — один раз на манёвр (ManeuverThen). С хвостом фраза не
+        // из записанных отрывков — её говорит синтезатор.
+        let then = ManeuverThen.voiced(stage: next, alreadySaid: thenSaid.contains(index), cameraHolds: cameraHolds)
+            ? ManeuverThen.following(index, in: variant.steps) : nil
+        if then != nil { thenSaid.insert(index) }
         // Улика для разбора поездки: какая ступень, где и с рядом ли (фраза
         // целиком не пишется — в ней улица).
         Log.route.notice("манёвр голосом: ступень \(next, privacy: .public), \(Int(distance), privacy: .public) м, \(Int(speedKmh), privacy: .public) км/ч, ряд \(said?.logName ?? "-", privacy: .public), камера держит \(cameraHolds, privacy: .public)")
         if next == 0 {
-            onManeuver?(step.text, step.voiceEvent(meters: nil))
+            onManeuver?(then.map { ManeuverThen.spoken(step.text, then: $0) } ?? step.text,
+                        then == nil ? step.voiceEvent(meters: nil) : nil)
         } else {
             let meters = Self.spokenMeters(distance, far: next == 2)
-            onManeuver?(Self.withAdvice(String(format: String(localized: "Через %lld метров — %@"),
-                                               meters, step.text), said),
-                        step.voiceEvent(meters: meters, advice: said))
+            let phrase = Self.withAdvice(String(format: String(localized: "Через %lld метров — %@"),
+                                                meters, step.text), said)
+            onManeuver?(then.map { ManeuverThen.spoken(phrase, then: $0) } ?? phrase,
+                        then == nil ? step.voiceEvent(meters: meters, advice: said) : nil)
         }
         // Считаем манёвр один раз — при первом объявлении. Хранимые ступени
         // это 0…2, поэтому «было 3» означает «до сих пор не объявляли».
@@ -1374,6 +1410,12 @@ final class RouteService {
         }
         approachMissedAt[index] = Date()
         return nil
+    }
+
+    /// Голос манёвров старой линии во время перестроения — только если мы
+    /// снова на ней: съехав, водитель ждёт новый маршрут, а не старый поворот.
+    nonisolated static func voicesOldLine(rebuilding: Bool, deviation: CLLocationDistance) -> Bool {
+        !rebuilding || deviation <= AppConfig.rerouteDeviationMeters
     }
 
     /// Какую ступень голоса манёвра пора произнести: 2 — далеко («через 800
@@ -1428,7 +1470,7 @@ final class RouteService {
 
     // MARK: - Движки
 
-    private struct BuiltVariant {
+    struct BuiltVariant {
         let points: [MKMapPoint]
         let distance: CLLocationDistance
         let travelTime: TimeInterval
@@ -1437,6 +1479,7 @@ final class RouteService {
         var laneProbes: [LaneProbe] = []
         var stopAlong: CLLocationDistance?
         var offline = false
+        var timeline: RouteTimeline?
     }
 
     /// Маршрут без сети по своему графу трасс (OfflineRouteService, 12б.10).
@@ -1472,12 +1515,55 @@ final class RouteService {
         }
         // Apple и свой сервер — одновременно: внутри Узбекистана Apple не
         // строит, и ждать его отказа перед запросом OSRM значило прибавлять
-        // круг по сети к каждому построению. Apple по-прежнему главнее.
-        // Сбой Apple-роутинга — штатный путь: берём ответ своего сервера.
-        async let own = ownRouteResult(from: source, to: destination, alternatives: alternatives, heading: heading)
-        if let apple = try? await appleRoute(from: source, to: destination, alternatives: alternatives),
-           !apple.isEmpty { return apple }
-        return try await own.get()
+        // круг по сети к каждому построению. Apple главнее, но готовый свой
+        // ответ ждёт его не дольше `appleRouteWaitSeconds` (RouteRace).
+        // Задачи неструктурные: решив, не ждём проигравшего — MKDirections
+        // отмену задачи не слышит.
+        let (events, sink) = AsyncStream.makeStream(of: RouteRace<[BuiltVariant]>.Event.self)
+        let apple = Task {
+            let routes = try? await appleRoute(from: source, to: destination, alternatives: alternatives)
+            sink.yield(.apple(routes?.isEmpty == false ? routes : nil))
+        }
+        let own = Task {
+            let result = await ownRouteResult(from: source, to: destination, alternatives: alternatives,
+                                              heading: heading)
+            let weak = (try? result.get())?.contains(where: \.offline) ?? false
+            sink.yield(.own(result, weak: weak))
+        }
+        let wait = AppConfig.appleRouteWaitSeconds
+        let deadline = Task {
+            try? await Task.sleep(for: .seconds(wait))
+            sink.yield(.deadline)
+        }
+        defer {
+            apple.cancel()
+            own.cancel()
+            deadline.cancel()
+            sink.finish()
+        }
+        return try await withTaskCancellationHandler {
+            var race = RouteRace<[BuiltVariant]>()
+            var seen = 0
+            listening: for await event in events {
+                try Task.checkCancellation()
+                seen += 1
+                switch race.note(event) {
+                case .wait:               if seen >= 3 { break listening }
+                case .take(let routes):   return routes
+                case .fail(let error):    throw error
+                }
+            }
+            try Task.checkCancellation()
+            switch race.fallback() {
+            case .take(let routes):   return routes
+            case .fail(let error):    throw error
+            case .wait:               throw RouteError.noRoute
+            }
+        } onCancel: {
+            own.cancel()
+            apple.cancel()
+            sink.finish()
+        }
     }
 
     private func ownRouteResult(from source: CLLocationCoordinate2D, to destination: CLLocationCoordinate2D,
@@ -1506,7 +1592,7 @@ final class RouteService {
             return try await osrmRoute(from: source, via: stop, to: destination, alternatives: alternatives)
         } catch {
             // Отменили или ответ больше не нужен — свой граф трасс ни к чему.
-            guard !Task.isCancelled else { throw error }
+            guard Self.fallsBackOffline(after: error, taskCancelled: Task.isCancelled) else { throw error }
             // Ни Apple, ни свой сервер — на трассе без связи. Последнее средство —
             // свой граф трасс: приблизительный маршрут лучше, чем никакого
             // (12б.10). С остановкой — нет: заезд по пути без сети не считаем.
@@ -1588,17 +1674,38 @@ final class RouteService {
             // Инструкции Apple уже локализованы системой; позиция шага — накопленная длина.
             var along: CLLocationDistance = 0
             var steps: [RouteStep] = []
+            // Линия, пройденная до шага, — для угла поворота (AppleTurn).
+            var walked: [CLLocationCoordinate2D] = []
+            let last = route.steps.count - 1
             // Шаг без текста тоже занимает дорогу: пропуская его, не прибавляли
             // и его длину — следующие манёвры съезжали назад по маршруту.
-            for step in route.steps {
+            for (index, step) in route.steps.enumerated() {
+                let line = Self.coordinates(of: step.polyline)
                 if !step.instructions.isEmpty {
-                    steps.append(RouteStep(distanceAlong: along, text: step.instructions, icon: "arrow.up"))
+                    if index == last, index > 0 {
+                        steps.append(RouteStep(distanceAlong: along, text: step.instructions,
+                                               icon: "flag.checkered", kind: .arrive))
+                    } else {
+                        // Тип — из угла между линиями; Apple его не отдаёт.
+                        let modifier = index == 0 ? nil : AppleTurn.modifier(incoming: walked, outgoing: line)
+                        steps.append(RouteStep(distanceAlong: along, text: step.instructions,
+                                               icon: AppleTurn.icon(modifier: modifier),
+                                               kind: modifier.map { ManeuverKind.fromOSRM(modifier: $0) }))
+                    }
                 }
+                walked += line
                 along += step.distance
             }
             return BuiltVariant(points: points, distance: route.distance,
                                 travelTime: route.expectedTravelTime, steps: steps)
         }
+    }
+
+    /// Точки линии MKPolyline как координаты.
+    private static func coordinates(of polyline: MKPolyline) -> [CLLocationCoordinate2D] {
+        var out = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: polyline.pointCount)
+        polyline.getCoordinates(&out, range: NSRange(location: 0, length: polyline.pointCount))
+        return out
     }
 
     // MARK: - Своя дорога (24.4)
@@ -1671,36 +1778,29 @@ final class RouteService {
             .map { String(format: "%.6f,%.6f", $0.longitude, $0.latitude) }
             .joined(separator: ";")
 
-        // Сторонний OSRM, не наш бэкенд — единственное осознанное исключение из
-        // правила «сеть только через APIClient» (свой формат URL и ошибок).
         // Отказ сервера на новые параметры (29.E) — один повтор прежним
         // запросом (OSRMQuery.send): маршрут обязан построиться.
         let answer = try await OSRMQuery.send { legacy in
-            var components = URLComponents(url: AppConfig.osrmBaseURL
-                .appendingPathComponent("route/v1/driving")
-                .appendingPathComponent(path),
-                resolvingAgainstBaseURL: false)!
-            components.queryItems = pass.isEmpty
+            let query = pass.isEmpty
                 ? Self.osrmQueryItems(alternatives: alternatives, heading: heading, waypoints: waypoints.count,
                                       legacy: legacy)
                 : Self.osrmQueryItems(heading: heading, via: pass, legacy: legacy)
-            var request = URLRequest(url: components.url!, timeoutInterval: AppConfig.osrmTimeoutSeconds)
-            request.cachePolicy = .reloadIgnoringLocalCacheData
             do {
-                let (data, response) = try await URLSession.shared.data(for: request)
-                return OSRMQuery.Answer(status: (response as? HTTPURLResponse)?.statusCode ?? 200, data: data)
+                let raw = try await osrm.getRaw("route/v1/driving/" + path, query: query, label: "osrm route",
+                                                cachePolicy: .reloadIgnoringLocalCacheData)
+                return OSRMQuery.Answer(status: raw.status, data: raw.data)
             } catch {
-                throw RouteError.noConnection
+                throw Self.transportFailure(error)
             }
         }
         if answer.legacy {
             Log.route.notice("OSRM отверг новые параметры — маршрут прежним запросом")
         }
-        // 5xx/4xx без валидного тела — это «сервер недоступен», а не «маршрута нет»:
-        // пользователь должен видеть проблему сети, а не думать, что дороги не существует.
-        guard (200...299).contains(answer.status) else {
-            Log.route.error("OSRM HTTP \(answer.status, privacy: .public)")
-            throw RouteError.serverUnreachable
+        // «Пути нет» (NoRoute/NoSegment) — «маршрут не найден»; прочий отказ —
+        // сбой сервера, а не «дороги не существует».
+        if let refusal = OSRMQuery.refusal(status: answer.status, data: answer.data) {
+            Log.route.error("OSRM HTTP \(answer.status, privacy: .public): \(refusal == .noRoute ? "пути нет" : "сбой сервера", privacy: .public)")
+            throw refusal == .noRoute ? RouteError.noRoute : RouteError.serverFailed
         }
         let data = answer.data
 
@@ -1721,7 +1821,7 @@ final class RouteService {
     /// Плечи (`legs`) идут подряд: с остановкой по пути их два, и манёвры
     /// второго считаются от начала маршрута, а прибытие первого — это заезд.
     @concurrent
-    private nonisolated static func parseOSRM(_ data: Data, language: String,
+    nonisolated static func parseOSRM(_ data: Data, language: String,
                                               stopName: String?) async -> [BuiltVariant]? {
         let response: OSRMResponse
         do {
@@ -1740,25 +1840,31 @@ final class RouteService {
                 CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0])
             }
             let points = path.map(MKMapPoint.init)
-            // Излом «прямо» (29.E, TurnBend): точка манёвра — вершина линии
-            // (location шага), ищем её по порядку, а не по сумме длин шагов —
-            // на трассе та расходится с линией на сотни метров.
+            // Точка манёвра — вершина линии (location шага), а не сумма длин
+            // шагов: та расходится с линией на сотни метров (ManeuverAnchor).
             let cumulative = TurnBend.cumulative(path)
-            var vertex = 0
+            let flat = route.legs.flatMap(\.steps)
+            let lineCumulative = Self.cumulative(of: points)
+            let anchors = ManeuverAnchor.positions(locations: flat.map(\.maneuver.location),
+                                                   distances: flat.map(\.distance),
+                                                   path: path, cumulative: lineCumulative)
             var steps: [RouteStep] = []
             var notices: [LaneNotice] = []
             var probes = LaneProbeCollector(path: path)
-            var along: CLLocationDistance = 0
             var stopAlong: CLLocationDistance?
+            var position = 0
             for (legIndex, leg) in route.legs.enumerated() {
                 let isLast = legIndex == route.legs.count - 1
                 var currentName: String?
+                // Начало плеча после первого — заезд.
+                if legIndex == 1, anchors.indices.contains(position) { stopAlong = anchors[position].along }
                 for step in leg.steps {
+                    let anchor = anchors[position]
+                    position += 1
+                    let along = anchor.along
                     var bend: TurnBend.Measure?
                     if step.maneuver.type == "continue" || step.maneuver.type == "new name",
-                       let at = step.maneuver.location, at.count == 2,
-                       let index = vertexIndex(of: at, in: path, from: vertex) {
-                        vertex = index
+                       let index = anchor.vertex {
                         bend = TurnBend.measure(path: path, cumulative: cumulative, at: cumulative[index])
                     }
                     let built = maneuverStep(step, at: along, language: language,
@@ -1768,31 +1874,16 @@ final class RouteService {
                     probes.add(step, at: along, built: built, index: steps.count)
                     if let built { steps.append(built) }
                     notices += laneNotices(step, at: along, isManeuver: built != nil)
-                    along += step.distance
                 }
-                if !isLast, stopAlong == nil { stopAlong = along }
             }
             return BuiltVariant(points: points, distance: route.distance,
                                 travelTime: route.duration, steps: steps, laneNotices: notices,
-                                laneProbes: probes.probes, stopAlong: stopAlong)
+                                laneProbes: probes.probes, stopAlong: stopAlong,
+                                timeline: RouteTimeline(starts: anchors.map(\.along),
+                                                        durations: flat.map(\.duration),
+                                                        length: lineCumulative.last ?? 0))
         }
         return variants.isEmpty ? nil : variants
-    }
-
-    /// Вершина линии, совпадающая с точкой манёвра ([lon, lat]), начиная с
-    /// `start`: манёвры идут по порядку линии. nil — не нашли (тогда излом
-    /// не судим и шаг молчит, как до 29.E).
-    nonisolated static func vertexIndex(of location: [Double], in path: [CLLocationCoordinate2D],
-                                        from start: Int) -> Int? {
-        guard location.count == 2 else { return nil }
-        let tolerance = 1e-6
-        var index = max(0, start)
-        while index < path.count {
-            if abs(path[index].longitude - location[0]) < tolerance,
-               abs(path[index].latitude - location[1]) < tolerance { return index }
-            index += 1
-        }
-        return nil
     }
 
     /// nonisolated: разбирается в фоне (parseOSRM) — изоляция главным потоком
@@ -1818,6 +1909,8 @@ final class RouteService {
             /// умолчанием, а не `let`: у структуры синтезируется ещё и
             /// memberwise-инициализатор, которым пользуются тесты.
             var intersections: [Intersection]? = nil
+            /// Секунды шага по графу — кумулятив времени (RouteTimeline).
+            var duration: Double? = nil
         }
         nonisolated struct Maneuver: Decodable {
             let type: String
@@ -1854,11 +1947,12 @@ final class RouteService {
                                          currentName: String? = nil,
                                          bend: TurnBend.Measure? = nil) -> RouteStep? {
         let m = step.maneuver
+        let osrmType = spokenType(m.type)
         // «Остаёмся на дороге», а линия на перекрёстке ломается (29.E,
         // TurnBend): говорим как поворот — и в голосе, и в крае ряда.
-        let bendTurn = TurnBend.voices(type: m.type, modifier: m.modifier, bend: bend,
+        let bendTurn = TurnBend.voices(type: osrmType, modifier: m.modifier, bend: bend,
                                        roads: step.intersections?.first?.bearings?.count ?? 0)
-        let type = bendTurn ? "turn" : m.type
+        let type = bendTurn ? "turn" : osrmType
         var text: String?
         var icon = "arrow.up"
 
@@ -1875,7 +1969,7 @@ final class RouteService {
             }
         }
 
-        switch m.type {
+        switch osrmType {
         case "turn", "end of road":
             if let (phrase, symbol) = turnPhrase(m.modifier) { text = phrase; icon = symbol }
         case "continue":
@@ -1907,12 +2001,17 @@ final class RouteService {
         case "merge":
             text = String(localized: "перестройтесь в поток"); icon = "arrow.merge"
         case "on ramp":
-            text = String(localized: "съезд на развязку"); icon = "arrow.up.right"
+            text = String(localized: "съезд на развязку"); icon = rampIcon(m.modifier)
         case "off ramp":
-            text = String(localized: "сверните на съезд"); icon = "arrow.down.right"
+            text = String(localized: "сверните на съезд"); icon = rampIcon(m.modifier)
         case "roundabout", "rotary":
-            let exit = m.exit ?? 1
-            text = String(format: String(localized: "на кольце %lld-й съезд"), exit)
+            // Номер съезда неизвестен — без номера: выдуманный «1-й» уводит
+            // с кольца раньше нужного.
+            if let exit = m.exit, exit > 0 {
+                text = String(format: String(localized: "на кольце %lld-й съезд"), exit)
+            } else {
+                text = String(localized: "въезжайте на кольцо")
+            }
             icon = "arrow.triangle.2.circlepath"
         case "arrive":
             if let stopName {
@@ -1921,12 +2020,15 @@ final class RouteService {
                 text = String(localized: "вы прибыли"); icon = "flag.checkered"
             }
         default:
-            break   // depart, new name и прочее не озвучиваем
+            // depart; exit roundabout/rotary — съезд уже назван на въезде;
+            // use lane — ряд скажут подсказки полос; notification — смена
+            // свойств дороги без манёвра.
+            break
         }
 
         // Разворот на той же улице: улицу не называем — водитель на ней и
         // стоит, «на улицу Беруни» звучит как поворот куда-то ещё.
-        let uturnInPlace = m.modifier == "uturn" && ["turn", "continue", "end of road"].contains(m.type)
+        let uturnInPlace = m.modifier == "uturn" && ["turn", "continue", "end of road"].contains(osrmType)
             && sameStreet(step.name, currentName)
         if uturnInPlace { text = String(localized: "развернитесь") }
         guard var result = text else { return nil }
@@ -1934,7 +2036,7 @@ final class RouteService {
         // Излом на своей же улице: улицу не называем — «налево на улицу
         // Сеул», когда мы и так на Сеуле, звучит как поворот куда-то ещё.
         let bendInPlace = bendTurn && sameStreet(step.name, currentName)
-        if !step.name.isEmpty, m.type != "arrive", !uturnInPlace, !bendInPlace {
+        if !step.name.isEmpty, osrmType != "arrive", !uturnInPlace, !bendInPlace {
             // «на улицу Беруни», а не «на Beruniy shoh ko'chasi»: фраза просит
             // винительный падеж.
             let street = StreetName.display(step.name, language: language,
@@ -1944,8 +2046,8 @@ final class RouteService {
         // Тип манёвра — отдельно от фразы. Фраза зависит ещё и от типа
         // развязки («держитесь правее» на развилке против «поверните направо»
         // на перекрёстке), а геометрия поворота — только от модификатора.
-        let kind: ManeuverKind = m.type == "arrive" ? .arrive
-            : m.type == "roundabout" || m.type == "rotary" ? .roundabout
+        let kind: ManeuverKind = osrmType == "arrive" ? .arrive
+            : osrmType == "roundabout" || osrmType == "rotary" ? .roundabout
             : ManeuverKind.fromOSRM(modifier: m.modifier)
         // Тип команды для записанного голоса — только у фразы без имени
         // собственного: улицу и название остановки диктор не записывал.
@@ -1956,6 +2058,24 @@ final class RouteService {
                          shortText: result == phrase ? nil : phrase,
                          voiceAction: voiceAction,
                          edge: LaneAdvice.edge(osrmType: type, modifier: m.modifier))
+    }
+
+    /// Тип OSRM, как его говорим: малое кольцо (`roundabout turn`) OSRM
+    /// велит читать обычным поворотом, устаревший `ramp` — съездом.
+    nonisolated static func spokenType(_ type: String) -> String {
+        switch type {
+        case "roundabout turn": "turn"
+        case "ramp":            "off ramp"
+        default:                type
+        }
+    }
+
+    /// Стрелка съезда по стороне: съезд налево — не стрелка направо.
+    nonisolated static func rampIcon(_ modifier: String?) -> String {
+        switch modifier {
+        case "left", "slight left", "sharp left": "arrow.up.left"
+        default:                                  "arrow.up.right"
+        }
     }
 
     /// Одна ли это улица: имена OSRM сравниваются без регистра и крайних
@@ -2174,7 +2294,8 @@ final class RouteService {
                            trafficLiveDelay: trafficForecasts[index]?.liveSeconds,
                            paceFactor: paceFactor?(PersonalPace.roadClass(distance: variant.distance,
                                                                           travelTime: variant.travelTime)) ?? 1,
-                           cameraSpots: variantSpots[index])
+                           cameraSpots: variantSpots[index],
+                           timeline: variant.timeline)
         }
         selectedID = verdict.recommended
         // Новый набор: ярлыки могут подвинуться за поздними пробками, пока
@@ -2311,8 +2432,10 @@ final class RouteService {
     /// updateProgress (он ждёт смещения) молчит ровно тогда, когда объезд нужен.
     /// Кроме фиксов — открытие приложения или экрана машины и новый файл
     /// пробок: стоящему телефону фиксов может не прийти минутами.
-    func considerDetour(coordinate: CLLocationCoordinate2D, speedKmh: Double, now: Date = Date(),
-                        trigger: DetourAdvisor.Trigger = .fix) {
+    /// `course` — достоверный курс (−1 — нет): объезд начинается туда, куда
+    /// машина едет, как и перестроение, а не с разворота на встречную.
+    func considerDetour(coordinate: CLLocationCoordinate2D, speedKmh: Double, course: CLLocationDirection = -1,
+                        now: Date = Date(), trigger: DetourAdvisor.Trigger = .fix) {
         if trigger == .opened { detourOpenedAt = now }
         // Истекло — показанное: это «остаёмся», те же 10 минут тишины. Так и не
         // показанное считается в лимит и глушит голос, но открывшему приложение
@@ -2353,12 +2476,14 @@ final class RouteService {
         // Той же меркой, что варианты: движок + пробки, не личный остаток (8.8.11).
         let currentRemaining = engineRemaining
         let via = stop
+        let heading = course >= 0 ? course : nil
         Log.route.notice("объезд: ищу (\(String(describing: reason), privacy: .public)) — впереди +\(Int(self.remainingTrafficDelay), privacy: .public) с, ползём \(Int(crawl), privacy: .public) с")
         Task {
             defer { detourSearching = false }
             let built: [BuiltVariant]
             do {
-                built = try await calculate(from: coordinate, via: via, to: destination, alternatives: true)
+                built = try await calculate(from: coordinate, via: via, to: destination, alternatives: true,
+                                            heading: heading)
             } catch {
                 Log.route.notice("объезд: варианты не построены — \(error.localizedDescription, privacy: .public)")
                 return
@@ -2627,7 +2752,25 @@ final class RouteService {
     /// да (NoSegment: попутной дороги в радиусе нет); запрос не дошёл — нет:
     /// второй ждал бы тот же таймаут.
     nonisolated static func retriesWithoutHeading(after error: Error) -> Bool {
-        error as? RouteError != .noConnection
+        !isCancellation(error) && error as? RouteError != .noConnection
+    }
+
+    /// Запрос оборвали мы сами (сменили цель, «Отмена»), а не сеть.
+    nonisolated static func isCancellation(_ error: Error) -> Bool {
+        if case APIClient.Failure.transport(let inner) = error { return isCancellation(inner) }
+        return error is CancellationError || (error as? URLError)?.code == .cancelled
+    }
+
+    /// Чем считать сбой запроса к OSRM: отмена остаётся отменой, остальное —
+    /// «запрос не дошёл». До 76 отмена уходила как `noConnection`.
+    nonisolated static func transportFailure(_ error: Error) -> Error {
+        isCancellation(error) ? CancellationError() : RouteError.noConnection
+    }
+
+    /// Пробовать ли свой граф трасс после сбоя сервера: после отмены — нет;
+    /// сервер ответил «пути нет» — граф трасс знает не больше.
+    nonisolated static func fallsBackOffline(after error: Error, taskCancelled: Bool) -> Bool {
+        !taskCancelled && !isCancellation(error) && error as? RouteError != .noRoute
     }
 
     /// Ход по линии для RerouteGate (20.9): курс ветки, которую выбрала

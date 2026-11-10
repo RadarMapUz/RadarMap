@@ -4,7 +4,8 @@
 //
 //  «Где ушло время» (8.8.8): только медленные места — хуже q75 водителя, а не
 //  просто медленнее медианы; своя поездка в «обычно» не входит; стоянка рвёт
-//  отрезок; меньше минуты — не место; не больше трёх, большие первыми.
+//  отрезок; меньше минуты — не место; не больше трёх, большие первыми;
+//  первые и последние 400 м — не дорога (выезд со стоянки), их время отдельно.
 //
 
 import CoreLocation
@@ -182,12 +183,44 @@ final class CommuteLossTests: XCTestCase {
 
     /// Своя поездка в «обычно» не входит: другие — 20, 20 и 40 с (q75 30),
     /// наша — 40 с, то есть медленная. С нашей строкой q75 стал бы 40, и
-    /// поездка спрятала бы собственную потерю.
+    /// поездка спрятала бы собственную потерю. Края пути (по 400 м) — не
+    /// дорога: место — участки 2…17.
     func testOwnRowIsNotPartOfUsual() {
         let mine = [UInt16](repeating: 40, count: 20)
-        let found = CommuteLoss.stretches(in: variant(mine: mine, others: [20, 20, 40], evening: false),
-                                          tripID: tripID, calendar: utc)
-        XCTAssertEqual(found.first?.segments, 0...19)
-        XCTAssertEqual(found.first?.lostSeconds ?? 0, 400, accuracy: 0.5)
+        let report = CommuteLoss.report(in: variant(mine: mine, others: [20, 20, 40], evening: false),
+                                        tripID: tripID, calendar: utc)
+        XCTAssertEqual(report.stretches.first?.segments, 2...17)
+        XCTAssertEqual(report.stretches.first?.lostSeconds ?? 0, 320, accuracy: 0.5)
+        XCTAssertEqual(report.leaving, 0, "40 с у работы — меньше минуты, не строка")
+        XCTAssertEqual(report.arriving, 0)
+    }
+
+    /// Снимок владельца (10.11): «+10 мин — 100 м от работы». Это середина
+    /// участка 0–200 м, куда ложится всё до начала движения: прогрев, ворота,
+    /// выезд со стоянки. В места не идёт — называется отдельно.
+    func testLeavingTheParkingIsNotARoadLoss() {
+        let mine = usual([0: 620])
+        let report = CommuteLoss.report(in: variant(mine: mine), tripID: tripID, calendar: utc)
+        XCTAssertTrue(report.stretches.isEmpty, "\(report.stretches)")
+        XCTAssertEqual(report.leaving, 600, accuracy: 0.5)
+        XCTAssertEqual(report.arriving, 0)
+    }
+
+    /// То же у финиша: круги в поисках места у дома — не пробка; а пробка за
+    /// 400 м до конца — пробка.
+    func testArrivingEdgeIsSeparateRoadBeforeItIsNot() {
+        let mine = usual([19: 200, 18: 200, 16: 80, 17: 80])
+        let report = CommuteLoss.report(in: variant(mine: mine), tripID: tripID, calendar: utc)
+        XCTAssertEqual(report.stretches.map(\.segments), [16...17])
+        XCTAssertEqual(report.stretches.first?.lostSeconds ?? 0, 120, accuracy: 0.5)
+        XCTAssertEqual(report.arriving, 360, accuracy: 0.5)
+        XCTAssertEqual(report.leaving, 0)
+    }
+
+    /// Разбор по варианту, где лежит строка поездки; нет строки — nil.
+    func testReportForTripFindsItsVariant() {
+        let v = variant(mine: usual([0: 620]))
+        XCTAssertEqual(CommuteLoss.report(for: tripID, in: [v], calendar: utc)?.leaving ?? 0, 600, accuracy: 0.5)
+        XCTAssertNil(CommuteLoss.report(for: 12_345, in: [v], calendar: utc))
     }
 }

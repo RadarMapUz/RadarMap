@@ -613,6 +613,8 @@ final class AppEnvironment {
         // Обслуживание: правка на экране — пересчёт напоминаний; то, что
         // человек только что правил, он уже видел.
         maintenance.onEdited = { [weak self] seen in self?.maintenanceEdited(seen) }
+        energyJournal.onLoaded = { [weak self] in self?.migrateCarLogIfNeeded() }
+        migrateCarLogIfNeeded()
 
         // Одноразовая ретро-чистка «мостовых» проездов: оси дорог появились в
         // базе v8 — старые «проезды» поперёк оси (мост над камерой) выкидываем.
@@ -1153,6 +1155,7 @@ final class AppEnvironment {
         trip.retryLegacyLifetime()
         commuteProfiles.retryLoadNow()
         cameras.reloadUserDataIfNeeded()
+        migrateCarLogIfNeeded()
     }
 
     private func observeProtectedData() {

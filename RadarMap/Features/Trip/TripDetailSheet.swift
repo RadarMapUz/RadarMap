@@ -309,9 +309,11 @@ struct TripDetailContent: View {
                     .id("chart")
                 // Во что обошлась дорога (21.4): электричество и бензин по
                 // дням, «как посчитано» — раскрывается.
-                TripEnergyCard(record: record)
-                    .entrance(3, appeared)
-                    .id("energy")
+                if env.showsCarLog(.expenses) {
+                    TripEnergyCard(record: record)
+                        .entrance(3, appeared)
+                        .id("energy")
+                }
                 TripStopsSection(record: record) { dismiss() }
                     .entrance(4, appeared)
             }
@@ -360,7 +362,7 @@ struct TripDetailContent: View {
                     Button { share() } label: {
                         Label("Поделиться поездкой", systemImage: "photo")
                     }
-                    if record.hasTrack {
+                    if record.hasTrack, env.showsCarLog(.export) {
                         Button {
                             if let url = TimedTrackStore.gpxFile(for: record) {
                                 gpxFile = ShareFilePayload(url: url)

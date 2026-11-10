@@ -629,6 +629,9 @@ final class AppSettings {
     /// «Работаю водителем» (такси, курьер — 12б.9): поездки собираются в
     /// смены, без дороги на работу и подсказок «Домой», голос короткий.
     var workDriverMode: Bool { didSet { store.set(workDriverMode, forKey: Keys.workDriverMode) } }
+    /// «Машина и расходы» — автодневник (CarLog): выключен у новой установки,
+    /// у тех, кто уже вёл записи, включается переносом в AppEnvironment.
+    var carLog: Bool { didSet { store.set(carLog, forKey: Keys.carLog) } }
     /// Госномер для «Проверить штрафы» (FineCheck): только на телефоне,
     /// пустая строка — не задан. На сервер не уходит никогда.
     var licensePlate: String { didSet { store.set(licensePlate, forKey: Keys.licensePlate) } }
@@ -876,6 +879,7 @@ final class AppSettings {
         static let maintenanceRemindersOff = "maintenanceRemindersOff"
         static let alertProfile = "alertProfile"
         static let lockScreenPrivate = "lockScreenPrivate"
+        static let carLog = "carLogEnabled"
     }
 
     /// Пишем/снимаем override языка приложения. iOS читает «AppleLanguages» из
@@ -977,6 +981,7 @@ final class AppSettings {
         tripodHints = store.bool(forKey: Keys.tripodHints)
         nightVoice = store.bool(forKey: Keys.nightVoice)
         workDriverMode = store.bool(forKey: Keys.workDriverMode)
+        carLog = store.bool(forKey: Keys.carLog)
         licensePlate = store.string(forKey: Keys.licensePlate) ?? ""
         parkedCarHint = store.bool(forKey: Keys.parkedCarHint)
         mapPlaces = store.bool(forKey: Keys.mapPlaces)
@@ -1202,7 +1207,7 @@ extension AppSettings {
         Keys.home, Keys.work, Keys.recents, Keys.favorites, Keys.fuelProfile, Keys.vehicleEnergy,
         Keys.navigationMetadata, Keys.departureReminders, Keys.departureRemindersAsked,
         Keys.workTarget, Keys.workTargetAsked, Keys.adaptive, Keys.drive3D, Keys.drive3DPitchBefore,
-        Keys.drive3DPitchTouched, Keys.map3D,
+        Keys.drive3DPitchTouched, Keys.map3D, Keys.carLog,
     ]
 
     /// Модель железа («iPhone14,2») — для умолчаний по классу телефона.

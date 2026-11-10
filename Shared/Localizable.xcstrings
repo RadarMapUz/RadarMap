@@ -17550,6 +17550,54 @@
         }
       }
     },
+    "Заправки, расходы, обслуживание, смены и выгрузка поездок. Выключите — записи останутся на телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заправки, расходы, обслуживание, смены и выгрузка поездок. Выключите — записи останутся на телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoqilgʻi quyish, xarajatlar, texnik xizmat, smenalar va safarlarni yuklab olish. Oʻchirsangiz — yozuvlar telefonda qoladi."
+          }
+        }
+      }
+    },
+    "Тип машины нужен и без расходов: по нему — заправки или зарядки по пути и в CarPlay.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тип машины нужен и без расходов: по нему — заправки или зарядки по пути и в CarPlay."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina turi xarajatlarsiz ham kerak: unga qarab yoʻldagi va CarPlayʼdagi yoqilgʻi quyish yoki quvvatlash shoxobchalari koʻrsatiladi."
+          }
+        }
+      }
+    },
+    "Сколько поездок хранится и как стереть историю.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сколько поездок хранится и как стереть историю."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qancha safar saqlanayotgani va tarixni qanday oʻchirish."
+          }
+        }
+      }
+    },
     "Тап по скорости — быстрые переключатели": {
       "localizations": {
         "ru": {

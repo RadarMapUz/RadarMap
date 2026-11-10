@@ -308,39 +308,44 @@ struct TripSettingsPage: View {
                 Text("Время прибытия — тем, кто ждёт: у каждого своя ссылка.")
             }
 
-            Section {
-                Toggle("Работаю водителем", isOn: $settings.workDriverMode)
-                    .onChange(of: settings.workDriverMode) { _, _ in env.refreshLearnedPlaces() }
-                SettingsExplainer([
-                    "Для такси и доставки. Поездки собираются в смены — от первого рейса до простоя дольше часа; в «Итогах» появляются «Смены»: часы, километры, превышения, штрафы по замерам и топливо.",
-                    "В смене нет подсказок «Домой» и «На работу», рейсы не учатся как дорога на работу и не меняют выученные Дом и Работу.",
-                    "Голос о камерах — короткий, если режим оповещений «Авто».",
-                    "Выключение режима прошлые поездки не трогает.",
-                ])
-            } footer: {
-                Text("Такси, доставка: день — это смена, а не поездки.")
+            if env.showsCarLog(.workDriver) {
+                Section {
+                    Toggle("Работаю водителем", isOn: $settings.workDriverMode)
+                        .onChange(of: settings.workDriverMode) { _, _ in env.refreshLearnedPlaces() }
+                    SettingsExplainer([
+                        "Для такси и доставки. Поездки собираются в смены — от первого рейса до простоя дольше часа; в «Итогах» появляются «Смены»: часы, километры, превышения, штрафы по замерам и топливо.",
+                        "В смене нет подсказок «Домой» и «На работу», рейсы не учатся как дорога на работу и не меняют выученные Дом и Работу.",
+                        "Голос о камерах — короткий, если режим оповещений «Авто».",
+                        "Выключение режима прошлые поездки не трогает.",
+                    ])
+                } footer: {
+                    Text("Такси, доставка: день — это смена, а не поездки.")
+                }
             }
 
-            Section {
-                // Машина, расход и цены переехали в раздел верхнего уровня
-                // (21.10); ссылка здесь — на релиз, чтобы привычный путь вёл туда.
-                NavigationLink {
-                    EnergySettingsPage()
-                } label: {
-                    LabeledContent("Машина и расходы") {
-                        Text(EnergyText.shortTitle(settings.vehicleEnergy))
+            // Автодневник — только при включённых «Машине и расходах» (CarLog).
+            if env.showsCarLog(.journal) {
+                Section {
+                    // Машина, расход и цены переехали в раздел верхнего уровня
+                    // (21.10); ссылка здесь — на релиз, чтобы привычный путь вёл туда.
+                    NavigationLink {
+                        EnergySettingsPage()
+                    } label: {
+                        LabeledContent("Машина и расходы") {
+                            Text(EnergyText.shortTitle(settings.vehicleEnergy))
+                        }
                     }
-                }
-                NavigationLink {
-                    MaintenancePage()
-                } label: {
-                    LabeledContent("Обслуживание") {
-                        Text(MaintenanceText.summary(env.maintenance.states(),
-                                                     hasOdometer: env.maintenance.odometerKm != nil))
+                    NavigationLink {
+                        MaintenancePage()
+                    } label: {
+                        LabeledContent("Обслуживание") {
+                            Text(MaintenanceText.summary(env.maintenance.states(),
+                                                         hasOdometer: env.maintenance.odometerKm != nil))
+                        }
                     }
+                } footer: {
+                    Text("Тип машины, расход и цены — теперь в разделе «Машина и расходы» в начале настроек.")
                 }
-            } footer: {
-                Text("Тип машины, расход и цены — теперь в разделе «Машина и расходы» в начале настроек.")
             }
 
             FineCheckSection()
@@ -354,7 +359,11 @@ struct TripSettingsPage: View {
                     }
                 }
             } footer: {
-                Text("Выгрузить все поездки одним архивом или стереть историю.")
+                if env.showsCarLog(.export) {
+                    Text("Выгрузить все поездки одним архивом или стереть историю.")
+                } else {
+                    Text("Сколько поездок хранится и как стереть историю.")
+                }
             }
 
             Section {
@@ -688,16 +697,21 @@ struct AdvancedSettingsPage: View {
                     .onChange(of: settings.recordTimedTrack) { _, on in
                         env.trip.recordsTimedTrack = on
                     }
-                Button("Выгрузить все поездки (GPX)") {
-                    if let url = TimedTrackStore.gpxFile(forAll: env.trip.history) {
-                        allTracks = ShareFilePayload(url: url)
+                // Выгрузка — часть автодневника (CarLog), запись трека — нет.
+                let exports = env.showsCarLog(.export)
+                if exports {
+                    Button("Выгрузить все поездки (GPX)") {
+                        if let url = TimedTrackStore.gpxFile(forAll: env.trip.history) {
+                            allTracks = ShareFilePayload(url: url)
+                        }
                     }
+                    .disabled(env.trip.history.isEmpty)
                 }
-                .disabled(env.trip.history.isEmpty)
                 SettingsExplainer([
                     "Точка каждую секунду со временем — чтобы видео с регистратора можно было поставить на карту. Хранится только на телефоне 30 дней.",
+                ] + (exports ? [
                     "«Выгрузить все поездки» отдаёт один файл GPX: линии поездок последней недели и проезды камер за месяц.",
-                ])
+                ] : []))
             } header: {
                 Text("Регистратор")
             } footer: {

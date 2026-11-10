@@ -1516,7 +1516,7 @@ final class RouteService {
             return try await osrmRoute(from: source, via: stop, to: destination, alternatives: alternatives)
         } catch {
             // Отменили или ответ больше не нужен — свой граф трасс ни к чему.
-            guard !Task.isCancelled else { throw error }
+            guard Self.fallsBackOffline(after: error, taskCancelled: Task.isCancelled) else { throw error }
             // Ни Apple, ни свой сервер — на трассе без связи. Последнее средство —
             // свой граф трасс: приблизительный маршрут лучше, чем никакого
             // (12б.10). С остановкой — нет: заезд по пути без сети не считаем.
@@ -1700,7 +1700,7 @@ final class RouteService {
                 let (data, response) = try await URLSession.shared.data(for: request)
                 return OSRMQuery.Answer(status: (response as? HTTPURLResponse)?.statusCode ?? 200, data: data)
             } catch {
-                throw RouteError.noConnection
+                throw Self.transportFailure(error)
             }
         }
         if answer.legacy {
@@ -2631,7 +2631,23 @@ final class RouteService {
     /// да (NoSegment: попутной дороги в радиусе нет); запрос не дошёл — нет:
     /// второй ждал бы тот же таймаут.
     nonisolated static func retriesWithoutHeading(after error: Error) -> Bool {
-        error as? RouteError != .noConnection
+        !isCancellation(error) && error as? RouteError != .noConnection
+    }
+
+    /// Запрос оборвали мы сами (сменили цель, «Отмена»), а не сеть.
+    nonisolated static func isCancellation(_ error: Error) -> Bool {
+        error is CancellationError || (error as? URLError)?.code == .cancelled
+    }
+
+    /// Чем считать сбой запроса к OSRM: отмена остаётся отменой, остальное —
+    /// «запрос не дошёл». До 76 отмена уходила как `noConnection`.
+    nonisolated static func transportFailure(_ error: Error) -> Error {
+        isCancellation(error) ? CancellationError() : RouteError.noConnection
+    }
+
+    /// Пробовать ли свой граф трасс после сбоя сервера: после отмены — нет.
+    nonisolated static func fallsBackOffline(after error: Error, taskCancelled: Bool) -> Bool {
+        !taskCancelled && !isCancellation(error)
     }
 
     /// Ход по линии для RerouteGate (20.9): курс ветки, которую выбрала

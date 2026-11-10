@@ -138,7 +138,7 @@ struct EngineBaseLayer: View {
                         maneuverCallout: env.location.isTripActive ? ManeuverCallout.content(step: env.route.nextStep) : nil,
                         calloutFrame: calloutFrame(size: geo.size, insets: insets),
                         recenterToken: recenterToken,
-                        modernStyle: env.settings.mapModernStyle,
+                        modernStyle: true,
                         performance: env.thermal.mode,
                         lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled,
                         northUp: map.orientation == .following,

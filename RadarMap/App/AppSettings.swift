@@ -721,11 +721,6 @@ final class AppSettings {
     /// одном центре против 8 455 дорог, и объясняют они, где кончается
     /// асфальт, — вопрос пешехода, а не водителя.
     var mapSidewalks: Bool { didSet { store.set(mapSidewalks, forKey: Keys.mapSidewalks) } }
-    /// Новая карта (бета): основа OpenMapTiles и наши слои дороги по выпуску
-    /// тайлов (docs/plan_map_offline.md). Включена по умолчанию в 2.0, чтобы
-    /// её увидели тестировщики; выключатель — без релиза, если на живом
-    /// телефоне что-то пойдёт не так.
-    var mapModernStyle: Bool { didSet { store.set(mapModernStyle, forKey: Keys.mapModernStyle) } }
     /// 3D-вид: карта наклонена, видно дорогу вперёд (кнопка «3D» на карте).
     /// Запоминается: выбор человека сильнее режима.
     /// Ключ этого телефона (с 43): наклон, включённый «Объёмным видом» на
@@ -918,7 +913,6 @@ final class AppSettings {
             Keys.nightVoice: true,
             Keys.parkedCarHint: true,
             Keys.mapPlaces: true,
-            Keys.mapModernStyle: true,
             Keys.map3D: true,
             // Масштаб — щипком; кнопки +/− по желанию (панель «Карта»). До
             // этапа 31 были включены и делали колонку из шести кругов.
@@ -991,7 +985,6 @@ final class AppSettings {
         // выключил (явное «нет» сохранено и уважается).
         mapHouses = store.object(forKey: Keys.mapHouses) as? Bool ?? true
         mapSidewalks = store.bool(forKey: Keys.mapSidewalks)
-        mapModernStyle = store.bool(forKey: Keys.mapModernStyle)
         map3D = store.bool(forKey: Keys.map3D)
         drive3D = store.object(forKey: Keys.drive3D) as? Bool
             ?? Drive3D.defaultEnabled(machine: Self.hardwareMachine)
@@ -1181,6 +1174,9 @@ final class AppSettings {
 // машина — не здесь: они в CloudKit, зашифрованными.
 
 extension AppSettings {
+    /// Ключи убранных настроек: в iCloud их клали прежние сборки, «Удалить копию» стирает и их.
+    static let retiredCloudSettingKeys = [Keys.mapModernStyle]
+
     static let cloudSettingKinds: [String: CloudSettingsSync.Kind] = [
         Keys.sound: .bool, Keys.voiceMode: .string, Keys.overspeedVoice: .string,
         Keys.radius: .double, Keys.filter: .string, Keys.volume: .double,
@@ -1191,7 +1187,7 @@ extension AppSettings {
         Keys.destinationHints: .bool, Keys.commuteLearningOff: .bool, Keys.smartSilence: .bool,
         Keys.tripodHints: .bool, Keys.nightVoice: .bool, Keys.workDriverMode: .bool, Keys.parkedCarHint: .bool,
         Keys.mapPlaces: .bool, Keys.mapHouses: .bool, Keys.mapSidewalks: .bool,
-        Keys.mapModernStyle: .bool, Keys.mapZoomButtons: .bool,
+        Keys.mapZoomButtons: .bool,
         Keys.cursorStyle: .string, Keys.alertMode: .string, Keys.alertProfile: .string,
         Keys.usageStats: .bool, Keys.trafficHidden: .bool, Keys.trafficContributionOff: .bool,
         Keys.roadWeatherOff: .bool, Keys.maintenanceRemindersOff: .bool,
@@ -1270,7 +1266,6 @@ extension AppSettings {
         case (Keys.mapPlaces, .bool(let v)): mapPlaces = v
         case (Keys.mapHouses, .bool(let v)): mapHouses = v
         case (Keys.mapSidewalks, .bool(let v)): mapSidewalks = v
-        case (Keys.mapModernStyle, .bool(let v)): mapModernStyle = v
         case (Keys.mapZoomButtons, .bool(let v)): mapZoomButtons = v
         case (Keys.cursorStyle, .string(let v)): cursorStyle = CursorStyle(stored: v)
         case (Keys.alertMode, .string(let v)): if let mode = AlertMode(rawValue: v) { alertMode = mode }

@@ -2,6 +2,7 @@
 """Тесты RadarMap API: поднимаем настоящий сервер на случайном порту с временной
 БД и ходим в него HTTP-клиентом stdlib. Запуск: python3 server/test_api.py
 """
+import hashlib
 import json
 import os
 import re
@@ -1337,6 +1338,68 @@ class TrafficTest(ServerTestBase):
         for payload in ({"v": 2, "pieces": []}, {"pieces": []}, {"v": 1, "pieces": "x"}):
             status, _ = _call(self.port, "POST", "/api/traffic", payload)
             self.assertEqual(status, 400)
+
+    def labels(self):
+        conn = sqlite3.connect(api.TRAFFIC_DB_PATH)
+        rows = conn.execute("SELECT src, gen FROM traffic_pieces ORDER BY id").fetchall()
+        conn.close()
+        return rows
+
+    def test_piece_carries_a_source_label_and_no_address(self):
+        """Метка источника — 8 знаков HMAC: один адрес — одна метка, разные —
+        разные; самого адреса в базе нет ни в каком виде."""
+        for i, ip in enumerate(("10.7.7.1", "10.7.7.1", "10.7.7.2")):
+            _call(self.port, "POST", "/api/traffic", {"v": 1, "pieces": [self.piece(lat=41.40 + i * 0.01)]}, ip=ip)
+        (a, gen_a), (b, gen_b), (c, gen_c) = self.labels()
+        self.assertRegex(a, r"^[0-9a-f]{8}$")
+        self.assertEqual(a, b, "тот же адрес — тот же источник")
+        self.assertNotEqual(a, c, "другой адрес — другой источник")
+        self.assertEqual(len({gen_a, gen_b, gen_c}), 1)
+        self.assertGreater(gen_a, 0)
+        self.assertNotEqual(a, hashlib.sha256(b"10.7.7.1").hexdigest()[:8], "без соли метку не подобрать")
+        with open(api.TRAFFIC_DB_PATH, "rb") as f:
+            raw = f.read()
+        for wal in (api.TRAFFIC_DB_PATH + "-wal",):
+            if os.path.exists(wal):
+                with open(wal, "rb") as f:
+                    raw += f.read()
+        self.assertNotIn(b"10.7.7.", raw, "адрес не хранится")
+
+    def test_source_salt_lives_in_memory_and_no_longer_than_a_day(self):
+        saved = api._traffic_salt
+        try:
+            api._traffic_salt = None
+            first, gen = api.traffic_source("10.7.8.1", 1_000_000.0)
+            self.assertEqual(api.traffic_source("10.7.8.1", 1_000_000.0 + api.TRAFFIC_SALT_SECONDS - 1), (first, gen))
+            later, gen2 = api.traffic_source("10.7.8.1", 1_000_000.0 + api.TRAFFIC_SALT_SECONDS)
+            self.assertNotEqual((first, gen), (later, gen2), "через сутки соль новая — метки не связать")
+            api._traffic_salt = None                      # рестарт процесса
+            self.assertNotEqual(api.traffic_source("10.7.8.1", 1_000_000.0)[0], first)
+            self.assertEqual(api.traffic_source("", 1_000_000.0), ("", 0), "нет адреса — общий источник")
+            self.assertLessEqual(api.TRAFFIC_SOURCE_HEX, 8)
+        finally:
+            api._traffic_salt = saved
+
+    def test_source_columns_are_added_to_an_old_database_once(self):
+        saved = api.TRAFFIC_DB_PATH
+        work = tempfile.mkdtemp()
+        try:
+            api.TRAFFIC_DB_PATH = os.path.join(work, "traffic.db")
+            conn = sqlite3.connect(api.TRAFFIC_DB_PATH)
+            conn.execute("""CREATE TABLE traffic_pieces(id INTEGER PRIMARY KEY AUTOINCREMENT,
+                received REAL NOT NULL, points TEXT NOT NULL)""")
+            conn.execute("INSERT INTO traffic_pieces(received, points) VALUES(1, '[]')")
+            conn.commit()
+            conn.close()
+            api.init_traffic_db()
+            api.init_traffic_db()
+            conn = sqlite3.connect(api.TRAFFIC_DB_PATH)
+            self.assertEqual(conn.execute("SELECT src, gen FROM traffic_pieces").fetchall(), [("", 0)],
+                             "старый кусок — без метки: общий источник")
+            conn.close()
+        finally:
+            api.TRAFFIC_DB_PATH = saved
+            shutil.rmtree(work, ignore_errors=True)
 
     def test_skips_bad_pieces_keeps_good(self):
         outside = self.piece(lat=55.75, lon=37.61)            # Москва

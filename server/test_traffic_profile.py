@@ -131,8 +131,8 @@ class RouteDbTest(unittest.TestCase):
     def live(self, pieces, age, kmh, u=1, v=2, now=None):
         now = now or at(0, 18, 10)
         for piece in range(pieces):
-            self.conn.execute("""INSERT INTO traffic_samples(u, v, kmh, weight, ts, piece, passed)
-                                 VALUES(?, ?, ?, 100, ?, ?, 1)""", (u, v, kmh, now - age, 100 + piece))
+            self.conn.execute("""INSERT INTO traffic_samples(u, v, kmh, weight, ts, piece, passed, src, gen)
+                                 VALUES(?, ?, ?, 100, ?, ?, 1, hex(randomblob(4)), 1)""", (u, v, kmh, now - age, 100 + piece))
         self.conn.commit()
 
     def test_evening_jam_is_written_at_18_10_and_not_at_3(self):

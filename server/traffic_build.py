@@ -9,18 +9,30 @@ traffic/now.json для телефонов.
   1. Новые куски (POST /api/traffic) сопоставляются с дорогами нашим OSRM
      (`match`, тот же граф, что строит маршруты). Ответ даёт по каждому
      отрезку пару узлов OSM и длину, а время между точками следа — из куска:
-     скорость = длина участка / время. Кусок удаляется сразу после
-     сопоставления: сырой след живёт минуты, дальше остаются только скорости
-     на рёбрах.
-  2. Текущая скорость ребра — взвешенная медиана за SAMPLE_WINDOW, и только
-     если её подтвердили MIN_PIECES разных кусков, прошедших ребро насквозь:
-     один водитель, вставший у обочины, пробку не рисует. «Насквозь» — не
-     ближе PIECE_END_GUARD к концам совпадения: соседние куски одной машины
-     стыкуются на одном ребре (следующий начинается со следующего фикса,
-     метрах в 10–15), и по одному лишь касанию эта машина сама с собой
-     набирала бы «два куска» на стыке, а машина, стоящая на месте, — на
-     своём ребре каждые 8–10 минут. Скорость участков у концов в медиану
-     идёт как обычно; не в счёт они только как свидетели.
+     каждому отрезку ребра достаётся его доля времени участка, а стояние
+     (участок без пути) — целиком ребру, на котором стоим. Кусок удаляется
+     сразу после сопоставления: сырой след живёт минуты, дальше остаются
+     только длины и секунды на рёбрах.
+  2. Текущая скорость ребра (этап 75). Скорость куска на ребре — путь /
+     время (сумма длин его отрезков на ребре / сумма их секунд): очередь у
+     светофора — это секунды, а не метры, и вес «в метрах» её терял. Голос
+     источника — медиана его кусков (не больше SOURCE_EDGE_PIECES самых
+     свежих), скорость ребра — медиана по источникам с весом
+     exp(−возраст/LIVE_TAU); при двух равных голосах — середина между ними,
+     а не меньший. Возраст — от времени приёма куска (received): абсолютного
+     времени телефон не шлёт, а приём — ближайшая к проезду метка, что есть.
+     Ребро идёт в выход, только если его насквозь прошли куски
+     MAP_MIN_SOURCES разных ИСТОЧНИКОВ и самый свежий не старше
+     LIVE_FRESH_AGE. Источник — метка из api.py: усечённый HMAC адреса с
+     солью, живущей в памяти api.py не дольше суток (ни адреса, ни
+     устройства в базе нет); одна машина, сколько бы кусков ни прислала, —
+     один свидетель. Метка лежит в строке куска и в образцах окна
+     (SAMPLE_WINDOW, дальше стирается) и не идёт ни в один файл наружу.
+     Куски без метки (до выкладки) — один общий источник; метки разных
+     солей между собой не сравнимы, и свидетели считаются внутри одной соли.
+     «Насквозь» — не ближе PIECE_END_GUARD к концам совпадения: соседние
+     куски одной машины стыкуются на одном ребре, и касание — не проезд.
+     «Красный» — только если медленно ехали JAM_MIN_SOURCES источников.
   3. Уровень — от отношения текущей скорости к скорости графа (car.lua) на
      этом ребре: свободно / медленно / пробка. Скорость графа есть с первого
      дня, поэтому холодного старта у «свободной скорости» нет; обычная
@@ -47,7 +59,7 @@ traffic/now.json для телефонов.
      восьми утра, сложенные в один файл, набирают порог впятеро быстрее, а
      дорога во вторник в 8:00 от среды в 8:00 не отличается. Ребро попадает
      в файл, только если его прошли не меньше TYPICAL_MIN_PIECES кусков в этот
-     час (эффективных, п. 6) И два куска прошли его вместе (в одном окне
+     час (эффективных, п. 6) И два источника прошли его вместе (в одном окне
      now.json) за последние SHARED_TTL: один
      человек, каждый будний день едущий в 8:00 по своей улице, набирает пять
      кусков за неделю — но не два одновременно, и его улица публичной не
@@ -88,7 +100,7 @@ traffic/now.json для телефонов.
      класс дня и час по нему проходит ≳ 0,7 куска в неделю (5 · ln 2 / 5 нед.).
 
      Отметка «не один человек» (traffic_shared) тоже стареет: ребро идёт в
-     файл, только если два куска прошли его вместе за последние SHARED_TTL
+     файл, только если два источника прошли его вместе за последние SHARED_TTL
      (= полураспад — тот срок, за который набирается половина веса
      публикуемого числа). Вечная отметка вместе со старением профиля
      ослабила бы защиту: улица, по которой когда-то раз проехали двое, а
@@ -133,7 +145,8 @@ CELL_LIMIT = 2               # кусков на ячейку, направле�
 SEEN_TTL = 30 * 60           # отпечатки повторов: как TRAFFIC_SEEN_TTL в api.py
 SAMPLE_WINDOW = 15 * 60      # «текущая» скорость — за последние 15 минут
 SAMPLE_KEEP = 60 * 60        # сырые скорости рёбер хранятся час
-MIN_PIECES = 2               # независимых кусков на ребро, чтобы показать его
+MIN_SOURCES = tc.MAP_MIN_SOURCES   # разных источников на ребро, чтобы показать его
+MIN_PIECES = MIN_SOURCES     # прежнее имя
 MIN_CONFIDENCE = 0.1         # совпадение OSRM ниже — кусок не про дорогу
 MATCH_RADIUS = 25            # метров: GPS в городе + ширина проспекта
 PIECE_END_GUARD = MATCH_RADIUS   # метров у концов совпадения: ребро задето, а не пройдено
@@ -168,6 +181,10 @@ def schema(conn):
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         received REAL NOT NULL,
         points TEXT NOT NULL)""")
+    # Метка источника и поколение её соли (п. 2 шапки); пишет api.py. Строки
+    # до выкладки — без метки: один общий источник.
+    add_column(conn, "traffic_pieces", "src", "TEXT NOT NULL DEFAULT ''")
+    add_column(conn, "traffic_pieces", "gen", "INTEGER NOT NULL DEFAULT 0")
     conn.execute("""CREATE TABLE IF NOT EXISTS traffic_cell_load(
         la INTEGER NOT NULL, lo INTEGER NOT NULL, sector INTEGER NOT NULL,
         bucket INTEGER NOT NULL, n INTEGER NOT NULL,
@@ -181,6 +198,11 @@ def schema(conn):
     # получают 0: свидетелями не считаются, а живут они час (SAMPLE_KEEP), и
     # now.json первые 15 минут после выкладки строится только из новых.
     add_column(conn, "traffic_samples", "passed", "INTEGER NOT NULL DEFAULT 0")
+    # secs — секунды куска на этом отрезке (0 у строк до выкладки: время
+    # выводится из kmh и weight); src, gen — метка источника, живёт окно.
+    add_column(conn, "traffic_samples", "secs", "REAL NOT NULL DEFAULT 0")
+    add_column(conn, "traffic_samples", "src", "TEXT NOT NULL DEFAULT ''")
+    add_column(conn, "traffic_samples", "gen", "INTEGER NOT NULL DEFAULT 0")
     conn.execute("CREATE INDEX IF NOT EXISTS traffic_samples_ts ON traffic_samples(ts)")
     conn.execute("""CREATE TABLE IF NOT EXISTS traffic_nodes(
         id INTEGER PRIMARY KEY, lat REAL NOT NULL, lon REAL NOT NULL)""")
@@ -199,7 +221,7 @@ def schema(conn):
     # масштабе метки profile_epoch (п. 6 шапки), а не целые счётчики.
     add_column(conn, "traffic_profile", "pieces", "INTEGER NOT NULL DEFAULT 0")
     add_column(conn, "traffic_profile", "sum_pace", "REAL NOT NULL DEFAULT 0")
-    # Рёбра, которые два куска прошли в одном окне now.json — то есть не
+    # Рёбра, которые два источника прошли в одном окне now.json — то есть не
     # один человек; seen — когда это было в последний раз (живёт SHARED_TTL).
     # Отметки 8.8.16 без времени получают 0 — просрочены: их возраст
     # неизвестен, а улица с настоящим движением подтвердится в первом же
@@ -262,11 +284,13 @@ def edges_from_match(response, points):
     """Скорости по рёбрам из ответа OSRM.
 
     Возвращает (samples, nodes, models):
-      samples — [(u, v, kmh, weight_m, passed)], скорость участка между
+      samples — [(u, v, kmh, weight_m, passed, secs)], скорость участка между
                 соседними точками следа на каждом ребре этого участка, вес —
                 длина отрезка ребра внутри участка, passed — отрезок не
                 ближе PIECE_END_GUARD к концам совпадения (кусок прошёл это
-                ребро, а не начался или кончился на нём);
+                ребро, а не начался или кончился на нём), secs — доля
+                времени участка на этом отрезке; стояние (участок без пути)
+                — отрезок нулевой длины со всем временем участка;
       nodes   — {id: (lat, lon)} узлов, чьё положение видно в геометрии;
       models  — {(u, v): kmh} скорость графа на ребре (длина / время OSRM).
 
@@ -311,8 +335,14 @@ def edges_from_match(response, points):
             a, b = ends[k][1], ends[k + 1][1]
             dt = points[b][2] - points[a][2]
             length = leg.get("distance") or 0
+            covered = leg_length(leg)
             if dt <= 0:
-                along += leg_length(leg)
+                along += covered
+                continue
+            if covered <= 0:
+                # Стоим: время есть, пути нет. Свидетелем такой отрезок не
+                # считается — только добавляет секунды своему ребру.
+                samples.append((ids[0], ids[1], 0.0, 0.0, False, float(dt)))
                 continue
             kmh = min(MAX_KMH, length / dt * 3.6)
             for j in range(m):
@@ -321,7 +351,9 @@ def edges_from_match(response, points):
                 start, along = along, along + dist[j]
                 passed = start >= PIECE_END_GUARD and along <= total - PIECE_END_GUARD
                 edge = (ids[j], ids[j + 1])
-                samples.append((edge[0], edge[1], kmh, dist[j], passed))
+                # Не быстрее MAX_KMH: скачок GPS не делает секунды нулевыми.
+                secs = max(dt * dist[j] / covered, dist[j] * 3.6 / MAX_KMH)
+                samples.append((edge[0], edge[1], kmh, dist[j], passed, secs))
                 if j < len(dur) and dur[j] > 0:
                     models[edge] = dist[j] / dur[j] * 3.6
     return samples, nodes, models
@@ -614,21 +646,27 @@ def decay_scale(epoch, now):
     return 2.0 ** ((now - epoch) / PROFILE_HALF_LIFE)
 
 
-def store(conn, piece_id, samples, nodes, models, now, turns=()):
+def store(conn, piece_id, samples, nodes, models, now, turns=(), seen=None, source=("", 0)):
+    """`seen` — оценка времени проезда (received куска, не позже `now`): по
+    ней стареют образцы окна; `source` — (метка, поколение соли) из api.py."""
+    seen = now if seen is None else min(seen, now)
     how = profile_slot(now)
     weight = decay_scale(profile_epoch(conn, now), now)
     # 33A: кусок — одно наблюдение слота на каждом ребре, которое прошёл
-    # насквозь (темп по длине своих отрезков, как piece_profile).
-    passed = [sample for sample in samples if sample[4]]
+    # насквозь: темп по всем своим отрезкам на нём, стояние в счёт — та же
+    # скорость куска, что в живом слое (live_speeds).
+    through = {sample[:2] for sample in samples if sample[4]}
+    passed = [sample for sample in samples if sample[:2] in through]
     slot, day = week_slot(now), day_number(now)
     conn.executemany("INSERT INTO traffic_slot_obs(u, v, slot, day, kmh) VALUES(?, ?, ?, ?, ?)",
                      [(u, v, slot, day, min(MAX_KMH, 3600.0 / pace))
                       for (u, v), (_c, _t, pace) in sorted(piece_profile(passed).items())])
     conn.executemany("INSERT INTO traffic_turn_obs(u, v, w, slot, day, delay, angle) VALUES(?, ?, ?, ?, ?, ?, ?)",
                      [(u, v, w, slot, day, delay, angle) for u, v, w, delay, angle in turns])
-    conn.executemany("""INSERT INTO traffic_samples(u, v, kmh, weight, ts, piece, passed)
-                        VALUES(?, ?, ?, ?, ?, ?, ?)""",
-                     [(u, v, kmh, w, now, piece_id, int(passed)) for u, v, kmh, w, passed in samples])
+    conn.executemany("""INSERT INTO traffic_samples(u, v, kmh, weight, ts, piece, passed, secs, src, gen)
+                        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                     [(u, v, kmh, w, seen, piece_id, int(passed), sample_seconds(kmh, w, *rest), *source)
+                      for u, v, kmh, w, passed, *rest in samples])
     conn.executemany("INSERT OR REPLACE INTO traffic_nodes(id, lat, lon) VALUES(?, ?, ?)",
                      [(i, lat, lon) for i, (lat, lon) in nodes.items()])
     conn.executemany("INSERT OR REPLACE INTO traffic_edges(u, v, model_kmh) VALUES(?, ?, ?)",
@@ -646,18 +684,37 @@ def store(conn, piece_id, samples, nodes, models, now, turns=()):
                       for (u, v), (count, total, pace) in piece_profile(samples).items()])
 
 
+def sample_seconds(kmh, weight, secs=0.0):
+    """Секунды отрезка: свои, а у строки без них (до этапа 75) — из скорости
+    и длины. Путь есть, а скорости нет — «стоим»: бесконечность."""
+    if secs > 0:
+        return secs
+    if weight <= 0:
+        return 0.0
+    return weight * 3.6 / kmh if kmh > 0 else math.inf
+
+
+def pace_kmh(length, secs):
+    """Скорость куска на ребре — путь / время, в [PACE_MIN_KMH, MAX_KMH]; одно
+    правило для живого слоя и профиля часа. Ни пути, ни времени — None."""
+    if secs <= 0:
+        return MAX_KMH if length > 0 else None
+    return min(MAX_KMH, max(PACE_MIN_KMH, length / secs * 3.6))
+
+
 def piece_profile(samples):
     """Один кусок — одно наблюдение ребра: {(u, v): (отрезков, сумма км/ч,
-    темп с/км)}. Темп — взвешенный по длине отрезков внутри куска."""
+    темп с/км)}. Темп — время куска на ребре на его путь (pace_kmh): стояние
+    входит секундами, а не метрами."""
     acc = {}
-    for u, v, kmh, weight, _ in samples:
+    for u, v, kmh, weight, _passed, *rest in samples:
         entry = acc.setdefault((u, v), [0, 0.0, 0.0, 0.0])
         entry[0] += 1
         entry[1] += kmh
         entry[2] += weight
-        entry[3] += weight * 3600.0 / max(PACE_MIN_KMH, kmh)
-    return {edge: (count, total, paced / length if length > 0 else 3600.0 / PACE_MIN_KMH)
-            for edge, (count, total, length, paced) in acc.items()}
+        entry[3] += sample_seconds(kmh, weight, *rest)
+    return {edge: (count, total, 3600.0 / (pace_kmh(length, secs) or PACE_MIN_KMH))
+            for edge, (count, total, length, secs) in acc.items()}
 
 
 def match_or_none(matcher, points):
@@ -699,27 +756,28 @@ def process(conn, now, matcher=osrm_match, budget=RUN_BUDGET, clock=time.monoton
     done = matched = skipped = 0
     with ThreadPoolExecutor(MATCH_WORKERS) as pool:
         while clock() < deadline:
-            rows = conn.execute("SELECT id, received, points FROM traffic_pieces ORDER BY id DESC LIMIT ?",
-                                (MATCH_WORKERS,)).fetchall()
+            rows = conn.execute("""SELECT id, received, points, src, gen FROM traffic_pieces
+                                   ORDER BY id DESC LIMIT ?""", (MATCH_WORKERS,)).fetchall()
             if not rows:
                 break
             batch, planned = [], {}
-            for piece_id, received, raw in rows:
+            for piece_id, received, raw, src, gen in rows:
                 points = json.loads(raw)
                 key = piece_cell(points, received)
                 if saturating and cell_count(conn, key) + planned.get(key, 0) >= CELL_LIMIT:
                     conn.execute("DELETE FROM traffic_pieces WHERE id = ?", (piece_id,))
                     skipped += 1
                 else:
-                    batch.append((piece_id, points, key))
+                    batch.append((piece_id, points, key, received, (src or "", gen or 0)))
                     planned[key] = planned.get(key, 0) + 1
             conn.commit()
             responses = list(pool.map(lambda item: match_or_none(matcher, item[1]), batch))
-            for (piece_id, points, key), response in zip(batch, responses):
+            for (piece_id, points, key, received, source), response in zip(batch, responses):
                 if response is None:
                     continue
                 samples, nodes, models = edges_from_match(response, points)
-                store(conn, piece_id, samples, nodes, models, now, turns_from_match(response, points))
+                store(conn, piece_id, samples, nodes, models, now, turns_from_match(response, points),
+                      seen=received, source=source)
                 conn.execute("DELETE FROM traffic_pieces WHERE id = ?", (piece_id,))
                 if saturating:
                     count_cell(conn, key)
@@ -746,6 +804,9 @@ def prune(conn, now):
     except sqlite3.OperationalError:
         pass
     conn.execute("DELETE FROM traffic_samples WHERE ts < ?", (now - SAMPLE_KEEP,))
+    # Метка источника живёт окно: дальше образец нужен только счётчикам панели.
+    conn.execute("UPDATE traffic_samples SET src = '', gen = 0 WHERE ts < ? AND (src != '' OR gen != 0)",
+                 (now - SAMPLE_WINDOW,))
     conn.execute("DELETE FROM traffic_cell_load WHERE bucket < ?", (int((now - PIECE_TTL) // CELL_BUCKET),))
     conn.commit()
 
@@ -753,15 +814,19 @@ def prune(conn, now):
 # --- Агрегация и выход --------------------------------------------------------
 
 def weighted_median(pairs):
-    """Медиана значений с весами: [(value, weight)]."""
-    pairs = sorted(pairs)
+    """Медиана значений с весами: [(value, weight)]. Ровно половина веса по
+    обе стороны (два равных свидетеля) — середина между соседями, а не
+    меньший: одно притормозившее такси не делает улицу медленной."""
+    pairs = sorted(pair for pair in pairs if pair[1] > 0)
     total = sum(w for _, w in pairs)
     if total <= 0:
         return None
-    acc = 0.0
-    for value, weight in pairs:
+    half, acc = total / 2, 0.0
+    for index, (value, weight) in enumerate(pairs):
         acc += weight
-        if acc >= total / 2:
+        if abs(acc - half) <= 1e-9 * total and index + 1 < len(pairs):
+            return (value + pairs[index + 1][0]) / 2
+        if acc > half:
             return value
     return pairs[-1][0]
 
@@ -778,35 +843,69 @@ def level(kmh, model_kmh):
     return 1
 
 
+def freshness(age):
+    """Вес образца по возрасту: exp(−возраст/LIVE_TAU)."""
+    return math.exp(-max(0.0, age) / tc.LIVE_TAU)
+
+
+def live_speeds(conn, now, window=SAMPLE_WINDOW):
+    """Живые рёбра окна (п. 2 шапки): {(u, v): (км/ч, источников, возраст
+    свежего свидетеля, [голоса источников км/ч])}. Одно правило для
+    now.json, пути (traffic_profile) и отметки «не один человек». В счёт
+    идут только куски, прошедшие ребро насквозь."""
+    rows = conn.execute("""SELECT u, v, src, gen, MAX(ts), SUM(weight), MAX(passed),
+                                  SUM(CASE WHEN secs > 0 THEN secs
+                                           WHEN kmh > 0 THEN weight * 3.6 / kmh
+                                           ELSE weight * ? END)
+                           FROM traffic_samples WHERE ts >= ?
+                           GROUP BY u, v, piece""", (3.6 / PACE_MIN_KMH, now - window))
+    grouped = {}
+    for u, v, src, gen, ts, length, passed, secs in rows:
+        kmh = pace_kmh(length, secs)
+        if passed and kmh is not None:
+            grouped.setdefault((u, v), {}).setdefault((gen, src), []).append((ts, kmh))
+    out = {}
+    for edge, sources in grouped.items():
+        votes, fresh, per_salt = [], None, {}
+        for (gen, _src), pieces in sources.items():
+            kept = sorted(pieces, reverse=True)[:tc.SOURCE_EDGE_PIECES]
+            vote = weighted_median([(kmh, freshness(now - ts)) for ts, kmh in kept])
+            votes.append((vote, freshness(now - kept[0][0])))
+            fresh = kept[0][0] if fresh is None else max(fresh, kept[0][0])
+            per_salt[gen] = per_salt.get(gen, 0) + 1
+        # Метки разных солей не сравнимы: тот же адрес после смены соли —
+        # другая метка. Свидетелей — сколько набралось внутри одной соли.
+        out[edge] = (weighted_median(votes), max(per_salt.values()), max(0.0, now - fresh),
+                     sorted(vote for vote, _ in votes))
+    return out
+
+
+def jam_level(kmh, votes, model_kmh):
+    """Уровень ребра; «красный» — только если медленно (ниже SLOW_RATIO
+    графа) ехали JAM_MIN_SOURCES источников, иначе не выше «медленно»."""
+    lvl = level(kmh, model_kmh)
+    if lvl == 3 and sum(vote < SLOW_RATIO * model_kmh for vote in votes) < tc.JAM_MIN_SOURCES:
+        return 2
+    return lvl
+
+
 def live_edges(conn, now):
     """Подтверждённые рёбра окна now.json с id узлов OSM:
     [(u, v, ulat, ulon, vlat, vlon, level, kmh, model_kmh)]. Одно правило для
     now.json, файла скоростей OSRM (traffic_speeds.py) и плотности в панели."""
-    rows = conn.execute("""SELECT s.u, s.v, s.kmh, s.weight, s.piece, s.passed, e.model_kmh,
-                                  a.lat, a.lon, b.lat, b.lon
-                           FROM traffic_samples s
-                           JOIN traffic_edges e ON e.u = s.u AND e.v = s.v
-                           JOIN traffic_nodes a ON a.id = s.u
-                           JOIN traffic_nodes b ON b.id = s.v
-                           WHERE s.ts >= ?""", (now - SAMPLE_WINDOW,))
-    grouped = {}
-    for u, v, kmh, weight, piece, passed, model, alat, alon, blat, blon in rows:
-        entry = grouped.setdefault((u, v), {"pairs": [], "pieces": set(), "model": model,
-                                            "coords": (alat, alon, blat, blon)})
-        entry["pairs"].append((kmh, weight))
-        # Свидетель — только кусок, прошедший ребро насквозь (п. 2 шапки).
-        if passed:
-            entry["pieces"].add(piece)
+    known = {(u, v): rest for u, v, *rest in conn.execute(
+        """SELECT e.u, e.v, e.model_kmh, a.lat, a.lon, b.lat, b.lon FROM traffic_edges e
+           JOIN traffic_nodes a ON a.id = e.u JOIN traffic_nodes b ON b.id = e.v""")}
     out = []
-    for (u, v), entry in grouped.items():
+    for edge, (kmh, sources, age, votes) in live_speeds(conn, now).items():
         # Порог карты (33F) — свой, отдельно от порога пути (traffic_profile).
-        if len(entry["pieces"]) < tc.MAP_MIN_PIECES:
+        if edge not in known or sources < tc.MAP_MIN_SOURCES or age > tc.LIVE_FRESH_AGE:
             continue
-        kmh = weighted_median(entry["pairs"])
-        lvl = level(kmh, entry["model"]) if kmh is not None else None
+        model, *coords = known[edge]
+        lvl = jam_level(kmh, votes, model)
         if lvl is None:
             continue
-        out.append((u, v) + entry["coords"] + (lvl, kmh, entry["model"]))
+        out.append(edge + tuple(coords) + (lvl, kmh, model))
     return sorted(out)
 
 
@@ -816,20 +915,19 @@ def aggregate(conn, now):
 
 
 def mark_shared(conn, now):
-    """Отметить временем `now` рёбра, которые сейчас прошли два независимых
-    куска (то же правило, что у now.json). Отметка живёт SHARED_TTL: «здесь
+    """Отметить временем `now` рёбра, которые сейчас прошли два разных
+    источника (то же правило, что у now.json). Отметка живёт SHARED_TTL: «здесь
     ездит не один человек» — правда о недавнем, а не навсегда (п. 6 шапки)."""
-    conn.execute("""INSERT INTO traffic_shared(u, v, seen)
-                    SELECT u, v, ? FROM traffic_samples WHERE ts >= ? AND passed = 1
-                    GROUP BY u, v HAVING COUNT(DISTINCT piece) >= ?
-                    ON CONFLICT(u, v) DO UPDATE SET seen = MAX(seen, excluded.seen)""",
-                 (now, now - SAMPLE_WINDOW, MIN_PIECES))
+    conn.executemany("""INSERT INTO traffic_shared(u, v, seen) VALUES(?, ?, ?)
+                        ON CONFLICT(u, v) DO UPDATE SET seen = MAX(seen, excluded.seen)""",
+                     [(u, v, now) for (u, v), (_kmh, sources, _age, _votes)
+                      in sorted(live_speeds(conn, now).items()) if sources >= MIN_SOURCES])
     conn.commit()
 
 
 # --- Плотность данных (27.E) ----------------------------------------------------
 #
-# Слой пробок честен ребро за ребром (MIN_PIECES свидетелей за SAMPLE_WINDOW),
+# Слой пробок честен ребро за ребром (MIN_SOURCES свидетелей за SAMPLE_WINDOW),
 # но «на карте нет красного» значит «свободно» только там, где ездят многие:
 # набор несёт одни медленные рёбра, и пустой город неотличим от свободного.
 # Панель (admin.py, «Пробки») показывает по городам, сколько данных пришло за
@@ -838,7 +936,7 @@ def mark_shared(conn, now):
 #
 # CITY_READY_PIECES_PER_HOUR — порог «город готов»: 60 кусков по ~1 км в час —
 # это ~15 кусков в каждом 15-минутном окне, примерно три машины, всё время
-# едущие по городу. Меньше — подтверждённое ребро редкость (два куска на одном
+# едущие по городу. Меньше — подтверждённое ребро редкость (два источника на одном
 # ребре за 15 минут), и отсутствие пробки ничего не говорит. Порог — для
 # людей и решений, телефоны его не видят: слой и ETA по-прежнему решают
 # ребро за ребром, и ни одно ребро без двух свидетелей не публикуется.
@@ -1084,8 +1182,9 @@ def write_gzip_copy(path, body):
 
 
 # Показ пробки для проверки владельцем (27.10): пока файл есть и не истёк,
-# его рёбра добавляются в now.json поверх настоящих. Срок вшит в сам файл —
-# забытый показ гаснет сам; откат раньше срока — удалить файл. Файл скоростей
+# его рёбра добавляются в now.json поверх настоящих. Срок вшит в сам файл и
+# обязателен, а сверху ограничен DEMO_MAX_SECONDS от записи файла — забытый
+# показ гаснет сам, какой бы срок в нём ни стоял; откат раньше — удалить файл. Файл скоростей
 # маршрутизатора он не трогает: только показ, ETA и «Впереди пробка».
 DEMO_PATH = "/opt/radarmap/api/traffic_demo.json"
 
@@ -1095,15 +1194,20 @@ def demo_edges(now, path=DEMO_PATH):
     try:
         with open(path, encoding="utf-8") as f:
             demo = json.load(f)
+        written = os.path.getmtime(path)
     except FileNotFoundError:
         return []
     except (OSError, ValueError) as error:
         print(f"показ пробки: файл не читается — {error}", file=sys.stderr)
         return []
-    if not isinstance(demo, dict) or float(demo.get("expires", 0)) <= now:
+    expires = demo.get("expires") if isinstance(demo, dict) else None
+    if isinstance(expires, bool) or not isinstance(expires, (int, float)) or not math.isfinite(expires):
         return []
+    if now >= min(expires, written + tc.DEMO_MAX_SECONDS):
+        return []
+    edges = demo.get("edges")
     out = []
-    for e in demo.get("edges", []):
+    for e in edges if isinstance(edges, list) else []:
         if (isinstance(e, list) and len(e) == 7 and e[4] in (1, 2, 3)
                 and all(isinstance(x, (int, float)) for x in e)):
             out.append(tuple(e))

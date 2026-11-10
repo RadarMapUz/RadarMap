@@ -849,10 +849,16 @@ def traffic_counts(path, now):
     try:
         out["pieces"] = conn.execute("SELECT COUNT(DISTINCT piece) FROM traffic_samples WHERE ts >= ?",
                                      (now - 3600,)).fetchone()[0]
+        # Свидетели — разные источники (этап 75); сборщик до него — куски.
+        try:
+            conn.execute("SELECT src, gen FROM traffic_samples LIMIT 0")
+            witness = "gen || ':' || src"
+        except sqlite3.OperationalError:
+            witness = "piece"
         for key, minimum in (("map", TRAFFIC_MAP_MIN), ("route", TRAFFIC_ROUTE_MIN)):
             out[key] = conn.execute(
                 "SELECT COUNT(*) FROM (SELECT 1 FROM traffic_samples WHERE ts >= ? AND passed = 1 "
-                "GROUP BY u, v HAVING COUNT(DISTINCT piece) >= ?)", (now - 900, minimum)).fetchone()[0]
+                f"GROUP BY u, v HAVING COUNT(DISTINCT {witness}) >= ?)", (now - 900, minimum)).fetchone()[0]
         local = time.gmtime(now + 5 * 3600)
         slot = local.tm_wday * 24 + local.tm_hour
         day = int((now + 5 * 3600) // DAY)

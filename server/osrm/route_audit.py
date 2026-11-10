@@ -131,6 +131,10 @@ def cmd_index(args):
         def relation(self, r):
             if r.tags.get("type") != "restriction":
                 return
+            # except=motorcar — запрет не для легковых, OSRM его не применяет
+            if any(v in ("motorcar", "motor_vehicle", "vehicle")
+                   for v in r.tags.get("except", "").replace(" ", "").split(";")):
+                return
             kind = r.tags.get("restriction") or r.tags.get("restriction:motorcar") or ""
             members = {"from": [], "via": [], "to": []}
             for m in r.members:

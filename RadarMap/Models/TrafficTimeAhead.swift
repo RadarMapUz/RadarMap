@@ -90,7 +90,7 @@ nonisolated enum TrafficTimeAhead {
         }
 
         var total: TimeInterval = 0, liveTotal: TimeInterval = 0
-        var travelled = 0.0
+        var travelled = 0.0, liveSpan = 0.0, liveMeasured = 0.0
         var usedLive = false, usedTypical = false
         for (b, box) in boxes.enumerated() {
             // Кусок маршрута в 32 отрезка, в рамке которого нет ни рёбер
@@ -103,7 +103,7 @@ nonisolated enum TrafficTimeAhead {
             let profileBlock = profileFile?.snapshot.mayCover(minLat: box.minLat, minLon: box.minLon,
                                                               maxLat: box.maxLat, maxLon: box.maxLon) ?? false
             if !liveBlock && !profileBlock {
-                if liveSnapshot != nil && blockStart <= liveUntil { usedLive = true }
+                if liveSnapshot != nil && blockStart <= liveUntil { usedLive = true; liveSpan += box.length }
                 if profileFile != nil { usedTypical = true }
                 travelled += box.length
                 continue
@@ -120,7 +120,7 @@ nonisolated enum TrafficTimeAhead {
                 let liveEdges = inHorizon ? liveSnapshot!.candidates(p, q, course: course) : []
                 let profileEdges = profileFile?.snapshot.candidates(p, q, course: course) ?? []
                 if liveEdges.isEmpty && profileEdges.isEmpty {
-                    if inHorizon { usedLive = true } else if profileFile != nil { usedTypical = true }
+                    if inHorizon { usedLive = true; liveSpan += segment } else if profileFile != nil { usedTypical = true }
                     travelled += segment
                     continue
                 }
@@ -132,9 +132,11 @@ nonisolated enum TrafficTimeAhead {
                                                        longitude: p.longitude + (q.longitude - p.longitude) * t)
                     let moment = departure.addingTimeInterval((travelled + step / 2) * pace + total)
                     travelled += step
+                    if liveSnapshot != nil, moment <= liveUntil { liveSpan += step }
                     if let liveSnapshot, moment <= liveUntil,
                        let index = liveSnapshot.matchingIndex(at: point, among: liveEdges) {
                         usedLive = true
+                        liveMeasured += step
                         let edge = liveSnapshot.edges[index]
                         if edge.level >= 2, edge.modelKmh > 0 {
                             let delay = max(0, step / (max(3, edge.kmh) / 3.6) - step / (edge.modelKmh / 3.6))
@@ -152,10 +154,12 @@ nonisolated enum TrafficTimeAhead {
                 }
             }
         }
+        let measured = TrafficForecast.share(measured: liveMeasured, of: liveSpan)
         switch (usedLive, usedTypical) {
-        case (true, true):  return TrafficForecast.Delay(seconds: total, source: .mixed, liveSeconds: liveTotal)
-        case (true, false): return TrafficForecast.Delay(seconds: total, source: .live)
-        case (false, true): return TrafficForecast.Delay(seconds: total, source: .typical)
+        case (true, true):  return TrafficForecast.Delay(seconds: total, source: .mixed, liveSeconds: liveTotal,
+                                                         liveMeasuredShare: measured)
+        case (true, false): return TrafficForecast.Delay(seconds: total, source: .live, liveMeasuredShare: measured)
+        case (false, true): return TrafficForecast.Delay(seconds: total, source: .typical, liveMeasuredShare: measured)
         case (false, false): return nil
         }
     }

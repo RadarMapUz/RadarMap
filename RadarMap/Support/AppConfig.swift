@@ -970,6 +970,11 @@ nonisolated enum AppConfig {
     /// (красный).
     static let routeTrafficNoticeSeconds: TimeInterval = 3 * 60
     static let routeTrafficHeavySeconds: TimeInterval = 12 * 60
+    /// «Без пробок» (задержка меньше этого) — только когда измеренные рёбра
+    /// свежего now.json покрыли не меньше этой доли пути в живом горизонте;
+    /// иначе «нет данных»: слой толпы покрывает не каждую улицу (77).
+    nonisolated static let trafficFreeClaimSeconds: TimeInterval = 60
+    nonisolated static let trafficFreeMinMeasuredShare = 0.5
 
     // MARK: - Дорога на работу и домой (Commute)
 
@@ -1593,6 +1598,11 @@ nonisolated enum AppConfig {
     /// и получает отказ.
     static let reportCancelWindow: TimeInterval = 10 * 60
 
+    /// Треногу прицелом — не дальше этого от себя: столько уходит на то, чтобы
+    /// встать на обочине трассы за минуту после проезда. Сервер дальность не
+    /// проверяет (не знает, где телефон), и дальше — это уже отметка «с дивана».
+    nonisolated static let addTripodMaxDistanceMeters: CLLocationDistance = 1500
+
     // MARK: - Отметка: выбор типа и «Отменить» (вариант B, 02.11)
 
     /// Отсчёт выбора после «Отметить»: молчание столько секунд — тренога.
@@ -1853,6 +1863,12 @@ nonisolated enum AppConfig {
     static let rerouteBearingRadiusMeters = 35
     /// Радиус прибытия: ближе этого до финиша — маршрут выполнен.
     static let arrivalRadiusMeters: CLLocationDistance = 60
+    /// …и по линии до цели не больше этого: на встречной стороне проспекта
+    /// цель в 30 м по прямой, а по линии — до разворота и обратно. Двор или
+    /// объезд дома в радиусе 60 м — до 250 м линии; ближайший разворот
+    /// (от 200 м) — 400 м и больше. Мимо линии (дальше `rerouteDriftMeters`)
+    /// остаток не спрашиваем (ArrivalReached).
+    static let arrivalNearRemainingMeters: CLLocationDistance = 350
     /// «Проехали финиш по линии»: осталось меньше этого по маршруту И до
     /// цели не дальше `arrivalPassedRadiusMeters` — парковка чуть в стороне,
     /// фикс не попал в малый радиус, а маршрут выполнен.
@@ -1891,11 +1907,31 @@ nonisolated enum AppConfig {
     /// Манёвр «впереди», если до него больше этого: иначе на самом повороте
     /// баннер перескакивал бы на следующий раньше, чем машина повернула.
     static let maneuverAheadSlackMeters: CLLocationDistance = 15
+    /// Манёвр привязывается к вершине линии не дальше этого от ожидаемого
+    /// места (сумма длин шагов): 120 м или 2 % длины предыдущего шага —
+    /// мерки OSRM и линии расходятся на доли процента (ManeuverAnchor).
+    static let maneuverAnchorSlackMeters: CLLocationDistance = 120
+    static let maneuverAnchorSlackShare = 0.02
     /// Камера маршрута остаётся «следующей», пока не отстала на столько:
     /// фикс у самой камеры может лечь на пару десятков метров за ней.
     static let routeCameraBehindSlackMeters: CLLocationDistance = 30
     /// Таймаут запроса к своему OSRM: дольше — «сервер недоступен».
     static let osrmTimeoutSeconds: TimeInterval = 12
+    /// Сколько от начала построения ждать Apple, когда свой OSRM уже ответил
+    /// (RouteRace): внутри Узбекистана Apple не строит, и готовый маршрут не
+    /// должен стоять за его отказом.
+    static let appleRouteWaitSeconds: TimeInterval = 2.5
+    /// Тип поворота шага Apple (AppleTurn): курс по стольким метрам линии
+    /// до манёвра и после — излом последнего метра не решает за перекрёсток.
+    static let appleTurnProbeMeters: CLLocationDistance = 25
+    /// Линия короче этого — угол не судим, стрелка «прямо».
+    static let appleTurnMinProbeMeters: CLLocationDistance = 5
+    /// Границы угла поворота, °: меньше первой — прямо, дальше — плавно,
+    /// поворот, круто, разворот.
+    static let appleTurnStraightDegrees = 20.0
+    static let appleTurnSlightDegrees = 45.0
+    static let appleTurnSharpDegrees = 135.0
+    static let appleTurnUturnDegrees = 165.0
     /// Ближе этого — та же цель: второе касание не второе построение.
     nonisolated static let routeBuildSameTargetMeters: Double = 30
     /// Дольше этого индикатор говорит, что сеть медленная.
@@ -2375,11 +2411,21 @@ nonisolated enum AppConfig {
 
     // MARK: - «Впереди пробка» без маршрута (JamAhead)
 
-    /// Где искать: от 30 м до 1,5 км по ходу, в коридоре 25 м + 5 % дальности.
-    static let jamMinAheadMeters: Double = 30
+    /// Где искать: до 1,5 км вперёд по цепочке рёбер от своего ребра.
     static let jamLookAheadMeters: Double = 1_500
-    static let jamCorridorMeters: Double = 25
-    static let jamCorridorSlope = 0.05
+    /// Своё ребро — ближе этого к машине: сырой фикс в крайней полосе
+    /// проспекта лежит в 10–15 м от оси плюс погрешность GPS; дальше — уже
+    /// дублёр или соседняя улица.
+    nonisolated static let jamOwnEdgeMeters: Double = 25
+    /// Разрыв внутри пробки (свободное или никем не измеренное ребро между
+    /// медленными), который ещё одна пробка: перекрёсток с примыканиями —
+    /// 100–150 м. Больше — пробка кончилась.
+    nonisolated static let jamGapMeters: Double = 150
+    /// Ребро за дырой в наблюдениях — не дальше этого в сторону от оси
+    /// (дублёр идёт в 15–30 м).
+    nonisolated static let jamGapSideMeters: Double = 12
+    /// На развилке продолжение «прямо» — отклонение не больше этого.
+    nonisolated static let jamMaxTurnDegrees: Double = 45
     /// Пробка — не короче 300 м и не меньше минуты задержки; говорим, когда
     /// до её начала не больше километра.
     static let jamMinLengthMeters: Double = 300
@@ -3115,6 +3161,10 @@ nonisolated enum AppConfig {
     static let trafficBatchPieces = 12
     /// Аудиосессия отпускается через столько после фразы — музыка возвращается.
     static let audioReleaseDelaySeconds: TimeInterval = 0.4
+    /// Пример оповещения (онбординг, настройки) закрывается сам через столько.
+    static let alertSampleSeconds: TimeInterval = 6
+    /// Второе нажатие «пример» в этот зазор молчит: сессия ещё активируется.
+    static let alertSampleRepeatGuardSeconds: TimeInterval = 1.5
     /// Шаг дистанции на часах вдали от камеры и вблизи (зона — как у Live Activity).
     static let watchDistanceStepFar = 100.0
     static let watchDistanceStepNear = 25.0

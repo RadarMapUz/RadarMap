@@ -45,10 +45,10 @@ nonisolated enum Drive3D {
         let edgeOpacity: Double
     }
 
-    /// День: насыщенный синий, разметка на нём 5,8:1; кант белый.
-    static let day = Ribbon(fill: 0x0A5FD8, edge: 0xFFFFFF, edgeOpacity: 0.7)
-    /// Ночь: насыщенный синий без засветки (светлота 0,13); кант еле заметный.
-    static let night = Ribbon(fill: 0x2B63C0, edge: 0x9CC3FF, edgeOpacity: 0.3)
+    /// День: синий маршрута (`RouteColors.body`), разметка на нём 5,7:1; кант белый.
+    static let day = Ribbon(fill: RouteColors.body.day, edge: 0xFFFFFF, edgeOpacity: 0.7)
+    /// Ночь: синяя заливка `accentFill` без засветки, разметка 4:1; кант еле заметный.
+    static let night = Ribbon(fill: WidgetPalette.accentFill.dark, edge: 0x9CC3FF, edgeOpacity: 0.3)
 
     static func ribbon(daylight: Bool) -> Ribbon { daylight ? day : night }
 

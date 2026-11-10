@@ -47,7 +47,7 @@ struct MapAttribution: View {
                 .accessibilityLabel(Text("Данные карты и лицензии"))
             }
             Text(verbatim: "© OpenMapTiles © OpenStreetMap")
-                .font(.rounded(10, .medium))
+                .font(.dense(10, .medium))
                 .foregroundStyle(Theme.textTertiary)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)

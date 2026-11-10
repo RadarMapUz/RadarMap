@@ -231,15 +231,7 @@ final class ReportFlow {
         draft.finished(delivered: outcome.isSuccess, serverID: serverID, queued: queued, now: Date())
         if let sent = draft.sent { armUndoTimer(sent.undoUntil) }
         Log.network.notice("отметка (\(touch.source.rawValue, privacy: .public)): \(kind.rawValue, privacy: .public) — \(outcome.isSuccess ? "ушла" : "нет", privacy: .public)")
-        if speak {
-            // Голос называет тип: «Тренога отмечена». Очередь и отказы —
-            // прежними фразами: там важнее, что делать дальше.
-            if case .sent(.created) = outcome {
-                alerts?.speak(ReportWords.marked(kind))
-            } else {
-                alerts?.speak(outcome.spoken)
-            }
-        }
+        if speak { alerts?.speak(outcome.spoken(for: kind)) }
         return outcome
     }
 

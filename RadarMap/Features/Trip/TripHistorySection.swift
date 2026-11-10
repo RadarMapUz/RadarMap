@@ -197,7 +197,7 @@ struct TripListRow: View {
                                 Formatting.points(worst.points), worst.place))
                         .font(.rounded(13, .medium))
                         .foregroundStyle(worst.edge ? PassVerdict.edge.tint : PassVerdict.over.tint)
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
                 // Склеенная поездка: сразу видно, что внутри был заезд по пути.
                 if let stops = record.stops, !stops.isEmpty {

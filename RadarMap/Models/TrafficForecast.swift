@@ -52,12 +52,33 @@ nonisolated enum TrafficForecast {
         /// (профиль часа недели или файл часа). Не задана — по источнику:
         /// живые — вся задержка, иначе ноль.
         let liveSeconds: TimeInterval
+        /// Доля пути в живом горизонте, где под шагом было измеренное ребро
+        /// свежего now.json (0…1); живого горизонта нет — 0. Не задана — 1.
+        let liveMeasuredShare: Double
 
-        init(seconds: TimeInterval, source: Source, liveSeconds: TimeInterval? = nil) {
+        init(seconds: TimeInterval, source: Source, liveSeconds: TimeInterval? = nil,
+             liveMeasuredShare: Double = 1) {
             self.seconds = seconds
             self.source = source
             self.liveSeconds = liveSeconds ?? (source == .live ? seconds : 0)
+            self.liveMeasuredShare = liveMeasuredShare
         }
+    }
+
+    /// Задержка, которую можно показать водителю (77). Почти ноль — это
+    /// «без пробок» и зелёный, а их вправе сказать только измеренные рёбра:
+    /// путь, о котором свежий now.json почти ничего не знает, — «нет данных»
+    /// (nil: нейтральная подпись и цвет, в машине — системный), а не «свободно».
+    /// Заметная задержка остаётся: медленные рёбра измерены.
+    static func claimable(_ delay: Delay?) -> Delay? {
+        guard let delay, delay.seconds < AppConfig.trafficFreeClaimSeconds,
+              delay.liveMeasuredShare < AppConfig.trafficFreeMinMeasuredShare else { return delay }
+        return nil
+    }
+
+    /// Доля измеренного пути: `measured` метров из `span` в живом горизонте.
+    static func share(measured: Double, of span: Double) -> Double {
+        span > 0 ? min(1, measured / span) : 0
     }
 
     /// Чем подписать задержку варианта (решение 28.10): «+N мин из-за пробок»
@@ -130,8 +151,16 @@ nonisolated enum TrafficForecast {
         }
 
         var total: TimeInterval = 0, liveTotal: TimeInterval = 0
-        var travelled = 0.0
+        var travelled = 0.0, liveSpan = 0.0, liveMeasured = 0.0
         var usedLive = false, usedTypical = false
+        func liveStep(_ live: TrafficSnapshot, at point: CLLocationCoordinate2D, course: Double, step: Double) {
+            usedLive = true
+            liveSpan += step
+            guard let delay = live.measuredStepDelay(at: point, course: course, length: step) else { return }
+            liveMeasured += step
+            total += delay
+            liveTotal += delay
+        }
         for (p, q) in zip(route, route.dropFirst()) {
             let segment = GeoMath.fastDistance(p.latitude, p.longitude, q.latitude, q.longitude)
             guard segment > 0.5 else { continue }
@@ -145,27 +174,23 @@ nonisolated enum TrafficForecast {
                 let moment = departure.addingTimeInterval((travelled + step / 2) * pace + total)
                 travelled += step
                 if liveFresh, let live, moment <= liveUntil {
-                    usedLive = true
-                    let delay = live.stepDelay(at: point, course: course, length: step)
-                    total += delay
-                    liveTotal += delay
+                    liveStep(live, at: point, course: course, step: step)
                 } else if let file = typicalFile(at: moment) {
                     usedTypical = true
                     total += file.stepDelay(at: point, course: course, length: step)
                 } else if liveFallback, let live {
                     // Файла часа нет — дальняя часть по живым, как до 27.E:
                     // пробка сорокаминутной давности ближе к правде, чем ничего.
-                    usedLive = true
-                    let delay = live.stepDelay(at: point, course: course, length: step)
-                    total += delay
-                    liveTotal += delay
+                    liveStep(live, at: point, course: course, step: step)
                 }
             }
         }
+        let measured = share(measured: liveMeasured, of: liveSpan)
         switch (usedLive, usedTypical) {
-        case (true, true):  return Delay(seconds: total, source: .mixed, liveSeconds: liveTotal)
-        case (true, false): return Delay(seconds: total, source: .live)
-        case (false, true): return Delay(seconds: total, source: .typical)
+        case (true, true):  return Delay(seconds: total, source: .mixed, liveSeconds: liveTotal,
+                                         liveMeasuredShare: measured)
+        case (true, false): return Delay(seconds: total, source: .live, liveMeasuredShare: measured)
+        case (false, true): return Delay(seconds: total, source: .typical, liveMeasuredShare: measured)
         case (false, false): return nil
         }
     }

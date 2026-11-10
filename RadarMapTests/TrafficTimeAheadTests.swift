@@ -165,6 +165,19 @@ final class TrafficTimeAheadTests: XCTestCase {
         XCTAssertEqual(got.source, .typical)
     }
 
+    func testLiveShareCountsOnlyMeasuredRoadInTheHorizon() throws {
+        // 10 км, свежие живые свободны на первых 2 км: измерено 2 из 10 км горизонта.
+        let partial = try XCTUnwrap(delay(km: 10, departure: at(hour: 3),
+                                          live: live(level: 1, kmh: 60, to: 2_000, generated: at(hour: 3)),
+                                          profile: profile(slots: [:])))
+        XCTAssertEqual(partial.liveMeasuredShare, 0.2, accuracy: 0.02)
+        XCTAssertNil(TrafficForecast.claimable(partial), "о 8 км ничего не известно — не «без пробок»")
+        let full = try XCTUnwrap(delay(km: 10, departure: at(hour: 3),
+                                       live: live(level: 1, kmh: 60, generated: at(hour: 3)), profile: nil))
+        XCTAssertEqual(full.liveMeasuredShare, 1, accuracy: 0.01)
+        XCTAssertNotNil(TrafficForecast.claimable(full))
+    }
+
     func testOldOrForeignFileIsNoData() {
         let departure = at(hour: 18)
         XCTAssertNil(delay(km: 10, departure: departure,

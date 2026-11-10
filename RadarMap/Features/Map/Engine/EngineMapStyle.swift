@@ -590,8 +590,9 @@ nonisolated enum EngineMapStyle {
     /// (движок принимает только строку цвета).
     /// Зона «здесь часто ставят треногу» — янтарь, не красный камеры: это
     /// догадка о прошлом, а не камера (HotspotAlert). До 29.C2 брался цвет
-    /// треноги, теперь у треноги красный камеры.
-    static let hotspotHex = "#F2B200"
+    /// треноги, теперь у треноги красный камеры. С 10.11 — ночной `warning`:
+    /// свой #F2B200 был почти-дублем и его, и жёлтого главного действия.
+    static let hotspotHex = RouteColors.hex(WidgetPalette.warning.dark)
 
     static func typeHex(_ kind: CameraType) -> String {
         String(format: "#%06X", kind.markerRGB)
@@ -645,7 +646,7 @@ nonisolated enum EngineMapStyle {
         out.append([
             "id": "camera-halo", "type": "circle", "source": "cameras",
             "filter": ["==", ["get", "alert"], true],
-            "paint": ["circle-radius": 26, "circle-color": "#D93025",
+            "paint": ["circle-radius": 26, "circle-color": RouteColors.hex(CameraGlyph.camera.fillRGB),
                       "circle-opacity": 0.18],
         ])
         // Точка мелкого масштаба — тот же язык, что значок (вариант B,
@@ -659,9 +660,9 @@ nonisolated enum EngineMapStyle {
                                         12, ["case", calm, 3, 4],
                                         15, ["case", calm, 7, 10],
                                         17, ["case", calm, 9, 13]],
-                      // Без цвета у точки — нейтральный серый, не красный:
+                      // Без цвета у точки — графит спокойной камеры, не красный:
                       // красный значит «камера на пути» (25.F, снимок 63).
-                      "circle-color": ["coalesce", ["get", "color"], "#6B6B70"],
+                      "circle-color": ["coalesce", ["get", "color"], CameraMarkerLook.neutralDay],
                       // Спокойная камера на виде района — без белого кольца и
                       // полупрозрачная (25.D, аудит 21.10): с кольцом 1,8 она
                       // весила, как камера на пути. Не скрыта — правило

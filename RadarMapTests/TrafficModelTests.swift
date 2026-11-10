@@ -169,7 +169,7 @@ final class TrafficModelTests: XCTestCase {
         // Даже если рёбра профиля попадут туда, где ждут живые, они уровня 1 —
         // ни «Впереди пробка», ни задержки для объезда.
         XCTAssertTrue(p.snapshot.edges.allSatisfy { $0.level == 1 })
-        XCTAssertNil(JamAhead.detect(edges: p.snapshot.edges, position: north(-300), course: 0))
+        XCTAssertNil(JamAhead.detect(in: p.snapshot, position: north(-300), course: 0))
         XCTAssertEqual(p.snapshot.delay(along: route), 0, "живая мерка объезда по профилю — ноль")
         XCTAssertFalse(DetourAdvisor.shouldSearch(remainingDistance: 10_000, delayAhead: p.snapshot.delay(along: route),
                                                   currentRemaining: 10 * 60, sinceLastSearch: nil, sinceDecline: nil,

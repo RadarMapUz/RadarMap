@@ -15,7 +15,6 @@ import UIKit
 
 struct AlertSettingsPage: View {
     @Environment(AppEnvironment.self) private var env
-    @State private var showsRecall = false
 
     var body: some View {
         @Bindable var settings = env.settings
@@ -47,6 +46,8 @@ struct AlertSettingsPage: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            Section { AlertSampleButton() }
+
             Section {
                 // Один профиль вместо четырёх перечислений. Раньше поведение
                 // задавали голос, режим город/трасса, фоновые баннеры и старт
@@ -74,14 +75,6 @@ struct AlertSettingsPage: View {
                     }
                 }
 
-                // Голос о САМОМ превышении — отдельно от голоса о камерах:
-                // просьба из реальной поездки — фраза без камеры впереди
-                // воспринимается как ворчание, штраф-то возможен у камеры.
-                Picker("Голос о превышении", selection: $settings.overspeedVoice) {
-                    ForEach(OverspeedVoice.allCases) { Text($0.title).tag($0) }
-                }
-                // Ночной голос (12.6): короче, но не тише.
-                Toggle("Ночью короче", isOn: $settings.nightVoice)
                 // Записанный голос (этап 16): строка есть, только когда для
                 // языка приложения в сборке есть пакет диктора.
                 if env.alerts.recorded.isAvailable {
@@ -118,8 +111,6 @@ struct AlertSettingsPage: View {
                 SettingsExplainer([
                     "«Авто» различает город и трассу: в городе короткая фраза, на трассе полная, при превышении — громче и с лимитом.",
                     "О камерах, которые вы каждый день проезжаете спокойно, приложение молчит и только отмечает вибрацией. Подъедете с превышением — заговорит.",
-                    "«Голос о превышении» — про фразу без камеры. В режиме «У камер» она звучит, только когда камера впереди по вашей дороге; в остальное время превышение видно цветом скорости.",
-                    "«Ночью короче» — после заката о камере говорится коротко: «Камера, 300 метров». Громкость та же, а при превышении фраза звучит целиком.",
                 ] + (env.alerts.recorded.isAvailable ? [
                     "«Записанный голос» — заранее озвученные фразы: голос ровный, без синтезатора в моменте. Фразу, которой в записи нет (например, с названием улицы), целиком прочтёт системный голос.",
                 ] : []))
@@ -149,6 +140,45 @@ struct AlertSettingsPage: View {
             } footer: {
                 Text("За сколько метров до камеры предупреждать. Голос отсчитывает пороги по мере приближения.")
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section {
+                NavigationLink {
+                    AlertExtrasPage()
+                } label: {
+                    Text("Дополнительно")
+                }
+            } footer: {
+                Text("Голос о превышении, погода на перевалах, уведомления.")
+            }
+        }
+        .settingsPage("Оповещения и звук")
+    }
+}
+
+/// Второй этаж «Оповещений»: то, что настраивают один раз.
+struct AlertExtrasPage: View {
+    @Environment(AppEnvironment.self) private var env
+    @State private var showsRecall = false
+
+    var body: some View {
+        @Bindable var settings = env.settings
+        Form {
+            Section {
+                // Голос о САМОМ превышении — отдельно от голоса о камерах:
+                // просьба из реальной поездки — фраза без камеры впереди
+                // воспринимается как ворчание, штраф-то возможен у камеры.
+                Picker("Голос о превышении", selection: $settings.overspeedVoice) {
+                    ForEach(OverspeedVoice.allCases) { Text($0.title).tag($0) }
+                }
+                // Ночной голос (12.6): короче, но не тише.
+                Toggle("Ночью короче", isOn: $settings.nightVoice)
+                SettingsExplainer([
+                    "«Голос о превышении» — про фразу без камеры. В режиме «У камер» она звучит, только когда камера впереди по вашей дороге; в остальное время превышение видно цветом скорости.",
+                    "«Ночью короче» — после заката о камере говорится коротко: «Камера, 300 метров». Громкость та же, а при превышении фраза звучит целиком.",
+                ])
+            } header: {
+                Text("Голос")
             }
 
             Section {
@@ -204,7 +234,7 @@ struct AlertSettingsPage: View {
                 }
             }
         }
-        .settingsPage("Оповещения и звук")
+        .settingsPage("Дополнительно")
         .sheet(isPresented: $showsRecall) { AlertRecallInfoSheet(tally: env.trip.alertRecall) }
     }
 }
@@ -241,7 +271,6 @@ struct SpeedSettingsPage: View {
 
 struct TripSettingsPage: View {
     @Environment(AppEnvironment.self) private var env
-    @State private var allTracks: ShareFilePayload?
 
     var body: some View {
         @Bindable var settings = env.settings
@@ -281,39 +310,44 @@ struct TripSettingsPage: View {
                 Text("Время прибытия — тем, кто ждёт: у каждого своя ссылка.")
             }
 
-            Section {
-                Toggle("Работаю водителем", isOn: $settings.workDriverMode)
-                    .onChange(of: settings.workDriverMode) { _, _ in env.refreshLearnedPlaces() }
-                SettingsExplainer([
-                    "Для такси и доставки. Поездки собираются в смены — от первого рейса до простоя дольше часа; в «Итогах» появляются «Смены»: часы, километры, превышения, штрафы по замерам и топливо.",
-                    "В смене нет подсказок «Домой» и «На работу», рейсы не учатся как дорога на работу и не меняют выученные Дом и Работу.",
-                    "Голос о камерах — короткий, если режим оповещений «Авто».",
-                    "Выключение режима прошлые поездки не трогает.",
-                ])
-            } footer: {
-                Text("Такси, доставка: день — это смена, а не поездки.")
+            if env.showsCarLog(.workDriver) {
+                Section {
+                    Toggle("Работаю водителем", isOn: $settings.workDriverMode)
+                        .onChange(of: settings.workDriverMode) { _, _ in env.refreshLearnedPlaces() }
+                    SettingsExplainer([
+                        "Для такси и доставки. Поездки собираются в смены — от первого рейса до простоя дольше часа; в «Итогах» появляются «Смены»: часы, километры, превышения, штрафы по замерам и топливо.",
+                        "В смене нет подсказок «Домой» и «На работу», рейсы не учатся как дорога на работу и не меняют выученные Дом и Работу.",
+                        "Голос о камерах — короткий, если режим оповещений «Авто».",
+                        "Выключение режима прошлые поездки не трогает.",
+                    ])
+                } footer: {
+                    Text("Такси, доставка: день — это смена, а не поездки.")
+                }
             }
 
-            Section {
-                // Машина, расход и цены переехали в раздел верхнего уровня
-                // (21.10); ссылка здесь — на релиз, чтобы привычный путь вёл туда.
-                NavigationLink {
-                    EnergySettingsPage()
-                } label: {
-                    LabeledContent("Машина и расходы") {
-                        Text(EnergyText.shortTitle(settings.vehicleEnergy))
+            // Автодневник — только при включённых «Машине и расходах» (CarLog).
+            if env.showsCarLog(.journal) {
+                Section {
+                    // Машина, расход и цены переехали в раздел верхнего уровня
+                    // (21.10); ссылка здесь — на релиз, чтобы привычный путь вёл туда.
+                    NavigationLink {
+                        EnergySettingsPage()
+                    } label: {
+                        LabeledContent("Машина и расходы") {
+                            Text(EnergyText.shortTitle(settings.vehicleEnergy))
+                        }
                     }
-                }
-                NavigationLink {
-                    MaintenancePage()
-                } label: {
-                    LabeledContent("Обслуживание") {
-                        Text(MaintenanceText.summary(env.maintenance.states(),
-                                                     hasOdometer: env.maintenance.odometerKm != nil))
+                    NavigationLink {
+                        MaintenancePage()
+                    } label: {
+                        LabeledContent("Обслуживание") {
+                            Text(MaintenanceText.summary(env.maintenance.states(),
+                                                         hasOdometer: env.maintenance.odometerKm != nil))
+                        }
                     }
+                } footer: {
+                    Text("Тип машины, расход и цены — теперь в разделе «Машина и расходы» в начале настроек.")
                 }
-            } footer: {
-                Text("Тип машины, расход и цены — теперь в разделе «Машина и расходы» в начале настроек.")
             }
 
             FineCheckSection()
@@ -327,35 +361,11 @@ struct TripSettingsPage: View {
                     }
                 }
             } footer: {
-                Text("Выгрузить все поездки одним архивом или стереть историю.")
-            }
-
-            Section {
-                Toggle("Подробный трек для регистратора", isOn: $settings.recordTimedTrack)
-                    .onChange(of: settings.recordTimedTrack) { _, on in
-                        env.trip.recordsTimedTrack = on
-                    }
-                Button("Выгрузить все поездки (GPX)") {
-                    if let url = TimedTrackStore.gpxFile(forAll: env.trip.history) {
-                        allTracks = ShareFilePayload(url: url)
-                    }
+                if env.showsCarLog(.export) {
+                    Text("Выгрузить все поездки одним архивом или стереть историю.")
+                } else {
+                    Text("Сколько поездок хранится и как стереть историю.")
                 }
-                .disabled(env.trip.history.isEmpty)
-                SettingsExplainer([
-                    "Точка каждую секунду со временем — чтобы видео с регистратора можно было поставить на карту. Хранится только на телефоне 30 дней.",
-                    "«Выгрузить все поездки» отдаёт один файл GPX: линии поездок последней недели и проезды камер за месяц.",
-                ])
-            } header: {
-                Text("Регистратор")
-            }
-
-            Section {
-                Toggle("Вождение 3D", isOn: $settings.drive3D)
-            } header: {
-                Text("Карта")
-            } footer: {
-                Text("Наклон, серый асфальт, маршрут во всю полосу и сужение к нужному ряду у поворота — на телефоне и в машине. Выключите — наклон вернётся прежний.")
-                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section {
@@ -373,10 +383,6 @@ struct TripSettingsPage: View {
             }
         }
         .settingsPage("Поездка")
-        .sheet(item: $allTracks) { payload in
-            ActivityFileSheet(url: payload.url)
-                .presentationDetents([.medium, .large])
-        }
     }
 }
 
@@ -423,17 +429,6 @@ struct RouteSettingsPage: View {
                 ])
             } footer: {
                 Text("Время прибытия — с поправкой на то, как быстро вы обычно едете.")
-            }
-
-            // 26.4: метаданные ведения CarPlay. Действует сразу — идущее
-            // ведение в машине начинается заново (CarPlayGuidance).
-            Section {
-                Toggle("Манёвры на приборке и HUD", isOn: $settings.carPlayNavigationMetadata)
-            } header: {
-                Text(verbatim: "CarPlay")
-            } footer: {
-                Text("Машина покажет стрелку и расстояние на приборке или проекции, если умеет; ряд полос на экране CarPlay при этом не показывается.")
-                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .settingsPage("Маршрут")
@@ -662,10 +657,12 @@ struct LearningSettingsPage: View {
     }
 }
 
-// MARK: - Батарея
+// MARK: - Для опытных
 
-struct BatterySettingsPage: View {
+/// Инженерные переключатели со всех разделов — одной страницей в конце настроек.
+struct AdvancedSettingsPage: View {
     @Environment(AppEnvironment.self) private var env
+    @State private var allTracks: ShareFilePayload?
 
     var body: some View {
         @Bindable var settings = env.settings
@@ -676,12 +673,61 @@ struct BatterySettingsPage: View {
                         // Иначе выключение в поездке залипало бы на последнем тире.
                         env.location.refreshLocationMode()
                     }
+            } header: {
+                Text("Батарея")
             } footer: {
-                Text("Вдали от камер точность GPS ниже, у камеры — максимальная. Пока на карту смотрят, фиксы идут каждую секунду.")
-                    .fixedSize(horizontal: false, vertical: true)
+                Text("Вдали от камер GPS бережёт батарею, у камеры работает в полную силу.")
+            }
+
+            Section {
+                Toggle("Вождение 3D", isOn: $settings.drive3D)
+            } header: {
+                Text("Карта")
+            } footer: {
+                Text("Наклонная карта в поездке и маршрут во всю полосу — на телефоне и в машине.")
+            }
+
+            // 26.4: метаданные ведения CarPlay. Действует сразу — идущее
+            // ведение в машине начинается заново (CarPlayGuidance).
+            Section {
+                Toggle("Манёвры на приборке и HUD", isOn: $settings.carPlayNavigationMetadata)
+            } header: {
+                Text(verbatim: "CarPlay")
+            } footer: {
+                Text("Стрелка поворота на приборной панели, если машина умеет. Ряд полос на экране CarPlay при этом скрыт.")
+            }
+
+            Section {
+                Toggle("Подробный трек для регистратора", isOn: $settings.recordTimedTrack)
+                    .onChange(of: settings.recordTimedTrack) { _, on in
+                        env.trip.recordsTimedTrack = on
+                    }
+                // Выгрузка — часть автодневника (CarLog), запись трека — нет.
+                let exports = env.showsCarLog(.export)
+                if exports {
+                    Button("Выгрузить все поездки (GPX)") {
+                        if let url = TimedTrackStore.gpxFile(forAll: env.trip.history) {
+                            allTracks = ShareFilePayload(url: url)
+                        }
+                    }
+                    .disabled(env.trip.history.isEmpty)
+                }
+                SettingsExplainer([
+                    "Точка каждую секунду со временем — чтобы видео с регистратора можно было поставить на карту. Хранится только на телефоне 30 дней.",
+                ] + (exports ? [
+                    "«Выгрузить все поездки» отдаёт один файл GPX: линии поездок последней недели и проезды камер за месяц.",
+                ] : []))
+            } header: {
+                Text("Регистратор")
+            } footer: {
+                Text("Точка каждую секунду — чтобы положить видео регистратора на карту.")
             }
         }
-        .settingsPage("Батарея")
+        .settingsPage("Для опытных")
+        .sheet(item: $allTracks) { payload in
+            ActivityFileSheet(url: payload.url)
+                .presentationDetents([.medium, .large])
+        }
     }
 }
 
@@ -781,7 +827,7 @@ struct HelpSettingsPage: View {
             Item(icon: "location.fill", question: "Зачем доступ к геопозиции «Всегда»?",
                  answer: "Без него поездка не начнётся сама, пока приложение свёрнуто, и о камерах оно промолчит. Поездка, начатая на экране, звучит и в фоне — до первой долгой остановки; доступ «Всегда» снимает это ограничение. На сервер уходят запрос маршрута, ваши отметки и «Поделиться прибытием», а в поездке — обезличенные отрезки пути для пробок; их можно выключить: Настройки → Конфиденциальность → «Помогать с пробками»."),
             Item(icon: "battery.75percent", question: "Сколько тратится батареи?",
-                 answer: "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно, но вдали от камер точность снижается сама (Настройки → Батарея). Больше всего тратит экран: если смотреть на карту не нужно, погасите его — при доступе «Всегда» о камерах приложение предупредит голосом и с погашенным экраном."),
+                 answer: "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно, но вдали от камер точность снижается сама (Настройки → Для опытных). Больше всего тратит экран: если смотреть на карту не нужно, погасите его — при доступе «Всегда» о камерах приложение предупредит голосом и с погашенным экраном."),
             Item(icon: "externaldrive.fill", question: "Как перенести поездки на новый телефон?",
                  answer: "Включите Настройки → Поездка → История поездок → «Хранить поездки: в iCloud» — на новом iPhone с тем же Apple ID история появится сама. Без iCloud — Настройки → О приложении → Мои данные → «Сохранить копию», затем на новом телефоне «Восстановить из файла». На наш сервер история не уходит ни так, ни так."),
         ]),
@@ -978,7 +1024,7 @@ struct LanguageSettingsPage: View {
     }
 }
 
-// MARK: - Проверить штрафы
+// MARK: - Портал штрафов
 
 /// Госномер и кнопка на официальный портал (FineCheck, 12б.8). Номер — только
 /// в буфер, не в адрес ссылки; рядом своя оценка с честной пометкой.
@@ -1015,7 +1061,18 @@ struct FineCheckSection: View {
                 }
                 openURL(AppConfig.fineCheckPortalURL)
             } label: {
-                Label("Проверить штрафы", systemImage: "doc.text.magnifyingglass")
+                // Название — что кнопка делает на деле: штрафы показывает портал, не приложение.
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Открыть портал штрафов")
+                        Text(plate == nil ? String(localized: "Откроется в браузере")
+                                          : String(localized: "Скопируем номер — вставьте его на портале"))
+                            .font(.footnote)
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                } icon: {
+                    Image(systemName: "arrow.up.right.square")
+                }
             }
             // Кнопка уводит из приложения в браузер — об этом говорится до
             // нажатия, а не после.
@@ -1042,10 +1099,15 @@ struct FineCheckSection: View {
                 }
             }
             .foregroundStyle(Theme.textPrimary)
+            SettingsExplainer([
+                "Приложение не узнаёт о штрафах само: кнопка копирует госномер и открывает официальный портал в браузере.",
+                "Пришедший штраф внесите в «Мои штрафы» — сверим с поездкой и напомним о сроке.",
+                "Номер и штрафы хранятся только на телефоне.",
+            ])
         } header: {
             Text("Штрафы")
         } footer: {
-            Text("Оценка, не постановление: пришёл ли штраф, знает только портал. Пришедший штраф внесите в «Мои штрафы» — сверим с поездкой и напомним о сроке. Номер и штрафы хранятся только на телефоне.")
+            Text("Оценка, не постановление: пришёл ли штраф, знает только портал.")
         }
         .sheet(isPresented: $showsFines) { FinesScreen() }
     }

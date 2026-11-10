@@ -42,7 +42,7 @@ struct QuickTogglesBar: View {
             // от него на треть выше (5.5). Стоя — показываем.
             if showsDetail {
                 Text(settings.voiceMode.detail)
-                    .font(.rounded(10))
+                    .font(.dense(10))
                     .foregroundStyle(Theme.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -54,7 +54,7 @@ struct QuickTogglesBar: View {
                     onClose()
                 } label: {
                     Label("Я пассажир — завершить без записи", systemImage: "figure.seated.seatbelt")
-                        .font(.rounded(13, .semibold))
+                        .font(.dense(13, .semibold))
                         .foregroundStyle(Theme.textSecondary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
@@ -94,7 +94,7 @@ struct QuickTogglesBar: View {
                 // на accentFill — включено (палитра А, PaletteTests, 4.4).
                 MapPopoverGlyph(systemName: icon, isOn: isOn.wrappedValue, size: 44, glyph: 19)
                 Text(title)
-                    .font(.rounded(11, .medium))
+                    .font(.dense(11, .medium))
                     .foregroundStyle(isOn.wrappedValue ? Theme.textPrimary : Theme.textTertiary)
             }
             .frame(maxWidth: .infinity)
@@ -116,12 +116,12 @@ struct QuickTogglesBar: View {
             // а подпись переносится по словам.
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 5) {
-                    Image(systemName: mode.symbol).font(.rounded(11, .semibold))
-                    Text(mode.title).font(.rounded(12, .semibold)).lineLimit(1)
+                    Image(systemName: mode.symbol).font(.dense(11, .semibold))
+                    Text(mode.title).font(.dense(12, .semibold)).lineLimit(1)
                 }
                 VStack(spacing: 2) {
-                    Image(systemName: mode.symbol).font(.rounded(11, .semibold))
-                    Text(mode.title).font(.rounded(12, .semibold))
+                    Image(systemName: mode.symbol).font(.dense(11, .semibold))
+                    Text(mode.title).font(.dense(12, .semibold))
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }

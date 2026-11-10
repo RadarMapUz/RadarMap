@@ -414,7 +414,8 @@ final class AppEnvironment {
         guard location.isTripActive, route.isActive, !location.isSignalStale, !location.isPositionCoarse,
               let here = location.currentCoordinate else { return }
         route.refreshTrafficDelay(revision: traffic.revision)
-        route.considerDetour(coordinate: here, speedKmh: location.speedKmh, trigger: trigger)
+        route.considerDetour(coordinate: here, speedKmh: location.speedKmh, course: location.currentCourse,
+                             trigger: trigger)
     }
 
     /// Ставит RootView по scenePhase телефона.
@@ -613,6 +614,8 @@ final class AppEnvironment {
         // Обслуживание: правка на экране — пересчёт напоминаний; то, что
         // человек только что правил, он уже видел.
         maintenance.onEdited = { [weak self] seen in self?.maintenanceEdited(seen) }
+        energyJournal.onLoaded = { [weak self] in self?.migrateCarLogIfNeeded() }
+        migrateCarLogIfNeeded()
 
         // Одноразовая ретро-чистка «мостовых» проездов: оси дорог появились в
         // базе v8 — старые «проезды» поперёк оси (мост над камерой) выкидываем.
@@ -691,6 +694,9 @@ final class AppEnvironment {
                 // Близкие видят прибытие (12б.6, 22.1): кому и что — FamilyShare.
                 self.family.update()
             }
+            // Набор старше 10 минут снимается и с фиксом: такт сети в долгой
+            // поездке без связи может ждать минутами.
+            traffic?.dropStale()
             if let traffic, let route, route.isActive { route.refreshTrafficDelay(revision: traffic.revision) }
             // «Впереди пробка» — только без маршрута: с маршрутом пробки уже в
             // ETA и в предложении объезда. Одна фраза на пробку (JamAhead) и,
@@ -1153,6 +1159,7 @@ final class AppEnvironment {
         trip.retryLegacyLifetime()
         commuteProfiles.retryLoadNow()
         cameras.reloadUserDataIfNeeded()
+        migrateCarLogIfNeeded()
     }
 
     private func observeProtectedData() {

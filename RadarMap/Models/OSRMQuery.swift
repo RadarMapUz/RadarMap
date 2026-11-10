@@ -90,6 +90,24 @@ nonisolated enum OSRMQuery {
         (400..<500).contains(status)
     }
 
+    /// Отказ сервера (код не 2xx): «пути нет» или сбой самого сервера.
+    enum Refusal: Equatable, Sendable { case noRoute, server }
+
+    /// OSRM отвечает на «пути нет» кодом 400 с телом `{"code":"NoRoute"}`
+    /// (или NoSegment — дороги у точки нет): это «маршрут не найден», а не
+    /// сбой сервера. Прочие отказы и тело не JSON (5xx прокси) — сбой.
+    /// nil — ответ успешный.
+    static func refusal(status: Int, data: Data) -> Refusal? {
+        guard !(200..<300).contains(status) else { return nil }
+        struct Body: Decodable { let code: String }
+        do {
+            let code = try JSONDecoder().decode(Body.self, from: data).code
+            return code == "NoRoute" || code == "NoSegment" ? .noRoute : .server
+        } catch {
+            return .server
+        }
+    }
+
     /// `true` до 29.E (одна альтернатива), с 29.E — число.
     private static func alternativesValue(_ wanted: Bool, legacy: Bool) -> String {
         guard wanted else { return "false" }

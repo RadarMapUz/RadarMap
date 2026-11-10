@@ -18,6 +18,7 @@ extension MapScreen {
     /// нет: старт — пятая кнопка дока (`tripStartsByItself`).
     var tripButtonPrimary: some View {
         PrimaryButton(title: "Начать поездку", systemImage: "play.fill") { toggleTrip() }
+            .typeDensity(.dense)
             .liftAccent()
     }
 
@@ -61,14 +62,40 @@ extension MapScreen {
 
     // MARK: - Действия
 
-    func addCamera(kind: AddKind, name: String) {
+    /// Отметка для всех, поставленная пальцем (прицел и «Радар здесь») — одно правило.
+    func reportReach(at point: CLLocationCoordinate2D?) -> TripodAvailability {
+        TripodAvailability.check(point: point,
+                                 driver: env.location.currentCoordinate,
+                                 reportsEnabled: env.mobile.isEnabled)
+    }
+
+    var tripodAvailability: TripodAvailability { reportReach(at: map.mapCenter) }
+
+    func addPoint(kind: AddPointKind, name: String) {
         guard let center = map.mapCenter else {
             withMotion { map.isAddingCamera = false }
             return
         }
-        let type: CameraType = kind == .radar ? .stationaryRadar : .stationaryCamera
-        env.cameras.addCamera(at: center, type: type, label: name)   // revision → onChange обновит карту
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        switch kind.route {
+        case .ownCamera(let type):
+            env.cameras.addCamera(at: center, type: type, label: name)   // revision → onChange обновит карту
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        case .report(let reportKind):
+            guard tripodAvailability.isAvailable else { return }
+            // Та же дверь и тот же отклик, что у отметки из поездки; точка — прицел, не GPS.
+            Task {
+                let outcome = await env.mobile.quickReport(
+                    kind: reportKind,
+                    coordinate: center,
+                    speedKmh: env.location.speedKmh,
+                    isTripActive: env.location.isTripActive,
+                    placement: .deliberate,
+                    fix: nil)
+                UINotificationFeedbackGenerator()
+                    .notificationOccurred(outcome.isSuccess ? .success : .warning)
+                env.alerts.speak(outcome.spoken(for: reportKind))
+            }
+        }
         withMotion { map.isAddingCamera = false }
     }
 

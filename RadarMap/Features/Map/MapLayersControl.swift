@@ -113,7 +113,7 @@ struct MapLayersPanel: View {
                     HStack(spacing: 10) {
                         MapPopoverGlyph(systemName: "point.topleft.down.to.point.bottomright.curvepath", isOn: false)
                         Text("Весь маршрут")
-                            .font(.rounded(14, .medium))
+                            .font(.dense(14, .medium))
                             .foregroundStyle(Theme.textPrimary)
                         Spacer(minLength: 10)
                     }
@@ -123,7 +123,7 @@ struct MapLayersPanel: View {
                 .buttonStyle(PressableStyle(.row))
             }
             Text("Кнопки")
-                .font(.rounded(11, .semibold))
+                .font(.dense(11, .semibold))
                 .foregroundStyle(Theme.textTertiary)
                 .padding(.top, 8)
                 .padding(.bottom, 2)
@@ -155,11 +155,11 @@ struct MapLayersPanel: View {
                 // «Тротуаров» рядом с домами читался пятном.
                 MapPopoverGlyph(systemName: icon, isOn: isOn.wrappedValue)
                 Text(title)
-                    .font(.rounded(14, .medium))
+                    .font(.dense(14, .medium))
                     .foregroundStyle(Theme.textPrimary)
                 Spacer(minLength: 10)
                 Image(systemName: isOn.wrappedValue ? "checkmark.circle.fill" : "circle")
-                    .font(.rounded(18))
+                    .font(.dense(18))
                     .foregroundStyle(isOn.wrappedValue ? Theme.accent : Theme.textTertiary)
                     .frame(width: 44)
             }

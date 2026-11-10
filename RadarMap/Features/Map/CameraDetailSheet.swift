@@ -449,7 +449,7 @@ struct CameraDetailSheet: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .minimumScaleFactor(0.85)
-                    .frame(height: 30)          // ровно две строки у всех плиток
+                    .frame(minHeight: 30)       // две строки у всех плиток; крупный кегль растит
             }
             .foregroundStyle(tint)
             .frame(maxWidth: .infinity)

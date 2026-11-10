@@ -25,10 +25,14 @@ struct MapPointBar: View {
     /// nil — геопозиции нет, маршрут строить не из чего.
     let onRoute: (() -> Void)?
     let onRadar: () -> Void
+    /// Почему «Радар здесь» сейчас нельзя (TripodAvailability); nil — можно.
+    /// Зовётся в body бара, а не экрана: своя точка меняется каждый фикс.
+    var radarNote: () -> String? = { nil }
     let onOwnCamera: () -> Void
     let onCancel: () -> Void
 
     var body: some View {
+        let radarNote = radarNote()
         VStack(spacing: 10) {
             HStack {
                 Label {
@@ -36,12 +40,12 @@ struct MapPointBar: View {
                 } icon: {
                     Image(systemName: "mappin.and.ellipse")
                 }
-                .font(.rounded(14, .semibold))
+                .font(.dense(14, .semibold))
                 .foregroundStyle(Theme.textPrimary)
                 Spacer()
                 Button(action: onCancel) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.rounded(20))
+                        .font(.dense(20))
                         .foregroundStyle(Theme.textTertiary)
                         .tapTarget()
                 }
@@ -57,8 +61,17 @@ struct MapPointBar: View {
                 action("Радар здесь", "dot.radiowaves.left.and.right",
                        tint: Theme.textPrimary, chip: Theme.Types.camera,
                        glyph: .white, action: onRadar)
+                    .disabled(radarNote != nil)
+                    .opacity(radarNote == nil ? 1 : 0.55)
                 action("Своя камера", "plus.viewfinder",
                        tint: Theme.textPrimary, action: onOwnCamera)
+            }
+            if let radarNote {
+                Text(radarNote)
+                    .font(.dense(12))
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(12)
@@ -79,11 +92,11 @@ struct MapPointBar: View {
                 if let chip {
                     TypeChipGlyph(symbol: icon, camera: CameraGlyph(symbol: icon), fill: chip, glyph: glyph)
                 } else {
-                    Image(systemName: icon).font(.rounded(18, .semibold))
+                    Image(systemName: icon).font(.dense(18, .semibold))
                         .frame(height: TypeChipGlyph.side)
                 }
                 Text(title)
-                    .font(.rounded(10, .medium))
+                    .font(.dense(10, .medium))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
@@ -110,12 +123,12 @@ struct ReportPickerBar: View {
         VStack(spacing: 10) {
             HStack {
                 Label("Что впереди?", systemImage: "eye.fill")
-                    .font(.rounded(14, .semibold))
+                    .font(.dense(14, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                 Spacer()
                 Button(action: onCancel) {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.rounded(20))
+                        .font(.dense(20))
                         .foregroundStyle(Theme.textTertiary)
                         .tapTarget()
                 }
@@ -144,7 +157,7 @@ struct ReportPickerBar: View {
                             TypeChipGlyph(symbol: kind.symbol, camera: kind.cameraGlyph,
                                           fill: kind.tint, glyph: kind.glyphTint)
                             Text(kind.title)
-                                .font(.rounded(10, .medium))
+                                .font(.dense(10, .medium))
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.7)
                         }
@@ -177,7 +190,7 @@ private struct TypeChipGlyph: View {
             CameraCoinView(glyph: camera, fill: fill, ink: glyph, side: Self.side)
         } else {
             Image(systemName: symbol)
-                .font(.rounded(13, .bold))
+                .font(.dense(13, .bold))
                 .foregroundStyle(glyph)
                 .frame(width: Self.side, height: Self.side)
                 .background(fill, in: Circle())

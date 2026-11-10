@@ -91,7 +91,7 @@ struct PeriodShareCard: View {
                 ShareMetricDivider()
                 ShareMetric(value: Formatting.duration(summary.movingDuration),
                             label: String(localized: "за рулём"),
-                            icon: "clock.fill", tint: Theme.Types.intelligent)
+                            icon: "clock.fill", tint: Theme.Icon.time)
             }
             .shareMetricsTile()
             .padding(.bottom, 4)

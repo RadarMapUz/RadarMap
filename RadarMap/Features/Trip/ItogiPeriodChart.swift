@@ -61,6 +61,7 @@ struct ItogiPeriodChart: View {
                     .font(.rounded(13, .medium))
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 Text(selected.map { Formatting.distance($0.km * 1000) } ?? value ?? "")
                     .font(.numeral(30, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
@@ -76,8 +77,8 @@ struct ItogiPeriodChart: View {
                         Image(systemName: "xmark.circle.fill")
                             .font(.rounded(20))
                             .foregroundStyle(Theme.textTertiary)
-                            .frame(width: Theme.controlSize, height: 28, alignment: .trailing)
-                            .contentShape(Rectangle())
+                            .frame(minWidth: Theme.controlSize, alignment: .trailing)
+                            .tapTarget()
                     }
                     .buttonStyle(PressableStyle())
                     .accessibilityLabel(Text("Сбросить выбор"))

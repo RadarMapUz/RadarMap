@@ -8,14 +8,15 @@
 //  пробки были лишь цветом на карте, на которую за рулём не смотрят. Здесь —
 //  одна спокойная фраза, когда на дороге ПО ХОДУ движения стоит пробка,
 //  подтверждённая другими водителями (TrafficSnapshot: только медленные
-//  рёбра, ≥ 2 независимых куска за 15 минут).
+//  рёбра, ≥ 2 разных источника за 15 минут — порог сервера, в файле числа
+//  свидетелей нет).
 //
 //  Тон — как у треног (TripodHotspots), а не как у камер: это данные о том,
 //  что было пару минут назад, и сказанное уверенно о неточном стоит доверия.
 //  Поэтому:
 //    * без курса — молчим (не знаем, куда едем);
-//    * только рёбра в узком коридоре впереди и в нашем направлении — встречная
-//      пробка не наша;
+//    * только связная цепочка рёбер от своего ребра вперёд — встречная
+//      пробка и пробка на дублёре не наши; своего ребра нет — молчим;
 //    * короткая медленная вставка (< 300 м или < 1 мин) — не пробка;
 //    * одна фраза на пробку; повтор — только о другой пробке и не чаще раза
 //      в `jamAnnounceGapSeconds`.
@@ -44,36 +45,92 @@ nonisolated enum JamAhead {
         }
     }
 
-    /// Пробка впереди или nil.
-    static func detect(edges: [TrafficEdge], position: CLLocationCoordinate2D,
+    /// Пробка впереди или nil. Идём от СВОЕГО ребра (ближайшее по месту и
+    /// направлению) вперёд по связной цепочке: конец ребра — начало
+    /// следующего, на развилке — продолжение прямее; дыра в наблюдениях или
+    /// свободное ребро внутри пробки терпятся до `jamGapMeters`. Своего ребра
+    /// нет — молчим: прямая от курса складывала дублёр с проспектом и теряла
+    /// пробку за изгибом.
+    static func detect(in snapshot: TrafficSnapshot, position: CLLocationCoordinate2D,
                        course: CLLocationDirection) -> Jam? {
-        guard course >= 0, course.isFinite else { return nil }
+        guard course >= 0, course.isFinite,
+              let own = snapshot.matchingIndex(at: position, course: course,
+                                               within: AppConfig.jamOwnEdgeMeters) else { return nil }
+        let edges = snapshot.edges
+        var visited: Set<Int> = [own]
+        var index = own
+        // Остаток своего ребра — от машины до его конца.
+        var piece = min(GeoMath.fastDistance(position.latitude, position.longitude,
+                                             edges[own].b.latitude, edges[own].b.longitude),
+                        GeoMath.fastDistance(edges[own].a.latitude, edges[own].a.longitude,
+                                             edges[own].b.latitude, edges[own].b.longitude))
+        var walked = 0.0, gap = 0.0
         var length: CLLocationDistance = 0
         var delay: TimeInterval = 0
-        var nearest: (along: Double, point: CLLocationCoordinate2D)?
-        for edge in edges where edge.level >= 2 {
-            let mid = CLLocationCoordinate2D(latitude: (edge.a.latitude + edge.b.latitude) / 2,
-                                             longitude: (edge.a.longitude + edge.b.longitude) / 2)
-            let distance = GeoMath.fastDistance(position.latitude, position.longitude, mid.latitude, mid.longitude)
-            guard distance <= AppConfig.jamLookAheadMeters + 100 else { continue }
-            let bearing = GeoMath.bearing(from: position, to: mid)
-            let off = (bearing - course) * .pi / 180
-            let along = distance * cos(off)
-            let lateral = abs(distance * sin(off))
-            guard along >= AppConfig.jamMinAheadMeters, along <= AppConfig.jamLookAheadMeters,
-                  lateral <= AppConfig.jamCorridorMeters + along * AppConfig.jamCorridorSlope,
-                  GeoMath.angleDifference(GeoMath.bearing(from: edge.a, to: edge.b), course)
-                    <= AppConfig.trafficMatchDegrees else { continue }
-            let edgeLength = GeoMath.fastDistance(edge.a.latitude, edge.a.longitude,
-                                                  edge.b.latitude, edge.b.longitude)
-            length += edgeLength
-            delay += max(0, edgeLength / (max(3, edge.kmh) / 3.6) - edgeLength / (max(5, edge.modelKmh) / 3.6))
-            if nearest == nil || along < nearest!.along { nearest = (along, edge.a) }
+        var begin: (along: Double, point: CLLocationCoordinate2D)?
+        while true {
+            let edge = edges[index]
+            if edge.level >= 2 {
+                if begin == nil { begin = (walked, index == own ? position : edge.a) }
+                length += piece
+                delay += max(0, piece / (max(3, edge.kmh) / 3.6) - piece / (max(5, edge.modelKmh) / 3.6))
+                gap = 0
+            } else if begin != nil {
+                gap += piece
+            }
+            walked += piece
+            guard gap <= AppConfig.jamGapMeters, walked < AppConfig.jamLookAheadMeters,
+                  begin != nil || walked <= AppConfig.jamAnnounceWithinMeters else { break }
+            if let next = straightest(after: index, in: snapshot, visited: visited) {
+                index = next
+            } else if let jump = acrossHole(after: index, in: snapshot, visited: visited) {
+                if begin != nil { gap += jump.meters }
+                walked += jump.meters
+                guard gap <= AppConfig.jamGapMeters else { break }
+                index = jump.index
+            } else {
+                break
+            }
+            visited.insert(index)
+            piece = GeoMath.fastDistance(edges[index].a.latitude, edges[index].a.longitude,
+                                         edges[index].b.latitude, edges[index].b.longitude)
         }
-        guard let nearest, length >= AppConfig.jamMinLengthMeters,
+        guard let begin, length >= AppConfig.jamMinLengthMeters,
               delay >= AppConfig.jamMinDelaySeconds,
-              nearest.along <= AppConfig.jamAnnounceWithinMeters else { return nil }
-        return Jam(startsIn: nearest.along, length: length, delay: delay, start: nearest.point)
+              begin.along <= AppConfig.jamAnnounceWithinMeters else { return nil }
+        return Jam(startsIn: begin.along, length: length, delay: delay, start: begin.point)
+    }
+
+    /// Продолжение из конца ребра: то, что отклоняется меньше всех, и не
+    /// круче `jamMaxTurnDegrees` — поворот на боковую улицу не «впереди».
+    private static func straightest(after index: Int, in snapshot: TrafficSnapshot, visited: Set<Int>) -> Int? {
+        let heading = snapshot.bearing(of: index)
+        var best: (index: Int, turn: Double)?
+        for next in snapshot.continuations(of: index) where !visited.contains(Int(next)) {
+            let turn = GeoMath.angleDifference(snapshot.bearing(of: Int(next)), heading)
+            guard turn <= AppConfig.jamMaxTurnDegrees else { continue }
+            if best == nil || turn < best!.turn { best = (Int(next), turn) }
+        }
+        return best?.index
+    }
+
+    /// Следующее ребро за дырой в наблюдениях: начинается прямо по ходу не
+    /// дальше `jamGapMeters` и не в стороне (дублёр лежит дальше допуска).
+    private static func acrossHole(after index: Int, in snapshot: TrafficSnapshot,
+                                   visited: Set<Int>) -> (index: Int, meters: Double)? {
+        let end = snapshot.edges[index].b
+        let heading = snapshot.bearing(of: index)
+        let far = GeoMath.destination(from: end, bearing: heading, distanceMeters: AppConfig.jamGapMeters)
+        var best: (index: Int, meters: Double)?
+        for candidate in snapshot.candidates(end, far, course: heading) where !visited.contains(Int(candidate)) {
+            let start = snapshot.edges[Int(candidate)].a
+            let distance = GeoMath.fastDistance(end.latitude, end.longitude, start.latitude, start.longitude)
+            guard distance > 1, distance <= AppConfig.jamGapMeters else { continue }
+            let off = (GeoMath.bearing(from: end, to: start) - heading) * .pi / 180
+            guard cos(off) > 0, abs(distance * sin(off)) <= AppConfig.jamGapSideMeters else { continue }
+            if best == nil || distance < best!.meters { best = (Int(candidate), distance) }
+        }
+        return best
     }
 
     /// Не сказать о той же пробке дважды и не говорить слишком часто.

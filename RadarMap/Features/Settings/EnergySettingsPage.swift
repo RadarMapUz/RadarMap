@@ -39,7 +39,9 @@ struct EnergySettingsPage: View {
     var body: some View {
         let settings = env.settings
         Group {
-            if wizard || (settings.fuelProfile.setupDone != true && settings.fuelProfile.isBlank) {
+            if !settings.carLog {
+                offPage
+            } else if wizard || (settings.fuelProfile.setupDone != true && settings.fuelProfile.isBlank) {
                 EnergyWizard {
                     var profile = settings.fuelProfile
                     profile.setupDone = true
@@ -51,6 +53,7 @@ struct EnergySettingsPage: View {
             }
         }
         .settingsPage("Машина и расходы")
+        .onChange(of: settings.carLog) { _, _ in env.carLogChanged() }
         .sheet(item: $editing) { part in
             EnergyEditSheet(part: part)
         }
@@ -94,6 +97,30 @@ struct EnergySettingsPage: View {
     }
     #endif
 
+    // MARK: - Переключатель дневника
+
+    /// Главный переключатель автодневника (CarLog): без него — только тип машины.
+    private var carLogSection: some View {
+        @Bindable var settings = env.settings
+        return Section {
+            Toggle("Машина и расходы", isOn: $settings.carLog)
+        } footer: {
+            Text("Заправки, расходы, обслуживание, смены и выгрузка поездок. Выключите — записи останутся на телефоне.")
+        }
+    }
+
+    private var offPage: some View {
+        Form {
+            carLogSection
+            Section {
+                Button { editing = .type } label: { typeRow(env.settings.vehicleEnergy) }
+                    .tint(Theme.textPrimary)
+            } footer: {
+                Text("Тип машины нужен и без расходов: по нему — заправки или зарядки по пути и в CarPlay.")
+            }
+        }
+    }
+
     // MARK: - Сводка
 
     private var summary: some View {
@@ -102,6 +129,7 @@ struct EnergySettingsPage: View {
         let profile = settings.fuelProfile
         return ScrollViewReader { proxy in
         Form {
+            carLogSection
             if settings.needsHybridQuestion {
                 Section {
                     // «Да» без запаса хода — сразу к запасу: без него доля

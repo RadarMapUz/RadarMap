@@ -44,6 +44,12 @@
 //  экране. Когда цвет значит всё, он не значит ничего: в момент тревоги
 //  водитель не должен разбирать, этот красный про штраф или про модель камеры.
 //
+//  ПЕРЕСМОТР 10 ноября («палитру единую красивую»): палитра та же, но всё
+//  приложение теперь на ней — сырые цвета экранов, значков карты, виджетов и
+//  часов сведены к токенам (docs/palette_audit_2026-11-10.md). Числа общих
+//  токенов — в Shared/WidgetPalette (одни и те же для приложения, виджетов и
+//  часов), сырой цвет вне DesignSystem/ ловит RawColorLintTests.
+//
 //  Отсюда три слоя:
 //   • состояния  — accent / warning / danger / success, выдаются через role(_:);
 //   • типы камер — приглушённое семейство `Types`, оно не спорит с состояниями;
@@ -76,6 +82,16 @@ enum Theme {
         }
     }
 
+    /// Пара «день / ночь» из общего числового источника (Shared/WidgetPalette):
+    /// приложение, виджеты и часы берут состояния, текст и подложку из одних чисел.
+    nonisolated static func adaptive(_ pair: WidgetPalette.Pair) -> Color {
+        adaptive(pair.light, pair.dark)
+    }
+
+    nonisolated static func adaptiveUIColor(_ pair: WidgetPalette.Pair) -> UIColor {
+        adaptiveUIColor(pair.light, pair.dark)
+    }
+
     nonisolated static func rgb(_ hex: UInt32, _ alpha: CGFloat = 1) -> UIColor {
         UIColor(red: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
                 blue: CGFloat(hex & 0xFF) / 255, alpha: alpha)
@@ -86,23 +102,23 @@ enum Theme {
     /// Выделение и всё «своё»: маршрут, выбранное, ссылки, значки активного.
     /// Синий, а не жёлтый: этот цвет бывает ТЕКСТОМ, а жёлтый текст на белой
     /// панели не читается (1,3:1). 5,1:1 днём на фоне, 7,2:1 ночью.
-    static let accent  = adaptive(0x0B62D0, 0x5FA2FF)
+    static let accent  = adaptive(WidgetPalette.accent)
     /// Главное действие — заливка кнопки («Радар!», «Поехали»). Один на экран.
     /// Текст на нём — `onAction` (11,9:1).
     static let action  = Color(uiColor: actionUIColor)
     /// `action` и `onAction` для UIKit (картинки кнопок CarPlay).
-    nonisolated static let actionUIColor = rgb(0xFFD43B)
-    nonisolated static let onActionUIColor = rgb(0x1C1C1E)
+    nonisolated static let actionUIColor = rgb(WidgetPalette.action)
+    nonisolated static let onActionUIColor = rgb(WidgetPalette.onAction)
     static let onAction = Color(uiColor: onActionUIColor)
     /// Внимание: приближение к камере, превышение в допуске, «на грани».
-    static let warning = adaptive(0x9A5800, 0xFFB020)
+    static let warning = adaptive(WidgetPalette.warning)
     /// Опасность: штрафуемое превышение, камера вплотную, ошибка.
     /// nonisolated — читается кольцом камеры в MapPalette (nonisolated).
     nonisolated static let danger  = Color(uiColor: dangerUIColor)
     /// `danger` для UIKit (значок камеры в CPRouteDetail).
-    nonisolated static let dangerUIColor = adaptiveUIColor(0xC62828, 0xFF7A70)
+    nonisolated static let dangerUIColor = adaptiveUIColor(WidgetPalette.danger)
     /// Норма: в лимите, чисто, выполнено.
-    static let success = adaptive(0x177A41, 0x4CC27A)
+    static let success = adaptive(WidgetPalette.success)
 
     // MARK: - Маршрут и манёвр
     //
@@ -118,7 +134,7 @@ enum Theme {
     /// читается (2,4:1) — поэтому заливка отдельным токеном: 5,7:1 / 6,1:1.
     static let accentFill = Color(uiColor: accentFillUIColor)
     /// `accentFill` для UIKit.
-    nonisolated static let accentFillUIColor = adaptiveUIColor(0x0B62D0, 0x1E5DC4)
+    nonisolated static let accentFillUIColor = adaptiveUIColor(WidgetPalette.accentFill)
     /// Карточка манёвра CarPlay (CPManeuver.cardBackgroundColor) — синий
     /// ТЕМНЕЕ `accentFill`. CarPlay принимает фон карточки только при
     /// контрасте с белым не ниже 7:1 (замер 21.10: сеттер CPManeuver отдаёт
@@ -137,8 +153,8 @@ enum Theme {
     /// `accentFill`: ночные `danger`/`success` светлые (они бывают текстом на
     /// графите), и белое на них читалось 2,2–2,6:1 — «Стоп», «Завершить
     /// поездку», «Да»/«Нет» на приборке. Белый на заливке ≥ 4,9:1 в обеих темах.
-    static let dangerFill = adaptive(0xC62828, 0xD0362C)
-    static let successFill = adaptive(0x177A41, 0x1A7F45)
+    static let dangerFill = adaptive(WidgetPalette.dangerFill)
+    static let successFill = adaptive(WidgetPalette.successFill)
 
     /// Линия маршрута — одна на движке (телефон и машина) и на картинках
     /// «Итогов». Числа — в `RouteColors`: стиль движка — JSON и берёт их
@@ -271,17 +287,17 @@ enum Theme {
     /// Свой набор «Итогов»: фиолетовый и мятный не спорят с синим маршрутом,
     /// жёлтым действием и красной камерой.
     enum Stats {
-        static let commute = adaptive(0x5B3DF5, 0x9A85FF)
+        static let commute = adaptive(WidgetPalette.statsCommute)
         static let commuteTop = adaptive(0x8266FF, 0xB8A8FF)
         static let commuteText = adaptive(0x4A2FE0, 0xB8A8FF)
-        static let other = adaptive(0x0B9F78, 0x3BE3B0)
+        static let other = adaptive(WidgetPalette.statsOther)
         static let otherTop = adaptive(0x22C79A, 0x86F2D2)
         static let otherText = adaptive(0x067A5B, 0x63EBC2)
-        static let ringGround = Color(uiColor: Theme.rgb(0x0E1014))
-        static let ringCalm = [Color(uiColor: Theme.rgb(0x2BF0B5)), Color(uiColor: Theme.rgb(0x19C8E8))]
-        static let ringWatch = [Color(uiColor: Theme.rgb(0xFFD15C)), Color(uiColor: Theme.rgb(0xFF9A2E))]
-        static let ringRisk = [Color(uiColor: Theme.rgb(0xFF5C7A)), Color(uiColor: Theme.rgb(0xE0218A))]
-        static let ringRoad = [Color(uiColor: Theme.rgb(0xB49CFF)), Color(uiColor: Theme.rgb(0x6C4DFF))]
+        static let ringGround = Color(uiColor: Theme.rgb(WidgetPalette.ringGround))
+        static let ringCalm = WidgetPalette.ringCalm.dark.map { Color(uiColor: Theme.rgb($0)) }
+        static let ringWatch = WidgetPalette.ringWatch.dark.map { Color(uiColor: Theme.rgb($0)) }
+        static let ringRisk = WidgetPalette.ringRisk.dark.map { Color(uiColor: Theme.rgb($0)) }
+        static let ringRoad = WidgetPalette.ringRoad.dark.map { Color(uiColor: Theme.rgb($0)) }
     }
 
     // MARK: - Типы камер
@@ -296,18 +312,15 @@ enum Theme {
 
     enum Types {
         /// Камера любого типа (Shared/CameraGlyph.fillRGB).
-        static let camera      = Color(uiColor: rgb(0xD93025))
-        /// Индиго — бывший цвет интеллектуальной камеры; на маркерах с 29.C2
-        /// не используется, остался акцентом Итогов (время, плавность).
-        static let intelligent = Color(uiColor: rgb(0x6A3FD6))
+        static let camera      = Color(uiColor: rgb(CameraGlyph.camera.fillRGB))
         /// Пост ДПС.
-        static let post        = Color(uiColor: rgb(0x46525E))
+        static let post        = Color(uiColor: rgb(CameraGlyph.post.fillRGB))
         /// ДТП — событие, а не характеристика точки: цвет опасности. На
         /// маркере — постоянный (дневной danger): ночной #FF7A70 с белым
         /// глифом не дотягивал до 4,5:1 (29.C).
-        static let accident    = Color(uiColor: rgb(0xC62828))
+        static let accident    = Color(uiColor: rgb(CameraGlyph.accident.fillRGB))
         /// Неизвестный тип — графит потемнее поста, белый глиф 6:1.
-        static let other       = Color(uiColor: rgb(0x556070))
+        static let other       = Color(uiColor: rgb(CameraGlyph.other.fillRGB))
         /// Кольцо маркера.
         static let ring        = Color.white
     }
@@ -315,11 +328,11 @@ enum Theme {
     // MARK: - Поверхности и текст
 
     static let background    = adaptive(0xF2F1EE, 0x121212)
-    static let surface       = adaptive(0xFFFFFF, 0x1F1F1F)
+    static let surface       = adaptive(WidgetPalette.surface)
     static let stroke        = adaptive(0x000000, 0xFFFFFF, lightAlpha: 0.08, darkAlpha: 0.10)
     /// Подложка экрана тревоги — всегда графит, днём тоже: на белом фоне
     /// цифра расстояния читалась бы, но полоса цвета типа — нет (13.10).
-    static let alertSurface  = Color(uiColor: rgb(0x14181D))
+    static let alertSurface  = Color(uiColor: rgb(WidgetPalette.alertSurface))
 
     // MARK: - Глубина
     //
@@ -333,11 +346,11 @@ enum Theme {
     /// от тёмной карты.
     static let panelShadow = adaptive(0x0B1B33, 0x000000, lightAlpha: 0.14, darkAlpha: 0.30)
 
-    static let textPrimary   = adaptive(0x1D1D1B, 0xF2F1EE)
-    static let textSecondary = adaptive(0x5C5B57, 0xAAA9A4)
+    static let textPrimary   = adaptive(WidgetPalette.primary)
+    static let textSecondary = adaptive(WidgetPalette.secondary)
     /// Третья ступень: ≥ 4,7:1 и днём, и ночью, на фоне и на карточке —
     /// это подписи под цифрами, которые читают на ходу, через блик.
-    static let textTertiary  = adaptive(0x6A6964, 0x9A9993)
+    static let textTertiary  = adaptive(WidgetPalette.tertiary)
 
     // MARK: - Кромка
     //
@@ -377,7 +390,7 @@ enum Theme {
 
     /// Кант знака ограничения скорости — красный дорожного знака (ПДД), а не
     /// красный камеры: знак рисуется как на столбе.
-    nonisolated static let signRedUIColor = rgb(0xD90D1A)
+    nonisolated static let signRedUIColor = rgb(WidgetPalette.signRed)
     static let signRed = Color(uiColor: signRedUIColor)
 
     /// Полоска маршрута без данных о пробках.
@@ -419,6 +432,25 @@ enum Theme {
 }
 
 // MARK: - Типографика (SF Pro; Rounded — только крупные цифры)
+
+/// Где стоит текст: экран чтения растёт с системным кеглем заметно, панель
+/// поверх карты — почти нет.
+nonisolated enum TypeDensity: Sendable {
+    case reading
+    case dense
+}
+
+extension EnvironmentValues {
+    /// Для общих компонентов (кнопки), которые стоят и в листах, и в панелях
+    /// поверх карты; панель ставит `.typeDensity(.dense)`.
+    @Entry var typeDensity: TypeDensity = .reading
+}
+
+extension View {
+    func typeDensity(_ density: TypeDensity) -> some View {
+        environment(\.typeDensity, density)
+    }
+}
 
 extension Font {
     // MARK: - Шкала кегля
@@ -512,9 +544,22 @@ extension Font {
     /// 1.10: крупное по-прежнему почти не растёт (цифра видна и так, а
     /// карточка вокруг тесная), но шкала сохраняет пропорции на любом
     /// системном кегле.
-    nonisolated static func typeFactor(raw: Double, size: CGFloat) -> Double {
-        let small: Double = 1.30, large: Double = 1.10
-        let from: CGFloat = 15, to: CGFloat = 30
+    ///
+    /// С 10.11 потолков два (`TypeDensity`). Экран чтения (списки,
+    /// настройки, «Итоги», листы) растёт до `readingCeiling` — это AX3 (2.55 по UIFontMetrics)
+    /// целиком, а AX4–AX5 упираются в него: дальше строки списков ломаются.
+    /// Ступени до 19 растут полностью (основной текст 17 снапается в 19),
+    /// заголовки от 38 — до 1.90 (ниже 30 и 38 сливаются). Панели поверх карты держат прежние
+    /// 1.30 / 1.10.
+    nonisolated static let readingCeiling: Double = 2.60
+
+    nonisolated static func typeFactor(raw: Double, size: CGFloat,
+                                       density: TypeDensity) -> Double {
+        let small: Double, large: Double, from: CGFloat, to: CGFloat
+        switch density {
+        case .reading: small = readingCeiling; large = 1.90; from = 19; to = 38
+        case .dense:   small = 1.30; large = 1.10; from = 15; to = 30
+        }
         let ceiling: Double
         if size <= from {
             ceiling = small
@@ -558,18 +603,37 @@ extension Font {
     /// Maps. Переименование тронуло бы ~550 строк в каждом экране ради слова —
     /// функция сохранила имя, но Rounded здесь больше нет.
     static func rounded(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        scaled(size, weight, .default, .reading)
+    }
+
+    /// То же для панелей поверх карты (HUD, манёвр, тревога, CarPlay): там
+    /// тесно, и системный кегль держится под прежним жёстким потолком.
+    static func dense(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        scaled(size, weight, .default, .dense)
+    }
+
+    static func rounded(_ size: CGFloat, _ weight: Font.Weight = .regular,
+                        density: TypeDensity) -> Font {
+        scaled(size, weight, .default, density)
+    }
+
+    private static func scaled(_ size: CGFloat, _ weight: Font.Weight,
+                               _ design: Font.Design, _ density: TypeDensity) -> Font {
         let step = snapType(size)
-        let factor = typeFactor(raw: rawTypeFactor, size: step)
-        return .system(size: (step * CGFloat(factor)).rounded(), weight: weight)
+        let factor = typeFactor(raw: rawTypeFactor, size: step, density: density)
+        return .system(size: (step * CGFloat(factor)).rounded(), weight: weight, design: design)
     }
 
     /// Крупная цифра — скорость, расстояние, балл, время, деньги. Единственное
     /// место, где остался SF Pro Rounded: приборная цифра читается с вытянутой
     /// руки и отличает «число» от подписи вокруг.
     static func numeral(_ size: CGFloat, _ weight: Font.Weight = .bold) -> Font {
-        let step = snapType(size)
-        let factor = typeFactor(raw: rawTypeFactor, size: step)
-        return .system(size: (step * CGFloat(factor)).rounded(), weight: weight, design: .rounded)
+        scaled(size, weight, .rounded, .reading)
+    }
+
+    /// Цифра панели поверх карты — под жёстким потолком, как `dense`.
+    static func denseNumeral(_ size: CGFloat, _ weight: Font.Weight = .bold) -> Font {
+        scaled(size, weight, .rounded, .dense)
     }
 
     /// Цифра вне шкалы: экран тревоги, знак лимита, карточки для шеринга,
@@ -754,3 +818,29 @@ nonisolated enum RouteColors {
     }
 }
 
+/// Заливки значков, которые приложение рисует для карты движка (UIKit,
+/// один растр на обе темы — ночная карта получает тот же значок). Каждая —
+/// токен Theme в числах, кроме двух своих ролей ниже.
+nonisolated enum MapIconColors {
+    /// Графит предметов карты: светофор, заправка, места, «газа нет». Совпадает
+    /// со спрайтом выпуска (server/omt/make_arrows.py), поэтому своё число.
+    static let graphite: UInt32 = 0x3B4047
+    /// Светлые огни на капсуле светофора.
+    static let signalDot: UInt32 = 0xD9DEE6
+    /// «STOP» — приглушённый красный знака, на ΔE 32 от красного камеры:
+    /// дорожный знак на карте не должен читаться камерой.
+    static let stopSign: UInt32 = 0xA33B38
+    /// Синий диск под белым знаком (флаг цели, булавка, машина, парковка,
+    /// выбранный вариант маршрута) — `Theme.accentFill` дня: до 10.11 здесь
+    /// стоял Tailwind #2563D9, ушедший из интерфейса с 31D.
+    static let accentFill: UInt32 = WidgetPalette.accentFill.light
+    /// «Внимание» под белым знаком: перекрытие, ремонт, «известна только
+    /// очередь». Перекрытие было #C2410C — на ΔE 15 от красного камеры.
+    static let warning: UInt32 = WidgetPalette.warning.light
+    /// «Норма» под белым знаком: своя камера, «газ есть».
+    static let success: UInt32 = WidgetPalette.successFill.light
+    /// Значок «?» неподтверждённой отметки — графит поста (CameraGlyph).
+    static let ghost: UInt32 = CameraGlyph.post.fillRGB
+    /// Текст на белой пилюле значка — `textPrimary` дня.
+    static let ink: UInt32 = WidgetPalette.primary.light
+}

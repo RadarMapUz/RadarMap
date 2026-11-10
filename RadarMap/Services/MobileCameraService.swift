@@ -878,6 +878,13 @@ final class MobileCameraService {
             }
         }
 
+        /// Голос после отметки: новая точка называет тип («Тренога отмечена»),
+        /// очередь и отказы — прежними фразами, там важнее, что делать дальше.
+        func spoken(for kind: ReportKind) -> String {
+            if case .sent(.created) = self { return ReportWords.marked(kind) }
+            return spoken
+        }
+
         var isSuccess: Bool {
             if case .queued = self { return true }   // тап принят, дело за сетью
             if case .sent(let result) = self { return !result.isFailure }

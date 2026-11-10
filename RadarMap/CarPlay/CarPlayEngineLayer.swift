@@ -184,7 +184,7 @@ struct CarPlayEngineLayer: View {
             // ряд полос там в карточке манёвра системы (laneRow).
             maneuverKind: env.route.nextStep?.kind,
             recenterToken: model.recenterRequests,
-            modernStyle: env.settings.mapModernStyle,
+            modernStyle: true,
             performance: performance,
             lowPower: lowPower,
             // В машине карта всегда «по ходу»: это навигатор. Без курса

@@ -245,7 +245,7 @@ nonisolated enum CameraZone {
     /// Проверено CameraZoneTests (ΔE ленты поверх полотна всех классов в
     /// обеих темах; лента ≠ линия маршрута).
     enum Colors {
-        static let day: (hex: UInt32, alpha: Double) = (0xE5372B, 0.30)
+        static let day: (hex: UInt32, alpha: Double) = (CameraGlyph.camera.fillRGB, 0.30)
         static let night: (hex: UInt32, alpha: Double) = (0xFF5A4E, 0.40)
 
         static func pick(daylight: Bool) -> (hex: UInt32, alpha: Double) { daylight ? day : night }

@@ -4607,22 +4607,6 @@
         }
       }
     },
-    "Вдали от камер точность GPS ниже, у камеры — максимальная. Пока на карту смотрят, фиксы идут каждую секунду.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Вдали от камер точность GPS ниже, у камеры — максимальная. Пока на карту смотрят, фиксы идут каждую секунду."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kameralardan uzoqda GPS aniqligi pastroq, kamera yonida — maksimal. Xaritaga qarab turilganda nuqtalar har soniyada keladi."
-          }
-        }
-      }
-    },
     "Вернуть": {
       "localizations": {
         "ru": {
@@ -4860,22 +4844,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aniqni yoqish"
-          }
-        }
-      }
-    },
-    "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно, но вдали от камер точность снижается сама (Настройки → Батарея). Больше всего тратит экран: если смотреть на карту не нужно, погасите его — при доступе «Всегда» о камерах приложение предупредит голосом и с погашенным экраном.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно, но вдали от камер точность снижается сама (Настройки → Батарея). Больше всего тратит экран: если смотреть на карту не нужно, погасите его — при доступе «Всегда» о камерах приложение предупредит голосом и с погашенным экраном."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Safardan tashqari — deyarli hech narsa: ilova faqat kameralar yonida uygʻonadi. Safarda GPS doim ishlaydi, lekin kameralardan uzoqda aniqlik oʻzi pasayadi (Sozlamalar → Batareya). Eng koʻp ekran sarflaydi: xaritaga qarash shart boʻlmasa, uni oʻchiring — «Doim» ruxsati boʻlsa, ilova kameralar haqida oʻchgan ekranda ham ovoz bilan ogohlantiradi."
           }
         }
       }
@@ -6764,22 +6732,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yaqin kishini qoʻshish"
-          }
-        }
-      }
-    },
-    "Добавить здесь": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Добавить здесь"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Shu yerga qoʻshish"
           }
         }
       }
@@ -9879,22 +9831,6 @@
         }
       }
     },
-    "Машина покажет стрелку и расстояние на приборке или проекции, если умеет; ряд полос на экране CarPlay при этом не показывается.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Машина покажет стрелку и расстояние на приборке или проекции, если умеет; ряд полос на экране CarPlay при этом не показывается."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mashina qoʻllab-quvvatlasa, asboblar panelida yoki proyeksiyada yoʻnalish koʻrsatkichi va masofani koʻrsatadi; bunda CarPlay ekranida yoʻl qatorlari koʻrsatilmaydi."
-          }
-        }
-      }
-    },
     "Меньше, чем в прошлый период": {
       "localizations": {
         "ru": {
@@ -10260,22 +10196,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sahifada va xabarlarda: «Aziz uyga ketyapti». Boʻsh boʻlsa — «Haydovchi»."
-          }
-        }
-      }
-    },
-    "Наведите центр на камеру": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Наведите центр на камеру"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Markazni kameraga toʻgʻrilang"
           }
         }
       }
@@ -12859,22 +12779,6 @@
         }
       }
     },
-    "Оценка, не постановление: пришёл ли штраф, знает только портал. Пришедший штраф внесите в «Мои штрафы» — сверим с поездкой и напомним о сроке. Номер и штрафы хранятся только на телефоне.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Оценка, не постановление: пришёл ли штраф, знает только портал. Пришедший штраф внесите в «Мои штрафы» — сверим с поездкой и напомним о сроке. Номер и штрафы хранятся только на телефоне."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bu taxmin, qaror emas: jarima kelgan-kelmaganini faqat portal biladi. Kelgan jarimani «Mening jarimalarim»ga kiriting — safar bilan solishtiramiz va muddatni eslatamiz. Raqam va jarimalar faqat telefonda saqlanadi."
-          }
-        }
-      }
-    },
     "Очередь больше 30 минут": {
       "localizations": {
         "ru": {
@@ -14205,6 +14109,38 @@
         }
       }
     },
+    "Показать, как выглядит оповещение": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать, как выглядит оповещение"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ogohlantirish qanday koʻrinishini koʻrsatish"
+          }
+        }
+      }
+    },
+    "Так выглядит предупреждение у камеры. Коснитесь, чтобы закрыть.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Так выглядит предупреждение у камеры. Коснитесь, чтобы закрыть."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera oldidagi ogohlantirish shunday koʻrinadi. Yopish uchun bosing."
+          }
+        }
+      }
+    },
     "Пост ДПС": {
       "localizations": {
         "ru": {
@@ -14778,22 +14714,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yangilanishlarni tekshirish"
-          }
-        }
-      }
-    },
-    "Проверить штрафы": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Проверить штрафы"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Jarimalarni tekshirish"
           }
         }
       }
@@ -17626,6 +17546,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Taksi, yetkazib berish: kun — bu smena, safarlar emas."
+          }
+        }
+      }
+    },
+    "Заправки, расходы, обслуживание, смены и выгрузка поездок. Выключите — записи останутся на телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заправки, расходы, обслуживание, смены и выгрузка поездок. Выключите — записи останутся на телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yoqilgʻi quyish, xarajatlar, texnik xizmat, smenalar va safarlarni yuklab olish. Oʻchirsangiz — yozuvlar telefonda qoladi."
+          }
+        }
+      }
+    },
+    "Тип машины нужен и без расходов: по нему — заправки или зарядки по пути и в CarPlay.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тип машины нужен и без расходов: по нему — заправки или зарядки по пути и в CarPlay."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina turi xarajatlarsiz ham kerak: unga qarab yoʻldagi va CarPlayʼdagi yoqilgʻi quyish yoki quvvatlash shoxobchalari koʻrsatiladi."
+          }
+        }
+      }
+    },
+    "Сколько поездок хранится и как стереть историю.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сколько поездок хранится и как стереть историю."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qancha safar saqlanayotgani va tarixni qanday oʻchirish."
           }
         }
       }
@@ -21053,6 +21021,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "aylanada %lld-chiqish"
+          }
+        }
+      }
+    },
+    "въезжайте на кольцо": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "въезжайте на кольцо"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "aylanaga kiring"
           }
         }
       }
@@ -32407,6 +32391,22 @@
         }
       }
     },
+    "%1$@. Затем %2$@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@. Затем %2$@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@. Keyin %2$@"
+          }
+        }
+      }
+    },
     "пост ДПС": {
       "comment": "Сводка листа «Перед дальней дорогой» (LongTripText.postsLabel): форма для 1, 21…; число стоит отдельно.",
       "localizations": {
@@ -35631,22 +35631,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Safarda hajmli koʻrinish"
-          }
-        }
-      }
-    },
-    "Наклон, серый асфальт, маршрут во всю полосу и сужение к нужному ряду у поворота — на телефоне и в машине. Выключите — наклон вернётся прежний.": {
-      "localizations": {
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Наклон, серый асфальт, маршрут во всю полосу и сужение к нужному ряду у поворота — на телефоне и в машине. Выключите — наклон вернётся прежний."
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Qiyalik, kulrang asfalt, marshrut butun yoʻl boʻylab va burilishda kerakli qatorga torayadi — telefonda ham, mashinada ham. Oʻchirsangiz — avvalgi qiyalik qaytadi."
           }
         }
       }
@@ -39971,6 +39955,454 @@
           "stringUnit": {
             "state": "translated",
             "value": "3D haydash"
+          }
+        }
+      }
+    },
+    "Дополнительно": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дополнительно"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qoʻshimcha"
+          }
+        }
+      }
+    },
+    "Голос о превышении, погода на перевалах, уведомления.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голос о превышении, погода на перевалах, уведомления."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tezlikni oshirish haqida ovoz, dovonlardagi ob-havo, bildirishnomalar."
+          }
+        }
+      }
+    },
+    "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно, но вдали от камер точность снижается сама (Настройки → Для опытных). Больше всего тратит экран: если смотреть на карту не нужно, погасите его — при доступе «Всегда» о камерах приложение предупредит голосом и с погашенным экраном.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вне поездки — почти ничего: приложение просыпается только у камер. В поездке GPS работает постоянно, но вдали от камер точность снижается сама (Настройки → Для опытных). Больше всего тратит экран: если смотреть на карту не нужно, погасите его — при доступе «Всегда» о камерах приложение предупредит голосом и с погашенным экраном."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safardan tashqari — deyarli hech narsa: ilova faqat kameralar yonida uygʻonadi. Safarda GPS doim ishlaydi, lekin kameralardan uzoqda aniqlik oʻzi pasayadi (Sozlamalar → Tajribalilar uchun). Eng koʻp ekran sarflaydi: xaritaga qarash shart boʻlmasa, uni oʻchiring — «Doim» ruxsati boʻlsa, ilova kameralar haqida oʻchgan ekranda ham ovoz bilan ogohlantiradi."
+          }
+        }
+      }
+    },
+    "Для опытных": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для опытных"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tajribalilar uchun"
+          }
+        }
+      }
+    },
+    "Вдали от камер GPS бережёт батарею, у камеры работает в полную силу.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вдали от камер GPS бережёт батарею, у камеры работает в полную силу."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kameralardan uzoqda GPS batareyani tejaydi, kamera yonida toʻliq quvvatda ishlaydi."
+          }
+        }
+      }
+    },
+    "Наклонная карта в поездке и маршрут во всю полосу — на телефоне и в машине.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Наклонная карта в поездке и маршрут во всю полосу — на телефоне и в машине."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Safarda qiya xarita va butun qator kengligidagi marshrut — telefonda ham, mashinada ham."
+          }
+        }
+      }
+    },
+    "Стрелка поворота на приборной панели, если машина умеет. Ряд полос на экране CarPlay при этом скрыт.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Стрелка поворота на приборной панели, если машина умеет. Ряд полос на экране CarPlay при этом скрыт."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mashina qoʻllab-quvvatlasa, asboblar panelida burilish koʻrsatkichi koʻrinadi. Bunda CarPlay ekranida yoʻl qatorlari koʻrsatilmaydi."
+          }
+        }
+      }
+    },
+    "Точка каждую секунду — чтобы положить видео регистратора на карту.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Точка каждую секунду — чтобы положить видео регистратора на карту."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Har soniyada bitta nuqta — videoregistrator videosini xaritaga qoʻyish uchun."
+          }
+        }
+      }
+    },
+    "Открыть портал штрафов": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть портал штрафов"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jarimalar portalini ochish"
+          }
+        }
+      }
+    },
+    "Откроется в браузере": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Откроется в браузере"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brauzerda ochiladi"
+          }
+        }
+      }
+    },
+    "Скопируем номер — вставьте его на портале": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Скопируем номер — вставьте его на портале"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raqamdan nusxa olamiz — uni portalga qoʻying"
+          }
+        }
+      }
+    },
+    "Приложение не узнаёт о штрафах само: кнопка копирует госномер и открывает официальный портал в браузере.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приложение не узнаёт о штрафах само: кнопка копирует госномер и открывает официальный портал в браузере."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ilova jarimalar haqida oʻzi bilmaydi: tugma davlat raqamidan nusxa oladi va rasmiy portalni brauzerda ochadi."
+          }
+        }
+      }
+    },
+    "Пришедший штраф внесите в «Мои штрафы» — сверим с поездкой и напомним о сроке.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пришедший штраф внесите в «Мои штрафы» — сверим с поездкой и напомним о сроке."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kelgan jarimani «Mening jarimalarim»ga kiriting — safar bilan solishtiramiz va muddatni eslatamiz."
+          }
+        }
+      }
+    },
+    "Номер и штрафы хранятся только на телефоне.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Номер и штрафы хранятся только на телефоне."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raqam va jarimalar faqat telefonda saqlanadi."
+          }
+        }
+      }
+    },
+    "Оценка, не постановление: пришёл ли штраф, знает только портал.": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оценка, не постановление: пришёл ли штраф, знает только портал."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu taxmin, qaror emas: jarima kelgan-kelmaganini faqat portal biladi."
+          }
+        }
+      }
+    },
+    "Где стоит камера?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Где стоит камера?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamera qayerda turibdi?"
+          }
+        }
+      }
+    },
+    "Где стоит тренога?": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Где стоит тренога?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uch oyoq qayerda turibdi?"
+          }
+        }
+      }
+    },
+    "Наведите на неё центр карты": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Наведите на неё центр карты"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarita markazini unga toʻgʻrilang"
+          }
+        }
+      }
+    },
+    "Сохранить камеру": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранить камеру"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kamerani saqlash"
+          }
+        }
+      }
+    },
+    "Отметить треногу": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отметить треногу"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uch oyoqni belgilash"
+          }
+        }
+      }
+    },
+    "Камера скорости": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камера скорости"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tezlik kamerasi"
+          }
+        }
+      }
+    },
+    "Камера на светофоре": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Камера на светофоре"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Svetofordagi kamera"
+          }
+        }
+      }
+    },
+    "Меряет скорость · только у вас": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Меряет скорость · только у вас"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tezlikni oʻlchaydi · faqat sizda"
+          }
+        }
+      }
+    },
+    "Светофор и полосы · только у вас": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Светофор и полосы · только у вас"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Svetofor va qatorlar · faqat sizda"
+          }
+        }
+      }
+    },
+    "Увидят все водители · исчезнет сама": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Увидят все водители · исчезнет сама"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Barcha haydovchilar koʻradi · oʻzi yoʻqoladi"
+          }
+        }
+      }
+    },
+    "Только рядом с вами — до %@": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только рядом с вами — до %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faqat yoningizda — %@ gacha"
+          }
+        }
+      }
+    },
+    "Нужна ваша геопозиция — отметка ставится рядом": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нужна ваша геопозиция — отметка ставится рядом"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geolokatsiyangiz kerak — belgi yoningizda qoʻyiladi"
+          }
+        }
+      }
+    },
+    "Отметки водителей сейчас выключены": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отметки водителей сейчас выключены"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haydovchilar belgilari hozir oʻchirilgan"
           }
         }
       }

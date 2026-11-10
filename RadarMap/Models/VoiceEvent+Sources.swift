@@ -146,7 +146,10 @@ nonisolated extension VoiceEvent.Action {
         case "merge":               self = .merge
         case "on ramp":             self = .onRamp
         case "off ramp":            self = .offRamp
-        case "roundabout", "rotary": self = .roundabout(exit: exit ?? 1)
+        case "roundabout", "rotary":
+            // Без номера съезда фраза другая («въезжайте на кольцо») — её нет в записи.
+            guard let exit, exit > 0 else { return nil }
+            self = .roundabout(exit: exit)
         case "arrive":              self = .arrived
         default:                    return nil
         }

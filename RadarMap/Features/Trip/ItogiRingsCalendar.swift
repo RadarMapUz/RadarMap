@@ -107,8 +107,8 @@ struct ItogiRingsCalendar: View {
 
     private var legend: some View {
         HStack(spacing: 14) {
-            legendDot(Theme.Stats.ringCalm.first ?? .green, "Аккуратность")
-            legendDot(Theme.Stats.ringRoad.first ?? .purple, "Пробег")
+            legendDot(Theme.Stats.ringCalm.first ?? Theme.success, "Аккуратность")
+            legendDot(Theme.Stats.ringRoad.first ?? Theme.Stats.commute, "Пробег")
             legendDot(Theme.action, "Идеально")
             legendDot(Theme.danger, "Штраф")
         }

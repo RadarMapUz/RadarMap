@@ -80,12 +80,12 @@ nonisolated enum PeriodExportPDF {
                     var tallest: CGFloat = 0
                     for (index, title) in table.headers.enumerated() {
                         let w = width * table.widths[index]
-                        tallest = max(tallest, draw(title, font: .boldSystemFont(ofSize: 9), color: .darkGray,
+                        tallest = max(tallest, draw(title, font: .boldSystemFont(ofSize: 9), color: Theme.rgb(WidgetPalette.secondary.light),
                                                     x: x, width: w - 4))
                         x += w
                     }
                     y += tallest + 4
-                    UIColor.lightGray.setFill()
+                    Theme.rgb(WidgetPalette.tertiary.light).setFill()
                     UIRectFill(CGRect(x: margin, y: y, width: width, height: 0.5))
                     y += 4
                 }
@@ -113,7 +113,7 @@ nonisolated enum PeriodExportPDF {
                 y += 16
             }
             ensure(40)
-            draw(document.footer, font: .systemFont(ofSize: 9), color: .gray)
+            draw(document.footer, font: .systemFont(ofSize: 9), color: Theme.rgb(WidgetPalette.tertiary.light))
         }
     }
 }

@@ -26,7 +26,7 @@ nonisolated enum CompassRing {
     }
 
     /// Север — синим акцентом приложения (красный на карте — только камера).
-    static let northRGB: UInt32 = 0x6BA3FF
+    static let northRGB: UInt32 = WidgetPalette.accent.dark
 
     /// Международные отметки сторон света (не слова интерфейса).
     static let marks = [Mark(letter: "N", bearing: 0), Mark(letter: "E", bearing: 90),

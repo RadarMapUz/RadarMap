@@ -84,6 +84,12 @@ nonisolated struct SearchIndex: Sendable {
     private let sortedTokens: [Int32]
     /// Триграмма (с меткой начала слова) → слова — кандидаты нечёткого.
     private let trigrams: [UInt32: [Int32]]
+    /// Номера домов (houseKey, байтами) по алфавиту и дома с каждым: «ka 1»
+    /// берёт дом 1 сразу у всех подходящих улиц, не перебирая их дома.
+    private let houseKeys: [[UInt8]]
+    private let housesByKey: [[Int32]]
+    /// Дом (индекс в `addresses`) → его улица.
+    private let houseStreet: [Int32]
 
     // MARK: - Сборка
 
@@ -143,6 +149,20 @@ nonisolated struct SearchIndex: Sendable {
                 trigrams[gram, default: []].append(Int32(id))
             }
         }
+
+        var byKey: [String: [Int32]] = [:]
+        var houseStreet = [Int32](repeating: 0, count: book?.addresses.count ?? 0)
+        for (index, street) in streets.enumerated() {
+            for (offset, key) in street.houseKeys.enumerated() {
+                let address = street.houses.lowerBound + offset
+                houseStreet[address] = Int32(index)
+                byKey[key, default: []].append(Int32(address))
+            }
+        }
+        let keyed = byKey.map { (Array($0.key.utf8), $0.value) }.sorted { Self.less($0.0, $1.0) }
+        self.houseKeys = keyed.map(\.0)
+        self.housesByKey = keyed.map(\.1)
+        self.houseStreet = houseStreet
 
         self.names = names
         self.tokens = tokens
@@ -421,27 +441,32 @@ nonisolated struct SearchIndex: Sendable {
 
         // Места.
         if let venueBook, !venues.isEmpty {
-            let ranked = venues.map { index, candidate in
+            let rows = venues.map { index, candidate in
                 let venue = venueBook.venues[index]
-                return (venue, candidate, near.map { Self.distance($0, venue.point) } ?? 0)
-            }.sorted { left, right in
-                let leftHint = venuePenalty(left.0.kind), rightHint = venuePenalty(right.0.kind)
-                if leftHint != rightHint { return leftHint < rightHint }
-                if left.1.tier != right.1.tier { return left.1.tier < right.1.tier }
-                if left.1.extra != right.1.extra { return left.1.extra > right.1.extra }
-                if left.1.primary != right.1.primary { return left.1.primary }
-                let leftRank = Self.kindRank(left.0.kind), rightRank = Self.kindRank(right.0.kind)
-                if leftRank != rightRank { return leftRank < rightRank }
-                if left.2 != right.2 { return left.2 < right.2 }
-                return left.0.name < right.0.name
+                return VenueRow(venue: index, hint: venuePenalty(venue.kind), candidate: candidate,
+                                rank: Self.kindRank(venue.kind),
+                                distance: near.map { Self.distance($0, venue.point) } ?? 0)
+            }
+            var ranked = Ranked(rows) { left, right in
+                if left.hint != right.hint { return left.hint < right.hint }
+                if left.candidate.tier != right.candidate.tier { return left.candidate.tier < right.candidate.tier }
+                if left.candidate.extra != right.candidate.extra { return left.candidate.extra > right.candidate.extra }
+                if left.candidate.primary != right.candidate.primary { return left.candidate.primary }
+                if left.rank != right.rank { return left.rank < right.rank }
+                if left.distance != right.distance { return left.distance < right.distance }
+                let leftName = venueBook.venues[left.venue].name, rightName = venueBook.venues[right.venue].name
+                if leftName != rightName { return leftName < rightName }
+                return left.venue < right.venue
             }
             var seen = Set(answer.venues.map(\.id))
-            for (venue, candidate, _) in ranked where answer.venues.count < venueLimit {
+            while answer.venues.count < venueLimit || bestVenue == nil, let row = ranked.next() {
+                if bestVenue == nil { bestVenue = (row.hint, row.candidate.tier.rawValue) }
+                guard answer.venues.count < venueLimit else { break }
+                let venue = venueBook.venues[row.venue]
                 guard seen.insert(venue.id).inserted else { continue }
                 answer.venues.append(venue)
-                if let former = candidate.former { answer.formerNames[venue.id] = former }
+                if let former = row.candidate.former { answer.formerNames[venue.id] = former }
             }
-            if let first = ranked.first { bestVenue = (venuePenalty(first.0.kind), first.1.tier.rawValue) }
         }
 
         // Улицы и дома.
@@ -449,41 +474,68 @@ nonisolated struct SearchIndex: Sendable {
         if let book, !streets.isEmpty {
             let streetHint = streetPenalty
             if let house = query.house {
-                // Лёгкие строки: индекс дома и расстояние. Address, его id и
-                // подпись «бывш.» — только для тех, что попадут в ответ: «ka 1»
-                // совпадает с десятками тысяч домов, и строить строку на
-                // каждый — это 170 мс на главном потоке (ревью 03.11).
-                var found: [(house: Int, exact: Bool, candidate: Candidate, distance: Double)] = []
-                for (index, candidate) in streets {
-                    let street = book.streets[index]
-                    for (offset, address) in street.houses.enumerated() {
-                        let key = street.houseKeys[offset]
-                        guard key.hasPrefix(house) else { continue }
-                        found.append((address, key == house, candidate,
-                                      near.map { Self.distance($0, book.addresses[address].point) } ?? 0))
+                // Сначала точный номер (он всегда выше начала номера) — из
+                // индекса номеров, без перебора домов каждой улицы; начало
+                // номера («1» — «12», «1а») — только если точных не хватило.
+                // Address, его id и подпись «бывш.» — только для строк ответа
+                // (ревью 03.11: строка на каждый из ~30 тысяч домов — 170 мс).
+                var position = [Int32](repeating: -1, count: streetCount)
+                for (slot, street) in streets.enumerated() { position[street.0] = Int32(slot) }
+                let key = Array(house.utf8)
+                let keys = houseKeyRange(key)
+                let exactKey = keys.first.flatMap { houseKeys[$0] == key ? $0 : nil }
+                func row(_ address: Int32) -> HouseRow? {
+                    let slot = position[Int(houseStreet[Int(address)])]
+                    guard slot >= 0 else { return nil }
+                    return HouseRow(address: Int(address), candidate: streets[Int(slot)].1,
+                                    distance: near.map { Self.distance($0, book.addresses[Int(address)].point) } ?? 0)
+                }
+                func show(_ rows: [HouseRow]) {
+                    var ranked = Ranked(rows) { left, right in
+                        if left.candidate.tier != right.candidate.tier { return left.candidate.tier < right.candidate.tier }
+                        if left.distance != right.distance { return left.distance < right.distance }
+                        return left.address < right.address
+                    }
+                    while answer.addresses.count < streetLimit || bestStreet == nil, let row = ranked.next() {
+                        if bestStreet == nil { bestStreet = (streetHint, row.candidate.tier.rawValue) }
+                        guard answer.addresses.count < streetLimit else { break }
+                        let address = book.addresses[row.address]
+                        // Один адрес — одна строка (точка и контур дома в OSM).
+                        let twin = answer.addresses.contains { other in
+                            other.street == address.street && other.house == address.house
+                                && Self.distance(other.point, address.point) < AppConfig.addressDuplicateMeters
+                        }
+                        if twin { continue }
+                        answer.addresses.append(address)
+                        if let former = row.candidate.former { answer.formerNames[address.id] = former }
                     }
                 }
-                found.sort { left, right in
-                    if left.exact != right.exact { return left.exact }
-                    if left.candidate.tier != right.candidate.tier { return left.candidate.tier < right.candidate.tier }
-                    if left.distance != right.distance { return left.distance < right.distance }
-                    return left.house < right.house
-                }
-                for row in found where answer.addresses.count < streetLimit {
-                    let address = book.addresses[row.house]
-                    // Один адрес — одна строка (точка и контур дома в OSM).
-                    let twin = answer.addresses.contains { other in
-                        other.street == address.street && other.house == address.house
-                            && Self.distance(other.point, address.point) < AppConfig.addressDuplicateMeters
+                if let exactKey { show(housesByKey[exactKey].compactMap(row)) }
+                if answer.addresses.count < streetLimit {
+                    let longer = keys.filter { $0 != exactKey }
+                    let indexed = longer.reduce(0) { $0 + housesByKey[$1].count }
+                    let scanned = streets.reduce(0) { $0 + book.streets[$1.0].houses.count }
+                    var rows: [HouseRow] = []
+                    // Дешевле из двух: дома с таким началом номера по всему
+                    // файлу или все дома подошедших улиц.
+                    if indexed <= scanned {
+                        for slot in longer { rows += housesByKey[slot].compactMap(row) }
+                    } else {
+                        for (index, candidate) in streets {
+                            let street = book.streets[index]
+                            for (offset, houseKey) in street.houseKeys.enumerated()
+                            where houseKey.utf8.count > key.count && houseKey.utf8.starts(with: key) {
+                                let address = street.houses.lowerBound + offset
+                                rows.append(HouseRow(address: address, candidate: candidate,
+                                                     distance: near.map { Self.distance($0, book.addresses[address].point) } ?? 0))
+                            }
+                        }
                     }
-                    if twin { continue }
-                    answer.addresses.append(address)
-                    if let former = row.candidate.former { answer.formerNames[address.id] = former }
+                    show(rows)
                 }
-                if let first = found.first { bestStreet = (streetHint, first.candidate.tier.rawValue) }
             } else {
-                var ranked: [(street: Int, pick: Int, candidate: Candidate, distance: Double)] = []
-                ranked.reserveCapacity(streets.count)
+                var rows: [StreetRow] = []
+                rows.reserveCapacity(streets.count)
                 for (index, candidate) in streets {
                     let street = book.streets[index]
                     guard !street.houses.isEmpty else { continue }
@@ -496,22 +548,23 @@ nonisolated struct SearchIndex: Sendable {
                             if distance < pickDistance { pick = house; pickDistance = distance }
                         }
                     }
-                    ranked.append((index, pick, candidate, pickDistance))
+                    rows.append(StreetRow(street: index, pick: pick, candidate: candidate, distance: pickDistance))
                 }
-                ranked.sort { left, right in
+                var ranked = Ranked(rows) { left, right in
                     if left.candidate.tier != right.candidate.tier { return left.candidate.tier < right.candidate.tier }
                     if left.candidate.extra != right.candidate.extra { return left.candidate.extra > right.candidate.extra }
                     if left.candidate.primary != right.candidate.primary { return left.candidate.primary }
                     if left.distance != right.distance { return left.distance < right.distance }
                     return left.street < right.street
                 }
-                for row in ranked.prefix(streetLimit) {
+                while answer.addresses.count < streetLimit || bestStreet == nil, let row = ranked.next() {
+                    if bestStreet == nil { bestStreet = (streetHint, row.candidate.tier.rawValue) }
+                    guard answer.addresses.count < streetLimit else { break }
                     let address = Address(street: book.streets[row.street].name, house: "",
                                           point: book.addresses[row.pick].point)
                     answer.addresses.append(address)
                     if let former = row.candidate.former { answer.formerNames[address.id] = former }
                 }
-                if let first = ranked.first { bestStreet = (streetHint, first.candidate.tier.rawValue) }
             }
         }
 
@@ -521,6 +574,88 @@ nonisolated struct SearchIndex: Sendable {
         default: answer.venuesFirst = true
         }
         return answer
+    }
+
+    private struct VenueRow {
+        let venue: Int
+        let hint: Int
+        let candidate: Candidate
+        let rank: Int
+        let distance: Double
+    }
+
+    private struct StreetRow {
+        let street: Int
+        let pick: Int
+        let candidate: Candidate
+        let distance: Double
+    }
+
+    private struct HouseRow {
+        let address: Int
+        let candidate: Candidate
+        let distance: Double
+    }
+
+    /// Строки по порядку `less` без полной сортировки: в ответ идут 8–12
+    /// из тысяч, и сортировка всех была главной ценой запроса. Берёт первые
+    /// `take`, при нехватке (дубли пропущены) — вдвое больше. `less` —
+    /// строгий полный порядок, иначе добор сдвинет уже выданные строки.
+    private struct Ranked<Row>: IteratorProtocol {
+        private let rows: [Row]
+        private let less: (Row, Row) -> Bool
+        private var take: Int
+        private var top: [Row] = []
+        private var position = 0
+        private var started = false
+
+        init(_ rows: [Row], take: Int = 16, by less: @escaping (Row, Row) -> Bool) {
+            self.rows = rows
+            self.less = less
+            self.take = take
+        }
+
+        mutating func next() -> Row? {
+            if position == top.count {
+                if started, top.count == rows.count { return nil }
+                if started { take *= 2 }
+                started = true
+                top = SearchIndex.leading(rows, take, by: less)
+                guard position < top.count else { return nil }
+            }
+            defer { position += 1 }
+            return top[position]
+        }
+    }
+
+    /// Первые `count` строк по порядку `less`, отсортированные.
+    private static func leading<Row>(_ rows: [Row], _ count: Int, by less: (Row, Row) -> Bool) -> [Row] {
+        if count >= rows.count { return rows.sorted(by: less) }
+        var top: [Row] = []
+        top.reserveCapacity(count + 1)
+        for row in rows {
+            if top.count == count, let last = top.last, !less(row, last) { continue }
+            var low = 0, high = top.count
+            while low < high {
+                let mid = (low + high) / 2
+                if less(top[mid], row) { low = mid + 1 } else { high = mid }
+            }
+            top.insert(row, at: low)
+            if top.count > count { top.removeLast() }
+        }
+        return top
+    }
+
+    /// Номера домов, начинающиеся с `prefix` (включая равный), — индексы в `houseKeys`.
+    private func houseKeyRange(_ prefix: [UInt8]) -> Range<Int> {
+        var low = 0, high = houseKeys.count
+        while low < high {
+            let mid = (low + high) / 2
+            if Self.less(houseKeys[mid], prefix) { low = mid + 1 } else { high = mid }
+        }
+        var end = low
+        while end < houseKeys.count, houseKeys[end].starts(with: prefix) { end += 1 }
+        return low..<end
     }
 
     /// При равном совпадении: станция и район выше кафе с тем же словом в

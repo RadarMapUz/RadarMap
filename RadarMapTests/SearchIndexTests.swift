@@ -232,6 +232,61 @@ final class SearchIndexTests: XCTestCase {
         XCTAssertEqual(found.first?.point.latitude, near.latitude)
     }
 
+    func testStreetTypeWordWithHouseFindsTheHouse() {
+        for query in ["Xamza ko'chasi 3", "хамза кўчаси 3", "улица Хамза 3"] {
+            XCTAssertEqual(index().search(query, near: near).addresses.first?.title, "Xamza ko'chasi, 3", query)
+        }
+    }
+
+    /// Номер дома у многих улиц сразу (индекс номеров + отбор первых без
+    /// полной сортировки): точный номер выше начала номера, ближе — выше,
+    /// начало номера добирается, только если точных не хватило.
+    func testHouseAcrossManyStreetsKeepsTheOrder() {
+        var addresses: [Address] = []
+        for i in 0..<40 {
+            let lat = near.latitude + 0.001 * Double((i * 17) % 40 + 1)
+            for (house, shift) in [("1", 0.0), ("10", 0.0002), ("1a", 0.0003), ("21", 0.0004)] {
+                addresses.append(Address(street: "Kamolon-\(i) ko'chasi", house: house,
+                                         point: CLLocationCoordinate2D(latitude: lat + shift, longitude: near.longitude)))
+            }
+        }
+        for i in 0..<30 {
+            addresses.append(Address(street: "Navoiy-\(i) ko'chasi", house: "1",
+                                     point: CLLocationCoordinate2D(latitude: near.latitude, longitude: near.longitude + 0.0001 * Double(i))))
+        }
+        let index = SearchIndex(book: AddressBook(addresses: addresses), venues: nil)
+
+        let exact = index.search("ka 1", near: near).addresses
+        XCTAssertEqual(exact.count, 12)
+        XCTAssertTrue(exact.allSatisfy { $0.house == "1" && $0.street.hasPrefix("Kamolon") })
+        XCTAssertEqual(exact.map(\.point.latitude), exact.map(\.point.latitude).sorted(), "ближе — выше")
+        XCTAssertEqual(exact.first?.point.latitude ?? 0, near.latitude + 0.001, accuracy: 1e-9)
+
+        let prefix = index.search("ka 2", near: near).addresses
+        XCTAssertEqual(prefix.count, 12, "точного «2» нет — начало номера")
+        XCTAssertTrue(prefix.allSatisfy { $0.house == "21" })
+        XCTAssertEqual(prefix.map(\.point.latitude), prefix.map(\.point.latitude).sorted())
+
+        // Kamolon-3 и Kamolon-30…39: одиннадцать домов «1», двенадцатый —
+        // начало номера у улицы, совпавшей точно.
+        let mixed = index.search("kamolon-3 1", near: near).addresses
+        XCTAssertEqual(mixed.count, 12)
+        XCTAssertEqual(mixed.first?.title, "Kamolon-3 ko'chasi, 1")
+        XCTAssertTrue(mixed.prefix(11).allSatisfy { $0.house == "1" })
+        XCTAssertEqual(mixed.last?.title, "Kamolon-3 ko'chasi, 10")
+
+        let typed = index.search("ko", near: near).addresses
+        XCTAssertEqual(typed.count, 12)
+        XCTAssertTrue(typed.allSatisfy { $0.street.hasPrefix("Kamolon") }, "«ko» — не каждая «… ko'chasi»")
+    }
+
+    func testOneAddressIsOneRow() {
+        let contour = CLLocationCoordinate2D(latitude: near.latitude + 0.0001, longitude: near.longitude)
+        let streets = AddressBook(addresses: [Address(street: "Xamza ko'chasi", house: "1", point: near),
+                                              Address(street: "Xamza ko'chasi", house: "1", point: contour)])
+        XCTAssertEqual(SearchIndex(book: streets, venues: nil).search("хамза 1", near: near).addresses.count, 1)
+    }
+
     // MARK: - Приведение и расстояние
 
     func testFoldMakesTheThreeScriptsEqual() {

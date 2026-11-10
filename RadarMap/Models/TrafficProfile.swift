@@ -128,7 +128,7 @@ nonisolated struct TrafficProfile: Sendable {
         }
         return TrafficProfile(generated: Date(timeIntervalSince1970: generated),
                               snapshot: TrafficSnapshot(generated: Date(timeIntervalSince1970: generated),
-                                                        edges: edges, cellDegrees: cellDegrees),
+                                                        edges: edges, cellDegrees: cellDegrees, linked: false),
                               slots: slots, curveIndex: curveIndex, curves: curves)
     }
 

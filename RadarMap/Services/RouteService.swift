@@ -768,10 +768,10 @@ final class RouteService {
                                          typical: [TypicalTraffic.Bucket: TrafficSnapshot]) -> TrafficForecast.Delay? {
         if profile != nil, let ahead = TrafficTimeAhead.delay(along: points, baseTime: travelTime, departure: now,
                                                               now: now, live: live, profile: profile) {
-            return ahead
+            return TrafficForecast.claimable(ahead)
         }
-        return TrafficForecast.delay(along: points, baseTime: travelTime, departure: now, now: now,
-                                     live: live, typical: { typical[$0] })
+        return TrafficForecast.claimable(TrafficForecast.delay(along: points, baseTime: travelTime, departure: now,
+                                                               now: now, live: live, typical: { typical[$0] }))
     }
 
     /// Остаток задержки сразу после выбора варианта, до первого фикса:

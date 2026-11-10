@@ -86,7 +86,7 @@ struct RoutePanel: View {
                     Text(verbatim: route.etaText)
                         .font(.denseNumeral(30, .heavy))
                         .foregroundStyle(route.trafficNote == nil ? Theme.textPrimary
-                                         : Self.trafficTint(route.trafficDelay ?? 0))
+                                         : Self.trafficTint(route.trafficDelay))
                         .lineLimit(1)
                         .contentTransition(.numericText())
                     // Подпись пробок не влезла в строку (SE, «обычно +12 мин в
@@ -153,7 +153,7 @@ struct RoutePanel: View {
     }
 
     private func trafficNoteText(_ note: String) -> some View {
-        Text(verbatim: note).foregroundStyle(Self.trafficTint(env.route.trafficDelay ?? 0))
+        Text(verbatim: note).foregroundStyle(Self.trafficTint(env.route.trafficDelay))
     }
 
     /// Строка «Перед дальней дорогой» — видна сразу, а не в «…»: на трассе без
@@ -317,7 +317,8 @@ struct RoutePanel: View {
                     Label(line ?? " ", systemImage: "car.2.fill")
                         .labelStyle(.titleAndIcon)
                         .font(.dense(11, .bold))
-                        .foregroundStyle(isSelected ? Theme.onAccentFillSecondary : Self.trafficTint(delay))
+                        .foregroundStyle(isSelected ? Theme.onAccentFillSecondary
+                                         : Self.trafficTint(variant.shownTrafficDelay))
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                         .opacity(line == nil ? 0 : 1)
@@ -364,12 +365,14 @@ struct RoutePanel: View {
     }
 
     /// Цвет пробки на маршруте: заметная задержка — янтарь, большая — красный,
-    /// без пробок — зелёный. Пороги — общие с машиной (RoutePreview.trafficTone).
-    static func trafficTint(_ delay: TimeInterval) -> Color {
+    /// без пробок — зелёный, данных нет — нейтральный (зелёный утверждал бы
+    /// «свободно»). Пороги — общие с машиной (RoutePreview.trafficTone).
+    static func trafficTint(_ delay: TimeInterval?) -> Color {
         switch RoutePreview.trafficTone(delay: delay) {
-        case .heavy:           return Theme.danger
-        case .slow:            return Theme.warning
-        case .free, .unknown:  return Theme.success
+        case .heavy:    return Theme.danger
+        case .slow:     return Theme.warning
+        case .free:     return Theme.success
+        case .unknown:  return Theme.textSecondary
         }
     }
 

@@ -693,6 +693,9 @@ final class AppEnvironment {
                 // Близкие видят прибытие (12б.6, 22.1): кому и что — FamilyShare.
                 self.family.update()
             }
+            // Набор старше 10 минут снимается и с фиксом: такт сети в долгой
+            // поездке без связи может ждать минутами.
+            traffic?.dropStale()
             if let traffic, let route, route.isActive { route.refreshTrafficDelay(revision: traffic.revision) }
             // «Впереди пробка» — только без маршрута: с маршрутом пробки уже в
             // ETA и в предложении объезда. Одна фраза на пробку (JamAhead) и,

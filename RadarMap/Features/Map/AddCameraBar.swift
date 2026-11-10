@@ -24,10 +24,10 @@ struct AddCameraBar: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(kind == .tripod ? String(localized: "Где стоит тренога?")
                                          : String(localized: "Где стоит камера?"))
-                        .font(.rounded(17, .semibold))
+                        .font(.dense(17, .semibold))
                         .foregroundStyle(Theme.textPrimary)
                     Text("Наведите на неё центр карты")
-                        .font(.rounded(13))
+                        .font(.dense(13))
                         .foregroundStyle(Theme.textSecondary)
                 }
                 .accessibilityElement(children: .combine)
@@ -61,6 +61,7 @@ struct AddCameraBar: View {
                 }
             }
             .padding(16)
+            .typeDensity(.dense)
         }
     }
 
@@ -76,16 +77,16 @@ struct AddCameraBar: View {
                 CameraIcon(kind: option.cameraType, side: 30, dashedRim: option == .tripod)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(Self.title(option))
-                        .font(.rounded(15, .semibold))
+                        .font(.dense(15, .semibold))
                         .foregroundStyle(Theme.textPrimary)
                     Text(Self.consequence(option, tripod: tripod))
-                        .font(.rounded(12))
+                        .font(.dense(12))
                         .foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .font(.rounded(20))
+                    .font(.dense(20))
                     .foregroundStyle(selected ? Theme.accent : Theme.textTertiary)
                     .accessibilityHidden(true)
             }

@@ -552,6 +552,26 @@ final class AlertPlayer: NSObject {
     }
     #endif
 
+    /// Когда просили пример (uptime, нс): сессия активируется не мгновенно,
+    /// и второе нажатие в этот зазор ещё не видит звука.
+    private var sampleRequestedAt: UInt64 = 0
+
+    /// Пример оповещения вне поездки (`AlertSampleView`): тот же сигнал и та
+    /// же фраза, что у камеры в городе, по тем же настройкам звука и голоса.
+    /// Пока что-то звучит, пример молчит — настоящую фразу он не перебивает.
+    func playSample() {
+        let now = DispatchTime.now().uptimeNanoseconds
+        let sounding = (player?.isPlaying ?? false) || synthesizer.isSpeaking || synthOutstanding > 0
+            || recordedPlaying || !pendingLines.isEmpty
+        let guardNanos = UInt64(AppConfig.alertSampleRepeatGuardSeconds * 1e9)
+        guard !sounding, now &- sampleRequestedAt > guardNanos else { return }
+        sampleRequestedAt = now
+        let event = VoiceEvent.camera(.init(kind: .stationaryCamera, form: .brief,
+                                             meters: Int(AlertSample.meters)))
+        if settings.soundEnabled { beep(count: 1) }
+        if settings.voiceEnabled { speak(VoiceText.render(event), event: event) }
+    }
+
     /// Замолчать СЕЙЧАС: оборвать фразу и сигнал на полуслове. Выключенный звук
     /// гасит только следующие оповещения, а водитель, нажавший «без звука» у
     /// камеры, хочет тишины немедленно, а не после конца фразы.

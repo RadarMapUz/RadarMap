@@ -38,13 +38,13 @@ struct MapPopoverHeader: View {
     var body: some View {
         HStack(spacing: 8) {
             Text(title)
-                .font(.rounded(13, .semibold))
+                .font(.dense(13, .semibold))
                 .foregroundStyle(Theme.textSecondary)
                 .accessibilityAddTraits(.isHeader)
             Spacer(minLength: 8)
             Button(action: onClose) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.rounded(18))
+                    .font(.dense(18))
                     .foregroundStyle(Theme.textTertiary)
                     .tapTarget()
             }

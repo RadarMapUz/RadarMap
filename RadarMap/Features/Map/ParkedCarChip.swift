@@ -25,17 +25,17 @@ struct ParkedCarChip: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "car.fill")
-                        .font(.rounded(11, .bold))
+                        .font(.dense(11, .bold))
                         .foregroundStyle(.white)
                         .frame(width: 24, height: 24)
                         .background(Theme.accentFill, in: Circle())
                         .accessibilityHidden(true)
                     Text(String(format: String(localized: "Машина · %@"), Formatting.distance(hint.meters)))
-                        .font(.rounded(14, .semibold))
+                        .font(.dense(14, .semibold))
                         .foregroundStyle(Theme.textPrimary)
                         .lineLimit(1)
                     Image(systemName: "location.north.fill")
-                        .font(.rounded(13, .bold))
+                        .font(.dense(13, .bold))
                         .foregroundStyle(Theme.accent)
                         .rotationEffect(.degrees(ParkedCar.arrowRotation(bearing: hint.bearing,
                                                                          mapDirection: map.displayedDirection)))

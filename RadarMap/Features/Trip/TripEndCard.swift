@@ -482,6 +482,7 @@ struct TripEndCard: View {
                                     .font(.rounded(15, .semibold))
                                     .foregroundStyle(Theme.warning)
                                     .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
                             }
                         }
                         .frame(maxWidth: .infinity, minHeight: Theme.controlSize)

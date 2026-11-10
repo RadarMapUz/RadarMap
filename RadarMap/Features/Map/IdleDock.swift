@@ -144,10 +144,10 @@ struct IdleDockContent: View {
         return Button(action: onSearch) {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass")
-                    .font(.rounded(19, .semibold))
+                    .font(.dense(19, .semibold))
                     .foregroundStyle(Theme.accent)
                 Text("Куда едем?")
-                    .font(.rounded(17, .semibold))
+                    .font(.dense(17, .semibold))
                     .foregroundStyle(Theme.textSecondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -167,10 +167,10 @@ struct IdleDockContent: View {
         return Button(action: onStats) {
             VStack(spacing: 3) {
                 Image(systemName: "chart.bar.fill")
-                    .font(.rounded(19, .semibold))
+                    .font(.dense(19, .semibold))
                     .foregroundStyle(Theme.accent)
                 Text("Итоги")
-                    .font(.rounded(12, .semibold))
+                    .font(.dense(12, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -192,9 +192,9 @@ struct IdleDockContent: View {
         return Button { onChip(chip) } label: {
             HStack(spacing: 6) {
                 Image(systemName: chip.kind.symbol)
-                    .font(.rounded(13, .bold))
+                    .font(.dense(13, .bold))
                 Text(verbatim: title)
-                    .font(.rounded(15, .semibold))
+                    .font(.dense(15, .semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
@@ -219,7 +219,7 @@ struct IdleDockContent: View {
                               touch: TouchRole = .regular, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.rounded(17, .bold))
+                .font(.dense(17, .bold))
                 .foregroundStyle(tint)
                 .frame(width: Theme.controlSize, height: Theme.controlSize)
                 .background(Theme.quietFill, in: Circle())

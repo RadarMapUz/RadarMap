@@ -52,10 +52,10 @@ struct CarPlayHandoffView: View {
                 .padding(.bottom, 22)
 
                 Text("Едем в CarPlay")
-                    .font(.rounded(28, .heavy))
+                    .font(.dense(28, .heavy))
                     .foregroundStyle(Theme.textPrimary)
                 Text("Карта и предупреждения — на экране машины.\nТелефон отдыхает и не греется.")
-                    .font(.rounded(15))
+                    .font(.dense(15))
                     .foregroundStyle(Theme.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -68,7 +68,7 @@ struct CarPlayHandoffView: View {
 
                 Button(action: onShowMap) {
                     Label("Открыть карту на телефоне", systemImage: "iphone")
-                        .font(.rounded(16, .semibold))
+                        .font(.dense(16, .semibold))
                         .foregroundStyle(Theme.textPrimary)
                         .frame(maxWidth: 340)
                         .padding(.vertical, 15)
@@ -113,7 +113,7 @@ private struct HandoffStatus: View {
                             Text("В пути")
                                 .foregroundStyle(Theme.textSecondary)
                             Text(timerInterval: started...Date.distantFuture, countsDown: false)
-                                .font(.rounded(17, .heavy).monospacedDigit())
+                                .font(.dense(17, .heavy).monospacedDigit())
                                 .foregroundStyle(Theme.textPrimary)
                             Text(verbatim: "·").foregroundStyle(Theme.textTertiary)
                             HandoffDistance()
@@ -130,7 +130,7 @@ private struct HandoffStatus: View {
                 }
             }
         }
-        .font(.rounded(15, .semibold))
+        .font(.dense(15, .semibold))
         .frame(maxWidth: 340)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -168,7 +168,7 @@ private struct HandoffArrival: View {
                         .foregroundStyle(Theme.textPrimary)
                     Text([env.route.destinationName, Formatting.duration(env.route.remainingTime)]
                         .filter { !$0.isEmpty }.joined(separator: " · "))
-                        .font(.rounded(13))
+                        .font(.dense(13))
                         .foregroundStyle(Theme.textSecondary)
                         .lineLimit(1)
                 }
@@ -199,7 +199,7 @@ private struct HandoffCamera: View {
                         .foregroundStyle(Theme.textPrimary)
                         .liveNumber()
                     Text("Голос предупредит заранее")
-                        .font(.rounded(13))
+                        .font(.dense(13))
                         .foregroundStyle(Theme.textSecondary)
                 }
             }
@@ -223,7 +223,7 @@ private struct HandoffDistance: View {
     var body: some View {
         if scenePhase != .background {
             Text(Formatting.distance(env.trip.distanceMeters))
-                .font(.rounded(15, .semibold).monospacedDigit())
+                .font(.dense(15, .semibold).monospacedDigit())
                 .foregroundStyle(Theme.textSecondary)
                 .liveNumber()
         }

@@ -74,6 +74,9 @@ nonisolated enum TripMenuSlots {
         /// Стоим (< 20 км/ч, TripScreenLayout.tripMenuShowsParkedItems) —
         /// третий ряд с экранами на минуту чтения.
         var parked = false
+        /// Поле «Куда едем?» уже на экране (док в простое): первая плитка —
+        /// «Настройки», а не второй поиск.
+        var searchOnScreen = false
     }
 
     /// Третий ряд с гистерезисом: появляется ниже `enter`, уходит от `leave`.
@@ -87,12 +90,13 @@ nonisolated enum TripMenuSlots {
 
     static func tiles(_ situation: Situation) -> [Tile] {
         let slots = Slot.allCases.filter { situation.parked || $0.rawValue < Slot.stats.rawValue }
-        return slots.map { tile($0, situation) }
+        // «Настройки» уже первой плиткой — второй в третьем ряду не нужно.
+        return slots.filter { !(situation.searchOnScreen && $0 == .settings) }.map { tile($0, situation) }
     }
 
     private static func tile(_ slot: Slot, _ s: Situation) -> Tile {
         switch slot {
-        case .search:    return Tile(slot: slot, action: .search, enabled: true)
+        case .search:    return Tile(slot: slot, action: s.searchOnScreen ? .settings : .search, enabled: true)
         case .myPlaces:  return Tile(slot: slot, action: .myPlaces, enabled: true)
         case .along:     return Tile(slot: slot, action: s.hasRoute ? .alongRoute : .nearbyStops, enabled: true)
         case .cameras:   return Tile(slot: slot, action: s.hasRoute ? .routeCameras : .nearbyCameras, enabled: true)

@@ -94,9 +94,9 @@ enum TripMapSnapshot {
                 path.lineWidth = width
                 path.stroke()
             }
-            stroke(Theme.rgb(0x4DA3FF, 0.28), 14)
-            stroke(Theme.rgb(0x0E1014, 0.75), 8)
-            stroke(Theme.rgb(0x4DA3FF), 5)
+            stroke(Theme.rgb(RouteColors.body.night, 0.28), 14)
+            stroke(Theme.rgb(WidgetPalette.alertSurface, 0.75), 8)
+            stroke(Theme.rgb(RouteColors.body.night), 5)
             stroke(UIColor.white.withAlphaComponent(0.55), 1.4)
 
             func dot(_ at: CGPoint, radius: CGFloat, fill: UIColor, rim: UIColor, width: CGFloat) {
@@ -114,14 +114,14 @@ enum TripMapSnapshot {
                 guard let coordinate = pass.coordinate else { continue }
                 let over = (pass.overLimitKmh ?? 0) > 0
                 dot(project(coordinate), radius: over ? 7 : 3.5,
-                    fill: over ? UIColor(Theme.danger) : Theme.rgb(0x3BE3B0),
-                    rim: over ? .white : Theme.rgb(0x0E1014), width: over ? 2 : 1)
+                    fill: over ? UIColor(Theme.danger) : Theme.rgb(WidgetPalette.success.dark),
+                    rim: over ? .white : Theme.rgb(WidgetPalette.alertSurface), width: over ? 2 : 1)
             }
             if let start = track.first, let end = track.last {
                 dot(project(CLLocationCoordinate2D(latitude: start.lat, longitude: start.lon)), radius: 5,
-                    fill: Theme.rgb(0x0E1014), rim: .white, width: 2.5)
+                    fill: Theme.rgb(WidgetPalette.alertSurface), rim: .white, width: 2.5)
                 dot(project(CLLocationCoordinate2D(latitude: end.lat, longitude: end.lon)), radius: 7.5,
-                    fill: Theme.rgb(0x4DA3FF), rim: .white, width: 2.5)
+                    fill: Theme.rgb(RouteColors.body.night), rim: .white, width: 2.5)
             }
         }
     }

@@ -165,7 +165,7 @@ struct CarPlayOverlay: View {
     /// карточки низа — камера, состояние, прибытие читаются как семья.
     static func glyphTile(_ symbol: String, fill: some ShapeStyle, glyph: Color) -> some View {
         Image(systemName: symbol)
-            .font(.rounded(17, .bold))
+            .font(.dense(17, .bold))
             .symbolRenderingMode(.hierarchical)
             .foregroundStyle(glyph)
             .frame(width: 40, height: 40)
@@ -179,13 +179,13 @@ struct CarPlayOverlay: View {
             Self.glyphTile(GhostText.symbol(ghost), fill: Theme.quietFill, glyph: Theme.accent)
             VStack(alignment: .leading, spacing: 1) {
                 Text(verbatim: Formatting.clock(ghost.arrival))
-                    .font(.numeral(24, .heavy).monospacedDigit())
+                    .font(.denseNumeral(24, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
                 // Длинная подпись («Работа · на 12 мин позже 9:00 · пробка») не
                 // раздвигает док под кнопки карты: потолок ширины капсулы.
                 Text(verbatim: GhostText.caption(ghost))
-                    .font(.rounded(13, .semibold))
+                    .font(.dense(13, .semibold))
                     .foregroundStyle(GhostText.tint(ghost))
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -207,7 +207,7 @@ struct CarPlayOverlay: View {
     private func maneuverBanner(step: RouteStep) -> some View {
         HStack(spacing: 12) {
             Image(systemName: step.icon)
-                .font(.rounded(24, .bold))
+                .font(.dense(24, .bold))
                 .foregroundStyle(Theme.onAccentFill)
                 .frame(width: 50, height: 50)
                 .background(Theme.onAccentFill.opacity(0.18),
@@ -215,7 +215,7 @@ struct CarPlayOverlay: View {
             VStack(alignment: .leading, spacing: 1) {
                 CarManeuverDistance()
                 Text(step.compactInstruction)
-                    .font(.rounded(16, .semibold))
+                    .font(.dense(16, .semibold))
                     .foregroundStyle(Theme.onAccentFillSecondary)
                     .lineLimit(1)
             }
@@ -264,13 +264,13 @@ private struct CarSpeedBadge: View {
         return ZStack(alignment: .topTrailing) {
             VStack(spacing: -2) {
                 Text("\(Int(env.location.speedKmh.rounded()))")
-                    .font(.numeral(30, .heavy).monospacedDigit())
+                    .font(.denseNumeral(30, .heavy).monospacedDigit())
                     .foregroundStyle(speedColor)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                     .liveNumber()
                 Text("км/ч")
-                    .font(.rounded(12, .semibold))
+                    .font(.dense(12, .semibold))
                     .foregroundStyle(Theme.textTertiary)
             }
             .frame(width: 78, height: 78)
@@ -327,7 +327,7 @@ private struct CarManeuverDistance: View {
 
     var body: some View {
         Text(Formatting.distance(env.route.nextStepDistance))
-            .font(.numeral(22, .heavy).monospacedDigit())
+            .font(.denseNumeral(22, .heavy).monospacedDigit())
             .foregroundStyle(Theme.onAccentFill)
             .liveNumber()
     }
@@ -345,16 +345,16 @@ private struct CarEtaCell: View {
             CarPlayOverlay.glyphTile("flag.checkered", fill: Theme.quietFill, glyph: Theme.success)
             VStack(alignment: .leading, spacing: 1) {
                 Text(Formatting.duration(env.route.remainingTime))
-                    .font(.numeral(24, .heavy).monospacedDigit())
+                    .font(.denseNumeral(24, .heavy).monospacedDigit())
                     .foregroundStyle(Theme.textPrimary)
                     .contentTransition(.numericText())
                 HStack(spacing: 6) {
                     Text(verbatim: "\(env.route.arrivalText) · \(Formatting.distance(env.route.remainingDistance))")
-                        .font(.rounded(13, .semibold).monospacedDigit())
+                        .font(.dense(13, .semibold).monospacedDigit())
                         .foregroundStyle(Theme.textSecondary)
                     if camerasAhead > 0 {
                         Label { Text(verbatim: "\(camerasAhead)") } icon: { SymbolIcon(Icon.cameras, size: 13, weight: .bold) }
-                            .font(.rounded(13, .bold).monospacedDigit())
+                            .font(.dense(13, .bold).monospacedDigit())
                             .foregroundStyle(Theme.Types.camera)
                             .labelStyle(.titleAndIcon)
                     }

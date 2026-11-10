@@ -303,7 +303,7 @@ private struct CarPlayClusterMarks: View {
         let course = env.location.displayCourse
         let heading = course >= 0 ? course : (model.mapDirection ?? 0)
         return Image(systemName: "location.north.fill")
-            .font(.rounded(15, .bold))
+            .font(.dense(15, .bold))
             // Не красная: красное на этой карте — камера.
             .foregroundStyle(Theme.accent)
             .rotationEffect(.degrees(-heading))

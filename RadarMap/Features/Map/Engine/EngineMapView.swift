@@ -724,12 +724,12 @@ struct EngineMapView: UIViewRepresentable {
             UIGraphicsImageRenderer(size: CGSize(width: 10, height: 20)).image { _ in
                 let shell = UIBezierPath(roundedRect: CGRect(x: 0.75, y: 0.75, width: 8.5, height: 18.5),
                                          cornerRadius: 4.25)
-                UIColor(red: 0.23, green: 0.25, blue: 0.28, alpha: 1).setFill()
+                Theme.rgb(MapIconColors.graphite).setFill()
                 shell.fill()
                 UIColor.white.withAlphaComponent(0.9).setStroke()
                 shell.lineWidth = 1.2
                 shell.stroke()
-                UIColor(red: 0.85, green: 0.87, blue: 0.90, alpha: 1).setFill()
+                Theme.rgb(MapIconColors.signalDot).setFill()
                 for y in [3.6, 8.3, 13.0] {
                     UIBezierPath(ovalIn: CGRect(x: 3.2, y: y, width: 3.6, height: 3.6)).fill()
                 }
@@ -768,8 +768,8 @@ struct EngineMapView: UIViewRepresentable {
                                    forName: CameraMarkerLook.imageBase(glyph) + look.suffix)
                 }
             }
-            style.setImage(Self.badgeIcon(fill: 0x46525E, text: "?"), forName: CameraMarkerLook.ghostBadge)
-            style.setImage(Self.badgeIcon(fill: 0x177A41, text: nil), forName: CameraMarkerLook.ownBadge)
+            style.setImage(Self.badgeIcon(fill: MapIconColors.ghost, text: "?"), forName: CameraMarkerLook.ghostBadge)
+            style.setImage(Self.badgeIcon(fill: MapIconColors.success, text: nil), forName: CameraMarkerLook.ownBadge)
             // Светофор — минималистично (владелец, 12.10: «красиво, по-другому,
             // задевает камеры»): маленькая графитовая капсула с тремя светлыми
             // точками, без красно-жёлто-зелёных огней — фазу тайл всё равно не
@@ -783,7 +783,7 @@ struct EngineMapView: UIViewRepresentable {
             style.setImage(signal, forName: EngineModernStyle.trafficLightImage)
             let stop = UIGraphicsImageRenderer(size: CGSize(width: 26, height: 26)).image { _ in
                 UIImage(systemName: "octagon.fill")?.withTintColor(
-                    UIColor(red: 0.64, green: 0.23, blue: 0.22, alpha: 1), renderingMode: .alwaysOriginal)
+                    Theme.rgb(MapIconColors.stopSign), renderingMode: .alwaysOriginal)
                     .draw(in: CGRect(x: 1, y: 1, width: 24, height: 24))
                 ("STOP" as NSString).draw(at: CGPoint(x: 3, y: 9), withAttributes: [
                     .font: UIFont.systemFont(ofSize: 8, weight: .bold), .foregroundColor: UIColor.white])
@@ -794,7 +794,7 @@ struct EngineMapView: UIViewRepresentable {
             let flag = UIGraphicsImageRenderer(size: CGSize(width: 34, height: 34)).image { _ in
                 UIColor.white.setFill()
                 UIBezierPath(ovalIn: CGRect(x: 1, y: 1, width: 32, height: 32)).fill()
-                Theme.rgb(0x2563D9).setFill()
+                Theme.rgb(MapIconColors.accentFill).setFill()
                 UIBezierPath(ovalIn: CGRect(x: 3, y: 3, width: 28, height: 28)).fill()
                 UIImage(systemName: "flag.checkered",
                         withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .bold))?
@@ -805,14 +805,14 @@ struct EngineMapView: UIViewRepresentable {
             let pin = UIGraphicsImageRenderer(size: CGSize(width: 32, height: 32)).image { _ in
                 UIImage(systemName: "mappin.circle.fill",
                         withConfiguration: UIImage.SymbolConfiguration(pointSize: 26, weight: .bold))?
-                    .withTintColor(Theme.rgb(0x2563D9), renderingMode: .alwaysOriginal)
+                    .withTintColor(Theme.rgb(MapIconColors.accentFill), renderingMode: .alwaysOriginal)
                     .draw(in: CGRect(x: 2, y: 2, width: 28, height: 28))
             }
             style.setImage(pin, forName: "radar-pin")
             // Перекрытие и ремонт: диск своего цвета с белым знаком и белым
             // кольцом — как маркер, но не красный (красный — камера).
-            for (name, symbol, hex) in [("radar-closure", "nosign", UInt32(0xC2410C)),
-                                        ("radar-roadwork", "cone.fill", UInt32(0x9C5300))] {
+            for (name, symbol, hex) in [("radar-closure", "nosign", MapIconColors.warning),
+                                        ("radar-roadwork", "cone.fill", MapIconColors.warning)] {
                 let image = UIGraphicsImageRenderer(size: CGSize(width: 30, height: 30)).image { _ in
                     UIColor.white.setFill()
                     UIBezierPath(ovalIn: CGRect(x: 1, y: 1, width: 28, height: 28)).fill()
@@ -831,7 +831,7 @@ struct EngineMapView: UIViewRepresentable {
             let parked = UIGraphicsImageRenderer(size: CGSize(width: 34, height: 34)).image { _ in
                 UIColor.white.setFill()
                 UIBezierPath(ovalIn: CGRect(x: 1, y: 1, width: 32, height: 32)).fill()
-                Theme.rgb(0x2563D9).setFill()
+                Theme.rgb(MapIconColors.accentFill).setFill()
                 UIBezierPath(ovalIn: CGRect(x: 3, y: 3, width: 28, height: 28)).fill()
                 if let car = UIImage(systemName: "car.fill",
                                      withConfiguration: UIImage.SymbolConfiguration(pointSize: 14, weight: .bold))?
@@ -1121,8 +1121,7 @@ struct EngineMapView: UIViewRepresentable {
         static func colorExpression(_ value: Any) -> NSExpression? {
             if let hex = value as? String, hex.hasPrefix("#"), hex.count == 7,
                let rgb = UInt32(hex.dropFirst(), radix: 16) {
-                return NSExpression(forConstantValue: UIColor(red: CGFloat((rgb >> 16) & 255) / 255,
-                    green: CGFloat((rgb >> 8) & 255) / 255, blue: CGFloat(rgb & 255) / 255, alpha: 1))
+                return NSExpression(forConstantValue: Theme.rgb(rgb))
             }
             guard let match = value as? [Any], match.count >= 5, match.count % 2 == 1,
                   match[0] as? String == "match", let get = match[1] as? [String],
@@ -1729,9 +1728,9 @@ struct EngineMapView: UIViewRepresentable {
             let fill: UInt32
             let glyph: String
             switch station.status {
-            case .gas?: fill = 0x1E8E3E; glyph = "checkmark"
-            case .nogas?: fill = 0x4B5563; glyph = "xmark"
-            case nil: fill = 0xB45309; glyph = "clock"
+            case .gas?: fill = MapIconColors.success; glyph = "checkmark"
+            case .nogas?: fill = MapIconColors.graphite; glyph = "xmark"
+            case nil: fill = MapIconColors.warning; glyph = "clock"
             }
             let text = station.queue.map(CngRules.queueText)
                 ?? CngRules.ago(cngAgeBucket(station.statusAge ?? 5))
@@ -1751,7 +1750,7 @@ struct EngineMapView: UIViewRepresentable {
                     icon.draw(at: CGPoint(x: 10 - icon.size.width / 2, y: 10 - icon.size.height / 2))
                 }
                 (text as NSString).draw(at: CGPoint(x: 21, y: (size.height - textSize.height) / 2),
-                                        withAttributes: [.font: font, .foregroundColor: UIColor(white: 0.12, alpha: 1)])
+                                        withAttributes: [.font: font, .foregroundColor: Theme.rgb(MapIconColors.ink)])
             }
         }
 

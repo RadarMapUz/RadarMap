@@ -27,7 +27,7 @@ struct TripSpeedCluster: View {
         HStack(spacing: 8) {
             VStack(spacing: -2) {
                 Text("\(speed)")
-                    .font(.numeral(24, .bold))
+                    .font(.denseNumeral(24, .bold))
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
@@ -42,7 +42,7 @@ struct TripSpeedCluster: View {
                             .foregroundStyle(Theme.warning)
                     }
                 }
-                .font(.rounded(10, .medium))
+                .font(.dense(10, .medium))
                 .minimumScaleFactor(0.7)
                 .foregroundStyle(over ? Color.white.opacity(0.85) : Theme.textSecondary)
             }

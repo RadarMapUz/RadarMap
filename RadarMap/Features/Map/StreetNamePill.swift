@@ -23,7 +23,7 @@ struct StreetNamePill: View {
         ZStack {
             if let name {
                 Text(verbatim: name)
-                    .font(.rounded(large ? 17 : 15, .semibold))
+                    .font(.dense(large ? 17 : 15, .semibold))
                     .foregroundStyle(Theme.textPrimary)
                     .lineLimit(1)
                     .truncationMode(.tail)

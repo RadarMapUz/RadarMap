@@ -40,7 +40,7 @@ extension AppEnvironment {
         let states = maintenance.states(now: now)
         let plan = MaintenanceReminders.plan(
             states: states, ledger: ledger,
-            enabled: settings.maintenanceReminders && notifications.canNotify,
+            enabled: settings.maintenanceReminders && settings.carLog && notifications.canNotify,
             tripActive: location.isTripActive, moment: moment, now: now, acknowledged: acknowledged)
         guard !plan.schedule.isEmpty || !plan.cancel.isEmpty || plan.ledger != ledger else { return }
         let byKind = Dictionary(uniqueKeysWithValues: states.map { ($0.kind, $0) })

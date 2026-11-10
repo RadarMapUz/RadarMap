@@ -92,7 +92,7 @@ struct TrafficLegend: View {
             title
                 .font(.rounded(15))
                 .foregroundStyle(Theme.textPrimary)
-                .lineLimit(1)
+                .lineLimit(2)
                 .minimumScaleFactor(0.85)
         }
     }
@@ -175,7 +175,7 @@ struct TrafficScoreChip: View {
     var body: some View {
         Button(action: action) {
             Text(verbatim: "\(score.value)")
-                .font(.numeral(17, .bold))
+                .font(.denseNumeral(17, .bold))
                 .foregroundStyle(Theme.textPrimary)
                 .controlCircle()
                 .overlay {

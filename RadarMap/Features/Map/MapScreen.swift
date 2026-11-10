@@ -108,7 +108,7 @@ struct MapScreen: View {
             .ignoresSafeArea(edges: .top)
             .allowsHitTesting(false)
 
-            if map.isAddingCamera { crosshair }
+            if map.isAddingCamera { AddPointCrosshair(frame: frame) }
 
             // Всё, что читает тик GPS, — только пока экран на виду.
             //

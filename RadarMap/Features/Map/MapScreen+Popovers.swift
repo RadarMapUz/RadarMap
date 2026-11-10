@@ -165,7 +165,7 @@ extension MapScreen {
         case .stopSharing:   env.etaShare.stop()
         case .goingHome:     env.family.goingHome()
         case .stats:         map.showStats = true
-        case .addCamera:     withMotion { map.isAddingCamera = true }
+        case .addCamera:     startAddingPoint()
         case .settings:      map.showSettings = true
         case .mapPanel, .shareChoice, .back: break   // решает сама панель
         }

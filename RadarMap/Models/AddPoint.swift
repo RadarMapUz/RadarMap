@@ -7,6 +7,7 @@
 //  покрыта AddPointTests.
 //
 
+import CoreGraphics
 import CoreLocation
 
 nonisolated enum AddPointKind: String, CaseIterable, Identifiable, Sendable {
@@ -72,5 +73,20 @@ nonisolated enum TripodAvailability: Equatable {
 
     private static func isReal(_ c: CLLocationCoordinate2D) -> Bool {
         CLLocationCoordinate2DIsValid(c) && !(c.latitude == 0 && c.longitude == 0)
+    }
+}
+
+/// Где на экране прицел: середина ВИДИМОЙ карты — между верхней стопкой панелей
+/// и верхним краем нижней. В центре всего экрана он прятался под панелью.
+nonisolated enum AddPointAim {
+
+    /// `insets` — доли высоты, закрытые панелями (MapFrameState); нижняя 0 —
+    /// «ещё не мерили», тогда низ — край вида.
+    static func point(width: Double, height: Double, insets: MapViewport.Insets) -> CGPoint {
+        guard width > 0, height > 0 else { return .zero }
+        let top = min(max(0, insets.top), 1) * height
+        let bottom = height - min(max(0, insets.bottom), 1) * height
+        let y = bottom > top ? (top + bottom) / 2 : height / 2
+        return CGPoint(x: width / 2, y: y)
     }
 }

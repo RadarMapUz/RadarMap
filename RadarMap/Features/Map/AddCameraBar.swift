@@ -134,3 +134,48 @@ extension TripodAvailability {
         }
     }
 }
+
+/// Прицел постановки: в середине видимой карты (AddPointAim) — там же, откуда
+/// движок берёт координату. Точка в центре — ровно место установки.
+struct AddPointCrosshair: View {
+    let frame: MapFrameState
+
+    private static let ring: CGFloat = 46
+    private static let dot: CGFloat = 8
+
+    var body: some View {
+        GeometryReader { geo in
+            let aim = AddPointAim.point(width: geo.size.width, height: geo.size.height, insets: frame.insets)
+            mark
+                .position(aim)
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// Белый кант под синим — заметно и на светлой карте, и на ночной.
+    private var mark: some View {
+        ZStack {
+            Circle()
+                .stroke(Theme.onAccentFill, lineWidth: 6)
+                .shadow(color: Theme.panelShadow, radius: 3, y: 1)
+            Circle()
+                .stroke(Theme.accentFill, lineWidth: 3)
+            ForEach(0..<4, id: \.self) { quarter in
+                Capsule()
+                    .fill(Theme.accentFill)
+                    .overlay(Capsule().stroke(Theme.onAccentFill, lineWidth: 1))
+                    .frame(width: 3, height: 12)
+                    .offset(y: -Self.ring / 2)
+                    .rotationEffect(.degrees(Double(quarter) * 90))
+            }
+            Circle()
+                .fill(Theme.accentFill)
+                .overlay(Circle().stroke(Theme.onAccentFill, lineWidth: 2))
+                .frame(width: Self.dot, height: Self.dot)
+                .shadow(color: Theme.panelShadow, radius: 2)
+        }
+        .frame(width: Self.ring, height: Self.ring)
+    }
+}

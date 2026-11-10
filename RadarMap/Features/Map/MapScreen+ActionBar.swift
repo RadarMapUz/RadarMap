@@ -69,10 +69,21 @@ extension MapScreen {
                                  reportsEnabled: env.mobile.isEnabled)
     }
 
-    var tripodAvailability: TripodAvailability { reportReach(at: map.mapCenter) }
+    var tripodAvailability: TripodAvailability { reportReach(at: map.addPointCoordinate) }
+
+    /// Открыть прицел: под ним — точка долгого нажатия, иначе вы, иначе
+    /// нынешний центр карты (движок ставит её под прицел, а не в центр вида).
+    func startAddingPoint(at point: CLLocationCoordinate2D? = nil) {
+        let target = point ?? env.location.currentCoordinate ?? map.mapCenter
+        withMotion {
+            map.pressedPoint = nil
+            map.isAddingCamera = true
+        }
+        if let target { map.center(on: target) }
+    }
 
     func addPoint(kind: AddPointKind, name: String) {
-        guard let center = map.mapCenter else {
+        guard let center = map.addPointCoordinate else {
             withMotion { map.isAddingCamera = false }
             return
         }

@@ -99,3 +99,38 @@ extension AddPointTests {
                                                reportsEnabled: true).isAvailable)
     }
 }
+
+// MARK: - Прицел — в середине видимой карты, не под панелью
+
+extension AddPointTests {
+
+    func testAimSitsBetweenPanels() {
+        // iPhone 16 Pro: 402×874; сверху панели до 120 pt, нижняя панель с 600 pt.
+        let insets = MapViewport.Insets(top: 120.0 / 874, bottom: (874.0 - 600) / 874)
+        let aim = AddPointAim.point(width: 402, height: 874, insets: insets)
+        XCTAssertEqual(aim.x, 201, accuracy: 0.001)
+        XCTAssertEqual(aim.y, 360, accuracy: 0.001)
+        XCTAssertLessThan(aim.y, 600 - 23, "прицел целиком над нижней панелью")
+        XCTAssertGreaterThan(aim.y, 120 + 23, "и под верхней стопкой")
+    }
+
+    func testAimFollowsPanelHeight() {
+        let low = AddPointAim.point(width: 402, height: 874,
+                                    insets: MapViewport.Insets(top: 0.1, bottom: 0.3))
+        let high = AddPointAim.point(width: 402, height: 874,
+                                     insets: MapViewport.Insets(top: 0.1, bottom: 0.45))
+        XCTAssertLessThan(high.y, low.y, "панель выросла — прицел поднялся")
+    }
+
+    func testAimWithoutMeasurementIsViewCentre() {
+        let aim = AddPointAim.point(width: 402, height: 874, insets: .none)
+        XCTAssertEqual(aim.y, 437, accuracy: 0.001)
+    }
+
+    func testAimSurvivesOverlappingPanels() {
+        let aim = AddPointAim.point(width: 402, height: 874,
+                                    insets: MapViewport.Insets(top: 0.7, bottom: 0.5))
+        XCTAssertEqual(aim.y, 437, accuracy: 0.001, "панели сошлись — середина вида, не за краем")
+        XCTAssertEqual(AddPointAim.point(width: 0, height: 874, insets: .none), .zero)
+    }
+}

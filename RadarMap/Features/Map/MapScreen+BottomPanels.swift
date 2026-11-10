@@ -48,13 +48,9 @@ extension MapScreen {
                     },
                     radarNote: { reportReach(at: point.coordinate).note },
                     onOwnCamera: {
-                        // Крестик режима добавления встаёт на выбранную точку —
-                        // пользователь при желании доводит позицию вручную.
-                        withMotion {
-                            map.pressedPoint = nil
-                            map.center(on: point.coordinate)
-                            map.isAddingCamera = true
-                        }
+                        // Прицел встаёт на выбранную точку — пользователь при
+                        // желании доводит позицию вручную.
+                        startAddingPoint(at: point.coordinate)
                     },
                     onCancel: {
                         withMotion { map.pressedPoint = nil }

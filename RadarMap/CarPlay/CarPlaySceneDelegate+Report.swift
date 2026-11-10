@@ -37,6 +37,8 @@ extension CarPlaySceneDelegate {
             let answer = await env.reports.begin(from: source, choiceBlocked: cameraOnScreen)
             if case .done(let outcome) = answer, !outcome.isSuccess {
                 showToast(outcome.spoken)
+            } else if case .done(let outcome) = answer, let merged = outcome.mergedText {
+                showToast(merged)
             }
         }
     }

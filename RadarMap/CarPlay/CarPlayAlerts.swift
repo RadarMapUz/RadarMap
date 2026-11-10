@@ -65,6 +65,7 @@ extension CarPlaySceneDelegate {
         let id = question.id
         let titles: [String]
         let symbolName: String
+        var subtitles = [String(localized: "Вы только что проехали эту отметку")]
         // Кнопки — по типу отметки (12.7): про пост «Стоит» / «Пост убрали».
         var yesTitle = String(localized: "Да")
         var noTitle = String(localized: "Нет")
@@ -77,13 +78,18 @@ extension CarPlaySceneDelegate {
             symbolName = camera.kind.symbolName
             yesTitle = asked.yes
             noTitle = asked.no
+            // Свежесть (82): «Не подтверждали 50 мин» говорит, зачем спрашиваем.
+            if let fresh = env.mobile.freshness(for: camera.id),
+               let line = TripodFreshness.card(fresh, now: Date()) {
+                subtitles = [line] + subtitles
+            }
         case .road(let event):
             titles = [RoadEventPassWatch.question(for: event.kind)]
             symbolName = (ReportKind(rawValue: event.kind.rawValue) ?? .closure).symbol
         }
         let alert = CPNavigationAlert(
             titleVariants: titles,
-            subtitleVariants: [String(localized: "Вы только что проехали эту отметку")],
+            subtitleVariants: subtitles,
             image: CarPlayGuidance.symbol(symbolName, pointSize: 30,
                                           onDark: model.carIsDark ?? !model.isDaylight),
             primaryAction: CPAlertAction(title: yesTitle, style: .default) { [weak self] _ in
@@ -101,6 +107,11 @@ extension CarPlaySceneDelegate {
         }
         confirmBanner = alert
         confirmBannerID = id
+        // Голосом — раз на отметку и только когда ответ — одно касание баннера (82).
+        if case .camera(let camera) = question, env.settings.voiceEnabled,
+           env.mobile.claimQuestionVoice(for: id) {
+            env.alerts.speak(MobilePassWatch.question(for: camera.kind).title)
+        }
         if case .road = question {
             Log.carplay.notice("вопрос «ещё перекрыто?»: баннер")
         } else {

@@ -378,10 +378,8 @@ final class PerformanceBudgetTests: XCTestCase {
         }
         let clock = ContinuousClock()
         let started = clock.now
-        var along: [Int: Double] = [:]
-        for candidate in tripods + spots {
-            if let value = TripodZone.along(of: candidate.coordinate, route: pts) { along[candidate.key] = value }
-        }
+        // Как в приложении (TripodZoneCache.alongs): индекс маршрута один на все цели.
+        let along = TripodZone.alongs(of: tripods + spots, route: pts)
         let alongTime = clock.now - started
         XCTAssertEqual(tripods.filter { along[$0.key] != nil }.count, 60, "каждая тренога на маршруте найдена")
         XCTAssertLessThan(alongTime, .milliseconds(400), "места 660 целей на маршруте в 10 000 точек: \(alongTime)")

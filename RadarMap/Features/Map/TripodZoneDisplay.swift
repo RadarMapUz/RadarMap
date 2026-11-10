@@ -75,10 +75,7 @@ final class TripodZoneCache {
         let rect = route.boundingMapRect
         let margin = MKMapPointsPerMeterAtLatitude(rect.origin.coordinate.latitude) * AppConfig.tripodZoneRouteMeters
         let reach = rect.insetBy(dx: -margin, dy: -margin)
-        var out: [Int: Double] = [:]
-        for candidate in candidates where reach.contains(MKMapPoint(candidate.coordinate)) {
-            if let along = TripodZone.along(of: candidate.coordinate, route: line) { out[candidate.key] = along }
-        }
+        let out = TripodZone.alongs(of: candidates.filter { reach.contains(MKMapPoint($0.coordinate)) }, route: line)
         alongValues = out
         return out
     }

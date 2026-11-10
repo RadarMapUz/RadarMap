@@ -1866,6 +1866,11 @@ nonisolated enum AppConfig {
     /// Манёвр «впереди», если до него больше этого: иначе на самом повороте
     /// баннер перескакивал бы на следующий раньше, чем машина повернула.
     static let maneuverAheadSlackMeters: CLLocationDistance = 15
+    /// Манёвр привязывается к вершине линии не дальше этого от ожидаемого
+    /// места (сумма длин шагов): 120 м или 2 % длины предыдущего шага —
+    /// мерки OSRM и линии расходятся на доли процента (ManeuverAnchor).
+    static let maneuverAnchorSlackMeters: CLLocationDistance = 120
+    static let maneuverAnchorSlackShare = 0.02
     /// Камера маршрута остаётся «следующей», пока не отстала на столько:
     /// фикс у самой камеры может лечь на пару десятков метров за ней.
     static let routeCameraBehindSlackMeters: CLLocationDistance = 30

@@ -1740,25 +1740,30 @@ final class RouteService {
                 CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0])
             }
             let points = path.map(MKMapPoint.init)
-            // Излом «прямо» (29.E, TurnBend): точка манёвра — вершина линии
-            // (location шага), ищем её по порядку, а не по сумме длин шагов —
-            // на трассе та расходится с линией на сотни метров.
+            // Точка манёвра — вершина линии (location шага), а не сумма длин
+            // шагов: та расходится с линией на сотни метров (ManeuverAnchor).
             let cumulative = TurnBend.cumulative(path)
-            var vertex = 0
+            let flat = route.legs.flatMap(\.steps)
+            let anchors = ManeuverAnchor.positions(locations: flat.map(\.maneuver.location),
+                                                   distances: flat.map(\.distance),
+                                                   path: path, cumulative: Self.cumulative(of: points))
             var steps: [RouteStep] = []
             var notices: [LaneNotice] = []
             var probes = LaneProbeCollector(path: path)
-            var along: CLLocationDistance = 0
             var stopAlong: CLLocationDistance?
+            var position = 0
             for (legIndex, leg) in route.legs.enumerated() {
                 let isLast = legIndex == route.legs.count - 1
                 var currentName: String?
+                // Начало плеча после первого — заезд.
+                if legIndex == 1, anchors.indices.contains(position) { stopAlong = anchors[position].along }
                 for step in leg.steps {
+                    let anchor = anchors[position]
+                    position += 1
+                    let along = anchor.along
                     var bend: TurnBend.Measure?
                     if step.maneuver.type == "continue" || step.maneuver.type == "new name",
-                       let at = step.maneuver.location, at.count == 2,
-                       let index = vertexIndex(of: at, in: path, from: vertex) {
-                        vertex = index
+                       let index = anchor.vertex {
                         bend = TurnBend.measure(path: path, cumulative: cumulative, at: cumulative[index])
                     }
                     let built = maneuverStep(step, at: along, language: language,
@@ -1768,31 +1773,13 @@ final class RouteService {
                     probes.add(step, at: along, built: built, index: steps.count)
                     if let built { steps.append(built) }
                     notices += laneNotices(step, at: along, isManeuver: built != nil)
-                    along += step.distance
                 }
-                if !isLast, stopAlong == nil { stopAlong = along }
             }
             return BuiltVariant(points: points, distance: route.distance,
                                 travelTime: route.duration, steps: steps, laneNotices: notices,
                                 laneProbes: probes.probes, stopAlong: stopAlong)
         }
         return variants.isEmpty ? nil : variants
-    }
-
-    /// Вершина линии, совпадающая с точкой манёвра ([lon, lat]), начиная с
-    /// `start`: манёвры идут по порядку линии. nil — не нашли (тогда излом
-    /// не судим и шаг молчит, как до 29.E).
-    nonisolated static func vertexIndex(of location: [Double], in path: [CLLocationCoordinate2D],
-                                        from start: Int) -> Int? {
-        guard location.count == 2 else { return nil }
-        let tolerance = 1e-6
-        var index = max(0, start)
-        while index < path.count {
-            if abs(path[index].longitude - location[0]) < tolerance,
-               abs(path[index].latitude - location[1]) < tolerance { return index }
-            index += 1
-        }
-        return nil
     }
 
     /// nonisolated: разбирается в фоне (parseOSRM) — изоляция главным потоком

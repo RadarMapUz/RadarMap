@@ -189,6 +189,10 @@ struct EngineBaseLayer: View {
                             ? map.visibleHotspots.map { TripodHabit.mapLabel(peak: $0.peak) ?? "" } : [],
                         centerCommand: map.centerCommand,
                         centerTarget: map.centerTarget,
+                        aimPoint: map.isAddingCamera
+                            ? AddPointAim.point(width: geo.size.width, height: geo.size.height, insets: insets)
+                            : nil,
+                        onAim: { map.noteAim($0) },
                         onHeading: { map.noteMapDirection($0) },
                         onBrowse: { map.releaseToFree() },
                         onSelectCamera: onSelectCamera,

@@ -1615,6 +1615,11 @@ nonisolated enum AppConfig {
     /// встать на обочине трассы за минуту после проезда. Сервер дальность не
     /// проверяет (не знает, где телефон), и дальше — это уже отметка «с дивана».
     nonisolated static let addTripodMaxDistanceMeters: CLLocationDistance = 1500
+    /// …или там, где сам проезжал за это окно: «видел по дороге, отмечаю дома».
+    /// Строки отказа называют «3 часа» словами (AddPointTests это сторожит).
+    nonisolated static let addTripodTrackWindowSeconds: TimeInterval = 3 * 3600
+    /// Насколько близко к своему треку: полоса дороги с запасом на упрощение трека.
+    nonisolated static let addTripodTrackMaxMeters: CLLocationDistance = 150
 
     // MARK: - Отметка: выбор типа и «Отменить» (вариант B, 02.11)
 

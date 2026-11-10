@@ -43,7 +43,11 @@ final class MapState {
     var showSearch = false
     var showSettings = false
     var showStats = false
-    var isAddingCamera = false
+    var isAddingCamera = false {
+        didSet { if !isAddingCamera { aimCoordinate = nil } }
+    }
+    /// Координата под прицелом постановки (движок, AddPointAim); nil — вне режима.
+    private(set) var aimCoordinate: CLLocationCoordinate2D?
     /// Точка долгого тапа: маркер + бар действий «Маршрут сюда / Радар / Своя камера».
     var pressedPoint: MapPoint?
     /// Карточка «Карта по пути» (19.3): её высота (меряет скрытая копия —
@@ -240,8 +244,18 @@ final class MapState {
     private var currentRegion: MKCoordinateRegion?
     private var loadedRegion: MKCoordinateRegion?   // область, для которой посчитаны точки (с буфером)
 
-    /// Координата центра карты (для добавления камеры «здесь»).
+    /// Координата центра карты.
     var mapCenter: CLLocationCoordinate2D? { currentRegion?.center }
+
+    /// Куда встанет точка прицела: под прицелом, а до первого замера — центр карты.
+    var addPointCoordinate: CLLocationCoordinate2D? { aimCoordinate ?? mapCenter }
+
+    func noteAim(_ coordinate: CLLocationCoordinate2D) {
+        guard isAddingCamera else { return }
+        if aimCoordinate?.latitude != coordinate.latitude || aimCoordinate?.longitude != coordinate.longitude {
+            aimCoordinate = coordinate
+        }
+    }
 
     var performance: PerformanceMode { thermal?.mode ?? .full }
 

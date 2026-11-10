@@ -82,14 +82,6 @@ extension MapScreen {
     // Проверять такие механизмы надо перебором режимов, а не на глаз: в план
     // я сначала записал «прячет нужное» — и это оказалось неверно.
 
-    var crosshair: some View {
-        Image(systemName: "scope")
-            .font(.system(size: 44, weight: .light))
-            .foregroundStyle(Theme.accent)
-            .shadow(color: .black.opacity(0.5), radius: 4)
-            .allowsHitTesting(false)
-    }
-
     // MARK: - Верх: HUD + подсказка
 
     /// Панели поверх карты сверху: объявления, HUD, тумблеры, манёвр.

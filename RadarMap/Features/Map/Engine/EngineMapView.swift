@@ -195,6 +195,11 @@ struct EngineMapView: UIViewRepresentable {
     /// крестику постановки камеры, который встаёт на точку долгого тапа.
     var centerCommand: Int = 0
     var centerTarget: CLLocationCoordinate2D?
+    /// Прицел постановки точки в точках вида (AddPointAim): цель команды «в
+    /// точку» встаёт под него, а не в центр вида. nil — прицела нет.
+    var aimPoint: CGPoint?
+    /// Координата под прицелом после каждого движения карты.
+    var onAim: (CLLocationCoordinate2D) -> Void = { _ in }
     var onHeading: (Double) -> Void = { _ in }
     var onBrowse: () -> Void = {}
     var onSelectCamera: (Camera) -> Void = { _ in }
@@ -569,6 +574,12 @@ struct EngineMapView: UIViewRepresentable {
             if styleReady { routeLine.regionChanged(in: mapView) }
             current?.onHeading(mapView.direction)
             current?.onRegion(Self.region(of: mapView))
+            if let aim = current?.aimPoint {
+                let under = mapView.convert(aim, toCoordinateFrom: mapView)
+                aimHeld = under
+                aimZoom = mapView.zoomLevel
+                current?.onAim(under)
+            }
         }
 
         static func region(of view: MLNMapView) -> MKCoordinateRegion {
@@ -1787,6 +1798,11 @@ struct EngineMapView: UIViewRepresentable {
         }
         private var lastHotspotsKey: Int = -1
         private var lastCenterCommand = 0
+        private var lastAim: CGPoint?
+        /// Что сейчас под прицелом и на каком масштабе: держится при смене
+        /// высоты панели и посреди анимации команды «в точку».
+        private var aimHeld: CLLocationCoordinate2D?
+        private var aimZoom: Double?
 
         private var shownCameraLabel: CarPlayCameraCue.Label?
         private var cameraLabelWritten = false
@@ -1864,13 +1880,43 @@ struct EngineMapView: UIViewRepresentable {
             }
             if model.centerCommand != lastCenterCommand {
                 lastCenterCommand = model.centerCommand
+                lastAim = model.aimPoint
                 if let target = model.centerTarget {
                     browsing = true
                     model.onBrowse()
-                    view.setCenter(target, zoomLevel: max(view.zoomLevel, AppConfig.mapCenterZoom),
-                                   animated: true)
+                    let zoom = max(view.zoomLevel, AppConfig.mapCenterZoom)
+                    aimHeld = model.aimPoint == nil ? nil : target
+                    aimZoom = zoom
+                    view.setCenter(Self.centre(placing: target, at: model.aimPoint, zoom: zoom, in: view),
+                                   zoomLevel: zoom, animated: true)
+                    if model.aimPoint != nil { model.onAim(target) }
+                }
+            } else if model.aimPoint != lastAim {
+                lastAim = model.aimPoint
+                // Панель выросла или сжалась — под прицелом остаётся та же точка.
+                if let aim = model.aimPoint, browsing, let held = aimHeld {
+                    let zoom = aimZoom ?? view.zoomLevel
+                    view.setCenter(Self.centre(placing: held, at: aim, zoom: zoom, in: view),
+                                   zoomLevel: zoom, animated: true)
+                } else if model.aimPoint == nil {
+                    aimHeld = nil
+                    aimZoom = nil
                 }
             }
+        }
+
+        /// Центр вида, при котором `target` на масштабе `zoom` окажется под
+        /// прицелом: сдвиг прицела от середины вида — в метры по повороту карты.
+        static func centre(placing target: CLLocationCoordinate2D, at aim: CGPoint?, zoom: Double,
+                           in view: MLNMapView) -> CLLocationCoordinate2D {
+            guard let aim, view.bounds.width > 0 else { return target }
+            let right = Double(view.bounds.midX - aim.x)
+            let down = Double(view.bounds.midY - aim.y)
+            let points = (right * right + down * down).squareRoot()
+            guard points > 0.5 else { return target }
+            let metersPerPoint = view.metersPerPoint(atLatitude: target.latitude) * pow(2, view.zoomLevel - zoom)
+            let bearing = view.direction + atan2(right, -down) * 180 / .pi
+            return GeoMath.destination(from: target, bearing: bearing, distanceMeters: points * metersPerPoint)
         }
 
         private func updateCameras(_ model: EngineMapView, in view: MLNMapView) {

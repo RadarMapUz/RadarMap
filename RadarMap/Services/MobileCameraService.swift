@@ -539,7 +539,9 @@ final class MobileCameraService {
             // сервера («слишком часто», блокировка) повтором не лечится, а
             // очередь, копящая заведомо мёртвые отметки, однажды выстрелит
             // залпом и получит блокировку уже за дело.
-            if live, failure.isWorthRetrying {
+            // Уже протухшая (отмечена по треку часы назад) — в очередь не кладём:
+            // «отправлю позже» было бы обещанием, которое очередь сама выбросит.
+            if live, failure.isWorthRetrying, ReportQueue.split([item], now: Date()).expired.isEmpty {
                 pending = ReportQueue.enqueued(item, into: pending)
                 savePending()
             }

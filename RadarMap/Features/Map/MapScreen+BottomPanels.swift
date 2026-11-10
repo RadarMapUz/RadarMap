@@ -48,13 +48,9 @@ extension MapScreen {
                     },
                     radarNote: { reportReach(at: point.coordinate).note },
                     onOwnCamera: {
-                        // Крестик режима добавления встаёт на выбранную точку —
-                        // пользователь при желании доводит позицию вручную.
-                        withMotion {
-                            map.pressedPoint = nil
-                            map.center(on: point.coordinate)
-                            map.isAddingCamera = true
-                        }
+                        // Прицел встаёт на выбранную точку — пользователь при
+                        // желании доводит позицию вручную.
+                        startAddingPoint(at: point.coordinate)
                     },
                     onCancel: {
                         withMotion { map.pressedPoint = nil }
@@ -70,7 +66,8 @@ extension MapScreen {
                         // Отклик — ПО ИТОГУ, а не сразу: прежний безусловный
                         // «успех» звучал одинаково и когда отметка ушла, и
                         // когда её отбросили как дубль.
-                        if let refusal = reportReach(at: report.coordinate).note {
+                        let reach = reportReach(at: report.coordinate)
+                        if let refusal = reach.note {
                             UINotificationFeedbackGenerator().notificationOccurred(.warning)
                             env.alerts.speak(refusal)
                             withMotion { reportPoint = nil }
@@ -83,7 +80,8 @@ extension MapScreen {
                                 speedKmh: env.location.speedKmh,
                                 isTripActive: env.location.isTripActive,
                                 placement: .deliberate,
-                                fix: nil)
+                                fix: nil,
+                                touchedAt: reach.observedAt ?? Date())
                             UINotificationFeedbackGenerator()
                                 .notificationOccurred(outcome.isSuccess ? .success : .warning)
                         }

@@ -41318,6 +41318,118 @@
           }
         }
       }
+    },
+    "Подвиньте карту, чтобы прицел встал на неё": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подвиньте карту, чтобы прицел встал на неё"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nishon unga tushishi uchun xaritani suring"
+          }
+        }
+      }
+    },
+    "Светофор": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Светофор"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Svetofor"
+          }
+        }
+      }
+    },
+    "Название": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Название"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nomi"
+          }
+        }
+      }
+    },
+    "Добавить название": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добавить название"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom qoʻshish"
+          }
+        }
+      }
+    },
+    "Только рядом с вами или там, где вы проезжали за последние 3 часа": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Только рядом с вами или там, где вы проезжали за последние 3 часа"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faqat yoningizda yoki soʻnggi 3 soatda oʻtgan joyingizda"
+          }
+        }
+      }
+    },
+    "Нужна геопозиция — или место, где вы проезжали за последние 3 часа": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нужна геопозиция — или место, где вы проезжали за последние 3 часа"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geolokatsiya kerak — yoki soʻnggi 3 soatda oʻtgan joyingiz"
+          }
+        }
+      }
+    },
+    "Вы проезжали здесь в %@ · увидят все водители": {
+      "localizations": {
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вы проезжали здесь в %@ · увидят все водители"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bu yerdan soat %@ da oʻtgansiz · barcha haydovchilar koʻradi"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

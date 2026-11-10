@@ -1211,12 +1211,11 @@ final class RouteService {
                 ? Self.pointAndCourse(along: along, pts: variant.points, cum: selectedCumulative) : nil,
             course: course)
 
-        // Прибытие: у самой цели ИЛИ проехали финиш по маршруту (парковка чуть в стороне,
-        // GPS-точка не попала в малый радиус — маршрут всё равно выполнен).
+        // Прибытие: у самой цели и по линии осталось мало ИЛИ проехали финиш по
+        // маршруту (ArrivalReached).
         let destinationDistance = point.distance(to: MKMapPoint(destination))
-        if destinationDistance <= AppConfig.arrivalRadiusMeters
-            || (variant.distance - along < AppConfig.arrivalPassedRemainingMeters
-                && destinationDistance < AppConfig.arrivalPassedRadiusMeters) {
+        if ArrivalReached.isReached(destinationDistance: destinationDistance,
+                                    remainingAlong: variant.distance - along, deviation: deviation) {
             arrive()
             return
         }

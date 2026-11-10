@@ -1828,6 +1828,12 @@ nonisolated enum AppConfig {
     static let rerouteBearingRadiusMeters = 35
     /// Радиус прибытия: ближе этого до финиша — маршрут выполнен.
     static let arrivalRadiusMeters: CLLocationDistance = 60
+    /// …и по линии до цели не больше этого: на встречной стороне проспекта
+    /// цель в 30 м по прямой, а по линии — до разворота и обратно. Двор или
+    /// объезд дома в радиусе 60 м — до 250 м линии; ближайший разворот
+    /// (от 200 м) — 400 м и больше. Мимо линии (дальше `rerouteDriftMeters`)
+    /// остаток не спрашиваем (ArrivalReached).
+    static let arrivalNearRemainingMeters: CLLocationDistance = 350
     /// «Проехали финиш по линии»: осталось меньше этого по маршруту И до
     /// цели не дальше `arrivalPassedRadiusMeters` — парковка чуть в стороне,
     /// фикс не попал в малый радиус, а маршрут выполнен.

@@ -1000,6 +1000,15 @@ nonisolated enum AppConfig {
     nonisolated static let commuteChainMaxGapSeconds: TimeInterval = 18 * 3600
     /// «Дольше обычного» считаем заметным с этой разницы.
     nonisolated static let commuteNoticeableDelaySeconds: TimeInterval = 3 * 60
+    /// Своё окно дороги: выезд дальше этого от типичного (обед, поручение) —
+    /// не та дорога, и в «обычно» он не входит. Совпадает с осью графика.
+    nonisolated static let commuteRoutineSpanMinutes = 120
+    /// Разброс «половина поездок — от 45 до 60 мин» — с пяти поездок: по трём
+    /// квартили — те же три числа.
+    nonisolated static let commuteRangeMinTrips = 5
+    /// Окно-совет — если в нём быстрее обычного хотя бы две поездки из трёх:
+    /// одна удачная рядом с обычной — не закономерность.
+    nonisolated static let commuteBucketFasterShare = 2.0 / 3
 
     // MARK: Профиль дороги по участкам (CommuteProfile, «призрак»)
     /// Короче — не дорога на работу, а переезд через двор.
@@ -1163,6 +1172,10 @@ nonisolated enum AppConfig {
     /// Пробел посреди пробки (стояние дольше двух минут на границе участков)
     /// не рвёт отрезок, если он не длиннее двух участков (~400 м).
     nonisolated static let commuteLossBridgeSegments = 2
+    /// Первые и последние метры пути — стоянка, прогрев, ворота, поиск места,
+    /// а не дорога: их лишнее время называется отдельно и в места не идёт.
+    /// Тот же радиус, которым поездка признаётся «от работы» и «до дома».
+    nonisolated static let commuteLossEdgeMeters: Double = commutePlaceRadiusMeters
 
     // MARK: «Выезжайте раньше» (план 19.10, 8.8.7)
 

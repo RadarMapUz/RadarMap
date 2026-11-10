@@ -126,18 +126,18 @@ final class CommuteTests: XCTestCase {
         XCTAssertEqual(summary.usualDepartureMinute, 8 * 60 + 22)
     }
 
-    /// Неделя дороги (8.8.15): средняя за 7 суток против медианы месяца.
-    /// Обычно 44 мин; на этой неделе 50, 47 и 53 — в среднем 50, на 6 мин
-    /// дольше. Средняя, а не медиана: тяжёлый вторник — часть недели.
-    func testWeekAverageAgainstUsual() throws {
+    /// Неделя дороги (8.8.15): медиана за 7 суток против медианы месяца.
+    /// Обычно 44 мин, половина поездок — 44–47; на этой неделе 50, 47 и 53 —
+    /// обычно 50, вне разброса.
+    func testWeekMedianAgainstUsual() throws {
         let trips = weekOfMornings([(1, 8, 20, 50), (2, 8, 25, 47), (3, 8, 22, 53),
                                     (9, 8, 20, 44), (10, 8, 18, 43), (11, 8, 25, 44), (12, 8, 30, 45),
                                     (15, 8, 20, 42), (16, 8, 22, 44)])
         let summary = try XCTUnwrap(Commute.summary(.toWork, trips: trips, now: now, calendar: calendar))
         let week = try XCTUnwrap(summary.week)
         XCTAssertEqual(week.trips, 3)
-        XCTAssertEqual(week.average, 50 * 60, accuracy: 1)
-        XCTAssertEqual(week.delta, week.average - (summary.usual ?? 0), accuracy: 1)
+        XCTAssertEqual(week.median, 50 * 60, accuracy: 1)
+        XCTAssertEqual(week.delta, week.median - (summary.usual ?? 0), accuracy: 1)
         XCTAssertTrue(week.isNoticeable)
     }
 
@@ -174,6 +174,108 @@ final class CommuteTests: XCTestCase {
                                     (4, 5, 30, 25), (5, 5, 40, 26)])
         XCTAssertNil(Commute.summary(.toWork, trips: trips, now: now, calendar: calendar)?.best,
                      "«выезжайте в 5 утра» — не совет")
+    }
+
+    /// Совет — по устойчивому окну: в 7:45 одна удачная поездка (30 мин) и
+    /// одна обычная (52) — медиана 41 «экономит», но закономерности нет.
+    func testNoAdviceFromOneLuckyDay() {
+        let trips = weekOfMornings([(1, 8, 22, 52), (2, 8, 20, 53), (3, 8, 25, 51), (6, 8, 21, 52),
+                                    (4, 7, 46, 30), (5, 7, 50, 52)])
+        XCTAssertNil(Commute.summary(.toWork, trips: trips, now: now, calendar: calendar)?.best)
+    }
+
+    // MARK: - Своё окно времени (разбор 10.11)
+
+    private func evenings(_ plan: [(daysAgo: Int, h: Int, m: Int, minutes: Double)]) -> [Commute.Trip] {
+        let history = plan.map { record(from: work, to: home, start: at(daysAgo: $0.daysAgo, $0.h, $0.m),
+                                        minutes: $0.minutes) }
+        return Commute.trips(history: history, home: home, work: work)
+    }
+
+    /// Выезды домой в 11:44, 13:10, 13:13 (обед, поручение) — дорога домой,
+    /// но не та, что вечером: в «обычно», неделю и «последнюю» не входят,
+    /// а называются отдельно. Последняя поездка — вчерашняя вечерняя, хотя
+    /// дневная была позже.
+    func testOffHoursTripsHomeStayOutOfTheSample() throws {
+        let trips = evenings([(1, 18, 35, 58), (2, 18, 20, 50), (3, 18, 40, 52), (4, 18, 10, 49),
+                              (7, 18, 30, 55), (8, 18, 45, 53),
+                              (0, 11, 44, 25), (2, 13, 10, 22), (6, 13, 13, 24)])
+        let s = try XCTUnwrap(Commute.summary(.toHome, trips: trips, now: now, calendar: calendar))
+        XCTAssertEqual(s.other.count, 3)
+        XCTAssertEqual(s.trips.count, 6)
+        XCTAssertEqual(s.last.duration, 58 * 60, "последняя — из своего окна")
+        XCTAssertEqual(s.usual, 52.5 * 60, "медиана вечерних, без обеденных 22–25 мин")
+        XCTAssertEqual(Set(s.other.map { Commute.minuteOfDay($0.departure, calendar: calendar) }),
+                       [11 * 60 + 44, 13 * 60 + 10, 13 * 60 + 13])
+    }
+
+    /// Окна нет, если «основная масса» — не больше половины: выезды и правда
+    /// разбросаны (сменный график), и прятать нечего.
+    func testScatteredDeparturesKeepEveryTrip() {
+        let trips = evenings([(1, 8, 0, 40), (2, 13, 0, 30), (3, 18, 0, 45), (4, 22, 30, 35)])
+        let split = Commute.routine(trips, calendar: calendar)
+        XCTAssertEqual(split.routine.count, 4)
+        XCTAssertTrue(split.other.isEmpty)
+    }
+
+    /// Ночная смена: выезды в 23:50 и в 0:10 — соседи, полночь окно не рвёт.
+    func testRoutineWindowWrapsAroundMidnight() {
+        let trips = evenings([(1, 23, 50, 30), (2, 0, 10, 28), (3, 23, 40, 31), (4, 0, 20, 29),
+                              (5, 15, 0, 40)])
+        let split = Commute.routine(trips, calendar: calendar)
+        XCTAssertEqual(split.routine.count, 4)
+        XCTAssertEqual(split.other.map { Commute.minuteOfDay($0.departure, calendar: calendar) }, [15 * 60])
+    }
+
+    // MARK: - Разброс, вердикт и цифры, которые складываются
+
+    /// Неделя — медиана, как «обычно»: на ровно таких же поездках со
+    /// скошенным вправо временем (одна пробка в 70 мин) среднее было бы
+    /// «дольше обычного» по построению.
+    func testWeekOfOrdinaryTripsIsNotSlower() throws {
+        let trips = evenings([(1, 18, 30, 50), (2, 18, 30, 70), (3, 18, 30, 51),
+                              (9, 18, 30, 50), (10, 18, 30, 52), (11, 18, 30, 49), (12, 18, 30, 70),
+                              (15, 18, 30, 51)])
+        let s = try XCTUnwrap(Commute.summary(.toHome, trips: trips, now: now, calendar: calendar))
+        let week = try XCTUnwrap(s.week)
+        XCTAssertEqual(week.median, 51 * 60)
+        XCTAssertFalse(week.isNoticeable, "среднее недели 57 — «на 6 мин дольше», медиана 51 — обычно")
+    }
+
+    /// «Дольше обычного» — только вне разброса: половина поездок 47,5–55,5 мин,
+    /// поездка в 55 на 5 мин дольше медианы, но в пределах обычного; 62 — вне.
+    func testVerdictFollowsTheUsualSpread() throws {
+        let plan: [(Int, Int, Int, Double)] = [(2, 18, 30, 46), (3, 18, 30, 56), (4, 18, 30, 50),
+                                               (5, 18, 30, 44), (8, 18, 30, 58), (9, 18, 30, 49)]
+        let inside = evenings([(1, 18, 30, 55)] + plan)
+        let s1 = try XCTUnwrap(Commute.summary(.toHome, trips: inside, now: now, calendar: calendar))
+        let range = try XCTUnwrap(s1.range)
+        XCTAssertTrue(range.contains(55 * 60), "\(range)")
+        XCTAssertEqual(s1.verdict, .usual)
+
+        let outside = evenings([(1, 18, 30, 62)] + plan)
+        XCTAssertEqual(Commute.summary(.toHome, trips: outside, now: now, calendar: calendar)?.verdict, .slower)
+        XCTAssertEqual(Commute.verdict(30 * 60, usual: 50 * 60, range: range), .faster)
+    }
+
+    /// Пока разброса нет (меньше пяти поездок) — по порогу 3 мин.
+    func testVerdictWithoutSpreadUsesTheThreshold() {
+        XCTAssertNil(Commute.summary(.toHome, trips: evenings([(1, 18, 30, 50), (2, 18, 30, 44),
+                                                               (3, 18, 30, 45)]),
+                                     now: now, calendar: calendar)?.range)
+        XCTAssertEqual(Commute.verdict(50 * 60, usual: 45 * 60, range: nil), .slower)
+        XCTAssertEqual(Commute.verdict(47 * 60, usual: 45 * 60, range: nil), .usual)
+        XCTAssertEqual(Commute.verdict(47 * 60, usual: nil, range: nil), .usual)
+    }
+
+    /// Цифры на экране складываются: «58 мин» и «обычно 52» — «на 6 мин»,
+    /// хотя разница в секундах (6:40) округлилась бы до семи.
+    func testShownDelayAddsUpWithShownMinutes() {
+        XCTAssertEqual(Commute.shownDelta(58 * 60 + 50, 52 * 60 + 10), 6)
+        XCTAssertEqual(Formatting.duration(58 * 60 + 50), Formatting.duration(58 * 60))
+        XCTAssertEqual(Commute.wholeMinutes(65 * 60 + 59), 65)
+        XCTAssertEqual(Commute.quantile([10, 20, 30, 40, 50], 0.25), 20)
+        XCTAssertEqual(Commute.quantile([10, 20], 0.75), 17.5)
     }
 
     func testOldTripsLeaveTheWindow() {

@@ -24,16 +24,16 @@ final class MobilePassQuestionTests: XCTestCase {
     }
 
     /// Словарь (02.11): тренога — «Тренога ещё стоит?», радар — «Радар ещё
-    /// стоит?», и у обоих «Стоит» / «Убрали». Настоящее время: тренога —
+    /// стоит?», и у обоих «Стоит» / «Уже нет» (82). Настоящее время: тренога —
     /// это «сейчас», и сервер понимает ответ как «стоит сейчас».
     func testTripodAndRadarAskInThePresent() {
         let tripod = MobilePassWatch.question(for: .tripod)
         XCTAssertEqual(tripod.title, "Тренога ещё стоит?")
         XCTAssertEqual(tripod.yes, "Стоит")
-        XCTAssertEqual(tripod.no, "Убрали")
+        XCTAssertEqual(tripod.no, "Уже нет")
         let radar = MobilePassWatch.question(for: .mobileRadar)
         XCTAssertEqual(radar.title, "Радар ещё стоит?")
-        XCTAssertEqual(radar.no, "Убрали")
+        XCTAssertEqual(radar.no, "Уже нет")
         for kind in [CameraType.mobileRadar, .tripod, .dpsPost, .accident] {
             XCTAssertFalse(MobilePassWatch.question(for: kind).title.contains("стоял"), "\(kind)")
         }

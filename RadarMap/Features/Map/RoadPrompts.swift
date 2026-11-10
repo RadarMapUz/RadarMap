@@ -253,6 +253,12 @@ struct RoadPromptDriver: View {
             // Время на ответ — с момента, когда вопрос видно (как у баннера машины).
             map.promptFrozenRemaining[shown.id] = nil
             if let offer = env.route.detourOffer { env.route.noteDetourShown(id: offer.id, now: now) }
+        case .passQuestion:
+            // Голосом — короткий вопрос, раз на отметку (82): ответ — одно касание на карточке.
+            if let camera = env.mobile.pendingConfirm, env.settings.voiceEnabled,
+               env.mobile.claimQuestionVoice(for: camera.id) {
+                env.alerts.speak(MobilePassWatch.question(for: camera.kind).title)
+            }
         default:
             break
         }
@@ -357,9 +363,12 @@ enum RoadPromptContent {
                 withMotion { mobile.answerConfirm(stillThere: value, for: camera.id) }
                 thanks()
             }
+            let fresh = mobile.freshness(for: camera.id)
             return RoadPromptModel(
                 glyph: .coin(camera.kind.glyph, fill: camera.kind.tint, ink: camera.kind.glyphTint),
-                question: question.title, silence: silentNothing,
+                question: question.title,
+                detail: fresh.flatMap { TripodFreshness.card($0, now: Date()) },
+                silence: silentNothing,
                 actions: [
                     .init(id: "yes", title: question.yes, symbol: "checkmark", style: .agree,
                           spoken: question.spokenYes, perform: { answer(true) }),

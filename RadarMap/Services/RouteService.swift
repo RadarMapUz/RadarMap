@@ -87,6 +87,9 @@ final class RouteService {
         /// ТОЛЬКО для карты: оповещения и проезды читают `cameras` с
         /// настоящими координатами.
         var cameraSpots: [Int: CameraOnLine.Spot] = [:]
+        /// Время графа вдоль линии по шагам OSRM; nil — движок длительностей
+        /// не дал, остаток — долей расстояния.
+        var timeline: RouteTimeline? = nil
 
         /// Время в пути с пробками — его и показываем, и сравниваем. У своей
         /// дороги (24.4) — по своим поездкам в этот час, если их хватает.
@@ -572,15 +575,22 @@ final class RouteService {
     }
 
     /// Остаток по маршруту до хвоста последних километров: доля времени графа
-    /// с личным темпом варианта (33E) + пробки остатка. На старте (весь путь,
+    /// (по шагам OSRM — RouteTimeline, без них — по расстоянию) с личным
+    /// темпом варианта (33E) + пробки остатка. На старте (весь путь,
     /// задержки из `initialRemainingDelays`) — ровно `Variant.shownTime`:
     /// флажок прибытия и крупная цифра — одно время (решение 28.10). Мерка
     /// объезда (`engineRemaining`) темпа не знает.
     static func remainingEstimate(_ variant: Variant, remainingDistance: CLLocationDistance,
                                   liveDelay: TimeInterval, typicalDelay: TimeInterval) -> TimeInterval {
         guard variant.distance > 0 else { return 0 }
-        let share = min(1, max(0, remainingDistance / variant.distance))
-        return variant.travelTime * variant.paceFactor * share + liveDelay + typicalDelay
+        return graphRemaining(variant, remainingDistance: remainingDistance) * variant.paceFactor
+            + liveDelay + typicalDelay
+    }
+
+    /// Время графа на остатке пути, без темпа и пробок.
+    static func graphRemaining(_ variant: Variant, remainingDistance: CLLocationDistance) -> TimeInterval {
+        variant.travelTime * RouteTimeline.remainingShare(variant.timeline, distance: variant.distance,
+                                                          remainingDistance: remainingDistance)
     }
 
     /// Закрыть наблюдение личного темпа (прибытие, снятие маршрута).
@@ -608,7 +618,7 @@ final class RouteService {
     /// против времени OSRM — в час пик это выдумало бы выгодный объезд.
     var engineRemaining: TimeInterval {
         guard let selected, selected.distance > 0 else { return 0 }
-        return selected.travelTime * remainingDistance / selected.distance + remainingTrafficDelay
+        return Self.graphRemaining(selected, remainingDistance: remainingDistance) + remainingTrafficDelay
     }
 
     /// Личный остаток пути (8.8.11), подаёт AppEnvironment из призрака дороги
@@ -642,7 +652,7 @@ final class RouteService {
             // прибытие поправкой (может быть и отрицательной: пробка в
             // получасе впереди к нашему приезду обычно уже рассосётся).
             live = snapshot?.delay(along: remaining) ?? 0
-            let baseTime = selected.travelTime * remainingDistance / selected.distance
+            let baseTime = Self.graphRemaining(selected, remainingDistance: remainingDistance)
             let ahead = TrafficTimeAhead.delay(along: remaining, baseTime: baseTime, departure: now, now: now,
                                                live: snapshot, profile: profile)?.seconds ?? live
             typical = ahead - live
@@ -651,7 +661,7 @@ final class RouteService {
         } else if selected.distance > 0 {
             // Живых нет (сборщик стоит, now.json старый) — обычная пробка
             // часа по остатку пути, с выездом «сейчас».
-            let baseTime = selected.travelTime * remainingDistance / selected.distance
+            let baseTime = Self.graphRemaining(selected, remainingDistance: remainingDistance)
             let needed = TrafficForecast.buckets(departure: now, travelTime: baseTime)
             let files = typicalFiles(needed)
             if files.count < needed.count { prefetchTypical?(needed) }
@@ -1437,6 +1447,7 @@ final class RouteService {
         var laneProbes: [LaneProbe] = []
         var stopAlong: CLLocationDistance?
         var offline = false
+        var timeline: RouteTimeline?
     }
 
     /// Маршрут без сети по своему графу трасс (OfflineRouteService, 12б.10).
@@ -1744,9 +1755,10 @@ final class RouteService {
             // шагов: та расходится с линией на сотни метров (ManeuverAnchor).
             let cumulative = TurnBend.cumulative(path)
             let flat = route.legs.flatMap(\.steps)
+            let lineCumulative = Self.cumulative(of: points)
             let anchors = ManeuverAnchor.positions(locations: flat.map(\.maneuver.location),
                                                    distances: flat.map(\.distance),
-                                                   path: path, cumulative: Self.cumulative(of: points))
+                                                   path: path, cumulative: lineCumulative)
             var steps: [RouteStep] = []
             var notices: [LaneNotice] = []
             var probes = LaneProbeCollector(path: path)
@@ -1777,7 +1789,10 @@ final class RouteService {
             }
             return BuiltVariant(points: points, distance: route.distance,
                                 travelTime: route.duration, steps: steps, laneNotices: notices,
-                                laneProbes: probes.probes, stopAlong: stopAlong)
+                                laneProbes: probes.probes, stopAlong: stopAlong,
+                                timeline: RouteTimeline(starts: anchors.map(\.along),
+                                                        durations: flat.map(\.duration),
+                                                        length: lineCumulative.last ?? 0))
         }
         return variants.isEmpty ? nil : variants
     }
@@ -1805,6 +1820,8 @@ final class RouteService {
             /// умолчанием, а не `let`: у структуры синтезируется ещё и
             /// memberwise-инициализатор, которым пользуются тесты.
             var intersections: [Intersection]? = nil
+            /// Секунды шага по графу — кумулятив времени (RouteTimeline).
+            var duration: Double? = nil
         }
         nonisolated struct Maneuver: Decodable {
             let type: String
@@ -2161,7 +2178,8 @@ final class RouteService {
                            trafficLiveDelay: trafficForecasts[index]?.liveSeconds,
                            paceFactor: paceFactor?(PersonalPace.roadClass(distance: variant.distance,
                                                                           travelTime: variant.travelTime)) ?? 1,
-                           cameraSpots: variantSpots[index])
+                           cameraSpots: variantSpots[index],
+                           timeline: variant.timeline)
         }
         selectedID = verdict.recommended
         // Новый набор: ярлыки могут подвинуться за поздними пробками, пока

@@ -72,6 +72,8 @@ MEM_MIN_MB = 800          # MemAvailable
 DISK_RESERVE_MB = 2048    # сверх размера набора
 INODES_MIN = 100_000
 SCP_LIMIT_KBIT = 40_000   # ~5 МБ/с: 1,7 ГБ за ~6 мин, канал соседям остаётся
+SCP_TRIES = 4             # обрыв связи (12.11: «Operation timed out» на первом файле) — повтор файла
+SSH_KEEPALIVE = ["-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4"]
 
 # Ворота аудита: новый граф не хуже боевого.
 GATE = {
@@ -150,10 +152,11 @@ def parse_snapshot(text):
     return snap
 
 
-def gate_reasons(snap, during=False, need_mb=0):
-    """Почему сейчас нельзя лить на VPS; пустой список — можно."""
+def gate_reasons(snap, during=False, need_mb=0, any_time=False):
+    """Почему сейчас нельзя лить на VPS; пустой список — можно. any_time —
+    без ночного окна, остальные ворота те же."""
     reasons = []
-    if not in_window(snap.get("hhmm", "")):
+    if not any_time and not in_window(snap.get("hhmm", "")):
         reasons.append(f"не ночь: {snap.get('hhmm', '?')} по Ташкенту, окно {WINDOW[0]}–{WINDOW[1]}")
     limit = LOAD_MAX_DURING if during else LOAD_MAX
     if snap.get("load1", 99.0) >= limit:
@@ -570,17 +573,17 @@ def cmd_gate(args):
     return 0 if not reasons else 75
 
 
-def wait_gate(deadline, need_mb=0, during=False):
+def wait_gate(deadline, need_mb=0, during=False, any_time=False):
     """Ждёт свободный сервер; (снимок, None) — дождались, (снимок, причины) — нет.
     На старте ждёт до deadline (--wait). Между файлами ждёт, пока причина
     временная (load, память, цикл пробок), и сдаётся, как только кончилась ночь."""
     step = 30 if during else 300
     while True:
         s = snapshot()
-        reasons = gate_reasons(s, during=during, need_mb=need_mb)
+        reasons = gate_reasons(s, during=during, need_mb=need_mb, any_time=any_time)
         if not reasons:
             return s, None
-        night_over = during and not in_window(s.get("hhmm", ""))
+        night_over = during and not any_time and not in_window(s.get("hhmm", ""))
         if night_over or (not during and time.time() + step > deadline):
             return s, reasons
         log(f"  жду: {'; '.join(reasons)}")
@@ -604,7 +607,7 @@ def cmd_upload(args):
     need_mb = round(sum(sum(os.path.getsize(os.path.join(set_dir(args.date, k), n)) for n in upload_files(set_dir(args.date, k)))
                         for k in kinds) / 1048576)
     deadline = time.time() + args.wait * 60
-    s, reasons = wait_gate(deadline, need_mb=need_mb)
+    s, reasons = wait_gate(deadline, need_mb=need_mb, any_time=args.any_time)
     show_snapshot(s)
     if reasons:
         msg = "сервер сейчас нельзя нагружать: " + "; ".join(reasons)
@@ -643,17 +646,25 @@ def upload_kind(args, kind, snap, deadline):
             if sizes.get(name) == os.path.getsize(src):
                 log(f"  = {name} (уже залит)")
                 continue
-            cmd = ["scp", "-q", "-l", str(args.limit), "-o", "BatchMode=yes", src, f"{VPS}:{part}/{name}"]
+            cmd = ["scp", "-q", "-l", str(args.limit), "-o", "BatchMode=yes", *SSH_KEEPALIVE, src, f"{VPS}:{part}/{name}"]
             if args.dry_run:
                 log("+ " + shlex.join(cmd))
                 continue
-            _, reasons = wait_gate(deadline, during=True)
+            _, reasons = wait_gate(deadline, during=True, any_time=args.any_time)
             if reasons:
                 log(f"✗ {kind}: остановлено перед {name}: {'; '.join(reasons)}. Недолитое — в {part}, "
                     "следующий запуск продолжит с этого файла.")
                 return 75
             start = time.monotonic()
-            subprocess.run(cmd, check=True)
+            for attempt in range(1, SCP_TRIES + 1):
+                if subprocess.run(cmd).returncode == 0:
+                    break
+                if attempt == SCP_TRIES:
+                    log(f"✗ {kind}: {name} не залит за {SCP_TRIES} попытки. Недолитое — в {part}, "
+                        "следующий запуск продолжит с этого файла.")
+                    return 1
+                log(f"  ↻ {name}: обрыв, попытка {attempt + 1} из {SCP_TRIES} через {30 * attempt} с")
+                time.sleep(30 * attempt)
             log(f"  ↑ {name}: {os.path.getsize(src) / 1048576:.1f} МБ за {time.monotonic() - start:.0f} с")
         verify = f"cd {part} && {nice} sha256sum -c --quiet SHA256SUMS && mv {part} {final}"
         if args.dry_run:
@@ -839,6 +850,7 @@ def main():
     u.add_argument("--dry-run", action="store_true")
     u.add_argument("--wait", type=int, default=0, help="ждать свободный сервер, минут")
     u.add_argument("--limit", type=int, default=SCP_LIMIT_KBIT, help="scp -l, Кбит/с")
+    u.add_argument("--any-time", action="store_true", help="без ночного окна; load, память, диск и цикл пробок — как ночью")
     s = sub.add_parser("switch")
     s.add_argument("--date", default=today())
     s.add_argument("--kind", choices=("mld", "ch"), required=True)

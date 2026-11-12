@@ -76,6 +76,13 @@ class LoadGate(unittest.TestCase):
         self.assertEqual(g.gate_reasons(snap, during=True), [])
         self.assertTrue(g.gate_reasons(dict(snap, load1=1.2), during=True))
 
+    def test_any_time_drops_only_the_window(self):
+        day = dict(QUIET_NIGHT, hhmm="14:10")
+        self.assertTrue(g.gate_reasons(day))
+        self.assertEqual(g.gate_reasons(day, any_time=True, need_mb=1700), [])
+        busy = g.gate_reasons(dict(day, load1=0.7, customize_lock=True), any_time=True)
+        self.assertEqual(len(busy), 2)
+
     def test_missing_numbers_mean_no(self):
         self.assertEqual(len(g.gate_reasons({"hhmm": "03:00"})), 2)   # load и память неизвестны
 

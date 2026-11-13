@@ -208,11 +208,20 @@ class AppColoursInSync(unittest.TestCase):
             self.assertEqual(palette_check.TRAFFIC["dark"][state], "#" + night[2:].lower(), state)
 
     def test_camera_types(self):
+        # С плана 90 Theme.Types берёт заливку у CameraGlyph (общий файл с
+        # виджетами): rgb(CameraGlyph.<тип>.fillRGB) — значение в его switch.
         theme = _swift("RadarMap/DesignSystem/Theme.swift")
+        glyph = _swift("Shared/CameraGlyph.swift")
         for name, hex_ in palette_check.CAMERA_TYPES.items():
-            found = re.search(rf"static let {name}\s*= Color\(uiColor: rgb\(0x([0-9A-Fa-f]{{6}})\)\)", theme)
+            found = re.search(rf"static let {name}\s*= Color\(uiColor: rgb\((0x[0-9A-Fa-f]{{6}}|CameraGlyph\.(\w+)\.fillRGB)\)\)",
+                              theme)
             self.assertIsNotNone(found, name)
-            self.assertEqual(hex_, "#" + found.group(1).lower(), name)
+            value = found.group(1)
+            if found.group(2):
+                case = re.search(rf"case \.{found.group(2)}:\s*return (0x[0-9A-Fa-f]{{6}})", glyph)
+                self.assertIsNotNone(case, name)
+                value = case.group(1)
+            self.assertEqual(hex_, "#" + value[2:].lower(), name)
 
     def test_asphalt_copy_in_palette_tests(self):
         # PaletteTests.asphalt держит копию полотна по классам и фона.
@@ -265,14 +274,33 @@ class AppColoursInSync(unittest.TestCase):
 
     def test_drive3d_ribbon(self):
         # Лента «Вождения 3D» — те же числа, что Drive3D.ribbon в приложении.
+        # Заливка — числом или токеном: RouteColors.<имя>.day/.night (Theme)
+        # либо WidgetPalette.<имя>.light/.dark (Shared).
         source = _swift("RadarMap/Models/Drive3D.swift")
+        theme_swift = _swift("RadarMap/DesignSystem/Theme.swift")
+        widget = _swift("Shared/WidgetPalette.swift")
+
+        def resolve(value):
+            if value.startswith("0x"):
+                return "#" + value[2:].lower()
+            kind, name, side = value.split(".")
+            if kind == "RouteColors":
+                pair = re.search(rf"static let {name}: Pair = \((0x[0-9A-Fa-f]{{6}}), (0x[0-9A-Fa-f]{{6}})\)",
+                                 theme_swift)
+                self.assertIsNotNone(pair, value)
+                return "#" + pair.group(1 if side == "day" else 2)[2:].lower()
+            pair = re.search(rf"static let {name} = Pair\(light: (0x[0-9A-Fa-f]{{6}}), dark: (0x[0-9A-Fa-f]{{6}})\)",
+                             widget)
+            self.assertIsNotNone(pair, value)
+            return "#" + pair.group(1 if side == "light" else 2)[2:].lower()
+
         for theme, name in (("light", "day"), ("dark", "night")):
-            found = re.search(rf"static let {name} = Ribbon\(fill: 0x([0-9A-F]{{6}}), edge: 0x([0-9A-F]{{6}}), "
+            found = re.search(rf"static let {name} = Ribbon\(fill: ([\w.]+), edge: ([\w.]+), "
                               rf"edgeOpacity: ([0-9.]+)\)", source)
             self.assertIsNotNone(found, name)
             ribbon = make_style.D3_RIBBON[theme]
-            self.assertEqual("#" + found.group(1).lower(), ribbon["fill"], name)
-            self.assertEqual("#" + found.group(2).lower(), ribbon["edge"], name)
+            self.assertEqual(resolve(found.group(1)), ribbon["fill"], name)
+            self.assertEqual(resolve(found.group(2)), ribbon["edge"], name)
             self.assertAlmostEqual(float(found.group(3)), ribbon["edge_opacity"], msg=name)
 
     def test_calm_markers(self):
@@ -280,16 +308,25 @@ class AppColoursInSync(unittest.TestCase):
         # заливка и кант — именованные константы, растры ссылаются на них.
         look = _swift("RadarMap/Models/CameraMarkerLook.swift")
 
+        widget = _swift("Shared/WidgetPalette.swift")
+
         def rgb(name):
-            found = re.search(rf"static let {name}: UInt32 = 0x([0-9A-Fa-f]{{6}})", look)
+            # Константа — числом, ссылкой на WidgetPalette или локальной `let`.
+            found = re.search(rf"(?:static )?let {name}: UInt32 = (0x[0-9A-Fa-f]{{6}}|WidgetPalette\.(\w+))", look)
             self.assertIsNotNone(found, name)
-            return "#" + found.group(1).lower()
+            if found.group(2):
+                found = re.search(rf"static let {found.group(2)}: UInt32 = (0x[0-9A-Fa-f]{{6}})", widget)
+                self.assertIsNotNone(found, name)
+            return "#" + found.group(1)[2:].lower()
 
         for suffix, theme, fill, rim in (("-calm-d", "light", "neutralDayRGB", None),
                                          ("-calm-n", "dark", "neutralNightRGB", "calmNightInkRGB")):
-            raster = re.search(rf'Raster\(suffix: "{suffix}".*?fill: (\w+),.*?rim: (\w+)\)', look)
+            raster = re.search(rf'Raster\(suffix: "{suffix}"[^)]*?fill: (\w+),[^)]*?rim: (\w+)\)', look)
             self.assertIsNotNone(raster, suffix)
-            self.assertEqual(raster.group(1), fill, suffix)
+            # С плана 90 заливка — локальная `calmDay`/`calmNight`: у камеры
+            # нейтральная, у прочих типов своя. Сверяется ветка камеры.
+            local = re.search(rf"let {raster.group(1)} = glyph == \.camera \? (\w+) :", look)
+            self.assertEqual(local.group(1) if local else raster.group(1), fill, suffix)
             self.assertEqual(palette_check.CALM[theme]["fill"], rgb(fill), suffix)
             ring = "#ffffff" if raster.group(2) == "0xFFFFFF" else rgb(raster.group(2))
             if rim:

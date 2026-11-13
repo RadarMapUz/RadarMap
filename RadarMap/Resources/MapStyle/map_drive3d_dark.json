@@ -864,14 +864,6 @@
    "text-color": "#8a93a0",
    "text-halo-color": "#111317"
   },
-  "highway-shield-us-interstate": {
-   "text-color": "#8a93a0",
-   "text-halo-color": "#111317"
-  },
-  "highway-shield-us-other": {
-   "text-color": "#8a93a0",
-   "text-halo-color": "#111317"
-  },
   "highway-trunk": {
    "line-color": [
     "interpolate",
@@ -940,17 +932,11 @@
   "housenumber": {
    "text-halo-color": "#262b33"
   },
-  "landcover-glacier": {
-   "fill-color": "#161a20"
-  },
   "landcover-grass": {
    "fill-color": "#16251c"
   },
   "landcover-grass-park": {
    "fill-color": "#16251c"
-  },
-  "landcover-ice-shelf": {
-   "fill-color": "#161a20"
   },
   "landcover-sand": {
    "fill-color": "#161a20"
@@ -993,10 +979,6 @@
    "text-halo-color": "#111317"
   },
   "place-city-capital": {
-   "text-color": "#8a93a0",
-   "text-halo-color": "#111317"
-  },
-  "place-continent": {
    "text-color": "#8a93a0",
    "text-halo-color": "#111317"
   },
@@ -1086,7 +1068,7 @@
      "clinic",
      "veterinary"
     ],
-    "#f08078",
+    "#6cc5b5",
     [
      "museum",
      "theatre",
@@ -1162,7 +1144,7 @@
      "clinic",
      "veterinary"
     ],
-    "#f08078",
+    "#6cc5b5",
     [
      "museum",
      "theatre",
@@ -1238,7 +1220,7 @@
      "clinic",
      "veterinary"
     ],
-    "#f08078",
+    "#6cc5b5",
     [
      "museum",
      "theatre",
@@ -1868,9 +1850,6 @@
    "fill-color": "#0e1c2c"
   },
   "water-name-lakeline": {
-   "text-halo-color": "#111317"
-  },
-  "water-name-ocean": {
    "text-halo-color": "#111317"
   },
   "water-name-other": {

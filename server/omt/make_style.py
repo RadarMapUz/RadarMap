@@ -147,7 +147,7 @@ PALETTES = {
         "parking": "#e8eaee", "parking_edge": "#d5d9df", "barrier": "#eceef1",
         # Мост: светлый край-ограждение и тень под пролётом; тоннель —
         # полупрозрачный асфальт с пунктирной кромкой (как у Яндекса).
-        "bridge_edge": "#ffffff", "bridge_shadow": "rgba(40,48,60,0.22)", "tunnel": "#dcdfe4",
+        "bridge_edge": "#ffffff", "bridge_shadow": "rgba(40,48,60,0.30)", "tunnel": "#dcdfe4",
         "tree_crown": "#b3db9c", "tree_crown_low": "#93c77c", "tree_crown_high": "#c9e8b6",
         "tree_light": "#d0ecbf", "tree_trunk": "#9a948c", "tree_shadow": "rgba(55,85,45,0.24)",
         "label": "#2d3036", "street_label": "#2b2e33", "halo": "#ffffff", "oneway_opacity": 0.55,
@@ -220,7 +220,7 @@ PALETTES = {
         "kerb": "#575c66", "kerb_trunk": "#7c8797", "trees": "trees-dark", "asphalt": "asphalt-dark",
         "gutter": "#1d2025",
         "parking": "#212429", "parking_edge": "#2c2f36", "barrier": "#4a4f58",
-        "bridge_edge": "#6b717c", "bridge_shadow": "rgba(0,0,0,0.45)", "tunnel": "#262a30",
+        "bridge_edge": "#7a808b", "bridge_shadow": "rgba(0,0,0,0.6)", "tunnel": "#262a30",
         "tree_crown": "#1d3628", "tree_crown_low": "#152a1f", "tree_crown_high": "#2a4a37",
         "tree_light": "#284634", "tree_trunk": "#3a3632", "tree_shadow": "rgba(0,0,0,0.5)",
         "label": "#e6e9ee", "street_label": "#f2f4f7", "halo": "#16181c", "oneway_opacity": 0.7,
@@ -247,6 +247,12 @@ ROADS_KEEP_LAYERS = {"transportation", "transportation_name", "water", "waterway
 ROADS_KEEP_IDS = {"background", "landcover-grass", "landcover-grass-park", "landcover-wood"}
 
 
+# Сдвиг тени пролёта растёт с масштабом, как сам пролёт (план 13.11, раздел 6):
+# постоянные 2×4 px на z18–19 терялись под кромкой, и эстакада над дорогой
+# читалась нарисованной поверх, а не стоящей над ней.
+BRIDGE_SHADOW_SHIFT = ["interpolate", ["linear"], ["zoom"], 15, ["literal", [1, 2]],
+                       17, ["literal", [3, 5]], 19, ["literal", [6, 11]]]
+
 # Доля ширины запасной линии основы, когда полотно рисуем мы (с
 # OUR_ROADS_FROM). Полной ширины она торчала зубцами из-под нашей ленты у
 # съездов, где геометрия OpenMapTiles и наша расходятся (Беруни, 05.10.2026);
@@ -256,6 +262,24 @@ FALLBACK_SHARE = 0.45
 # Разметка полос — с 17-го: на 16-м пунктиры многополосной улицы сливались в
 # рябь (Амира Темура, 07.10.2026). Осевая сплошная видна раньше.
 LANE_MARKINGS_FROM = 17
+# Экран машины (план 13.11, этап 5): камера машины на ходу держит z16,0–17,2,
+# и с порога 17 полосы там почти не появлялись. Палитра машины несёт свой порог
+# (lane_from) — разница машины меняет только прозрачность; слой с этого зума,
+# у телефона он прозрачен до LANE_MARKINGS_FROM.
+CAR_LANE_MARKINGS_FROM = 16.4
+
+
+def lane_opacity(p):
+    start = p.get("lane_from", LANE_MARKINGS_FROM)
+    if start <= CAR_LANE_MARKINGS_FROM:
+        return ["interpolate", ["linear"], ["zoom"], start, 0, start + 0.3, 1]
+    return ["interpolate", ["linear"], ["zoom"], CAR_LANE_MARKINGS_FROM, 0, start, 0, start + 0.4, 1]
+
+# Парковка «P» — с квартала, а не с района: на 14,5–16 их было 8–10 на экран,
+# и синие квадраты оказывались громче камер (план 13.11, раздел 5). Отступ
+# прореживает соседние площадки одного двора.
+PARKING_FROM = 16.5
+PARKING_PADDING = 16
 
 # Имя на ОДНОМ языке. Было «{name:latin}\n{name:nonlatin}»: две строки на
 # каждый объект, а латиница русских названий — автотранслитерация
@@ -308,9 +332,11 @@ POI_KINDS = {
                 "attraction", "monument", "castle", "college", "school", "university",
                 "kindergarten", "place_of_worship"),
 }
+# Медицина — бирюзовая, а не красная (план 13.11, раздел 4): красный на карте —
+# только камера, и «Kimyo University Hospital» красным читался предупреждением.
 POI_COLOURS = {
-    "light": {"food": "#d9690a", "shop": "#2f63c9", "health": "#c8322a", "culture": "#7b48c8"},
-    "dark": {"food": "#f0a24f", "shop": "#7aa5f2", "health": "#f08078", "culture": "#b694f0"},
+    "light": {"food": "#c25e0c", "shop": "#2f63c9", "health": "#1f7f73", "culture": "#7b48c8"},
+    "dark": {"food": "#f0a24f", "shop": "#7aa5f2", "health": "#6cc5b5", "culture": "#b694f0"},
 }
 
 
@@ -472,6 +498,14 @@ def _road_kind(layer_id):
 SCHOOL_CLASSES = ("school", "kindergarten", "college", "university", "education")
 
 
+# Слои OSM Bright, которым в Узбекистане нечего рисовать: океан и континенты,
+# ледники и шельфовые льды, паромы и пирсы, щиты дорог США. Каждый слой движок
+# всё равно проходит на каждом кадре и в каждом тайле (план 13.11, раздел 9).
+NOT_IN_UZBEKISTAN = {"landcover-glacier", "landcover-ice-shelf", "ferry", "road_area_pier", "road_pier",
+                     "water-name-ocean", "highway-shield-us-interstate", "highway-shield-us-other",
+                     "place-continent"}
+
+
 def _base_layer(layer, p, mode, theme):
     """Слой OSM Bright, перекрашенный в палитру; None — слоя в этом режиме нет."""
     l = copy.deepcopy(layer)
@@ -479,6 +513,8 @@ def _base_layer(layer, p, mode, theme):
     src = l.get("source-layer")
     paint = l.setdefault("paint", {})
     if mode == "roads" and i not in ROADS_KEEP_IDS and src not in ROADS_KEEP_LAYERS:
+        return None
+    if i in NOT_IN_UZBEKISTAN:
         return None
     if i == "background":
         paint["background-color"] = p["bg"]
@@ -948,6 +984,7 @@ def _uses(colour):
 
 
 CAR_NIGHT = {
+    "lane_from": CAR_LANE_MARKINGS_FROM,
     "bg": "#141619", "halo": "#141619",
     "road": "#383d46", "road_secondary": "#33373f", "road_tertiary": "#30343b",
     "minor": "#2b2f36", "minor_far": "#2b2f36",
@@ -964,6 +1001,7 @@ CAR_NIGHT = {
 CAR_PALETTES = {
     "A": {
         "light": {
+            "lane_from": CAR_LANE_MARKINGS_FROM,
             "bg": "#eceef1", "minor": "#fafbfc", "minor_far": "#fafbfc", "minor_edge": "#d3d7dd",
             "building_height": 0.75,
             "light": dict(PALETTES["light"]["light"], intensity=0.45),
@@ -978,6 +1016,7 @@ CAR_PALETTES = {
     },
     "B": {
         "light": {
+            "lane_from": CAR_LANE_MARKINGS_FROM,
             "bg": "#eef0f2", "landuse": "#eef0f2",
             "near_primary": "#d5d9df", "near_secondary": "#d5d9df", "near_tertiary": "#d5d9df",
             "zebra_base": "#d5d9df",
@@ -1110,8 +1149,10 @@ D3_PALETTES = {
 # заливка насыщенным синим (не смесью с асфальтом: смесь серела и у владельца
 # читалась ночью грязной), кант и его непрозрачность. Ночью — насыщенно и без
 # засветки (palette_check: светлота ≤ 0,18, разметка на ленте ≥ 3:1).
-D3_RIBBON = {"light": {"fill": "#0a5fd8", "edge": "#ffffff", "edge_opacity": 0.7},
-             "dark": {"fill": "#2b63c0", "edge": "#9cc3ff", "edge_opacity": 0.3}}
+# Копия Drive3D.day/.night (тело — RouteColors.body днём, WidgetPalette.accentFill
+# ночью); test_palette_check сверяет её с приложением.
+D3_RIBBON = {"light": {"fill": "#0b62d0", "edge": "#ffffff", "edge_opacity": 0.7},
+             "dark": {"fill": "#1e5dc4", "edge": "#9cc3ff", "edge_opacity": 0.3}}
 D3_FILES = (("map_drive3d_light.json", "light"), ("map_drive3d_dark.json", "dark"))
 
 
@@ -1356,7 +1397,7 @@ def _layers_in_draw_order(p):
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["==", ["get", "bridge"], True]],
          "layout": {"line-cap": "butt", "line-join": "round"},
          "paint": {"line-color": p["bridge_shadow"], "line-width": measured(9.0), "line-blur": 6,
-                   "line-translate": [2, 4]}},
+                   "line-translate": BRIDGE_SHADOW_SHIFT}},
         {"id": "radar-bridge-case", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["==", ["get", "bridge"], True]],
          "layout": {"line-cap": "butt", "line-join": "round"},
@@ -1381,21 +1422,19 @@ def _layers_in_draw_order(p):
                    "fill-opacity": ["interpolate", ["linear"], ["zoom"], 16.5, 0, 17.5, 0.18, 19, 0.16, 20, 0.14]}},
         # Сплошная перед перекрёстком (последние 25 м подхода) — без штриха.
         {"id": "radar-markings-solid", "type": "line", "source": "radar", "source-layer": "markings",
-         "minzoom": LANE_MARKINGS_FROM, "filter": ["all", ["!", ["has", "centre"]], ["has", "solid"]],
+         "minzoom": CAR_LANE_MARKINGS_FROM, "filter": ["all", ["!", ["has", "centre"]], ["has", "solid"]],
          "layout": {"line-cap": "butt"},
          "paint": {"line-color": p["paint"],
                    "line-width": ["interpolate", ["exponential", 2], ["zoom"], 16, 0.8, 20, 3],
-                   "line-opacity": ["interpolate", ["linear"], ["zoom"], LANE_MARKINGS_FROM, 0,
-                                    LANE_MARKINGS_FROM + 0.4, 1]}},
+                   "line-opacity": lane_opacity(p)}},
         {"id": "radar-markings", "type": "line", "source": "radar", "source-layer": "markings",
-         "minzoom": LANE_MARKINGS_FROM,
+         "minzoom": CAR_LANE_MARKINGS_FROM,
          "filter": ["all", ["!", ["has", "centre"]], ["!", ["has", "solid"]]],
          "layout": {"line-cap": "butt"},
          # Реже, как у Яндекса: частый пунктир на многополосной улице рябил.
          "paint": {"line-color": p["paint"], "line-dasharray": [3, 7],
                    "line-width": ["interpolate", ["exponential", 2], ["zoom"], 16, 0.8, 20, 3],
-                   "line-opacity": ["interpolate", ["linear"], ["zoom"], LANE_MARKINGS_FROM, 0,
-                                    LANE_MARKINGS_FROM + 0.4, 1]}},
+                   "line-opacity": lane_opacity(p)}},
         # Осевая двусторонней дороги (build_mvt.centre_lines): прерывистая с
         # длинным штрихом (1.5 ПДД) или сплошная при подтверждённых 4+ полосах
         # (1.1). Штрих длиннее, чем у разделителя полос, — осевая читается осевой.
@@ -1629,10 +1668,10 @@ def _driver_pois(out, p, theme):
     # Значка «P» в спрайте нет — буква на синем ореоле, как дорожный знак;
     # спрайт на сервере ради этого перевыпускать не нужно.
     parking = {"id": "radar-poi-parking", "type": "symbol", "source": "openmaptiles", "source-layer": "poi",
-               "minzoom": 14.5, "filter": ["all", ["==", "$type", "Point"], ["==", "class", "parking"]],
+               "minzoom": PARKING_FROM, "filter": ["all", ["==", "$type", "Point"], ["==", "class", "parking"]],
                "layout": {"text-field": "P", "text-font": ["Noto Sans Bold"],
-                          "text-size": ["interpolate", ["linear"], ["zoom"], 14.5, 11, 17, 15],
-                          "text-allow-overlap": False, "text-padding": 4, "symbol-sort-key": 2},
+                          "text-size": ["interpolate", ["linear"], ["zoom"], PARKING_FROM, 11, 18, 14],
+                          "text-allow-overlap": False, "text-padding": PARKING_PADDING, "symbol-sort-key": 2},
                "paint": {"text-color": "#FFFFFF",
                          "text-halo-color": "#2563D9" if theme == "light" else "#3B6FD6",
                          "text-halo-width": 4.5}}

@@ -1228,12 +1228,6 @@
   "highway-shield": {
    "text-color": "#3a3e45"
   },
-  "highway-shield-us-interstate": {
-   "text-color": "#3a3e45"
-  },
-  "highway-shield-us-other": {
-   "text-color": "#3a3e45"
-  },
   "highway-trunk": {
    "line-color": [
     "interpolate",
@@ -1340,12 +1334,6 @@
   "housenumber": {
    "text-halo-color": "#e6e8ec"
   },
-  "landcover-glacier": {
-   "fill-color": "#eef0f2"
-  },
-  "landcover-ice-shelf": {
-   "fill-color": "#eef0f2"
-  },
   "landcover-sand": {
    "fill-color": "#eef0f2"
   },
@@ -1359,9 +1347,6 @@
    "text-color": "#3a3e45"
   },
   "place-city-capital": {
-   "text-color": "#3a3e45"
-  },
-  "place-continent": {
    "text-color": "#3a3e45"
   },
   "place-country-1": {
@@ -1404,7 +1389,7 @@
      "ice_cream",
      "bakery"
     ],
-    "#d9690a",
+    "#c25e0c",
     [
      "shop",
      "grocery",
@@ -1442,7 +1427,7 @@
      "clinic",
      "veterinary"
     ],
-    "#c8322a",
+    "#1f7f73",
     [
      "museum",
      "theatre",
@@ -1479,7 +1464,7 @@
      "ice_cream",
      "bakery"
     ],
-    "#d9690a",
+    "#c25e0c",
     [
      "shop",
      "grocery",
@@ -1517,7 +1502,7 @@
      "clinic",
      "veterinary"
     ],
-    "#c8322a",
+    "#1f7f73",
     [
      "museum",
      "theatre",
@@ -1554,7 +1539,7 @@
      "ice_cream",
      "bakery"
     ],
-    "#d9690a",
+    "#c25e0c",
     [
      "shop",
      "grocery",
@@ -1592,7 +1577,7 @@
      "clinic",
      "veterinary"
     ],
-    "#c8322a",
+    "#1f7f73",
     [
      "museum",
      "theatre",
@@ -1761,6 +1746,66 @@
     ],
     "#b3bac4",
     "#cfd3d9"
+   ]
+  },
+  "radar-markings": {
+   "line-opacity": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    16.4,
+    0,
+    16.7,
+    1
+   ]
+  },
+  "radar-markings-bridge": {
+   "line-opacity": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    16.4,
+    0,
+    16.7,
+    1
+   ]
+  },
+  "radar-markings-solid": {
+   "line-opacity": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    16.4,
+    0,
+    16.7,
+    1
+   ]
+  },
+  "radar-markings-solid-bridge": {
+   "line-opacity": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    16.4,
+    0,
+    16.7,
+    1
    ]
   },
   "radar-median": {

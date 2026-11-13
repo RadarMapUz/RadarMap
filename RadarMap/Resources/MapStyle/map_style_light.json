@@ -16,39 +16,6 @@
   },
   {
    "filter": [
-    "==",
-    "subclass",
-    "glacier"
-   ],
-   "id": "landcover-glacier",
-   "layout": {
-    "visibility": "visible"
-   },
-   "metadata": {
-    "mapbox:group": "1444849388993.3071"
-   },
-   "paint": {
-    "fill-color": "#eceef1",
-    "fill-opacity": {
-     "base": 1,
-     "stops": [
-      [
-       0,
-       0.9
-      ],
-      [
-       10,
-       0.3
-      ]
-     ]
-    }
-   },
-   "source": "openmaptiles",
-   "source-layer": "landcover",
-   "type": "fill"
-  },
-  {
-   "filter": [
     "all",
     [
      "in",
@@ -707,39 +674,6 @@
    },
    "source": "openmaptiles",
    "source-layer": "water",
-   "type": "fill"
-  },
-  {
-   "filter": [
-    "==",
-    "subclass",
-    "ice_shelf"
-   ],
-   "id": "landcover-ice-shelf",
-   "layout": {
-    "visibility": "visible"
-   },
-   "metadata": {
-    "mapbox:group": "1444849382550.77"
-   },
-   "paint": {
-    "fill-color": "#eceef1",
-    "fill-opacity": {
-     "base": 1,
-     "stops": [
-      [
-       0,
-       0.9
-      ],
-      [
-       10,
-       0.3
-      ]
-     ]
-    }
-   },
-   "source": "openmaptiles",
-   "source-layer": "landcover",
    "type": "fill"
   },
   {
@@ -3143,32 +3077,6 @@
     [
      "in",
      "class",
-     "ferry"
-    ]
-   ],
-   "id": "ferry",
-   "layout": {
-    "line-join": "round",
-    "visibility": "visible"
-   },
-   "paint": {
-    "line-color": "rgba(108, 159, 182, 1)",
-    "line-dasharray": [
-     2,
-     2
-    ],
-    "line-width": 1.1
-   },
-   "source": "openmaptiles",
-   "source-layer": "transportation",
-   "type": "line"
-  },
-  {
-   "filter": [
-    "all",
-    [
-     "in",
-     "class",
      "taxiway"
     ]
    ],
@@ -3398,74 +3306,6 @@
    },
    "source": "openmaptiles",
    "source-layer": "aeroway",
-   "type": "line"
-  },
-  {
-   "filter": [
-    "all",
-    [
-     "==",
-     "$type",
-     "Polygon"
-    ],
-    [
-     "==",
-     "class",
-     "pier"
-    ]
-   ],
-   "id": "road_area_pier",
-   "layout": {
-    "visibility": "visible"
-   },
-   "metadata": {},
-   "paint": {
-    "fill-antialias": true,
-    "fill-color": "#e8eaee",
-    "fill-opacity": 0.6
-   },
-   "source": "openmaptiles",
-   "source-layer": "transportation",
-   "type": "fill"
-  },
-  {
-   "filter": [
-    "all",
-    [
-     "==",
-     "$type",
-     "LineString"
-    ],
-    [
-     "in",
-     "class",
-     "pier"
-    ]
-   ],
-   "id": "road_pier",
-   "layout": {
-    "line-cap": "round",
-    "line-join": "round"
-   },
-   "metadata": {},
-   "paint": {
-    "line-color": "#e8eaee",
-    "line-width": {
-     "base": 1.2,
-     "stops": [
-      [
-       15,
-       1
-      ],
-      [
-       17,
-       4
-      ]
-     ]
-    }
-   },
-   "source": "openmaptiles",
-   "source-layer": "transportation",
    "type": "line"
   },
   {
@@ -11142,7 +10982,7 @@
    "layout": {
     "line-cap": "butt"
    },
-   "minzoom": 17,
+   "minzoom": 16.4,
    "paint": {
     "line-color": "#ffffff",
     "line-opacity": [
@@ -11153,6 +10993,8 @@
      [
       "zoom"
      ],
+     16.4,
+     0,
      17,
      0,
      17.4,
@@ -11206,7 +11048,7 @@
    "layout": {
     "line-cap": "butt"
    },
-   "minzoom": 17,
+   "minzoom": 16.4,
    "paint": {
     "line-color": "#ffffff",
     "line-dasharray": [
@@ -11221,6 +11063,8 @@
      [
       "zoom"
      ],
+     16.4,
+     0,
      17,
      0,
      17.4,
@@ -11569,10 +11413,39 @@
    "minzoom": 15,
    "paint": {
     "line-blur": 6,
-    "line-color": "rgba(40,48,60,0.22)",
+    "line-color": "rgba(40,48,60,0.30)",
     "line-translate": [
-     2,
-     4
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     15,
+     [
+      "literal",
+      [
+       1,
+       2
+      ]
+     ],
+     17,
+     [
+      "literal",
+      [
+       3,
+       5
+      ]
+     ],
+     19,
+     [
+      "literal",
+      [
+       6,
+       11
+      ]
+     ]
     ],
     "line-width": [
      "interpolate",
@@ -11935,7 +11808,7 @@
    "layout": {
     "line-cap": "butt"
    },
-   "minzoom": 17,
+   "minzoom": 16.4,
    "paint": {
     "line-color": "#ffffff",
     "line-opacity": [
@@ -11946,6 +11819,8 @@
      [
       "zoom"
      ],
+     16.4,
+     0,
      17,
      0,
      17.4,
@@ -11996,7 +11871,7 @@
    "layout": {
     "line-cap": "butt"
    },
-   "minzoom": 17,
+   "minzoom": 16.4,
    "paint": {
     "line-color": "#ffffff",
     "line-dasharray": [
@@ -12011,6 +11886,8 @@
      [
       "zoom"
      ],
+     16.4,
+     0,
      17,
      0,
      17.4,
@@ -12263,7 +12140,7 @@
    },
    "paint": {
     "line-blur": 3,
-    "line-color": "rgba(40,48,60,0.22)",
+    "line-color": "rgba(40,48,60,0.30)",
     "line-translate": [
      2,
      3
@@ -13242,53 +13119,6 @@
      "Point"
     ],
     [
-     "==",
-     "class",
-     "ocean"
-    ]
-   ],
-   "id": "water-name-ocean",
-   "layout": {
-    "symbol-placement": "point",
-    "symbol-spacing": 350,
-    "text-field": [
-     "coalesce",
-     [
-      "get",
-      "name:ru"
-     ],
-     [
-      "get",
-      "name"
-     ],
-     ""
-    ],
-    "text-font": [
-     "Noto Sans Italic"
-    ],
-    "text-letter-spacing": 0.2,
-    "text-max-width": 5,
-    "text-rotation-alignment": "map",
-    "text-size": 14
-   },
-   "paint": {
-    "text-color": "#3b78b8",
-    "text-halo-color": "#ffffff",
-    "text-halo-width": 1.5
-   },
-   "source": "openmaptiles",
-   "source-layer": "water_name",
-   "type": "symbol"
-  },
-  {
-   "filter": [
-    "all",
-    [
-     "==",
-     "$type",
-     "Point"
-    ],
-    [
      "!in",
      "class",
      "ocean"
@@ -13455,7 +13285,7 @@
       "ice_cream",
       "bakery"
      ],
-     "#d9690a",
+     "#c25e0c",
      [
       "shop",
       "grocery",
@@ -13493,7 +13323,7 @@
       "clinic",
       "veterinary"
      ],
-     "#c8322a",
+     "#1f7f73",
      [
       "museum",
       "theatre",
@@ -13606,7 +13436,7 @@
       "ice_cream",
       "bakery"
      ],
-     "#d9690a",
+     "#c25e0c",
      [
       "shop",
       "grocery",
@@ -13644,7 +13474,7 @@
       "clinic",
       "veterinary"
      ],
-     "#c8322a",
+     "#1f7f73",
      [
       "museum",
       "theatre",
@@ -13756,7 +13586,7 @@
       "ice_cream",
       "bakery"
      ],
-     "#d9690a",
+     "#c25e0c",
      [
       "shop",
       "grocery",
@@ -13794,7 +13624,7 @@
       "clinic",
       "veterinary"
      ],
-     "#c8322a",
+     "#1f7f73",
      [
       "museum",
       "theatre",
@@ -13986,7 +13816,7 @@
     "text-font": [
      "Noto Sans Bold"
     ],
-    "text-padding": 4,
+    "text-padding": 16,
     "text-size": [
      "interpolate",
      [
@@ -13995,13 +13825,13 @@
      [
       "zoom"
      ],
-     14.5,
+     16.5,
      11,
-     17,
-     15
+     18,
+     14
     ]
    },
-   "minzoom": 14.5,
+   "minzoom": 16.5,
    "paint": {
     "text-color": "#FFFFFF",
     "text-halo-color": "#2563D9",
@@ -16611,163 +16441,6 @@
    "filter": [
     "all",
     [
-     "<",
-     "ref_length",
-     6
-    ],
-    [
-     "==",
-     "$type",
-     "LineString"
-    ],
-    [
-     "in",
-     "network",
-     "us-interstate"
-    ]
-   ],
-   "id": "highway-shield-us-interstate",
-   "layout": {
-    "icon-image": "{network}_{ref_length}",
-    "icon-rotation-alignment": "viewport",
-    "icon-size": 1,
-    "symbol-placement": {
-     "base": 1,
-     "stops": [
-      [
-       7,
-       "point"
-      ],
-      [
-       7,
-       "line"
-      ],
-      [
-       8,
-       "line"
-      ]
-     ]
-    },
-    "symbol-spacing": 900,
-    "text-field": "{ref}",
-    "text-font": [
-     "Noto Sans Bold"
-    ],
-    "text-letter-spacing": 0.1,
-    "text-max-angle": 15,
-    "text-padding": 50,
-    "text-rotation-alignment": "viewport",
-    "text-size": [
-     "interpolate",
-     [
-      "linear"
-     ],
-     [
-      "zoom"
-     ],
-     13,
-     10,
-     16,
-     11.5,
-     18,
-     13.5,
-     20,
-     15
-    ],
-    "text-transform": "uppercase"
-   },
-   "minzoom": 7,
-   "paint": {
-    "text-color": "#2d3036",
-    "text-halo-blur": 0.6,
-    "text-halo-color": "#ffffff",
-    "text-halo-width": 2.0
-   },
-   "source": "openmaptiles",
-   "source-layer": "transportation_name",
-   "type": "symbol"
-  },
-  {
-   "filter": [
-    "all",
-    [
-     "<=",
-     "ref_length",
-     6
-    ],
-    [
-     "==",
-     "$type",
-     "LineString"
-    ],
-    [
-     "in",
-     "network",
-     "us-highway",
-     "us-state"
-    ]
-   ],
-   "id": "highway-shield-us-other",
-   "layout": {
-    "icon-image": "{network}_{ref_length}",
-    "icon-rotation-alignment": "viewport",
-    "icon-size": 1,
-    "symbol-placement": {
-     "base": 1,
-     "stops": [
-      [
-       10,
-       "point"
-      ],
-      [
-       11,
-       "line"
-      ]
-     ]
-    },
-    "symbol-spacing": 900,
-    "text-field": "{ref}",
-    "text-font": [
-     "Noto Sans Bold"
-    ],
-    "text-letter-spacing": 0.1,
-    "text-max-angle": 15,
-    "text-padding": 50,
-    "text-rotation-alignment": "viewport",
-    "text-size": [
-     "interpolate",
-     [
-      "linear"
-     ],
-     [
-      "zoom"
-     ],
-     13,
-     10,
-     16,
-     11.5,
-     18,
-     13.5,
-     20,
-     15
-    ],
-    "text-transform": "uppercase"
-   },
-   "minzoom": 9,
-   "paint": {
-    "text-color": "#2d3036",
-    "text-halo-blur": 0.6,
-    "text-halo-color": "#ffffff",
-    "text-halo-width": 2.0
-   },
-   "source": "openmaptiles",
-   "source-layer": "transportation_name",
-   "type": "symbol"
-  },
-  {
-   "filter": [
-    "all",
-    [
      "has",
      "iata"
     ]
@@ -17394,48 +17067,6 @@
     "text-transform": "uppercase",
     "visibility": "visible"
    },
-   "metadata": {
-    "mapbox:group": "1444849242106.713"
-   },
-   "paint": {
-    "text-color": "#2d3036",
-    "text-halo-blur": 1,
-    "text-halo-color": "#ffffff",
-    "text-halo-width": 2
-   },
-   "source": "openmaptiles",
-   "source-layer": "place",
-   "type": "symbol"
-  },
-  {
-   "filter": [
-    "==",
-    "class",
-    "continent"
-   ],
-   "id": "place-continent",
-   "layout": {
-    "text-field": [
-     "coalesce",
-     [
-      "get",
-      "name:ru"
-     ],
-     [
-      "get",
-      "name"
-     ],
-     ""
-    ],
-    "text-font": [
-     "Noto Sans Bold"
-    ],
-    "text-max-width": 6.25,
-    "text-size": 14,
-    "text-transform": "uppercase",
-    "visibility": "visible"
-   },
-   "maxzoom": 1,
    "metadata": {
     "mapbox:group": "1444849242106.713"
    },

@@ -864,14 +864,6 @@
    "text-color": "#4a525e",
    "text-halo-color": "#f3f5f8"
   },
-  "highway-shield-us-interstate": {
-   "text-color": "#4a525e",
-   "text-halo-color": "#f3f5f8"
-  },
-  "highway-shield-us-other": {
-   "text-color": "#4a525e",
-   "text-halo-color": "#f3f5f8"
-  },
   "highway-trunk": {
    "line-color": [
     "interpolate",
@@ -940,17 +932,11 @@
   "housenumber": {
    "text-halo-color": "#f7f8fa"
   },
-  "landcover-glacier": {
-   "fill-color": "#eef1f5"
-  },
   "landcover-grass": {
    "fill-color": "#d2e6d4"
   },
   "landcover-grass-park": {
    "fill-color": "#d2e6d4"
-  },
-  "landcover-ice-shelf": {
-   "fill-color": "#eef1f5"
   },
   "landcover-sand": {
    "fill-color": "#eef1f5"
@@ -993,10 +979,6 @@
    "text-halo-color": "#f3f5f8"
   },
   "place-city-capital": {
-   "text-color": "#4a525e",
-   "text-halo-color": "#f3f5f8"
-  },
-  "place-continent": {
    "text-color": "#4a525e",
    "text-halo-color": "#f3f5f8"
   },
@@ -1048,7 +1030,7 @@
      "ice_cream",
      "bakery"
     ],
-    "#d9690a",
+    "#c25e0c",
     [
      "shop",
      "grocery",
@@ -1086,7 +1068,7 @@
      "clinic",
      "veterinary"
     ],
-    "#c8322a",
+    "#1f7f73",
     [
      "museum",
      "theatre",
@@ -1124,7 +1106,7 @@
      "ice_cream",
      "bakery"
     ],
-    "#d9690a",
+    "#c25e0c",
     [
      "shop",
      "grocery",
@@ -1162,7 +1144,7 @@
      "clinic",
      "veterinary"
     ],
-    "#c8322a",
+    "#1f7f73",
     [
      "museum",
      "theatre",
@@ -1200,7 +1182,7 @@
      "ice_cream",
      "bakery"
     ],
-    "#d9690a",
+    "#c25e0c",
     [
      "shop",
      "grocery",
@@ -1238,7 +1220,7 @@
      "clinic",
      "veterinary"
     ],
-    "#c8322a",
+    "#1f7f73",
     [
      "museum",
      "theatre",
@@ -1831,9 +1813,6 @@
    "fill-color": "#c6daea"
   },
   "water-name-lakeline": {
-   "text-halo-color": "#f3f5f8"
-  },
-  "water-name-ocean": {
    "text-halo-color": "#f3f5f8"
   },
   "water-name-other": {

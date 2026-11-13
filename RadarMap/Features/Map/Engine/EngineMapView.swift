@@ -258,6 +258,9 @@ struct EngineMapView: UIViewRepresentable {
         // (58°, AppConfig.engineMapPitchDegrees: там же — про #3029).
         view.isPitchEnabled = true
         view.maximumPitch = AppConfig.engineMapPitchDegrees
+        // Потолок приближения (план 13.11): дальше 19,5 тайл 15-го масштаба
+        // растягивается в мыло, а дерево разворачивалось на весь экран.
+        view.maximumZoomLevel = AppConfig.engineMaxZoom
         view.compassView.isHidden = true
         view.logoView.isHidden = true
         // Своя кнопка движка («ⓘ») не показывается: подпись данных рисует
@@ -563,6 +566,10 @@ struct EngineMapView: UIViewRepresentable {
             layoutPositionView(in: mapView)
             haze.update(pitchDegrees: mapView.camera.pitch, daylight: current?.daylight ?? true,
                         hidden: hazeHidden(current), in: mapView)
+            // Наклон жестом без нового фикса: дома встают объёмом сразу.
+            if let current, styleReady, layerKey?.flat != Self.isFlat(mapView) {
+                applyHiddenLayers(current, in: mapView)
+            }
         }
 
         func mapView(_ mapView: MLNMapView, regionDidChangeAnimated animated: Bool) {
@@ -1550,10 +1557,10 @@ struct EngineMapView: UIViewRepresentable {
             // зовётся на каждом фиксе, а меняется на смене решения.
             let key = LayerKey(detail: model.detail, parkingsKnown: parkingsKnown, driving: model.driving,
                                modern: modernLoaded, hot: model.performance != .full, car: model.carStyle != nil,
-                               drive3D: drive3DActive(model))
+                               drive3D: drive3DActive(model), flat: Self.isFlat(view))
             if key != layerKey || hiddenLayers == nil {
                 layerKey = key
-                applyLayerVisibility(model, parkingsKnown: parkingsKnown, in: style)
+                applyLayerVisibility(model, parkingsKnown: parkingsKnown, flat: key.flat, in: style)
             }
             // Значки заведений, вернувшиеся в поездке (стоим, у цели), — не под
             // «я» и кольцом компаса (29.D, EngineStopDetail): фильтр меняется
@@ -1570,10 +1577,20 @@ struct EngineMapView: UIViewRepresentable {
             var hot: Bool
             var car: Bool
             var drive3D: Bool
+            var flat: Bool
         }
         private var layerKey: LayerKey?
 
-        private func applyLayerVisibility(_ model: EngineMapView, parkingsKnown: Bool, in style: MLNStyle) {
+        /// Карта сверху (план 13.11, решение 4): объём домов при виде сверху —
+        /// лишь тёмные грани и тень у подножия, рябь по кварталу и проход
+        /// глубины. Без наклона дома плоские, объём — с наклоном.
+        static let flatHiddenLayers = ["building-3d", "building-ground-shadow"]
+        static func isFlat(_ view: MLNMapView) -> Bool {
+            view.camera.pitch < AppConfig.engineFlatBuildingsPitch
+        }
+
+        private func applyLayerVisibility(_ model: EngineMapView, parkingsKnown: Bool, flat: Bool,
+                                          in style: MLNStyle) {
             var wanted = MapDetailLayers.hidden(model.detail, destinationParkingsKnown: parkingsKnown)
             // Режим «в поездке» новой карты: заведения, номера домов, подписи
             // дорожек — те же слои, что раньше вырезал drivingLayers при сборке.
@@ -1590,11 +1607,12 @@ struct EngineMapView: UIViewRepresentable {
             if model.carStyle != nil { wanted.formUnion(MapDetailLayers.carHidden(model.detail)) }
             // «Вождение 3D» (43): тихий мир — без украшений на ходу и стоя.
             if drive3DActive(model) { wanted.formUnion(Drive3D.hiddenLayers) }
-            let hot = model.performance != .full
+            if flat { wanted.formUnion(Self.flatHiddenLayers) }
+            let hot = model.performance != .full || flat
             if wanted != hiddenLayers || hot != hotShown {
                 hiddenLayers = wanted
                 hotShown = hot
-                let managed = Set(Self.hotHiddenLayers).union(MapDetailLayers.managed)
+                let managed = Set(Self.hotHiddenLayers).union(Self.flatHiddenLayers).union(MapDetailLayers.managed)
                     .union(MapDetailLayers.carManaged)
                     .union(Drive3D.hiddenLayers)
                     .union(drivingLayerIDs(style))

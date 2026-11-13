@@ -135,6 +135,18 @@ struct EngineMapStyleTests {
         #expect(abs(visible - 1400) < 0.01)
         #expect(zoom > 15 && zoom < 16)
     }
+
+    @Test("Обзор без поездки — уже на нашем полотне, а не на стыке с основой")
+    @MainActor func overviewIsPastTheSeam() {
+        // Высоты экрана от iPhone 16e до 17 Pro Max: обзор нигде не на стыке
+        // 15,0 и не ближе 16,1 — квартал виден целиком.
+        for height in [844.0, 874, 956] {
+            let zoom = EngineMapView.Coordinator.zoom(spanMeters: AppConfig.engineOverviewSpan,
+                                                      height: height, latitude: 41.311)
+            #expect(zoom >= 15.6 && zoom <= 16.1, "высота \(height): масштаб \(zoom)")
+        }
+        #expect(AppConfig.engineMaxZoom > 19 && AppConfig.engineMaxZoom <= 20)
+    }
     #endif
 
     @Test("Каждый слой ссылается на существующий источник")

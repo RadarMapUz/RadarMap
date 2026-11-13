@@ -84,6 +84,9 @@ extension MapScreen {
                                 touchedAt: reach.observedAt ?? Date())
                             UINotificationFeedbackGenerator()
                                 .notificationOccurred(outcome.isSuccess ? .success : .warning)
+                            // Итог — словами, как у прицела: одна вибрация не
+                            // отличает «принято» от «уже отметили здесь» (92).
+                            env.alerts.speak(outcome.spoken(for: kind))
                         }
                         withMotion { reportPoint = nil }
                     },

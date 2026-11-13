@@ -177,8 +177,13 @@ nonisolated enum EngineModernStyle {
                                          "highway-secondary-tertiary", "highway-minor"]
 
     static func seedURL(bundle: Bundle) -> URL? {
-        bundle.url(forResource: seedResource, withExtension: "pmtiles")
-            ?? bundle.url(forResource: seedResource, withExtension: "pmtiles", subdirectory: "MapSeed")
+        if let url = bundle.url(forResource: seedResource, withExtension: "pmtiles")
+            ?? bundle.url(forResource: seedResource, withExtension: "pmtiles", subdirectory: "MapSeed") {
+            return url
+        }
+        // Нет файла в бандле — карта работает, но на первом запуске снова белая.
+        Log.app.error("Обзорная основа \(seedResource, privacy: .public).pmtiles не найдена в бандле")
+        return nil
     }
 
     /// Копии слоёв основы на источнике `seed`, сразу над фоном. Днём дорога

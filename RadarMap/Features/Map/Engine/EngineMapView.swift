@@ -567,7 +567,8 @@ struct EngineMapView: UIViewRepresentable {
             haze.update(pitchDegrees: mapView.camera.pitch, daylight: current?.daylight ?? true,
                         hidden: hazeHidden(current), in: mapView)
             // Наклон жестом без нового фикса: дома встают объёмом сразу.
-            if let current, styleReady, layerKey?.flat != Self.isFlat(mapView) {
+            if let current, styleReady,
+               layerKey?.flat != Self.isFlat(pitch: mapView.camera.pitch, was: layerKey?.flat) {
                 applyHiddenLayers(current, in: mapView)
             }
         }
@@ -952,6 +953,7 @@ struct EngineMapView: UIViewRepresentable {
             maneuverArrow.styleLoaded()
             hiddenLayers = nil
             hotShown = nil
+            flatHousesShown = nil
             modernDrivingLayerIDs = nil
             lastTrafficRevision = -1
             // Источники нового стиля пусты: флаг цели, машина, треноги и
@@ -1524,14 +1526,19 @@ struct EngineMapView: UIViewRepresentable {
                                       // на горячем телефоне — лишняя раскладка символов.
                                       EngineMapStyle.trafficLayerIDs.chevrons]
             + EngineTripodZone.hotHidden
-        /// Видны ТОЛЬКО на горячем телефоне: плоские дома вместо объёмных —
+        /// Видны ТОЛЬКО на горячем телефоне: плоская лента зоны треноги вместо
+        /// штриховки.
+        static let hotShownLayers = EngineTripodZone.hotShown
+        /// Плоские дома вместо объёмных — на горячем телефоне и при виде сверху:
         /// город не пустеет (в стиле выключены, make_style «building-flat»).
-        static let hotShownLayers = ["building-flat"] + EngineTripodZone.hotShown
+        static let flatHouseLayers = ["building-flat"]
         private var hiddenLayers: Set<String>?
         /// Значки заведений стоя (29.D): порядок слоёв и круг у машины.
         private let stopDetail = EngineStopDetail()
-        /// Плоские дома горячего телефона показаны (nil — после загрузки стиля).
+        /// Слои горячего телефона показаны (nil — после загрузки стиля).
         private var hotShown: Bool?
+        /// Плоские дома показаны (nil — после загрузки стиля).
+        private var flatHousesShown: Bool?
         /// Слои нового стиля, гасимые в поездке, — один раз на загрузку
         /// стиля. До 19.10 `style.layers.map(\.identifier)` по сотням
         /// ObjC-слоёв шёл дважды на КАЖДЫЙ фикс поездки (в машине — всегда),
@@ -1557,7 +1564,8 @@ struct EngineMapView: UIViewRepresentable {
             // зовётся на каждом фиксе, а меняется на смене решения.
             let key = LayerKey(detail: model.detail, parkingsKnown: parkingsKnown, driving: model.driving,
                                modern: modernLoaded, hot: model.performance != .full, car: model.carStyle != nil,
-                               drive3D: drive3DActive(model), flat: Self.isFlat(view))
+                               drive3D: drive3DActive(model),
+                               flat: Self.isFlat(pitch: view.camera.pitch, was: layerKey?.flat))
             if key != layerKey || hiddenLayers == nil {
                 layerKey = key
                 applyLayerVisibility(model, parkingsKnown: parkingsKnown, flat: key.flat, in: style)
@@ -1585,8 +1593,10 @@ struct EngineMapView: UIViewRepresentable {
         /// лишь тёмные грани и тень у подножия, рябь по кварталу и проход
         /// глубины. Без наклона дома плоские, объём — с наклоном.
         static let flatHiddenLayers = ["building-3d", "building-ground-shadow"]
-        static func isFlat(_ view: MLNMapView) -> Bool {
-            view.camera.pitch < AppConfig.engineFlatBuildingsPitch
+        /// С зазором у порога: наклон, дрожащий около 1° в жесте или анимации,
+        /// не переключает видимость слоёв на каждом кадре.
+        nonisolated static func isFlat(pitch: Double, was: Bool?) -> Bool {
+            pitch < (was == true ? AppConfig.engineFlatBuildingsLeavePitch : AppConfig.engineFlatBuildingsEnterPitch)
         }
 
         private func applyLayerVisibility(_ model: EngineMapView, parkingsKnown: Bool, flat: Bool,
@@ -1608,10 +1618,12 @@ struct EngineMapView: UIViewRepresentable {
             // «Вождение 3D» (43): тихий мир — без украшений на ходу и стоя.
             if drive3DActive(model) { wanted.formUnion(Drive3D.hiddenLayers) }
             if flat { wanted.formUnion(Self.flatHiddenLayers) }
-            let hot = model.performance != .full || flat
-            if wanted != hiddenLayers || hot != hotShown {
+            let hot = model.performance != .full
+            let flatHouses = hot || flat
+            if wanted != hiddenLayers || hot != hotShown || flatHouses != flatHousesShown {
                 hiddenLayers = wanted
                 hotShown = hot
+                flatHousesShown = flatHouses
                 let managed = Set(Self.hotHiddenLayers).union(Self.flatHiddenLayers).union(MapDetailLayers.managed)
                     .union(MapDetailLayers.carManaged)
                     .union(Drive3D.hiddenLayers)
@@ -1621,6 +1633,9 @@ struct EngineMapView: UIViewRepresentable {
                 }
                 for id in Self.hotShownLayers {
                     style.layer(withIdentifier: id)?.isVisible = hot
+                }
+                for id in Self.flatHouseLayers {
+                    style.layer(withIdentifier: id)?.isVisible = flatHouses
                 }
             }
         }

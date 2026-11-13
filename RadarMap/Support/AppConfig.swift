@@ -2819,8 +2819,10 @@ nonisolated enum AppConfig {
     /// 19,5 они растягиваются в мыло (план 13.11, раздел 5).
     static let engineMaxZoom = 19.5
     /// Наклон, ниже которого карта считается видом сверху и дома рисуются
-    /// плоскими (план 13.11, решение 4).
-    static let engineFlatBuildingsPitch = 1.0
+    /// плоскими (план 13.11, решение 4): плоско — ниже 0,5°, объём — с 1,5°;
+    /// зазор между порогами гасит дрожание наклона у границы.
+    static let engineFlatBuildingsEnterPitch = 0.5
+    static let engineFlatBuildingsLeavePitch = 1.5
     /// Тревожная камера подсвечивается на карте, если до неё не дальше этой
     /// доли видимого впереди (у самого края её не разглядеть).
     static let engineCameraInRangeShare = 0.9

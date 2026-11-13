@@ -553,6 +553,9 @@ struct EngineMapView: UIViewRepresentable {
             }
             overviewHeld = false
             entryUntil = 0
+            // Палец двигает карту — доводка «в точку» больше не нужна: под
+            // прицелом то, что выбрал водитель.
+            aimTarget = nil
             current?.onGesture()
             return true
         }
@@ -575,6 +578,18 @@ struct EngineMapView: UIViewRepresentable {
             current?.onHeading(mapView.direction)
             current?.onRegion(Self.region(of: mapView))
             if let aim = current?.aimPoint {
+                // Команда «в точку» доехала мимо (наклон или поворот менялись
+                // по дороге) — доводим, пока точка не встанет под прицел.
+                if let target = aimTarget {
+                    let shown = mapView.convert(target, toPointTo: mapView)
+                    if aimFixes > 0, AddPointAim.misses(shown, aim: aim) {
+                        aimFixes -= 1
+                        mapView.setCenter(Self.centre(placing: target, at: aim, zoom: mapView.zoomLevel,
+                                                      in: mapView), animated: false)
+                        return
+                    }
+                    aimTarget = nil
+                }
                 let under = mapView.convert(aim, toCoordinateFrom: mapView)
                 aimHeld = under
                 aimZoom = mapView.zoomLevel
@@ -1811,6 +1826,11 @@ struct EngineMapView: UIViewRepresentable {
         /// высоты панели и посреди анимации команды «в точку».
         private var aimHeld: CLLocationCoordinate2D?
         private var aimZoom: Double?
+        /// Точка, которую команда «в точку» ставит под прицел, и сколько ещё
+        /// доводок ей можно: наклон и поворот могут доехать вместе с центром,
+        /// и тогда расчёт по старой проекции промахивается.
+        private var aimTarget: CLLocationCoordinate2D?
+        private var aimFixes = 0
 
         private var shownCameraLabel: CarPlayCameraCue.Label?
         private var cameraLabelWritten = false
@@ -1895,6 +1915,8 @@ struct EngineMapView: UIViewRepresentable {
                     let zoom = max(view.zoomLevel, AppConfig.mapCenterZoom)
                     aimHeld = model.aimPoint == nil ? nil : target
                     aimZoom = zoom
+                    aimTarget = model.aimPoint == nil ? nil : target
+                    aimFixes = AddPointAim.maxFixes
                     view.setCenter(Self.centre(placing: target, at: model.aimPoint, zoom: zoom, in: view),
                                    zoomLevel: zoom, animated: true)
                     if model.aimPoint != nil { model.onAim(target) }
@@ -1904,20 +1926,31 @@ struct EngineMapView: UIViewRepresentable {
                 // Панель выросла или сжалась — под прицелом остаётся та же точка.
                 if let aim = model.aimPoint, browsing, let held = aimHeld {
                     let zoom = aimZoom ?? view.zoomLevel
+                    aimTarget = held
+                    aimFixes = AddPointAim.maxFixes
                     view.setCenter(Self.centre(placing: held, at: aim, zoom: zoom, in: view),
                                    zoomLevel: zoom, animated: true)
                 } else if model.aimPoint == nil {
                     aimHeld = nil
                     aimZoom = nil
+                    aimTarget = nil
                 }
             }
         }
 
         /// Центр вида, при котором `target` на масштабе `zoom` окажется под
-        /// прицелом: сдвиг прицела от середины вида — в метры по повороту карты.
+        /// прицелом. По проекции самого вида (что сейчас под прицелом и в
+        /// середине): на наклонной карте метр над серединой короче метра под
+        /// ней, и плоский пересчёт точек в метры ставил вас в 40 м под прицел
+        /// (92). Плоский — только когда точка под прицелом не на земле.
         static func centre(placing target: CLLocationCoordinate2D, at aim: CGPoint?, zoom: Double,
                            in view: MLNMapView) -> CLLocationCoordinate2D {
             guard let aim, view.bounds.width > 0 else { return target }
+            let under = view.convert(aim, toCoordinateFrom: view)
+            if CLLocationCoordinate2DIsValid(under) {
+                return AddPointAim.centre(placing: target, under: under, viewCentre: view.centerCoordinate,
+                                          scale: pow(2, view.zoomLevel - zoom))
+            }
             let right = Double(view.bounds.midX - aim.x)
             let down = Double(view.bounds.midY - aim.y)
             let points = (right * right + down * down).squareRoot()

@@ -31,13 +31,14 @@ PLACES = {
     "tunnel_ring": (41.2920, 69.2865, (15.8, 17.2)),
     "interchange_gavhar": (41.2560, 69.1930, (15.2, 16.5, 17.2)),
     "mahalla_chorsu": (41.3245, 69.2290, (15.8, 17.2, 18)),
+    "outskirts_qibray": (41.3600, 69.3700, (13, 14.6, 15.8, 16.5)),
     "highway_m39": (40.4900, 68.7800, (9, 11, 13)),
     "samarkand": (39.6547, 66.9757, (11, 13, 15.8)),
     "country": (41.3, 64.5, (5, 6)),
 }
 SETS = {"ladder": ["navoi_rashidov"], "places": [k for k in PLACES if k != "navoi_rashidov"],
         "all": list(PLACES)}
-MODES = ("free", "drive", "car", "seed")
+MODES = ("free", "drive", "car", "seed", "seedboth")
 # Копия EngineModernStyle.withSeed: режим seed — первый запуск без сети, только
 # основа из бандла (OMT до z12), сетевые источники пусты.
 SEED_GROUND = ("landcover-wood", "landcover-grass", "landcover-grass-park", "water",
@@ -47,7 +48,7 @@ SEED_ROADS = ("highway-motorway", "highway-trunk", "highway-primary", "highway-s
 SEED_MAX_ZOOM = 16.5
 
 
-def with_seed(style, daylight):
+def with_seed(style, daylight, network=False):
     layers = style["layers"]
     casings = {l["id"][:-len("-casing")]: l.get("paint", {}).get("line-color")
                for l in layers if l["id"].endswith("-casing")}
@@ -65,8 +66,9 @@ def with_seed(style, daylight):
     at = next(k for k, l in enumerate(layers) if l["id"] == "background") + 1
     style["layers"] = layers[:at] + seeds + layers[at:]
     style["sources"]["seed"] = {"type": "vector", "tiles": ["local://omt/{z}/{x}/{y}.pbf"], "maxzoom": 12}
-    for name in ("openmaptiles", "radar"):
-        style["sources"][name]["tiles"] = ["local://none/{z}/{x}/{y}"]
+    if not network:
+        for name in ("openmaptiles", "radar"):
+            style["sources"][name]["tiles"] = ["local://none/{z}/{x}/{y}"]
     return style
 CAR = {"light": "map_car_light.json", "dark": "map_car_dark.json"}
 
@@ -118,13 +120,14 @@ def styles(make_style, out):
     for theme in ("light", "dark"):
         base = make_style.build("local://", theme, "full")
         variants = {"free": None, "drive": json.loads(app[f"map_drive_{theme}.json"]),
-                    "car": json.loads(app[CAR[theme]]) if CAR[theme] in app else None, "seed": None}
+                    "car": json.loads(app[CAR[theme]]) if CAR[theme] in app else None, "seed": None,
+                    "seedboth": None}
         for mode, diff in variants.items():
             style = json.loads(json.dumps(base))
             if diff:
                 apply_diff(style, diff)
-            if mode == "seed":
-                with_seed(style, theme == "light")
+            if mode in ("seed", "seedboth"):
+                with_seed(style, theme == "light", network=mode == "seedboth")
             path = os.path.join(out, "styles", f"{theme}_{mode}.json")
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w", encoding="utf-8") as handle:
@@ -142,6 +145,8 @@ def jobs(files, places, out, modes, size, ratio):
             for theme in ("light", "dark"):
                 for mode in modes:
                     if mode in ("drive", "car") and zoom < 14:
+                        continue
+                    if mode == "seedboth" and zoom > 16.5:
                         continue
                     frame = os.path.join(out, "frames", place, f"z{zoom}_{theme}_{mode}.png")
                     result.append({"style": files[(theme, mode)], "zoom": zoom, "lat": lat, "lon": lon,

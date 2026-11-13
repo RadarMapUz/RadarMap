@@ -545,15 +545,13 @@ def _base_layer(layer, p, mode, theme):
             l["filter"] = ["all", ["==", "$type", "Polygon"], ["in", "class", "commercial", "retail"]]
             paint["fill-color"] = ["match", ["get", "class"], "retail", p["landuse_kind"]["landuse-retail"],
                                    p["landuse_kind"]["landuse-commercial"]]
-    elif i in ("highway-area", "road_area_pier"):
-        # Пешеходные площади и пирсы. В OSM Bright — светло-серая заливка, на
+    elif i == "highway-area":
+        # Пешеходные площади. В OSM Bright — светло-серая заливка, на
         # тёмной теме она горела пятном ярче проспекта (Аллея парадов).
         paint["fill-color"] = p["path"]
         paint["fill-opacity"] = 0.6
         if "fill-outline-color" in paint:
             paint["fill-outline-color"] = p["path_edge"]
-    elif i == "road_pier":
-        paint["line-color"] = p["path"]
     elif i == "boundary-land-level-4":
         # Районные границы — тонкий бледный штрих только издали: жирная
         # серая пунктирная ломаная поверх города читалась дорогой (06.10.2026).

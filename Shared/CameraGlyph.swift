@@ -30,8 +30,9 @@ import SwiftUI
 import CoreGraphics
 
 nonisolated enum CameraGlyph: String, CaseIterable, Sendable {
-    /// Камера любого типа, пост ДПС, ДТП, неизвестная точка.
-    case camera, post, accident, other
+    /// Камера любого типа, пост ДПС, ДТП, неизвестная точка; тренога и
+    /// передвижной радар — пока только на карте (90, `CameraType.mapGlyph`).
+    case camera, post, accident, other, tripod, mobileRadar
 
     /// По имени символа типа (`CameraType.symbolName`): оно ходит строкой в
     /// Live Activity и на часы и служит именем картинки в стиле движка.
@@ -54,17 +55,25 @@ nonisolated enum CameraGlyph: String, CaseIterable, Sendable {
     /// камеры у всех её типов; ДТП — постоянный красный опасности (ночной
     /// #FF7A70 с белым глифом не дотягивал до 4,5:1), отличается от камеры
     /// глифом; неизвестный тип — графит, не синий интерфейса.
+    /// Отметка водителей (90) — янтарь: светлая заливка, тёмный глиф (9,3:1);
+    /// от красного камеры отличается светлотой и при дейтеранопии.
     var fillRGB: UInt32 {
         switch self {
         case .camera:   return 0xD93025
         case .post:     return 0x46525E
         case .accident: return 0xC62828
         case .other:    return 0x556070
+        case .tripod, .mobileRadar: return 0xFFB020
         }
     }
 
-    /// Глиф на своей заливке — белый: все заливки тёмные (≥ 4,5:1).
-    var inkRGB: UInt32 { 0xFFFFFF }
+    /// Глиф на своей заливке: белый на тёмных, тёмный на янтаре (≥ 4,5:1).
+    var inkRGB: UInt32 {
+        switch self {
+        case .tripod, .mobileRadar: return 0x1C1C1E
+        default: return 0xFFFFFF
+        }
+    }
 
     /// Сетка глифа.
     static let grid: CGFloat = 24
@@ -144,6 +153,29 @@ nonisolated enum CameraGlyph: String, CaseIterable, Sendable {
                     Part(role: .fill, path: Self.circle(12, 16.7, 1.3))]
         case .other:
             return [Part(role: .stroke, path: Self.circle(12, 12, 7.6)), Part(role: .fill, path: Self.circle(12, 12, 2.5))]
+        case .tripod:
+            // Тренога: камера сверху, три ноги.
+            let legs = CGMutablePath()
+            for foot in [CGPoint(x: 4.5, y: 21.5), CGPoint(x: 12, y: 21.5), CGPoint(x: 19.5, y: 21.5)] {
+                legs.move(to: CGPoint(x: 12, y: 10)); legs.addLine(to: foot)
+            }
+            return [Part(role: .stroke, path: CGPath(roundedRect: CGRect(x: 5, y: 2.5, width: 14, height: 7.5),
+                                                     cornerWidth: 2, cornerHeight: 2, transform: nil)),
+                    Part(role: .fill, path: Self.circle(8.8, 6.3, 1.4)),
+                    Part(role: .stroke, path: legs)]
+        case .mobileRadar:
+            // Радар-пистолет: корпус, рукоять назад и две дуги волны перед стволом.
+            let grip = Self.lines([CGPoint(x: 6, y: 13.5), CGPoint(x: 3.5, y: 20.5),
+                                   CGPoint(x: 7, y: 20.5), CGPoint(x: 9, y: 13.5)])
+            let waves = CGMutablePath()
+            for r in [4.0, 7.5] as [CGFloat] {
+                waves.move(to: CGPoint(x: 13.5 + r * cos(-0.75), y: 10.5 + r * sin(-0.75)))
+                waves.addArc(center: CGPoint(x: 13.5, y: 10.5), radius: r, startAngle: -0.75, endAngle: 0.75, clockwise: false)
+            }
+            return [Part(role: .stroke, path: CGPath(roundedRect: CGRect(x: 2, y: 7, width: 12, height: 6.5),
+                                                     cornerWidth: 2, cornerHeight: 2, transform: nil)),
+                    Part(role: .stroke, path: grip),
+                    Part(role: .stroke, path: waves)]
         }
     }
 

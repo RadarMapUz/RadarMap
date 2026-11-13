@@ -24,6 +24,17 @@ extension CameraType {
         case .other:    return .other
         }
     }
+
+    /// Значок типа НА КАРТЕ (90, вариант C «Точка», владелец 13.11): тренога и
+    /// передвижной радар — свои глифы на янтарном ромбе, остальное — как
+    /// `glyph`. Вне карты (HUD, оповещение, CarPlay-баннер) пока `glyph`.
+    nonisolated var mapGlyph: CameraGlyph {
+        switch self {
+        case .tripod:      return .tripod
+        case .mobileRadar: return .mobileRadar
+        default:           return glyph
+        }
+    }
 }
 
 /// Значок камеры: красный круг камеры (у поста и ДТП — свои), белый кант, глиф.
@@ -87,10 +98,15 @@ enum CameraIconArt {
         }
     }
 
-    /// Облик значка на карте (CameraMarkerLook.rasters): с тенью и полем под неё.
-    nonisolated static func marker(_ glyph: CameraGlyph, look: CameraMarkerLook.Raster) -> UIImage {
-        image(glyph, side: CGFloat(look.side), fill: look.fill, ink: look.ink, rim: look.rim,
-              shadow: true, pad: CameraCoin.shadowPad)
+    /// Облик значка на карте (CameraMarkerLook.rasters, вариант C): точка,
+    /// булавка, ромб или треугольник с тенью — холст CameraMarkerArt.canvas.
+    nonisolated static func marker(_ glyph: CameraGlyph, look: CameraMarkerLook.Raster,
+                                   scale: CGFloat = 0) -> UIImage {
+        let format = UIGraphicsImageRendererFormat.preferred()
+        if scale > 0 { format.scale = scale }
+        return UIGraphicsImageRenderer(size: CameraMarkerArt.canvas(look), format: format).image { context in
+            CameraMarkerArt.draw(glyph, look: look, in: context.cgContext)
+        }
     }
 
     /// Один глиф цветом `ink` (кнопки шаблонов CarPlay, баннеры без основы).

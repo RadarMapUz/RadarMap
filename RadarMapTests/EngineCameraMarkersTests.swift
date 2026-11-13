@@ -190,12 +190,33 @@ struct EngineCameraMarkersTests {
     @Test("Значок каждого глифа во всех обликах рисуется: без картинки тип молча пропадает")
     @MainActor func everyMarkerImageRenders() {
         for glyph in EngineMapView.Coordinator.markerGlyphs {
-            for look in CameraMarkerLook.rasters {
+            for look in CameraMarkerLook.rasters(glyph) {
                 let image = CameraIconArt.marker(glyph, look: look)
-                let expected = look.side + 2 * Double(CameraCoin.shadowPad)
-                #expect(abs(Double(image.size.width) - expected) < 0.01, "\(glyph)\(look.suffix)")
-                #expect(abs(Double(image.size.height) - expected) < 0.01, "\(glyph)\(look.suffix)")
+                let canvas = CameraMarkerArt.canvas(look)
+                #expect(abs(image.size.width - canvas.width) < 0.01, "\(glyph)\(look.suffix)")
+                #expect(abs(image.size.height - canvas.height) < 0.01, "\(glyph)\(look.suffix)")
+                #expect(Double(image.size.width) >= look.side, "\(glyph)\(look.suffix): фигура не влезла")
             }
+        }
+    }
+
+    @Test("Булавка стоит остриём на нижнем крае картинки: якорь bottom — точка камеры")
+    @MainActor func pinTipTouchesTheBottomEdge() throws {
+        for suffix in ["-d", "-n", "-alert"] {
+            let look = try #require(CameraMarkerLook.rasters(.camera).first { $0.suffix == suffix })
+            let image = CameraIconArt.marker(.camera, look: look, scale: 3)
+            let cg = try #require(image.cgImage)
+            let w = cg.width, h = cg.height
+            var data = [UInt8](repeating: 0, count: w * h * 4)
+            let context = try #require(CGContext(data: &data, width: w, height: h, bitsPerComponent: 8,
+                                                 bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(),
+                                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+            // Память — сверху вниз: последняя строка буфера — нижний край картинки.
+            func alpha(_ x: Int, _ y: Int) -> UInt8 { data[(y * w + x) * 4 + 3] }
+            let bottom = (h - 3...h - 1).flatMap { y in (w / 2 - 3...w / 2 + 3).map { alpha($0, y) } }
+            #expect(bottom.contains { $0 > 128 }, "\(suffix): остриё не у нижнего края")
+            #expect(alpha(2, h - 1) == 0 && alpha(w - 3, h - 1) == 0, "\(suffix): у нижнего края только остриё")
         }
     }
 
@@ -261,9 +282,24 @@ struct EngineCameraMarkersTests {
         }
     }
 
+    @Test("Булавка стоит остриём на камере, ореол тревоги — у её головы, на обзоре — у точки")
+    func pinAnchorAndHalo() throws {
+        for (name, layers) in try drivingStyles() {
+            let icons = try #require(layers.first { $0["id"] as? String == "camera-icons" }, "\(name)")
+            let anchor = (icons["layout"] as? [String: Any])?["icon-anchor"] as? [Any]
+            #expect(((anchor?[1] as? [Any])?.last as? String) == "anchor", "\(name): якорь не из точки")
+            let halo = try #require(layers.first { $0["id"] as? String == "camera-halo-pin" }, "\(name): нет ореола булавки")
+            let translate = try #require((halo["paint"] as? [String: Any])?["circle-translate"] as? [Any])
+            #expect(translate.first as? String == "step", "\(name): ореол не следует за точкой на обзоре")
+            #expect(translate[3] as? Double == EngineMapStyle.cameraIconMinZoom)
+            let head = ((translate[4] as? [Any])?[1] as? [Any])?.last as? Double
+            #expect(head == -CameraMarkerLook.pinHeadLift(side: CameraMarkerLook.pinAlertSide))
+        }
+    }
+
     @Test("Слои камер не гасятся ни на горячем телефоне, ни на ходу")
     @MainActor func cameraLayersNeverHidden() {
-        let cameraLayers = ["camera-halo", "camera-dot", "camera-icons", "camera-badges"]
+        let cameraLayers = ["camera-halo", "camera-halo-pin", "camera-dot", "camera-icons", "camera-badges"]
         let hidden = Set(EngineMapView.Coordinator.hotHiddenLayers).union(MapDetailLayers.managed)
         for id in cameraLayers {
             #expect(!hidden.contains(id), "\(id) в списке гасимых")

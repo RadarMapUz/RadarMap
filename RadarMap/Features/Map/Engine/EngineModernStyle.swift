@@ -91,6 +91,10 @@ nonisolated enum EngineModernStyle {
             }
         }
         for (name, source) in EngineMapStyle.liveSources() { sources[name] = source }
+        // Обзорная основа из бандла — под сетевой: карта не белая, пока идут
+        // тайлы (первый запуск, слабая сеть). У скачанного региона своя основа.
+        let seed = offline == nil ? seedURL(bundle: bundle) : nil
+        if let seed { sources[seedSource] = ["type": "vector", "url": "pmtiles://" + seed.absoluteString] }
         style["sources"] = sources
 
         // Камеру ставит приложение. Положение из стиля при загрузке дёрнуло
@@ -124,6 +128,8 @@ nonisolated enum EngineModernStyle {
         // АЗС и парковка — значками приложения (EnginePlaceIcons, план 4.7).
         layers = layers.map(Self.ownPlaceIcons)
 
+        if seed != nil { layers = withSeed(layers, daylight: daylight) }
+
         // Маршрут — над дорогой и разметкой, под подписями основы.
         let labels = layers.firstIndex {
             $0["type"] as? String == "symbol" && $0["source"] as? String == "openmaptiles"
@@ -152,6 +158,60 @@ nonisolated enum EngineModernStyle {
     /// test_palette_check сверяет эти числа с генератором стиля.
     static let labelHex = (day: "#2d3036", night: "#e6e9ee")
     static let haloHex = (day: "#ffffff", night: "#16181c")
+
+    // MARK: - Обзорная основа из бандла
+
+    /// План 13.11, решение 5: на первом запуске карта 15–30 с была белой, пока
+    /// не придут тайлы. В бандле — OMT страны z0–9 и Ташкента z10–12
+    /// (server/omt/build_seed.py, < 10 МБ); её копии слоёв земли, воды и
+    /// дорог лежат сразу над фоном, под всей сетевой основой, и прячутся под
+    /// ней, как только она придёт. Подписей нет — их не растянуть с z12.
+    static let seedSource = "seed"
+    static let seedResource = "omt_seed"
+    /// Выше — камера поездки (z17+), там основа не нужна, а растянутый z12
+    /// только тратил бы кадр.
+    static let seedMaxZoom = 16.5
+    static let seedGround: Set<String> = ["landcover-wood", "landcover-grass", "landcover-grass-park", "water",
+                                          "waterway-river", "waterway-stream-canal"]
+    static let seedRoads: Set<String> = ["highway-motorway", "highway-trunk", "highway-primary",
+                                         "highway-secondary-tertiary", "highway-minor"]
+
+    static func seedURL(bundle: Bundle) -> URL? {
+        bundle.url(forResource: seedResource, withExtension: "pmtiles")
+            ?? bundle.url(forResource: seedResource, withExtension: "pmtiles", subdirectory: "MapSeed")
+    }
+
+    /// Копии слоёв основы на источнике `seed`, сразу над фоном. Днём дорога
+    /// берёт цвет своей каймы: белая линия на светлой земле без каймы не видна,
+    /// а сама кайма шире нашей ленты и торчала бы из-под неё (FALLBACK_SHARE).
+    static func withSeed(_ layers: [[String: Any]], daylight: Bool) -> [[String: Any]] {
+        var casings: [String: Any] = [:]
+        for layer in layers {
+            guard let id = layer["id"] as? String, id.hasSuffix("-casing"),
+                  let colour = (layer["paint"] as? [String: Any])?["line-color"] else { continue }
+            casings[String(id.dropLast("-casing".count))] = colour
+        }
+        var seeds: [[String: Any]] = []
+        for layer in layers {
+            guard let id = layer["id"] as? String, layer["source"] as? String == "openmaptiles",
+                  seedGround.contains(id) || seedRoads.contains(id) else { continue }
+            var copy = layer
+            copy["id"] = "seed-" + id
+            copy["source"] = seedSource
+            let maxZoom = (layer["maxzoom"] as? NSNumber)?.doubleValue ?? seedMaxZoom
+            copy["maxzoom"] = min(maxZoom, seedMaxZoom)
+            if daylight, seedRoads.contains(id), let colour = casings[id],
+               var paint = copy["paint"] as? [String: Any] {
+                paint["line-color"] = colour
+                copy["paint"] = paint
+            }
+            seeds.append(copy)
+        }
+        let at = layers.firstIndex { $0["id"] as? String == "background" }.map { $0 + 1 } ?? 0
+        var out = layers
+        out.insert(contentsOf: seeds, at: at)
+        return out
+    }
 
     static let trafficLightImage = "radar-traffic-light"
 

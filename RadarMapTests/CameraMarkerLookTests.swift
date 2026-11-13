@@ -2,8 +2,10 @@
 //  CameraMarkerLookTests.swift
 //  RadarMapTests
 //
-//  Вариант B: цвет — только у камер на нашем пути, тревога сверху, ни одна
-//  камера не пропадает, пометки не спорят с тревогой.
+//  Вариант C «Точка» (владелец, 13.11): все стационарные — один облик
+//  (точка вне пути, булавка на пути, красная булавка в тревоге), тренога и
+//  передвижной радар — другой ФОРМОЙ, красный — только у тревоги, ни одна
+//  камера не пропадает, тревога сверху, пометки не спорят с тревогой.
 //
 
 import XCTest
@@ -13,7 +15,7 @@ final class CameraMarkerLookTests: XCTestCase {
 
     private typealias Look = CameraMarkerLook
 
-    func testColourMeansOnOurPath() {
+    func testPathMeansAheadOnOurRoute() {
         let path = Look.pathIDs(route: [(id: 1, along: 100), (id: 2, along: 900), (id: 3, along: 2_500)],
                                 progress: 1_000, passedTolerance: 30, nearest: nil)
         XCTAssertEqual(path, [3], "позади по маршруту — уже не на пути")
@@ -35,88 +37,191 @@ final class CameraMarkerLookTests: XCTestCase {
                                     nearest: nil), [], "маршрута нет — его камеры не наши")
     }
 
-    func testAlertOutranksEverything() {
+    /// Порядок поверх: тревога > тренога > на пути > спокойная.
+    func testAlertThenTripodThenPathThenCalm() {
         XCTAssertEqual(Look.tier(id: 4, alert: 4, path: []), .alert)
         XCTAssertEqual(Look.tier(id: 4, alert: 4, path: [4]), .alert)
-        XCTAssertGreaterThan(Look.sortKey(.alert), Look.sortKey(.path))
-        XCTAssertGreaterThan(Look.sortKey(.path), Look.sortKey(.calm))
+        let alert = Look.sortKey(.alert, figure: .pin)
+        let tripod = Look.sortKey(.calm, figure: .diamond)
+        XCTAssertEqual(tripod, Look.sortKey(.path, figure: .diamond), "тренога всегда в полный рост")
+        XCTAssertGreaterThan(alert, tripod)
+        XCTAssertGreaterThan(tripod, Look.sortKey(.path, figure: .pin))
+        XCTAssertGreaterThan(Look.sortKey(.path, figure: .pin), Look.sortKey(.calm, figure: .pin))
     }
 
-    func testEveryCameraHasAnIcon() {
-        // Спокойная — тот же значок тише, а не пропажа.
-        for tier in [Look.Tier.calm, .path, .alert] {
-            for daylight in [true, false] {
-                XCTAssertFalse(Look.icon(symbol: "camera.fill", tier: tier, daylight: daylight).isEmpty)
+    // MARK: - Формы
+
+    /// Владелец: «все радары одинаковые, только треногу по-другому нужно
+    /// отмечать». Стационарные — одна форма и одна картинка; тренога и
+    /// передвижной радар — другая ФОРМА (ромб), а не оттенок.
+    func testStationaryAreOneMarkTripodIsAnotherShape() {
+        let stationary: [CameraType] = [.stationaryCamera, .stationaryRadar, .intelligentRadar]
+        for kind in stationary {
+            XCTAssertEqual(kind.mapGlyph, .camera, kind.symbolName)
+            XCTAssertEqual(Look.figure(kind.mapGlyph), .pin)
+            for tier in [Look.Tier.calm, .path, .alert] {
+                XCTAssertEqual(Look.icon(glyph: kind.mapGlyph, tier: tier, daylight: true),
+                               Look.icon(glyph: .camera, tier: tier, daylight: true))
             }
         }
-        XCTAssertNotEqual(Look.icon(symbol: "camera.fill", tier: .calm, daylight: true),
-                          Look.icon(symbol: "camera.fill", tier: .calm, daylight: false),
-                          "графит дня и ночи разный")
-        XCTAssertEqual(Look.icon(symbol: "camera.fill", tier: .alert, daylight: true), "camera.fill-alert")
+        for kind in [CameraType.tripod, .mobileRadar] {
+            XCTAssertEqual(Look.figure(kind.mapGlyph), .diamond, kind.symbolName)
+        }
+        XCTAssertNotEqual(CameraType.tripod.mapGlyph, CameraType.mobileRadar.mapGlyph, "глиф говорит, что это")
+        XCTAssertEqual(Look.figure(CameraType.accident.mapGlyph), .triangle)
+        XCTAssertEqual(Look.figure(CameraType.dpsPost.mapGlyph), .pin)
+        // Ромб ни в одном облике не совпадает формой с точкой или булавкой.
+        let pinShapes = Set(Look.rasters(.camera).map(\.shape))
+        let liveShapes = Set(Look.rasters(.tripod).map(\.shape))
+        XCTAssertTrue(pinShapes.isDisjoint(with: liveShapes))
     }
 
-    func testBadges() {
-        XCTAssertEqual(Look.badge(tier: .calm, unconfirmed: true, familiar: false), Look.ghostBadge)
-        XCTAssertEqual(Look.badge(tier: .alert, unconfirmed: true, familiar: false), Look.ghostBadge,
-                       "слух остаётся слухом и в тревоге")
-        XCTAssertEqual(Look.badge(tier: .path, unconfirmed: false, familiar: true), Look.ownBadge)
-        XCTAssertEqual(Look.badge(tier: .alert, unconfirmed: false, familiar: true), "",
-                       "идёт предупреждение — «своя» лишняя")
-        XCTAssertEqual(Look.badge(tier: .calm, unconfirmed: false, familiar: false), "")
+    /// Тренога — всегда в полный размер: она возникла только что, её надо
+    /// видеть и не на пути. Спокойная камера — точка.
+    func testTripodNeverShrinksToADot() throws {
+        for tier in [Look.Tier.calm, .path] {
+            let suffix = Look.suffix(.diamond, tier: tier, daylight: true, own: false, ghost: false)
+            let raster = try XCTUnwrap(Look.rasters(.tripod).first { $0.suffix == suffix })
+            XCTAssertEqual(raster.shape, .diamond)
+            XCTAssertGreaterThanOrEqual(raster.side, Look.pinSide)
+        }
+        let calm = try XCTUnwrap(Look.rasters(.camera).first { $0.suffix == "-calm-d" })
+        XCTAssertEqual(calm.shape, .dot)
     }
 
-    func testDotsSpeakTheSameLanguage() {
-        XCTAssertEqual(Look.dotColor(typeHex: "#D93025", tier: .calm, daylight: true), Look.neutralDay)
-        XCTAssertEqual(Look.dotColor(typeHex: "#D93025", tier: .calm, daylight: false), Look.neutralNight)
-        XCTAssertEqual(Look.dotColor(typeHex: "#D93025", tier: .path, daylight: true), "#D93025")
-        XCTAssertEqual(Look.dotColor(typeHex: "#D93025", tier: .alert, daylight: false), "#D93025")
+    /// Красный — только у тревоги (и ДТП — оно само опасность). Камера на
+    /// пути больше не краснеет: маршрут не превращается в красную цепочку.
+    func testRedOnlyAtAlert() {
+        for glyph in [CameraGlyph.camera, .post, .other, .tripod, .mobileRadar] {
+            for raster in Look.rasters(glyph) where raster.suffix != "-alert" {
+                XCTAssertNotEqual(raster.fill, Look.alertRGB, "\(glyph)\(raster.suffix) красный не в тревоге")
+            }
+            let alert = Look.rasters(glyph).first { $0.suffix == "-alert" }
+            XCTAssertEqual(alert?.fill, Look.alertRGB, "\(glyph): тревога — красная")
+            for daylight in [true, false] {
+                XCTAssertNotEqual(Look.dotColor(glyph: glyph, tier: .path, daylight: daylight), Look.hex(Look.alertRGB))
+                XCTAssertNotEqual(Look.dotColor(glyph: glyph, tier: .calm, daylight: daylight), Look.hex(Look.alertRGB))
+                XCTAssertEqual(Look.dotColor(glyph: glyph, tier: .alert, daylight: daylight), Look.hex(Look.alertRGB))
+            }
+        }
     }
 
-    // MARK: - Растры значка «Монета» (29.C)
+    // MARK: - Имена и растры
 
     /// Каждое имя, которое называет `icon`, есть среди растров движка — иначе
-    /// камеры этого облика не рисуются вовсе.
+    /// камера этого облика не рисуется вовсе.
     func testEveryIconSuffixHasARaster() {
-        let suffixes = Set(Look.rasters.map(\.suffix))
-        for tier in [Look.Tier.calm, .path, .alert] {
-            for daylight in [true, false] {
-                let name = Look.icon(symbol: "camera.fill", tier: tier, daylight: daylight)
-                XCTAssertTrue(suffixes.contains(String(name.dropFirst("camera.fill".count))), name)
+        for glyph in CameraGlyph.allCases {
+            let suffixes = Set(Look.rasters(glyph).map(\.suffix))
+            XCTAssertEqual(suffixes.count, Look.rasters(glyph).count, "\(glyph): облики не повторяются")
+            for tier in [Look.Tier.calm, .path, .alert] {
+                for daylight in [true, false] {
+                    for own in [true, false] {
+                        for ghost in [true, false] {
+                            let name = Look.icon(glyph: glyph, tier: tier, daylight: daylight, own: own, ghost: ghost)
+                            let suffix = String(name.dropFirst(Look.imageBase(glyph).count))
+                            XCTAssertTrue(suffixes.contains(suffix), name)
+                        }
+                    }
+                }
             }
         }
-        XCTAssertEqual(suffixes.count, Look.rasters.count, "облики не повторяются")
     }
 
-    /// Тревога крупнее «на пути», та — крупнее спокойной; спокойная не мельче
-    /// 24 pt: тише, но не исчезает.
-    func testSizesRankByTierAndCalmNeverVanishes() throws {
-        let side = Dictionary(uniqueKeysWithValues: Look.rasters.map { ($0.suffix, $0.side) })
-        let alert = try XCTUnwrap(side["-alert"]), path = try XCTUnwrap(side[""])
-        let calmDay = try XCTUnwrap(side["-calm-d"]), calmNight = try XCTUnwrap(side["-calm-n"])
-        XCTAssertGreaterThan(alert, path)
-        XCTAssertGreaterThan(path, calmDay)
-        XCTAssertEqual(calmDay, calmNight)
-        XCTAssertGreaterThanOrEqual(calmDay, 24)
+    func testDayAndNightDiffer() {
+        XCTAssertNotEqual(Look.icon(glyph: .camera, tier: .calm, daylight: true),
+                          Look.icon(glyph: .camera, tier: .calm, daylight: false), "графит дня и ночи разный")
+        XCTAssertNotEqual(Look.icon(glyph: .camera, tier: .path, daylight: true),
+                          Look.icon(glyph: .camera, tier: .path, daylight: false))
+        XCTAssertEqual(Look.icon(glyph: .camera, tier: .alert, daylight: true), "radar-camera-camera-alert")
     }
 
-    /// Спокойная — графит точки мелкого масштаба, глиф на нём читается в обеих
-    /// темах; «на пути» и тревога — цвет типа (fill nil).
-    func testCalmRastersAreNeutralAndReadable() {
-        for raster in Look.rasters {
-            switch raster.suffix {
-            case "-calm-d":
-                XCTAssertEqual(raster.fill, Look.neutralDayRGB)
-                XCTAssertEqual(String(format: "#%06X", Look.neutralDayRGB), Look.neutralDay)
-            case "-calm-n":
-                XCTAssertEqual(raster.fill, Look.neutralNightRGB)
-                XCTAssertEqual(String(format: "#%06X", Look.neutralNightRGB), Look.neutralNight)
-            default:
-                XCTAssertNil(raster.fill, "\(raster.suffix) — цвет типа")
-                XCTAssertNil(raster.ink)
-                continue
+    /// Булавка стоит остриём на точке камеры; точка, ромб и треугольник — центром.
+    func testPinStandsOnItsTip() {
+        XCTAssertEqual(Look.anchor(.pin, tier: .path), "bottom")
+        XCTAssertEqual(Look.anchor(.pin, tier: .alert), "bottom")
+        XCTAssertEqual(Look.anchor(.pin, tier: .calm), "center", "точка — центром")
+        XCTAssertEqual(Look.anchor(.diamond, tier: .alert), "center")
+        XCTAssertEqual(Look.anchor(.triangle, tier: .path), "center")
+        XCTAssertGreaterThan(Look.pinHeadLift(side: Look.pinAlertSide), Look.pinAlertSide / 2)
+    }
+
+    /// Тревога крупнее «на пути», та — крупнее точки.
+    func testSizesRankByTier() {
+        XCTAssertGreaterThan(Look.pinAlertSide, Look.pinSide)
+        XCTAssertGreaterThan(Look.pinSide, Look.dotSide)
+        XCTAssertGreaterThan(Look.diamondAlertSide, Look.diamondSide)
+        XCTAssertGreaterThan(Look.triangleAlertSide, Look.triangleSide)
+    }
+
+    // MARK: - Пометки
+
+    func testBadges() {
+        XCTAssertEqual(Look.badge(figure: .diamond, tier: .calm, unconfirmed: true, familiar: false), Look.ghostBadge)
+        XCTAssertEqual(Look.badge(figure: .diamond, tier: .alert, unconfirmed: true, familiar: false), Look.ghostBadge,
+                       "слух остаётся слухом и в тревоге")
+        XCTAssertEqual(Look.badge(figure: .pin, tier: .path, unconfirmed: false, familiar: true), Look.ownBadge)
+        XCTAssertEqual(Look.badge(figure: .pin, tier: .alert, unconfirmed: false, familiar: true), "",
+                       "идёт предупреждение — «своя» лишняя")
+        XCTAssertEqual(Look.badge(figure: .pin, tier: .calm, unconfirmed: false, familiar: true), "",
+                       "своя точка вне пути — зелёная сама, пометка 16 pt закрыла бы её")
+        XCTAssertEqual(Look.badge(figure: .pin, tier: .calm, unconfirmed: false, familiar: false), "")
+    }
+
+    /// Своя камера вне пути видна без пометки: точка зелёная.
+    func testOwnCalmDotIsGreen() throws {
+        let day = try XCTUnwrap(Look.rasters(.camera).first { $0.suffix == "-own-d" })
+        let night = try XCTUnwrap(Look.rasters(.camera).first { $0.suffix == "-own-n" })
+        XCTAssertEqual(day.fill, Look.ownDayRGB)
+        XCTAssertEqual(night.fill, Look.ownNightRGB)
+        XCTAssertEqual(Look.icon(glyph: .camera, tier: .calm, daylight: true, own: true), "radar-camera-camera-own-d")
+    }
+
+    /// Пометка у правого верха головы булавки, а не у острия: для каждого
+    /// места в стиле есть сдвиг, у булавки он выше головы.
+    func testBadgeSitsOnTheHead() {
+        let places = Dictionary(uniqueKeysWithValues: Look.badgePlaces.map { ($0.key, $0.offset) })
+        XCTAssertEqual(places.count, 9)
+        let pin = Look.badgeOffset(.pin, tier: .path)
+        XCTAssertLessThan(pin.y, -Look.pinHeadLift(side: Look.pinSide), "пометка — у головы")
+        XCTAssertGreaterThan(pin.x, 0)
+        let diamond = Look.badgeOffset(.diamond, tier: .path)
+        XCTAssertLessThan(diamond.y, 0)
+        XCTAssertGreaterThan(diamond.y, -Look.diamondSide)
+    }
+
+    // MARK: - Видимость
+
+    /// «Камера не исчезает»: точка вне пути видна на любом полотне карты в
+    /// обе темы — заливка или кант ≥ 3:1 к фону (порог нетекстового
+    /// элемента WCAG). Полотна — из server/omt/make_style.py.
+    func testCalmDotIsVisibleOnEveryGround() throws {
+        let grounds: [(daylight: Bool, name: String, rgb: UInt32)] = [
+            (true, "земля", 0xF2F3F5), (true, "дорога", 0xFFFFFF), (true, "магистраль", 0xFFE2A8),
+            (true, "парк", 0xCDEAC0), (true, "вода", 0xA9D5F7), (true, "дом", 0xE4E6EA),
+            (false, "земля", 0x16181C), (false, "дорога", 0x40454F), (false, "магистраль", 0x626874),
+            (false, "парк", 0x16271E), (false, "вода", 0x172A40), (false, "дом", 0x24272E),
+            (false, "машина", 0x141619),
+        ]
+        for glyph in [CameraGlyph.camera, .post, .other] {
+            for (daylight, name, ground) in grounds {
+                for own in [false, true] {
+                    let suffix = Look.suffix(.pin, tier: .calm, daylight: daylight, own: own, ghost: false)
+                    let dot = try XCTUnwrap(Look.rasters(glyph).first { $0.suffix == suffix })
+                    let best = max(contrast(dot.fill, ground), contrast(dot.rim, ground))
+                    XCTAssertGreaterThanOrEqual(best, 3, "\(glyph)\(suffix) на «\(name)»")
+                }
             }
-            let fill = raster.fill ?? 0, ink = raster.ink ?? 0
-            XCTAssertGreaterThanOrEqual(contrast(fill, ink), 4.5, "глиф на \(raster.suffix)")
+        }
+    }
+
+    /// Глиф читается на своей фигуре (≥ 4,5:1): белый на графите и красном,
+    /// тёмный на янтаре.
+    func testGlyphIsReadableOnEveryFigure() {
+        for glyph in CameraGlyph.allCases {
+            for raster in Look.rasters(glyph) where raster.shape != .dot {
+                XCTAssertGreaterThanOrEqual(contrast(raster.fill, raster.ink), 4.5, "\(glyph)\(raster.suffix)")
+            }
         }
     }
 

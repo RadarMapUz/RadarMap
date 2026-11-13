@@ -329,6 +329,9 @@ enum Theme {
         static let accident    = Color(uiColor: rgb(CameraGlyph.accident.fillRGB))
         /// Неизвестный тип — графит потемнее поста, белый глиф 6:1.
         static let other       = Color(uiColor: rgb(CameraGlyph.other.fillRGB))
+        /// Тренога и передвижной радар на карте (90, вариант C) — янтарный
+        /// ромб с тёмным глифом. Не `Theme.action`: жёлтый кнопки — одно действие.
+        static let live        = Color(uiColor: rgb(CameraGlyph.tripod.fillRGB))
         /// Кольцо маркера.
         static let ring        = Color.white
     }
@@ -675,10 +678,11 @@ extension CameraType {
         case .post:     return Theme.Types.post
         case .accident: return Theme.Types.accident
         case .other:    return Theme.Types.other
+        case .tripod, .mobileRadar: return Theme.Types.live
         }
     }
 
-    /// Цвет значка НА заливке типа — белый: все заливки тёмные (≥ 4,5:1).
+    /// Цвет значка НА заливке типа: белый на тёмных, тёмный на янтаре (≥ 4,5:1).
     var glyphTint: Color { Color(uiColor: Theme.rgb(glyph.inkRGB)) }
 }
 
@@ -849,6 +853,10 @@ nonisolated enum MapIconColors {
     static let success: UInt32 = WidgetPalette.successFill.light
     /// Значок «?» неподтверждённой отметки — графит поста (CameraGlyph).
     static let ghost: UInt32 = CameraGlyph.post.fillRGB
+    /// Отметка водителей на карте (90): янтарь ромба треноги и передвижного
+    /// радара, на обзоре — цвет точки. Глиф на нём — `liveInk`.
+    static let live: UInt32 = CameraGlyph.tripod.fillRGB
+    static let liveInk: UInt32 = CameraGlyph.tripod.inkRGB
     /// Текст на белой пилюле значка — `textPrimary` дня.
     static let ink: UInt32 = WidgetPalette.primary.light
 }

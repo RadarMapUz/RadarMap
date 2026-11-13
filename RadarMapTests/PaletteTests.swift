@@ -19,6 +19,7 @@
 //
 
 import SwiftUI
+import UIKit
 import XCTest
 @testable import RadarMap
 
@@ -100,9 +101,11 @@ final class PaletteTests: XCTestCase {
          ("danger", Theme.danger), ("success", Theme.success)]
     }
 
-    /// Заливки значков (29.C2): камера — одна на все типы камер; пост и ДТП.
+    /// Заливки значков (29.C2): камера — одна на все типы камер; пост и ДТП;
+    /// с 90 (вариант C) — янтарь треноги и передвижного радара на карте.
     private var types: [(String, Color)] {
-        [("camera", Theme.Types.camera), ("post", Theme.Types.post), ("accident", Theme.Types.accident)]
+        [("camera", Theme.Types.camera), ("post", Theme.Types.post), ("accident", Theme.Types.accident),
+         ("live", Theme.Types.live)]
     }
 
     /// Тип камеры → его заливка и глиф на ней (как рисует маркер). С 29.C —
@@ -223,10 +226,11 @@ final class PaletteTests: XCTestCase {
     }
 
     /// Типы различимы между собой — и при дейтеранопии (у ~6 % водителей).
-    /// С 29.C2 их три: камера, пост ДПС, ДТП. Камера и ДТП — оба красные
-    /// намеренно (красный = опасность впереди) и различаются ГЛИФОМ — это
-    /// держит CameraGlyphTests.testGlyphsAreDistinguishableBySilhouette;
-    /// цветом от них обоих отличается пост.
+    /// Их четыре: камера, пост ДПС, ДТП и отметка водителей (90). Камера и
+    /// ДТП — оба красные намеренно (красный = опасность впереди) и
+    /// различаются ФОРМОЙ (булавка и треугольник) и глифом; цветом от них
+    /// отличаются пост и янтарь треноги. Форму держит
+    /// testMapFiguresCarryTheKindNotOnlyTheColour.
     func testTypesAreDistinguishableFromEachOther() {
         inBothThemes { theme in
             for i in types.indices {
@@ -742,5 +746,39 @@ extension PaletteTests {
             return UInt32((a * alpha + b * (1 - alpha)).rounded()) << shift
         }
         return channel(16) | channel(8) | channel(0)
+    }
+}
+
+// MARK: - Значки камер на карте, вариант C (90, 13.11)
+
+extension PaletteTests {
+
+    /// Тренога и передвижной радар отличаются от стационарной камеры ФОРМОЙ
+    /// (ромб против точки и булавки), а не только цветом: при дейтеранопии
+    /// и боковым зрением на ходу красный и янтарь сближаются, форма — нет.
+    func testMapFiguresCarryTheKindNotOnlyTheColour() {
+        let camera = CameraMarkerLook.figure(CameraType.stationaryCamera.mapGlyph)
+        for kind in [CameraType.tripod, .mobileRadar] {
+            XCTAssertNotEqual(CameraMarkerLook.figure(kind.mapGlyph), camera, kind.symbolName)
+            XCTAssertNotEqual(CameraMarkerLook.figure(kind.mapGlyph), CameraMarkerLook.figure(CameraType.accident.mapGlyph))
+        }
+        // И цвет держит отличие даже при дейтеранопии.
+        inBothThemes { theme in
+            XCTAssertGreaterThanOrEqual(deltaEDeutan(Theme.Types.live, Theme.Types.camera), 25, theme)
+            XCTAssertGreaterThanOrEqual(deltaEDeutan(Theme.Types.live, Theme.Types.accident), 25, theme)
+        }
+    }
+
+    /// Тёмный глиф на янтаре читается (≥ 4,5:1); янтарь — не жёлтый главной
+    /// кнопки: жёлтый в интерфейсе один — одно действие на экране.
+    func testLiveMarkIsReadableAndNotTheActionYellow() {
+        let ink = Color(uiColor: Theme.rgb(MapIconColors.liveInk))
+        inBothThemes { theme in
+            XCTAssertGreaterThanOrEqual(contrast(ink, Theme.Types.live), 4.5, "глиф на янтаре \(theme)")
+            XCTAssertGreaterThanOrEqual(deltaE(Theme.Types.live, Theme.action), 15, "янтарь ≈ кнопка \(theme)")
+            XCTAssertGreaterThanOrEqual(deltaE(Theme.Types.live, Theme.Types.camera), 25, "янтарь ≈ камера \(theme)")
+        }
+        XCTAssertEqual(MapIconColors.live, CameraGlyph.tripod.fillRGB)
+        XCTAssertEqual(MapIconColors.live, CameraGlyph.mobileRadar.fillRGB)
     }
 }

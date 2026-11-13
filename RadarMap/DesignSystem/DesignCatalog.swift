@@ -341,34 +341,23 @@ struct DesignCatalogPage: View {
     // MARK: - Маркеры камер
 
     private var markersSection: some View {
-        CatalogSection("Маркеры камер · вариант B", note: "Цвет значит «на вашем пути». Красный на карте — только камера.") {
-            CatalogItem("CameraMarkerLook: спокойная · на пути · тревога", when: "Ни одна камера не пропадает: спокойная — тот же значок, тише.") {
+        CatalogSection("Маркеры камер · вариант C «Точка»",
+                       note: "Камера вне пути — точка, на пути — булавка. Тренога — янтарный ромб. Красный — только тревога.") {
+            CatalogItem("CameraMarkerLook: все облики", when: "Ни одна камера не пропадает: спокойная — точка, но видна.") {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(Self.markerTypes, id: \.self) { kind in
-                        HStack(spacing: 20) {
-                            CameraCoinView(glyph: kind.glyph,
-                                           fill: Theme.adaptive(CameraMarkerLook.neutralDayRGB,
-                                                                CameraMarkerLook.neutralNightRGB),
-                                           ink: Self.calmInk, rim: Self.calmInk, side: 24)
-                            CameraCoinView(glyph: kind.glyph, fill: kind.tint, ink: kind.glyphTint, side: 30)
-                            ZStack {
-                                Circle().fill(kind.tint.opacity(0.25)).frame(width: 56, height: 56)
-                                CameraCoinView(glyph: kind.glyph, fill: kind.tint, ink: kind.glyphTint,
-                                               side: 38, shadow: true)
+                        HStack(alignment: .bottom, spacing: 14) {
+                            ForEach(CameraMarkerLook.rasters(kind.mapGlyph), id: \.suffix) { look in
+                                Image(uiImage: CameraIconArt.marker(kind.mapGlyph, look: look))
                             }
-                            CameraIcon(kind: kind, side: 30, dashedRim: true)
                         }
                     }
-                    Text(verbatim: "Справа — неподтверждённая отметка водителей (пунктир).")
-                        .font(.rounded(12))
-                        .foregroundStyle(Theme.textTertiary)
                 }
             }
         }
     }
 
-    private static let markerTypes: [CameraType] = [.stationaryCamera, .tripod, .dpsPost, .accident]
-    private static let calmInk = Theme.adaptive(0xFFFFFF, CameraMarkerLook.calmNightInkRGB)
+    private static let markerTypes: [CameraType] = [.stationaryCamera, .tripod, .mobileRadar, .dpsPost, .accident]
 
     // MARK: - Пробки «Сигнал»
 

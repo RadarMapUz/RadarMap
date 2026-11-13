@@ -61,7 +61,7 @@ struct EngineMapView: UIViewRepresentable {
     var cameraProvider: ((MKCoordinateRegion, Int) -> [Camera])?
     var limitProvider: ((Camera) -> Int?)?
     var alertCameraID: Int?
-    /// Камеры на нашем пути (CameraMarkerLook): только у них цвет типа.
+    /// Камеры на нашем пути (CameraMarkerLook): у них булавка вместо точки.
     var pathCameraIDs: Set<Int> = []
     /// Камеры не на своей координате — на линии маршрута или на оси нашей
     /// дороги (CameraOnLine, 27.B). Только картинка; подпись — там же.
@@ -762,7 +762,7 @@ struct EngineMapView: UIViewRepresentable {
         /// нет в стиле, движок не рисует вовсе — молча (EngineCameraMarkersTests).
         static var cameraImageNames: [String] {
             markerGlyphs.flatMap { glyph in
-                CameraMarkerLook.rasters.map { CameraMarkerLook.imageBase(glyph) + $0.suffix }
+                CameraMarkerLook.rasters(glyph).map { CameraMarkerLook.imageBase(glyph) + $0.suffix }
             }
                 + [CameraMarkerLook.ghostBadge, CameraMarkerLook.ownBadge]
         }
@@ -773,14 +773,13 @@ struct EngineMapView: UIViewRepresentable {
                 for (name, image) in Self.iconCache { style.setImage(image, forName: name) }
                 return
             }
-            // Значок «Монета» (29.C, CameraIconArt) в обликах «Спокойной карты»
-            // (вариант B, владелец, 12.10; CameraMarkerLook): красный — только
-            // у камер на нашем пути и у тревоги, остальные — графитовый круг
-            // поменьше; пост ДПС и ДТП отличаются глифом. Все типы камер — один
-            // значок (29.C2). Цвет запекается в пиксели: движок не применяет к
-            // картинке стиля template-режим UIKit. Ореол тревоги — слой camera-halo.
+            // Вариант C «Точка» (владелец, 13.11; CameraMarkerLook): камера вне
+            // пути — точка, на пути — графитовая булавка, тревога — красная;
+            // тренога и передвижной радар — янтарный ромб. Цвет запекается в
+            // пиксели: движок не применяет к картинке стиля template-режим
+            // UIKit. Ореол тревоги — слои camera-halo / camera-halo-pin.
             for glyph in Self.markerGlyphs {
-                for look in CameraMarkerLook.rasters {
+                for look in CameraMarkerLook.rasters(glyph) {
                     style.setImage(CameraIconArt.marker(glyph, look: look),
                                    forName: CameraMarkerLook.imageBase(glyph) + look.suffix)
                 }
@@ -990,12 +989,21 @@ struct EngineMapView: UIViewRepresentable {
             guard let view, let current else { return }
             let rect = CGRect(x: point.x - 22, y: point.y - 22, width: 44, height: 44)
             let features = view.visibleFeatures(in: rect, styleLayerIdentifiers: ["camera-dot", "camera-icons"])
-            let ids = Set(features.compactMap { ($0.attribute(forKey: "id") as? NSNumber)?.intValue })
-            let nearest = cachedCameras.filter { ids.contains($0.id) }.min { a, b in
-                let pa = view.convert(a.coordinate, toPointTo: view)
-                let pb = view.convert(b.coordinate, toPointTo: view)
-                return hypot(pa.x - point.x, pa.y - point.y) < hypot(pb.x - point.x, pb.y - point.y)
+            // Булавка стоит остриём на точке камеры, а палец ложится на голову:
+            // расстояние меряется до середины значка, а не до острия.
+            var lift: [Int: CGFloat] = [:]
+            for feature in features {
+                guard let id = (feature.attribute(forKey: "id") as? NSNumber)?.intValue else { continue }
+                let anchored = feature.attribute(forKey: "anchor") as? String == "bottom"
+                let alert = (feature.attribute(forKey: "alert") as? NSNumber)?.boolValue ?? false
+                let side = alert ? CameraMarkerLook.pinAlertSide : CameraMarkerLook.pinSide
+                lift[id] = anchored ? CGFloat(CameraMarkerLook.pinHeadLift(side: side)) : 0
             }
+            func distance(_ camera: Camera) -> CGFloat {
+                let at = view.convert(camera.coordinate, toPointTo: view)
+                return hypot(at.x - point.x, at.y - (lift[camera.id] ?? 0) - point.y)
+            }
+            let nearest = cachedCameras.filter { lift[$0.id] != nil }.min { distance($0) < distance($1) }
             if let nearest {
                 current.onSelectCamera(nearest)
             } else if let id = routeVariants.variant(at: point, in: view), id != current.selectedVariantID {
@@ -2228,22 +2236,27 @@ struct EngineMapView: UIViewRepresentable {
                                        / (512 * max(1, spanMeters)))))
         }
 
-        /// Свойства точки камеры для слоёв стиля — облик варианта B
-        /// (CameraMarkerLook): уровень, значок, пометка, цвет точки.
+        /// Свойства точки камеры для слоёв стиля — облик варианта C «Точка»
+        /// (CameraMarkerLook): уровень, значок, якорь, пометка и её место, цвет точки.
         static func cameraAttributes(_ camera: Camera, alert: Int?, path: Set<Int>, familiar: Set<Int>,
                                      own: Set<Int> = [], daylight: Bool, limit: Int?) -> [String: Any] {
             let tier = CameraMarkerLook.tier(id: camera.id, alert: alert, path: path)
+            let glyph = camera.kind.mapGlyph
+            let figure = CameraMarkerLook.figure(glyph)
+            let isFamiliar = familiar.contains(camera.id)
             // Свежесть (82): приглушена и неподтверждённая, и та, о которой сказали «Уже нет».
             let faded = camera.mobileFresh.map(TripodFreshness.isFaded) ?? camera.isUnconfirmedMobile
             let ghost = CameraMarkerLook.isGhost(unconfirmed: faded, own: own.contains(camera.id))
             return ["id": camera.id, "alert": tier == .alert, "tier": tier.rawValue,
-                    "sort": CameraMarkerLook.sortKey(tier),
-                    "color": CameraMarkerLook.dotColor(typeHex: EngineMapStyle.typeHex(camera.kind),
-                                                       tier: tier, daylight: daylight),
-                    "icon": CameraMarkerLook.icon(glyph: camera.kind.glyph, tier: tier, daylight: daylight),
-                    "badge": CameraMarkerLook.badge(tier: tier,
+                    "sort": CameraMarkerLook.sortKey(tier, figure: figure),
+                    "color": CameraMarkerLook.dotColor(glyph: glyph, tier: tier, daylight: daylight, own: isFamiliar),
+                    "icon": CameraMarkerLook.icon(glyph: glyph, tier: tier, daylight: daylight,
+                                                  own: isFamiliar, ghost: ghost),
+                    "anchor": CameraMarkerLook.anchor(figure, tier: tier),
+                    "badge": CameraMarkerLook.badge(figure: figure, tier: tier,
                                                     unconfirmed: ghost && camera.isUnconfirmedMobile,
-                                                    familiar: familiar.contains(camera.id)),
+                                                    familiar: isFamiliar),
+                    "place": CameraMarkerLook.badgePlace(figure, tier: tier),
                     "limit": limit.map(String.init) ?? "",
                     "fresh": camera.mobileFresh.map(TripodFreshness.mapLabel) ?? "",
                     "unconfirmed": ghost]

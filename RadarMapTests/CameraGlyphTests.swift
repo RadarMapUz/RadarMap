@@ -25,7 +25,9 @@ final class CameraGlyphTests: XCTestCase {
         for kind in kinds {
             XCTAssertEqual(CameraGlyph(symbol: kind.symbolName), kind.glyph, kind.symbolName)
         }
-        XCTAssertEqual(Set(kinds.map(\.glyph)), Set(CameraGlyph.allCases), "у каждого глифа есть тип")
+        // Тренога и передвижной радар (90) — свои глифы пока только на карте.
+        XCTAssertEqual(Set(kinds.map(\.glyph)).union(kinds.map(\.mapGlyph)), Set(CameraGlyph.allCases),
+                       "у каждого глифа есть тип")
         // Состояния Live Activity — не камеры: им свой символ, не «прочее».
         XCTAssertNil(CameraGlyph(symbol: "checkmark.shield.fill"))
         XCTAssertNil(CameraGlyph(symbol: "location.slash.fill"))
@@ -41,8 +43,16 @@ final class CameraGlyphTests: XCTestCase {
             XCTAssertEqual(kind.glyph, .camera, kind.symbolName)
             XCTAssertEqual(kind.markerRGB, CameraType.stationaryCamera.markerRGB, kind.symbolName)
             XCTAssertEqual(hex(kind.tint), hex(Theme.Types.camera), kind.symbolName)
-            XCTAssertEqual(CameraMarkerLook.icon(glyph: kind.glyph, tier: .path, daylight: true),
+        }
+        // На карте (90, владелец 13.11: «только треногу по-другому нужно
+        // отмечать») стационарные — одна картинка, тренога и радар — свои.
+        for kind in [CameraType.stationaryCamera, .stationaryRadar, .intelligentRadar] {
+            XCTAssertEqual(CameraMarkerLook.icon(glyph: kind.mapGlyph, tier: .path, daylight: true),
                            CameraMarkerLook.icon(glyph: .camera, tier: .path, daylight: true))
+        }
+        for kind in [CameraType.mobileRadar, .tripod] {
+            XCTAssertNotEqual(CameraMarkerLook.icon(glyph: kind.mapGlyph, tier: .path, daylight: true),
+                              CameraMarkerLook.icon(glyph: .camera, tier: .path, daylight: true))
         }
         XCTAssertEqual(CameraType.dpsPost.glyph, .post)
         XCTAssertEqual(CameraType.accident.glyph, .accident)

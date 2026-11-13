@@ -598,6 +598,9 @@ nonisolated enum EngineMapStyle {
         String(format: "#%06X", kind.markerRGB)
     }
 
+    /// С этого масштаба камера — значок, ниже — точка (camera-dot).
+    static let cameraIconMinZoom = 14.5
+
     /// Камеры и «я» — над всем, в обоих стилях.
     static func markerLayers(label: String, halo: String) -> [[String: Any]] {
         var out: [[String: Any]] = []
@@ -642,26 +645,45 @@ nonisolated enum EngineMapStyle {
                        "icon-ignore-placement": false, "icon-pitch-alignment": "viewport"],
             "paint": ["icon-opacity": ["case", ["==", ["get", "confirmed"], true], 1.0, 0.55]],
         ])
-        // Ореол только у текущей тревоги; обычные камеры молчат.
+        // Ореол только у текущей тревоги; обычные камеры молчат. У ромба и
+        // треугольника — вокруг точки, у булавки (вариант C, 13.11) — вокруг
+        // головы: булавка стоит остриём на точке камеры, голова выше на
+        // pinHeadLift. Сдвиг — в точках экрана: булавка не ложится с наклоном.
+        let alertOn: [Any] = ["==", ["get", "alert"], true]
+        let pinned: [Any] = ["==", ["coalesce", ["get", "anchor"], "center"], "bottom"]
+        let haloPaint: [String: Any] = ["circle-radius": 26,
+                                        "circle-color": RouteColors.hex(CameraMarkerLook.alertRGB),
+                                        "circle-opacity": 0.18,
+                                        "circle-pitch-alignment": "viewport"]
         out.append([
             "id": "camera-halo", "type": "circle", "source": "cameras",
-            "filter": ["==", ["get", "alert"], true],
-            "paint": ["circle-radius": 26, "circle-color": RouteColors.hex(CameraGlyph.camera.fillRGB),
-                      "circle-opacity": 0.18],
+            "filter": ["all", alertOn, ["!", pinned]],
+            "paint": haloPaint,
         ])
-        // Точка мелкого масштаба — тот же язык, что значок (вариант B,
-        // CameraMarkerLook): цвет типа у камер на пути, графит у спокойных,
-        // и спокойная мельче. Цвет приходит свойством точки.
+        // Ниже z14.5 вместо булавки — точка (camera-dot): ореол — на ней.
+        var pinHalo = haloPaint
+        pinHalo["circle-translate"] = ["step", ["zoom"], ["literal", [0, 0]], cameraIconMinZoom,
+                                       ["literal", [0, -CameraMarkerLook.pinHeadLift(side: CameraMarkerLook.pinAlertSide)]]]
+        pinHalo["circle-translate-anchor"] = "viewport"
+        out.append([
+            "id": "camera-halo-pin", "type": "circle", "source": "cameras",
+            "filter": ["all", alertOn, pinned],
+            "paint": pinHalo,
+        ])
+        // Точка мелкого масштаба — тот же язык, что значок (вариант C,
+        // CameraMarkerLook.dotColor): графит у камер, янтарь у отметок
+        // водителей, красный только у тревоги и ДТП; спокойная мельче.
+        // Цвет приходит свойством точки.
         let calm: [Any] = ["==", ["get", "tier"], "calm"]
         out.append([
             "id": "camera-dot", "type": "circle", "source": "cameras",
-            "maxzoom": 14.5,
+            "maxzoom": cameraIconMinZoom,
             "paint": ["circle-radius": ["interpolate", ["linear"], ["zoom"],
                                         12, ["case", calm, 3, 4],
                                         15, ["case", calm, 7, 10],
                                         17, ["case", calm, 9, 13]],
                       // Без цвета у точки — графит спокойной камеры, не красный:
-                      // красный значит «камера на пути» (25.F, снимок 63).
+                      // красный значит «тревога» (90, вариант C).
                       "circle-color": ["coalesce", ["get", "color"], CameraMarkerLook.neutralDay],
                       // Спокойная камера на виде района — без белого кольца и
                       // полупрозрачная (25.D, аудит 21.10): с кольцом 1,8 она
@@ -682,15 +704,22 @@ nonisolated enum EngineMapStyle {
         // Сама камера по-прежнему рисуется всегда (icon-allow-overlap).
         out.append([
             "id": "camera-icons", "type": "symbol", "source": "cameras",
-            "minzoom": 14.5,
+            "minzoom": cameraIconMinZoom,
             "layout": ["icon-image": ["get", "icon"],
                        "icon-allow-overlap": true, "icon-ignore-placement": false,
-                       // При allow-overlap больший ключ лежит СВЕРХУ: тревога
-                       // поверх «на пути», те — поверх спокойных. До 12.10
-                       // ключ был 0 у тревоги — она пряталась под соседями.
+                       // Булавка — остриём на точке камеры (CameraMarkerLook.anchor).
+                       "icon-anchor": ["coalesce", ["get", "anchor"], "center"],
+                       // При allow-overlap больший ключ лежит СВЕРХУ: тревога,
+                       // затем тренога, затем «на пути», внизу спокойные. До
+                       // 12.10 ключ был 0 у тревоги — она пряталась под соседями.
                        "symbol-sort-key": ["coalesce", ["get", "sort"], 0]],
             "paint": ["icon-opacity": ["case", ["get", "unconfirmed"], 0.55, 1]],
         ])
+        var badgeOffset: [Any] = ["match", ["coalesce", ["get", "place"], ""]]
+        for place in CameraMarkerLook.badgePlaces {
+            badgeOffset += [place.key, ["literal", [place.offset.x, place.offset.y]]]
+        }
+        badgeOffset.append(["literal", [9.0, -9.0]])
         // Пометки поверх значка: «?» у отметки водителей, галочка у своей
         // камеры. Отдельным слоем — иначе каждая пометка удваивала бы набор
         // картинок, — и вне раскладки: пометка ничего не вытесняет.
@@ -700,10 +729,8 @@ nonisolated enum EngineMapStyle {
             "filter": ["!=", ["coalesce", ["get", "badge"], ""], ""],
             "layout": ["icon-image": ["get", "badge"],
                        "icon-allow-overlap": true, "icon-ignore-placement": true,
-                       "icon-offset": ["match", ["get", "tier"],
-                                       "alert", ["literal", [13, -13]],
-                                       "path", ["literal", [11, -11]],
-                                       ["literal", [9, -9]]],
+                       // Правый верх головы булавки или фигуры (CameraMarkerLook.badgeOffset).
+                       "icon-offset": badgeOffset,
                        "symbol-sort-key": ["coalesce", ["get", "sort"], 0]],
         ])
         // Свежесть отметки водителей (82): «✓ 14:05» — последнее «Стоит»,

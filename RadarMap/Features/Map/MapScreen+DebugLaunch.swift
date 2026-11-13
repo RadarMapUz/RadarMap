@@ -208,17 +208,6 @@ extension MapScreen {
                 }
             }
         }
-        // 90: снимки нашей карты и точки камер для листа вариантов значков.
-        #if canImport(MapLibre)
-        if let idx = args.firstIndex(of: "-dumpMarkerStudy"), idx + 1 < args.count {
-            let directory = URL(fileURLWithPath: args[idx + 1])
-            Task {
-                while !env.cameras.isDatabaseLoaded { await Task.pause(seconds: 0.2) }
-                await Task.pause(seconds: 3)
-                await CameraMarkerStudyDump.run(directory: directory, cameras: env.cameras.cameras)
-            }
-        }
-        #endif
         // 29.C: оповещение камеры в размере iPhone SE (375×667) — проверка
         // значка на малом экране без второго симулятора. Папка — аргументом.
         if let idx = args.firstIndex(of: "-dumpSEAlert"), idx + 1 < args.count {

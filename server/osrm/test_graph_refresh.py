@@ -425,6 +425,8 @@ class PatchLayer(unittest.TestCase):
             with open(g.PANEL_CACHE) as f:
                 self.assertEqual(json.load(f)["items"], [{"id": 2}])
             self.assertEqual(g.fetch_panel(argparse.Namespace(no_panel=True, panel_patches=None))[0], [])
+            g.ssh = lambda *a, **k: '{"old_panel": true}'
+            self.assertEqual(g.fetch_panel(args), ([], "панель старая"))
         finally:
             g.PANEL_CACHE, g.ssh = old_cache, old_ssh
             shutil.rmtree(tmp)

@@ -366,8 +366,15 @@ def fetch_panel(args):
         with open(args.panel_patches) as f:
             return json.load(f).get("items") or [], args.panel_patches
     try:
-        body = ssh(f"python3 {ADMIN} --export-route-patches", timeout=60)
-        items = json.loads(body).get("items")
+        # Старая панель флага не знает, и её main() без флага поднял бы init_db
+        # и сервер — поэтому сначала только чтение: есть ли флаг в файле.
+        body = ssh(f"if grep -q -e '--export-route-patches' {ADMIN}; then python3 {ADMIN} --export-route-patches; "
+                   "else echo '{\"old_panel\": true}'; fi", timeout=60)
+        payload = json.loads(body)
+        if payload.get("old_panel"):
+            log("! на VPS панель без выгрузки правок маршрута (нужен deploy_api.sh) — только файл репозитория")
+            return [], "панель старая"
+        items = payload.get("items")
         if not isinstance(items, list):
             raise ValueError("нет items")
         os.makedirs(WORK, exist_ok=True)

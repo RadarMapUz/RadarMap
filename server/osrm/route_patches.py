@@ -746,7 +746,8 @@ def side_choice(tags, members, net):
                 for d in (-1, 1) if 0 <= i + d < len(refs)]
     want = RESTRICTION_MANEUVER.get(restriction_kind(tags) or "")
     combos = [(f, t) for f in sides(fr[0]) for t in sides(to[0])
-              if f != t or fr[0] != to[0] or want == "uturn"]
+              if (f != t or fr[0] != to[0] or want == "uturn")
+              and net.can_go(f, v, True) and net.can_go(v, t, True)]
     if want:
         combos = [(f, t) for f, t in combos
                   if maneuver(ta.turn(net.bearing(f, v), net.bearing(v, t))) == want]

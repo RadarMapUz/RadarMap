@@ -1,0 +1,171 @@
+{
+ "version": 1,
+ "about": "Поправки маршрутов поверх выгрузки OSM (91). Координаты — [широта, долгота]. Формат и правила — docs/plan_91_route_patches_2026-11-13.md.",
+ "patches": [
+  {
+   "id": "a88-unbarrier-11839420512",
+   "kind": "unbarrier",
+   "node": 11839420512,
+   "expect": {
+    "at": [
+     41.3073009,
+     69.218232
+    ],
+    "tags": {
+     "barrier": "kerb",
+     "highway": "bus_stop"
+    }
+   },
+   "note": "Самарканд Дарваза: остановка с barrier=kerb прямо на оси проезжей части перекрывала сторону улицы (аудит 88)",
+   "evidence": "data"
+  },
+  {
+   "id": "a88-unbarrier-14331069273",
+   "kind": "unbarrier",
+   "node": 14331069273,
+   "expect": {
+    "at": [
+     41.452345,
+     69.2101464
+    ],
+    "tags": {
+     "barrier": "yes"
+    }
+   },
+   "note": "Quyi Ko‘kterak (primary): barrier=yes без уточнения на оси проезжей части (аудит 88)",
+   "evidence": "data"
+  },
+  {
+   "id": "a88-relation-12372974",
+   "kind": "relation_fix",
+   "relation": 12372974,
+   "members": [
+    [
+     "w",
+     860591712,
+     "from"
+    ],
+    [
+     "n",
+     13998512325,
+     "via"
+    ],
+    [
+     "w",
+     911497864,
+     "to"
+    ]
+   ],
+   "expect": {
+    "version": 2,
+    "members": [
+     [
+      "w",
+      860591712,
+      "from"
+     ],
+     [
+      "w",
+      911497864,
+      "to"
+     ]
+    ]
+   },
+   "note": "Фитрат: no_left_turn без via; from кончается, а to начинается в одном узле 13998512325 — он и есть via",
+   "evidence": "data"
+  },
+  {
+   "id": "a88-relation-13526946",
+   "kind": "relation_fix",
+   "relation": 13526946,
+   "members": [
+    [
+     "w",
+     911497856,
+     "from"
+    ],
+    [
+     "n",
+     13998512325,
+     "via"
+    ],
+    [
+     "w",
+     911497865,
+     "to"
+    ]
+   ],
+   "expect": {
+    "version": 2,
+    "members": [
+     [
+      "w",
+      911497856,
+      "from"
+     ],
+     [
+      "w",
+      911497865,
+      "to"
+     ]
+    ]
+   },
+   "note": "Фитрат: no_right_turn без via; общий конец from и to — узел 13998512325",
+   "evidence": "data"
+  },
+  {
+   "id": "a88-relation-13168980",
+   "kind": "relation_fix",
+   "relation": 13168980,
+   "members": [
+    [
+     "w",
+     1082335262,
+     "from"
+    ],
+    [
+     "n",
+     5907590951,
+     "via"
+    ],
+    [
+     "w",
+     1394805523,
+     "to"
+    ]
+   ],
+   "expect": {
+    "version": 5,
+    "members": [
+     [
+      "w",
+      1082335262,
+      "from"
+     ],
+     [
+      "w",
+      1394805523,
+      "to"
+     ],
+     [
+      "w",
+      1427054923,
+      "to"
+     ]
+    ]
+   },
+   "note": "Янги Узбекистон: only_straight_on без via и с двумя to; via — конец from и начало первого to, второй to — продолжение той же улицы дальше",
+   "evidence": "data"
+  },
+  {
+   "id": "relation-17726074-split",
+   "kind": "relation_fix",
+   "relation": 17726074,
+   "expect": {
+    "version": 3
+   },
+   "note": "Самарканд, Шабод: via не конец пути to — OSRM запрет тихо выбрасывал; путь режется в via",
+   "evidence": "data"
+  }
+ ]
+}

@@ -232,7 +232,17 @@ nonisolated struct APIClient {
     // MARK: - Построение запроса
 
     private func request(_ path: String) -> URLRequest {
-        URLRequest(url: base.appendingPathComponent(path), timeoutInterval: timeout)
+        URLRequest(url: Self.url(path, base: base), timeoutInterval: timeout)
+    }
+
+    /// Адрес запроса. Путь `api/…` при DEBUG `-apiBase` — на подменный сервер
+    /// (`AppConfig.debugAPIBaseURL`), всё прочее — от корня клиента.
+    nonisolated static func url(_ path: String, base: URL,
+                                apiOverride: URL? = AppConfig.debugAPIBaseURL) -> URL {
+        if let apiOverride, path.hasPrefix("api/") || path.hasPrefix("/api/") {
+            return apiOverride.appendingPathComponent(path)
+        }
+        return base.appendingPathComponent(path)
     }
 
     private func jsonRequest(_ path: String, body: [String: Any]) -> URLRequest {

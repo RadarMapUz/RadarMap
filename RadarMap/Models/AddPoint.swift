@@ -172,4 +172,25 @@ nonisolated enum AddPointAim {
         let y = bottom > top ? (top + bottom) / 2 : height / 2
         return CGPoint(x: width / 2, y: y)
     }
+
+    /// Центр вида, при котором `target` встанет под прицел. `under` — что под
+    /// прицелом сейчас, `viewCentre` — середина вида: сдвиг «середина → прицел»
+    /// на земле при том же наклоне и повороте не меняется, а со сменой масштаба
+    /// умножается на `scale` (2^(нынешний − новый)). Наклонная карта поэтому
+    /// считается так же точно, как плоская.
+    static func centre(placing target: CLLocationCoordinate2D, under: CLLocationCoordinate2D,
+                       viewCentre: CLLocationCoordinate2D, scale: Double) -> CLLocationCoordinate2D {
+        CLLocationCoordinate2D(latitude: target.latitude - (under.latitude - viewCentre.latitude) * scale,
+                               longitude: target.longitude - (under.longitude - viewCentre.longitude) * scale)
+    }
+
+    /// Доводок после команды «в точку» — не больше: дальше точка под
+    /// прицелом — та, что есть (палец мог уже двигать карту).
+    static let maxFixes = 2
+
+    /// Точка на экране дальше от прицела, чем видно глазу (3 pt).
+    static func misses(_ shown: CGPoint, aim: CGPoint) -> Bool {
+        let dx = shown.x - aim.x, dy = shown.y - aim.y
+        return (dx * dx + dy * dy).squareRoot() > 3
+    }
 }

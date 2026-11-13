@@ -1300,6 +1300,22 @@ nonisolated enum AppConfig {
         return syncBaseURL
     }()
 
+    /// DEBUG `-apiBase <url>`: КАЖДЫЙ запрос `api/…` — отметки, голоса, отзыв,
+    /// списки отметок, куски пробок, статистика — уходит на подменный сервер, а
+    /// не на боевой. Отметка с симулятора на боевом сервере — фейковая тренога
+    /// у реальных водителей. Карта, база и файлы остаются на `syncBaseURL`.
+    /// В релизе — nil.
+    static let debugAPIBaseURL: URL? = {
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        if let index = args.firstIndex(of: "-apiBase"), index + 1 < args.count,
+           let url = URL(string: args[index + 1]) {
+            return url
+        }
+        #endif
+        return nil
+    }()
+
     /// Страница проекта: поддержка, политика конфиденциальности, контакты.
     /// Она же Support URL в App Store Connect.
     /// Портал открытых данных — источник камер (МВД), банкоматов (ЦБ) и

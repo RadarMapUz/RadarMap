@@ -37,8 +37,8 @@ final class ReportFlow {
     /// Ждём годную точку после касания — второе касание в это время не
     /// заводит второй черновик, а кнопка показывает «Ищу GPS» (до 3 с).
     private(set) var awaitingFix = false
-    @ObservationIgnored private var choiceTimer: Task<Void, Never>?
-    @ObservationIgnored private var undoTimer: Task<Void, Never>?
+    @ObservationIgnored private let choiceTimer = Deadline()
+    @ObservationIgnored private let undoTimer = Deadline()
 
     /// Чем кончилось касание — для вспышки на кнопке, часов и плашки.
     enum Answer {
@@ -128,7 +128,7 @@ final class ReportFlow {
     /// выбора стоит — выбор под оповещением не виден.
     func pauseChoice(now: Date = Date()) {
         guard draft.pause(now: now) else { return }
-        choiceTimer?.cancel()
+        choiceTimer.cancel()
     }
 
     /// Экран освободился: выбор возвращается с остатком срока, не меньше
@@ -152,7 +152,7 @@ final class ReportFlow {
     func undo(speak: Bool = true) async -> String {
         guard let sent = draft.sent, canUndo(), let mobile else { return "" }
         draft.undone()
-        undoTimer?.cancel()
+        undoTimer.cancel()
         let why: MobileCameraService.ReportResult.Failure?
         if let id = sent.serverID {
             why = await mobile.cancelReport(id: id)
@@ -175,7 +175,7 @@ final class ReportFlow {
         guard let mobile, let id = mobile.cancellableReportID() else { return nil }
         if draft.sent?.serverID == id {
             draft.undone()
-            undoTimer?.cancel()
+            undoTimer.cancel()
         }
         let text = await mobile.cancelReport(id: id)?.spoken ?? String(localized: "Отметка убрана")
         if speak { alerts?.speak(text) }
@@ -202,11 +202,11 @@ final class ReportFlow {
             if speak, location?.isApproachingCamera != true { alerts?.speak(ReportWords.choosePrompt) }
             return .choosing
         case .cancelled:
-            choiceTimer?.cancel()
+            choiceTimer.cancel()
             if speak { alerts?.speak(ReportWords.notMarked) }
             return .cancelled
         case .send(let touch, let kind):
-            choiceTimer?.cancel()
+            choiceTimer.cancel()
             return .done(await send(touch, kind: kind, speak: speak))
         }
     }
@@ -274,24 +274,19 @@ final class ReportFlow {
 
     // MARK: - Часы
 
+    /// Срок выбора: молчание отправляет треногу — в своей задаче (Deadline),
+    /// иначе `perform` снимал бы таймер вместе с собственной отправкой (92).
     private func armChoiceTimer(_ deadline: Date) {
-        choiceTimer?.cancel()
-        choiceTimer = Task { [weak self] in
-            // Ошибка sleep — только отмена задачи: выбор сделан раньше срока.
-            try? await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow)))
-            guard !Task.isCancelled, let self else { return }
+        choiceTimer.arm(deadline) { [weak self] in
+            guard let self else { return }
             // Сон кончается не секунда в секунду — срок считаем наступившим.
             await self.perform(self.draft.expire(now: max(Date(), deadline)), speak: true)
         }
     }
 
     private func armUndoTimer(_ until: Date) {
-        undoTimer?.cancel()
-        undoTimer = Task { [weak self] in
-            // Ошибка sleep — только отмена задачи: отменили раньше срока.
-            try? await Task.sleep(for: .seconds(max(0, until.timeIntervalSinceNow)))
-            guard !Task.isCancelled, let self else { return }
-            self.draft.closeUndo(now: max(Date(), until))
+        undoTimer.arm(until) { [weak self] in
+            self?.draft.closeUndo(now: max(Date(), until))
         }
     }
 }

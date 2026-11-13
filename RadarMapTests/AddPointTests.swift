@@ -225,4 +225,41 @@ extension AddPointTests {
                        "строки отказа называют «3 часа» словами — сменили окно, смените и их")
         XCTAssertEqual(AppConfig.addTripodTrackMaxMeters, 150)
     }
+
+    // MARK: - Центр под прицел (92: на наклонной карте вы вставали в 40 м под прицел)
+
+    func testCentrePutsTargetUnderAimByTheViewsOwnOffset() {
+        // Под прицелом сейчас точка в 300 м севернее середины (наклон сжал её
+        // в меньшее число точек экрана) — центр уходит на те же 300 м южнее цели.
+        let target = CLLocationCoordinate2D(latitude: 41.30, longitude: 69.28)
+        let centre = CLLocationCoordinate2D(latitude: 41.31, longitude: 69.25)
+        let under = CLLocationCoordinate2D(latitude: 41.3127, longitude: 69.2503)
+        let placed = AddPointAim.centre(placing: target, under: under, viewCentre: centre, scale: 1)
+        XCTAssertEqual(placed.latitude, 41.30 - 0.0027, accuracy: 1e-9)
+        XCTAssertEqual(placed.longitude, 69.28 - 0.0003, accuracy: 1e-9)
+    }
+
+    func testCentreScalesOffsetWithZoom() {
+        // Приближение на один шаг — тот же сдвиг экрана вдвое короче на земле.
+        let target = CLLocationCoordinate2D(latitude: 41.30, longitude: 69.28)
+        let centre = CLLocationCoordinate2D(latitude: 41.31, longitude: 69.25)
+        let under = CLLocationCoordinate2D(latitude: 41.312, longitude: 69.25)
+        let placed = AddPointAim.centre(placing: target, under: under, viewCentre: centre, scale: 0.5)
+        XCTAssertEqual(placed.latitude, 41.299, accuracy: 1e-9)
+        XCTAssertEqual(placed.longitude, 69.28, accuracy: 1e-9)
+    }
+
+    func testAimAtCentreLeavesTargetAsCentre() {
+        let target = CLLocationCoordinate2D(latitude: 41.30, longitude: 69.28)
+        let centre = CLLocationCoordinate2D(latitude: 41.31, longitude: 69.25)
+        let placed = AddPointAim.centre(placing: target, under: centre, viewCentre: centre, scale: 2)
+        XCTAssertEqual(placed.latitude, target.latitude, accuracy: 1e-12)
+        XCTAssertEqual(placed.longitude, target.longitude, accuracy: 1e-12)
+    }
+
+    func testMissIsWhatTheEyeSees() {
+        let aim = CGPoint(x: 220, y: 400)
+        XCTAssertFalse(AddPointAim.misses(CGPoint(x: 222, y: 402), aim: aim))
+        XCTAssertTrue(AddPointAim.misses(CGPoint(x: 220, y: 438), aim: aim), "38 pt — снимок 92")
+    }
 }

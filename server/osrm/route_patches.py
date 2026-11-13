@@ -738,6 +738,8 @@ def side_choice(tags, members, net):
     fr, via, to = restriction_parts(members)
     if len(fr) != 1 or len(to) != 1 or len(via) != 1 or via[0][0] != "n":
         return None, "не через узел"
+    if fr[0] not in net.ways or to[0] not in net.ways:
+        return None, "пути relation нет в собранном куске"
     v = via[0][1]
 
     def sides(wid):

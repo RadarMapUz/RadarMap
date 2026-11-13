@@ -133,6 +133,65 @@ class MagnetTests(unittest.TestCase):
                          map_edits.fingerprint(point, [self.side, self.avenue]))
 
 
+class RoutePatchTests(unittest.TestCase):
+    """Правки маршрута (91): своя проверка свойств, свой экспорт, мимо тайлов."""
+
+    def setUp(self):
+        self.conn = sqlite3.connect(":memory:")
+        self.conn.row_factory = sqlite3.Row
+        map_edits.ensure_tables(self.conn)
+
+    def tearDown(self):
+        self.conn.close()
+
+    def test_props_are_checked(self):
+        problem = map_edits.route_props_problem
+        self.assertIsNotNone(problem("turn_ban", {"restriction": "no_left_turn"}))
+        self.assertIsNotNone(problem("turn_ban", {"restriction": "only_left_turn", "from_bearing": 0,
+                                                  "to_bearing": 90}))
+        self.assertIsNone(problem("turn_ban", {"restriction": "no_u_turn", "from_bearing": 0, "to_bearing": 180}))
+        self.assertIsNotNone(problem("turn_ban", {"restriction": "no_u_turn", "from_bearing": 0,
+                                                  "to_bearing": 180, "path": [1, 2]}))
+        self.assertIsNotNone(problem("turn_ban", {"restriction": "no_u_turn", "from_bearing": 0,
+                                                  "to_bearing": 180, "path": [1, 2, 3], "path_at": [[41, 69]]}))
+        self.assertIsNotNone(problem("oneway", {}))
+        self.assertIsNotNone(problem("no_entry", {"bearing": True}))
+        self.assertIsNone(problem("no_entry", {"bearing": 270}))
+        self.assertIsNotNone(problem("unbarrier", {"evidence": "сон"}))
+        self.assertIsNone(problem("unbarrier", {"evidence": "survey"}))
+        self.assertIsNone(problem("lanes", {"lanes": 4}))
+
+    def test_route_kinds_skip_tiles_and_sweep(self):
+        point = [69.25, 41.30]
+        map_edits.create(self.conn, "lanes", raw=point, snapped=point, props={"lanes": 4},
+                         status=map_edits.ACCEPTED)
+        map_edits.create(self.conn, "unbarrier", raw=point, snapped=point, props={},
+                         status=map_edits.ACCEPTED)
+        map_edits.create(self.conn, "oneway", raw=point, snapped=point, props={"bearing": 10},
+                         status=map_edits.DRAFT)
+        self.assertEqual([e["kind"] for e in map_edits.export_accepted(self.conn)], ["lanes"])
+        exported = map_edits.export_route_patches(self.conn)["items"]
+        self.assertEqual([e["kind"] for e in exported], ["unbarrier"])
+        import osm_queue
+        decisions = osm_queue.sweep(self.conn, roads=[])
+        self.assertEqual([d["edit"]["kind"] for d in decisions], ["lanes"])
+
+    def test_answer_move_and_undo(self):
+        card = {"key": "j1", "at": [41.3, 69.25], "streets": ["А", "Б"]}
+        move = {"key": "1,2,3", "kind": "left", "path": [1, 2, 3], "pts": [[41.3, 69.24], [41.3, 69.25], [41.31, 69.25]],
+                "from_bearing": 90, "to_bearing": 0}
+        edit_id = map_edits.answer_move(self.conn, card, move, "banned", "imagery", "", "модератор")
+        edit = map_edits.by_id(self.conn, edit_id)
+        self.assertEqual((edit["kind"], edit["status"]), ("turn_ban", map_edits.ACCEPTED))
+        self.assertEqual(edit["props"]["path_at"][0], [41.3, 69.24])
+        self.assertIn("налево нельзя", edit["note"])
+        with self.assertRaises(ValueError):
+            map_edits.answer_move(self.conn, card, move, "maybe")
+        self.assertTrue(map_edits.undo_move(self.conn, "1,2,3"))
+        self.assertEqual(map_edits.by_id(self.conn, edit_id)["status"], map_edits.WITHDRAWN)
+        self.assertFalse(map_edits.undo_move(self.conn, "1,2,3"))
+
+
 class StorageTests(unittest.TestCase):
 
     def setUp(self):

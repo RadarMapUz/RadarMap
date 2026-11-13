@@ -87,6 +87,20 @@ CREATE TABLE IF NOT EXISTS map_edit_history(
     at       REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_history_edit ON map_edit_history(edit_id, version);
+
+-- Ответы на «можно ли отсюда налево/разворот?» экрана «Перекрёстки без
+-- запретов» (91). Ключ — путь узлов OSM манёвра: так ответ узнаётся и в
+-- пересчитанном списке карточек. «Нельзя» заводит правку turn_ban.
+CREATE TABLE IF NOT EXISTS route_checks(
+    move      TEXT PRIMARY KEY,
+    junction  TEXT NOT NULL,
+    answer    TEXT NOT NULL,
+    edit_id   INTEGER,
+    evidence  TEXT DEFAULT '',
+    note      TEXT DEFAULT '',
+    author    TEXT DEFAULT '',
+    at        REAL NOT NULL
+);
 """
 
 # Виды правок. Список закрытый: неизвестный вид не попадает ни в таблицу, ни в
@@ -95,13 +109,29 @@ CREATE INDEX IF NOT EXISTS idx_history_edit ON map_edit_history(edit_id, version
 KINDS = {"lanes", "turn_lanes", "u_turn", "geometry", "point", "remove",
          "lock", "name", "area"}
 
+# Правки маршрута (91). Едут не в тайлы, а в граф OSRM: сборка на маке
+# забирает их чтением (admin.py --export-route-patches) и накладывает на
+# выгрузку OSM (server/osrm/route_patches.py). Узлов OSM у панели нет —
+# правка задаётся местом и азимутами, опору в OSM ищет сборка.
+ROUTE_KINDS = {"turn_ban", "no_entry", "oneway", "unbarrier"}
+KINDS |= ROUTE_KINDS
+
 # Названия видов для человека. Код — контракт с сервером и с запеканием, а на
 # экране нужно слово: «lanes» в строке очереди читается как недоделка.
 KIND_NAMES = {"lanes": "Полосы", "turn_lanes": "Направления полос",
               "u_turn": "Разворот", "geometry": "Своя геометрия",
               "point": "Обстановка", "remove": "Убрана дорога",
               "lock": "Размеченная область", "name": "Название",
-              "area": "Местность"}
+              "area": "Местность", "turn_ban": "Запрет поворота",
+              "no_entry": "Кирпич", "oneway": "Одностороннее",
+              "unbarrier": "Убран барьер"}
+
+ROUTE_RESTRICTIONS = {"no_left_turn": "налево нельзя", "no_right_turn": "направо нельзя",
+                      "no_straight_on": "прямо нельзя", "no_u_turn": "разворот нельзя"}
+# Чем проверено. Яндекс годится для нашего графа, но не для OSM: такая правка
+# в файл для OSM не попадёт (правила OSM о источниках).
+EVIDENCE = {"survey": "был на месте", "dashcam": "регистратор", "imagery": "снимок Bing/Esri",
+            "mapillary": "Mapillary", "yandex": "панорама Яндекса"}
 
 # Виды местности — те же коды, что у слоёв из OSM: вода, зелень, рельсы,
 # квартал. Панель заводит объект ТОГО ЖЕ вида, а не параллельный, поэтому он
@@ -623,11 +653,116 @@ def export_accepted(conn):
 
     Снимок, а не приращение: сборка накладывает состояние целиком, и «отменить»
     значит собрать тайлы без этой строки. Тот же приём, что у overrides камер.
+    Правки маршрута сюда не входят: тайлам до них дела нет, а сверка по
+    тайлам (osm_queue) двигала бы их по чужой геометрии.
     """
     rows = conn.execute(
         "SELECT * FROM map_edits WHERE status IN (?, ?) ORDER BY id",
         (ACCEPTED, PUBLISHED)).fetchall()
-    return [row_to_dict(row) for row in rows]
+    return [row_to_dict(row) for row in rows if row["kind"] not in ROUTE_KINDS]
+
+
+def export_route_patches(conn):
+    """Снимок правок маршрута для сборки графа — тоже снимок, а не приращение:
+    снятая правка просто не попадает в следующий граф."""
+    marks = ",".join("?" * len(ROUTE_KINDS))
+    rows = conn.execute(
+        f"SELECT * FROM map_edits WHERE status IN (?, ?) AND kind IN ({marks}) ORDER BY id",
+        (ACCEPTED, PUBLISHED, *sorted(ROUTE_KINDS))).fetchall()
+    return {"version": 1, "updatedAt": time.strftime("%Y-%m-%d"),
+            "items": [row_to_dict(row) for row in rows]}
+
+
+def _bearing_value(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value <= 360
+
+
+def route_props_problem(kind, props):
+    """Что не так со свойствами правки маршрута; None — всё в порядке.
+
+    Проверяет сервер, а не только форма: правка уходит в граф маршрутов, и
+    запрет без азимута стал бы на сборке очередью «проверить» без объяснения,
+    откуда она взялась."""
+    if kind not in ROUTE_KINDS:
+        return None
+    if not isinstance(props, dict):
+        return "нужны свойства правки"
+    evidence = props.get("evidence")
+    if evidence not in (None, "") and evidence not in EVIDENCE:
+        return "неизвестный способ проверки"
+    if kind == "turn_ban":
+        if props.get("restriction") not in ROUTE_RESTRICTIONS:
+            return "какой поворот запрещён: налево, направо, прямо или разворот"
+        if not (_bearing_value(props.get("from_bearing")) and _bearing_value(props.get("to_bearing"))):
+            return "нужны азимуты подхода и выезда"
+        path = props.get("path")
+        if path is not None:
+            at = props.get("path_at")
+            if not (isinstance(path, list) and len(path) >= 3
+                    and all(isinstance(n, int) and n > 0 for n in path)):
+                return "путь узлов OSM: не меньше трёх id"
+            if not (isinstance(at, list) and len(at) == len(path)
+                    and all(isinstance(p, list) and len(p) == 2 for p in at)):
+                return "у каждого узла пути — координата"
+    if kind in ("no_entry", "oneway") and not _bearing_value(props.get("bearing")):
+        return "нужно направление (азимут)"
+    return None
+
+
+def route_checks(conn):
+    """Ответы экрана «Перекрёстки без запретов»: путь манёвра → ответ."""
+    return {row["move"]: dict(row) for row in conn.execute("SELECT * FROM route_checks")}
+
+
+def answer_move(conn, card, move, answer, evidence="", note="", author=""):
+    """Ответ модератора на манёвр карточки → id правки (для «нельзя») или None.
+
+    «Нельзя» заводит принятую правку turn_ban с путём узлов OSM из карточки —
+    сборка сверит его со свежей выгрузкой. «Можно» только помечает манёвр
+    проверенным; прежний запрет при этом снимается (не удаляется)."""
+    if answer not in ("allowed", "banned"):
+        raise ValueError("ответ — allowed или banned")
+    if evidence and evidence not in EVIDENCE:
+        raise ValueError("неизвестный способ проверки")
+    prior = conn.execute("SELECT * FROM route_checks WHERE move = ?", (move["key"],)).fetchone()
+    if prior and prior["edit_id"]:
+        row = conn.execute("SELECT version, status FROM map_edits WHERE id = ?", (prior["edit_id"],)).fetchone()
+        if row and row["status"] != WITHDRAWN:
+            withdraw(conn, prior["edit_id"], row["version"])
+    edit_id = None
+    if answer == "banned":
+        lat, lon = card["at"]
+        restriction = "no_u_turn" if move["kind"] == "uturn" else "no_left_turn"
+        props = {"restriction": restriction, "from_bearing": move["from_bearing"] % 360,
+                 "to_bearing": move["to_bearing"] % 360, "path": list(move["path"]),
+                 "path_at": [list(p) for p in move["pts"]], "evidence": evidence,
+                 "junction": card["key"]}
+        problem = route_props_problem("turn_ban", props)
+        if problem:
+            raise ValueError(problem)
+        edit_id = create(conn, "turn_ban", raw=[lon, lat], snapped=[lon, lat], props=props,
+                         note=note or f"{' × '.join(card.get('streets', [])[:2])}: {ROUTE_RESTRICTIONS[restriction]}",
+                         author=author, status=ACCEPTED)
+    conn.execute(
+        """INSERT OR REPLACE INTO route_checks(move, junction, answer, edit_id, evidence, note, author, at)
+           VALUES(?,?,?,?,?,?,?,?)""",
+        (move["key"], card["key"], answer, edit_id, evidence or "", note or "", author, time.time()))
+    conn.commit()
+    return edit_id
+
+
+def undo_move(conn, move_key):
+    """Отменить ответ: запрет снимается (история остаётся), манёвр снова ждёт."""
+    prior = conn.execute("SELECT * FROM route_checks WHERE move = ?", (move_key,)).fetchone()
+    if prior is None:
+        return False
+    if prior["edit_id"]:
+        row = conn.execute("SELECT version, status FROM map_edits WHERE id = ?", (prior["edit_id"],)).fetchone()
+        if row and row["status"] != WITHDRAWN:
+            withdraw(conn, prior["edit_id"], row["version"])
+    conn.execute("DELETE FROM route_checks WHERE move = ?", (move_key,))
+    conn.commit()
+    return True
 
 
 # --------------------------------------------------------------------------

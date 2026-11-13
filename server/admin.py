@@ -34,6 +34,7 @@ Stdlib-only (sqlite3 + http.server), слушает 127.0.0.1:8093. Вход п�
 Запуск:
     python3 admin.py                      # сервер на 127.0.0.1:8092
     python3 admin.py --export             # JSON действующих правок (для публикации)
+    python3 admin.py --export-route-patches  # правки маршрута для сборки графа (база только чтением)
     python3 admin.py --mark-published 12  # пометить правки опубликованными в версии 12
     python3 admin.py --set-password       # задать пароль входа (спросит дважды)
     python3 admin.py --add-person <имя>   # завести человека (пароль спросит)
@@ -908,6 +909,24 @@ fill="#ffb02022" stroke="#ffb020" stroke-width="2"
 stroke-dasharray="4 3"/></svg>"""
 
 
+# Правки маршрута (91): что нельзя или можно проехать. Рисунки — знаки ПДД в
+# упрощении: перечёркнутая стрелка, кирпич, стрелка одностороннего, барьер.
+ROUTE_ICONS = {
+    "turn_ban": """<svg viewBox="0 0 48 28"><circle cx="24" cy="14" r="11" fill="#fff"
+stroke="#e5484d" stroke-width="3"/><path d="M27 20v-6h-7m3-3l-3 3 3 3" fill="none"
+stroke="#0b0e13" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M16 6l16 16" stroke="#e5484d" stroke-width="3"/></svg>""",
+    "no_entry": """<svg viewBox="0 0 48 28"><circle cx="24" cy="14" r="11" fill="#e5484d"/>
+<rect x="16" y="12" width="16" height="4" fill="#fff"/></svg>""",
+    "oneway": """<svg viewBox="0 0 48 28"><rect x="10" y="7" width="28" height="14" rx="2"
+fill="#1f6feb"/><path d="M14 14h16m-4-4l4 4-4 4" fill="none" stroke="#fff"
+stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>""",
+    "unbarrier": """<svg viewBox="0 0 48 28"><rect x="8" y="11" width="32" height="6" rx="1"
+fill="#ffb020" stroke="#0b0e13" stroke-width="1"/><path d="M12 6l24 16" stroke="#38e58c"
+stroke-width="3" stroke-linecap="round"/></svg>""",
+}
+
+
 SELECT_ICON = """<svg viewBox="0 0 48 28"><path d="M20 5l11 16h-6l-2 5z"
 fill="#cfd6e3" stroke="#0b0e13" stroke-width="1.2"
 stroke-linejoin="round"/></svg>"""
@@ -1246,6 +1265,17 @@ font-size:12px;cursor:pointer;line-height:1.35}}
       {tool_button(AREA_ICONS[4], "Квартал", "", 'data-kind="area" data-area="4"')}
       {tool_button(AREA_ICONS[9], "Островок", "I", 'data-kind="area" data-area="9"')}
     </div>
+  </details>
+  <details class="work" id="routebox">
+    <summary>Маршрут: что нельзя</summary>
+    <div class="toolrow draw">
+      {tool_button(ROUTE_ICONS["turn_ban"], "Запрет поворота", "", 'data-kind="turn_ban"')}
+      {tool_button(ROUTE_ICONS["no_entry"], "Кирпич", "", 'data-kind="no_entry"')}
+      {tool_button(ROUTE_ICONS["oneway"], "Одностороннее", "", 'data-kind="oneway"')}
+      {tool_button(ROUTE_ICONS["unbarrier"], "Убрать барьер", "", 'data-kind="unbarrier"')}
+    </div>
+    <div class="legend">Идёт в граф маршрутов еженедельной сборкой, не в тайлы.
+      Опору в OSM ищет сборка; не нашла однозначно — правка ждёт проверки.</div>
   </details>
   <details class="work" id="areabox">
     <summary>Отметить своё</summary>
@@ -1703,6 +1733,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, status_page())
             if path == "/junctions":
                 return self._send(200, junctions_page())
+            if path == "/junctions/turns":
+                query = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()}
+                return self._send(200, junction_turns_page(conn, query))
             if path == "/map":
                 return self.moderation_map(conn)
             if path == "/candidates":
@@ -1827,6 +1860,9 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/turns/act":
                 turn_action(conn, field, self.who())
                 return self._redirect(u("/turns"))
+            if path == "/junctions/turns/act":
+                junction_turn_action(conn, field, self.who())
+                return self._redirect(u("/junctions/turns"))
             if path == "/mobile/act":
                 self.mobile_action(conn, field)
                 return self._redirect(u("/mobile"))
@@ -2697,6 +2733,9 @@ class Handler(BaseHTTPRequestHandler):
         geom, raw_point = field.get("geom"), field.get("raw")
         if not (isinstance(geom, list) and isinstance(raw_point, list)):
             return self._json({"error": "нужна геометрия"}, 400)
+        problem = map_edits.route_props_problem(kind, field.get("props") or {})
+        if problem:
+            return self._json({"error": problem}, 400)
 
         edit_id, version = field.get("id"), field.get("version")
         if edit_id is None:
@@ -3799,8 +3838,10 @@ def worklist_progress(first, current):
 def junctions_page():
     rows = _load_worklist(WORKLIST_PATH)
     if rows is None:
-        return page("/junctions", "Перекрёстки", """
-<h1>Перекрёстки</h1><div class="card muted">Очередь ещё не посчитана: её строит
+        return page("/junctions", "Перекрёстки", f"""
+<h1>Перекрёстки</h1><div class="card"><a href="{esc(u("/junctions/turns"))}">Перекрёстки без
+запретов поворотов</a> — можно ли там налево и на разворот.</div>
+<div class="card muted">Очередь ещё не посчитана: её строит
 воскресная сборка (<code>update_roads.sh</code> → <code>junction_worklist.py</code>).</div>""")
     done, total = worklist_progress(_load_worklist(WORKLIST_FIRST_PATH), rows)
 
@@ -3818,6 +3859,8 @@ def junctions_page():
         for i, row in enumerate(rows[:100], 1))
     return page("/junctions", "Перекрёстки", f"""
 <h1>Перекрёстки: что дорисовать</h1>
+<div class="card"><a href="{esc(u("/junctions/turns"))}">Перекрёстки без запретов поворотов</a>
+— можно ли там налево и на разворот: ответ уходит в граф маршрутов.</div>
 <div class="card"><div class="row">
   <span class="tag">в очереди: {len(rows)}</span>
   <span class="tag {'ok' if done else ''}">из первой очереди готово: {done} из {total}</span>
@@ -3826,6 +3869,188 @@ def junctions_page():
 переходы, островки. Google и Яндекс как источник нельзя. Что не ложится в OSM —
 в конструкторе. Правка доезжает до карты воскресной сборкой.</div></div>
 {body}""")
+
+
+# --- Перекрёстки без запретов (91) ------------------------------------------
+#
+# Аудит 88: у 325 из 415 крупных перекрёстков Ташкента в OSM нет ни одного
+# запрета поворота, а наши маршруты ведут там налево. Карточки строит
+# route_patches.py cards на маке (выгрузка + маршруты аудита), сюда файл
+# привозит владелец. «Нельзя» — правка turn_ban в map_edits: еженедельная
+# сборка графа забирает её чтением и ставит relation в граф. «Можно» — манёвр
+# проверен. Сами в OSM ничего не пишем.
+JUNCTION_TURNS_PATH = os.environ.get(
+    "RADARMAP_JUNCTION_TURNS",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "review", "junction_turns.json"))
+JUNCTION_PAGE = 20
+MOVE_WORDS = {"left": "налево", "uturn": "разворот"}
+# Откуда едут — по азимуту движения: едут на север — значит с юга.
+COMPASS_FROM = ("с юга", "с юго-запада", "с запада", "с северо-запада",
+                "с севера", "с северо-востока", "с востока", "с юго-востока")
+
+
+def load_junction_cards(path=None):
+    try:
+        with open(path or JUNCTION_TURNS_PATH, encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    cards = payload.get("cards") if isinstance(payload, dict) else None
+    return payload if isinstance(cards, list) else None
+
+
+def _ray(bearing, length):
+    rad = math.radians(bearing)
+    return round(math.sin(rad) * length, 1), round(-math.cos(rad) * length, 1)
+
+
+def junction_svg(card, move):
+    """Схема манёвра без карты: серые — ветви перекрёстка, синий — откуда
+    едем, красный пунктир — куда спрашиваем. Север сверху."""
+    parts = []
+    for arm in card.get("arms") or []:
+        x, y = _ray(arm, 40)
+        parts.append(f'<line x1="0" y1="0" x2="{x}" y2="{y}" stroke="#3a4558" stroke-width="7" '
+                     f'stroke-linecap="round"/>')
+    fx, fy = _ray((move["from_bearing"] + 180) % 360, 40)
+    parts.append(f'<line x1="{fx}" y1="{fy}" x2="0" y2="0" stroke="#4aa8ff" stroke-width="5" '
+                 f'stroke-linecap="round"/>')
+    tx, ty = _ray(move["to_bearing"], 40)
+    parts.append(f'<line x1="0" y1="0" x2="{tx}" y2="{ty}" stroke="#ff4560" stroke-width="4" '
+                 f'stroke-dasharray="6 5" stroke-linecap="round"/>')
+    parts.append('<circle cx="0" cy="0" r="4" fill="#e8ecf3"/>')
+    return (f'<svg viewBox="-48 -48 96 96" width="76" height="76" role="img" aria-label="схема манёвра" '
+            f'style="float:left;margin:0 10px 4px 0">{"".join(parts)}</svg>')
+
+
+def yandex_links(lat, lon, heading):
+    """Внешние ссылки: спутник и панорама Яндекса. Для НАШЕГО графа — можно;
+    для правки OSM Яндекс как источник нельзя."""
+    sat = f"https://yandex.ru/maps/?ll={lon}%2C{lat}&z=19&l=sat"
+    pano = (f"https://yandex.ru/maps/?ll={lon}%2C{lat}&z=18&l=stv%2Csta"
+            f"&panorama%5Bpoint%5D={lon}%2C{lat}&panorama%5Bdirection%5D={int(heading) % 360}%2C0")
+    return (f'<a class="map" target="_blank" rel="noopener" href="{esc(sat)}">спутник Яндекса</a> · '
+            f'<a class="map" target="_blank" rel="noopener" href="{esc(pano)}">панорама</a>')
+
+
+def _move_form(card, move, answered):
+    act = esc(u("/junctions/turns/act"))
+    hidden = (f'<input type="hidden" name="junction" value="{esc(card["key"])}">'
+              f'<input type="hidden" name="move" value="{esc(move["key"])}">')
+    if answered:
+        return (f'<form method="post" action="{act}" class="inline">{hidden}'
+                f'<button name="answer" value="undo" class="ghost">Отменить ответ</button></form>')
+    options = "".join(f'<option value="{esc(k)}">{esc(v)}</option>' for k, v in map_edits.EVIDENCE.items())
+    return (f'<form method="post" action="{act}">{hidden}'
+            f'<select name="evidence" aria-label="чем проверено">{options}</select> '
+            f'<input type="text" name="note" placeholder="заметка" maxlength="200"> '
+            f'<button name="answer" value="allowed">Можно</button>'
+            f'<button name="answer" value="banned" class="danger">Нельзя</button></form>')
+
+
+def junction_turns_page(conn, query=None):
+    query = query or {}
+    payload = load_junction_cards()
+    head = ('<h1>Перекрёстки без запретов</h1><div class="card">У большинства крупных '
+            'перекрёстков Ташкента в OSM нет ни одного запрета поворота, и маршрут ведёт налево '
+            'там, где на деле может стоять знак. Проверьте по спутнику и панораме: можно ли с этого '
+            'подхода налево или на разворот. <b>Нельзя</b> — запрет в графе маршрутов со следующей '
+            'еженедельной сборки (это наша правка, в OSM ничего не уходит). <b>Можно</b> — манёвр '
+            'проверен. Сверху — где наши маршруты поворачивают налево.</div>')
+    if payload is None:
+        return page("/junctions", "Перекрёстки без запретов", head +
+                    '<div class="empty">Карточек нет: файл review/junction_turns.json строится на маке '
+                    '(route_patches.py cards) и привозится на сервер владельцем.</div>')
+    map_edits.ensure_tables(conn)
+    answers = map_edits.route_checks(conn)
+    cards = payload["cards"]
+
+    def open_moves(card):
+        return [m for m in card["moves"] if m["key"] not in answers]
+    show_all = query.get("all") == "1"
+    pending = [c for c in cards if open_moves(c)]
+    shown = cards if show_all else pending
+    try:
+        start = max(0, int(query.get("from") or 0))
+    except ValueError:
+        start = 0
+    done_moves = sum(1 for c in cards for m in c["moves"] if m["key"] in answers)
+    total_moves = sum(len(c["moves"]) for c in cards)
+    banned = sum(1 for a in answers.values() if a["answer"] == "banned")
+    summary = (f'<div class="card"><div class="row"><span class="tag">перекрёстков: {len(cards)}</span>'
+               f'<span class="tag">ждут ответа: {len(pending)}</span>'
+               f'<span class="tag {"ok" if done_moves else ""}">манёвров проверено: {done_moves} из {total_moves}</span>'
+               f'<span class="tag {"bad" if banned else ""}">запретов: {banned}</span></div>'
+               f'<div class="muted">Карточки от {esc(payload.get("built", "?"))} '
+               f'{esc(payload.get("source", ""))}. '
+               f'<a href="{esc(u("/junctions/turns?all=1" if not show_all else "/junctions/turns"))}">'
+               f'{"только ждущие" if show_all else "показать и проверенные"}</a></div></div>')
+    blocks = []
+    for card in shown[start:start + JUNCTION_PAGE]:
+        lat, lon = card["at"]
+        tags = []
+        if card.get("route_lefts"):
+            tags.append(f'<span class="tag warn">наши маршруты здесь налево: {card["route_lefts"]}</span>')
+        if card.get("signal"):
+            tags.append('<span class="tag">светофор</span>')
+        if card.get("divided"):
+            tags.append('<span class="tag">разделительная</span>')
+        rows = []
+        for move in card["moves"]:
+            answer = answers.get(move["key"])
+            side = COMPASS_FROM[int((move["from_bearing"] % 360 + 22.5) // 45) % 8]
+            target = f' на «{esc(move["to_street"])}»' if move.get("to_street") and move["kind"] == "left" else ""
+            what = (f'{esc(side)}{" по «" + esc(move["from_street"]) + "»" if move.get("from_street") else ""} — '
+                    f'<b>{MOVE_WORDS.get(move["kind"], move["kind"])}</b>{target}')
+            routes = f' <span class="tag warn">в маршрутах: {move["routes"]}</span>' if move.get("routes") else ""
+            state = ""
+            if answer:
+                word = "нельзя — запрет в графе" if answer["answer"] == "banned" else "можно"
+                cls = "bad" if answer["answer"] == "banned" else "ok"
+                state = (f' <span class="tag {cls}">{word}</span> <span class="muted">'
+                         f'{esc(map_edits.EVIDENCE.get(answer["evidence"], ""))} · {esc(answer["author"] or "")} · '
+                         f'{esc(ago(answer["at"]))}</span>')
+            via = move["pts"][1] if len(move.get("pts") or []) > 1 else card["at"]
+            rows.append(f'<div class="chg">{junction_svg(card, move)}<div style="flex:1 1 260px">'
+                        f'<div>{what}{routes}{state}</div>'
+                        f'<div class="muted">{yandex_links(via[0], via[1], move["from_bearing"])}</div>'
+                        f'{_move_form(card, move, bool(answer))}</div></div>')
+        blocks.append(f'<div class="card"><div class="row"><b>{card.get("rank", "")}. '
+                      f'{esc(" × ".join(card.get("streets", [])[:3]) or "без названий")}</b>{"".join(tags)}'
+                      f'{osm_link(lat, lon, "OSM")}</div>{"".join(rows)}</div>')
+    more = ""
+    if start + JUNCTION_PAGE < len(shown):
+        nxt = u(f"/junctions/turns?from={start + JUNCTION_PAGE}" + ("&all=1" if show_all else ""))
+        more = f'<div class="card"><a href="{esc(nxt)}">Дальше — ещё {len(shown) - start - JUNCTION_PAGE}</a></div>'
+    body = "".join(blocks) or '<div class="empty">Все манёвры проверены</div>'
+    return page("/junctions", "Перекрёстки без запретов", head + summary + body + more)
+
+
+def junction_turn_action(conn, field, who=""):
+    """Ответ на манёвр. Только для манёвра из файла карточек: путь узлов из
+    формы в граф не идёт — правка берёт путь и координаты из карточки."""
+    payload = load_junction_cards()
+    if payload is None:
+        return "карточек нет"
+    card = next((c for c in payload["cards"] if c.get("key") == field("junction")), None)
+    move = next((m for m in (card or {}).get("moves", []) if m.get("key") == field("move")), None)
+    if move is None:
+        return "манёвра нет в карточках"
+    map_edits.ensure_tables(conn)
+    answer = field("answer")
+    detail = f"{card['key']} {move['kind']} {move['key']}"
+    if answer == "undo":
+        map_edits.undo_move(conn, move["key"])
+        log_action(conn, None, "junction_undo", detail, who=who)
+        conn.commit()
+        return None
+    try:
+        edit_id = map_edits.answer_move(conn, card, move, answer, field("evidence"), field("note")[:200], who)
+    except ValueError as error:
+        return str(error)
+    log_action(conn, None, f"junction_{answer}", detail + (f" → правка #{edit_id}" if edit_id else ""), who=who)
+    conn.commit()
+    return None
 
 
 STATUS_JSON = os.environ.get("RADARMAP_STATUS", "/opt/radarmap/api/status.json")
@@ -3909,7 +4134,24 @@ def status_page(now=None):
     return page("/status", "Пульт", head + "".join(rows))
 
 
+def export_route_patches_readonly(path=None):
+    """Правки маршрута для сборки графа на маке. База открывается ТОЛЬКО
+    чтением (mode=ro) и до init_db: сборка забирает правки по ssh и ничего не
+    пишет на сервер. Таблицы ещё нет — правок нет."""
+    conn = sqlite3.connect(f"file:{path or DB_PATH}?mode=ro", uri=True, timeout=5)
+    conn.row_factory = sqlite3.Row
+    try:
+        return map_edits.export_route_patches(conn)
+    except sqlite3.OperationalError:
+        return {"version": 1, "updatedAt": time.strftime("%Y-%m-%d"), "items": []}
+    finally:
+        conn.close()
+
+
 def main():
+    if "--export-route-patches" in sys.argv:
+        print(json.dumps(export_route_patches_readonly(), ensure_ascii=False, separators=(",", ":")))
+        return
     init_db()
     ensure_api_tables()
     if "--export" in sys.argv:

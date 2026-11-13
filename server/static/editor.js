@@ -32,7 +32,9 @@
                   u_turn: 'Разворот', geometry: 'Своя геометрия',
                   point: 'Обстановка', remove: 'Убрана дорога',
                   lock: 'Размеченная область', name: 'Название',
-                  area: 'Местность' };
+                  area: 'Местность', turn_ban: 'Запрет поворота',
+                  no_entry: 'Кирпич', oneway: 'Одностороннее',
+                  unbarrier: 'Убран барьер' };
   // Классы дорог — те же, что у OSM: от них зависит и ширина полотна, и то,
   // как дорогу нарисует телефон.
   const CLASSES = [
@@ -627,6 +629,185 @@
     });
     label.appendChild(input);
     return { label: label, input: input };
+  }
+
+  // --- Правки маршрута (91) ---------------------------------------------
+  //
+  // Едут не в тайлы, а в граф маршрутов: еженедельная сборка на маке ищет
+  // опору в OSM по месту и азимутам. Узлов OSM у панели нет, поэтому карточка
+  // спрашивает ровно то, по чему сборка найдёт опору, — откуда и куда.
+  const ROUTE = { turn_ban: true, no_entry: true, oneway: true, unbarrier: true };
+  const RESTRICTIONS = [['no_left_turn', 'налево нельзя'], ['no_right_turn', 'направо нельзя'],
+                        ['no_straight_on', 'прямо нельзя'], ['no_u_turn', 'разворот нельзя']];
+  const EVIDENCE = [['survey', 'был на месте'], ['dashcam', 'регистратор'],
+                    ['imagery', 'снимок Bing/Esri'], ['mapillary', 'Mapillary'],
+                    ['yandex', 'панорама Яндекса']];
+  const COMPASS = ['север', 'северо-восток', 'восток', 'юго-восток', 'юг', 'юго-запад',
+                   'запад', 'северо-запад'];
+  const ARM_METERS = 30;
+
+  function compass(degrees) {
+    return COMPASS[Math.round((((degrees % 360) + 360) % 360) / 45) % 8];
+  }
+
+  function bearingOf(a, b) {
+    const k = Math.cos(a[1] * Math.PI / 180);
+    const deg = Math.atan2((b[0] - a[0]) * k, b[1] - a[1]) * 180 / Math.PI;
+    return (deg + 360) % 360;
+  }
+
+  // Ветви перекрёстка: где дороги из кадра выходят из круга в 30 м.
+  function armsAt(center) {
+    const found = [];
+    roadsInFrame.forEach(function (road) {
+      const pts = road.points || [];
+      for (let i = 1; i < pts.length; i += 1) {
+        const a = metersApart(center, pts[i - 1]), b = metersApart(center, pts[i]);
+        if ((a <= ARM_METERS) === (b <= ARM_METERS)) { continue; }
+        const outer = a > b ? pts[i - 1] : pts[i];
+        const deg = bearingOf(center, outer);
+        if (!found.some(function (x) { return Math.abs(((x - deg + 540) % 360) - 180) < 20; })) {
+          found.push(deg);
+        }
+      }
+    });
+    return found.sort(function (x, y) { return x - y; });
+  }
+
+  function turnKind(fromArm, toArm) {
+    const angle = ((toArm - (fromArm + 180) + 540) % 360) - 180;
+    if (Math.abs(angle) >= 150) { return 'no_u_turn'; }
+    if (angle <= -30) { return 'no_left_turn'; }
+    if (angle >= 30) { return 'no_right_turn'; }
+    return 'no_straight_on';
+  }
+
+  function picker(caption, options, value) {
+    const label = node('label', caption);
+    const pick = document.createElement('select');
+    options.forEach(function (o) {
+      const option = document.createElement('option');
+      option.value = String(o[0]);
+      option.textContent = o[1];
+      pick.appendChild(option);
+    });
+    if (value !== undefined && value !== null) { pick.value = String(value); }
+    label.appendChild(pick);
+    return { label: label, input: pick };
+  }
+
+  function placeRoute(coords) {
+    const point = [coords[1], coords[0]];
+    current = { kind: kind, geom: point, raw: point, props: {}, note: '' };
+    if (kind === 'turn_ban') {
+      const arms = armsAt(point);
+      if (arms.length < 3) {
+        hint('Щёлкните в центр перекрёстка: здесь видно меньше трёх ветвей.');
+        current = null;
+        return;
+      }
+      current.arms = arms;
+      showRouteCard();
+      return;
+    }
+    if (kind === 'unbarrier') { showRouteCard(); return; }
+    post('/api/snap', { lat: coords[0], lon: coords[1], touch: coarse }).then(function (snap) {
+      if (!snap.onRoad || !snap.anchor) {
+        hint('Вне дороги или две дороги рядом — щёлкните точнее по нужной улице.');
+        current = null;
+        return;
+      }
+      current.geom = snap.point;
+      current.anchor = snap.anchor;
+      current.props = { bearing: snap.anchor.bearing };
+      showRouteCard();
+    });
+  }
+
+  function showRouteCard() {
+    els.card.hidden = false;
+    els.card.innerHTML = '';
+    const props = current.props || {};
+    els.card.appendChild(node('h3', NAMES[current.kind] || current.kind));
+    els.card.appendChild(node('div', 'В граф маршрутов, не в тайлы. Опору в OSM найдёт '
+      + 'еженедельная сборка; неоднозначно — правка подождёт проверки.', 'muted'));
+    let fields = {};
+    if (current.kind === 'turn_ban') {
+      const arms = current.arms || [];
+      const armOptions = arms.map(function (b) { return [Math.round(b), compass(b) + ' (' + Math.round(b) + '°)']; });
+      const fromArm = props.from_bearing !== undefined ? Math.round((props.from_bearing + 180) % 360) : null;
+      const fromInput = picker('Откуда едут (ветвь подхода)',
+        armOptions.length ? armOptions : [[fromArm, compass(fromArm)]], fromArm);
+      const toInput = picker('Куда нельзя (ветвь выезда)',
+        armOptions.length ? armOptions : [[props.to_bearing, compass(props.to_bearing)]], props.to_bearing);
+      const kindInput = picker('Запрет', RESTRICTIONS, props.restriction || 'no_left_turn');
+      function guess() { kindInput.input.value = turnKind(Number(fromInput.input.value), Number(toInput.input.value)); }
+      fromInput.input.addEventListener('change', guess);
+      toInput.input.addEventListener('change', guess);
+      [fromInput, toInput, kindInput].forEach(function (f) { els.card.appendChild(f.label); });
+      if (!current.id && arms.length > 1) { toInput.input.value = String(Math.round(arms[1])); guess(); }
+      fields = { from: fromInput, to: toInput, restriction: kindInput };
+    } else if (current.kind === 'no_entry' || current.kind === 'oneway') {
+      const b = Math.round(props.bearing || 0);
+      const back = (b + 180) % 360;
+      const caption = current.kind === 'no_entry' ? 'Въезд запрещён в сторону' : 'Едут только в сторону';
+      fields.bearing = picker(caption, [[b, compass(b) + ' (' + b + '°)'], [back, compass(back) + ' (' + back + '°)']], b);
+      els.card.appendChild(fields.bearing.label);
+      els.card.appendChild(node('div', current.kind === 'no_entry'
+        ? 'Квартал от перекрёстка у знака до следующего станет односторонним — выезд остаётся.'
+        : 'Квартал улицы до ближайших перекрёстков станет односторонним.', 'muted'));
+    } else {
+      els.card.appendChild(node('div', 'Ближайший барьер (до 15 м), который перекрывает проезд, '
+        + 'будет снят в графе: бордюр на оси, «barrier=yes» посреди улицы.', 'muted'));
+    }
+    const evidence = picker('Чем проверено', EVIDENCE, props.evidence || 'survey');
+    els.card.appendChild(evidence.label);
+    els.card.appendChild(node('div', 'По Яндексу — только в наш граф: в OSM такую правку не отдают.', 'muted'));
+    const noteInput = field('Почему', 'text', current.note || '');
+    els.card.appendChild(noteInput.label);
+    const save = node('button', current.id ? 'Сохранить' : 'Принять');
+    save.addEventListener('click', function () {
+      const out = { evidence: evidence.input.value };
+      if (fields.from) {
+        const fromArm = Number(fields.from.input.value), toArm = Number(fields.to.input.value);
+        if (fromArm === toArm && fields.restriction.input.value !== 'no_u_turn') {
+          hint('Подход и выезд — одна ветвь: это разворот.');
+          return;
+        }
+        out.from_bearing = (fromArm + 180) % 360;
+        out.to_bearing = toArm;
+        out.restriction = fields.restriction.input.value;
+      }
+      if (fields.bearing) { out.bearing = Number(fields.bearing.input.value); }
+      commitRoute(out, noteInput.input.value);
+    });
+    els.card.appendChild(save);
+    if (current.id) {
+      const drop = node('button', 'Снять', 'ghost');
+      drop.addEventListener('click', withdrawCurrent);
+      els.card.appendChild(drop);
+    }
+    const cancel = node('button', 'Отмена', 'ghost');
+    cancel.addEventListener('click', closeCard);
+    els.card.appendChild(cancel);
+  }
+
+  function commitRoute(props, note) {
+    const kept = current.props || {};
+    if (kept.path) { props.path = kept.path; props.path_at = kept.path_at; props.junction = kept.junction; }
+    const payload = { kind: current.kind, geom: current.geom, raw: current.raw,
+                      anchor: current.anchor || null, props: props, note: note || '',
+                      status: ACCEPTED };
+    if (current.id) { payload.id = current.id; payload.version = current.version; }
+    post('/api/edit', payload).then(function (result) {
+      if (result.error) { hint(result.error); return; }
+      closeCard();
+      hint('Принято. В граф маршрутов — со следующей еженедельной сборкой.');
+      offerUndo(NAMES[payload.kind], function () {
+        return post('/api/edit/withdraw', { id: result.id, version: result.version });
+      });
+      reloadEdits();
+    });
   }
 
   // --- Сохранение ---------------------------------------------------------
@@ -2619,6 +2800,12 @@
       fingerprint: edit.fingerprint, props: edit.props || {},
       note: edit.note || '',
     };
+    if (ROUTE[edit.kind]) {
+      if (edit.kind === 'turn_ban') { current.arms = armsAt(edit.raw); }
+      showRouteCard();
+      hint('Правка #' + id + '. Delete — снять, Esc — закрыть.');
+      return;
+    }
     showCard(edit.anchor);
     attachDragger();
     hint('Правка #' + id + '. Delete — снять, Esc — закрыть.');
@@ -3384,7 +3571,7 @@
     // На телефоне свёрнуто ВСЁ, кроме текущего инструмента: развёрнутые
     // списки занимают экран целиком и закрывают карту — то есть ровно то,
     // ради чего панель открыли. На столе места хватает, и прятать нечего.
-    ['work', 'drawbox', 'pointbox', 'areabox', 'landbox'].forEach(function (id) {
+    ['work', 'drawbox', 'pointbox', 'areabox', 'landbox', 'routebox'].forEach(function (id) {
       const box = document.getElementById(id);
       if (box) { box.open = !coarse; }
     });
@@ -3434,6 +3621,7 @@
       // каждой значило бы платить щелчком за каждую следующую.
       if (markingArea) { markArea(e.get('coords')); return; }
       if (pointCode) { placePoint(e.get('coords'), pointCode); return; }
+      if (ROUTE[kind]) { placeRoute(e.get('coords')); return; }
       if (current && current.id) { closeCard(); return; }
       place(e.get('coords'), null);
     });
@@ -3555,6 +3743,12 @@
         } else {
           cancelDrawing(true);
           if (pointCode) { hint('Щелчок по дороге — ' + POINTS[pointCode] + '.'); }
+          if (ROUTE[kind]) {
+            hint({ turn_ban: 'Щелчок в центр перекрёстка — откуда и куда нельзя.',
+                   no_entry: 'Щелчок по улице у знака «въезд запрещён».',
+                   oneway: 'Щелчок по кварталу одностороннего движения.',
+                   unbarrier: 'Щелчок у барьера, которого на деле нет.' }[kind]);
+          }
         }
       });
     });

@@ -1808,6 +1808,130 @@ class TrafficDensityTests(unittest.TestCase):
         self.assertEqual(admin.traffic_area(40.6, 68.2), "трасса · Гулистан")
 
 
+class JunctionTurnsTests(AdminTest):
+    """«Перекрёстки без запретов» (91): «нельзя» — правка в граф маршрутов,
+    «можно» — манёвр проверен; в граф идёт путь узлов из карточки, а не из формы."""
+
+    CARD = {"key": "j100", "rank": 1, "at": [41.3224, 69.1931], "streets": ["Бешкайрагач", "Малая кольцевая"],
+            "signal": True, "divided": True, "arms": [0, 90, 180, 270], "route_lefts": 2,
+            "moves": [{"key": "1,2,3", "kind": "left", "path": [1, 2, 3],
+                       "pts": [[41.3220, 69.1931], [41.3224, 69.1931], [41.3224, 69.1925]],
+                       "from_street": "Бешкайрагач", "to_street": "Малая кольцевая",
+                       "from_bearing": 0, "to_bearing": 270, "routes": 2},
+                      {"key": "1,2,4,5", "kind": "uturn", "path": [1, 2, 4, 5],
+                       "pts": [[41.3220, 69.1931], [41.3224, 69.1931], [41.3224, 69.1932],
+                               [41.3220, 69.1932]],
+                       "from_street": "Бешкайрагач", "to_street": "Бешкайрагач",
+                       "from_bearing": 0, "to_bearing": 180, "routes": 0}]}
+
+    def setUp(self):
+        super().setUp()
+        self.saved = admin.JUNCTION_TURNS_PATH
+        self.file = tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w")
+        json.dump({"version": 1, "built": "2026-11-13", "cards": [self.CARD]}, self.file, ensure_ascii=False)
+        self.file.close()
+        admin.JUNCTION_TURNS_PATH = self.file.name
+        conn = admin.db()
+        try:
+            map_edits.ensure_tables(conn)
+            conn.execute("DELETE FROM map_edits")
+            conn.execute("DELETE FROM route_checks")
+            conn.commit()
+        finally:
+            conn.close()
+
+    def tearDown(self):
+        admin.JUNCTION_TURNS_PATH = self.saved
+        os.unlink(self.file.name)
+
+    def act(self, **fields):
+        base = {"junction": "j100", "move": "1,2,3", "evidence": "yandex", "note": ""}
+        base.update(fields)
+        return _post(self.port, "/junctions/turns/act", base)
+
+    def test_page_lists_moves_with_yandex_links(self):
+        code, html = _get(self.port, "/junctions/turns")
+        self.assertEqual(code, 200)
+        self.assertIn("Бешкайрагач × Малая кольцевая", html)
+        self.assertIn("наши маршруты здесь налево: 2", html)
+        self.assertIn("panorama%5Bpoint%5D=69.1931%2C41.3224", html)
+        self.assertIn("с юга по «Бешкайрагач» — <b>налево</b> на «Малая кольцевая»", html)
+        self.assertIn("/junctions/turns", _get(self.port, "/junctions")[1])
+
+    def test_without_cards_the_page_explains(self):
+        admin.JUNCTION_TURNS_PATH = "/nonexistent/junction_turns.json"
+        self.assertIn("Карточек нет", _get(self.port, "/junctions/turns")[1])
+
+    def test_banned_creates_route_patch_with_card_path(self):
+        self.assertEqual(self.act(answer="banned"), 303)
+        items = admin.export_route_patches_readonly()["items"]
+        self.assertEqual(len(items), 1)
+        edit = items[0]
+        self.assertEqual(edit["kind"], "turn_ban")
+        self.assertEqual(edit["props"]["path"], [1, 2, 3])
+        self.assertEqual(edit["props"]["restriction"], "no_left_turn")
+        self.assertEqual(edit["props"]["evidence"], "yandex")
+        self.assertEqual(edit["raw"], [69.1931, 41.3224])
+        # В тайлы правка маршрута не идёт.
+        self.assertEqual(admin.export_edits()["items"], [])
+        self.assertIn("нельзя — запрет в графе", _get(self.port, "/junctions/turns?all=1")[1])
+
+    def test_uturn_and_allowed(self):
+        self.act(move="1,2,4,5", answer="banned")
+        self.act(answer="allowed", evidence="survey")
+        items = admin.export_route_patches_readonly()["items"]
+        self.assertEqual([i["props"]["restriction"] for i in items], ["no_u_turn"])
+        conn = admin.db()
+        try:
+            checks = map_edits.route_checks(conn)
+        finally:
+            conn.close()
+        self.assertEqual(checks["1,2,3"]["answer"], "allowed")
+        self.assertIsNone(checks["1,2,3"]["edit_id"])
+        self.assertIn("Все манёвры проверены", _get(self.port, "/junctions/turns")[1])
+
+    def test_undo_and_rebanning_withdraw_the_old_patch(self):
+        self.act(answer="banned")
+        self.act(answer="allowed")
+        self.assertEqual(admin.export_route_patches_readonly()["items"], [])
+        self.act(answer="banned")
+        self.act(answer="undo")
+        self.assertEqual(admin.export_route_patches_readonly()["items"], [])
+        conn = admin.db()
+        try:
+            self.assertEqual(map_edits.route_checks(conn), {})
+            # История не удаляется: снятые правки на месте.
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM map_edits WHERE status = 3").fetchone()[0], 2)
+        finally:
+            conn.close()
+
+    def test_move_not_in_cards_is_ignored(self):
+        self.act(move="9,9,9", answer="banned")
+        self.act(junction="j999", answer="banned")
+        self.act(answer="banned", evidence="телепатия")
+        self.assertEqual(admin.export_route_patches_readonly()["items"], [])
+
+    def test_editor_route_patch_validation(self):
+        bad = {"kind": "turn_ban", "geom": [69.25, 41.3], "raw": [69.25, 41.3],
+               "props": {"restriction": "no_left_turn"}}
+        self.assertEqual(_post_json(self.port, "/api/edit", bad)[0], 400)
+        good = dict(bad, props={"restriction": "no_left_turn", "from_bearing": 90, "to_bearing": 0,
+                                "evidence": "survey"}, status=1)
+        self.assertEqual(_post_json(self.port, "/api/edit", good)[0], 200)
+        oneway = {"kind": "oneway", "geom": [69.25, 41.3], "raw": [69.25, 41.3], "props": {}, "status": 1}
+        self.assertEqual(_post_json(self.port, "/api/edit", oneway)[0], 400)
+        oneway["props"] = {"bearing": 45}
+        self.assertEqual(_post_json(self.port, "/api/edit", oneway)[0], 200)
+        kinds = sorted(i["kind"] for i in admin.export_route_patches_readonly()["items"])
+        self.assertEqual(kinds, ["oneway", "turn_ban"])
+
+    def test_export_is_read_only(self):
+        missing = os.path.join(tempfile.mkdtemp(), "none.db")
+        with self.assertRaises(sqlite3.OperationalError):
+            admin.export_route_patches_readonly(missing)
+        self.assertFalse(os.path.exists(missing))
+
+
 class JunctionWorklistPageTests(unittest.TestCase):
     """Очередь перекрёстков: ссылки на правку и честный прогресс."""
 

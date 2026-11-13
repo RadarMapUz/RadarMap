@@ -6,17 +6,25 @@
 кандидатом рядом с живыми файлами. Подмену делает владелец.
 
     python3 server/osrm/graph_refresh.py build  [--date Д] [--pbf файл] [--threads N]
+                                                [--panel-patches файл | --no-panel] [--no-patches]
+    python3 server/osrm/graph_refresh.py patches [--date Д] [--pbf файл] [--panel-patches файл | --no-panel]
     python3 server/osrm/graph_refresh.py audit  [--date Д] [--old-mld каталог] [--old-ch каталог]
     python3 server/osrm/graph_refresh.py gate                      # ворота нагрузки VPS, только чтение
     python3 server/osrm/graph_refresh.py upload [--date Д] [--dry-run] [--wait МИН] [--limit КБИТ/С]
     python3 server/osrm/graph_refresh.py switch [--date Д] --kind mld|ch [--i-am-owner]
 
-build   свежая выгрузка Geofabrik (md5) → build_osrm_mld.sh: MLD и отдельно CH,
-        оба с car_radarmap.lua; пики памяти, время, размеры → build.json.
+build   свежая выгрузка Geofabrik (md5) → слой поправок (route_patches.py: файл
+        patches/route_patches.json + правки панели, забранные с VPS только
+        чтением) → build_osrm_mld.sh: MLD и отдельно CH, оба с car_radarmap.lua;
+        пики памяти, время, размеры, итог слоя → build.json.
+patches только слой: что применится, что OSM догнал, что ждёт проверки —
+        без сборки графа (route_patches/report.md дня).
 audit   четыре osrm-routed в локальном docker (старый/новый × MLD/CH), пары
         audit_pairs.json запросом приложения, разбор route_audit.py, ворота
         (GATE) → audit.json и audit.md. Боевой граф находится сам: локальный
-        набор, чьи sha совпали с манифестом на VPS.
+        набор, чьи sha совпали с манифестом на VPS. Плюс слой поправок: пары и
+        пробы у каждой правки (через снятый барьер, мимо запрета) — новый граф
+        не нарушает ни одного нашего запрета, барьерные улицы проезжие.
 gate    снимок VPS (время по Ташкенту, load, MemAvailable, замок цикла
         пробок, диск, inode) и вердикт.
 upload  только прошедшие аудит наборы, только в ночное окно на свободном
@@ -38,6 +46,7 @@ import shlex
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -55,6 +64,8 @@ PLATFORM = "linux/amd64"
 
 VPS = os.environ.get("RADARMAP_VPS", "radarmap-vps")
 MLD_ROOT = "/opt/radarmap/osrm-mld"
+ADMIN = os.environ.get("RADARMAP_ADMIN", "/opt/radarmap/api/admin.py")
+PATCHED = f"{NAME}-patched.osm.pbf"
 CH_CONTAINER = "radarmap-osrm"
 MLD_CONTAINER = "radarmap-osrm-mld"
 # Живые каталоги стенда: upload и чистка их не трогают ни при каком раскладе.
@@ -342,6 +353,70 @@ def write_sums(path):
     return len(lines)
 
 
+PANEL_CACHE = os.path.join(WORK, "panel_route_patches.json")
+
+
+def fetch_panel(args):
+    """Правки маршрутов из панели → (items, откуда). С VPS — только чтением
+    (admin.py --export-route-patches открывает базу mode=ro). Не достали —
+    прошлая удачная копия: граф без вчерашних запретов хуже, чем с ними."""
+    if args.no_panel:
+        return [], "без панели (--no-panel)"
+    if args.panel_patches:
+        with open(args.panel_patches) as f:
+            return json.load(f).get("items") or [], args.panel_patches
+    try:
+        body = ssh(f"python3 {ADMIN} --export-route-patches", timeout=60)
+        items = json.loads(body).get("items")
+        if not isinstance(items, list):
+            raise ValueError("нет items")
+        os.makedirs(WORK, exist_ok=True)
+        with open(PANEL_CACHE, "w") as f:
+            json.dump({"fetched": time.strftime("%Y-%m-%dT%H:%M"), "items": items}, f, ensure_ascii=False)
+        return items, f"{VPS}: {len(items)}"
+    except (SystemExit, ValueError, subprocess.SubprocessError, OSError) as e:
+        if os.path.exists(PANEL_CACHE):
+            with open(PANEL_CACHE) as f:
+                cached = json.load(f)
+            log(f"! правки панели не получены ({str(e)[:120]}) — беру копию от {cached.get('fetched')}")
+            return cached.get("items") or [], f"копия {cached.get('fetched')}"
+        log(f"! правки панели не получены ({str(e)[:120]}), копии нет — только файл репозитория")
+        return [], "не получены"
+
+
+def run_patches(args, day, pbf, pbf_info):
+    """Слой поправок на выгрузку дня → (путь к pbf для сборки, сводка)."""
+    sys.path.insert(0, HERE)
+    import route_patches as rp
+    items, origin = fetch_panel(args)
+    out = os.path.join(day, PATCHED)
+    report = rp.apply_layer(pbf, out, os.path.join(day, "route_patches"), rp.REPO_FILE, items,
+                            date=args.date, pbf_info=pbf_info)
+    counts = report["counts"]
+    log(f"→ слой поправок {report['layer_sha']}: применено {counts.get(rp.APPLIED, 0)}, OSM догнал "
+        f"{counts.get(rp.CAUGHT_UP, 0)}, отложено «проверить» {counts.get(rp.CHECK, 0)} "
+        f"(панель: {origin}); {report['seconds']} с")
+    for d in report["patches"]:
+        if d["verdict"] == rp.CHECK:
+            log(f"  проверить {d['id']}: {d['reason']}")
+    summary = {"layer": report["layer_sha"], "counts": counts, "changes": report["changes"], "panel": origin,
+               "file": PATCHED, "md5": md5_file(out)}
+    return out, summary
+
+
+def cmd_patches(args):
+    day = os.path.join(WORK, args.date)
+    os.makedirs(day, exist_ok=True)
+    pbf = os.path.join(day, f"{NAME}-latest.osm.pbf")
+    if args.pbf:
+        subprocess.run(["cp", args.pbf, pbf], check=True)
+    elif not os.path.exists(pbf):
+        fetch_pbf(pbf)
+    run_patches(args, day, pbf, {"md5": md5_file(pbf), "osm_timestamp": pbf_timestamp(pbf)})
+    log(f"→ {day}/route_patches/report.md")
+    return 0
+
+
 def cmd_build(args):
     day = os.path.join(WORK, args.date)
     os.makedirs(day, exist_ok=True)
@@ -353,9 +428,17 @@ def cmd_build(args):
     info = {"date": args.date, "image": image_digest(), "threads": args.threads,
             "pbf": {"md5": md5_file(pbf), "bytes": os.path.getsize(pbf), "osm_timestamp": pbf_timestamp(pbf)}}
     log(f"→ выгрузка: {info['pbf']['bytes'] / 1048576:.0f} МБ, данные на {info['pbf']['osm_timestamp']}")
+    source = pbf
+    if not args.no_patches:
+        source, info["patches"] = run_patches(args, day, pbf, info["pbf"])
+    else:
+        stale = os.path.join(day, PATCHED)
+        if os.path.exists(stale):
+            os.remove(stale)
+        log("→ слой поправок выключен (--no-patches)")
     env = dict(os.environ, RADARMAP_OSRM_THREADS=str(args.threads))
     for kind in ("mld", "ch"):
-        cmd = ["nice", "-n", "15", "bash", BUILD_SCRIPT, "--work", day, "--pbf", pbf, "--profile", PROFILE]
+        cmd = ["nice", "-n", "15", "bash", BUILD_SCRIPT, "--work", day, "--pbf", source, "--profile", PROFILE]
         if kind == "ch":
             cmd.append("--ch")
         log("+ " + shlex.join(cmd))
@@ -367,6 +450,12 @@ def cmd_build(args):
         summary["files_count"] = write_sums(path)
         with open(PROFILE, "rb") as f:
             summary["profile_sha256"] = hashlib.sha256(f.read()).hexdigest()
+        if info.get("patches"):
+            # Какой слой в графе — строкой манифеста; sha_lines её не берёт.
+            c = info["patches"]["counts"]
+            with open(os.path.join(path, "manifest.txt"), "a") as f:
+                f.write(f"patches layer={info['patches']['layer']} applied={c.get('applied', 0)} "
+                        f"caught_up={c.get('caught_up', 0)} check={c.get('check', 0)}\n")
         info[kind] = summary
     with open(os.path.join(day, "build.json"), "w") as f:
         json.dump(info, f, ensure_ascii=False, indent=1)
@@ -422,6 +511,32 @@ def docker_up(name, path, kind, port):
     raise SystemExit(f"{name} не поднялся за 4 мин")
 
 
+def fetch_probes(port, out, report):
+    """Пробы слоя поправок: у каждой правки — свой маршрут «до и после»."""
+    import route_patches as rp
+    os.makedirs(os.path.join(out, "probes"), exist_ok=True)
+    for d in (report or {}).get("patches", []):
+        for probe in d.get("probes") or ():
+            try:
+                with urllib.request.urlopen(rp.probe_url(f"http://127.0.0.1:{port}", probe), timeout=60) as r:
+                    body = r.read()
+            except urllib.error.HTTPError as e:   # 400 NoSegment/NoRoute — ответ, а не сбой
+                body = e.read()
+            with open(os.path.join(out, "probes", probe["id"] + ".json"), "wb") as f:
+                f.write(body)
+
+
+def patch_gate(old, new):
+    """Ворота слоя: новый граф не нарушает наших запретов, пробы — как ждали."""
+    fails = []
+    if new["violations"]:
+        fails.append(f"маршруты нарушают наши правки: {new['by_patch']}")
+    missed = sorted(k for k, v in new["probes"].items() if not v["ok"])
+    if missed:
+        fails.append("пробы слоя не как ждали: " + ", ".join(missed))
+    return fails
+
+
 def fetch_runs(port, out, pairs):
     import route_audit as ra
     os.makedirs(out, exist_ok=True)
@@ -453,6 +568,39 @@ def analyze_runs(run_dir, tags, pairs):
     return result
 
 
+def layer_lines(report):
+    """Раздел audit.md про слой поправок: решения и пробы старый → новый граф."""
+    layer = report.get("layer")
+    if not layer:
+        return []
+    words = {"applied": "применена", "caught_up": "OSM догнал", "check": "проверить"}
+    lines = [f"## Слой поправок `{layer['sha']}`", "",
+             "Правок: " + ", ".join(f"{words.get(k, k)} {v}" for k, v in sorted(layer["counts"].items())) + ".", ""]
+    for kind in ("mld", "ch"):
+        checks = report[kind].get("patches")
+        if not checks:
+            continue
+        old, new = checks["old"], checks["new"]
+        lines += [f"{kind.upper()}: нарушений наших правок на парах и пробах {old['violations']} → "
+                  f"{new['violations']}.", "", "| Проба | ждём | было | стало |", "|---|---|---|---|"]
+        for pid in sorted(set(old["probes"]) | set(new["probes"])):
+            o, n = old["probes"].get(pid, {}), new["probes"].get(pid, {})
+
+            def cell(v):
+                if not v:
+                    return "—"
+                if v.get("error"):
+                    return f"{'да' if v['ok'] else 'нет'} ({v['error']})"
+                return f"{'да' if v['ok'] else 'нет'}, {v.get('distance')} м"
+            lines.append(f"| `{pid}` | {'через узел' if (n or o).get('expect') == 'through' else 'мимо запрета'} | "
+                         f"{cell(o)} | {cell(n)} |")
+        lines.append("")
+    queue = [p for p in layer["patches"] if p["verdict"] == "check"]
+    if queue:
+        lines += ["Ждут проверки:", ""] + [f"- `{p['id']}`: {p['reason']}" for p in queue] + [""]
+    return lines
+
+
 def write_report(day, report):
     pairs = {p["id"]: p["name"] for p in report["pairs_meta"]}
     lines = [f"# Аудит графа {report['date']}", "",
@@ -480,6 +628,7 @@ def write_report(day, report):
                          f"{o['duration'] / 60:.1f} | {n['duration'] / 60:.1f} | {(r['time_ratio'] - 1) * 100:+.1f} % | "
                          f"{r['variants_old']}→{r['variants_new']} |")
         lines.append("")
+    lines += layer_lines(report)
     with open(os.path.join(day, "audit.md"), "w") as f:
         f.write("\n".join(lines))
 
@@ -495,6 +644,10 @@ def cmd_audit(args):
     log("→ боевые наборы: " + ", ".join(f"{k} {v}" for k, v in baseline.items()))
     pairs = ra.load_pairs(args.pairs)
     runs = os.path.join(day, "audit")
+    layer = None
+    if os.path.exists(os.path.join(day, "route_patches", "report.json")) and build.get("patches"):
+        with open(os.path.join(day, "route_patches", "report.json")) as f:
+            layer = json.load(f)
     names = []
     try:
         for kind in ("mld", "ch"):
@@ -503,13 +656,18 @@ def cmd_audit(args):
                 names.append(name)
                 docker_up(name, path, kind, PORTS[(kind, side)])
                 fetch_runs(PORTS[(kind, side)], os.path.join(runs, f"{kind}-{side}"), pairs)
+                if layer:
+                    fetch_probes(PORTS[(kind, side)], os.path.join(runs, f"{kind}-{side}"), layer)
                 subprocess.run(["docker", "rm", "-f", name], capture_output=True)
                 log(f"  {kind}-{side}: {len(pairs)} пар")
     finally:
         for name in names:
             subprocess.run(["docker", "rm", "-f", name], capture_output=True)
     tags_path = os.path.join(runs, "tags.json")
-    ra.cmd_index(argparse.Namespace(pbf=os.path.join(day, f"{NAME}-latest.osm.pbf"),
+    # Индекс тегов — по той выгрузке, из которой собран новый граф: с нашими
+    # relation и разрезанными путями (узлы у разреза те же, что в OSM).
+    index_pbf = os.path.join(day, PATCHED) if build.get("patches") else os.path.join(day, f"{NAME}-latest.osm.pbf")
+    ra.cmd_index(argparse.Namespace(pbf=index_pbf,
                                     runs=[os.path.join(runs, d) for d in ("mld-old", "mld-new", "ch-old", "ch-new")],
                                     out=tags_path))
     with open(tags_path) as f:
@@ -524,6 +682,18 @@ def cmd_audit(args):
         report["graph"][kind] = [old_graph, new_graph]
         report[kind] = compare({"pairs": analyze_runs(os.path.join(runs, f"{kind}-old"), tags, pairs), "graph": old_graph},
                                {"pairs": analyze_runs(os.path.join(runs, f"{kind}-new"), tags, pairs), "graph": new_graph})
+        if layer:
+            import route_patches as rp
+            checks = {side: rp.check_runs(layer, os.path.join(runs, f"{kind}-{side}")) for side in ("old", "new")}
+            report[kind]["patches"] = checks
+            fails = patch_gate(checks["old"], checks["new"])
+            if fails:
+                report[kind]["fails"] += fails
+                report[kind]["pass"] = False
+    if layer:
+        report["layer"] = {"sha": layer["layer_sha"], "counts": layer["counts"],
+                           "patches": [{k: d.get(k) for k in ("id", "kind", "source", "verdict", "reason")}
+                                       for d in layer["patches"]]}
     with open(os.path.join(day, "audit.json"), "w") as f:
         json.dump(report, f, ensure_ascii=False, indent=1)
     write_report(day, report)
@@ -838,6 +1008,13 @@ def main():
     b.add_argument("--pbf", help="готовая выгрузка вместо Geofabrik")
     b.add_argument("--threads", type=int, default=2)
     b.add_argument("--quiet", action="store_true")
+    for parser in (b, sub.add_parser("patches")):
+        parser.add_argument("--panel-patches", help="выгрузка admin.py --export-route-patches вместо ssh")
+        parser.add_argument("--no-panel", action="store_true", help="без правок панели")
+        if parser is not b:
+            parser.add_argument("--date", default=today())
+            parser.add_argument("--pbf", help="готовая выгрузка вместо Geofabrik")
+    b.add_argument("--no-patches", action="store_true", help="собрать без слоя поправок")
     a = sub.add_parser("audit")
     a.add_argument("--date", default=today())
     a.add_argument("--old-mld")
@@ -856,7 +1033,7 @@ def main():
     s.add_argument("--kind", choices=("mld", "ch"), required=True)
     s.add_argument("--i-am-owner", action="store_true")
     args = p.parse_args()
-    return {"build": cmd_build, "audit": cmd_audit, "gate": cmd_gate,
+    return {"build": cmd_build, "patches": cmd_patches, "audit": cmd_audit, "gate": cmd_gate,
             "upload": cmd_upload, "switch": cmd_switch}[args.cmd](args) or 0
 
 

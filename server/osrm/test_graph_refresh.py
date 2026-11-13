@@ -375,5 +375,60 @@ class SwitchRun(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.root, ".lock")))
 
 
+class PatchLayer(unittest.TestCase):
+    """Слой поправок в сборке и аудите (91): ворота и откуда берутся правки панели."""
+
+    def test_gate_new_graph_must_not_break_our_patches(self):
+        ok = {"violations": 0, "by_patch": {}, "probes": {"b-1": {"ok": True, "expect": "through"}}}
+        self.assertEqual(g.patch_gate(ok, ok), [])
+        bad = {"violations": 2, "by_patch": {"ban": 2}, "probes": {"b-1": {"ok": False, "expect": "through"}}}
+        fails = g.patch_gate(ok, bad)
+        self.assertEqual(len(fails), 2)
+        self.assertIn("ban", fails[0])
+        self.assertIn("b-1", fails[1])
+
+    def test_layer_section_in_audit(self):
+        report = {"layer": {"sha": "abc", "counts": {"applied": 1, "check": 1},
+                            "patches": [{"id": "x", "verdict": "check", "reason": "узла нет"}]},
+                  "mld": {"patches": {"old": {"violations": 3, "probes": {"b-1": {"ok": False, "distance": 900,
+                                                                                    "expect": "through"}}},
+                                      "new": {"violations": 0, "probes": {"b-1": {"ok": True, "distance": 200,
+                                                                                    "expect": "through"}}}}},
+                  "ch": {}}
+        text = "\n".join(g.layer_lines(report))
+        self.assertIn("нарушений наших правок на парах и пробах 3 → 0", text)
+        self.assertIn("| `b-1` | через узел | нет, 900 м | да, 200 м |", text)
+        self.assertIn("`x`: узла нет", text)
+        self.assertEqual(g.layer_lines({"mld": {}, "ch": {}}), [])
+
+    def test_panel_fallback_to_last_copy(self):
+        import argparse
+        import json
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        old_cache, old_ssh = g.PANEL_CACHE, g.ssh
+        try:
+            g.PANEL_CACHE = os.path.join(tmp, "cache.json")
+
+            def broken(*a, **k):
+                raise SystemExit("ssh: нет связи")
+            g.ssh = broken
+            args = argparse.Namespace(no_panel=False, panel_patches=None)
+            self.assertEqual(g.fetch_panel(args)[0], [])
+            with open(g.PANEL_CACHE, "w") as f:
+                json.dump({"fetched": "2026-11-12T03:00", "items": [{"id": 1}]}, f)
+            items, origin = g.fetch_panel(args)
+            self.assertEqual(items, [{"id": 1}])
+            self.assertIn("копия", origin)
+            g.ssh = lambda *a, **k: json.dumps({"items": [{"id": 2}]})
+            self.assertEqual(g.fetch_panel(args)[0], [{"id": 2}])
+            with open(g.PANEL_CACHE) as f:
+                self.assertEqual(json.load(f)["items"], [{"id": 2}])
+            self.assertEqual(g.fetch_panel(argparse.Namespace(no_panel=True, panel_patches=None))[0], [])
+        finally:
+            g.PANEL_CACHE, g.ssh = old_cache, old_ssh
+            shutil.rmtree(tmp)
+
+
 if __name__ == "__main__":
     unittest.main()

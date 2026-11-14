@@ -14,7 +14,7 @@ nonisolated enum MapDetailLayers {
 
     /// «Не дорога»: подземные пешеходные переходы и тротуары (широкие
     /// фиолетовые полосы поперёк проспекта — «убери тоннели», 12.10),
-    /// наложение тоннелей, деревья и тени, зерно асфальта, имена арыков (у
+    /// деревья и тени, зерно асфальта, имена арыков (у
     /// моста ложились наискось поперёк проспекта, CarPlay 13.10). Подписи
     /// дорожек (`highway-name-path`) прячет режим «в поездке» сам.
     /// Тени у подножия домов (`building-ground-shadow`) здесь нет с 29.F:
@@ -25,7 +25,8 @@ nonisolated enum MapDetailLayers {
         "tunnel-path-steps-casing", "tunnel-path-steps", "tunnel-path",
         "bridge-path-shadow", "bridge-path-casing", "bridge-path-steps", "bridge-path",
         "highway-path-steps-casing", "highway-path", "highway-path-steps",
-        "radar-tunnel-case", "radar-tunnel",
+        // Автомобильный тоннель в поездке виден (владелец, 14.11): маршрут через
+        // тоннель Бунёдкора иначе шёл по парку без дороги под ним.
         "trees", "radar-tree-shadow", "radar-tree", "radar-tree-light", "radar-tree-3d", "radar-barrier-3d",
         "radar-asphalt-grain",
         "waterway-name",

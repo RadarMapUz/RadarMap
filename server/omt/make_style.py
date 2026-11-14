@@ -748,11 +748,26 @@ def _bridge_order(layers):
 # Ключа сортировки нет нарочно: с равным ключом MapLibre рисует объекты слоя в
 # обратном порядке тайла, без ключа — в порядке тайла, как внутри каждого
 # прежнего слоя. Порядок между прежними слоями не важен, когда цвет у них один
-# (рулёжки и полосы аэродрома). Пунктир по данным MapLibre не рисует вовсе
-# (линия пропадает), поэтому слои с разным пунктиром не сливаются.
+# (рулёжки и полосы аэродрома). У мостов и тоннелей цвет — по классу, и между
+# прежними слоями остаётся порядок тайла: Planetiler кладёт линии по z_order
+# (важность дороги), OSM Bright — слои по той же важности. На всей сборке
+# основы ни одна перекрывающаяся пара разного цвета не лежит в обратном
+# порядке; tools/map_matrix/merge_order.py перепроверяет это после сборки. Где
+# пары нашлись (тег layer кладёт съезд моста над магистралью — 7 пар), группы
+# разрезаны: съезды мостов отдельно от улиц. Пунктир по данным MapLibre не рисует
+# вовсе (линия пропадает), поэтому слои с разным пунктиром не сливаются; не
+# сливаются и дворы с улицами — у них разная прозрачность по зуму, а по данным
+# она считается на целых зумах и съехала бы.
 MERGED_LAYERS = {
     "aeroway-casing": ("aeroway-taxiway-casing", "aeroway-runway-casing"),
     "aeroway-line": ("aeroway-taxiway", "aeroway-runway"),
+    "tunnel-link-street-casing": ("tunnel-link-casing", "tunnel-secondary-tertiary-casing"),
+    "tunnel-street-major": ("tunnel-secondary-tertiary", "tunnel-trunk-primary", "tunnel-motorway"),
+    "bridge-link-casing-all": ("bridge-motorway-link-casing", "bridge-link-casing"),
+    "bridge-street-major-casing": ("bridge-secondary-tertiary-casing", "bridge-trunk-primary-casing",
+                                   "bridge-motorway-casing"),
+    "bridge-link-all": ("bridge-motorway-link", "bridge-link"),
+    "bridge-street-major": ("bridge-secondary-tertiary", "bridge-trunk-primary", "bridge-motorway"),
 }
 # Свойства, которые у слитого слоя берутся по фильтру прежнего слоя.
 MERGED_BY_MEMBER = ("line-width",)

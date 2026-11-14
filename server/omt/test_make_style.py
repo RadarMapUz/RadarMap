@@ -740,7 +740,7 @@ def _universe(filters):
 class MergedLayersTests(unittest.TestCase):
     """Слитые слои основы (план 13.11, раздел 9): слоёв меньше, картинка та же."""
     # Потолок числа слоёв: было 165 днём и 166 ночью (ночью — свечение магистрали).
-    BUDGET = {"light": 163, "dark": 164}
+    BUDGET = {"light": 154, "dark": 155}
 
     @classmethod
     def setUpClass(cls):

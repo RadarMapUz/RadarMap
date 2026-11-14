@@ -741,6 +741,107 @@ def _bridge_order(layers):
     return rest
 
 
+# Соседние однотипные слои основы, слитые в один (план 13.11, раздел 9):
+# движок проходит каждый слой на каждом кадре и в каждом тайле. Сливаются
+# только слои с одинаковыми цветом, прозрачностью, пунктиром, раскладкой и
+# зумами; разной бывает лишь ширина — она берётся по фильтру прежнего слоя.
+# Ключа сортировки нет нарочно: с равным ключом MapLibre рисует объекты слоя в
+# обратном порядке тайла, без ключа — в порядке тайла, как внутри каждого
+# прежнего слоя. Порядок между прежними слоями не важен, когда цвет у них один
+# (рулёжки и полосы аэродрома). У мостов и тоннелей цвет — по классу, и между
+# прежними слоями остаётся порядок тайла: Planetiler кладёт линии по z_order
+# (важность дороги), OSM Bright — слои по той же важности. На всей сборке
+# основы ни одна перекрывающаяся пара разного цвета не лежит в обратном
+# порядке; tools/map_matrix/merge_order.py перепроверяет это после сборки. Где
+# пары нашлись (тег layer кладёт съезд моста над магистралью — 7 пар), группы
+# разрезаны: съезды мостов отдельно от улиц. Пунктир по данным MapLibre не рисует
+# вовсе (линия пропадает), поэтому слои с разным пунктиром не сливаются; не
+# сливаются и дворы с улицами — у них разная прозрачность по зуму, а по данным
+# она считается на целых зумах и съехала бы.
+MERGED_LAYERS = {
+    "aeroway-casing": ("aeroway-taxiway-casing", "aeroway-runway-casing"),
+    "aeroway-line": ("aeroway-taxiway", "aeroway-runway"),
+    "tunnel-link-street-casing": ("tunnel-link-casing", "tunnel-secondary-tertiary-casing"),
+    "tunnel-street-major": ("tunnel-secondary-tertiary", "tunnel-trunk-primary", "tunnel-motorway"),
+    "bridge-link-casing-all": ("bridge-motorway-link-casing", "bridge-link-casing"),
+    "bridge-street-major-casing": ("bridge-secondary-tertiary-casing", "bridge-trunk-primary-casing",
+                                   "bridge-motorway-casing"),
+    "bridge-link-all": ("bridge-motorway-link", "bridge-link"),
+    "bridge-street-major": ("bridge-secondary-tertiary", "bridge-trunk-primary", "bridge-motorway"),
+}
+# Свойства, которые у слитого слоя берутся по фильтру прежнего слоя.
+MERGED_BY_MEMBER = ("line-width",)
+
+
+def _filter_expression(flt):
+    """Фильтр OSM Bright старого вида — выражением (для case внутри свойства)."""
+    op = flt[0]
+    if op in ("all", "any"):
+        return [op, *[_filter_expression(f) for f in flt[1:]]]
+    if op in ("has", "!has"):
+        return ["has", flt[1]] if op == "has" else ["!", ["has", flt[1]]]
+    value = ["geometry-type"] if flt[1] == "$type" else ["get", flt[1]]
+    if op in ("==", "!="):
+        return [op, value, flt[2]]
+    if op in ("in", "!in"):
+        test = ["match", value, list(flt[2:]), True, False]
+        return test if op == "in" else ["!", test]
+    raise ValueError(f"фильтр {flt!r} не переводится в выражение")
+
+
+def _zoom_curve(value):
+    """(интерполяция, [зумы], [значения]) верхнего уровня; старая функция stops — так же."""
+    if isinstance(value, dict) and set(value) <= {"base", "stops"}:
+        return ["exponential", value.get("base", 1)], [s[0] for s in value["stops"]], [s[1] for s in value["stops"]]
+    if isinstance(value, list) and value[:1] == ["interpolate"] and value[2] == ["zoom"]:
+        return value[1], value[3::2], value[4::2]
+    return None
+
+
+def _visible_layout(layer):
+    layout = dict(layer.get("layout", {}))
+    if layout.get("visibility") == "visible":
+        layout.pop("visibility")
+    return layout
+
+
+def _merge_layers(layers):
+    """Слить группы MERGED_LAYERS; группа целиком отсутствует (режим roads) — пропуск."""
+    for merged_id, members in MERGED_LAYERS.items():
+        at = [k for k, layer in enumerate(layers) if layer["id"] in members]
+        if not at:
+            continue
+        group = [layers[k] for k in at]
+        if [layer["id"] for layer in group] != list(members) or at != list(range(at[0], at[0] + len(at))):
+            raise ValueError(f"{merged_id}: слои {members} не стоят подряд")
+        first = group[0]
+        for layer in group[1:]:
+            same = [k for k in ("type", "source", "source-layer", "minzoom", "maxzoom") if layer.get(k) != first.get(k)]
+            if same or _visible_layout(layer) != _visible_layout(first):
+                raise ValueError(f"{merged_id}: {layer['id']} отличается от {first['id']}: {same or 'layout'}")
+            paint = {k: v for k, v in layer.get("paint", {}).items() if k not in MERGED_BY_MEMBER}
+            if paint != {k: v for k, v in first.get("paint", {}).items() if k not in MERGED_BY_MEMBER}:
+                raise ValueError(f"{merged_id}: у {layer['id']} другая краска")
+        merged = copy.deepcopy(first)
+        merged["id"] = merged_id
+        merged["filter"] = ["any", *[layer["filter"] for layer in group]]
+        for prop in MERGED_BY_MEMBER:
+            values = [layer.get("paint", {}).get(prop) for layer in group]
+            if all(v == values[0] for v in values):
+                continue
+            curves = [_zoom_curve(v) for v in values]
+            if any(c is None or c[:2] != curves[0][:2] for c in curves):
+                raise ValueError(f"{merged_id}.{prop}: у слоёв разные ступени по зуму")
+            tests = [_filter_expression(layer["filter"]) for layer in group[:-1]]
+            stops = []
+            for k, zoom in enumerate(curves[0][1]):
+                by_member = [x for test, c in zip(tests, curves) for x in (test, c[2][k])]
+                stops += [zoom, ["case", *by_member, curves[-1][2][k]]]
+            merged["paint"][prop] = ["interpolate", curves[0][0], ["zoom"], *stops]
+        layers[at[0]:at[-1] + 1] = [merged]
+    return layers
+
+
 # Свечение магистрали ночью: на сколько пикселей шире полотна (на обе
 # стороны) и сила. Размытие — на всю ширину ореола: края нет, только свет.
 TRUNK_GLOW_EXTRA_PX = 16
@@ -1637,7 +1738,7 @@ def build(base, theme="light", mode="full", tileset=None, palette=None):
                        "text-padding": 3, "text-max-width": 4},
             "paint": {"text-color": p["housenumber"], "text-halo-color": p["building"],
                       "text-halo-width": 1}})
-    s["layers"] = out
+    s["layers"] = _merge_layers(out)
     s["light"] = p["light"]
     s["name"] = f"RadarMap — {'светлая' if theme == 'light' else 'тёмная'}, {'полная' if mode == 'full' else 'только дорога'}"
     return s

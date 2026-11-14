@@ -487,6 +487,10 @@ class JunctionMask:
 
     def __init__(self, polygons=()):
         self._grid = defaultdict(list)
+        self.add_polygons(polygons)
+
+    def add_polygons(self, polygons):
+        """Добавить препятствия, сохранив маску переходов и прежних узлов."""
         for ring in polygons:
             if len(ring) < 3:
                 continue
@@ -1129,7 +1133,17 @@ def drop_overlapping_strips(items):
 
 
 BIG_JUNCTION_M2 = 600.0
+# Узел двух разных улиц уже при площади 300 м² достаточно велик, чтобы
+# пунктир не шёл через его центр. Порог больших узлов для других слоёв
+# не меняется: разворот одной улицы по-прежнему сохраняет полосы.
+MARKING_JUNCTION_MIN_M2 = 300.0
 STRIP_IN_JUNCTION_SHARE = 0.4
+
+
+def marking_junction_areas(areas, street_names):
+    """Площади пересечений разных улиц, где заканчивается разметка полос."""
+    return [ring for ring in areas if _ring_area(ring) >= MARKING_JUNCTION_MIN_M2
+            and len(street_names.inside(ring)) >= 2]
 
 
 def strip_outside_junction(ring, mask):
@@ -1141,24 +1155,45 @@ def strip_outside_junction(ring, mask):
     """
     if mask.covers(_box_centre(ring)) and mask.covers(waffle_centre(ring)):
         return False
-    xs = [p[0] for p in ring]
-    ys = [p[1] for p in ring]
-    samples = inside_points(ring, 12)
-    if samples and sum(mask._covers_area(p) for p in samples) / len(samples) > STRIP_IN_JUNCTION_SHARE:
+    samples = inside_points(ring, 48)
+    share = sum(mask._covers_area(p) for p in samples) / len(samples) if samples else 0.0
+    # У порога уточняем: грубая сетка на длинной изогнутой полосе давала
+    # 44% вместо 27% и удаляла пригодную разделительную целиком.
+    if abs(share - STRIP_IN_JUNCTION_SHARE) <= 0.05:
+        samples = inside_points(ring, 96)
+        share = sum(mask._covers_area(p) for p in samples) / len(samples) if samples else 0.0
+    if share > STRIP_IN_JUNCTION_SHARE:
         return False
     return True
 
 
 def inside_points(ring, per_side):
-    """До per_side² точек сетки внутри многоугольника."""
-    x0, x1 = min(p[0] for p in ring), max(p[0] for p in ring)
-    y0, y1 = min(p[1] for p in ring), max(p[1] for p in ring)
+    """До per_side² проб в системе координат длинной стороны полосы.
+
+    Сетка по широте/долготе почти не попадает в узкую диагональную полосу:
+    оценка перекрытия зависела от её поворота. Вдоль длинной стороны пробы
+    покрывают и длину, и ширину при прежнем ограничении количества.
+    """
+    if len(ring) < 3 or per_side <= 0:
+        return []
+    lon, lat = ring[0]
+    kx = 111_320 * math.cos(math.radians(lat))
+    metric = [((p[0] - lon) * kx, (p[1] - lat) * 111_320) for p in ring]
+    a, b = max(zip(metric, metric[1:] + metric[:1]), key=lambda pair: math.dist(*pair))
+    length = math.dist(a, b)
+    if length == 0:
+        return []
+    ux, uy = (b[0] - a[0]) / length, (b[1] - a[1]) / length
+    local = [(x * ux + y * uy, -x * uy + y * ux) for x, y in metric]
+    x0, x1 = min(p[0] for p in local), max(p[0] for p in local)
+    y0, y1 = min(p[1] for p in local), max(p[1] for p in local)
     out = []
     for i in range(per_side):
         for j in range(per_side):
             p = (x0 + (x1 - x0) * (i + 0.5) / per_side, y0 + (y1 - y0) * (j + 0.5) / per_side)
-            if _inside(p, ring):
-                out.append(p)
+            if _inside(p, local):
+                out.append((lon + (p[0] * ux - p[1] * uy) / kx,
+                            lat + (p[0] * uy + p[1] * ux) / 111_320))
     return out
 
 
@@ -2754,9 +2789,18 @@ def fit_zebras(crossings, fitter, with_meta=False):
             kx = 111_320 * math.cos(math.radians(point[1]))
             fx, fy = math.sin(heading), math.cos(heading)
             shift = (anchor[0][0] - point[0]) * kx * fx + (anchor[0][1] - point[1]) * 111_320 * fy
-            point = (point[0] + fx * shift / kx, point[1] + fy * shift / 111_320)
+            proposed = (point[0] + fx * shift / kx, point[1] + fy * shift / 111_320)
+            # Выравнивание не должно продолжать ось за конец сегмента или
+            # выносить зебру за изгиб дороги. Снова пересекаем реальную ось
+            # своей ленты; если пересечения нет, сохраняем исходный переход.
+            across = _zebra_line(proposed, heading, half + ZEBRA_REACH_METERS)
+            matches = [hit for hit in fitter.hits(*across) if hit[0] == key
+                       and abs(math.sin(hit[2] - heading)) < ZEBRA_PARALLEL_SINE]
+            if matches:
+                hit = min(matches, key=lambda h: _point_segment_m(h[1], proposed, proposed))
+                _, point, heading, half, _ = hit
         aligned.append((key, point, heading, half, sine, marked))
-    aligned = _align_across_carriageways(aligned, fitter.names)
+    aligned = _align_across_carriageways(aligned, fitter.names, fitter)
     kept = []
     for key, point, heading, half, sine, marked in aligned:
         kx = 111_320 * math.cos(math.radians(point[1]))
@@ -2792,7 +2836,7 @@ ZEBRA_ALIGN_PARALLEL_SINE = 0.42
 ZEBRA_ALIGN_ACROSS_METERS = 30.0
 
 
-def _align_across_carriageways(aligned, names):
+def _align_across_carriageways(aligned, names, fitter=None):
     """Зебры одного перехода через встречные ленты одной улицы — на одну прямую."""
     anchors = []
     out = []
@@ -2815,7 +2859,12 @@ def _align_across_carriageways(aligned, names):
                 if best is None or abs(along) < abs(best):
                     best = along
         if best is not None and abs(best) > 0.05:
-            point = (point[0] + fx * best / kx, point[1] + fy * best / 111_320)
+            proposed = (point[0] + fx * best / kx, point[1] + fy * best / 111_320)
+            # Сдвиг не выносит зебру за конец или изгиб своей ленты.
+            across = _zebra_line(proposed, heading, half + ZEBRA_REACH_METERS)
+            if fitter is None or any(hit[0] == key and abs(math.sin(hit[2] - heading)) < ZEBRA_PARALLEL_SINE
+                   for hit in fitter.hits(*across)):
+                point = proposed
         anchors.append((key, point, heading, name))
         out.append((key, point, heading, half, sine, marked))
     return out
@@ -3025,8 +3074,15 @@ def approach_lights(zone, signals):
         distance = math.hypot(dx, dy)
         if distance > 1.0:
             rays.append((math.degrees(math.atan2(dx, dy)) % 360, dx / distance, dy / distance, distance))
+    # Разрезаем круг по самому большому пустому сектору, а не по северу.
+    # Иначе подходы у 0°/360° группировались иначе после поворота всего узла.
+    ordered = sorted(rays)
+    if len(ordered) > 1:
+        cut = max(range(len(ordered)), key=lambda i:
+                  (ordered[(i + 1) % len(ordered)][0] - ordered[i][0]) % 360)
+        ordered = ordered[cut + 1:] + ordered[:cut + 1]
     groups = []
-    for ray in sorted(rays):
+    for ray in ordered:
         for group in groups:
             mean = math.degrees(math.atan2(sum(r[1] for r in group), sum(r[2] for r in group))) % 360
             if abs((ray[0] - mean + 180) % 360 - 180) <= LIGHT_APPROACH_DEGREES:
@@ -3515,6 +3571,8 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         signals = _signal_grid(points)
         boxes, junction_areas, strips, drawn_islands = [], [], [], []
         kerb_cover, kerb_lines = [], []
+        visible_medians = []
+        corner_areas = []
         # Полотно — только у стрелок: вся страна в память не влезет.
         arrow_area = arrow_cells(points, _SIGNAL_CELL)
         tree_area = {(int(t[0] / JunctionMask.CELL), int(t[1] / JunctionMask.CELL))
@@ -3529,6 +3587,8 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                         tree_asphalt.append(shape)
                 if kind == AREA_JUNCTION_BOX:
                     boxes.append(shape)
+                if kind == AREA_FILLET and flags & 1:
+                    corner_areas.append(shape)
                 # Перемычка между двумя направлениями одной улицы (вид 8 с
                 # флагом полосы) — не перекрёсток. Попадая в маску больших
                 # узлов, она стирала пунктир на 150–200 м магистрали подряд
@@ -3547,6 +3607,8 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                 if (kind == AREA_MEDIAN and flags & 2) or kind == AREA_DIVIDER:
                     strips.append((kind, flags, shape))
                     continue
+                if kind == AREA_MEDIAN and flags & 1:
+                    visible_medians.append(shape)
                 lay(kind, flags, shape)
         # Бордюр угла — после всех площадей узлов: режется их глубиной.
         kerb_mask = KerbMask(kerb_cover)
@@ -3575,7 +3637,7 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         # 06.10.2026). Разделительные, стрелки и двойная — по полной маске.
         street_names = StreetNames(roads)
         marks_mask = JunctionMask(cores + boxes + drawn_islands + near_cores
-                                  + [ring for ring in big if len(street_names.inside(ring)) >= 2])
+                                  + marking_junction_areas(junction_areas, street_names))
         # Зебры, которые рисуются, — до разметки: пунктир не идёт сквозь
         # переход (Зарканар, 05.10.2026).
         zebra_nodes = defaultdict(list)
@@ -3621,6 +3683,11 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         junction_cover = JunctionMask(kerb_cover)
         band_cover = JunctionMask(bands)
         road_classes = {id(road): road[0] for road in roads}
+        # Для разделителей важна физическая площадь всех узлов и углов.
+        # Маска разметки намеренно пропускает небольшие примыкания одной
+        # улицы, но оставлять на их асфальте островок-разделитель нельзя.
+        median_mask = JunctionMask(junction_areas + boxes + corner_areas)
+        median_mask.add_zebras([line for line, _marked in fitted_zebras])
         del kerb_cover
         for kind, flags, shape in strips:
             if kind == AREA_DIVIDER:
@@ -3643,8 +3710,9 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                         # Обрубок между переходом и узлом — не остров: асфальт.
                         lay(AREA_JUNCTION, fill_flags_near(raw, zebra_fitter, road_classes), grown(raw))
                         continue
-                    if strip_outside_junction(piece, mask):
+                    if strip_outside_junction(piece, median_mask):
                         lay(kind, flags, piece, concrete)
+                        visible_medians.append(piece)
                         for bit in getattr(piece, "bits", ()):
                             lay(AREA_JUNCTION, fill_flags_near(bit, zebra_fitter, road_classes), grown(bit))
                     else:
@@ -3654,7 +3722,11 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                     # Асфальт на месте острова — перемычкой (флаг полосы): не
                     # маска узла и не мера контура, цвета соседней площади.
                     lay(AREA_JUNCTION, fill_flags_near(piece, zebra_fitter, road_classes), grown(piece))
-        del strip_cover, junction_cover, band_cover, bands, touch_bands, road_classes
+        del strip_cover, junction_cover, band_cover, bands, touch_bands, road_classes, median_mask
+        # Пунктир не должен проходить по разделительной. Учитываем только
+        # оставленные полосы: отброшенная внутри узла полоса не режет дорогу.
+        # Мосты по-прежнему обходят наземную маску в _markings.
+        marks_mask.add_polygons(visible_medians)
         # Регулируемые перекрёстки — после всех центров: светофор отдаётся
         # ближайшему узлу. Центры — и «середины узла» (вид 10), и ядра
         # перекрёстков двух улиц: середины узла у многих перекрёстков нет вовсе

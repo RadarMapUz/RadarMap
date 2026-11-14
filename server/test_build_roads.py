@@ -2909,6 +2909,44 @@ class JunctionKerbTests(unittest.TestCase):
         self.assertEqual(build_roads.corner_radius(40.0, 40.0), build_roads.KERB_RADIUS_MAX)
         self.assertEqual(build_roads.corner_radius(12.0, 2.0), build_roads.KERB_RADIUS_MIN)
 
+    def test_wide_junction_keeps_curved_corners_within_reach(self):
+        for width in (44.0, 50.0):
+            with self.subTest(width=width):
+                legs = [self.leg(a, width) for a in (0, 90, 180, 270)]
+                made = self.made(legs)
+                kerbs = [f for f in made if f[0] == build_roads.AREA_KERB]
+                self.assertEqual(len(kerbs), 4)
+                ring = next(f for f in made if f[0] == build_roads.AREA_JUNCTION)
+                self.assertTrue(build_roads.surface_gate(ring))
+                for _kind, _flags, line in kerbs:
+                    points = self.metric(line)
+                    self.assertGreaterEqual(len(points), 5)
+                    self.assertLessEqual(max(abs(v) for p in points for v in p),
+                                         build_roads.MOUTH_MAX_TANGENT_METERS + 1.01)
+                    # Дуга касается кромок обеих дорог и сохраняет квартал
+                    # снаружи: середина дуги дальше от узла, чем угол лент.
+                    middle = points[len(points) // 2]
+                    self.assertTrue(all(abs(v) > width / 2 for v in middle))
+
+    def test_corner_is_not_forced_when_no_radius_fits(self):
+        legs = [self.leg(a, 60.0) for a in (0, 90, 180, 270)]
+        kerbs = []
+        build_roads.mouth_outline(legs, kerbs)
+        self.assertEqual(kerbs, [])
+
+    def test_oblique_and_unequal_approaches_survive_tile_quantization(self):
+        for width in (6, 10, 14, 20, 28, 36, 44, 50):
+            for other in (6, 10, 14, 20, 28, 36, 44, 50):
+                for angle in (45, 60, 75, 90, 105, 120, 135):
+                    with self.subTest(width=width, other=other, angle=angle):
+                        legs = [self.leg(a, w) for a, w in
+                                ((0, width), (angle, other),
+                                 (180, width), (180 + angle, other))]
+                        ring = build_roads.mouth_outline(legs)
+                        if ring is not None:
+                            self.assertTrue(build_roads.surface_gate(
+                                (build_roads.AREA_JUNCTION, build_roads.AREA_FLAG_CLOSED, ring)))
+
     def test_a_narrow_arm_does_not_sharpen_the_avenue_corners(self):
         legs = [self.leg(0, 12.0), self.leg(90, 12.0), self.leg(180, 12.0), self.leg(270, 12.0),
                 self.leg(225, 4.6)]

@@ -265,10 +265,12 @@ struct EngineMapStyleTests {
     @Test("Светофор новой карты — свой значок, и он не налезает на соседей")
     func ownTrafficLight() {
         let layer: [String: Any] = ["id": "radar-signal-icon",
-                                    "layout": ["icon-image": "traffic-light", "icon-allow-overlap": false]]
+                                    "layout": ["icon-image": "traffic-light", "icon-allow-overlap": false,
+                                               "icon-ignore-placement": true]]
         let own = EngineModernStyle.ownTrafficLight(layer)["layout"] as? [String: Any]
         #expect(own?["icon-image"] as? String == EngineModernStyle.trafficLightImage)
         #expect(own?["icon-allow-overlap"] as? Bool == false)
+        #expect(own?["icon-ignore-placement"] as? Bool == false)
         let other: [String: Any] = ["id": "x", "layout": ["icon-image": "fuel_11"]]
         #expect((EngineModernStyle.ownTrafficLight(other)["layout"] as? [String: Any])?["icon-image"] as? String
                 == "fuel_11")
@@ -283,6 +285,7 @@ struct EngineMapStyleTests {
         let layout = signal?["layout"] as? [String: Any]
         #expect(layout?["icon-image"] as? String == "radar-signal")
         #expect(layout?["icon-allow-overlap"] as? Bool == false)
+        #expect(layout?["icon-ignore-placement"] as? Bool == false)
         #expect(all.contains { $0["id"] as? String == "route-traveled" })
     }
 

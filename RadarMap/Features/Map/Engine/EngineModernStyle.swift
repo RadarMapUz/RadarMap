@@ -225,6 +225,10 @@ nonisolated enum EngineModernStyle {
               layout["icon-image"] as? String == "traffic-light" else { return layer }
         var own = layer
         layout["icon-image"] = trafficLightImage
+        // Значок должен занимать место в collision index: иначе соседние
+        // светофоры накладываются друг на друга на дальнем масштабе.
+        layout["icon-allow-overlap"] = false
+        layout["icon-ignore-placement"] = false
         own["layout"] = layout
         return own
     }

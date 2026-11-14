@@ -425,7 +425,7 @@ nonisolated enum EngineMapStyle {
             "id": "traffic-signals", "type": "symbol", "source": "near", "source-layer": "points",
             "minzoom": 16.2, "filter": ["==", ["get", "kind"], 1],
             "layout": ["icon-image": "radar-signal", "icon-allow-overlap": false,
-                       "icon-ignore-placement": true,
+                       "icon-ignore-placement": false,
                        "icon-padding": 2, "icon-anchor": "bottom",
                        "icon-size": ["interpolate", ["linear"], ["zoom"], 16.2, 0.75, 18, 1],
                        "icon-pitch-alignment": "viewport", "icon-rotation-alignment": "viewport"],

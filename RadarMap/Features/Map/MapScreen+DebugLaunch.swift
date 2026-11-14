@@ -18,6 +18,18 @@ extension MapScreen {
     /// -showCameraDetail` открывает нужный экран без тапов. В релизную сборку не попадает.
     func openScreenFromLaunchArguments() {
         let args = ProcessInfo.processInfo.arguments
+        // Повторяемая визуальная проверка дороги: -inspectRoad <lat> <lon>.
+        if let index = args.firstIndex(of: "-inspectRoad"), index + 2 < args.count,
+           let latitude = Double(args[index + 1]), let longitude = Double(args[index + 2]),
+           latitude.isFinite, longitude.isFinite,
+           (-85...85).contains(latitude), (-180...180).contains(longitude) {
+            Task {
+                await Task.pause(seconds: 6)
+                map.center(on: CLLocationCoordinate2D(latitude: latitude, longitude: longitude))
+                await Task.pause(seconds: 1)
+                map.zoomStep(2)
+            }
+        }
         // Демо-история для визуальной проверки Итогов и отчёта за период.
         // -demoBigNumbers: та же история, но с четырёхзначными километрами —
         // вёрстку Итогов надо проверять на числах, которые бывают в жизни, а не

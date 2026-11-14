@@ -51,6 +51,18 @@ class EncodeTests(unittest.TestCase):
 
 
 class OrientationTests(unittest.TestCase):
+    def test_upper_bridge_level_bit_only_for_layer_two_and_up(self):
+        up = build_roads.FLAG_LEVEL_UP
+        self.assertFalse(build_roads.flags_of({"bridge": "yes", "layer": "1"}) & up)
+        self.assertFalse(build_roads.flags_of({"bridge": "yes"}) & up)
+        self.assertTrue(build_roads.flags_of({"bridge": "yes", "layer": "2"}) & up)
+        self.assertTrue(build_roads.flags_of({"bridge": "viaduct", "layer": "3"}) & up)
+        self.assertFalse(build_roads.flags_of({"layer": "2"}) & up, "только у мостов")
+        self.assertFalse(build_roads.flags_of({"bridge": "yes", "layer": "чушь"}) & up)
+        # Бит выше всех, что читает клиент (маски 1…8 и полосы 4–7).
+        self.assertGreater(up, build_roads.FLAG_LANES_MASK | build_roads.FLAG_RING)
+        self.assertTrue(build_roads.topo(up), "ярус — характер: с нижним не склеивается")
+
     def test_reverse_oneway_is_flipped(self):
         # oneway=-1: односторонняя ПРОТИВ порядка точек. Телефон рисует
         # стрелки по порядку точек, поэтому геометрия разворачивается здесь.

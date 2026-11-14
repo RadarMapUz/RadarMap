@@ -20,13 +20,19 @@ import mvt
 from build_roads import (AREA_DIVIDER, AREA_KERB, FLAG_LANES_INFERRED, AREA_FILLET, AREA_HOUSE, AREA_JUNCTION, AREA_JUNCTION_BOX, AREA_MEDIAN, AREA_ROAD,
                          clip_ring, polygon_difference, polygon_intersection,
                          FLAG_BRIDGE,
-                         FLAG_LANES_TAGGED, FLAG_LINK, FLAG_ONEWAY, FLAG_TUNNEL,
+                         FLAG_LANES_TAGGED, FLAG_LEVEL_UP, FLAG_LINK, FLAG_ONEWAY, FLAG_TUNNEL,
                          PFLAG_CONFIRMED, PFLAG_PAINTED, PFLAG_ONEWAY, point_azimuth, point_width,
                          SURFACE_CLASS_MASK, SURFACE_CLASS_SHIFT, lanes_of,
                          road_width_meters, POINT_LANE_ARROWS, MAX_ARROW_LANES,
                          unpack_turns, turn_count, junction_class, with_junction_class,
                          TURN_LEFT, TURN_RIGHT, TURN_SLIGHT_LEFT, TURN_SLIGHT_RIGHT, TURN_UTURN,
                          TURN_THROUGH_LEFT, TURN_THROUGH_RIGHT)
+
+# Уровень ленты: земля, мост, верхний ярус моста, тоннель. Разметка и ленты
+# разных уровней друг друга не режут.
+LEVEL_BITS = FLAG_BRIDGE | FLAG_TUNNEL | FLAG_LEVEL_UP
+UPPER_DECK = FLAG_BRIDGE | FLAG_LEVEL_UP
+
 
 # Зумы. Два, а не десять.
 #
@@ -1345,6 +1351,10 @@ def _walk_along(points, index, t, metres):
     return here
 
 
+# Запас под настилом верхнего яруса: ограждение шире полотна на пару пикселей.
+UNDER_DECK_MARGIN_METERS = 1.5
+
+
 class OverlapIndex:
     """Оси лент по клеткам: лежит ли точка разметки на ЧУЖОЙ ленте того же уровня."""
 
@@ -1390,7 +1400,7 @@ class OverlapIndex:
             if code > 7 or len(points) < 2:
                 continue
             half = (widths.get(id(road)) or road_width_meters(code, lanes_of(flags))) / 2.0
-            level = flags & (FLAG_BRIDGE | FLAG_TUNNEL)
+            level = flags & LEVEL_BITS
             pad = (half + 2.0) / 111_320
             key = id(road)
             marked = lane_split(code, flags, 2.0 * half) if code <= 7 and not flags & FLAG_TUNNEL else (0, False)
@@ -1406,7 +1416,7 @@ class OverlapIndex:
                         self._grid[(gx, gy)].append(entry)
 
     def foreign(self, point, road):
-        level = road[1] & (FLAG_BRIDGE | FLAG_TUNNEL)
+        level = road[1] & LEVEL_BITS
         own_ends = self._ends.get(id(road), set())
         own_rank = self._rank.get(id(road))
         kx = 111_320 * math.cos(math.radians(point[1]))
@@ -1423,6 +1433,22 @@ class OverlapIndex:
             length = dx * dx + dy * dy
             t = 0.0 if length == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / length))
             if math.hypot(ax + t * dx, ay + t * dy) < half - self.MARGIN_METERS:
+                return True
+        return False
+
+    def under_deck(self, point):
+        """Точка под настилом верхнего яруса (с запасом на его ограждение)."""
+        kx = 111_320 * math.cos(math.radians(point[1]))
+        for _key, lvl, a, b, half, _oneway, _marked, _points, _index in self._grid.get(
+                (int(point[0] / self.CELL), int(point[1] / self.CELL)), ()):
+            if lvl != UPPER_DECK:
+                continue
+            ax, ay = (a[0] - point[0]) * kx, (a[1] - point[1]) * 111_320
+            bx, by = (b[0] - point[0]) * kx, (b[1] - point[1]) * 111_320
+            dx, dy = bx - ax, by - ay
+            length = dx * dx + dy * dy
+            t = 0.0 if length == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / length))
+            if math.hypot(ax + t * dx, ay + t * dy) < half + UNDER_DECK_MARGIN_METERS:
                 return True
         return False
 
@@ -1529,7 +1555,10 @@ class OverlapIndex:
             parts = max(1, int(length / step_meters))
             dense.extend((a[0] + (b[0] - a[0]) * i / parts, a[1] + (b[1] - a[1]) * i / parts)
                          for i in range(1, parts + 1))
-        flags = [self.foreign(p, road) for p in dense]
+        # Разметка нижнего моста под верхним ярусом стирается: в стиле ярус
+        # лежит выше настила, но разметка всех мостов — одним слоем над ними.
+        lower = road[1] & LEVEL_BITS == FLAG_BRIDGE
+        flags = [self.foreign(p, road) or (lower and self.under_deck(p)) for p in dense]
         if not any(flags):
             return [line]
         runs, current = [], []
@@ -1619,7 +1648,7 @@ def _markings(roads, widths=None, mask=None, overlap=None):
     """
     def key(point, flags):
         return (round(point[0], 6), round(point[1], 6),
-                flags & (FLAG_BRIDGE | FLAG_TUNNEL))
+                flags & LEVEL_BITS)
 
     # Узел: [степень, ширина самой широкой, имена улиц tertiary+].
     nodes = defaultdict(lambda: [0, 0.0, set()])
@@ -1786,7 +1815,8 @@ def _markings(roads, widths=None, mask=None, overlap=None):
                     pieces = [part]
                 # Пунктир не ложится на чужую ленту: там, где пандус вливается
                 # в проспект, разметка двух лент шла сеткой (Фурката, 05.10.2026).
-                on_bridge = bool(flags & FLAG_BRIDGE)
+                # 0 — земля, 1 — мост, 2 — верхний ярус: стиль кладёт ярус поверх яруса.
+                on_bridge = (2 if flags & UPPER_DECK == UPPER_DECK else 1) if flags & FLAG_BRIDGE else 0
                 for piece in pieces:
                     for clean in overlap.clip(piece, road):
                         yield clean, kind, solid, on_bridge
@@ -1916,6 +1946,9 @@ def _road_props(road, width=None):
         props["oneway"] = True
     if flags & FLAG_BRIDGE:
         props["bridge"] = True
+        # Верхний ярус (layer ≥ 2) — отдельной группой стиля поверх нижнего.
+        if flags & FLAG_LEVEL_UP:
+            props["level"] = 2
     if flags & FLAG_TUNNEL:
         props["tunnel"] = True
     if flags & FLAG_LANES_TAGGED:
@@ -2243,14 +2276,16 @@ TREE_CROWN_RADII = (1.9, 2.3, 2.7, 3.1)
 TREE_CROWN_SIDES = 16
 
 
-def tree_crown(point, size, share=1.0, radius=None, sides=TREE_CROWN_SIDES):
-    """Кольцо вокруг точки дерева: радиус кроны по классу размера (× share), метры."""
+def tree_crown(point, size, share=1.0, radius=None, sides=TREE_CROWN_SIDES, phase=0.0):
+    """Кольцо вокруг точки дерева: радиус кроны по классу размера (× share), метры.
+
+    phase — поворот на долю грани."""
     lon, lat = point
     if radius is None:
         radius = TREE_CROWN_RADII[size % len(TREE_CROWN_RADII)] * share
     kx = 111_320 * math.cos(math.radians(lat))
-    ring = [(lon + radius * math.cos(2 * math.pi * i / sides) / kx,
-             lat + radius * math.sin(2 * math.pi * i / sides) / 111_320)
+    ring = [(lon + radius * math.cos(2 * math.pi * (i + phase) / sides) / kx,
+             lat + radius * math.sin(2 * math.pi * (i + phase) / sides) / 111_320)
             for i in range(sides)]
     return ring + ring[:1]
 
@@ -2288,14 +2323,17 @@ def tree_tiers(point, size, planted=False):
     out = [(tree_crown(point, size, radius=TREE_TRUNK_RADIUS, sides=4 if planted else 6),
             {"crown": True, "trunk": True, "base": 0.0, "top": TREE_TRUNK_METERS + 0.3})]
     for index, (share, low, high) in enumerate(tiers):
+        # Соседние ярусы повёрнуты на полграни: рёбра не встают в одну
+        # вертикаль, и крона в наклоне не читается гранёной колонной.
+        phase = 0.5 * (index % 2)
         if planted:
-            out.append((tree_crown(point, size, share, sides=sides),
+            out.append((tree_crown(point, size, share, sides=sides, phase=phase),
                         {"crown": True, "tier": round(index * (TREE_TIER_COUNT - 1) / (len(tiers) - 1)),
                          "base": round(TREE_TRUNK_METERS + low * crown, 2),
                          "top": round(TREE_TRUNK_METERS + high * crown, 2)}))
             continue
         # Низ кроны — в тени, верх — на свету: номер яруса стиль переводит в тон.
-        out.append((tree_crown(point, size, share),
+        out.append((tree_crown(point, size, share, phase=phase),
                     {"crown": True, "tier": index, "base": round(TREE_TRUNK_METERS + low * crown, 2),
                      "top": round(TREE_TRUNK_METERS + high * crown, 2)}))
     return out
@@ -2428,7 +2466,7 @@ def bridge_chains(roads, widths, overlap=None):
         ends[key(road[2][-1])].append((road, False))
 
     def signature(road):
-        return (road[0], bool(road[1] & FLAG_ONEWAY), width_of(road))
+        return (road[0], bool(road[1] & FLAG_ONEWAY), bool(road[1] & FLAG_LEVEL_UP), width_of(road))
 
     def partner(road, at_start):
         here = ends[key(road[2][0] if at_start else road[2][-1])]
@@ -2481,6 +2519,67 @@ def bridge_chains(roads, widths, overlap=None):
         name = next((piece[3] for piece in chain if len(piece) > 3 and piece[3]), "")
         out.append(((first[0], first[1], points, name), width_of(first)))
     return merged, out
+
+
+# Портал тоннеля (раздел 6 плана 13.11): короткая тёмная черта поперёк ленты
+# там, где автомобильный тоннель стыкуется с наземной дорогой.
+KIND_TUNNEL_PORTAL = 17
+PORTAL_INSET_METERS = 0.6      # чуть внутрь тоннеля: круглый торец наземной ленты его не закрывает
+PORTAL_OVERHANG_METERS = 0.5   # за кромку с каждой стороны — черта читается шире полотна
+PORTAL_HEADING_METERS = 6.0    # направление тоннеля — по хорде, а не по первому отрезку
+# Портал — у улиц tertiary и старше: в классах 6–7 «тоннели» Ташкента — проезды
+# сквозь дом (building_passage), въезды в подземные гаражи и ошибочные culvert;
+# 255 тёмных черт по дворам вместо полутора десятков на настоящих тоннелях.
+PORTAL_MAX_CLASS = 5
+
+
+def tunnel_portals(roads, widths=None, tapers=None):
+    """[линия поперёк] — порталы автомобильных тоннелей.
+
+    Портал — конец тоннеля, в который упирается наземная дорога и не входит
+    другой кусок того же тоннеля (тоннель в OSM режут на куски, их стыки —
+    не порталы).
+    """
+    widths = widths or {}
+
+    def key(point):
+        return (round(point[0], 6), round(point[1], 6))
+
+    ground, tunnel_ends = set(), defaultdict(int)
+    for road in roads:
+        code, flags, points = road[0], road[1], road[2]
+        if code > 7 or len(points) < 2:
+            continue
+        for end in (points[0], points[-1]):
+            if flags & FLAG_TUNNEL:
+                tunnel_ends[key(end)] += 1
+            elif not flags & FLAG_BRIDGE:
+                ground.add(key(end))
+    out = []
+    for road in roads:
+        code, flags, points = road[0], road[1], road[2]
+        if code > PORTAL_MAX_CLASS or len(points) < 2 or not flags & FLAG_TUNNEL:
+            continue
+        width = widths.get(id(road)) or road_width_meters(code, lanes_of(flags))
+        # Ширина у самого конца — нарисованная: лента сходится к соседу ступенями.
+        pieces = tapered_pieces(road, width, (tapers or {}).get(id(road)))
+        for run, end_width in ((points, pieces[0][1]), (points[::-1], pieces[-1][1])):
+            half = end_width / 2.0
+            end = run[0]
+            if key(end) not in ground or tunnel_ends[key(end)] != 1:
+                continue
+            kx = 111_320 * math.cos(math.radians(end[1]))
+            inward = _walk_along(run, 0, 0.0, PORTAL_HEADING_METERS)
+            dx, dy = (inward[0] - end[0]) * kx, (inward[1] - end[1]) * 111_320
+            length = math.hypot(dx, dy)
+            if length < 1.0:
+                continue
+            fx, fy = dx / length, dy / length
+            cx, cy = end[0] + fx * PORTAL_INSET_METERS / kx, end[1] + fy * PORTAL_INSET_METERS / 111_320
+            reach = half + PORTAL_OVERHANG_METERS
+            out.append([(cx - fy * reach / kx, cy + fx * reach / 111_320),
+                        (cx + fy * reach / kx, cy - fx * reach / 111_320)])
+    return out
 
 
 INNER_ROAD_SHARE = 0.6
@@ -3064,8 +3163,71 @@ LIGHT_MIN_METERS = 5.0
 LIGHT_MAX_METERS = 14.0
 
 
-def approach_lights(zone, signals):
-    """Точки значков светофоров, по одной на подход: [(lon, lat)]."""
+# Значок подхода — у стоп-линии своего подхода, а не на доле пути до неё
+# посреди перекрёстка (этап 7 плана 13.11): чуть до линии по ходу к узлу.
+KIND_NODE_LIGHT = 18             # один значок на узел для обзора 16–16,5
+STOP_LIGHT_MIN_METERS = 3.0      # ближе к центру — это линия соседнего подхода в самом узле
+STOP_LIGHT_MAX_METERS = 45.0     # как REGULATED_REACH: дальше — уже не этот узел
+STOP_LIGHT_DEGREES = 40.0        # стоп-линия в секторе подхода (ленты дублёра смещены вбок)
+STOP_LIGHT_BACK_METERS = 3.0     # от линии навстречу движению: значок не закрывает краску
+# От оси зебры — до места стоп-линии перед ней (approach_stop_lines) и дальше.
+ZEBRA_LIGHT_BACK_METERS = ZEBRA_DEPTH_METERS / 2 + STOP_BEFORE_ZEBRA_METERS + STOP_LIGHT_BACK_METERS
+
+
+def light_at_stop(cx, cy, ux, uy, stops, back=STOP_LIGHT_BACK_METERS, used=None):
+    """Точка значка у стоп-линии подхода (единичный вектор u из центра) или None.
+
+    stops — StopIndex стоп-линий или зебр; back — на сколько метров от линии
+    навстречу движению; used — id линий, уже занятых другими подходами узла
+    (выбранная сюда добавляется): одна линия — один значок.
+    """
+    if stops is None:
+        return None
+    kx = 111_320 * math.cos(math.radians(cy))
+    best = None
+    cos_sector = math.cos(math.radians(STOP_LIGHT_DEGREES))
+    reach = STOP_LIGHT_MAX_METERS + 10.0
+    cells = range(int((cx - reach / kx) / _SIGNAL_CELL), int((cx + reach / kx) / _SIGNAL_CELL) + 1)
+    rows = range(int((cy - reach / 111_320) / _SIGNAL_CELL), int((cy + reach / 111_320) / _SIGNAL_CELL) + 1)
+    for gx in cells:
+        for gy in rows:
+            for line in stops._grid.get((gx, gy), ()):
+                if used is not None and id(line) in used:
+                    continue
+                a, b = line[0], line[-1]
+                ax, ay = (a[0] - cx) * kx, (a[1] - cy) * 111_320
+                bx, by = (b[0] - cx) * kx, (b[1] - cy) * 111_320
+                mx, my = (ax + bx) / 2, (ay + by) / 2
+                distance = math.hypot(mx, my)
+                along = mx * ux + my * uy
+                if not STOP_LIGHT_MIN_METERS <= along <= STOP_LIGHT_MAX_METERS:
+                    continue
+                if along < distance * cos_sector:
+                    continue
+                lx, ly = bx - ax, by - ay
+                length = math.hypot(lx, ly)
+                if length == 0 or abs(lx * ux + ly * uy) / length > 0.5:
+                    continue                       # не поперёк подхода
+                if best is None or along < best[0]:
+                    # Нормаль к линии — от узла: туда стоят машины перед линией.
+                    nx, ny = -ly / length, lx / length
+                    if nx * mx + ny * my < 0:
+                        nx, ny = -nx, -ny
+                    best = (along, mx + nx * back, my + ny * back, id(line))
+    if best is None:
+        return None
+    if used is not None:
+        used.add(best[3])
+    return (cx + best[1] / kx, cy + best[2] / 111_320)
+
+
+def approach_lights(zone, signals, stops=None, zebras=None):
+    """Точки значков светофоров, по одной на подход: [(lon, lat)].
+
+    stops — StopIndex: значок встаёт у стоп-линии своего подхода; нет её — там,
+    где она была бы, перед зеброй подхода (zebras); нет и зебры — на доле
+    расстояния до светофоров подхода, как раньше.
+    """
     cx, cy = waffle_centre(zone)
     kx = 111_320 * math.cos(math.radians(cy))
     rays = []
@@ -3095,9 +3257,16 @@ def approach_lights(zone, signals):
         # без подходов): подход неизвестен, но узел регулируемый — один значок.
         return [(cx, cy)]
     out = []
+    used = set()
     for group in groups:
         ux, uy = sum(r[1] for r in group), sum(r[2] for r in group)
         norm = math.hypot(ux, uy) or 1.0
+        at_stop = light_at_stop(cx, cy, ux / norm, uy / norm, stops, used=used)
+        if at_stop is None:
+            at_stop = light_at_stop(cx, cy, ux / norm, uy / norm, zebras, ZEBRA_LIGHT_BACK_METERS, used)
+        if at_stop is not None:
+            out.append(at_stop)
+            continue
         reach = sum(r[3] for r in group) / len(group) * LIGHT_SHARE
         reach = max(LIGHT_MIN_METERS, min(LIGHT_MAX_METERS, reach))
         out.append((cx + ux / norm * reach / kx, cy + uy / norm * reach / 111_320))
@@ -3544,6 +3713,8 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                     piece_props["width"] = width
                     piece_props.pop("stub", None)
                 _put(buckets, zoom, LAYER_ROADS, mvt.LINESTRING, piece, piece_props)
+        for portal in tunnel_portals(roads, widths, tapers):
+            _put(buckets, zoom, LAYER_SURFACE, mvt.LINESTRING, portal, {"kind": KIND_TUNNEL_PORTAL})
         for road in far:
             _put(buckets, far_zoom, LAYER_ROADS, mvt.LINESTRING, road[2],
                  _road_props(road))
@@ -3743,13 +3914,8 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
         # Светофор, поставленный человеком, рисуется всегда: у своего узла или
         # отдельным значком (place_confirmed).
         junctions, loose = place_confirmed(junctions, confirmed)
-        for zone, lights in junctions:
-            # Жёлтой сетки нет (у Яндекса её нет): зона только решает,
-            # регулируемый ли перекрёсток и где его центр.
-            for light in approach_lights(zone, lights):
-                _put(buckets, zoom, LAYER_SURFACE, mvt.POINT, [light], {"kind": KIND_APPROACH_LIGHT})
-        for light in loose:
-            _put(buckets, zoom, LAYER_SURFACE, mvt.POINT, [light], {"kind": KIND_APPROACH_LIGHT})
+        # Значки подходов ставятся у стоп-линий — после них (ниже).
+        light_junctions = junctions
         if confirmed:
             at_junctions = len({spot for _zone, lights in junctions for spot in lights} & confirmed)
             print(f"MVT светофоры от человека: {len(confirmed)} — у узлов {at_junctions}, "
@@ -3855,6 +4021,18 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                     del stop_lines[index]
             stop_lines[-1] = [(line, 1) for line in extra]
         stops = StopIndex(line for lines in stop_lines.values() for line, _code in lines)
+        zebra_lines = StopIndex(line for line, _marked in fitted_zebras)
+        for zone, lights in light_junctions:
+            # Жёлтой сетки нет (у Яндекса её нет): зона только решает,
+            # регулируемый ли перекрёсток и где его центр. Значки подходов —
+            # с 16,5 (approach отличает их от значков старых тайлов), на обзоре
+            # 16–16,5 — один значок в центре узла.
+            for light in approach_lights(zone, lights, stops, zebra_lines):
+                _put(buckets, zoom, LAYER_SURFACE, mvt.POINT, [light],
+                     {"kind": KIND_APPROACH_LIGHT, "approach": True})
+            _put(buckets, zoom, LAYER_SURFACE, mvt.POINT, [waffle_centre(zone)], {"kind": KIND_NODE_LIGHT})
+        for light in loose:
+            _put(buckets, zoom, LAYER_SURFACE, mvt.POINT, [light], {"kind": KIND_APPROACH_LIGHT})
         # Разметка — после стоп-линий: полосы и сплошные обрываются у стоп-линии,
         # а не проходят сквозь неё крестом (Кумарик, 07.10.2026).
         marks_mask.add_zebras([line for line, _m in fitted_zebras]
@@ -3865,9 +4043,11 @@ def build_mvt(roads, target_dir, areas=(), points=(), far=(),
                 props["solid"] = True
             if on_bridge:
                 props["bridge"] = True
+            if on_bridge == 2:
+                props["level"] = 2
             _put(buckets, zoom, LAYER_MARKINGS, mvt.LINESTRING, line, props)
         # Индекс лент живёт до стрелок: ряд делит нарисованную ленту под собой.
-        crossings = StopIndex(line for line, _marked in fitted_zebras)
+        crossings = zebra_lines
         arrows_past_stop = 0
         # Почему ряд не встал: последняя причина из поисков места по подходу.
         arrows_skipped = Counter()

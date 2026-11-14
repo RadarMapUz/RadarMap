@@ -906,6 +906,57 @@
     ]
    ]
   },
+  "radar-bridge-up": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    15,
+    [
+     "match",
+     [
+      "get",
+      "cls"
+     ],
+     [
+      1,
+      2
+     ],
+     "#ffe2a8",
+     3,
+     "#ffffff",
+     4,
+     "#ffffff",
+     5,
+     "#ffffff",
+     "#ffffff"
+    ],
+    16,
+    [
+     "match",
+     [
+      "get",
+      "cls"
+     ],
+     [
+      1,
+      2
+     ],
+     "#4b4f5a",
+     3,
+     "#3f4859",
+     4,
+     "#3f4859",
+     5,
+     "#434c5e",
+     "#ffffff"
+    ]
+   ]
+  },
   "radar-divider-kerb": {
    "line-color": [
     "interpolate",
@@ -1269,6 +1320,21 @@
     "#cfd3d9",
     16,
     "#d7dce3"
+   ]
+  },
+  "radar-tunnel-portal": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    15,
+    "#2f343c",
+    16,
+    "#1a1d23"
    ]
   },
   "radar-zebra-base": {

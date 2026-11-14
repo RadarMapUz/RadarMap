@@ -1075,6 +1075,30 @@
   "radar-bridge-shadow": {
    "line-color": "rgba(0,0,0,0.5)"
   },
+  "radar-bridge-shadow-up": {
+   "line-color": "rgba(0,0,0,0.5)"
+  },
+  "radar-bridge-up": {
+   "line-color": [
+    "match",
+    [
+     "get",
+     "cls"
+    ],
+    [
+     1,
+     2
+    ],
+    "#3b4049",
+    3,
+    "#363d48",
+    4,
+    "#363d48",
+    5,
+    "#363d48",
+    "#272c34"
+   ]
+  },
   "radar-centre-dashed": {
    "line-color": "#cbd1d9"
   },

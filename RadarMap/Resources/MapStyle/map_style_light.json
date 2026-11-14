@@ -10470,7 +10470,7 @@
    "minzoom": 15,
    "paint": {
     "line-color": "#dcdfe4",
-    "line-opacity": 0.3,
+    "line-opacity": 0.55,
     "line-width": [
      "interpolate",
      [
@@ -11520,6 +11520,51 @@
      [
       "geometry-type"
      ],
+     "LineString"
+    ],
+    [
+     "==",
+     [
+      "get",
+      "kind"
+     ],
+     17
+    ]
+   ],
+   "id": "radar-tunnel-portal",
+   "layout": {
+    "line-cap": "butt"
+   },
+   "minzoom": 15,
+   "paint": {
+    "line-color": "#2f343c",
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      2
+     ],
+     [
+      "zoom"
+     ],
+     15,
+     1.2,
+     20,
+     21.390950399999998
+    ]
+   },
+   "source": "radar",
+   "source-layer": "surface",
+   "type": "line"
+  },
+  {
+   "filter": [
+    "all",
+    [
+     "==",
+     [
+      "geometry-type"
+     ],
      "Polygon"
     ],
     [
@@ -12133,6 +12178,13 @@
    "filter": [
     "all",
     [
+     "!",
+     [
+      "has",
+      "level"
+     ]
+    ],
+    [
      "<=",
      [
       "get",
@@ -12273,6 +12325,13 @@
    "filter": [
     "all",
     [
+     "!",
+     [
+      "has",
+      "level"
+     ]
+    ],
+    [
      "<=",
      [
       "get",
@@ -12396,6 +12455,418 @@
     ]
    ],
    "id": "radar-bridge",
+   "layout": {
+    "line-cap": "round",
+    "line-join": "round"
+   },
+   "minzoom": 15,
+   "paint": {
+    "line-color": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     15,
+     [
+      "match",
+      [
+       "get",
+       "cls"
+      ],
+      [
+       1,
+       2
+      ],
+      "#ffe2a8",
+      3,
+      "#ffffff",
+      4,
+      "#ffffff",
+      5,
+      "#ffffff",
+      "#ffffff"
+     ],
+     16,
+     [
+      "match",
+      [
+       "get",
+       "cls"
+      ],
+      [
+       1,
+       2
+      ],
+      "#ecd096",
+      3,
+      "#d2d6dd",
+      4,
+      "#d2d6dd",
+      5,
+      "#d2d6dd",
+      "#ffffff"
+     ]
+    ],
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      2
+     ],
+     [
+      "zoom"
+     ],
+     15,
+     [
+      "max",
+      [
+       "+",
+       [
+        "*",
+        [
+         "coalesce",
+         [
+          "get",
+          "width"
+         ],
+         8
+        ],
+        0.557056
+       ],
+       0.0
+      ],
+      1.0
+     ],
+     18,
+     [
+      "max",
+      [
+       "+",
+       [
+        "*",
+        [
+         "coalesce",
+         [
+          "get",
+          "width"
+         ],
+         8
+        ],
+        4.456448
+       ],
+       0.0
+      ],
+      1.0
+     ],
+     20,
+     [
+      "max",
+      [
+       "+",
+       [
+        "*",
+        [
+         "coalesce",
+         [
+          "get",
+          "width"
+         ],
+         8
+        ],
+        17.825792
+       ],
+       0.0
+      ],
+      1.0
+     ]
+    ]
+   },
+   "source": "radar",
+   "source-layer": "roads",
+   "type": "line"
+  },
+  {
+   "filter": [
+    "all",
+    [
+     "has",
+     "level"
+    ],
+    [
+     "<=",
+     [
+      "get",
+      "cls"
+     ],
+     7
+    ],
+    [
+     "==",
+     [
+      "get",
+      "bridge"
+     ],
+     true
+    ]
+   ],
+   "id": "radar-bridge-shadow-up",
+   "layout": {
+    "line-cap": "butt",
+    "line-join": "round"
+   },
+   "minzoom": 15,
+   "paint": {
+    "line-blur": 6,
+    "line-color": "rgba(40,48,60,0.30)",
+    "line-translate": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     15,
+     [
+      "literal",
+      [
+       1,
+       2
+      ]
+     ],
+     17,
+     [
+      "literal",
+      [
+       3,
+       5
+      ]
+     ],
+     19,
+     [
+      "literal",
+      [
+       6,
+       11
+      ]
+     ]
+    ],
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      2
+     ],
+     [
+      "zoom"
+     ],
+     15,
+     [
+      "max",
+      [
+       "+",
+       [
+        "*",
+        [
+         "coalesce",
+         [
+          "get",
+          "width"
+         ],
+         8
+        ],
+        0.557056
+       ],
+       9.0
+      ],
+      10.0
+     ],
+     18,
+     [
+      "max",
+      [
+       "+",
+       [
+        "*",
+        [
+         "coalesce",
+         [
+          "get",
+          "width"
+         ],
+         8
+        ],
+        4.456448
+       ],
+       9.0
+      ],
+      10.0
+     ],
+     20,
+     [
+      "max",
+      [
+       "+",
+       [
+        "*",
+        [
+         "coalesce",
+         [
+          "get",
+          "width"
+         ],
+         8
+        ],
+        17.825792
+       ],
+       9.0
+      ],
+      10.0
+     ]
+    ]
+   },
+   "source": "radar",
+   "source-layer": "roads",
+   "type": "line"
+  },
+  {
+   "filter": [
+    "all",
+    [
+     "has",
+     "level"
+    ],
+    [
+     "<=",
+     [
+      "get",
+      "cls"
+     ],
+     7
+    ],
+    [
+     "==",
+     [
+      "get",
+      "bridge"
+     ],
+     true
+    ]
+   ],
+   "id": "radar-bridge-case-up",
+   "layout": {
+    "line-cap": "butt",
+    "line-join": "round"
+   },
+   "minzoom": 15,
+   "paint": {
+    "line-color": "#ffffff",
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      2
+     ],
+     [
+      "zoom"
+     ],
+     15,
+     [
+      "max",
+      [
+       "+",
+       [
+        "*",
+        [
+         "coalesce",
+         [
+          "get",
+          "width"
+         ],
+         8
+        ],
+        0.557056
+       ],
+       4.0
+      ],
+      5.0
+     ],
+     18,
+     [
+      "max",
+      [
+       "+",
+       [
+        "*",
+        [
+         "coalesce",
+         [
+          "get",
+          "width"
+         ],
+         8
+        ],
+        4.456448
+       ],
+       4.0
+      ],
+      5.0
+     ],
+     20,
+     [
+      "max",
+      [
+       "+",
+       [
+        "*",
+        [
+         "coalesce",
+         [
+          "get",
+          "width"
+         ],
+         8
+        ],
+        17.825792
+       ],
+       4.0
+      ],
+      5.0
+     ]
+    ]
+   },
+   "source": "radar",
+   "source-layer": "roads",
+   "type": "line"
+  },
+  {
+   "filter": [
+    "all",
+    [
+     "has",
+     "level"
+    ],
+    [
+     "<=",
+     [
+      "get",
+      "cls"
+     ],
+     7
+    ],
+    [
+     "==",
+     [
+      "get",
+      "bridge"
+     ],
+     true
+    ]
+   ],
+   "id": "radar-bridge-up",
    "layout": {
     "line-cap": "round",
     "line-join": "round"
@@ -12850,6 +13321,72 @@
      1.0
     ]
    },
+   "minzoom": 16.5,
+   "source": "radar",
+   "source-layer": "surface",
+   "type": "symbol"
+  },
+  {
+   "filter": [
+    "all",
+    [
+     "==",
+     [
+      "geometry-type"
+     ],
+     "Point"
+    ],
+    [
+     "any",
+     [
+      "==",
+      [
+       "get",
+       "kind"
+      ],
+      18
+     ],
+     [
+      "all",
+      [
+       "==",
+       [
+        "get",
+        "kind"
+       ],
+       14
+      ],
+      [
+       "!",
+       [
+        "has",
+        "approach"
+       ]
+      ]
+     ]
+    ]
+   ],
+   "id": "radar-signal-node",
+   "layout": {
+    "icon-allow-overlap": false,
+    "icon-ignore-placement": true,
+    "icon-image": "traffic-light",
+    "icon-padding": 1,
+    "icon-size": [
+     "interpolate",
+     [
+      "linear"
+     ],
+     [
+      "zoom"
+     ],
+     16,
+     0.7,
+     19,
+     1.0
+    ]
+   },
+   "maxzoom": 16.5,
    "minzoom": 16,
    "source": "radar",
    "source-layer": "surface",
@@ -13745,7 +14282,7 @@
        ]
       ],
       0,
-      "#93c77c",
+      "#a1cf8b",
       3,
       "#b3db9c",
       6.2,

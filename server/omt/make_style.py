@@ -148,7 +148,11 @@ PALETTES = {
         # Мост: светлый край-ограждение и тень под пролётом; тоннель —
         # полупрозрачный асфальт с пунктирной кромкой (как у Яндекса).
         "bridge_edge": "#ffffff", "bridge_shadow": "rgba(40,48,60,0.30)", "tunnel": "#dcdfe4",
-        "tree_crown": "#b3db9c", "tree_crown_low": "#93c77c", "tree_crown_high": "#c9e8b6",
+        # Портал тоннеля — тёмная черта поперёк ленты: темнее любого асфальта.
+        "tunnel_portal": "#2f343c",
+        # Низ кроны темнее верха, но мягко: стены яруса и так темнит свет
+        # объёма (до 0,38 цвета), и при #93c77c низ читался чёрными гранями.
+        "tree_crown": "#b3db9c", "tree_crown_low": "#a1cf8b", "tree_crown_high": "#c9e8b6",
         "tree_light": "#d0ecbf", "tree_trunk": "#9a948c", "tree_shadow": "rgba(55,85,45,0.24)",
         "label": "#2d3036", "street_label": "#2b2e33", "halo": "#ffffff", "oneway_opacity": 0.55,
         "housenumber": "#707681", "water_label": "#3b78b8",
@@ -167,7 +171,7 @@ PALETTES = {
         "drive_tertiary": "#434c5e", "drive_minor": "#ffffff",
         "drive_kerb": "#e4e8ee", "drive_kerb_trunk": "#f0c46e", "drive_minor_edge": "#d9dce1",
         "drive_casing": "#d7dce3", "drive_gutter": "#363e4d", "drive_zebra_base": "#3f4859",
-        "drive_paint": "#ffffff", "drive_street_label": "#f2f4f7",
+        "drive_paint": "#ffffff", "drive_street_label": "#f2f4f7", "drive_tunnel_portal": "#1a1d23",
         # Дома в поездке (29.F) — чуть светлее и холоднее: на тёмном асфальте
         # светлые объёмы как у Amap, без прозрачности (она просвечивала стены).
         "drive_building": "#e9ecf1",
@@ -221,7 +225,10 @@ PALETTES = {
         "gutter": "#1d2025",
         "parking": "#212429", "parking_edge": "#2c2f36", "barrier": "#4a4f58",
         "bridge_edge": "#7a808b", "bridge_shadow": "rgba(0,0,0,0.6)", "tunnel": "#262a30",
-        "tree_crown": "#1d3628", "tree_crown_low": "#152a1f", "tree_crown_high": "#2a4a37",
+        "tunnel_portal": "#0d0e11",
+        # Ночью свет объёма — 0,5: при прежних #152a1f–#2a4a37 стены крон были
+        # почти чёрными; светлее на ступень, всё ещё темнее любой улицы.
+        "tree_crown": "#2c4a37", "tree_crown_low": "#243f2e", "tree_crown_high": "#3a5d47",
         "tree_light": "#284634", "tree_trunk": "#3a3632", "tree_shadow": "rgba(0,0,0,0.5)",
         "label": "#e6e9ee", "street_label": "#f2f4f7", "halo": "#16181c", "oneway_opacity": 0.7,
         "housenumber": "#8b929d", "water_label": "#7fa6d1",
@@ -233,7 +240,7 @@ PALETTES = {
         "drive_tertiary": "#33373f", "drive_minor": "#30343c",
         "drive_kerb": "#575c66", "drive_kerb_trunk": "#7c8797", "drive_minor_edge": "#1f2227",
         "drive_casing": "#25282e", "drive_gutter": "#1d2025", "drive_zebra_base": "#2e3137",
-        "drive_paint": "#9aa0aa", "drive_street_label": "#f2f4f7",
+        "drive_paint": "#9aa0aa", "drive_street_label": "#f2f4f7", "drive_tunnel_portal": "#0d0e11",
         "drive_building": "#24272e",
         "drive_building_use": {"health": "#34272e", "education": "#312d22", "retail": "#2c2738",
                                "industrial": "#1f2a3a", "religious": "#213434"},
@@ -708,8 +715,21 @@ GROUND_PAINT = ("radar-asphalt-grain", "radar-markings-solid", "radar-markings",
                 "radar-centre-solid", "radar-zebra-base", "radar-zebra", "radar-stop-line", "radar-arrows")
 # Ширина бетонной разделительной на карте, м.
 DIVIDER_METERS = 1.6
+# Прозрачность полотна тоннеля.
+TUNNEL_OPACITY = 0.55
+# Толщина черты портала тоннеля, м.
+PORTAL_METERS = 1.2
+# С этого зума светофор — по значку на подход, ниже — один на узел.
+SIGNAL_APPROACH_FROM = 16.5
+
+
+def signal_layout():
+    return {"icon-image": "traffic-light", "icon-allow-overlap": False,
+            "icon-ignore-placement": True, "icon-padding": 1,
+            "icon-size": ["interpolate", ["linear"], ["zoom"], 16, 0.7, 19, 1.0]}
 BRIDGE_MARKINGS = ("radar-markings-solid", "radar-markings", "radar-centre-dashed",
                    "radar-centre-solid")
+UPPER_DECK_LAYERS = ("radar-bridge-shadow", "radar-bridge-case", "radar-bridge")
 
 
 def _with(condition, existing):
@@ -736,8 +756,22 @@ def _bridge_order(layers):
     rest = [layer for layer in layers if layer["id"] not in GROUND_PAINT]
     shadow = next(i for i, layer in enumerate(rest) if layer["id"] == "radar-bridge-shadow")
     rest[shadow:shadow] = ground
+    # Верхний ярус (layer ≥ 2, свойство level) — своей тенью, ограждением и
+    # настилом поверх нижнего; разметку нижнего под ним стирает сборка тайлов,
+    # поэтому разметка всех мостов остаётся одним слоем над обоими ярусами.
+    # Настил нижней группы ярус не исключает: по radar-bridge приложение щупает
+    # ленты, а двойная заливка одним цветом не видна.
+    upper = []
+    for layer_id in UPPER_DECK_LAYERS:
+        layer = by_id[layer_id]
+        up = copy.deepcopy(layer)
+        up["id"] = layer_id + "-up"
+        up["filter"] = _with(["has", "level"], up["filter"])
+        upper.append(up)
+        if layer_id != "radar-bridge":
+            layer["filter"] = _with(["!", ["has", "level"]], layer["filter"])
     top = next(i for i, layer in enumerate(rest) if layer["id"] == "radar-bridge") + 1
-    rest[top:top] = deck
+    rest[top:top] = upper + deck
     return rest
 
 
@@ -970,7 +1004,7 @@ DRIVE_KEYS = {"near_trunk": "drive_trunk", "near_primary": "drive_primary",
               "minor_edge": "drive_minor_edge", "casing": "drive_casing", "gutter": "drive_gutter",
               "zebra_base": "drive_zebra_base", "paint": "drive_paint",
               "street_label": "drive_street_label", "building": "drive_building",
-              "building_use": "drive_building_use"}
+              "building_use": "drive_building_use", "tunnel_portal": "drive_tunnel_portal"}
 # Подписи дворов и дорожек: полотно под ними в поездке не темнеет, и имя
 # остаётся тёмным на белом (общий ключ street_label перекрасил бы и их).
 DRIVE_KEEP_LAYERS = ("highway-name-minor", "highway-name-path")
@@ -1360,9 +1394,12 @@ def _layers_in_draw_order(p):
         {"id": "radar-tunnel", "type": "line", "source": "radar", "source-layer": "roads",
          "minzoom": OUR_ROADS_FROM, "filter": ["all", ["<=", ["get", "cls"], 7], ["has", "tunnel"]],
          "layout": {"line-join": "round", "line-cap": "butt"},
-         # Едва видная полоса, как у Яндекса: плотный «призрак» тоннеля Фурката
-         # поверх перекрёстка Навои читался второй дорогой (07.10.2026).
-         "paint": {"line-color": p["tunnel"], "line-width": measured(), "line-opacity": 0.3}},
+         # Полупрозрачная полоса (раздел 6 плана 13.11 — 55 %): «призрак»
+         # тоннеля Фурката читался второй дорогой, пока лежал ПОВЕРХ
+         # перекрёстка Навои (07.10.2026); под наземным полотном перекрёсток
+         # его закрывает, а по парку над тоннелем Бунёдкора маршрут идёт по
+         # видимой дороге, а не по газону (владелец, 14.11).
+         "paint": {"line-color": p["tunnel"], "line-width": measured(), "line-opacity": TUNNEL_OPACITY}},
         # Кромка площади узла (аудит 23.10, №1): контур многоугольника узла
         # цветом кромки, под каймой лент. Внутреннюю половину закрывает
         # заливка узла, у подходов — сами ленты; остаётся бордюр по внешнему
@@ -1465,6 +1502,16 @@ def _layers_in_draw_order(p):
          # торцов эстакад. Тайлы без cls — прежний цвет проспекта.
          "paint": {"fill-color": ["case", ["has", "cls"], class_asphalt(p), p["road"]],
                    "fill-antialias": False}},
+        # Портал тоннеля (build_mvt.tunnel_portals, вид 17): тёмная черта
+        # поперёк там, где наземная дорога уходит под землю, — поверх круглого
+        # торца наземной ленты и площади узла: портал часто в устье съезда.
+        {"id": "radar-tunnel-portal", "type": "line", "source": "radar", "source-layer": "surface",
+         "minzoom": OUR_ROADS_FROM,
+         "filter": ["all", ["==", ["geometry-type"], "LineString"], ["==", ["get", "kind"], 17]],
+         "layout": {"line-cap": "butt"},
+         "paint": {"line-color": p["tunnel_portal"],
+                   "line-width": ["interpolate", ["exponential", 2], ["zoom"],
+                                  OUR_ROADS_FROM, 1.2, 20, PORTAL_METERS * 2 ** 20 * M]}},
         # Разделительная ПОЛОСА между встречными лентами — поверх асфальта и площади узла: она
         # построена по тем же ширинам, что и полотно, а под полотном узкий
         # бетонный разделитель (Мукими: 2,5 м между лентами по 5 полос) целиком
@@ -1592,14 +1639,23 @@ def _layers_in_draw_order(p):
         # Светофоры как у Яндекса: по значку на каждый подход, ромбом вокруг
         # центра регулируемого перекрёстка (build_mvt.approach_lights, вид 14).
         # Жёлтой «вафли» больше нет — у Яндекса её нет (снимок 05.10.2026).
-        {"id": "radar-signal-icon", "type": "symbol", "source": "radar", "source-layer": "surface", "minzoom": 16,
+        # С 16,5 — по значку у стоп-линии каждого подхода (этап 7).
+        {"id": "radar-signal-icon", "type": "symbol", "source": "radar", "source-layer": "surface",
+         "minzoom": SIGNAL_APPROACH_FROM,
          "filter": ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], 14]],
          # Минималистично и не поверх камеры (владелец, 12.10): светофор
          # обходит значки камер и подписи (allow-overlap false), но сам никого
          # не выталкивает (ignore-placement true).
-         "layout": {"icon-image": "traffic-light", "icon-allow-overlap": False,
-                    "icon-ignore-placement": True, "icon-padding": 1,
-                    "icon-size": ["interpolate", ["linear"], ["zoom"], 16, 0.7, 19, 1.0]}},
+         "layout": signal_layout()},
+        # Обзор 16–16,5 — один значок на узел (вид 18, центр узла). Тайлы до
+        # этапа 7 значка узла не несут, их значки подходов (без approach)
+        # остаются здесь как были — со старыми тайлами обзор не пустеет.
+        {"id": "radar-signal-node", "type": "symbol", "source": "radar", "source-layer": "surface",
+         "minzoom": 16, "maxzoom": SIGNAL_APPROACH_FROM,
+         "filter": ["all", ["==", ["geometry-type"], "Point"],
+                    ["any", ["==", ["get", "kind"], 18],
+                     ["all", ["==", ["get", "kind"], 14], ["!", ["has", "approach"]]]]],
+         "layout": signal_layout()},
     ]
 
 

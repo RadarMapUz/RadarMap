@@ -29,7 +29,11 @@ PLACES = {
     "amir_temur": (41.3111, 69.2797, (13, 15.8, 17.2)),
     "tunnel_bunyodkor": (41.3116, 69.2412, (15.8, 17.2, 18)),
     "tunnel_ring": (41.2920, 69.2865, (15.8, 17.2)),
+    # Портал тоннеля Бунёдкора с юга: выход полотна из-под земли.
+    "tunnel_portal": (41.3102, 69.2401, (16.5, 17.2, 18)),
     "interchange_gavhar": (41.2560, 69.1930, (15.2, 16.5, 17.2)),
+    # Эстакада Чоштепа: верхний ярус (layer 2) над съездами развязки.
+    "overpass_choshtepa": (41.2278, 69.1814, (15.8, 16.5, 17.2, 18)),
     "mahalla_chorsu": (41.3245, 69.2290, (15.8, 17.2, 18)),
     "outskirts_qibray": (41.3600, 69.3700, (13, 14.6, 15.8, 16.5)),
     "highway_m39": (40.4900, 68.7800, (9, 11, 13)),
@@ -37,7 +41,9 @@ PLACES = {
     "country": (41.3, 64.5, (5, 6)),
 }
 SETS = {"ladder": ["navoi_rashidov"], "places": [k for k in PLACES if k != "navoi_rashidov"],
-        "all": list(PLACES)}
+        "all": list(PLACES),
+        "geometry": ["interchange_gavhar", "overpass_choshtepa", "tunnel_bunyodkor", "tunnel_ring", "tunnel_portal",
+                     "anhor_bridge", "navoi_rashidov"]}
 MODES = ("free", "drive", "car", "seed", "seedboth")
 # Копия EngineModernStyle.withSeed: режим seed — первый запуск без сети, только
 # основа из бандла (OMT до z12), сетевые источники пусты.

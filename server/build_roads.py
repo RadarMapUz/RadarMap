@@ -112,6 +112,10 @@ FLAG_LANES_INFERRED = 1 << 10
 # проспектом (06.10.2026). Съезд без тега — 1 полоса (двусторонний — 2), в
 # голосовании полос не участвует. Телефон бит не читает.
 FLAG_LINK = 1 << 11
+# Мост второго уровня и выше (OSM layer ≥ 2): верхний ярус развязки кладётся
+# поверх нижнего вместе с разметкой. Только у мостов — уровень +1 и так любой
+# мост. Телефон по формату дорог бит не читает (маски & 1…& 8 и полосы).
+FLAG_LEVEL_UP = 1 << 12
 
 # Своя дорога короче этого — не дорога, а дрожь мыши.
 MIN_DRAWN_METERS = 20.0
@@ -124,7 +128,7 @@ MAX_DRAWN_SEGMENT_METERS = 2000.0
 # Биты ХАРАКТЕРА линии. Только они участвуют в склейке и сведении проезжих:
 # две половины одной улицы, у которых в OSM разное число полос, — по-прежнему
 # одна улица, и разойтись они не должны из-за поля, которого раньше не было.
-FLAG_TOPO_MASK = FLAG_ONEWAY | FLAG_BRIDGE | FLAG_TUNNEL | FLAG_RING
+FLAG_TOPO_MASK = FLAG_ONEWAY | FLAG_BRIDGE | FLAG_TUNNEL | FLAG_RING | FLAG_LEVEL_UP
 
 # Сколько полос считать, когда OSM молчит (а он молчит у 91 % дорог центра
 # Ташкента: 769 тегов lanes на 8 455 дорог). Числа ПОЛНЫЕ, как в самом теге:
@@ -966,6 +970,14 @@ def encode(points):
     return out
 
 
+def osm_layer(properties):
+    """Тег layer числом; нет его или мусор — 0."""
+    try:
+        return int(str(properties.get("layer", "0")).strip().split(";")[0])
+    except ValueError:
+        return 0
+
+
 def flags_of(properties, points=None, code=None):
     """Биты записи. code передаётся, когда класс уже известен: без него полосы
     считать не из чего, и старшие биты остаются нулём — «не задано»."""
@@ -981,6 +993,8 @@ def flags_of(properties, points=None, code=None):
         flags |= FLAG_ONEWAY
     if properties.get("bridge") not in (None, "no"):
         flags |= FLAG_BRIDGE
+        if osm_layer(properties) >= 2:
+            flags |= FLAG_LEVEL_UP
     if properties.get("tunnel") not in (None, "no"):
         flags |= FLAG_TUNNEL
     if str(properties.get("highway", "")).endswith("_link"):

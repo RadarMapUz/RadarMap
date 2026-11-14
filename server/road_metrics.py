@@ -34,6 +34,8 @@ LAT_M = 111_320.0
 SAMPLE_STEP_METERS = 2.0
 ZEBRA_NEAR_METERS = 2.0
 ARROW_STOP_REACH_METERS = 30.0
+ARROW_STOP_AHEAD_METERS = 60.0
+ARROW_STOP_ENDPOINT_TOLERANCE = 1.5
 ARROW_STOP_LATERAL_METERS = 8.0
 MEDIAN_ON_ASPHALT_SHARE = 0.4
 JUNCTION_MIN_AREA_M2 = 300.0
@@ -176,10 +178,11 @@ class Uncovered:
 
 
 def arrows_after_stop(arrows, stop_lines):
-    """Доля рядов стрелок, за которыми (против хода) в 30 м стоит стоп-линия.
+    """Доля отдельных стрелок после ближайшей поперечной стоп-линии.
 
     arrows — [(lon, lat, bearing)]; stop_lines — [[(lon, lat), (lon, lat)]].
-    Ряд стрелок «после стоп-линии», если стоп-линия лежит позади него по ходу.
+    Продольная линия соседней дороги не считается стоп-линией подхода.
+    Более близкая линия впереди означает новый подход после прошлого узла.
     """
     if not arrows:
         return 0.0
@@ -188,13 +191,37 @@ def arrows_after_stop(arrows, stop_lines):
     for lon, lat, bearing in arrows:
         kx = LAT_M * math.cos(math.radians(lat))
         fx, fy = math.sin(math.radians(bearing)), math.cos(math.radians(bearing))
-        found = False
-        for along in range(2, int(ARROW_STOP_REACH_METERS) + 1, 2):
-            p = (lon - fx * along / kx, lat - fy * along / LAT_M)
-            if index.near(p, 1.5):
-                found = True
-                break
-        bad += found
+        cell = (int(lon / index.CELL), int(lat / index.CELL))
+        pad_x = math.ceil(ARROW_STOP_AHEAD_METERS / (kx * index.CELL))
+        pad_y = math.ceil(ARROW_STOP_AHEAD_METERS / (LAT_M * index.CELL))
+        seen = set()
+        behind = ahead = float("inf")
+        for gx in range(cell[0] - pad_x, cell[0] + pad_x + 1):
+            for gy in range(cell[1] - pad_y, cell[1] + pad_y + 1):
+                for a, b in index._grid.get((gx, gy), ()):
+                    key = (tuple(a), tuple(b))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    ax, ay = (a[0] - lon) * kx, (a[1] - lat) * LAT_M
+                    bx, by = (b[0] - lon) * kx, (b[1] - lat) * LAT_M
+                    dx, dy = bx - ax, by - ay
+                    length = math.hypot(dx, dy)
+                    if length == 0 or abs(dx * fx + dy * fy) / length > 0.5:
+                        continue
+                    la, lb = ax * fy - ay * fx, bx * fy - by * fx
+                    # Точное пересечение оси стрелки с линией вместо шагов
+                    # по 2 м. У конца линии допускается ошибка квантования.
+                    t = max(0.0, min(1.0, -la / (lb - la)))
+                    lateral = la + (lb - la) * t
+                    if abs(lateral) > ARROW_STOP_ENDPOINT_TOLERANCE:
+                        continue
+                    along = (ax + dx * t) * fx + (ay + dy * t) * fy
+                    if 2.0 <= along <= ARROW_STOP_AHEAD_METERS:
+                        ahead = min(ahead, along)
+                    elif -ARROW_STOP_REACH_METERS <= along <= -2.0:
+                        behind = min(behind, -along)
+        bad += behind < float("inf") and behind <= ahead
     return bad / len(arrows)
 
 
@@ -1369,7 +1396,7 @@ def measure(tiles_dir, islands_path=None, bbox=None):
 UNITS = {
     "houses_under_asphalt": "% площади домов",
     "islands_under_asphalt": "% площади островков",
-    "arrows_after_stop": "на 1000 рядов",
+    "arrows_after_stop": "на 1000 стрелок",
     "dashes_in_junction": "м на 1 км пунктира",
     "dashes_on_zebra": "м на 1 км пунктира",
     "medians_on_asphalt": "% разделительных",

@@ -4792,9 +4792,17 @@ def mouth_outline(legs, kerbs=None, uniform=False):
         t = (a["d"][0] * ry - a["d"][1] * rx) / det
         corner = (pa[0] + a["d"][0] * s, pa[1] + a["d"][1] * s)
         radius = kerb_radius(legs) if uniform else corner_radius(a["half"] * 2, b["half"] * 2)
+        # Широкий подход оставляет меньше места для скругления. Уменьшаем
+        # радиус до доступного, иначе весь угол исчезал и контур заменялся
+        # выпуклой оболочкой. Предел вылета устья остаётся прежним.
+        available = MOUTH_MAX_TANGENT_METERS - max(s, t)
+        radius = min(radius, available * math.tan(turn / 2))
+        if radius < KERB_RADIUS_MIN:
+            corners.append(None)
+            continue
         tangent = radius / math.tan(turn / 2)
         ta, tb = s + tangent, t + tangent
-        if ta > MOUTH_MAX_TANGENT_METERS or tb > MOUTH_MAX_TANGENT_METERS:
+        if ta > MOUTH_MAX_TANGENT_METERS + 1e-9 or tb > MOUTH_MAX_TANGENT_METERS + 1e-9:
             corners.append(None)
             continue
         start = (corner[0] + a["d"][0] * tangent, corner[1] + a["d"][1] * tangent)

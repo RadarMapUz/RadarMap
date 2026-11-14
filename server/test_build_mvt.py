@@ -5,6 +5,7 @@ import os
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import build_mvt
 import build_roads
@@ -260,6 +261,59 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(len(list(build_mvt.lane_markings([bridge], mask=mask))), 2,
                          "мост над узлом земли не режется")
 
+    def test_written_median_cuts_ground_markings_but_not_bridge(self):
+        flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (3 << 4)
+        ring = [(69.2797, 41.3108), (69.2803, 41.3108),
+                (69.2803, 41.3112), (69.2797, 41.3112)]
+        for bridge in (False, True):
+            with self.subTest(bridge=bridge):
+                road = self.road([(69.278, 41.311), (69.282, 41.311)],
+                                 flags=flags | (build_mvt.FLAG_BRIDGE if bridge else 0))
+                emitted = []
+                original = build_mvt._markings
+
+                def capture(*args):
+                    emitted.extend(original(*args))
+                    return iter(emitted)
+
+                def areas(_target, name):
+                    return [(build_mvt.AREA_MEDIAN, 3, ring)] if name == "d" else []
+
+                with patch.object(build_mvt, "written_areas", side_effect=areas), \
+                     patch.object(build_mvt, "_markings", side_effect=capture):
+                    build_mvt.build_mvt([road], self.dir)
+                lines = [line for line, centre, _solid, _bridge in emitted if not centre]
+                self.assertEqual(len(lines), 2 if bridge else 4)
+                if not bridge:
+                    mask = build_mvt.JunctionMask([ring])
+                    self.assertFalse(any(mask.covers(p) for line in lines for p in line))
+
+    def test_adding_median_keeps_existing_crossing_mask(self):
+        mask = build_mvt.JunctionMask()
+        mask.add_zebras([[(69.28, 41.3109), (69.28, 41.3111)]])
+        mask.add_polygons([[(69.29, 41.31), (69.291, 41.31),
+                            (69.291, 41.311), (69.29, 41.311)]])
+        self.assertTrue(mask.covers((69.28, 41.311)))
+        self.assertTrue(mask.covers((69.2905, 41.3105)))
+
+    def test_small_junction_removes_its_median_but_keeps_adjacent_strip(self):
+        def ring(x, y, w, h):
+            kx = 111_320 * math.cos(math.radians(41.31))
+            return [(69.28 + a / kx, 41.31 + b / 111_320)
+                    for a, b in ((x, y), (x+w, y), (x+w, y+h), (x, y+h))]
+        inside, outside = ring(-3, -8, 6, 16), ring(30, -8, 6, 16)
+        figures = [(build_mvt.AREA_JUNCTION, 1, ring(-10, -10, 20, 20)),
+                   (build_mvt.AREA_MEDIAN, 3, inside),
+                   (build_mvt.AREA_MEDIAN, 3, outside)]
+        with patch.object(build_mvt, "written_areas",
+                          side_effect=lambda _target, name: figures if name == "d" else []), \
+             patch.object(build_mvt, "_put", wraps=build_mvt._put) as put:
+            build_mvt.build_mvt([], self.dir)
+        medians = [call.args[4] for call in put.call_args_list
+                   if call.args[2] == build_mvt.LAYER_SURFACE
+                   and call.args[5].get("kind") == build_mvt.AREA_MEDIAN]
+        self.assertEqual(medians, [outside])
+
     def test_dashes_stop_at_a_zebra(self):
         # Зарканар: пунктир шёл сквозь зебру.
         flags = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (3 << 4)
@@ -308,6 +362,31 @@ class BuildTests(unittest.TestCase):
         self.assertTrue(build_mvt.strip_outside_junction(outside, mask))
         self.assertTrue(build_mvt.strip_outside_junction(touching, mask))
 
+    def test_narrow_median_overlap_does_not_depend_on_rotation(self):
+        for angle in (0, 5, 15, 30, 45, 60, 85, 90, 135):
+            with self.subTest(angle=angle):
+                t = math.radians(angle)
+                def m(x, y):
+                    return (69.28 + (x * math.cos(t) - y * math.sin(t)) /
+                            (111_320 * math.cos(math.radians(41.31))),
+                            41.31 + (x * math.sin(t) + y * math.cos(t)) / 111_320)
+                ring = [m(0, 0), m(100, 0), m(100, 2), m(0, 2)]
+                self.assertEqual(len(build_mvt.inside_points(ring, 12)), 144)
+                for reach, kept in ((44, False), (30, True)):
+                    mask = build_mvt.JunctionMask([[m(-1, -2), m(reach, -2),
+                                                   m(reach, 4), m(-1, 4)]])
+                    self.assertEqual(build_mvt.strip_outside_junction(ring, mask), kept)
+
+    def test_long_curved_medians_survive_sampling_aliases(self):
+        with open(os.path.join(os.path.dirname(__file__), "fixtures", "median_sampling.json")) as handle:
+            cases = json.load(handle)["cases"]
+        for case in cases:
+            with self.subTest(centre=case["centre"]):
+                # Независимый замер сеткой 0,5 м: 27% и 11%, оба ниже 40%.
+                self.assertLess(case["dense_half_metre_share"], 0.3)
+                mask = build_mvt.JunctionMask(case["junctions"])
+                self.assertTrue(build_mvt.strip_outside_junction(case["ring"], mask))
+
     def test_overlapping_strips_keep_the_larger(self):
         # Основной ход и дублёр давали две разделительные друг на друге.
         def m(dx, dy):
@@ -331,6 +410,27 @@ class BuildTests(unittest.TestCase):
                  (3, 1, [m(-100, 10), m(0, 10)], a), (3, 1, [m(0, 10), m(100, 10)], a),
                  (3, 1, [m(0, -10), m(0, 10)], "")]
         self.assertEqual(build_mvt.crossing_cores(roads), [])
+
+    def test_medium_junction_cuts_markings_only_for_distinct_ground_streets(self):
+        def m(x, y):
+            return (69.28 + x / (111_320 * math.cos(math.radians(41.311))),
+                    41.311 + y / 111_320)
+        ring = [m(-10, -10), m(10, -10), m(10, 10), m(-10, 10)]
+        flags = build_mvt.FLAG_ONEWAY | build_mvt.FLAG_LANES_TAGGED | (3 << 4)
+        main = (3, flags, [m(-100, 0), m(100, 0)], "Main")
+        for name, other_flags, expected in (("Cross", 0, True),
+                                             ("Main", 0, False),
+                                             ("Cross", build_mvt.FLAG_BRIDGE, False)):
+            with self.subTest(name=name, flags=other_flags):
+                other = (3, other_flags, [m(0, -100), m(0, 100)], name)
+                selected = build_mvt.marking_junction_areas(
+                    [ring], build_mvt.StreetNames([main, other]))
+                self.assertEqual(bool(selected), expected)
+                mask = build_mvt.JunctionMask(selected)
+                lines = list(build_mvt.lane_markings([main], mask=mask))
+                self.assertEqual(len(lines), 4 if expected else 2)
+                if expected:
+                    self.assertFalse(any(mask.covers(p) for line in lines for p in line))
 
     def test_two_way_road_gets_a_centre_line(self):
         # Двусторонних — 72 % километров tertiary: без осевой они были пустыми.
@@ -792,6 +892,23 @@ class JunctionLightTests(unittest.TestCase):
     def test_too_few_signals_still_no_lights(self):
         signals = [self.facing(x, y) for x, y in ((-40, 2), (40, -2))]
         self.assertIsNone(self.lights(signals))
+
+    def test_approaches_crossing_north_keep_their_groups_when_rotated(self):
+        # До исправления поворот 330° превращал два подхода в три.
+        for rotation in range(0, 360, 10):
+            with self.subTest(rotation=rotation):
+                signals = [self.m(40 * math.sin(math.radians(a + rotation)),
+                                  40 * math.cos(math.radians(a + rotation)))
+                           for a in (0, 30, 60, 90)]
+                lights = build_mvt.approach_lights(self.box, signals)
+                self.assertEqual(len(lights), 2)
+                self.assertEqual(lights, build_mvt.approach_lights(self.box, signals[::-1]))
+                for angle in (15 + rotation, 75 + rotation):
+                    expected = self.m(14 * math.sin(math.radians(angle)),
+                                      14 * math.cos(math.radians(angle)))
+                    self.assertLess(min(math.hypot((lon - expected[0]) * self.kx,
+                                                  (lat - expected[1]) * 111_320)
+                                        for lon, lat in lights), 0.01)
 
     def confirmed(self, x, y):
         kind, flags, spot = self.facing(x, y)

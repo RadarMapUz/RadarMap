@@ -36,6 +36,34 @@ class ArrowTests(unittest.TestCase):
         stop = [m(10, -5), m(10, 5)]
         self.assertEqual(rm.arrows_after_stop([(LON, LAT, 90)], [stop]), 0.0)
 
+    def test_previous_junction_does_not_hide_correct_next_approach(self):
+        lines = [[m(-27, -5), m(-27, 5)], [m(11, -5), m(11, 5)]]
+        self.assertEqual(rm.arrows_after_stop([(LON, LAT, 90)], lines), 0.0)
+
+    def test_distant_forward_line_does_not_excuse_recently_passed_stop(self):
+        lines = [[m(-5, -5), m(-5, 5)], [m(40, -5), m(40, 5)]]
+        self.assertEqual(rm.arrows_after_stop([(LON, LAT, 90)], lines), 1.0)
+
+    def test_nearby_parallel_and_oblique_lines_are_not_stops_of_this_lane(self):
+        for line in ([m(-20, 1), m(-5, 1)], [m(-20, -2), m(-5, 2)]):
+            self.assertEqual(rm.arrows_after_stop([(LON, LAT, 90)], [line]), 0.0)
+
+    def test_line_on_adjacent_lane_and_zero_length_are_ignored(self):
+        lines = [[m(-10, 5), m(-10, 10)], [m(-10, 0), m(-10, 0)]]
+        self.assertEqual(rm.arrows_after_stop([(LON, LAT, 90)], lines), 0.0)
+
+    def test_empty_arrows(self):
+        self.assertEqual(rm.arrows_after_stop([], [[m(-10, -5), m(-10, 5)]]), 0.0)
+
+    def test_transverse_slanted_stop_is_caught_in_either_vertex_order(self):
+        stop = [m(-12, -6), m(-8, 6)]
+        for line in (stop, list(reversed(stop))):
+            self.assertEqual(rm.arrows_after_stop([(LON, LAT, 90)], [line]), 1.0)
+
+    def test_denominator_is_individual_arrows(self):
+        arrows = [(LON, LAT, 90), (*m(-20, 0), 90)]
+        self.assertEqual(rm.arrows_after_stop(arrows, [[m(-10, -5), m(-10, 5)]]), 0.5)
+
 
 class DashTests(unittest.TestCase):
     def test_dashes_inside_a_junction_are_measured(self):

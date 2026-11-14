@@ -8,6 +8,9 @@
     python3 server/render_preview.py <каталог тайлов> <lon> <lat> <zoom> <out.png> [--kind7]
 
 --kind7 дорисовывает полотно (вид 7) так, как его заливает панель-конструктор.
+--roads-only оставляет только дороги и их кромки для проверки геометрии.
+--markings добавляет записанную в MVT разметку (без значков и стрелок).
+Это диагностический рендер геометрии, не снимок стиля приложения.
 """
 import math
 import os
@@ -37,6 +40,8 @@ def props(layer, feature):
 def main():
     tiles, lon, lat, zoom, out = sys.argv[1], float(sys.argv[2]), float(sys.argv[3]), float(sys.argv[4]), sys.argv[5]
     kind7 = "--kind7" in sys.argv
+    roads_only = "--roads-only" in sys.argv
+    markings = "--markings" in sys.argv
     n = 2 ** DETAIL
     wx = (lon + 180) / 360 * n
     wy = (1 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2 * n
@@ -65,11 +70,11 @@ def main():
             for feature in layer["features"]:
                 yield tx, ty, props(layer, feature), [[to_px(tx, ty, x, y) for x, y in s] for s in shapes_of(feature)]
 
-    for tx, ty, p, shapes in each("land"):
+    for tx, ty, p, shapes in (() if roads_only else each("land")):
         for s in shapes:
             if len(s) > 2:
                 draw.polygon(s, fill=LAND.get(p.get("kind"), C["block"]))
-    for tx, ty, p, shapes in each("houses"):
+    for tx, ty, p, shapes in (() if roads_only else each("houses")):
         for s in shapes:
             if len(s) > 2:
                 draw.polygon(s, fill=C["house"], outline=C["house_edge"])
@@ -84,9 +89,16 @@ def main():
                     r = w / 2
                     for x, y in (s[0], s[-1]):
                         draw.ellipse((x - r, y - r, x + r, y + r), fill=fill)
-    for tx, ty, p, shapes in each("surface"):
+    # Сначала всё полотно, затем узлы и разделители — независимо от тайла.
+    # Иначе соседний тайл мог снова залить уже нарисованный островок.
+    order = {7: 0, 13: 1, 8: 2, 10: 3, 9: 4, 15: 5, 16: 6}
+    for tx, ty, p, shapes in sorted(each("surface"), key=lambda row: order.get(row[2].get("kind"), 7)):
         kind = p.get("kind")
         for s in shapes:
+            if kind in (15, 16) and len(s) >= 2:
+                draw.line(s, fill=(188, 168, 106) if p.get("major") else C["kerb"],
+                          width=max(1, round(0.25 * metres_px)), joint="curve")
+                continue
             if len(s) < 3:
                 continue
             if kind in (8, 10):
@@ -97,6 +109,45 @@ def main():
                 draw.polygon(s, fill=C["median"], outline=C["kerb"])
             elif kind == 7 and kind7:
                 draw.polygon(s, fill=ASPHALT.get(p.get("cls"), ASPHALT[3]), outline=C["kerb"])
+    if markings:
+        def dashed(line, width, dash, gap, colour):
+            distance = 0.0
+            period = dash + gap
+            for a, b in zip(line, line[1:]):
+                length = math.dist(a, b)
+                at = 0.0
+                while at < length:
+                    phase = (distance + at) % period
+                    on = phase < dash
+                    step = min(length - at, (dash if on else period) - phase)
+                    if step < 1e-8:
+                        step = min(length - at, 1e-8)
+                    if on:
+                        p = tuple(a[i] + (b[i] - a[i]) * at / length for i in (0, 1))
+                        q = tuple(a[i] + (b[i] - a[i]) * (at + step) / length for i in (0, 1))
+                        draw.line([p, q], fill=colour, width=width)
+                    at += step
+                distance += length
+
+        for _tx, _ty, p, shapes in each("markings"):
+            colour = (202, 192, 144) if p.get("centre") else (215, 220, 220)
+            width = max(1, round(0.18 * metres_px))
+            for s in shapes:
+                if len(s) < 2:
+                    continue
+                if p.get("solid") or p.get("centre") == 2:
+                    draw.line(s, fill=colour, width=width)
+                else:
+                    dashed(s, width, 3 * metres_px, 5 * metres_px, colour)
+        for _tx, _ty, p, shapes in each("paint"):
+            for s in shapes:
+                if len(s) < 2:
+                    continue
+                if p.get("kind") == 12:
+                    dashed(s, max(1, round(3 * metres_px)),
+                           0.5 * metres_px, 0.5 * metres_px, (226, 231, 219))
+                else:
+                    draw.line(s, fill=(226, 231, 219), width=max(1, round(0.4 * metres_px)))
     image.save(out)
     print(out)
 

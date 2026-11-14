@@ -83,6 +83,13 @@ class StyleTests(unittest.TestCase):
         self.assertIn(icon["layout"]["icon-image"], sprite)
         self.assertIn(["==", ["geometry-type"], "Point"], icon["filter"])
         self.assertIn(["==", ["get", "kind"], 14], icon["filter"])
+        self.assertEqual(icon["minzoom"], 16.5)
+        # Обзор 16–16,5: значок узла (вид 18) и значки старых тайлов (без approach).
+        node = next(l for l in self.style["layers"] if l["id"] == "radar-signal-node")
+        self.assertEqual((node["minzoom"], node["maxzoom"]), (16, 16.5))
+        self.assertEqual(node["layout"], icon["layout"])
+        self.assertIn(["==", ["get", "kind"], 18], node["filter"][2])
+        self.assertIn(["all", ["==", ["get", "kind"], 14], ["!", ["has", "approach"]]], node["filter"][2])
         # Жёлтой «вафли» нет — как у Яндекса.
         ids = [l["id"] for l in self.style["layers"]]
         self.assertNotIn("radar-waffle", ids)
@@ -144,6 +151,32 @@ class StyleTests(unittest.TestCase):
         for ground in ("radar-markings", "radar-zebra", "radar-stop-line", "radar-arrows"):
             self.assertLess(ids.index(ground), ids.index("radar-bridge-shadow"), ground)
         self.assertGreater(ids.index("radar-markings-bridge"), deck)
+
+    def test_upper_deck_lies_over_the_lower_with_its_markings(self):
+        ids = [layer["id"] for layer in self.style["layers"]]
+        layers = {l["id"]: l for l in self.style["layers"]}
+        deck = ids.index("radar-bridge")
+        up = [ids.index(i) for i in ("radar-bridge-shadow-up", "radar-bridge-case-up", "radar-bridge-up")]
+        self.assertEqual(up, sorted(up))
+        self.assertGreater(up[0], deck, "ярус над настилом нижнего")
+        for marking in ("radar-markings-bridge", "radar-markings-solid-bridge", "radar-centre-solid-bridge"):
+            self.assertGreater(ids.index(marking), up[-1], "разметка мостов над ярусом")
+        for layer_id in ("radar-bridge-shadow-up", "radar-bridge-case-up", "radar-bridge-up"):
+            self.assertIn(["has", "level"], layers[layer_id]["filter"])
+        # Тень и ограждение нижней группы ярус не рисуют — иначе тень вдвое.
+        for layer_id in ("radar-bridge-shadow", "radar-bridge-case"):
+            self.assertIn(["!", ["has", "level"]], layers[layer_id]["filter"])
+        self.assertNotIn(["!", ["has", "level"]], layers["radar-bridge"]["filter"], "щупы приложения")
+
+    def test_tunnel_portal_lies_over_ground_road_ends(self):
+        ids = [layer["id"] for layer in self.style["layers"]]
+        layers = {l["id"]: l for l in self.style["layers"]}
+        portal = layers["radar-tunnel-portal"]
+        self.assertIn(["==", ["get", "kind"], 17], portal["filter"])
+        self.assertGreater(ids.index("radar-tunnel-portal"), ids.index("radar-roads"))
+        self.assertGreater(ids.index("radar-tunnel-portal"), ids.index("radar-roads-stub"))
+        self.assertGreater(ids.index("radar-tunnel-portal"), ids.index("radar-junction"))
+        self.assertLess(ids.index("radar-tunnel-portal"), ids.index("radar-bridge-shadow"))
 
     def test_centre_lines_have_their_own_layers(self):
         layers = {l["id"]: l for l in self.style["layers"]}
@@ -740,7 +773,9 @@ def _universe(filters):
 class MergedLayersTests(unittest.TestCase):
     """Слитые слои основы (план 13.11, раздел 9): слоёв меньше, картинка та же."""
     # Потолок числа слоёв: было 165 днём и 166 ночью (ночью — свечение магистрали).
-    BUDGET = {"light": 154, "dark": 155}
+    # +3 — верхний ярус мостов (этап 7): тень, ограждение и настил поверх нижнего;
+    # +1 — портал тоннеля; +1 — светофор узла на обзоре 16–16,5.
+    BUDGET = {"light": 159, "dark": 160}
 
     @classmethod
     def setUpClass(cls):

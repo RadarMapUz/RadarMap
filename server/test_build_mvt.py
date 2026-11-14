@@ -631,6 +631,58 @@ class BuildTests(unittest.TestCase):
         lines = list(build_mvt.lane_markings(roads))
         self.assertAlmostEqual(lines[0][-1][0], middle[0], places=8)
 
+    def test_upper_deck_erases_lower_bridge_markings_beneath_it(self):
+        # Развязка Гавхар: верхний ярус над нижним мостом; разметка нижнего
+        # одним слоем со всеми мостами легла бы поверх настила яруса.
+        bridge = build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | build_mvt.FLAG_BRIDGE | (3 << 4)
+        lower = self.road([(69.278, 41.311), (69.282, 41.311)], flags=bridge)
+        upper = self.road([(69.28, 41.309), (69.28, 41.313)], flags=bridge | build_mvt.FLAG_LEVEL_UP)
+        def spans(lines, lat):
+            return [line for line in lines if all(abs(p[1] - lat) < 1e-4 for p in line)]
+        lines = list(build_mvt.lane_markings([lower, upper]))
+        low = spans(lines, 41.311)
+        self.assertTrue(low)
+        for line in low:
+            self.assertFalse(min(p[0] for p in line) < 69.28 < max(p[0] for p in line), "разметка под ярусом")
+        # Верхний ярус свою разметку не теряет.
+        high = [line for line in lines if all(abs(p[0] - 69.28) < 1e-4 for p in line)]
+        self.assertTrue(any(min(p[1] for p in l) < 41.311 < max(p[1] for p in l) for l in high))
+        props = build_mvt._road_props(upper)
+        self.assertEqual((props.get("bridge"), props.get("level")), (True, 2))
+        self.assertNotIn("level", build_mvt._road_props(lower))
+
+    def test_tunnel_portal_only_where_tunnel_meets_the_ground(self):
+        tunnel = build_mvt.FLAG_TUNNEL | build_mvt.FLAG_ONEWAY
+        ramp = self.road([(69.278, 41.311), (69.279, 41.311)], flags=build_mvt.FLAG_ONEWAY)
+        first = self.road([(69.279, 41.311), (69.280, 41.311)], flags=tunnel)
+        second = self.road([(69.280, 41.311), (69.281, 41.311)], flags=tunnel)
+        dead_end = self.road([(69.281, 41.311), (69.2815, 41.311)], flags=tunnel)
+        portals = build_mvt.tunnel_portals([ramp, first, second, dead_end])
+        self.assertEqual(len(portals), 1, "стык кусков тоннеля и глухой конец — не порталы")
+        (a, b), = portals
+        kx = 111_320 * math.cos(math.radians(41.311))
+        # Поперёк ленты, чуть внутри тоннеля, шире полотна.
+        self.assertAlmostEqual(a[0], b[0], places=8)
+        self.assertGreater(a[0], 69.279)
+        width = abs(a[1] - b[1]) * 111_320
+        self.assertAlmostEqual(width, build_roads.road_width_meters(3, 0) + 2 * build_mvt.PORTAL_OVERHANG_METERS,
+                               places=1)
+        self.assertAlmostEqual((a[0] - 69.279) * kx, build_mvt.PORTAL_INSET_METERS, places=2)
+
+    def test_portal_spans_the_tapered_end_as_drawn(self):
+        # Бунёдкор: лента тоннеля 3,6 м сходится к 7 м у портала — черта по нарисованному.
+        ramp = self.road([(69.2795, 41.311), (69.279, 41.311)], flags=build_mvt.FLAG_ONEWAY)
+        tunnel = self.road([(69.282, 41.311), (69.279, 41.311)], flags=build_mvt.FLAG_TUNNEL | build_mvt.FLAG_ONEWAY)
+        drawn = build_mvt.tapered_pieces(tunnel, 4.0, (None, 9.0))[-1][1]
+        (a, b), = build_mvt.tunnel_portals([ramp, tunnel], {id(tunnel): 4.0}, {id(tunnel): (None, 9.0)})
+        self.assertAlmostEqual(abs(a[1] - b[1]) * 111_320, drawn + 2 * build_mvt.PORTAL_OVERHANG_METERS, places=1)
+
+    def test_pedestrian_tunnel_and_yard_passage_have_no_portal(self):
+        street = self.road([(69.278, 41.311), (69.279, 41.311)])
+        path = (9, build_mvt.FLAG_TUNNEL, [(69.279, 41.311), (69.280, 41.311)], "")
+        passage = (7, build_mvt.FLAG_TUNNEL, [(69.279, 41.311), (69.279, 41.312)], "")
+        self.assertEqual(build_mvt.tunnel_portals([street, path, passage]), [])
+
     def test_markings_are_in_detail_tile_only(self):
         road = self.road([(69.28, 41.311), (69.281, 41.311)],
                          flags=build_mvt.FLAG_LANES_TAGGED | build_mvt.FLAG_ONEWAY | (2 << 4))
@@ -910,6 +962,46 @@ class JunctionLightTests(unittest.TestCase):
                                                   (lat - expected[1]) * 111_320)
                                         for lon, lat in lights), 0.01)
 
+    def test_icon_stands_before_the_stop_line_of_its_approach(self):
+        # Этап 7: значок у стоп-линии своего подхода, а не на 35 % пути
+        # посреди перекрёстка. Южный подход двусторонней улицы: линия на
+        # правой (восточной) половине в 22 м к югу; северный подход — без
+        # стоп-линии, значок по-старому.
+        south_stop = [self.m(0.3, -22), self.m(6.5, -22)]
+        crossing_stop = [self.m(-25, -2), self.m(-25, -8)]       # другой подход — не наш
+        stops = build_mvt.StopIndex([south_stop, crossing_stop])
+        lights = build_mvt.approach_lights(self.box, [self.m(x, y) for x, y in ((3, -40), (-3, 40), (40, -3))],
+                                           stops)
+        self.assertEqual(len(lights), 3)
+        local = sorted(((lon - 69.2428) * self.kx, (lat - 41.3219) * 111_320) for lon, lat in lights)
+        south = min(local, key=lambda p: p[1])
+        self.assertAlmostEqual(south[1], -22 - build_mvt.STOP_LIGHT_BACK_METERS, places=1)
+        self.assertAlmostEqual(south[0], 3.4, places=1)
+        north = max(local, key=lambda p: p[1])
+        self.assertLessEqual(math.hypot(*north), build_mvt.LIGHT_MAX_METERS + 0.5, "без линии — как раньше")
+        east = max(local, key=lambda p: p[0])
+        self.assertLessEqual(math.hypot(*east), build_mvt.LIGHT_MAX_METERS + 0.5)
+
+    def test_without_stop_line_icon_stands_where_it_would_be_before_the_zebra(self):
+        zebra = build_mvt.StopIndex([[self.m(-6, -20), self.m(6, -20)]])
+        lights = build_mvt.approach_lights(self.box, [self.m(0, -40)], build_mvt.StopIndex([]), zebra)
+        (lon, lat), = lights
+        self.assertAlmostEqual((lat - 41.3219) * 111_320, -20 - build_mvt.ZEBRA_LIGHT_BACK_METERS, places=1)
+        self.assertAlmostEqual((lon - 69.2428) * self.kx, 0, places=1)
+
+    def test_one_stop_line_gives_one_icon(self):
+        # Два подхода в 56° друг от друга видят одну линию в своих секторах.
+        stop = build_mvt.StopIndex([[self.m(6.75, -19.0), self.m(12.05, -16.2)]])
+        lights = build_mvt.approach_lights(self.box, [self.m(0, -40), self.m(30, -20)], stop)
+        self.assertEqual(len(lights), 2)
+        self.assertEqual(len(set(lights)), 2, "второй подход — не на той же точке")
+
+    def test_stop_line_along_the_approach_or_too_far_is_ignored(self):
+        along = build_mvt.StopIndex([[self.m(1, -10), self.m(1, -20)]])
+        far = build_mvt.StopIndex([[self.m(0.3, -60), self.m(6.5, -60)]])
+        for stops in (along, far):
+            self.assertIsNone(build_mvt.light_at_stop(69.2428, 41.3219, 0.0, -1.0, stops))
+
     def confirmed(self, x, y):
         kind, flags, spot = self.facing(x, y)
         return (kind, flags | build_roads.PFLAG_CONFIRMED, spot)
@@ -1132,6 +1224,12 @@ class BridgeChainTests(unittest.TestCase):
         merged, out = build_mvt.bridge_chains([a, b], {})
         self.assertEqual(len(out), 1)
         self.assertEqual(sorted(out[0][0][2]), [(69.300, 41.310), (69.301, 41.310), (69.302, 41.310)])
+
+    def test_upper_deck_is_not_glued_to_the_lower(self):
+        a = self.road([(69.300, 41.310), (69.301, 41.310)])
+        b = self.road([(69.301, 41.310), (69.302, 41.310)],
+                      flags=build_roads.FLAG_BRIDGE | build_roads.FLAG_ONEWAY | build_roads.FLAG_LEVEL_UP)
+        self.assertEqual(build_mvt.bridge_chains([a, b], {})[1], [])
 
     def test_fork_is_not_glued(self):
         a = self.road([(69.300, 41.310), (69.301, 41.310)])

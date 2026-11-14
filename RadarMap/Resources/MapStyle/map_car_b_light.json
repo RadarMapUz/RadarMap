@@ -1343,6 +1343,57 @@
     ]
    ]
   },
+  "radar-bridge-up": {
+   "line-color": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    15,
+    [
+     "match",
+     [
+      "get",
+      "cls"
+     ],
+     [
+      1,
+      2
+     ],
+     "#efd59f",
+     3,
+     "#ffffff",
+     4,
+     "#ffffff",
+     5,
+     "#ffffff",
+     "#ffffff"
+    ],
+    16,
+    [
+     "match",
+     [
+      "get",
+      "cls"
+     ],
+     [
+      1,
+      2
+     ],
+     "#efd59f",
+     3,
+     "#d5d9df",
+     4,
+     "#d5d9df",
+     5,
+     "#d5d9df",
+     "#ffffff"
+    ]
+   ]
+  },
   "radar-divider-kerb": {
    "line-color": "#b3bac4"
   },

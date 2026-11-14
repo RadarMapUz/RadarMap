@@ -256,6 +256,13 @@ final class MapDetailPolicyTests: XCTestCase {
             XCTAssertTrue(standing.contains(id), id)
         }
         XCTAssertTrue(Set(MapDetailLayers.carPaths).isSubset(of: Set(MapDetailLayers.decor)))
+        // Автомобильный тоннель — дорога, а не украшение: в поездке и в
+        // «Вождении 3D» виден (владелец, 14.11); пешеходный переход — нет.
+        for id in ["radar-tunnel", "radar-tunnel-case"] {
+            XCTAssertFalse(MapDetailLayers.decor.contains(id), id)
+            XCTAssertFalse(Drive3D.hiddenLayers.contains(id), id)
+            XCTAssertFalse(moving.contains(id), id)
+        }
         let untouchable = ["camera-icons", "camera-label", "route", "traffic", "road-events", "radar-camera-zone"]
         for id in untouchable {
             XCTAssertFalse(moving.contains(id), id)

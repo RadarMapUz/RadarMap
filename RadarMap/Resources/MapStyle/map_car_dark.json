@@ -833,14 +833,6 @@
    "text-color": "#a9afb9",
    "text-halo-color": "#141619"
   },
-  "highway-shield-us-interstate": {
-   "text-color": "#a9afb9",
-   "text-halo-color": "#141619"
-  },
-  "highway-shield-us-other": {
-   "text-color": "#a9afb9",
-   "text-halo-color": "#141619"
-  },
   "highway-trunk": {
    "line-color": [
     "interpolate",
@@ -920,10 +912,6 @@
    "text-halo-color": "#141619"
   },
   "place-city-capital": {
-   "text-color": "#a9afb9",
-   "text-halo-color": "#141619"
-  },
-  "place-continent": {
    "text-color": "#a9afb9",
    "text-halo-color": "#141619"
   },
@@ -1013,7 +1001,7 @@
      "clinic",
      "veterinary"
     ],
-    "#f08078",
+    "#6cc5b5",
     [
      "museum",
      "theatre",
@@ -1089,7 +1077,7 @@
      "clinic",
      "veterinary"
     ],
-    "#f08078",
+    "#6cc5b5",
     [
      "museum",
      "theatre",
@@ -1165,7 +1153,7 @@
      "clinic",
      "veterinary"
     ],
-    "#f08078",
+    "#6cc5b5",
     [
      "museum",
      "theatre",
@@ -1260,16 +1248,68 @@
    ]
   },
   "radar-markings": {
-   "line-color": "#858b95"
+   "line-color": "#858b95",
+   "line-opacity": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    16.4,
+    0,
+    16.7,
+    1
+   ]
   },
   "radar-markings-bridge": {
-   "line-color": "#858b95"
+   "line-color": "#858b95",
+   "line-opacity": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    16.4,
+    0,
+    16.7,
+    1
+   ]
   },
   "radar-markings-solid": {
-   "line-color": "#858b95"
+   "line-color": "#858b95",
+   "line-opacity": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    16.4,
+    0,
+    16.7,
+    1
+   ]
   },
   "radar-markings-solid-bridge": {
-   "line-color": "#858b95"
+   "line-color": "#858b95",
+   "line-opacity": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    16.4,
+    0,
+    16.7,
+    1
+   ]
   },
   "radar-median": {
    "fill-color": "#383d46",
@@ -1722,9 +1762,6 @@
    ]
   },
   "water-name-lakeline": {
-   "text-halo-color": "#141619"
-  },
-  "water-name-ocean": {
    "text-halo-color": "#141619"
   },
   "water-name-other": {

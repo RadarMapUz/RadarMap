@@ -135,6 +135,35 @@ struct EngineMapStyleTests {
         #expect(abs(visible - 1400) < 0.01)
         #expect(zoom > 15 && zoom < 16)
     }
+
+    @Test("Обзор без поездки — уже на нашем полотне, а не на стыке с основой")
+    @MainActor func overviewIsPastTheSeam() {
+        // Высоты экрана от iPhone 16e до 17 Pro Max: обзор нигде не на стыке
+        // 15,0 и не ближе 16,1 — квартал виден целиком.
+        for height in [844.0, 874, 956] {
+            let zoom = EngineMapView.Coordinator.zoom(spanMeters: AppConfig.engineOverviewSpan,
+                                                      height: height, latitude: 41.311)
+            #expect(zoom >= 15.6 && zoom <= 16.1, "высота \(height): масштаб \(zoom)")
+        }
+        #expect(AppConfig.engineMaxZoom > 19 && AppConfig.engineMaxZoom <= 20)
+    }
+
+    @Test("Плоские дома: вид сверху — плоско, наклон — объём, у порога без дрожания")
+    @MainActor func flatHousesHysteresis() {
+        typealias C = EngineMapView.Coordinator
+        #expect(C.isFlat(pitch: 0, was: nil))
+        #expect(!C.isFlat(pitch: 45, was: nil))
+        // Дрожание около 1° не переключает ни туда, ни обратно.
+        #expect(C.isFlat(pitch: 1.0, was: true))
+        #expect(!C.isFlat(pitch: 1.0, was: false))
+        #expect(!C.isFlat(pitch: AppConfig.engineFlatBuildingsLeavePitch, was: true))
+        #expect(C.isFlat(pitch: AppConfig.engineFlatBuildingsEnterPitch - 0.1, was: false))
+        // Плоские дома — свой список: плоская лента треноги остаётся только
+        // у горячего телефона (ревью 14.11).
+        #expect(C.flatHouseLayers == ["building-flat"])
+        #expect(!C.hotShownLayers.contains("building-flat"))
+        #expect(Set(C.flatHiddenLayers).isSubset(of: Set(C.hotHiddenLayers)))
+    }
     #endif
 
     @Test("Каждый слой ссылается на существующий источник")

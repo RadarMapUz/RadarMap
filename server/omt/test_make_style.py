@@ -315,9 +315,15 @@ class StyleTests(unittest.TestCase):
         self.assertEqual(arrows["layout"]["symbol-placement"], "line")
 
     def test_lane_markings_wait_for_close_zoom(self):
+        # Телефон: полосы прозрачны до LANE_MARKINGS_FROM (на 16-м рябь); слой
+        # стоит с порога машины, чтобы её разница включала его раньше.
         layers = {layer["id"]: layer for layer in self.style["layers"]}
         for layer_id in ("radar-markings", "radar-markings-solid"):
-            self.assertGreaterEqual(layers[layer_id]["minzoom"], make_style.LANE_MARKINGS_FROM)
+            self.assertGreaterEqual(layers[layer_id]["minzoom"], make_style.CAR_LANE_MARKINGS_FROM)
+            stops = layers[layer_id]["paint"]["line-opacity"][3:]
+            for zoom, value in zip(stops[::2], stops[1::2]):
+                if zoom <= make_style.LANE_MARKINGS_FROM:
+                    self.assertEqual(value, 0, (layer_id, zoom))
 
     def test_base_roads_stay_under_ours_as_fallback(self):
         # Нет нашего тайла (офлайн, район вне сборки) — дорога не исчезает.
@@ -653,6 +659,20 @@ class PaletteTests(unittest.TestCase):
         stop = make_style.class_width(24)[10]      # зум 20: обе ширины выше минимума
         self.assertEqual(stop[0], "case")
         self.assertLess(stop[2], stop[3])
+
+
+
+class CarLaneMarkings(unittest.TestCase):
+    def test_car_shows_lanes_at_its_driving_zoom(self):
+        # Машина на ходу держит z16,0–17,2 (DriveCamera.carPitched): полосы
+        # видны к 16,7, а не с 17,4, как у телефона.
+        for theme, variant in (("light", "A"), ("dark", "A"), ("light", "B")):
+            diff = make_style.car_overrides(theme, variant)["layers"]
+            for layer_id in ("radar-markings", "radar-markings-solid"):
+                ramp = diff[layer_id]["line-opacity"]
+                self.assertEqual(ramp[3], make_style.CAR_LANE_MARKINGS_FROM)
+                self.assertLessEqual(ramp[-2], 16.8, (theme, variant, layer_id))
+                self.assertEqual(ramp[-1], 1)
 
 
 if __name__ == "__main__":

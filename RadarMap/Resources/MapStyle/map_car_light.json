@@ -1214,6 +1214,66 @@
     ]
    ]
   },
+  "radar-markings": {
+   "line-opacity": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    16.4,
+    0,
+    16.7,
+    1
+   ]
+  },
+  "radar-markings-bridge": {
+   "line-opacity": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    16.4,
+    0,
+    16.7,
+    1
+   ]
+  },
+  "radar-markings-solid": {
+   "line-opacity": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    16.4,
+    0,
+    16.7,
+    1
+   ]
+  },
+  "radar-markings-solid-bridge": {
+   "line-opacity": [
+    "interpolate",
+    [
+     "linear"
+    ],
+    [
+     "zoom"
+    ],
+    16.4,
+    0,
+    16.7,
+    1
+   ]
+  },
   "radar-median": {
    "fill-color": [
     "interpolate",

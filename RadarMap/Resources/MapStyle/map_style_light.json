@@ -3073,14 +3073,25 @@
   },
   {
    "filter": [
-    "all",
+    "any",
     [
-     "in",
-     "class",
-     "taxiway"
+     "all",
+     [
+      "in",
+      "class",
+      "taxiway"
+     ]
+    ],
+    [
+     "all",
+     [
+      "in",
+      "class",
+      "runway"
+     ]
     ]
    ],
-   "id": "aeroway-taxiway-casing",
+   "id": "aeroway-casing",
    "layout": {
     "line-cap": "round",
     "line-join": "round",
@@ -3093,59 +3104,58 @@
    "paint": {
     "line-color": "#c5cad2",
     "line-opacity": 1,
-    "line-width": {
-     "base": 1.5,
-     "stops": [
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.5
+     ],
+     [
+      "zoom"
+     ],
+     11,
+     [
+      "case",
       [
-       11,
-       2
+       "all",
+       [
+        "match",
+        [
+         "get",
+         "class"
+        ],
+        [
+         "taxiway"
+        ],
+        true,
+        false
+       ]
       ],
+      2,
+      5
+     ],
+     17,
+     [
+      "case",
       [
-       17,
-       12
-      ]
+       "all",
+       [
+        "match",
+        [
+         "get",
+         "class"
+        ],
+        [
+         "taxiway"
+        ],
+        true,
+        false
+       ]
+      ],
+      12,
+      55
      ]
-    }
-   },
-   "source": "openmaptiles",
-   "source-layer": "aeroway",
-   "type": "line"
-  },
-  {
-   "filter": [
-    "all",
-    [
-     "in",
-     "class",
-     "runway"
     ]
-   ],
-   "id": "aeroway-runway-casing",
-   "layout": {
-    "line-cap": "round",
-    "line-join": "round",
-    "visibility": "visible"
-   },
-   "metadata": {
-    "mapbox:group": "1444849345966.4436"
-   },
-   "minzoom": 12,
-   "paint": {
-    "line-color": "#c5cad2",
-    "line-opacity": 1,
-    "line-width": {
-     "base": 1.5,
-     "stops": [
-      [
-       11,
-       5
-      ],
-      [
-       17,
-       55
-      ]
-     ]
-    }
    },
    "source": "openmaptiles",
    "source-layer": "aeroway",
@@ -3196,19 +3206,35 @@
   },
   {
    "filter": [
-    "all",
+    "any",
     [
-     "in",
-     "class",
-     "taxiway"
+     "all",
+     [
+      "in",
+      "class",
+      "taxiway"
+     ],
+     [
+      "==",
+      "$type",
+      "LineString"
+     ]
     ],
     [
-     "==",
-     "$type",
-     "LineString"
+     "all",
+     [
+      "in",
+      "class",
+      "runway"
+     ],
+     [
+      "==",
+      "$type",
+      "LineString"
+     ]
     ]
    ],
-   "id": "aeroway-taxiway",
+   "id": "aeroway-line",
    "layout": {
     "line-cap": "round",
     "line-join": "round",
@@ -3233,76 +3259,72 @@
       ]
      ]
     },
-    "line-width": {
-     "base": 1.5,
-     "stops": [
+    "line-width": [
+     "interpolate",
+     [
+      "exponential",
+      1.5
+     ],
+     [
+      "zoom"
+     ],
+     11,
+     [
+      "case",
       [
-       11,
-       1
+       "all",
+       [
+        "match",
+        [
+         "get",
+         "class"
+        ],
+        [
+         "taxiway"
+        ],
+        true,
+        false
+       ],
+       [
+        "==",
+        [
+         "geometry-type"
+        ],
+        "LineString"
+       ]
       ],
+      1,
+      4
+     ],
+     17,
+     [
+      "case",
       [
-       17,
-       10
-      ]
+       "all",
+       [
+        "match",
+        [
+         "get",
+         "class"
+        ],
+        [
+         "taxiway"
+        ],
+        true,
+        false
+       ],
+       [
+        "==",
+        [
+         "geometry-type"
+        ],
+        "LineString"
+       ]
+      ],
+      10,
+      50
      ]
-    }
-   },
-   "source": "openmaptiles",
-   "source-layer": "aeroway",
-   "type": "line"
-  },
-  {
-   "filter": [
-    "all",
-    [
-     "in",
-     "class",
-     "runway"
-    ],
-    [
-     "==",
-     "$type",
-     "LineString"
     ]
-   ],
-   "id": "aeroway-runway",
-   "layout": {
-    "line-cap": "round",
-    "line-join": "round",
-    "visibility": "visible"
-   },
-   "metadata": {
-    "mapbox:group": "1444849345966.4436"
-   },
-   "minzoom": 4,
-   "paint": {
-    "line-color": "#e6e8ec",
-    "line-opacity": {
-     "base": 1,
-     "stops": [
-      [
-       11,
-       0
-      ],
-      [
-       12,
-       1
-      ]
-     ]
-    },
-    "line-width": {
-     "base": 1.5,
-     "stops": [
-      [
-       11,
-       4
-      ],
-      [
-       17,
-       50
-      ]
-     ]
-    }
    },
    "source": "openmaptiles",
    "source-layer": "aeroway",

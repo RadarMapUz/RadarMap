@@ -662,6 +662,152 @@ class PaletteTests(unittest.TestCase):
 
 
 
+def _legacy(flt, props):
+    """Фильтр старого вида OSM Bright на наборе свойств объекта ($type — среди них)."""
+    op, key = flt[0], (flt[1] if len(flt) > 1 else None)
+    if op in ("all", "any"):
+        return (all if op == "all" else any)(_legacy(f, props) for f in flt[1:])
+    if op in ("has", "!has"):
+        return (key in props) == (op == "has")
+    if op in ("==", "!="):
+        return (key in props and props[key] == flt[2]) == (op == "==")
+    if op in ("in", "!in"):
+        return (key in props and props[key] in flt[2:]) == (op == "in")
+    raise ValueError(flt)
+
+
+def _expression(e, props):
+    """Подмножество выражений, в которое переводятся фильтры слитых слоёв."""
+    if not isinstance(e, list):
+        return e
+    op = e[0]
+    if op in ("all", "any"):
+        return (all if op == "all" else any)(_expression(x, props) for x in e[1:])
+    if op == "!":
+        return not _expression(e[1], props)
+    if op == "has":
+        return e[1] in props
+    if op == "get":
+        return props.get(e[1])
+    if op == "geometry-type":
+        return props["$type"]
+    if op in ("==", "!="):
+        a = _expression(e[1], props)
+        return (a is not None and a == e[2]) == (op == "==")
+    if op == "match":
+        value = _expression(e[1], props)
+        for k in range(2, len(e) - 1, 2):
+            if value is not None and value in e[k]:
+                return _expression(e[k + 1], props)
+        return _expression(e[-1], props)
+    if op == "case":
+        for k in range(1, len(e) - 1, 2):
+            if _expression(e[k], props):
+                return _expression(e[k + 1], props)
+        return _expression(e[-1], props)
+    raise ValueError(e)
+
+
+def _branch(stop, props):
+    """Ветка case по фильтрам прежних слоёв — как есть, без вычисления."""
+    if isinstance(stop, list) and stop[:1] == ["case"]:
+        for k in range(1, len(stop) - 1, 2):
+            if _expression(stop[k], props):
+                return stop[k + 1]
+        return stop[-1]
+    return stop
+
+
+def _universe(filters):
+    """Все сочетания свойств из литералов фильтров, плюс «нет свойства» и «другое»."""
+    import itertools
+    values = {"$type": {"Point", "LineString", "Polygon"}}
+
+    def walk(flt):
+        if flt[0] in ("all", "any"):
+            for f in flt[1:]:
+                walk(f)
+        elif len(flt) > 1:
+            values.setdefault(flt[1], set()).update(v for v in flt[2:])
+    for flt in filters:
+        walk(flt)
+    keys = sorted(values)
+    choices = [sorted(values[k], key=repr) + ([] if k == "$type" else [None, "другое"]) for k in keys]
+    for combo in itertools.product(*choices):
+        yield {k: v for k, v in zip(keys, combo) if v is not None}
+
+
+class MergedLayersTests(unittest.TestCase):
+    """Слитые слои основы (план 13.11, раздел 9): слоёв меньше, картинка та же."""
+    # Потолок числа слоёв: было 165 днём и 166 ночью (ночью — свечение магистрали).
+    BUDGET = {"light": 163, "dark": 164}
+
+    @classmethod
+    def setUpClass(cls):
+        from unittest import mock
+        cls.merged, cls.whole = {}, {}
+        for theme in ("light", "dark"):
+            cls.merged[theme] = make_style.build(make_style.APP_BASE, theme, "full", tileset=make_style.APP_TILESET)
+            with mock.patch.dict(make_style.MERGED_LAYERS, clear=True):
+                cls.whole[theme] = make_style.build(make_style.APP_BASE, theme, "full",
+                                                    tileset=make_style.APP_TILESET)
+
+    def test_layer_count_stays_under_the_budget(self):
+        for theme, limit in self.BUDGET.items():
+            self.assertLessEqual(len(self.merged[theme]["layers"]), limit, theme)
+
+    def test_merged_layer_stands_where_its_members_stood(self):
+        for theme in self.BUDGET:
+            ids = [l["id"] for l in self.whole[theme]["layers"]]
+            rebuilt = []
+            for layer_id in ids:
+                merged = next((m for m, members in make_style.MERGED_LAYERS.items() if layer_id in members), None)
+                if merged is None:
+                    rebuilt.append(layer_id)
+                elif not rebuilt or rebuilt[-1] != merged:
+                    rebuilt.append(merged)
+            self.assertEqual(rebuilt, [l["id"] for l in self.merged[theme]["layers"]], theme)
+
+    def test_every_member_class_is_kept_with_its_own_width(self):
+        # Объект рисует слитый слой ⇔ его рисовал ровно один прежний слой, и
+        # ширина та же на каждой ступени зума; краска, кроме ширины, — та же.
+        for theme in self.BUDGET:
+            whole = {l["id"]: l for l in self.whole[theme]["layers"]}
+            merged = {l["id"]: l for l in self.merged[theme]["layers"]}
+            for merged_id, members in make_style.MERGED_LAYERS.items():
+                layer, group = merged[merged_id], [whole[m] for m in members]
+                width = layer["paint"]["line-width"]
+                seen = set()
+                for props in _universe([m["filter"] for m in group]):
+                    hits = [m for m in group if _legacy(m["filter"], props)]
+                    self.assertLessEqual(len(hits), 1, (merged_id, props))
+                    self.assertEqual(_legacy(layer["filter"], props), bool(hits), (merged_id, props))
+                    if not hits:
+                        continue
+                    seen.add(hits[0]["id"])
+                    own = make_style._zoom_curve(hits[0]["paint"]["line-width"])
+                    self.assertEqual(width[3::2], own[1], merged_id)
+                    for stop, value in zip(width[4::2], own[2]):
+                        self.assertEqual(_branch(stop, props), value, (merged_id, props))
+                self.assertEqual(seen, set(members), f"{merged_id}: классы потеряны")
+                for prop, value in layer["paint"].items():
+                    if prop not in make_style.MERGED_BY_MEMBER:
+                        self.assertTrue(all(m["paint"].get(prop) == value for m in group), (merged_id, prop))
+
+    def test_width_by_member_is_exact_on_the_gpu(self):
+        # Свойство «зум + данные» MapLibre считает смесью значений на целых
+        # зумах Z и Z+1. Ширина, которая раньше зависела только от зума, точна
+        # после слияния, только если её ступени — на целых зумах.
+        for theme in self.BUDGET:
+            whole = {l["id"]: l for l in self.whole[theme]["layers"]}
+            for members in make_style.MERGED_LAYERS.values():
+                for member in members:
+                    width = whole[member]["paint"]["line-width"]
+                    if "get" not in json.dumps(width):
+                        zooms = make_style._zoom_curve(width)[1]
+                        self.assertTrue(all(float(z).is_integer() for z in zooms), (member, zooms))
+
+
 class CarLaneMarkings(unittest.TestCase):
     def test_car_shows_lanes_at_its_driving_zoom(self):
         # Машина на ходу держит z16,0–17,2 (DriveCamera.carPitched): полосы
